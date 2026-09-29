@@ -141,13 +141,19 @@ func _ready() -> void:
 	add_child(EngineAudio.new())
 
 func _physics_process(delta: float) -> void:
-	var throttle := Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP)
-	var braking := Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN)
-	var handbrake := Input.is_key_pressed(KEY_SPACE)
+	# Input (#29, #30): named InputMap actions (project.godot), all polled
+	# here -- no _input handlers. Shifts are one-shot, hence just_pressed.
+	if Input.is_action_just_pressed("shift_down"):
+		manual_shift(-1)
+	if Input.is_action_just_pressed("shift_up"):
+		manual_shift(1)
+	var throttle := Input.is_action_pressed("accelerate")
+	var braking := Input.is_action_pressed("brake")
+	var handbrake := Input.is_action_pressed("handbrake")
 	var steer_in := 0.0
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+	if Input.is_action_pressed("steer_left"):
 		steer_in -= 1.0
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+	if Input.is_action_pressed("steer_right"):
 		steer_in += 1.0
 
 	throttle_input = 1.0 if throttle else 0.0
@@ -193,10 +199,3 @@ func is_off_road() -> bool:
 		if w.surface_type != "Road":
 			return true
 	return false
-
-func _input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_Q:
-			manual_shift(-1)
-		elif event.keycode == KEY_E:
-			manual_shift(1)

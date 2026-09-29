@@ -217,6 +217,7 @@ func _physics_process(_delta: float) -> void:
 	var z := player.global_position.z
 	if absf(z) >= recenter_dist:
 		_shift_origin(int(floor(-z / RoadChunkBuilder.CHUNK_LEN)))
+	_poll_camera_input()
 
 ## Moves the world back by shift_chunks whole chunks (positive = the car had
 ## driven forward, -z). Whole chunks keep chunk positions exact integers x 50.
@@ -297,8 +298,9 @@ func _update_camera(delta: float) -> void:
 	camera.global_position = Vector3(fx + back.x, fy + CAM_HEIGHT, p.z + back.z)
 	camera.look_at(Vector3(fx + ahead.x, fy + 1.1, p.z + ahead.z), Vector3.UP)
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_C:
+# Polled from _physics_process like all game input (#30), not an event handler.
+func _poll_camera_input() -> void:
+	if Input.is_action_just_pressed("camera_cycle"):
 		cam_mode = (cam_mode + 1) % CAM_MODE_NAMES.size()
 
 # ---------- temporary debug readout (real HUD is milestone 5) ----------

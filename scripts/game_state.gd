@@ -10,8 +10,9 @@ extends Node
 #
 # Pausing uses the SceneTree's own pause, so physics (the GEVP vehicle) and
 # every other default-mode node freeze. This node runs with
-# PROCESS_MODE_ALWAYS so it still hears Esc while paused. The physics tick
-# rate is untouched -- it must stay at 60 Hz (GEVP breaks at 30 Hz).
+# PROCESS_MODE_ALWAYS so it still polls the pause action (Esc) while paused.
+# The physics tick rate is untouched -- it must stay at 60 Hz (GEVP breaks at
+# 30 Hz).
 
 enum State { PLAYING, PAUSED }
 
@@ -22,10 +23,10 @@ var state: State = State.PLAYING
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+# Polled like all game input (#30), not an event handler.
+func _physics_process(_delta: float) -> void:
+	if Input.is_action_just_pressed("pause"):
 		toggle_pause()
-		get_viewport().set_input_as_handled()
 
 func toggle_pause() -> void:
 	if state == State.PAUSED:

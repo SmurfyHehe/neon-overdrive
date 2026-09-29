@@ -163,6 +163,10 @@ func _update_chunk_pool(ref_z: float) -> void:
 			var prev_cfg := _section_at(max_idx - 1)
 			var cfg := _section_at(max_idx)
 			RoadChunkBuilder.rebuild_chunk(c.root, max_idx, prev_cfg, cfg)
+			# Physics interpolation is on (ISSUES B7): without this reset the
+			# recycled chunk would slide from its old spot to the new one
+			# over a frame instead of jumping there.
+			c.root.reset_physics_interpolation()
 			c.index = max_idx
 
 # ---------- player ----------
@@ -176,11 +180,17 @@ func _setup_camera() -> void:
 	camera = Camera3D.new()
 	camera.fov = CAM_FOV
 	camera.far = 400.0
+	# Moved in _process every rendered frame, so it must not be
+	# physics-interpolated itself (ISSUES B7).
+	camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	add_child(camera)
 	camera.current = true
 
 func _update_camera() -> void:
-	var p := player.position
+	# The interpolated position, not player.position: the car only moves on
+	# the 60 Hz physics tick, and with vsync off the camera updates several
+	# times per tick. Following the raw position made car and road judder.
+	var p := player.get_global_transform_interpolated().origin
 	# BUG FIX (2026-09-13): camera never rotated for reverse, so you couldn't
 	# see what you were backing into. Reversing flips the chase cam to the
 	# opposite side of the car looking the opposite way -- it still trails

@@ -18,6 +18,14 @@ config/name="Neon Overdrive"
 run/main_scene="res://Game.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
+[display]
+
+window/vsync/vsync_mode.editor=0
+
+[physics]
+
+common/physics_interpolation=true
+
 [rendering]
 
 renderer/rendering_method="mobile"

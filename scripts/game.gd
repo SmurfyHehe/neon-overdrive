@@ -57,15 +57,38 @@ func _setup_world() -> void:
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.11, 0.05, 0.23)
 	env.fog_density = 0.006
+	# NIGHT LIGHTING PASS (2026-09-29, RESEARCH-cheap-pretty.md item 1): the
+	# gradient sky is also the ambient source (Godot's default under BG_SKY),
+	# so its purple horizon fills the scene for free -- no extra light needed.
+	# Dialled down from the default 1.0 because at full energy a bright horizon
+	# lifts the near-black asphalt back toward grey and flattens the emissive
+	# markings it is supposed to sit behind.
+	env.ambient_light_energy = 0.3
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)
 
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-55, -35, 0)
-	sun.light_energy = 1.1
-	sun.light_color = Color(1.0, 0.95, 0.86)
-	add_child(sun)
+	# NIGHT LIGHTING PASS (2026-09-29, RESEARCH-cheap-pretty.md item 1): this
+	# was a warm white key at energy 1.1 -- i.e. a daylight sun sitting inside
+	# a purple night palette and fighting it. road_chunk_builder.gd already
+	# authors this world for night: near-black asphalt albedos, plus emissive
+	# curbs, edge lines, lane dashes, barriers, building windows and
+	# cyan/magenta pylons at energy 0.9-2.5. Those ARE the light you are meant
+	# to see (and it's why the markings were made emissive in the first place
+	# -- see that file's header). So this light's only remaining job is a dim
+	# cool moonlight key: enough to give the car body and roadside geometry
+	# form so they don't read as flat silhouettes, not enough to compete with
+	# the neon. Renamed sun -> moon because that is now what it is.
+	#
+	# Shadows stay off (Godot's default) deliberately, not by oversight: a
+	# shadow-casting directional light costs an entire extra pass, and at this
+	# key energy the shadow would barely be visible anyway. A blob shadow under
+	# the car is the cheap version if one is wanted later (RESEARCH item 5).
+	var moon := DirectionalLight3D.new()
+	moon.rotation_degrees = Vector3(-55, -35, 0)
+	moon.light_energy = 0.2
+	moon.light_color = Color(0.6, 0.66, 1.0)
+	add_child(moon)
 
 # ---------- ground collision (new for milestone 2 -- chunks are visual only, wheels need something real to hit) ----------
 func _setup_ground_collision() -> void:

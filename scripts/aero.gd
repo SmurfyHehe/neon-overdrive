@@ -73,19 +73,69 @@ static func _apply_draft(v: Vehicle) -> void:
 		return
 	v.apply_central_force(v.linear_velocity.normalized() * drag * draft_factor)
 
-static func _draft_factor(v: Vehicle) -> float:
+## Drafting lookup scales with traffic (issue #24). The old version walked
+## the whole "aero_vehicles" group for every vehicle, every physics frame:
+## O(n^2), 1600 checks at 40 cars. Now the group is bucketed ONCE per physics
+## frame into a flat XZ grid, and each vehicle only looks at the cells its
+## DRAFT_MAX_DISTANCE circle touches. Cells are twice DRAFT_MAX_DISTANCE wide,
+## so that circle always fits in a 2x2 block (4 lookups, not 9). The block
+## holds every car the full scan would have accepted -- same result, not an
+## approximation (tests/aero_draft_equivalence.gd checks it against a frozen
+## copy of the old code). Grid, not lane buckets, so curves and lane changes
+## need no special cases.
+##
+## Distances still use each car's LIVE global_position; the grid only decides
+## who is a candidate. Cars move by physics integration, which happens after
+## every _physics_process call, so positions don't change within a frame.
+## Something that teleports a car mid-frame (a respawn) could leave it in a
+## stale cell for that one frame -- harmless for a draft effect.
+const _DRAFT_CELL := DRAFT_MAX_DISTANCE * 2.0
+
+static var _draft_grid := {}  # Vector2i -> Array of Node3D
+static var _draft_grid_frame := -1
+
+static func _rebuild_draft_grid(tree: SceneTree) -> void:
+	_draft_grid.clear()
+	for other in tree.get_nodes_in_group("aero_vehicles"):
+		var p: Vector3 = other.global_position
+		var cell := Vector2i(floori(p.x / _DRAFT_CELL), floori(p.z / _DRAFT_CELL))
+		if _draft_grid.has(cell):
+			_draft_grid[cell].append(other)
+		else:
+			_draft_grid[cell] = [other]
+
+## Forces the next lookup to rebuild the grid. Only tests need this: they move
+## cars several times inside one physics frame.
+static func invalidate_draft_grid() -> void:
+	_draft_grid_frame = -1
+
+static func _draft_factor(v: Node3D) -> float:
+	var frame := Engine.get_physics_frames()
+	if frame != _draft_grid_frame:
+		_rebuild_draft_grid(v.get_tree())
+		_draft_grid_frame = frame
 	var best := 0.0
-	for other in v.get_tree().get_nodes_in_group("aero_vehicles"):
-		if other == v:
-			continue
-		var to_other: Vector3 = other.global_position - v.global_position
-		var dist := to_other.length()
-		if dist < 0.5 or dist > DRAFT_MAX_DISTANCE:
-			continue
-		var forward := -v.global_transform.basis.z
-		var alignment := forward.normalized().dot(to_other.normalized())
-		if alignment < DRAFT_MIN_ALIGNMENT:
-			continue
-		var closeness := 1.0 - clampf((dist - DRAFT_MIN_DISTANCE) / (DRAFT_MAX_DISTANCE - DRAFT_MIN_DISTANCE), 0.0, 1.0)
-		best = maxf(best, closeness * MAX_DRAFT_REDUCTION)
+	var pos := v.global_position
+	var forward := (-v.global_transform.basis.z).normalized()
+	var x0 := floori((pos.x - DRAFT_MAX_DISTANCE) / _DRAFT_CELL)
+	var x1 := floori((pos.x + DRAFT_MAX_DISTANCE) / _DRAFT_CELL)
+	var z0 := floori((pos.z - DRAFT_MAX_DISTANCE) / _DRAFT_CELL)
+	var z1 := floori((pos.z + DRAFT_MAX_DISTANCE) / _DRAFT_CELL)
+	for cx in range(x0, x1 + 1):
+		for cz in range(z0, z1 + 1):
+			var bucket = _draft_grid.get(Vector2i(cx, cz))
+			if bucket == null:
+				continue
+			for other in bucket:
+				if other == v or not is_instance_valid(other):
+					continue
+				var to_other: Vector3 = other.global_position - pos
+				var dist := to_other.length()
+				if dist < 0.5 or dist > DRAFT_MAX_DISTANCE:
+					continue
+				var alignment := forward.dot(to_other.normalized())
+				if alignment < DRAFT_MIN_ALIGNMENT:
+					continue
+				var closeness := 1.0 - clampf((dist - DRAFT_MIN_DISTANCE) / (DRAFT_MAX_DISTANCE - DRAFT_MIN_DISTANCE), 0.0, 1.0)
+				best = maxf(best, closeness * MAX_DRAFT_REDUCTION)
 	return best

@@ -99,7 +99,7 @@ dense world moving slowly, and costs less.
 
 Cheap, high-impact: FOV widening with speed, camera shake, screen-edge speed
 lines, a scrolling road texture, and a rhythm of emissive roadside posts. Those
-are nearly free and they're most of the feel. The HANDOFF already lists
+are nearly free and they're most of the feel. The original plan (now in ROADMAP.md) already lists
 "dynamic camera FOV/shake tied to speed" — that's correctly prioritized.
 
 ## 6. Art direction is the cheapest optimization
@@ -123,7 +123,7 @@ Worth separating, because "retro 3D" usually means both:
 | Fog and darkness as draw-distance | 240p resolution, heavy dithering |
 | Atlases, modular kits, palette swaps | Bilinear-filtering-off texture crunch |
 
-HANDOFF.md commits to **"beautiful low-poly"** — deliberate faceted geometry
+The agreed direction (ROADMAP.md) commits to **"beautiful low-poly"** — deliberate faceted geometry
 with strong lighting, in the vein of *Street-Spec* — explicitly **not**
 placeholder boxes and not PS1 jank. So: take the left column, skip the right
 column. Faceted geometry is a modern low-poly look, and it's cheap for the same

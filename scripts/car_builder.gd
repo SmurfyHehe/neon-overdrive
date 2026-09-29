@@ -24,14 +24,31 @@ const KIND_CONFIGS := {
 ## outward-normal side) as two triangles into an open SurfaceTool. Normal is
 ## computed per-quad (not smoothed across neighbors) to keep the deliberate
 ## faceted/low-poly look everything else in this file already uses.
+##
+## Godot treats CLOCKWISE triangles as front faces, so the triangles are
+## emitted in reverse (a,c,b / a,d,c) while the normal stays outward. Emitting
+## them CCW as given culled every panel facing the camera and showed the far
+## panels' insides, lit from behind -- the "bare frame, panels missing" car in
+## ISSUES G1.
+##
+## The normal comes from the diagonals, not from (b-a)x(c-a): lofts taper to a
+## zero-height section (the coupe glass) or repeat a z (the coupe body), so a
+## quad can have two coincident corners and collapse into a triangle, and the
+## edge-based cross product is then zero (ISSUES G2). The diagonal cross is the
+## same direction for any planar quad and only vanishes when the whole quad
+## does. Zero-area triangles are skipped instead of emitted.
+const _QUAD_AREA_EPS := 1e-8
+
 static func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
-	var normal := (b - a).cross(c - a).normalized()
-	st.set_normal(normal); st.add_vertex(a)
-	st.set_normal(normal); st.add_vertex(b)
-	st.set_normal(normal); st.add_vertex(c)
-	st.set_normal(normal); st.add_vertex(a)
-	st.set_normal(normal); st.add_vertex(c)
-	st.set_normal(normal); st.add_vertex(d)
+	var diag := (c - a).cross(d - b)
+	if diag.length_squared() < _QUAD_AREA_EPS:
+		return
+	var normal := diag.normalized()
+	for tri in [[a, c, b], [a, d, c]]:
+		if (tri[1] - tri[0]).cross(tri[2] - tri[0]).length_squared() < _QUAD_AREA_EPS:
+			continue
+		for v in tri:
+			st.set_normal(normal); st.add_vertex(v)
 
 ## Builds a tapered "loft" mesh from a series of cross-sections along Z, each
 ## {z, w, y0, y1} (half-width w/2 either side of X=0, bottom y0, top y1, all

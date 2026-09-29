@@ -45,9 +45,11 @@ var chassis_visual: Node3D
 # these live here rather than on the vendored Vehicle class (kept unmodified,
 # see header) and get set the same way every other tuning number does, via
 # CarSpec.apply()'s generic v.set() loop -- see car_spec.gd/aero.gd for the
-# actual force math and why it's structured this way.
-var aero_lift_coefficient_front := 0.0
-var aero_lift_coefficient_rear := 0.0
+# actual force math and why it's structured this way. Sign convention:
+# positive = downforce (pushes the axle toward -basis.y); these were named
+# aero_lift_coefficient_* before issue #34, same values, same force.
+var aero_downforce_coefficient_front := 0.0
+var aero_downforce_coefficient_rear := 0.0
 
 func _ready() -> void:
 	# NOTE: we deliberately do NOT call super._ready() here -- Vehicle's own
@@ -132,6 +134,11 @@ func _ready() -> void:
 	# one member and drafting always finds nothing -- built for real ahead of
 	# time, same pattern as CarSpec, not dead code.
 	add_to_group("aero_vehicles")
+
+	# Engine sound (2026-09-29, prototype of PROPOSAL-audio.md option C): a
+	# synthesised engine driven by this car's motor_rpm/throttle. Added after
+	# CarSpec.apply() so it picks up the real idle/max rpm.
+	add_child(EngineAudio.new())
 
 func _physics_process(delta: float) -> void:
 	var throttle := Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP)

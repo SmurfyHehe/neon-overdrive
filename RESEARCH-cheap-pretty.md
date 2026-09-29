@@ -183,9 +183,65 @@ to achieve. Keep 60Hz and find savings in rendering instead.
 
 Godot's **Monitors** tab reports draw calls, frame time, and video memory
 directly, and the **Visual Profiler** breaks down GPU time by stage (shadows,
-GI, post-processing). Measure before optimizing — on desktop hardware we may
-have plenty of headroom, in which case these techniques are being adopted for
-their *look*, which is still a good reason.
+GI, post-processing). Measure before optimizing. The "do we have headroom?"
+question is answered below — partly yes, but not in the way "desktop hardware"
+suggests.
+
+---
+
+## The target machine (added 2026-09-29)
+
+v1 targets the dev machine and should be measured on it. That's an advantage: the
+cost of a bad rendering decision is felt the same day it's made.
+
+| | HP Laptop 15-dy5xxx |
+| --- | --- |
+| CPU | i5-1235U — 2 P-cores + 8 E-cores, **15 W**, 1.3 GHz base / 4.4 boost |
+| GPU | Intel Iris Xe, **80 EU**, no dedicated VRAM |
+| RAM | 16 GB DDR4-3200, **dual channel** |
+| Display | 1920x1080 @ 60 Hz |
+| Godot | v4.7.2-stable, portable exe in `Documents\` |
+
+"Desktop hardware with plenty of headroom" is half right. In raw shading power
+this is fine — Iris Xe at 80–96 EU trades blows with a GeForce MX450 and lands
+near a GTX 1050 Mobile in synthetics, which is more than a low-poly night racer
+needs. The headroom is real. It just isn't where you'd look for it, because the
+two actual constraints are not shader throughput:
+
+1. **15 W sustained power.** The chip boosts to 4.4 GHz and cannot hold it. A
+   framerate read at minute 1 lies about minute 20. Every measurement below has
+   to be taken warm or it isn't a measurement.
+2. **Shared memory bandwidth.** There is no dedicated VRAM — CPU and iGPU
+   contend for the same DDR4-3200. On integrated graphics bandwidth is what
+   kills framerates, so suspect it *before* triangle count, every time. This is
+   also why the tricks in this document land harder here than on a desktop with
+   a discrete card: vertex colors, atlases, MultiMesh and short draw distance all
+   cut bandwidth, not just shader work.
+
+**Budget 8–10 ms per frame, not 16.6.** The spare 6 ms is what keeps minute 20
+at 60 fps.
+
+### What this changes about the priorities above
+
+- **Item 6 (test glow) moves to the front.** It's no longer a caveat to check
+  eventually — it's the first number to take, because `rendering_method="mobile"`
+  plus a bandwidth-bound GPU is exactly the shape of godot#98531. And the answer
+  changes how every emissive asset gets authored: if glow is too expensive, halos
+  get painted into textures, which is an art-pipeline decision that wants
+  settling before milestone 3, not after a hundred assets exist.
+- **Keeping 60 Hz physics is right, and it's the CPU risk.** Only 2 of the 12
+  threads are performance cores, and GEVP integrates suspension and tire forces
+  per step per vehicle. Player-only is cheap. Milestones 3–4 (traffic, then
+  *reactive* traffic) are where this could bite — so traffic cars should not get
+  GEVP bodies without a measured reason. ROADMAP already anticipates this for
+  police tier count ("capped by actual CPU/engine performance"); it applies to
+  traffic density first.
+- **Add an internal resolution scale (0.6–1.0) early.** At 1080p on a
+  bandwidth-bound iGPU this is the cheapest single lever that exists, and it's
+  also what lets the game run on machines weaker than this one.
+- **Measure an exported build, warm, on mains power *and* on battery.** The
+  editor's own GPU use makes in-editor numbers a fiction, and this chassis
+  throttles differently unplugged — which is how people will actually play it.
 
 ---
 
@@ -202,3 +258,10 @@ their *look*, which is still a good reason.
 - [Optimizing Godot for Mobile: A Field Guide — slicker.me](https://slicker.me/godot/mobile-optimization.html)
 - [Glow extremely slow with Mobile renderer — godotengine/godot#98531](https://github.com/godotengine/godot/issues/98531)
 - [Optimizing 3D performance — Godot docs](https://docs.godotengine.org/en/4.4/tutorials/performance/optimizing_3d_performance.html)
+
+For the target-machine section:
+
+- [Intel Core i5-1235U product specifications — Intel](https://www.intel.com/content/www/us/en/products/sku/226266/intel-core-i51235u-processor-12m-cache-up-to-4-40-ghz-with-ipu/specifications.html)
+- [Iris Xe vs. MX350 / MX450 / GTX 1050 in synthetic GPU tests — NotebookCheck](https://www.notebookcheck.net/Intel-Iris-Xe-Max-powered-Asus-VivoBook-Flip-14-TP470-in-review-Good-gains-over-Xe-Graphics-G7-96-EUs-MX350-and-GTX-1050-in-synthetic-GPU-tests.512386.0.html)
+- [Iris Xe Time Spy results vs. MX450 — WCCFTech](https://wccftech.com/intel-iris-xe-max-gpu-time-spy-benchmarks-trade-blows-with-an-nvidia-mx450/)
+- [Renderers (Forward+ / Mobile / Compatibility) — Godot docs](https://docs.godotengine.org/en/4.4/tutorials/rendering/renderers.html)

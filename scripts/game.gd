@@ -96,6 +96,21 @@ func _setup_world() -> void:
 	# lifts the near-black asphalt back toward grey and flattens the emissive
 	# markings it is supposed to sit behind.
 	env.ambient_light_energy = 0.3
+	# GLOW (#25): a short, tight halo on the emissive markings -- Roy's pick
+	# ("A - Tight") of four options compared in an exported benchmark. Only the
+	# three smallest blur levels, so the halo hugs the lines instead of washing
+	# the scene; threshold 1.0 keeps the dim, non-emissive geometry out of it.
+	# Measured cost on the i5-1235U / Mobile renderer: ~0.05 ms/frame, inside
+	# run-to-run noise, so the godot#98531 Mobile glow slowdown does not show
+	# up here. Re-measure with benchmark.bat if these values change.
+	env.glow_enabled = true
+	for i in 7:
+		env.set_glow_level(i, 1.0 if i <= 2 else 0.0)
+	env.glow_intensity = 0.8
+	env.glow_strength = 1.0
+	env.glow_bloom = 0.0
+	env.glow_hdr_threshold = 1.0
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)

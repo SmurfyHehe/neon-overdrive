@@ -122,3 +122,43 @@ Unlock gating: buying a higher-tier car is gated on **currency saved**, not on f
 ## Open items still remaining
 - Whether damage affects handling (not just top speed) once physics exists to hook into — revisit once milestone 2 physics is real
 - These are v1 numbers for a game that doesn't run yet — expect a real tuning pass once milestone 9-11 are playable, not treated as final
+
+## Proposals, pending Roy (2026-09-29)
+
+**Status: not approved.** Look-and-feel calls are Roy's; a side-by-side comparison is being prepared so he can choose from screenshots. Do not build these as decisions.
+
+
+Full reasoning and sources in `RESEARCH-cheap-pretty.md`. These three are called
+out here because each blocks or biases an upcoming milestone, and two of them get
+expensive to reverse later.
+
+1. **The directional light contradicts the palette.** `game.gd` `_setup_world()`
+   sets a warm white sun (`light_energy = 1.1`, colour `1.0, 0.95, 0.86`) — a
+   daylight key sitting inside a purple night sky and violet fog. Committing to a
+   dim cool key and letting *emissives* be the visible light source (markings,
+   signage, street lights, tail lights, underglow) makes the existing sky/fog
+   coherent and licenses a shorter draw distance. **Belongs to milestone 2
+   (environment/atmosphere) in the HANDOFF plan — decide before art work starts.**
+
+2. **Vertex-colour the road chunks at build time.** Endless procedural worlds
+   normally forfeit baked lighting — there's no static scene for `LightmapGI` to
+   bake. But `road_chunk_builder.gd` constructs its meshes in code, so light
+   pools under lamps, darker shoulders and curb highlights can be written into
+   vertex colours *during construction*, at zero runtime lighting cost. This is
+   the technique that made Spyro's world look lit on a PS1, and it's available to
+   us specifically *because* the road is procedural. **Affects milestone 1's
+   builder; cheapest to add while that code is still being touched.**
+
+3. **Build traffic as `MultiMeshInstance3D` + per-instance colour from day one.**
+   Milestone 3 is next. Two or three car meshes with palette-swapped instance
+   colours gives real visual variety at roughly one draw call; the same traffic as
+   individual nodes is one draw call each. **This is the reversal that gets
+   expensive** — retrofitting MultiMesh after reactive AI (milestone 4), near-miss
+   detection zones (milestone 9) and police (milestone 11) are all reading and
+   writing per-car state is significantly harder than starting there.
+
+Also recorded in that doc, and deliberately contrary to standard mobile advice:
+**do not drop `physics_ticks_per_second` to 30.** The vendored GEVP controller
+integrates suspension and tire forces per physics step; halving the rate degrades
+the exact simcade feel the milestone 2 rewrite existed to achieve. Find savings in
+rendering instead.

@@ -1,2 +1,5 @@
 # Normalize EOL for all files that Git considers text files (Godot default).
 * text=auto eol=lf
+
+# Batch files need CRLF or cmd.exe can misparse them.
+*.bat text eol=crlf

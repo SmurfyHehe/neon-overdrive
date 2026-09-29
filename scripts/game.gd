@@ -17,7 +17,20 @@ const POOL_SIZE := CHUNKS_AHEAD + CHUNKS_BEHIND + 1
 var section_cache: Dictionary = {"-1": {"own_lanes": 3, "onc_lanes": 2, "barrier": false}}
 var chunk_pool: Array = []  # Array of {root: Node3D, index: int}
 
+# Floating origin (issue #26). Float32 positions lose precision far from
+# (0,0,0) -- at 100 km a coordinate only resolves to ~8 mm, and the old 200 km
+# ground slab was a hard wall. So the world is kept near the origin: once the
+# car is RECENTER_DIST out, everything (car, chunks) moves back by a whole
+# number of chunks in one physics step. origin_index is the logical chunk
+# index that currently sits at world z=0; chunk indices (and the section
+# layout keyed by them) keep counting up forever, only positions are shifted.
+# A var, not a const, so tests can shift more often.
+var recenter_dist := 1000.0
+var origin_index := 0
+var recenter_count := 0
+
 var player: PlayerCar
+var game_state: GameState
 
 var camera: Camera3D
 const CAM_DIST := 6.0
@@ -46,6 +59,7 @@ func _ready() -> void:
 	_setup_player()
 	_setup_camera()
 	_setup_debug_hud()
+	_setup_game_state()
 
 func _setup_world() -> void:
 	var env := Environment.new()
@@ -118,9 +132,16 @@ func _setup_ground_collision() -> void:
 	# axle torqued the car into a slow backflip and off the map every time.
 	# Shifting the slab forward by CHUNK_LEN covers that behind-chunk with
 	# margin to spare.
-	box.size = Vector3(200.0, 2.0, 200000.0)
+	#
+	# Floating origin (issue #26): the car never gets more than
+	# recenter_dist from z=0 now, so the slab only has to cover that range
+	# plus margin either way (ahead, and behind for reversing) -- it never
+	# moves, and there is no far wall any more.
+	var ahead := recenter_dist + 500.0
+	var behind := recenter_dist + 100.0
+	box.size = Vector3(200.0, 2.0, ahead + behind)
 	shape.shape = box
-	shape.position = Vector3(0.0, -1.0, -100000.0 + RoadChunkBuilder.CHUNK_LEN)
+	shape.position = Vector3(0.0, -1.0, (behind - ahead) / 2.0)
 	body.add_child(shape)
 	# Physics rewrite (2026-09-13): the vendored Wheel raycast identifies
 	# surface type by the FIRST group on whatever collision body it hits
@@ -159,12 +180,12 @@ func _setup_chunk_pool() -> void:
 		var idx := i - CHUNKS_BEHIND
 		var prev_cfg := _section_at(idx - 1)
 		var cfg := _section_at(idx)
-		var root := RoadChunkBuilder.build_chunk(idx, prev_cfg, cfg)
+		var root := RoadChunkBuilder.build_chunk(idx, prev_cfg, cfg, origin_index)
 		add_child(root)
 		chunk_pool.append({"root": root, "index": idx})
 
 func _update_chunk_pool(ref_z: float) -> void:
-	var current_idx := int(floor(-ref_z / RoadChunkBuilder.CHUNK_LEN))
+	var current_idx := int(floor(-ref_z / RoadChunkBuilder.CHUNK_LEN)) + origin_index
 	var max_idx := current_idx
 	for c in chunk_pool:
 		max_idx = max(max_idx, c.index)
@@ -173,12 +194,51 @@ func _update_chunk_pool(ref_z: float) -> void:
 			max_idx += 1
 			var prev_cfg := _section_at(max_idx - 1)
 			var cfg := _section_at(max_idx)
-			RoadChunkBuilder.rebuild_chunk(c.root, max_idx, prev_cfg, cfg)
+			RoadChunkBuilder.rebuild_chunk(c.root, max_idx, prev_cfg, cfg, origin_index)
 			# Physics interpolation is on (ISSUES B7): without this reset the
 			# recycled chunk would slide from its old spot to the new one
 			# over a frame instead of jumping there.
 			c.root.reset_physics_interpolation()
 			c.index = max_idx
+
+# ---------- floating origin (issue #26) ----------
+func _physics_process(_delta: float) -> void:
+	# Runs before the car's own _physics_process (parent before child), so
+	# GEVP computes this step's velocity from positions that are already
+	# shifted consistently.
+	var z := player.global_position.z
+	if absf(z) >= recenter_dist:
+		_shift_origin(int(floor(-z / RoadChunkBuilder.CHUNK_LEN)))
+
+## Moves the world back by shift_chunks whole chunks (positive = the car had
+## driven forward, -z). Whole chunks keep chunk positions exact integers x 50.
+func _shift_origin(shift_chunks: int) -> void:
+	if shift_chunks == 0:
+		return
+	origin_index += shift_chunks
+	recenter_count += 1
+	var offset := Vector3(0.0, 0.0, float(shift_chunks) * RoadChunkBuilder.CHUNK_LEN)
+
+	# The car. Velocity and spin carry over untouched (they are not
+	# positions). GEVP derives speed from the position it saved on the last
+	# step, on the body and on every wheel; left unshifted, the next step
+	# would read the 1 km move as a 60 km/s burst and wreck the tire model.
+	player.global_position += offset
+	player.previous_global_position += offset
+	for w in player.wheel_array:
+		w.previous_global_position += offset
+		w.last_collision_point += offset
+	# Physics interpolation is on (ISSUES B7): without a reset the car would
+	# be drawn sliding 1 km across one tick.
+	player.reset_physics_interpolation()
+
+	for c in chunk_pool:
+		# Re-derived from the index, not +=, so error can never accumulate.
+		c.root.position = Vector3(0, 0, -float(c.index - origin_index) * RoadChunkBuilder.CHUNK_LEN)
+		c.root.reset_physics_interpolation()
+	# The ground slab stays put: it is centred on the origin by design.
+	# The camera follows the car's interpolated position in _process, so it
+	# needs nothing here.
 
 # ---------- player ----------
 func _setup_player() -> void:
@@ -253,7 +313,7 @@ func _setup_debug_hud() -> void:
 	var controls := Label.new()
 	controls.position = Vector2(16, 400)
 	controls.add_theme_color_override("font_color", Color(0.71, 0.65, 0.84))
-	controls.text = "A/D steer  ·  W/S throttle/brake  ·  Space handbrake  ·  Q/E shift down/up (R-N-1-2-3-4-5)"
+	controls.text = "A/D steer  ·  W/S throttle/brake  ·  Space handbrake  ·  Q/E shift down/up (R-N-1-2-3-4-5)  ·  Esc pause"
 	hud.add_child(controls)
 
 func _update_debug_hud() -> void:
@@ -271,6 +331,12 @@ func _update_debug_hud() -> void:
 	else:
 		lbl_gear.add_theme_color_override("font_color", Color(0, 0.96, 1))
 		lbl_gear.scale = Vector2(1.0, 1.0)
+
+# ---------- game state (pause / restart / quit, issue #27) ----------
+func _setup_game_state() -> void:
+	game_state = GameState.new()
+	add_child(game_state)
+	add_child(PauseMenu.new(game_state))
 
 func _process(delta: float) -> void:
 	_update_chunk_pool(player.position.z)

@@ -21,8 +21,9 @@ class_name RoadChunkBuilder
 #   box (raised slightly above the flat "Road" ground slab) under the
 #   curb+sidewalk band, and the vendored Wheel controller reads the group a
 #   wheel's raycast hits to pick tire values AND feels the real height step.
-#   This box is NOT tapered (per-chunk average width) -- a deliberate
-#   simplification, unlike the tapered visual strips above it.
+#   UPDATE (2026-09-29, issue #35): this used to be one box at the chunk's
+#   average width, up to 1.15 m off the drawn sidewalk at each end of a
+#   lane-change chunk. It is now a tapered prism that matches the strip.
 # - roadside buildings beyond the sidewalks: real collision (StaticBody3D +
 #   BoxShape3D) so the player can't drive through them -- this is now the
 #   actual hard boundary of the drivable world, since the curb no longer is
@@ -56,12 +57,13 @@ class_name RoadChunkBuilder
 # Curves + elevation are their own later architecture change (Path3D-driven
 # procedural mesh) and are explicitly NOT attempted here.
 #
-# Known remaining simplification: interior lane-divider dashes and the
-# center barrier/dash line are snapped to each chunk's own (end-of-chunk)
-# lane count, not tapered -- properly tapering dividers through a
-# lane-count change means dividers appearing/disappearing mid-span, real
-# complexity that wasn't worth it for a "cheap fix" pass. Revisit if it
-# reads as janky once driven.
+# Interior lane-divider dashes and the center barrier/dash line are snapped
+# to each chunk's own (end-of-chunk) lane count, not tapered. Kept on purpose
+# (issue #36, closed won't-fix 2026-09-29): on a lane ADD the new divider
+# carries on from the old road edge while the new lane opens beside it, and
+# on a lane DROP the outer lane narrows away with no divider -- which is how
+# real roads mark both. Tapering would mean dividers appearing and
+# disappearing mid-span for a worse-looking result.
 
 const LANE_W := 2.3
 const CHUNK_LEN := 50.0
@@ -133,8 +135,8 @@ static func _flat_mat(color: Color, emissive: bool = false, energy: float = 1.0)
 
 ## Procedural asphalt-grain material: a small seamless noise texture mapped
 ## through a 2-color gradient, tiled via uv1_scale so it repeats along the
-## chunk instead of stretching. Two-sided (CULL_DISABLED) so triangle
-## winding on the tapered strips below never matters.
+## chunk instead of stretching. Back faces are culled (the default), so the
+## tapered strips below must wind their triangles to face up.
 static func _asphalt_mat(color: Color) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	var noise := FastNoiseLite.new()
@@ -152,7 +154,6 @@ static func _asphalt_mat(color: Color) -> StandardMaterial3D:
 	m.uv1_scale = Vector3(2.0, 6.0, 1.0)
 	m.roughness = 0.9
 	m.metallic = 0.0
-	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return m
 
 static func _get_own_mat() -> StandardMaterial3D:
@@ -309,10 +310,10 @@ static func _lane_w(lanes: int) -> float:
 # the pool and has its six vertices rewritten in place on rebuild; the old
 # path spun up a SurfaceTool for all ten strips on every single rebuild.
 #
-# Vertex order and the two-sided material are carried over unchanged from the
-# SurfaceTool version, so the strips rasterise exactly as before. (The
-# CULL_DISABLED that makes winding irrelevant is a separate known issue --
-# fixing it here would have changed the visuals mid-pass.)
+# Godot treats clockwise triangles (seen from the front) as front faces, and
+# every strip material culls back faces. The oncoming-side strips are passed
+# mirrored x values (outer < inner), which flips the winding, so the vertex
+# order is picked per side to keep every strip facing up.
 
 static func _strip_arrays(x_inner0: float, x_inner1: float, x_outer0: float, x_outer1: float, length: float, y: float) -> Array:
 	var a := Vector3(x_inner0, y, 0.0)
@@ -321,13 +322,18 @@ static func _strip_arrays(x_inner0: float, x_inner1: float, x_outer0: float, x_o
 	var d := Vector3(x_outer1, y, -length)
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([a, b, c, b, d, c])
+	# [a, b, c] runs clockwise seen from above only when outer is left of inner.
+	var mirrored := x_outer0 < x_inner0
+	arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([a, b, c, b, d, c] if mirrored else [a, c, b, b, c, d])
 	arrays[Mesh.ARRAY_NORMAL] = PackedVector3Array([
 		Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP,
 	])
 	arrays[Mesh.ARRAY_TEX_UV] = PackedVector2Array([
 		Vector2(0, 0), Vector2(1, 0), Vector2(0, 1),
 		Vector2(1, 0), Vector2(1, 1), Vector2(0, 1),
+	] if mirrored else [
+		Vector2(0, 0), Vector2(0, 1), Vector2(1, 0),
+		Vector2(1, 0), Vector2(0, 1), Vector2(1, 1),
 	])
 	return arrays
 
@@ -378,10 +384,11 @@ static func _building_slots() -> int:
 
 # ---------- collision (reused bodies) ----------
 #
-# Real "Dirt"-group collision spanning the curb+sidewalk band on one side for
-# this whole chunk. Created once per side and RESIZED on rebuild -- the shape
-# resource is reused, so nothing here reallocates either. Still not tapered
-# (per-chunk average width), the same deliberate simplification as before.
+# Real "Dirt"-group collision spanning the sidewalk band on one side for this
+# whole chunk. Created once per side and RESHAPED on rebuild -- the shape
+# resource is reused. It is a convex prism tapered exactly like the sidewalk
+# strip (issue #35), so the grip change and the height step sit under the
+# drawn curb edge all along a lane-count change.
 
 static func _new_sidewalk_collision(body_name: String) -> StaticBody3D:
 	var body := StaticBody3D.new()
@@ -389,16 +396,28 @@ static func _new_sidewalk_collision(body_name: String) -> StaticBody3D:
 	body.add_to_group("Dirt")
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
-	col.shape = BoxShape3D.new()
+	var hull := ConvexPolygonShape3D.new()
+	# placeholder until _apply() reshapes it -- an empty hull logs an error
+	hull.points = PackedVector3Array([Vector3.ZERO, Vector3.RIGHT, Vector3.UP, Vector3.BACK])
+	col.shape = hull
 	body.add_child(col)
 	return body
 
-static func _update_sidewalk_collision(root: Node3D, body_name: String, inner_x: float, outer_x: float, side: int) -> void:
+static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: float, inner1: float, outer0: float, outer1: float, side: int) -> void:
 	var body: StaticBody3D = root.get_node(NodePath(body_name))
 	var col: CollisionShape3D = body.get_node(^"Shape")
-	var box: BoxShape3D = col.shape
-	box.size = Vector3(outer_x - inner_x, 0.1, CHUNK_LEN)
-	body.position = Vector3((inner_x + outer_x) / 2.0 * float(side), 0.1, -CHUNK_LEN / 2.0)
+	var hull: ConvexPolygonShape3D = col.shape
+	# chunk start is z=0, end is z=-CHUNK_LEN; same 0.05..0.15 height band as
+	# the old box. Points are in chunk-local space, so the body sits at origin.
+	var sx := float(side)
+	var pts := PackedVector3Array()
+	for y in [0.05, 0.15]:
+		pts.append(Vector3(inner0 * sx, y, 0.0))
+		pts.append(Vector3(outer0 * sx, y, 0.0))
+		pts.append(Vector3(inner1 * sx, y, -CHUNK_LEN))
+		pts.append(Vector3(outer1 * sx, y, -CHUNK_LEN))
+	hull.points = pts
+	body.position = Vector3.ZERO
 
 # ---------- buildings (reused nodes) ----------
 #
@@ -498,9 +517,14 @@ static func _create_nodes(root: Node3D) -> void:
 ## Rewrites an already-built chunk skeleton for a new position/config. No
 ## node is created, freed, or reparented here -- this is what replaces the
 ## old queue_free()-everything teardown.
-static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary) -> void:
+##
+## origin_index is the floating-origin offset (game.gd, issue #26): the chunk
+## that currently sits at world z=0. The subtraction is done in ints BEFORE
+## converting to float, so a chunk millions of indices out still lands on an
+## exact, small coordinate instead of a rounded huge one.
+static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary, origin_index: int = 0) -> void:
 	root.name = "Chunk_%d" % chunk_index
-	root.position = Vector3(0, 0, -float(chunk_index) * CHUNK_LEN)
+	root.position = Vector3(0, 0, -float(chunk_index - origin_index) * CHUNK_LEN)
 	root.set_meta("chunk_index", chunk_index)
 
 	var own_lanes: int = clampi(int(cfg.own_lanes), 1, MAX_OWN_LANES)
@@ -544,8 +568,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	_update_strip(root, "SidewalkOwn", start_own_curb, end_own_curb, start_own_walk, end_own_walk, 0.1)
 	_update_strip(root, "SidewalkOnc", -start_onc_curb, -end_onc_curb, -start_onc_walk, -end_onc_walk, 0.1)
 
-	_update_sidewalk_collision(root, "SidewalkColOwn", (start_own_curb + end_own_curb) / 2.0, (start_own_walk + end_own_walk) / 2.0, 1)
-	_update_sidewalk_collision(root, "SidewalkColOnc", (start_onc_curb + end_onc_curb) / 2.0, (start_onc_walk + end_onc_walk) / 2.0, -1)
+	_update_sidewalk_collision(root, "SidewalkColOwn", start_own_curb, end_own_curb, start_own_walk, end_own_walk, 1)
+	_update_sidewalk_collision(root, "SidewalkColOnc", start_onc_curb, end_onc_curb, start_onc_walk, end_onc_walk, -1)
 
 	# edge pylons -- cosmetic rhythm/speed cues, interpolated along each
 	# shoulder's outer edge between this chunk's start and end width
@@ -604,12 +628,12 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			written += 1
 	lane.visible_instance_count = written
 
-## Builds a fresh chunk root positioned at world Z = -chunk_index * CHUNK_LEN,
+## Builds a fresh chunk root positioned at world Z = -(chunk_index - origin_index) * CHUNK_LEN,
 ## spanning from z=0 to z=-CHUNK_LEN locally.
-static func build_chunk(chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary) -> Node3D:
+static func build_chunk(chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary, origin_index: int = 0) -> Node3D:
 	var root := Node3D.new()
 	_create_nodes(root)
-	_apply(root, chunk_index, prev_cfg, cfg)
+	_apply(root, chunk_index, prev_cfg, cfg, origin_index)
 	return root
 
 ## The recycle path. Previously this queue_free()'d all ~70 children and
@@ -617,7 +641,7 @@ static func build_chunk(chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary)
 ## teardown-and-reallocate roughly every 0.9 seconds -- a periodic stutter on
 ## a 15 W CPU. Now it only rewrites vertex data, transforms and shape sizes
 ## into nodes that already exist.
-static func rebuild_chunk(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary) -> void:
+static func rebuild_chunk(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary, origin_index: int = 0) -> void:
 	if not root.has_meta("nodes_built"):
 		_create_nodes(root)
-	_apply(root, chunk_index, prev_cfg, cfg)
+	_apply(root, chunk_index, prev_cfg, cfg, origin_index)

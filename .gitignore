@@ -1,0 +1,17 @@
+# Agent Office worker scaffolding - machine-local, contains absolute paths
+# and a per-worker hook token. Never commit.
+.agent-office/
+
+# OS noise
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Godot 4 - editor cache and import artifacts, regenerated on open
+.godot/
+*.translation
+
+# Export output
+build/
+*.exe
+*.pck

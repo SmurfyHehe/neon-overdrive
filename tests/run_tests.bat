@@ -18,10 +18,13 @@ if not exist ".godot" "%GODOT%" --headless --path . --import >nul 2>&1
 set "FAILED="
 call :run smoke --headless
 call :run car_loft_normals --headless
+call :run road_strip_winding --headless
+call :run sidewalk_collision_taper --headless
+call :run aero_draft_equivalence --headless
 if /i not "%~1"=="quick" (
-	rem These two need the real renderer: headless drops MultiMesh data.
-	call :run chunk_builder_equivalence
+	rem These need a real window: headless drops MultiMesh data.
 	call :run chunk_drive
+	call :run game_state
 )
 echo.
 if defined FAILED (

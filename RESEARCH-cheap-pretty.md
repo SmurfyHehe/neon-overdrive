@@ -223,12 +223,15 @@ at 60 fps.
 
 ### What this changes about the priorities above
 
-- **Item 6 (test glow) moves to the front.** It's no longer a caveat to check
-  eventually — it's the first number to take, because `rendering_method="mobile"`
-  plus a bandwidth-bound GPU is exactly the shape of godot#98531. And the answer
-  changes how every emissive asset gets authored: if glow is too expensive, halos
-  get painted into textures, which is an art-pipeline decision that wants
-  settling before milestone 3, not after a hundred assets exist.
+- **Item 6 (test glow) is now a confirmed risk, and it's measurable the moment
+  glow exists.** Verified 2026-09-29: the project runs on **Vulkan 1.3.280 /
+  Forward Mobile** on this Iris Xe, so godot#98531 applies to this exact
+  configuration — and `game.gd` builds its `Environment` with fog but **no
+  `glow_enabled` at all yet**. So there is nothing to measure today. Take the
+  number in the same sitting glow is switched on during the atmosphere pass,
+  before any emissive assets are authored around it: if glow is too expensive,
+  halos get painted into textures instead, and that's an art-pipeline decision
+  that's cheap now and expensive after a hundred assets exist.
 - **Keeping 60 Hz physics is right, and it's the CPU risk.** Only 2 of the 12
   threads are performance cores, and GEVP integrates suspension and tire forces
   per step per vehicle. Player-only is cheap. Milestones 3–4 (traffic, then

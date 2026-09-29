@@ -77,8 +77,8 @@ static func coupe_default() -> Dictionary:
 		# rear downforce helps put power down without adding front push that
 		# would fight the steering feel already tuned. Not measured from a
 		# real car, [stated]-flagged as likely to need retuning once driven.
-		"aero_lift_coefficient_front": 0.35,
-		"aero_lift_coefficient_rear": 0.55,
+		"aero_downforce_coefficient_front": 0.35,
+		"aero_downforce_coefficient_rear": 0.55,
 	}
 
 ## Rise-then-taper torque curve, loosely modeled on a real gasoline engine's

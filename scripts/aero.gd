@@ -9,7 +9,7 @@
 # linear_velocity) -- same "extend, don't edit" pattern as the rest of this
 # project's vendor integration.
 #
-# Data-driven like car_spec.gd: aero_lift_coefficient_front/rear live as
+# Data-driven like car_spec.gd: aero_downforce_coefficient_front/rear live as
 # plain vars on PlayerCar (not the vendor class) and get set the same way
 # CarSpec.apply() sets everything else, via v.set(). Future NPCCar/CopCar
 # specs can give themselves different aero numbers (e.g. a heavier cop SUV
@@ -37,17 +37,17 @@ static func apply(v: Vehicle) -> void:
 ## separate "reduce pitch at speed" code. This is exactly the kind of claim
 ## that needs headless verification, not just this comment -- see ship notes.
 static func _apply_downforce(v: Vehicle) -> void:
-	# BUG FIX (2026-09-13, verified headless): aero_lift_coefficient_front/rear
+	# BUG FIX (2026-09-13, verified headless): aero_downforce_coefficient_front/rear
 	# are declared on PlayerCar, not on the vendored Vehicle base class this
 	# function is statically typed against, so GDScript can't infer a type for
-	# `q * v.frontal_area * v.aero_lift_coefficient_front` via `:=` (it treats
+	# `q * v.frontal_area * v.aero_downforce_coefficient_front` via `:=` (it treats
 	# the unknown member as Variant and refuses to infer) -- a hard parse
 	# error that broke script loading entirely, not just a wrong number.
 	# Explicit `: float` typing sidesteps the inference and does a normal
 	# dynamic property fetch at runtime instead.
 	var q := 0.5 * v.air_density * v.speed * v.speed
-	var front_force: float = q * v.frontal_area * v.aero_lift_coefficient_front
-	var rear_force: float = q * v.frontal_area * v.aero_lift_coefficient_rear
+	var front_force: float = q * v.frontal_area * v.aero_downforce_coefficient_front
+	var rear_force: float = q * v.frontal_area * v.aero_downforce_coefficient_rear
 	var down := -v.global_transform.basis.y
 	var front_offset := v.to_global(v.front_axle_position) - v.global_position
 	var rear_offset := v.to_global(v.rear_axle_position) - v.global_position

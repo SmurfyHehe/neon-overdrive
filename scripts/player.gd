@@ -133,6 +133,11 @@ func _ready() -> void:
 	# time, same pattern as CarSpec, not dead code.
 	add_to_group("aero_vehicles")
 
+	# Engine sound (2026-09-29, prototype of PROPOSAL-audio.md option C): a
+	# synthesised engine driven by this car's motor_rpm/throttle. Added after
+	# CarSpec.apply() so it picks up the real idle/max rpm.
+	add_child(EngineAudio.new())
+
 func _physics_process(delta: float) -> void:
 	var throttle := Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP)
 	var braking := Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN)

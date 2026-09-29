@@ -10,7 +10,8 @@ documents it as a deliberate choice — you may not want to file those at all.
 
 ## Closed
 
-Verified fixed on `main` at `9ea72c8`.
+A1–D6 verified fixed on `main` at `9ea72c8`; A5 onward closed by the
+listed PRs, all merged.
 
 | # | Issue | Closed by |
 |---|---|---|
@@ -27,6 +28,17 @@ Verified fixed on `main` at `9ea72c8`.
 | D3 | `LANE_W` declared in three files | PR #3 (one left) |
 | D4 | `SHIFT_SAFE_SPEED` declared, never referenced | PR #3 |
 | D6 | Tire radius set twice | PR #3 (`car_spec.gd` only) |
+| A5 | Pixel's task stalled; F1, F3, F4 never landed | PR #44 (F1, F3, F4 landed) |
+| A6 | Two agents fixed the same bug | `CLAUDE.md` rules (PR #5) + check-in-flight dispatch |
+| A7 | An agent reset the shared root checkout | `CLAUDE.md` rules (PR #5) + check-in-flight dispatch |
+| B5 | `CULL_DISABLED` on the asphalt/strip material | PR #54 |
+| B6 | Drafting was O(n²) per physics frame | PR #51 |
+| B7 | Headroom unmeasurable (vsync on, no frame-time harness) | PR #49 (benchmark mode) |
+| C1 | No floating origin / world recentering | PR #58 |
+| C2 | No pause, restart, quit or game-state machine | PR #56 |
+| F1 | `project.godot` feature tag said Forward Plus | PR #44 |
+| F3 | Doc sprawl with overlapping authority | PR #44 (HANDOFF.md retired) |
+| F4 | HANDOFF's "editor run not verified" was false | PR #44 (HANDOFF.md retired) |
 
 B1–B4 verification: headless boot 600 frames with zero errors, plus a
 throwaway harness driving `build_chunk` once then `rebuild_chunk` 300 times
@@ -40,66 +52,7 @@ Not covered by that: how any of it *looks*. Headless renders nothing.
 
 ---
 
-## A. Coordination
-
-**A5. Pixel's task is incomplete — F1, F3, F4 never landed.** (NEW)
-The task covering A1, F1, F3, F4 and tracking `ISSUES.md` produced only PR #2
-(A1). The worker stalled on a permission prompt. Three hygiene issues and the
-issue list itself are still open because of it.
-
-**A6. Duplicate diagnosis: two agents fixed the same bug.** (NEW)
-The `road_chunk_builder.gd` parse error was independently diagnosed from the
-same Godot log and fixed identically by two agents. One fix became PR #4; the
-other became an orphaned commit on `main`, discarded by a `git reset`. The
-diffs were byte-identical. Pure duplicated spend, and a sign that dispatch
-does not know what is already in flight.
-
-**A7. An agent reset the shared root checkout under another agent.** (NEW)
-`git reset` to `origin/main` was run in the root checkout while another agent
-was mid-debug there holding an unpushed fix. The commit was orphaned and the
-tree reverted to a non-parsing `road_chunk_builder.gd`, so the game stopped
-booting again while the cause of it not booting was being diagnosed. Nothing
-was lost only because the same fix existed on PR #4.
-*Fix proposed in PR #5.*
-
----
-
 ## B. Performance
-
-**B5. `cull_mode = CULL_DISABLED` on the asphalt/strip material.**
-Doubles rasterised triangles on the largest surfaces in the scene. The comment
-admits it exists so triangle winding "never matters" — it covers a
-winding-order bug rather than fixing it. There is exactly one real site; the
-old `:192` reference was always a comment, not code.
-*Where: `road_chunk_builder.gd:155`.*
-
-**B6. Drafting is O(n²) per physics frame.**
-`_draft_factor()` walks the entire `aero_vehicles` group for every vehicle at
-60 Hz. Inert today (one member), but it lands precisely when milestone 3
-traffic arrives — 20–40 cars is 400–1600 distance checks per frame, on 2
-P-cores already running GEVP's per-wheel raycasts.
-*Where: `scripts/aero.gd:76-91`.*
-
-**B7. Headroom is unmeasurable. Partly addressed by PR #8, but not closed.**
-Originally: no vsync setting existed at all, so it was engine-default on and
-every run read a flat 60 FPS / 16.66 ms regardless of load.
-
-PR #8 added `window/vsync/vsync_mode.editor=0`. That is the **`.editor`
-feature-tagged override**, so it only takes effect when running from the
-editor. The plain `window/vsync/vsync_mode` key is still unset, which means
-**vsync remains on in exported builds** — including the standalone build Roy
-is now playing, and any build used for benchmarking. Two things still open:
-
-- set the untagged `window/vsync/vsync_mode` as well, or deliberately decide
-  that measurement only ever happens in-editor and say so;
-- there is still no frame-time harness, so the budget in
-  RESEARCH-cheap-pretty.md remains unverified — and that includes the
-  draw-call numbers claimed for B1–B4 above, which are counted, not timed.
-*Where: `project.godot:23`.*
-*Update (#19, PR #49):* benchmark mode now measures frame time in exported
-builds and turns vsync off for that run only (`benchmark.bat`, or
-`NeonOverdrive.exe -- --benchmark`). **Still open:** nobody has timed B1–B4
-or B8's glow cost yet; normal play keeps vsync on.
 
 **B8. Glow is never enabled.**
 `game.gd`'s `Environment` sets fog and sky but no `glow_enabled` — confirmed,
@@ -111,16 +64,6 @@ directly in front of the entire neon aesthetic.
 ---
 
 ## C. Architecture
-
-**C1. No floating origin / world recentering.**
-The ground slab is 200,000 units long and chunks sit at `-index × 50`. Single
-precision degrades badly that far out, and there is a hard wall at ~200 km —
-about an hour at 200 km/h — in a game whose premise is *endless*.
-
-**C2. No pause, restart, or quit. No game-state machine at all.**
-You cannot exit without killing the process. Milestones 6–11 (damage ending a
-run, fuel stranding, garage stops) every one assume a state machine that does
-not exist.
 
 **C3. No out-of-bounds handling.**
 Buildings are 22 m apart so there are gaps between them, and past them is flat
@@ -148,7 +91,8 @@ or delete.
 ## E. Tuning and correctness
 
 **E1. Grip target drift.** `coefficient_of_friction {"Road": 3.0}` in
-`car_spec.gd`, but HANDOFF.md states the target as "friction ~1.2-1.5". Either
+`car_spec.gd`, but ROADMAP.md's "Carried over from HANDOFF.md" section
+states the target as "friction ~1.2-1.5". Either
 the target moved or GEVP's convention differs from `VehicleBody3D`'s.
 Undocumented either way.
 
@@ -209,25 +153,10 @@ Until top speed comes down, 5th is a gear with no reason to be selected and
 
 ## F. Hygiene
 
-**F1. `project.godot` metadata is inconsistent.** Still open.
-`config/features` claims `"Forward Plus"` while `renderer/rendering_method` is
-`"mobile"`. The engine reports Forward Mobile at runtime, so the tag misleads.
-*Where: `project.godot:19` vs `:23`.*
-
 **F2. No tests, no CI, no performance harness.**
 RESEARCH-cheap-pretty.md prescribes a measurement discipline with no mechanism
 to run it. The B1–B4 verification above had to build a throwaway harness and
 then delete it — that work should be a kept fixture, not disposable.
-
-**F3. Doc sprawl with overlapping authority.** Still open.
-CLAUDE.md + ROADMAP.md + HANDOFF.md + RESEARCH-cheap-pretty.md +
-PROPOSAL-audio.md + this file. HANDOFF is from Sept 12 and its "Plan, in order"
-is superseded by ROADMAP's 11 milestones.
-
-**F4. HANDOFF's "editor run not verified" is false.** Still open.
-`HANDOFF.md:23` still reads "Godot editor run has not been verified working
-end-to-end this session". It was verified 2026-09-29: the project imports,
-boots headless for 600 frames with zero errors, and the chunk harness passes.
 
 **F5. Godot's global class cache goes stale when tracked scripts are deleted.** (NEW)
 PR #3 deleted `Claude outputs/`, but `.godot/global_script_class_cache.cfg`

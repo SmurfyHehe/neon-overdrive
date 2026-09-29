@@ -27,5 +27,15 @@ Rules:
 
 ## Git: remote
 
-`origin` is <https://github.com/SmurfyHehe/neon-overdrive.git>. Pushing is
-Roy's call - ask, do not push on your own initiative.
+`origin` is <https://github.com/SmurfyHehe/neon-overdrive.git>.
+
+## Git: every change goes through a pull request
+
+Roy approves changes before they reach `main` (decided 2026-09-29).
+
+- **Never commit to `main`.** Branch first, in your own worktree under
+  `.claude/worktrees/` so you do not switch the branch under other agents.
+- **Push your branch and open a PR** with `gh pr create`. Pushing a work
+  branch is allowed; the PR description says what changed and why, in plain
+  words.
+- **Only Roy merges.** Do not merge your own PR, and do not push to `main`.

@@ -32,7 +32,7 @@ class_name PlayerCar
 # also gets a REAL small physical bump for free from the sidewalk's raised
 # collision geometry, instead of the old scripted cosmetic jolt.
 
-const KIND := "coupe"
+const KIND := TestCarBuilder.KIND  # #63 neutral test car
 const CFG := {
 	"wheel_r": 0.34, "axle_z": 1.05, "wheel_x": 0.88,
 }
@@ -67,7 +67,9 @@ func _ready() -> void:
 	# upgraded with actual panel/bumper/mirror/spoiler/alloy-wheel detail (see
 	# car_builder.gd's _add_body_details/_add_glass/_build_alloy_wheel) instead
 	# of the old flat-box look.
-	chassis_visual = CarBuilder.build_chassis_visual(KIND, Color(0, 0.96, 1))
+	# #63: the neutral test car, for judging handling and camera. The styled
+	# coupe (CarBuilder, KIND_CONFIGS["coupe"]) waits on the design in #16.
+	chassis_visual = TestCarBuilder.build_chassis_visual()
 	add_child(chassis_visual)
 
 	# BUG FIX (2026-09-13, verified headless): RigidBody3D falls asleep after

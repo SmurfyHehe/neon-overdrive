@@ -15,9 +15,10 @@
 
 ## 1. Where audio stands today
 
-**There is none.** A search across the project for `audio`, `sound`,
-`AudioStream` or `bus` returns zero matches outside the vendored physics folder.
-No `AudioStreamPlayer` nodes, no bus layout, no audio in `project.godot`. This is
+**There is none.** No code or scene outside the vendored physics folder mentions
+`audio`, `sound`, `AudioStream` or `bus`; the only mentions are in docs (the
+HANDOFF.md backlog line quoted above). No `AudioStreamPlayer` nodes, no bus
+layout, no audio in `project.godot`. This is
 genuinely greenfield — which is good news, because it means no prior decision has
 to be undone.
 
@@ -64,8 +65,8 @@ Three things worth calling out:
 - **`surface_type` is already tagged.** The sidewalk collision is tagged `"Dirt"`
   and the road slab `"Road"` (done during the environment pass for grip reasons),
   so a different tire sound over the kerb costs nothing extra.
-- **`motor_rpm` is confirmed live.** Comments in `player.gd` record headless tests
-  showing motor RPM climbing to redline normally. Engine config — mass, torque,
+- **`motor_rpm` is confirmed live.** A comment in `player.gd` (line 74) records a
+  headless test showing motor RPM climbing normally with the car moving. Engine config — mass, torque,
   gearing — lives in `car_spec.gd` and is applied through `CarSpec.apply()`, so
   audio tuning can hang off the same structure the mods tree (milestone 10) will
   eventually drive.
@@ -80,15 +81,16 @@ same work regardless of which is chosen.
 Record or license an engine at intervals, then crossfade and pitch-shift between
 loops by RPM and load.
 
-- **Asset cost: ~13 loops per perspective**, spaced every 500 RPM (tighter, 250
-  RPM, below 2500 where the ear is less forgiving). Across the four standard
-  perspectives — exhaust, engine bay, intake, interior — that's **52 files
-  on-throttle**, roughly **104** once off-throttle variants exist.
-- **The interior perspective is confirmed required** (Roy, 2026-09-29: cockpit
-  view must come). So the fourth perspective is not optional and this count does
-  not shrink. Note this also supersedes ROADMAP.md's confirmed-decision line
-  *"Chase cam only for now. No cockpit/hood toggle yet"* — that needs updating,
-  and it affects milestone 5 (Camera + HUD) as well as audio.
+- **Asset cost: ~16 loops per perspective.** The car runs 1000–7000 RPM
+  (`car_spec.gd`); at 250 RPM spacing below 2500, where the ear is less
+  forgiving, and 500 RPM above, that's 7 + 9 loops. The three outside
+  perspectives — exhaust, engine bay, intake — make **48 files on-throttle**,
+  roughly **96** once off-throttle variants exist.
+- **Interior perspective: not needed yet.** Cockpit view comes later (Roy,
+  2026-09-29: the current car model isn't suitable for first person), and
+  ROADMAP.md's "Chase cam only for now" stands. When cockpit view does arrive,
+  option A needs a fourth set of recordings: another 16 loops on-throttle, ~32
+  with off-throttle.
 - **Why so many:** a sample stretched more than about 500 RPM audibly warps. The
   count is forced by that limit, not by ambition.
 - **Tuning burden:** every loop needs its true RPM derived (RPM = fundamental
@@ -121,17 +123,18 @@ intake and exhaust roughness, and modulate on load.
 - **Controllability:** total. Cylinder count, firing interval, harmonic content
   and redline become numbers in `car_spec.gd` — which means the **mods tree
   (milestone 10) could genuinely change how a car sounds** when you buy an engine
-  upgrade, rather than just changing its stats. Tiers B and A could sound like
-  different cars because they *are* different parameters, not different files.
+  upgrade, rather than just changing its stats. The Sleeper and top-tier cars
+  could sound like different cars because they *are* different parameters, not
+  different files.
 - **Aesthetic fit:** this is the argument that matters. A synthesised engine in a
   synthwave night racer isn't a compromise standing in for a real recording — it
   is the same instrument family as the soundtrack. It's also exactly the logic the
   graphics research landed on: pay once, in code, instead of in assets.
-- **Cockpit view costs almost nothing here.** With the interior perspective now
-  confirmed, this becomes a real advantage: a cockpit is acoustically a damped,
-  filtered version of the same engine, so the interior mix is an EQ and reverb
-  treatment of a signal we already have — not a second set of recordings. Under
-  option A the same requirement is a quarter of a ~104-file library.
+- **A later cockpit view would cost almost nothing here.** Cockpit view isn't
+  planned yet, but when it comes, a cockpit is acoustically a damped, filtered
+  version of the same engine, so the interior mix is an EQ and reverb treatment
+  of a signal we already have — not a second set of recordings. Under option A
+  the same view means another ~32 files.
 - **Risk, stated plainly:** it will sound synthetic, because it is. If the target
   is "sounds like a real car," this is the wrong choice and no amount of tuning
   fixes that. It also has real CPU cost per frame (buffer filling in GDScript),
@@ -143,17 +146,21 @@ intake and exhaust roughness, and modulate on load.
 Worth knowing it exists, because it's what modern racing sims actually use, and
 it collapses the asset problem to **3 files** — one acceleration ramp, one
 deceleration ramp, one idle loop — with the expensive analysis done offline.
-Ruled out because **Godot 4 has no granular engine natively**; it means FMOD,
-Wwise or AudioMotors, and that's a middleware dependency far out of proportion to
-where this project is.
+Godot 4 has no granular engine built in, but that alone isn't a reason to rule
+it out: it could be hand-built on the same `AudioStreamGenerator` option C uses,
+with no FMOD or Wwise. Left out because it combines the costs of A and C — it
+still needs recorded ramps (sourced, cleaned, analysed offline) *and* a custom
+real-time playback engine in code — and that's a lot of machinery for where this
+project is. Worth revisiting if C's prototype sounds too synthetic and B sounds
+too stretched.
 
 ### Recommendation
 
 **C, with the prototype gate.** It's the only option with zero asset cost, it's
 the only one that lets the mods tree change how a car sounds, and it's the one
 whose weakness (sounds synthetic) is arguably this game's aesthetic rather than a
-defect. The cockpit requirement widened the gap rather than closing it: the view
-that costs option A a quarter of its library costs option C a filter. But it is
+defect. It also ages best if cockpit view arrives later: that view would cost
+option A another set of recordings, and option C a filter. But it is
 also the option I'm least able to promise on paper — so the
 honest form of this recommendation is: build a throwaway synthesised engine
 first, listen to it, and fall back to **B** without embarrassment if it doesn't
@@ -219,7 +226,8 @@ onto music states with no invention required:
 
 Two more hooks worth using: the **near-miss streak multiplier** (builds over a
 rolling 4s window, caps at 3.0×) is a natural filter-open or layer-in, since it's
-already a number from 1.0 to 3.0 (in 0.15 steps) rather than an on/off state; and **stop places**
+already a number from 1.0 to 3.0 (+0.15 per near-miss until the cap) rather than
+an on/off state; and **stop places**
 (garage, repair, refuel) want their own calm cue, because they're the only moments
 the game stops moving.
 
@@ -258,10 +266,10 @@ turned down. Worth designing in from the first bus, not bolted on at the end.
 
 1. **Which engine direction** — A, B or C. §3 is the material for that call.
 2. **Which music route** — licensed, commissioned, or composed in-project (§5).
-3. **Does the cockpit change the camera plan now or later?** Confirming cockpit
-   view affects milestone 5 (Camera + HUD) and contradicts a line in ROADMAP.md's
-   confirmed decisions. That's a roadmap edit I haven't made — it's a design
-   decision of yours to record, and another worker has the repo open.
+
+*Answered:* cockpit view comes later, not now (Roy, 2026-09-29). The current car
+model isn't suitable for first person, so ROADMAP.md's "Chase cam only for now"
+and milestone 5 stay as they are.
 
 ## 7. Sources
 

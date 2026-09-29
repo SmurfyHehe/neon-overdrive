@@ -21,8 +21,9 @@ class_name RoadChunkBuilder
 #   box (raised slightly above the flat "Road" ground slab) under the
 #   curb+sidewalk band, and the vendored Wheel controller reads the group a
 #   wheel's raycast hits to pick tire values AND feels the real height step.
-#   This box is NOT tapered (per-chunk average width) -- a deliberate
-#   simplification, unlike the tapered visual strips above it.
+#   UPDATE (2026-09-29, issue #35): this used to be one box at the chunk's
+#   average width, up to 1.15 m off the drawn sidewalk at each end of a
+#   lane-change chunk. It is now a tapered prism that matches the strip.
 # - roadside buildings beyond the sidewalks: real collision (StaticBody3D +
 #   BoxShape3D) so the player can't drive through them -- this is now the
 #   actual hard boundary of the drivable world, since the curb no longer is
@@ -56,12 +57,13 @@ class_name RoadChunkBuilder
 # Curves + elevation are their own later architecture change (Path3D-driven
 # procedural mesh) and are explicitly NOT attempted here.
 #
-# Known remaining simplification: interior lane-divider dashes and the
-# center barrier/dash line are snapped to each chunk's own (end-of-chunk)
-# lane count, not tapered -- properly tapering dividers through a
-# lane-count change means dividers appearing/disappearing mid-span, real
-# complexity that wasn't worth it for a "cheap fix" pass. Revisit if it
-# reads as janky once driven.
+# Interior lane-divider dashes and the center barrier/dash line are snapped
+# to each chunk's own (end-of-chunk) lane count, not tapered. Kept on purpose
+# (issue #36, closed won't-fix 2026-09-29): on a lane ADD the new divider
+# carries on from the old road edge while the new lane opens beside it, and
+# on a lane DROP the outer lane narrows away with no divider -- which is how
+# real roads mark both. Tapering would mean dividers appearing and
+# disappearing mid-span for a worse-looking result.
 
 const LANE_W := 2.3
 const CHUNK_LEN := 50.0
@@ -378,10 +380,11 @@ static func _building_slots() -> int:
 
 # ---------- collision (reused bodies) ----------
 #
-# Real "Dirt"-group collision spanning the curb+sidewalk band on one side for
-# this whole chunk. Created once per side and RESIZED on rebuild -- the shape
-# resource is reused, so nothing here reallocates either. Still not tapered
-# (per-chunk average width), the same deliberate simplification as before.
+# Real "Dirt"-group collision spanning the sidewalk band on one side for this
+# whole chunk. Created once per side and RESHAPED on rebuild -- the shape
+# resource is reused. It is a convex prism tapered exactly like the sidewalk
+# strip (issue #35), so the grip change and the height step sit under the
+# drawn curb edge all along a lane-count change.
 
 static func _new_sidewalk_collision(body_name: String) -> StaticBody3D:
 	var body := StaticBody3D.new()
@@ -389,16 +392,28 @@ static func _new_sidewalk_collision(body_name: String) -> StaticBody3D:
 	body.add_to_group("Dirt")
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
-	col.shape = BoxShape3D.new()
+	var hull := ConvexPolygonShape3D.new()
+	# placeholder until _apply() reshapes it -- an empty hull logs an error
+	hull.points = PackedVector3Array([Vector3.ZERO, Vector3.RIGHT, Vector3.UP, Vector3.BACK])
+	col.shape = hull
 	body.add_child(col)
 	return body
 
-static func _update_sidewalk_collision(root: Node3D, body_name: String, inner_x: float, outer_x: float, side: int) -> void:
+static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: float, inner1: float, outer0: float, outer1: float, side: int) -> void:
 	var body: StaticBody3D = root.get_node(NodePath(body_name))
 	var col: CollisionShape3D = body.get_node(^"Shape")
-	var box: BoxShape3D = col.shape
-	box.size = Vector3(outer_x - inner_x, 0.1, CHUNK_LEN)
-	body.position = Vector3((inner_x + outer_x) / 2.0 * float(side), 0.1, -CHUNK_LEN / 2.0)
+	var hull: ConvexPolygonShape3D = col.shape
+	# chunk start is z=0, end is z=-CHUNK_LEN; same 0.05..0.15 height band as
+	# the old box. Points are in chunk-local space, so the body sits at origin.
+	var sx := float(side)
+	var pts := PackedVector3Array()
+	for y in [0.05, 0.15]:
+		pts.append(Vector3(inner0 * sx, y, 0.0))
+		pts.append(Vector3(outer0 * sx, y, 0.0))
+		pts.append(Vector3(inner1 * sx, y, -CHUNK_LEN))
+		pts.append(Vector3(outer1 * sx, y, -CHUNK_LEN))
+	hull.points = pts
+	body.position = Vector3.ZERO
 
 # ---------- buildings (reused nodes) ----------
 #
@@ -544,8 +559,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	_update_strip(root, "SidewalkOwn", start_own_curb, end_own_curb, start_own_walk, end_own_walk, 0.1)
 	_update_strip(root, "SidewalkOnc", -start_onc_curb, -end_onc_curb, -start_onc_walk, -end_onc_walk, 0.1)
 
-	_update_sidewalk_collision(root, "SidewalkColOwn", (start_own_curb + end_own_curb) / 2.0, (start_own_walk + end_own_walk) / 2.0, 1)
-	_update_sidewalk_collision(root, "SidewalkColOnc", (start_onc_curb + end_onc_curb) / 2.0, (start_onc_walk + end_onc_walk) / 2.0, -1)
+	_update_sidewalk_collision(root, "SidewalkColOwn", start_own_curb, end_own_curb, start_own_walk, end_own_walk, 1)
+	_update_sidewalk_collision(root, "SidewalkColOnc", start_onc_curb, end_onc_curb, start_onc_walk, end_onc_walk, -1)
 
 	# edge pylons -- cosmetic rhythm/speed cues, interpolated along each
 	# shoulder's outer edge between this chunk's start and end width

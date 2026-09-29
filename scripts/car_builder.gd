@@ -25,6 +25,12 @@ const KIND_CONFIGS := {
 ## computed per-quad (not smoothed across neighbors) to keep the deliberate
 ## faceted/low-poly look everything else in this file already uses.
 ##
+## Godot treats CLOCKWISE triangles as front faces, so the triangles are
+## emitted in reverse (a,c,b / a,d,c) while the normal stays outward. Emitting
+## them CCW as given culled every panel facing the camera and showed the far
+## panels' insides, lit from behind -- the "bare frame, panels missing" car in
+## ISSUES G1.
+##
 ## The normal comes from the diagonals, not from (b-a)x(c-a): lofts taper to a
 ## zero-height section (the coupe glass) or repeat a z (the coupe body), so a
 ## quad can have two coincident corners and collapse into a triangle, and the
@@ -38,7 +44,7 @@ static func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector
 	if diag.length_squared() < _QUAD_AREA_EPS:
 		return
 	var normal := diag.normalized()
-	for tri in [[a, b, c], [a, c, d]]:
+	for tri in [[a, c, b], [a, d, c]]:
 		if (tri[1] - tri[0]).cross(tri[2] - tri[0]).length_squared() < _QUAD_AREA_EPS:
 			continue
 		for v in tri:

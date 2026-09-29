@@ -86,6 +86,10 @@ and every run reads a flat 60 FPS / 16.66 ms regardless of load. No frame-time
 harness exists, so the budget in RESEARCH-cheap-pretty.md is unverified — and
 that includes the draw-call numbers claimed for B1–B4 above, which are counted,
 not timed.
+*Update (#19, PR #49):* measuring is now possible in exported builds with
+benchmark mode (`benchmark.bat`, or `NeonOverdrive.exe -- --benchmark`).
+**Still open:** nobody has timed B1–B4 or B8's glow cost yet. Benchmark mode
+is the tool for it; that measurement is a separate task.
 
 **B8. Glow is never enabled.**
 `game.gd`'s `Environment` sets fog and sky but no `glow_enabled` — confirmed,

@@ -80,12 +80,22 @@ traffic arrives — 20–40 cars is 400–1600 distance checks per frame, on 2
 P-cores already running GEVP's per-wheel raycasts.
 *Where: `scripts/aero.gd:76-91`.*
 
-**B7. Headroom is unmeasurable.**
-No vsync setting appears in `project.godot` at all, so it is engine-default on
-and every run reads a flat 60 FPS / 16.66 ms regardless of load. No frame-time
-harness exists, so the budget in RESEARCH-cheap-pretty.md is unverified — and
-that includes the draw-call numbers claimed for B1–B4 above, which are counted,
-not timed.
+**B7. Headroom is unmeasurable. Partly addressed by PR #8, but not closed.**
+Originally: no vsync setting existed at all, so it was engine-default on and
+every run read a flat 60 FPS / 16.66 ms regardless of load.
+
+PR #8 added `window/vsync/vsync_mode.editor=0`. That is the **`.editor`
+feature-tagged override**, so it only takes effect when running from the
+editor. The plain `window/vsync/vsync_mode` key is still unset, which means
+**vsync remains on in exported builds** — including the standalone build Roy
+is now playing, and any build used for benchmarking. Two things still open:
+
+- set the untagged `window/vsync/vsync_mode` as well, or deliberately decide
+  that measurement only ever happens in-editor and say so;
+- there is still no frame-time harness, so the budget in
+  RESEARCH-cheap-pretty.md remains unverified — and that includes the
+  draw-call numbers claimed for B1–B4 above, which are counted, not timed.
+*Where: `project.godot:23`.*
 
 **B8. Glow is never enabled.**
 `game.gd`'s `Environment` sets fog and sky but no `glow_enabled` — confirmed,
@@ -142,8 +152,12 @@ Undocumented either way.
 `aero_lift_coefficient_front/rear` get multiplied by `-basis.y`, so the sign
 convention is inverted from the name. Confusing for anyone tuning it later.
 
-**E3. Nothing has ever been driven.** Gearing, torque curve, aero and grip are
-all `[stated]`-flagged in-code as needing a real tuning pass once playable.
+**E3. Nothing had ever been driven — this is now resolved, and it produced
+E7-E9 below.** Gearing, torque curve, aero and grip were all
+`[stated]`-flagged in-code as needing a real tuning pass once playable. As of
+2026-09-29 the game is playable from a standalone build and Roy has driven it.
+The first real feel feedback exists; it is filed as E7-E9. Aero and grip are
+still untested by feel.
 
 **E4. Sidewalk collision uses untapered average width.** *(Acknowledged.)*
 
@@ -151,6 +165,41 @@ all `[stated]`-flagged in-code as needing a real tuning pass once playable.
 
 **E6. No curves or elevation.** *(Acknowledged, out of scope — needs the Path3D
 rearchitecture.)*
+
+**E7. Gear spread is the wrong shape — 4th and 5th are barely usable.** (NEW)
+Roy, after driving: *"the gearing ratio doesnt feel right. there barley any use
+for 4th and 5th gear."*
+
+With `wheel_r 0.34`, `final_drive 4.1` and a 7000 rpm redline, the ratios
+`[3.6, 2.4, 1.8, 1.4, 0.95]` give:
+
+| Gear | Ratio | km/h at redline | Step to next |
+|---|---|---|---|
+| 1 | 3.6 | 61 | 1.50 |
+| 2 | 2.4 | 91 | 1.33 |
+| 3 | 1.8 | 122 | 1.29 |
+| 4 | 1.4 | 156 | **1.47** |
+| 5 | 0.95 | 230 | — |
+
+Gear steps should shrink as they go up. These shrink (1.50, 1.33, 1.29) and
+then jump back to 1.47 for 4->5 — the second-largest step in the box sits at
+the top, where there is least power to recover from it.
+*Where: `scripts/car_spec.gd` `gear_ratios`.*
+
+**E8. The torque curve falls off too hard to survive that jump.** (NEW)
+`default_torque_curve()` peaks at x=0.55 and drops to 0.55 by x=1.0. Treating
+x as normalized rpm, torque x rpm puts peak *power* near x=0.85 (~5950 rpm),
+and by redline power is about 28% down from peak. Upshifting 4->5 at 6000 rpm
+lands at roughly 4070 rpm, which is about **75% of peak power** — so the shift
+into 5th costs a quarter of the available power. That is the mechanism behind
+E7's symptom, and neither fixes cleanly without the other.
+*Where: `scripts/car_spec.gd` `default_torque_curve()`.*
+
+**E9. Top gear is geared for a speed the game does not use.** (NEW)
+5th reaches 230 km/h at redline. **Roy's stated target is around 200 km/h.**
+Until top speed comes down, 5th is a gear with no reason to be selected and
+4th covers only a narrow 122-156 km/h window.
+*Depends on E7/E8; changing final drive moves every gear.*
 
 ---
 
@@ -191,6 +240,75 @@ and uncommitted, for the whole session.
 
 ---
 
+## G. Car model and car visuals
+
+**G1. The player car reads as a bare frame with the body panels missing —
+cause identified, and it is NOT what was suspected.** (NEW)
+The logged suspicion was face winding or culling in `car_builder.gd`. That is
+wrong on both counts:
+
+- `_build_loft`'s winding is **correct**. All six quad families (left, right,
+  top, bottom, front cap, rear cap) were checked by computing
+  `(b-a).cross(c-a)` against the section ordering, which is monotonically
+  increasing in z. Every face's normal points outward.
+- `player.gd:68` calls `build_chassis_visual`, not `build_skeleton_visual`.
+  The skeleton-rig mix-up was a real bug but it was fixed on 2026-09-13; the
+  player has had a real body since.
+
+The actual cause is lighting, not geometry. `bbcb12f` dropped the directional
+key light from energy 1.1 (warm daylight) to **0.2** (dim moonlight) and set
+`ambient_light_energy` to 0.3, with a near-black sky (`sky_top_color`
+0.02/0.004/0.08). The car's `body_mat` is non-emissive, so the panels receive
+almost no light and render close to black — while the headlights (emission
+1.4) and taillights (1.2) emit at full strength regardless of scene lighting.
+From the chase camera you therefore see glowing lights and little else, which
+reads as "panels missing". The geometry is all present.
+*Where: `scripts/game.gd:86-89` (key light) vs `car_builder.gd`
+`build_chassis_visual`'s `body_mat`.*
+
+**G2. The glass loft has degenerate end caps with zero normals.** (NEW)
+`_add_coupe_glass`'s `glass_sections` first and last entries set
+`y0 == y1 == base_y`, so the front and rear cap quads emitted by `_build_loft`
+have zero area. `(b-a).cross(c-a).normalized()` on a degenerate triangle
+returns `Vector3.ZERO`, so those faces carry a null normal and shade
+incorrectly. Minor next to G1 but real, and independent of it.
+*Where: `car_builder.gd` `_add_coupe_glass` / `_build_loft`.*
+
+**G3. Roy is unhappy with the car model itself, separate from G1.** (NEW)
+Roy: *"our car model sucks atm"*. This is a look-and-feel call and needs his
+direction before any work. Worth knowing there have already been two passes:
+the body was stacked `BoxMesh` primitives, then was rebuilt as the tapered
+loft wedge after Roy's *"replace the sport coupe its hideous"*. A third pass
+should start from what specifically still reads wrong, not from another guess.
+**G1 should be settled first** — it is likely that some of "sucks" is simply
+that the model is nearly invisible.
+
+**G4. The player car has no self-lit elements.** (NEW)
+No underglow, no emissive body accents, nothing that survives a dim night key.
+Roy already picked a placeholder underglow for the car as part of the lighting
+comparison's phase 2, which is on hold. Directly relevant to G1.
+
+---
+
+## H. Audio
+
+**H1. There is no audio in the project at all.** (NEW)
+Roy, on the standalone build: *"theres 0 sound on the build"*. This is not a
+regression — it was never built. There is no `AudioStreamPlayer`, no
+`AudioStream`, no audio file anywhere in the tree.
+
+`PROPOSAL-audio.md` states its own status plainly: *"STATUS: PROPOSAL. Nothing
+here is decided and no code has been written."* Audio appears nowhere in
+ROADMAP.md's milestones 1-11, and HANDOFF.md lists engine-pitch and
+tire-screech audio under *after core feel is right — don't build yet*.
+
+So the gap is expected, but Roy now wants it. Two things block a useful
+estimate: a direction has to be chosen from the three in PROPOSAL-audio.md,
+and engine sound is coupled to E7-E9 — pitch mapped to rpm will feel wrong
+while the gearing itself is wrong.
+
+---
+
 ## What matters most now
 
 **B7 + B8 together are the real exposure.** Glow is never enabled, the project
@@ -208,3 +326,32 @@ awkward once traffic exists.
 
 **A5–A7 are process, not code**, and they cost real tokens today: one task
 stalled, one fix written twice, one working tree reset mid-debug.
+
+---
+
+### Revised after the first real play session (2026-09-29)
+
+The game became playable from a standalone build and Roy drove it. That
+changes the ordering above, because feel feedback now exists where before
+there was only static analysis.
+
+**G1 first, and it is cheap.** The car looking like a bare frame is a lighting
+and material interaction, not broken geometry — the panels are all there and
+correctly wound. It is very likely that part of G3 ("our car model sucks")
+dissolves once the car is actually lit. Diagnosing G3 before fixing G1 risks
+redesigning a model nobody can currently see.
+
+**E7 + E8 are one issue and must move together.** The 4->5 gear step is the
+second-largest in the box and it lands exactly where the torque curve has
+already given up 28% of peak power. Fixing the ratios without flattening the
+curve, or the reverse, will not fix the symptom Roy reported. E9 (top speed to
+~200 km/h, Roy's stated target) rides along with them since final drive moves
+every gear.
+
+**H1 depends on E7–E9.** Engine audio is pitch mapped to rpm; building it
+against gearing that is known wrong means tuning it twice.
+
+**B7 is still the measurement blocker** and is now known to be only
+half-fixed — the vsync override PR #8 added does not apply to exported builds.
+Everything claimed about B1–B4 performance, and anything B8 would claim about
+glow cost, is unverified until that and a harness exist.

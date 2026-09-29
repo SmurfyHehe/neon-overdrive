@@ -133,8 +133,8 @@ static func _flat_mat(color: Color, emissive: bool = false, energy: float = 1.0)
 
 ## Procedural asphalt-grain material: a small seamless noise texture mapped
 ## through a 2-color gradient, tiled via uv1_scale so it repeats along the
-## chunk instead of stretching. Two-sided (CULL_DISABLED) so triangle
-## winding on the tapered strips below never matters.
+## chunk instead of stretching. Back faces are culled (the default), so the
+## tapered strips below must wind their triangles to face up.
 static func _asphalt_mat(color: Color) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	var noise := FastNoiseLite.new()
@@ -152,7 +152,6 @@ static func _asphalt_mat(color: Color) -> StandardMaterial3D:
 	m.uv1_scale = Vector3(2.0, 6.0, 1.0)
 	m.roughness = 0.9
 	m.metallic = 0.0
-	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return m
 
 static func _get_own_mat() -> StandardMaterial3D:
@@ -309,10 +308,10 @@ static func _lane_w(lanes: int) -> float:
 # the pool and has its six vertices rewritten in place on rebuild; the old
 # path spun up a SurfaceTool for all ten strips on every single rebuild.
 #
-# Vertex order and the two-sided material are carried over unchanged from the
-# SurfaceTool version, so the strips rasterise exactly as before. (The
-# CULL_DISABLED that makes winding irrelevant is a separate known issue --
-# fixing it here would have changed the visuals mid-pass.)
+# Godot treats clockwise triangles (seen from the front) as front faces, and
+# every strip material culls back faces. The oncoming-side strips are passed
+# mirrored x values (outer < inner), which flips the winding, so the vertex
+# order is picked per side to keep every strip facing up.
 
 static func _strip_arrays(x_inner0: float, x_inner1: float, x_outer0: float, x_outer1: float, length: float, y: float) -> Array:
 	var a := Vector3(x_inner0, y, 0.0)
@@ -321,13 +320,18 @@ static func _strip_arrays(x_inner0: float, x_inner1: float, x_outer0: float, x_o
 	var d := Vector3(x_outer1, y, -length)
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([a, b, c, b, d, c])
+	# [a, b, c] runs clockwise seen from above only when outer is left of inner.
+	var mirrored := x_outer0 < x_inner0
+	arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([a, b, c, b, d, c] if mirrored else [a, c, b, b, c, d])
 	arrays[Mesh.ARRAY_NORMAL] = PackedVector3Array([
 		Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP,
 	])
 	arrays[Mesh.ARRAY_TEX_UV] = PackedVector2Array([
 		Vector2(0, 0), Vector2(1, 0), Vector2(0, 1),
 		Vector2(1, 0), Vector2(1, 1), Vector2(0, 1),
+	] if mirrored else [
+		Vector2(0, 0), Vector2(0, 1), Vector2(1, 0),
+		Vector2(1, 0), Vector2(0, 1), Vector2(1, 1),
 	])
 	return arrays
 

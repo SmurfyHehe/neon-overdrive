@@ -338,7 +338,7 @@ func _setup_debug_hud() -> void:
 	var controls := Label.new()
 	controls.position = Vector2(16, 400)
 	controls.add_theme_color_override("font_color", Color(0.71, 0.65, 0.84))
-	controls.text = "A/D steer  ·  W/S throttle/brake  ·  Space handbrake  ·  Q/E shift down/up (R-N-1-2-3-4-5)  ·  Esc pause"
+	controls.text = "A/D steer  ·  W/S throttle/brake  ·  Space handbrake  ·  Q/E shift down/up (R-N-1-2-3-4-5)  ·  Esc pause  ·  T tuning"
 	hud.add_child(controls)
 
 func _update_debug_hud() -> void:
@@ -362,6 +362,7 @@ func _setup_game_state() -> void:
 	game_state = GameState.new()
 	add_child(game_state)
 	add_child(PauseMenu.new(game_state))
+	add_child(TuningPanel.new(player, game_state))
 
 func _process(delta: float) -> void:
 	_update_chunk_pool(player.position.z)

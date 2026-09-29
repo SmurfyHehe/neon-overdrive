@@ -89,3 +89,21 @@ or directly: `godot --headless --editor --quit --path .` (on Roy's laptop,
 - **If a worker reports "the game doesn't load" after pulling, try this
   first.**
 - **Never commit `.godot/`** to "fix" it - the cache is machine-local.
+
+## Workers: the queue is dispatcher-only
+
+`office-queue` is for the queue agent (the dispatcher) only. From a worker,
+`.agent-office/bin/office-queue list` returns
+`403: Only the agents standing by the boards can use the queue.` That is
+expected - do not retry it or work around it (issue #48).
+
+- **The dispatcher checks the queue** and pastes what is in flight into each
+  task prompt.
+- **Workers use that in-flight list**, plus `gh pr list` and
+  `git branch -r`, to avoid duplicating work. Workers do not run
+  `office-queue`.
+- **If a required check is impossible, say so plainly** - e.g. "the queue
+  refused me (403), so I relied on the in-flight list in my prompt". Never
+  report it as "no queue found".
+- **After each PR, report the actual token and time cost** of the task, not
+  just the estimate.

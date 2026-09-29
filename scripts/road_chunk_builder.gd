@@ -395,7 +395,7 @@ static func _new_sidewalk_collision(body_name: String) -> StaticBody3D:
 
 static func _update_sidewalk_collision(root: Node3D, body_name: String, inner_x: float, outer_x: float, side: int) -> void:
 	var body: StaticBody3D = root.get_node(NodePath(body_name))
-	var col: CollisionShape3D = body.get_node(&"Shape")
+	var col: CollisionShape3D = body.get_node(^"Shape")
 	var box: BoxShape3D = col.shape
 	box.size = Vector3(outer_x - inner_x, 0.1, CHUNK_LEN)
 	body.position = Vector3((inner_x + outer_x) / 2.0 * float(side), 0.1, -CHUNK_LEN / 2.0)
@@ -432,7 +432,7 @@ static func _new_building(index: int) -> Array:
 static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: float, side: int) -> void:
 	var mi: MeshInstance3D = root.get_node(NodePath("BuildingMesh%d" % index))
 	var body: StaticBody3D = root.get_node(NodePath("BuildingBody%d" % index))
-	var col: CollisionShape3D = body.get_node(&"Shape")
+	var col: CollisionShape3D = body.get_node(^"Shape")
 	var box: BoxShape3D = col.shape
 
 	var is_garage: bool = randf() < 0.12
@@ -549,8 +549,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 
 	# edge pylons -- cosmetic rhythm/speed cues, interpolated along each
 	# shoulder's outer edge between this chunk's start and end width
-	var pylons_own: MultiMesh = (root.get_node(&"PylonsOwn") as MultiMeshInstance3D).multimesh
-	var pylons_onc: MultiMesh = (root.get_node(&"PylonsOnc") as MultiMeshInstance3D).multimesh
+	var pylons_own: MultiMesh = (root.get_node(^"PylonsOwn") as MultiMeshInstance3D).multimesh
+	var pylons_onc: MultiMesh = (root.get_node(^"PylonsOnc") as MultiMeshInstance3D).multimesh
 	var n_pylons := _pylon_slots()
 	for i in range(n_pylons):
 		var pz := -float(i) * PYLON_SPACING - PYLON_SPACING / 2.0
@@ -576,8 +576,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# config, not tapered (see file header). Both the wall and the dash
 	# buffer always exist; only one of them is shown.
 	var slots := _dash_slots()
-	var center: MultiMesh = (root.get_node(&"CenterDashes") as MultiMeshInstance3D).multimesh
-	(root.get_node(&"Barrier") as MeshInstance3D).visible = barrier
+	var center: MultiMesh = (root.get_node(^"CenterDashes") as MultiMeshInstance3D).multimesh
+	(root.get_node(^"Barrier") as MeshInstance3D).visible = barrier
 	if barrier:
 		center.visible_instance_count = 0
 	else:
@@ -588,7 +588,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 
 	# interior lane dividers, both directions packed into one instance
 	# buffer; unused capacity is simply left outside visible_instance_count
-	var lane: MultiMesh = (root.get_node(&"LaneDashes") as MultiMeshInstance3D).multimesh
+	var lane: MultiMesh = (root.get_node(^"LaneDashes") as MultiMeshInstance3D).multimesh
 	var written := 0
 	for lane_i in range(1, own_lanes):
 		var x: float = lane_i * LANE_W

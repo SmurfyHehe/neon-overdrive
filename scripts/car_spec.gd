@@ -140,32 +140,34 @@ static func build_torque_curve(low_end: float, peak_pos: float, plateau: float, 
 	c.add_point(Vector2(1.0, falloff))
 	return c
 
-## Builds all 4 raycast Wheel nodes + their visuals and assigns them onto the
-## Vehicle's front_left_wheel/etc. -- wheel_cfg needs wheel_r/axle_z/wheel_x
-## (the same shape CarBuilder.KIND_CONFIGS entries already use, so callers
-## can pass CarBuilder.KIND_CONFIGS[kind] directly rather than duplicating
-## those numbers in a second place, the way player.gd used to). Mount height
-## (spring_length + tire_radius above the chassis origin) is computed here so
-## every car gets the fix verified during the physics rewrite for free,
-## rather than each car type having to remember it.
-static func build_wheels(v: Vehicle, kind: String, wheel_cfg: Dictionary, front_spring_length: float, rear_spring_length: float) -> void:
-	var wheel_r: float = wheel_cfg.wheel_r
-	var axle_z: float = wheel_cfg.axle_z
-	var wheel_x: float = wheel_cfg.wheel_x
+## Builds all 4 raycast Wheel nodes and assigns them onto the Vehicle's
+## front_left_wheel/etc. hardpoints is {front_z, rear_z, wheel_x, wheel_r}
+## (forward is -Z, so front_z is negative) and visuals is {FL, FR, RL, RR}
+## wheel visuals, each centred on its own axle -- both come from
+## VehicleModel.build(), so any car in VehicleRegistry gets wheels the same
+## way. Front and rear axles are separate numbers because a real model's
+## wheels are rarely centred on its origin. Mount height (spring_length +
+## tire_radius above the chassis origin) is computed here so every car gets
+## the fix verified during the physics rewrite for free, rather than each car
+## type having to remember it.
+static func build_wheels(v: Vehicle, hardpoints: Dictionary, visuals: Dictionary, front_spring_length: float, rear_spring_length: float) -> void:
+	var wheel_r: float = hardpoints.wheel_r
+	var front_z: float = hardpoints.front_z
+	var rear_z: float = hardpoints.rear_z
+	var wheel_x: float = hardpoints.wheel_x
 	var front_mount_y := front_spring_length + wheel_r
 	var rear_mount_y := rear_spring_length + wheel_r
 	v.front_tire_radius = wheel_r
 	v.rear_tire_radius = wheel_r
-	v.front_left_wheel = _build_wheel(v, kind, Vector3(-wheel_x, front_mount_y, -axle_z))
-	v.front_right_wheel = _build_wheel(v, kind, Vector3(wheel_x, front_mount_y, -axle_z))
-	v.rear_left_wheel = _build_wheel(v, kind, Vector3(-wheel_x, rear_mount_y, axle_z))
-	v.rear_right_wheel = _build_wheel(v, kind, Vector3(wheel_x, rear_mount_y, axle_z))
+	v.front_left_wheel = _build_wheel(v, visuals.FL, Vector3(-wheel_x, front_mount_y, front_z))
+	v.front_right_wheel = _build_wheel(v, visuals.FR, Vector3(wheel_x, front_mount_y, front_z))
+	v.rear_left_wheel = _build_wheel(v, visuals.RL, Vector3(-wheel_x, rear_mount_y, rear_z))
+	v.rear_right_wheel = _build_wheel(v, visuals.RR, Vector3(wheel_x, rear_mount_y, rear_z))
 
-static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
+static func _build_wheel(v: Vehicle, visual: Node3D, pos: Vector3) -> Wheel:
 	var w := Wheel.new()
 	w.position = pos
 	v.add_child(w)
-	var visual := TestCarBuilder.build_wheel_visual(v.front_tire_radius) if kind == TestCarBuilder.KIND else CarBuilder.build_wheel_visual(kind)
 	w.wheel_node = visual
 	w.add_child(visual)
 	return w

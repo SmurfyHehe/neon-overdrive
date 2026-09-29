@@ -163,7 +163,7 @@ func _readout_text() -> String:
 	var redline: float = values.max_rpm
 	var cut := redline * REV_CUT
 	var fd: float = values.final_drive
-	var wheel_r: float = PlayerCar.CFG.wheel_r
+	var wheel_r: float = player.rear_tire_radius
 	# Peak power, sampled off the curve the car is actually using.
 	var peak_kw := 0.0
 	var peak_rpm := 0.0

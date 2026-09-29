@@ -19,6 +19,7 @@ set "FAILED="
 call :run smoke --headless
 call :run car_loft_normals --headless
 call :run test_car --headless
+call :run vehicle_registry --headless
 call :run road_strip_winding --headless
 call :run sidewalk_collision_taper --headless
 call :run aero_draft_equivalence --headless

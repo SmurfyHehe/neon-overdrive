@@ -125,10 +125,12 @@ Unlock gating: buying a higher-tier car is gated on **currency saved**, not on f
 
 **Target feel:** **simcade** physics (weighted grip/slide - not lane-snap arcade, not full sim) plus **beautiful low-poly** art (deliberate faceted geometry and strong lighting, not placeholder boxes), inspired by *Street-Spec: 日本* (osoiDev, https://store.steampowered.com/app/4230950/StreetSpec/).
 
+**Physics targets from the old plan** (for milestone 2 tuning): ~200 km/h top speed, punchy but not instant 0-100, friction ~1.2-1.5 (grip with a reachable slide), speed-sensitive steering, visible tilt under accel/brake/cornering. Note `car_spec.gd` currently uses `coefficient_of_friction` 3.0 - see E1 in `ISSUES.md`.
+
 **Original browser prototype** (reference for anything not yet ported): https://claude.ai/code/artifact/56a869ba-c7b6-46d4-9614-86f6760a2df7
 
 **Ideas from the old plan, not yet scheduled:**
-- Environment: skybox from the Vice Nights / Heat Check / Sunset Vice style bank (Heat Check's neon grid horizon fit best), bloom on emissives, camera FOV/shake tied to speed.
+- Environment: skybox from the Vice Nights / Heat Check / Sunset Vice style bank (Heat Check's neon grid horizon fit best), bloom on emissives. (Camera FOV/shake tied to speed belongs with milestone 5, camera + HUD.)
 - Car art: real panel definition (200-500 tris), emissive trim/underglow, baked AO, simple 2-3 slot livery system.
 
 **Backlog (after core feel is right - don't build yet):** drift scoring/combo system, tuning menu (hook into `car_builder.gd`), livery/colour picker, ghost/replay of best run, checkpoint-sprint vs endless-dodge modes, engine-pitch/tyre-screech audio tied to physics state. (Police pursuit is milestone 11.)
@@ -154,7 +156,7 @@ expensive to reverse later.
    dim cool key and letting *emissives* be the visible light source (markings,
    signage, street lights, tail lights, underglow) makes the existing sky/fog
    coherent and licenses a shorter draw distance. **Belongs to milestone 2
-   (environment/atmosphere) in the original HANDOFF plan, now retired — decide before art work starts.**
+   (environment/atmosphere) in the retired HANDOFF plan - not ROADMAP's milestone 2, which is player physics — decide before art work starts.**
 
 2. **Vertex-colour the road chunks at build time.** Endless procedural worlds
    normally forfeit baked lighting — there's no static scene for `LightmapGI` to

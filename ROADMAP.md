@@ -125,14 +125,14 @@ Unlock gating: buying a higher-tier car is gated on **currency saved**, not on f
 
 ## Proposals, pending Roy (2026-09-29)
 
-**Status: not approved.** Look-and-feel calls are Roy's; a side-by-side comparison is being prepared so he can choose from screenshots. Do not build these as decisions.
+**Status:** proposal 1 is **approved and built** (`bbcb12f`, on Roy's direct instruction) - do not re-propose or revert it. Proposals 2 and 3 are **not approved**. Look-and-feel calls are Roy's; a side-by-side comparison is being prepared so he can choose from screenshots. Do not build 2 or 3 as decisions.
 
 
 Full reasoning and sources in `RESEARCH-cheap-pretty.md`. These three are called
 out here because each blocks or biases an upcoming milestone, and two of them get
 expensive to reverse later.
 
-1. **The directional light contradicts the palette.** `game.gd` `_setup_world()`
+1. **[Approved and done - `bbcb12f`.] The directional light contradicts the palette.** `game.gd` `_setup_world()`
    sets a warm white sun (`light_energy = 1.1`, colour `1.0, 0.95, 0.86`) — a
    daylight key sitting inside a purple night sky and violet fog. Committing to a
    dim cool key and letting *emissives* be the visible light source (markings,

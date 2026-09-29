@@ -18,6 +18,7 @@ var section_cache: Dictionary = {"-1": {"own_lanes": 3, "onc_lanes": 2, "barrier
 var chunk_pool: Array = []  # Array of {root: Node3D, index: int}
 
 var player: PlayerCar
+var game_state: GameState
 
 var camera: Camera3D
 const CAM_DIST := 6.0
@@ -35,6 +36,7 @@ func _ready() -> void:
 	_setup_player()
 	_setup_camera()
 	_setup_debug_hud()
+	_setup_game_state()
 
 func _setup_world() -> void:
 	var env := Environment.new()
@@ -219,7 +221,7 @@ func _setup_debug_hud() -> void:
 	var controls := Label.new()
 	controls.position = Vector2(16, 400)
 	controls.add_theme_color_override("font_color", Color(0.71, 0.65, 0.84))
-	controls.text = "A/D steer  ·  W/S throttle/brake  ·  Space handbrake  ·  Q/E shift down/up (R-N-1-2-3-4-5)"
+	controls.text = "A/D steer  ·  W/S throttle/brake  ·  Space handbrake  ·  Q/E shift down/up (R-N-1-2-3-4-5)  ·  Esc pause"
 	hud.add_child(controls)
 
 func _update_debug_hud() -> void:
@@ -236,6 +238,12 @@ func _update_debug_hud() -> void:
 	else:
 		lbl_gear.add_theme_color_override("font_color", Color(0, 0.96, 1))
 		lbl_gear.scale = Vector2(1.0, 1.0)
+
+# ---------- game state (pause / restart / quit, issue #27) ----------
+func _setup_game_state() -> void:
+	game_state = GameState.new()
+	add_child(game_state)
+	add_child(PauseMenu.new(game_state))
 
 func _process(_delta: float) -> void:
 	_update_chunk_pool(player.position.z)

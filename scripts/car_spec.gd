@@ -63,6 +63,27 @@ static func coupe_default() -> Dictionary:
 		"front_spring_length": 0.22,
 		"rear_spring_length": 0.26,
 		"tire_stiffnesses": {"Road": 10.0, "Dirt": 3.0},
+		# Friction convention (#33): GEVP's coefficient_of_friction is NOT
+		# VehicleBody3D's wheel_friction_slip. The old "~1.2-1.5" target in
+		# HANDOFF.md was written for VehicleBody3D, which was never built --
+		# GEVP replaced it -- so that range does not apply here.
+		# In gevp_wheel.gd process_tires(), the tire's force limit is
+		#   (cof - 1 / (tire_width_mm * contact_patch * 0.2)) * spring_force
+		# and tire_stiffnesses makes the brush model saturate within a few
+		# degrees of slip, so that limit is effectively the peak force. With
+		# the 245 mm tires and 0.2 contact_patch left at GEVP defaults, the
+		# subtracted term is ~0.1, so Road 3.0 means:
+		#   - lateral (cornering) peak ~2.9x wheel load, i.e. ~2.9 g, up to
+		#     ~5% more at big slip angles from lateral_grip_assist;
+		#   - longitudinal (traction) peak ~1.45x load, because
+		#     longitudinal_grip_ratio 0.5 halves it -- this is where the
+		#     reachable slide comes from (wheelspin / power oversteer);
+		#     braking gets up to 2.5x that via braking_grip_multiplier.
+		# For scale, real street tires are ~1.0 and slicks ~1.6, so 3.0 is
+		# arcade-high cornering grip. It is GEVP's own shipped Road default,
+		# not a leftover. Grip feel is Roy's call -- tune by driving, and
+		# note that spring_force includes aero downforce, so grip also
+		# rises with speed. Also feeds max_brake_force (gevp_vehicle.gd).
 		"coefficient_of_friction": {"Road": 3.0, "Dirt": 2.0},
 		"rolling_resistance": {"Road": 1.0, "Dirt": 1.6},
 		"lateral_grip_assist": {"Road": 0.05, "Dirt": 0.0},
@@ -77,8 +98,8 @@ static func coupe_default() -> Dictionary:
 		# rear downforce helps put power down without adding front push that
 		# would fight the steering feel already tuned. Not measured from a
 		# real car, [stated]-flagged as likely to need retuning once driven.
-		"aero_lift_coefficient_front": 0.35,
-		"aero_lift_coefficient_rear": 0.55,
+		"aero_downforce_coefficient_front": 0.35,
+		"aero_downforce_coefficient_rear": 0.55,
 	}
 
 ## Rise-then-taper torque curve, loosely modeled on a real gasoline engine's

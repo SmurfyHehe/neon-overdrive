@@ -243,35 +243,36 @@ and uncommitted, for the whole session.
 ## G. Car model and car visuals
 
 **G1. The player car reads as a bare frame with the body panels missing —
-cause identified, and it is NOT what was suspected.** (NEW)
-The logged suspicion was face winding or culling in `car_builder.gd`. That is
-wrong on both counts:
+cause: loft face winding.** (FIX IN PR #45, stacked on #43)
+`_quad` emitted its triangles counter-clockwise, but Godot treats **clockwise**
+as the front face. Every body and glass panel facing the camera was culled, and
+the far panels showed their inside, lit from behind, so they rendered black.
+The normals themselves were correct (outward); the winding check that found
+nothing wrong used the counter-clockwise convention, not Godot's.
 
-- `_build_loft`'s winding is **correct**. All six quad families (left, right,
-  top, bottom, front cap, rear cap) were checked by computing
-  `(b-a).cross(c-a)` against the section ordering, which is monotonically
-  increasing in z. Every face's normal points outward.
-- `player.gd:68` calls `build_chassis_visual`, not `build_skeleton_visual`.
-  The skeleton-rig mix-up was a real bug but it was fixed on 2026-09-13; the
-  player has had a real body since.
+Proof: in a brightly lit test scene (key light 1.4 plus ambient) the loft body
+and glass were still solid black while the box parts beside them lit normally,
+and flipping the loft material's cull mode made the full body appear. PR #45
+reverses the triangle order in `_quad` and keeps the normals. The body renders
+solid in game afterwards, and `tests/car_loft_normals.gd` now checks the
+winding.
 
-The actual cause is lighting, not geometry. `bbcb12f` dropped the directional
-key light from energy 1.1 (warm daylight) to **0.2** (dim moonlight) and set
-`ambient_light_energy` to 0.3, with a near-black sky (`sky_top_color`
-0.02/0.004/0.08). The car's `body_mat` is non-emissive, so the panels receive
-almost no light and render close to black — while the headlights (emission
-1.4) and taillights (1.2) emit at full strength regardless of scene lighting.
-From the chase camera you therefore see glowing lights and little else, which
-reads as "panels missing". The geometry is all present.
-*Where: `scripts/game.gd:86-89` (key light) vs `car_builder.gd`
-`build_chassis_visual`'s `body_mat`.*
+The night lighting still matters, but it's secondary. `bbcb12f` dropped the key
+light to energy **0.2** with `ambient_light_energy` 0.3, and `body_mat` is
+non-emissive, so even with #45 the car reads dark in game. Whether to lift
+that is Roy's call (see G4). The skeleton-rig mix-up (`player.gd:68`) was fixed
+on 2026-09-13 and is not involved.
+*Where: `car_builder.gd` `_quad` (winding); `scripts/game.gd:86-89` (key
+light).*
 
-**G2. The glass loft has degenerate end caps with zero normals.** (NEW)
+**G2. The glass loft has degenerate end caps with zero normals.** (FIX IN PR #43)
 `_add_coupe_glass`'s `glass_sections` first and last entries set
 `y0 == y1 == base_y`, so the front and rear cap quads emitted by `_build_loft`
 have zero area. `(b-a).cross(c-a).normalized()` on a degenerate triangle
 returns `Vector3.ZERO`, so those faces carry a null normal and shade
-incorrectly. Minor next to G1 but real, and independent of it.
+incorrectly. The same cause gave the front-right and rear-left glass side
+triangles zero normals too; #43 fixes all of them. Minor next to G1 but real,
+and independent of it.
 *Where: `car_builder.gd` `_add_coupe_glass` / `_build_loft`.*
 
 **G3. Roy is unhappy with the car model itself, separate from G1.** (NEW)
@@ -335,11 +336,11 @@ The game became playable from a standalone build and Roy drove it. That
 changes the ordering above, because feel feedback now exists where before
 there was only static analysis.
 
-**G1 first, and it is cheap.** The car looking like a bare frame is a lighting
-and material interaction, not broken geometry — the panels are all there and
-correctly wound. It is very likely that part of G3 ("our car model sucks")
-dissolves once the car is actually lit. Diagnosing G3 before fixing G1 risks
-redesigning a model nobody can currently see.
+**G1 first, and it is cheap.** The car looking like a bare frame was broken
+face winding (PR #45, one line), not the model's design. It is very likely
+that part of G3 ("our car model sucks") dissolves once the body actually
+renders. Diagnosing G3 before #43/#45 merge risks redesigning a model nobody
+can currently see.
 
 **E7 + E8 are one issue and must move together.** The 4->5 gear step is the
 second-largest in the box and it lands exactly where the torque curve has

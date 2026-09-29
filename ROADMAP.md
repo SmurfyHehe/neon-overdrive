@@ -119,6 +119,22 @@ Unlock gating: buying a higher-tier car is gated on **currency saved**, not on f
 - Refuel stop: full refill, ~3s stopped
 - Empty tank: run ends (stranded)
 
+## Carried over from HANDOFF.md (retired 2026-09-29)
+
+`HANDOFF.md` (2026-09-12) was retired on Roy's decision (#40) - this file is the one source of truth for plan and order. Its old "Plan, in order" is superseded by the build order above. What was still useful:
+
+**Target feel:** **simcade** physics (weighted grip/slide - not lane-snap arcade, not full sim) plus **beautiful low-poly** art (deliberate faceted geometry and strong lighting, not placeholder boxes), inspired by *Street-Spec: 日本* (osoiDev, https://store.steampowered.com/app/4230950/StreetSpec/).
+
+**Original browser prototype** (reference for anything not yet ported): https://claude.ai/code/artifact/56a869ba-c7b6-46d4-9614-86f6760a2df7
+
+**Ideas from the old plan, not yet scheduled:**
+- Environment: skybox from the Vice Nights / Heat Check / Sunset Vice style bank (Heat Check's neon grid horizon fit best), bloom on emissives, camera FOV/shake tied to speed.
+- Car art: real panel definition (200-500 tris), emissive trim/underglow, baked AO, simple 2-3 slot livery system.
+
+**Backlog (after core feel is right - don't build yet):** drift scoring/combo system, tuning menu (hook into `car_builder.gd`), livery/colour picker, ghost/replay of best run, checkpoint-sprint vs endless-dodge modes, engine-pitch/tyre-screech audio tied to physics state. (Police pursuit is milestone 11.)
+
+**Main risk:** scope creep - simcade physics, beautiful low-poly and an open feature backlog is a lot for a solo build. Stick to one milestone at a time.
+
 ## Open items still remaining
 - Whether damage affects handling (not just top speed) once physics exists to hook into — revisit once milestone 2 physics is real
 - These are v1 numbers for a game that doesn't run yet — expect a real tuning pass once milestone 9-11 are playable, not treated as final
@@ -138,7 +154,7 @@ expensive to reverse later.
    dim cool key and letting *emissives* be the visible light source (markings,
    signage, street lights, tail lights, underglow) makes the existing sky/fog
    coherent and licenses a shorter draw distance. **Belongs to milestone 2
-   (environment/atmosphere) in the HANDOFF plan — decide before art work starts.**
+   (environment/atmosphere) in the original HANDOFF plan, now retired — decide before art work starts.**
 
 2. **Vertex-colour the road chunks at build time.** Endless procedural worlds
    normally forfeit baked lighting — there's no static scene for `LightmapGI` to

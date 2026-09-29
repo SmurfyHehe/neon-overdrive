@@ -47,6 +47,7 @@ var cam_follow := Vector2.ZERO  # smoothed (x, y) the camera tracks
 var cam_yaw := 0.0              # 0 = behind for forward, PI = mirrored for reverse
 var cam_started := false
 var lbl_cam: Label
+var lbl_car: Label
 
 var lbl_gear: Label
 var lbl_speed: Label
@@ -335,10 +336,14 @@ func _setup_debug_hud() -> void:
 	lbl_cam.position = Vector2(16, 56)
 	lbl_cam.add_theme_color_override("font_color", font_color)
 	hud.add_child(lbl_cam)
+	lbl_car = Label.new()
+	lbl_car.position = Vector2(16, 78)
+	lbl_car.add_theme_color_override("font_color", font_color)
+	hud.add_child(lbl_car)
 	var controls := Label.new()
 	controls.position = Vector2(16, 400)
 	controls.add_theme_color_override("font_color", Color(0.71, 0.65, 0.84))
-	controls.text = "A/D steer  ·  W/S throttle/brake  ·  Space handbrake  ·  Q/E shift down/up (R-N-1-2-3-4-5)  ·  Esc pause  ·  T tuning"
+	controls.text = "A/D steer  ·  W/S throttle/brake  ·  Space handbrake  ·  Q/E shift down/up (R-N-1-2-3-4-5)  ·  Esc pause  ·  T tuning  ·  V car  ·  L look"
 	hud.add_child(controls)
 
 func _update_debug_hud() -> void:
@@ -346,6 +351,7 @@ func _update_debug_hud() -> void:
 	lbl_gear.text = "GEAR %s" % gear_name
 	lbl_speed.text = "%d units/s" % int(player.current_speed())
 	lbl_cam.text = "CAMERA %s  (C to switch)" % CAM_MODE_NAMES[cam_mode]
+	lbl_car.text = "CAR %s, %s  (V car, L look)" % [VehicleRegistry.entry(PlayerCar.vehicle_id).name, PlayerCar.look]
 	# BUG FIX (2026-09-13): shift_flash_t was tracked on the player since
 	# milestone 2 but nothing ever read it -- shifting had zero feedback.
 	# Wired it to actually punch the gear label (bright flash + scale pop)

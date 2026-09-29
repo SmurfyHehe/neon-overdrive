@@ -52,15 +52,16 @@ func _initialize() -> void:
 			_fail("tail light at z %.2f is not at the tail" % z)
 	car.free()
 
+	PlayerCar.vehicle_id = "test"  # the game now starts in VehicleRegistry.PLAYER_CARS[0]
 	var player: PlayerCar = load("res://scripts/player.gd").new()
 	root.add_child(player)
 	await process_frame  # let the player's _ready build its wheels
-	var cfg: Dictionary = PlayerCar.CFG
+	var cfg: Dictionary = VehicleRegistry.TEST_CAR_PHYSICS
 	var wheels := {
-		"FL": [player.front_left_wheel, Vector3(-cfg.wheel_x, 0, -cfg.axle_z)],
-		"FR": [player.front_right_wheel, Vector3(cfg.wheel_x, 0, -cfg.axle_z)],
-		"RL": [player.rear_left_wheel, Vector3(-cfg.wheel_x, 0, cfg.axle_z)],
-		"RR": [player.rear_right_wheel, Vector3(cfg.wheel_x, 0, cfg.axle_z)],
+		"FL": [player.front_left_wheel, Vector3(-cfg.wheel_x, 0, cfg.front_z)],
+		"FR": [player.front_right_wheel, Vector3(cfg.wheel_x, 0, cfg.front_z)],
+		"RL": [player.rear_left_wheel, Vector3(-cfg.wheel_x, 0, cfg.rear_z)],
+		"RR": [player.rear_right_wheel, Vector3(cfg.wheel_x, 0, cfg.rear_z)],
 	}
 	for name in wheels:
 		var w: Wheel = wheels[name][0]
@@ -71,7 +72,7 @@ func _initialize() -> void:
 		var r: float = (tyre.mesh as CylinderMesh).top_radius
 		if absf(r - w.tire_radius) > 1e-4:
 			_fail("%s visual radius %.3f, physics %.3f" % [name, r, w.tire_radius])
-	print("wheelbase %.2f m, track %.2f m" % [cfg.axle_z * 2.0, cfg.wheel_x * 2.0])
+	print("wheelbase %.2f m, track %.2f m" % [cfg.rear_z - cfg.front_z, cfg.wheel_x * 2.0])
 	player.free()
 
 	print("PASS" if fails == 0 else "FAILURES: %d" % fails)

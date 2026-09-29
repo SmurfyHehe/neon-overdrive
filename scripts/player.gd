@@ -18,7 +18,7 @@ class_name PlayerCar
 # of mass, so roll/pitch/dive/squat are now genuine physics, not a cosmetic
 # mesh trick -- the entire cosmetic-tilt system from the previous version is
 # gone, deleted, not layered on top. This file only owns: wheel node
-# construction (our CFG hardpoints), input wiring (WASD/Space/Q-E, matching
+# construction (VehicleRegistry hardpoints), input wiring (WASD/Space/Q-E, matching
 # our existing controls), a torque curve (Vehicle requires one, has no
 # default), gear count/ratios (5 gears, an easy array to change later --
 # [stated] the exact gear count/drivetrain feel may still change), and the
@@ -32,10 +32,10 @@ class_name PlayerCar
 # also gets a REAL small physical bump for free from the sidewalk's raised
 # collision geometry, instead of the old scripted cosmetic jolt.
 
-const KIND := TestCarBuilder.KIND  # #63 neutral test car
-const CFG := {
-	"wheel_r": 0.34, "axle_z": 1.05, "wheel_x": 0.88,
-}
+## Which car and look to spawn, from VehicleRegistry. Static so the choice
+## survives the scene reload that switching cars does (V/L keys below).
+static var vehicle_id: String = VehicleRegistry.PLAYER_CARS[0]
+static var look: String = "stock"
 
 const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Vehicle's own shift_time below
 
@@ -69,7 +69,11 @@ func _ready() -> void:
 	# of the old flat-box look.
 	# #63: the neutral test car, for judging handling and camera. The styled
 	# coupe (CarBuilder, KIND_CONFIGS["coupe"]) waits on the design in #16.
-	chassis_visual = TestCarBuilder.build_chassis_visual()
+	# Vehicle registry: the body, wheels and wheel positions now come from
+	# VehicleRegistry/VehicleModel, so any listed car (model file or the
+	# code-built test car) spawns the same way.
+	var car := VehicleModel.build(vehicle_id, look)
+	chassis_visual = car.body
 	add_child(chassis_visual)
 
 	# BUG FIX (2026-09-13, verified headless): RigidBody3D falls asleep after
@@ -93,7 +97,7 @@ func _ready() -> void:
 	# real and correct, only actual movement was blocked). y_offset=0.5 keeps
 	# the bottom face comfortably clear of the ground after settling --
 	# CarSpec.build_collision() defaults to this same verified value.
-	CarSpec.build_collision(self, Vector3(1.6, 0.6, 3.4))
+	CarSpec.build_collision(self, car.hardpoints.collision)
 
 	# ---- Vehicle-level tuning ----
 	# CarSpec refactor (2026-09-13, Roy: "i want full physics everywhere ...
@@ -116,8 +120,8 @@ func _ready() -> void:
 	# not grounded). Each wheel's local Y must be its OWN axle's
 	# spring_length + tire_radius above the chassis origin, same pattern the
 	# old VehicleWheel3D mount height used. CarSpec.build_wheels() computes
-	# this the same way, from the same CFG shape, for every car type.
-	CarSpec.build_wheels(self, KIND, CFG, front_spring_length, rear_spring_length)
+	# this the same way, from VehicleModel's hardpoints, for every car type.
+	CarSpec.build_wheels(self, car.hardpoints, car.wheels, front_spring_length, rear_spring_length)
 
 	initialize()
 
@@ -149,6 +153,17 @@ func _physics_process(delta: float) -> void:
 		manual_shift(-1)
 	if Input.is_action_just_pressed("shift_up"):
 		manual_shift(1)
+	# Testing keys until the garage and upgrade tree exist: V next car, L next
+	# look (stock -> tuned). Rebuilding the physics in place would mean
+	# unwinding everything Vehicle.initialize() accumulates, so switching
+	# reloads the scene instead; tuning-panel changes reset with it.
+	if Input.is_action_just_pressed("vehicle_next"):
+		vehicle_id = VehicleRegistry.next_player_car(vehicle_id)
+		look = VehicleRegistry.look_names(vehicle_id)[0]
+		get_tree().reload_current_scene.call_deferred()
+	if Input.is_action_just_pressed("vehicle_look"):
+		look = VehicleRegistry.next_look(vehicle_id, look)
+		get_tree().reload_current_scene.call_deferred()
 	var throttle := Input.is_action_pressed("accelerate")
 	var braking := Input.is_action_pressed("brake")
 	var handbrake := Input.is_action_pressed("handbrake")

@@ -25,6 +25,7 @@ if /i not "%~1"=="quick" (
 	rem These need a real window: headless drops MultiMesh data.
 	call :run chunk_drive
 	call :run game_state
+	call :run tuning_panel
 )
 echo.
 if defined FAILED (

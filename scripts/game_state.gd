@@ -14,7 +14,9 @@ extends Node
 # The physics tick rate is untouched -- it must stay at 60 Hz (GEVP breaks at
 # 30 Hz).
 
-enum State { PLAYING, PAUSED }
+# TUNING (#62) is the debug tuning panel: paused like PAUSED, but the panel
+# shows instead of the pause menu.
+enum State { PLAYING, PAUSED, TUNING }
 
 signal state_changed(new_state: State, old_state: State)
 
@@ -27,9 +29,13 @@ func _ready() -> void:
 func _physics_process(_delta: float) -> void:
 	if Input.is_action_just_pressed("pause"):
 		toggle_pause()
+	elif Input.is_action_just_pressed("tuning_panel"):
+		toggle_tuning()
 
 func toggle_pause() -> void:
-	if state == State.PAUSED:
+	if state == State.TUNING:
+		close_tuning()  # Esc backs out of the tuning panel
+	elif state == State.PAUSED:
 		resume()
 	elif state == State.PLAYING:
 		pause()
@@ -42,6 +48,19 @@ func pause() -> void:
 
 func resume() -> void:
 	if state != State.PAUSED:
+		return
+	get_tree().paused = false
+	_set_state(State.PLAYING)
+
+func toggle_tuning() -> void:
+	if state == State.TUNING:
+		close_tuning()
+	elif state == State.PLAYING:
+		get_tree().paused = true
+		_set_state(State.TUNING)
+
+func close_tuning() -> void:
+	if state != State.TUNING:
 		return
 	get_tree().paused = false
 	_set_state(State.PLAYING)

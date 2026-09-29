@@ -104,15 +104,40 @@ static func coupe_default() -> Dictionary:
 
 ## Rise-then-taper torque curve, loosely modeled on a real gasoline engine's
 ## band, not measured from anything specific -- same shape every car uses for
-## now; giving different car types their own curve shape is an easy future
-## knob once this matters.
+## now. Built from the shape knobs below (#62) so the tuning panel and, later,
+## upgrades change the same four numbers instead of hand-placed points.
 static func default_torque_curve() -> Curve:
+	var t := DEFAULT_TORQUE_SHAPE
+	return build_torque_curve(t.low_end, t.peak_pos, t.plateau, t.falloff)
+
+const DEFAULT_TORQUE_SHAPE := {"low_end": 0.35, "peak_pos": 0.55, "plateau": 0.0, "falloff": 0.55}
+
+# Where the in-between points sit, as fractions of the rise and the fall.
+# Taken from the hand-placed curve this replaced -- (0.25, 0.75) on the way up
+# and (0.85, 0.9) on the way down -- so build_torque_curve(0.35, 0.55, 0.0,
+# 0.55) reproduces it point for point.
+const RISE_MID_X := 0.25 / 0.55
+const RISE_MID_Y := 0.40 / 0.65
+const FALL_MID_X := 0.30 / 0.45
+const FALL_MID_Y := 0.10 / 0.45
+
+## Torque curve from four shape knobs (#62). x is rpm / max_rpm, y is the
+## fraction of max_torque.
+## - low_end: torque at 0 rpm (turbo/big-displacement engines pull harder low)
+## - peak_pos: rpm fraction where peak torque ENDS (cams move this up)
+## - plateau: width of the flat top before peak_pos (turbos are wide and flat)
+## - falloff: torque left at redline (high-rev engines hold on longer)
+static func build_torque_curve(low_end: float, peak_pos: float, plateau: float, falloff: float) -> Curve:
+	peak_pos = clampf(peak_pos, 0.1, 0.99)
+	var peak_start := clampf(peak_pos - plateau, 0.05, peak_pos)
 	var c := Curve.new()
-	c.add_point(Vector2(0.0, 0.35))
-	c.add_point(Vector2(0.25, 0.75))
-	c.add_point(Vector2(0.55, 1.0))
-	c.add_point(Vector2(0.85, 0.9))
-	c.add_point(Vector2(1.0, 0.55))
+	c.add_point(Vector2(0.0, low_end))
+	c.add_point(Vector2(peak_start * RISE_MID_X, low_end + (1.0 - low_end) * RISE_MID_Y))
+	c.add_point(Vector2(peak_start, 1.0))
+	if peak_pos > peak_start:
+		c.add_point(Vector2(peak_pos, 1.0))
+	c.add_point(Vector2(peak_pos + (1.0 - peak_pos) * FALL_MID_X, 1.0 - (1.0 - falloff) * FALL_MID_Y))
+	c.add_point(Vector2(1.0, falloff))
 	return c
 
 ## Builds all 4 raycast Wheel nodes + their visuals and assigns them onto the

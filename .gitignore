@@ -15,3 +15,7 @@ desktop.ini
 build/
 *.exe
 *.pck
+
+# Claude Code local state - worktrees are checkouts of this same repo,
+# plus machine-local session data. Never commit.
+.claude/

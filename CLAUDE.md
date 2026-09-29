@@ -66,3 +66,26 @@ Roy approves changes before they reach `main` (decided 2026-09-29).
   branch is allowed; the PR description says what changed and why, in plain
   words.
 - **Only Roy merges.** Do not merge your own PR, and do not push to `main`.
+
+## After pulling: game won't boot? Refresh the class cache
+
+Godot keeps a per-machine cache of `class_name` scripts in
+`.godot/global_script_class_cache.cfg`. `.godot/` is gitignored, so when a
+pull deletes or moves a script, your cache still points at the old path and
+the game fails at parse time with a missing-script or unknown-class error
+(issue #42 - PR #3 left `PlayerCar` pointing at a deleted file).
+
+Fix it by running this once from the project folder:
+
+```
+powershell -File tools/refresh-godot-cache.ps1
+```
+
+or directly: `godot --headless --editor --quit --path .` (on Roy's laptop,
+`godot` is `~/Documents/Godot_v4.7.2-stable_win64_console.exe`).
+
+- **Run it after any pull that deletes, renames or moves a `.gd` file**, and
+  in a fresh worktree before running the game or tests.
+- **If a worker reports "the game doesn't load" after pulling, try this
+  first.**
+- **Never commit `.godot/`** to "fix" it - the cache is machine-local.

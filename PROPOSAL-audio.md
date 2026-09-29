@@ -1,8 +1,9 @@
 # Neon Overdrive — Audio Proposal (2026-09-29)
 
-> **STATUS: PROPOSAL. Nothing here is decided and no code has been written.**
-> Sound direction is a look-and-feel call, which is Roy's. This document exists
-> to present three directions with honest costs so one can be chosen.
+> **STATUS: DIRECTION CHOSEN (Roy, 2026-09-29), nothing built yet.** Engine: try
+> **C** (synthesised) first; if a cheap way to get recordings turns up, **A** is
+> the better end state. Music: made in-project, or free / very cheap. Cockpit
+> view: later. See §6.
 >
 > Audio is currently **backlogged**, not scheduled: HANDOFF.md lists
 > "engine-pitch/tire-screech audio tied to physics state" under *after core feel
@@ -164,7 +165,8 @@ option A another set of recordings, and option C a filter. But it is
 also the option I'm least able to promise on paper — so the
 honest form of this recommendation is: build a throwaway synthesised engine
 first, listen to it, and fall back to **B** without embarrassment if it doesn't
-land. That's a much cheaper experiment than committing to A's asset pipeline.
+land. *(Roy chose C, but with **A** rather than B as the preferred alternative
+if recordings can be had cheaply — see §6.)* That's a much cheaper experiment than committing to A's asset pipeline.
 
 ## 4. The layers beyond the engine
 
@@ -262,14 +264,17 @@ in §4 exists partly for this: sidechain or duck music slightly against engine l
 (`throttle_amount`), so full-throttle reads as loud without the music simply being
 turned down. Worth designing in from the first bus, not bolted on at the end.
 
-## 6. Open questions for Roy
+## 6. Decisions (Roy, 2026-09-29)
 
-1. **Which engine direction** — A, B or C. §3 is the material for that call.
-2. **Which music route** — licensed, commissioned, or composed in-project (§5).
-
-*Answered:* cockpit view comes later, not now (Roy, 2026-09-29). The current car
-model isn't suitable for first person, so ROADMAP.md's "Chase cam only for now"
-and milestone 5 stay as they are.
+1. **Engine: C first, A if it gets cheap.** Build the throwaway synthesised
+   engine and listen to it. If a cheap source of engine recordings turns up,
+   sampled realism (A) is preferred over C. B is no longer the planned fallback.
+2. **Music: made in-project, or free / very cheap.** No commissioning. Free or
+   cheap tracks need to come as separate layers (stems) or per-heat-level
+   tracks, and their licence must allow use in a game.
+3. **Cockpit view: later.** The current car model isn't suitable for first
+   person, so ROADMAP.md's "Chase cam only for now" and milestone 5 stay as
+   they are.
 
 ## 7. Sources
 

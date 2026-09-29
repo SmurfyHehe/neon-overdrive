@@ -52,7 +52,13 @@ var lbl_gear: Label
 var lbl_speed: Label
 
 func _ready() -> void:
-	randomize()
+	# Benchmark mode (-- --benchmark, see benchmark.gd) drives a fixed road so
+	# runs are comparable; normal play gets a fresh one each time.
+	var benchmark := Benchmark.requested()
+	if benchmark:
+		seed(Benchmark.SEED)
+	else:
+		randomize()
 	_setup_world()
 	_setup_ground_collision()
 	_setup_chunk_pool()
@@ -60,6 +66,8 @@ func _ready() -> void:
 	_setup_camera()
 	_setup_debug_hud()
 	_setup_game_state()
+	if benchmark:
+		add_child(Benchmark.new())
 
 func _setup_world() -> void:
 	var env := Environment.new()

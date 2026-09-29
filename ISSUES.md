@@ -96,6 +96,10 @@ is now playing, and any build used for benchmarking. Two things still open:
   RESEARCH-cheap-pretty.md remains unverified — and that includes the
   draw-call numbers claimed for B1–B4 above, which are counted, not timed.
 *Where: `project.godot:23`.*
+*Update (#19, PR #49):* benchmark mode now measures frame time in exported
+builds and turns vsync off for that run only (`benchmark.bat`, or
+`NeonOverdrive.exe -- --benchmark`). **Still open:** nobody has timed B1–B4
+or B8's glow cost yet; normal play keeps vsync on.
 
 **B8. Glow is never enabled.**
 `game.gd`'s `Environment` sets fog and sky but no `glow_enabled` — confirmed,

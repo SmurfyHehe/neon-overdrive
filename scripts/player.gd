@@ -37,7 +37,6 @@ const CFG := {
 	"wheel_r": 0.34, "axle_z": 1.05, "wheel_x": 0.88,
 }
 
-const SHIFT_SAFE_SPEED := 1.0  # kept for HUD-era compatibility; Vehicle's own shift() already blocks reverse-while-moving-forward internally
 const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Vehicle's own shift_time below
 
 var chassis_visual: Node3D
@@ -102,9 +101,6 @@ func _ready() -> void:
 	# exact simulation instead of a separate/cheaper one. Values are UNCHANGED
 	# from before this refactor -- verified headless (see ship notes).
 	CarSpec.apply(self, CarSpec.coupe_default())
-
-	front_tire_radius = CFG.wheel_r
-	rear_tire_radius = CFG.wheel_r
 
 	# BUG FIX (2026-09-13, verified headless): a wheel's raycast starts AT its
 	# own node position and extends DOWN by spring_length+tire_radius (set

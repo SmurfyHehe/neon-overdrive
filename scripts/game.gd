@@ -8,7 +8,6 @@ extends Node3D
 # This script owns the world (chunks, ground collision, camera, debug HUD)
 # and the player instance.
 
-const LANE_W := 2.3
 const CHUNKS_AHEAD := 6
 const CHUNKS_BEHIND := 1
 const POOL_SIZE := CHUNKS_AHEAD + CHUNKS_BEHIND + 1

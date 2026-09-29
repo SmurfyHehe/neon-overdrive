@@ -5,7 +5,8 @@ extends SceneTree
 #   hand-placed curve, so adding the knobs did not change the car
 # - T opens the panel: tree paused, state TUNING, panel shown, pause menu not
 # - moving sliders writes into the live Vehicle (gearing, torque, curve)
-# - the readout shows the 230 km/h 5th-gear redline speed #62 quotes
+# - the readout shows 253 km/h in 5th: #62's 230 at 7000 rpm, but GEVP
+#   only cuts at 110% of redline (7700 rpm)
 # - T closes it again, and Esc closes it too
 #
 # Exit code 1 on failure. Run (a window opens for a few seconds):
@@ -31,7 +32,7 @@ func _process(_delta: float) -> bool:
 			_check(game.game_state.state == GameState.State.TUNING, "state should be TUNING")
 			_check(panel.visible, "tuning panel should be visible")
 			_check(not _find(game, PauseMenu).visible, "pause menu should stay hidden")
-			_check(panel.readout.text.contains("230"), "readout should show 230 km/h in 5th:\n" + panel.readout.text)
+			_check(panel.readout.text.contains("253"), "readout should show 253 km/h in 5th:\n" + panel.readout.text)
 			panel.sliders.final_drive.value = 3.5
 			panel.sliders.gear_5.value = 1.1
 			panel.sliders.max_torque.value = 500.0

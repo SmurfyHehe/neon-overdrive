@@ -29,6 +29,10 @@ const KNOBS := [
 	["falloff", "Torque at redline", 0.2, 1.0, 0.01],
 ]
 const AIR_DENSITY := 1.2  # kg/m^3, for the drag-limited top speed estimate
+# gevp_vehicle.gd process_motor() only cuts torque above max_rpm * 1.1, and the
+# torque curve holds its redline value up to there -- so the speeds a gear
+# really reaches are at 110% of the "Redline rpm" knob, not at it.
+const REV_CUT := 1.1
 
 var player: PlayerCar
 var game_state: GameState
@@ -157,6 +161,7 @@ func _refresh() -> void:
 
 func _readout_text() -> String:
 	var redline: float = values.max_rpm
+	var cut := redline * REV_CUT
 	var fd: float = values.final_drive
 	var wheel_r: float = PlayerCar.CFG.wheel_r
 	# Peak power, sampled off the curve the car is actually using.
@@ -173,26 +178,27 @@ func _readout_text() -> String:
 	lines.append("")
 	lines.append("Peak power  %d kW (%d hp) at %d rpm" % [peak_kw, peak_kw * 1.341, peak_rpm])
 	lines.append("At redline  %d%% of peak power" % roundi(100.0 * _power_kw(redline) / peak_kw))
+	lines.append("Rev cut     %d rpm (engine pulls to 110%% of redline)" % roundi(cut))
 	lines.append("")
-	lines.append("Gear  km/h@redline  step  upshift->rpm  %power")
+	lines.append("Gear  km/h@cut  step  upshift->rpm  %power")
 	for g in GEAR_COUNT:
 		var ratio: float = values["gear_%d" % (g + 1)]
-		var line := "%-4d  %8d" % [g + 1, roundi(_kmh_at(redline, ratio, fd, wheel_r))]
+		var line := "%-4d  %8d" % [g + 1, roundi(_kmh_at(cut, ratio, fd, wheel_r))]
 		if g + 1 < GEAR_COUNT:
 			var next: float = values["gear_%d" % (g + 2)]
-			var drop_rpm := redline * next / ratio
-			line += "      %4.2f  %8d     %3d%%" % [ratio / next, roundi(drop_rpm), roundi(100.0 * _power_kw(drop_rpm) / peak_kw)]
+			var drop_rpm := cut * next / ratio
+			line += "  %4.2f  %12d    %3d%%" % [ratio / next, roundi(drop_rpm), roundi(100.0 * _power_kw(drop_rpm) / peak_kw)]
 			if next >= ratio:
 				line += "  !! not shorter"
 		lines.append(line)
 	lines.append("")
 	var top_ratio: float = values["gear_%d" % GEAR_COUNT]
-	var gear_top := _kmh_at(redline, top_ratio, fd, wheel_r)
+	var gear_top := _kmh_at(cut, top_ratio, fd, wheel_r)
 	var drag_top := _drag_limited_kmh(top_ratio, fd, wheel_r)
 	if drag_top < gear_top:
 		lines.append("Top speed ~%d km/h (drag-limited in %d)" % [roundi(drag_top), GEAR_COUNT])
 	else:
-		lines.append("Top speed %d km/h (redline in %d)" % [roundi(gear_top), GEAR_COUNT])
+		lines.append("Top speed %d km/h (rev cut in %d)" % [roundi(gear_top), GEAR_COUNT])
 	lines.append("  estimate: air drag only, no rolling resistance")
 	return "\n".join(lines)
 
@@ -204,18 +210,19 @@ func _kmh_at(rpm: float, ratio: float, fd: float, wheel_r: float) -> float:
 	return rpm / (ratio * fd) * TAU / 60.0 * wheel_r * 3.6
 
 ## Highest speed in top gear where engine power still beats air drag. Walks up
-## in 1 km/h steps to the redline speed; coarse, but it is only a guide.
+## in 1 km/h steps to the rev-cut speed; coarse, but it is only a guide.
+## Ignores motor_drag and tire slip, so real top speed comes out a bit lower.
 func _drag_limited_kmh(ratio: float, fd: float, wheel_r: float) -> float:
 	var drag_k := 0.5 * AIR_DENSITY * player.coefficient_of_drag * player.frontal_area
-	var redline_kmh := _kmh_at(values.max_rpm, ratio, fd, wheel_r)
+	var cut_kmh := _kmh_at(values.max_rpm * REV_CUT, ratio, fd, wheel_r)
 	var kmh := 1.0
-	while kmh < redline_kmh:
+	while kmh < cut_kmh:
 		var v := kmh / 3.6
 		var rpm := v / wheel_r * ratio * fd * 60.0 / TAU
 		if _power_kw(rpm) * 1000.0 < drag_k * v * v * v:
 			return kmh
 		kmh += 1.0
-	return redline_kmh
+	return cut_kmh
 
 func _gear_name() -> String:
 	return "R" if player.gear == -1 else ("N" if player.gear == 0 else str(player.gear))

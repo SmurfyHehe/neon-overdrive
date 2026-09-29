@@ -49,7 +49,7 @@ sound.
 | Variable | Type | What it drives |
 |---|---|---|
 | `slip_vector` | Vector2 | **Tire audio.** Longitudinal *and* lateral slip, separately |
-| `surface_type` | String | `"Road"` / `"Dirt"` / `"Grass"` — switches the tire sound |
+| `surface_type` | String | `"Road"` / `"Dirt"` — switches the tire sound. (GEVP also knows `"Grass"`, but nothing in this project is tagged Grass) |
 | `spring_force` | float | Suspension thump over bumps and curbs |
 | `spin` | float | Wheelspin, lockup |
 
@@ -91,8 +91,8 @@ loops by RPM and load.
   and it affects milestone 5 (Camera + HUD) as well as audio.
 - **Why so many:** a sample stretched more than about 500 RPM audibly warps. The
   count is forced by that limit, not by ambition.
-- **Tuning burden:** every loop needs its true RPM derived (fundamental frequency
-  × 60 ÷ cylinders × 2) or the crossfades drift out of tune, and all loops must
+- **Tuning burden:** every loop needs its true RPM derived (RPM = fundamental
+  frequency × 120 ÷ cylinders) or the crossfades drift out of tune, and all loops must
   share matching pitch curves.
 - **Verdict:** best possible result, and not realistically solo-achievable without
   buying a commercial engine library. Even then it is days of tuning, not hours.
@@ -219,7 +219,7 @@ onto music states with no invention required:
 
 Two more hooks worth using: the **near-miss streak multiplier** (builds over a
 rolling 4s window, caps at 3.0×) is a natural filter-open or layer-in, since it's
-already a continuous 1.0–3.0 value rather than a state; and **stop places**
+already a number from 1.0 to 3.0 (in 0.15 steps) rather than an on/off state; and **stop places**
 (garage, repair, refuel) want their own calm cue, because they're the only moments
 the game stops moving.
 

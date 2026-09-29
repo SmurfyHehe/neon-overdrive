@@ -1077,7 +1077,9 @@ func calculate_average_tire_friction(weight : float, surface : String) -> float:
 
 func calculate_brake_force() -> void:
 	var friction := calculate_average_tire_friction(vehicle_mass * 9.8, "Road")
-	max_brake_force = ((friction * braking_grip_multiplier) * average_drive_wheel_radius) / wheel_array.size()
+	# Local change to vendored GEVP (#75): upstream declares brake_force_multiplier
+	# but never applies it.
+	max_brake_force = ((friction * braking_grip_multiplier) * average_drive_wheel_radius) / wheel_array.size() * brake_force_multiplier
 	max_handbrake_force = ((friction * braking_grip_multiplier * 0.05) / average_drive_wheel_radius)
 
 func calculate_center_of_gravity(front_distribution : float) -> Vector3:

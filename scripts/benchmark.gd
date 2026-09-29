@@ -27,6 +27,7 @@ var game: Node
 var t := 0.0
 var started := false
 var frames: PackedFloat32Array = []
+var draw_calls: PackedInt32Array = []  # one sample per measured frame
 var max_speed := 0.0
 
 static func requested() -> bool:
@@ -59,6 +60,9 @@ func _process(delta: float) -> void:
 	t += delta
 	if t > WARMUP_SECS:
 		frames.append(delta * 1000.0)
+		# The monitor holds the last rendered frame's count, so sample it every
+		# frame: a single read at the end only sees whatever the quit frame drew.
+		draw_calls.append(int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)))
 
 	var p: PlayerCar = game.get("player")
 	var speed := p.linear_velocity.length()
@@ -85,11 +89,24 @@ func _report() -> void:
 		sum += f
 	var avg := sum / n
 	var p99: float = s[int(n * 0.99)]
-	var line := "%s  %s  frames=%d avg=%.2fms (%d fps) p50=%.2f p99=%.2f (1%% low %d fps) max=%.2f  draw_calls=%d top_speed=%.1f m/s" % [
+	# 1% low: the average of the slowest 1% of frames (the usual definition),
+	# not just the 99th-percentile frame, so a few big hitches pull it down.
+	var worst := maxi(1, n / 100)
+	var worst_sum := 0.0
+	for i in range(n - worst, n):
+		worst_sum += s[i]
+	var low1: float = worst_sum / worst
+	var dc_sum := 0
+	var dc_max := 0
+	for d in draw_calls:
+		dc_sum += d
+		dc_max = maxi(dc_max, d)
+	var dc_avg := float(dc_sum) / maxi(1, draw_calls.size())
+	var line := "%s  %s  frames=%d avg=%.2fms (%d fps) 1%%low=%.2fms (%d fps) p50=%.2f p99=%.2f max=%.2f  draw_calls avg=%d max=%d  top_speed=%.1f m/s" % [
 		Time.get_datetime_string_from_system(false, true),
 		ProjectSettings.get_setting("rendering/renderer/rendering_method"),
-		n, avg, int(1000.0 / avg), s[n / 2], p99, int(1000.0 / p99), s[n - 1],
-		Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME), max_speed]
+		n, avg, int(1000.0 / avg), low1, int(1000.0 / low1), s[n / 2], p99, s[n - 1],
+		roundi(dc_avg), dc_max, max_speed]
 	print("BENCHMARK ", line)
 	# Next to the exe in an exported build, where Roy can find it; user:// when
 	# run from the editor, whose "exe" is Godot itself.

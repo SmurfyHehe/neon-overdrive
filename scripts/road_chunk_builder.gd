@@ -517,9 +517,14 @@ static func _create_nodes(root: Node3D) -> void:
 ## Rewrites an already-built chunk skeleton for a new position/config. No
 ## node is created, freed, or reparented here -- this is what replaces the
 ## old queue_free()-everything teardown.
-static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary) -> void:
+##
+## origin_index is the floating-origin offset (game.gd, issue #26): the chunk
+## that currently sits at world z=0. The subtraction is done in ints BEFORE
+## converting to float, so a chunk millions of indices out still lands on an
+## exact, small coordinate instead of a rounded huge one.
+static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary, origin_index: int = 0) -> void:
 	root.name = "Chunk_%d" % chunk_index
-	root.position = Vector3(0, 0, -float(chunk_index) * CHUNK_LEN)
+	root.position = Vector3(0, 0, -float(chunk_index - origin_index) * CHUNK_LEN)
 	root.set_meta("chunk_index", chunk_index)
 
 	var own_lanes: int = clampi(int(cfg.own_lanes), 1, MAX_OWN_LANES)
@@ -623,12 +628,12 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			written += 1
 	lane.visible_instance_count = written
 
-## Builds a fresh chunk root positioned at world Z = -chunk_index * CHUNK_LEN,
+## Builds a fresh chunk root positioned at world Z = -(chunk_index - origin_index) * CHUNK_LEN,
 ## spanning from z=0 to z=-CHUNK_LEN locally.
-static func build_chunk(chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary) -> Node3D:
+static func build_chunk(chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary, origin_index: int = 0) -> Node3D:
 	var root := Node3D.new()
 	_create_nodes(root)
-	_apply(root, chunk_index, prev_cfg, cfg)
+	_apply(root, chunk_index, prev_cfg, cfg, origin_index)
 	return root
 
 ## The recycle path. Previously this queue_free()'d all ~70 children and
@@ -636,7 +641,7 @@ static func build_chunk(chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary)
 ## teardown-and-reallocate roughly every 0.9 seconds -- a periodic stutter on
 ## a 15 W CPU. Now it only rewrites vertex data, transforms and shape sizes
 ## into nodes that already exist.
-static func rebuild_chunk(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary) -> void:
+static func rebuild_chunk(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary, origin_index: int = 0) -> void:
 	if not root.has_meta("nodes_built"):
 		_create_nodes(root)
-	_apply(root, chunk_index, prev_cfg, cfg)
+	_apply(root, chunk_index, prev_cfg, cfg, origin_index)

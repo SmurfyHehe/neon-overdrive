@@ -1,8 +1,111 @@
-# Neon Overdrive — Full Rebuild Roadmap (2026-09-12)
+# Neon Overdrive — Car Culture Roadmap (approved 2026-09-29)
+
+Roy approved this plan on 2026-09-29. It replaces the endless-highway-survival roadmap, which is kept further down for reference. Research behind it is in two reports ("Car culture game research" and "Car culture game design research"). The proposal page Roy signed off is at https://claude.ai/artifact/282jj5PnGRwxkzsy8jfb4R.
+
+## The game
+
+You're a mechanic by day. Each night you choose how to spend it: work on your own car, go to an event, move the story on, or pick up an extra shift. The events are ranked:
+
+1. **Pulls:** roll races and dig races.
+2. **Good driving:** highway runs and touge.
+3. **Burnouts and takeovers:** this is what "drifting" means here. It's US street takeovers, donuts and smoke shows, not Japanese angle drifting.
+
+You climb a street list of ten names, one callout at a time.
+
+## The loop
+
+- **Day:** a short shift at the shop. Two or three customer jobs pay the bills and drop tips. A customer's car can belong to a rival you race later, unlock a part at cost, or start a story beat.
+- **Night:** **one main activity plus one small extra**, such as a quick tune or a drive past the meet (Roy's pick). A strict one-thing-per-night rule is close to NFS Unbound's calendar, which players hated.
+- **Week's end:** rent (and possibly a garage debt) falls due, and a new callout is posted. A family garage debt was suggested as a story hook, but story is parked for Roy to write, so treat it as a placeholder.
+- **Money:** a normal shift covers roughly the bills and an extra shift adds about half again. A won event pays more than a shift, and a lost one pays less. These are starting numbers, to be set by playtesting.
+- **Missed payments:** Roy wants a layered system that uses all three candidates and possibly more. The candidates are:
+  - a capped late fee with a tool held until you pay;
+  - replaying the week, keeping upgrades but not cash;
+  - a loan-shark rival whose story ends in a race for your car;
+  - a race or job you must run for the debt holder.
+
+  The exact layering is still to be designed. One rule is fixed: there is always a floor, meaning a job that pays and a race with no entry fee, so the player can never be stuck broke. Research notes: `C:/SmurfyHehe/neon-overdrive-research/research_notes/debt_penalties.md` (outside the repo).
+
+## The events
+
+| Event | Rules | Notes |
+|---|---|---|
+| **Dig race** | 1/8 mile from a stop, no handicap. If you jump, you lose. | **Full steering** (Roy's pick). Lane-change-only and correction-only can be added later as settings. Launch with the revs in the green, and a shift light grades each shift (NFS Underground). Hole shots let reaction beat horsepower. A "no prep" low-grip surface was suggested, but Roy did not pick it in the brainstorm, so it is parked. Before building the strip, check that a keyboard dig race takes skill: manual shifting and a launch-rpm window, not just the tune. |
+| **Roll race** | Pace side by side at 40 (freeway) or 60 (strip). Three honks, then go. The first to pull clear or reach about 140 mph wins. | Jumping the third honk is a foul. This is where engine upgrades show most. Reuses the dig race code and rival. Rolling through traffic waits for the traffic milestone. |
+| **Highway run** | Flash your lights to challenge a rival. Each car has a bar that drains while it's behind, and faster the further back it falls. Hitting traffic or a wall costs a chunk. | This is Tokyo Xtreme Racer's spirit-points duel. There's no hidden AI catch-up. Reuses the road generator and the rival. Needs traffic, which is not built yet. |
+| **Touge** | Two runs with lead and chase swapped. The chaser wins by closing the gap and the leader by stretching it. A third run breaks a tie. | An American canyon road with named corners. It needs curves and hills first (#37), and it shares the gap system with the highway run. |
+| **Burnouts and takeovers** | Summernats-style scoring out of 100: smoke and car control, minus points for stalling, reversing or hitting the barrier. Takeovers add a crowd hype meter and a police timer. | Always show what ends a combo. PR #82 checks whether the car can do burnouts and donuts at all. |
+
+## Rivals, rep and heat
+
+- **The List:** ten names. You move up only by calling out someone above you and winning, and a callout expires after three nights. Rivals sit in crews by event, each with a boss. Each rival is one row of data.
+- **Rep and money:** there's one currency, money. There are two kinds of rep: **speed rep** is your List rank, and **respect** comes from clean conduct at meets. There is no second points currency.
+- **Meets:** meets are the hub where you find races and hear rumours. A burnout on the way out wins hype, but it adds heat and can get the next meet shut down.
+- **Heat:** stored per car. Getting caught brings a fine and a strike. Three strikes means impound, with a steep buy-back. Respray or plate work lowers heat.
+- **Pink slips:** rare story moments only.
+
+## Maps
+
+Separate maps are picked from a menu, and each one is a proper full-size place (Roy asked for bigger than the first draft):
+
+| Map | Size |
+|---|---|
+| Industrial district (dig and roll strips) | about 3 km of streets |
+| Freeway | 25–30 km loop, mostly laid by the road generator |
+| Mountain pass | 8–10 km each way |
+| Downtown (takeovers and meets) | about 1.2 × 1.2 km |
+| The shop | a garage and its block |
+
+## What happens to the current game
+
+- **Keep:**
+  - the driving physics (60 Hz, see below), the test car and the gritty PS2 night look;
+  - the tuning panel, upgrade tree and vehicle registry (PR #79). The tree's drift branch becomes a burnout branch: torque, rear bias and line lock;
+  - the road generator, which lays the freeway;
+  - the near-miss formula, which is a design on paper only.
+- **Not built yet:** there are **no other cars in the game**: no traffic, no rival, no AI (`player.gd` notes "No traffic exists yet"). Traffic and near-miss detection were planned but never built, so they are milestones of their own below.
+- **Park:** the fuel meter and procedural stop places. The code stays, but stop building them.
+- **Change:** damage stops ending the run and becomes repair cost and time.
+- **Move:** the police chase moves to milestone 7.
+
+## Milestone order
+
+Each milestone follows the same steps: propose, get Roy's sign-off, build, playtest. Then start the next one.
+
+| # | Milestone | Playable result |
+|---|---|---|
+| 1 | **Rival car + dig race, then roll race** | One scripted rival (follows a speed curve, no GEVP physics, so it is cheap and can't spin out). Dig race on the empty straight first, with full steering, manual shifting and a launch window. Then the roll race: 40 mph pace phase and a three-honk start. |
+| 1b | **One-week mock, menus only** (alongside 1) | Day result, night choice, money, rep and bills, with no driving. Tests whether choosing nights feels like freedom or like chores, which is the biggest risk (NFS Unbound's calendar). |
+| 2 | **The List** | Ten rivals in crews, callouts with timers, grudge and cash stakes. |
+| 3 | **Traffic** | Lane-following traffic on the freeway (MultiMesh per the rendering notes), then near-miss detection. Unlocks roll races through traffic. |
+| 4 | **Highway run** | The gap-bar duel on the freeway with traffic. The rival reacts to the gap visibly, never with hidden catch-up. |
+| 5 | **Full night loop** | The real day job board, night menu and weekly bills, built on whatever the week mock taught us. |
+| 6 | **Touge** | Curves and elevation (#37), then the mountain pass and two-run lead and chase. |
+| 7 | **Heat and police** | Heat per car, strikes, impound and escape runs. |
+| 8 | **Meet hub** | A lot to hang out in, respect, rumours and raids. |
+| 9 | **Burnout pad and takeover** | Design comes from the takeover specialist. PR #82 is the burnout and donut feel check. |
+| 10 | **Hands-on day job** | Roy's newest idea: the day job is driving the shop truck (tows and deliveries). Needs a second vehicle setup. |
+
+Rival and crew cars are scripted by default. Only the player's car runs full GEVP physics, to stay under the laptop's CPU ceiling.
+
+Story runs through every milestone as text, stills and phone messages.
+
+## Still open
+
+- **Top 3:** about 90 ideas have been picked across two brainstorm sessions, none ranked. Ask Roy which 3 the game must have on day one before scope grows further.
+- **Two idea pages disagree:** this roadmap's proposal page (https://claude.ai/artifact/282jj5PnGRwxkzsy8jfb4R) and the merged brainstorm page (https://claude.ai/artifact/QQNekPUnt5bPcUDVrVWJEV) conflict on no-prep, the family debt and missed-payment penalties. They need one source of truth.
+- **Crew system:** anyone who races or earns for the garage gets their own car. Parked for its own brainstorm.
+- How the missed-payment penalties layer together (see above).
+- Setting: suggested as an American city with a nearby canyon. Not yet confirmed.
+- The game's name: "Neon Overdrive" no longer matches the look Roy picked. It stays as a working title.
+
+## Superseded 2026-09-29: endless-highway roadmap (2026-09-12)
+
+Kept for reference. The car-culture roadmap above replaces its goal and build order. Still in use: the physics notes, the near-miss formula (now feeding the highway run and respect), the upgrade-tree structure (drift grip becomes a burnout branch) and the rendering proposals. Fuel, stop places and damage-ends-run are parked.
 
 Old `main.gd` (treadmill/distance-accumulator architecture) is abandoned, not edited further. `car_builder.gd` (pure mesh construction) is kept and reused. Everything below is built fresh in real world-space.
 
-## Confirmed design decisions
+### Confirmed design decisions
 
 **World:** Endless procedural road **plus procedural stop places** (garage/tuning, repair/refuel, and pure visual-variety stops) placed periodically along the route.
 
@@ -23,7 +126,7 @@ Old `main.gd` (treadmill/distance-accumulator architecture) is abandoned, not ed
 **Flavor/terminology** (for HUD text, event names, unlock names — from street-racing slang research):
 Burnout, Drift, Donut, Full Send, Hole Shot, Redline, Fish-Tail, Power Slide, Wheelman, Sleeper, Ricer, Beater, Green Light, Slipstream, Dead Hook, Tune, Boost. ("Near-miss"/"close call" itself doesn't have strong established slang beyond "close call" — fine to use plainly.)
 
-## Build order (milestones)
+### Build order (milestones)
 
 1. **Road-chunk foundation** — world-space road generation, chunks spawn ahead / recycle behind the car. Reuses old lane-width/section-variation math, reimplemented against real positions.
 2. **Player physics** — real `VehicleBody3D` + wheels, grip/slip tuning, weight-transfer visuals for free from real suspension.
@@ -39,7 +142,7 @@ Burnout, Drift, Donut, Full Send, Hole Shot, Redline, Fish-Tail, Power Slide, Wh
 
 Each milestone: propose approach → sign-off → build → confirm before next. No batching ahead of where we've agreed.
 
-## Near-miss / risk-scoring design (finalized 2026-09-12)
+### Near-miss / risk-scoring design (finalized 2026-09-12)
 
 Compound formula, not a flat "in zone = point":
 
@@ -51,7 +154,7 @@ Compound formula, not a flat "in zone = point":
 - **Streak multiplier ("heat of the moment"):** a rolling risk meter builds while near-misses keep happening in quick succession; while it's elevated, both currency payout *and* heat gain per event scale up together. Decays if the player drives clean for a few seconds. This is also a/the primary feed into the wanted/heat system alongside sustained high speed and mod-level.
 - **Same-car decay (anti-cheese, no hard cap):** each traffic car remembers the last time it credited the player a near-miss. A repeat trigger against that *same* car within a short window is worth sharply less (e.g. ~35% the second time, ~10% the third, near-zero after) rather than being blocked — hugging one car's side becomes worthless on its own without needing an arbitrary rule.
 
-## Mods/unlock tree design (finalized 2026-09-12)
+### Mods/unlock tree design (finalized 2026-09-12)
 
 Five linear tracks per vehicle: **Engine, Tires/Grip, Suspension, Fuel Tank, Armor/Durability.** Each track tiers up (1→2→3…), and at a fork tier each track splits into **two pathways, chosen independently per category** (mixing Path A on one category with Path B on another is intended, not an edge case). Once a path is picked for a category on a given vehicle, that category locks to that path (respec cost/option is an open question, not decided). Each vehicle has its own independent mod state — a second car later starts its own tree from scratch.
 
@@ -62,11 +165,11 @@ Example pathway identities per track (placeholders — exact numbers TBD when we
 - **Fuel Tank:** Range (bigger tank) vs Efficiency (slower drain at same size)
 - **Armor/Durability:** Heavy (more health, adds weight) vs Light (less health, no weight penalty)
 
-## Balance pass v1 (finalized 2026-09-12 — starting numbers, expect tuning once playable)
+### Balance pass v1 (finalized 2026-09-12 — starting numbers, expect tuning once playable)
 
 Currency name placeholder: **Cred** (change anytime, it's just a label).
 
-### Mods tree — costs & effects
+#### Mods tree — costs & effects
 Tier 1 is a shared baseline upgrade (no fork yet). Tier 2 is the fork — buying into Path A or Path B for that category. Tier 3 extends whichever path was chosen.
 
 **Costs cut to ~1/3 of the original pass (2026-09-12) — goal is players cycling through multiple modded cars, not grinding one forever.**
@@ -83,7 +186,7 @@ Full max-out of one vehicle's tree: **7,000 Cred** (was 21,000) — at ~400 Cred
 
 **Respec:** allowed, costs 1.5× the total Cred spent so far in that one category (not the whole tree) — e.g. respeccing a fully-maxed track (1,400 spent) costs 2,100 Cred.
 
-### Car tiers (added 2026-09-12)
+#### Car tiers (added 2026-09-12)
 
 Three vehicles, each with its own independent mod tree, each harder to fully mod than the last — so moving up tiers is a real escalation, not just a reskin. The 7,000-Cred numbers above are the **Starter** car's baseline; Tier B and Tier A scale both purchase price and mod cost:
 
@@ -95,7 +198,7 @@ Three vehicles, each with its own independent mod tree, each harder to fully mod
 
 Unlock gating: buying a higher-tier car is gated on **currency saved**, not on fully maxing the previous car first — a player can buy Tier B the moment they've saved 5,000 Cred even mid-mod on the Starter, so "move on to another car" can happen well before a car is finished. Each car's mod progress is independent and persists — you can own and swap between all three, modding each on its own track.
 
-### Near-miss / risk formula constants
+#### Near-miss / risk formula constants
 - Detection shell: 1.5m outside each traffic car's collision hull
 - Base value: 10 Cred/event
 - Proximity factor: 1.0x (outer edge of shell) → 2.5x (grazing the hull)
@@ -104,14 +207,14 @@ Unlock gating: buying a higher-tier car is gated on **currency saved**, not on f
 - Streak multiplier: starts 1.0x, +0.15x per event within a rolling 4-second window, caps at 3.0x, decays to 1.0x after 4s clean
 - Same-car decay: 1st trigger = 100% value, 2nd within 8s = 35%, 3rd = 10%, 4th+ = ~2% (not blocked, just not worth it)
 
-### Heat & police
+#### Heat & police
 - Heat gain: +2 × current streak multiplier per near-miss event; +1/sec while above 85% of current top speed; +0.5/sec passively per Tier-3 performance mod owned (Engine/Tires) — a loud build draws attention just by existing
 - Heat decay: -3/sec while under speed threshold with no recent near-miss/mod triggers
 - Tiers: 0-29 no police · 30-59 (Tier 1: 1 cop, moderate) · 60-89 (Tier 2: 2 cops, aggressive) · 90-100 (Tier 3: 3 cops + roadblock/spike-strip event)
 - Evasion: heat must stay below the current tier's floor for 6s with no police nearby → chase ends, pays 50 × tier-reached Cred bonus
 - Note: tier count/roadblock complexity is capped by actual CPU/engine performance once we're building it — may need to trim at that point
 
-### Damage & fuel numbers
+#### Damage & fuel numbers
 - Max health: 100 (before Armor mods). Traffic clip: -15. Head-on/high-speed crash: -40. Barrier/environment hit: -25. At 0 health, run ends.
 - Performance degradation: top speed scales down linearly, 100%→80% as health goes 100→0
 - Repair stop: full heal, ~3s stopped
@@ -119,7 +222,7 @@ Unlock gating: buying a higher-tier car is gated on **currency saved**, not on f
 - Refuel stop: full refill, ~3s stopped
 - Empty tank: run ends (stranded)
 
-## Carried over from HANDOFF.md (retired 2026-09-29)
+### Carried over from HANDOFF.md (retired 2026-09-29)
 
 `HANDOFF.md` (2026-09-12) was retired on Roy's decision (#40) - this file is the one source of truth for plan and order. Its old "Plan, in order" is superseded by the build order above. What was still useful:
 
@@ -137,11 +240,11 @@ Unlock gating: buying a higher-tier car is gated on **currency saved**, not on f
 
 **Main risk:** scope creep - simcade physics, beautiful low-poly and an open feature backlog is a lot for a solo build. Stick to one milestone at a time.
 
-## Open items still remaining
+### Open items still remaining
 - Whether damage affects handling (not just top speed) once physics exists to hook into — revisit once milestone 2 physics is real
 - These are v1 numbers for a game that doesn't run yet — expect a real tuning pass once milestone 9-11 are playable, not treated as final
 
-## Proposals, pending Roy (2026-09-29)
+### Proposals, pending Roy (2026-09-29)
 
 **Status:** proposal 1 is **approved and built** (`bbcb12f`, on Roy's direct instruction) - do not re-propose or revert it. Proposals 2 and 3 are **not approved**. Look-and-feel calls are Roy's; a side-by-side comparison is being prepared so he can choose from screenshots. Do not build 2 or 3 as decisions.
 

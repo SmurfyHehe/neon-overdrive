@@ -16,7 +16,7 @@ You climb a street list of ten names, one callout at a time.
 
 - **Day:** a short shift at the shop. Two or three customer jobs pay the bills and drop tips. A customer's car can belong to a rival you race later, unlock a part at cost, or start a story beat.
 - **Night:** **one main activity plus one small extra**, such as a quick tune or a drive past the meet (Roy's pick). A strict one-thing-per-night rule is close to NFS Unbound's calendar, which players hated.
-- **Week's end:** rent and the family garage debt fall due, and a new callout is posted.
+- **Week's end:** rent (and possibly a garage debt) falls due, and a new callout is posted. A family garage debt was suggested as a story hook, but story is parked for Roy to write, so treat it as a placeholder.
 - **Money:** a normal shift covers roughly the bills and an extra shift adds about half again. A won event pays more than a shift, and a lost one pays less. These are starting numbers, to be set by playtesting.
 - **Missed payments:** Roy wants a layered system that uses all three candidates and possibly more. The candidates are:
   - a capped late fee with a tool held until you pay;
@@ -30,9 +30,9 @@ You climb a street list of ten names, one callout at a time.
 
 | Event | Rules | Notes |
 |---|---|---|
-| **Dig race** | 1/8 mile from a stop, no handicap. If you jump, you lose. | **Full steering** (Roy's pick). Lane-change-only and correction-only can be added later as settings. Launch with the revs in the green, and a shift light grades each shift (NFS Underground). Hole shots let reaction beat horsepower. A "no prep" low-grip surface is an option. |
-| **Roll race** | Pace side by side at 40 (freeway) or 60 (strip). Three honks, then go. The first to pull clear or reach about 140 mph wins. | Jumping the third honk is a foul. This is where engine upgrades show most. Reuses the dig race code, the highway and traffic. |
-| **Highway run** | Flash your lights to challenge a rival. Each car has a bar that drains while it's behind, and faster the further back it falls. Hitting traffic or a wall costs a chunk. | This is Tokyo Xtreme Racer's spirit-points duel. There's no hidden AI catch-up. Reuses the road generator, traffic and the near-miss work. |
+| **Dig race** | 1/8 mile from a stop, no handicap. If you jump, you lose. | **Full steering** (Roy's pick). Lane-change-only and correction-only can be added later as settings. Launch with the revs in the green, and a shift light grades each shift (NFS Underground). Hole shots let reaction beat horsepower. A "no prep" low-grip surface was suggested, but Roy did not pick it in the brainstorm, so it is parked. Before building the strip, check that a keyboard dig race takes skill: manual shifting and a launch-rpm window, not just the tune. |
+| **Roll race** | Pace side by side at 40 (freeway) or 60 (strip). Three honks, then go. The first to pull clear or reach about 140 mph wins. | Jumping the third honk is a foul. This is where engine upgrades show most. Reuses the dig race code and rival. Rolling through traffic waits for the traffic milestone. |
+| **Highway run** | Flash your lights to challenge a rival. Each car has a bar that drains while it's behind, and faster the further back it falls. Hitting traffic or a wall costs a chunk. | This is Tokyo Xtreme Racer's spirit-points duel. There's no hidden AI catch-up. Reuses the road generator and the rival. Needs traffic, which is not built yet. |
 | **Touge** | Two runs with lead and chase swapped. The chaser wins by closing the gap and the leader by stretching it. A third run breaks a tie. | An American canyon road with named corners. It needs curves and hills first (#37), and it shares the gap system with the highway run. |
 | **Burnouts and takeovers** | Summernats-style scoring out of 100: smoke and car control, minus points for stalling, reversing or hitting the barrier. Takeovers add a crowd hype meter and a police timer. | Always show what ends a combo. PR #82 checks whether the car can do burnouts and donuts at all. |
 
@@ -61,10 +61,12 @@ Separate maps are picked from a menu, and each one is a proper full-size place (
 - **Keep:**
   - the driving physics (60 Hz, see below), the test car and the gritty PS2 night look;
   - the tuning panel, upgrade tree and vehicle registry (PR #79). The tree's drift branch becomes a burnout branch: torque, rear bias and line lock;
-  - the road generator, traffic and near-miss formula, which feed the freeway, the roll races and the highway run.
+  - the road generator, which lays the freeway;
+  - the near-miss formula, which is a design on paper only.
+- **Not built yet:** there are **no other cars in the game**: no traffic, no rival, no AI (`player.gd` notes "No traffic exists yet"). Traffic and near-miss detection were planned but never built, so they are milestones of their own below.
 - **Park:** the fuel meter and procedural stop places. The code stays, but stop building them.
 - **Change:** damage stops ending the run and becomes repair cost and time.
-- **Move:** the police chase moves to milestone 5.
+- **Move:** the police chase moves to milestone 7.
 
 ## Milestone order
 
@@ -72,19 +74,27 @@ Each milestone follows the same steps: propose, get Roy's sign-off, build, playt
 
 | # | Milestone | Playable result |
 |---|---|---|
-| 1 | **One-week slice** | Day job board (auto-resolved), night menu, weekly bills, dig race and roll race. Five nights in a row, to prove the loop is fun. |
+| 1 | **Rival car + dig race, then roll race** | One scripted rival (follows a speed curve, no GEVP physics, so it is cheap and can't spin out). Dig race on the empty straight first, with full steering, manual shifting and a launch window. Then the roll race: 40 mph pace phase and a three-honk start. |
+| 1b | **One-week mock, menus only** (alongside 1) | Day result, night choice, money, rep and bills, with no driving. Tests whether choosing nights feels like freedom or like chores, which is the biggest risk (NFS Unbound's calendar). |
 | 2 | **The List** | Ten rivals in crews, callouts with timers, grudge and cash stakes. |
-| 3 | **Highway run** | The gap-bar duel on the freeway with traffic. |
-| 4 | **Touge** | Curves and elevation (#37), then the mountain pass and two-run lead and chase. |
-| 5 | **Heat and police** | Heat per car, strikes, impound and escape runs. |
-| 6 | **Meet hub** | A lot to hang out in, respect, rumours and raids. |
-| 7 | **Burnout pad and takeover** | Scoring out of 100, then the hype meter and police timer. |
-| 8 | **Hands-on day job** | A repair minigame and customer cars tied to rivals. |
+| 3 | **Traffic** | Lane-following traffic on the freeway (MultiMesh per the rendering notes), then near-miss detection. Unlocks roll races through traffic. |
+| 4 | **Highway run** | The gap-bar duel on the freeway with traffic. The rival reacts to the gap visibly, never with hidden catch-up. |
+| 5 | **Full night loop** | The real day job board, night menu and weekly bills, built on whatever the week mock taught us. |
+| 6 | **Touge** | Curves and elevation (#37), then the mountain pass and two-run lead and chase. |
+| 7 | **Heat and police** | Heat per car, strikes, impound and escape runs. |
+| 8 | **Meet hub** | A lot to hang out in, respect, rumours and raids. |
+| 9 | **Burnout pad and takeover** | Design comes from the takeover specialist. PR #82 is the burnout and donut feel check. |
+| 10 | **Hands-on day job** | Roy's newest idea: the day job is driving the shop truck (tows and deliveries). Needs a second vehicle setup. |
+
+Rival and crew cars are scripted by default. Only the player's car runs full GEVP physics, to stay under the laptop's CPU ceiling.
 
 Story runs through every milestone as text, stills and phone messages.
 
 ## Still open
 
+- **Top 3:** about 90 ideas have been picked across two brainstorm sessions, none ranked. Ask Roy which 3 the game must have on day one before scope grows further.
+- **Two idea pages disagree:** this roadmap's proposal page (https://claude.ai/artifact/282jj5PnGRwxkzsy8jfb4R) and the merged brainstorm page (https://claude.ai/artifact/QQNekPUnt5bPcUDVrVWJEV) conflict on no-prep, the family debt and missed-payment penalties. They need one source of truth.
+- **Crew system:** anyone who races or earns for the garage gets their own car. Parked for its own brainstorm.
 - How the missed-payment penalties layer together (see above).
 - Setting: suggested as an American city with a nearby canyon. Not yet confirmed.
 - The game's name: "Neon Overdrive" no longer matches the look Roy picked. It stays as a working title.

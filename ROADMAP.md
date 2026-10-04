@@ -1,5 +1,106 @@
 # Neon Overdrive — Full Rebuild Roadmap (2026-09-12)
 
+## Roy's 2026-10-04 plan: stages A–G
+
+**Goal:** a complete playable run loop, built in this order. Every stage is
+verified headless with real simulated input, logged here, and **stops for
+Roy's sign-off** before the next one starts. Stage D stops after every car.
+
+| Stage | Contents |
+|---|---|
+| A | Feel + environment art: dynamic FOV, camera shake, lower chase cam, speed-scaled engine/wind/tyre audio, dense roadside detail, narrower road |
+| B | Milestones 3–5: lane-follow traffic, reactive traffic, camera + HUD. The 3 NPC cars are built here |
+| C | Milestones 6–9: damage, fuel, stop places, currency/scoring |
+| D | The 5 remaining player cars, one at a time, each with its CarSpec |
+| E | Milestone 10: garage + a real branching mod tree per player car |
+| F | Milestone 11: heat/wanted + police pursuit. The 3 cop cars are built here |
+| G | Integration: full-loop run, balance, bug sweep, Windows export on request |
+
+**Constraints (Roy, 2026-10-04):** verify by running Godot headless with real
+simulated input, and check `run/main_scene` before calling anything hung. Use
+original designs only, with no real makes or logos. Log every decision here as
+it happens. Flag contradictions instead of picking silently. Never delete Roy's
+files. Don't touch the parked top-speed plateau in `process_clutch()` or the
+automatic-vs-manual clutch question unless Roy raises them.
+
+**Rules carried forward:**
+- **Physics:** GEVP stays vendored and unmodified. The one logged exception is
+  `clutch_torque = 0` in Neutral. Extensions live in `aero.gd` and `car_spec.gd`.
+- **Every car runs the same raycast wheel sim** (player, NPC, cop, modded),
+  told apart only by CarSpec data. Roy, 2026-09-13, restated 2026-10-04.
+- **Gas-only powertrain** for all 12 cars (Roy, 2026-09-13).
+- **Mod trees:** each player car gets its own branching tree, 8–15+ nodes
+  (for example a grip branch and a power branch), applied as CarSpec
+  overrides. This answers GitHub #71 and supersedes the shared five-track tree
+  and three car tiers further down (2026-09-12).
+
+**Fleet: 12 original designs** inspired by real categories. These and their
+reference cars were agreed with Roy on 2026-09-13; they were only in Claude's
+notes until now.
+
+| Role | Car | Real-world reference points |
+|---|---|---|
+| Player 1 | Sports coupe | Supra A80, Silvia S13–S14, RX-7 FD3S |
+| Player 2 | Hot hatch (light, agile starter) | Civic Si, Golf GTI, 205 GTI |
+| Player 3 | Tuner sedan (JDM, mod-friendly) | Skyline R32–R34, AE86, Lancer Evo |
+| Player 4 | Kei-style roadster (light, low power) | Honda Beat, Suzuki Cappuccino, Autozam AZ-1 |
+| Player 5 | Muscle sedan (RWD, torque, low grip) | Impala SS, Chevelle SS, Caprice 9C1 |
+| Player 6 | Performance crossover (AWD, tall) | Crosstrek/XV, A6 Allroad, Delta Integrale |
+| NPC 1 | Commuter sedan | Camry, Accord, Sentra |
+| NPC 2 | City hatchback | Yaris, Fit, Swift |
+| NPC 3 | Pickup/SUV | Hilux, F-150, Land Cruiser |
+| Cop 1 | Patrol sedan | Crown Victoria P71, Charger Pursuit |
+| Cop 2 | Patrol SUV | Police Interceptor Utility, Tahoe PPV |
+| Cop 3 | Unmarked interceptor | unmarked Charger Hellcat, Mustang GT PI |
+
+**Open conflicts, waiting on Roy (flagged 2026-10-04):**
+1. **Direction.** PR #83 (open) records a car-culture plan Roy approved on
+   2026-09-29. It parks fuel, stop places and damage-ends-the-run (stage C
+   here) and makes rival and traffic cars scripted. This plan builds them.
+   Stage A applies to both, so it goes ahead; **stage B needs a decision.**
+2. **Cars.** PR #79 (open) moves cars to imported models through a vehicle
+   registry. Stage D assumed 12 cars built here. Needs a decision before D.
+3. **CPU cost of full-sim traffic.** RESEARCH-cheap-pretty.md warns that the
+   i5-1235U has 2 performance cores and that traffic should not get GEVP
+   bodies "without a measured reason". Roy's rule above is that reason, so
+   stage B measures traffic density against the frame budget before
+   committing a number.
+4. **Coupe status.** Not "awaiting judgement": Roy said "our car model sucks
+   atm" (#16), but he judged it while it rendered inside out, a winding bug
+   fixed after (PR #45). The game currently spawns the neutral test car (#63).
+
+### Stage A plan and decisions (2026-10-04)
+
+**Look:** Look Board option **B, "Gritty PS2 night"**, which Roy picked on
+2026-09-29: dark, orange sodium lamps, lamp pools, film grain, heavy shadows,
+**no neon**. It also matches the Street-Spec reference ("slightly low-poly and
+retro"). So stage A repaints the neon palette (cyan/magenta pylons, purple
+fog) instead of adding more neon. Approved night-lighting proposal 1 (dim cool
+key, emissives as the visible light) still holds.
+
+**In scope:**
+- **Camera:** lower chase cam, speed FOV with a partial dolly so the car keeps
+  its size while the world stretches, and speed/surface/impact shake. It goes
+  into one ChaseCamera class, and Roy's three smoothing modes (#31) are kept
+  as they are.
+- **Audio:** wind, rolling-road roar, tyre squeal and kerb/sidewalk rumble,
+  driven by speed, slip and surface. The synthesized engine from #57 is reused
+  unchanged, since its pitch already follows rpm and therefore speed through
+  the gears. Final engine tuning still waits on #62.
+- **Road:** narrower overall, with max 3 own-direction lanes (was 4), a
+  narrower shoulder and sidewalk, and buildings closer. `LANE_W` (2.3 m) is
+  **not** narrowed: it is already narrower than a real lane, and stage B
+  traffic needs it.
+- **Roadside detail:** sodium street lamps with fake light pools, dense
+  delineator posts instead of neon pylons, and walls closing the gaps between
+  buildings. All are MultiMesh, with draw calls counted before and after.
+- **Look support:** headlights on the player car (the detail has to be
+  visible), a blob shadow under it, and a light film grain.
+
+**Deferred, to propose later:** tunnels (part of look B; a new chunk type),
+utility poles and wires, overhead signs, vertex-coloured road lighting
+(proposal 2, still not approved) and wet-road reflections.
+
 Old `main.gd` (treadmill/distance-accumulator architecture) is abandoned, not edited further. `car_builder.gd` (pure mesh construction) is kept and reused. Everything below is built fresh in real world-space.
 
 ## Confirmed design decisions

@@ -148,6 +148,81 @@ utility poles and wires, overhead signs, vertex-coloured road lighting
 - **Pre-existing warning, not caused here:** "MultiMesh interpolation is
   being triggered from outside physics process" shows up on main too, when
   a chunk recycles from `_process`. Left alone; noted for #28/#26 owners.
+- **Audio:** `scripts/car_audio.gd` drives four looping layers made from
+  noise in code, with no audio files:
+  - wind, rising with v² on the World bus;
+  - road roar, rising with v on the Tires bus;
+  - tyre squeal from slip angle or slip ratio, weighted by tyre load;
+  - kerb rumble on "Dirt", whose rate follows speed.
+
+  The first squeal was three pure tones (it would have sounded like a synth
+  whine) and became noise through three resonators instead. Hard launches
+  squeal for real: 460 Nm through 1st and 2nd outruns rear grip in GEVP, so
+  this changes if #62 retunes the power.
+- **Process incident (fixed):** a read-only `git status` run on Roy's
+  checkout from the desktop bridge's Linux shell, where deletes are blocked,
+  left a stale `.git/index.lock` there for under a minute. It is moved out
+  to `build/stage-a/`, and CLAUDE.md now has a rule for that shell.
+
+### Stage A results (2026-10-04): waiting for Roy's sign-off
+
+**Changed** (branch `feat/stage-a-feel-env`, based on main 25dbf17):
+- `scripts/chase_camera.gd` (new): the camera from game.gd, plus the low
+  rig, speed FOV and dolly, and shake.
+- `scripts/car_audio.gd` (new): wind, road, squeal and kerb layers. The
+  engine (#57) is unchanged.
+- `scripts/road_chunk_builder.gd` and `scripts/game.gd`:
+  - look B palette;
+  - narrower road (3-lane cap, 0.9 m shoulder, buildings closer);
+  - lamps, light pools, 5 m posts and gap walls;
+  - the white-building fix.
+- `scripts/car_fx.gd` and `scripts/film_grain.gd` (new): headlight, blob
+  shadow and grain. `scripts/player.gd` gains three lines to attach audio
+  and FX.
+- Tests: new `camera_feel` and `car_audio` (headless) and `roadside_detail`
+  (window), all in `run_tests.bat`. `floating_origin_drive` now reads the
+  chase offset from the camera.
+- `CLAUDE.md`: a git rule for the desktop bridge's Linux shell.
+
+**Verified** in the cloud sandbox (Godot 4.7.2 Linux, real simulated keys,
+window tests on a software renderer):
+- All 12 runner tests pass (9 existing, 3 new), as do `engine_audio_render`
+  and `floating_origin_drive` (2 of 2 runs).
+- **Camera:** framing at rest is exact. At 28 m/s the FOV is 67.4° and the
+  distance 4.59 m, and FOV follows speed (r = 0.994). The hardest braking
+  peaks at 0.32 m/s per tick against a 0.8 threshold, so it never shakes. A
+  wall hit at speed gives trauma 0.98, and the cruise buzz stays ≤ 0.13°.
+- **Audio:** wind follows speed² (r = 1.000) and road follows speed
+  (r = 0.997). Squeal tops out at 0.04 when cruising straight and reaches
+  1.0 in a handbrake slide. Kerb rumble comes on. The loops take 115 ms to
+  build. The real mix was recorded from the Master bus and checked on a
+  spectrogram.
+- **Layout:** `roadside_detail` covers 36 lane configs and their rebuilds.
+  It was mutation-checked: it fails if the ADD-emission bug or the gap walls
+  regress.
+- **Draw calls** in benchmark mode, same drive: main averages 147 (max 160),
+  stage A averages 171 (max 186), +16%.
+- **Windows export:** builds with 0 errors. Its embedded pack loads in Godot
+  and passes the smoke test.
+- **Clip:** a 23.5 s drive with picture and sound, recorded with Godot's
+  movie writer.
+
+**Not verified / open:**
+- **Frame time on Roy's laptop.** The software renderer here says nothing
+  useful about it. `benchmark.bat` on the stage A build is the real check;
+  main ran at about 3.3 ms there (2026-09-29), against a budget of 8–10 ms.
+- **The .exe has not been launched on Windows**, since there is no Windows
+  here.
+- **Feel, look and mix are Roy's call.** Every value is a named constant:
+  camera in `chase_camera.gd`, audio in `car_audio.gd`, lights in
+  `car_fx.gd`, palette in `game.gd` and `road_chunk_builder.gd`.
+- **Merge conflicts:** expect small ones with open PR #79 (`game.gd` HUD
+  line, `player.gd` `_ready`). This branch has not been rebased onto it.
+- **Not pushed:** the session's GitHub access refused the push (the Claude
+  GitHub App isn't installed), so the branch is handed over as a bundle.
+- **Waiting on Roy before stage B:** the direction (PR #83 vs this plan),
+  the car pipeline (PR #79) and the traffic sim cost (see Open conflicts
+  above).
 
 Old `main.gd` (treadmill/distance-accumulator architecture) is abandoned, not edited further. `car_builder.gd` (pure mesh construction) is kept and reused. Everything below is built fresh in real world-space.
 

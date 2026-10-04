@@ -60,10 +60,12 @@ class_name RoadChunkBuilder
 #   paint now (white/yellow, faint retroreflective emission below the glow
 #   threshold) instead of glowing cyan/amber; the cyan/magenta pylons are
 #   delineator posts; asphalt, curbs and sidewalks are neutral greys.
-# - narrower road: shoulder 1.6 -> 0.9 m, sidewalk 2.2 -> 1.8 m, buildings
-#   0.5 m behind the sidewalk instead of 1.0. LANE_W is unchanged on purpose
-#   (2.3 m is already narrower than a real lane, and traffic needs it); the
-#   lane-count cap moved from 4 to 3 in game.gd::_section_at().
+# - narrower road: shoulder 1.6 -> 0.9 m, buildings 0.5 m behind the
+#   sidewalk instead of 1.0, and the lane-count cap moved from 4 to 3 in
+#   game.gd::_section_at(). The sidewalk stays 2.2 m (a drivable risk/reward
+#   shortcut by design; 1.8 m was tried and barely fit the car). LANE_W is
+#   unchanged on purpose (2.3 m is already narrower than a real lane, and
+#   traffic needs it).
 # - dense roadside detail, all MultiMesh: sodium street lamps every 25 m per
 #   side (staggered), a fake light pool on the road under each one (additive
 #   decal-style quad, zero lighting cost), posts every 5 m, and concrete walls
@@ -89,7 +91,8 @@ const CHUNK_LEN := 50.0
 const DASH_SPACING := 4.0
 const SHOULDER_W := 0.9
 const CURB_W := 0.3
-const SIDEWALK_W := 1.8
+const SIDEWALK_W := 2.2  # kept: the sidewalk is a drivable shortcut by design,
+                         # and 1.8 m would barely fit the car's 1.76 m track
 # "Pylons" are delineator posts since stage A (node names kept). Denser
 # spacing on purpose: near-road objects whipping past are the main speed cue.
 const PYLON_SPACING := 5.0

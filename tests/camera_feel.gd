@@ -89,6 +89,13 @@ func _player() -> PlayerCar:
 func _cam() -> ChaseCamera:
 	return game.get("camera")
 
+## Lateral position of the middle of the right-hand sidewalk where the car is
+## now (lane counts change chunk to chunk, so it is looked up, not fixed).
+func _sidewalk_x(p: PlayerCar) -> float:
+	var idx := int(floor(-p.global_position.z / RoadChunkBuilder.CHUNK_LEN)) + int(game.get("origin_index"))
+	var cfg: Dictionary = game.call("_section_at", idx)
+	return RoadChunkBuilder._lane_w(cfg.own_lanes) + RoadChunkBuilder.SHOULDER_W + RoadChunkBuilder.CURB_W + RoadChunkBuilder.SIDEWALK_W / 2.0
+
 ## Holds the heading down the road toward lateral position aim_x, like
 ## chunk_drive.gd's bot (which is aim_x = 0, max_term = 0.05).
 func _hold_heading(p: PlayerCar, aim_x: float = 0.0, max_term: float = 0.05) -> void:
@@ -170,7 +177,7 @@ func _physics_process(_delta: float) -> bool:
 			_upshift(p)
 			# Ease toward the right-hand sidewalk once moving.
 			if speed > 12.0:
-				_hold_heading(p, 14.0, 0.15)
+				_hold_heading(p, _sidewalk_x(p), 0.15)
 			else:
 				_hold_heading(p)
 			kerb_max = maxf(kerb_max, cam.surface_t)

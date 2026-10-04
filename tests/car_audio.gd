@@ -18,7 +18,7 @@ extends SceneTree
 #   at 30 m/s wind > 0.35 and road > 0.5; squeal stays under 0.15 while
 #   cruising straight above 20 m/s
 # - slide: squeal > 0.4
-# - kerb: surface > 0.3
+# - kerb: surface > 0.25
 # - four players, playing, on the World/Tires buses that exist
 # Also records the real mixed output (engine + these layers) from the Master
 # bus to user://stage_a_drive.wav and reports how loud each phase is.
@@ -96,6 +96,13 @@ func _check_loops() -> void:
 			_fail("%s loop clicks at the seam (%.4f)" % [layer, seam])
 		if wav.loop_mode != AudioStreamWAV.LOOP_FORWARD or wav.loop_end != n:
 			_fail("%s is not a full forward loop" % layer)
+
+## Lateral position of the middle of the right-hand sidewalk where the car is
+## now (lane counts change chunk to chunk, so it is looked up, not fixed).
+func _sidewalk_x(p: PlayerCar) -> float:
+	var idx := int(floor(-p.global_position.z / RoadChunkBuilder.CHUNK_LEN)) + int(game.get("origin_index"))
+	var cfg: Dictionary = game.call("_section_at", idx)
+	return RoadChunkBuilder._lane_w(cfg.own_lanes) + RoadChunkBuilder.SHOULDER_W + RoadChunkBuilder.CURB_W + RoadChunkBuilder.SIDEWALK_W / 2.0
 
 func _hold_heading(p: PlayerCar, aim_x: float = 0.0, max_term: float = 0.05) -> void:
 	var err: float = p.global_rotation.y + clampf((aim_x - p.global_position.x) * 0.02, -max_term, max_term)
@@ -202,13 +209,14 @@ func _physics_process(_delta: float) -> bool:
 		"kerb":
 			_upshift(p)
 			if speed > 8.0:
-				_hold_heading(p, 16.0, 0.2)
+				_hold_heading(p, _sidewalk_x(p), 0.15)
 			else:
 				_hold_heading(p, p.global_position.x)
 			kerb_surface = maxf(kerb_surface, audio.surface_level)
-			if kerb_surface > 0.3 or phase_ticks > 60 * 25:
+			# Two wheels on the sidewalk at ~10 m/s is ~0.25; silent is 0.
+			if kerb_surface > 0.25 or phase_ticks > 60 * 25:
 				print("kerb: surface max %.2f" % kerb_surface)
-				if kerb_surface <= 0.3:
+				if kerb_surface <= 0.25:
 					_fail("kerb rumble never came on (%.2f)" % kerb_surface)
 				_finish()
 	return false

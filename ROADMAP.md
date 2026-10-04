@@ -88,7 +88,7 @@ key, emissives as the visible light) still holds.
   unchanged, since its pitch already follows rpm and therefore speed through
   the gears. Final engine tuning still waits on #62.
 - **Road:** narrower overall, with max 3 own-direction lanes (was 4), a
-  narrower shoulder and sidewalk, and buildings closer. `LANE_W` (2.3 m) is
+  narrower shoulder, and buildings closer. `LANE_W` (2.3 m) is
   **not** narrowed: it is already narrower than a real lane, and stage B
   traffic needs it.
 - **Roadside detail:** sodium street lamps with fake light pools, dense
@@ -141,6 +141,10 @@ utility poles and wires, overhead signs, vertex-coloured road lighting
 - **Gap walls are visual only.** Out-of-bounds collision is #28, and
   uncommitted work for it is sitting in Roy's root checkout, so it is not
   done twice here.
+- **Sidewalk width kept at 2.2 m.** I tried 1.8 m, but then the car's
+  1.76 m track barely fits, which quietly kills the drivable-sidewalk
+  shortcut (a 2026-09-13 design decision). The test bots caught it: they
+  could no longer get all four wheels onto the sidewalk.
 - **Pre-existing warning, not caused here:** "MultiMesh interpolation is
   being triggered from outside physics process" shows up on main too, when
   a chunk recycles from `_process`. Left alone; noted for #28/#26 owners.

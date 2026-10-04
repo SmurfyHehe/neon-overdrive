@@ -86,7 +86,7 @@ func _setup_world() -> void:
 	env.fog_density = 0.009
 	# NIGHT LIGHTING PASS (2026-09-29, RESEARCH-cheap-pretty.md item 1): the
 	# gradient sky is also the ambient source (Godot's default under BG_SKY),
-	# so its purple horizon fills the scene for free -- no extra light needed.
+	# so its horizon glow fills the scene for free -- no extra light needed.
 	# Dialled down from the default 1.0 because at full energy a bright horizon
 	# lifts the near-black asphalt back toward grey and flattens the emissive
 	# markings it is supposed to sit behind.
@@ -124,6 +124,9 @@ func _setup_world() -> void:
 	# cool moonlight key: enough to give the car body and roadside geometry
 	# form so they don't read as flat silhouettes, not enough to compete with
 	# the neon. Renamed sun -> moon because that is now what it is.
+	# Stage A (2026-10-04): the light you see is now sodium street lamps, their
+	# pools on the road, windows and the player's headlight; the markings and
+	# posts are dim paint, not neon. The moon keeps the same job.
 	#
 	# Shadows stay off (Godot's default) deliberately, not by oversight: a
 	# shadow-casting directional light costs an entire extra pass, and at this

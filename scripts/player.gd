@@ -141,6 +141,8 @@ func _ready() -> void:
 	# synthesised engine driven by this car's motor_rpm/throttle. Added after
 	# CarSpec.apply() so it picks up the real idle/max rpm.
 	add_child(EngineAudio.new())
+	# Stage A (2026-10-04): wind, road, tyre and kerb sound next to the engine.
+	add_child(CarAudio.new())
 
 	# Stage A (2026-10-04): headlights + blob shadow, since the world is dark
 	# on purpose now (Look Board B). After the body and wheels exist, because

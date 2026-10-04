@@ -101,6 +101,50 @@ key, emissives as the visible light) still holds.
 utility poles and wires, overhead signs, vertex-coloured road lighting
 (proposal 2, still not approved) and wet-road reflections.
 
+### Stage A log (2026-10-04, as it happened)
+
+- **Baseline on main (25dbf17):** all 9 `run_tests.bat` tests pass in the
+  cloud sandbox (Godot 4.7.2 Linux, lavapipe for window tests).
+  `floating_origin_drive` (not in the runner) is flaky there before any
+  change: frame overshoot 0.000–0.019 m against a 0.0 limit, 1 of 3 runs.
+- **Camera:** extracted to `scripts/chase_camera.gd`. Height 3.2 → 1.85 m,
+  distance 6.0 → 5.2 m, look 12 m ahead at 0.95 m. FOV goes 58° → 74°
+  (vertical), linear from 5 to 45 m/s, so today's ~35 m/s top speed already
+  gets ¾ of it. Hard acceleration adds up to +3° and braking takes off 2°.
+  The dolly is 70%, so the car keeps most of its size as the FOV widens, and
+  the camera drops 0.2 m at speed. Shake has three parts: a speed buzz
+  (≤0.46°), kerb/sidewalk rumble, and impact trauma when velocity jumps by
+  more than 0.8 m/s in one tick. Hard braking peaks at 0.32 m/s per tick,
+  measured, so braking never reads as an impact.
+- **Found while looking at Roy's own 2026-09-29 screenshots:** the buildings
+  rendered as solid white blocks, even with glow off. The window material
+  used the default `EMISSION_OP_ADD` with a white emission colour, so every
+  face emitted ≥1.4. **Fixed** (MULTIPLY), with a regression check in
+  `tests/roadside_detail.gd`. This was very likely a large part of
+  "environment is trash".
+- **Environment:**
+  - Palette moved to look B: near-black sky with a sodium-orange horizon,
+    warm dark fog (density 0.006 → 0.009), and grey asphalt (lighter than
+    before, so headlights show on it).
+  - Markings are paint, emitting at 0.28, below the glow threshold. Curb and
+    median barrier are concrete. Posts every 5 m replace the neon pylons
+    every 8 m.
+  - Sodium lamps every 25 m per side, staggered, each with an additive light
+    pool on the road that fades out between 110 and 170 m.
+  - Buildings have longer frontages (9–18 m) at 25 m spacing; their windows
+    use world-space mapping on a 25 m tile, which divides the 1 km
+    floating-origin shift. Gap walls fill the lots between them.
+  - Player car gets a headlight (one spot: 28 energy, 55 m range, 30°) and a
+    blob shadow decal. The car's meshes move to render layer 2 so the decal
+    skips them.
+  - Film grain is a darken-only multiply at 9%, at 24 fps.
+- **Gap walls are visual only.** Out-of-bounds collision is #28, and
+  uncommitted work for it is sitting in Roy's root checkout, so it is not
+  done twice here.
+- **Pre-existing warning, not caused here:** "MultiMesh interpolation is
+  being triggered from outside physics process" shows up on main too, when
+  a chunk recycles from `_process`. Left alone; noted for #28/#26 owners.
+
 Old `main.gd` (treadmill/distance-accumulator architecture) is abandoned, not edited further. `car_builder.gd` (pure mesh construction) is kept and reused. Everything below is built fresh in real world-space.
 
 ## Confirmed design decisions

@@ -22,11 +22,13 @@ call :run test_car --headless
 call :run road_strip_winding --headless
 call :run sidewalk_collision_taper --headless
 call :run aero_draft_equivalence --headless
+call :run camera_feel --headless
 if /i not "%~1"=="quick" (
 	rem These need a real window: headless drops MultiMesh data.
 	call :run chunk_drive
 	call :run game_state
 	call :run tuning_panel
+	call :run roadside_detail
 )
 echo.
 if defined FAILED (

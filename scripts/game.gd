@@ -66,18 +66,24 @@ func _setup_world() -> void:
 	# horizon" Roy flagged in his screenshot. A gradient sky reads as an
 	# actual horizon instead of a wall, and letting fog_density drop means
 	# the gradient is doing more of the distance-fade work than a wall of fog.
+	#
+	# STAGE A (2026-10-04): repainted from the purple neon palette to the look
+	# Roy picked (Look Board B, "Gritty PS2 night"): a near-black sky with a
+	# dull sodium-orange city glow at the horizon, and a warm dark haze that
+	# swallows the distance -- denser than before, so the rows of street lamps
+	# fade into it (and the short draw distance is free, RESEARCH item 2).
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.02, 0.004, 0.08)
-	sky_mat.sky_horizon_color = Color(0.35, 0.08, 0.55)
-	sky_mat.ground_bottom_color = Color(0.02, 0.004, 0.047)
-	sky_mat.ground_horizon_color = Color(0.25, 0.05, 0.4)
+	sky_mat.sky_top_color = Color(0.008, 0.01, 0.018)
+	sky_mat.sky_horizon_color = Color(0.17, 0.095, 0.05)
+	sky_mat.ground_bottom_color = Color(0.008, 0.008, 0.01)
+	sky_mat.ground_horizon_color = Color(0.11, 0.065, 0.04)
 	var sky := Sky.new()
 	sky.sky_material = sky_mat
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.11, 0.05, 0.23)
-	env.fog_density = 0.006
+	env.fog_light_color = Color(0.1, 0.066, 0.042)
+	env.fog_density = 0.009
 	# NIGHT LIGHTING PASS (2026-09-29, RESEARCH-cheap-pretty.md item 1): the
 	# gradient sky is also the ambient source (Godot's default under BG_SKY),
 	# so its purple horizon fills the scene for free -- no extra light needed.
@@ -103,6 +109,9 @@ func _setup_world() -> void:
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)
+	# Look B's "grainy filter" (stage A): a light, darken-only animated grain
+	# over the 3D view, under the HUD.
+	add_child(FilmGrain.new())
 
 	# NIGHT LIGHTING PASS (2026-09-29, RESEARCH-cheap-pretty.md item 1): this
 	# was a warm white key at energy 1.1 -- i.e. a daylight sun sitting inside
@@ -175,7 +184,9 @@ func _section_at(idx: int) -> Dictionary:
 	var own_delta := 0
 	if own_roll >= 0.55:
 		own_delta = 1 if own_roll < 0.78 else -1
-	var own_lanes: int = clampi(int(prev.own_lanes) + own_delta, 2, 4)
+	# Stage A (narrower road): at most 3 lanes our way, was 4. The builder's
+	# MultiMesh capacity (MAX_OWN_LANES) still allows 4, so this only narrows.
+	var own_lanes: int = clampi(int(prev.own_lanes) + own_delta, 2, 3)
 	var onc_roll := randf()
 	var onc_delta := 0
 	if onc_roll >= 0.7:

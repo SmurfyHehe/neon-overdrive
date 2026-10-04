@@ -142,6 +142,11 @@ func _ready() -> void:
 	# CarSpec.apply() so it picks up the real idle/max rpm.
 	add_child(EngineAudio.new())
 
+	# Stage A (2026-10-04): headlights + blob shadow, since the world is dark
+	# on purpose now (Look Board B). After the body and wheels exist, because
+	# it moves their meshes to the car's own render layer.
+	CarFx.attach(self, chassis_visual.get_meta("half_l", 2.2))
+
 func _physics_process(delta: float) -> void:
 	# Input (#29, #30): named InputMap actions (project.godot), all polled
 	# here -- no _input handlers. Shifts are one-shot, hence just_pressed.

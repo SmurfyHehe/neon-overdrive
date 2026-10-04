@@ -1,0 +1,182 @@
+extends Camera3D
+class_name ChaseCamera
+
+# Chase camera (stage A, 2026-10-04). Moved out of game.gd so the feel layer
+# below has one home. Roy's three smoothing modes from #31 are carried over
+# unchanged (C cycles them; he tunes them later). New in stage A, from the
+# sense-of-speed research (perceived speed comes from how fast things move
+# across the screen, not from the number on the speedo):
+# - a lower chase position: foreground objects sweep past at a bigger angle;
+# - speed FOV with a partial dolly-in, so the world stretches outward while
+#   the car keeps roughly its size on screen;
+# - shake: a light buzz that grows with speed, a rumble on kerbs and
+#   sidewalks, and a kick when the car hits something.
+# Every number below is a starting value for Roy to judge by driving.
+
+const MODE_NAMES := ["A: hard snap", "B: light smoothing", "C: smoothing + reverse swing"]
+const FOLLOW_RATE := 6.0  # 1/s, how fast the camera catches up sideways/vertically
+const SWING_RATE := 5.0   # 1/s, how fast it swings round for reverse (~0.6 s)
+
+# Framing. Was distance 6.0 / height 3.2 / look 10 m ahead at 1.1 / FOV 62.
+const DIST := 5.2         # m behind the car at rest
+const HEIGHT := 1.85      # m above the car's origin at rest
+const LOOK_AHEAD := 12.0  # m ahead of the car the camera aims at
+const LOOK_HEIGHT := 0.95
+const SQUAT := 0.2        # m the camera drops at full speed effect
+
+# Speed FOV (vertical degrees; Godot keeps height, so 16:9 is ~1.6x wider).
+const FOV_REST := 58.0
+const FOV_FAST := 74.0
+const FOV_SPEED_LO := 5.0    # m/s (18 km/h): widening starts
+const FOV_SPEED_HI := 45.0   # m/s (162 km/h): fully wide. Linear between, so
+                             # today's ~35 m/s top speed already gets 3/4 of it
+const FOV_ACCEL_GAIN := 0.25 # deg per m/s^2 of forward acceleration
+const FOV_ACCEL_MIN := -2.0  # braking narrows a little
+const FOV_ACCEL_MAX := 3.0   # hard acceleration widens a little more
+const FOV_RATE := 3.0        # 1/s smoothing on the speed term
+const ACCEL_RATE := 4.0      # 1/s smoothing on the acceleration term
+## 0 = distance fixed (car shrinks as FOV widens), 1 = car keeps its rest size.
+const DOLLY := 0.7
+
+# Shake. Rotation in radians, position in metres, at full strength.
+const SPEED_SHAKE_ROT := 0.008   # ~0.45 deg buzz at FOV_SPEED_HI and above
+const SPEED_SHAKE_POS := 0.015
+const SURFACE_SHAKE_ROT := 0.008 # kerb/sidewalk rumble ("Dirt" surface)
+const SURFACE_SHAKE_POS := 0.02
+const IMPACT_SHAKE_ROT := 0.035  # ~2 deg at full trauma
+const IMPACT_SHAKE_POS := 0.12
+const TRAUMA_DECAY := 1.6        # 1/s
+## Velocity change in one physics tick (m/s) above which it counts as a hit.
+## Hard braking peaks well under this (see tests/camera_feel.gd); a wall at
+## speed is several times over it.
+const IMPACT_DV := 0.8
+const IMPACT_GAIN := 0.12        # trauma per m/s over the threshold
+
+var target: PlayerCar
+var mode := 0
+## Tests turn this off to compare the drawn position against the chase offset.
+var shake_enabled := true
+
+# Smoothed state the HUD and tests can read.
+var speed_t := 0.0     # 0..1, eased speed factor
+var accel_fov := 0.0   # current acceleration FOV term, degrees
+var trauma := 0.0      # 0..1, impact shake energy
+var surface_t := 0.0   # 0..1, share of wheels on a rough surface (scaled by speed)
+var dist_now := DIST
+var height_now := HEIGHT
+var anchor := Vector3.ZERO  # chase position before shake
+var aim := Vector3.ZERO     # point the rig looks at before shake
+
+var _follow := Vector2.ZERO
+var _yaw := 0.0
+var _started := false
+var _prev_vel := Vector3.ZERO
+var _prev_speed := 0.0
+var _accel := 0.0
+var _t := 0.0
+var _noise := FastNoiseLite.new()
+
+func _init(car: PlayerCar) -> void:
+	target = car
+	fov = FOV_REST
+	far = 400.0
+	# Moved in _process every rendered frame, so it must not be
+	# physics-interpolated itself (ISSUES B7).
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	_noise.seed = 9431
+	_noise.frequency = 1.0
+
+func _ready() -> void:
+	current = true
+	_prev_vel = target.linear_velocity
+
+func mode_name() -> String:
+	return MODE_NAMES[mode]
+
+# Polled on the physics tick like all game input (#30), and the impact check
+# needs exactly one velocity sample per tick.
+func _physics_process(delta: float) -> void:
+	if Input.is_action_just_pressed("camera_cycle"):
+		mode = (mode + 1) % MODE_NAMES.size()
+	var v := target.linear_velocity
+	var dv := (v - _prev_vel).length()
+	_prev_vel = v
+	if dv > IMPACT_DV:
+		trauma = minf(1.0, trauma + (dv - IMPACT_DV) * IMPACT_GAIN)
+	var speed := target.current_speed()
+	_accel = (speed - _prev_speed) / delta
+	_prev_speed = speed
+
+func _process(delta: float) -> void:
+	_update_feel(delta)
+	_place(delta)
+	if shake_enabled:
+		_shake(delta)
+
+func _update_feel(delta: float) -> void:
+	var speed := absf(target.current_speed())
+	var want_t := clampf((speed - FOV_SPEED_LO) / (FOV_SPEED_HI - FOV_SPEED_LO), 0.0, 1.0)
+	speed_t = lerpf(speed_t, want_t, 1.0 - exp(-FOV_RATE * delta))
+	var want_a := clampf(_accel * FOV_ACCEL_GAIN, FOV_ACCEL_MIN, FOV_ACCEL_MAX)
+	accel_fov = lerpf(accel_fov, want_a, 1.0 - exp(-ACCEL_RATE * delta))
+	fov = lerpf(FOV_REST, FOV_FAST, speed_t) + accel_fov
+	# Dolly: scale the distance by how much the frustum widened, part way.
+	var widen := tan(deg_to_rad(FOV_REST) * 0.5) / tan(deg_to_rad(fov) * 0.5)
+	dist_now = DIST * (DOLLY * widen + (1.0 - DOLLY))
+	height_now = HEIGHT - SQUAT * speed_t
+	trauma = maxf(0.0, trauma - TRAUMA_DECAY * delta)
+	var rough := 0
+	var grounded := 0
+	for w in target.wheel_array:
+		if w.is_colliding():
+			grounded += 1
+			if w.surface_type != "Road":
+				rough += 1
+	var want_s := 0.0
+	if grounded > 0:
+		want_s = float(rough) / float(grounded) * clampf(speed / 15.0, 0.0, 1.0)
+	surface_t = lerpf(surface_t, want_s, 1.0 - exp(-12.0 * delta))
+
+func _place(delta: float) -> void:
+	# The interpolated position, not target.position: the car only moves on
+	# the 60 Hz physics tick, and with vsync off the camera updates several
+	# times per tick. Following the raw position made car and road judder.
+	var p := target.get_global_transform_interpolated().origin
+	# Reversing flips the chase cam to the opposite side of the car looking
+	# the opposite way (2026-09-13 fix, kept).
+	var target_yaw := PI if target.gear == -1 else 0.0
+	if mode == 0 or not _started:
+		_follow = Vector2(p.x, p.y)
+		_yaw = target_yaw
+		_started = true
+	else:
+		# Frame-rate independent ease: the same feel at 60 or 300 fps.
+		_follow = _follow.lerp(Vector2(p.x, p.y), 1.0 - exp(-FOLLOW_RATE * delta))
+		if mode == 2:
+			_yaw = lerpf(_yaw, target_yaw, 1.0 - exp(-SWING_RATE * delta))
+		else:
+			_yaw = target_yaw
+	# Distance along the road stays locked to the car (only sideways and
+	# height motion is smoothed); the dolly shortens it with speed.
+	var back := Vector3(0, 0, dist_now).rotated(Vector3.UP, _yaw)
+	var ahead := Vector3(0, 0, -LOOK_AHEAD).rotated(Vector3.UP, _yaw)
+	anchor = Vector3(_follow.x + back.x, _follow.y + height_now, p.z + back.z)
+	aim = Vector3(_follow.x + ahead.x, _follow.y + LOOK_HEIGHT, p.z + ahead.z)
+	global_position = anchor
+	look_at(aim, Vector3.UP)
+
+## Smooth noise shake applied on top of the chase transform. Amplitude adds
+## the three sources; impact uses trauma^2 so small knocks stay small.
+func _shake(delta: float) -> void:
+	var buzz := pow(speed_t, 1.5)
+	var rot := SPEED_SHAKE_ROT * buzz + SURFACE_SHAKE_ROT * surface_t + IMPACT_SHAKE_ROT * trauma * trauma
+	var pos := SPEED_SHAKE_POS * buzz + SURFACE_SHAKE_POS * surface_t + IMPACT_SHAKE_POS * trauma * trauma
+	if rot <= 0.0 and pos <= 0.0:
+		return
+	# Faster wobble for rough surface and hits than for the speed buzz.
+	_t += delta * (6.0 + 10.0 * surface_t + 14.0 * trauma)
+	rotate_object_local(Vector3.RIGHT, rot * _noise.get_noise_2d(_t, 0.0))
+	rotate_object_local(Vector3.UP, rot * 0.6 * _noise.get_noise_2d(_t, 100.0))
+	rotate_object_local(Vector3.BACK, rot * 0.8 * _noise.get_noise_2d(_t, 200.0))
+	global_position += global_basis * Vector3(pos * _noise.get_noise_2d(_t, 300.0), pos * _noise.get_noise_2d(_t, 400.0), 0.0)

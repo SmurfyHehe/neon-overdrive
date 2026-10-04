@@ -32,20 +32,9 @@ var recenter_count := 0
 var player: PlayerCar
 var game_state: GameState
 
-var camera: Camera3D
-const CAM_DIST := 6.0
-const CAM_HEIGHT := 3.2
-const CAM_FOV := 62.0
-# Issue #31: C cycles camera modes in-game. Roy kept all three for now
-# (2026-09-29) and will tune them later.
-# 0 = hard snap (old), 1 = light smoothing, 2 = smoothing + eased reverse swing.
-const CAM_MODE_NAMES := ["A: hard snap", "B: light smoothing", "C: smoothing + reverse swing"]
-const CAM_FOLLOW_RATE := 6.0  # 1/s, how fast the camera catches up sideways/vertically
-const CAM_SWING_RATE := 5.0   # 1/s, how fast it swings round for reverse (~0.6 s)
-var cam_mode := 0
-var cam_follow := Vector2.ZERO  # smoothed (x, y) the camera tracks
-var cam_yaw := 0.0              # 0 = behind for forward, PI = mirrored for reverse
-var cam_started := false
+# Chase camera, its three smoothing modes (#31, C to cycle) and the stage A
+# speed feel (FOV, dolly, shake) all live in chase_camera.gd.
+var camera: ChaseCamera
 var lbl_cam: Label
 
 var lbl_gear: Label
@@ -232,7 +221,6 @@ func _physics_process(_delta: float) -> void:
 	var z := player.global_position.z
 	if absf(z) >= recenter_dist:
 		_shift_origin(int(floor(-z / RoadChunkBuilder.CHUNK_LEN)))
-	_poll_camera_input()
 
 ## Moves the world back by shift_chunks whole chunks (positive = the car had
 ## driven forward, -z). Whole chunks keep chunk positions exact integers x 50.
@@ -272,51 +260,8 @@ func _setup_player() -> void:
 
 # ---------- camera ----------
 func _setup_camera() -> void:
-	camera = Camera3D.new()
-	camera.fov = CAM_FOV
-	camera.far = 400.0
-	# Moved in _process every rendered frame, so it must not be
-	# physics-interpolated itself (ISSUES B7).
-	camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	camera = ChaseCamera.new(player)
 	add_child(camera)
-	camera.current = true
-
-func _update_camera(delta: float) -> void:
-	# The interpolated position, not player.position: the car only moves on
-	# the 60 Hz physics tick, and with vsync off the camera updates several
-	# times per tick. Following the raw position made car and road judder.
-	var p := player.get_global_transform_interpolated().origin
-	# BUG FIX (2026-09-13): camera never rotated for reverse, so you couldn't
-	# see what you were backing into. Reversing flips the chase cam to the
-	# opposite side of the car looking the opposite way -- it still trails
-	# "behind" relative to the current direction of travel, just mirrored.
-	var reversing := player.gear == -1
-	var target_yaw := PI if reversing else 0.0
-	if cam_mode == 0 or not cam_started:
-		cam_follow = Vector2(p.x, p.y)
-		cam_yaw = target_yaw
-		cam_started = true
-	else:
-		# Frame-rate independent ease: the same feel at 60 or 300 fps.
-		var k := 1.0 - exp(-CAM_FOLLOW_RATE * delta)
-		cam_follow = cam_follow.lerp(Vector2(p.x, p.y), k)
-		if cam_mode == 2:
-			cam_yaw = lerpf(cam_yaw, target_yaw, 1.0 - exp(-CAM_SWING_RATE * delta))
-		else:
-			cam_yaw = target_yaw
-	# Distance along the road stays locked to the car, so speed never pulls
-	# the camera further back; only sideways and height motion is smoothed.
-	var fx := cam_follow.x
-	var fy := cam_follow.y
-	var back := Vector3(0, 0, CAM_DIST).rotated(Vector3.UP, cam_yaw)
-	var ahead := Vector3(0, 0, -10.0).rotated(Vector3.UP, cam_yaw)
-	camera.global_position = Vector3(fx + back.x, fy + CAM_HEIGHT, p.z + back.z)
-	camera.look_at(Vector3(fx + ahead.x, fy + 1.1, p.z + ahead.z), Vector3.UP)
-
-# Polled from _physics_process like all game input (#30), not an event handler.
-func _poll_camera_input() -> void:
-	if Input.is_action_just_pressed("camera_cycle"):
-		cam_mode = (cam_mode + 1) % CAM_MODE_NAMES.size()
 
 # ---------- temporary debug readout (real HUD is milestone 5) ----------
 func _setup_debug_hud() -> void:
@@ -345,7 +290,7 @@ func _update_debug_hud() -> void:
 	var gear_name := "R" if player.gear == -1 else ("N" if player.gear == 0 else str(player.gear))
 	lbl_gear.text = "GEAR %s" % gear_name
 	lbl_speed.text = "%d units/s" % int(player.current_speed())
-	lbl_cam.text = "CAMERA %s  (C to switch)" % CAM_MODE_NAMES[cam_mode]
+	lbl_cam.text = "CAMERA %s  (C to switch)" % camera.mode_name()
 	# BUG FIX (2026-09-13): shift_flash_t was tracked on the player since
 	# milestone 2 but nothing ever read it -- shifting had zero feedback.
 	# Wired it to actually punch the gear label (bright flash + scale pop)
@@ -364,7 +309,6 @@ func _setup_game_state() -> void:
 	add_child(PauseMenu.new(game_state))
 	add_child(TuningPanel.new(player, game_state))
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	_update_chunk_pool(player.position.z)
-	_update_camera(delta)
 	_update_debug_hud()

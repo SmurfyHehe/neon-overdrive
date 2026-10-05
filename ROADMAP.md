@@ -337,17 +337,28 @@ window tests on a software renderer):
   the car pipeline (PR #79) and the traffic sim cost (see Open conflicts
   above). *(Resolved 2026-10-05, see Stage B.)*
 
-## Stage B (revised 2026-10-05): design sheet, traffic, camera + HUD, exhaust
+## Stage B (revised 2026-10-05): design sheet, exhaust, traffic, camera + HUD, NPC cars
 
-Four sub-stages. Each one **stops for Roy's sign-off**, with its results
-written here first.
+Five steps, in this order (Roy's stage B prompt, 2026-10-05, 03:30 MDT). It
+supersedes the B1–B4 table the B1 session worked from, which had traffic
+second and the exhaust last. Each step **stops for Roy's sign-off**, with its
+results written here first, and the next step never starts unprompted.
 
-| Sub-stage | Contents |
+| Step | Contents |
 |---|---|
-| B1 | Design sheet for all 12 cars (design only, no modeling) |
-| B2 | Milestones 3–4: lane-follow, then reactive traffic on the multi-lane highway, plus the 3 NPC cars built from the B1 sheets |
-| B3 | Milestone 5: camera + full dashboard HUD |
-| B4 | Exhaust build: synthesized exhaust, pops/crackles, flames, flamethrower tune |
+| 1 | Design sheet for all 12 cars (6 player, 3 NPC, 3 cop): original designs, a silhouette language per class, readable from every angle (a 360 camera comes later), gas only, a realistic poly budget for a mid laptop, mods that change shape, paint, wheels and 3 sticker spots. Design only. Built by the B1 session, audited in this one. |
+| 2 | Exhaust: loudness, raspiness, pops/crackles, flame tune. Loudness and flames are cosmetic only. |
+| 3 | Milestones 3–4, full-sim traffic (Option C): every traffic car runs the same raycast Vehicle sim through CarSpec, told apart by data only. Lane-follow first, then reactive. Road: 4 lanes per direction. A draw-distance slider that lowers sim quality for far cars. Test at ~300 km/h in busy traffic and report fps. Research traffic AI first and cite it. |
+| 4 | Milestone 5, camera + HUD: steering wheel with an RPM bar going green to red as the shift cue, instrument cluster, visible gear shifter. Automatic and semi-manual, switched in the T tuning menu. R picks reverse only when nearly stopped. Settings in a pause-menu Settings tab. Keyboard only. |
+| 5 | Build the 3 NPC cars from the approved sheet. |
+
+Not in stage B: fuel, stop places, damage-ends-the-run (after the garage),
+player-car builds, the garage, police. GEVP stays unmodified unless Roy asks,
+and any exception is logged here.
+
+**Changes against the B1 session's plan:** the slider is now part of step 3
+outright (B1 had it "only if measurement shows it's needed"), and 4 lanes per
+direction is now the spec (stage A capped it at 3; step 3 widens the road).
 
 **Decisions (Roy, 2026-10-05):**
 - **Direction, Option C:** traffic stays full-sim (the same raycast wheel sim,
@@ -441,7 +452,7 @@ written here first.
   - **P6** gained rack crossbars.
   - **N3:** longer cab.
 
-### B1 results (2026-10-05): waiting for Roy's sign-off
+### B1 results (2026-10-05): superseded by the step 1 audit below
 
 **Changed** (branch `feat/stage-b1-design-sheet`, stacked on
 `feat/stage-a-feel-env`):
@@ -479,6 +490,127 @@ written here first.
   branding.
 - **Waiting on Roy:** B1 sign-off (shapes, parts, stickers, colours) before B2.
 - **Review page** (private to Roy): <https://claude.ai/artifact/SvEKcFe1CaWa787K8Gha3m>. It has a 360° viewer of every design and build, plus the sheets.
+
+### Step 1 audit (2026-10-05): waiting for Roy's sign-off
+
+Roy's stage B prompt arrived after B1 had delivered its sheet. Asked what to
+do with it, **Roy chose "audit and verify it"** over a fresh redesign or
+approving it as-is, and **kept the red and blue police light bars**. The audit
+checks B1 against the step 1 spec in Godot, adds the checks B1 skipped, and
+pushes the weak reads (P2, P5, N1).
+
+**Log:**
+- Read-only git on Roy's root checkout from the bridge shell ran as plain
+  `git status` before this session read the bridge-shell rule (it lives in the
+  B1 branch's CLAUDE.md, not in the root checkout's older copy). Checked
+  straight after: no `.lock` left in `.git`. Later reads used
+  `--no-optional-locks`. The root checkout is still on `main` 4c1ddca with
+  someone's uncommitted edits to `player.gd`, `road_chunk_builder.gd` and
+  `chunk_builder_equivalence.gd`; untouched.
+- **Baseline:** all 12 runner tests pass on the B1 branch (Godot 4.7.2 Linux,
+  lavapipe for window tests). The generator reproduces B1's `fleet.json`
+  byte for byte.
+- **New Godot checks** on the exact proxy shapes (`proxies.json`, exported by
+  `tools/fleet_design/godot_export.py`):
+  - `fleet_design_check` (headless): fleet roles, triangles and draw calls
+    against the budgets, sticker slots (on the body, nothing hovering over
+    them, seen from 96 orbit cameras and the chase cam), exhaust tips
+    (present for every build and option, behind the rear axle, attached,
+    0.6 m clear for flames), class cues (traffic arch gaps bigger than every
+    player car's, a police tell on every police build), palette.
+  - `fleet_silhouette_sweep` (window): outlines from 96 orbit cameras plus
+    the chase view, compared pairwise. An "outline twin" is two cars whose
+    outlines, scaled to the same box, nowhere differ by more than 1%.
+  - `fleet_budget_scene` (window): the stage A scene with 30 traffic proxies,
+    as separate meshes and as MultiMesh, counted by Godot's renderer.
+- **On B1's designs** these found 43 sticker-slot failures and 9 outline-twin
+  view-pairs:
+  - **Bug:** sticker slots did not drop with the ride-height mods, so on every
+    lowered build they floated 3–5.5 cm above the body (16 failures). Fixed
+    in `car.py`.
+  - P2's rear slot sat under its own roof spoiler (and the big wing), so the
+    chase cam never saw it; P6's sat under the big wing; and P1's rear-window
+    banner, once it sat on the lowered body, hid behind the GT wing on the
+    full build.
+  - From some rear views no slot showed on 8 cars: trunk and engine lids face
+    up (P3, P4, P5, N1, C1, C3, seen from low behind), and spoilers or wings
+    covered P2's and P6's rear slots.
+  - Twins: P2 and P6 (7 high or 3/4 views), P1 and P3 (1), P2 and N1 (head-on
+    at ground level).
+- **Metric note:** area overlap was useless (any two cars scaled to the same
+  box overlap 90%+), and an edge-match score called side views identical.
+  The twin test that matched what a blind tester can tell apart compares the
+  most different 3% of the two outlines.
+- **Revisions:**
+  - **P2:** box blisters 6.5 cm proud of the doors (W 1.76 → 1.83), wider
+    track, cabin 5 cm narrower each side, roof 4 cm lower, more upright hatch,
+    a deeper overhanging roof spoiler.
+  - **P5:** W 1.98 → 2.02 with stronger hourglass hips, roof 3 cm lower,
+    narrower cabin, taller cowl scoop, sharper ducktail, wider rear track.
+  - **N1:** nose, roof (1.48 → 1.51) and deck raised, wider and rounder
+    cabin, smaller wheels in bigger gaps.
+  - **P6** (not on the list, but P2's twin): crossbars reach 14 cm past the
+    roof edge, and the street build keeps low rails instead of a bare roof
+    (bare, it read as the hot hatch from 7 angles).
+  - **Rear sticker slot:** the upright tail panel or tailgate on every car
+    (moved on P1–P6, N1, C1, C3). It is the one rule that keeps it visible
+    from the chase cam and from low behind on every build. Trade-off: on P5
+    and C1 the old trunk lid looked bigger from the chase cam (0.22 vs 0.15
+    m² projected).
+- **Blind test** (one fresh agent, Godot-rendered outlines, 9 cameras incl. 3
+  high angles B1 never tested): 106/109 right. All 3 misses were the high
+  rear view, where the tuner, commuter and muscle sedan blur. The tester told
+  both remaining twin pairs apart (12/12 at each of those views). "Sure"
+  rates are not comparable with B1's rounds (different tester, harder views).
+
+**Changed** (branch `feat/stage-b1-audit`, stacked on
+`feat/stage-b1-design-sheet`):
+- `tools/fleet_design/`: `cars.py`, `options.py`, `car.py` (slot drop fix,
+  crossbar overhang), `critique.py`, `export.py`, `sheets.py`; new
+  `godot_export.py` and `audit_sheet.py`.
+- `docs/design/fleet/`: regenerated sheets, overview, outline check,
+  `fleet.json`, `verify.json` (audit round added), `README.md`; new
+  `proxies.json` and `audit/` (check output, 360 outline strips,
+  `audit_sheet.png`).
+- `tests/`: `fleet_proxies.gd`, `fleet_design_check.gd`,
+  `fleet_silhouette_sweep.gd`, `fleet_budget_scene.gd`, added to
+  `run_tests.bat`. They write to `user://fleet_audit/` unless given
+  `-- --out=...`, so a test run never dirties the repo.
+- No game code or scenes changed. GEVP untouched.
+
+**Verified** (Godot 4.7.2 Linux, real runs, 2026-10-05):
+- All 15 runner tests pass: the 12 existing ones and the 3 new ones.
+- `fleet_design_check`: 0 failures (B1: 43). Every build: 2.4k–3.3k
+  triangles, 7 planned draw calls, 3 slots on the body, the rear slot seen by
+  the chase cam (0.09–0.22 m² projected), a slot visible from 93–96 of 96
+  orbit cameras. Arch gaps: player max 0.045 m < traffic min 0.065 m.
+  97 colours, no magenta or cyan.
+- `fleet_silhouette_sweep`: no new twins; 2 known stock twins remain, each at
+  one 35° view (P1/P3, P2/P6). With every example build: the tuner's
+  "sleeper" street build blends with plain sedans (intended) and the muscle
+  sedan's street build matches the commuter at one high rear angle.
+- `fleet_budget_scene`: baseline 176 draw calls. 30 traffic cars as separate
+  meshes: +150 (5 each: Godot drew each 3-surface body in one call). As one
+  MultiMesh per design: +6. Full budget (30 traffic at 4k, 3 police at 6k,
+  player at 10k) is about 157k triangles a frame.
+- Review page updated to version 2 with the revised designs and sheets.
+
+**Not verified / open:**
+- **Frame time on the laptop.** The CPU renderer here can't say. Step 3
+  measures it with real traffic at ~300 km/h, as the prompt asks.
+- **Traffic draw calls:** separate meshes cost ~5 draw calls per car (on top
+  of physics). MultiMesh rendering (RESEARCH-cheap-pretty.md proposal 3, not
+  approved) cuts that to ~2 per design. A step 3 decision.
+- **Roy's calls:** sign-off of step 1; tail panel vs trunk lid on P5/C1; hood
+  slot vs a windshield sun strip (no slot shows from dead ahead at ground
+  level); whether to push the 2 remaining twin pairs.
+- Still open from B1: physics wheelbases move to each car's drawn wheelbase
+  (handling changes, tuned per car when built); interiors, undersides and car
+  names deferred.
+- **Pushed** (this session got push access to the repo): stage A is PR #84
+  (into `main`), B1 is PR #85 (into stage A) and this audit is PR #86 (into
+  B1). Merge in that order; only Roy merges. A bundle of all three is also in
+  `build/stage-b1-audit/`.
 
 Old `main.gd` (treadmill/distance-accumulator architecture) is abandoned, not edited further. `car_builder.gd` (pure mesh construction) is kept and reused. Everything below is built fresh in real world-space.
 

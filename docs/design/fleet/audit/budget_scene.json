@@ -1,0 +1,24 @@
+{
+ "traffic_cars": 30,
+ "baseline": {
+  "dc": 176,
+  "tris": 9008,
+  "obj": 304
+ },
+ "nodes": {
+  "dc": 326,
+  "tris": 86418,
+  "obj": 454
+ },
+ "multimesh": {
+  "dc": 182,
+  "tris": 86418,
+  "obj": 310
+ },
+ "nodes_draw_calls_per_car": 5.0,
+ "multimesh_extra_draw_calls": 6,
+ "designs": 3,
+ "proxy_tris_avg": 2580.0,
+ "full_budget_tris_per_frame": 157008,
+ "note": "Counts from Godot's renderer, independent of the GPU. Frame time is not measured here (CPU renderer)."
+}

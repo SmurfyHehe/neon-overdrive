@@ -479,9 +479,12 @@ def add_part(model, p):
             for s in (s0 + 0.04, s1 - 0.04):
                 yy = pl(D['top'], s) - 0.03
                 box(m, (sx * x, 0.5 * (yy + ym + h * 0.7), z(s)), (0.04, ym + h * 0.7 - yy, 0.06), p.get('mat', 'trim'))
+        # crossbars reach bar_over past the rails (P6's poke out past the roof
+        # edge so the rack shows in the front, rear and high outlines)
+        over = p.get('bar_over', 0.05)
         for s in p.get('bars', []):
             y0 = max(pl(D['top'], s0), pl(D['top'], s1)) - 0.03 + h * 0.7
-            box(m, (0, y0 + 0.03, z(s)), (2 * x + 0.10, 0.028, 0.045), p.get('mat', 'trim'))
+            box(m, (0, y0 + 0.03, z(s)), (2 * x + 2 * over, p.get('bar_h', 0.028), 0.045), p.get('mat', 'trim'))
 
     elif t == 'popups':
         s0, s1, x0, x1, h = p['s0'], p['s1'], p['x0'], p['x1'], p['h']
@@ -836,6 +839,11 @@ def build(defn, build=None, stickers=False):
         model.body = model.body + np.array([0, -drop, 0])
         for t in tips:
             t['pos'][1] = round(t['pos'][1] - drop, 3)
+        # sticker slots ride with the body too (B1 left them at stock height,
+        # 3-5.5 cm above a lowered body; found by tests/fleet_design_check.gd)
+        down = np.array([0, -drop, 0])
+        for sl in slots:
+            sl['tris'] = [[tuple(p + down for p in t) for t in placed] for placed in sl['tris']]
     model.mesh.extend(wheel_mesh)
 
     wh = D['wheel']

@@ -224,6 +224,8 @@ func _spawn(spec: Dictionary, lane: int, kind: int) -> Run:
 	var car := PlayerCar.new()
 	car.sim_only = true
 	car.spec = CarSpec.clone_spec(spec)
+	# TuneTrack shifts by itself (_shift); the game default is automatic now.
+	car.spec["automatic_transmission"] = false
 	car.driver = r.drive
 	car.position = Vector3(lane * LANE_SPACING, 0.3, 0.0)
 	add_child(car)

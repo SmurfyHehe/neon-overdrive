@@ -47,6 +47,7 @@ if /i not "%~1"=="quick" (
 	call :run fleet_budget_scene
 	call :run exhaust_keys
 	call :run mute
+	call :run feel_pass_1
 )
 echo.
 if defined FAILED (

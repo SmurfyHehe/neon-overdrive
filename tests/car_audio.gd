@@ -141,6 +141,7 @@ func _physics_process(_delta: float) -> bool:
 		_finish()
 		return false
 	var p: PlayerCar = game.get("player")
+	p.automatic_transmission = false  # this bot shifts with E (the game default is automatic now)
 	if audio == null:
 		for c in p.get_children():
 			if c is CarAudio:

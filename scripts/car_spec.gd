@@ -115,7 +115,11 @@ static func coupe_default() -> Dictionary:
 	# gear_ratios and identical straight-line speed after 4s (was silently
 	# using the vendored default gearing before this fix, a real
 	# would-have-shipped regression).
-	var gear_ratios_typed: Array[float] = [3.6, 2.4, 1.8, 1.4, 0.95]
+	# Feel pass 1 (2026-10-05): even steps of about 1.3 and 1st gear good for
+	# ~80 km/h at redline (was 61, ISSUES E7). Same top gear, so top speed is
+	# unchanged. A real ~1300 kg coupe pulls 65-85 km/h in 1st (research:
+	# docs/research/car-feel.md).
+	var gear_ratios_typed: Array[float] = [2.74, 2.10, 1.615, 1.24, 0.95]
 	return {
 		"vehicle_mass": 1300.0,
 		"front_weight_distribution": 0.45,
@@ -126,7 +130,12 @@ static func coupe_default() -> Dictionary:
 		"torque_shape": DEFAULT_TORQUE_SHAPE.duplicate(),  # apply() builds the Vehicle's torque_curve from this
 		"gear_ratios": gear_ratios_typed,
 		"final_drive": 4.1,
-		"automatic_transmission": false,
+		# Feel pass 1: the car shifts itself by default (G toggles manual). Shifts
+		# take 0.2 s (was 0.3), and the clutch takes up at 2000 rpm (was 3000).
+		# motor_drag stays at the default 0.005: 0.007 cost ~10 km/h of top speed.
+		"automatic_transmission": true,
+		"shift_time": 0.2,
+		"clutch_out_rpm": 2000.0,
 		"coefficient_of_drag": 0.26,
 		"frontal_area": 1.9,
 		"brake_force_multiplier": 1.0,  # the vendored default, now explicit so tuning has one source of truth

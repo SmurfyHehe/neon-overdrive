@@ -307,7 +307,7 @@ func _setup_debug_hud() -> void:
 	var controls := Label.new()
 	controls.position = Vector2(16, 400)
 	controls.add_theme_color_override("font_color", Color(0.71, 0.65, 0.84))
-	controls.text = "A/D steer  ·  W/S throttle/brake  ·  Space handbrake  ·  Q/E shift down/up (R-N-1-2-3-4-5)  ·  Esc pause  ·  T tuning  ·  Y auto-tune  ·  M mute"
+	controls.text = "A/D steer  ·  W/S throttle/brake  ·  Space handbrake  ·  G auto/manual  ·  Q/E shift (manual)  ·  Esc pause  ·  T tuning  ·  Y auto-tune  ·  M mute"
 	hud.add_child(controls)
 
 func _update_debug_hud() -> void:

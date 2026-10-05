@@ -37,10 +37,12 @@ its GitHub issue. For the order to work in, see the triage issue #59.
 | #73 | Upgrade tree: real turbo lag needs a physics addition |
 | #74 | Upgrade tree: do tiers cap which races you can enter? |
 | #75 | `brake_force_multiplier` is declared but never read |
+| #80 | Engine sound changes with the car, engine and upgrades |
 
 #70–#74 are design questions for Roy about the upgrade tree in #62. #75 is a
 bug in the vendored GEVP code (`gevp_vehicle.gd:71`). Nothing sets it away
-from 1.0 today, but a brakes upgrade would need it.
+from 1.0 today, but a brakes upgrade would need it. #80 is Roy's request for engine sound that
+changes with the car and its upgrades.
 
 ---
 

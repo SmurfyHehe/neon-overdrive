@@ -48,6 +48,7 @@ func _ready() -> void:
 		set_physics_process(false)
 		AutoTuneJob.run_worker(get_tree(), worker_dir)
 		return
+	AudioSettings.load_settings()
 	if OS.get_environment("NEON_MUTE") == "1":
 		AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), true)
 	# Benchmark mode (-- --benchmark, see benchmark.gd) drives a fixed road so

@@ -7,6 +7,7 @@ extends CanvasLayer
 
 var game_state: GameState
 var resume_button: Button
+var volume_sliders := {}   # channel -> HSlider
 
 func _init(state: GameState) -> void:
 	game_state = state
@@ -33,6 +34,31 @@ func _ready() -> void:
 	title.text = "PAUSED"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
+
+	# Volume sliders (Phase B). Keyboard: Tab or arrows to move, Left/Right to change.
+	var vol_title := Label.new()
+	vol_title.text = "Volume"
+	vol_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(vol_title)
+	for channel in AudioSettings.CHANNELS:
+		var row := HBoxContainer.new()
+		box.add_child(row)
+		var name_label := Label.new()
+		name_label.text = channel
+		name_label.custom_minimum_size = Vector2(70, 0)
+		row.add_child(name_label)
+		var s := HSlider.new()
+		s.min_value = 0.0
+		s.max_value = 1.0
+		s.step = 0.05
+		s.value = AudioSettings.volumes[channel]
+		s.custom_minimum_size = Vector2(180, 0)
+		s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		s.value_changed.connect(func(v: float) -> void:
+			AudioSettings.set_volume(channel, v)
+			AudioSettings.save_settings())
+		row.add_child(s)
+		volume_sliders[channel] = s
 
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	_add_button(box, "Restart", game_state.restart)

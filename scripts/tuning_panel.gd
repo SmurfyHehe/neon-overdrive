@@ -117,6 +117,10 @@ func _ready() -> void:
 func _on_state_changed(new_state: GameState.State, _old_state: GameState.State) -> void:
 	visible = new_state == GameState.State.TUNING
 	if visible:
+		# Auto-Tune (or Reset) may have changed the spec since the panel was built.
+		_read_from_player()
+		for key in values:
+			sliders[key].set_value_no_signal(values[key])
 		_refresh()
 	else:
 		# Sliders keep keyboard focus otherwise and eat the arrow keys.

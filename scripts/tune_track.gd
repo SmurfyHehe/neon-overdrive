@@ -35,6 +35,7 @@ const CORNER_STEER := 0.3
 const MAX_STEPS := 4000        # safety stop for a run that never finishes
 
 enum Kind { ACCEL, BRAKE, CORNER }
+const ALL_KINDS := [Kind.ACCEL, Kind.BRAKE, Kind.CORNER]
 
 ## One scripted run on one car.
 class Run extends RefCounted:
@@ -150,23 +151,26 @@ var linear_damp_override := -1.0
 var steps_taken := 0  # physics steps the last evaluate() ran, all specs together
 var cars_simulated := 0  # cars in flight at any one step (3)
 
-## Runs the three tests for every spec, one spec at a time; returns one metrics
-## dictionary per spec: top_speed_kmh, t_0_100, brake_dist_100, brake_time,
-## peak_lat_g, max_slip_deg, plus "ok" (false, with "problems" listing why, if a
-## run flipped, never got going, or produced a non-finite number).
-func evaluate(specs: Array) -> Array:
+## Runs the scripted tests for every spec, one spec at a time; returns one
+## metrics dictionary per spec: top_speed_kmh, t_0_100, brake_dist_100,
+## brake_time, peak_lat_g, max_slip_deg, plus "ok" (false, with "problems"
+## listing why, if a run flipped, never got going, or produced a non-finite
+## number). `kinds` picks which runs to do (the search only runs what its goals
+## need); a run always uses its own lane, so a metric is the same number
+## whichever other runs are along.
+func evaluate(specs: Array, kinds: Array = ALL_KINDS) -> Array:
 	steps_taken = 0
-	cars_simulated = 3
+	cars_simulated = kinds.size()
 	var results: Array = []
 	for spec in specs:
-		results.append(await _evaluate_one(spec))
+		results.append(await _evaluate_one(spec, kinds))
 	return results
 
-func _evaluate_one(spec: Dictionary) -> Dictionary:
+func _evaluate_one(spec: Dictionary, kinds: Array) -> Dictionary:
 	var ground := _make_ground()
 	var runs: Array = []
-	for kind in [Kind.ACCEL, Kind.BRAKE, Kind.CORNER]:
-		runs.append(_spawn(spec, runs.size(), kind))
+	for kind in kinds:
+		runs.append(_spawn(spec, kind, kind))
 	var steps := 0
 	var pending := true
 	while pending and steps < MAX_STEPS:

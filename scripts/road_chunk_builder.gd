@@ -54,6 +54,27 @@ class_name RoadChunkBuilder
 # vertex order and materials. The CULL_DISABLED double-rasterisation on the
 # asphalt strips is a known separate issue, left alone here on purpose.
 
+# 2026-10-04 stage A environment pass (ROADMAP "Stage A plan and decisions"):
+# - repainted for the look Roy picked on the Look Board (option B, "Gritty PS2
+#   night": dark, orange sodium lamps, lamp pools, no neon). Markings are
+#   paint now (white/yellow, faint retroreflective emission below the glow
+#   threshold) instead of glowing cyan/amber; the cyan/magenta pylons are
+#   delineator posts; asphalt, curbs and sidewalks are neutral greys.
+# - narrower road: shoulder 1.6 -> 0.9 m, buildings 0.5 m behind the
+#   sidewalk instead of 1.0, and the lane-count cap moved from 4 to 3 in
+#   game.gd::_section_at(). The sidewalk stays 2.2 m (a drivable risk/reward
+#   shortcut by design; 1.8 m was tried and barely fit the car). LANE_W is
+#   unchanged on purpose (2.3 m is already narrower than a real lane, and
+#   traffic needs it).
+# - dense roadside detail, all MultiMesh: sodium street lamps every 25 m per
+#   side (staggered), a fake light pool on the road under each one (additive
+#   decal-style quad, zero lighting cost), posts every 5 m, and concrete walls
+#   closing the gaps between buildings.
+# - buildings: their window emission was set up as ADD with a white emission
+#   colour, which lit every face at 1.4x -- the solid white blocks in every
+#   screenshot. Now MULTIPLY (only the windows glow), world-space triplanar so
+#   windows are the same size on every building, and longer frontages.
+
 # Curves + elevation are their own later architecture change (Path3D-driven
 # procedural mesh) and are explicitly NOT attempted here.
 #
@@ -68,12 +89,30 @@ class_name RoadChunkBuilder
 const LANE_W := 2.3
 const CHUNK_LEN := 50.0
 const DASH_SPACING := 4.0
-const SHOULDER_W := 1.6
+const SHOULDER_W := 0.9
 const CURB_W := 0.3
-const SIDEWALK_W := 2.2
-const PYLON_SPACING := 8.0
-const PYLON_HEIGHT := 0.9
-const BUILDING_SPACING := 22.0
+const SIDEWALK_W := 2.2  # kept: the sidewalk is a drivable shortcut by design,
+                         # and 1.8 m would barely fit the car's 1.76 m track
+# "Pylons" are delineator posts since stage A (node names kept). Denser
+# spacing on purpose: near-road objects whipping past are the main speed cue.
+const PYLON_SPACING := 5.0
+const PYLON_HEIGHT := 1.0
+const BUILDING_SPACING := 25.0
+const BUILDING_GAP := 0.5  # m between the sidewalk's outer edge and a building front
+
+# Street lamps (stage A). Each side gets one every LAMP_SPACING m, the two
+# sides staggered by half that, so a lamp passes every 12.5 m.
+const LAMP_SPACING := 25.0
+const LAMP_SETBACK := 0.35  # pole distance outside the curb's outer edge
+const LAMP_POLE_H := 7.5
+const LAMP_ARM := 1.9       # how far the arm reaches out over the road
+const POOL_ACROSS := 13.0   # light pool size on the road, m
+const POOL_ALONG := 17.0
+const POOL_Y := 0.045       # just above the lane dashes (top at 0.035)
+const SODIUM := Color(1.0, 0.55, 0.2)
+
+const WALL_H := 2.2         # gap walls between buildings
+const WALL_T := 0.3
 
 # Dash / pylon / barrier dimensions, previously inline magic numbers repeated
 # at each construction site. They are constants now because the shared meshes
@@ -83,7 +122,7 @@ const DASH_H := 0.05
 const DASH_Y := 0.01
 const CENTER_DASH_W := 0.22
 const LANE_DASH_W := 0.2
-const PYLON_W := 0.12
+const PYLON_W := 0.1
 const BARRIER_W := 0.2
 const BARRIER_H := 0.65
 # Carried over verbatim from the pre-pass code, which sat the barrier at 0.32
@@ -97,10 +136,13 @@ const BARRIER_Y := 0.32
 const MAX_OWN_LANES := 4
 const MAX_ONC_LANES := 2
 
-const CENTER_COLOR := Color(1, 0.72, 0)
-const LANE_DASH_COLOR := Color(0, 0.9, 0.94)
-const BUILDING_COLOR_GARAGE := Color(0.12, 0.1, 0.05)
-const BUILDING_COLOR_TOWER := Color(0.08, 0.05, 0.14)
+# Road paint (stage A): plain white and yellow, with just enough emission to
+# read at night like retroreflective paint -- below the 1.0 glow threshold.
+const CENTER_COLOR := Color(0.86, 0.62, 0.12)
+const LANE_DASH_COLOR := Color(0.82, 0.82, 0.78)
+const PAINT_ENERGY := 0.28
+const BUILDING_COLOR_GARAGE := Color(0.09, 0.08, 0.065)
+const BUILDING_COLOR_TOWER := Color(0.065, 0.062, 0.068)
 
 static var _own_mat: StandardMaterial3D
 static var _onc_mat: StandardMaterial3D
@@ -123,6 +165,11 @@ static var _center_dash_mesh: BoxMesh
 static var _lane_dash_mesh: BoxMesh
 static var _pylon_mesh: BoxMesh
 static var _barrier_mesh: BoxMesh
+static var _lamp_mesh: ArrayMesh
+static var _pool_mesh: PlaneMesh
+static var _pool_mat: StandardMaterial3D
+static var _wall_mesh: BoxMesh
+static var _wall_mat: StandardMaterial3D
 
 static func _flat_mat(color: Color, emissive: bool = false, energy: float = 1.0) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -158,67 +205,78 @@ static func _asphalt_mat(color: Color) -> StandardMaterial3D:
 
 static func _get_own_mat() -> StandardMaterial3D:
 	if _own_mat == null:
-		_own_mat = _asphalt_mat(Color(0.047, 0.067, 0.125))
+		_own_mat = _asphalt_mat(Color(0.085, 0.085, 0.09))
 	return _own_mat
 
 static func _get_onc_mat() -> StandardMaterial3D:
 	if _onc_mat == null:
-		_onc_mat = _asphalt_mat(Color(0.07, 0.047, 0.094))
+		_onc_mat = _asphalt_mat(Color(0.08, 0.08, 0.085))
 	return _onc_mat
 
 static func _get_shoulder_mat() -> StandardMaterial3D:
 	if _shoulder_mat == null:
-		_shoulder_mat = _asphalt_mat(Color(0.03, 0.03, 0.045))
+		_shoulder_mat = _asphalt_mat(Color(0.055, 0.055, 0.058))
 	return _shoulder_mat
 
-## Curb: bright, slightly emissive strip -- crossable rumble cue, not a wall
-## (see file header). Bright on purpose so it visually reads as a real
-## marked edge, not just another shade of shoulder.
+## Curb: crossable rumble cue, not a wall (see file header). Light concrete
+## (stage A: was a bright emissive strip, part of the neon look) so it still
+## reads as the road's edge against the darker shoulder.
 static func _get_curb_mat() -> StandardMaterial3D:
 	if _curb_mat == null:
-		_curb_mat = _flat_mat(Color(0.95, 0.85, 0.55), true, 0.9)
+		_curb_mat = _flat_mat(Color(0.42, 0.41, 0.39), true, 0.12)
 	return _curb_mat
 
-## Sidewalk: flat, non-emissive concrete tone -- deliberately calm/neutral so
-## it reads as "different surface" against the neon road without competing
-## with it visually.
+## Sidewalk: flat, non-emissive concrete tone -- calm and neutral so it reads
+## as a different surface without competing with the road.
 static func _get_sidewalk_mat() -> StandardMaterial3D:
 	if _sidewalk_mat == null:
-		_sidewalk_mat = _asphalt_mat(Color(0.11, 0.1, 0.12))
+		_sidewalk_mat = _asphalt_mat(Color(0.12, 0.115, 0.11))
 	return _sidewalk_mat
 
 ## Solid (non-dashed) lane-edge line -- real roads mark the outer edge
 ## differently from interior lane splits; ours didn't distinguish them at all.
 static func _get_edge_line_mat() -> StandardMaterial3D:
 	if _edge_line_mat == null:
-		_edge_line_mat = _flat_mat(Color(0.85, 0.95, 1.0), true, 2.2)
+		_edge_line_mat = _flat_mat(LANE_DASH_COLOR, true, PAINT_ENERGY)
 	return _edge_line_mat
 
+## Delineator posts (stage A; were cyan/magenta neon pylons). Faint emission
+## stands in for the reflector catching headlights, so the 5 m rhythm still
+## reads in the dark without glowing.
 static func _get_pylon_mat_own() -> StandardMaterial3D:
 	if _pylon_mat_own == null:
-		_pylon_mat_own = _flat_mat(Color(0, 0.9, 0.94), true, 2.5)
+		_pylon_mat_own = _flat_mat(Color(0.72, 0.72, 0.7), true, 0.35)
 	return _pylon_mat_own
 
 static func _get_pylon_mat_onc() -> StandardMaterial3D:
 	if _pylon_mat_onc == null:
-		_pylon_mat_onc = _flat_mat(Color(1, 0.15, 0.75), true, 2.5)
+		_pylon_mat_onc = _flat_mat(Color(0.72, 0.62, 0.45), true, 0.35)
 	return _pylon_mat_onc
 
 ## Procedural window-grid texture for buildings -- built once (a punched dot
 ## grid of lit "windows" over a dark base) and shared across every building
 ## material instance as an emission_texture, instead of spawning extra window
 ## meshes per building.
+##
+## Stage A: a minority of windows lit (a city at 2 a.m., not an office at
+## noon), mostly warm incandescent with some cool fluorescent ones. Uses its
+## own seeded RNG so the pattern doesn't consume (or depend on) the global
+## random sequence the road layout uses.
 static func _get_window_tex() -> ImageTexture:
 	if _window_tex == null:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 2004
 		var img := Image.create(32, 32, false, Image.FORMAT_RGB8)
-		img.fill(Color(0.015, 0.015, 0.025))
+		img.fill(Color(0.0, 0.0, 0.0))
 		var gy := 2
 		while gy < 30:
-			var gx := 2
+			var gx := 1
 			while gx < 30:
-				if randf() < 0.55:
-					img.set_pixel(gx, gy, Color(1.0, 0.85, 0.45))
-					img.set_pixel(gx + 1, gy, Color(1.0, 0.85, 0.45))
+				if rng.randf() < 0.32:
+					var lit := Color(1.0, 0.78, 0.45) if rng.randf() < 0.7 else Color(0.62, 0.8, 1.0)
+					lit = lit * rng.randf_range(0.55, 1.0)
+					img.set_pixel(gx, gy, lit)
+					img.set_pixel(gx + 1, gy, lit)
 				gx += 4
 			gy += 4
 		_window_tex = ImageTexture.create_from_image(img)
@@ -235,7 +293,18 @@ static func _building_mat(base_color: Color) -> StandardMaterial3D:
 	m.emission_enabled = true
 	m.emission_texture = _get_window_tex()
 	m.emission = Color(1, 1, 1)
-	m.emission_energy_multiplier = 1.4
+	# BUG FIX (stage A): the default operator is ADD, i.e. emission colour PLUS
+	# texture, so white + texture lit every face at >= 1.4 -- the solid white
+	# blocks. MULTIPLY makes the texture the mask: only windows emit.
+	m.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
+	m.emission_energy_multiplier = 1.25
+	# World-space mapping: windows are the same size on every building
+	# whatever its dimensions, and the 25 m tile divides the 1 km floating-
+	# origin shift exactly, so the pattern never jumps on a recenter.
+	m.uv1_triplanar = true
+	m.uv1_world_triplanar = true
+	m.uv1_scale = Vector3.ONE / 25.0
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	m.roughness = 0.85
 	return m
 
@@ -252,19 +321,20 @@ static func _get_building_mat(is_garage: bool) -> StandardMaterial3D:
 ## file that bypassed the static-var cache above, constructed fresh inside
 ## _populate() on every chunk build. A new material per chunk defeats the
 ## batching the rest of the cache exists to enable.
+## Stage A: a concrete median barrier instead of a glowing amber bar.
 static func _get_barrier_mat() -> StandardMaterial3D:
 	if _barrier_mat == null:
-		_barrier_mat = _flat_mat(CENTER_COLOR, true, 1.4)
+		_barrier_mat = _flat_mat(Color(0.36, 0.355, 0.34), true, 0.1)
 	return _barrier_mat
 
 static func _get_center_dash_mat() -> StandardMaterial3D:
 	if _center_dash_mat == null:
-		_center_dash_mat = _flat_mat(CENTER_COLOR, true, 2.0)
+		_center_dash_mat = _flat_mat(CENTER_COLOR, true, PAINT_ENERGY)
 	return _center_dash_mat
 
 static func _get_lane_dash_mat() -> StandardMaterial3D:
 	if _lane_dash_mat == null:
-		_lane_dash_mat = _flat_mat(LANE_DASH_COLOR, true, 2.0)
+		_lane_dash_mat = _flat_mat(LANE_DASH_COLOR, true, PAINT_ENERGY)
 	return _lane_dash_mat
 
 # ---------- shared geometry ----------
@@ -299,6 +369,92 @@ static func _get_barrier_mesh() -> BoxMesh:
 	if _barrier_mesh == null:
 		_barrier_mesh = _box_mesh(Vector3(BARRIER_W, BARRIER_H, CHUNK_LEN))
 	return _barrier_mesh
+
+## Street lamp, built once and shared by every chunk's lamp MultiMesh: a pole
+## and arm (dark metal) and a sodium head (emissive, above the glow threshold
+## so it blooms). Two surfaces, so materials live on the mesh, not on the
+## MultiMeshInstance3D. Local space: pole at the origin, arm reaching toward
+## -X (over the road on the player's side; the other side is mirrored by the
+## instance transform).
+static func _get_lamp_mesh() -> ArrayMesh:
+	if _lamp_mesh == null:
+		var metal := _flat_mat(Color(0.2, 0.2, 0.21))
+		metal.roughness = 0.6
+		var head := _flat_mat(SODIUM, true, 4.0)
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		_add_box(st, Vector3(0.0, LAMP_POLE_H / 2.0, 0.0), Vector3(0.16, LAMP_POLE_H, 0.16))
+		_add_box(st, Vector3(-LAMP_ARM / 2.0, LAMP_POLE_H - 0.05, 0.0), Vector3(LAMP_ARM, 0.1, 0.12))
+		_lamp_mesh = st.commit()
+		_lamp_mesh.surface_set_material(0, metal)
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		_add_box(st, Vector3(-LAMP_ARM + 0.2, LAMP_POLE_H - 0.16, 0.0), Vector3(0.75, 0.14, 0.36))
+		_lamp_mesh = st.commit(_lamp_mesh)
+		_lamp_mesh.surface_set_material(1, head)
+	return _lamp_mesh
+
+## Axis-aligned box into a SurfaceTool, flat-shaded (one normal per face) and
+## wound clockwise from outside, matching Godot's front faces.
+static func _add_box(st: SurfaceTool, center: Vector3, size: Vector3) -> void:
+	var h := size / 2.0
+	var faces := [
+		[Vector3.RIGHT, Vector3(h.x, -h.y, h.z), Vector3(h.x, h.y, h.z), Vector3(h.x, h.y, -h.z), Vector3(h.x, -h.y, -h.z)],
+		[Vector3.LEFT, Vector3(-h.x, -h.y, -h.z), Vector3(-h.x, h.y, -h.z), Vector3(-h.x, h.y, h.z), Vector3(-h.x, -h.y, h.z)],
+		[Vector3.UP, Vector3(-h.x, h.y, h.z), Vector3(-h.x, h.y, -h.z), Vector3(h.x, h.y, -h.z), Vector3(h.x, h.y, h.z)],
+		[Vector3.DOWN, Vector3(-h.x, -h.y, -h.z), Vector3(-h.x, -h.y, h.z), Vector3(h.x, -h.y, h.z), Vector3(h.x, -h.y, -h.z)],
+		[Vector3.BACK, Vector3(-h.x, -h.y, h.z), Vector3(-h.x, h.y, h.z), Vector3(h.x, h.y, h.z), Vector3(h.x, -h.y, h.z)],
+		[Vector3.FORWARD, Vector3(h.x, -h.y, -h.z), Vector3(h.x, h.y, -h.z), Vector3(-h.x, h.y, -h.z), Vector3(-h.x, -h.y, -h.z)],
+	]
+	for f in faces:
+		st.set_normal(f[0])
+		for i in [1, 2, 3, 1, 3, 4]:
+			st.add_vertex(center + f[i])
+
+## Light pool: a flat quad with a radial falloff, added on top of the road
+## (BLEND_MODE_ADD, unshaded), so a lamp "lights" the asphalt at zero lighting
+## cost. Fades out with distance instead of fog: fog on an additive surface
+## would add fog colour, not remove light.
+static func _get_pool_mesh() -> PlaneMesh:
+	if _pool_mesh == null:
+		_pool_mesh = PlaneMesh.new()
+		_pool_mesh.size = Vector2.ONE
+	return _pool_mesh
+
+static func _get_pool_mat() -> StandardMaterial3D:
+	if _pool_mat == null:
+		var grad := Gradient.new()
+		grad.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
+		grad.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.42), Color(1, 1, 1, 0)])
+		var tex := GradientTexture2D.new()
+		tex.gradient = grad
+		tex.fill = GradientTexture2D.FILL_RADIAL
+		tex.fill_from = Vector2(0.5, 0.5)
+		tex.fill_to = Vector2(1.0, 0.5)
+		tex.width = 128
+		tex.height = 128
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		m.albedo_texture = tex
+		m.albedo_color = Color(SODIUM.r * 0.42, SODIUM.g * 0.42, SODIUM.b * 0.42, 1.0)
+		m.disable_fog = true
+		m.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
+		m.distance_fade_min_distance = 170.0  # min > max: fade OUT with distance
+		m.distance_fade_max_distance = 110.0
+		_pool_mat = m
+	return _pool_mat
+
+static func _get_wall_mesh() -> BoxMesh:
+	if _wall_mesh == null:
+		_wall_mesh = _box_mesh(Vector3.ONE)  # scaled per instance
+	return _wall_mesh
+
+static func _get_wall_mat() -> StandardMaterial3D:
+	if _wall_mat == null:
+		_wall_mat = _flat_mat(Color(0.15, 0.145, 0.14))
+		_wall_mat.roughness = 0.95
+	return _wall_mat
 
 static func _lane_w(lanes: int) -> float:
 	return float(lanes) * LANE_W
@@ -382,6 +538,9 @@ static func _pylon_slots() -> int:
 static func _building_slots() -> int:
 	return int(CHUNK_LEN / BUILDING_SPACING)
 
+static func _lamp_slots() -> int:
+	return int(CHUNK_LEN / LAMP_SPACING)
+
 # ---------- collision (reused bodies) ----------
 #
 # Real "Dirt"-group collision spanning the sidewalk band on one side for this
@@ -448,18 +607,21 @@ static func _new_building(index: int) -> Array:
 	body.add_child(col)
 	return [mi, body]
 
-static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: float, side: int) -> void:
+## Returns the building's length along the road (its z size), so the gap
+## walls can fill what is left between buildings.
+static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: float, side: int) -> float:
 	var mi: MeshInstance3D = root.get_node(NodePath("BuildingMesh%d" % index))
 	var body: StaticBody3D = root.get_node(NodePath("BuildingBody%d" % index))
 	var col: CollisionShape3D = body.get_node(^"Shape")
 	var box: BoxShape3D = col.shape
 
+	# Stage A: longer frontages (d, along the road) so the street reads as a
+	# continuous built-up corridor; w is how deep the block goes.
 	var is_garage: bool = randf() < 0.12
-	var w: float = randf_range(3.0, 6.0)
-	var d: float = randf_range(3.0, 6.0)
-	var h: float = randf_range(3.0, 4.0) if is_garage else randf_range(5.0, 16.0)
-	var gap := 1.0
-	var pos := Vector3((edge_x_abs + w / 2.0 + gap) * float(side), h / 2.0, z)
+	var w: float = randf_range(4.0, 10.0)
+	var d: float = randf_range(9.0, 18.0)
+	var h: float = randf_range(3.0, 4.5) if is_garage else randf_range(6.0, 22.0)
+	var pos := Vector3((edge_x_abs + w / 2.0 + BUILDING_GAP) * float(side), h / 2.0, z)
 
 	(mi.mesh as BoxMesh).size = Vector3(w, h, d)
 	mi.position = pos
@@ -471,11 +633,13 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 
 	box.size = Vector3(w, h, d)
 	body.position = pos
+	return d
 
 # ---------- build / rebuild ----------
 
 ## Creates the fixed node skeleton for a chunk: ten strips, two collision
-## bodies, four MultiMeshInstance3D, the barrier, and the building pairs.
+## bodies, seven MultiMeshInstance3D (pylons x2, dashes x2, lamps, lamp
+## pools, gap walls), the barrier, and the building pairs.
 ## Runs ONCE per pooled chunk root -- everything after that is an in-place
 ## update, which is the whole point of the recycle path below.
 static func _create_nodes(root: Node3D) -> void:
@@ -500,6 +664,13 @@ static func _create_nodes(root: Node3D) -> void:
 	# Worst case: every interior divider on both sides at max lane count.
 	var max_dividers := (MAX_OWN_LANES - 1) + (MAX_ONC_LANES - 1)
 	root.add_child(_new_multimesh("LaneDashes", _get_lane_dash_mesh(), _get_lane_dash_mat(), max_dividers * slots))
+
+	# Stage A roadside detail: street lamps (both sides in one buffer), their
+	# light pools, and the walls between buildings. Capacity is the worst case,
+	# allocated once, like the dashes and pylons above.
+	root.add_child(_new_multimesh("Lamps", _get_lamp_mesh(), null, _lamp_slots() * 2))
+	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2))
+	root.add_child(_new_multimesh("GapWalls", _get_wall_mesh(), _get_wall_mat(), (_building_slots() + 1) * 2))
 
 	var wall := MeshInstance3D.new()
 	wall.name = "Barrier"
@@ -588,13 +759,59 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 
 	# roadside buildings -- real collision, the world's actual hard boundary
 	var n_buildings := _building_slots()
+	var spans := {1: [], -1: []}  # per side: [z_front, z_back] of each building
 	for i in range(n_buildings):
 		var bz := -float(i) * BUILDING_SPACING - BUILDING_SPACING / 2.0
 		var bt: float = -bz / CHUNK_LEN
 		var own_edge_b: float = lerp(start_own_walk, end_own_walk, bt)
 		var onc_edge_b: float = lerp(start_onc_walk, end_onc_walk, bt)
-		_update_building(root, i * 2, own_edge_b, bz, 1)
-		_update_building(root, i * 2 + 1, onc_edge_b, bz, -1)
+		var d_own := _update_building(root, i * 2, own_edge_b, bz, 1)
+		var d_onc := _update_building(root, i * 2 + 1, onc_edge_b, bz, -1)
+		spans[1].append([bz + d_own / 2.0, bz - d_own / 2.0])
+		spans[-1].append([bz + d_onc / 2.0, bz - d_onc / 2.0])
+
+	# gap walls (stage A) -- close the open lots between buildings along the
+	# building-front line. Visual only: out-of-bounds collision is issue #28,
+	# which is being worked on separately, so it is deliberately not done here.
+	var walls: MultiMesh = (root.get_node(^"GapWalls") as MultiMeshInstance3D).multimesh
+	var n_walls := 0
+	for side in [1, -1]:
+		var walk0: float = start_own_walk if side == 1 else start_onc_walk
+		var walk1: float = end_own_walk if side == 1 else end_onc_walk
+		var z_from := 0.0
+		var edges: Array = spans[side].duplicate()
+		edges.append([-CHUNK_LEN, -CHUNK_LEN])
+		for e in edges:
+			var z_to: float = e[0]
+			var length := z_from - z_to
+			if length > 0.3:
+				var zc := (z_from + z_to) / 2.0
+				var x: float = lerp(walk0, walk1, -zc / CHUNK_LEN) + BUILDING_GAP + WALL_T / 2.0
+				var basis := Basis.from_scale(Vector3(WALL_T, WALL_H, length))
+				walls.set_instance_transform(n_walls, Transform3D(basis, Vector3(x * float(side), WALL_H / 2.0, zc)))
+				n_walls += 1
+			z_from = e[1]
+	walls.visible_instance_count = n_walls
+
+	# street lamps + their light pools (stage A). Pole just outside the curb,
+	# arm over the road; the oncoming side is the same mesh turned 180 deg.
+	var lamps: MultiMesh = (root.get_node(^"Lamps") as MultiMeshInstance3D).multimesh
+	var pools: MultiMesh = (root.get_node(^"LampPools") as MultiMeshInstance3D).multimesh
+	var n_lamps := 0
+	for i in range(_lamp_slots()):
+		for side in [1, -1]:
+			# own side at 6.25, 31.25 m; oncoming at 18.75, 43.75 m into the chunk
+			var lz := -float(i) * LAMP_SPACING - (LAMP_SPACING * 0.25 if side == 1 else LAMP_SPACING * 0.75)
+			var lt: float = -lz / CHUNK_LEN
+			var curb: float = lerp(start_own_curb, end_own_curb, lt) if side == 1 else lerp(start_onc_curb, end_onc_curb, lt)
+			var pole_x := (curb + LAMP_SETBACK) * float(side)
+			var turn := Basis() if side == 1 else Basis(Vector3.UP, PI)
+			lamps.set_instance_transform(n_lamps, Transform3D(turn, Vector3(pole_x, 0.0, lz)))
+			var head_x := pole_x - (LAMP_ARM - 0.2) * float(side)
+			pools.set_instance_transform(n_lamps, Transform3D(Basis.from_scale(Vector3(POOL_ACROSS, 1.0, POOL_ALONG)), Vector3(head_x, POOL_Y, lz)))
+			n_lamps += 1
+	lamps.visible_instance_count = n_lamps
+	pools.visible_instance_count = n_lamps
 
 	# center line / barrier -- snapped to this chunk's own end-of-chunk
 	# config, not tapered (see file header). Both the wall and the dash

@@ -169,6 +169,13 @@ func _ready() -> void:
 	# CarSpec.apply() so it picks up the real idle/max rpm.
 	if not sim_only:
 		add_child(EngineAudio.new())
+		# Stage A (2026-10-04): wind, road, tyre and kerb sound next to the engine.
+		add_child(CarAudio.new())
+
+		# Stage A (2026-10-04): headlights + blob shadow, since the world is dark
+		# on purpose now (Look Board B). After the body and wheels exist, because
+		# it moves their meshes to the car's own render layer.
+		CarFx.attach(self, chassis_visual.get_meta("half_l", 2.2))
 
 func _physics_process(delta: float) -> void:
 	if driver.is_valid():

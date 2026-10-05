@@ -59,6 +59,7 @@ func _initialize() -> void:
 	game = (load("res://Game.tscn") as PackedScene).instantiate()
 	game.set("recenter_dist", TEST_RECENTER_DIST)
 	root.add_child(game)
+	(game.get("camera") as ChaseCamera).shake_enabled = false
 	_teleport_far()
 	# Render checks run right before drawing, after every node's _process
 	# (the camera moves in game.gd's _process), so they see the drawn frame.
@@ -159,8 +160,12 @@ func _check_drawn_frame() -> void:
 		worst_frame_step = max(worst_frame_step, absf(road_z - prev_road_z) - allowed)
 	prev_road_z = road_z
 	prev_phys_frame = phys_frame
-	var cam: Camera3D = game.get("camera")
-	var want := Vector3(ip.x, ip.y + 3.2, ip.z + (-6.0 if p.gear == -1 else 6.0))
+	var cam: ChaseCamera = game.get("camera")
+	# Stage A: the chase offset now shrinks with speed (dolly + squat), so it
+	# is read from the camera rather than hard-coded; shake is off for this
+	# test (see _initialize), so the drawn position is exactly the offset.
+	var back := -cam.dist_now if p.gear == -1 else cam.dist_now
+	var want := Vector3(ip.x, ip.y + cam.height_now, ip.z + back)
 	worst_cam_err = max(worst_cam_err, cam.global_position.distance_to(want))
 	for c in game.get("chunk_pool"):
 		var want_z := -float(c.index - origin) * RoadChunkBuilder.CHUNK_LEN

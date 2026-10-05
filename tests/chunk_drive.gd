@@ -21,6 +21,7 @@ extends SceneTree
 
 const RUN_SECS := 45.0
 const WARMUP_SECS := 2.0  # skip shader-compile hitches at startup
+const SHIFT_HOLD_TICKS := 3
 
 var game: Node
 var t := 0.0
@@ -32,6 +33,10 @@ var recycles := 0
 var max_speed := 0.0
 var fails := 0
 var shot_taken := false
+var tick := 0
+var shift_release_tick := 0
+var steer_left := false
+var steer_right := false
 
 func _initialize() -> void:
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
@@ -47,6 +52,11 @@ func _press(k: Key, down: bool) -> void:
 	e.pressed = down
 	Input.parse_input_event(e)
 
+# Render frames: timing only. The bot must NOT live here -- Game polls input in
+# _physics_process (#30), so a key pressed and released inside one render frame
+# is invisible to it, and the number of render frames per physics tick depends
+# on the machine. That made shifts and steering (and so top speed and distance
+# driven) vary run to run.
 func _process(delta: float) -> bool:
 	if not started:
 		started = true
@@ -57,16 +67,6 @@ func _process(delta: float) -> bool:
 		frames.append(delta * 1000.0)
 
 	var p: PlayerCar = game.get("player")
-	var speed := p.linear_velocity.length()
-	max_speed = max(max_speed, speed)
-	# Heading hold: steer only when yaw drifts, nudged back toward x=0.
-	var err: float = p.global_rotation.y + clampf(-p.global_position.x * 0.02, -0.05, 0.05)
-	_press(KEY_A, err < -0.02)
-	_press(KEY_D, err > 0.02)
-	if p.gear >= 1 and p.gear < 6 and speed > 9.0 * p.gear and not p.is_shifting:
-		_press(KEY_E, true)
-		_press(KEY_E, false)
-
 	for c in game.get("chunk_pool"):
 		var id: int = c.root.get_instance_id()
 		if last_index.has(id) and last_index[id] != c.index:
@@ -89,6 +89,34 @@ func _process(delta: float) -> bool:
 		return true
 	return false
 
+# Physics ticks (fixed 60 Hz): the bot. Same decisions every run regardless of
+# frame rate. A/D are held, not tapped; E is held for SHIFT_HOLD_TICKS ticks so
+# the tick that polls it sees it down.
+func _physics_process(_delta: float) -> bool:
+	if not started or game == null:
+		return false
+	tick += 1
+	if shift_release_tick != 0 and tick >= shift_release_tick:
+		_press(KEY_E, false)
+		shift_release_tick = 0
+	var p: PlayerCar = game.get("player")
+	var speed := p.linear_velocity.length()
+	max_speed = max(max_speed, speed)
+	# Heading hold: steer only when yaw drifts, nudged back toward x=0.
+	var err: float = p.global_rotation.y + clampf(-p.global_position.x * 0.02, -0.05, 0.05)
+	var left := err < -0.02
+	var right := err > 0.02
+	if left != steer_left:
+		steer_left = left
+		_press(KEY_A, left)
+	if right != steer_right:
+		steer_right = right
+		_press(KEY_D, right)
+	if shift_release_tick == 0 and p.gear >= 1 and p.gear < 6 and speed > 9.0 * p.gear and not p.is_shifting:
+		_press(KEY_E, true)
+		shift_release_tick = tick + SHIFT_HOLD_TICKS
+	return false
+
 func _fail(msg: String) -> void:
 	fails += 1
 	print("FAIL ", msg)
@@ -101,7 +129,7 @@ func _report(p: PlayerCar) -> void:
 	for f in s:
 		sum += f
 	print("frames=%d avg=%.2fms p50=%.2f p99=%.2f p99.9=%.2f max=%.2f" % [n, sum / n, s[n / 2], s[int(n * 0.99)], s[int(n * 0.999)], s[n - 1]])
-	print("recycles=%d top_speed=%.1f m/s final_pos=%s" % [recycles, max_speed, p.global_position])
+	print("recycles=%d top_speed=%.1f m/s gear=%d final_pos=%s" % [recycles, max_speed, p.gear, p.global_position])
 	print("draw_calls=%d objects=%d" % [Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME), Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)])
 	if recycles == 0:
 		_fail("no chunk recycled -- the car never got far enough to test anything")

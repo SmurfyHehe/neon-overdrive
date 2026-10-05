@@ -12,11 +12,28 @@ extends SceneTree
 # Exit code 1 on failure. Run (a window opens for a few seconds):
 #   Godot_v4.7.2-stable_win64_console.exe --path . -s res://tests/tuning_panel.gd
 
+# Game polls input in _physics_process (#30), and Input.is_action_just_pressed
+# is only true on the physics tick the press landed in. A key pressed and
+# released in the same render frame is gone before a tick can see it, so a tap
+# presses now and releases HOLD_TICKS physics ticks later (2 = at least one
+# whole tick with the key down, whichever order the callbacks run in).
+const HOLD_TICKS := 2
+
 var frame := 0
+var tick := 0
 var failures: Array[String] = []
+var releases := {}             # Key -> tick on which to release it
 
 func _initialize() -> void:
 	change_scene_to_file("res://Game.tscn")
+
+func _physics_process(_delta: float) -> bool:
+	tick += 1
+	for code in releases.keys():
+		if tick >= releases[code]:
+			_send(code, false)
+			releases.erase(code)
+	return false
 
 func _process(_delta: float) -> bool:
 	frame += 1
@@ -42,6 +59,13 @@ func _process(_delta: float) -> bool:
 			_check(is_equal_approx(game.player.gear_ratios[4], 1.1), "gear 5 not applied")
 			_check(is_equal_approx(game.player.max_torque, 500.0), "max_torque not applied")
 			_check(game.player.get_torque_at_rpm(1000.0) > before, "low-end knob should raise low-rpm torque")
+			# One write path: the player's spec dict holds the same values.
+			var spec: Dictionary = game.player.spec
+			_check(is_equal_approx(spec.final_drive, 3.5), "spec final_drive not written")
+			_check(is_equal_approx(spec.gear_ratios[4], 1.1), "spec gear 5 not written")
+			_check(spec.gear_ratios.is_typed(), "spec gear_ratios lost its type")
+			_check(is_equal_approx(spec.max_torque, 500.0), "spec max_torque not written")
+			_check(is_equal_approx(spec.torque_shape.low_end, 0.7), "spec torque shape not written")
 			_key(KEY_T)
 		100:
 			_check(not paused, "second T should unpause")
@@ -81,11 +105,15 @@ func _find(game: Node, type) -> Node:
 	return null
 
 func _key(code: Key) -> void:
-	for pressed in [true, false]:
-		var ev := InputEventKey.new()
-		ev.keycode = code
-		ev.pressed = pressed
-		Input.parse_input_event(ev)
+	_send(code, true)
+	releases[code] = tick + HOLD_TICKS
+
+func _send(code: Key, pressed: bool) -> void:
+	var ev := InputEventKey.new()
+	ev.keycode = code
+	ev.physical_keycode = code
+	ev.pressed = pressed
+	Input.parse_input_event(ev)
 
 func _check(ok: bool, msg: String) -> void:
 	if not ok:

@@ -41,6 +41,12 @@ const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Veh
 
 var chassis_visual: Node3D
 
+## This car's tune: the one dictionary Vehicle properties are set from and that
+## CarSpec.set_param() keeps in step with the live car. Set it before add_child()
+## to build a car from a specific spec (the test track does); left empty it
+## becomes the default coupe.
+var spec := {}
+
 # Aero (2026-09-13, Roy: "add aerodynamics to the game" -> "full aero model"):
 # these live here rather than on the vendored Vehicle class (kept unmodified,
 # see header) and get set the same way every other tuning number does, via
@@ -104,7 +110,9 @@ func _ready() -> void:
 	# profile any car type can copy-and-override, so NPCs/cops/mods reuse this
 	# exact simulation instead of a separate/cheaper one. Values are UNCHANGED
 	# from before this refactor -- verified headless (see ship notes).
-	CarSpec.apply(self, CarSpec.coupe_default())
+	if spec.is_empty():
+		spec = CarSpec.coupe_default()
+	CarSpec.apply(self, spec)
 
 	# BUG FIX (2026-09-13, verified headless): a wheel's raycast starts AT its
 	# own node position and extends DOWN by spring_length+tire_radius (set

@@ -180,3 +180,16 @@ Also recorded in that doc, and deliberately contrary to standard mobile advice:
 integrates suspension and tire forces per physics step; halving the rate degrades
 the exact simcade feel the milestone 2 rewrite existed to achieve. Find savings in
 rendering instead.
+
+## Auto-Tune (started 2026-10-05)
+
+An Auto-Tune layer on top of the raw T-menu tuner. The raw tuner stays raw; both write the same per-car spec dict through `CarSpec.set_param()`.
+
+**v1 scope (Roy, 2026-10-05):** gearing (`final_drive`, `gear_ratios`), aero (drag, front/rear downforce), brakes (`brake_force_multiplier`) and the four Road tire keys. Engine and suspension, and the mod-tier cap stub, are deferred. Steps 0-2 first; step 3 (analytic estimator) only if the real sim turns out too slow to search directly.
+
+Steps: 0 setup -> 1a spec dict + registry + write path -> 1b rewire tuning_panel to it -> 2 hidden test track -> (3 estimator, conditional) -> 4 goals/locks/constraints -> 5 search + top-3 verification -> 6 panel UI -> 7 named slots.
+
+### Step 1a - spec dict, registry, single write path
+**Changed:** `scripts/tune_params.gd` (new): registry of the 14 v1 paths with absolute ranges. `CarSpec.set_param()` clamps, writes spec and live car, then re-derives what the vendored Vehicle only computes in `initialize()` (each Wheel's cached `current_*` tire numbers, `max_brake_force`). `CarSpec.apply()` now gives the car its own copy of every array/dict (the spec, Vehicle and all four wheels used to share the same tire dictionaries). `CarSpec.clone_spec()`. `PlayerCar.spec` holds the tune. `brake_force_multiplier: 1.0` added to `coupe_default()` (the vendor's own default, no behaviour change).
+**Verified:** `tests/tune_params.gd`, headless, PASS: defaults inside range; no aliasing; `gear_ratios` stays `Array[float]`; all 14 paths spec == car == clamped request; clamping; a car tuned live matches a car built fresh from the same spec (gearing, wheel tire cache, brake force). Mutation check: with the re-derive step disabled the test fails on the tire cache, as it should.
+**Open:** the raw tuning panel still writes Vehicle properties directly, so for now there are two write paths (1b removes that). Ranges are provisional until the step 2 sweep.

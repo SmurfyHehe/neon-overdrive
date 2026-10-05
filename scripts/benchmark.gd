@@ -12,7 +12,7 @@ class_name Benchmark
 # While it runs: V-Sync off and no FPS cap, so frame times are real instead
 # of a flat 16.67 ms. A bot holds W, shifts up with E as speed builds, and
 # taps A/D to hold heading -- the same driving as tests/chunk_drive.gd, so the
-# two produce comparable numbers. Physics stays on the 60 Hz tick.
+# two produce comparable numbers. Physics stays on the project tick rate (120 Hz).
 #
 # When done it appends one result line to benchmark-results.txt (next to the
 # exe in an exported build, in user:// otherwise), prints it, and quits.

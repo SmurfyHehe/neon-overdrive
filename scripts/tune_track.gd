@@ -45,7 +45,7 @@ class Run extends RefCounted:
 	var done := false
 	var failed := ""
 	var m := {}
-	var dt := 1.0 / 60.0
+	var dt := 1.0 / Engine.physics_ticks_per_second
 	# brake
 	var brake_phase := false
 	var brake_start := Vector3.ZERO

@@ -60,7 +60,7 @@ func start(spec: Dictionary, request: Dictionary, budget: int) -> bool:
 	write_json(dir.path_join(RESULT_FILE), {})
 	write_json(dir.path_join(PROGRESS_FILE), {})
 	write_json(dir.path_join(REQUEST_FILE), {"values": values_from_spec(spec), "request": request, "budget": budget})
-	var args := PackedStringArray(["--headless", "--fixed-fps", "60"])
+	var args := PackedStringArray(["--headless", "--fixed-fps", str(Engine.physics_ticks_per_second)])
 	if exe == OS.get_executable_path() and OS.has_feature("template"):
 		# The exported game: it finds its own .pck and runs the worker as a mode
 		# of the game itself (see Game._ready and run_worker).

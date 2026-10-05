@@ -22,6 +22,7 @@ call :run test_car --headless
 call :run road_strip_winding --headless
 call :run sidewalk_collision_taper --headless
 call :run aero_draft_equivalence --headless
+call :run exhaust_tune --headless
 if /i not "%~1"=="quick" (
 	rem These need a real window: headless drops MultiMesh data.
 	call :run chunk_drive

@@ -213,6 +213,8 @@ func _read_keyboard() -> void:
 		manual_shift(1)
 	if Input.is_action_just_pressed("toggle_gearbox"):
 		automatic_transmission = not automatic_transmission
+	if Input.is_action_just_pressed("reverse"):
+		toggle_reverse()
 	var throttle := Input.is_action_pressed("accelerate")
 	var braking := Input.is_action_pressed("brake")
 	var handbrake := Input.is_action_pressed("handbrake")
@@ -238,6 +240,16 @@ func _read_keyboard() -> void:
 	var rate := lerpf(STEER_ATTACK, STEER_ATTACK_FAST, speed_t) if coming_in else STEER_RELEASE
 	_steer_smooth = move_toward(_steer_smooth, target, rate * get_physics_process_delta_time())
 	steering_input = -_steer_smooth
+
+## R: drive to reverse and back, only when (nearly) stopped (Roy; ROADMAP stage B
+## step 4). In reverse W drives the car backwards and S brakes. Does nothing while
+## moving or mid-shift.
+const REVERSE_MAX_SPEED := 1.5  # m/s (~5 km/h)
+func toggle_reverse() -> bool:
+	if is_shifting or current_speed() > REVERSE_MAX_SPEED:
+		return false
+	shift(1 - current_gear if current_gear == -1 else -1 - current_gear)
+	return true
 
 ## HUD compatibility -- game.gd reads player.gear (int, -1/0/1..N) and
 ## player.current_speed(); both map directly onto what Vehicle already

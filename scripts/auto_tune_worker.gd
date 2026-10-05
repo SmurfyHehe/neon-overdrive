@@ -16,19 +16,4 @@ func _run() -> void:
 		push_error("auto_tune_worker: no job directory given")
 		quit(2)
 		return
-	var dir := args[0]
-	var req := AutoTuneJob.read_json(dir.path_join(AutoTuneJob.REQUEST_FILE))
-	if req.is_empty():
-		AutoTuneJob.write_json(dir.path_join(AutoTuneJob.RESULT_FILE), {"ok": false, "error": "no readable request"})
-		quit(2)
-		return
-	await process_frame
-	var base := AutoTuneJob.spec_from_values(req.values)
-	var track := TuneTrack.new()
-	root.add_child(track)
-	var progress_path := dir.path_join(AutoTuneJob.PROGRESS_FILE)
-	var on_progress := func(done: int, total: int, best: float) -> void:
-		AutoTuneJob.write_json(progress_path, {"done": done, "total": total, "best": best})
-	var r: Dictionary = await AutoTuneSearch.new().run(track, base, req.request, int(req.budget), on_progress)
-	AutoTuneJob.write_json(dir.path_join(AutoTuneJob.RESULT_FILE), AutoTuneJob.result_to_json(r))
-	quit(0)
+	AutoTuneJob.run_worker(self, args[0])

@@ -12,11 +12,28 @@ extends SceneTree
 # Exit code 1 on failure. Run (a window opens for a few seconds):
 #   Godot_v4.7.2-stable_win64_console.exe --path . -s res://tests/tuning_panel.gd
 
+# Game polls input in _physics_process (#30), and Input.is_action_just_pressed
+# is only true on the physics tick the press landed in. A key pressed and
+# released in the same render frame is gone before a tick can see it, so a tap
+# presses now and releases HOLD_TICKS physics ticks later (2 = at least one
+# whole tick with the key down, whichever order the callbacks run in).
+const HOLD_TICKS := 2
+
 var frame := 0
+var tick := 0
 var failures: Array[String] = []
+var releases := {}             # Key -> tick on which to release it
 
 func _initialize() -> void:
 	change_scene_to_file("res://Game.tscn")
+
+func _physics_process(_delta: float) -> bool:
+	tick += 1
+	for code in releases.keys():
+		if tick >= releases[code]:
+			_send(code, false)
+			releases.erase(code)
+	return false
 
 func _process(_delta: float) -> bool:
 	frame += 1
@@ -81,11 +98,15 @@ func _find(game: Node, type) -> Node:
 	return null
 
 func _key(code: Key) -> void:
-	for pressed in [true, false]:
-		var ev := InputEventKey.new()
-		ev.keycode = code
-		ev.pressed = pressed
-		Input.parse_input_event(ev)
+	_send(code, true)
+	releases[code] = tick + HOLD_TICKS
+
+func _send(code: Key, pressed: bool) -> void:
+	var ev := InputEventKey.new()
+	ev.keycode = code
+	ev.physical_keycode = code
+	ev.pressed = pressed
+	Input.parse_input_event(ev)
 
 func _check(ok: bool, msg: String) -> void:
 	if not ok:

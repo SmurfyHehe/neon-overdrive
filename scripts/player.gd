@@ -130,7 +130,10 @@ func _ready() -> void:
 	# real and correct, only actual movement was blocked). y_offset=0.5 keeps
 	# the bottom face comfortably clear of the ground after settling --
 	# CarSpec.build_collision() defaults to this same verified value.
-	CarSpec.build_collision(self, Vector3(1.6, 0.6, 3.4))
+	# Phase A: 1.0 m tall (was 0.6, bottom face unchanged at y=0.2) so the
+	# derived roll inertia is ~460 kg m2 (was ~380; a real 1300 kg coupe is
+	# about 400-600). Yaw inertia about 1840 stays in the real 1500-2200 band.
+	CarSpec.build_collision(self, Vector3(1.6, 1.0, 3.4), 0.7)
 
 	# ---- Vehicle-level tuning ----
 	# CarSpec refactor (2026-09-13, Roy: "i want full physics everywhere ...

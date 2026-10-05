@@ -51,10 +51,11 @@ func _initialize() -> void:
 	var locks := {"locks": {"gear_ratios/0": true, "final_drive": true}}
 	_check(not AutoTuneRules.free_paths(locks).has("final_drive") and AutoTuneRules.free_paths(locks).size() == 12, "free_paths ignores locks")
 	s = CarSpec.clone_spec(base)
-	TuneParams.set_value(s, "gear_ratios/1", 4.0)  # above locked gear 1 (3.6)
+	var g1: float = base.gear_ratios[0]
+	TuneParams.set_value(s, "gear_ratios/1", g1 + 0.4)  # above locked gear 1
 	_check(AutoTuneRules.repair(s, locks), "repair should shorten gear 2 under a locked gear 1")
-	_check(is_equal_approx(s.gear_ratios[0], 3.6), "locked gear 1 moved")
-	_check(s.gear_ratios[1] <= 3.6 / AutoTuneRules.GEAR_STEP + 1e-6, "gear 2 not brought under locked gear 1")
+	_check(is_equal_approx(s.gear_ratios[0], g1), "locked gear 1 moved")
+	_check(s.gear_ratios[1] <= g1 / AutoTuneRules.GEAR_STEP + 1e-6, "gear 2 not brought under locked gear 1")
 	_check(_ordered(s), "order broken: %s" % str(s.gear_ratios))
 	var both := {"locks": {"gear_ratios/0": true, "gear_ratios/1": true}}
 	s = CarSpec.clone_spec(base)

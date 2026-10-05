@@ -1,6 +1,17 @@
 [gd_resource type="AudioBusLayout" format=3]
 
+[sub_resource type="AudioEffectHardLimiter" id="AudioEffectHardLimiter_master"]
+ceiling_db = -1.0
+
 [resource]
+bus/0/name = &"Master"
+bus/0/solo = false
+bus/0/mute = false
+bus/0/bypass_fx = false
+bus/0/volume_db = 0.0
+bus/0/send = &""
+bus/0/effect/0/effect = SubResource("AudioEffectHardLimiter_master")
+bus/0/effect/0/enabled = true
 bus/1/name = &"Engine"
 bus/1/solo = false
 bus/1/mute = false

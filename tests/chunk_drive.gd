@@ -60,7 +60,6 @@ func _press(k: Key, down: bool) -> void:
 func _process(delta: float) -> bool:
 	if not started:
 		started = true
-		_press(KEY_W, true)
 		return false
 	t += delta
 	if t > WARMUP_SECS:
@@ -89,33 +88,32 @@ func _process(delta: float) -> bool:
 		return true
 	return false
 
-# Physics ticks (fixed 60 Hz): the bot. Same decisions every run regardless of
-# frame rate. A/D are held, not tapped; E is held for SHIFT_HOLD_TICKS ticks so
-# the tick that polls it sees it down.
+# Physics ticks (fixed 60 Hz): the bot, now a driver callable on the player car
+# (no key events). A windowed run loses held keys the moment the window loses
+# focus, which made this test's distance driven vary wildly (3 to 46 recycles);
+# a driver does not depend on focus. The game shifts itself (automatic default).
 func _physics_process(_delta: float) -> bool:
 	if not started or game == null:
 		return false
 	tick += 1
-	if shift_release_tick != 0 and tick >= shift_release_tick:
-		_press(KEY_E, false)
-		shift_release_tick = 0
 	var p: PlayerCar = game.get("player")
-	var speed := p.linear_velocity.length()
-	max_speed = max(max_speed, speed)
-	# Heading hold: steer only when yaw drifts, nudged back toward x=0.
-	var err: float = p.global_rotation.y + clampf(-p.global_position.x * 0.02, -0.05, 0.05)
-	var left := err < -0.02
-	var right := err > 0.02
-	if left != steer_left:
-		steer_left = left
-		_press(KEY_A, left)
-	if right != steer_right:
-		steer_right = right
-		_press(KEY_D, right)
-	if shift_release_tick == 0 and p.gear >= 1 and p.gear < 6 and speed > 9.0 * p.gear and not p.is_shifting:
-		_press(KEY_E, true)
-		shift_release_tick = tick + SHIFT_HOLD_TICKS
+	if not p.driver.is_valid():
+		p.driver = _drive
+	max_speed = max(max_speed, p.linear_velocity.length())
 	return false
+
+func _drive(c: PlayerCar) -> void:
+	# Heading hold: steer only when yaw drifts, nudged back toward x=0.
+	var err: float = c.global_rotation.y + clampf(-c.global_position.x * 0.02, -0.05, 0.05)
+	var steer := 0.0
+	if err < -0.02:
+		steer = -1.0  # left (A)
+	elif err > 0.02:
+		steer = 1.0   # right (D)
+	c.throttle_input = 1.0
+	c.brake_input = 0.0
+	c.handbrake_input = 0.0
+	c.steering_input = -steer  # same sign flip as PlayerCar._read_keyboard
 
 func _fail(msg: String) -> void:
 	fails += 1

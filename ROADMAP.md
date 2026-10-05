@@ -133,7 +133,9 @@ automatic-vs-manual clutch question unless Roy raises them.
   braking, turbo and heat/wear. Every edit is marked `DEVIATION` in
   `scripts/vendor/gevp/gevp_vehicle.gd` so a re-vendor can re-apply it. Logged
   edits: `clutch_torque = 0` in Neutral; feel pass 1b (soft rev limiter with
-  hysteresis, rev match on upshifts, `motor_brake` as engine braking).
+  hysteresis, rev match on upshifts, `motor_brake` as engine braking); Phase A
+  (idle PI controller instead of a hard idle floor, throttle-dependent
+  automatic shift points with hysteresis).
   Extensions that do not need a vendor edit still live in `aero.gd` and
   `car_spec.gd`.
 - **Every car runs the same raycast wheel sim** (player, NPC, cop, modded),

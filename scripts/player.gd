@@ -37,9 +37,30 @@ const CFG := {
 	"wheel_r": 0.34, "axle_z": 1.05, "wheel_x": 0.88,
 }
 
+## Godot gives every RigidBody3D linear damp 0.1 (a drag of 0.1 per second on
+## top of the aero model), which held this car at ~124 km/h in 4th gear no
+## matter the tune (found by TuneTrack, Auto-Tune step 2). Roy approved removing
+## the cap (2026-10-05); air resistance is AeroModel's job. Replace, not
+## combine, so the project/area defaults can't add it back.
+const LINEAR_DAMP := 0.0
+
 const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Vehicle's own shift_time below
 
 var chassis_visual: Node3D
+
+## This car's tune: the one dictionary Vehicle properties are set from and that
+## CarSpec.set_param() keeps in step with the live car. Set it before add_child()
+## to build a car from a specific spec (the test track does); left empty it
+## becomes the default coupe.
+var spec := {}
+
+## Test-track hooks (scripts/tune_track.gd). `driver`, when set, is called every
+## physics tick instead of reading the keyboard and sets throttle_input,
+## brake_input, steering_input and gear itself -- same simulation, different
+## hands. `sim_only` (set before add_child) skips the chassis mesh and the
+## engine audio, which have no effect on the physics.
+var driver := Callable()
+var sim_only := false
 
 # Aero (2026-09-13, Roy: "add aerodynamics to the game" -> "full aero model"):
 # these live here rather than on the vendored Vehicle class (kept unmodified,
@@ -69,8 +90,9 @@ func _ready() -> void:
 	# of the old flat-box look.
 	# #63: the neutral test car, for judging handling and camera. The styled
 	# coupe (CarBuilder, KIND_CONFIGS["coupe"]) waits on the design in #16.
-	chassis_visual = TestCarBuilder.build_chassis_visual()
-	add_child(chassis_visual)
+	if not sim_only:
+		chassis_visual = TestCarBuilder.build_chassis_visual()
+		add_child(chassis_visual)
 
 	# BUG FIX (2026-09-13, verified headless): RigidBody3D falls asleep after
 	# ~0.5s of low apparent velocity (standard Godot sleep threshold), and
@@ -80,6 +102,9 @@ func _ready() -> void:
 	# frame 150 and linear_velocity stayed pinned at ~0 forever after. A
 	# player-controlled vehicle should never sleep.
 	can_sleep = false
+
+	linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
+	linear_damp = LINEAR_DAMP
 
 	# Vehicle body collision shape -- the RigidBody3D still needs one (wheels
 	# handle ground contact via their own raycasts).
@@ -104,7 +129,9 @@ func _ready() -> void:
 	# profile any car type can copy-and-override, so NPCs/cops/mods reuse this
 	# exact simulation instead of a separate/cheaper one. Values are UNCHANGED
 	# from before this refactor -- verified headless (see ship notes).
-	CarSpec.apply(self, CarSpec.coupe_default())
+	if spec.is_empty():
+		spec = CarSpec.coupe_default()
+	CarSpec.apply(self, spec)
 
 	# BUG FIX (2026-09-13, verified headless): a wheel's raycast starts AT its
 	# own node position and extends DOWN by spring_length+tire_radius (set
@@ -140,16 +167,29 @@ func _ready() -> void:
 	# Engine sound (2026-09-29, prototype of PROPOSAL-audio.md option C): a
 	# synthesised engine driven by this car's motor_rpm/throttle. Added after
 	# CarSpec.apply() so it picks up the real idle/max rpm.
-	add_child(EngineAudio.new())
-	# Stage A (2026-10-04): wind, road, tyre and kerb sound next to the engine.
-	add_child(CarAudio.new())
+	if not sim_only:
+		add_child(EngineAudio.new())
+		# Stage A (2026-10-04): wind, road, tyre and kerb sound next to the engine.
+		add_child(CarAudio.new())
 
-	# Stage A (2026-10-04): headlights + blob shadow, since the world is dark
-	# on purpose now (Look Board B). After the body and wheels exist, because
-	# it moves their meshes to the car's own render layer.
-	CarFx.attach(self, chassis_visual.get_meta("half_l", 2.2))
+		# Stage A (2026-10-04): headlights + blob shadow, since the world is dark
+		# on purpose now (Look Board B). After the body and wheels exist, because
+		# it moves their meshes to the car's own render layer.
+		CarFx.attach(self, chassis_visual.get_meta("half_l", 2.2))
 
 func _physics_process(delta: float) -> void:
+	if driver.is_valid():
+		driver.call(self)
+	else:
+		_read_keyboard()
+	super._physics_process(delta)
+
+	# Aero (2026-09-13): applied AFTER the vendor's own _physics_process so
+	# drafting can recompute and partially cancel the drag force it just
+	# applied this frame. See aero.gd for the actual force math.
+	AeroModel.apply(self)
+
+func _read_keyboard() -> void:
 	# Input (#29, #30): named InputMap actions (project.godot), all polled
 	# here -- no _input handlers. Shifts are one-shot, hence just_pressed.
 	if Input.is_action_just_pressed("shift_down"):
@@ -176,13 +216,6 @@ func _physics_process(delta: float) -> void:
 	# Negating here (rather than swapping which key does what) keeps A=left/D=right
 	# reading naturally in the code while matching what the asset expects.
 	steering_input = -steer_in
-
-	super._physics_process(delta)
-
-	# Aero (2026-09-13): applied AFTER the vendor's own _physics_process so
-	# drafting can recompute and partially cancel the drag force it just
-	# applied this frame. See aero.gd for the actual force math.
-	AeroModel.apply(self)
 
 ## HUD compatibility -- game.gd reads player.gear (int, -1/0/1..N) and
 ## player.current_speed(); both map directly onto what Vehicle already

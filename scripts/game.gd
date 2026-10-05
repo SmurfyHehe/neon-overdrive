@@ -41,6 +41,8 @@ var lbl_gear: Label
 var lbl_speed: Label
 
 func _ready() -> void:
+	if OS.get_environment("NEON_MUTE") == "1":
+		AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), true)
 	# Benchmark mode (-- --benchmark, see benchmark.gd) drives a fixed road so
 	# runs are comparable; normal play gets a fresh one each time.
 	var benchmark := Benchmark.requested()
@@ -235,6 +237,8 @@ func _physics_process(_delta: float) -> void:
 	var z := player.global_position.z
 	if absf(z) >= recenter_dist:
 		_shift_origin(int(floor(-z / RoadChunkBuilder.CHUNK_LEN)))
+	if Input.is_action_just_pressed("mute"):
+		toggle_mute()
 
 ## Moves the world back by shift_chunks whole chunks (positive = the car had
 ## driven forward, -z). Whole chunks keep chunk positions exact integers x 50.
@@ -277,6 +281,12 @@ func _setup_camera() -> void:
 	camera = ChaseCamera.new(player)
 	add_child(camera)
 
+## M mutes all game audio (master bus). Setting NEON_MUTE=1 starts muted, for
+## test runs and late-night testing.
+func toggle_mute() -> void:
+	var bus := AudioServer.get_bus_index("Master")
+	AudioServer.set_bus_mute(bus, not AudioServer.is_bus_mute(bus))
+
 # ---------- temporary debug readout (real HUD is milestone 5) ----------
 func _setup_debug_hud() -> void:
 	var hud := CanvasLayer.new()
@@ -297,7 +307,7 @@ func _setup_debug_hud() -> void:
 	var controls := Label.new()
 	controls.position = Vector2(16, 400)
 	controls.add_theme_color_override("font_color", Color(0.71, 0.65, 0.84))
-	controls.text = "A/D steer  ·  W/S throttle/brake  ·  Space handbrake  ·  Q/E shift down/up (R-N-1-2-3-4-5)  ·  Esc pause  ·  T tuning"
+	controls.text = "A/D steer  ·  W/S throttle/brake  ·  Space handbrake  ·  Q/E shift down/up (R-N-1-2-3-4-5)  ·  Esc pause  ·  T tuning  ·  M mute"
 	hud.add_child(controls)
 
 func _update_debug_hud() -> void:

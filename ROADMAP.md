@@ -1,4 +1,107 @@
-# Neon Overdrive — Full Rebuild Roadmap (2026-09-12)
+# Neon Overdrive — Car Culture Roadmap (approved 2026-09-29)
+
+Roy approved this plan on 2026-09-29. It replaces the endless-highway-survival roadmap, which is kept further down for reference. Research behind it is in two reports ("Car culture game research" and "Car culture game design research"). The proposal page Roy signed off is at https://claude.ai/artifact/282jj5PnGRwxkzsy8jfb4R.
+
+## The game
+
+You're a mechanic by day. Each night you choose how to spend it: work on your own car, go to an event, move the story on, or pick up an extra shift. The events are ranked:
+
+1. **Pulls:** roll races and dig races.
+2. **Good driving:** highway runs and touge.
+3. **Burnouts and takeovers:** this is what "drifting" means here. It's US street takeovers, donuts and smoke shows, not Japanese angle drifting.
+
+You climb a street list of ten names, one callout at a time.
+
+## The loop
+
+- **Day:** a short shift at the shop. Two or three customer jobs pay the bills and drop tips. A customer's car can belong to a rival you race later, unlock a part at cost, or start a story beat.
+- **Night:** **one main activity plus one small extra**, such as a quick tune or a drive past the meet (Roy's pick). A strict one-thing-per-night rule is close to NFS Unbound's calendar, which players hated.
+- **Week's end:** rent (and possibly a garage debt) falls due, and a new callout is posted. A family garage debt was suggested as a story hook, but story is parked for Roy to write, so treat it as a placeholder.
+- **Money:** a normal shift covers roughly the bills and an extra shift adds about half again. A won event pays more than a shift, and a lost one pays less. These are starting numbers, to be set by playtesting.
+- **Missed payments:** Roy wants a layered system that uses all three candidates and possibly more. The candidates are:
+  - a capped late fee with a tool held until you pay;
+  - replaying the week, keeping upgrades but not cash;
+  - a loan-shark rival whose story ends in a race for your car;
+  - a race or job you must run for the debt holder.
+
+  The exact layering is still to be designed. One rule is fixed: there is always a floor, meaning a job that pays and a race with no entry fee, so the player can never be stuck broke. Research notes: `C:/SmurfyHehe/neon-overdrive-research/research_notes/debt_penalties.md` (outside the repo).
+
+## The events
+
+| Event | Rules | Notes |
+|---|---|---|
+| **Dig race** | 1/8 mile from a stop, no handicap. If you jump, you lose. | **Full steering** (Roy's pick). Lane-change-only and correction-only can be added later as settings. Launch with the revs in the green, and a shift light grades each shift (NFS Underground). Hole shots let reaction beat horsepower. A "no prep" low-grip surface was suggested, but Roy did not pick it in the brainstorm, so it is parked. Before building the strip, check that a keyboard dig race takes skill: manual shifting and a launch-rpm window, not just the tune. |
+| **Roll race** | Pace side by side at 40 (freeway) or 60 (strip). Three honks, then go. The first to pull clear or reach about 140 mph wins. | Jumping the third honk is a foul. This is where engine upgrades show most. Reuses the dig race code and rival. Rolling through traffic waits for the traffic milestone. |
+| **Highway run** | Flash your lights to challenge a rival. Each car has a bar that drains while it's behind, and faster the further back it falls. Hitting traffic or a wall costs a chunk. | This is Tokyo Xtreme Racer's spirit-points duel. There's no hidden AI catch-up. Reuses the road generator and the rival. Needs traffic, which is not built yet. |
+| **Touge** | Two runs with lead and chase swapped. The chaser wins by closing the gap and the leader by stretching it. A third run breaks a tie. | An American canyon road with named corners. It needs curves and hills first (#37), and it shares the gap system with the highway run. |
+| **Burnouts and takeovers** | Summernats-style scoring out of 100: smoke and car control, minus points for stalling, reversing or hitting the barrier. Takeovers add a crowd hype meter and a police timer. | Always show what ends a combo. PR #82 checks whether the car can do burnouts and donuts at all. |
+
+## Rivals, rep and heat
+
+- **The List:** ten names. You move up only by calling out someone above you and winning, and a callout expires after three nights. Rivals sit in crews by event, each with a boss. Each rival is one row of data.
+- **Rep and money:** there's one currency, money. There are two kinds of rep: **speed rep** is your List rank, and **respect** comes from clean conduct at meets. There is no second points currency.
+- **Meets:** meets are the hub where you find races and hear rumours. A burnout on the way out wins hype, but it adds heat and can get the next meet shut down.
+- **Heat:** stored per car. Getting caught brings a fine and a strike. Three strikes means impound, with a steep buy-back. Respray or plate work lowers heat.
+- **Pink slips:** rare story moments only.
+
+## Maps
+
+Separate maps are picked from a menu, and each one is a proper full-size place (Roy asked for bigger than the first draft):
+
+| Map | Size |
+|---|---|
+| Industrial district (dig and roll strips) | about 3 km of streets |
+| Freeway | 25–30 km loop, mostly laid by the road generator |
+| Mountain pass | 8–10 km each way |
+| Downtown (takeovers and meets) | about 1.2 × 1.2 km |
+| The shop | a garage and its block |
+
+## What happens to the current game
+
+- **Keep:**
+  - the driving physics (60 Hz, see below), the test car and the gritty PS2 night look;
+  - the tuning panel, upgrade tree and vehicle registry (PR #79). The tree's drift branch becomes a burnout branch: torque, rear bias and line lock;
+  - the road generator, which lays the freeway;
+  - the near-miss formula, which is a design on paper only.
+- **Not built yet:** there are **no other cars in the game**: no traffic, no rival, no AI (`player.gd` notes "No traffic exists yet"). Traffic and near-miss detection were planned but never built, so they are milestones of their own below.
+- **Park:** the fuel meter and procedural stop places. The code stays, but stop building them.
+- **Change:** damage stops ending the run and becomes repair cost and time.
+- **Move:** the police chase moves to milestone 7.
+
+## Milestone order
+
+Each milestone follows the same steps: propose, get Roy's sign-off, build, playtest. Then start the next one.
+
+| # | Milestone | Playable result |
+|---|---|---|
+| 1 | **Rival car + dig race, then roll race** | One scripted rival (follows a speed curve, no GEVP physics, so it is cheap and can't spin out). Dig race on the empty straight first, with full steering, manual shifting and a launch window. Then the roll race: 40 mph pace phase and a three-honk start. |
+| 1b | **One-week mock, menus only** (alongside 1) | Day result, night choice, money, rep and bills, with no driving. Tests whether choosing nights feels like freedom or like chores, which is the biggest risk (NFS Unbound's calendar). |
+| 2 | **The List** | Ten rivals in crews, callouts with timers, grudge and cash stakes. |
+| 3 | **Traffic** | Lane-following traffic on the freeway (MultiMesh per the rendering notes), then near-miss detection. Unlocks roll races through traffic. |
+| 4 | **Highway run** | The gap-bar duel on the freeway with traffic. The rival reacts to the gap visibly, never with hidden catch-up. |
+| 5 | **Full night loop** | The real day job board, night menu and weekly bills, built on whatever the week mock taught us. |
+| 6 | **Touge** | Curves and elevation (#37), then the mountain pass and two-run lead and chase. |
+| 7 | **Heat and police** | Heat per car, strikes, impound and escape runs. |
+| 8 | **Meet hub** | A lot to hang out in, respect, rumours and raids. |
+| 9 | **Burnout pad and takeover** | Design comes from the takeover specialist. PR #82 is the burnout and donut feel check. |
+| 10 | **Hands-on day job** | Roy's newest idea: the day job is driving the shop truck (tows and deliveries). Needs a second vehicle setup. |
+
+Rival and crew cars are scripted by default. Only the player's car runs full GEVP physics, to stay under the laptop's CPU ceiling.
+
+Story runs through every milestone as text, stills and phone messages.
+
+## Still open
+
+- **Top 3:** about 90 ideas have been picked across two brainstorm sessions, none ranked. Ask Roy which 3 the game must have on day one before scope grows further.
+- **Two idea pages disagree:** this roadmap's proposal page (https://claude.ai/artifact/282jj5PnGRwxkzsy8jfb4R) and the merged brainstorm page (https://claude.ai/artifact/QQNekPUnt5bPcUDVrVWJEV) conflict on no-prep, the family debt and missed-payment penalties. They need one source of truth.
+- **Crew system:** anyone who races or earns for the garage gets their own car. Parked for its own brainstorm.
+- How the missed-payment penalties layer together (see above).
+- Setting: suggested as an American city with a nearby canyon. Not yet confirmed.
+- The game's name: "Neon Overdrive" no longer matches the look Roy picked. It stays as a working title.
+
+## Superseded 2026-09-29: endless-highway roadmap (2026-09-12)
+
+Kept for reference. The car-culture roadmap above replaces its goal and build order. Still in use: the physics notes, the near-miss formula (now feeding the highway run and respect), the upgrade-tree structure (drift grip becomes a burnout branch) and the rendering proposals. Fuel, stop places and damage-ends-run are parked.
 
 ## Roy's 2026-10-04 plan: stages A–G
 
@@ -511,7 +614,7 @@ pushes the weak reads (P2, P5, N1).
 
 Old `main.gd` (treadmill/distance-accumulator architecture) is abandoned, not edited further. `car_builder.gd` (pure mesh construction) is kept and reused. Everything below is built fresh in real world-space.
 
-## Confirmed design decisions
+### Confirmed design decisions
 
 **World:** Endless procedural road **plus procedural stop places** (garage/tuning, repair/refuel, and pure visual-variety stops) placed periodically along the route.
 
@@ -532,7 +635,7 @@ Old `main.gd` (treadmill/distance-accumulator architecture) is abandoned, not ed
 **Flavor/terminology** (for HUD text, event names, unlock names — from street-racing slang research):
 Burnout, Drift, Donut, Full Send, Hole Shot, Redline, Fish-Tail, Power Slide, Wheelman, Sleeper, Ricer, Beater, Green Light, Slipstream, Dead Hook, Tune, Boost. ("Near-miss"/"close call" itself doesn't have strong established slang beyond "close call" — fine to use plainly.)
 
-## Build order (milestones)
+### Build order (milestones)
 
 1. **Road-chunk foundation** — world-space road generation, chunks spawn ahead / recycle behind the car. Reuses old lane-width/section-variation math, reimplemented against real positions.
 2. **Player physics** — real `VehicleBody3D` + wheels, grip/slip tuning, weight-transfer visuals for free from real suspension.
@@ -548,7 +651,7 @@ Burnout, Drift, Donut, Full Send, Hole Shot, Redline, Fish-Tail, Power Slide, Wh
 
 Each milestone: propose approach → sign-off → build → confirm before next. No batching ahead of where we've agreed.
 
-## Near-miss / risk-scoring design (finalized 2026-09-12)
+### Near-miss / risk-scoring design (finalized 2026-09-12)
 
 Compound formula, not a flat "in zone = point":
 
@@ -560,7 +663,7 @@ Compound formula, not a flat "in zone = point":
 - **Streak multiplier ("heat of the moment"):** a rolling risk meter builds while near-misses keep happening in quick succession; while it's elevated, both currency payout *and* heat gain per event scale up together. Decays if the player drives clean for a few seconds. This is also a/the primary feed into the wanted/heat system alongside sustained high speed and mod-level.
 - **Same-car decay (anti-cheese, no hard cap):** each traffic car remembers the last time it credited the player a near-miss. A repeat trigger against that *same* car within a short window is worth sharply less (e.g. ~35% the second time, ~10% the third, near-zero after) rather than being blocked — hugging one car's side becomes worthless on its own without needing an arbitrary rule.
 
-## Mods/unlock tree design (finalized 2026-09-12)
+### Mods/unlock tree design (finalized 2026-09-12)
 
 Five linear tracks per vehicle: **Engine, Tires/Grip, Suspension, Fuel Tank, Armor/Durability.** Each track tiers up (1→2→3…), and at a fork tier each track splits into **two pathways, chosen independently per category** (mixing Path A on one category with Path B on another is intended, not an edge case). Once a path is picked for a category on a given vehicle, that category locks to that path (respec cost/option is an open question, not decided). Each vehicle has its own independent mod state — a second car later starts its own tree from scratch.
 
@@ -571,11 +674,11 @@ Example pathway identities per track (placeholders — exact numbers TBD when we
 - **Fuel Tank:** Range (bigger tank) vs Efficiency (slower drain at same size)
 - **Armor/Durability:** Heavy (more health, adds weight) vs Light (less health, no weight penalty)
 
-## Balance pass v1 (finalized 2026-09-12 — starting numbers, expect tuning once playable)
+### Balance pass v1 (finalized 2026-09-12 — starting numbers, expect tuning once playable)
 
 Currency name placeholder: **Cred** (change anytime, it's just a label).
 
-### Mods tree — costs & effects
+#### Mods tree — costs & effects
 Tier 1 is a shared baseline upgrade (no fork yet). Tier 2 is the fork — buying into Path A or Path B for that category. Tier 3 extends whichever path was chosen.
 
 **Costs cut to ~1/3 of the original pass (2026-09-12) — goal is players cycling through multiple modded cars, not grinding one forever.**
@@ -592,7 +695,7 @@ Full max-out of one vehicle's tree: **7,000 Cred** (was 21,000) — at ~400 Cred
 
 **Respec:** allowed, costs 1.5× the total Cred spent so far in that one category (not the whole tree) — e.g. respeccing a fully-maxed track (1,400 spent) costs 2,100 Cred.
 
-### Car tiers (added 2026-09-12)
+#### Car tiers (added 2026-09-12)
 
 Three vehicles, each with its own independent mod tree, each harder to fully mod than the last — so moving up tiers is a real escalation, not just a reskin. The 7,000-Cred numbers above are the **Starter** car's baseline; Tier B and Tier A scale both purchase price and mod cost:
 
@@ -604,7 +707,7 @@ Three vehicles, each with its own independent mod tree, each harder to fully mod
 
 Unlock gating: buying a higher-tier car is gated on **currency saved**, not on fully maxing the previous car first — a player can buy Tier B the moment they've saved 5,000 Cred even mid-mod on the Starter, so "move on to another car" can happen well before a car is finished. Each car's mod progress is independent and persists — you can own and swap between all three, modding each on its own track.
 
-### Near-miss / risk formula constants
+#### Near-miss / risk formula constants
 - Detection shell: 1.5m outside each traffic car's collision hull
 - Base value: 10 Cred/event
 - Proximity factor: 1.0x (outer edge of shell) → 2.5x (grazing the hull)
@@ -613,14 +716,14 @@ Unlock gating: buying a higher-tier car is gated on **currency saved**, not on f
 - Streak multiplier: starts 1.0x, +0.15x per event within a rolling 4-second window, caps at 3.0x, decays to 1.0x after 4s clean
 - Same-car decay: 1st trigger = 100% value, 2nd within 8s = 35%, 3rd = 10%, 4th+ = ~2% (not blocked, just not worth it)
 
-### Heat & police
+#### Heat & police
 - Heat gain: +2 × current streak multiplier per near-miss event; +1/sec while above 85% of current top speed; +0.5/sec passively per Tier-3 performance mod owned (Engine/Tires) — a loud build draws attention just by existing
 - Heat decay: -3/sec while under speed threshold with no recent near-miss/mod triggers
 - Tiers: 0-29 no police · 30-59 (Tier 1: 1 cop, moderate) · 60-89 (Tier 2: 2 cops, aggressive) · 90-100 (Tier 3: 3 cops + roadblock/spike-strip event)
 - Evasion: heat must stay below the current tier's floor for 6s with no police nearby → chase ends, pays 50 × tier-reached Cred bonus
 - Note: tier count/roadblock complexity is capped by actual CPU/engine performance once we're building it — may need to trim at that point
 
-### Damage & fuel numbers
+#### Damage & fuel numbers
 - Max health: 100 (before Armor mods). Traffic clip: -15. Head-on/high-speed crash: -40. Barrier/environment hit: -25. At 0 health, run ends.
 - Performance degradation: top speed scales down linearly, 100%→80% as health goes 100→0
 - Repair stop: full heal, ~3s stopped
@@ -628,7 +731,7 @@ Unlock gating: buying a higher-tier car is gated on **currency saved**, not on f
 - Refuel stop: full refill, ~3s stopped
 - Empty tank: run ends (stranded)
 
-## Carried over from HANDOFF.md (retired 2026-09-29)
+### Carried over from HANDOFF.md (retired 2026-09-29)
 
 `HANDOFF.md` (2026-09-12) was retired on Roy's decision (#40) - this file is the one source of truth for plan and order. Its old "Plan, in order" is superseded by the build order above. What was still useful:
 
@@ -646,11 +749,11 @@ Unlock gating: buying a higher-tier car is gated on **currency saved**, not on f
 
 **Main risk:** scope creep - simcade physics, beautiful low-poly and an open feature backlog is a lot for a solo build. Stick to one milestone at a time.
 
-## Open items still remaining
+### Open items still remaining
 - Whether damage affects handling (not just top speed) once physics exists to hook into — revisit once milestone 2 physics is real
 - These are v1 numbers for a game that doesn't run yet — expect a real tuning pass once milestone 9-11 are playable, not treated as final
 
-## Proposals, pending Roy (2026-09-29)
+### Proposals, pending Roy (2026-09-29)
 
 **Status:** proposal 1 is **approved and built** (`bbcb12f`, on Roy's direct instruction) - do not re-propose or revert it. Proposals 2 and 3 are **not approved**. Look-and-feel calls are Roy's; a side-by-side comparison is being prepared so he can choose from screenshots. Do not build 2 or 3 as decisions.
 
@@ -689,3 +792,51 @@ Also recorded in that doc, and deliberately contrary to standard mobile advice:
 integrates suspension and tire forces per physics step; halving the rate degrades
 the exact simcade feel the milestone 2 rewrite existed to achieve. Find savings in
 rendering instead.
+
+## Auto-Tune (started 2026-10-05)
+
+An Auto-Tune layer on top of the raw T-menu tuner. The raw tuner stays raw; both write the same per-car spec dict through `CarSpec.set_param()`.
+
+**v1 scope (Roy, 2026-10-05):** gearing (`final_drive`, `gear_ratios`), aero (drag, front/rear downforce), brakes (`brake_force_multiplier`) and the four Road tire keys. Engine and suspension, and the mod-tier cap stub, are deferred. Steps 0-2 first; step 3 (analytic estimator) only if the real sim turns out too slow to search directly.
+
+Steps: 0 setup -> 1a spec dict + registry + write path -> 1b rewire tuning_panel to it -> 2 hidden test track -> (3 estimator, conditional) -> 4 goals/locks/constraints -> 5 search + top-3 verification -> 6 panel UI -> 7 named slots.
+
+### Step 1a - spec dict, registry, single write path
+**Changed:** `scripts/tune_params.gd` (new): registry of the 14 v1 paths with absolute ranges. `CarSpec.set_param()` clamps, writes spec and live car, then re-derives what the vendored Vehicle only computes in `initialize()` (each Wheel's cached `current_*` tire numbers, `max_brake_force`). `CarSpec.apply()` now gives the car its own copy of every array/dict (the spec, Vehicle and all four wheels used to share the same tire dictionaries). `CarSpec.clone_spec()`. `PlayerCar.spec` holds the tune. `brake_force_multiplier: 1.0` added to `coupe_default()` (the vendor's own default, no behaviour change).
+**Verified:** `tests/tune_params.gd`, headless, PASS: defaults inside range; no aliasing; `gear_ratios` stays `Array[float]`; all 14 paths spec == car == clamped request; clamping; a car tuned live matches a car built fresh from the same spec (gearing, wheel tire cache, brake force). Mutation check: with the re-derive step disabled the test fails on the tire cache, as it should.
+**Open:** the raw tuning panel still writes Vehicle properties directly, so for now there are two write paths (1b removes that). Ranges are provisional until the step 2 sweep.
+
+### Step 1b - raw tuning panel writes the spec
+**Changed:** `scripts/tuning_panel.gd` now reads from and writes to `player.spec` through `CarSpec.set_param()`; it keeps no tune of its own. Its look, controls and knob keys are unchanged; slider ranges come from `TuneParams`. The engine knobs (peak torque, redline, the four torque-shape values) are registered as raw-only (`auto: false`), so they use the same write path but Auto-Tune cannot touch them. The torque shape now lives in the spec (`torque_shape`) and `CarSpec.apply()` / `set_param()` build the Vehicle's `torque_curve` from it; `coupe_default()` no longer carries a separate `torque_curve` (same curve, built from the same shape). `set_param()` also re-derives `max_clutch_torque` for engine edits.
+**Verified:** `tests/tune_params.gd` PASS (adds: engine paths written to spec and car, torque curve follows the spec's shape, `max_clutch_torque` re-derived, fresh car built from the spec matches the live-tuned one, Auto-Tune has exactly the 14 v1 paths and none is an engine path). `tests/tuning_panel.gd` PASS (windowed; adds: after slider moves the player's spec holds the same values, `gear_ratios` still `Array[float]`). All headless tests and `chunk_drive` PASS.
+**Open:** `tests/game_state.gd` (windowed) FAILS on a clean `origin/main` too, and gives different partial results between runs ("Esc should pause the tree" and later checks). Not caused by this branch; looks focus/timing dependent. Not fixed here.
+
+### Step 2 - hidden test track (real sim, scripted drivers)
+**Changed:** `scripts/tune_track.gd` (new, `TuneTrack`): flat "Road" ground plus three scripted runs per spec on a real `PlayerCar` built from the spec - `accel` (full throttle, auto-shift at 97% of the spec's redline -> `t_0_100`, `top_speed_kmh` over 35 s), `brake` (to 100 km/h, then full brake -> `brake_dist_100`), `corner` (fixed steering, rising speed -> `peak_lat_g`, `max_slip_deg`). `evaluate(specs)` runs specs one after another in the same lanes. `PlayerCar` gained two hooks, `driver` (a Callable that replaces the keyboard polling; keyboard code moved unchanged into `_read_keyboard()`) and `sim_only` (skips chassis mesh and engine audio, which don't affect physics). `TuneTrack.linear_damp_override` is a what-if switch, off by default.
+**Verified:** `tests/tune_track.gd`, headless with `--fixed-fps 60` (added to `run_tests.bat`, full run only, ~2 min), PASS:
+- Same spec five times in a row and again on a fresh track: bit-identical metrics. (Batching specs across lanes kilometres apart gave up to 2.3% different slide metrics - single-precision position noise - so specs are evaluated sequentially in fixed lanes. Batching saved no time anyway: a car-step costs the same however many cars run.)
+- Fidelity: the track's default coupe tops out at 124.28 km/h; the real `Game.tscn` driven the same way (scratch script, not kept) reads 124.3 km/h.
+- All 14 Auto-Tune v1 tunables at both ends of their ranges (gears kept in order): every run finishes, no flip, all finite.
+- Sensitivity tables (printed by the test): every tunable moves at least one metric except as noted below.
+**Sim speed (measured):** one spec = 3 runs, 2161 physics steps (36 s of driving). Wall time for that, same code, on this laptop (i5-1235U; on battery at 12%, CPU at 60-70% performance, power state varied during the session): **0.72 s to 2.0 s per spec**, i.e. 1,100-3,000 steps/s, 19-50x real time, ~210-310 us per car-step. Three specs (the step-5 verification): 2.2 s (fast) to 5.8 s (slow). The 14-field sweep (29 specs) took 39-58 s. Direct search budget: at 0.7 s per spec 100 evaluations ~1.2 min and a 1,400-evaluation hill climb ~16 min; at 2 s, ~3 min and ~47 min. These are headless `--fixed-fps` numbers (CPU-bound, an upper bound on in-game speed).
+**Findings:**
+- **The game's real top speed is ~124 km/h, not ~250.** The project never sets damping, so Godot's default linear damp (0.1 per second, ~4.5 kN at 124 km/h) holds the car in 4th gear at 6,373 rpm. With damping replaced by 0 the same car reaches 241.6 km/h at 36 s (and 0-100 drops from 7.2 s to 5.0 s). Under game damping top speed barely responds to tuning: final drive 120-131 km/h, drag 123-125, gear 5 never engages (no effect at all). So a "Top Speed" Auto-Tune goal is nearly meaningless until this is decided. Not changed - it is a feel decision for Roy. ISSUES E9 ("stock top speed is really ~253") assumed no damping.
+- Gear ratios need an ordering constraint: with gears 1-3 at the registry minimum (0.5) under a 2.4 gear 2, the car cannot launch (never reaches 100 km/h). Range limits alone are not safe for gears; step 4 must enforce "each gear shorter than the one below" (the sweep used >=1.05x steps).
+- Registry range edges are not all gentle: Road friction 4.0 gives 4.6 g peak and a 31 m 100-0 with damping removed. Provisional ranges, Roy's call.
+- Brake: 100-0 is 36.6 m at the default (about 1.1 g average); `brake_force_multiplier` 0.7 -> 48 m, 1.5 -> 32 m (not proportional, tire-limited at the top).
+**Open:** full `run_tests.bat` run: `tune_track` PASS, `tuning_panel` PASS, all headless PASS; `chunk_drive` failed once inside the full run ("no chunk recycled") but passed 2/2 standalone on this branch and 2/2 on clean `origin/main`, so intermittent, not tied to this branch; `game_state` fails as on clean `origin/main`. The hidden track is not yet hosted in its own physics world inside the game (it runs under the test's root); in-game verification speed is unmeasured (headless `--fixed-fps` numbers are an upper bound). Drivers are simple and fixed (open-loop steering for `corner`; no step-steer stability or drift-hold metric yet). Step 3 (analytic estimator) is not started - see the budget above.
+
+### Linear damp removed (Roy approved 2026-10-05)
+**Changed:** `PlayerCar.LINEAR_DAMP := 0.0`, applied in `_ready()` with `DAMP_MODE_REPLACE`. `TuneTrack.linear_damp_override` now applies after the car's `_ready()`; `tests/tune_track.gd` compares "as the game runs" (0) against Godot's old 0.1 instead of 0 against the game.
+**Verified:** `tests/tune_track.gd`, headless `--fixed-fps 60`, default coupe, same code before/after:
+
+| | before (damp 0.1) | after (damp 0) |
+|---|---|---|
+| top speed (35 s) | 124.3 km/h | 241.6 km/h |
+| 0-100 | 7.22 s | 5.03 s |
+| 100-0 | 36.6 m | 42.0 m |
+| peak lateral g | 2.91 | 2.80 |
+
+Determinism check still bit-identical. New assertion: top speed > 180 km/h, so the cap can't come back unnoticed.
+**ISSUES E9 re-check:** the "~253" in E9 is the rev-cut ceiling (1.1 x redline); the car measures 241.6 km/h, between the 230 km/h redline speed and that ceiling, so a ~200 target is overshot by ~40 km/h. Ratios stay Roy's call (#62 / Auto-Tune). Braking is ~5 m longer and peak lateral g slightly lower because damping used to help slow the car.
+**Open:** step 2's "game damping" sensitivity numbers above are the old capped car; the sweep now prints both. Registry ranges are still provisional.

@@ -20,7 +20,77 @@ class_name CarSpec
 ## builds by copying a base spec and changing a few entries.
 static func apply(v: Vehicle, spec: Dictionary) -> void:
 	for key in spec:
-		v.set(key, spec[key])
+		if key == "torque_shape":
+			# Not a Vehicle property: the spec stores the shape and the car gets
+			# the curve built from it, so tuning the shape and the curve can't
+			# disagree.
+			v.torque_curve = _curve_from_shape(spec[key])
+		else:
+			v.set(key, _own(spec[key]))
+
+## The vehicle gets its own copy of every array and dictionary. Without this the
+## spec, the Vehicle and (via Vehicle.initialize()) all four wheels would share
+## the same tire dictionaries, so writing the spec would silently change the
+## car, and a saved spec would change under you. duplicate(true) keeps
+## Array[float] typed.
+static func _own(x: Variant) -> Variant:
+	if x is Dictionary or x is Array:
+		return x.duplicate(true)
+	return x
+
+## An independent deep copy of a spec, for snapshots (undo, saved tunes) and for
+## building a second car from the same tune.
+static func clone_spec(spec: Dictionary) -> Dictionary:
+	var out := {}
+	for key in spec:
+		var x: Variant = spec[key]
+		out[key] = x.duplicate() if x is Resource else _own(x)
+	return out
+
+## THE write path for tuning (raw panel and Auto-Tune both). Clamps to the
+## registry range, writes the spec and the live car, then redoes whatever the
+## vendored Vehicle only works out once. Returns the value actually stored, or
+## NAN for a path that is not in TuneParams.
+##
+## Needed because of how gevp reads things: gear ratios, final drive, drag and
+## the aero coefficients are read fresh every tick, but each Wheel caches its
+## surface's tire numbers (current_*) and the Vehicle derives max_brake_force
+## from friction and brake_force_multiplier, both only in initialize(). Before
+## the car is ready, initialize() will do all that itself, so only the spec is
+## written.
+static func set_param(v: Vehicle, spec: Dictionary, path: String, value: float) -> float:
+	var entry := TuneParams.find(path)
+	if entry.is_empty():
+		push_error("CarSpec.set_param: '%s' is not a tunable path" % path)
+		return NAN
+	value = clampf(value, entry.min, entry.max)
+	TuneParams.set_value(spec, path, value)
+	if entry.on_car:
+		TuneParams.set_value(v, path, value)
+	if v.is_ready:
+		_rederive(v, spec, entry.rederive)
+	return value
+
+static func _curve_from_shape(t: Dictionary) -> Curve:
+	return build_torque_curve(t.low_end, t.peak_pos, t.plateau, t.falloff)
+
+static func _rederive(v: Vehicle, spec: Dictionary, kind: String) -> void:
+	if kind == TuneParams.ENGINE:
+		# initialize() derives max_clutch_torque from max_torque once.
+		v.max_clutch_torque = v.max_torque * v.max_clutch_torque_ratio
+		v.torque_curve = _curve_from_shape(spec.torque_shape)
+	if kind == TuneParams.TIRE:
+		# Same formulas as Wheel.initialize() / its surface-change branch. The
+		# vendored files stay untouched; tests/tune_params.gd checks these match
+		# a freshly built car, so a vendor change would show up there.
+		for w in v.wheel_array:
+			var s: String = w.surface_type
+			w.current_cof = w.coefficient_of_friction[s]
+			w.current_lateral_grip_assist = w.lateral_grip_assist[s]
+			w.current_longitudinal_grip_ratio = w.longitudinal_grip_ratio[s]
+			w.current_tire_stiffness = 1000000.0 + 8000000.0 * w.tire_stiffnesses[s]
+	if kind == TuneParams.TIRE or kind == TuneParams.BRAKE:
+		v.calculate_brake_force()
 
 ## Baseline tuning -- currently identical to what PlayerCar shipped with
 ## (2026-09-13 physics rewrite + power/top-speed passes), NOT yet meaningfully
@@ -53,12 +123,13 @@ static func coupe_default() -> Dictionary:
 		"max_torque": 460.0,
 		"max_rpm": 7000.0,
 		"idle_rpm": 1000.0,
-		"torque_curve": default_torque_curve(),
+		"torque_shape": DEFAULT_TORQUE_SHAPE.duplicate(),  # apply() builds the Vehicle's torque_curve from this
 		"gear_ratios": gear_ratios_typed,
 		"final_drive": 4.1,
 		"automatic_transmission": false,
 		"coefficient_of_drag": 0.26,
 		"frontal_area": 1.9,
+		"brake_force_multiplier": 1.0,  # the vendored default, now explicit so tuning has one source of truth
 		"max_steering_angle": deg_to_rad(38.0),
 		"front_spring_length": 0.22,
 		"rear_spring_length": 0.26,

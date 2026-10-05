@@ -134,6 +134,7 @@ static func coupe_default() -> Dictionary:
 		# take 0.2 s (was 0.3), and the clutch takes up at 2000 rpm (was 3000).
 		# motor_drag stays at the default 0.005: 0.007 cost ~10 km/h of top speed.
 		"automatic_transmission": true,
+		"realistic_clutch": false,  # Phase C: clutch pedal, stall and starter; V toggles it in the game (off by default)
 		"turbo_boost_max": 0.0,  # Phase B: 0 = naturally aspirated; the T tuner can add boost
 		"brake_selects_reverse": false,  # R picks reverse (Roy); S only brakes
 		"automatic_time_between_shifts": 800.0,  # Phase A shift map: min ms between upshifts

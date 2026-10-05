@@ -220,6 +220,12 @@ func _read_keyboard() -> void:
 		automatic_transmission = not automatic_transmission
 	if Input.is_action_just_pressed("reverse"):
 		toggle_reverse()
+	if Input.is_action_just_pressed("toggle_clutch_model"):
+		realistic_clutch = not realistic_clutch
+		engine_running = true
+		clutch_pedal = 0.0
+	clutch_input = 1.0 if Input.is_action_pressed("clutch") else 0.0
+	starter_input = Input.is_action_pressed("starter")
 	var throttle := Input.is_action_pressed("accelerate")
 	var braking := Input.is_action_pressed("brake")
 	var handbrake := Input.is_action_pressed("handbrake")

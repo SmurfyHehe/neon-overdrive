@@ -137,7 +137,7 @@ automatic-vs-manual clutch question unless Roy raises them.
   (idle PI controller instead of a hard idle floor, throttle-dependent
   automatic shift points with hysteresis); Phase B (turbo boost and blow-off,
   `brake_selects_reverse`, and the `torque_mult` / `brake_mult` hooks for heat
-  and wear).
+  and wear); Phase C (opt-in realistic clutch, stall and starter, off by default).
   Extensions that do not need a vendor edit still live in `aero.gd` and
   `car_spec.gd`.
 - **Every car runs the same raycast wheel sim** (player, NPC, cop, modded),

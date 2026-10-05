@@ -28,6 +28,14 @@ var apply_button: Button
 var undo_button: Button
 var status_label: Label
 var result_label: Label
+var slot_name_edit: LineEdit
+var slot_list: ItemList
+var save_button: Button
+var load_button: Button
+var delete_button: Button
+
+## Named tune slots (step 7). Tests swap in one on a scratch file.
+var slots := TuneSlots.new()
 
 ## Tests set this to run a smaller search than the Quick option.
 var budget_override := 0
@@ -104,6 +112,25 @@ func _ready() -> void:
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	left.add_child(status_label)
 
+	# --- tune slots: save / load the whole tune by name ---
+	left.add_child(_heading("Tune slots (whole tune, engine included)"))
+	var save_row := HBoxContainer.new()
+	left.add_child(save_row)
+	slot_name_edit = LineEdit.new()
+	slot_name_edit.placeholder_text = "slot name"
+	slot_name_edit.max_length = TuneSlots.MAX_NAME_LENGTH
+	slot_name_edit.custom_minimum_size = Vector2(180, 0)
+	save_row.add_child(slot_name_edit)
+	save_button = _button(save_row, "Save", _on_save_slot)
+	slot_list = ItemList.new()
+	slot_list.custom_minimum_size = Vector2(0, 84)
+	slot_list.item_selected.connect(_on_slot_selected)
+	left.add_child(slot_list)
+	var slot_row := HBoxContainer.new()
+	left.add_child(slot_row)
+	load_button = _button(slot_row, "Load", _on_load_slot)
+	delete_button = _button(slot_row, "Delete", _on_delete_slot)
+
 	# --- middle: locks ---
 	var mid := VBoxContainer.new()
 	columns.add_child(mid)
@@ -124,6 +151,7 @@ func _ready() -> void:
 	columns.add_child(result_label)
 
 	game_state.state_changed.connect(_on_state_changed)
+	_refresh_slots()
 	_refresh_buttons()
 
 func _heading(text: String) -> Label:
@@ -190,6 +218,10 @@ func _refresh_buttons() -> void:
 	apply_button.disabled = running or not result.get("improved", false)
 	undo_button.disabled = running or undo_spec.is_empty()
 	budget_option.disabled = running
+	var picked := not slot_list.get_selected_items().is_empty()
+	load_button.disabled = running or not picked
+	delete_button.disabled = not picked
+	save_button.disabled = running
 
 # ---------- run ----------
 
@@ -305,9 +337,66 @@ func _on_undo() -> void:
 	_refresh_lock_labels()
 	_refresh_buttons()
 
-## Writes every Auto-Tune value that differs, through the single write path.
+## Writes every tunable value that differs, through the single write path. All
+## paths, not just Auto-Tune's: Undo must also revert a slot load, which can
+## carry engine values.
 func _write(spec: Dictionary) -> void:
-	for p in TuneParams.auto_paths():
-		var v := TuneParams.get_value(spec, p)
-		if absf(TuneParams.get_value(player.spec, p) - v) > 1e-9:
-			CarSpec.set_param(player, player.spec, p, v)
+	for e in TuneParams.all():
+		var v := TuneParams.get_value(spec, e.path)
+		if absf(TuneParams.get_value(player.spec, e.path) - v) > 1e-9:
+			CarSpec.set_param(player, player.spec, e.path, v)
+
+# ---------- tune slots ----------
+
+func _refresh_slots(select := "") -> void:
+	slot_list.clear()
+	for n in slots.names():
+		slot_list.add_item(n)
+		if n == select:
+			slot_list.select(slot_list.item_count - 1)
+	_refresh_buttons()
+
+func _selected_slot() -> String:
+	var sel := slot_list.get_selected_items()
+	return "" if sel.is_empty() else slot_list.get_item_text(sel[0])
+
+func _on_slot_selected(index: int) -> void:
+	slot_name_edit.text = slot_list.get_item_text(index)
+	_refresh_buttons()
+
+func _on_save_slot() -> void:
+	var n := TuneSlots.clean_name(slot_name_edit.text)
+	if n == "":
+		status_label.text = "Type a name for the slot first."
+		return
+	var replacing := slots.has(n)
+	if not slots.save(n, player.spec):
+		status_label.text = "Could not save the slot (see the Godot console)."
+		return
+	status_label.text = "%s slot '%s'." % ["Replaced" if replacing else "Saved", n]
+	_refresh_slots(n)
+
+func _on_load_slot() -> void:
+	var n := _selected_slot()
+	if running or n == "":
+		return
+	var before := CarSpec.clone_spec(player.spec)
+	if not slots.apply(n, player):
+		status_label.text = "Slot '%s' is empty or missing." % n
+		return
+	undo_spec = before
+	result = {}
+	result_label.text = ""
+	status_label.text = "Loaded '%s'. The car now drives with this tune." % n
+	if not AutoTuneRules.violations(player.spec, {}, player.spec).is_empty():
+		status_label.text += " (Its gears are out of order or out of range.)"
+	_refresh_lock_labels()
+	_refresh_buttons()
+
+func _on_delete_slot() -> void:
+	var n := _selected_slot()
+	if n == "":
+		return
+	slots.delete(n)
+	status_label.text = "Deleted slot '%s'." % n
+	_refresh_slots()

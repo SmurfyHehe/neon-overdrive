@@ -11,6 +11,9 @@ extends SceneTree
 # - Apply writes the player's spec and live car through CarSpec.set_param();
 #   Undo puts them back
 # - the raw T panel shows what Auto-Tune applied (its sliders re-sync on open)
+# - tune slots (step 7): Save stores the whole tune (engine knobs too), Load puts
+#   it back through the write path (spec and live car) and Undo reverts the load,
+#   saving the same name replaces, Delete removes the entry
 # - closing the panel mid-search cancels it and kills the worker
 #
 # Paced in physics ticks and wall-clock timeouts, not render frames (see
@@ -23,6 +26,7 @@ const EXPECT_TOP := 241.6
 const EXPECT_0_100 := 5.03
 const EXPECT_100_0 := 42.0
 const TOLERANCE := 0.005
+const SLOT_FILE := "user://autotune/test_panel_slots.json"
 
 var failures: Array[String] = []
 
@@ -105,9 +109,45 @@ func _run() -> void:
 	await _tap(KEY_T)
 	await _until(func(): return game.game_state.state == GameState.State.PLAYING, 5.0)
 
-	# --- cancel by closing mid-search ---
+	# --- tune slots ---
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://autotune"))
+	var sf := FileAccess.open(SLOT_FILE, FileAccess.WRITE)  # start empty (overwrite; never deleted)
+	sf.store_string("")
+	sf = null
+	panel.slots = TuneSlots.new(SLOT_FILE)
+	panel._refresh_slots()
 	await _tap(KEY_Y)
 	await _until(func(): return game.game_state.state == GameState.State.AUTOTUNE, 5.0)
+	_check(panel.slot_list.item_count == 0 and panel.save_button.disabled == false and panel.load_button.disabled, "empty slot list: Load should be off")
+	panel.save_button.pressed.emit()
+	_check(panel.slot_list.item_count == 0 and panel.status_label.text.contains("name"), "Save with no name should ask for one")
+	CarSpec.set_param(player, player.spec, "final_drive", 3.3)
+	CarSpec.set_param(player, player.spec, "max_torque", 420.0)   # raw-only knob: a slot keeps it too
+	panel.slot_name_edit.text = "Test A"
+	panel.save_button.pressed.emit()
+	_check(panel.slot_list.item_count == 1 and panel.slot_list.get_item_text(0) == "Test A", "slot not listed after Save")
+	_check(panel.status_label.text.begins_with("Saved"), "status after Save: %s" % panel.status_label.text)
+	CarSpec.set_param(player, player.spec, "final_drive", 4.4)
+	CarSpec.set_param(player, player.spec, "max_torque", 300.0)
+	panel.slot_list.select(0)
+	panel.slot_list.item_selected.emit(0)
+	_check(panel.slot_name_edit.text == "Test A" and not panel.load_button.disabled, "picking a slot should fill the name and enable Load")
+	panel.load_button.pressed.emit()
+	_check(is_equal_approx(player.spec.final_drive, 3.3) and is_equal_approx(player.spec.max_torque, 420.0), "Load did not restore the saved tune: %f %f" % [player.spec.final_drive, player.spec.max_torque])
+	_check(is_equal_approx(player.final_drive, 3.3) and is_equal_approx(player.max_torque, 420.0), "Load did not reach the live car")
+	_check(not panel.undo_button.disabled, "Undo should be on after Load")
+	panel.undo_button.pressed.emit()
+	_check(is_equal_approx(player.spec.final_drive, 4.4) and is_equal_approx(player.spec.max_torque, 300.0), "Undo did not revert the Load")
+	panel.save_button.pressed.emit()  # same name in the box: replaces
+	_check(panel.status_label.text.begins_with("Replaced") and panel.slot_list.item_count == 1, "same name should replace: %s" % panel.status_label.text)
+	_check(is_equal_approx(panel.slots.values("Test A").final_drive, 4.4), "replaced slot holds the old value")
+	panel.slot_list.select(0)
+	panel.delete_button.pressed.emit()
+	_check(panel.slot_list.item_count == 0 and not panel.slots.has("Test A"), "Delete did not remove the slot")
+	CarSpec.set_param(player, player.spec, "final_drive", start_spec.final_drive)
+	CarSpec.set_param(player, player.spec, "max_torque", start_spec.max_torque)
+
+	# --- cancel by closing mid-search ---
 	panel.goal_sliders.accel.value = 1
 	for path in panel.lock_boxes:
 		panel.lock_boxes[path].button_pressed = false

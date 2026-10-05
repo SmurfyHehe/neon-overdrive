@@ -18,7 +18,7 @@ its GitHub issue. For the order to work in, see the triage issue #59.
 | E6 | No curves or elevation | #37 | Acknowledged; needs the Path3D rearchitecture |
 | E7 | Gear spread is the wrong shape | #62 | E7–E9 merged into #62 |
 | E8 | Torque curve falls off too hard | #62 | |
-| E9 | Top gear set for 230 km/h, target ~200 | #62 | GEVP cuts at 1.1 × `max_rpm`, so stock top speed is really ~253 |
+| E9 | Top gear set for 230 km/h, target ~200 | #62 | GEVP cuts at 1.1 × `max_rpm`, so the ceiling is ~253. Measured on TuneTrack with linear damp 0 (this PR): 241.6 km/h at 35 s; before it, damp 0.1 capped the car at 124 km/h |
 | G3 | Car model shape needs Roy's direction | #16 | #63 (test car, PR #68) is separate: a neutral car for testing |
 | G4 | Player car has no self-lit elements | #17 | |
 | H1 | No audio at all | #18 | Engine-sound test merged (PR #57); direction still open |

@@ -213,3 +213,18 @@ Steps: 0 setup -> 1a spec dict + registry + write path -> 1b rewire tuning_panel
 - Registry range edges are not all gentle: Road friction 4.0 gives 4.6 g peak and a 31 m 100-0 with damping removed. Provisional ranges, Roy's call.
 - Brake: 100-0 is 36.6 m at the default (about 1.1 g average); `brake_force_multiplier` 0.7 -> 48 m, 1.5 -> 32 m (not proportional, tire-limited at the top).
 **Open:** full `run_tests.bat` run: `tune_track` PASS, `tuning_panel` PASS, all headless PASS; `chunk_drive` failed once inside the full run ("no chunk recycled") but passed 2/2 standalone on this branch and 2/2 on clean `origin/main`, so intermittent, not tied to this branch; `game_state` fails as on clean `origin/main`. The hidden track is not yet hosted in its own physics world inside the game (it runs under the test's root); in-game verification speed is unmeasured (headless `--fixed-fps` numbers are an upper bound). Drivers are simple and fixed (open-loop steering for `corner`; no step-steer stability or drift-hold metric yet). Step 3 (analytic estimator) is not started - see the budget above.
+
+### Linear damp removed (Roy approved 2026-10-05)
+**Changed:** `PlayerCar.LINEAR_DAMP := 0.0`, applied in `_ready()` with `DAMP_MODE_REPLACE`. `TuneTrack.linear_damp_override` now applies after the car's `_ready()`; `tests/tune_track.gd` compares "as the game runs" (0) against Godot's old 0.1 instead of 0 against the game.
+**Verified:** `tests/tune_track.gd`, headless `--fixed-fps 60`, default coupe, same code before/after:
+
+| | before (damp 0.1) | after (damp 0) |
+|---|---|---|
+| top speed (35 s) | 124.3 km/h | 241.6 km/h |
+| 0-100 | 7.22 s | 5.03 s |
+| 100-0 | 36.6 m | 42.0 m |
+| peak lateral g | 2.91 | 2.80 |
+
+Determinism check still bit-identical. New assertion: top speed > 180 km/h, so the cap can't come back unnoticed.
+**ISSUES E9 re-check:** the "~253" in E9 is the rev-cut ceiling (1.1 x redline); the car measures 241.6 km/h, between the 230 km/h redline speed and that ceiling, so a ~200 target is overshot by ~40 km/h. Ratios stay Roy's call (#62 / Auto-Tune). Braking is ~5 m longer and peak lateral g slightly lower because damping used to help slow the car.
+**Open:** step 2's "game damping" sensitivity numbers above are the old capped car; the sweep now prints both. Registry ranges are still provisional.

@@ -297,6 +297,86 @@ written here first.
   - Interiors and undersides come later.
 - **Top speed:** ~300 km/h through tuning stays; Roy likes it.
 
+### B1 log (2026-10-05, as it happened)
+
+- **Pre-checks:**
+  - The real project is `C:\SmurfyHehe\neon-overdrive`; Documents has no
+    `NeonOverdriveGodot`.
+  - Stage A was neither in the repo (it existed only as a bundle on the
+    laptop) nor signed off, so I asked Roy. He signed it off, and B stacks on
+    the stage A branch, to be pushed later.
+  - Roy's root checkout is on `main` 4c1ddca, 58 commits behind GitHub, with
+    uncommitted edits. I reported it and didn't touch it (CLAUDE.md).
+- **Method:**
+  - Each car is data: profile curves, lofted into one low-poly 3D proxy in
+    `tools/fleet_design/` (Python, software renderer). Every view on a sheet
+    comes from that one shape, so the views can't disagree.
+  - No Godot code or scenes changed in B1.
+- **Design decisions (proposals, part of the B1 sign-off):**
+  - **NPC 3 is a pickup, not an SUV**, so traffic can't be confused with the
+    patrol SUV.
+  - **Silhouette language per class:**
+    - player: low and wide, wheels fill the arches, one hero cue each;
+    - traffic: taller and softer, small wheels in big gaps;
+    - police: big and upright, always with a police tell in the outline.
+  - **Each car has its own tail-light signature**, for reading cars from behind
+    at night.
+  - **Sticker slots:** door (mirrored), hood, and one slot seen from behind, so
+    every camera sees one.
+  - **Police livery:** navy with silver doors and roof.
+  - **Police blue `#2E4FD8` is the only off-palette colour** and is flagged for
+    Roy.
+- **Revisions from the renders and blind tests:**
+  - **Decals:** placement fixed. Decals hug the curved panels; flat ones were
+    sinking into the body.
+  - **P1:** rounder tail, slimmer hoop wing.
+  - **P2:** chunkier, with a wider track, blistered arches and a higher belt.
+  - **P3:** cabin moved back.
+  - **P4:** lower tail.
+  - **P5** was the weakest player read. It gained a tall cowl scoop, a chopped
+    cabin, a ducktail and coke-bottle hips.
+  - **P6** gained rack crossbars.
+  - **N3:** longer cab.
+
+### B1 results (2026-10-05): waiting for Roy's sign-off
+
+**Changed** (branch `feat/stage-b1-design-sheet`, stacked on
+`feat/stage-a-feel-env`):
+- `docs/design/fleet/`:
+  - `README.md`;
+  - `fleet_overview.png`, 12 per-car sheets in `sheets/`, and
+    `outline_check.png`;
+  - `fleet.json`, with every number B2–B4 need, and `verify.json`.
+- `docs/design/.gdignore`, so Godot doesn't import the PNGs.
+- `tools/fleet_design/`: the generator and checks.
+
+**Verified:**
+- **Blind test**, 3 rounds, each run by a fresh agent that had never seen the
+  designs. It matched shuffled, unlabeled silhouettes in 6 views to the 12
+  class names.
+  - Correct: 72/72 every round.
+  - "Sure": 33 → 36 → 39 of 72 as the designs were revised.
+  - Final design: side 12/12 sure, both 3/4 views 8/12.
+- **Palette:** 76 colours checked, with no magenta or cyan.
+- **Sheets:** every sheet was viewed and self-critiqued. The critique is
+  printed on each sheet.
+
+**Not verified / open:**
+- **These are proxies, not the game models.** Triangle counts (2.2k–3.0k per
+  car) and draw calls get measured on the laptop in B2. The plan is one merged
+  mesh per car with 3 surfaces plus one wheel mesh.
+- **Weakest reads:** the hot hatch, muscle sedan and commuter are "sure" only
+  side-on. That is fine for traffic. P2 and P5 can be pushed further if Roy
+  wants.
+- **Police blue needs Roy's OK**, or the light bar goes red/amber.
+- **Physics wheels will move to each car's drawn wheelbase** (2.27–3.08 m,
+  against today's 2.10 m), and that changes handling. Each car's CarSpec is
+  tuned when it's built (B2, D).
+- **Deferred:** interiors and undersides (Roy, 2026-10-05). Car names wait for
+  branding.
+- **Waiting on Roy:** B1 sign-off (shapes, parts, stickers, colours) before B2.
+- **Review page** (private to Roy): <https://claude.ai/artifact/SvEKcFe1CaWa787K8Gha3m>. It has a 360° viewer of every design and build, plus the sheets.
+
 Old `main.gd` (treadmill/distance-accumulator architecture) is abandoned, not edited further. `car_builder.gd` (pure mesh construction) is kept and reused. Everything below is built fresh in real world-space.
 
 ## Confirmed design decisions

@@ -1,0 +1,7978 @@
+{
+ "stage": "B1 design sheet, 2026-10-05",
+ "coords": "Godot axes: X right, Y up, -Z forward. Origin on the ground, midway between the axles. Curves use s = metres from the front tip; z = s - (front_overhang + wheelbase / 2).",
+ "palette": {
+  "sky": "#1B2A4A",
+  "shadow": "#0E1424",
+  "sodium": "#FF8A1F",
+  "window_amber": "#FFC066",
+  "silver": "#C9CED6",
+  "taillight_red": "#E5262B",
+  "police_blue (off-palette, needs sign-off)": "#2E4FD8"
+ },
+ "traffic_paints": [
+  {
+   "name": "Silver",
+   "hex": "#C9CED6",
+   "weight": 22
+  },
+  {
+   "name": "Pearl",
+   "hex": "#E9E6DF",
+   "weight": 18
+  },
+  {
+   "name": "Black",
+   "hex": "#15171C",
+   "weight": 16
+  },
+  {
+   "name": "Gunmetal",
+   "hex": "#4A505B",
+   "weight": 14
+  },
+  {
+   "name": "Navy",
+   "hex": "#26314D",
+   "weight": 8
+  },
+  {
+   "name": "Beige",
+   "hex": "#B9AE98",
+   "weight": 7
+  },
+  {
+   "name": "Faded red",
+   "hex": "#8E2A28",
+   "weight": 6
+  },
+  {
+   "name": "Dark green",
+   "hex": "#2B4A3A",
+   "weight": 5
+  },
+  {
+   "name": "Taxi amber",
+   "hex": "#F2B53A",
+   "weight": 4
+  }
+ ],
+ "material_colours": {
+  "paint": "#C9CED6",
+  "roof": null,
+  "paint2": "#C9CED6",
+  "trim": "#1A1D24",
+  "under": "#0B0E14",
+  "glass": "#151D2E",
+  "pillar": "#10141C",
+  "chrome": "#C9CED6",
+  "rim": "#B9BEC6",
+  "rim_dark": "#22252C",
+  "rim_gap": "#0B0E14",
+  "rim_face": "#8D939C",
+  "tire": "#15171C",
+  "tire_side": "#1C1F26",
+  "head": "#FFE7BD",
+  "head_off": "#5A5F68",
+  "tail": "#E5262B",
+  "turn": "#FFC066",
+  "pol_r": "#E5262B",
+  "pol_b": "#2E4FD8",
+  "grille": "#0D1017",
+  "interior": "#141820",
+  "bed": "#1E2129",
+  "slot": "#FF8A1F",
+  "exh_hole": "#050608",
+  "tail_off": "#5C1416",
+  "rim_bronze": "#9C6B3A",
+  "rim_gold": "#C8A04A"
+ },
+ "cars": [
+  {
+   "id": "p1_coupe",
+   "role": "player",
+   "label": "Sports coupe",
+   "refs": "Supra A80, Silvia S13, RX-7 FD3S",
+   "silhouette_rule": "Long hood, cabin pushed back, fastback roof, hoop wing; pop-up lamps stand up at night.",
+   "dims": {
+    "length": 4.42,
+    "width_body": 1.8,
+    "height": 1.24,
+    "wheelbase": 2.52,
+    "front_overhang": 0.98,
+    "rear_overhang": 0.92,
+    "ground_clearance": 0.13
+   },
+   "physics_hint": {
+    "wheel_r": 0.32,
+    "wheel_x": 0.765,
+    "axle_z": 1.26,
+    "tire_w_front": 0.245,
+    "tire_w_rear": 0.265,
+    "note": "CarSpec.build_wheels uses symmetric axle_z; this origin already sits midway between the axles."
+   },
+   "curves": {
+    "top": [
+     [
+      0.0,
+      0.44
+     ],
+     [
+      0.05,
+      0.55
+     ],
+     [
+      0.3,
+      0.64
+     ],
+     [
+      1.0,
+      0.74
+     ],
+     [
+      1.55,
+      0.8
+     ],
+     [
+      2.2,
+      1.22
+     ],
+     [
+      2.95,
+      1.24
+     ],
+     [
+      3.3,
+      1.17
+     ],
+     [
+      3.85,
+      0.97
+     ],
+     [
+      4.22,
+      0.94
+     ],
+     [
+      4.34,
+      0.92
+     ],
+     [
+      4.4,
+      0.84
+     ],
+     [
+      4.42,
+      0.72
+     ]
+    ],
+    "floor": [
+     [
+      0,
+      0.3
+     ],
+     [
+      0.25,
+      0.13
+     ],
+     [
+      4.05,
+      0.14
+     ],
+     [
+      4.28,
+      0.2
+     ],
+     [
+      4.42,
+      0.36
+     ]
+    ],
+    "hw": [
+     [
+      0,
+      0.6
+     ],
+     [
+      0.1,
+      0.78
+     ],
+     [
+      0.4,
+      0.88
+     ],
+     [
+      0.98,
+      0.9
+     ],
+     [
+      2.2,
+      0.885
+     ],
+     [
+      3.5,
+      0.9
+     ],
+     [
+      4.1,
+      0.875
+     ],
+     [
+      4.3,
+      0.83
+     ],
+     [
+      4.42,
+      0.74
+     ]
+    ],
+    "waist": [
+     [
+      0,
+      0.38
+     ],
+     [
+      0.45,
+      0.54
+     ],
+     [
+      3.6,
+      0.58
+     ],
+     [
+      4.42,
+      0.55
+     ]
+    ],
+    "belt": [
+     [
+      0.0,
+      0.44
+     ],
+     [
+      0.4,
+      0.61
+     ],
+     [
+      1.55,
+      0.77
+     ],
+     [
+      2.7,
+      0.82
+     ],
+     [
+      3.85,
+      0.89
+     ],
+     [
+      4.42,
+      0.82
+     ]
+    ]
+   },
+   "section": {
+    "tumble": 0.07,
+    "sill_in": 0.035,
+    "rocker_h": 0.3
+   },
+   "cabin": {
+    "A": 1.55,
+    "W": 2.2,
+    "R": 2.95,
+    "C": 3.85,
+    "D": 3.35,
+    "roof_w": [
+     [
+      2.2,
+      0.6
+     ],
+     [
+      2.95,
+      0.57
+     ],
+     [
+      3.85,
+      0.66
+     ]
+    ],
+    "roof_drop": 0.035,
+    "pillars": [
+     [
+      2.66,
+      2.72
+     ]
+    ]
+   },
+   "open_top": [],
+   "wheel": {
+    "r": 0.32,
+    "w": 0.245,
+    "w_rear": 0.265,
+    "track": 1.53,
+    "arch_gap": 0.025,
+    "rim": "5spoke",
+    "rim_ratio": 0.7
+   },
+   "decals": [
+    {
+     "view": "front",
+     "rect": [
+      -0.48,
+      0.21,
+      0.48,
+      0.33
+     ],
+     "mat": "grille",
+     "tag": "fbumper"
+    },
+    {
+     "view": "front",
+     "rect": [
+      0.5,
+      0.33,
+      0.74,
+      0.39
+     ],
+     "mat": "turn",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.78,
+      0.58,
+      0.78,
+      0.74
+     ],
+     "mat": "trim",
+     "cell": 0.2
+    },
+    {
+     "view": "rear",
+     "circle": [
+      0.63,
+      0.66,
+      0.06,
+      12
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "circle": [
+      0.47,
+      0.66,
+      0.06,
+      12
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.66,
+      0.22,
+      0.66,
+      0.31
+     ],
+     "mat": "trim",
+     "tag": "rbumper"
+    }
+   ],
+   "parts": [
+    {
+     "type": "mirrors"
+    },
+    {
+     "type": "hoop",
+     "tag": "spoiler",
+     "s0": 4.02,
+     "s1": 4.28,
+     "span": 1.52,
+     "y_end": 1.03,
+     "y_mid": 1.13,
+     "thick": 0.035
+    },
+    {
+     "type": "popups",
+     "s0": 0.26,
+     "s1": 0.5,
+     "x0": 0.36,
+     "x1": 0.7,
+     "h": 0.12,
+     "tag": "popups"
+    }
+   ],
+   "sticker_slots": [
+    {
+     "id": "door",
+     "view": "left",
+     "mirror": true,
+     "note": "",
+     "rect": [
+      1.7,
+      0.4,
+      2.55,
+      0.64
+     ],
+     "center": [
+      -0.893,
+      0.52,
+      -0.115
+     ],
+     "normal": [
+      -0.998,
+      0.069,
+      0.001
+     ],
+     "size": [
+      0.85,
+      0.24
+     ]
+    },
+    {
+     "id": "hood",
+     "view": "top",
+     "mirror": false,
+     "note": "",
+     "rect": [
+      -0.3,
+      0.55,
+      0.3,
+      1.25
+     ],
+     "center": [
+      -0.0,
+      0.733,
+      -1.34
+     ],
+     "normal": [
+      0.0,
+      0.991,
+      -0.131
+     ],
+     "size": [
+      0.6,
+      0.7
+     ]
+    },
+    {
+     "id": "rear",
+     "view": "rear",
+     "mirror": false,
+     "note": "rear window banner",
+     "rect": [
+      -0.45,
+      1.06,
+      0.45,
+      1.14
+     ],
+     "center": [
+      -0.0,
+      1.1,
+      1.21
+     ],
+     "normal": [
+      -0.002,
+      0.938,
+      0.346
+     ],
+     "size": [
+      0.9,
+      0.08
+     ]
+    }
+   ],
+   "paint": {
+    "hero": [
+     "Sodium",
+     "#FF8A1F"
+    ],
+    "alts": [
+     [
+      "Silver",
+      "#C9CED6"
+     ],
+     [
+      "Midnight",
+      "#1B2A4A"
+     ],
+     [
+      "Signal red",
+      "#B3191E"
+     ],
+     [
+      "Pearl",
+      "#E9E6DF"
+     ]
+    ],
+    "trim": "#1A1D24",
+    "rim": "#C9CED6"
+   },
+   "options": {
+    "front_bumper": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "lip": {
+      "label": "Lip splitter",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "splitter",
+         "s0": -0.05,
+         "s1": 0.3,
+         "y": 0.213,
+         "w": 1.512
+        }
+       }
+      ]
+     },
+     "race": {
+      "label": "Race bumper",
+      "ops": [
+       {
+        "op": "curve",
+        "curve": "floor",
+        "keys": [
+         [
+          0.0,
+          0.24
+         ],
+         [
+          0.3,
+          0.105
+         ]
+        ]
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "splitter",
+         "s0": -0.09,
+         "s1": 0.32,
+         "y": 0.1,
+         "w": 1.62
+        }
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "box",
+         "s": 0.1,
+         "xy": [
+          0.774,
+          0.36
+         ],
+         "size": [
+          0.16,
+          0.012,
+          0.1
+         ],
+         "mat": "trim"
+        }
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "box",
+         "s": 0.1,
+         "xy": [
+          -0.774,
+          0.36
+         ],
+         "size": [
+          0.16,
+          0.012,
+          0.1
+         ],
+         "mat": "trim"
+        }
+       },
+       {
+        "op": "remove_decals",
+        "tag": "fbumper"
+       },
+       {
+        "op": "decal",
+        "decal": {
+         "view": "front",
+         "rect": [
+          -0.558,
+          0.27,
+          0.558,
+          0.44
+         ],
+         "mat": "grille",
+         "tag": "fbumper"
+        }
+       }
+      ]
+     }
+    },
+    "rear_bumper": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "diffuser": {
+      "label": "Diffuser",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "diffuser",
+         "y": 0.202,
+         "w": 1.116,
+         "d": 0.32,
+         "fins": 4
+        }
+       }
+      ]
+     }
+    },
+    "hood": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "vented": {
+      "label": "Vented hood",
+      "ops": [
+       {
+        "op": "curve",
+        "curve": "top",
+        "keys": [
+         [
+          0.762,
+          0.731
+         ],
+         [
+          1.188,
+          0.785
+         ]
+        ]
+       },
+       {
+        "op": "decal",
+        "decal": {
+         "view": "top",
+         "rect": [
+          0.12,
+          0.762,
+          0.36,
+          1.062
+         ],
+         "mat": "grille",
+         "mirror": true
+        }
+       }
+      ]
+     }
+    },
+    "skirts": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "skirts": {
+      "label": "Side skirts",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "skirts",
+         "s0": 1.365,
+         "s1": 3.115
+        }
+       }
+      ]
+     },
+     "widebody": {
+      "label": "Wide-body overfenders",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "flares",
+         "band": 0.11,
+         "proud": 0.055,
+         "tag": "widebody"
+        }
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "skirts",
+         "s0": 1.445,
+         "s1": 3.035
+        }
+       },
+       {
+        "op": "set",
+        "path": "wheel.track",
+        "value": 1.61
+       },
+       {
+        "op": "set",
+        "path": "wheel.w",
+        "value": 0.265
+       }
+      ]
+     }
+    },
+    "spoiler": {
+     "stock": {
+      "label": "Hoop wing",
+      "ops": []
+     },
+     "ducktail": {
+      "label": "Ducktail",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "spoiler"
+       },
+       {
+        "op": "curve",
+        "curve": "top",
+        "keys": [
+         [
+          4.3,
+          0.952
+         ],
+         [
+          4.4,
+          0.89
+         ]
+        ]
+       }
+      ]
+     },
+     "gt": {
+      "label": "GT wing",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "spoiler"
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "wing",
+         "tag": "spoiler",
+         "s0": 4.06,
+         "s1": 4.36,
+         "y": 1.241,
+         "span": 1.55,
+         "uprights": [
+          0.4
+         ],
+         "kick": 0.04
+        }
+       }
+      ]
+     },
+     "none": {
+      "label": "Clean deck",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "spoiler"
+       }
+      ]
+     }
+    },
+    "lamps": {
+     "stock": {
+      "label": "Pop-ups",
+      "ops": []
+     },
+     "fixed": {
+      "label": "Fixed-lamp nose",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "popups"
+       },
+       {
+        "op": "decal",
+        "decal": {
+         "view": "front",
+         "rect": [
+          0.4,
+          0.4,
+          0.76,
+          0.48
+         ],
+         "mat": "head",
+         "mirror": true
+        }
+       }
+      ]
+     }
+    },
+    "wheels": {
+     "stock": {
+      "label": "5-spoke",
+      "ops": []
+     },
+     "mesh": {
+      "label": "Mesh",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "mesh"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.74
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim"
+       }
+      ]
+     },
+     "dish": {
+      "label": "Deep dish",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "dish"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.74
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim"
+       }
+      ]
+     },
+     "six": {
+      "label": "6-spoke gold",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "6spoke"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.74
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim_gold"
+       }
+      ]
+     }
+    },
+    "exhaust": {
+     "stock": {
+      "label": "Dual (split)",
+      "ops": []
+     },
+     "single": {
+      "label": "Single (big bore)",
+      "ops": [
+       {
+        "op": "exhaust",
+        "tips": [
+         {
+          "x": -0.522,
+          "y": 0.346,
+          "r": 0.054
+         }
+        ]
+       }
+      ]
+     },
+     "quad": {
+      "label": "Quad",
+      "ops": [
+       {
+        "op": "exhaust",
+        "tips": [
+         {
+          "x": 0.504,
+          "y": 0.346,
+          "r": 0.038
+         },
+         {
+          "x": 0.648,
+          "y": 0.346,
+          "r": 0.038
+         },
+         {
+          "x": -0.504,
+          "y": 0.346,
+          "r": 0.038
+         },
+         {
+          "x": -0.648,
+          "y": 0.346,
+          "r": 0.038
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "stance": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "lowered": {
+      "label": "Lowered 3 cm",
+      "ops": [
+       {
+        "op": "drop",
+        "value": 0.03
+       }
+      ]
+     },
+     "slammed": {
+      "label": "Slammed 5.5 cm",
+      "ops": [
+       {
+        "op": "drop",
+        "value": 0.055
+       }
+      ]
+     }
+    }
+   },
+   "builds": {
+    "street": {
+     "front_bumper": "lip",
+     "skirts": "skirts",
+     "spoiler": "ducktail",
+     "wheels": "mesh",
+     "exhaust": "single",
+     "stance": "lowered"
+    },
+    "full": {
+     "front_bumper": "race",
+     "rear_bumper": "diffuser",
+     "hood": "vented",
+     "skirts": "widebody",
+     "spoiler": "gt",
+     "lamps": "fixed",
+     "wheels": "six",
+     "exhaust": "quad",
+     "stance": "slammed"
+    }
+   },
+   "budget_tris": 10000,
+   "proxy_tris": {
+    "stock": 2568,
+    "street": 2670,
+    "full": 2928
+   },
+   "exhaust_tips": {
+    "stock": [
+     {
+      "pos": [
+       0.55,
+       0.25,
+       2.134
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.045
+     },
+     {
+      "pos": [
+       -0.55,
+       0.25,
+       2.134
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.045
+     }
+    ],
+    "single": [
+     {
+      "pos": [
+       -0.522,
+       0.346,
+       2.218
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.054
+     }
+    ],
+    "quad": [
+     {
+      "pos": [
+       0.504,
+       0.346,
+       2.218
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.038
+     },
+     {
+      "pos": [
+       0.648,
+       0.346,
+       2.218
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.038
+     },
+     {
+      "pos": [
+       -0.504,
+       0.346,
+       2.218
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.038
+     },
+     {
+      "pos": [
+       -0.648,
+       0.346,
+       2.218
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.038
+     }
+    ]
+   }
+  },
+  {
+   "id": "p2_hothatch",
+   "role": "player",
+   "label": "Hot hatch",
+   "refs": "Civic Si/EK, Golf GTI Mk2, 205 GTI",
+   "silhouette_rule": "Short brick on wheels pushed to the corners: upright hatch, roof spoiler, wide low stance.",
+   "dims": {
+    "length": 4.05,
+    "width_body": 1.76,
+    "height": 1.415,
+    "wheelbase": 2.55,
+    "front_overhang": 0.86,
+    "rear_overhang": 0.64,
+    "ground_clearance": 0.13
+   },
+   "physics_hint": {
+    "wheel_r": 0.305,
+    "wheel_x": 0.765,
+    "axle_z": 1.275,
+    "tire_w_front": 0.215,
+    "tire_w_rear": 0.215,
+    "note": "CarSpec.build_wheels uses symmetric axle_z; this origin already sits midway between the axles."
+   },
+   "curves": {
+    "top": [
+     [
+      0.0,
+      0.6
+     ],
+     [
+      0.05,
+      0.69
+     ],
+     [
+      0.25,
+      0.78
+     ],
+     [
+      1.22,
+      0.92
+     ],
+     [
+      1.84,
+      1.35
+     ],
+     [
+      3.58,
+      1.36
+     ],
+     [
+      3.66,
+      1.33
+     ],
+     [
+      3.9,
+      0.99
+     ],
+     [
+      4.0,
+      0.96
+     ],
+     [
+      4.05,
+      0.62
+     ]
+    ],
+    "floor": [
+     [
+      0,
+      0.27
+     ],
+     [
+      0.22,
+      0.13
+     ],
+     [
+      3.75,
+      0.13
+     ],
+     [
+      4.05,
+      0.28
+     ]
+    ],
+    "hw": [
+     [
+      0,
+      0.7
+     ],
+     [
+      0.1,
+      0.82
+     ],
+     [
+      0.4,
+      0.86
+     ],
+     [
+      0.48,
+      0.88
+     ],
+     [
+      1.24,
+      0.88
+     ],
+     [
+      1.32,
+      0.86
+     ],
+     [
+      3.03,
+      0.86
+     ],
+     [
+      3.11,
+      0.88
+     ],
+     [
+      3.71,
+      0.88
+     ],
+     [
+      3.8,
+      0.86
+     ],
+     [
+      3.92,
+      0.845
+     ],
+     [
+      4.05,
+      0.8
+     ]
+    ],
+    "waist": [
+     [
+      0,
+      0.48
+     ],
+     [
+      0.4,
+      0.58
+     ],
+     [
+      3.8,
+      0.6
+     ],
+     [
+      4.05,
+      0.58
+     ]
+    ],
+    "belt": [
+     [
+      0,
+      0.58
+     ],
+     [
+      0.25,
+      0.75
+     ],
+     [
+      1.22,
+      0.9
+     ],
+     [
+      3.58,
+      1.0
+     ],
+     [
+      4.05,
+      0.92
+     ]
+    ]
+   },
+   "section": {
+    "tumble": 0.05,
+    "sill_in": 0.03,
+    "rocker_h": 0.28
+   },
+   "cabin": {
+    "A": 1.22,
+    "W": 1.84,
+    "R": 3.58,
+    "C": 3.9,
+    "D": 3.38,
+    "roof_w": [
+     [
+      1.86,
+      0.63
+     ],
+     [
+      3.55,
+      0.61
+     ]
+    ],
+    "roof_drop": 0.03,
+    "pillars": [
+     [
+      2.62,
+      2.7
+     ]
+    ]
+   },
+   "open_top": [],
+   "wheel": {
+    "r": 0.305,
+    "w": 0.215,
+    "track": 1.53,
+    "arch_gap": 0.025,
+    "rim": "6spoke",
+    "rim_ratio": 0.68
+   },
+   "decals": [
+    {
+     "view": "front",
+     "rect": [
+      -0.4,
+      0.5,
+      0.4,
+      0.58
+     ],
+     "mat": "grille"
+    },
+    {
+     "view": "front",
+     "rect": [
+      0.42,
+      0.5,
+      0.76,
+      0.62
+     ],
+     "mat": "head",
+     "mirror": true
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.5,
+      0.22,
+      0.5,
+      0.36
+     ],
+     "mat": "grille",
+     "tag": "fbumper"
+    },
+    {
+     "view": "front",
+     "circle": [
+      0.6,
+      0.29,
+      0.04,
+      10
+     ],
+     "mat": "head",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.56,
+      0.7,
+      0.82,
+      0.94
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.25,
+      0.52,
+      0.25,
+      0.66
+     ],
+     "mat": "trim"
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.65,
+      0.22,
+      0.65,
+      0.32
+     ],
+     "mat": "trim",
+     "tag": "rbumper"
+    }
+   ],
+   "parts": [
+    {
+     "type": "mirrors"
+    },
+    {
+     "type": "roof_spoiler",
+     "tag": "spoiler",
+     "s0": 3.46,
+     "s1": 3.8,
+     "y0": 1.36,
+     "y1": 1.28,
+     "span": 1.32,
+     "thick": 0.045,
+     "brake_light": true
+    }
+   ],
+   "sticker_slots": [
+    {
+     "id": "door",
+     "view": "left",
+     "mirror": true,
+     "note": "",
+     "rect": [
+      1.55,
+      0.42,
+      2.45,
+      0.66
+     ],
+     "center": [
+      -0.868,
+      0.54,
+      -0.135
+     ],
+     "normal": [
+      -1.0,
+      0.02,
+      -0.0
+     ],
+     "size": [
+      0.9,
+      0.24
+     ]
+    },
+    {
+     "id": "hood",
+     "view": "top",
+     "mirror": false,
+     "note": "",
+     "rect": [
+      -0.3,
+      0.35,
+      0.3,
+      1.05
+     ],
+     "center": [
+      -0.0,
+      0.856,
+      -1.435
+     ],
+     "normal": [
+      0.0,
+      0.99,
+      -0.144
+     ],
+     "size": [
+      0.6,
+      0.7
+     ]
+    },
+    {
+     "id": "rear",
+     "view": "rear",
+     "mirror": false,
+     "note": "hatch glass banner",
+     "rect": [
+      -0.42,
+      1.22,
+      0.42,
+      1.3
+     ],
+     "center": [
+      0.0,
+      1.26,
+      1.575
+     ],
+     "normal": [
+      -0.003,
+      0.546,
+      0.838
+     ],
+     "size": [
+      0.84,
+      0.08
+     ]
+    }
+   ],
+   "paint": {
+    "hero": [
+     "Rally red",
+     "#C41E24"
+    ],
+    "alts": [
+     [
+      "Pearl",
+      "#E9E6DF"
+     ],
+     [
+      "Gunmetal",
+      "#4A505B"
+     ],
+     [
+      "Sodium",
+      "#FF8A1F"
+     ],
+     [
+      "Black",
+      "#15171C"
+     ]
+    ],
+    "trim": "#1A1D24",
+    "rim": "#C9CED6"
+   },
+   "options": {
+    "front_bumper": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "lip": {
+      "label": "Lip splitter",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "splitter",
+         "s0": -0.05,
+         "s1": 0.3,
+         "y": 0.189,
+         "w": 1.478
+        }
+       }
+      ]
+     },
+     "race": {
+      "label": "Race bumper",
+      "ops": [
+       {
+        "op": "curve",
+        "curve": "floor",
+        "keys": [
+         [
+          0.0,
+          0.21
+         ],
+         [
+          0.3,
+          0.105
+         ]
+        ]
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "splitter",
+         "s0": -0.09,
+         "s1": 0.32,
+         "y": 0.1,
+         "w": 1.584
+        }
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "box",
+         "s": 0.1,
+         "xy": [
+          0.757,
+          0.33
+         ],
+         "size": [
+          0.16,
+          0.012,
+          0.1
+         ],
+         "mat": "trim"
+        }
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "box",
+         "s": 0.1,
+         "xy": [
+          -0.757,
+          0.33
+         ],
+         "size": [
+          0.16,
+          0.012,
+          0.1
+         ],
+         "mat": "trim"
+        }
+       },
+       {
+        "op": "remove_decals",
+        "tag": "fbumper"
+       },
+       {
+        "op": "decal",
+        "decal": {
+         "view": "front",
+         "rect": [
+          -0.546,
+          0.24,
+          0.546,
+          0.41
+         ],
+         "mat": "grille",
+         "tag": "fbumper"
+        }
+       }
+      ]
+     }
+    },
+    "rear_bumper": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "diffuser": {
+      "label": "Diffuser",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "diffuser",
+         "y": 0.21,
+         "w": 1.091,
+         "d": 0.32,
+         "fins": 4
+        }
+       }
+      ]
+     }
+    },
+    "hood": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "vented": {
+      "label": "Vented hood",
+      "ops": [
+       {
+        "op": "curve",
+        "curve": "top",
+        "keys": [
+         [
+          0.575,
+          0.852
+         ],
+         [
+          0.925,
+          0.902
+         ]
+        ]
+       },
+       {
+        "op": "decal",
+        "decal": {
+         "view": "top",
+         "rect": [
+          0.12,
+          0.575,
+          0.36,
+          0.875
+         ],
+         "mat": "grille",
+         "mirror": true
+        }
+       }
+      ]
+     }
+    },
+    "skirts": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "skirts": {
+      "label": "Side skirts",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "skirts",
+         "s0": 1.23,
+         "s1": 3.04
+        }
+       }
+      ]
+     },
+     "widebody": {
+      "label": "Wide-body overfenders",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "flares",
+         "band": 0.11,
+         "proud": 0.055,
+         "tag": "widebody"
+        }
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "skirts",
+         "s0": 1.31,
+         "s1": 2.96
+        }
+       },
+       {
+        "op": "set",
+        "path": "wheel.track",
+        "value": 1.6
+       },
+       {
+        "op": "set",
+        "path": "wheel.w",
+        "value": 0.235
+       }
+      ]
+     }
+    },
+    "spoiler": {
+     "stock": {
+      "label": "Roof spoiler",
+      "ops": []
+     },
+     "big": {
+      "label": "Big roof wing",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "spoiler"
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "roof_spoiler",
+         "tag": "spoiler",
+         "s0": 3.38,
+         "s1": 3.95,
+         "y0": 1.37,
+         "y1": 1.33,
+         "span": 1.4,
+         "thick": 0.05,
+         "brake_light": true
+        }
+       }
+      ]
+     },
+     "none": {
+      "label": "No spoiler",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "spoiler"
+       }
+      ]
+     }
+    },
+    "wheels": {
+     "stock": {
+      "label": "6-spoke",
+      "ops": []
+     },
+     "turbofan": {
+      "label": "Turbofan",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "turbofan"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.72
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim"
+       }
+      ]
+     },
+     "mesh": {
+      "label": "Mesh",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "mesh"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.74
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim"
+       }
+      ]
+     },
+     "split": {
+      "label": "Split 5-spoke",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "split"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.76
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim_dark"
+       }
+      ]
+     }
+    },
+    "exhaust": {
+     "stock": {
+      "label": "Dual (one side)",
+      "ops": []
+     },
+     "center": {
+      "label": "Centre single (big bore)",
+      "ops": [
+       {
+        "op": "exhaust",
+        "tips": [
+         {
+          "x": 0.0,
+          "y": 0.35,
+          "r": 0.065
+         }
+        ]
+       }
+      ]
+     },
+     "dual": {
+      "label": "Dual (split)",
+      "ops": [
+       {
+        "op": "exhaust",
+        "tips": [
+         {
+          "x": 0.546,
+          "y": 0.33,
+          "r": 0.04
+         },
+         {
+          "x": -0.546,
+          "y": 0.33,
+          "r": 0.04
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "stance": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "lowered": {
+      "label": "Lowered 3 cm",
+      "ops": [
+       {
+        "op": "drop",
+        "value": 0.03
+       }
+      ]
+     },
+     "slammed": {
+      "label": "Slammed 5.5 cm",
+      "ops": [
+       {
+        "op": "drop",
+        "value": 0.055
+       }
+      ]
+     }
+    }
+   },
+   "builds": {
+    "street": {
+     "front_bumper": "lip",
+     "skirts": "skirts",
+     "wheels": "turbofan",
+     "exhaust": "center",
+     "stance": "lowered"
+    },
+    "full": {
+     "front_bumper": "race",
+     "rear_bumper": "diffuser",
+     "hood": "vented",
+     "skirts": "widebody",
+     "spoiler": "big",
+     "wheels": "split",
+     "exhaust": "dual",
+     "stance": "slammed"
+    }
+   },
+   "budget_tris": 10000,
+   "proxy_tris": {
+    "stock": 2544,
+    "street": 2694,
+    "full": 2992
+   },
+   "exhaust_tips": {
+    "stock": [
+     {
+      "pos": [
+       -0.42,
+       0.24,
+       1.885
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.038
+     },
+     {
+      "pos": [
+       -0.32,
+       0.24,
+       1.885
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.038
+     }
+    ],
+    "center": [
+     {
+      "pos": [
+       0.0,
+       0.35,
+       1.965
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.065
+     }
+    ],
+    "dual": [
+     {
+      "pos": [
+       0.546,
+       0.33,
+       1.965
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.04
+     },
+     {
+      "pos": [
+       -0.546,
+       0.33,
+       1.965
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.04
+     }
+    ]
+   }
+  },
+  {
+   "id": "p3_tuner",
+   "role": "player",
+   "label": "Tuner sedan",
+   "refs": "Skyline R32-R34, AE86, Lancer Evo",
+   "silhouette_rule": "Square-cut four-door with boxed overfenders and a tall pedestal wing; four round tail lamps.",
+   "dims": {
+    "length": 4.48,
+    "width_body": 1.78,
+    "height": 1.36,
+    "wheelbase": 2.62,
+    "front_overhang": 0.95,
+    "rear_overhang": 0.91,
+    "ground_clearance": 0.12
+   },
+   "physics_hint": {
+    "wheel_r": 0.32,
+    "wheel_x": 0.76,
+    "axle_z": 1.31,
+    "tire_w_front": 0.245,
+    "tire_w_rear": 0.245,
+    "note": "CarSpec.build_wheels uses symmetric axle_z; this origin already sits midway between the axles."
+   },
+   "curves": {
+    "top": [
+     [
+      0.0,
+      0.56
+     ],
+     [
+      0.04,
+      0.66
+     ],
+     [
+      0.18,
+      0.74
+     ],
+     [
+      1.45,
+      0.86
+     ],
+     [
+      2.02,
+      1.33
+     ],
+     [
+      3.0,
+      1.36
+     ],
+     [
+      3.55,
+      1.02
+     ],
+     [
+      4.34,
+      1.0
+     ],
+     [
+      4.45,
+      0.97
+     ],
+     [
+      4.48,
+      0.72
+     ]
+    ],
+    "floor": [
+     [
+      0,
+      0.27
+     ],
+     [
+      0.2,
+      0.12
+     ],
+     [
+      4.2,
+      0.12
+     ],
+     [
+      4.48,
+      0.29
+     ]
+    ],
+    "hw": [
+     [
+      0,
+      0.7
+     ],
+     [
+      0.08,
+      0.84
+     ],
+     [
+      0.4,
+      0.86
+     ],
+     [
+      0.55,
+      0.89
+     ],
+     [
+      1.36,
+      0.89
+     ],
+     [
+      1.46,
+      0.86
+     ],
+     [
+      3.07,
+      0.86
+     ],
+     [
+      3.17,
+      0.89
+     ],
+     [
+      3.98,
+      0.89
+     ],
+     [
+      4.1,
+      0.86
+     ],
+     [
+      4.38,
+      0.85
+     ],
+     [
+      4.48,
+      0.8
+     ]
+    ],
+    "waist": [
+     [
+      0,
+      0.48
+     ],
+     [
+      0.4,
+      0.6
+     ],
+     [
+      4.48,
+      0.62
+     ]
+    ],
+    "belt": [
+     [
+      0,
+      0.56
+     ],
+     [
+      0.25,
+      0.74
+     ],
+     [
+      1.45,
+      0.84
+     ],
+     [
+      3.55,
+      0.91
+     ],
+     [
+      4.48,
+      0.88
+     ]
+    ]
+   },
+   "section": {
+    "tumble": 0.035,
+    "sill_in": 0.03,
+    "rocker_h": 0.28
+   },
+   "cabin": {
+    "A": 1.45,
+    "W": 2.02,
+    "R": 3.0,
+    "C": 3.55,
+    "D": 3.38,
+    "roof_w": [
+     [
+      2.02,
+      0.61
+     ],
+     [
+      3.0,
+      0.59
+     ],
+     [
+      3.55,
+      0.66
+     ]
+    ],
+    "roof_drop": 0.03,
+    "pillars": [
+     [
+      2.5,
+      2.58
+     ]
+    ]
+   },
+   "open_top": [],
+   "wheel": {
+    "r": 0.32,
+    "w": 0.245,
+    "track": 1.52,
+    "arch_gap": 0.028,
+    "rim": "10spoke",
+    "rim_ratio": 0.7,
+    "rim_mat": "rim_bronze"
+   },
+   "decals": [
+    {
+     "view": "front",
+     "rect": [
+      0.46,
+      0.56,
+      0.8,
+      0.68
+     ],
+     "mat": "head",
+     "mirror": true
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.42,
+      0.56,
+      0.42,
+      0.66
+     ],
+     "mat": "grille"
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.56,
+      0.24,
+      0.56,
+      0.42
+     ],
+     "mat": "grille",
+     "tag": "fbumper"
+    },
+    {
+     "view": "rear",
+     "circle": [
+      0.66,
+      0.84,
+      0.072,
+      12
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "circle": [
+      0.46,
+      0.84,
+      0.072,
+      12
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.25,
+      0.48,
+      0.25,
+      0.62
+     ],
+     "mat": "trim"
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.7,
+      0.22,
+      0.7,
+      0.33
+     ],
+     "mat": "trim",
+     "tag": "rbumper"
+    }
+   ],
+   "parts": [
+    {
+     "type": "mirrors"
+    },
+    {
+     "type": "wing",
+     "tag": "spoiler",
+     "s0": 4.12,
+     "s1": 4.42,
+     "y": 1.18,
+     "span": 1.42,
+     "uprights": [
+      0.42
+     ],
+     "kick": 0.03
+    }
+   ],
+   "sticker_slots": [
+    {
+     "id": "door",
+     "view": "left",
+     "mirror": true,
+     "note": "",
+     "rect": [
+      1.55,
+      0.42,
+      3.05,
+      0.62
+     ],
+     "center": [
+      -0.869,
+      0.52,
+      0.04
+     ],
+     "normal": [
+      -1.0,
+      -0.023,
+      -0.0
+     ],
+     "size": [
+      1.5,
+      0.2
+     ]
+    },
+    {
+     "id": "hood",
+     "view": "top",
+     "mirror": false,
+     "note": "",
+     "rect": [
+      -0.3,
+      0.3,
+      0.3,
+      1.1
+     ],
+     "center": [
+      -0.0,
+      0.807,
+      -1.56
+     ],
+     "normal": [
+      0.0,
+      0.997,
+      -0.083
+     ],
+     "size": [
+      0.6,
+      0.8
+     ]
+    },
+    {
+     "id": "rear",
+     "view": "top",
+     "mirror": false,
+     "note": "trunk lid",
+     "rect": [
+      -0.4,
+      3.6,
+      0.4,
+      4.05
+     ],
+     "center": [
+      0.0,
+      1.011,
+      1.565
+     ],
+     "normal": [
+      -0.0,
+      1.0,
+      0.027
+     ],
+     "size": [
+      0.8,
+      0.45
+     ]
+    }
+   ],
+   "paint": {
+    "hero": [
+     "Pearl white",
+     "#E9E6DF"
+    ],
+    "alts": [
+     [
+      "Gunmetal",
+      "#4A505B"
+     ],
+     [
+      "Silver",
+      "#C9CED6"
+     ],
+     [
+      "Sodium",
+      "#FF8A1F"
+     ],
+     [
+      "Black",
+      "#15171C"
+     ]
+    ],
+    "trim": "#1A1D24",
+    "rim": "#9C6B3A"
+   },
+   "options": {
+    "front_bumper": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "lip": {
+      "label": "Lip splitter",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "splitter",
+         "s0": -0.05,
+         "s1": 0.3,
+         "y": 0.175,
+         "w": 1.495
+        }
+       }
+      ]
+     },
+     "race": {
+      "label": "Race bumper",
+      "ops": [
+       {
+        "op": "curve",
+        "curve": "floor",
+        "keys": [
+         [
+          0.0,
+          0.21
+         ],
+         [
+          0.3,
+          0.095
+         ]
+        ]
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "splitter",
+         "s0": -0.09,
+         "s1": 0.32,
+         "y": 0.09,
+         "w": 1.602
+        }
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "box",
+         "s": 0.1,
+         "xy": [
+          0.765,
+          0.33
+         ],
+         "size": [
+          0.16,
+          0.012,
+          0.1
+         ],
+         "mat": "trim"
+        }
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "box",
+         "s": 0.1,
+         "xy": [
+          -0.765,
+          0.33
+         ],
+         "size": [
+          0.16,
+          0.012,
+          0.1
+         ],
+         "mat": "trim"
+        }
+       },
+       {
+        "op": "remove_decals",
+        "tag": "fbumper"
+       },
+       {
+        "op": "decal",
+        "decal": {
+         "view": "front",
+         "rect": [
+          -0.552,
+          0.24,
+          0.552,
+          0.41
+         ],
+         "mat": "grille",
+         "tag": "fbumper"
+        }
+       }
+      ]
+     }
+    },
+    "rear_bumper": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "diffuser": {
+      "label": "Diffuser",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "diffuser",
+         "y": 0.204,
+         "w": 1.104,
+         "d": 0.32,
+         "fins": 4
+        }
+       }
+      ]
+     }
+    },
+    "hood": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "vented": {
+      "label": "Vented hood",
+      "ops": [
+       {
+        "op": "curve",
+        "curve": "top",
+        "keys": [
+         [
+          0.663,
+          0.811
+         ],
+         [
+          1.088,
+          0.851
+         ]
+        ]
+       },
+       {
+        "op": "decal",
+        "decal": {
+         "view": "top",
+         "rect": [
+          0.12,
+          0.663,
+          0.36,
+          0.963
+         ],
+         "mat": "grille",
+         "mirror": true
+        }
+       }
+      ]
+     }
+    },
+    "skirts": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "skirts": {
+      "label": "Side skirts",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "skirts",
+         "s0": 1.338,
+         "s1": 3.182
+        }
+       }
+      ]
+     },
+     "widebody": {
+      "label": "Wide-body overfenders",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "flares",
+         "band": 0.11,
+         "proud": 0.055,
+         "tag": "widebody"
+        }
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "skirts",
+         "s0": 1.418,
+         "s1": 3.102
+        }
+       },
+       {
+        "op": "set",
+        "path": "wheel.track",
+        "value": 1.6
+       },
+       {
+        "op": "set",
+        "path": "wheel.w",
+        "value": 0.265
+       }
+      ]
+     }
+    },
+    "spoiler": {
+     "stock": {
+      "label": "Pedestal wing",
+      "ops": []
+     },
+     "gt": {
+      "label": "GT wing",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "spoiler"
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "wing",
+         "tag": "spoiler",
+         "s0": 4.08,
+         "s1": 4.42,
+         "y": 1.342,
+         "span": 1.53,
+         "uprights": [
+          0.39
+         ],
+         "kick": 0.04
+        }
+       }
+      ]
+     },
+     "ducktail": {
+      "label": "Lip (sleeper)",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "spoiler"
+       },
+       {
+        "op": "curve",
+        "curve": "top",
+        "keys": [
+         [
+          4.35,
+          1.017
+         ],
+         [
+          4.45,
+          1.01
+         ]
+        ]
+       }
+      ]
+     },
+     "none": {
+      "label": "No spoiler",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "spoiler"
+       }
+      ]
+     }
+    },
+    "wheels": {
+     "stock": {
+      "label": "10-spoke bronze",
+      "ops": []
+     },
+     "mesh": {
+      "label": "Mesh gold",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "mesh"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.74
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim_gold"
+       }
+      ]
+     },
+     "six": {
+      "label": "6-spoke",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "6spoke"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.74
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim"
+       }
+      ]
+     },
+     "dish": {
+      "label": "Deep dish",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "dish"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.74
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim"
+       }
+      ]
+     }
+    },
+    "exhaust": {
+     "stock": {
+      "label": "Single",
+      "ops": []
+     },
+     "center": {
+      "label": "Centre single (big bore)",
+      "ops": [
+       {
+        "op": "exhaust",
+        "tips": [
+         {
+          "x": 0.0,
+          "y": 0.349,
+          "r": 0.065
+         }
+        ]
+       }
+      ]
+     },
+     "dual": {
+      "label": "Dual (split)",
+      "ops": [
+       {
+        "op": "exhaust",
+        "tips": [
+         {
+          "x": 0.552,
+          "y": 0.329,
+          "r": 0.045
+         },
+         {
+          "x": -0.552,
+          "y": 0.329,
+          "r": 0.045
+         }
+        ]
+       }
+      ]
+     },
+     "quad": {
+      "label": "Quad",
+      "ops": [
+       {
+        "op": "exhaust",
+        "tips": [
+         {
+          "x": 0.498,
+          "y": 0.329,
+          "r": 0.038
+         },
+         {
+          "x": 0.641,
+          "y": 0.329,
+          "r": 0.038
+         },
+         {
+          "x": -0.498,
+          "y": 0.329,
+          "r": 0.038
+         },
+         {
+          "x": -0.641,
+          "y": 0.329,
+          "r": 0.038
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "stance": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "lowered": {
+      "label": "Lowered 3 cm",
+      "ops": [
+       {
+        "op": "drop",
+        "value": 0.03
+       }
+      ]
+     },
+     "slammed": {
+      "label": "Slammed 5.5 cm",
+      "ops": [
+       {
+        "op": "drop",
+        "value": 0.055
+       }
+      ]
+     }
+    }
+   },
+   "builds": {
+    "street": {
+     "front_bumper": "lip",
+     "spoiler": "ducktail",
+     "wheels": "mesh",
+     "exhaust": "center",
+     "stance": "lowered"
+    },
+    "full": {
+     "front_bumper": "race",
+     "rear_bumper": "diffuser",
+     "hood": "vented",
+     "skirts": "widebody",
+     "spoiler": "gt",
+     "wheels": "six",
+     "exhaust": "quad",
+     "stance": "slammed"
+    }
+   },
+   "budget_tris": 10000,
+   "proxy_tris": {
+    "stock": 2662,
+    "street": 2726,
+    "full": 2972
+   },
+   "exhaust_tips": {
+    "stock": [
+     {
+      "pos": [
+       -0.5,
+       0.25,
+       2.204
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.05
+     }
+    ],
+    "center": [
+     {
+      "pos": [
+       0.0,
+       0.349,
+       2.27
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.065
+     }
+    ],
+    "dual": [
+     {
+      "pos": [
+       0.552,
+       0.329,
+       2.27
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.045
+     },
+     {
+      "pos": [
+       -0.552,
+       0.329,
+       2.27
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.045
+     }
+    ],
+    "quad": [
+     {
+      "pos": [
+       0.498,
+       0.329,
+       2.27
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.038
+     },
+     {
+      "pos": [
+       0.641,
+       0.329,
+       2.27
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.038
+     },
+     {
+      "pos": [
+       -0.498,
+       0.329,
+       2.27
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.038
+     },
+     {
+      "pos": [
+       -0.641,
+       0.329,
+       2.27
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.038
+     }
+    ]
+   }
+  },
+  {
+   "id": "p4_kei",
+   "role": "player",
+   "label": "Kei roadster",
+   "refs": "Honda Beat, Suzuki Cappuccino, Autozam AZ-1",
+   "silhouette_rule": "Tiny open two-seater: no roof, twin headrest humps, wheels at the very corners.",
+   "dims": {
+    "length": 3.3,
+    "width_body": 1.4,
+    "height": 1.13,
+    "wheelbase": 2.27,
+    "front_overhang": 0.55,
+    "rear_overhang": 0.48,
+    "ground_clearance": 0.12
+   },
+   "physics_hint": {
+    "wheel_r": 0.28,
+    "wheel_x": 0.615,
+    "axle_z": 1.135,
+    "tire_w_front": 0.175,
+    "tire_w_rear": 0.185,
+    "note": "CarSpec.build_wheels uses symmetric axle_z; this origin already sits midway between the axles."
+   },
+   "curves": {
+    "top": [
+     [
+      0.0,
+      0.48
+     ],
+     [
+      0.05,
+      0.57
+     ],
+     [
+      0.22,
+      0.63
+     ],
+     [
+      0.92,
+      0.74
+     ],
+     [
+      1.3,
+      1.12
+     ],
+     [
+      1.36,
+      1.13
+     ],
+     [
+      1.42,
+      0.82
+     ],
+     [
+      2.32,
+      0.8
+     ],
+     [
+      3.05,
+      0.82
+     ],
+     [
+      3.22,
+      0.79
+     ],
+     [
+      3.3,
+      0.62
+     ]
+    ],
+    "floor": [
+     [
+      0,
+      0.24
+     ],
+     [
+      0.16,
+      0.12
+     ],
+     [
+      3.1,
+      0.12
+     ],
+     [
+      3.3,
+      0.28
+     ]
+    ],
+    "hw": [
+     [
+      0,
+      0.52
+     ],
+     [
+      0.08,
+      0.63
+     ],
+     [
+      0.3,
+      0.69
+     ],
+     [
+      3.0,
+      0.7
+     ],
+     [
+      3.2,
+      0.66
+     ],
+     [
+      3.3,
+      0.6
+     ]
+    ],
+    "waist": [
+     [
+      0,
+      0.36
+     ],
+     [
+      0.3,
+      0.46
+     ],
+     [
+      3.3,
+      0.48
+     ]
+    ],
+    "belt": [
+     [
+      0,
+      0.46
+     ],
+     [
+      0.3,
+      0.6
+     ],
+     [
+      0.92,
+      0.71
+     ],
+     [
+      2.32,
+      0.77
+     ],
+     [
+      3.3,
+      0.74
+     ]
+    ]
+   },
+   "section": {
+    "tumble": 0.05,
+    "sill_in": 0.03,
+    "rocker_h": 0.26
+   },
+   "cabin": {
+    "A": 0.92,
+    "W": 1.3,
+    "R": 1.36,
+    "C": 1.42,
+    "D": 1.4,
+    "roof_w": 0.54,
+    "roof_drop": 0.02,
+    "pillars": [],
+    "roof_h": 1.13
+   },
+   "open_top": [
+    {
+     "s0": 1.42,
+     "s1": 2.32,
+     "floor": 0.42,
+     "wall": 0.06,
+     "mat": "interior"
+    }
+   ],
+   "wheel": {
+    "r": 0.28,
+    "w": 0.175,
+    "w_rear": 0.185,
+    "track": 1.23,
+    "arch_gap": 0.025,
+    "rim": "5spoke",
+    "rim_ratio": 0.66
+   },
+   "decals": [
+    {
+     "view": "front",
+     "ellipse": [
+      0.48,
+      0.52,
+      0.1,
+      0.055,
+      12
+     ],
+     "mat": "head",
+     "mirror": true
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.25,
+      0.28,
+      0.25,
+      0.36
+     ],
+     "mat": "grille",
+     "tag": "fbumper"
+    },
+    {
+     "view": "left",
+     "rect": [
+      2.36,
+      0.46,
+      2.6,
+      0.62
+     ],
+     "mat": "grille",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "ellipse": [
+      0.48,
+      0.66,
+      0.09,
+      0.05,
+      12
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.5,
+      0.22,
+      0.5,
+      0.3
+     ],
+     "mat": "trim",
+     "tag": "rbumper"
+    }
+   ],
+   "parts": [
+    {
+     "type": "mirrors",
+     "s": 1.1
+    },
+    {
+     "type": "rollhoops",
+     "s": 2.3,
+     "h": 1.0,
+     "x": 0.3,
+     "w": 0.26,
+     "tag": "hoops"
+    }
+   ],
+   "sticker_slots": [
+    {
+     "id": "door",
+     "view": "left",
+     "mirror": true,
+     "note": "",
+     "rect": [
+      1.3,
+      0.4,
+      2.05,
+      0.6
+     ],
+     "center": [
+      -0.698,
+      0.5,
+      -0.01
+     ],
+     "normal": [
+      -0.995,
+      0.103,
+      -0.005
+     ],
+     "size": [
+      0.75,
+      0.2
+     ]
+    },
+    {
+     "id": "hood",
+     "view": "top",
+     "mirror": false,
+     "note": "",
+     "rect": [
+      -0.25,
+      0.15,
+      0.25,
+      0.8
+     ],
+     "center": [
+      0.0,
+      0.678,
+      -1.21
+     ],
+     "normal": [
+      0.0,
+      0.983,
+      -0.184
+     ],
+     "size": [
+      0.5,
+      0.65
+     ]
+    },
+    {
+     "id": "rear",
+     "view": "top",
+     "mirror": false,
+     "note": "engine lid",
+     "rect": [
+      -0.4,
+      2.6,
+      0.4,
+      3.1
+     ],
+     "center": [
+      0.0,
+      0.816,
+      1.165
+     ],
+     "normal": [
+      -0.001,
+      1.0,
+      0.002
+     ],
+     "size": [
+      0.8,
+      0.5
+     ]
+    }
+   ],
+   "paint": {
+    "hero": [
+     "Signal yellow",
+     "#F2B53A"
+    ],
+    "alts": [
+     [
+      "Signal red",
+      "#B3191E"
+     ],
+     [
+      "Cream",
+      "#E8DCC0"
+     ],
+     [
+      "Racing green",
+      "#1F4D3A"
+     ],
+     [
+      "Silver",
+      "#C9CED6"
+     ]
+    ],
+    "trim": "#1A1D24",
+    "rim": "#C9CED6"
+   },
+   "options": {
+    "roof": {
+     "stock": {
+      "label": "Open",
+      "ops": []
+     },
+     "hardtop": {
+      "label": "Hardtop",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "hoops"
+       },
+       {
+        "op": "open",
+        "value": []
+       },
+       {
+        "op": "cabin",
+        "values": {
+         "R": 1.95,
+         "C": 2.34,
+         "D": 1.88,
+         "pillars": []
+        }
+       },
+       {
+        "op": "curve",
+        "curve": "top",
+        "keys": [
+         [
+          1.3,
+          1.12
+         ],
+         [
+          1.95,
+          1.13
+         ],
+         [
+          2.34,
+          0.81
+         ]
+        ]
+       }
+      ]
+     },
+     "rollbar": {
+      "label": "Roll bar",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "hoops"
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "bedbar",
+         "s": 2.2,
+         "h": 1.13,
+         "x": 0.44
+        }
+       }
+      ]
+     }
+    },
+    "front_bumper": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "lip": {
+      "label": "Lip splitter",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "splitter",
+         "s0": -0.05,
+         "s1": 0.3,
+         "y": 0.145,
+         "w": 1.176
+        }
+       }
+      ]
+     }
+    },
+    "spoiler": {
+     "stock": {
+      "label": "None",
+      "ops": []
+     },
+     "ducktail": {
+      "label": "Ducktail",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "spoiler"
+       },
+       {
+        "op": "curve",
+        "curve": "top",
+        "keys": [
+         [
+          3.12,
+          0.828
+         ],
+         [
+          3.22,
+          0.83
+         ]
+        ]
+       }
+      ]
+     },
+     "wing": {
+      "label": "Small wing",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "spoiler"
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "wing",
+         "tag": "spoiler",
+         "s0": 3.0,
+         "s1": 3.24,
+         "y": 0.978,
+         "span": 1.2,
+         "uprights": [
+          0.31
+         ],
+         "kick": 0.04
+        }
+       }
+      ]
+     }
+    },
+    "skirts": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "skirts": {
+      "label": "Side skirts",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "skirts",
+         "s0": 0.895,
+         "s1": 2.475
+        }
+       }
+      ]
+     },
+     "widebody": {
+      "label": "Wide-body overfenders",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "flares",
+         "band": 0.11,
+         "proud": 0.055,
+         "tag": "widebody"
+        }
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "skirts",
+         "s0": 0.975,
+         "s1": 2.395
+        }
+       },
+       {
+        "op": "set",
+        "path": "wheel.track",
+        "value": 1.3
+       },
+       {
+        "op": "set",
+        "path": "wheel.w",
+        "value": 0.195
+       }
+      ]
+     }
+    },
+    "wheels": {
+     "stock": {
+      "label": "5-spoke",
+      "ops": []
+     },
+     "mesh": {
+      "label": "Mesh",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "mesh"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.72
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim"
+       }
+      ]
+     },
+     "dish": {
+      "label": "Deep dish",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "dish"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.72
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim"
+       }
+      ]
+     },
+     "steel": {
+      "label": "Steelies",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "steel"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.7
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim"
+       }
+      ]
+     }
+    },
+    "exhaust": {
+     "stock": {
+      "label": "Single",
+      "ops": []
+     },
+     "center": {
+      "label": "Centre single (big bore)",
+      "ops": [
+       {
+        "op": "exhaust",
+        "tips": [
+         {
+          "x": 0.0,
+          "y": 0.32,
+          "r": 0.051
+         }
+        ]
+       }
+      ]
+     },
+     "dual": {
+      "label": "Dual (split)",
+      "ops": [
+       {
+        "op": "exhaust",
+        "tips": [
+         {
+          "x": 0.434,
+          "y": 0.3,
+          "r": 0.034
+         },
+         {
+          "x": -0.434,
+          "y": 0.3,
+          "r": 0.034
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "stance": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "lowered": {
+      "label": "Lowered 3 cm",
+      "ops": [
+       {
+        "op": "drop",
+        "value": 0.03
+       }
+      ]
+     },
+     "slammed": {
+      "label": "Slammed 5.5 cm",
+      "ops": [
+       {
+        "op": "drop",
+        "value": 0.055
+       }
+      ]
+     }
+    }
+   },
+   "builds": {
+    "street": {
+     "roof": "hardtop",
+     "front_bumper": "lip",
+     "spoiler": "ducktail",
+     "wheels": "mesh",
+     "stance": "lowered"
+    },
+    "full": {
+     "roof": "rollbar",
+     "skirts": "widebody",
+     "spoiler": "wing",
+     "wheels": "dish",
+     "exhaust": "dual",
+     "stance": "slammed"
+    }
+   },
+   "budget_tris": 10000,
+   "proxy_tris": {
+    "stock": 2178,
+    "street": 2306,
+    "full": 2536
+   },
+   "exhaust_tips": {
+    "stock": [
+     {
+      "pos": [
+       0.35,
+       0.22,
+       1.59
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.035
+     }
+    ],
+    "center": [
+     {
+      "pos": [
+       0.0,
+       0.32,
+       1.665
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.051
+     }
+    ],
+    "dual": [
+     {
+      "pos": [
+       0.434,
+       0.3,
+       1.665
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.034
+     },
+     {
+      "pos": [
+       -0.434,
+       0.3,
+       1.665
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.034
+     }
+    ]
+   }
+  },
+  {
+   "id": "p5_muscle",
+   "role": "player",
+   "label": "Muscle sedan",
+   "refs": "Impala SS (1994-96), Chevelle SS, Caprice 9C1",
+   "silhouette_rule": "Long, low, wide land yacht: tall cowl scoop, chopped slit-window cabin, ducktail, coke-bottle hips; full-width tail bar.",
+   "dims": {
+    "length": 5.35,
+    "width_body": 1.98,
+    "height": 1.33,
+    "wheelbase": 2.95,
+    "front_overhang": 1.12,
+    "rear_overhang": 1.28,
+    "ground_clearance": 0.15
+   },
+   "physics_hint": {
+    "wheel_r": 0.345,
+    "wheel_x": 0.81,
+    "axle_z": 1.475,
+    "tire_w_front": 0.255,
+    "tire_w_rear": 0.3,
+    "note": "CarSpec.build_wheels uses symmetric axle_z; this origin already sits midway between the axles."
+   },
+   "curves": {
+    "top": [
+     [
+      0.0,
+      0.7
+     ],
+     [
+      0.04,
+      0.79
+     ],
+     [
+      0.22,
+      0.84
+     ],
+     [
+      1.88,
+      0.95
+     ],
+     [
+      2.55,
+      1.31
+     ],
+     [
+      3.28,
+      1.33
+     ],
+     [
+      3.92,
+      1.0
+     ],
+     [
+      5.06,
+      0.99
+     ],
+     [
+      5.2,
+      1.08
+     ],
+     [
+      5.27,
+      1.08
+     ],
+     [
+      5.32,
+      0.88
+     ],
+     [
+      5.35,
+      0.7
+     ]
+    ],
+    "floor": [
+     [
+      0,
+      0.28
+     ],
+     [
+      0.3,
+      0.15
+     ],
+     [
+      5.0,
+      0.15
+     ],
+     [
+      5.2,
+      0.22
+     ],
+     [
+      5.35,
+      0.36
+     ]
+    ],
+    "hw": [
+     [
+      0,
+      0.86
+     ],
+     [
+      0.08,
+      0.94
+     ],
+     [
+      0.45,
+      0.965
+     ],
+     [
+      1.12,
+      0.975
+     ],
+     [
+      1.7,
+      0.965
+     ],
+     [
+      2.4,
+      0.95
+     ],
+     [
+      3.3,
+      0.955
+     ],
+     [
+      3.75,
+      0.975
+     ],
+     [
+      4.07,
+      0.99
+     ],
+     [
+      4.6,
+      0.985
+     ],
+     [
+      5.05,
+      0.95
+     ],
+     [
+      5.25,
+      0.9
+     ],
+     [
+      5.35,
+      0.84
+     ]
+    ],
+    "waist": [
+     [
+      0,
+      0.48
+     ],
+     [
+      0.5,
+      0.6
+     ],
+     [
+      4.0,
+      0.66
+     ],
+     [
+      5.35,
+      0.62
+     ]
+    ],
+    "belt": [
+     [
+      0,
+      0.66
+     ],
+     [
+      0.3,
+      0.81
+     ],
+     [
+      1.88,
+      0.93
+     ],
+     [
+      3.92,
+      0.99
+     ],
+     [
+      5.35,
+      0.93
+     ]
+    ]
+   },
+   "section": {
+    "tumble": 0.09,
+    "sill_in": 0.04,
+    "rocker_h": 0.32
+   },
+   "cabin": {
+    "A": 1.88,
+    "W": 2.55,
+    "R": 3.28,
+    "C": 3.92,
+    "D": 3.62,
+    "roof_w": [
+     [
+      2.55,
+      0.66
+     ],
+     [
+      3.28,
+      0.6
+     ],
+     [
+      3.92,
+      0.7
+     ]
+    ],
+    "roof_drop": 0.035,
+    "pillars": [
+     [
+      2.98,
+      3.08
+     ]
+    ]
+   },
+   "open_top": [],
+   "wheel": {
+    "r": 0.345,
+    "w": 0.255,
+    "w_rear": 0.3,
+    "track": 1.62,
+    "arch_gap": 0.03,
+    "rim": "dish",
+    "rim_ratio": 0.68
+   },
+   "decals": [
+    {
+     "view": "front",
+     "rect": [
+      -0.48,
+      0.52,
+      0.48,
+      0.66
+     ],
+     "mat": "grille"
+    },
+    {
+     "view": "front",
+     "rect": [
+      0.5,
+      0.53,
+      0.86,
+      0.65
+     ],
+     "mat": "head",
+     "mirror": true
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.6,
+      0.26,
+      0.6,
+      0.38
+     ],
+     "mat": "grille",
+     "tag": "fbumper"
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.12,
+      0.8,
+      0.86,
+      0.88
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.12,
+      0.8,
+      0.12,
+      0.88
+     ],
+     "mat": "trim"
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.26,
+      0.5,
+      0.26,
+      0.64
+     ],
+     "mat": "trim"
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.8,
+      0.24,
+      0.8,
+      0.36
+     ],
+     "mat": "trim",
+     "tag": "rbumper"
+    }
+   ],
+   "parts": [
+    {
+     "type": "mirrors"
+    },
+    {
+     "type": "scoop",
+     "tag": "hood",
+     "s0": 0.85,
+     "s1": 1.62,
+     "w": 0.68,
+     "h": 0.13
+    }
+   ],
+   "sticker_slots": [
+    {
+     "id": "door",
+     "view": "left",
+     "mirror": true,
+     "note": "",
+     "rect": [
+      2.0,
+      0.45,
+      3.6,
+      0.66
+     ],
+     "center": [
+      -0.962,
+      0.555,
+      0.205
+     ],
+     "normal": [
+      -1.0,
+      -0.011,
+      -0.007
+     ],
+     "size": [
+      1.6,
+      0.21
+     ]
+    },
+    {
+     "id": "hood",
+     "view": "top",
+     "mirror": false,
+     "note": "",
+     "rect": [
+      -0.32,
+      0.4,
+      0.32,
+      1.45
+     ],
+     "center": [
+      0.0,
+      0.897,
+      -1.67
+     ],
+     "normal": [
+      0.0,
+      0.998,
+      -0.067
+     ],
+     "size": [
+      0.64,
+      1.05
+     ]
+    },
+    {
+     "id": "rear",
+     "view": "top",
+     "mirror": false,
+     "note": "trunk lid",
+     "rect": [
+      -0.45,
+      4.15,
+      0.45,
+      5.05
+     ],
+     "center": [
+      0.0,
+      1.003,
+      2.005
+     ],
+     "normal": [
+      -0.0,
+      1.0,
+      0.015
+     ],
+     "size": [
+      0.9,
+      0.9
+     ]
+    }
+   ],
+   "paint": {
+    "hero": [
+     "Cherry",
+     "#6A1620"
+    ],
+    "alts": [
+     [
+      "Black",
+      "#15171C"
+     ],
+     [
+      "Silver",
+      "#C9CED6"
+     ],
+     [
+      "Racing green",
+      "#1F4D3A"
+     ],
+     [
+      "Pearl",
+      "#E9E6DF"
+     ]
+    ],
+    "trim": "#1A1D24",
+    "rim": "#C9CED6"
+   },
+   "options": {
+    "hood": {
+     "stock": {
+      "label": "Cowl scoop",
+      "ops": []
+     },
+     "shaker": {
+      "label": "Shaker scoop",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "hood"
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "scoop",
+         "tag": "hood",
+         "s0": 0.98,
+         "s1": 1.42,
+         "w": 0.44,
+         "h": 0.17
+        }
+       }
+      ]
+     },
+     "flat": {
+      "label": "Flat hood (sleeper)",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "hood"
+       }
+      ]
+     }
+    },
+    "front_bumper": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "chin": {
+      "label": "Lip splitter",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "splitter",
+         "s0": -0.05,
+         "s1": 0.3,
+         "y": 0.223,
+         "w": 1.663
+        }
+       }
+      ]
+     }
+    },
+    "spoiler": {
+     "stock": {
+      "label": "Ducktail",
+      "ops": []
+     },
+     "drag": {
+      "label": "Drag wing",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "spoiler"
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "wing",
+         "tag": "spoiler",
+         "s0": 4.99,
+         "s1": 5.29,
+         "y": 1.281,
+         "span": 1.7,
+         "uprights": [
+          0.44
+         ],
+         "kick": 0.04
+        }
+       }
+      ]
+     },
+     "smooth": {
+      "label": "Smooth deck",
+      "ops": [
+       {
+        "op": "curve",
+        "curve": "top",
+        "keys": [
+         [
+          5.2,
+          1.0
+         ],
+         [
+          5.27,
+          0.99
+         ]
+        ]
+       }
+      ]
+     }
+    },
+    "skirts": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "skirts": {
+      "label": "Side skirts",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "skirts",
+         "s0": 1.535,
+         "s1": 3.655
+        }
+       }
+      ]
+     }
+    },
+    "wheels": {
+     "stock": {
+      "label": "Deep dish",
+      "ops": []
+     },
+     "five": {
+      "label": "5-spoke",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "5spoke"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.74
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim"
+       }
+      ]
+     },
+     "mono": {
+      "label": "Monoblock black",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "mono"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.76
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim_dark"
+       }
+      ]
+     },
+     "steel": {
+      "label": "Steelies (sleeper)",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "steel"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.7
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim"
+       }
+      ]
+     }
+    },
+    "exhaust": {
+     "stock": {
+      "label": "Dual (split)",
+      "ops": []
+     },
+     "side": {
+      "label": "Side exit",
+      "ops": [
+       {
+        "op": "exhaust",
+        "tips": [
+         {
+          "dir": "side",
+          "side": "right",
+          "s": 3.535,
+          "y": 0.22,
+          "r": 0.05
+         },
+         {
+          "dir": "side",
+          "side": "left",
+          "s": 3.535,
+          "y": 0.22,
+          "r": 0.05
+         }
+        ]
+       }
+      ]
+     },
+     "quad": {
+      "label": "Quad",
+      "ops": [
+       {
+        "op": "exhaust",
+        "tips": [
+         {
+          "x": 0.554,
+          "y": 0.367,
+          "r": 0.041
+         },
+         {
+          "x": 0.713,
+          "y": 0.367,
+          "r": 0.041
+         },
+         {
+          "x": -0.554,
+          "y": 0.367,
+          "r": 0.041
+         },
+         {
+          "x": -0.713,
+          "y": 0.367,
+          "r": 0.041
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "stance": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "lowered": {
+      "label": "Lowered 3 cm",
+      "ops": [
+       {
+        "op": "drop",
+        "value": 0.03
+       }
+      ]
+     },
+     "slammed": {
+      "label": "Slammed 5.5 cm",
+      "ops": [
+       {
+        "op": "drop",
+        "value": 0.055
+       }
+      ]
+     }
+    }
+   },
+   "builds": {
+    "street": {
+     "hood": "shaker",
+     "wheels": "five",
+     "exhaust": "side",
+     "stance": "lowered"
+    },
+    "full": {
+     "hood": "shaker",
+     "front_bumper": "chin",
+     "spoiler": "drag",
+     "skirts": "skirts",
+     "wheels": "mono",
+     "exhaust": "quad",
+     "stance": "slammed"
+    }
+   },
+   "budget_tris": 10000,
+   "proxy_tris": {
+    "stock": 2662,
+    "street": 2598,
+    "full": 2818
+   },
+   "exhaust_tips": {
+    "stock": [
+     {
+      "pos": [
+       0.62,
+       0.26,
+       2.698
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.05
+     },
+     {
+      "pos": [
+       -0.62,
+       0.26,
+       2.698
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.05
+     }
+    ],
+    "side": [
+     {
+      "pos": [
+       0.965,
+       0.22,
+       0.94
+      ],
+      "dir": [
+       1,
+       0,
+       0
+      ],
+      "r": 0.05
+     },
+     {
+      "pos": [
+       -0.965,
+       0.22,
+       0.94
+      ],
+      "dir": [
+       -1,
+       0,
+       0
+      ],
+      "r": 0.05
+     }
+    ],
+    "quad": [
+     {
+      "pos": [
+       0.554,
+       0.367,
+       2.805
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.041
+     },
+     {
+      "pos": [
+       0.713,
+       0.367,
+       2.805
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.041
+     },
+     {
+      "pos": [
+       -0.554,
+       0.367,
+       2.805
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.041
+     },
+     {
+      "pos": [
+       -0.713,
+       0.367,
+       2.805
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.041
+     }
+    ]
+   }
+  },
+  {
+   "id": "p6_crossover",
+   "role": "player",
+   "label": "Performance crossover",
+   "refs": "Crosstrek/XV, A6 Allroad, Delta Integrale",
+   "silhouette_rule": "Lifted rally hatch: black-clad box flares, roof rack, high ground clearance.",
+   "dims": {
+    "length": 4.35,
+    "width_body": 1.84,
+    "height": 1.592,
+    "wheelbase": 2.62,
+    "front_overhang": 0.92,
+    "rear_overhang": 0.81,
+    "ground_clearance": 0.22
+   },
+   "physics_hint": {
+    "wheel_r": 0.345,
+    "wheel_x": 0.78,
+    "axle_z": 1.31,
+    "tire_w_front": 0.235,
+    "tire_w_rear": 0.235,
+    "note": "CarSpec.build_wheels uses symmetric axle_z; this origin already sits midway between the axles."
+   },
+   "curves": {
+    "top": [
+     [
+      0.0,
+      0.72
+     ],
+     [
+      0.06,
+      0.84
+     ],
+     [
+      0.28,
+      0.94
+     ],
+     [
+      1.25,
+      1.06
+     ],
+     [
+      1.92,
+      1.5
+     ],
+     [
+      3.82,
+      1.53
+     ],
+     [
+      4.18,
+      1.16
+     ],
+     [
+      4.3,
+      1.12
+     ],
+     [
+      4.35,
+      0.78
+     ]
+    ],
+    "floor": [
+     [
+      0,
+      0.42
+     ],
+     [
+      0.32,
+      0.22
+     ],
+     [
+      4.02,
+      0.22
+     ],
+     [
+      4.35,
+      0.44
+     ]
+    ],
+    "hw": [
+     [
+      0,
+      0.7
+     ],
+     [
+      0.12,
+      0.85
+     ],
+     [
+      0.4,
+      0.885
+     ],
+     [
+      0.5,
+      0.915
+     ],
+     [
+      1.36,
+      0.915
+     ],
+     [
+      1.46,
+      0.885
+     ],
+     [
+      3.08,
+      0.885
+     ],
+     [
+      3.18,
+      0.915
+     ],
+     [
+      3.94,
+      0.915
+     ],
+     [
+      4.04,
+      0.89
+     ],
+     [
+      4.35,
+      0.82
+     ]
+    ],
+    "waist": [
+     [
+      0,
+      0.62
+     ],
+     [
+      0.4,
+      0.72
+     ],
+     [
+      4.35,
+      0.74
+     ]
+    ],
+    "belt": [
+     [
+      0,
+      0.72
+     ],
+     [
+      0.3,
+      0.9
+     ],
+     [
+      1.25,
+      1.02
+     ],
+     [
+      3.9,
+      1.08
+     ],
+     [
+      4.35,
+      1.02
+     ]
+    ]
+   },
+   "section": {
+    "tumble": 0.05,
+    "sill_in": 0.03,
+    "rocker_h": 0.48
+   },
+   "cabin": {
+    "A": 1.25,
+    "W": 1.92,
+    "R": 3.82,
+    "C": 4.18,
+    "D": 3.72,
+    "roof_w": [
+     [
+      1.92,
+      0.66
+     ],
+     [
+      3.82,
+      0.64
+     ]
+    ],
+    "roof_drop": 0.03,
+    "pillars": [
+     [
+      2.68,
+      2.76
+     ]
+    ]
+   },
+   "open_top": [],
+   "wheel": {
+    "r": 0.345,
+    "w": 0.235,
+    "track": 1.56,
+    "arch_gap": 0.045,
+    "rim": "5spoke",
+    "rim_ratio": 0.64
+   },
+   "decals": [
+    {
+     "view": "front",
+     "rect": [
+      0.4,
+      0.8,
+      0.58,
+      0.9
+     ],
+     "mat": "head",
+     "mirror": true
+    },
+    {
+     "view": "front",
+     "rect": [
+      0.6,
+      0.8,
+      0.8,
+      0.9
+     ],
+     "mat": "head",
+     "mirror": true
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.38,
+      0.78,
+      0.38,
+      0.92
+     ],
+     "mat": "grille"
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.55,
+      0.5,
+      0.55,
+      0.62
+     ],
+     "mat": "grille",
+     "tag": "fbumper"
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.45,
+      0.4,
+      0.45,
+      0.48
+     ],
+     "mat": "chrome"
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.6,
+      0.86,
+      0.88,
+      0.96
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.8,
+      0.96,
+      0.88,
+      1.1
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.45,
+      0.44,
+      0.45,
+      0.52
+     ],
+     "mat": "chrome",
+     "tag": "rbumper"
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.25,
+      0.62,
+      0.25,
+      0.76
+     ],
+     "mat": "trim"
+    }
+   ],
+   "parts": [
+    {
+     "type": "mirrors"
+    },
+    {
+     "type": "flares",
+     "mat": "trim",
+     "band": 0.085,
+     "proud": 0.025,
+     "tag": "cladding"
+    },
+    {
+     "type": "roof_rails",
+     "s0": 2.05,
+     "s1": 3.75,
+     "x": 0.58,
+     "h": 0.07,
+     "bars": [
+      2.45,
+      3.4
+     ],
+     "tag": "rack"
+    },
+    {
+     "type": "roof_spoiler",
+     "tag": "spoiler",
+     "s0": 3.76,
+     "s1": 3.96,
+     "y0": 1.53,
+     "y1": 1.49,
+     "span": 1.26
+    }
+   ],
+   "sticker_slots": [
+    {
+     "id": "door",
+     "view": "left",
+     "mirror": true,
+     "note": "",
+     "rect": [
+      1.55,
+      0.62,
+      2.9,
+      0.85
+     ],
+     "center": [
+      -0.89,
+      0.735,
+      -0.005
+     ],
+     "normal": [
+      -0.998,
+      0.064,
+      -0.001
+     ],
+     "size": [
+      1.35,
+      0.23
+     ]
+    },
+    {
+     "id": "hood",
+     "view": "top",
+     "mirror": false,
+     "note": "",
+     "rect": [
+      -0.3,
+      0.3,
+      0.3,
+      1.1
+     ],
+     "center": [
+      -0.0,
+      1.001,
+      -1.53
+     ],
+     "normal": [
+      0.0,
+      0.992,
+      -0.123
+     ],
+     "size": [
+      0.6,
+      0.8
+     ]
+    },
+    {
+     "id": "rear",
+     "view": "rear",
+     "mirror": false,
+     "note": "hatch glass banner",
+     "rect": [
+      -0.42,
+      1.38,
+      0.42,
+      1.46
+     ],
+     "center": [
+      0.0,
+      1.42,
+      1.693
+     ],
+     "normal": [
+      -0.003,
+      0.673,
+      0.74
+     ],
+     "size": [
+      0.84,
+      0.08
+     ]
+    }
+   ],
+   "paint": {
+    "hero": [
+     "Sand",
+     "#B8A27A"
+    ],
+    "alts": [
+     [
+      "Silver",
+      "#C9CED6"
+     ],
+     [
+      "Rally red",
+      "#C41E24"
+     ],
+     [
+      "Black",
+      "#15171C"
+     ],
+     [
+      "Racing green",
+      "#1F4D3A"
+     ]
+    ],
+    "trim": "#1A1D24",
+    "rim": "#2A2D33"
+   },
+   "options": {
+    "kit": {
+     "stock": {
+      "label": "Roof rack",
+      "ops": []
+     },
+     "rally": {
+      "label": "Rally lamp pod",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "lightpod",
+         "s": -0.03,
+         "y": 0.62,
+         "w": 0.96,
+         "n": 4
+        }
+       }
+      ]
+     },
+     "street": {
+      "label": "Street (rack off)",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "rack"
+       }
+      ]
+     }
+    },
+    "front_bumper": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "lip": {
+      "label": "Lip splitter",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "splitter",
+         "s0": -0.05,
+         "s1": 0.3,
+         "y": 0.34,
+         "w": 1.546
+        }
+       }
+      ]
+     }
+    },
+    "hood": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "scoop": {
+      "label": "Hood scoop",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "hood"
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "scoop",
+         "tag": "hood",
+         "s0": 0.45,
+         "s1": 1.0,
+         "w": 0.5,
+         "h": 0.06
+        }
+       }
+      ]
+     }
+    },
+    "skirts": {
+     "stock": {
+      "label": "Cladding",
+      "ops": []
+     },
+     "mudflaps": {
+      "label": "Mud flaps",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "mudflaps"
+        }
+       }
+      ]
+     }
+    },
+    "spoiler": {
+     "stock": {
+      "label": "Roof spoiler",
+      "ops": []
+     },
+     "big": {
+      "label": "Big roof wing",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "spoiler"
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "roof_spoiler",
+         "tag": "spoiler",
+         "s0": 3.7,
+         "s1": 4.16,
+         "y0": 1.54,
+         "y1": 1.52,
+         "span": 1.4,
+         "thick": 0.05
+        }
+       }
+      ]
+     }
+    },
+    "wheels": {
+     "stock": {
+      "label": "5-spoke dark",
+      "ops": []
+     },
+     "rally": {
+      "label": "Rally 6-spoke gold",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "6spoke"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.66
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim_gold"
+       }
+      ]
+     },
+     "mesh": {
+      "label": "Mesh",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "mesh"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.7
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim"
+       }
+      ]
+     }
+    },
+    "exhaust": {
+     "stock": {
+      "label": "Dual (centre)",
+      "ops": []
+     },
+     "center": {
+      "label": "Centre single (big bore)",
+      "ops": [
+       {
+        "op": "exhaust",
+        "tips": [
+         {
+          "x": 0.0,
+          "y": 0.493,
+          "r": 0.072
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "stance": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "lowered": {
+      "label": "Street-lowered 4.5 cm",
+      "ops": [
+       {
+        "op": "drop",
+        "value": 0.045
+       }
+      ]
+     },
+     "raised": {
+      "label": "Gravel-raised 3 cm",
+      "ops": [
+       {
+        "op": "drop",
+        "value": -0.03
+       }
+      ]
+     }
+    }
+   },
+   "builds": {
+    "street": {
+     "kit": "street",
+     "front_bumper": "lip",
+     "hood": "scoop",
+     "wheels": "mesh",
+     "stance": "lowered"
+    },
+    "full": {
+     "kit": "rally",
+     "skirts": "mudflaps",
+     "hood": "scoop",
+     "spoiler": "big",
+     "wheels": "rally",
+     "exhaust": "center",
+     "stance": "raised"
+    }
+   },
+   "budget_tris": 10000,
+   "proxy_tris": {
+    "stock": 2716,
+    "street": 2866,
+    "full": 2836
+   },
+   "exhaust_tips": {
+    "stock": [
+     {
+      "pos": [
+       0.24,
+       0.38,
+       2.08
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.045
+     },
+     {
+      "pos": [
+       -0.24,
+       0.38,
+       2.08
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.045
+     }
+    ],
+    "center": [
+     {
+      "pos": [
+       0.0,
+       0.493,
+       2.17
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.072
+     }
+    ]
+   }
+  },
+  {
+   "id": "n1_commuter",
+   "role": "npc",
+   "label": "Commuter sedan",
+   "refs": "Camry, Accord, Sentra",
+   "silhouette_rule": "Soft, tall-cabin modern sedan: short hood, high short deck, small wheels in big arch gaps.",
+   "dims": {
+    "length": 4.8,
+    "width_body": 1.82,
+    "height": 1.48,
+    "wheelbase": 2.8,
+    "front_overhang": 0.98,
+    "rear_overhang": 1.02,
+    "ground_clearance": 0.16
+   },
+   "physics_hint": {
+    "wheel_r": 0.32,
+    "wheel_x": 0.78,
+    "axle_z": 1.4,
+    "tire_w_front": 0.215,
+    "tire_w_rear": 0.215,
+    "note": "CarSpec.build_wheels uses symmetric axle_z; this origin already sits midway between the axles."
+   },
+   "curves": {
+    "top": [
+     [
+      0.0,
+      0.66
+     ],
+     [
+      0.07,
+      0.77
+     ],
+     [
+      0.3,
+      0.85
+     ],
+     [
+      1.3,
+      0.98
+     ],
+     [
+      2.12,
+      1.46
+     ],
+     [
+      3.12,
+      1.48
+     ],
+     [
+      3.96,
+      1.1
+     ],
+     [
+      4.62,
+      1.08
+     ],
+     [
+      4.74,
+      1.03
+     ],
+     [
+      4.8,
+      0.86
+     ]
+    ],
+    "floor": [
+     [
+      0,
+      0.3
+     ],
+     [
+      0.3,
+      0.16
+     ],
+     [
+      4.5,
+      0.16
+     ],
+     [
+      4.68,
+      0.22
+     ],
+     [
+      4.8,
+      0.36
+     ]
+    ],
+    "hw": [
+     [
+      0,
+      0.7
+     ],
+     [
+      0.2,
+      0.86
+     ],
+     [
+      0.6,
+      0.905
+     ],
+     [
+      4.2,
+      0.91
+     ],
+     [
+      4.6,
+      0.88
+     ],
+     [
+      4.8,
+      0.82
+     ]
+    ],
+    "waist": [
+     [
+      0,
+      0.52
+     ],
+     [
+      0.4,
+      0.64
+     ],
+     [
+      4.8,
+      0.66
+     ]
+    ],
+    "belt": [
+     [
+      0,
+      0.66
+     ],
+     [
+      0.3,
+      0.84
+     ],
+     [
+      1.3,
+      0.97
+     ],
+     [
+      3.96,
+      1.06
+     ],
+     [
+      4.8,
+      1.0
+     ]
+    ]
+   },
+   "section": {
+    "tumble": 0.08,
+    "sill_in": 0.035,
+    "rocker_h": 0.32
+   },
+   "cabin": {
+    "A": 1.3,
+    "W": 2.12,
+    "R": 3.12,
+    "C": 3.96,
+    "D": 3.72,
+    "roof_w": [
+     [
+      2.12,
+      0.66
+     ],
+     [
+      3.12,
+      0.63
+     ],
+     [
+      3.96,
+      0.7
+     ]
+    ],
+    "roof_drop": 0.035,
+    "pillars": [
+     [
+      2.7,
+      2.8
+     ]
+    ]
+   },
+   "open_top": [],
+   "wheel": {
+    "r": 0.32,
+    "w": 0.215,
+    "track": 1.56,
+    "arch_gap": 0.065,
+    "rim": "turbofan",
+    "rim_ratio": 0.66
+   },
+   "decals": [
+    {
+     "view": "front",
+     "rect": [
+      0.48,
+      0.66,
+      0.86,
+      0.76
+     ],
+     "mat": "head",
+     "mirror": true
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.4,
+      0.58,
+      0.4,
+      0.7
+     ],
+     "mat": "grille"
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.45,
+      0.28,
+      0.45,
+      0.4
+     ],
+     "mat": "grille"
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.52,
+      0.88,
+      0.88,
+      1.0
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.25,
+      0.56,
+      0.25,
+      0.7
+     ],
+     "mat": "trim"
+    }
+   ],
+   "parts": [
+    {
+     "type": "mirrors"
+    }
+   ],
+   "sticker_slots": [
+    {
+     "id": "door",
+     "view": "left",
+     "mirror": true,
+     "note": "",
+     "rect": [
+      1.9,
+      0.5,
+      3.4,
+      0.72
+     ],
+     "center": [
+      -0.915,
+      0.61,
+      0.27
+     ],
+     "normal": [
+      -0.999,
+      0.045,
+      -0.001
+     ],
+     "size": [
+      1.5,
+      0.22
+     ]
+    },
+    {
+     "id": "hood",
+     "view": "top",
+     "mirror": false,
+     "note": "",
+     "rect": [
+      -0.3,
+      0.4,
+      0.3,
+      1.15
+     ],
+     "center": [
+      -0.0,
+      0.931,
+      -1.605
+     ],
+     "normal": [
+      0.0,
+      0.992,
+      -0.129
+     ],
+     "size": [
+      0.6,
+      0.75
+     ]
+    },
+    {
+     "id": "rear",
+     "view": "top",
+     "mirror": false,
+     "note": "trunk lid",
+     "rect": [
+      -0.4,
+      4.1,
+      0.4,
+      4.6
+     ],
+     "center": [
+      0.0,
+      1.094,
+      1.97
+     ],
+     "normal": [
+      -0.0,
+      0.999,
+      0.037
+     ],
+     "size": [
+      0.8,
+      0.5
+     ]
+    }
+   ],
+   "paint": {
+    "traffic": true
+   },
+   "options": {
+    "trim": {
+     "stock": {
+      "label": "Base",
+      "ops": []
+     },
+     "sport": {
+      "label": "Sport",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "splitter",
+         "s0": -0.05,
+         "s1": 0.3,
+         "y": 0.239,
+         "w": 1.529
+        }
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "5spoke"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.7
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim"
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "lip",
+         "s0": 4.58,
+         "s1": 4.74,
+         "y": 1.07,
+         "span": 1.3,
+         "h": 0.03
+        }
+       }
+      ]
+     },
+     "taxi": {
+      "label": "Taxi",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "box",
+         "s": 2.72,
+         "xy": [
+          0.0,
+          1.53
+         ],
+         "size": [
+          0.56,
+          0.14,
+          0.2
+         ],
+         "mat": "turn"
+        }
+       }
+      ]
+     }
+    }
+   },
+   "builds": {
+    "sport": {
+     "trim": "sport"
+    },
+    "taxi": {
+     "trim": "taxi"
+    }
+   },
+   "budget_tris": 4000,
+   "proxy_tris": {
+    "stock": 2486,
+    "sport": 2342,
+    "taxi": 2498
+   },
+   "exhaust_tips": {
+    "stock": [
+     {
+      "pos": [
+       -0.55,
+       0.28,
+       2.401
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.03
+     }
+    ]
+   }
+  },
+  {
+   "id": "n2_cityhatch",
+   "role": "npc",
+   "label": "City hatchback",
+   "refs": "Yaris, Fit, Swift",
+   "silhouette_rule": "Tall cab-forward egg: stubby nose, long raked windshield, high flat roof, tall tail lamps up the pillars.",
+   "dims": {
+    "length": 3.95,
+    "width_body": 1.69,
+    "height": 1.53,
+    "wheelbase": 2.53,
+    "front_overhang": 0.8,
+    "rear_overhang": 0.62,
+    "ground_clearance": 0.15
+   },
+   "physics_hint": {
+    "wheel_r": 0.295,
+    "wheel_x": 0.73,
+    "axle_z": 1.265,
+    "tire_w_front": 0.185,
+    "tire_w_rear": 0.185,
+    "note": "CarSpec.build_wheels uses symmetric axle_z; this origin already sits midway between the axles."
+   },
+   "curves": {
+    "top": [
+     [
+      0.0,
+      0.6
+     ],
+     [
+      0.06,
+      0.72
+     ],
+     [
+      0.25,
+      0.82
+     ],
+     [
+      0.8,
+      0.96
+     ],
+     [
+      1.78,
+      1.5
+     ],
+     [
+      3.7,
+      1.53
+     ],
+     [
+      3.84,
+      1.14
+     ],
+     [
+      3.91,
+      1.08
+     ],
+     [
+      3.95,
+      0.66
+     ]
+    ],
+    "floor": [
+     [
+      0,
+      0.27
+     ],
+     [
+      0.25,
+      0.15
+     ],
+     [
+      3.7,
+      0.15
+     ],
+     [
+      3.95,
+      0.29
+     ]
+    ],
+    "hw": [
+     [
+      0,
+      0.66
+     ],
+     [
+      0.15,
+      0.79
+     ],
+     [
+      0.45,
+      0.84
+     ],
+     [
+      3.55,
+      0.845
+     ],
+     [
+      3.85,
+      0.82
+     ],
+     [
+      3.95,
+      0.78
+     ]
+    ],
+    "waist": [
+     [
+      0,
+      0.5
+     ],
+     [
+      0.4,
+      0.62
+     ],
+     [
+      3.95,
+      0.64
+     ]
+    ],
+    "belt": [
+     [
+      0,
+      0.62
+     ],
+     [
+      0.3,
+      0.8
+     ],
+     [
+      0.8,
+      0.92
+     ],
+     [
+      3.7,
+      1.02
+     ],
+     [
+      3.95,
+      0.97
+     ]
+    ]
+   },
+   "section": {
+    "tumble": 0.07,
+    "sill_in": 0.035,
+    "rocker_h": 0.3
+   },
+   "cabin": {
+    "A": 0.8,
+    "W": 1.78,
+    "R": 3.7,
+    "C": 3.84,
+    "D": 3.48,
+    "roof_w": [
+     [
+      1.78,
+      0.66
+     ],
+     [
+      3.7,
+      0.65
+     ]
+    ],
+    "roof_drop": 0.03,
+    "pillars": [
+     [
+      2.22,
+      2.3
+     ]
+    ]
+   },
+   "open_top": [],
+   "wheel": {
+    "r": 0.295,
+    "w": 0.185,
+    "track": 1.46,
+    "arch_gap": 0.065,
+    "rim": "steel",
+    "rim_ratio": 0.66
+   },
+   "decals": [
+    {
+     "view": "front",
+     "rect": [
+      0.46,
+      0.72,
+      0.8,
+      0.82
+     ],
+     "mat": "head",
+     "mirror": true
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.3,
+      0.66,
+      0.3,
+      0.74
+     ],
+     "mat": "grille"
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.4,
+      0.28,
+      0.4,
+      0.38
+     ],
+     "mat": "grille"
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.64,
+      0.82,
+      0.78,
+      1.3
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.24,
+      0.52,
+      0.24,
+      0.64
+     ],
+     "mat": "trim"
+    }
+   ],
+   "parts": [
+    {
+     "type": "mirrors"
+    }
+   ],
+   "sticker_slots": [
+    {
+     "id": "door",
+     "view": "left",
+     "mirror": true,
+     "note": "",
+     "rect": [
+      1.3,
+      0.5,
+      2.9,
+      0.75
+     ],
+     "center": [
+      -0.847,
+      0.625,
+      0.035
+     ],
+     "normal": [
+      -0.997,
+      0.083,
+      -0.002
+     ],
+     "size": [
+      1.6,
+      0.25
+     ]
+    },
+    {
+     "id": "hood",
+     "view": "top",
+     "mirror": false,
+     "note": "",
+     "rect": [
+      -0.28,
+      0.2,
+      0.28,
+      0.72
+     ],
+     "center": [
+      0.0,
+      0.882,
+      -1.605
+     ],
+     "normal": [
+      0.0,
+      0.962,
+      -0.273
+     ],
+     "size": [
+      0.56,
+      0.52
+     ]
+    },
+    {
+     "id": "rear",
+     "view": "rear",
+     "mirror": false,
+     "note": "tailgate",
+     "rect": [
+      -0.35,
+      0.82,
+      0.35,
+      0.98
+     ],
+     "center": [
+      0.0,
+      0.9,
+      1.897
+     ],
+     "normal": [
+      -0.0,
+      0.0,
+      1.0
+     ],
+     "size": [
+      0.7,
+      0.16
+     ]
+    }
+   ],
+   "paint": {
+    "traffic": true
+   },
+   "options": {
+    "trim": {
+     "stock": {
+      "label": "Base",
+      "ops": []
+     },
+     "sport": {
+      "label": "Sport",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "6spoke"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.7
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim"
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "roof_spoiler",
+         "s0": 3.6,
+         "s1": 3.82,
+         "y0": 1.53,
+         "y1": 1.49,
+         "span": 1.2
+        }
+       }
+      ]
+     },
+     "rack": {
+      "label": "Roof rack",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "roof_rails",
+         "s0": 2.0,
+         "s1": 3.55,
+         "x": 0.56,
+         "h": 0.06,
+         "bars": [
+          2.3,
+          3.2
+         ]
+        }
+       }
+      ]
+     }
+    }
+   },
+   "builds": {
+    "sport": {
+     "trim": "sport"
+    },
+    "rack": {
+     "trim": "rack"
+    }
+   },
+   "budget_tris": 4000,
+   "proxy_tris": {
+    "stock": 2326,
+    "sport": 2270,
+    "rack": 2422
+   },
+   "exhaust_tips": {
+    "stock": [
+     {
+      "pos": [
+       -0.45,
+       0.26,
+       1.881
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.028
+     }
+    ]
+   }
+  },
+  {
+   "id": "n3_pickup",
+   "role": "npc",
+   "label": "Pickup",
+   "refs": "Hilux, F-150, Land Cruiser",
+   "silhouette_rule": "Tall double-cab with an open bed behind it: flat slab sides, big tyres, high ground clearance.",
+   "dims": {
+    "length": 5.3,
+    "width_body": 1.86,
+    "height": 1.86,
+    "wheelbase": 3.08,
+    "front_overhang": 0.92,
+    "rear_overhang": 1.3,
+    "ground_clearance": 0.3
+   },
+   "physics_hint": {
+    "wheel_r": 0.39,
+    "wheel_x": 0.79,
+    "axle_z": 1.54,
+    "tire_w_front": 0.265,
+    "tire_w_rear": 0.265,
+    "note": "CarSpec.build_wheels uses symmetric axle_z; this origin already sits midway between the axles."
+   },
+   "curves": {
+    "top": [
+     [
+      0.0,
+      1.02
+     ],
+     [
+      0.04,
+      1.12
+     ],
+     [
+      0.2,
+      1.18
+     ],
+     [
+      1.25,
+      1.24
+     ],
+     [
+      1.92,
+      1.82
+     ],
+     [
+      3.2,
+      1.86
+     ],
+     [
+      3.28,
+      1.32
+     ],
+     [
+      5.27,
+      1.24
+     ],
+     [
+      5.3,
+      1.2
+     ]
+    ],
+    "floor": [
+     [
+      0,
+      0.5
+     ],
+     [
+      0.32,
+      0.3
+     ],
+     [
+      4.4,
+      0.3
+     ],
+     [
+      5.3,
+      0.56
+     ]
+    ],
+    "hw": [
+     [
+      0,
+      0.82
+     ],
+     [
+      0.08,
+      0.9
+     ],
+     [
+      0.3,
+      0.93
+     ],
+     [
+      5.2,
+      0.93
+     ],
+     [
+      5.3,
+      0.92
+     ]
+    ],
+    "waist": [
+     [
+      0,
+      0.82
+     ],
+     [
+      0.4,
+      0.95
+     ],
+     [
+      5.3,
+      0.95
+     ]
+    ],
+    "belt": [
+     [
+      0,
+      1.02
+     ],
+     [
+      0.2,
+      1.14
+     ],
+     [
+      1.25,
+      1.21
+     ],
+     [
+      3.28,
+      1.25
+     ],
+     [
+      5.3,
+      1.25
+     ]
+    ]
+   },
+   "section": {
+    "tumble": 0.035,
+    "sill_in": 0.03,
+    "rocker_h": 0.52
+   },
+   "cabin": {
+    "A": 1.25,
+    "W": 1.92,
+    "R": 3.2,
+    "C": 3.28,
+    "D": 3.15,
+    "roof_w": [
+     [
+      1.92,
+      0.73
+     ],
+     [
+      3.2,
+      0.73
+     ]
+    ],
+    "roof_drop": 0.03,
+    "pillars": [
+     [
+      2.5,
+      2.6
+     ]
+    ]
+   },
+   "open_top": [
+    {
+     "s0": 3.34,
+     "s1": 5.27,
+     "floor": 0.92,
+     "wall": 0.05,
+     "mat": "bed"
+    }
+   ],
+   "wheel": {
+    "r": 0.39,
+    "w": 0.265,
+    "track": 1.58,
+    "arch_gap": 0.07,
+    "arch_lift": 0.02,
+    "rim": "6spoke",
+    "rim_ratio": 0.62
+   },
+   "decals": [
+    {
+     "view": "front",
+     "rect": [
+      -0.55,
+      0.76,
+      0.55,
+      1.04
+     ],
+     "mat": "grille",
+     "cell": 0.2
+    },
+    {
+     "view": "front",
+     "rect": [
+      0.58,
+      0.9,
+      0.86,
+      1.02
+     ],
+     "mat": "head",
+     "mirror": true
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.88,
+      0.5,
+      0.88,
+      0.66
+     ],
+     "mat": "trim",
+     "cell": 0.25
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.8,
+      0.84,
+      0.92,
+      1.18
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.88,
+      0.54,
+      0.88,
+      0.66
+     ],
+     "mat": "chrome",
+     "cell": 0.25
+    }
+   ],
+   "parts": [
+    {
+     "type": "mirrors",
+     "out": 0.11,
+     "up": 0.1
+    },
+    {
+     "type": "step",
+     "s0": 1.4,
+     "s1": 3.1,
+     "y": 0.42
+    }
+   ],
+   "sticker_slots": [
+    {
+     "id": "door",
+     "view": "left",
+     "mirror": true,
+     "note": "",
+     "rect": [
+      1.4,
+      0.78,
+      3.05,
+      1.08
+     ],
+     "center": [
+      -0.937,
+      0.93,
+      -0.235
+     ],
+     "normal": [
+      -0.999,
+      0.041,
+      -0.0
+     ],
+     "size": [
+      1.65,
+      0.3
+     ]
+    },
+    {
+     "id": "hood",
+     "view": "top",
+     "mirror": false,
+     "note": "",
+     "rect": [
+      -0.32,
+      0.3,
+      0.32,
+      1.1
+     ],
+     "center": [
+      0.0,
+      1.218,
+      -1.76
+     ],
+     "normal": [
+      0.0,
+      0.998,
+      -0.058
+     ],
+     "size": [
+      0.64,
+      0.8
+     ]
+    },
+    {
+     "id": "rear",
+     "view": "rear",
+     "mirror": false,
+     "note": "tailgate",
+     "rect": [
+      -0.45,
+      0.9,
+      0.45,
+      1.14
+     ],
+     "center": [
+      0.0,
+      1.02,
+      2.852
+     ],
+     "normal": [
+      0.0,
+      -0.0,
+      1.0
+     ],
+     "size": [
+      0.9,
+      0.24
+     ]
+    }
+   ],
+   "paint": {
+    "traffic": true
+   },
+   "options": {
+    "trim": {
+     "stock": {
+      "label": "Open bed",
+      "ops": []
+     },
+     "covered": {
+      "label": "Bed cover",
+      "ops": [
+       {
+        "op": "open",
+        "value": []
+       }
+      ]
+     },
+     "sportsbar": {
+      "label": "Sports bar",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "bedbar",
+         "s": 3.55,
+         "h": 1.62,
+         "x": 0.78
+        }
+       }
+      ]
+     }
+    }
+   },
+   "builds": {
+    "covered": {
+     "trim": "covered"
+    },
+    "sportsbar": {
+     "trim": "sportsbar"
+    }
+   },
+   "budget_tris": 4000,
+   "proxy_tris": {
+    "stock": 2474,
+    "covered": 2302,
+    "sportsbar": 2510
+   },
+   "exhaust_tips": {
+    "stock": [
+     {
+      "pos": [
+       0.55,
+       0.42,
+       2.405
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.045
+     }
+    ]
+   }
+  },
+  {
+   "id": "c1_patrol",
+   "role": "cop",
+   "label": "Patrol sedan",
+   "refs": "Crown Victoria P71, Charger Pursuit",
+   "silhouette_rule": "Big square-backed sedan with a light bar on the roof, a push bar up front and a pillar spotlight.",
+   "dims": {
+    "length": 5.3,
+    "width_body": 1.96,
+    "height": 1.6,
+    "wheelbase": 2.92,
+    "front_overhang": 1.08,
+    "rear_overhang": 1.3,
+    "ground_clearance": 0.16
+   },
+   "physics_hint": {
+    "wheel_r": 0.335,
+    "wheel_x": 0.81,
+    "axle_z": 1.46,
+    "tire_w_front": 0.235,
+    "tire_w_rear": 0.235,
+    "note": "CarSpec.build_wheels uses symmetric axle_z; this origin already sits midway between the axles."
+   },
+   "curves": {
+    "top": [
+     [
+      0.0,
+      0.7
+     ],
+     [
+      0.05,
+      0.82
+     ],
+     [
+      0.2,
+      0.9
+     ],
+     [
+      1.85,
+      0.98
+     ],
+     [
+      2.48,
+      1.46
+     ],
+     [
+      3.5,
+      1.48
+     ],
+     [
+      3.92,
+      1.07
+     ],
+     [
+      5.18,
+      1.05
+     ],
+     [
+      5.27,
+      1.01
+     ],
+     [
+      5.3,
+      0.8
+     ]
+    ],
+    "floor": [
+     [
+      0,
+      0.32
+     ],
+     [
+      0.3,
+      0.16
+     ],
+     [
+      4.95,
+      0.16
+     ],
+     [
+      5.3,
+      0.35
+     ]
+    ],
+    "hw": [
+     [
+      0,
+      0.84
+     ],
+     [
+      0.08,
+      0.94
+     ],
+     [
+      0.35,
+      0.975
+     ],
+     [
+      4.95,
+      0.98
+     ],
+     [
+      5.2,
+      0.96
+     ],
+     [
+      5.3,
+      0.92
+     ]
+    ],
+    "waist": [
+     [
+      0,
+      0.5
+     ],
+     [
+      0.35,
+      0.62
+     ],
+     [
+      5.3,
+      0.64
+     ]
+    ],
+    "belt": [
+     [
+      0,
+      0.7
+     ],
+     [
+      0.2,
+      0.88
+     ],
+     [
+      1.85,
+      0.96
+     ],
+     [
+      3.92,
+      1.0
+     ],
+     [
+      5.3,
+      0.99
+     ]
+    ]
+   },
+   "section": {
+    "tumble": 0.05,
+    "sill_in": 0.03,
+    "rocker_h": 0.33
+   },
+   "cabin": {
+    "A": 1.85,
+    "W": 2.48,
+    "R": 3.5,
+    "C": 3.92,
+    "D": 3.76,
+    "roof_w": [
+     [
+      2.48,
+      0.72
+     ],
+     [
+      3.5,
+      0.71
+     ],
+     [
+      3.92,
+      0.76
+     ]
+    ],
+    "roof_drop": 0.03,
+    "pillars": [
+     [
+      2.98,
+      3.08
+     ]
+    ]
+   },
+   "open_top": [],
+   "wheel": {
+    "r": 0.335,
+    "w": 0.235,
+    "track": 1.62,
+    "arch_gap": 0.045,
+    "rim": "steel",
+    "rim_ratio": 0.7
+   },
+   "decals": [
+    {
+     "view": "left",
+     "rect": [
+      1.95,
+      0.4,
+      3.85,
+      0.92
+     ],
+     "mat": "paint2",
+     "mirror": true,
+     "cell": 0.15,
+     "tag": "livery"
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.45,
+      0.62,
+      0.45,
+      0.8
+     ],
+     "mat": "grille"
+    },
+    {
+     "view": "front",
+     "rect": [
+      0.5,
+      0.66,
+      0.86,
+      0.8
+     ],
+     "mat": "head",
+     "mirror": true
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.92,
+      0.32,
+      0.92,
+      0.48
+     ],
+     "mat": "trim",
+     "cell": 0.3
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.55,
+      0.8,
+      0.92,
+      0.95
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.26,
+      0.56,
+      0.26,
+      0.7
+     ],
+     "mat": "trim"
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.92,
+      0.3,
+      0.92,
+      0.46
+     ],
+     "mat": "trim",
+     "cell": 0.3
+    }
+   ],
+   "parts": [
+    {
+     "type": "mirrors"
+    },
+    {
+     "type": "lightbar",
+     "s": 3.0,
+     "y": 1.47,
+     "w": 1.3,
+     "depth": 0.3,
+     "h": 0.1,
+     "tag": "lightbar"
+    },
+    {
+     "type": "pushbar",
+     "s": -0.1,
+     "y0": 0.32,
+     "y1": 0.98,
+     "w": 0.86,
+     "tag": "pushbar"
+    },
+    {
+     "type": "spotlight"
+    }
+   ],
+   "sticker_slots": [
+    {
+     "id": "door",
+     "view": "left",
+     "mirror": true,
+     "note": "POLICE",
+     "rect": [
+      2.0,
+      0.55,
+      3.7,
+      0.8
+     ],
+     "center": [
+      -0.98,
+      0.675,
+      0.31
+     ],
+     "normal": [
+      -0.998,
+      0.057,
+      0.022
+     ],
+     "size": [
+      1.7,
+      0.25
+     ]
+    },
+    {
+     "id": "hood",
+     "view": "top",
+     "mirror": false,
+     "note": "unit number",
+     "rect": [
+      -0.3,
+      0.4,
+      0.3,
+      1.4
+     ],
+     "center": [
+      -0.0,
+      0.945,
+      -1.64
+     ],
+     "normal": [
+      0.0,
+      0.999,
+      -0.048
+     ],
+     "size": [
+      0.6,
+      1.0
+     ]
+    },
+    {
+     "id": "rear",
+     "view": "top",
+     "mirror": false,
+     "note": "trunk lid",
+     "rect": [
+      -0.45,
+      4.05,
+      0.45,
+      5.05
+     ],
+     "center": [
+      -0.0,
+      1.065,
+      2.01
+     ],
+     "normal": [
+      0.0,
+      1.0,
+      0.015
+     ],
+     "size": [
+      0.9,
+      1.0
+     ]
+    }
+   ],
+   "paint": {
+    "livery": {
+     "paint": "#1B2A4A",
+     "paint2": "#C9CED6",
+     "roof": "#C9CED6"
+    }
+   },
+   "options": {
+    "kit": {
+     "stock": {
+      "label": "Full light bar + push bar",
+      "ops": []
+     },
+     "lowpro": {
+      "label": "Low-profile bar",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "lightbar"
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "lightbar",
+         "tag": "lightbar",
+         "s": 3.0,
+         "y": 1.47,
+         "w": 1.2,
+         "depth": 0.22,
+         "h": 0.05,
+         "segments": 8,
+         "pattern": "alt"
+        }
+       }
+      ]
+     },
+     "nobar": {
+      "label": "No push bar",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "pushbar"
+       }
+      ]
+     }
+    }
+   },
+   "builds": {
+    "lowpro": {
+     "kit": "lowpro"
+    },
+    "nobar": {
+     "kit": "nobar"
+    }
+   },
+   "budget_tris": 6000,
+   "proxy_tris": {
+    "stock": 2614,
+    "lowpro": 2638,
+    "nobar": 2542
+   },
+   "exhaust_tips": {
+    "stock": [
+     {
+      "pos": [
+       0.62,
+       0.28,
+       2.681
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.04
+     }
+    ]
+   }
+  },
+  {
+   "id": "c2_patrolsuv",
+   "role": "cop",
+   "label": "Patrol SUV",
+   "refs": "Police Interceptor Utility, Tahoe PPV",
+   "silhouette_rule": "Tall box: long flat roof with the light bar, push bar, three side windows, upright tailgate.",
+   "dims": {
+    "length": 5.1,
+    "width_body": 2.0,
+    "height": 2.089,
+    "wheelbase": 3.03,
+    "front_overhang": 0.98,
+    "rear_overhang": 1.09,
+    "ground_clearance": 0.23
+   },
+   "physics_hint": {
+    "wheel_r": 0.37,
+    "wheel_x": 0.85,
+    "axle_z": 1.515,
+    "tire_w_front": 0.255,
+    "tire_w_rear": 0.255,
+    "note": "CarSpec.build_wheels uses symmetric axle_z; this origin already sits midway between the axles."
+   },
+   "curves": {
+    "top": [
+     [
+      0.0,
+      0.94
+     ],
+     [
+      0.05,
+      1.05
+     ],
+     [
+      0.25,
+      1.12
+     ],
+     [
+      1.25,
+      1.18
+     ],
+     [
+      1.95,
+      1.76
+     ],
+     [
+      4.8,
+      1.8
+     ],
+     [
+      4.98,
+      1.3
+     ],
+     [
+      5.06,
+      1.25
+     ],
+     [
+      5.1,
+      0.86
+     ]
+    ],
+    "floor": [
+     [
+      0,
+      0.44
+     ],
+     [
+      0.32,
+      0.23
+     ],
+     [
+      4.75,
+      0.23
+     ],
+     [
+      5.1,
+      0.46
+     ]
+    ],
+    "hw": [
+     [
+      0,
+      0.86
+     ],
+     [
+      0.08,
+      0.96
+     ],
+     [
+      0.35,
+      1.0
+     ],
+     [
+      4.9,
+      1.0
+     ],
+     [
+      5.1,
+      0.95
+     ]
+    ],
+    "waist": [
+     [
+      0,
+      0.74
+     ],
+     [
+      0.35,
+      0.86
+     ],
+     [
+      5.1,
+      0.88
+     ]
+    ],
+    "belt": [
+     [
+      0,
+      0.94
+     ],
+     [
+      0.25,
+      1.08
+     ],
+     [
+      1.25,
+      1.15
+     ],
+     [
+      4.95,
+      1.22
+     ],
+     [
+      5.1,
+      1.16
+     ]
+    ]
+   },
+   "section": {
+    "tumble": 0.045,
+    "sill_in": 0.03,
+    "rocker_h": 0.45
+   },
+   "cabin": {
+    "A": 1.25,
+    "W": 1.95,
+    "R": 4.8,
+    "C": 4.98,
+    "D": 4.62,
+    "roof_w": [
+     [
+      1.95,
+      0.8
+     ],
+     [
+      4.8,
+      0.8
+     ]
+    ],
+    "roof_drop": 0.03,
+    "pillars": [
+     [
+      2.62,
+      2.72
+     ],
+     [
+      3.62,
+      3.7
+     ]
+    ]
+   },
+   "open_top": [],
+   "wheel": {
+    "r": 0.37,
+    "w": 0.255,
+    "track": 1.7,
+    "arch_gap": 0.06,
+    "rim": "steel",
+    "rim_ratio": 0.66
+   },
+   "decals": [
+    {
+     "view": "left",
+     "rect": [
+      1.4,
+      0.62,
+      3.62,
+      1.12
+     ],
+     "mat": "paint2",
+     "mirror": true,
+     "cell": 0.15,
+     "tag": "livery"
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.5,
+      0.8,
+      0.5,
+      1.02
+     ],
+     "mat": "grille"
+    },
+    {
+     "view": "front",
+     "rect": [
+      0.55,
+      0.86,
+      0.9,
+      1.0
+     ],
+     "mat": "head",
+     "mirror": true
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.95,
+      0.44,
+      0.95,
+      0.62
+     ],
+     "mat": "trim",
+     "cell": 0.3
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.8,
+      0.92,
+      0.96,
+      1.3
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.25,
+      0.66,
+      0.25,
+      0.8
+     ],
+     "mat": "trim"
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.95,
+      0.46,
+      0.95,
+      0.6
+     ],
+     "mat": "trim",
+     "cell": 0.3
+    }
+   ],
+   "parts": [
+    {
+     "type": "mirrors",
+     "out": 0.11,
+     "up": 0.1
+    },
+    {
+     "type": "lightbar",
+     "s": 2.55,
+     "y": 1.77,
+     "w": 1.4,
+     "depth": 0.3,
+     "h": 0.11,
+     "tag": "lightbar"
+    },
+    {
+     "type": "pushbar",
+     "s": -0.1,
+     "y0": 0.42,
+     "y1": 1.12,
+     "w": 0.95,
+     "tag": "pushbar"
+    },
+    {
+     "type": "antennas",
+     "list": [
+      [
+       0.3,
+       3.8,
+       0.3
+      ],
+      [
+       -0.3,
+       4.0,
+       0.3
+      ]
+     ]
+    }
+   ],
+   "sticker_slots": [
+    {
+     "id": "door",
+     "view": "left",
+     "mirror": true,
+     "note": "POLICE",
+     "rect": [
+      1.5,
+      0.75,
+      3.5,
+      1.05
+     ],
+     "center": [
+      -1.003,
+      0.9,
+      0.005
+     ],
+     "normal": [
+      -0.997,
+      0.079,
+      -0.001
+     ],
+     "size": [
+      2.0,
+      0.3
+     ]
+    },
+    {
+     "id": "hood",
+     "view": "top",
+     "mirror": false,
+     "note": "unit number",
+     "rect": [
+      -0.32,
+      0.35,
+      0.32,
+      1.1
+     ],
+     "center": [
+      0.0,
+      1.158,
+      -1.77
+     ],
+     "normal": [
+      0.0,
+      0.998,
+      -0.061
+     ],
+     "size": [
+      0.64,
+      0.75
+     ]
+    },
+    {
+     "id": "rear",
+     "view": "rear",
+     "mirror": false,
+     "note": "tailgate",
+     "rect": [
+      -0.4,
+      0.9,
+      0.4,
+      1.1
+     ],
+     "center": [
+      0.0,
+      1.0,
+      2.617
+     ],
+     "normal": [
+      0.0,
+      0.0,
+      1.0
+     ],
+     "size": [
+      0.8,
+      0.2
+     ]
+    }
+   ],
+   "paint": {
+    "livery": {
+     "paint": "#1B2A4A",
+     "paint2": "#C9CED6",
+     "roof": "#C9CED6"
+    }
+   },
+   "options": {
+    "kit": {
+     "stock": {
+      "label": "Full light bar + push bar",
+      "ops": []
+     },
+     "nobar": {
+      "label": "No push bar",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "pushbar"
+       }
+      ]
+     }
+    }
+   },
+   "builds": {
+    "nobar": {
+     "kit": "nobar"
+    }
+   },
+   "budget_tris": 6000,
+   "proxy_tris": {
+    "stock": 2602,
+    "nobar": 2530
+   },
+   "exhaust_tips": {
+    "stock": [
+     {
+      "pos": [
+       0.62,
+       0.36,
+       2.503
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.045
+     }
+    ]
+   }
+  },
+  {
+   "id": "c3_interceptor",
+   "role": "cop",
+   "label": "Unmarked interceptor",
+   "refs": "unmarked Charger Hellcat, Mustang GT PI",
+   "silhouette_rule": "Big long-hood fastback with a pillar spotlight and a cluster of trunk antennas; no light bar, plain dark paint.",
+   "dims": {
+    "length": 4.82,
+    "width_body": 1.92,
+    "height": 1.38,
+    "wheelbase": 2.72,
+    "front_overhang": 1.02,
+    "rear_overhang": 1.08,
+    "ground_clearance": 0.13
+   },
+   "physics_hint": {
+    "wheel_r": 0.34,
+    "wheel_x": 0.8,
+    "axle_z": 1.36,
+    "tire_w_front": 0.255,
+    "tire_w_rear": 0.275,
+    "note": "CarSpec.build_wheels uses symmetric axle_z; this origin already sits midway between the axles."
+   },
+   "curves": {
+    "top": [
+     [
+      0.0,
+      0.62
+     ],
+     [
+      0.05,
+      0.74
+     ],
+     [
+      0.3,
+      0.85
+     ],
+     [
+      1.85,
+      0.97
+     ],
+     [
+      2.55,
+      1.36
+     ],
+     [
+      3.15,
+      1.38
+     ],
+     [
+      4.12,
+      1.06
+     ],
+     [
+      4.64,
+      1.04
+     ],
+     [
+      4.74,
+      1.07
+     ],
+     [
+      4.78,
+      1.06
+     ],
+     [
+      4.82,
+      0.84
+     ]
+    ],
+    "floor": [
+     [
+      0,
+      0.28
+     ],
+     [
+      0.3,
+      0.13
+     ],
+     [
+      4.55,
+      0.13
+     ],
+     [
+      4.82,
+      0.31
+     ]
+    ],
+    "hw": [
+     [
+      0,
+      0.78
+     ],
+     [
+      0.12,
+      0.91
+     ],
+     [
+      0.45,
+      0.95
+     ],
+     [
+      3.4,
+      0.96
+     ],
+     [
+      4.0,
+      0.96
+     ],
+     [
+      4.6,
+      0.92
+     ],
+     [
+      4.82,
+      0.86
+     ]
+    ],
+    "waist": [
+     [
+      0,
+      0.46
+     ],
+     [
+      0.4,
+      0.58
+     ],
+     [
+      4.82,
+      0.6
+     ]
+    ],
+    "belt": [
+     [
+      0,
+      0.62
+     ],
+     [
+      0.3,
+      0.83
+     ],
+     [
+      1.85,
+      0.95
+     ],
+     [
+      3.6,
+      1.02
+     ],
+     [
+      4.82,
+      0.98
+     ]
+    ]
+   },
+   "section": {
+    "tumble": 0.07,
+    "sill_in": 0.035,
+    "rocker_h": 0.3
+   },
+   "cabin": {
+    "A": 1.85,
+    "W": 2.55,
+    "R": 3.15,
+    "C": 4.12,
+    "D": 3.72,
+    "roof_w": [
+     [
+      2.55,
+      0.62
+     ],
+     [
+      3.15,
+      0.6
+     ],
+     [
+      4.12,
+      0.7
+     ]
+    ],
+    "roof_drop": 0.035,
+    "pillars": []
+   },
+   "open_top": [],
+   "wheel": {
+    "r": 0.34,
+    "w": 0.255,
+    "w_rear": 0.275,
+    "track": 1.6,
+    "arch_gap": 0.025,
+    "rim": "mono",
+    "rim_ratio": 0.7,
+    "rim_mat": "rim_dark"
+   },
+   "decals": [
+    {
+     "view": "front",
+     "rect": [
+      -0.48,
+      0.54,
+      0.48,
+      0.7
+     ],
+     "mat": "grille"
+    },
+    {
+     "view": "front",
+     "rect": [
+      0.52,
+      0.62,
+      0.86,
+      0.72
+     ],
+     "mat": "head",
+     "mirror": true
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.3,
+      0.58,
+      -0.18,
+      0.62
+     ],
+     "mat": "pol_r"
+    },
+    {
+     "view": "front",
+     "rect": [
+      0.18,
+      0.58,
+      0.3,
+      0.62
+     ],
+     "mat": "pol_b"
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.62,
+      0.22,
+      0.62,
+      0.36
+     ],
+     "mat": "grille",
+     "tag": "fbumper"
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.48,
+      0.86,
+      0.86,
+      0.895
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.48,
+      0.8,
+      0.86,
+      0.835
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.25,
+      0.56,
+      0.25,
+      0.7
+     ],
+     "mat": "trim"
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.75,
+      0.24,
+      0.75,
+      0.36
+     ],
+     "mat": "trim",
+     "tag": "rbumper"
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.2,
+      0.92,
+      -0.08,
+      0.95
+     ],
+     "mat": "pol_r"
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.08,
+      0.92,
+      0.2,
+      0.95
+     ],
+     "mat": "pol_b"
+    }
+   ],
+   "parts": [
+    {
+     "type": "mirrors"
+    },
+    {
+     "type": "spotlight"
+    },
+    {
+     "type": "antennas",
+     "list": [
+      [
+       0.25,
+       4.42,
+       0.28
+      ],
+      [
+       0.0,
+       4.48,
+       0.32
+      ],
+      [
+       -0.25,
+       4.42,
+       0.28
+      ]
+     ]
+    }
+   ],
+   "sticker_slots": [
+    {
+     "id": "door",
+     "view": "left",
+     "mirror": true,
+     "note": "empty (unmarked)",
+     "rect": [
+      2.0,
+      0.52,
+      3.2,
+      0.74
+     ],
+     "center": [
+      -0.959,
+      0.63,
+      0.22
+     ],
+     "normal": [
+      -0.994,
+      0.11,
+      -0.005
+     ],
+     "size": [
+      1.2,
+      0.22
+     ]
+    },
+    {
+     "id": "hood",
+     "view": "top",
+     "mirror": false,
+     "note": "empty (unmarked)",
+     "rect": [
+      -0.3,
+      0.4,
+      0.3,
+      1.4
+     ],
+     "center": [
+      -0.0,
+      0.908,
+      -1.48
+     ],
+     "normal": [
+      0.0,
+      0.997,
+      -0.077
+     ],
+     "size": [
+      0.6,
+      1.0
+     ]
+    },
+    {
+     "id": "rear",
+     "view": "top",
+     "mirror": false,
+     "note": "empty (unmarked)",
+     "rect": [
+      -0.4,
+      4.25,
+      0.4,
+      4.62
+     ],
+     "center": [
+      0.0,
+      1.054,
+      2.055
+     ],
+     "normal": [
+      0.0,
+      0.999,
+      0.038
+     ],
+     "size": [
+      0.8,
+      0.37
+     ]
+    }
+   ],
+   "paint": {
+    "hero": [
+     "Gunmetal",
+     "#2E333C"
+    ],
+    "alts": [
+     [
+      "Black",
+      "#15171C"
+     ],
+     [
+      "Silver",
+      "#C9CED6"
+     ],
+     [
+      "Dark red",
+      "#4A1218"
+     ]
+    ],
+    "trim": "#1A1D24",
+    "rim": "#22252C"
+   },
+   "options": {
+    "kit": {
+     "stock": {
+      "label": "Unmarked",
+      "ops": []
+     },
+     "pursuit": {
+      "label": "Pursuit pack (push bar)",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "pushbar",
+         "s": -0.1,
+         "y0": 0.28,
+         "y1": 0.8,
+         "w": 0.8
+        }
+       }
+      ]
+     }
+    }
+   },
+   "builds": {
+    "pursuit": {
+     "kit": "pursuit"
+    }
+   },
+   "budget_tris": 6000,
+   "proxy_tris": {
+    "stock": 2476,
+    "pursuit": 2548
+   },
+   "exhaust_tips": {
+    "stock": [
+     {
+      "pos": [
+       0.52,
+       0.26,
+       2.415
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.04
+     },
+     {
+      "pos": [
+       0.66,
+       0.26,
+       2.415
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.04
+     },
+     {
+      "pos": [
+       -0.52,
+       0.26,
+       2.415
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.04
+     },
+     {
+      "pos": [
+       -0.66,
+       0.26,
+       2.415
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.04
+     }
+    ]
+   }
+  }
+ ]
+}

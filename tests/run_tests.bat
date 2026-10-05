@@ -31,6 +31,7 @@ call :run fleet_design_check --headless
 call :run exhaust_tune --headless
 call :run audio_master --headless
 call :run phase_a_engine --headless
+call :run clutch_model --headless
 call :run driveline_audio --headless
 call :run radio --headless
 call :run powertrain_health "--headless --fixed-fps 60"

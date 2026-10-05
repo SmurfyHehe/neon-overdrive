@@ -723,6 +723,22 @@ func process_steering(delta : float) -> void:
 	for wheel in wheel_array:
 		wheel.steer(steering_adjust + steer_correction, max_steering_angle)
 
+## (9) The clutch amount (0 = closed, 1 = open) with the realistic model on.
+func _realistic_clutch_amount(delta: float) -> float:
+	if is_shifting or current_gear == 0 or not engine_running:
+		return 1.0
+	if not automatic_transmission:
+		clutch_pedal = move_toward(clutch_pedal, clutch_input, 10.0 * delta)
+		return 1.0 - smoothstep(0.15, 0.85, 1.0 - clutch_pedal)
+	var engage := 1.0
+	if speed < AUTO_CLUTCH_SHUT_SPEED and absi(current_gear) == 1:
+		var launch := clampf((motor_rpm - idle_rpm) / (LAUNCH_FULL_RPM - idle_rpm), 0.0, 1.0)
+		var creep := CREEP_ENGAGE if brake_input < 0.1 else 0.0
+		engage = lerpf(creep, 1.0, launch * clampf(throttle_input, 0.0, 1.0))
+	# anti-stall: open up as the revs sag toward the stall point
+	engage *= clampf((motor_rpm - (STALL_RPM + 150.0)) / 300.0, 0.0, 1.0)
+	return 1.0 - smoothstep(0.0, 1.0, engage)
+
 func process_throttle(delta : float) -> void:
 	var throttle_delta := throttle_speed * delta
 	
@@ -741,7 +757,9 @@ func process_throttle(delta : float) -> void:
 		throttle_amount = 0.0
 	
 	## Disengage clutch when shifting or below motor idle
-	if need_clutch or is_shifting:
+	if realistic_clutch:
+		clutch_amount = _realistic_clutch_amount(delta)
+	elif need_clutch or is_shifting:
 		clutch_amount = 1.0
 	else:
 		clutch_amount = clutch_input
@@ -759,7 +777,7 @@ func process_throttle(delta : float) -> void:
 ##     hard-coded 100% / 75% of max_rpm.
 const IDLE_KP := 0.10            # Nm per rpm of idle error
 const IDLE_KI := 0.30            # Nm per rpm per second
-const IDLE_MAX_TORQUE := 60.0    # the most the idle controller may add
+const IDLE_MAX_TORQUE := 120.0   # the most the idle controller may add (it must beat drag twice over to spin up from a stall)
 const AUTO_UP_LIGHT := 0.45      # upshift at this fraction of max_rpm on a light throttle (1.0 on full)
 const AUTO_DOWN_LIGHT := 0.30    # downshift below this fraction of max_rpm (in the lower gear) on a light throttle
 const AUTO_DOWN_FULL := 0.75     # same, on full throttle (GEVP's old fixed value)
@@ -781,6 +799,27 @@ const AUTO_DOWN_FULL := 0.75     # same, on full throttle (GEVP's old fixed valu
 ## (8) Heat and wear hooks (Phase B, DEVIATION): PowertrainHealth sets these each
 ## tick. 1.0 = no effect. torque_mult scales engine torque (overheat derate),
 ## brake_mult scales brake force (fade). Both have floors, so the car never dies.
+## (9) Realistic clutch, stall and starter (Phase C, 2026-10-05, DEVIATION, off by
+## default). With realistic_clutch on, GEVP's "clutch opens below idle, closes above
+## clutch_out_rpm" hack is replaced by:
+##  - manual gearbox: a clutch pedal (clutch_input, smoothed) with a bite curve;
+##  - automatic: an auto clutch that creeps at idle, slips through a launch and is
+##    shut above 3 m/s, and opens before the engine stalls (anti-stall);
+##  - stall: the engine stops if it is dragged under STALL_RPM for STALL_TIME while
+##    the clutch is closed; hold starter_input to crank it (it needs the clutch
+##    open, which the automatic does by itself).
+@export var realistic_clutch := false
+var engine_running := true
+var starter_input := false
+var clutch_pedal := 0.0
+var _stall_timer := 0.0
+const STALL_RPM := 450.0
+const STALL_TIME := 0.25
+const STARTER_TORQUE := 90.0
+const STARTER_RPM := 600.0
+const CREEP_ENGAGE := 0.12       # automatic clutch engagement at idle with no throttle
+const LAUNCH_FULL_RPM := 2200.0  # engagement reaches 1.0 here on a launch
+const AUTO_CLUTCH_SHUT_SPEED := 3.0
 var torque_mult := 1.0
 var brake_mult := 1.0
 var boost := 0.0
@@ -810,9 +849,16 @@ func process_motor(delta : float) -> void:
 	torque_output = get_torque_at_rpm(motor_rpm) * throttle_amount * turbo_mult * torque_mult
 	## Adjust torque based on throttle input, clutch input, and motor drag
 	torque_output -= drag_torque * (1.0 + (clutch_amount * (1.0 - throttle_amount)))
+	var engine_off := realistic_clutch and not engine_running
+	if engine_off:
+		# (9) no firing: only drag, plus the starter if it is held
+		torque_output = -drag_torque * (1.0 + (clutch_amount * (1.0 - throttle_amount)))
+		if starter_input:
+			torque_output += STARTER_TORQUE
+		idle_integral = 0.0
 	# (4) idle controller: PI on rpm error, only on a (nearly) closed throttle,
 	# anti-windup by clamping the integral. Replaces the old hard floor.
-	if throttle_amount < 0.1:
+	elif throttle_amount < 0.1:
 		var idle_err := idle_rpm - motor_rpm
 		idle_integral = clampf(idle_integral + idle_err * IDLE_KI * delta, 0.0, IDLE_MAX_TORQUE)
 		torque_output += clampf(idle_err * IDLE_KP + idle_integral, 0.0, IDLE_MAX_TORQUE)
@@ -831,7 +877,8 @@ func process_motor(delta : float) -> void:
 	elif new_rpm < limit_rpm - LIMITER_HYSTERESIS_RPM:
 		limiter_cut = false
 	motor_is_redline = limiter_cut
-	if limiter_cut or new_rpm <= idle_rpm * 0.4:
+	var min_fire_rpm := idle_rpm * (0.1 if realistic_clutch else 0.4)  # realistic: it may run (and stall) well under idle
+	if (limiter_cut or new_rpm <= min_fire_rpm) and not engine_off:
 		torque_output = 0.0
 	
 	motor_rpm += ANGULAR_VELOCITY_TO_RPM * delta * (torque_output - drag_torque) / motor_moment
@@ -842,7 +889,20 @@ func process_motor(delta : float) -> void:
 	elif new_rpm > maxf(clutch_out_rpm, idle_rpm):
 		need_clutch = false
 	
-	motor_rpm = maxf(motor_rpm, idle_rpm * 0.4)  # (4) safety floor only; the idle controller holds idle
+	motor_rpm = maxf(motor_rpm, 0.0 if engine_off else idle_rpm * (0.15 if realistic_clutch else 0.4))  # (4) safety floor only; the idle controller holds idle
+	# (9) stall and restart
+	if realistic_clutch:
+		if engine_running:
+			if clutch_amount < 0.4 and motor_rpm < STALL_RPM:
+				_stall_timer += delta
+				if _stall_timer > STALL_TIME:
+					engine_running = false
+			else:
+				_stall_timer = 0.0
+		elif starter_input and motor_rpm > STARTER_RPM:
+			engine_running = true
+			_stall_timer = 0.0
+			idle_integral = 0.0
 
 func process_clutch(delta : float):
 	if current_gear == 0:
@@ -891,7 +951,10 @@ func process_clutch(delta : float):
 	
 	var clutch_reaction_torque := clutch_torque + tcs_torque_reduction
 	var new_rpm := motor_rpm - ((ANGULAR_VELOCITY_TO_RPM * delta * clutch_reaction_torque) / motor_moment)
-	if new_rpm < idle_rpm:
+	if realistic_clutch:
+		# (9) the realistic clutch lets the engine be dragged under idle (it can stall)
+		new_rpm = maxf(new_rpm, 0.0 if not engine_running else idle_rpm * 0.15)
+	elif new_rpm < idle_rpm:
 		new_rpm = idle_rpm
 	if new_rpm < idle_rpm + 100:
 		need_clutch = true

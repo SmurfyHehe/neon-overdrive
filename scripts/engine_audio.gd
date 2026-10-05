@@ -8,6 +8,7 @@ class_name EngineAudio
 ## Seconds of audio buffered ahead. Lower = engine reacts sooner to the
 ## throttle, higher = more tolerant of frame hitches.
 const BUFFER_SECS := 0.06
+const ENGINE_VOLUME := 0.5  # EngineSynth's own default level
 
 ## Which car's exhaust preset the player car starts with (exhaust_tune.gd).
 ## Placeholder until the cars are built from fleet.json (stage B step 5).
@@ -42,6 +43,7 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if _playback == null:
 		return
+	synth.volume = ENGINE_VOLUME if _vehicle.engine_running else 0.0  # a stalled engine is silent
 	if _vehicle.turbo_boost_max > 0.0:
 		synth.boost = clampf(_vehicle.boost / _vehicle.turbo_boost_max, 0.0, 1.0)
 		if _vehicle.blow_off_count != _seen_blow_offs:

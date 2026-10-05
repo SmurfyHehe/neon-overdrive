@@ -11,7 +11,7 @@ extends SceneTree
 #   launch, which is what the search constraints (step 4) must rule out
 # Prints (not asserts):
 # - a sensitivity table: how far each tunable moves each metric, both as the
-#   game runs (default damping) and with linear damping removed
+#   game runs (linear damp 0) and with Godot's old default damp of 0.1
 # - simulation speed: physics steps per second and wall time per evaluated spec
 #
 # Meant to run with a fixed frame time so physics steps are not tied to the wall
@@ -36,6 +36,8 @@ func _initialize() -> void:
 	print("default coupe: ", _fmt(first))
 	_check(first.ok, "default coupe run problems: %s" % str(first.problems))
 	_check(first.top_speed_kmh > 80.0 and first.top_speed_kmh < 320.0, "top speed implausible: %f" % first.top_speed_kmh)
+	# Guard for PlayerCar.LINEAR_DAMP: Godot's default damp (0.1) held this car at ~124 km/h.
+	_check(first.top_speed_kmh > 180.0, "top speed %.1f km/h: linear damping is capping the car again" % first.top_speed_kmh)
 	_check(first.get("t_0_100", 99.0) > 1.5 and first.get("t_0_100", 99.0) < 20.0, "0-100 implausible: %s" % str(first.get("t_0_100")))
 	_check(first.brake_dist_100 > 10.0 and first.brake_dist_100 < 100.0, "100-0 distance implausible: %f" % first.brake_dist_100)
 	_check(first.peak_lat_g > 0.5 and first.peak_lat_g < 5.0, "peak lateral g implausible: %f" % first.peak_lat_g)
@@ -78,7 +80,7 @@ func _initialize() -> void:
 			TuneParams.set_value(s, path, value)
 			specs.append(s)
 			labels.append("%s=%s (%.3f)" % [path, end, value])
-	for damp in [-1.0, 0.0]:
+	for damp in [-1.0, 0.1]:
 		track = _new_track()
 		track.linear_damp_override = damp
 		var t0 := Time.get_ticks_usec()
@@ -87,7 +89,7 @@ func _initialize() -> void:
 		var car_steps := track.steps_taken * track.cars_simulated
 		print("
 === sweep, %s: %d specs, %.1f s wall, %.2f s per spec, %.0f physics steps/s (3 cars), %.0f us per car-step" % [
-			"game damping" if damp < 0.0 else "linear damp removed", specs.size(), wall, wall / specs.size(), track.steps_taken / wall, wall * 1e6 / car_steps])
+			"as the game runs (linear damp 0)" if damp < 0.0 else "old Godot default damp 0.1", specs.size(), wall, wall / specs.size(), track.steps_taken / wall, wall * 1e6 / car_steps])
 		_report_sweep(labels, results, damp < 0.0)
 		track.queue_free()
 

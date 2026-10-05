@@ -37,6 +37,13 @@ const CFG := {
 	"wheel_r": 0.34, "axle_z": 1.05, "wheel_x": 0.88,
 }
 
+## Godot gives every RigidBody3D linear damp 0.1 (a drag of 0.1 per second on
+## top of the aero model), which held this car at ~124 km/h in 4th gear no
+## matter the tune (found by TuneTrack, Auto-Tune step 2). Roy approved removing
+## the cap (2026-10-05); air resistance is AeroModel's job. Replace, not
+## combine, so the project/area defaults can't add it back.
+const LINEAR_DAMP := 0.0
+
 const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Vehicle's own shift_time below
 
 var chassis_visual: Node3D
@@ -95,6 +102,9 @@ func _ready() -> void:
 	# frame 150 and linear_velocity stayed pinned at ~0 forever after. A
 	# player-controlled vehicle should never sleep.
 	can_sleep = false
+
+	linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
+	linear_damp = LINEAR_DAMP
 
 	# Vehicle body collision shape -- the RigidBody3D still needs one (wheels
 	# handle ground contact via their own raycasts).

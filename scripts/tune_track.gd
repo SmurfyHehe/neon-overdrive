@@ -142,9 +142,9 @@ class Run extends RefCounted:
 		if t >= CORNER_TIME or (t > 4.0 and peak_lat_g > 0.3 and lat_g_smooth < 0.6 * peak_lat_g):
 			_finish()
 
-## -1 runs the cars exactly as the game does. 0 or more replaces the RigidBody's
-## linear damping with that value, for what-if runs: the project leaves Godot's
-## default linear damp (0.1) on, which caps the car near 124 km/h.
+## -1 runs the cars exactly as the game does (PlayerCar.LINEAR_DAMP, 0). 0 or
+## more replaces the RigidBody's linear damping with that value, for what-if
+## runs: Godot's old default of 0.1 capped the car near 124 km/h.
 var linear_damp_override := -1.0
 
 var steps_taken := 0  # physics steps the last evaluate() ran, all specs together
@@ -219,12 +219,11 @@ func _spawn(spec: Dictionary, lane: int, kind: int) -> Run:
 	r.t = -SETTLE_TIME
 	var car := PlayerCar.new()
 	car.sim_only = true
-	if linear_damp_override >= 0.0:
-		car.linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
-		car.linear_damp = linear_damp_override
 	car.spec = CarSpec.clone_spec(spec)
 	car.driver = r.drive
 	car.position = Vector3(lane * LANE_SPACING, 0.3, 0.0)
 	add_child(car)
+	if linear_damp_override >= 0.0:  # after _ready(), which sets the game's value
+		car.linear_damp = linear_damp_override
 	r.car = car
 	return r

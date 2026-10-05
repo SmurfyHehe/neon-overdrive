@@ -20,8 +20,15 @@ OUT = os.path.normpath(os.path.join(HERE, '..', '..', 'docs', 'design', 'fleet')
 FONT_DIR = '/usr/share/fonts/opentype/inter/'
 
 
+# Windows has no Inter; Segoe UI is close enough that the sheets stay readable
+WIN_FONT_DIR = 'C:/Windows/Fonts/'
+WIN_FONTS = {'b': 'segoeuib.ttf', 's': 'seguisb.ttf', 'r': 'segoeui.ttf', 'm': 'segoeui.ttf'}
+
+
 def F(weight, size):
     name = {'b': 'Inter-Bold.otf', 's': 'Inter-SemiBold.otf', 'r': 'Inter-Regular.otf', 'm': 'Inter-Medium.otf'}[weight]
+    if not os.path.isdir(FONT_DIR):
+        return ImageFont.truetype(WIN_FONT_DIR + WIN_FONTS[weight], size)
     return ImageFont.truetype(FONT_DIR + name, size)
 
 
@@ -223,7 +230,7 @@ def builds_panel(sheet, D, box):
 
 def stickers_panel(sheet, D, box):
     x0, y0, x1, y1 = box
-    panel(sheet, box, 'STICKER SLOTS (exactly 3, fixed)')
+    panel(sheet, box, 'STICKER SLOTS (exactly 4, fixed)')
     m = car.build(D, stickers=True)
     # neutral paint so the amber slots always show
     cols = render.resolve_colors(m.mesh.mats, dict(colors(D), paint='#4A505B', paint2='#6B7280', roof='#4A505B'))
@@ -231,16 +238,18 @@ def stickers_panel(sheet, D, box):
     b = views.view_image(m, cols, 'q_rear', size=(520, 330), ss=2)
     w = (x1 - x0 - 30) // 2
     for k, im in enumerate((a, b)):
-        im.thumbnail((w, 210), Image.LANCZOS)
+        im.thumbnail((w, 190), Image.LANCZOS)
         sheet.paste(im, (x0 + 10 + k * (w + 10), y0 + 34))
     d = ImageDraw.Draw(sheet)
-    y = y0 + 252
+    y = y0 + 232
     for i, st in enumerate(D['stickers']):
         where = {'left': 'both doors (mirrored)' if st.get('mirror') else 'left door', 'top': 'from above',
                  'rear': 'from behind'}[st['view']]
+        if st['id'] == 'sun':
+            where = 'across the top of the windshield'
         note = st.get('note') or st['id']
         d.text((x0 + 14, y), f"{i + 1}  {st['id']}: {note}, {where}", font=F('m', 17), fill=SILVER)
-        y += 26
+        y += 24
 
 
 def parts_panel(sheet, D, box):

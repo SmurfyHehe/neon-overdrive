@@ -5,17 +5,17 @@ extends SceneTree
 #   fleet     6 player, 3 traffic, 3 police cars
 #   budget    triangles per build within the class budget (player 10k,
 #             police 6k, traffic 4k); draw calls per car <= 7 (B1 plan)
-#   stickers  exactly 3 slots per build. Every placement sits on the body (a
+#   stickers  exactly 4 slots per build (door, hood, windshield sun strip, rear). Every placement sits on the body (a
 #             ray along -normal meets it within 3 cm). No part hovers over it
 #             (a wing, spoiler or rack more than 8 cm above); a flush part
 #             like a hood scoop is fine, the sticker wraps over it. From every
 #             orbit camera (24 yaw x 4 pitch, the 360 garage view) at least
-#             one slot faces the camera and is unblocked, except the 3
-#             ground-level views of the nose (yaw 165-195, pitch 2), where
-#             only the front fascia faces the camera: covering those needs a
-#             windshield sun strip instead of the hood slot (Roy's call).
-#             The rear slot must be seen from the chase cam; its readable
-#             size there (area x facing) is reported.
+#             one slot faces the camera and is unblocked. The sun strip is
+#             what covers the 3 ground-level views of the nose (yaw 165-195,
+#             pitch 2), where only the front fascia faces the camera. The
+#             rear slot sits on the upright tail panel or tailgate (normal
+#             no more than 0.2 up) and must be seen from the chase cam; its
+#             readable size there (area x facing) is reported.
 #   exhaust   every build and every exhaust option has at least one tip (gas
 #             only). Rear tips sit behind the rear axle, side exits between
 #             the axles. The tip geometry is there (a ray back into the tip
@@ -48,7 +48,6 @@ const CHASE_VFOV := 58.0
 const CHASE_ASPECT := 16.0 / 9.0
 const POLICE_TELLS := ["lightbar", "pushbar", "spotlight", "antennas"]
 const HOVER := 0.08            # a part this far above a slot hides it
-const NOSE_LOW := ["yaw 165 pitch 2", "yaw 180 pitch 2", "yaw 195 pitch 2"]
 
 var fails := 0
 var report := {"cars": {}, "fails": []}
@@ -183,8 +182,8 @@ func _check_build(data: Dictionary, car: Dictionary, b: Dictionary, f: Dictionar
 	var space := root.get_world_3d().direct_space_state
 
 	# sticker slots
-	if b.slots.size() != 3:
-		_fail("%s: %d sticker slots, want 3" % [tag, b.slots.size()])
+	if b.slots.size() != 4:
+		_fail("%s: %d sticker slots, want 4" % [tag, b.slots.size()])
 	var placements := []
 	var slot_report := {}
 	for s in b.slots:
@@ -202,6 +201,8 @@ func _check_build(data: Dictionary, car: Dictionary, b: Dictionary, f: Dictionar
 			var c := Vector3(p.center[0], p.center[1], p.center[2])
 			var n := Vector3(p.normal[0], p.normal[1], p.normal[2])
 			placements.append([s.id, c, n])
+			if s.id == "rear" and n.y > 0.2:
+				_fail("%s: rear slot faces %.2f up, it must sit on the upright tail panel" % [tag, n.y])
 			# on the body: from 0.5 m out, the first thing hit along -n is the
 			# body right under the slot (slots float 12 mm up; allow 3 cm)
 			var hit := _ray(space, c + n * 0.5, c - n * 0.2)
@@ -240,12 +241,8 @@ func _check_build(data: Dictionary, car: Dictionary, b: Dictionary, f: Dictionar
 	r["orbit_views"] = orbit.size()
 	r["orbit_blind_views"] = blind
 	r["slot_view_counts"] = per_slot
-	var judged_blind := []
-	for v in blind:
-		if not (v in NOSE_LOW):
-			judged_blind.append(v)
-	if not judged_blind.is_empty():
-		_fail("%s: no sticker slot visible from %d orbit views: %s" % [tag, judged_blind.size(), judged_blind])
+	if not blind.is_empty():
+		_fail("%s: no sticker slot visible from %d orbit views: %s" % [tag, blind.size(), blind])
 	# chase cam: which slots it sees, and how big the rear one reads there
 	var chase := []
 	var rear_read := 0.0

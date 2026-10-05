@@ -346,7 +346,7 @@ results written here first, and the next step never starts unprompted.
 
 | Step | Contents |
 |---|---|
-| 1 | Design sheet for all 12 cars (6 player, 3 NPC, 3 cop): original designs, a silhouette language per class, readable from every angle (a 360 camera comes later), gas only, a realistic poly budget for a mid laptop, mods that change shape, paint, wheels and 3 sticker spots. Design only. Built by the B1 session, audited in this one. |
+| 1 | Design sheet for all 12 cars (6 player, 3 NPC, 3 cop): original designs, a silhouette language per class, readable from every angle (a 360 camera comes later), gas only, a realistic poly budget for a mid laptop, mods that change shape, paint, wheels and 4 sticker spots. Design only. Built by the B1 session, audited in this one. |
 | 2 | Exhaust: loudness, raspiness, pops/crackles, flame tune. Loudness and flames are cosmetic only. |
 | 3 | Milestones 3–4, full-sim traffic (Option C): every traffic car runs the same raycast Vehicle sim through CarSpec, told apart by data only. Lane-follow first, then reactive. Road: 4 lanes per direction. A draw-distance slider that lowers sim quality for far cars. Test at ~300 km/h in busy traffic and report fps. Research traffic AI first and cite it. |
 | 4 | Milestone 5, camera + HUD: steering wheel with an RPM bar going green to red as the shift cue, instrument cluster, visible gear shifter. Automatic and semi-manual, switched in the T tuning menu. R picks reverse only when nearly stopped. Settings in a pause-menu Settings tab. Keyboard only. |
@@ -369,7 +369,8 @@ direction is now the spec (stage A capped it at 3; step 3 widens the road).
   is not used. Designs are original, with real-inspired shapes and no
   licensed makes. Gas-only. Keyboard-only input.
 - **Mods** change shape, paint, wheels and stickers. Each car has exactly
-  **3 fixed sticker slots**.
+  **4 fixed sticker slots**: door, hood, windshield sun strip, rear (Roy,
+  2026-10-05; was 3).
 - **Exhaust is cosmetic only:** loudness, tone, raspiness, pops/crackles,
   flames and a flamethrower tune. It has no wear, heat, fuel or police
   effects.
@@ -435,8 +436,9 @@ direction is now the spec (stage A capped it at 3; step 3 widens the road).
     - police: big and upright, always with a police tell in the outline.
   - **Each car has its own tail-light signature**, for reading cars from behind
     at night.
-  - **Sticker slots:** door (mirrored), hood, and one slot seen from behind, so
-    every camera sees one.
+  - **Sticker slots:** door (mirrored), hood, windshield sun strip, and one slot
+    seen from behind on the upright tail panel or tailgate, so every camera sees
+    one. Signed off by Roy with the sun strip added (4 slots, 2026-10-05).
   - **Police livery:** navy with silver doors and roof.
   - **Police blue `#2E4FD8` is the only off-palette colour** and is flagged for
     Roy.
@@ -491,7 +493,14 @@ direction is now the spec (stage A capped it at 3; step 3 widens the road).
 - **Waiting on Roy:** B1 sign-off (shapes, parts, stickers, colours) before B2.
 - **Review page** (private to Roy): <https://claude.ai/artifact/SvEKcFe1CaWa787K8Gha3m>. It has a 360° viewer of every design and build, plus the sheets.
 
-### Step 1 audit (2026-10-05): waiting for Roy's sign-off
+### Step 1 audit (2026-10-05): approved by Roy with changes
+
+Roy approved step 1 with two changes, applied in this branch: the rear sticker
+stays on the upright tail panel or tailgate for all 12 cars (P5 and C1
+included, accepting the smaller chase-cam read), and each car goes from 3 to 4
+sticker slots by adding the windshield sun strip. `fleet_design_check` now
+wants exactly 4 slots, an upright rear slot, and a slot visible from all 96
+orbit cameras (the nose-level exception is gone).
 
 Roy's stage B prompt arrived after B1 had delivered its sheet. Asked what to
 do with it, **Roy chose "audit and verify it"** over a fresh redesign or

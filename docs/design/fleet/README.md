@@ -69,17 +69,19 @@ patrol SUV.
   Every option changes the visible shape, the wheels or the paint. Physics
   effects belong to the stage E mod trees. Traffic and police cars get 2–3
   variants for variety, for example a taxi sign, a bed cover, or a push bar off.
-- **Sticker slots:** exactly 3 per car:
+- **Sticker slots:** exactly 4 per car (Roy's step 1 sign-off, 2026-10-05):
   - the door, mirrored on both sides;
   - the hood, seen from above;
+  - the windshield sun strip, a banner across the top of the glass between the
+    A-pillars, seen from above;
   - the tail panel or tailgate, upright, so the chase cam and low rear views
     both see it (moved there in the audit from rear windows and trunk lids;
     the hot hatch's old one sat under its spoiler).
 
   Checked in Godot (`tests/fleet_design_check.gd`): every slot lies on the body
   in every build, nothing hovers over it, the chase cam sees the rear one, and
-  every orbit camera sees at least one, except the 3 ground-level views of the
-  nose, where only the front fascia faces the camera. Each slot's 3D centre,
+  every orbit camera sees at least one, all 96 of them (the sun strip is what
+  covers the 3 ground-level views of the nose that the hood slot missed). Each slot's 3D centre,
   normal and size is in `fleet.json`, ready for a decal projector. On police
   cars the slots hold the livery; on the unmarked car they are empty.
 - **Exhaust tips:** position, direction and radius for every exhaust option

@@ -25,7 +25,10 @@ call :run test_car --headless
 call :run road_strip_winding --headless
 call :run sidewalk_collision_taper --headless
 call :run aero_draft_equivalence --headless
+call :run tune_params --headless
 if /i not "%~1"=="quick" (
+	rem Headless, but ~2 min of simulated driving; --fixed-fps lets physics run faster than the clock.
+	call :run tune_track "--headless --fixed-fps 60"
 	rem These need a real window: headless drops MultiMesh data.
 	call :run chunk_drive
 	call :run game_state
@@ -43,6 +46,7 @@ exit /b 0
 :run
 echo.
 echo === %1
-"%GODOT%" %AUDIO% %2 --path . -s res://tests/%1.gd
+"%GODOT%" %AUDIO% %~2 --path . -s res://tests/%1.gd
+
 if errorlevel 1 set "FAILED=!FAILED! %1"
 exit /b 0

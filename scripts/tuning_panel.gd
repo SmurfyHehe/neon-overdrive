@@ -7,26 +7,30 @@ extends CanvasLayer
 # "Copy values" puts a car_spec.gd-ready snippet on the clipboard (and prints
 # it) for the step-2 PR.
 #
+# Every edit goes through CarSpec.set_param() into the player's spec dict (the
+# same path Auto-Tune uses), which updates the live car; the panel keeps no
+# separate copy of the tune. Slider ranges come from TuneParams.
+#
 # Debug tool, deliberately plain Godot default controls -- not the game's UI.
 # The torque knobs are the four CarSpec.build_torque_curve() shape values plus
 # peak torque and redline; they are the same levers the planned upgrade tree
 # will move, so a tune found here maps straight onto upgrades later.
 
 const GEAR_COUNT := 5
-# [key, label, min, max, step]
+# [key, label, TuneParams path, step]; min and max come from TuneParams.
 const KNOBS := [
-	["final_drive", "Final drive", 2.5, 5.5, 0.01],
-	["gear_1", "Gear 1", 0.5, 4.5, 0.01],
-	["gear_2", "Gear 2", 0.5, 4.5, 0.01],
-	["gear_3", "Gear 3", 0.5, 4.5, 0.01],
-	["gear_4", "Gear 4", 0.5, 4.5, 0.01],
-	["gear_5", "Gear 5", 0.5, 4.5, 0.01],
-	["max_torque", "Peak torque Nm", 150.0, 900.0, 5.0],
-	["max_rpm", "Redline rpm", 4000.0, 10000.0, 100.0],
-	["low_end", "Low-end torque", 0.1, 0.9, 0.01],
-	["peak_pos", "Peak position", 0.25, 0.95, 0.01],
-	["plateau", "Plateau width", 0.0, 0.5, 0.01],
-	["falloff", "Torque at redline", 0.2, 1.0, 0.01],
+	["final_drive", "Final drive", "final_drive", 0.01],
+	["gear_1", "Gear 1", "gear_ratios/0", 0.01],
+	["gear_2", "Gear 2", "gear_ratios/1", 0.01],
+	["gear_3", "Gear 3", "gear_ratios/2", 0.01],
+	["gear_4", "Gear 4", "gear_ratios/3", 0.01],
+	["gear_5", "Gear 5", "gear_ratios/4", 0.01],
+	["max_torque", "Peak torque Nm", "max_torque", 5.0],
+	["max_rpm", "Redline rpm", "max_rpm", 100.0],
+	["low_end", "Low-end torque", "torque_shape/low_end", 0.01],
+	["peak_pos", "Peak position", "torque_shape/peak_pos", 0.01],
+	["plateau", "Plateau width", "torque_shape/plateau", 0.01],
+	["falloff", "Torque at redline", "torque_shape/falloff", 0.01],
 ]
 const AIR_DENSITY := 1.2  # kg/m^3, for the drag-limited top speed estimate
 # gevp_vehicle.gd process_motor() only cuts torque above max_rpm * 1.1, and the
@@ -77,10 +81,11 @@ func _ready() -> void:
 		var name_label := Label.new()
 		name_label.text = k[1]
 		grid.add_child(name_label)
+		var entry := TuneParams.find(k[2])
 		var s := HSlider.new()
-		s.min_value = k[2]
-		s.max_value = k[3]
-		s.step = k[4]
+		s.min_value = entry.min
+		s.max_value = entry.max
+		s.step = k[3]
 		s.custom_minimum_size = Vector2(220, 0)
 		s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		s.value = values[k[0]]
@@ -120,8 +125,19 @@ func _on_state_changed(new_state: GameState.State, _old_state: GameState.State) 
 			focused.release_focus()
 
 func _on_slider(value: float, key: String) -> void:
-	values[key] = value
-	_apply()
+	_write(key, value)
+	_refresh()
+
+func _path_of(key: String) -> String:
+	for k in KNOBS:
+		if k[0] == key:
+			return k[2]
+	return ""
+
+## One edit: through the single write path. The stored (clamped) value is what
+## the panel shows.
+func _write(key: String, value: float) -> void:
+	values[key] = CarSpec.set_param(player, player.spec, _path_of(key), value)
 
 func _reset() -> void:
 	for key in start_values:
@@ -130,32 +146,18 @@ func _reset() -> void:
 	_apply()
 
 func _read_from_player() -> void:
-	values.final_drive = player.final_drive
-	for i in GEAR_COUNT:
-		values["gear_%d" % (i + 1)] = player.gear_ratios[i]
-	values.max_torque = player.max_torque
-	values.max_rpm = player.max_rpm
-	for key in CarSpec.DEFAULT_TORQUE_SHAPE:
-		values[key] = CarSpec.DEFAULT_TORQUE_SHAPE[key]
+	for k in KNOBS:
+		values[k[0]] = TuneParams.get_value(player.spec, k[2])
 
-## Writes every knob into the live Vehicle. All of these are read fresh each
-## physics tick by gevp_vehicle.gd except max_clutch_torque, which initialize()
-## derives from max_torque once, so it is recomputed here the same way.
+## Writes every knob. Used on open and Reset; a single slider move uses _write().
 func _apply() -> void:
-	var ratios: Array[float] = []
-	for i in GEAR_COUNT:
-		ratios.append(values["gear_%d" % (i + 1)])
-	player.gear_ratios = ratios
-	player.final_drive = values.final_drive
-	player.max_torque = values.max_torque
-	player.max_clutch_torque = values.max_torque * player.max_clutch_torque_ratio
-	player.max_rpm = values.max_rpm
-	player.torque_curve = CarSpec.build_torque_curve(values.low_end, values.peak_pos, values.plateau, values.falloff)
+	for k in KNOBS:
+		_write(k[0], values[k[0]])
 	_refresh()
 
 func _refresh() -> void:
 	for k in KNOBS:
-		var step: float = k[4]
+		var step: float = k[3]
 		value_labels[k[0]].text = ("%d" % values[k[0]]) if step >= 1.0 else ("%.2f" % values[k[0]])
 	readout.text = _readout_text()
 

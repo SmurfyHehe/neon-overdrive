@@ -28,10 +28,12 @@ if /i not "%~1"=="quick" (
 	rem Headless, but ~2 min of simulated driving; --fixed-fps lets physics run faster than the clock.
 	call :run tune_track "--headless --fixed-fps 60"
 	call :run auto_tune_search "--headless --fixed-fps 60"
+	call :run auto_tune_job "--headless --fixed-fps 60"
 	rem These need a real window: headless drops MultiMesh data.
 	call :run chunk_drive
 	call :run game_state
 	call :run tuning_panel
+	call :run auto_tune_panel
 )
 echo.
 if defined FAILED (

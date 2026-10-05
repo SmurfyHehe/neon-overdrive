@@ -31,8 +31,6 @@ const MIN_STEP := 0.02
 const VERIFY_COUNT := 3
 const IMPROVE_EPS := 1e-4  # a move must beat the current score by this much
 
-var cancelled := false
-
 ## `track` must be in the tree. `request`: see AutoTuneRules. `budget`: how many
 ## candidate runs the search may spend (verification is extra, at most
 ## VERIFY_COUNT + 1 full evaluations). `progress`, if valid, is called as
@@ -41,12 +39,11 @@ var cancelled := false
 ##   improved: bool, spec: Dictionary (the base spec when not improved),
 ##   base_metrics, metrics (full, verified), score (full score, 0 if none),
 ##   evals, notes: Array[String],
-##   verified: Array of {spec, search_score, full_score, metrics, accepted, why},
-##   cancelled: bool }
+##   verified: Array of {spec, search_score, full_score, metrics, accepted, why} }
 func run(track: TuneTrack, base: Dictionary, request: Dictionary, budget: int, progress := Callable()) -> Dictionary:
 	var result := {
 		"improved": false, "spec": CarSpec.clone_spec(base), "base_metrics": {}, "metrics": {},
-		"score": 0.0, "evals": 0, "notes": [] as Array[String], "verified": [], "cancelled": false,
+		"score": 0.0, "evals": 0, "notes": [] as Array[String], "verified": [],
 	}
 	if AutoTuneRules.active_goals(request).is_empty():
 		result.notes.append("No goal selected.")
@@ -77,11 +74,11 @@ func run(track: TuneTrack, base: Dictionary, request: Dictionary, budget: int, p
 		result.evals = evals
 		return result
 
-	while evals < budget and not cancelled and step >= MIN_STEP and not active.is_empty():
+	while evals < budget and step >= MIN_STEP and not active.is_empty():
 		var moves := {}  # path -> best {spec, score, path} among that path's probes
 		for path in active:
 			for sign in [1.0, -1.0]:
-				if evals >= budget or cancelled:
+				if evals >= budget:
 					break
 				var cand := _probe(current, path, sign * step, request)
 				if cand.is_empty():
@@ -100,7 +97,7 @@ func run(track: TuneTrack, base: Dictionary, request: Dictionary, budget: int, p
 		for path in moves:
 			if best.is_empty() or moves[path].score > best.score:
 				best = moves[path]
-		if moves.size() > 1 and evals < budget and not cancelled:
+		if moves.size() > 1 and evals < budget:
 			var combo := CarSpec.clone_spec(current)
 			for path in moves:
 				TuneParams.set_value(combo, path, TuneParams.get_value(moves[path].spec, path))
@@ -119,7 +116,6 @@ func run(track: TuneTrack, base: Dictionary, request: Dictionary, budget: int, p
 			still.append(path)
 		active = still
 
-	result.cancelled = cancelled
 	await _verify(track, base, request, base_full, archive, result)
 	result.evals = evals + result.verified.size()
 	return result

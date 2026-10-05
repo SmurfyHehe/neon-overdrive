@@ -16,7 +16,10 @@ extends Node
 
 # TUNING (#62) is the debug tuning panel: paused like PAUSED, but the panel
 # shows instead of the pause menu.
-enum State { PLAYING, PAUSED, TUNING }
+# AUTOTUNE is the Auto-Tune panel (paused like TUNING). Its search runs in a
+# separate headless Godot process (scripts/auto_tune_job.gd), because the game's
+# physics can neither run faster than real time nor be stepped by hand.
+enum State { PLAYING, PAUSED, TUNING, AUTOTUNE }
 
 signal state_changed(new_state: State, old_state: State)
 
@@ -31,10 +34,14 @@ func _physics_process(_delta: float) -> void:
 		toggle_pause()
 	elif Input.is_action_just_pressed("tuning_panel"):
 		toggle_tuning()
+	elif Input.is_action_just_pressed("autotune_panel"):
+		toggle_autotune()
 
 func toggle_pause() -> void:
 	if state == State.TUNING:
 		close_tuning()  # Esc backs out of the tuning panel
+	elif state == State.AUTOTUNE:
+		close_autotune()  # Esc backs out of Auto-Tune too
 	elif state == State.PAUSED:
 		resume()
 	elif state == State.PLAYING:
@@ -64,6 +71,18 @@ func close_tuning() -> void:
 		return
 	get_tree().paused = false
 	_set_state(State.PLAYING)
+
+func toggle_autotune() -> void:
+	if state == State.AUTOTUNE:
+		close_autotune()
+	elif state == State.PLAYING:
+		get_tree().paused = true
+		_set_state(State.AUTOTUNE)
+
+func close_autotune() -> void:
+	if state == State.AUTOTUNE:
+		get_tree().paused = false
+		_set_state(State.PLAYING)
 
 # Fresh run: reload the whole scene. Cheapest correct reset -- no per-system
 # reset code to keep in sync as systems are added.

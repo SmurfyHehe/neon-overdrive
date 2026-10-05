@@ -499,6 +499,23 @@ C3 = {
 
 FLEET = [P1, P2, P3, P4, P5, P6, N1, N2, N3, C1, C2, C3]
 
+
+def _add_sun_strips():
+    """Roy's step 1 sign-off (2026-10-05): 4 sticker slots per car, door, hood,
+    windshield sun strip, rear. The strip is a banner across the top of the
+    windshield, between the A-pillars, drawn from above so it hugs the glass."""
+    for D in FLEET:
+        cab = D['cabin']
+        rw = cab['roof_w']
+        w = (rw[0][1] if isinstance(rw, list) else rw) - 0.07
+        note = 'empty (unmarked)' if D['id'] == 'c3_interceptor' else 'windshield sun strip'
+        strip = {'id': 'sun', 'view': 'top', 'rect': (-w, cab['W'] - 0.15, w, cab['W'] - 0.02), 'note': note}
+        i = [st['id'] for st in D['stickers']].index('rear')
+        D['stickers'].insert(i, strip)
+
+
+_add_sun_strips()
+
 # Traffic paints (NPC): neutral, weighted. Nothing here may outshine a player car.
 TRAFFIC_PAINTS = [
     ('Silver', '#C9CED6', 22), ('Pearl', '#E9E6DF', 18), ('Black', '#15171C', 16), ('Gunmetal', '#4A505B', 14),

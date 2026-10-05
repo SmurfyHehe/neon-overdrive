@@ -34,7 +34,7 @@ class_name PlayerCar
 
 const KIND := TestCarBuilder.KIND  # #63 neutral test car
 const CFG := {
-	"wheel_r": 0.34, "axle_z": 1.05, "wheel_x": 0.88,
+	"wheel_r": 0.34, "axle_z": 1.25, "wheel_x": 0.88,  # Phase B: wheelbase 2.5 m (was 2.1; real coupes 2.4-2.7)
 }
 
 ## Godot gives every RigidBody3D linear damp 0.1 (a drag of 0.1 per second on

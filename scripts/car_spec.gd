@@ -145,6 +145,13 @@ static func coupe_default() -> Dictionary:
 		"frontal_area": 1.9,
 		"brake_force_multiplier": 2.5,  # Phase A: GEVP derives max brake force from tyre friction, so halving cof halved braking; x2 puts it back near 1 g (100-0 about 40 m)
 		"max_steering_angle": deg_to_rad(38.0),
+		# Phase B suspension (research: docs/research/build-phases.md): sporty damping
+		# (0.55, GEVP default 0.4) and a stiffer front anti-roll bar than rear, so the
+		# car understeers a little when pushed instead of snapping loose.
+		"front_damping_ratio": 0.55,
+		"rear_damping_ratio": 0.55,
+		"front_arb_ratio": 0.30,
+		"rear_arb_ratio": 0.20,
 		"front_spring_length": 0.22,
 		"rear_spring_length": 0.26,
 		"tire_stiffnesses": {"Road": 10.0, "Dirt": 3.0},

@@ -8,7 +8,7 @@ class_name CarBuilder
 # recolor per-instance for traffic variety.
 
 const KIND_CONFIGS := {
-	"coupe": {"wheel_r":0.34, "axle_z":1.05, "wheel_x":0.88, "chassis_h":0.46, "hood_h":0.30,
+	"coupe": {"wheel_r":0.34, "axle_z":1.25, "wheel_x":0.88, "chassis_h":0.46, "hood_h":0.30,
 		"main_w":1.6, "hood_w":1.5, "hood_z0":-1.7, "hood_z1":-0.25, "main_z0":-0.25, "main_z1":1.7,
 		"cabin_w":1.24, "roof_w":1.12, "cabin_z0":-0.35, "cabin_z1":0.95, "glass_h":0.30, "hood_rake":0.16,
 		"spoiler":true},

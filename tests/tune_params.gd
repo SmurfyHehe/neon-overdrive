@@ -6,7 +6,10 @@ extends SceneTree
 # - every base value of the default spec sits inside its registry range
 # - the car owns its arrays/dictionaries (no aliasing with the spec)
 # - gear_ratios stays Array[float] after writes (the silent-assignment bug)
-# - every v1 path: spec value == car value == the clamped request
+# - every registered path (v1 Auto-Tune ones and the raw-only engine ones): spec
+#   value == car value == the clamped request; the torque shape turns into the
+#   car's torque curve and max_torque into max_clutch_torque
+# - Auto-Tune gets exactly the 14 v1 paths, none of them engine
 # - values outside the range are clamped; an unknown path is refused
 # - a car tuned live matches a car built from the same spec: gearing, the
 #   wheels' cached tire numbers, brake force
@@ -30,10 +33,20 @@ func _initialize() -> void:
 		var stored := CarSpec.set_param(live, live.spec, e.path, target)
 		_check(is_equal_approx(stored, target), "%s: stored %f, wanted %f" % [e.path, stored, target])
 		_check(is_equal_approx(TuneParams.get_value(live.spec, e.path), target), "%s: spec not written" % e.path)
-		_check(is_equal_approx(TuneParams.get_value(live, e.path), target), "%s: car not written" % e.path)
+		if e.on_car:
+			_check(is_equal_approx(TuneParams.get_value(live, e.path), target), "%s: car not written" % e.path)
 	_check(live.gear_ratios.is_typed(), "live gear_ratios lost its type")
 	_check(live.spec.gear_ratios.is_typed(), "spec gear_ratios lost its type")
 	_check(live.gear_ratios.size() == 5, "gear count changed")
+
+	_check(live.max_clutch_torque == live.max_torque * live.max_clutch_torque_ratio, "max_clutch_torque not re-derived")
+	var shaped := CarSpec.build_torque_curve(live.spec.torque_shape.low_end, live.spec.torque_shape.peak_pos, live.spec.torque_shape.plateau, live.spec.torque_shape.falloff)
+	for x in [0.0, 0.2, 0.5, 0.8, 1.0]:
+		_check(is_equal_approx(live.torque_curve.sample_baked(x), shaped.sample_baked(x)), "torque curve does not follow the spec's shape at %f" % x)
+	var auto := TuneParams.auto_paths()
+	_check(auto.size() == 14, "Auto-Tune should have 14 paths, has %d" % auto.size())
+	for path in auto:
+		_check(not path.begins_with("torque_shape") and path != "max_torque" and path != "max_rpm", "engine path %s should not be Auto-Tune" % path)
 
 	# Clamping.
 	var hi := CarSpec.set_param(live, live.spec, "final_drive", 99.0)
@@ -82,6 +95,10 @@ func _check_same_car(a: PlayerCar, b: PlayerCar) -> void:
 		_check(is_equal_approx(wa.current_tire_stiffness, wb.current_tire_stiffness), "wheel %d tire stiffness differs" % i)
 		_check(is_equal_approx(wa.current_lateral_grip_assist, wb.current_lateral_grip_assist), "wheel %d lateral assist differs" % i)
 		_check(is_equal_approx(wa.current_longitudinal_grip_ratio, wb.current_longitudinal_grip_ratio), "wheel %d longitudinal ratio differs" % i)
+	_check(is_equal_approx(a.max_torque, b.max_torque) and is_equal_approx(a.max_rpm, b.max_rpm), "engine scalars differ")
+	_check(is_equal_approx(a.max_clutch_torque, b.max_clutch_torque), "max_clutch_torque differs")
+	for x in [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0]:
+		_check(is_equal_approx(a.torque_curve.sample_baked(x), b.torque_curve.sample_baked(x)), "torque curve differs at %f" % x)
 	_check(is_equal_approx(a.max_brake_force, b.max_brake_force), "max_brake_force %f vs %f" % [a.max_brake_force, b.max_brake_force])
 	_check(is_equal_approx(a.max_handbrake_force, b.max_handbrake_force), "max_handbrake_force differs")
 	_check(is_equal_approx(a.coefficient_of_drag, b.coefficient_of_drag), "drag differs")

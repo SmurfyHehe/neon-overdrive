@@ -20,7 +20,13 @@ class_name CarSpec
 ## builds by copying a base spec and changing a few entries.
 static func apply(v: Vehicle, spec: Dictionary) -> void:
 	for key in spec:
-		v.set(key, _own(spec[key]))
+		if key == "torque_shape":
+			# Not a Vehicle property: the spec stores the shape and the car gets
+			# the curve built from it, so tuning the shape and the curve can't
+			# disagree.
+			v.torque_curve = _curve_from_shape(spec[key])
+		else:
+			v.set(key, _own(spec[key]))
 
 ## The vehicle gets its own copy of every array and dictionary. Without this the
 ## spec, the Vehicle and (via Vehicle.initialize()) all four wheels would share
@@ -59,12 +65,20 @@ static func set_param(v: Vehicle, spec: Dictionary, path: String, value: float) 
 		return NAN
 	value = clampf(value, entry.min, entry.max)
 	TuneParams.set_value(spec, path, value)
-	TuneParams.set_value(v, path, value)
+	if entry.on_car:
+		TuneParams.set_value(v, path, value)
 	if v.is_ready:
-		_rederive(v, entry.rederive)
+		_rederive(v, spec, entry.rederive)
 	return value
 
-static func _rederive(v: Vehicle, kind: String) -> void:
+static func _curve_from_shape(t: Dictionary) -> Curve:
+	return build_torque_curve(t.low_end, t.peak_pos, t.plateau, t.falloff)
+
+static func _rederive(v: Vehicle, spec: Dictionary, kind: String) -> void:
+	if kind == TuneParams.ENGINE:
+		# initialize() derives max_clutch_torque from max_torque once.
+		v.max_clutch_torque = v.max_torque * v.max_clutch_torque_ratio
+		v.torque_curve = _curve_from_shape(spec.torque_shape)
 	if kind == TuneParams.TIRE:
 		# Same formulas as Wheel.initialize() / its surface-change branch. The
 		# vendored files stay untouched; tests/tune_params.gd checks these match
@@ -109,7 +123,7 @@ static func coupe_default() -> Dictionary:
 		"max_torque": 460.0,
 		"max_rpm": 7000.0,
 		"idle_rpm": 1000.0,
-		"torque_curve": default_torque_curve(),
+		"torque_shape": DEFAULT_TORQUE_SHAPE.duplicate(),  # apply() builds the Vehicle's torque_curve from this
 		"gear_ratios": gear_ratios_typed,
 		"final_drive": 4.1,
 		"automatic_transmission": false,

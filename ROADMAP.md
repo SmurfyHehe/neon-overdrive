@@ -156,18 +156,24 @@ notes until now.
 | Cop 2 | Patrol SUV | Police Interceptor Utility, Tahoe PPV |
 | Cop 3 | Unmarked interceptor | unmarked Charger Hellcat, Mustang GT PI |
 
-**Open conflicts, waiting on Roy (flagged 2026-10-04):**
+**Open conflicts flagged 2026-10-04. Items 1–3 were resolved by Roy on
+2026-10-05 (see "Stage B" below):**
 1. **Direction.** PR #83 (open) records a car-culture plan Roy approved on
    2026-09-29. It parks fuel, stop places and damage-ends-the-run (stage C
    here) and makes rival and traffic cars scripted. This plan builds them.
-   Stage A applies to both, so it goes ahead; **stage B needs a decision.**
+   **Resolved, Option C:** traffic stays full-sim. Fuel, stops and
+   damage-ends-the-run move to after the garage, and currency/scoring stays
+   before it. This supersedes PR #83's scripted traffic.
 2. **Cars.** PR #79 (open) moves cars to imported models through a vehicle
-   registry. Stage D assumed 12 cars built here. Needs a decision before D.
+   registry. Stage D assumed 12 cars built here. **Resolved:** we design all
+   cars ourselves in-engine, and PR #79's import pipeline is not used.
 3. **CPU cost of full-sim traffic.** RESEARCH-cheap-pretty.md warns that the
    i5-1235U has 2 performance cores and that traffic should not get GEVP
    bodies "without a measured reason". Roy's rule above is that reason, so
    stage B measures traffic density against the frame budget before
-   committing a number.
+   committing a number. **Resolved:** measure first. If that shows it's
+   needed, add a "Traffic detail distance" slider, as a scoped exception
+   (B2).
 4. **Coupe status.** Not "awaiting judgement": Roy said "our car model sucks
    atm" (#16), but he judged it while it rendered inside out, a winding bug
    fixed after (PR #45). The game currently spawns the neutral test car (#63).
@@ -267,7 +273,11 @@ utility poles and wires, overhead signs, vertex-coloured road lighting
   left a stale `.git/index.lock` there for under a minute. It is moved out
   to `build/stage-a/`, and CLAUDE.md now has a rule for that shell.
 
-### Stage A results (2026-10-04): waiting for Roy's sign-off
+### Stage A results (2026-10-04): signed off by Roy, 2026-10-05
+
+**Sign-off (Roy, 2026-10-05):** speed feels fast now. Playability on a busy
+road is still untested, so B2 checks it with real traffic. The branch is still
+unpushed: Roy chose to stack stage B on top of it and push both later.
 
 **Changed** (branch `feat/stage-a-feel-env`, based on main 25dbf17):
 - `scripts/chase_camera.gd` (new): the camera from game.gd, plus the low
@@ -325,7 +335,150 @@ window tests on a software renderer):
   GitHub App isn't installed), so the branch is handed over as a bundle.
 - **Waiting on Roy before stage B:** the direction (PR #83 vs this plan),
   the car pipeline (PR #79) and the traffic sim cost (see Open conflicts
-  above).
+  above). *(Resolved 2026-10-05, see Stage B.)*
+
+## Stage B (revised 2026-10-05): design sheet, traffic, camera + HUD, exhaust
+
+Four sub-stages. Each one **stops for Roy's sign-off**, with its results
+written here first.
+
+| Sub-stage | Contents |
+|---|---|
+| B1 | Design sheet for all 12 cars (design only, no modeling) |
+| B2 | Milestones 3–4: lane-follow, then reactive traffic on the multi-lane highway, plus the 3 NPC cars built from the B1 sheets |
+| B3 | Milestone 5: camera + full dashboard HUD |
+| B4 | Exhaust build: synthesized exhaust, pops/crackles, flames, flamethrower tune |
+
+**Decisions (Roy, 2026-10-05):**
+- **Direction, Option C:** traffic stays full-sim (the same raycast wheel sim,
+  told apart by CarSpec data only). Fuel, stops and damage-ends-the-run move
+  to after the garage stage, and currency/scoring stays before the garage.
+  This supersedes PR #83's scripted traffic.
+- **Cars:** we design all cars ourselves in-engine. PR #79's import pipeline
+  is not used. Designs are original, with real-inspired shapes and no
+  licensed makes. Gas-only. Keyboard-only input.
+- **Mods** change shape, paint, wheels and stickers. Each car has exactly
+  **3 fixed sticker slots**.
+- **Exhaust is cosmetic only:** loudness, tone, raspiness, pops/crackles,
+  flames and a flamethrower tune. It has no wear, heat, fuel or police
+  effects.
+- **Target:** 60 fps on Roy's i5-1235U with Iris Xe.
+- **Look:** "Gritty PS2 night" with the Street-Spec reference, and no neon.
+- **Palette, "Amber vs. Dusk":**
+  - sky `#1B2A4A`, shadow `#0E1424`;
+  - sodium `#FF8A1F`, window amber `#FFC066`;
+  - silver `#C9CED6`, taillight red `#E5262B`;
+  - no magenta or cyan.
+- **Budgets** are estimates, to be measured on the laptop: player ~10k tris,
+  cop ~6k, traffic ~4k. Fewer separate parts matters more than raw triangles.
+- **Traffic fallback (B2), built only if measurement shows it's needed:**
+  - a "Traffic detail distance" slider in Settings;
+  - cars beyond it run a cheaper sim and a simpler mesh, and near cars always
+    run the full sim;
+  - the handoff keeps position, velocity and heading, with no visible pop.
+
+  This is the one scoped exception to the same-sim rule.
+- **Stage A is signed off.** Stage B stacks on `feat/stage-a-feel-env`, and
+  Roy pushes both later.
+
+**Earlier inputs from Roy that stage B has to honour (chat, 2026-10-04/05):**
+- **T menu:** tuning the car, including the transmission choice (automatic or
+  semi-manual).
+- **Pause menu:** a Settings tab for the other settings (camera, units).
+- **Reverse:** R switches to reverse only when nearly stopped.
+- **HUD:**
+  - a steering wheel with an RPM bar that runs green to red as the shift cue;
+  - an instrument cluster;
+  - a visible gear shifter.
+- **Road:** a multi-lane highway with **4 lanes per direction**. *This
+  conflicts with stage A's 3-lane cap*, and B2 resolves it with traffic
+  measurements.
+- **Cars:** a complete redesign of all 12, "a generation up" in looks
+  without losing performance.
+  - Silhouettes must read from every angle, because a 360° garage camera is
+    coming.
+  - Interiors and undersides come later.
+- **Top speed:** ~300 km/h through tuning stays; Roy likes it.
+
+### B1 log (2026-10-05, as it happened)
+
+- **Pre-checks:**
+  - The real project is `C:\SmurfyHehe\neon-overdrive`; Documents has no
+    `NeonOverdriveGodot`.
+  - Stage A was neither in the repo (it existed only as a bundle on the
+    laptop) nor signed off, so I asked Roy. He signed it off, and B stacks on
+    the stage A branch, to be pushed later.
+  - Roy's root checkout is on `main` 4c1ddca, 58 commits behind GitHub, with
+    uncommitted edits. I reported it and didn't touch it (CLAUDE.md).
+- **Method:**
+  - Each car is data: profile curves, lofted into one low-poly 3D proxy in
+    `tools/fleet_design/` (Python, software renderer). Every view on a sheet
+    comes from that one shape, so the views can't disagree.
+  - No Godot code or scenes changed in B1.
+- **Design decisions (proposals, part of the B1 sign-off):**
+  - **NPC 3 is a pickup, not an SUV**, so traffic can't be confused with the
+    patrol SUV.
+  - **Silhouette language per class:**
+    - player: low and wide, wheels fill the arches, one hero cue each;
+    - traffic: taller and softer, small wheels in big gaps;
+    - police: big and upright, always with a police tell in the outline.
+  - **Each car has its own tail-light signature**, for reading cars from behind
+    at night.
+  - **Sticker slots:** door (mirrored), hood, and one slot seen from behind, so
+    every camera sees one.
+  - **Police livery:** navy with silver doors and roof.
+  - **Police blue `#2E4FD8` is the only off-palette colour** and is flagged for
+    Roy.
+- **Revisions from the renders and blind tests:**
+  - **Decals:** placement fixed. Decals hug the curved panels; flat ones were
+    sinking into the body.
+  - **P1:** rounder tail, slimmer hoop wing.
+  - **P2:** chunkier, with a wider track, blistered arches and a higher belt.
+  - **P3:** cabin moved back.
+  - **P4:** lower tail.
+  - **P5** was the weakest player read. It gained a tall cowl scoop, a chopped
+    cabin, a ducktail and coke-bottle hips.
+  - **P6** gained rack crossbars.
+  - **N3:** longer cab.
+
+### B1 results (2026-10-05): waiting for Roy's sign-off
+
+**Changed** (branch `feat/stage-b1-design-sheet`, stacked on
+`feat/stage-a-feel-env`):
+- `docs/design/fleet/`:
+  - `README.md`;
+  - `fleet_overview.png`, 12 per-car sheets in `sheets/`, and
+    `outline_check.png`;
+  - `fleet.json`, with every number B2–B4 need, and `verify.json`.
+- `docs/design/.gdignore`, so Godot doesn't import the PNGs.
+- `tools/fleet_design/`: the generator and checks.
+
+**Verified:**
+- **Blind test**, 3 rounds, each run by a fresh agent that had never seen the
+  designs. It matched shuffled, unlabeled silhouettes in 6 views to the 12
+  class names.
+  - Correct: 72/72 every round.
+  - "Sure": 33 → 36 → 39 of 72 as the designs were revised.
+  - Final design: side 12/12 sure, both 3/4 views 8/12.
+- **Palette:** 76 colours checked, with no magenta or cyan.
+- **Sheets:** every sheet was viewed and self-critiqued. The critique is
+  printed on each sheet.
+
+**Not verified / open:**
+- **These are proxies, not the game models.** Triangle counts (2.2k–3.0k per
+  car) and draw calls get measured on the laptop in B2. The plan is one merged
+  mesh per car with 3 surfaces plus one wheel mesh.
+- **Weakest reads:** the hot hatch, muscle sedan and commuter are "sure" only
+  side-on. That is fine for traffic. P2 and P5 can be pushed further if Roy
+  wants.
+- **Police blue needs Roy's OK**, or the light bar goes red/amber.
+- **Physics wheels will move to each car's drawn wheelbase** (2.27–3.08 m,
+  against today's 2.10 m), and that changes handling. Each car's CarSpec is
+  tuned when it's built (B2, D).
+- **Deferred:** interiors and undersides (Roy, 2026-10-05). Car names wait for
+  branding.
+- **Waiting on Roy:** B1 sign-off (shapes, parts, stickers, colours) before B2.
+- **Review page** (private to Roy): <https://claude.ai/artifact/SvEKcFe1CaWa787K8Gha3m>. It has a 360° viewer of every design and build, plus the sheets.
 
 Old `main.gd` (treadmill/distance-accumulator architecture) is abandoned, not edited further. `car_builder.gd` (pure mesh construction) is kept and reused. Everything below is built fresh in real world-space.
 

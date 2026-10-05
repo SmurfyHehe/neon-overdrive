@@ -9,12 +9,24 @@ class_name EngineAudio
 ## throttle, higher = more tolerant of frame hitches.
 const BUFFER_SECS := 0.06
 
+## Which car's exhaust preset the player car starts with (exhaust_tune.gd).
+## Placeholder until the cars are built from fleet.json (stage B step 5).
+const START_PRESET := "p1_coupe"
+## How fast a held exhaust key moves its knob, per second (0..1 scale).
+const KNOB_RATE := 0.4
+## Seconds the exhaust readout stays on screen after a change.
+const READOUT_SECS := 2.5
+
 var synth := EngineSynth.new()
+var _label: Label
+var _readout_left := 0.0
 var _vehicle: Vehicle
 var _playback: AudioStreamGeneratorPlayback
 
 func _ready() -> void:
 	_vehicle = get_parent() as Vehicle
+	synth.tune = ExhaustTune.for_car(START_PRESET)
+	_setup_readout()
 	synth.mix_rate = AudioServer.get_mix_rate()
 	synth.idle_rpm = _vehicle.idle_rpm
 	synth.max_rpm = _vehicle.max_rpm
@@ -33,3 +45,38 @@ func _process(_delta: float) -> void:
 	if n > 0:
 		_playback.push_buffer(synth.render(n, _vehicle.motor_rpm,
 				_vehicle.throttle_amount, _vehicle.motor_is_redline))
+
+# Temporary playtest controls (stage B step 2): U/J loudness, I/K raspiness,
+# O/L pops, held. Cosmetic only. Polled from _physics_process like the rest of
+# the game's input (#30), but here rather than game.gd to keep this change in
+# one file; the real controls go in the T tuning panel with PRs #88-90.
+func _physics_process(delta: float) -> void:
+	var t := synth.tune
+	var moved := false
+	var dir := Input.get_axis("exhaust_loud_down", "exhaust_loud_up")
+	if dir != 0.0:
+		t.loudness = clampf(t.loudness + dir * KNOB_RATE * delta, 0.0, 1.0)
+		moved = true
+	dir = Input.get_axis("exhaust_rasp_down", "exhaust_rasp_up")
+	if dir != 0.0:
+		t.raspiness = clampf(t.raspiness + dir * KNOB_RATE * delta, 0.0, 1.0)
+		moved = true
+	dir = Input.get_axis("exhaust_pops_down", "exhaust_pops_up")
+	if dir != 0.0:
+		t.pops = clampf(t.pops + dir * KNOB_RATE * delta, 0.0, 1.0)
+		moved = true
+	if moved:
+		_readout_left = READOUT_SECS
+	_readout_left = maxf(_readout_left - delta, 0.0)
+	_label.visible = _readout_left > 0.0
+	if _label.visible:
+		_label.text = "EXHAUST  loudness %.2f (U/J)  raspiness %.2f (I/K)  pops %.2f (O/L)" % [t.loudness, t.raspiness, t.pops]
+
+func _setup_readout() -> void:
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	_label = Label.new()
+	_label.position = Vector2(16, 80)
+	_label.add_theme_color_override("font_color", Color(1.0, 0.54, 0.12))
+	_label.visible = false
+	layer.add_child(_label)

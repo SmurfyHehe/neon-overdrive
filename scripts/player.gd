@@ -59,6 +59,8 @@ const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Veh
 
 var chassis_visual: Node3D
 var _steer_smooth := 0.0
+## Heat and wear (Phase B). Off for sim_only cars so TuneTrack stays clean.
+var health := PowertrainHealth.new()
 
 ## This car's tune: the one dictionary Vehicle properties are set from and that
 ## CarSpec.set_param() keeps in step with the live car. Set it before add_child()
@@ -178,6 +180,7 @@ func _ready() -> void:
 	# one member and drafting always finds nothing -- built for real ahead of
 	# time, same pattern as CarSpec, not dead code.
 	add_to_group("aero_vehicles")
+	health.enabled = not sim_only
 
 	# Engine sound (2026-09-29, prototype of PROPOSAL-audio.md option C): a
 	# synthesised engine driven by this car's motor_rpm/throttle. Added after
@@ -203,6 +206,7 @@ func _physics_process(delta: float) -> void:
 	# drafting can recompute and partially cancel the drag force it just
 	# applied this frame. See aero.gd for the actual force math.
 	AeroModel.apply(self)
+	health.step(self, delta)
 
 func _read_keyboard() -> void:
 	# Input (#29, #30): named InputMap actions (project.godot), all polled

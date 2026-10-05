@@ -1,6 +1,6 @@
 # Neon Overdrive — Issue List
 
-Audit 2026-09-29, refreshed 2026-09-29 against `main` at `d71f33f`.
+Audit 2026-09-29, refreshed 2026-10-05 against `origin/main` at `4bfed10`.
 
 **GitHub issues are the live list.** This file keeps the audit's letter IDs
 (A1, E7, ...) so older PRs and comments still make sense, and maps each one to
@@ -16,33 +16,26 @@ its GitHub issue. For the order to work in, see the triage issue #59.
 | D5 | `is_off_road()` defined, never called | #28 | Roy: keep it as a scoring hook |
 | C6 | Camera had no smoothing | #31 | PR #61 added 3 modes (C key); Roy tunes later |
 | E6 | No curves or elevation | #37 | Acknowledged; needs the Path3D rearchitecture |
-| E7 | Gear spread is the wrong shape | #62 | E7–E9 merged into #62 |
-| E8 | Torque curve falls off too hard | #62 | |
-| E9 | Top gear set for 230 km/h, target ~200 | #62 | GEVP cuts at 1.1 × `max_rpm`, so the ceiling is ~253. Measured on TuneTrack with linear damp 0 (this PR): 241.6 km/h at 35 s; before it, damp 0.1 capped the car at 124 km/h |
-| G3 | Car model shape needs Roy's direction | #16 | #63 (test car, PR #68) is separate: a neutral car for testing |
+| E7 | Gear spread is the wrong shape | #62 | E7–E9 merged into #62. Gearing was evened in `764b3f0` (steps now about 1.3), but no test asserts the spread, so not closed |
+| E8 | Torque curve falls off too hard | #62 | Torque shape is now tunable (Auto-Tune 1b, `f5f9361`); Roy's tune not recorded |
+| E9 | Top gear set for 230 km/h, target ~200 | #62 | GEVP cuts at 1.1 × `max_rpm`, so the ceiling is ~253. The damp-0.1 cap at 124 km/h is fixed (`8cf2c89`, PR #89): 241.6 km/h at 35 s. `chassis_targets` now asserts 235–250 km/h; Roy likes ~300 through tuning, so the ~200 target is stale |
+| G3 | Car model shape needs Roy's direction | #16 | The test car (#63) is closed; the 12-car design sheet is merged (#85, #86) but no game models are built from it |
 | G4 | Player car has no self-lit elements | #17 | |
-| H1 | No audio at all | #18 | Engine-sound test merged (PR #57); direction still open |
 
 ### Filed after the audit
 
 | GitHub | Issue |
 |---|---|
 | #48 | Workers are told to check the queue but `office-queue` refuses them (403) |
-| #55 | Keyboard steering reaches full lock at any speed |
-| #62 | Gearing & power: tuning sliders (PR #69), then Roy's tune, then the upgrade tree |
-| #63 | Neutral test car (PR #68) |
+| #62 | Gearing & power: sliders (PR #69, merged), Auto-Tune (#88, #90, #100, merged), then Roy's tune, then the upgrade tree |
 | #70 | Upgrade tree: stop at 200 km/h with a gear limit or a weaker engine? |
-| #71 | Upgrade tree: one tree for every car, or one per car? |
+| #71 | Upgrade tree: one tree for every car, or one per car? (ROADMAP records Roy's decision: one per car; issue not closed here) |
 | #72 | Upgrade tree: can the player respec? |
-| #73 | Upgrade tree: real turbo lag needs a physics addition |
 | #74 | Upgrade tree: do tiers cap which races you can enter? |
-| #75 | `brake_force_multiplier` is declared but never read |
 | #80 | Engine sound changes with the car, engine and upgrades |
 
-#70–#74 are design questions for Roy about the upgrade tree in #62. #75 is a
-bug in the vendored GEVP code (`gevp_vehicle.gd:71`). Nothing sets it away
-from 1.0 today, but a brakes upgrade would need it. #80 is Roy's request for engine sound that
-changes with the car and its upgrades.
+#70, #71, #72 and #74 are design questions for Roy about the upgrade tree in #62. #80 is Roy's request for engine sound that
+changes with the car and its upgrades; the engine, driveline and turbo sounds exist (`093b3ef`, `8890350`, `65a4303`), but not per-car or per-upgrade, so it stays open.
 
 ---
 
@@ -87,6 +80,11 @@ changes with the car and its upgrades.
 | F6 | This file was untracked | tracked since PR #6 |
 | G1 | Car rendered as a bare frame, loft winding (#14) | PR #45 |
 | G2 | Glass loft zero normals (#15) | PR #43 |
+| H1 | No audio at all (#18) | `093b3ef` (engine synth, PR #57), `18e0509` (stage A wind/road/squeal/kerb), `8890350` (Phase B driveline); tests `car_audio`, `audio_master`, `driveline_audio`. Engine-tuning direction is now #80 |
+| #55 | Keyboard steering reaches full lock at any speed | `764b3f0`; `tests/feel_pass_1.gd` checks the ramp and the speed cap |
+| #63 | Neutral test car | PR #68 (`e4f23cd`); `tests/test_car.gd` |
+| #73 | Real turbo lag needs a physics addition | `65a4303`; `tests/turbo.gd` |
+| #75 | `brake_force_multiplier` declared but never read | `ee9ee5a`; read in `gevp_vehicle.gd` (`DEVIATION`), set in `car_spec.gd`, and exercised by the brake run in `tests/tune_track.gd` (100-0 m) |
 
 ---
 
@@ -94,9 +92,9 @@ changes with the car and its upgrades.
 
 **C3 / D5 (#28).** Buildings are 22 m apart, and past them is a flat slab you
 can drive on. Nothing stops the player leaving the road. `is_off_road()`
-(`scripts/player.gd:197`) is still not called anywhere.
+(`scripts/player.gd:284`) is still not called anywhere on `origin/main`.
 
-**E7–E9 (#62).** With `wheel_r 0.34`, `final_drive 4.1` and a 7000 rpm
+**E7–E9 (#62).** Audit-time numbers, before `764b3f0` evened the gearing. With `wheel_r 0.34`, `final_drive 4.1` and a 7000 rpm
 redline, the ratios `[3.6, 2.4, 1.8, 1.4, 0.95]` give:
 
 | Gear | Ratio | km/h at redline | Step to next |

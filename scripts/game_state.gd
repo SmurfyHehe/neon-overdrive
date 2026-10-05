@@ -11,8 +11,8 @@ extends Node
 # Pausing uses the SceneTree's own pause, so physics (the GEVP vehicle) and
 # every other default-mode node freeze. This node runs with
 # PROCESS_MODE_ALWAYS so it still polls the pause action (Esc) while paused.
-# The physics tick rate is untouched -- it must stay at 60 Hz (GEVP breaks at
-# 30 Hz).
+# The physics tick rate is 120 Hz (GEVP recommends at least 120 and breaks at
+# 30 Hz); see tick_rate.gd.
 
 # TUNING (#62) is the debug tuning panel: paused like PAUSED, but the panel
 # shows instead of the pause menu.

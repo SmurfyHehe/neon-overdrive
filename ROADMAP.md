@@ -137,7 +137,11 @@ automatic-vs-manual clutch question unless Roy raises them.
   (idle PI controller instead of a hard idle floor, throttle-dependent
   automatic shift points with hysteresis); Phase B (turbo boost and blow-off,
   `brake_selects_reverse`, and the `torque_mult` / `brake_mult` hooks for heat
-  and wear); Phase C (opt-in realistic clutch, stall and starter, off by default).
+  and wear); Phase C (opt-in realistic clutch, stall and starter, off by default;
+  tyre load sensitivity and per-tyre grip multiplier; clutch grip multiplier).
+  **Physics now runs at 120 Hz** (Roy, 2026-10-05; GEVP recommends at least 120).
+  Tests run at 60 via NEON_TICKS=60 (see scripts/tick_rate.gd), plus
+  tests/tick_rate_120.gd at the real rate.
   Extensions that do not need a vendor edit still live in `aero.gd` and
   `car_spec.gd`.
 - **Every car runs the same raycast wheel sim** (player, NPC, cop, modded),

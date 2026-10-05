@@ -127,8 +127,10 @@ func _physics_process(delta: float) -> void:
 	var v := target.linear_velocity
 	var dv := (v - _prev_vel).length()
 	_prev_vel = v
-	if dv > IMPACT_DV:
-		trauma = minf(1.0, trauma + (dv - IMPACT_DV) * IMPACT_GAIN)
+	# the per-tick velocity change scales with the tick length, so scale the threshold
+	var dv_limit := IMPACT_DV * 60.0 / float(Engine.physics_ticks_per_second)
+	if dv > dv_limit:
+		trauma = minf(1.0, trauma + (dv - dv_limit) * IMPACT_GAIN * float(Engine.physics_ticks_per_second) / 60.0)
 	var speed := target.current_speed()
 	_accel = (speed - _prev_speed) / delta
 	_prev_speed = speed

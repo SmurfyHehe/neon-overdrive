@@ -16,6 +16,8 @@ rem A fresh checkout has no import cache yet; scripts fail to load without it.
 if not exist ".godot" "%GODOT%" --headless --path . --import >nul 2>&1
 rem Tests are silent unless you set SOUND=1 (the Dummy audio driver plays nothing).
 set "AUDIO=--audio-driver Dummy"
+rem Most tests count physics ticks as sixtieths of a second, so they run at 60 Hz; the game itself runs at 120 (see tick_rate.gd and tests/tick_rate_120.gd).
+if "%NEON_TICKS%"=="" set "NEON_TICKS=60"
 if "%SOUND%"=="1" set "AUDIO="
 
 set "FAILED="
@@ -31,6 +33,7 @@ call :run fleet_design_check --headless
 call :run exhaust_tune --headless
 call :run audio_master --headless
 call :run phase_a_engine --headless
+call :run tick_rate_120 "--headless --fixed-fps 120"
 call :run cockpit --headless
 call :run tyres "--headless --fixed-fps 60"
 call :run clutch_model --headless

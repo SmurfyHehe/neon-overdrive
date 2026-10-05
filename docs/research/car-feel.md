@@ -121,3 +121,61 @@ cosmetic.
 - Engine sound: https://www.audiokinetic.com/en/community/blog/engine-sound-modeling-from-sampling-to-granular-synthesis-in-wwise/
 - AudioStreamGenerator: https://docs.godotengine.org/en/stable/classes/class_audiostreamgenerator.html
 - Free music: https://gtstu.com/free-royalty-free-music-indie-games/
+
+## G. Deeper research (2026-10-05, pages actually fetched)
+
+Summaries come through a small model, so treat quoted numbers as leads and
+check the raw file before relying on them. Unverified items are marked.
+
+**GEVP internals** (`addons/gevp/scripts/vehicle.gd`; our vendored copy is
+`scripts/vendor/gevp/gevp_vehicle.gd`):
+- Defaults: `shift_time` 0.3, `clutch_out_rpm` 3000, `motor_drag` 0.005 (variable,
+  by rpm), `motor_brake` 10 ("constant motor drag"), `max_clutch_torque_ratio` 1.6,
+  `automatic_transmission` true, `throttle_speed` 20, `braking_speed` 10,
+  `steering_speed` 4.25, `countersteer_speed` 11, `steering_speed_decay` 0.20,
+  `steering_exponent` 1.5, `steering_slip_assist` 0.15 (keep above 0: issue 32).
+- Automatic shifting is hard-coded: up at ideal rpm above `max_rpm` (or above 80
+  percent with real rpm over `max_rpm`), down when the lower gear would sit under
+  75 percent of `max_rpm`. It is not throttle-dependent. Reverse is tied to the
+  brake input at a standstill. `manual_shift()` does nothing in automatic mode.
+- Rev matching exists only on downshifts (`lerpf(motor_rpm, requested_gear_rpm,
+  0.5)`). The limiter cuts torque at 1.1 x `max_rpm`.
+- Known issue 35: automatic upshift uses wheel speed, so wheelspin or wrong wheel
+  radius can stop it shifting. Dechode's Godot-Advanced-Vehicle shifts by torque
+  comparison (up above 85 percent of max rpm, down below 50 percent) with a 700 ms
+  minimum interval and a locked/slipping clutch state machine.
+
+**Numbers worth using** (sources fetched):
+- Shift map example (x-engineer.org): 1-2 shift at 12 km/h with 0 percent throttle
+  to 58 km/h at 100 percent; 2-3 21 to 91; 3-4 32 to 135; downshifts sit below the
+  upshifts; minimum 2 s in gear after an upshift, 1 s after a downshift.
+- Shift times (Wikipedia): DCT 40 to 150 ms, hydraulic automatic about 120 to 150
+  ms best case; ordinary automatics 200 to 500 ms. Arcade feel: 150 to 250 ms.
+- Torque converter: stall 1700 to 2400 rpm, multiplication up to about 2.1,
+  lock-up above speed ratio 0.95.
+- Real gearing, 2022 MX-5 (1065 kg, 7500 rpm): 1st tops about 60 km/h (manual) or
+  69 (auto), 2nd about 101, 3rd about 148.
+- Keyboard steering: Assetto Corsa Evo defaults deadzone 7 percent, speed
+  sensitivity 70, filter 20; recommended 2, 40, 15. BeamNG scales steering
+  response down linearly from 15 to 250 km/h. No published attack/release tables
+  exist; our ramp (about 0.2 s to lock, release 1.6x faster) is a starting guess.
+- Tyres: street mu 0.7 to 1.0, sport 1.0 to 1.2, slick about 1.3 to 1.6. Load
+  sensitivity: Fy peaks scale with load to the power 0.7 to 0.9. Our cof 3.0 is far
+  above real tyres; GEVP subtracts a load term (`spring_force / (tire_width *
+  contact_patch * 0.2)`), so effective mu is a bit lower. Rollover limit is about
+  t / (2h), which is 1.76 g for our 1.76 m track and an assumed 0.5 m CG.
+- Chassis: a 1300 kg coupe has about a 2.4 to 2.7 m wheelbase (86/BRZ 2.57 m) and
+  yaw inertia of roughly 1800 to 2400 kg m2 (box estimate 2250). Our 2.1 m
+  wheelbase is short. Our 26 N/mm springs on a 325 kg corner is 1.42 Hz at motion
+  ratio 1, which is sporty and plausible. Damping 0.4 looks underdamped if it is a
+  ratio; 0.6 to 0.7 is typical for sporty.
+- Floaty or "squished" raycast suspension at speed was fixed in one Godot forum
+  thread by calling `force_raycast_update()` at the start of the suspension step.
+
+**Not found (do not treat as researched):** real keyboard attack/release code from
+other games, engine-braking Nm figures, measured limiter cut times, Forza or Gran
+Turismo steering assist details, and GDC-style arcade handling write-ups.
+
+**What pass 1 (PR 95) used:** shift time 0.2, clutch take-up 2000 rpm, 1st gear
+about 80 km/h, steering ramp and speed lock. It left `motor_drag` at 0.005
+(0.007 cost about 10 km/h of top speed) and did not touch vendored GEVP code.

@@ -29,8 +29,13 @@ static func apply_all() -> void:
 	for channel in CHANNELS:
 		_apply(channel)
 
+## The dB a channel's slider asks for (-80 for silence), for code that adds an
+## offset on top (PerspectiveAudio on the Music bus).
+static func volume_db_for(channel: String) -> float:
+	return linear_to_db(volumes[channel]) if volumes[channel] > 0.0001 else -80.0
+
 static func _apply(channel: String) -> void:
-	var db := linear_to_db(volumes[channel]) if volumes[channel] > 0.0001 else -80.0
+	var db := volume_db_for(channel)
 	for bus_name in CHANNELS[channel]:
 		var i := AudioServer.get_bus_index(bus_name)
 		if i >= 0:

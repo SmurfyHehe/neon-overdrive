@@ -52,6 +52,15 @@ const TRAUMA_DECAY := 1.6        # 1/s
 const IMPACT_DV := 0.8
 const IMPACT_GAIN := 0.12        # trauma per m/s over the threshold
 
+## Phase C: the cockpit view (F toggles). VIEW_CHASE is everything above; in
+## VIEW_COCKPIT the camera sits at the driver's eye, rigid to the car, the body is
+## hidden and a CockpitFrame (dash, pillars, steering wheel) is shown.
+enum View { CHASE, COCKPIT }
+const COCKPIT_EYE := Vector3(-0.30, 1.05, -0.15)  # car-local, -x is the driver's side (left-hand drive)
+const COCKPIT_FOV := 78.0
+var view := View.CHASE
+var frame: CockpitFrame
+var perspective: PerspectiveAudio
 var target: PlayerCar
 var mode := 0
 ## Tests turn this off to compare the drawn position against the chase offset.
@@ -86,19 +95,35 @@ func _init(car: PlayerCar) -> void:
 	_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
 	_noise.seed = 9431
 	_noise.frequency = 1.0
+	near = 0.05
 
 func _ready() -> void:
 	current = true
 	_prev_vel = target.linear_velocity
+	frame = CockpitFrame.new()
+	add_child(frame)
+	perspective = PerspectiveAudio.new()
+	add_child(perspective)
+
+## Switch between the chase and cockpit views.
+func set_view(v: View) -> void:
+	view = v
+	var cockpit := v == View.COCKPIT
+	frame.visible = cockpit
+	if target.chassis_visual != null:
+		target.chassis_visual.visible = not cockpit
+	perspective.set_cockpit(cockpit)
 
 func mode_name() -> String:
-	return MODE_NAMES[mode]
+	return "COCKPIT" if view == View.COCKPIT else MODE_NAMES[mode]
 
 # Polled on the physics tick like all game input (#30), and the impact check
 # needs exactly one velocity sample per tick.
 func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("camera_cycle"):
 		mode = (mode + 1) % MODE_NAMES.size()
+	if Input.is_action_just_pressed("camera_view"):
+		set_view(View.CHASE if view == View.COCKPIT else View.COCKPIT)
 	var v := target.linear_velocity
 	var dv := (v - _prev_vel).length()
 	_prev_vel = v
@@ -110,9 +135,23 @@ func _physics_process(delta: float) -> void:
 
 func _process(delta: float) -> void:
 	_update_feel(delta)
+	if view == View.COCKPIT:
+		_place_cockpit()
+		frame.steering = -target.steering_input  # the wheel turns the way the car does
+		if shake_enabled:
+			_shake(delta)
+		return
 	_place(delta)
 	if shake_enabled:
 		_shake(delta)
+
+## Rigid to the car at the driver's eye, on the interpolated transform (same reason
+## as the chase cam), looking where the car points; a fixed FOV that widens a touch
+## with speed.
+func _place_cockpit() -> void:
+	var xf := target.get_global_transform_interpolated()
+	global_transform = Transform3D(xf.basis, xf * COCKPIT_EYE)
+	fov = COCKPIT_FOV + 6.0 * speed_t
 
 func _update_feel(delta: float) -> void:
 	var speed := absf(target.current_speed())

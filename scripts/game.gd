@@ -318,7 +318,7 @@ func _setup_debug_hud() -> void:
 	var controls := Label.new()
 	controls.position = Vector2(16, 400)
 	controls.add_theme_color_override("font_color", Color(0.71, 0.65, 0.84))
-	controls.text = "A/D steer  ·  W/S throttle/brake  ·  Space handbrake  ·  R reverse  ·  N radio  ·  V clutch model (Shift clutch, X starter)  ·  G auto/manual  ·  Q/E shift (manual)  ·  Esc pause  ·  T tuning  ·  Y auto-tune  ·  M mute"
+	controls.text = "A/D steer  ·  W/S throttle/brake  ·  Space handbrake  ·  R reverse  ·  N radio  ·  F cockpit view  ·  V clutch model (Shift clutch, X starter)  ·  G auto/manual  ·  Q/E shift (manual)  ·  Esc pause  ·  T tuning  ·  Y auto-tune  ·  M mute"
 	hud.add_child(controls)
 
 func _update_debug_hud() -> void:
@@ -329,7 +329,7 @@ func _update_debug_hud() -> void:
 		lbl_speed.text += "   ENGINE OFF  (hold X to start)"
 	if player.turbo_boost_max > 0.0:
 		lbl_speed.text += "   BOOST %.2f / %.2f bar" % [player.boost, player.turbo_boost_max]
-	lbl_cam.text = "CAMERA %s  (C to switch)" % camera.mode_name()
+	lbl_cam.text = "CAMERA %s  (C smoothing, F cockpit)" % camera.mode_name()
 	# BUG FIX (2026-09-13): shift_flash_t was tracked on the player since
 	# milestone 2 but nothing ever read it -- shifting had zero feedback.
 	# Wired it to actually punch the gear label (bright flash + scale pop)

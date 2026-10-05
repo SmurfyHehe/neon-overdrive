@@ -44,9 +44,21 @@ const CFG := {
 ## combine, so the project/area defaults can't add it back.
 const LINEAR_DAMP := 0.0
 
+## Feel pass 1 (2026-10-05): keyboard steering. A key press ramps the steering
+## toward full lock instead of jumping there, and the available lock shrinks
+## with speed (full lock below ~15 km/h, a quarter of it from ~180 km/h up).
+## Starting values from research (docs/research/car-feel.md), to be tuned by feel.
+const STEER_ATTACK := 5.0        # per second toward lock at low speed (~0.2 s to full)
+const STEER_ATTACK_FAST := 3.0   # same at high speed
+const STEER_RELEASE := 8.0       # per second back to centre, and when reversing direction
+const STEER_LOCK_MIN := 0.25     # fraction of lock left at STEER_FAST_SPEED
+const STEER_SLOW_SPEED := 4.0    # m/s (~15 km/h): full lock below this
+const STEER_FAST_SPEED := 50.0   # m/s (180 km/h): minimum lock from here up
+
 const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Vehicle's own shift_time below
 
 var chassis_visual: Node3D
+var _steer_smooth := 0.0
 
 ## This car's tune: the one dictionary Vehicle properties are set from and that
 ## CarSpec.set_param() keeps in step with the live car. Set it before add_child()
@@ -196,6 +208,8 @@ func _read_keyboard() -> void:
 		manual_shift(-1)
 	if Input.is_action_just_pressed("shift_up"):
 		manual_shift(1)
+	if Input.is_action_just_pressed("toggle_gearbox"):
+		automatic_transmission = not automatic_transmission
 	var throttle := Input.is_action_pressed("accelerate")
 	var braking := Input.is_action_pressed("brake")
 	var handbrake := Input.is_action_pressed("handbrake")
@@ -215,7 +229,12 @@ func _read_keyboard() -> void:
 	# math is built for the opposite input sign convention from our A/D mapping.
 	# Negating here (rather than swapping which key does what) keeps A=left/D=right
 	# reading naturally in the code while matching what the asset expects.
-	steering_input = -steer_in
+	var speed_t := clampf((current_speed() - STEER_SLOW_SPEED) / (STEER_FAST_SPEED - STEER_SLOW_SPEED), 0.0, 1.0)
+	var target := steer_in * lerpf(1.0, STEER_LOCK_MIN, speed_t)
+	var coming_in := target != 0.0 and (_steer_smooth == 0.0 or signf(target) == signf(_steer_smooth))
+	var rate := lerpf(STEER_ATTACK, STEER_ATTACK_FAST, speed_t) if coming_in else STEER_RELEASE
+	_steer_smooth = move_toward(_steer_smooth, target, rate * get_physics_process_delta_time())
+	steering_input = -_steer_smooth
 
 ## HUD compatibility -- game.gd reads player.gear (int, -1/0/1..N) and
 ## player.current_speed(); both map directly onto what Vehicle already

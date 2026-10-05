@@ -23,6 +23,7 @@ call :run road_strip_winding --headless
 call :run sidewalk_collision_taper --headless
 call :run aero_draft_equivalence --headless
 call :run tune_params --headless
+call :run auto_tune_rules --headless
 if /i not "%~1"=="quick" (
 	rem Headless, but ~2 min of simulated driving; --fixed-fps lets physics run faster than the clock.
 	call :run tune_track "--headless --fixed-fps 60"

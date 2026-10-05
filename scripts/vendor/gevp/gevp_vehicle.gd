@@ -746,8 +746,20 @@ func process_throttle(delta : float) -> void:
 	else:
 		clutch_amount = clutch_input
 
+## DEVIATION FROM THE "VENDOR STAYS UNMODIFIED" RULE (2026-10-05, Roy: "you can
+## have access to the GEVP and edit it to make it fit our game"). Engine feel
+## pass 1b, logged in ROADMAP.md. Three changes, each marked below:
+##  1. a soft rev limiter (fuel cut with hysteresis) instead of a hard wall,
+##  2. rev matching on upshifts too (revs fall to the next gear's speed),
+##  3. motor_brake is actually used: constant engine braking when off throttle.
+## Re-apply these if the addon is ever re-vendored.
+const LIMITER_HYSTERESIS_RPM := 150.0  # fuel stays cut until rpm falls this far below the limit
+var limiter_cut := false
+
 func process_motor(delta : float) -> void:
-	var drag_torque := motor_rpm * motor_drag
+	# (3) engine braking: motor_brake was declared and never read; it now adds a
+	# constant drag that fades out as the throttle opens.
+	var drag_torque := motor_rpm * motor_drag + motor_brake * (1.0 - throttle_amount)
 	torque_output = get_torque_at_rpm(motor_rpm) * throttle_amount
 	## Adjust torque based on throttle input, clutch input, and motor drag
 	torque_output -= drag_torque * (1.0 + (clutch_amount * (1.0 - throttle_amount)))
@@ -755,11 +767,17 @@ func process_motor(delta : float) -> void:
 	## Prevent motor from outputting torque below idle or far beyond redline
 	var new_rpm := motor_rpm
 	new_rpm += ANGULAR_VELOCITY_TO_RPM * delta * torque_output / motor_moment
-	motor_is_redline = false
-	if new_rpm > max_rpm * 1.1 or new_rpm <= idle_rpm:
+	# (1) soft limiter: fuel cuts at 1.1 x max_rpm and only returns once rpm has
+	# dropped LIMITER_HYSTERESIS_RPM below it, so the limiter pulses instead of
+	# slamming a wall every physics tick.
+	var limit_rpm := max_rpm * 1.1
+	if new_rpm > limit_rpm:
+		limiter_cut = true
+	elif new_rpm < limit_rpm - LIMITER_HYSTERESIS_RPM:
+		limiter_cut = false
+	motor_is_redline = limiter_cut
+	if limiter_cut or new_rpm <= idle_rpm:
 		torque_output = 0.0
-		if new_rpm > max_rpm * 1.1:
-			motor_is_redline = true
 	
 	motor_rpm += ANGULAR_VELOCITY_TO_RPM * delta * (torque_output - drag_torque) / motor_moment
 	
@@ -1014,6 +1032,12 @@ func complete_shift() -> void:
 		var wheel_spin := speed / average_drive_wheel_radius
 		var requested_gear_rpm := gear_ratios[requested_gear - 1] * final_drive * wheel_spin * ANGULAR_VELOCITY_TO_RPM
 		motor_rpm = lerpf(motor_rpm, requested_gear_rpm, 0.5)
+	elif requested_gear > current_gear and requested_gear > 0:
+		# (2) upshift rev match: revs used to hang high, then the clutch bit
+		# hard. Pull most of the way to the next gear's speed.
+		var up_wheel_spin := speed / average_drive_wheel_radius
+		var up_gear_rpm := gear_ratios[requested_gear - 1] * final_drive * up_wheel_spin * ANGULAR_VELOCITY_TO_RPM
+		motor_rpm = maxf(lerpf(motor_rpm, up_gear_rpm, 0.8), idle_rpm)
 	current_gear = requested_gear
 	last_shift_delta_time = delta_time
 	is_shifting = false

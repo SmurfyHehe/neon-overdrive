@@ -25,6 +25,7 @@ call :run test_car --headless
 call :run road_strip_winding --headless
 call :run sidewalk_collision_taper --headless
 call :run aero_draft_equivalence --headless
+call :run exhaust_tune --headless
 call :run tune_params --headless
 if /i not "%~1"=="quick" (
 	rem Headless, but ~2 min of simulated driving; --fixed-fps lets physics run faster than the clock.
@@ -33,6 +34,7 @@ if /i not "%~1"=="quick" (
 	call :run chunk_drive
 	call :run game_state
 	call :run tuning_panel
+	call :run exhaust_keys
 	call :run mute
 )
 echo.

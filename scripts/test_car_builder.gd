@@ -10,9 +10,9 @@ class_name TestCarBuilder
 #
 # Spec (Roy approved): about 4.4 m long x 1.8 m wide x 1.3 m tall, wheelbase
 # and track matching the physics wheels. The physics wheels (player.gd CFG)
-# sit 2.1 m apart front to back and 1.76 m side to side, so the body has long
-# ~1.15 m overhangs and the tyres stand ~8 cm proud of the 1.8 m body. That
-# is intentional: the visuals show exactly where the physics wheels are.
+# sit 2.5 m apart front to back (Phase B, was 2.1) and 1.76 m side to side, so
+# the body has ~0.95 m overhangs and the tyres stand ~8 cm proud of the 1.8 m
+# body. That is intentional: the visuals show exactly where the physics wheels are.
 #
 # Forward is -Z, up is +Y, ground at y = 0 with the springs fully extended
 # (the body settles a few cm lower once the suspension loads). Reuses

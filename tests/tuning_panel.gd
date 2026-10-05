@@ -59,6 +59,13 @@ func _process(_delta: float) -> bool:
 			_check(is_equal_approx(game.player.gear_ratios[4], 1.1), "gear 5 not applied")
 			_check(is_equal_approx(game.player.max_torque, 500.0), "max_torque not applied")
 			_check(game.player.get_torque_at_rpm(1000.0) > before, "low-end knob should raise low-rpm torque")
+			# One write path: the player's spec dict holds the same values.
+			var spec: Dictionary = game.player.spec
+			_check(is_equal_approx(spec.final_drive, 3.5), "spec final_drive not written")
+			_check(is_equal_approx(spec.gear_ratios[4], 1.1), "spec gear 5 not written")
+			_check(spec.gear_ratios.is_typed(), "spec gear_ratios lost its type")
+			_check(is_equal_approx(spec.max_torque, 500.0), "spec max_torque not written")
+			_check(is_equal_approx(spec.torque_shape.low_end, 0.7), "spec torque shape not written")
 			_key(KEY_T)
 		100:
 			_check(not paused, "second T should unpause")

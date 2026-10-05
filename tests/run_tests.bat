@@ -27,6 +27,7 @@ if /i not "%~1"=="quick" (
 	call :run chunk_drive
 	call :run game_state
 	call :run tuning_panel
+	call :run mute
 )
 echo.
 if defined FAILED (

@@ -72,12 +72,21 @@ func _spawn() -> void:
 	for k in [KEY_W, KEY_S, KEY_A, KEY_D, KEY_SPACE]:
 		_press(k, false)
 
+## Held "keys" are flags read by a driver on the player car, not input events: a
+## windowed run loses held keys when the window loses focus, and headless frame
+## pacing made this bot's steering vary run to run (the kerb phase was marginal).
+## The car shifts itself (automatic default), so E is ignored.
+var keys := {}
+
 func _press(k: Key, down: bool) -> void:
-	var e := InputEventKey.new()
-	e.keycode = k
-	e.physical_keycode = k
-	e.pressed = down
-	Input.parse_input_event(e)
+	keys[k] = down
+
+func _drive(c: PlayerCar) -> void:
+	c.throttle_input = 1.0 if keys.get(KEY_W, false) else 0.0
+	c.brake_input = 1.0 if keys.get(KEY_S, false) else 0.0
+	c.handbrake_input = 1.0 if keys.get(KEY_SPACE, false) else 0.0
+	var steer := (1.0 if keys.get(KEY_D, false) else 0.0) - (1.0 if keys.get(KEY_A, false) else 0.0)
+	c.steering_input = -steer  # same sign flip as PlayerCar._read_keyboard
 
 func _fail(msg: String) -> void:
 	fails += 1
@@ -122,6 +131,8 @@ func _physics_process(_delta: float) -> bool:
 	var cam := _cam()
 	if p == null or cam == null:
 		return false
+	if not p.driver.is_valid():
+		p.driver = _drive
 	var v := p.linear_velocity
 	var speed := p.current_speed()
 	match phase:

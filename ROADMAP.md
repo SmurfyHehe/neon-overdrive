@@ -504,8 +504,10 @@ pushes the weak reads (P2, P5, N1).
 - Still open from B1: physics wheelbases move to each car's drawn wheelbase
   (handling changes, tuned per car when built); interiors, undersides and car
   names deferred.
-- **Not pushed:** stage A, B1 and this audit are handed over as one bundle in
-  `build/stage-b1-audit/`, as before.
+- **Pushed** (this session got push access to the repo): stage A is PR #84
+  (into `main`), B1 is PR #85 (into stage A) and this audit is PR #86 (into
+  B1). Merge in that order; only Roy merges. A bundle of all three is also in
+  `build/stage-b1-audit/`.
 
 Old `main.gd` (treadmill/distance-accumulator architecture) is abandoned, not edited further. `car_builder.gd` (pure mesh construction) is kept and reused. Everything below is built fresh in real world-space.
 

@@ -659,7 +659,7 @@ func process_braking(delta : float) -> void:
 	else:
 		is_braking = false
 	
-	brake_force = brake_amount * max_brake_force
+	brake_force = brake_amount * max_brake_force * brake_mult
 	handbrake_force = handbrake_input * max_handbrake_force
 
 func process_steering(delta : float) -> void:
@@ -778,6 +778,11 @@ const AUTO_DOWN_FULL := 0.75     # same, on full throttle (GEVP's old fixed valu
 @export var turbo_tau_up := 0.6          # seconds to spool (63%)
 @export var turbo_tau_down := 0.25       # seconds to fall
 @export var turbo_gain := 0.45           # torque gain at full boost
+## (8) Heat and wear hooks (Phase B, DEVIATION): PowertrainHealth sets these each
+## tick. 1.0 = no effect. torque_mult scales engine torque (overheat derate),
+## brake_mult scales brake force (fade). Both have floors, so the car never dies.
+var torque_mult := 1.0
+var brake_mult := 1.0
 var boost := 0.0
 var blow_off_count := 0
 var _prev_throttle := 0.0
@@ -802,7 +807,7 @@ func process_motor(delta : float) -> void:
 	else:
 		boost = 0.0
 	_prev_throttle = throttle_amount
-	torque_output = get_torque_at_rpm(motor_rpm) * throttle_amount * turbo_mult
+	torque_output = get_torque_at_rpm(motor_rpm) * throttle_amount * turbo_mult * torque_mult
 	## Adjust torque based on throttle input, clutch input, and motor drag
 	torque_output -= drag_torque * (1.0 + (clutch_amount * (1.0 - throttle_amount)))
 	# (4) idle controller: PI on rpm error, only on a (nearly) closed throttle,

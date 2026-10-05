@@ -343,6 +343,7 @@ func _setup_game_state() -> void:
 	add_child(TuningPanel.new(player, game_state))
 	add_child(AutoTunePanel.new(player, game_state))
 	add_child(TunerTabs.new(game_state))
+	add_child(WarningLights.new(player))
 
 func _process(_delta: float) -> void:
 	_update_chunk_pool(player.position.z)

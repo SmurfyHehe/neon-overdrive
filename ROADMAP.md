@@ -135,7 +135,9 @@ automatic-vs-manual clutch question unless Roy raises them.
   edits: `clutch_torque = 0` in Neutral; feel pass 1b (soft rev limiter with
   hysteresis, rev match on upshifts, `motor_brake` as engine braking); Phase A
   (idle PI controller instead of a hard idle floor, throttle-dependent
-  automatic shift points with hysteresis).
+  automatic shift points with hysteresis); Phase B (turbo boost and blow-off,
+  `brake_selects_reverse`, and the `torque_mult` / `brake_mult` hooks for heat
+  and wear).
   Extensions that do not need a vendor edit still live in `aero.gd` and
   `car_spec.gd`.
 - **Every car runs the same raycast wheel sim** (player, NPC, cop, modded),

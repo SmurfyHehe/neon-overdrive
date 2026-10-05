@@ -109,7 +109,8 @@ func _set_state(new_state: State) -> void:
 	# The engine sound is a generator pushed from _process, which stops while the
 	# tree is paused; the buffer then underruns and clicks. Mute its bus for the
 	# pause, unmute on the way back (Phase A, 2026-10-05).
-	var engine_bus := AudioServer.get_bus_index(&"Engine")
-	if engine_bus >= 0:
-		AudioServer.set_bus_mute(engine_bus, new_state != State.PLAYING)
+	for bus_name in [&"Engine", &"Music"]:
+		var bus := AudioServer.get_bus_index(bus_name)
+		if bus >= 0:
+			AudioServer.set_bus_mute(bus, new_state != State.PLAYING)
 	state_changed.emit(new_state, old)

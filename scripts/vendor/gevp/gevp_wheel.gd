@@ -63,6 +63,9 @@ var last_collider
 var last_collision_point := Vector3.ZERO
 var last_collision_normal := Vector3.ZERO
 var current_cof := 0.0
+## (10) Phase C, DEVIATION: a per-tyre grip multiplier PowertrainHealth sets from
+## tyre temperature and wear (1.0 = no effect).
+var grip_mult := 1.0
 var current_rolling_resistance := 0.0
 var current_lateral_grip_assist := 0.0
 var current_longitudinal_grip_ratio := 0.0
@@ -289,7 +292,14 @@ func process_tires(braking : bool, delta : float):
 		slip_vector = Vector2(0.0001, 0.0001)
 	
 	var cornering_stiffness := 0.5 * current_tire_stiffness * pow(contact_patch, 2.0)
-	var friction := current_cof * spring_force - (spring_force / (tire_width * contact_patch * 0.2))
+	# (10) load sensitivity: grip per unit of load falls as the load rises, so weight
+	# transfer costs total grip (real tyres: Fy ~ Fz^0.7-0.9). vehicle.tyre_load_sensitivity
+	# is the exponent loss (0 = off, GEVP's old linear-in-load behaviour); the
+	# reference load is this wheel's share of the static weight.
+	var load_factor := 1.0
+	if vehicle.tyre_load_sensitivity > 0.0 and spring_force > 1.0:
+		load_factor = pow(clampf(spring_force / maxf(mass_over_wheel * 9.81, 1.0), 0.25, 4.0), -vehicle.tyre_load_sensitivity)
+	var friction := current_cof * grip_mult * load_factor * spring_force - (spring_force / (tire_width * contact_patch * 0.2))
 	var deflect := 1.0 / (sqrt(pow(cornering_stiffness * slip_vector.y, 2.0) + pow(cornering_stiffness * slip_vector.x, 2.0)))
 	
 	## Adds in additional longitudinal grip when braking

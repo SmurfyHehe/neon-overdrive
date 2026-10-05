@@ -42,7 +42,28 @@ const FADE_START_C := 350.0
 const FADE_END_C := 650.0
 const BRAKE_FLOOR := 0.6
 
-enum Warn { NONE = 0, ENG = 1, ENG_DERATE = 2, BRK = 4, BRK_FADE = 8 }
+# Tyres (Phase C): temperature heats with slip power (load x slip x speed) and cools
+# with airspeed; grip follows a window (cold and overheated both lose grip) and a
+# slow wear loss. Per tyre, floors keep every tyre above TYRE_FLOOR of full grip.
+const TYRE_HEAT_K := 0.0026
+const TYRE_COOL_BASE := 0.05
+const TYRE_COOL_SPEED := 0.004
+const TYRE_TAU := 25.0
+const TYRE_REF_LOAD := 3200.0       # N, a typical tyre load
+const TYRE_WEAR_SLIP := 0.08        # slip beyond this wears the tyre
+const TYRE_WEAR_K := 0.0002         # wear per (excess slip x load ratio x (speed + 6)) second
+const TYRE_WEAR_LOSS := 0.15        # grip lost at full wear
+const TYRE_FLOOR := 0.78
+const WARN_TYRE_C := 120.0
+const WARN_TYRE_WEAR := 0.8
+
+# Clutch wear (Phase C): slipping power eats the clutch; a worn clutch holds less torque.
+const CLUTCH_FREE_W := 500.0        # slip power below this is free (a closed clutch)
+const CLUTCH_LIFE_J := 2.0e6
+const CLUTCH_CAP_LOSS := 0.45       # fraction of grip lost at full wear
+const WARN_CLUTCH_WEAR := 0.7
+
+enum Warn { NONE = 0, ENG = 1, ENG_DERATE = 2, BRK = 4, BRK_FADE = 8, TYRE = 16, CLUTCH = 32 }
 
 var enabled := true
 var engine_temp := 85.0
@@ -50,6 +71,11 @@ var brake_temp := AMBIENT_C
 var torque_mult := 1.0
 var brake_mult := 1.0
 var warnings := 0
+var tyre_temp: Array[float] = [AMBIENT_C, AMBIENT_C, AMBIENT_C, AMBIENT_C]
+var tyre_wear: Array[float] = [0.0, 0.0, 0.0, 0.0]
+var tyre_grip: Array[float] = [1.0, 1.0, 1.0, 1.0]
+var clutch_wear := 0.0
+var clutch_cap := 1.0
 
 ## One physics step from raw numbers, so tests can drive it without a car.
 ## load 0..1 (engine power fraction), on_limiter, speed m/s, brake_power W.
@@ -77,6 +103,48 @@ func step_values(dt: float, load: float, on_limiter: bool, speed: float, brake_p
 	elif brake_temp >= WARN_BRAKE_C:
 		warnings |= Warn.BRK
 
+## Grip multiplier for a tyre temperature: cold and overheated both lose grip.
+static func temp_grip(t: float) -> float:
+	if t < 40.0:
+		return 0.88
+	if t < 80.0:
+		return lerpf(0.88, 1.0, (t - 40.0) / 40.0)
+	if t <= 100.0:
+		return 1.0
+	return maxf(lerpf(1.0, 0.86, (t - 100.0) / 50.0), 0.80)
+
+## One tyre for one step, from raw numbers (testable without a car).
+## slip is the larger of slide angle and slip ratio, force the tyre's load in N.
+func step_tyre(i: int, dt: float, speed: float, slip: float, force: float) -> void:
+	var heat := TYRE_HEAT_K * force * slip * (speed + 2.0)
+	var cool := TYRE_COOL_BASE + TYRE_COOL_SPEED * speed
+	var balance := AMBIENT_C + heat / cool
+	tyre_temp[i] += (balance - tyre_temp[i]) * (1.0 - exp(-dt / TYRE_TAU))
+	tyre_temp[i] = clampf(tyre_temp[i], AMBIENT_C, 260.0)
+	var excess := maxf(slip - TYRE_WEAR_SLIP, 0.0)
+	tyre_wear[i] = clampf(tyre_wear[i] + excess * (force / TYRE_REF_LOAD) * (speed + 6.0) * TYRE_WEAR_K * dt, 0.0, 1.0)
+	tyre_grip[i] = maxf(temp_grip(tyre_temp[i]) * (1.0 - TYRE_WEAR_LOSS * tyre_wear[i]), TYRE_FLOOR)
+	if tyre_temp[i] >= WARN_TYRE_C or tyre_wear[i] >= WARN_TYRE_WEAR:
+		warnings |= Warn.TYRE
+
+## The clutch for one step: slip power (W) wears it, wear weakens it.
+func step_clutch(dt: float, slip_power: float) -> void:
+	clutch_wear = clampf(clutch_wear + maxf(slip_power - CLUTCH_FREE_W, 0.0) * dt / CLUTCH_LIFE_J, 0.0, 1.0)
+	clutch_cap = clampf(1.0 - CLUTCH_CAP_LOSS * smoothstep(0.5, 1.0, clutch_wear), 1.0 - CLUTCH_CAP_LOSS, 1.0)
+	if clutch_wear >= WARN_CLUTCH_WEAR:
+		warnings |= Warn.CLUTCH
+
+## Service: the garage will call this; for now the pause menu has a button.
+func repair() -> void:
+	engine_temp = 85.0
+	brake_temp = AMBIENT_C
+	for i in 4:
+		tyre_temp[i] = AMBIENT_C
+		tyre_wear[i] = 0.0
+		tyre_grip[i] = 1.0
+	clutch_wear = 0.0
+	clutch_cap = 1.0
+
 ## One step from the car. Writes the two multipliers back onto it.
 func step(v: Vehicle, dt: float) -> void:
 	if not enabled:
@@ -85,6 +153,9 @@ func step(v: Vehicle, dt: float) -> void:
 		warnings = Warn.NONE
 		v.torque_mult = 1.0
 		v.brake_mult = 1.0
+		v.clutch_cap_mult = 1.0
+		for w in v.wheel_array:
+			w.grip_mult = 1.0
 		return
 	var peak_power := v.max_torque * v.max_rpm / 9.5488 * 0.7  # rough W at the power peak
 	var power := maxf(v.torque_output, 0.0) * v.motor_rpm / 9.5488
@@ -93,14 +164,36 @@ func step(v: Vehicle, dt: float) -> void:
 	step_values(dt, load, v.limiter_cut, v.speed, brake_power)
 	v.torque_mult = torque_mult
 	v.brake_mult = brake_mult
+	# tyres: the wheels are FL, FR, RL, RR
+	for i in mini(4, v.wheel_array.size()):
+		var w: Wheel = v.wheel_array[i]
+		var slip := 0.0
+		var force := 0.0
+		if w.is_colliding():
+			slip = maxf(absf(w.slip_vector.x), absf(w.slip_vector.y))
+			force = w.spring_force
+		step_tyre(i, dt, v.speed, slip, force)
+		w.grip_mult = tyre_grip[i]
+	# clutch: slip power = torque x speed difference across the plates
+	var clutch_slip := 0.0
+	if v.current_gear != 0 and v.clutch_amount < 0.95:
+		var engine_w := v.motor_rpm / 9.5488
+		var input_w := v.get_drivetrain_spin() * v.get_gear_ratio(v.current_gear)
+		clutch_slip = absf(v.clutch_torque) * absf(engine_w - input_w)
+	step_clutch(dt, clutch_slip)
+	v.clutch_cap_mult = clutch_cap
 
 func is_warning(flag: int) -> bool:
 	return (warnings & flag) != 0
 
 ## Only the wear numbers; temperatures reset on load. For the garage later.
 func to_dict() -> Dictionary:
-	return {"engine_temp": engine_temp, "brake_temp": brake_temp}
+	return {"engine_temp": engine_temp, "brake_temp": brake_temp, "clutch_wear": clutch_wear, "tyre_wear": tyre_wear.duplicate()}
 
 func from_dict(d: Dictionary) -> void:
 	engine_temp = float(d.get("engine_temp", 85.0))
+	clutch_wear = float(d.get("clutch_wear", 0.0))
+	var tw: Array = d.get("tyre_wear", [0.0, 0.0, 0.0, 0.0])
+	for i in 4:
+		tyre_wear[i] = float(tw[i]) if i < tw.size() else 0.0
 	brake_temp = float(d.get("brake_temp", AMBIENT_C))

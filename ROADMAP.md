@@ -103,6 +103,230 @@ Story runs through every milestone as text, stills and phone messages.
 
 Kept for reference. The car-culture roadmap above replaces its goal and build order. Still in use: the physics notes, the near-miss formula (now feeding the highway run and respect), the upgrade-tree structure (drift grip becomes a burnout branch) and the rendering proposals. Fuel, stop places and damage-ends-run are parked.
 
+## Roy's 2026-10-04 plan: stages A–G
+
+**Goal:** a complete playable run loop, built in this order. Every stage is
+verified headless with real simulated input, logged here, and **stops for
+Roy's sign-off** before the next one starts. Stage D stops after every car.
+
+| Stage | Contents |
+|---|---|
+| A | Feel + environment art: dynamic FOV, camera shake, lower chase cam, speed-scaled engine/wind/tyre audio, dense roadside detail, narrower road |
+| B | Milestones 3–5: lane-follow traffic, reactive traffic, camera + HUD. The 3 NPC cars are built here |
+| C | Milestones 6–9: damage, fuel, stop places, currency/scoring |
+| D | The 5 remaining player cars, one at a time, each with its CarSpec |
+| E | Milestone 10: garage + a real branching mod tree per player car |
+| F | Milestone 11: heat/wanted + police pursuit. The 3 cop cars are built here |
+| G | Integration: full-loop run, balance, bug sweep, Windows export on request |
+
+**Constraints (Roy, 2026-10-04):** verify by running Godot headless with real
+simulated input, and check `run/main_scene` before calling anything hung. Use
+original designs only, with no real makes or logos. Log every decision here as
+it happens. Flag contradictions instead of picking silently. Never delete Roy's
+files. Don't touch the parked top-speed plateau in `process_clutch()` or the
+automatic-vs-manual clutch question unless Roy raises them.
+
+**Rules carried forward:**
+- **Physics:** GEVP stays vendored and unmodified. The one logged exception is
+  `clutch_torque = 0` in Neutral. Extensions live in `aero.gd` and `car_spec.gd`.
+- **Every car runs the same raycast wheel sim** (player, NPC, cop, modded),
+  told apart only by CarSpec data. Roy, 2026-09-13, restated 2026-10-04.
+- **Gas-only powertrain** for all 12 cars (Roy, 2026-09-13).
+- **Mod trees:** each player car gets its own branching tree, 8–15+ nodes
+  (for example a grip branch and a power branch), applied as CarSpec
+  overrides. This answers GitHub #71 and supersedes the shared five-track tree
+  and three car tiers further down (2026-09-12).
+
+**Fleet: 12 original designs** inspired by real categories. These and their
+reference cars were agreed with Roy on 2026-09-13; they were only in Claude's
+notes until now.
+
+| Role | Car | Real-world reference points |
+|---|---|---|
+| Player 1 | Sports coupe | Supra A80, Silvia S13–S14, RX-7 FD3S |
+| Player 2 | Hot hatch (light, agile starter) | Civic Si, Golf GTI, 205 GTI |
+| Player 3 | Tuner sedan (JDM, mod-friendly) | Skyline R32–R34, AE86, Lancer Evo |
+| Player 4 | Kei-style roadster (light, low power) | Honda Beat, Suzuki Cappuccino, Autozam AZ-1 |
+| Player 5 | Muscle sedan (RWD, torque, low grip) | Impala SS, Chevelle SS, Caprice 9C1 |
+| Player 6 | Performance crossover (AWD, tall) | Crosstrek/XV, A6 Allroad, Delta Integrale |
+| NPC 1 | Commuter sedan | Camry, Accord, Sentra |
+| NPC 2 | City hatchback | Yaris, Fit, Swift |
+| NPC 3 | Pickup/SUV | Hilux, F-150, Land Cruiser |
+| Cop 1 | Patrol sedan | Crown Victoria P71, Charger Pursuit |
+| Cop 2 | Patrol SUV | Police Interceptor Utility, Tahoe PPV |
+| Cop 3 | Unmarked interceptor | unmarked Charger Hellcat, Mustang GT PI |
+
+**Open conflicts, waiting on Roy (flagged 2026-10-04):**
+1. **Direction.** PR #83 (open) records a car-culture plan Roy approved on
+   2026-09-29. It parks fuel, stop places and damage-ends-the-run (stage C
+   here) and makes rival and traffic cars scripted. This plan builds them.
+   Stage A applies to both, so it goes ahead; **stage B needs a decision.**
+2. **Cars.** PR #79 (open) moves cars to imported models through a vehicle
+   registry. Stage D assumed 12 cars built here. Needs a decision before D.
+3. **CPU cost of full-sim traffic.** RESEARCH-cheap-pretty.md warns that the
+   i5-1235U has 2 performance cores and that traffic should not get GEVP
+   bodies "without a measured reason". Roy's rule above is that reason, so
+   stage B measures traffic density against the frame budget before
+   committing a number.
+4. **Coupe status.** Not "awaiting judgement": Roy said "our car model sucks
+   atm" (#16), but he judged it while it rendered inside out, a winding bug
+   fixed after (PR #45). The game currently spawns the neutral test car (#63).
+
+### Stage A plan and decisions (2026-10-04)
+
+**Look:** Look Board option **B, "Gritty PS2 night"**, which Roy picked on
+2026-09-29: dark, orange sodium lamps, lamp pools, film grain, heavy shadows,
+**no neon**. It also matches the Street-Spec reference ("slightly low-poly and
+retro"). So stage A repaints the neon palette (cyan/magenta pylons, purple
+fog) instead of adding more neon. Approved night-lighting proposal 1 (dim cool
+key, emissives as the visible light) still holds.
+
+**In scope:**
+- **Camera:** lower chase cam, speed FOV with a partial dolly so the car keeps
+  its size while the world stretches, and speed/surface/impact shake. It goes
+  into one ChaseCamera class, and Roy's three smoothing modes (#31) are kept
+  as they are.
+- **Audio:** wind, rolling-road roar, tyre squeal and kerb/sidewalk rumble,
+  driven by speed, slip and surface. The synthesized engine from #57 is reused
+  unchanged, since its pitch already follows rpm and therefore speed through
+  the gears. Final engine tuning still waits on #62.
+- **Road:** narrower overall, with max 3 own-direction lanes (was 4), a
+  narrower shoulder, and buildings closer. `LANE_W` (2.3 m) is
+  **not** narrowed: it is already narrower than a real lane, and stage B
+  traffic needs it.
+- **Roadside detail:** sodium street lamps with fake light pools, dense
+  delineator posts instead of neon pylons, and walls closing the gaps between
+  buildings. All are MultiMesh, with draw calls counted before and after.
+- **Look support:** headlights on the player car (the detail has to be
+  visible), a blob shadow under it, and a light film grain.
+
+**Deferred, to propose later:** tunnels (part of look B; a new chunk type),
+utility poles and wires, overhead signs, vertex-coloured road lighting
+(proposal 2, still not approved) and wet-road reflections.
+
+### Stage A log (2026-10-04, as it happened)
+
+- **Baseline on main (25dbf17):** all 9 `run_tests.bat` tests pass in the
+  cloud sandbox (Godot 4.7.2 Linux, lavapipe for window tests).
+  `floating_origin_drive` (not in the runner) is flaky there before any
+  change: frame overshoot 0.000–0.019 m against a 0.0 limit, 1 of 3 runs.
+- **Camera:** extracted to `scripts/chase_camera.gd`. Height 3.2 → 1.85 m,
+  distance 6.0 → 5.2 m, look 12 m ahead at 0.95 m. FOV goes 58° → 74°
+  (vertical), linear from 5 to 45 m/s, so today's ~35 m/s top speed already
+  gets ¾ of it. Hard acceleration adds up to +3° and braking takes off 2°.
+  The dolly is 70%, so the car keeps most of its size as the FOV widens, and
+  the camera drops 0.2 m at speed. Shake has three parts: a speed buzz
+  (≤0.46°), kerb/sidewalk rumble, and impact trauma when velocity jumps by
+  more than 0.8 m/s in one tick. Hard braking peaks at 0.32 m/s per tick,
+  measured, so braking never reads as an impact.
+- **Found while looking at Roy's own 2026-09-29 screenshots:** the buildings
+  rendered as solid white blocks, even with glow off. The window material
+  used the default `EMISSION_OP_ADD` with a white emission colour, so every
+  face emitted ≥1.4. **Fixed** (MULTIPLY), with a regression check in
+  `tests/roadside_detail.gd`. This was very likely a large part of
+  "environment is trash".
+- **Environment:**
+  - Palette moved to look B: near-black sky with a sodium-orange horizon,
+    warm dark fog (density 0.006 → 0.009), and grey asphalt (lighter than
+    before, so headlights show on it).
+  - Markings are paint, emitting at 0.28, below the glow threshold. Curb and
+    median barrier are concrete. Posts every 5 m replace the neon pylons
+    every 8 m.
+  - Sodium lamps every 25 m per side, staggered, each with an additive light
+    pool on the road that fades out between 110 and 170 m.
+  - Buildings have longer frontages (9–18 m) at 25 m spacing; their windows
+    use world-space mapping on a 25 m tile, which divides the 1 km
+    floating-origin shift. Gap walls fill the lots between them.
+  - Player car gets a headlight (one spot: 28 energy, 55 m range, 30°) and a
+    blob shadow decal. The car's meshes move to render layer 2 so the decal
+    skips them.
+  - Film grain is a darken-only multiply at 9%, at 24 fps.
+- **Gap walls are visual only.** Out-of-bounds collision is #28, and
+  uncommitted work for it is sitting in Roy's root checkout, so it is not
+  done twice here.
+- **Sidewalk width kept at 2.2 m.** I tried 1.8 m, but then the car's
+  1.76 m track barely fits, which quietly kills the drivable-sidewalk
+  shortcut (a 2026-09-13 design decision). The test bots caught it: they
+  could no longer get all four wheels onto the sidewalk.
+- **Pre-existing warning, not caused here:** "MultiMesh interpolation is
+  being triggered from outside physics process" shows up on main too, when
+  a chunk recycles from `_process`. Left alone; noted for #28/#26 owners.
+- **Audio:** `scripts/car_audio.gd` drives four looping layers made from
+  noise in code, with no audio files:
+  - wind, rising with v² on the World bus;
+  - road roar, rising with v on the Tires bus;
+  - tyre squeal from slip angle or slip ratio, weighted by tyre load;
+  - kerb rumble on "Dirt", whose rate follows speed.
+
+  The first squeal was three pure tones (it would have sounded like a synth
+  whine) and became noise through three resonators instead. Hard launches
+  squeal for real: 460 Nm through 1st and 2nd outruns rear grip in GEVP, so
+  this changes if #62 retunes the power.
+- **Process incident (fixed):** a read-only `git status` run on Roy's
+  checkout from the desktop bridge's Linux shell, where deletes are blocked,
+  left a stale `.git/index.lock` there for under a minute. It is moved out
+  to `build/stage-a/`, and CLAUDE.md now has a rule for that shell.
+
+### Stage A results (2026-10-04): waiting for Roy's sign-off
+
+**Changed** (branch `feat/stage-a-feel-env`, based on main 25dbf17):
+- `scripts/chase_camera.gd` (new): the camera from game.gd, plus the low
+  rig, speed FOV and dolly, and shake.
+- `scripts/car_audio.gd` (new): wind, road, squeal and kerb layers. The
+  engine (#57) is unchanged.
+- `scripts/road_chunk_builder.gd` and `scripts/game.gd`:
+  - look B palette;
+  - narrower road (3-lane cap, 0.9 m shoulder, buildings closer);
+  - lamps, light pools, 5 m posts and gap walls;
+  - the white-building fix.
+- `scripts/car_fx.gd` and `scripts/film_grain.gd` (new): headlight, blob
+  shadow and grain. `scripts/player.gd` gains three lines to attach audio
+  and FX.
+- Tests: new `camera_feel` and `car_audio` (headless) and `roadside_detail`
+  (window), all in `run_tests.bat`. `floating_origin_drive` now reads the
+  chase offset from the camera.
+- `CLAUDE.md`: a git rule for the desktop bridge's Linux shell.
+
+**Verified** in the cloud sandbox (Godot 4.7.2 Linux, real simulated keys,
+window tests on a software renderer):
+- All 12 runner tests pass (9 existing, 3 new), as do `engine_audio_render`
+  and `floating_origin_drive` (2 of 2 runs).
+- **Camera:** framing at rest is exact. At 28 m/s the FOV is 67.4° and the
+  distance 4.59 m, and FOV follows speed (r = 0.994). The hardest braking
+  peaks at 0.32 m/s per tick against a 0.8 threshold, so it never shakes. A
+  wall hit at speed gives trauma 0.98, and the cruise buzz stays ≤ 0.13°.
+- **Audio:** wind follows speed² (r = 1.000) and road follows speed
+  (r = 0.997). Squeal tops out at 0.04 when cruising straight and reaches
+  1.0 in a handbrake slide. Kerb rumble comes on. The loops take 115 ms to
+  build. The real mix was recorded from the Master bus and checked on a
+  spectrogram.
+- **Layout:** `roadside_detail` covers 36 lane configs and their rebuilds.
+  It was mutation-checked: it fails if the ADD-emission bug or the gap walls
+  regress.
+- **Draw calls** in benchmark mode, same drive: main averages 147 (max 160),
+  stage A averages 171 (max 186), +16%.
+- **Windows export:** builds with 0 errors. Its embedded pack loads in Godot
+  and passes the smoke test.
+- **Clip:** a 23.5 s drive with picture and sound, recorded with Godot's
+  movie writer.
+
+**Not verified / open:**
+- **Frame time on Roy's laptop.** The software renderer here says nothing
+  useful about it. `benchmark.bat` on the stage A build is the real check;
+  main ran at about 3.3 ms there (2026-09-29), against a budget of 8–10 ms.
+- **The .exe has not been launched on Windows**, since there is no Windows
+  here.
+- **Feel, look and mix are Roy's call.** Every value is a named constant:
+  camera in `chase_camera.gd`, audio in `car_audio.gd`, lights in
+  `car_fx.gd`, palette in `game.gd` and `road_chunk_builder.gd`.
+- **Merge conflicts:** expect small ones with open PR #79 (`game.gd` HUD
+  line, `player.gd` `_ready`). This branch has not been rebased onto it.
+- **Not pushed:** the session's GitHub access refused the push (the Claude
+  GitHub App isn't installed), so the branch is handed over as a bundle.
+- **Waiting on Roy before stage B:** the direction (PR #83 vs this plan),
+  the car pipeline (PR #79) and the traffic sim cost (see Open conflicts
+  above).
+
 Old `main.gd` (treadmill/distance-accumulator architecture) is abandoned, not edited further. `car_builder.gd` (pure mesh construction) is kept and reused. Everything below is built fresh in real world-space.
 
 ### Confirmed design decisions

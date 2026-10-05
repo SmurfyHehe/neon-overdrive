@@ -32,20 +32,9 @@ var recenter_count := 0
 var player: PlayerCar
 var game_state: GameState
 
-var camera: Camera3D
-const CAM_DIST := 6.0
-const CAM_HEIGHT := 3.2
-const CAM_FOV := 62.0
-# Issue #31: C cycles camera modes in-game. Roy kept all three for now
-# (2026-09-29) and will tune them later.
-# 0 = hard snap (old), 1 = light smoothing, 2 = smoothing + eased reverse swing.
-const CAM_MODE_NAMES := ["A: hard snap", "B: light smoothing", "C: smoothing + reverse swing"]
-const CAM_FOLLOW_RATE := 6.0  # 1/s, how fast the camera catches up sideways/vertically
-const CAM_SWING_RATE := 5.0   # 1/s, how fast it swings round for reverse (~0.6 s)
-var cam_mode := 0
-var cam_follow := Vector2.ZERO  # smoothed (x, y) the camera tracks
-var cam_yaw := 0.0              # 0 = behind for forward, PI = mirrored for reverse
-var cam_started := false
+# Chase camera, its three smoothing modes (#31, C to cycle) and the stage A
+# speed feel (FOV, dolly, shake) all live in chase_camera.gd.
+var camera: ChaseCamera
 var lbl_cam: Label
 
 var lbl_gear: Label
@@ -79,21 +68,27 @@ func _setup_world() -> void:
 	# horizon" Roy flagged in his screenshot. A gradient sky reads as an
 	# actual horizon instead of a wall, and letting fog_density drop means
 	# the gradient is doing more of the distance-fade work than a wall of fog.
+	#
+	# STAGE A (2026-10-04): repainted from the purple neon palette to the look
+	# Roy picked (Look Board B, "Gritty PS2 night"): a near-black sky with a
+	# dull sodium-orange city glow at the horizon, and a warm dark haze that
+	# swallows the distance -- denser than before, so the rows of street lamps
+	# fade into it (and the short draw distance is free, RESEARCH item 2).
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.02, 0.004, 0.08)
-	sky_mat.sky_horizon_color = Color(0.35, 0.08, 0.55)
-	sky_mat.ground_bottom_color = Color(0.02, 0.004, 0.047)
-	sky_mat.ground_horizon_color = Color(0.25, 0.05, 0.4)
+	sky_mat.sky_top_color = Color(0.008, 0.01, 0.018)
+	sky_mat.sky_horizon_color = Color(0.17, 0.095, 0.05)
+	sky_mat.ground_bottom_color = Color(0.008, 0.008, 0.01)
+	sky_mat.ground_horizon_color = Color(0.11, 0.065, 0.04)
 	var sky := Sky.new()
 	sky.sky_material = sky_mat
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.11, 0.05, 0.23)
-	env.fog_density = 0.006
+	env.fog_light_color = Color(0.1, 0.066, 0.042)
+	env.fog_density = 0.009
 	# NIGHT LIGHTING PASS (2026-09-29, RESEARCH-cheap-pretty.md item 1): the
 	# gradient sky is also the ambient source (Godot's default under BG_SKY),
-	# so its purple horizon fills the scene for free -- no extra light needed.
+	# so its horizon glow fills the scene for free -- no extra light needed.
 	# Dialled down from the default 1.0 because at full energy a bright horizon
 	# lifts the near-black asphalt back toward grey and flattens the emissive
 	# markings it is supposed to sit behind.
@@ -116,6 +111,9 @@ func _setup_world() -> void:
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)
+	# Look B's "grainy filter" (stage A): a light, darken-only animated grain
+	# over the 3D view, under the HUD.
+	add_child(FilmGrain.new())
 
 	# NIGHT LIGHTING PASS (2026-09-29, RESEARCH-cheap-pretty.md item 1): this
 	# was a warm white key at energy 1.1 -- i.e. a daylight sun sitting inside
@@ -128,6 +126,9 @@ func _setup_world() -> void:
 	# cool moonlight key: enough to give the car body and roadside geometry
 	# form so they don't read as flat silhouettes, not enough to compete with
 	# the neon. Renamed sun -> moon because that is now what it is.
+	# Stage A (2026-10-04): the light you see is now sodium street lamps, their
+	# pools on the road, windows and the player's headlight; the markings and
+	# posts are dim paint, not neon. The moon keeps the same job.
 	#
 	# Shadows stay off (Godot's default) deliberately, not by oversight: a
 	# shadow-casting directional light costs an entire extra pass, and at this
@@ -188,7 +189,9 @@ func _section_at(idx: int) -> Dictionary:
 	var own_delta := 0
 	if own_roll >= 0.55:
 		own_delta = 1 if own_roll < 0.78 else -1
-	var own_lanes: int = clampi(int(prev.own_lanes) + own_delta, 2, 4)
+	# Stage A (narrower road): at most 3 lanes our way, was 4. The builder's
+	# MultiMesh capacity (MAX_OWN_LANES) still allows 4, so this only narrows.
+	var own_lanes: int = clampi(int(prev.own_lanes) + own_delta, 2, 3)
 	var onc_roll := randf()
 	var onc_delta := 0
 	if onc_roll >= 0.7:
@@ -234,7 +237,6 @@ func _physics_process(_delta: float) -> void:
 	var z := player.global_position.z
 	if absf(z) >= recenter_dist:
 		_shift_origin(int(floor(-z / RoadChunkBuilder.CHUNK_LEN)))
-	_poll_camera_input()
 	if Input.is_action_just_pressed("mute"):
 		toggle_mute()
 
@@ -276,51 +278,8 @@ func _setup_player() -> void:
 
 # ---------- camera ----------
 func _setup_camera() -> void:
-	camera = Camera3D.new()
-	camera.fov = CAM_FOV
-	camera.far = 400.0
-	# Moved in _process every rendered frame, so it must not be
-	# physics-interpolated itself (ISSUES B7).
-	camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	camera = ChaseCamera.new(player)
 	add_child(camera)
-	camera.current = true
-
-func _update_camera(delta: float) -> void:
-	# The interpolated position, not player.position: the car only moves on
-	# the 60 Hz physics tick, and with vsync off the camera updates several
-	# times per tick. Following the raw position made car and road judder.
-	var p := player.get_global_transform_interpolated().origin
-	# BUG FIX (2026-09-13): camera never rotated for reverse, so you couldn't
-	# see what you were backing into. Reversing flips the chase cam to the
-	# opposite side of the car looking the opposite way -- it still trails
-	# "behind" relative to the current direction of travel, just mirrored.
-	var reversing := player.gear == -1
-	var target_yaw := PI if reversing else 0.0
-	if cam_mode == 0 or not cam_started:
-		cam_follow = Vector2(p.x, p.y)
-		cam_yaw = target_yaw
-		cam_started = true
-	else:
-		# Frame-rate independent ease: the same feel at 60 or 300 fps.
-		var k := 1.0 - exp(-CAM_FOLLOW_RATE * delta)
-		cam_follow = cam_follow.lerp(Vector2(p.x, p.y), k)
-		if cam_mode == 2:
-			cam_yaw = lerpf(cam_yaw, target_yaw, 1.0 - exp(-CAM_SWING_RATE * delta))
-		else:
-			cam_yaw = target_yaw
-	# Distance along the road stays locked to the car, so speed never pulls
-	# the camera further back; only sideways and height motion is smoothed.
-	var fx := cam_follow.x
-	var fy := cam_follow.y
-	var back := Vector3(0, 0, CAM_DIST).rotated(Vector3.UP, cam_yaw)
-	var ahead := Vector3(0, 0, -10.0).rotated(Vector3.UP, cam_yaw)
-	camera.global_position = Vector3(fx + back.x, fy + CAM_HEIGHT, p.z + back.z)
-	camera.look_at(Vector3(fx + ahead.x, fy + 1.1, p.z + ahead.z), Vector3.UP)
-
-# Polled from _physics_process like all game input (#30), not an event handler.
-func _poll_camera_input() -> void:
-	if Input.is_action_just_pressed("camera_cycle"):
-		cam_mode = (cam_mode + 1) % CAM_MODE_NAMES.size()
 
 ## M mutes all game audio (master bus). Setting NEON_MUTE=1 starts muted, for
 ## test runs and late-night testing.
@@ -355,7 +314,7 @@ func _update_debug_hud() -> void:
 	var gear_name := "R" if player.gear == -1 else ("N" if player.gear == 0 else str(player.gear))
 	lbl_gear.text = "GEAR %s" % gear_name
 	lbl_speed.text = "%d units/s" % int(player.current_speed())
-	lbl_cam.text = "CAMERA %s  (C to switch)" % CAM_MODE_NAMES[cam_mode]
+	lbl_cam.text = "CAMERA %s  (C to switch)" % camera.mode_name()
 	# BUG FIX (2026-09-13): shift_flash_t was tracked on the player since
 	# milestone 2 but nothing ever read it -- shifting had zero feedback.
 	# Wired it to actually punch the gear label (bright flash + scale pop)
@@ -374,7 +333,6 @@ func _setup_game_state() -> void:
 	add_child(PauseMenu.new(game_state))
 	add_child(TuningPanel.new(player, game_state))
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	_update_chunk_pool(player.position.z)
-	_update_camera(delta)
 	_update_debug_hud()

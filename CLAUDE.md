@@ -52,6 +52,25 @@ Rules:
   it.** Another agent may be relying on exactly that state. Tell Roy what you
   see and let him decide.
 
+## Git from the Claude desktop bridge's Linux shell: read with no locks
+
+A cloud Claude session can reach this folder through the desktop app's Linux
+shell (`device_bash`), where **deleting files is blocked**. Git cleans up its
+lock files by deleting them, so any git command that writes leaves a stale
+lock behind. On 2026-10-04 a plain `git status` there (status refreshes the
+index) left `.git/index.lock` in the root checkout for under a minute,
+which blocks every other git command in that checkout until it is moved away.
+
+Rules for that shell:
+
+- **Read with `git --no-optional-locks`** (`status`, `diff`), or set
+  `GIT_OPTIONAL_LOCKS=0`. `log`, `show` and `cat-file` don't write.
+- **No writing git commands there at all**: no `fetch`, `add`, `commit` or
+  `worktree add`. Hand over work another way, for example a bundle file plus
+  the command for Roy or a Windows-side agent to run.
+- **If a stale lock appears, move it out of `.git`** (renaming is allowed,
+  deleting is not) and tell Roy.
+
 ## Git: remote
 
 `origin` is <https://github.com/SmurfyHehe/neon-overdrive.git>.

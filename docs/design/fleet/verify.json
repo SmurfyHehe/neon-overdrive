@@ -42,20 +42,98 @@
   "Named correctly: 72 of 72 in every round (12 cars x 6 views).",
   "Named and \"sure\": 33 -> 36 -> 39 of 72 as the designs were revised.",
   "Final design, sure per view: side 12/12, 3/4 front 8/12, 3/4 rear 8/12, front 5/12, traffic ahead 5/12, top 1/12.",
-  "From the top every car is a rounded rectangle; identity from above comes from the roof graphic (glass, light bar, bed, livery), not the outline."
+  "From the top every car is a rounded rectangle; identity from above comes from the roof graphic (glass, light bar, bed, livery), not the outline.",
+  "Audit round (revised designs, 9 views incl. 3 high angles): named correctly 106/109; every miss was at the high rear view, where the three sedans blur."
  ],
  "per_car": {
-  "p1_coupe": "Blind test, final round: named correctly in 6/6 views, sure in 3/6.",
-  "n3_pickup": "Blind test, final round: named correctly in 6/6 views, sure in 5/6.",
-  "p5_muscle": "Blind test, final round: named correctly in 6/6 views, sure in 1/6.",
-  "p3_tuner": "Blind test, final round: named correctly in 6/6 views, sure in 3/6.",
-  "p2_hothatch": "Blind test, final round: named correctly in 6/6 views, sure in 1/6.",
-  "c2_patrolsuv": "Blind test, final round: named correctly in 6/6 views, sure in 5/6.",
-  "n2_cityhatch": "Blind test, final round: named correctly in 6/6 views, sure in 2/6.",
-  "p6_crossover": "Blind test, final round: named correctly in 6/6 views, sure in 2/6.",
-  "p4_kei": "Blind test, final round: named correctly in 6/6 views, sure in 6/6.",
-  "c1_patrol": "Blind test, final round: named correctly in 6/6 views, sure in 5/6.",
-  "c3_interceptor": "Blind test, final round: named correctly in 6/6 views, sure in 5/6.",
-  "n1_commuter": "Blind test, final round: named correctly in 6/6 views, sure in 1/6."
+  "p1_coupe": "Audit blind test, 9 views: named correctly in 9/9, sure in 6/9.",
+  "n3_pickup": "Audit blind test, 9 views: named correctly in 9/9, sure in 4/9.",
+  "p5_muscle": "Audit blind test, 9 views: named correctly in 9/9, sure in 0/9.",
+  "p3_tuner": "Audit blind test, 9 views: named correctly in 8/9, sure in 5/9.",
+  "p2_hothatch": "Audit blind test, 9 views: named correctly in 9/9, sure in 0/9.",
+  "c2_patrolsuv": "Audit blind test, 9 views: named correctly in 9/9, sure in 7/9.",
+  "n2_cityhatch": "Audit blind test, 9 views: named correctly in 9/9, sure in 0/9.",
+  "p6_crossover": "Audit blind test, 9 views: named correctly in 9/9, sure in 6/9.",
+  "p4_kei": "Audit blind test, 9 views: named correctly in 9/9, sure in 3/9.",
+  "c1_patrol": "Audit blind test, 9 views: named correctly in 9/9, sure in 8/9.",
+  "c3_interceptor": "Audit blind test, 9 views: named correctly in 9/9, sure in 8/9.",
+  "n1_commuter": "Audit blind test, 9 views: named correctly in 8/9, sure in 0/9."
+ },
+ "audit": {
+  "date": "2026-10-05",
+  "method": "One fresh agent, never shown the designs, matched shuffled outlines rendered by Godot (tests/fleet_silhouette_sweep.gd --save-views) to the 12 class names, 9 cameras: B1's 6 plus 3 high angles B1 never tested, picked where the 360 sweep found the closest outlines. Each outline scaled to fit its tile, so size is no cue. The high rear view had a 13th outline (the muscle sedan's street build) and the tester was told one class appeared twice. Revised designs (P2, P5, N1, P6 changed).",
+  "per_view": {
+   "y270_p02": {
+    "view": "side (2 deg)",
+    "correct": 12,
+    "sure_correct": 8,
+    "outlines": 12,
+    "misses": []
+   },
+   "y180_p02": {
+    "view": "front (2 deg)",
+    "correct": 12,
+    "sure_correct": 4,
+    "outlines": 12,
+    "misses": []
+   },
+   "y225_p15": {
+    "view": "3/4 front (15 deg)",
+    "correct": 12,
+    "sure_correct": 6,
+    "outlines": 12,
+    "misses": []
+   },
+   "y045_p15": {
+    "view": "3/4 rear (15 deg)",
+    "correct": 12,
+    "sure_correct": 8,
+    "outlines": 12,
+    "misses": []
+   },
+   "y090_p60": {
+    "view": "high side (60 deg)",
+    "correct": 12,
+    "sure_correct": 4,
+    "outlines": 12,
+    "misses": []
+   },
+   "chase_ahead": {
+    "view": "traffic ahead from the chase cam",
+    "correct": 12,
+    "sure_correct": 4,
+    "outlines": 12,
+    "misses": []
+   },
+   "y165_p35": {
+    "view": "high front (35 deg)",
+    "correct": 12,
+    "sure_correct": 3,
+    "outlines": 12,
+    "misses": []
+   },
+   "y135_p35": {
+    "view": "high 3/4 front (35 deg)",
+    "correct": 12,
+    "sure_correct": 7,
+    "outlines": 12,
+    "misses": []
+   },
+   "y000_p35": {
+    "view": "high rear (35 deg)",
+    "correct": 10,
+    "sure_correct": 3,
+    "outlines": 13,
+    "misses": [
+     "p3_tuner->Commuter sedan(1)",
+     "n1_commuter->Pickup(1)",
+     "p5_muscle->Tuner sedan(1)"
+    ]
+   }
+  },
+  "correct": 106,
+  "outlines": 109,
+  "sure_correct": 47,
+  "note": "\"Sure\" counts depend on the tester and the views, so they are not comparable with B1's rounds."
  }
 }

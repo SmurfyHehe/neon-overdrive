@@ -460,7 +460,8 @@ def outline_check(verify):
         y += 40
         x2 = 1700
         yy = y - 40 - 28 * 4 - 30
-        d.text((x2, yy), 'Final round, sure per car (of 6 views)', font=F('s', 19), fill=MUTED)
+        d.text((x2, yy), 'Audit round, sure per car (of 9 views)' if 'audit' in verify else 'Final round, sure per car (of 6 views)',
+               font=F('s', 19), fill=MUTED)
         yy += 30
         pc = verify['per_car']
         order = sorted(pc.items(), key=lambda kv: -int(kv[1].split('sure in ')[1].split('/')[0]))

@@ -4,19 +4,24 @@
 CRITIQUE = {
     'p1_coupe': 'Unmistakable side-on and 3/4 (long hood, set-back cabin, hoop wing); pop-ups own the nose. Weakest from '
                 'behind beside the tuner, split by the low hoop arc and a 12 cm lower roof. Changed: slimmer hoop, rounder tail.',
-    'p2_hothatch': 'Sure side-on, but head-on and from behind the tester only guessed "probably": the roof spoiler bar is '
-                   'close to the tuner\'s wing tips. Changed: wider track, blistered arches, higher belt. Next fix if wanted: '
-                   'taller upright cabin or a bigger roof wing.',
+    'p2_hothatch': 'B1 audit: the 360 sweep found it shared an outline with the crossover from 7 angles. Changed: box '
+                   'blisters 6.5 cm proud of a narrower cabin, wider track, lower roof, near-vertical hatch under an '
+                   'overhanging spoiler. Now apart from the crossover at every angle but one (35 deg front, where the '
+                   'rack tips are the tell). Blind test: right 9/9, "probably" in all.',
     'p3_tuner': 'Pedestal wing and boxed overfenders read everywhere; head-on it shares wing tips with the coupe and the hot '
                 'hatch, and height splits them. Changed: cabin moved back, shorter trunk.',
     'p4_kei': 'Open top, headrest humps and tiny size: the clearest outline in the fleet (sure in every view). Changed: '
               'lower, rounder tail.',
-    'p5_muscle': 'Was the weakest player car (told from the commuter only by length in tests 1-2). Now: tall cowl scoop, '
-                 'chopped slit-window cabin, ducktail, coke-bottle hips. Sure side-on; head-on and behind still "probably".',
-    'p6_crossover': 'Ride height, black-clad box flares and the roof rack carry it. Rack crossbars were added after test 1, '
-                    'because rails alone vanished from behind. From the front-3/4 its roof bar can be confused with a spoiler.',
-    'n1_commuter': 'Deliberately plain: tall cabin, short high deck, small wheels in big gaps. It is the default car the '
-                   'others differ from, so "not sure" outside the side view is acceptable for traffic.',
+    'p5_muscle': 'B1 gave it the cowl scoop, chopped cabin, ducktail and hips; still "probably" head-on and behind. '
+                 'Audit: 4 cm wider, roof 3 cm lower, narrower cabin, stronger hourglass hips, taller scoop, sharper '
+                 'ducktail. Blind test: right 9/9, "probably" in all. Its street build blurs with the commuter from one '
+                 'high rear angle.',
+    'p6_crossover': 'Ride height, black-clad box flares and the roof rack carry it. Audit: the crossbars now poke 14 cm '
+                    'past the roof edge, so the rack shows head-on, from behind and from high up (its tell against the hot '
+                    'hatch), and the street build keeps low rails instead of a bare roof.',
+    'n1_commuter': 'Deliberately plain: the default car the others differ from. Audit: taller nose, roof and deck, a '
+                   'wider rounder cabin, smaller wheels in bigger gaps, so it no longer shares a head-on outline with the '
+                   'hot hatch. Blind test: right 8/9; the miss was the high rear view, where the three sedans blur.',
     'n2_cityhatch': 'Tall cab-forward egg: instant side-on and 3/4, and the tall pillar lamps make its night rear unique. '
                     'Head-on only its height separates it from the hot hatch.',
     'n3_pickup': 'Cab plus open bed is unmistakable from the side, 3/4 and behind. From above only the bed step shows. '

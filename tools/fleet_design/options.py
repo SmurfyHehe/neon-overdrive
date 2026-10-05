@@ -46,8 +46,8 @@ P2['options'] = {
     'spoiler': {'stock': {'label': 'Roof spoiler', 'ops': []},
                 'big': {'label': 'Big roof wing', 'ops': [
                     {'op': 'remove', 'tag': 'spoiler'},
-                    {'op': 'add', 'part': {'type': 'roof_spoiler', 'tag': 'spoiler', 's0': 3.38, 's1': 3.95, 'y0': 1.37,
-                                           'y1': 1.33, 'span': 1.40, 'thick': 0.05, 'brake_light': True}}]},
+                    {'op': 'add', 'part': {'type': 'roof_spoiler', 'tag': 'spoiler', 's0': 3.40, 's1': 3.98, 'y0': 1.35,
+                                           'y1': 1.31, 'span': 1.32, 'thick': 0.055, 'brake_light': True}}]},
                 'none': M.no_spoiler()},
     'wheels': _wheel_set('6-spoke', ('turbofan', M.wheels('turbofan', 'Turbofan', 0.72)), ('mesh', M.wheels('mesh', 'Mesh', 0.74)),
                          ('split', M.wheels('split', 'Split 5-spoke', 0.76, 'rim_dark'))),
@@ -116,7 +116,11 @@ P6['options'] = {
     'kit': {'stock': {'label': 'Roof rack', 'ops': []},
             'rally': {'label': 'Rally lamp pod', 'ops': [
                 {'op': 'add', 'part': {'type': 'lightpod', 's': -0.03, 'y': 0.62, 'w': 0.96, 'n': 4}}]},
-            'street': {'label': 'Street (rack off)', 'ops': [{'op': 'remove', 'tag': 'rack'}]}},
+            # keeps low rails: with the whole rack off and lowered, P6 read as
+            # the hot hatch from 7 angles (B1 audit, tests/fleet_silhouette_sweep.gd)
+            'street': {'label': 'Street (crossbars off)', 'ops': [
+                {'op': 'remove', 'tag': 'rack'},
+                {'op': 'add', 'part': {'type': 'roof_rails', 'tag': 'rack', 's0': 2.05, 's1': 3.75, 'x': 0.60, 'h': 0.07, 'bars': []}}]}},
     'front_bumper': {'stock': STOCK, 'lip': M.lip(P6)},
     'hood': {'stock': STOCK, 'scoop': M.scoop(P6, 0.45, 1.00, 0.50, 0.06, 'Hood scoop')},
     'skirts': {'stock': {'label': 'Cladding', 'ops': []},
@@ -136,9 +140,9 @@ P6['options'] = {
 N1['options'] = {
     'trim': {'stock': {'label': 'Base', 'ops': []},
              'sport': {'label': 'Sport', 'ops': M.lip(N1)['ops'] + M.wheels('5spoke', '5-spoke', 0.70)['ops'] +
-                       [{'op': 'add', 'part': {'type': 'lip', 's0': 4.58, 's1': 4.74, 'y': 1.07, 'span': 1.30, 'h': 0.03}}]},
+                       [{'op': 'add', 'part': {'type': 'lip', 's0': 4.58, 's1': 4.74, 'y': 1.11, 'span': 1.30, 'h': 0.03}}]},
              'taxi': {'label': 'Taxi', 'ops': [
-                 {'op': 'add', 'part': {'type': 'box', 's': 2.72, 'xy': (0.0, 1.53), 'size': (0.56, 0.14, 0.20), 'mat': 'turn'}}]}},
+                 {'op': 'add', 'part': {'type': 'box', 's': 2.70, 'xy': (0.0, 1.56), 'size': (0.56, 0.14, 0.20), 'mat': 'turn'}}]}},
 }
 N2['options'] = {
     'trim': {'stock': {'label': 'Base', 'ops': []},

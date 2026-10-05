@@ -89,7 +89,7 @@ def main():
         'coords': 'Godot axes: X right, Y up, -Z forward. Origin on the ground, midway between the axles. '
                   'Curves use s = metres from the front tip; z = s - (front_overhang + wheelbase / 2).',
         'palette': {'sky': '#1B2A4A', 'shadow': '#0E1424', 'sodium': '#FF8A1F', 'window_amber': '#FFC066',
-                    'silver': '#C9CED6', 'taillight_red': '#E5262B', 'police_blue (off-palette, needs sign-off)': '#2E4FD8'},
+                    'silver': '#C9CED6', 'taillight_red': '#E5262B', 'police_blue (off-palette, kept by Roy 2026-10-05)': '#2E4FD8'},
         'traffic_paints': [{'name': n, 'hex': h, 'weight': w} for n, h, w in cars.TRAFFIC_PAINTS],
         'material_colours': render.BASE_MATS,
         'cars': [car_entry(D) for D in cars.FLEET],

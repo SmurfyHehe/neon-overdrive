@@ -189,6 +189,7 @@ func _ready() -> void:
 		add_child(EngineAudio.new())
 		# Stage A (2026-10-04): wind, road, tyre and kerb sound next to the engine.
 		add_child(CarAudio.new())
+		add_child(DrivelineAudio.new())
 
 		# Stage A (2026-10-04): headlights + blob shadow, since the world is dark
 		# on purpose now (Look Board B). After the body and wheels exist, because

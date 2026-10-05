@@ -1,0 +1,51 @@
+class_name AudioSettings
+extends RefCounted
+
+# Volume settings (Phase B, 2026-10-05; stage B step 4's "Settings tab" starts
+# here): one slider each for Master, Engine, Effects (tyres, wind, UI) and Music,
+# applied to the audio buses and saved in user://settings.cfg. The pause menu
+# shows the sliders; Game applies the saved values at start. 1.0 is the buses'
+# own level, so the defaults change nothing.
+
+const DEFAULT_PATH := "user://settings.cfg"
+const CHANNELS := {
+	"Master": [&"Master"],
+	"Engine": [&"Engine"],
+	"Effects": [&"Tires", &"World", &"UI"],
+	"Music": [&"Music"],
+}
+
+## Tests point this at a scratch file.
+static var path := DEFAULT_PATH
+static var volumes := {"Master": 1.0, "Engine": 1.0, "Effects": 1.0, "Music": 1.0}
+
+static func set_volume(channel: String, value: float) -> void:
+	if not CHANNELS.has(channel):
+		return
+	volumes[channel] = clampf(value, 0.0, 1.0)
+	_apply(channel)
+
+static func apply_all() -> void:
+	for channel in CHANNELS:
+		_apply(channel)
+
+static func _apply(channel: String) -> void:
+	var db := linear_to_db(volumes[channel]) if volumes[channel] > 0.0001 else -80.0
+	for bus_name in CHANNELS[channel]:
+		var i := AudioServer.get_bus_index(bus_name)
+		if i >= 0:
+			AudioServer.set_bus_volume_db(i, db)
+
+## Reads the file (missing or damaged means defaults) and applies it.
+static func load_settings() -> void:
+	var cfg := ConfigFile.new()
+	var ok := cfg.load(path) == OK
+	for channel in CHANNELS:
+		volumes[channel] = clampf(float(cfg.get_value("audio", channel.to_lower(), 1.0)), 0.0, 1.0) if ok else 1.0
+	apply_all()
+
+static func save_settings() -> bool:
+	var cfg := ConfigFile.new()
+	for channel in CHANNELS:
+		cfg.set_value("audio", channel.to_lower(), volumes[channel])
+	return cfg.save(path) == OK

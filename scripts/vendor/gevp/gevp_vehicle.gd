@@ -820,6 +820,10 @@ const STARTER_RPM := 600.0
 const CREEP_ENGAGE := 0.12       # automatic clutch engagement at idle with no throttle
 const LAUNCH_FULL_RPM := 2200.0  # engagement reaches 1.0 here on a launch
 const AUTO_CLUTCH_SHUT_SPEED := 3.0
+## (10) Phase C, DEVIATION: tyre_load_sensitivity (see gevp_wheel.gd process_tires) and
+## clutch_cap_mult, the clutch's remaining grip from PowertrainHealth's clutch wear.
+@export var tyre_load_sensitivity := 0.0
+var clutch_cap_mult := 1.0
 var torque_mult := 1.0
 var brake_mult := 1.0
 var boost := 0.0
@@ -935,7 +939,7 @@ func process_clutch(delta : float):
 	var clutch_factor := (1.0 - clutch_amount)
 	var tcs_torque_reduction := 0.0
 	clutch_torque = ((a - b + c)/(motor_moment + drive_inertia_R)) * clutch_factor
-	clutch_torque = clampf(clutch_torque, -max_clutch_torque * clutch_factor, max_clutch_torque * clutch_factor)
+	clutch_torque = clampf(clutch_torque, -max_clutch_torque * clutch_cap_mult * clutch_factor, max_clutch_torque * clutch_cap_mult * clutch_factor)
 	
 	## Check if traction control is needed and adjust motor speed and clutch torque if needed
 	if traction_control_max_slip > 0.0:

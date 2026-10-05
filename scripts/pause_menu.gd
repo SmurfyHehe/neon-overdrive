@@ -61,10 +61,17 @@ func _ready() -> void:
 		volume_sliders[channel] = s
 
 	resume_button = _add_button(box, "Resume", game_state.resume)
+	_add_button(box, "Service car (reset wear)", _service_car)
 	_add_button(box, "Restart", game_state.restart)
 	_add_button(box, "Quit", game_state.quit)
 
 	game_state.state_changed.connect(_on_state_changed)
+
+## Resets temperatures, tyre, clutch and brake wear (the garage will own this later).
+func _service_car() -> void:
+	var player: Variant = get_parent().get("player")
+	if player != null and player.get("health") != null:
+		player.health.repair()
 
 func _add_button(parent: Control, text: String, action: Callable) -> Button:
 	var b := Button.new()

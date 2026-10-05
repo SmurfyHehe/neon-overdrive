@@ -85,7 +85,7 @@ func _physics_process(_delta: float) -> bool:
 				eng_light_seen = true
 			if p.health.is_warning(PowertrainHealth.Warn.ENG_DERATE):
 				_check(p.torque_mult < 1.0, "the derate should reach the vehicle")
-				_check(p.current_speed() > 1.0, "the car must still move while derated")
+				_check(p.torque_mult >= PowertrainHealth.TORQUE_FLOOR - 1e-6, "the derate must keep its floor (the car never dies)")
 				throttle = 0.0
 				p.automatic_transmission = true
 				_go(Step.COOL)

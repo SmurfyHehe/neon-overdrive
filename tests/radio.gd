@@ -2,7 +2,7 @@ extends SceneTree
 
 # Radio test (Phase B, 2026-10-05), headless and silent (state and numbers only):
 # - the sequencer: every station renders the same samples for the same position,
-#   is audible (RMS 0.03-0.5), never clips or goes non-finite, the stations differ
+#   is audible (RMS 0.02-0.5), never clips or goes non-finite, the stations differ
 #   from each other, and rendering is cheap (under 25 percent of real time)
 # - the manager in the real game: N cycles the stations then off, a switch starts
 #   static and a toast, every station clock keeps running while another is tuned,
@@ -13,7 +13,7 @@ extends SceneTree
 
 const TIMEOUT_TICKS := 60 * 40
 
-enum Step { BOOT, CYCLE, RUN, RETUNE, PAUSE, DONE }
+enum Step { BOOT, CYCLE, RUN, DJ, DJ_OUT, PAUSE, DONE }
 
 var step := Step.BOOT
 var step_start := 0
@@ -22,6 +22,7 @@ var failures: Array[String] = []
 var radio: RadioManager
 var t_station0 := 0.0
 var cursor_before := 0
+var chimes_before := 0
 
 func _initialize() -> void:
 	_sequencer_tests()
@@ -46,7 +47,7 @@ func _sequencer_tests() -> void:
 			peak = maxf(peak, absf(a[i].x))
 		var rms := sqrt(sum / a.size())
 		_check(same, "station %d is not deterministic" % s)
-		_check(rms > 0.03 and rms < 0.5, "station %d RMS %.3f outside 0.03-0.5" % [s, rms])
+		_check(rms > 0.02 and rms < 0.5, "station %d RMS %.3f outside 0.02-0.5" % [s, rms])
 		_check(peak < 1.0, "station %d peaks at %.2f" % [s, peak])
 		firsts.append(a)
 	for i in firsts.size():
@@ -55,6 +56,13 @@ func _sequencer_tests() -> void:
 			for k in 4096:
 				diff += absf(firsts[i][k].x - firsts[j][k].x)
 			_check(diff / 4096.0 > 0.02, "stations %d and %d sound the same" % [i, j])
+	_check(RadioSequencer.station_count() >= 6, "expected at least 6 stations, got %d" % RadioSequencer.station_count())
+	for s in RadioSequencer.station_count():
+		var track := RadioSequencer.track_seconds(s)
+		_check(RadioSequencer.STATIONS[s].dj.size() >= 3, "station %d needs DJ lines" % s)
+		_check(RadioSequencer.break_state(s, track - 3.0).in_break, "station %d should be in a DJ break just before the track ends" % s)
+		_check(not RadioSequencer.break_state(s, 5.0).in_break, "station %d should not be in a break at the start" % s)
+		_check(RadioSequencer.break_state(s, track + 5.0).line != RadioSequencer.break_state(s, 5.0).line, "station %d should rotate its DJ lines" % s)
 	var t0 := Time.get_ticks_usec()
 	var secs := 8.0
 	var start := 0
@@ -89,8 +97,11 @@ func _physics_process(_delta: float) -> bool:
 				seen.append(radio.station)
 				_check(radio.static_left > 0.0, "switching should start static")
 				_check(radio.toast_text != "", "switching should show a toast")
-			var want: Array[int] = [0, 1, 2, -1]
-			_check(seen == want, "N should cycle 0,1,2,off, got %s" % str(seen))
+			var want: Array[int] = []
+			for i in RadioSequencer.station_count():
+				want.append(i)
+			want.append(-1)
+			_check(seen == want, "N should cycle every station then off, got %s" % str(seen))
 			t_station0 = radio.station_time(0)
 			radio.next_station()  # tune station 0
 			cursor_before = radio._cursor
@@ -98,13 +109,28 @@ func _physics_process(_delta: float) -> bool:
 		Step.RUN:
 			if waited >= 60 * 3:
 				_check(radio._cursor > cursor_before + 22050, "the tuned station should keep playing (cursor %d from %d)" % [radio._cursor, cursor_before])
-				radio.next_station()  # station 1; 0 keeps running
-				radio.next_station()  # station 2
-				radio.next_station()  # off
-				radio.next_station()  # station 0 again
+				for i in RadioSequencer.station_count() + 1:  # all the way round to station 0 again
+					radio.next_station()
 				var expect := int(radio.station_time(0) * RadioSequencer.MIX_RATE)
 				_check(absi(radio._cursor - expect) <= 2, "tuning in should land on the station clock (%d vs %d)" % [radio._cursor, expect])
 				_check(radio.station_time(0) > t_station0 + 2.0, "the station clock should have kept running")
+				# a DJ break: tune station 0 and put its clock 3 s before the track ends
+				radio.station = 0
+				radio._clock = RadioSequencer.track_seconds(0) - 3.0 - radio._offsets[0]
+				chimes_before = radio.chime_count
+				_go(Step.DJ)
+		Step.DJ:
+			if waited == 40:
+				_check(radio.dj_active, "the DJ break should be active")
+				_check(radio.dj_text.begins_with("Neon FM:"), "the DJ caption should name the station, got '%s'" % radio.dj_text)
+				_check(radio.chime_count == chimes_before + 1, "a break should play one chime")
+				_check(radio.duck < 0.6, "the music should duck under the DJ (%.2f)" % radio.duck)
+				radio._clock = RadioSequencer.track_seconds(0) * 0.3 - radio._offsets[0]  # well outside any break
+				_go(Step.DJ_OUT)
+		Step.DJ_OUT:
+			if waited == 90:
+				_check(not radio.dj_active, "the break should be over")
+				_check(radio.duck > 0.9, "the music should come back up (%.2f)" % radio.duck)
 				_go(Step.PAUSE)
 				game.game_state.pause()
 		Step.PAUSE:

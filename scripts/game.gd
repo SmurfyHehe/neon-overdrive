@@ -321,6 +321,8 @@ func _update_debug_hud() -> void:
 	var gear_name := "R" if player.gear == -1 else ("N" if player.gear == 0 else str(player.gear))
 	lbl_gear.text = "GEAR %s" % gear_name
 	lbl_speed.text = "%d units/s" % int(player.current_speed())
+	if player.turbo_boost_max > 0.0:
+		lbl_speed.text += "   BOOST %.2f / %.2f bar" % [player.boost, player.turbo_boost_max]
 	lbl_cam.text = "CAMERA %s  (C to switch)" % camera.mode_name()
 	# BUG FIX (2026-09-13): shift_flash_t was tracked on the player since
 	# milestone 2 but nothing ever read it -- shifting had zero feedback.

@@ -61,6 +61,12 @@ var _pop_thump := 0.0
 var _pop_hp := 0.0
 var _pop_wait := 0  # samples until the next overrun pop
 var _flame_peak := 0.0
+## Turbo (Phase B): boost 0..1 (fraction of max boost) set by EngineAudio; blow_off()
+## fires the vent. The whistle is a rising sine, the vent a short filtered noise burst.
+var boost := 0.0
+var _whistle_phase := 0.0
+var _bov_env := 0.0
+var _bov_lp := 0.0
 
 func _init() -> void:
 	# Fixed per-cylinder spread: the same cylinder is always a little louder
@@ -70,6 +76,10 @@ func _init() -> void:
 	_cyl_amp.resize(cylinders)
 	for i in cylinders:
 		_cyl_amp[i] = rng.randf_range(0.8, 1.0)
+
+## The blow-off valve vents: a short "pssh" whose size follows how hot the boost was.
+func blow_off(strength: float) -> void:
+	_bov_env = maxf(_bov_env, clampf(strength, 0.0, 1.0))
 
 ## Largest flame (0..1) the exhaust has spat since the last call, then resets.
 ## Pops on overrun and rev-limiter cuts make flames, scaled by tune.flame.
@@ -173,7 +183,17 @@ func render(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVe
 			_pop_hp = n - _pop_thump
 			pop = (_pop_hp * 0.8 + _pop_thump * 12.0) * _pop_env
 			_pop_env *= pop_decay
-		var s := _lp + body * 0.9 + rasp * rasp_gain * (0.3 + _thr) + pop * (0.5 + 0.5 * tune.loudness)
+		var turbo := 0.0
+		if boost > 0.02:
+			# whistle: pitch and level rise with boost
+			_whistle_phase += TAU * (1800.0 + 5200.0 * boost) / mix_rate
+			turbo = sin(_whistle_phase) * 0.2 * boost * boost
+		if _bov_env > 0.01:
+			var bn := _rand()
+			_bov_lp += 0.25 * (bn - _bov_lp)
+			turbo += (bn - _bov_lp) * 0.8 * _bov_env
+			_bov_env *= pop_decay
+		var s := _lp + body * 0.9 + rasp * rasp_gain * (0.3 + _thr) + pop * (0.5 + 0.5 * tune.loudness) + turbo * (0.5 + 0.5 * tune.loudness)
 		s = tanh(s * (1.5 + 1.5 * _thr))
 		# DC blocker: the pulses are all positive, so strip the offset.
 		var dc := s - _dc_x + 0.995 * _dc_y

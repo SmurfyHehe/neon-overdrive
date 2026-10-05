@@ -27,6 +27,7 @@ const KNOBS := [
 	["gear_5", "Gear 5", "gear_ratios/4", 0.01],
 	["max_torque", "Peak torque Nm", "max_torque", 5.0],
 	["max_rpm", "Redline rpm", "max_rpm", 100.0],
+	["turbo", "Turbo boost bar", "turbo_boost_max", 0.05],
 	["low_end", "Low-end torque", "torque_shape/low_end", 0.01],
 	["peak_pos", "Peak position", "torque_shape/peak_pos", 0.01],
 	["plateau", "Plateau width", "torque_shape/plateau", 0.01],

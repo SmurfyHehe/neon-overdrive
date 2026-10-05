@@ -41,6 +41,13 @@ var lbl_gear: Label
 var lbl_speed: Label
 
 func _ready() -> void:
+	# Auto-Tune worker mode (exported game): no world, just the search.
+	var worker_dir := AutoTuneJob.worker_dir_from_args()
+	if worker_dir != "":
+		set_process(false)
+		set_physics_process(false)
+		AutoTuneJob.run_worker(get_tree(), worker_dir)
+		return
 	if OS.get_environment("NEON_MUTE") == "1":
 		AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), true)
 	# Benchmark mode (-- --benchmark, see benchmark.gd) drives a fixed road so
@@ -307,7 +314,7 @@ func _setup_debug_hud() -> void:
 	var controls := Label.new()
 	controls.position = Vector2(16, 400)
 	controls.add_theme_color_override("font_color", Color(0.71, 0.65, 0.84))
-	controls.text = "A/D steer  ·  W/S throttle/brake  ·  Space handbrake  ·  G auto/manual  ·  Q/E shift (manual)  ·  Esc pause  ·  T tuning  ·  Y auto-tune  ·  M mute"
+	controls.text = "A/D steer  ·  W/S throttle/brake  ·  Space handbrake  ·  R reverse  ·  G auto/manual  ·  Q/E shift (manual)  ·  Esc pause  ·  T tuning  ·  Y auto-tune  ·  M mute"
 	hud.add_child(controls)
 
 func _update_debug_hud() -> void:
@@ -333,6 +340,7 @@ func _setup_game_state() -> void:
 	add_child(PauseMenu.new(game_state))
 	add_child(TuningPanel.new(player, game_state))
 	add_child(AutoTunePanel.new(player, game_state))
+	add_child(TunerTabs.new(game_state))
 
 func _process(_delta: float) -> void:
 	_update_chunk_pool(player.position.z)

@@ -22,13 +22,18 @@ extends RefCounted
 # nested dictionaries, and JSON would lose Array[float].
 #
 # Needs a Godot executable it can start: $GODOT, else the running executable if
-# it is Godot's own (editor / console build), else the default of run_tests.bat.
-# An exported game has none of these, so Auto-Tune is a dev-build feature.
+# it is Godot's own (editor / console build) or the exported game itself (an
+# exported game carries the whole project in its .pck, so it can run the worker
+# script with --headless; fixed 2026-10-05, it used to need a Godot install and
+# failed silently in the exported exe), else the default of run_tests.bat.
 
 const DIR := "user://autotune"
 const REQUEST_FILE := "request.json"
 const PROGRESS_FILE := "progress.json"
 const RESULT_FILE := "result.json"
+## An exported game ignores `-s <script>`, so its worker mode is a user argument
+## the game itself reads: `game.exe --headless --fixed-fps 60 -- --autotune-worker <dir>`.
+const WORKER_FLAG := "--autotune-worker"
 
 enum State { IDLE, RUNNING, DONE, FAILED, CANCELLED }
 
@@ -55,12 +60,14 @@ func start(spec: Dictionary, request: Dictionary, budget: int) -> bool:
 	write_json(dir.path_join(RESULT_FILE), {})
 	write_json(dir.path_join(PROGRESS_FILE), {})
 	write_json(dir.path_join(REQUEST_FILE), {"values": values_from_spec(spec), "request": request, "budget": budget})
-	var args := PackedStringArray([
-		"--headless", "--fixed-fps", "60",
-		"--path", ProjectSettings.globalize_path("res://"),
-		"-s", "res://scripts/auto_tune_worker.gd",
-		"--", dir,
-	])
+	var args := PackedStringArray(["--headless", "--fixed-fps", "60"])
+	if exe == OS.get_executable_path() and OS.has_feature("template"):
+		# The exported game: it finds its own .pck and runs the worker as a mode
+		# of the game itself (see Game._ready and run_worker).
+		args.append_array(["--", WORKER_FLAG, dir])
+	else:
+		args.append_array(["--path", ProjectSettings.globalize_path("res://")])
+		args.append_array(["-s", "res://scripts/auto_tune_worker.gd", "--", dir])
 	pid = OS.create_process(exe, args)
 	if pid <= 0:
 		error = "Could not start %s" % exe
@@ -113,13 +120,42 @@ static func find_godot() -> String:
 	if env != "":
 		candidates.append(env)
 	var own := OS.get_executable_path()
-	if own.get_file().to_lower().begins_with("godot"):
+	if own.get_file().to_lower().begins_with("godot") or OS.has_feature("template"):
 		candidates.append(own)
 	candidates.append(OS.get_environment("USERPROFILE").path_join("Documents/Godot_v4.7.2-stable_win64_console.exe"))
 	for c in candidates:
 		if FileAccess.file_exists(c):
 			return c
 	return ""
+
+# ---------- worker side ----------
+
+## The job directory if this process was started as an Auto-Tune worker in game
+## mode (`-- --autotune-worker <dir>`), else "".
+static func worker_dir_from_args() -> String:
+	var args := OS.get_cmdline_user_args()
+	var i := args.find(WORKER_FLAG)
+	return args[i + 1] if i >= 0 and i + 1 < args.size() else ""
+
+## Runs the search on a TuneTrack inside `tree` and writes progress and result
+## files into `dir`, then quits the tree. Used by auto_tune_worker.gd (dev) and by
+## the game's own worker mode (exported build).
+static func run_worker(tree: SceneTree, dir: String) -> void:
+	var req := read_json(dir.path_join(REQUEST_FILE))
+	if req.is_empty():
+		write_json(dir.path_join(RESULT_FILE), {"ok": false, "error": "no readable request"})
+		tree.quit(2)
+		return
+	await tree.process_frame
+	var base := spec_from_values(req.values)
+	var track := TuneTrack.new()
+	tree.root.add_child(track)
+	var progress_path := dir.path_join(PROGRESS_FILE)
+	var on_progress := func(done: int, total: int, best: float) -> void:
+		write_json(progress_path, {"done": done, "total": total, "best": best})
+	var r: Dictionary = await AutoTuneSearch.new().run(track, base, req.request, int(req.budget), on_progress)
+	write_json(dir.path_join(RESULT_FILE), result_to_json(r))
+	tree.quit(0)
 
 # ---------- shared by both sides ----------
 

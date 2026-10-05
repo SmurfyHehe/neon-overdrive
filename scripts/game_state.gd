@@ -59,9 +59,17 @@ func resume() -> void:
 	get_tree().paused = false
 	_set_state(State.PLAYING)
 
+## One tuner menu with two tabs (manual T, Auto-Tune Y): switching tab keeps the
+## game paused. Does nothing outside the tuner.
+func switch_tuner(to: State) -> void:
+	if (to == State.TUNING or to == State.AUTOTUNE) and (state == State.TUNING or state == State.AUTOTUNE) and state != to:
+		_set_state(to)
+
 func toggle_tuning() -> void:
 	if state == State.TUNING:
 		close_tuning()
+	elif state == State.AUTOTUNE:
+		switch_tuner(State.TUNING)  # T from the Auto-Tune tab opens the manual tab
 	elif state == State.PLAYING:
 		get_tree().paused = true
 		_set_state(State.TUNING)
@@ -75,6 +83,8 @@ func close_tuning() -> void:
 func toggle_autotune() -> void:
 	if state == State.AUTOTUNE:
 		close_autotune()
+	elif state == State.TUNING:
+		switch_tuner(State.AUTOTUNE)  # Y from the manual tab opens the Auto-Tune tab
 	elif state == State.PLAYING:
 		get_tree().paused = true
 		_set_state(State.AUTOTUNE)

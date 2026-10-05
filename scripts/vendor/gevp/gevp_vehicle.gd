@@ -763,6 +763,10 @@ const IDLE_MAX_TORQUE := 60.0    # the most the idle controller may add
 const AUTO_UP_LIGHT := 0.45      # upshift at this fraction of max_rpm on a light throttle (1.0 on full)
 const AUTO_DOWN_LIGHT := 0.30    # downshift below this fraction of max_rpm (in the lower gear) on a light throttle
 const AUTO_DOWN_FULL := 0.75     # same, on full throttle (GEVP's old fixed value)
+## (6) Reverse is chosen with the R key, not by holding the brake at a standstill
+## (GEVP's own scheme, where S flips between drive and reverse). Set false and
+## S only brakes.
+@export var brake_selects_reverse := true
 var idle_integral := 0.0
 const LIMITER_HYSTERESIS_RPM := 150.0  # fuel stays cut until rpm falls this far below the limit
 var limiter_cut := false
@@ -916,7 +920,7 @@ func process_transmission() -> void:
 					if delta_time - last_shift_delta_time > down_gap:
 						shift(-1)
 		
-		if absf(current_gear) <= 1 and brake_input > 0.75:
+		if brake_selects_reverse and absf(current_gear) <= 1 and brake_input > 0.75:
 			if not reversing:
 				if speed < 1.0 or local_velocity.z > 0.0:
 					if delta_time - last_shift_delta_time > shift_time:

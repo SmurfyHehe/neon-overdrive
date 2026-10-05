@@ -44,11 +44,11 @@ static func all() -> Array[Dictionary]:
 		_entries.append(_e("coefficient_of_drag", "Drag coefficient", 0.20, 0.40))
 		_entries.append(_e("aero_downforce_coefficient_front", "Downforce front", 0.0, 1.0))
 		_entries.append(_e("aero_downforce_coefficient_rear", "Downforce rear", 0.0, 1.2))
-		_entries.append(_e("brake_force_multiplier", "Brake force", 0.7, 1.5, BRAKE))
+		_entries.append(_e("brake_force_multiplier", "Brake force", 1.0, 3.0, BRAKE))
 		_entries.append(_e("tire_stiffnesses/Road", "Tire stiffness", 6.0, 14.0, TIRE))
-		_entries.append(_e("coefficient_of_friction/Road", "Tire friction", 2.0, 4.0, TIRE))
+		_entries.append(_e("coefficient_of_friction/Road", "Tire friction", 1.0, 2.5, TIRE))
 		_entries.append(_e("lateral_grip_assist/Road", "Lateral grip assist", 0.0, 0.2, TIRE))
-		_entries.append(_e("longitudinal_grip_ratio/Road", "Longitudinal grip", 0.35, 0.7, TIRE))
+		_entries.append(_e("longitudinal_grip_ratio/Road", "Longitudinal grip", 0.5, 1.2, TIRE))
 	return _entries
 
 ## The paths Auto-Tune is allowed to change.

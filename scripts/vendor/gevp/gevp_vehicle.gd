@@ -753,6 +753,17 @@ func process_throttle(delta : float) -> void:
 ##  2. rev matching on upshifts too (revs fall to the next gear's speed),
 ##  3. motor_brake is actually used: constant engine braking when off throttle.
 ## Re-apply these if the addon is ever re-vendored.
+## Phase A (2026-10-05), also DEVIATIONs, logged in ROADMAP:
+##  4. an idle controller (PI loop) instead of a hard floor at idle rpm,
+##  5. throttle-dependent automatic shift points with hysteresis, replacing the
+##     hard-coded 100% / 75% of max_rpm.
+const IDLE_KP := 0.10            # Nm per rpm of idle error
+const IDLE_KI := 0.30            # Nm per rpm per second
+const IDLE_MAX_TORQUE := 60.0    # the most the idle controller may add
+const AUTO_UP_LIGHT := 0.45      # upshift at this fraction of max_rpm on a light throttle (1.0 on full)
+const AUTO_DOWN_LIGHT := 0.30    # downshift below this fraction of max_rpm (in the lower gear) on a light throttle
+const AUTO_DOWN_FULL := 0.75     # same, on full throttle (GEVP's old fixed value)
+var idle_integral := 0.0
 const LIMITER_HYSTERESIS_RPM := 150.0  # fuel stays cut until rpm falls this far below the limit
 var limiter_cut := false
 
@@ -763,6 +774,14 @@ func process_motor(delta : float) -> void:
 	torque_output = get_torque_at_rpm(motor_rpm) * throttle_amount
 	## Adjust torque based on throttle input, clutch input, and motor drag
 	torque_output -= drag_torque * (1.0 + (clutch_amount * (1.0 - throttle_amount)))
+	# (4) idle controller: PI on rpm error, only on a (nearly) closed throttle,
+	# anti-windup by clamping the integral. Replaces the old hard floor.
+	if throttle_amount < 0.1:
+		var idle_err := idle_rpm - motor_rpm
+		idle_integral = clampf(idle_integral + idle_err * IDLE_KI * delta, 0.0, IDLE_MAX_TORQUE)
+		torque_output += clampf(idle_err * IDLE_KP + idle_integral, 0.0, IDLE_MAX_TORQUE)
+	else:
+		idle_integral = move_toward(idle_integral, 0.0, 100.0 * delta)
 	
 	## Prevent motor from outputting torque below idle or far beyond redline
 	var new_rpm := motor_rpm
@@ -776,7 +795,7 @@ func process_motor(delta : float) -> void:
 	elif new_rpm < limit_rpm - LIMITER_HYSTERESIS_RPM:
 		limiter_cut = false
 	motor_is_redline = limiter_cut
-	if limiter_cut or new_rpm <= idle_rpm:
+	if limiter_cut or new_rpm <= idle_rpm * 0.4:
 		torque_output = 0.0
 	
 	motor_rpm += ANGULAR_VELOCITY_TO_RPM * delta * (torque_output - drag_torque) / motor_moment
@@ -787,7 +806,7 @@ func process_motor(delta : float) -> void:
 	elif new_rpm > maxf(clutch_out_rpm, idle_rpm):
 		need_clutch = false
 	
-	motor_rpm = maxf(motor_rpm, idle_rpm)
+	motor_rpm = maxf(motor_rpm, idle_rpm * 0.4)  # (4) safety floor only; the idle controller holds idle
 
 func process_clutch(delta : float):
 	if current_gear == 0:
@@ -874,10 +893,18 @@ func process_transmission() -> void:
 				previous_gear_rpm = get_gear_ratio(current_gear - 1) * maxf(drivetrain_spin, ideal_wheel_spin) * ANGULAR_VELOCITY_TO_RPM
 			
 			
+			# (5) shift map: the lighter the throttle, the earlier it upshifts and
+			# the lower it lets the revs fall before downshifting. Full throttle
+			# gives GEVP's old behaviour (up at max_rpm, down below 75%), which
+			# is also the kickdown. At least automatic_time_between_shifts
+			# between upshifts (0.6 x that between downshifts) stops hunting.
+			var demand := clampf(throttle_input, 0.0, 1.0)
+			var up_gap := maxf(shift_time, automatic_time_between_shifts / 1000.0)
+			var down_gap := maxf(shift_time, automatic_time_between_shifts / 1000.0 * 0.6)
 			if current_gear < gear_ratios.size():
 				if current_gear > 0:
-					if current_ideal_gear_rpm > max_rpm:
-						if delta_time - last_shift_delta_time > shift_time:
+					if current_ideal_gear_rpm > max_rpm * lerpf(AUTO_UP_LIGHT, 1.0, demand):
+						if delta_time - last_shift_delta_time > up_gap:
 							shift(1)
 					if current_ideal_gear_rpm > max_rpm * 0.8 and current_real_gear_rpm > max_rpm:
 						if delta_time - last_shift_delta_time > shift_time:
@@ -885,8 +912,8 @@ func process_transmission() -> void:
 				elif current_gear == 0 and motor_rpm > maxf(clutch_out_rpm, idle_rpm):
 					shift(1)
 			if current_gear - 1 > 0:
-				if current_gear > 1 and previous_gear_rpm < 0.75 * max_rpm:
-					if delta_time - last_shift_delta_time > shift_time:
+				if current_gear > 1 and previous_gear_rpm < max_rpm * lerpf(AUTO_DOWN_LIGHT, AUTO_DOWN_FULL, demand):
+					if delta_time - last_shift_delta_time > down_gap:
 						shift(-1)
 		
 		if absf(current_gear) <= 1 and brake_input > 0.75:

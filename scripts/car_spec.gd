@@ -134,12 +134,15 @@ static func coupe_default() -> Dictionary:
 		# take 0.2 s (was 0.3), and the clutch takes up at 2000 rpm (was 3000).
 		# motor_drag stays at the default 0.005: 0.007 cost ~10 km/h of top speed.
 		"automatic_transmission": true,
+		"automatic_time_between_shifts": 800.0,  # Phase A shift map: min ms between upshifts
+		"throttle_speed": 8.0,  # Phase A: throttle lag, ~0.12 s from closed to open (GEVP default 20)
+		"center_of_gravity_height_offset": -0.07,  # Phase A: CoG ~0.5 m (was -0.2, ~0.38 m)
 		"shift_time": 0.2,
 		"clutch_out_rpm": 2000.0,
 		"motor_brake": 20.0,  # engine braking when off throttle (pass 1b; GEVP default 10, was unused)
 		"coefficient_of_drag": 0.26,
 		"frontal_area": 1.9,
-		"brake_force_multiplier": 1.0,  # the vendored default, now explicit so tuning has one source of truth
+		"brake_force_multiplier": 2.5,  # Phase A: GEVP derives max brake force from tyre friction, so halving cof halved braking; x2 puts it back near 1 g (100-0 about 40 m)
 		"max_steering_angle": deg_to_rad(38.0),
 		"front_spring_length": 0.22,
 		"rear_spring_length": 0.26,
@@ -160,15 +163,19 @@ static func coupe_default() -> Dictionary:
 		#     longitudinal_grip_ratio 0.5 halves it -- this is where the
 		#     reachable slide comes from (wheelspin / power oversteer);
 		#     braking gets up to 2.5x that via braking_grip_multiplier.
-		# For scale, real street tires are ~1.0 and slicks ~1.6, so 3.0 is
-		# arcade-high cornering grip. It is GEVP's own shipped Road default,
-		# not a leftover. Grip feel is Roy's call -- tune by driving, and
+		# PHASE A (2026-10-05): Road is now 1.2 (measured peak ~1.5 g with load and
+		# downforce; the 3.0 above
+		# was GEVP's shipped default and gave ~2.9 g, past the rollover limit
+		# of ~1.76 g for a 1.76 m track at 0.5 m CG, research in
+		# docs/research/car-feel.md). Real street tyres are ~0.9-1.0, sport
+		# ~1.0-1.2, slicks ~1.3-1.6. The numbers in the comment above are for
+		# 3.0 and scale with cof. Grip feel is Roy's call -- tune by driving, and
 		# note that spring_force includes aero downforce, so grip also
 		# rises with speed. Also feeds max_brake_force (gevp_vehicle.gd).
-		"coefficient_of_friction": {"Road": 3.0, "Dirt": 2.0},
+		"coefficient_of_friction": {"Road": 1.2, "Dirt": 0.9},
 		"rolling_resistance": {"Road": 1.0, "Dirt": 1.6},
 		"lateral_grip_assist": {"Road": 0.05, "Dirt": 0.0},
-		"longitudinal_grip_ratio": {"Road": 0.5, "Dirt": 0.45},
+		"longitudinal_grip_ratio": {"Road": 1.1, "Dirt": 0.45},  # Phase A: with cof 1.2 this keeps launch traction (long grip 1.3)
 
 		# Aero (2026-09-13, Roy: "add aerodynamics to the game" -> full model):
 		# these aren't vendored Vehicle properties -- they're plain vars

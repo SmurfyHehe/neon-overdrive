@@ -47,6 +47,14 @@ var chassis_visual: Node3D
 ## becomes the default coupe.
 var spec := {}
 
+## Test-track hooks (scripts/tune_track.gd). `driver`, when set, is called every
+## physics tick instead of reading the keyboard and sets throttle_input,
+## brake_input, steering_input and gear itself -- same simulation, different
+## hands. `sim_only` (set before add_child) skips the chassis mesh and the
+## engine audio, which have no effect on the physics.
+var driver := Callable()
+var sim_only := false
+
 # Aero (2026-09-13, Roy: "add aerodynamics to the game" -> "full aero model"):
 # these live here rather than on the vendored Vehicle class (kept unmodified,
 # see header) and get set the same way every other tuning number does, via
@@ -75,8 +83,9 @@ func _ready() -> void:
 	# of the old flat-box look.
 	# #63: the neutral test car, for judging handling and camera. The styled
 	# coupe (CarBuilder, KIND_CONFIGS["coupe"]) waits on the design in #16.
-	chassis_visual = TestCarBuilder.build_chassis_visual()
-	add_child(chassis_visual)
+	if not sim_only:
+		chassis_visual = TestCarBuilder.build_chassis_visual()
+		add_child(chassis_visual)
 
 	# BUG FIX (2026-09-13, verified headless): RigidBody3D falls asleep after
 	# ~0.5s of low apparent velocity (standard Godot sleep threshold), and
@@ -148,9 +157,22 @@ func _ready() -> void:
 	# Engine sound (2026-09-29, prototype of PROPOSAL-audio.md option C): a
 	# synthesised engine driven by this car's motor_rpm/throttle. Added after
 	# CarSpec.apply() so it picks up the real idle/max rpm.
-	add_child(EngineAudio.new())
+	if not sim_only:
+		add_child(EngineAudio.new())
 
 func _physics_process(delta: float) -> void:
+	if driver.is_valid():
+		driver.call(self)
+	else:
+		_read_keyboard()
+	super._physics_process(delta)
+
+	# Aero (2026-09-13): applied AFTER the vendor's own _physics_process so
+	# drafting can recompute and partially cancel the drag force it just
+	# applied this frame. See aero.gd for the actual force math.
+	AeroModel.apply(self)
+
+func _read_keyboard() -> void:
 	# Input (#29, #30): named InputMap actions (project.godot), all polled
 	# here -- no _input handlers. Shifts are one-shot, hence just_pressed.
 	if Input.is_action_just_pressed("shift_down"):
@@ -177,13 +199,6 @@ func _physics_process(delta: float) -> void:
 	# Negating here (rather than swapping which key does what) keeps A=left/D=right
 	# reading naturally in the code while matching what the asset expects.
 	steering_input = -steer_in
-
-	super._physics_process(delta)
-
-	# Aero (2026-09-13): applied AFTER the vendor's own _physics_process so
-	# drafting can recompute and partially cancel the drag force it just
-	# applied this frame. See aero.gd for the actual force math.
-	AeroModel.apply(self)
 
 ## HUD compatibility -- game.gd reads player.gear (int, -1/0/1..N) and
 ## player.current_speed(); both map directly onto what Vehicle already

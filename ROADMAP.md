@@ -53,18 +53,24 @@ notes until now.
 | Cop 2 | Patrol SUV | Police Interceptor Utility, Tahoe PPV |
 | Cop 3 | Unmarked interceptor | unmarked Charger Hellcat, Mustang GT PI |
 
-**Open conflicts, waiting on Roy (flagged 2026-10-04):**
+**Open conflicts flagged 2026-10-04. Items 1–3 were resolved by Roy on
+2026-10-05 (see "Stage B" below):**
 1. **Direction.** PR #83 (open) records a car-culture plan Roy approved on
    2026-09-29. It parks fuel, stop places and damage-ends-the-run (stage C
    here) and makes rival and traffic cars scripted. This plan builds them.
-   Stage A applies to both, so it goes ahead; **stage B needs a decision.**
+   **Resolved, Option C:** traffic stays full-sim. Fuel, stops and
+   damage-ends-the-run move to after the garage, and currency/scoring stays
+   before it. This supersedes PR #83's scripted traffic.
 2. **Cars.** PR #79 (open) moves cars to imported models through a vehicle
-   registry. Stage D assumed 12 cars built here. Needs a decision before D.
+   registry. Stage D assumed 12 cars built here. **Resolved:** we design all
+   cars ourselves in-engine, and PR #79's import pipeline is not used.
 3. **CPU cost of full-sim traffic.** RESEARCH-cheap-pretty.md warns that the
    i5-1235U has 2 performance cores and that traffic should not get GEVP
    bodies "without a measured reason". Roy's rule above is that reason, so
    stage B measures traffic density against the frame budget before
-   committing a number.
+   committing a number. **Resolved:** measure first. If that shows it's
+   needed, add a "Traffic detail distance" slider, as a scoped exception
+   (B2).
 4. **Coupe status.** Not "awaiting judgement": Roy said "our car model sucks
    atm" (#16), but he judged it while it rendered inside out, a winding bug
    fixed after (PR #45). The game currently spawns the neutral test car (#63).
@@ -164,7 +170,11 @@ utility poles and wires, overhead signs, vertex-coloured road lighting
   left a stale `.git/index.lock` there for under a minute. It is moved out
   to `build/stage-a/`, and CLAUDE.md now has a rule for that shell.
 
-### Stage A results (2026-10-04): waiting for Roy's sign-off
+### Stage A results (2026-10-04): signed off by Roy, 2026-10-05
+
+**Sign-off (Roy, 2026-10-05):** speed feels fast now. Playability on a busy
+road is still untested, so B2 checks it with real traffic. The branch is still
+unpushed: Roy chose to stack stage B on top of it and push both later.
 
 **Changed** (branch `feat/stage-a-feel-env`, based on main 25dbf17):
 - `scripts/chase_camera.gd` (new): the camera from game.gd, plus the low
@@ -222,7 +232,70 @@ window tests on a software renderer):
   GitHub App isn't installed), so the branch is handed over as a bundle.
 - **Waiting on Roy before stage B:** the direction (PR #83 vs this plan),
   the car pipeline (PR #79) and the traffic sim cost (see Open conflicts
-  above).
+  above). *(Resolved 2026-10-05, see Stage B.)*
+
+## Stage B (revised 2026-10-05): design sheet, traffic, camera + HUD, exhaust
+
+Four sub-stages. Each one **stops for Roy's sign-off**, with its results
+written here first.
+
+| Sub-stage | Contents |
+|---|---|
+| B1 | Design sheet for all 12 cars (design only, no modeling) |
+| B2 | Milestones 3–4: lane-follow, then reactive traffic on the multi-lane highway, plus the 3 NPC cars built from the B1 sheets |
+| B3 | Milestone 5: camera + full dashboard HUD |
+| B4 | Exhaust build: synthesized exhaust, pops/crackles, flames, flamethrower tune |
+
+**Decisions (Roy, 2026-10-05):**
+- **Direction, Option C:** traffic stays full-sim (the same raycast wheel sim,
+  told apart by CarSpec data only). Fuel, stops and damage-ends-the-run move
+  to after the garage stage, and currency/scoring stays before the garage.
+  This supersedes PR #83's scripted traffic.
+- **Cars:** we design all cars ourselves in-engine. PR #79's import pipeline
+  is not used. Designs are original, with real-inspired shapes and no
+  licensed makes. Gas-only. Keyboard-only input.
+- **Mods** change shape, paint, wheels and stickers. Each car has exactly
+  **3 fixed sticker slots**.
+- **Exhaust is cosmetic only:** loudness, tone, raspiness, pops/crackles,
+  flames and a flamethrower tune. It has no wear, heat, fuel or police
+  effects.
+- **Target:** 60 fps on Roy's i5-1235U with Iris Xe.
+- **Look:** "Gritty PS2 night" with the Street-Spec reference, and no neon.
+- **Palette, "Amber vs. Dusk":**
+  - sky `#1B2A4A`, shadow `#0E1424`;
+  - sodium `#FF8A1F`, window amber `#FFC066`;
+  - silver `#C9CED6`, taillight red `#E5262B`;
+  - no magenta or cyan.
+- **Budgets** are estimates, to be measured on the laptop: player ~10k tris,
+  cop ~6k, traffic ~4k. Fewer separate parts matters more than raw triangles.
+- **Traffic fallback (B2), built only if measurement shows it's needed:**
+  - a "Traffic detail distance" slider in Settings;
+  - cars beyond it run a cheaper sim and a simpler mesh, and near cars always
+    run the full sim;
+  - the handoff keeps position, velocity and heading, with no visible pop.
+
+  This is the one scoped exception to the same-sim rule.
+- **Stage A is signed off.** Stage B stacks on `feat/stage-a-feel-env`, and
+  Roy pushes both later.
+
+**Earlier inputs from Roy that stage B has to honour (chat, 2026-10-04/05):**
+- **T menu:** tuning the car, including the transmission choice (automatic or
+  semi-manual).
+- **Pause menu:** a Settings tab for the other settings (camera, units).
+- **Reverse:** R switches to reverse only when nearly stopped.
+- **HUD:**
+  - a steering wheel with an RPM bar that runs green to red as the shift cue;
+  - an instrument cluster;
+  - a visible gear shifter.
+- **Road:** a multi-lane highway with **4 lanes per direction**. *This
+  conflicts with stage A's 3-lane cap*, and B2 resolves it with traffic
+  measurements.
+- **Cars:** a complete redesign of all 12, "a generation up" in looks
+  without losing performance.
+  - Silhouettes must read from every angle, because a 360° garage camera is
+    coming.
+  - Interiors and undersides come later.
+- **Top speed:** ~300 km/h through tuning stays; Roy likes it.
 
 Old `main.gd` (treadmill/distance-accumulator architecture) is abandoned, not edited further. `car_builder.gd` (pure mesh construction) is kept and reused. Everything below is built fresh in real world-space.
 

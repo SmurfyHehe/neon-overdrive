@@ -22,12 +22,23 @@ const STATIC_SECS := 0.35
 const TOAST_SECS := 3.0
 const SPEAKER_CUTOFF_HZ := 7500.0
 const GAIN := 0.8
+const DUCK_DB := -11.0          # the music under the DJ
+const DUCK_RATE := 6.0          # 1/s, how fast it ducks and comes back
+const CHIME_NOTES := [76, 79, 83, 88]   # E5 G5 B5 E6, the stinger at the start of a break
 
 ## -1 = off, else an index into RadioSequencer.STATIONS.
 var station := -1
 var static_left := 0.0
 var toast_text := ""
 var toast_left := 0.0
+## DJ break (see RadioSequencer.break_state): true while the tuned station is in one.
+var dj_active := false
+var dj_text := ""
+var chime_count := 0
+var duck := 1.0                # current music gain, 1 = full
+var _dj_label: Label
+var _chime_left := 0.0
+var _in_break_before := false
 
 var _player: AudioStreamPlayer
 var _playback: AudioStreamGeneratorPlayback
@@ -59,6 +70,16 @@ func _ready() -> void:
 	_label.add_theme_color_override("font_color", Color(0.0, 0.96, 1.0))
 	_label.visible = false
 	layer.add_child(_label)
+	_dj_label = Label.new()
+	_dj_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	_dj_label.position = Vector2(-360, -150)
+	_dj_label.custom_minimum_size = Vector2(720, 0)
+	_dj_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_dj_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_dj_label.add_theme_color_override("font_color", Color(1.0, 0.54, 0.12))
+	_dj_label.add_theme_font_size_override("font_size", 20)
+	_dj_label.visible = false
+	layer.add_child(_dj_label)
 
 ## Music bus: a gentle low-pass, once, so the radio sounds like a car stereo.
 func _ensure_speaker_filter() -> void:
@@ -84,6 +105,37 @@ func next_station() -> void:
 		toast_text = "RADIO OFF"
 	toast_left = TOAST_SECS
 
+## DJ break bookkeeping for the tuned station: caption, ducking, and the chime when a
+## break begins (also when you tune in mid-break, so you hear it start).
+func _update_dj(delta: float) -> void:
+	var in_break := false
+	if station >= 0:
+		var st := RadioSequencer.break_state(station, station_time(station))
+		in_break = st.in_break
+		if in_break:
+			var lines: Array = RadioSequencer.STATIONS[station].dj
+			dj_text = "%s: %s" % [RadioSequencer.STATIONS[station].name, lines[st.line]]
+	if in_break and not _in_break_before:
+		chime_count += 1
+		_chime_left = 1.2
+	_in_break_before = in_break
+	dj_active = in_break
+	var want := db_to_linear(DUCK_DB) if in_break else 1.0
+	duck = lerpf(duck, want, 1.0 - exp(-DUCK_RATE * delta))
+	_dj_label.visible = in_break
+	_dj_label.text = dj_text
+
+## A short rising chime (four sine pings) mixed into a block.
+func _add_chime(block: PackedVector2Array, n: int) -> void:
+	for i in n:
+		var t := 1.2 - _chime_left + float(i) / MIX_RATE
+		var note := clampi(int(t / 0.25), 0, CHIME_NOTES.size() - 1)
+		var local := t - note * 0.25
+		var env := exp(-7.0 * local) * clampf(local * 200.0, 0.0, 1.0)
+		var v := sin(TAU * RadioSequencer.midi_hz(CHIME_NOTES[note]) * t) * env * 0.35
+		block[i] += Vector2(v, v)
+	_chime_left = maxf(_chime_left - float(n) / MIX_RATE, 0.0)
+
 ## Where a station is in its song right now, in seconds on its own clock.
 func station_time(s: int) -> float:
 	return _clock + _offsets[s]
@@ -94,6 +146,7 @@ func _process(delta: float) -> void:
 	_label.visible = toast_left > 0.0
 	_label.text = toast_text
 	static_left = maxf(static_left - delta, 0.0)
+	_update_dj(delta)
 	if _playback == null:
 		return
 	var n := _playback.get_frames_available()
@@ -104,7 +157,9 @@ func _process(delta: float) -> void:
 		block = _sequencer.render(station, _cursor, n)
 		_cursor += n
 		for i in n:
-			block[i] *= GAIN
+			block[i] *= GAIN * duck
+		if _chime_left > 0.0:
+			_add_chime(block, n)
 	else:
 		block.resize(n)
 	if static_left > 0.0:

@@ -16,13 +16,30 @@ const LOOP_STEPS := STEPS_PER_BAR * BARS
 # name, bpm, root (midi note of the chord root's tonic), chords (semitone offset of each
 # bar's root, and whether it is minor), arp pattern (indices into the chord's 4 notes),
 # bass pattern (16 steps, 1 = play), pulse width, brightness.
+# "dj" is the station banter: text lines shown as captions in the DJ break that ends
+# each track (a track is LOOPS_PER_TRACK loops of the band). All original lines, no
+# voice: the station music ducks and a short chime plays while the caption shows.
+const LOOPS_PER_TRACK := 6
+const BREAK_SECS := 7.0
 const STATIONS := [
 	{"name": "Neon FM", "bpm": 108.0, "root": 57, "chords": [[0, true], [-4, false], [-7, false], [-2, false]],
-		"arp": [0, 1, 2, 3, 2, 1, 2, 3], "bass": [1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0], "pulse": 0.35, "bright": 0.7},
+		"arp": [0, 1, 2, 3, 2, 1, 2, 3], "bass": [1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0], "pulse": 0.35, "bright": 0.7,
+		"dj": ["You are on Neon FM. Palm trees, wet asphalt, nothing but time.", "That was the sound of a city that never lifts off the gas. Stay with us.", "Neon FM, where every red light is just a suggestion to dream.", "Eighty degrees and falling, traffic is a myth. Keep it flat."]},
 	{"name": "Night Drive", "bpm": 94.0, "root": 50, "chords": [[0, true], [-2, false], [-4, false], [-5, true]],
-		"arp": [0, 2, 1, 3, 0, 2, 3, 1], "bass": [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0], "pulse": 0.5, "bright": 0.5},
+		"arp": [0, 2, 1, 3, 0, 2, 3, 1], "bass": [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0], "pulse": 0.5, "bright": 0.5,
+		"dj": ["Night Drive. Low beams, low tempo, long road.", "If you can hear this, you are still awake. Good. So are we.", "Slow down just enough to feel the engine think about it.", "This is the hour when the highway belongs to the ones who listen."]},
 	{"name": "Open Road", "bpm": 118.0, "root": 52, "chords": [[0, true], [-5, false], [-4, false], [-7, true]],
-		"arp": [0, 1, 3, 2, 0, 1, 3, 2], "bass": [1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1], "pulse": 0.25, "bright": 0.9},
+		"arp": [0, 1, 3, 2, 0, 1, 3, 2], "bass": [1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1], "pulse": 0.25, "bright": 0.9,
+		"dj": ["Open Road. Four lanes each way and nobody to tell you no.", "Wind up the revs, we will wind up the synths.", "The speedometer is only a rumour. Open Road keeps it moving.", "Next up: more horizon than you can burn."]},
+	{"name": "Chrome Radio", "bpm": 126.0, "root": 55, "chords": [[0, true], [-2, false], [-5, false], [-7, true]],
+		"arp": [0, 3, 1, 2, 3, 0, 2, 1], "bass": [1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1], "pulse": 0.3, "bright": 1.0,
+		"dj": ["Chrome Radio, polished to a mirror finish.", "Shift when it sings, not when it screams.", "Fast, loud and a little bit shiny. You know where you are.", "If it is not reflecting streetlights, it is not on the playlist."]},
+	{"name": "Sunset Drive", "bpm": 88.0, "root": 53, "chords": [[0, false], [-5, false], [-3, true], [-7, false]],
+		"arp": [0, 1, 2, 1, 3, 2, 1, 0], "bass": [1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0], "pulse": 0.45, "bright": 0.6,
+		"dj": ["Sunset Drive. The sky is the colour of a cooling brake disc.", "Windows down, volume up, plans optional.", "Orange to purple to black. We will be here when the stars come on.", "Take the long way home. That is what this station is for."]},
+	{"name": "Midnight Run", "bpm": 102.0, "root": 48, "chords": [[0, true], [-4, true], [-2, false], [-7, true]],
+		"arp": [0, 2, 3, 2, 1, 3, 2, 0], "bass": [1, 1, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1], "pulse": 0.4, "bright": 0.55,
+		"dj": ["Midnight Run. If someone is behind you, we play it louder.", "Dark roads, clean lines, no questions.", "This is the track you drive to when you have already decided.", "Lights off the mirror, eyes on the next corner. Midnight Run."]},
 ]
 
 var _rng_state := 12345
@@ -36,6 +53,20 @@ static func station_count() -> int:
 
 static func midi_hz(note: float) -> float:
 	return 440.0 * pow(2.0, (note - 69.0) / 12.0)
+
+## Seconds in one DJ-to-DJ track of the station.
+static func track_seconds(station: int) -> float:
+	return loop_seconds(station) * LOOPS_PER_TRACK
+
+## Where a station is in its track and DJ break at `seconds` on its clock:
+## {"in_break": bool, "line": index into its "dj" lines, "into": seconds into the break}.
+static func break_state(station: int, seconds: float) -> Dictionary:
+	var track := track_seconds(station)
+	var pos := fposmod(seconds, track)
+	var in_break := pos > track - BREAK_SECS
+	var lines: Array = STATIONS[station].dj
+	var n := int(floor(seconds / track))
+	return {"in_break": in_break, "line": n % lines.size(), "into": pos - (track - BREAK_SECS) if in_break else 0.0}
 
 ## Seconds in one loop of the station.
 static func loop_seconds(station: int) -> float:

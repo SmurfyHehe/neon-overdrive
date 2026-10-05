@@ -14,6 +14,9 @@ if not exist "%GODOT%" (
 cd /d "%~dp0.."
 rem A fresh checkout has no import cache yet; scripts fail to load without it.
 if not exist ".godot" "%GODOT%" --headless --path . --import >nul 2>&1
+rem Tests are silent unless you set SOUND=1 (the Dummy audio driver plays nothing).
+set "AUDIO=--audio-driver Dummy"
+if "%SOUND%"=="1" set "AUDIO="
 
 set "FAILED="
 call :run smoke --headless
@@ -40,6 +43,6 @@ exit /b 0
 :run
 echo.
 echo === %1
-"%GODOT%" %2 --path . -s res://tests/%1.gd
+"%GODOT%" %AUDIO% %2 --path . -s res://tests/%1.gd
 if errorlevel 1 set "FAILED=!FAILED! %1"
 exit /b 0

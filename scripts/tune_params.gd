@@ -37,6 +37,7 @@ static func all() -> Array[Dictionary]:
 			_entries.append(_e("gear_ratios/%d" % i, "Gear %d" % (i + 1), 0.5, 4.5))
 		_entries.append(_e("max_torque", "Peak torque Nm", 150.0, 900.0, ENGINE, false))
 		_entries.append(_e("max_rpm", "Redline rpm", 4000.0, 10000.0, ENGINE, false))
+		_entries.append(_e("turbo_boost_max", "Turbo boost bar", 0.0, 1.5, ENGINE, false, true))
 		_entries.append(_e("torque_shape/low_end", "Low-end torque", 0.1, 0.9, ENGINE, false, false))
 		_entries.append(_e("torque_shape/peak_pos", "Peak position", 0.25, 0.95, ENGINE, false, false))
 		_entries.append(_e("torque_shape/plateau", "Plateau width", 0.0, 0.5, ENGINE, false, false))

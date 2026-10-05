@@ -31,6 +31,7 @@ call :run fleet_design_check --headless
 call :run exhaust_tune --headless
 call :run audio_master --headless
 call :run phase_a_engine --headless
+call :run turbo "--headless --fixed-fps 60"
 call :run chassis_targets "--headless --fixed-fps 60"
 call :run reverse_and_tabs --headless
 call :run auto_tune_worker_mode --headless

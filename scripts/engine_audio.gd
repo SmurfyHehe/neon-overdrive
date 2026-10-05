@@ -19,6 +19,7 @@ const READOUT_SECS := 2.5
 
 var synth := EngineSynth.new()
 var _label: Label
+var _seen_blow_offs := 0
 var _readout_left := 0.0
 var _vehicle: Vehicle
 var _playback: AudioStreamGeneratorPlayback
@@ -41,6 +42,13 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if _playback == null:
 		return
+	if _vehicle.turbo_boost_max > 0.0:
+		synth.boost = clampf(_vehicle.boost / _vehicle.turbo_boost_max, 0.0, 1.0)
+		if _vehicle.blow_off_count != _seen_blow_offs:
+			_seen_blow_offs = _vehicle.blow_off_count
+			synth.blow_off(synth.boost + 0.3)
+	else:
+		synth.boost = 0.0
 	var n := _playback.get_frames_available()
 	if n > 0:
 		_playback.push_buffer(synth.render(n, _vehicle.motor_rpm,

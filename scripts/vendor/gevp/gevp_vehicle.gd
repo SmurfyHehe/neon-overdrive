@@ -767,6 +767,20 @@ const AUTO_DOWN_FULL := 0.75     # same, on full throttle (GEVP's old fixed valu
 ## (GEVP's own scheme, where S flips between drive and reverse). Set false and
 ## S only brakes.
 @export var brake_selects_reverse := true
+## (7) Turbo (Phase B, 2026-10-05, DEVIATION). boost runs 0..turbo_boost_max (bar)
+## and lags the exhaust flow: it rises toward flow x turbo_boost_max with
+## turbo_tau_up, falls with turbo_tau_down, and multiplies torque by
+## 1 + turbo_gain x boost / turbo_boost_max. turbo_boost_max 0 (the default) is a
+## naturally aspirated engine: the multiplier is exactly 1.0. blow_off_count rises
+## by one each time the throttle is lifted off a hot boost (audio reads it).
+@export var turbo_boost_max := 0.0
+@export var turbo_rpm_thresh := 2500.0   # no boost below this rpm
+@export var turbo_tau_up := 0.6          # seconds to spool (63%)
+@export var turbo_tau_down := 0.25       # seconds to fall
+@export var turbo_gain := 0.45           # torque gain at full boost
+var boost := 0.0
+var blow_off_count := 0
+var _prev_throttle := 0.0
 var idle_integral := 0.0
 const LIMITER_HYSTERESIS_RPM := 150.0  # fuel stays cut until rpm falls this far below the limit
 var limiter_cut := false
@@ -775,7 +789,20 @@ func process_motor(delta : float) -> void:
 	# (3) engine braking: motor_brake was declared and never read; it now adds a
 	# constant drag that fades out as the throttle opens.
 	var drag_torque := motor_rpm * motor_drag + motor_brake * (1.0 - throttle_amount)
-	torque_output = get_torque_at_rpm(motor_rpm) * throttle_amount
+	# (7) turbo: spool, then scale the torque. Skipped entirely when there is none.
+	var turbo_mult := 1.0
+	if turbo_boost_max > 0.0:
+		var flow := throttle_amount * clampf((motor_rpm - turbo_rpm_thresh) / maxf(max_rpm - turbo_rpm_thresh, 1.0), 0.0, 1.0)
+		var target := turbo_boost_max * flow
+		var tau := turbo_tau_up if target > boost else turbo_tau_down
+		boost += (target - boost) * (1.0 - exp(-delta / maxf(tau, 0.01)))
+		if _prev_throttle > 0.5 and throttle_amount < 0.2 and boost > 0.3 * turbo_boost_max:
+			blow_off_count += 1
+		turbo_mult = 1.0 + turbo_gain * boost / turbo_boost_max
+	else:
+		boost = 0.0
+	_prev_throttle = throttle_amount
+	torque_output = get_torque_at_rpm(motor_rpm) * throttle_amount * turbo_mult
 	## Adjust torque based on throttle input, clutch input, and motor drag
 	torque_output -= drag_torque * (1.0 + (clutch_amount * (1.0 - throttle_amount)))
 	# (4) idle controller: PI on rpm error, only on a (nearly) closed throttle,

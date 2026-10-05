@@ -127,8 +127,15 @@ files. Don't touch the parked top-speed plateau in `process_clutch()` or the
 automatic-vs-manual clutch question unless Roy raises them.
 
 **Rules carried forward:**
-- **Physics:** GEVP stays vendored and unmodified. The one logged exception is
-  `clutch_torque = 0` in Neutral. Extensions live in `aero.gd` and `car_spec.gd`.
+- **Physics:** GEVP is vendored, but **Roy opened it for editing on 2026-10-05**
+  ("you can have access to the GEVP and edit it to make it fit our game"), to
+  build a real engine: inertia and stall, soft limiter, rev matching, engine
+  braking, turbo and heat/wear. Every edit is marked `DEVIATION` in
+  `scripts/vendor/gevp/gevp_vehicle.gd` so a re-vendor can re-apply it. Logged
+  edits: `clutch_torque = 0` in Neutral; feel pass 1b (soft rev limiter with
+  hysteresis, rev match on upshifts, `motor_brake` as engine braking).
+  Extensions that do not need a vendor edit still live in `aero.gd` and
+  `car_spec.gd`.
 - **Every car runs the same raycast wheel sim** (player, NPC, cop, modded),
   told apart only by CarSpec data. Roy, 2026-09-13, restated 2026-10-04.
 - **Gas-only powertrain** for all 12 cars (Roy, 2026-09-13).
@@ -353,8 +360,8 @@ results written here first, and the next step never starts unprompted.
 | 5 | Build the 3 NPC cars from the approved sheet. |
 
 Not in stage B: fuel, stop places, damage-ends-the-run (after the garage),
-player-car builds, the garage, police. GEVP stays unmodified unless Roy asks,
-and any exception is logged here.
+player-car builds, the garage, police. GEVP edits are allowed since 2026-10-05
+(see Rules carried forward); every one is logged there and marked in the code.
 
 **Changes against the B1 session's plan:** the slider is now part of step 3
 outright (B1 had it "only if measurement shows it's needed"), and 4 lanes per

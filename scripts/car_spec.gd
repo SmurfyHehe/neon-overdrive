@@ -136,6 +136,7 @@ static func coupe_default() -> Dictionary:
 		"automatic_transmission": true,
 		"shift_time": 0.2,
 		"clutch_out_rpm": 2000.0,
+		"motor_brake": 20.0,  # engine braking when off throttle (pass 1b; GEVP default 10, was unused)
 		"coefficient_of_drag": 0.26,
 		"frontal_area": 1.9,
 		"brake_force_multiplier": 1.0,  # the vendored default, now explicit so tuning has one source of truth

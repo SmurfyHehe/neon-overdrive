@@ -22,9 +22,9 @@ extends SceneTree
 
 const HOLD_TICKS := 6
 # Default coupe on the headless test track (tests/tune_track.gd).
-const EXPECT_TOP := 241.3
-const EXPECT_0_100 := 5.25
-const EXPECT_100_0 := 41.9
+const EXPECT_TOP := 240.7
+const EXPECT_0_100 := 5.52
+const EXPECT_100_0 := 38.9
 const TOLERANCE := 0.005
 const SLOT_FILE := "user://autotune/test_panel_slots.json"
 

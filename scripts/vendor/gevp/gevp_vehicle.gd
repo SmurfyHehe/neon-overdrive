@@ -1291,3 +1291,56 @@ func apply_tyre_setup() -> void:
 			front_static_camber_stock if front else rear_static_camber_stock,
 			signf(w.position.x))
 		_camber_active = _camber_active or w.camber_active
+
+## (13) Tuner redesign PR 2 (2026-10-06), DEVIATION: re-derives everything
+## initialize() computes once from the suspension, steering, diff and brake
+## settings, so the tuner can change them on a live car. Same formulas as
+## initialize(); tests/tuner_settings.gd checks a live-tuned car against a freshly
+## built one. Wheel state (spin, compression, surface) is left alone.
+func apply_suspension() -> void:
+	front_axle.differential_lock_torque = front_locking_differential_engage_torque
+	rear_axle.differential_lock_torque = rear_locking_differential_engage_torque
+	var front_weight_per_wheel := vehicle_mass * front_weight_distribution * 4.9
+	var front_spring_rate := calculate_spring_rate(front_weight_per_wheel, front_spring_length, front_resting_ratio)
+	var front_damping_rate := calculate_damping(front_weight_per_wheel, front_spring_rate, front_damping_ratio)
+	for wheel in front_axle.wheels:
+		_apply_wheel_suspension(wheel, front_spring_length, front_spring_rate, front_arb_ratio, front_damping_rate,
+			front_bump_damp_multiplier, front_rebound_damp_multiplier, front_abs_spin_difference_threshold)
+	var rear_weight_per_wheel := vehicle_mass * (1.0 - front_weight_distribution) * 4.9
+	var rear_spring_rate := calculate_spring_rate(rear_weight_per_wheel, rear_spring_length, rear_resting_ratio)
+	var rear_damping_rate := calculate_damping(rear_weight_per_wheel, rear_spring_rate, rear_damping_ratio)
+	for wheel in rear_axle.wheels:
+		_apply_wheel_suspension(wheel, rear_spring_length, rear_spring_rate, rear_arb_ratio, rear_damping_rate,
+			rear_bump_damp_multiplier, rear_rebound_damp_multiplier, rear_abs_spin_difference_threshold)
+	var wheel_base := rear_left_wheel.position.z - front_left_wheel.position.z
+	var front_track_width := front_right_wheel.position.x - front_left_wheel.position.x
+	var front_ackermann := (atan((wheel_base * tan(max_steering_angle)) / (wheel_base - (front_track_width * 0.5 * tan(max_steering_angle)))) / max_steering_angle) - 1.0
+	var rear_track_width := rear_right_wheel.position.x - rear_left_wheel.position.x
+	var rear_ackermann := (atan((wheel_base * tan(max_steering_angle)) / (wheel_base - (rear_track_width * 0.5 * tan(max_steering_angle)))) / max_steering_angle) - 1.0
+	front_left_wheel.ackermann = front_ackermann
+	front_left_wheel.toe = -front_toe
+	front_right_wheel.ackermann = -front_ackermann
+	front_right_wheel.toe = front_toe
+	rear_left_wheel.ackermann = rear_ackermann
+	rear_left_wheel.toe = -rear_toe
+	rear_right_wheel.ackermann = -rear_ackermann
+	rear_right_wheel.toe = rear_toe
+	# A negative bias means "work it out from the springs", as in initialize().
+	var bias := front_brake_bias
+	if bias < 0.0:
+		var front_axle_spring_force := calculate_axle_spring_force(0.6, front_spring_length, front_spring_rate)
+		bias = front_axle_spring_force / (front_axle_spring_force + calculate_axle_spring_force(0.4, rear_spring_length, rear_spring_rate))
+	front_axle.brake_bias = bias
+	rear_axle.brake_bias = 1.0 - bias
+
+func _apply_wheel_suspension(wheel: Wheel, length: float, rate: float, arb: float, damping: float, bump: float, rebound: float, abs_threshold: float) -> void:
+	wheel.spring_length = length
+	wheel.max_spring_length = length
+	wheel.set_target_position(Vector3.DOWN * (length + wheel.tire_radius))
+	wheel.spring_rate = rate
+	wheel.antiroll = rate * arb
+	wheel.slow_bump = damping * bump
+	wheel.slow_rebound = damping * rebound
+	wheel.fast_bump = damping * bump * 0.5
+	wheel.fast_rebound = damping * rebound * 0.5
+	wheel.abs_spin_difference_threshold = -absf(abs_threshold)

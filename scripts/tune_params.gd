@@ -21,6 +21,7 @@ const TIRE := "tire"      # Road tire entries: wheels cache them per surface
 const BRAKE := "brake"    # max_brake_force is derived from friction and the multiplier
 const ENGINE := "engine"  # max_clutch_torque and the torque curve are derived from these
 const TYRE_SETUP := "tyre_setup"  # pressure and camber are pushed onto the wheels (Vehicle.apply_tyre_setup)
+const SUSPENSION := "suspension"  # spring/damper/ARB rates, toe, steering geometry, diff and brake split (Vehicle.apply_suspension)
 
 # "auto": Auto-Tune may change it. The engine entries are raw-panel only until
 # engine tuning joins Auto-Tune (with tier caps).
@@ -61,6 +62,30 @@ static func all() -> Array[Dictionary]:
 		_entries.append(_e("rear_tyre_pressure", "Tyre pressure rear bar", 1.6, 2.8, TYRE_SETUP, false))
 		_entries.append(_e("front_static_camber", "Camber front deg", -4.0, 1.0, TYRE_SETUP, false))
 		_entries.append(_e("rear_static_camber", "Camber rear deg", -4.0, 1.0, TYRE_SETUP, false))
+		# Tuner redesign PR 2: chassis settings, raw-panel only like PR 1's.
+		# Ranges are what the test track showed safe on the coupe (2026-10-06):
+		# rear toe-out, no front bar, a stiff rear bar and a stiff or tall rear
+		# end each spun the car (30-70 deg slip) and are cut off. The rear is touchy:
+		# springs past 0.55 or ride height past 0.27 m already slide it.
+		# tests/tuner_settings.gd drives every one of them at both ends.
+		_entries.append(_e("front_toe", "Toe front rad", -0.02, 0.02, SUSPENSION, false))
+		_entries.append(_e("rear_toe", "Toe rear rad", 0.0, 0.02, SUSPENSION, false))
+		_entries.append(_e("front_spring_length", "Ride height front m", 0.16, 0.28, SUSPENSION, false))
+		_entries.append(_e("rear_spring_length", "Ride height rear m", 0.18, 0.27, SUSPENSION, false))
+		_entries.append(_e("front_resting_ratio", "Springs front (soft-stiff)", 0.3, 0.7, SUSPENSION, false))
+		_entries.append(_e("rear_resting_ratio", "Springs rear (soft-stiff)", 0.3, 0.55, SUSPENSION, false))
+		_entries.append(_e("front_damping_ratio", "Dampers front", 0.25, 0.9, SUSPENSION, false))
+		_entries.append(_e("rear_damping_ratio", "Dampers rear", 0.25, 0.9, SUSPENSION, false))
+		_entries.append(_e("front_arb_ratio", "Anti-roll bar front", 0.1, 0.6, SUSPENSION, false))
+		_entries.append(_e("rear_arb_ratio", "Anti-roll bar rear", 0.0, 0.45, SUSPENSION, false))
+		_entries.append(_e("front_locking_differential_engage_torque", "Diff lock front Nm (low = locked)", 0.0, 1000.0, SUSPENSION, false))
+		_entries.append(_e("rear_locking_differential_engage_torque", "Diff lock rear Nm (low = locked)", 0.0, 1000.0, SUSPENSION, false))
+		_entries.append(_e("front_brake_bias", "Brake bias front (-1 auto)", -1.0, 0.8, SUSPENSION, false))
+		_entries.append(_e("max_steering_angle", "Steering lock rad", deg_to_rad(30.0), deg_to_rad(50.0), SUSPENSION, false))
+		_entries.append(_e("traction_control_max_slip", "Traction control slip (0 off)", 0.0, 20.0, NONE, false))
+		_entries.append(_e("stability_yaw_strength", "Stability strength", 0.0, 12.0, NONE, false))
+		_entries.append(_e("front_abs_spin_difference_threshold", "ABS front threshold", 4.0, 40.0, SUSPENSION, false))
+		_entries.append(_e("rear_abs_spin_difference_threshold", "ABS rear threshold", 4.0, 40.0, SUSPENSION, false))
 	return _entries
 
 ## The paths Auto-Tune is allowed to change.

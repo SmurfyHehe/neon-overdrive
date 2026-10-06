@@ -24,6 +24,8 @@ if "%NEON_TRAFFIC%"=="" set "NEON_TRAFFIC=0"
 
 set "FAILED="
 call :run smoke --headless
+call :run palette --headless
+call :run hud --headless
 call :run car_loft_normals --headless
 call :run test_car --headless
 call :run road_strip_winding --headless

@@ -157,7 +157,7 @@ func _ready() -> void:
 func _heading(text: String) -> Label:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_color_override("font_color", Color(0.6, 0.9, 1.0))
+	l.add_theme_color_override("font_color", Color(0.79, 0.81, 0.84))  # silver #C9CED6
 	return l
 
 func _button(parent: Control, text: String, action: Callable) -> Button:

@@ -86,8 +86,8 @@ func _ready() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	_label = Label.new()
-	_label.position = Vector2(16, 104)
-	_label.add_theme_color_override("font_color", Color(0.0, 0.96, 1.0))
+	_label.position = Vector2(16, 40)
+	_label.add_theme_color_override("font_color", Color(1.0, 0.75, 0.4))  # amber #FFC066
 	_label.visible = false
 	layer.add_child(_label)
 	_dj_label = Label.new()

@@ -5,7 +5,7 @@ extends Node3D
 # NOW a vendored raycast Vehicle/Wheel controller -- see player.gd header for
 # why VehicleBody3D was replaced) per ROADMAP.md. Old scripts/main.gd is
 # abandoned, not reused. car_builder.gd IS reused (pure mesh construction).
-# This script owns the world (chunks, ground collision, camera, debug HUD)
+# This script owns the world (chunks, ground collision, camera)
 # and the player instance.
 
 const CHUNKS_AHEAD := 6
@@ -45,11 +45,7 @@ var game_state: GameState
 # Chase camera, its three smoothing modes (#31, C to cycle) and the stage A
 # speed feel (FOV, dolly, shake) all live in chase_camera.gd.
 var camera: ChaseCamera
-var lbl_cam: Label
 var radio: RadioManager
-
-var lbl_gear: Label
-var lbl_speed: Label
 
 func _ready() -> void:
 	# Auto-Tune worker mode (exported game): no world, just the search.
@@ -82,7 +78,7 @@ func _ready() -> void:
 	_setup_player()
 	_setup_traffic()
 	_setup_camera()
-	_setup_debug_hud()
+	_setup_hud()
 	_setup_game_state()
 	if benchmark:
 		add_child(Benchmark.new())
@@ -325,48 +321,9 @@ func toggle_mute() -> void:
 	var bus := AudioServer.get_bus_index("Master")
 	AudioServer.set_bus_mute(bus, not AudioServer.is_bus_mute(bus))
 
-# ---------- temporary debug readout (real HUD is milestone 5) ----------
-func _setup_debug_hud() -> void:
-	var hud := CanvasLayer.new()
-	add_child(hud)
-	var font_color := Color(0, 0.96, 1)
-	lbl_gear = Label.new()
-	lbl_gear.position = Vector2(16, 12)
-	lbl_gear.add_theme_color_override("font_color", font_color)
-	hud.add_child(lbl_gear)
-	lbl_speed = Label.new()
-	lbl_speed.position = Vector2(16, 34)
-	lbl_speed.add_theme_color_override("font_color", font_color)
-	hud.add_child(lbl_speed)
-	lbl_cam = Label.new()
-	lbl_cam.position = Vector2(16, 56)
-	lbl_cam.add_theme_color_override("font_color", font_color)
-	hud.add_child(lbl_cam)
-	var controls := Label.new()
-	controls.position = Vector2(16, 400)
-	controls.add_theme_color_override("font_color", Color(0.71, 0.65, 0.84))
-	controls.text = "A/D steer  ·  W/S throttle/brake  ·  Space handbrake  ·  R reverse  ·  N radio  ·  F cockpit view  ·  V clutch model (Shift clutch, X starter)  ·  G auto/manual  ·  Q/E shift (manual)  ·  Esc pause  ·  T tuning  ·  Y auto-tune  ·  M mute"
-	hud.add_child(controls)
-
-func _update_debug_hud() -> void:
-	var gear_name := "R" if player.gear == -1 else ("N" if player.gear == 0 else str(player.gear))
-	lbl_gear.text = "GEAR %s" % gear_name
-	lbl_speed.text = "%d units/s" % int(player.current_speed())
-	if not player.engine_running:
-		lbl_speed.text += "   ENGINE OFF  (hold X to start)"
-	if player.turbo_boost_max > 0.0:
-		lbl_speed.text += "   BOOST %.2f / %.2f bar" % [player.boost, player.turbo_boost_max]
-	lbl_cam.text = "CAMERA %s  (C smoothing, F cockpit)   TRAFFIC %d cars, %d full-sim (Esc: sliders)" % [camera.mode_name(), traffic.cars.size(), traffic.detailed_count()]
-	# BUG FIX (2026-09-13): shift_flash_t was tracked on the player since
-	# milestone 2 but nothing ever read it -- shifting had zero feedback.
-	# Wired it to actually punch the gear label (bright flash + scale pop)
-	# for its ~0.2s window.
-	if player.shift_flash_t > 0.0:
-		lbl_gear.add_theme_color_override("font_color", Color(1, 1, 1))
-		lbl_gear.scale = Vector2(1.3, 1.3)
-	else:
-		lbl_gear.add_theme_color_override("font_color", Color(0, 0.96, 1))
-		lbl_gear.scale = Vector2(1.0, 1.0)
+# ---------- HUD (scripts/hud.gd) ----------
+func _setup_hud() -> void:
+	add_child(Hud.new(player, camera, traffic))
 
 # ---------- game state (pause / restart / quit, issue #27) ----------
 func _setup_game_state() -> void:
@@ -382,4 +339,3 @@ func _setup_game_state() -> void:
 
 func _process(_delta: float) -> void:
 	_update_chunk_pool(player.position.z)
-	_update_debug_hud()

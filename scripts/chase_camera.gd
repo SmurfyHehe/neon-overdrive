@@ -54,11 +54,15 @@ const IMPACT_DV := 0.8
 const IMPACT_GAIN := 0.12        # trauma per m/s over the threshold
 
 ## Phase C: the cockpit view (F toggles). VIEW_CHASE is everything above; in
-## VIEW_COCKPIT the camera sits at the driver's eye, rigid to the car, the body is
-## hidden and a CockpitFrame (dash, pillars, steering wheel) is shown.
+## VIEW_COCKPIT the camera sits at the driver's eye, rigid to the car, the body
+## is kept off this camera (it stays in the mirrors) and the CockpitFrame (the
+## whole interior, wheel, cluster, mirrors) is shown.
+## The eye (cockpit milestone, 2026-10-06): seat height in the P1's cabin, just
+## ahead of the B-pillar, a hand's width inboard of the seat centre (-0.36) so
+## the passenger-side door mirror is still inside the view at the default FOV.
 enum View { CHASE, COCKPIT }
-const COCKPIT_EYE := Vector3(-0.30, 1.05, -0.15)  # car-local, -x is the driver's side (left-hand drive)
-const COCKPIT_FOV := 78.0
+const COCKPIT_EYE := Vector3(-0.32, 1.06, 0.30)  # car-local, -x is the driver's side (left-hand drive)
+const COCKPIT_FOV := 80.0
 var view := View.CHASE
 var frame: CockpitFrame
 var perspective: PerspectiveAudio
@@ -101,8 +105,12 @@ func _init(car: PlayerCar) -> void:
 func _ready() -> void:
 	current = true
 	_prev_vel = target.linear_velocity
-	frame = CockpitFrame.new()
-	add_child(frame)
+	# The interior lives on the car (car space), not on the camera, so the
+	# mirrors and (next PR) the driver sit where they are from any view. This
+	# camera never draws the mirror-only layer the body moves to in the cockpit.
+	frame = CockpitFrame.new(target)
+	target.add_child(frame)
+	cull_mask &= ~CockpitFrame.MIRROR_ONLY_BIT
 	perspective = PerspectiveAudio.new()
 	add_child(perspective)
 
@@ -110,9 +118,7 @@ func _ready() -> void:
 func set_view(v: View) -> void:
 	view = v
 	var cockpit := v == View.COCKPIT
-	frame.visible = cockpit
-	if target.chassis_visual != null:
-		target.chassis_visual.visible = not cockpit
+	frame.set_cockpit(cockpit)
 	perspective.set_cockpit(cockpit)
 
 func mode_name() -> String:

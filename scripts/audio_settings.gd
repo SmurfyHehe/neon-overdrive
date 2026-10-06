@@ -8,6 +8,11 @@ extends RefCounted
 # own level, so the defaults change nothing.
 
 const DEFAULT_PATH := "user://settings.cfg"
+const TestMode := preload("res://scripts/test_mode.gd")
+
+## DEFAULT_PATH, or its test_ twin when a test is running (scripts/test_mode.gd).
+static func default_path() -> String:
+	return TestMode.path(DEFAULT_PATH)
 const CHANNELS := {
 	"Master": [&"Master"],
 	"Engine": [&"Engine"],
@@ -16,7 +21,7 @@ const CHANNELS := {
 }
 
 ## Tests point this at a scratch file.
-static var path := DEFAULT_PATH
+static var path := default_path()
 static var volumes := {"Master": 1.0, "Engine": 1.0, "Effects": 1.0, "Music": 1.0}
 
 static func set_volume(channel: String, value: float) -> void:

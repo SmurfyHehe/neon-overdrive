@@ -46,7 +46,7 @@ func _settings_test() -> void:
 	AudioSettings.path = "user://does_not_exist.cfg"
 	AudioSettings.load_settings()
 	_check(is_equal_approx(AudioSettings.volumes["Engine"], 1.0), "missing file should mean defaults")
-	AudioSettings.path = AudioSettings.DEFAULT_PATH
+	AudioSettings.path = AudioSettings.default_path()
 	for layer in ["whine", "thump", "clunk", "landing"]:
 		var w := DrivelineAudio.stream(layer)
 		_check(w.data.size() > 1000, "%s stream is empty" % layer)

@@ -28,6 +28,11 @@ extends RefCounted
 # failed silently in the exported exe), else the default of run_tests.bat.
 
 const DIR := "user://autotune"
+const TestMode := preload("res://scripts/test_mode.gd")
+
+## DIR, or user://test_autotune when a test is running (scripts/test_mode.gd).
+static func job_dir() -> String:
+	return TestMode.path(DIR)
 const REQUEST_FILE := "request.json"
 const PROGRESS_FILE := "progress.json"
 const RESULT_FILE := "result.json"
@@ -54,7 +59,7 @@ func start(spec: Dictionary, request: Dictionary, budget: int) -> bool:
 		error = "Auto-Tune needs a Godot executable to run its search in. Set the GODOT environment variable to Godot_v4.7.2-stable_win64_console.exe."
 		state = State.FAILED
 		return false
-	var dir := ProjectSettings.globalize_path(DIR)
+	var dir := ProjectSettings.globalize_path(job_dir())
 	DirAccess.make_dir_recursive_absolute(dir)
 	# Truncate the previous job's files so a stale result can't be mistaken for this one.
 	write_json(dir.path_join(RESULT_FILE), {})
@@ -83,7 +88,7 @@ func start(spec: Dictionary, request: Dictionary, budget: int) -> bool:
 func poll() -> State:
 	if state != State.RUNNING:
 		return state
-	var dir := ProjectSettings.globalize_path(DIR)
+	var dir := ProjectSettings.globalize_path(job_dir())
 	var p := read_json(dir.path_join(PROGRESS_FILE))
 	if not p.is_empty():
 		progress = p

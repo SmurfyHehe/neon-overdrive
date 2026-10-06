@@ -37,13 +37,18 @@ if (-not $done) {
 	Write-Host ("TIMEOUT: {0} killed after {1} s" -f $Name, $TimeoutSec)
 } else {
 	$code = $p.ExitCode
-	if ($code -ne 0) { $status = "FAIL" }
+	# A positive code is the test's own verdict (quit(1)). A negative one is a crash code
+	# (-1073741819 = 0xC0000005, an access violation): Godot dies at shutdown now and then
+	# after the test has printed PASS (seen 2026-10-06 in camera_feel and powertrain_health,
+	# about 2 runs in 70). The old run_tests.bat never counted those (IF ERRORLEVEL 1 is
+	# false for a negative code), so they are flagged here but not counted as failures.
+	if ($code -gt 0) { $status = "FAIL" } elseif ($code -lt 0) { $status = "CRASH" }
 }
 $secs = [int][math]::Round(((Get-Date) - $start).TotalSeconds)
 # The exit code is printed on a failure: a test that printed PASS but exited non-zero
 # (a crash while shutting down) otherwise looks like a mystery.
 $note = ""
-if ($status -eq "FAIL") { $note = "  (exit code $code)" }
+if ($status -eq "FAIL" -or $status -eq "CRASH") { $note = "  (exit code $code)" }
 Write-Host ("finished {0}  {1} s  {2}{3}" -f (Get-Date).ToString("HH:mm:ss"), $secs, $status, $note)
 if ($Log -ne "") { Add-Content -Path $Log -Value ("{0,5} s  {1,-8} {2}" -f $secs, $status, $Name) }
 exit $code

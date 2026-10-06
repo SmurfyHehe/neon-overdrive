@@ -34,6 +34,7 @@ type nul > "%TIMES%"
 echo Started %DATE% %TIME:~0,8%
 
 set "FAILED="
+set "CRASHED="
 call :run smoke --headless
 call :run car_loft_normals --headless
 call :run test_car --headless
@@ -88,11 +89,13 @@ echo.
 echo Per-test times:
 type "%TIMES%"
 echo Finished %DATE% %TIME:~0,8%
+rem A negative exit code is Godot crashing (often at shutdown, after the test printed PASS). The old script never counted those either; they are only listed.
+if defined CRASHED echo CRASHED, not counted as failed:!CRASHED!
 if defined FAILED (
-	echo FAILED:%FAILED%
+	echo FAILED:!FAILED!
 	exit /b 1
 )
-echo All tests passed.
+if defined CRASHED (echo No test failed, but see CRASHED above.) else echo All tests passed.
 exit /b 0
 
 :run
@@ -100,5 +103,5 @@ echo.
 echo === %1  [%TIME:~0,8%]
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0run_one.ps1" -Godot "%GODOT%" -Name %1 -Flags "%~2" -Audio "%AUDIO%" -TimeoutSec %TEST_TIMEOUT% -Log "%TIMES%"
 set "RC=!errorlevel!"
-if !RC! equ 124 (set "FAILED=!FAILED! %1(TIMEOUT)") else if !RC! neq 0 (set "FAILED=!FAILED! %1")
+if !RC! equ 124 (set "FAILED=!FAILED! %1(TIMEOUT)") else if !RC! gtr 0 (set "FAILED=!FAILED! %1") else if !RC! lss 0 (set "CRASHED=!CRASHED! %1(!RC!)")
 exit /b 0

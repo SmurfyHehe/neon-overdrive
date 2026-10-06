@@ -54,6 +54,7 @@ const TIMEOUT_TICKS := (WARMUP_TICKS + MEASURE_TICKS) * 6 * 2
 const BUDGET_MS := 1000.0 / RATE
 const PHASES := [
 	{"cars": 0, "detail": 300.0},
+	{"cars": 16, "detail": 150.0},  # the default since traffic milestone 4
 	{"cars": 20, "detail": 300.0},
 	{"cars": 40, "detail": 300.0},
 	{"cars": 80, "detail": 300.0},
@@ -78,6 +79,7 @@ var phase_start := 0
 var samples: PackedFloat32Array = []
 var last_usec := 0
 var full_sim_min := 0
+var full_sim_sum := 0
 var lane_err_max := 0.0
 var contacts := 0
 var first_contact := ""
@@ -113,6 +115,7 @@ func _next_phase() -> void:
 	phase_start = tick
 	samples.clear()
 	full_sim_min = 1 << 30
+	full_sim_sum = 0
 	lane_err_max = 0.0
 	contacts = 0
 	first_contact = ""
@@ -140,6 +143,7 @@ func _physics_process(_delta: float) -> bool:
 	if waited > WARMUP_TICKS:
 		samples.append(float(now - last_usec) / 1000.0)
 		full_sim_min = mini(full_sim_min, traffic.detailed_count())
+		full_sim_sum += traffic.detailed_count()
 		lane_err_max = maxf(lane_err_max, absf(p.global_position.x - Harness.lane_x(PLAYER_LANE)))
 		min_speed = minf(min_speed, p.current_speed())
 		for car in traffic.cars:
@@ -153,7 +157,7 @@ func _physics_process(_delta: float) -> bool:
 	if waited >= WARMUP_TICKS + MEASURE_TICKS:
 		var s := Harness.stats(samples)
 		results.append({"cars": cfg.cars, "detail": cfg.detail, "mean": s.mean, "p50": s.p50, "p95": s.p95, "max": s.max,
-			"full_sim": full_sim_min, "speed": Harness.kmh(p.current_speed()), "min_speed": Harness.kmh(min_speed), "lane_err": lane_err_max,
+			"full_sim": full_sim_min, "full_sim_mean": float(full_sim_sum) / samples.size(), "speed": Harness.kmh(p.current_speed()), "min_speed": Harness.kmh(min_speed), "lane_err": lane_err_max,
 			"contacts": contacts, "first_contact": first_contact})
 		var r: Dictionary = results[results.size() - 1]
 		_check(r.speed >= MIN_KMH, "phase %d (%d cars, %.0f m): the player ended at %.0f km/h, under %.0f (wrecked? %d ticks in contact, lane error %.2f m)" % [
@@ -181,11 +185,13 @@ func _end(msg: String) -> bool:
 	for r in results:
 		if r.cars == 0:
 			base = r.mean
-		var per_car: float = (r.mean - base) / r.cars if r.cars > 0 and r.full_sim == r.cars else NAN
+		# Per full-sim car, over the mean full-sim count (milestone 4 cars spawn
+		# hidden beyond the draw distance, so not every car is full-sim all the time).
+		var per_car: float = (r.mean - base) / r.full_sim_mean if r.cars > 0 and r.full_sim_mean > 0.0 else NAN
 		print("  %4d   %5.0f m   %4d     %6.2f %6.2f %6.2f %6.2f   %s   %4.0f (%4.0f) km/h   %.2f m   %d%s%s" % [
 			r.cars, r.detail, r.full_sim, r.mean, r.p50, r.p95, r.max,
 			"under" if r.mean <= BUDGET_MS else "OVER ", r.speed, r.min_speed, r.lane_err, r.contacts,
-			"" if is_nan(per_car) else "   (%.3f ms per full-sim car)" % per_car,
+			"" if is_nan(per_car) else "   (%.3f ms per full-sim car, %.1f full-sim on average)" % [per_car, r.full_sim_mean],
 			"" if r.first_contact == "" else "   " + r.first_contact])
 	for e in logger.errors:
 		fails.append("logged error: " + e)

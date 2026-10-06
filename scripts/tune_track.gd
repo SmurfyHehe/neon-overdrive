@@ -27,8 +27,8 @@ extends Node3D
 
 const KMH := 1.0 / 3.6
 const LANE_SPACING := 40.0
-## Where lane 0 sits. Off the game road (x -13..13 m with 4 lanes each way,
-## buildings to about x 23 m) because tests run the track inside the live
+## Where lane 0 sits. Off the game road (x -17..17 m with 4 lanes each way of
+## 3.2 m, buildings to about x 27 m) because tests run the track inside the live
 ## Game.tscn, and the stage B step 3 player parks in a lane: with lane 0 on
 ## x=0 the accel car rear-ended the coasting player (tests/tyres.gd,
 ## 2026-10-05). Note: positions move the single-precision results a hair.

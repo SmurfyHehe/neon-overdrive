@@ -114,6 +114,7 @@ func _physics_process(_delta: float) -> bool:
 				w.update(0.5, false, false, 3500.0, 40, "1")
 				_check(w.lit_count == 0 and w.led_colours[0].a < 0.01, "at 50%% every LED is off (alpha 0)")
 				_check_sightline(p, frame)
+				_check_wheel_pose(frame)
 				steer = 0.0
 				throttle = 1.0
 				_go(Step.PEDALS)
@@ -185,6 +186,24 @@ func _check_sightline(p: PlayerCar, frame: CockpitFrame) -> void:
 						hits[key] = hit
 	print("sightline: %d rays, ground pitch %.2f deg, %d blocked" % [rays, ground_pitch, hits.size()])
 	_check(hits.is_empty(), "the cluster, dash, hub or column block the road from the eye: %s" % [hits.keys().slice(0, 8)])
+
+## Roy (2026-10-06): the wheel points at the driver and does not block the view.
+## The face normal must rise toward the eye (between 15 and 35 degrees up from
+## the hub), and the top of the rim, grip included, must sit at least
+## CockpitFrame.WHEEL_TOP_MIN_DEG below the eye's horizontal.
+func _check_wheel_pose(frame: CockpitFrame) -> void:
+	var eye := ChaseCamera.COCKPIT_EYE
+	var hub := CockpitFrame.WHEEL_POS
+	var normal: Vector3 = frame.wheel_mount.transform.basis * Vector3(0, 0, 1)
+	var normal_up := rad_to_deg(atan2(normal.y, normal.z))
+	var to_eye := eye - hub
+	var eye_up := rad_to_deg(atan2(to_eye.y, to_eye.z))
+	var top_local := frame.wheel.rim_point(90.0) + Vector3(0, SteeringWheel.GRIP_R, 0)
+	var top: Vector3 = frame.wheel_mount.transform * top_local
+	var top_below := rad_to_deg(atan2(eye.y - top.y, eye.z - top.z))
+	print("wheel pose: face %.1f deg up, eye %.1f deg up from the hub, rim top %.1f deg below the eye" % [normal_up, eye_up, top_below])
+	_check(normal_up >= 15.0 and normal_up <= 35.0 and normal_up < eye_up, "the wheel face looks %.1f deg up; it should rise toward the driver's eye" % normal_up)
+	_check(top_below >= CockpitFrame.WHEEL_TOP_MIN_DEG, "the rim top is only %.1f deg below the eye" % top_below)
 
 func _go(next: Step) -> void:
 	step = next

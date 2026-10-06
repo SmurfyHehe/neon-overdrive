@@ -2,7 +2,7 @@ extends Node
 class_name RadioManager
 
 # The in-game radio (Phase B, 2026-10-05; file stations 2026-10-06). N cycles
-# Drift Phonk, Dark Phonk, Graveyard TV (Dale, talk only), Synthwave, off. The
+# Drift Phonk, Dark Phonk, The Dave Show (Dave, talk only), Synthwave, off. The
 # music stations play the Ogg Vorbis tracks in assets/radio/ (RadioStations),
 # one shuffled playlist each (RadioPlaylist): no track twice in a row, the next
 # one starts when a track ends.
@@ -10,7 +10,7 @@ class_name RadioManager
 # Every station has a running clock that advances all the time, so tuning back in
 # lands mid-track like a real radio. Switching plays a short burst of static. The
 # Music bus gets a low-pass so the music sounds like it comes from car speakers.
-# Dale's lines come as captions with a chime (they would duck any music). The tree's pause
+# Dave's lines come as captions with a chime (they would duck any music). The tree's pause
 # stops _process, so the radio goes quiet in the pause menu (GameState also mutes
 # the Music bus while paused to avoid a click).
 #
@@ -37,7 +37,7 @@ var station := -1
 var static_left := 0.0
 var toast_text := ""
 var toast_left := 0.0
-## Dale break (see RadioStations.break_state): true while the tuned station is in one.
+## Dave break (see RadioStations.break_state): true while the tuned station is in one.
 var dj_active := false
 var dj_text := ""
 var chime_count := 0
@@ -209,7 +209,7 @@ func _update_dj(delta: float) -> void:
 	_dj_label.text = dj_text
 
 ## The music gain a DJ break aims for: ducked while a line is on and there is music
-## to duck, else full. Dale's station has no music, so nothing ducks under him.
+## to duck, else full. Dave's station has no music, so nothing ducks under him.
 static func duck_target(in_break: bool, has_music: bool) -> float:
 	return db_to_linear(DUCK_DB) if in_break and has_music else 1.0
 

@@ -58,7 +58,7 @@ const IMPACT_GAIN := 0.12        # trauma per m/s over the threshold
 ## hidden and a CockpitFrame (dash, pillars, steering wheel) is shown.
 enum View { CHASE, COCKPIT }
 const COCKPIT_EYE := Vector3(-0.30, 1.05, -0.15)  # car-local, -x is the driver's side (left-hand drive)
-const COCKPIT_FOV := 78.0
+const COCKPIT_FOV_SPEED_GAIN := 6.0  # degrees added at top speed; the base is ViewSettings.cockpit_fov (default 62)
 var view := View.CHASE
 var frame: CockpitFrame
 var perspective: PerspectiveAudio
@@ -163,7 +163,7 @@ func _process(delta: float) -> void:
 func _place_cockpit() -> void:
 	var xf := target.get_global_transform_interpolated()
 	global_transform = Transform3D(xf.basis, xf * COCKPIT_EYE)
-	fov = COCKPIT_FOV + 6.0 * speed_t
+	fov = ViewSettings.cockpit_fov + COCKPIT_FOV_SPEED_GAIN * speed_t
 
 ## 0..1 speed factor for FOV, dolly, squat and shake. Ease-out (1 - (1-t)^2):
 ## the range now runs to top speed (68 m/s), so a straight line would leave

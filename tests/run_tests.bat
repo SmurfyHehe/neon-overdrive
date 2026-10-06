@@ -41,11 +41,8 @@ call :run phase_a_engine --headless
 call :run tick_rate_120 "--headless --fixed-fps 120"
 call :run cockpit --headless
 call :run cockpit_interior --headless
-<<<<<<< HEAD
-call :run cockpit_driver --headless
-=======
 call :run cockpit_isolation "--headless --fixed-fps 120"
->>>>>>> feat/cockpit-interior
+call :run cockpit_driver --headless
 call :run tyres "--headless --fixed-fps 60"
 call :run clutch_model --headless
 call :run driveline_audio --headless

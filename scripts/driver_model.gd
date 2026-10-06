@@ -111,6 +111,8 @@ func _ready() -> void:
 		legs[side] = _build_leg(side)
 	for n in find_children("*", "VisualInstance3D", true, false):
 		(n as VisualInstance3D).layers = CockpitFrame.DRIVER_BIT
+		if n is GeometryInstance3D:
+			(n as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF   # visual only, no shadows on the car
 	_last_gear = player.gear
 	_hand_xf = _grip_transform(1)
 	_foot_target = _pedal_ankle("throttle")

@@ -165,8 +165,8 @@ func _check_sightline(p: PlayerCar, frame: CockpitFrame) -> void:
 			var dir := Vector3(0, 0, -1).rotated(Vector3.RIGHT, deg_to_rad(pitch)).rotated(Vector3.UP, yaw)
 			for m in meshes:
 				var mi := m as MeshInstance3D
-				if not mi.mesh is ArrayMesh:
-					continue
+				if not mi.mesh is ArrayMesh or not mi.is_visible_in_tree():
+					continue   # the driver's head and torso are hidden in the cockpit view
 				var xf: Transform3D = to_car * mi.global_transform
 				var mesh := mi.mesh as ArrayMesh
 				for si in mesh.get_surface_count():

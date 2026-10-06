@@ -47,6 +47,7 @@ var game_state: GameState
 var camera: ChaseCamera
 var lbl_cam: Label
 var radio: RadioManager
+var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
 var lbl_gear: Label
 var lbl_speed: Label
@@ -82,6 +83,8 @@ func _ready() -> void:
 	_setup_player()
 	_setup_traffic()
 	_setup_camera()
+	fx = FxPack.new(player, camera)
+	add_child(fx)
 	_setup_debug_hud()
 	_setup_game_state()
 	if benchmark:
@@ -286,6 +289,7 @@ func _shift_origin(shift_chunks: int) -> void:
 		c.root.reset_physics_interpolation()
 	# Traffic (milestone 3): every car gets the same bookkeeping as the player.
 	traffic.shift_world(offset)
+	fx.shift_world(offset)  # skid marks are laid in world space
 	# The ground slab stays put: it is centred on the origin by design.
 	# The camera follows the car's interpolated position in _process, so it
 	# needs nothing here.

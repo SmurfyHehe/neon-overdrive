@@ -50,6 +50,7 @@ call :run tune_params --headless
 call :run auto_tune_rules --headless
 call :run tune_slots --headless
 call :run traffic_spawn "--headless --fixed-fps 60"
+call :run fx_pack --headless
 if /i not "%~1"=="quick" (
 	rem Headless, but ~2 min of simulated driving; --fixed-fps lets physics run faster than the clock.
 	call :run tune_track "--headless --fixed-fps 60"

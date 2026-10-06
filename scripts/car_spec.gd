@@ -201,6 +201,39 @@ static func coupe_default() -> Dictionary:
 		"aero_downforce_coefficient_rear": 0.55,
 	}
 
+## Traffic tune (milestone 3, 2026-10-05): coupe_default() with commuter-car
+## numbers -- a smaller engine, more drag, street tyres, hardly any downforce.
+## Same simulation, different data; the three NPC cars (stage B step 5) replace
+## this with their own dicts. Not measured from a real car.
+static func traffic_default() -> Dictionary:
+	var s := coupe_default()
+	s["vehicle_mass"] = 1250.0
+	s["max_torque"] = 170.0
+	s["max_rpm"] = 6200.0
+	s["coefficient_of_drag"] = 0.32
+	s["frontal_area"] = 2.1
+	s["coefficient_of_friction"] = {"Road": 1.0, "Dirt": 0.8}
+	s["aero_downforce_coefficient_front"] = 0.05
+	s["aero_downforce_coefficient_rear"] = 0.05
+	s["automatic_transmission"] = true
+	s["realistic_clutch"] = false
+	s["turbo_boost_max"] = 0.0
+	return s
+
+## Physics layers (milestone 3). Every car sits on CAR_LAYER and collides with
+## the world (WORLD_LAYER: ground slab, sidewalks, buildings) and with other
+## cars. A Wheel is a RayCast3D on the default mask, layer 1 only, so a wheel
+## never sees a car body. That is not just tidiness: the vendored Wheel takes
+## its tyre numbers from the FIRST group of whatever it hits (gevp_wheel.gd
+## process_forces), a car's first group is "aero_vehicles", and
+## coefficient_of_friction["aero_vehicles"] does not exist.
+const WORLD_LAYER := 1
+const CAR_LAYER := 2
+
+static func set_collision_layers(v: Vehicle) -> void:
+	v.collision_layer = 1 << (CAR_LAYER - 1)
+	v.collision_mask = (1 << (WORLD_LAYER - 1)) | (1 << (CAR_LAYER - 1))
+
 ## Rise-then-taper torque curve, loosely modeled on a real gasoline engine's
 ## band, not measured from anything specific -- same shape every car uses for
 ## now. Built from the shape knobs below (#62) so the tuning panel and, later,

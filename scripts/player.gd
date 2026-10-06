@@ -119,6 +119,9 @@ func _ready() -> void:
 
 	linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
 	linear_damp = LINEAR_DAMP
+	# Milestone 3: cars on their own physics layer, so the wheel raycasts never
+	# land on another car (see CarSpec.set_collision_layers for why that matters).
+	CarSpec.set_collision_layers(self)
 
 	# Vehicle body collision shape -- the RigidBody3D still needs one (wheels
 	# handle ground contact via their own raycasts).

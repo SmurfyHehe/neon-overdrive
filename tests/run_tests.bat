@@ -19,6 +19,8 @@ set "AUDIO=--audio-driver Dummy"
 rem Most tests count physics ticks as sixtieths of a second, so they run at 60 Hz; the game itself runs at 120 (see tick_rate.gd and tests/tick_rate_120.gd).
 if "%NEON_TICKS%"=="" set "NEON_TICKS=60"
 if "%SOUND%"=="1" set "AUDIO="
+rem No traffic for the older drive-bot tests (they steer across lanes blind); the traffic_* tests ignore this and spawn their own.
+if "%NEON_TRAFFIC%"=="" set "NEON_TRAFFIC=0"
 
 set "FAILED="
 call :run smoke --headless
@@ -47,9 +49,13 @@ call :run auto_tune_worker_mode --headless
 call :run tune_params --headless
 call :run auto_tune_rules --headless
 call :run tune_slots --headless
+call :run traffic_spawn "--headless --fixed-fps 60"
 if /i not "%~1"=="quick" (
 	rem Headless, but ~2 min of simulated driving; --fixed-fps lets physics run faster than the clock.
 	call :run tune_track "--headless --fixed-fps 60"
+	rem Traffic (stage B step 3) at the game's 120 Hz tick: ~1 min of dense traffic, then the perf sweep.
+	call :run traffic_stability "--headless --fixed-fps 120"
+	call :run traffic_perf "--headless --fixed-fps 120"
 	call :run auto_tune_search "--headless --fixed-fps 60"
 	call :run auto_tune_job "--headless --fixed-fps 60"
 	rem Key-press tests run headless: a windowed run loses its held keys the moment the window loses focus (found 2026-10-05, it made chunk_drive and feel_pass_1 flaky).

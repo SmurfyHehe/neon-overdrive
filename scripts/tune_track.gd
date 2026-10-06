@@ -27,6 +27,12 @@ extends Node3D
 
 const KMH := 1.0 / 3.6
 const LANE_SPACING := 40.0
+## Where lane 0 sits. Off the game road (x -13..13 m with 4 lanes each way,
+## buildings to about x 23 m) because tests run the track inside the live
+## Game.tscn, and the stage B step 3 player parks in a lane: with lane 0 on
+## x=0 the accel car rear-ended the coasting player (tests/tyres.gd,
+## 2026-10-05). Note: positions move the single-precision results a hair.
+const LANE_X0 := -120.0
 const SETTLE_TIME := 1.0       # car held on the brakes while the suspension settles
 const SHIFT_RPM_FRACTION := 0.97  # upshift at this fraction of the spec's max_rpm
 const ACCEL_TIME := 35.0
@@ -212,7 +218,7 @@ func _make_ground() -> StaticBody3D:
 	box.size = Vector3(3 * LANE_SPACING + 200.0, 2.0, 6000.0)
 	shape.shape = box
 	body.add_child(shape)
-	body.position = Vector3(box.size.x * 0.5 - 100.0, -1.0, -2400.0)
+	body.position = Vector3(LANE_X0 + LANE_SPACING, -1.0, -2400.0)  # centred on the middle lane
 	add_child(body)
 	return body
 
@@ -227,7 +233,7 @@ func _spawn(spec: Dictionary, lane: int, kind: int) -> Run:
 	# TuneTrack shifts by itself (_shift); the game default is automatic now.
 	car.spec["automatic_transmission"] = false
 	car.driver = r.drive
-	car.position = Vector3(lane * LANE_SPACING, 0.3, 0.0)
+	car.position = Vector3(LANE_X0 + lane * LANE_SPACING, 0.3, 0.0)
 	add_child(car)
 	if linear_damp_override >= 0.0:  # after _ready(), which sets the game's value
 		car.linear_damp = linear_damp_override

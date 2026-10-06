@@ -130,11 +130,12 @@ const BARRIER_H := 0.65
 # visually neutral; it is a 5 mm difference, not a deliberate design value.
 const BARRIER_Y := 0.32
 
-# Must match the clampi() ranges in game.gd::_section_at(). The MultiMesh
+# Must match game.gd's lane counts (OWN_LANES / ONC_LANES). The MultiMesh
 # instance buffers are sized for the worst case exactly once, so these cannot
 # be exceeded at runtime -- _apply() clamps defensively rather than overrun.
+# Stage B step 3 (2026-10-05): 4 lanes each way; oncoming was capped at 2.
 const MAX_OWN_LANES := 4
-const MAX_ONC_LANES := 2
+const MAX_ONC_LANES := 4
 
 # Road paint (stage A): plain white and yellow, with just enough emission to
 # read at night like retroreflective paint -- below the 1.0 glow threshold.

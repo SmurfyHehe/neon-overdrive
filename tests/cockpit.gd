@@ -67,6 +67,7 @@ func _physics_process(_delta: float) -> bool:
 				_check(fwd.dot(car_fwd) > 0.99, "the cockpit camera should face where the car faces (dot %.3f)" % fwd.dot(car_fwd))
 				_check(not p.chassis_visual.visible, "the body should be hidden in the cockpit")
 				_check(cam.frame.visible, "the cockpit frame should be shown")
+				_check(cam.fov >= ViewSettings.cockpit_fov and cam.fov <= ViewSettings.cockpit_fov + ChaseCamera.COCKPIT_FOV_SPEED_GAIN + 0.01, "the cockpit FOV should be the setting (%.0f) plus up to %.0f for speed, got %.2f" % [ViewSettings.cockpit_fov, ChaseCamera.COCKPIT_FOV_SPEED_GAIN, cam.fov])
 				_check(absf(cam.frame.wheel.rotation.y) > 0.3, "the wheel should turn with the steering (%.2f)" % cam.frame.wheel.rotation.y)
 				_go(Step.BLEND_IN)
 		Step.BLEND_IN:

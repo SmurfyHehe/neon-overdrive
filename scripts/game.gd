@@ -57,6 +57,7 @@ func _ready() -> void:
 		return
 	AudioSettings.load_settings()
 	TrafficSettings.load_settings()
+	ViewSettings.load_settings()
 	# NEON_TRAFFIC=<n> overrides the saved car count, like NEON_TICKS/NEON_MUTE:
 	# tests/run_tests.bat sets 0 so the older drive-bot tests, which steer
 	# across lanes blind, do not hit traffic (tests/traffic_*.gd clear it).

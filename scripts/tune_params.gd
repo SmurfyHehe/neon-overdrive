@@ -20,6 +20,7 @@ const NONE := ""
 const TIRE := "tire"      # Road tire entries: wheels cache them per surface
 const BRAKE := "brake"    # max_brake_force is derived from friction and the multiplier
 const ENGINE := "engine"  # max_clutch_torque and the torque curve are derived from these
+const TYRE_SETUP := "tyre_setup"  # pressure and camber are pushed onto the wheels (Vehicle.apply_tyre_setup)
 
 # "auto": Auto-Tune may change it. The engine entries are raw-panel only until
 # engine tuning joins Auto-Tune (with tier caps).
@@ -54,6 +55,12 @@ static func all() -> Array[Dictionary]:
 		_entries.append(_e("coefficient_of_friction/Road", "Tire friction", 1.0, 2.5, TIRE))
 		_entries.append(_e("lateral_grip_assist/Road", "Lateral grip assist", 0.0, 0.2, TIRE))
 		_entries.append(_e("longitudinal_grip_ratio/Road", "Longitudinal grip", 0.5, 1.2, TIRE))
+		# Tuner redesign PR 1: not Auto-Tune until the calibration sweep has run
+		# with it (proposal section 9).
+		_entries.append(_e("front_tyre_pressure", "Tyre pressure front bar", 1.6, 2.8, TYRE_SETUP, false))
+		_entries.append(_e("rear_tyre_pressure", "Tyre pressure rear bar", 1.6, 2.8, TYRE_SETUP, false))
+		_entries.append(_e("front_static_camber", "Camber front deg", -4.0, 1.0, TYRE_SETUP, false))
+		_entries.append(_e("rear_static_camber", "Camber rear deg", -4.0, 1.0, TYRE_SETUP, false))
 	return _entries
 
 ## The paths Auto-Tune is allowed to change.

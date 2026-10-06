@@ -93,6 +93,8 @@ static func _rederive(v: Vehicle, spec: Dictionary, kind: String) -> void:
 			w.current_tire_stiffness = 1000000.0 + 8000000.0 * w.tire_stiffnesses[s]
 	if kind == TuneParams.TIRE or kind == TuneParams.BRAKE:
 		v.calculate_brake_force()
+	if kind == TuneParams.TYRE_SETUP:
+		v.apply_tyre_setup()
 
 ## Baseline tuning -- currently identical to what PlayerCar shipped with
 ## (2026-09-13 physics rewrite + power/top-speed passes), NOT yet meaningfully
@@ -137,6 +139,16 @@ static func coupe_default() -> Dictionary:
 		# motor_drag stays at the default 0.005: 0.007 cost ~10 km/h of top speed.
 		"automatic_transmission": true,
 		"tyre_load_sensitivity": 0.12,  # Phase C: weight transfer costs grip (real tyres 0.1-0.3); 0 = off
+		# Tuner redesign PR 1: tyre pressure (bar) and static camber (deg). The
+		# *_stock values are this car's factory setup; the tuner moves the others,
+		# and every effect is measured against stock (gevp_wheel.gd, item 12).
+		"front_tyre_pressure": 2.2,
+		"rear_tyre_pressure": 2.2,
+		"tyre_pressure_stock": 2.2,
+		"front_static_camber": 0.0,
+		"rear_static_camber": 0.0,
+		"front_static_camber_stock": 0.0,
+		"rear_static_camber_stock": 0.0,
 		"realistic_clutch": false,  # Phase C: clutch pedal, stall and starter; on in the MANUAL gearbox mode (G cycles auto / semi / manual)
 		"turbo_boost_max": 0.0,  # Phase B: 0 = naturally aspirated; the T tuner can add boost
 		"brake_selects_reverse": false,  # R picks reverse (Roy); S only brakes

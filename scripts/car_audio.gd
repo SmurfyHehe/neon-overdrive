@@ -22,7 +22,8 @@ const LOOP_SECS := 2.0
 const FADE_SECS := 0.15  # crossfade baked into each loop so the seam is silent
 
 # Speed curves, m/s.
-const WIND_FULL := 45.0   # wind reaches full level here (it rises with v^2)
+const WIND_FULL := 68.0   # wind reaches full level here (68 m/s = 245 km/h, top speed)
+const WIND_EXP := 1.5     # level = (v / WIND_FULL)^WIND_EXP. Was v^2 up to 45 m/s; a gentler exponent keeps everyday speeds from going quiet on the longer range.
 const ROAD_FULL := 40.0
 const SURFACE_FULL := 20.0
 
@@ -97,7 +98,7 @@ func _process(delta: float) -> void:
 	var on_road := float(grounded - rough) / 4.0
 	var on_rough := float(rough) / 4.0
 
-	wind_level = _approach(wind_level, minf(1.0, pow(speed / WIND_FULL, 2.0)), delta)
+	wind_level = _approach(wind_level, minf(1.0, pow(speed / WIND_FULL, WIND_EXP)), delta)
 	road_level = _approach(road_level, pow(clampf(speed / ROAD_FULL, 0.0, 1.0), 1.2) * on_road, delta)
 	# A tyre sliding at walking pace doesn't scream; fade squeal in by 3 m/s
 	# unless the wheel itself is spinning (a burnout squeals standing still).

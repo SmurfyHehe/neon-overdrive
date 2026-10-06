@@ -167,38 +167,37 @@ func _setup_world() -> void:
 func _setup_ground_collision() -> void:
 	var body := StaticBody3D.new()
 	var shape := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	# One big flat slab under the whole play area instead of per-chunk
+	# One flat ground under the whole play area instead of per-chunk
 	# collision -- the road is flat, so a single static shape is simplest
 	# and cheapest. Revisit if/when terrain height ever varies.
 	#
-	# BUG FIX (2026-09-12): this slab used to run from z=-200000 to z=0,
-	# which put its edge EXACTLY at the player's spawn point. The rear axle
-	# (at local z=+1.05) sat past that edge over empty space from frame one
-	# -- there's even a real visual road chunk back there (chunk index -1,
-	# CHUNKS_BEHIND=1, spans z=0 to +CHUNK_LEN=50) that the ground never
-	# covered. Only the front wheels ever found ground; the ungrounded rear
-	# axle torqued the car into a slow backflip and off the map every time.
-	# Shifting the slab forward by CHUNK_LEN covers that behind-chunk with
-	# margin to spare.
+	# History: it was a BoxShape3D slab. BUG FIX (2026-09-12): its edge once
+	# sat exactly at the spawn point, so the rear axle hung over nothing and
+	# the car backflipped off the map. Floating origin (issue #26) then cut it
+	# down to recenter_dist plus margin either way.
 	#
-	# Floating origin (issue #26): the car never gets more than
-	# recenter_dist from z=0 now, so the slab only has to cover that range
-	# plus margin either way (ahead, and behind for reversing) -- it never
-	# moves, and there is no far wall any more.
-	var ahead := recenter_dist + 500.0
-	var behind := recenter_dist + 100.0
-	box.size = Vector3(200.0, 2.0, ahead + behind)
-	shape.shape = box
-	shape.position = Vector3(0.0, -1.0, (behind - ahead) / 2.0)
+	# BUG FIX (2026-10-06, tests/recenter_kick.gd): now an infinite plane. At
+	# ~240 km/h the rear-bottom edge of the chassis collision box rides on the
+	# ground (aero downforce + squat), and box-vs-box with an edge lying flat
+	# on a face is ill-conditioned: on some ticks Godot's separating-axis test
+	# picks an edge-edge axis, the contact normal tilts 1-2 degrees and one
+	# step throws the car up and sideways. The rear springs over-extend, GEVP
+	# drops the rear tyre forces for a few ticks and the car weaves at 3-12
+	# m/s^2. It showed up ~0.5-1.5 s after a floating-origin recenter because
+	# recentering sends the car over the same stretch of slab again and again
+	# at full speed and the bad ticks depend on float rounding at that spot;
+	# with the slab moved along with the world on each recenter the run was
+	# clean. A plane has no edges, so the contact normal is always straight up,
+	# and it needs no size, so it no longer depends on recenter_dist.
+	shape.shape = WorldBoundaryShape3D.new()  # the plane y=0, solid below
 	body.add_child(shape)
 	# Physics rewrite (2026-09-13): the vendored Wheel raycast identifies
 	# surface type by the FIRST group on whatever collision body it hits
-	# (see scripts/vendor/gevp/gevp_wheel.gd process_forces). This base slab
+	# (see scripts/vendor/gevp/gevp_wheel.gd process_forces). This ground plane
 	# is the road+shoulder+curb surface, so it's tagged "Road" -- the raised
 	# sidewalk collision added per-chunk in road_chunk_builder.gd sits
 	# slightly higher and is tagged "Dirt", so a wheel over the sidewalk hits
-	# that closer box first regardless of this slab extending underneath it.
+	# that closer box first regardless of this plane extending underneath it.
 	body.add_to_group("Road")
 	add_child(body)
 
@@ -282,7 +281,7 @@ func _shift_origin(shift_chunks: int) -> void:
 		c.root.reset_physics_interpolation()
 	# Traffic (milestone 3): every car gets the same bookkeeping as the player.
 	traffic.shift_world(offset)
-	# The ground slab stays put: it is centred on the origin by design.
+	# The ground plane stays put: it is infinite.
 	# The camera follows the car's interpolated position in _process, so it
 	# needs nothing here.
 

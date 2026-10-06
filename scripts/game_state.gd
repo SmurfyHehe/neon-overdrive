@@ -14,9 +14,10 @@ extends Node
 # The physics tick rate is 120 Hz (GEVP recommends at least 120 and breaks at
 # 30 Hz); see tick_rate.gd.
 
-# TUNING (#62) is the debug tuning panel: paused like PAUSED, but the panel
-# shows instead of the pause menu.
-# AUTOTUNE is the Auto-Tune panel (paused like TUNING). Its search runs in a
+# TUNING (#62) and AUTOTUNE are the two ways of opening the one Tuner screen
+# (scripts/tuner_screen.gd): paused like PAUSED, but the screen shows instead of
+# the pause menu. TUNING shows it with the Auto-Tune section collapsed (T),
+# AUTOTUNE with it expanded (Y). The Auto-Tune search runs in a
 # separate headless Godot process (scripts/auto_tune_job.gd), because the game's
 # physics can neither run faster than real time nor be stepped by hand.
 enum State { PLAYING, PAUSED, TUNING, AUTOTUNE }
@@ -25,16 +26,40 @@ signal state_changed(new_state: State, old_state: State)
 
 var state: State = State.PLAYING
 
+# T, Y and Esc are polled, which means a key typed into a text field (a tune slot
+# name) would also switch tabs or close the tuner. _input() runs before the GUI
+# sees the key, so it can tell whether a text control had focus when the key went
+# down; the poll then skips that press.
+const TEXT_GUARDED := [&"pause", &"tuning_panel", &"autotune_panel"]
+var _typed_into_text: Dictionary = {}
+
+## True for the two states that show the Tuner screen.
+static func is_tuner(s: State) -> bool:
+	return s == State.TUNING or s == State.AUTOTUNE
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
+## True while a text control (LineEdit, TextEdit) has keyboard focus.
+func typing_in_text() -> bool:
+	var focused := get_viewport().gui_get_focus_owner()
+	return focused is LineEdit or focused is TextEdit
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and typing_in_text():
+		for action in TEXT_GUARDED:
+			if event.is_action(action):
+				_typed_into_text[action] = true
+
 # Polled like all game input (#30), not an event handler.
 func _physics_process(_delta: float) -> void:
-	if Input.is_action_just_pressed("pause"):
+	var blocked := _typed_into_text
+	_typed_into_text = {}
+	if Input.is_action_just_pressed("pause") and not blocked.has(&"pause"):
 		toggle_pause()
-	elif Input.is_action_just_pressed("tuning_panel"):
+	elif Input.is_action_just_pressed("tuning_panel") and not blocked.has(&"tuning_panel"):
 		toggle_tuning()
-	elif Input.is_action_just_pressed("autotune_panel"):
+	elif Input.is_action_just_pressed("autotune_panel") and not blocked.has(&"autotune_panel"):
 		toggle_autotune()
 
 func toggle_pause() -> void:

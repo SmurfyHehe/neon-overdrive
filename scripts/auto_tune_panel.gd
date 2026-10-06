@@ -1,14 +1,19 @@
 class_name AutoTunePanel
-extends CanvasLayer
+extends VBoxContainer
 
-# Auto-Tune panel (step 6). Y opens it (GameState.AUTOTUNE, game paused like the
-# raw T panel), Y or Esc closes it. Pick what to improve (goals, weight 0-3),
+# Auto-Tune panel (step 6), the collapsible add-on section of the Tuner screen
+# (scripts/tuner_screen.gd). Y opens the screen with this section expanded
+# (GameState.AUTOTUNE, game paused), T collapses it, Esc closes the screen. Pick what to improve (goals, weight 0-3),
 # lock what must not change, press Run; the search runs in a separate headless
 # Godot process (AutoTuneJob) on the hidden test track and offers the best
 # verified tune with before/after numbers. Apply writes it through
 # CarSpec.set_param(), the same path as the raw T panel, which is unchanged.
 #
 # Debug tool, deliberately plain Godot default controls, like the raw panel.
+
+## The car's tune changed (Apply, Undo, a loaded slot): the sliders next to this
+## section show the old values until they are told to refresh.
+signal tune_changed
 
 const BUDGETS := [["Quick (30 runs)", 30], ["Normal (60 runs)", 60], ["Thorough (120 runs)", 120]]
 const DEFAULT_BUDGET := 1
@@ -53,27 +58,13 @@ func _init(car: PlayerCar, state: GameState) -> void:
 	game_state = state
 
 func _ready() -> void:
-	process_mode = Node.PROCESS_MODE_ALWAYS
-	layer = 10
-	visible = false
-
-	var panel := PanelContainer.new()
-	panel.position = Vector2(16, 40)
-	var bg := StyleBoxFlat.new()
-	bg.bg_color = Color(0.03, 0.02, 0.07, 0.94)
-	bg.set_content_margin_all(10)
-	panel.add_theme_stylebox_override("panel", bg)
-	add_child(panel)
 	var columns := HBoxContainer.new()
 	columns.add_theme_constant_override("separation", 24)
-	panel.add_child(columns)
+	add_child(columns)
 
 	# --- left: goals, budget, buttons ---
 	var left := VBoxContainer.new()
 	columns.add_child(left)
-	var title := Label.new()
-	title.text = "AUTO-TUNE  -  Y or Esc to close, game paused"
-	left.add_child(title)
 	left.add_child(_heading("Goals (0 = off)"))
 	var grid := GridContainer.new()
 	grid.columns = 3
@@ -120,6 +111,10 @@ func _ready() -> void:
 	slot_name_edit.placeholder_text = "slot name"
 	slot_name_edit.max_length = TuneSlots.MAX_NAME_LENGTH
 	slot_name_edit.custom_minimum_size = Vector2(180, 0)
+	slot_name_edit.gui_input.connect(_on_slot_name_input)
+	slot_name_edit.text_submitted.connect(func(_t: String) -> void:
+		_on_save_slot()
+		slot_name_edit.release_focus())
 	save_row.add_child(slot_name_edit)
 	save_button = _button(save_row, "Save", _on_save_slot)
 	slot_list = ItemList.new()
@@ -144,11 +139,11 @@ func _ready() -> void:
 		locks.add_child(cb)
 		lock_boxes[path] = cb
 
-	# --- right: result ---
+	# --- below: result ---
 	result_label = Label.new()
 	result_label.add_theme_font_override("font", _mono_font())
 	result_label.custom_minimum_size = Vector2(420, 0)
-	columns.add_child(result_label)
+	add_child(result_label)
 
 	game_state.state_changed.connect(_on_state_changed)
 	_refresh_slots()
@@ -175,17 +170,11 @@ func _mono_font() -> Font:
 # ---------- open / close ----------
 
 func _on_state_changed(new_state: GameState.State, old_state: GameState.State) -> void:
-	visible = new_state == GameState.State.AUTOTUNE
-	if visible:
-		_refresh_lock_labels()
+	if GameState.is_tuner(new_state):
+		refresh_lock_labels()
 		_refresh_buttons()
-	elif old_state == GameState.State.AUTOTUNE:
-		if running:
-			_on_cancel()  # leaving the panel stops the search
-		# Sliders and checkboxes keep keyboard focus otherwise and eat game keys.
-		var focused := get_viewport().gui_get_focus_owner()
-		if focused:
-			focused.release_focus()
+	elif GameState.is_tuner(old_state) and running:
+		_on_cancel()  # leaving the Tuner screen stops the search
 
 # ---------- request ----------
 
@@ -207,7 +196,9 @@ func request() -> Dictionary:
 func budget() -> int:
 	return budget_override if budget_override > 0 else BUDGETS[budget_option.selected][1]
 
-func _refresh_lock_labels() -> void:
+## The Lock checkboxes show the car's current value; the Tuner screen calls this
+## when the gearing sliders change it.
+func refresh_lock_labels() -> void:
 	for path in lock_boxes:
 		var e := TuneParams.find(path)
 		lock_boxes[path].text = "%s  %.2f" % [e.label, TuneParams.get_value(player.spec, path)]
@@ -325,7 +316,7 @@ func _on_apply() -> void:
 	status_label.text = "Applied. The car now drives with this tune."
 	result = {}
 	result_label.text = ""
-	_refresh_lock_labels()
+	refresh_lock_labels()
 	_refresh_buttons()
 
 func _on_undo() -> void:
@@ -334,7 +325,7 @@ func _on_undo() -> void:
 	_write(undo_spec)
 	undo_spec = {}
 	status_label.text = "Undone."
-	_refresh_lock_labels()
+	refresh_lock_labels()
 	_refresh_buttons()
 
 ## Writes every tunable value that differs, through the single write path. All
@@ -345,6 +336,7 @@ func _write(spec: Dictionary) -> void:
 		var v := TuneParams.get_value(spec, e.path)
 		if absf(TuneParams.get_value(player.spec, e.path) - v) > 1e-9:
 			CarSpec.set_param(player, player.spec, e.path, v)
+	tune_changed.emit()
 
 # ---------- tune slots ----------
 
@@ -359,6 +351,13 @@ func _refresh_slots(select := "") -> void:
 func _selected_slot() -> String:
 	var sel := slot_list.get_selected_items()
 	return "" if sel.is_empty() else slot_list.get_item_text(sel[0])
+
+## Esc in the name field leaves the field (GameState ignores that Esc, so the
+## Tuner screen stays open); a second Esc closes the screen.
+func _on_slot_name_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel"):
+		slot_name_edit.release_focus()
+		slot_name_edit.accept_event()
 
 func _on_slot_selected(index: int) -> void:
 	slot_name_edit.text = slot_list.get_item_text(index)
@@ -390,8 +389,9 @@ func _on_load_slot() -> void:
 	status_label.text = "Loaded '%s'. The car now drives with this tune." % n
 	if not AutoTuneRules.violations(player.spec, {}, player.spec).is_empty():
 		status_label.text += " (Its gears are out of order or out of range.)"
-	_refresh_lock_labels()
+	refresh_lock_labels()
 	_refresh_buttons()
+	tune_changed.emit()
 
 func _on_delete_slot() -> void:
 	var n := _selected_slot()

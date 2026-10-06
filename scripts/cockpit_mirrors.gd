@@ -28,13 +28,13 @@ const GLASS_TINT := Color(0.86, 0.87, 0.92)
 const DARK_GLASS := Color("#171A20")
 
 ## Rearview glass: centre, size, and the angle that reflects straight back for the eye.
-const REAR_POS := Vector3(0.0, 1.17, 0.0)
+const REAR_POS := Vector3(0.0, 1.16, -0.10)
 const REAR_SIZE_M := Vector2(0.24, 0.072)
 const REAR_YAW := -23.0
 const REAR_PITCH := -8.0
 ## Door glass angles (yaw about +y, same sense as the housings in P1CoupeBuilder).
 const SIDE_GLASS_YAW := [17.0, -26.0]
-const SIDE_SIZE_M := Vector2(0.155, 0.085)
+const SIDE_SIZE_M := Vector2(0.175, 0.098)
 ## The glass sits this far inside the housing's open face.
 const SIDE_INSET := 0.02
 
@@ -87,10 +87,11 @@ func _add_mirror(mirror_name: String, pos: Vector3, size_m: Vector2, yaw_deg: fl
 	if env != null:
 		cam.environment = env
 	vp.add_child(cam)
-	# The camera hangs in car space at the glass, looking straight back (+z is
-	# the car's rear), yawed outward for the door mirrors.
-	cam.position = pos
-	cam.rotation_degrees = Vector3(SIDE_PITCH if cam_yaw_out != 0.0 else 0.0, 180.0 - cam_yaw_out, 0.0)
+	# The camera sits in car space at the glass, looking straight back (+z is
+	# the car's rear), yawed outward for the door mirrors. A SubViewport is not
+	# a Node3D, so its camera does not inherit this node's transform: the
+	# car-local transform is kept and applied every frame in _process.
+	var local := Transform3D(Basis.from_euler(Vector3(deg_to_rad(SIDE_PITCH if cam_yaw_out != 0.0 else 0.0), deg_to_rad(180.0 - cam_yaw_out), 0.0)), pos)
 	cam.current = true
 
 	var quad := MeshInstance3D.new()
@@ -110,7 +111,8 @@ func _add_mirror(mirror_name: String, pos: Vector3, size_m: Vector2, yaw_deg: fl
 	quad.rotation_degrees = Vector3(pitch_deg, yaw_deg, 0.0)
 	quad.layers = CockpitFrame.INTERIOR_BIT
 	add_child(quad)
-	views.append({"vp": vp, "cam": cam, "quad": quad, "mat": mat})
+	views.append({"vp": vp, "cam": cam, "quad": quad, "mat": mat, "local": local})
+	cam.global_transform = global_transform * local
 
 ## Cockpit view on or off: nothing renders while off.
 func set_active(on: bool) -> void:
@@ -142,9 +144,14 @@ func is_rendering() -> bool:
 			return true
 	return false
 
+## Moves the cameras with the car (drawn on the interpolated transform, like the
+## cockpit camera) and queues this frame's mirror.
 func _process(_delta: float) -> void:
 	if not active or not enabled or views.is_empty():
 		return
+	var xf := get_global_transform_interpolated()
+	for v in views:
+		v.cam.global_transform = xf * v.local
 	_frame += 1
 	# UPDATE_ONCE draws on the next frame and drops back to DISABLED by itself.
 	if _frame % 2 == 0:

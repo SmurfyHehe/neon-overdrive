@@ -44,7 +44,7 @@ const CLUSTER_Z := -0.349
 const DIAL_R := 0.07
 const DIAL_SWEEP := 270.0   # degrees from empty (lower left) to full (lower right)
 const SPEEDO_MAX_KMH := 300.0
-const LEVER_LEN := 0.19
+const LEVER_LEN := 0.23
 const LEVER_ROW_TILT := 16.0   # degrees fore/aft for a gear slot
 const LEVER_COL_TILT := 11.0   # degrees left/right per column
 const LEVER_SPEED := 9.0       # slot units per second along the gate path
@@ -223,12 +223,12 @@ func _build_static() -> void:
 	# Roof liner, windshield header, sun visors.
 	k.box(Vector3(1.36, 0.02, 0.80), Vector3(0.0, 1.295, 0.35), PLASTIC_LIGHT)
 	k.box(Vector3(1.30, 0.05, 0.08), Vector3(0.0, 1.30, -0.03), PLASTIC)
-	for sx in [SEAT_X, -SEAT_X]:
-		k.box(Vector3(0.42, 0.012, 0.15), Vector3(sx, 1.275, 0.06), LEATHER, Basis(Vector3.RIGHT, deg_to_rad(-6.0)))
+	for sx in [SEAT_X, -SEAT_X]:   # folded up against the liner, above the view line
+		k.box(Vector3(0.42, 0.012, 0.15), Vector3(sx, 1.283, 0.13), LEATHER, Basis(Vector3.RIGHT, deg_to_rad(-4.0)))
 	# Rearview mirror housing and stalk (the glass is a CockpitMirrors quad).
 	var rb := Basis(Vector3.UP, deg_to_rad(CockpitMirrors.REAR_YAW)) * Basis(Vector3.RIGHT, deg_to_rad(CockpitMirrors.REAR_PITCH))
 	k.box(Vector3(0.265, 0.09, 0.025), CockpitMirrors.REAR_POS + rb * Vector3(0, 0, -0.014), PLASTIC, rb)
-	k.box(Vector3(0.02, 0.09, 0.02), Vector3(0.0, 1.235, -0.03), PLASTIC)
+	k.box(Vector3(0.02, 0.10, 0.02), CockpitMirrors.REAR_POS + Vector3(0.0, 0.085, -0.02), PLASTIC)
 	# Floor, footwell and firewall; rear bulkhead. (The door mirror cups are on
 	# the body, P1CoupeBuilder; the parcel shelf is its own mesh, see _ready.)
 	k.box(Vector3(1.70, 0.04, 1.40), Vector3(0.0, 0.27, 0.15), CARPET)
@@ -292,8 +292,8 @@ func _build_cluster() -> void:
 	add_child(lamps)
 	lamp_text = _label("ENG   BRK   TYR   CLT", 14, Vector3(SEAT_X, 1.066, CLUSTER_Z + 0.002), SILVER, 0.00045)
 	lamp_text.name = "LampText"
-	_label("x1000 rpm", 14, Vector3(SEAT_X - 0.10, 0.978, CLUSTER_Z + 0.002), AMBER, 0.0004)
-	_label("km/h", 14, Vector3(SEAT_X + 0.10, 0.978, CLUSTER_Z + 0.002), AMBER, 0.0004)
+	_label("x1000 rpm", 26, Vector3(SEAT_X - 0.10, 0.984, CLUSTER_Z + 0.002), AMBER, 0.0005)
+	_label("km/h", 26, Vector3(SEAT_X + 0.10, 0.984, CLUSTER_Z + 0.002), AMBER, 0.0005)
 
 func _needle(at: Vector3, node_name: String) -> Node3D:
 	var pivot := Node3D.new()
@@ -330,7 +330,7 @@ func _build_radio() -> void:
 	for i in 4:
 		k.box(Vector3(0.018, 0.008, 0.004), Vector3(-0.045 + 0.03 * i, 0.772, -0.258), PLASTIC_LIGHT)
 	add_child(k.instance(CockpitKit.material(0.6, 0.2), "Radio"))
-	radio_label = _label("RADIO OFF", 16, Vector3(0.0, 0.806, -0.257), AMBER, 0.00045)
+	radio_label = _label("RADIO OFF", 30, Vector3(0.0, 0.808, -0.257), AMBER, 0.00045)
 	radio_label.name = "RadioLabel"
 
 ## Where a reaching hand presses (next PR), car space.
@@ -342,7 +342,7 @@ func radio_button_position() -> Vector3:
 func _build_lever() -> void:
 	lever = Node3D.new()
 	lever.name = "Lever"
-	lever.position = Vector3(0.0, 0.60, -0.02)
+	lever.position = Vector3(0.0, 0.615, -0.02)
 	var k := CockpitKit.new()
 	k.cylinder(0.008, 0.0, LEVER_LEN - 0.02, Vector3.ZERO, SILVER, 8)
 	k.cylinder(0.02, 0.0, 0.02, Vector3.ZERO, LEATHER, 8)   # boot collar

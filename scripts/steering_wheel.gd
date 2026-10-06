@@ -84,7 +84,11 @@ func _build_body() -> void:
 	# driver and inward, the top and bottom sections carbon with alternating
 	# shades for the weave.
 	const SEGS := 56
-	const SIDES := 8
+	# Tube cross-section angles: 0 = outward, 90 = toward the driver, 180 =
+	# inward; the narrow 118..130 face is the stitch seam (about 3.5 mm).
+	const PHIS := [0.0, 45.0, 90.0, 118.0, 130.0, 180.0, 225.0, 270.0, 315.0]
+	const SEAM := 3
+	var SIDES := PHIS.size()
 	var rings := []
 	for s in SEGS + 1:
 		var t := TAU * float(s % SEGS) / SEGS
@@ -96,7 +100,7 @@ func _build_body() -> void:
 			radial = Vector3(0.0, -1.0, 0.0)   # the flat chord: tube offset straight down
 		var ring := []
 		for j in SIDES:
-			var phi := TAU * float(j) / SIDES
+			var phi := deg_to_rad(float(PHIS[j]))
 			ring.append(Vector3(c.x, c.y, 0.0) + radial * (r * cos(phi)) + Vector3(0, 0, r * sin(phi)))
 		rings.append(ring)
 	for s in SEGS:
@@ -106,8 +110,8 @@ func _build_body() -> void:
 			var k := (j + 1) % SIDES
 			var col := LEATHER
 			if grip:
-				if j == 2:
-					col = STITCH          # seam between the driver-facing and inward faces
+				if j == SEAM:
+					col = STITCH          # the seam, between the driver-facing and inward faces
 			else:
 				col = CARBON if (s % 2 == 0) else CARBON_ALT
 			kit.quad(rings[s][j], rings[s + 1][j], rings[s + 1][k], rings[s][k], col)
@@ -124,7 +128,7 @@ func _build_body() -> void:
 	# Button housings on the side spokes (the lit dots are MultiMesh instances).
 	for sx in [-1.0, 1.0]:
 		kit.box(Vector3(0.028, 0.026, 0.006), Vector3(sx * 0.085, 0.0, 0.008), PAD)
-	body = kit.instance(CockpitKit.material(0.7, 0.15), "WheelBody")
+	body = kit.instance(CockpitKit.material(0.7, 0.1, 0.15), "WheelBody")
 	add_child(body)
 
 ## LED positions along the top plate, outer ends first (index 0 and 14 at the

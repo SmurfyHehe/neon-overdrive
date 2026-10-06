@@ -48,10 +48,10 @@ const GLOW_ENERGY := 2.5
 ## toward the driver. Centre in body space (before BODY_LIFT) and the yaw of the
 ## open face about +y; the cockpit's mirror glass and cameras sit in them.
 const MIRRORS := [
-	{"pos": Vector3(-1.00, 0.86, -0.58), "yaw": 12.0},
-	{"pos": Vector3(1.00, 0.86, -0.58), "yaw": -20.0},
+	{"pos": Vector3(-1.01, 0.86, -0.55), "yaw": 12.0},
+	{"pos": Vector3(1.01, 0.86, -0.55), "yaw": -20.0},
 ]
-const MIRROR_SIZE := Vector3(0.19, 0.11, 0.10)
+const MIRROR_SIZE := Vector3(0.21, 0.125, 0.10)
 const MIRROR_INSIDE := Color("#0B0E14")
 ## Faces whose colour is the paint: flagged in the vertex alpha so one surface
 ## carries paint and trim and the paint can still change at runtime.

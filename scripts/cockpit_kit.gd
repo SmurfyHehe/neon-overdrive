@@ -163,11 +163,14 @@ func instance(mat: Material, node_name := "") -> MeshInstance3D:
 	return mi
 
 ## Vertex-colour material. Shaded, so the cabin light gives the shapes form.
-static func material(roughness := 0.85, metallic := 0.0) -> StandardMaterial3D:
+## Specular is low by default: on near-black plastics Godot's default 0.5
+## reflects the orange night sky and turns the whole cabin olive-brown.
+static func material(roughness := 0.85, metallic := 0.0, specular := 0.08) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.vertex_color_use_as_albedo = true
 	m.roughness = roughness
 	m.metallic = metallic
+	m.metallic_specular = specular
 	return m
 
 const GLOW_SHADER := """

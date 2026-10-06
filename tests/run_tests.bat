@@ -56,6 +56,7 @@ call :run tyres "--headless --fixed-fps 60"
 call :run clutch_model --headless
 call :run driveline_audio --headless
 call :run radio --headless
+call :run view_settings --headless
 call :run powertrain_health "--headless --fixed-fps 60"
 call :run turbo "--headless --fixed-fps 60"
 call :run chassis_targets "--headless --fixed-fps 60"
@@ -74,6 +75,7 @@ if /i not "%~1"=="quick" (
 	call :run tune_track "--headless --fixed-fps 60"
 	rem Traffic (stage B step 3) at the game's 120 Hz tick: ~1 min of dense traffic, then the perf sweep.
 	call :run traffic_stability "--headless --fixed-fps 120"
+	call :run traffic_behaviour "--headless --fixed-fps 120"
 	call :run traffic_perf "--headless --fixed-fps 120"
 	call :run auto_tune_search "--headless --fixed-fps 60"
 	call :run auto_tune_job "--headless --fixed-fps 60"

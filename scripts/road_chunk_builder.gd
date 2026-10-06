@@ -63,9 +63,8 @@ class_name RoadChunkBuilder
 # - narrower road: shoulder 1.6 -> 0.9 m, buildings 0.5 m behind the
 #   sidewalk instead of 1.0, and the lane-count cap moved from 4 to 3 in
 #   game.gd::_section_at(). The sidewalk stays 2.2 m (a drivable risk/reward
-#   shortcut by design; 1.8 m was tried and barely fit the car). LANE_W is
-#   unchanged on purpose (2.3 m is already narrower than a real lane, and
-#   traffic needs it).
+#   shortcut by design; 1.8 m was tried and barely fit the car). LANE_W was
+#   left at 2.3 m then; traffic milestone 4 widened it (see LANE_W).
 # - dense roadside detail, all MultiMesh: sodium street lamps every 25 m per
 #   side (staggered), a fake light pool on the road under each one (additive
 #   decal-style quad, zero lighting cost), posts every 5 m, and concrete walls
@@ -86,7 +85,14 @@ class_name RoadChunkBuilder
 # real roads mark both. Tapering would mean dividers appearing and
 # disappearing mid-span for a worse-looking result.
 
-const LANE_W := 2.3
+# Lane width. 2.3 m until traffic milestone 4 (2026-10-06, Roy's call after the
+# audit): with ~1.8-2.1 m cars that left about 0.25 m either side, and the
+# scripted player sideswiped oncoming traffic within seconds at 240 km/h.
+# Real highway lanes are 3.5-3.7 m; 3.2 m keeps the road a little tight for
+# the sense of speed and leaves ~1.1 m between bodies in adjacent lanes.
+# Everything else across the road (shoulder, curb, sidewalk, buildings,
+# lamps, lane dashes, traffic lane centres) is laid out from this constant.
+const LANE_W := 3.2
 const CHUNK_LEN := 50.0
 const DASH_SPACING := 4.0
 const SHOULDER_W := 0.9

@@ -541,3 +541,99 @@ static func build_wheel_visual(kind: String) -> Node3D:
 	root.add_child(_build_alloy_wheel(cfg.wheel_r, rim_mat, hub_mat))
 
 	return root
+
+# ---------- shared, merged visuals for traffic (traffic milestone 4) ----------
+# build_chassis_visual() and build_wheel_visual() make a fresh node tree with
+# fresh meshes and materials every call: about 17 MeshInstance3D for a coupe
+# body and 8 per wheel, so ~49 draw calls per traffic car, and 40 cars meant
+# 40 copies of identical resources. The shared versions build that same tree
+# once per (kind, colour) (wheels: per kind), bake it into ONE ArrayMesh with
+# one surface per distinct material, and hand every car a single
+# MeshInstance3D pointing at the cached mesh. Same vertices, normals and
+# materials, so it looks the same; it is one draw call per material instead
+# of one per box. Measured 2026-10-06 (windowed, all cars in view): see the
+# traffic milestone 4 PR for the numbers.
+# recolor() does not work on these (the material is shared by every car of
+# that colour); traffic never recolours.
+
+static var _chassis_cache := {}  # "kind|rrggbbaa" -> ArrayMesh
+static var _wheel_cache := {}    # kind -> ArrayMesh
+
+static func shared_chassis_visual(kind: String, color: Color) -> Node3D:
+	var cfg: Dictionary = KIND_CONFIGS.get(kind, KIND_CONFIGS["coupe"])
+	var key := "%s|%s" % [kind, color.to_html()]
+	var mesh: ArrayMesh = _chassis_cache.get(key)
+	if mesh == null:
+		var src := build_chassis_visual(kind, color)
+		mesh = merge_meshes(src)
+		src.free()
+		_chassis_cache[key] = mesh
+	var root := Node3D.new()
+	root.set_meta("kind", kind)
+	var mi := MeshInstance3D.new()
+	mi.name = "Body"
+	mi.mesh = mesh
+	root.add_child(mi)
+	root.set_meta("half_w", float(cfg.main_w) / 2.0)
+	root.set_meta("half_l", (float(cfg.main_z1) - float(cfg.hood_z0)) / 2.0)
+	return root
+
+static func shared_wheel_visual(kind: String) -> Node3D:
+	var mesh: ArrayMesh = _wheel_cache.get(kind)
+	if mesh == null:
+		var src := build_wheel_visual(kind)
+		mesh = merge_meshes(src)
+		src.free()
+		_wheel_cache[kind] = mesh
+	var root := Node3D.new()
+	var mi := MeshInstance3D.new()
+	mi.name = "Wheel"
+	mi.mesh = mesh
+	root.add_child(mi)
+	return root
+
+## Bakes every MeshInstance3D under `root` (not in the tree; transforms are
+## taken relative to root) into one ArrayMesh, one surface per distinct
+## material. Materials that are equal by value (CarBuilder makes a fresh trim
+## material for every bumper) share a surface.
+static func merge_meshes(root: Node3D) -> ArrayMesh:
+	var tools := {}
+	var mats := {}
+	var order: Array[String] = []
+	for n in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := n as MeshInstance3D
+		if mi.mesh == null:
+			continue
+		var xf := mi.transform
+		var parent := mi.get_parent()
+		while parent != null and parent != root:
+			xf = (parent as Node3D).transform * xf
+			parent = parent.get_parent()
+		for s in mi.mesh.get_surface_count():
+			var mat: Material = mi.material_override if mi.material_override != null else mi.mesh.surface_get_material(s)
+			var key := _material_key(mat)
+			if not tools.has(key):
+				var st := SurfaceTool.new()
+				st.begin(Mesh.PRIMITIVE_TRIANGLES)
+				tools[key] = st
+				mats[key] = mat
+				order.append(key)
+			# De-indexed first: SurfaceTool.append_from keeps a source's index
+			# list, and once one indexed box is in, the plain (non-indexed)
+			# loft triangles appended before it are dropped at commit.
+			var flat := SurfaceTool.new()
+			flat.create_from(mi.mesh, s)
+			flat.deindex()
+			(tools[key] as SurfaceTool).append_from(flat.commit(), 0, xf)
+	var out := ArrayMesh.new()
+	for key in order:
+		out = (tools[key] as SurfaceTool).commit(out)
+		out.surface_set_material(out.get_surface_count() - 1, mats[key])
+	return out
+
+static func _material_key(m: Material) -> String:
+	var sm := m as StandardMaterial3D
+	if sm == null:
+		return str(m.get_instance_id()) if m != null else "none"
+	return "%s|%.3f|%.3f|%s|%.3f|%s|%.3f" % [sm.albedo_color.to_html(), sm.metallic, sm.roughness,
+		sm.emission_enabled, sm.emission_energy_multiplier, sm.rim_enabled, sm.rim]

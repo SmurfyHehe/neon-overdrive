@@ -309,7 +309,9 @@ static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
 	elif kind == P1CoupeBuilder.KIND:
 		visual = P1CoupeBuilder.build_wheel_visual(v.front_tire_radius, pos)
 	else:
-		visual = CarBuilder.build_wheel_visual(kind)
+		# CarBuilder kinds (traffic) share one merged, cached wheel mesh per
+		# kind (traffic milestone 4, draw calls).
+		visual = CarBuilder.shared_wheel_visual(kind)
 	w.wheel_node = visual
 	w.add_child(visual)
 	return w

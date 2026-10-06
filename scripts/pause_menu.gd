@@ -30,6 +30,7 @@ const AMBER := Color("#FFC066")
 var game_state: GameState
 var resume_button: Button
 var volume_sliders := {}   # channel -> HSlider
+var fov_slider: HSlider
 var main_page: VBoxContainer
 var controls_page: VBoxContainer
 var controls_scroll: ScrollContainer
@@ -72,7 +73,7 @@ func _ready() -> void:
 		box.add_child(row)
 		var name_label := Label.new()
 		name_label.text = channel
-		name_label.custom_minimum_size = Vector2(70, 0)
+		name_label.custom_minimum_size = Vector2(100, 0)
 		row.add_child(name_label)
 		var s := HSlider.new()
 		s.min_value = 0.0
@@ -108,6 +109,17 @@ func _ready() -> void:
 			if traffic != null:
 				traffic.detail_distance = TrafficSettings.detail_distance)
 
+	# View slider (2026-10-06): the cockpit FOV, 55-78, default 62; the speed
+	# widening (up to +6) rides on top of it. Applies at once, saved with the rest.
+	var view_title := Label.new()
+	view_title.text = "View"
+	view_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(view_title)
+	fov_slider = _add_slider(box, "Cockpit FOV", ViewSettings.COCKPIT_FOV_MIN, ViewSettings.COCKPIT_FOV_MAX, 1.0, ViewSettings.cockpit_fov,
+		func(v: float) -> void:
+			ViewSettings.set_cockpit_fov(v)
+			ViewSettings.save_settings())
+
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	_add_button(box, "Controls", show_controls)
 	_add_button(box, "Service car (reset wear)", _service_car)
@@ -128,7 +140,7 @@ func _add_slider(parent: Control, text: String, lo: float, hi: float, step: floa
 	parent.add_child(row)
 	var name_label := Label.new()
 	name_label.text = text
-	name_label.custom_minimum_size = Vector2(70, 0)
+	name_label.custom_minimum_size = Vector2(100, 0)
 	row.add_child(name_label)
 	var s := HSlider.new()
 	s.min_value = lo

@@ -8,7 +8,8 @@ extends SceneTree
 # - the manager in the real game: N cycles the stations then off, a switch starts
 #   static and a toast, every station clock keeps running while another is tuned,
 #   tuning in starts the track the clock says, partway through, the next track
-#   starts when one ends, Dale has no music but captions + a chime + ducking, the
+#   starts when one ends, Dale has no music but captions + a chime (and nothing to
+#   duck; the duck target is unit-tested), the
 #   Music bus has the speaker low-pass, and pausing mutes the Music bus
 # Exit code 1 on failure. Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/radio.gd
@@ -48,6 +49,10 @@ func _station_tests() -> void:
 	_check(RadioStations.break_state(2, 3.0).in_break, "Dale should talk at the start of his period")
 	_check(not RadioStations.break_state(2, RadioStations.BREAK_SECS + 5.0).in_break, "Dale should be quiet between lines")
 	_check(RadioStations.break_state(2, RadioStations.DALE_PERIOD + 3.0).line != RadioStations.break_state(2, 3.0).line, "Dale should rotate his lines")
+	# ducking: only a station with music has anything to duck, and it ducks hard
+	_check(RadioManager.duck_target(true, true) < 0.4, "a break over music should duck it")
+	_check(RadioManager.duck_target(true, false) == 1.0, "a break on a talk station has no music to duck")
+	_check(RadioManager.duck_target(false, true) == 1.0, "no break, no duck")
 	_check(FileAccess.file_exists("res://assets/radio/CREDITS.md"), "assets/radio/CREDITS.md is missing")
 
 func _playlist_tests() -> void:
@@ -107,8 +112,8 @@ func _physics_process(_delta: float) -> bool:
 			radio.next_station()  # tune station 0
 			_go(Step.RUN)
 		Step.RUN:
-			# tuned in on station 0: loading its 7 tracks stalls a frame (physics ticks pile up),
-			# so wait for the radio's own _process to start the track
+			# tuned in on station 0: its 7 tracks load on background threads, so the
+			# radio's own _process starts the track a few frames later
 			if radio.now_playing != "" or waited >= 180:
 				var pos := radio.playlist_position(0)
 				_check(radio.now_playing != "", "a music station should have a track on air")
@@ -155,7 +160,7 @@ func _physics_process(_delta: float) -> bool:
 				_check(radio.dj_active, "Dale's line should be showing")
 				_check(radio.dj_text.begins_with("Dale:"), "the caption should be Dale's, got '%s'" % radio.dj_text)
 				_check(radio.chime_count == chimes_before + 1, "a line should play one chime")
-				_check(radio.duck < 0.6, "the music should duck under Dale (%.2f)" % radio.duck)
+				_check(radio.duck == 1.0, "Dale has no music, so nothing ducks (%.2f)" % radio.duck)
 				radio._clock = RadioStations.DALE_PERIOD * 3.0 - radio._offsets[2] + RadioStations.BREAK_SECS + 5.0  # between lines
 				_go(Step.DJ_OUT)
 		Step.DJ_OUT:

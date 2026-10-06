@@ -10,12 +10,14 @@ class_name RadioManager
 # Every station has a running clock that advances all the time, so tuning back in
 # lands mid-track like a real radio. Switching plays a short burst of static. The
 # Music bus gets a low-pass so the music sounds like it comes from car speakers.
-# Dale's lines come as captions with a chime (and duck any music). The tree's pause
+# Dale's lines come as captions with a chime (they would duck any music). The tree's pause
 # stops _process, so the radio goes quiet in the pause menu (GameState also mutes
 # the Music bus while paused to avoid a click).
 #
 # Two players on the Music bus: _music plays the tracks, _fx is a generator for the
-# static and the chime. A station's tracks are loaded the first time you tune it.
+# static and the chime. A station's tracks load in the background (ResourceLoader
+# threaded requests) the first time you tune it, so there is no frame hitch; the
+# music starts as soon as they are all in, at the place the station clock says.
 #
 # Tests run silent (Dummy audio driver) and assert on state: station, clock,
 # playlist position, static, levels, bus effect.
@@ -52,6 +54,7 @@ var _playback: AudioStreamGeneratorPlayback
 var _streams := []           # per station: Array of AudioStream, filled on first tune
 var _lists := []             # per station: RadioPlaylist, or null (no music)
 var _tracks := []            # per station: Array[String] of file names matching _streams
+var _requested := []         # per station: true once the background load was asked for
 var _playing_station := -1
 var _playing_entry := -1
 var _clock := 0.0            # seconds since the radio was built; every station runs on it
@@ -66,6 +69,7 @@ func _ready() -> void:
 		_streams.append([])
 		_lists.append(null)
 		_tracks.append([])
+		_requested.append(false)
 	_ensure_speaker_filter()
 	var gen := AudioStreamGenerator.new()
 	gen.mix_rate = MIX_RATE
@@ -115,19 +119,39 @@ func next_station() -> void:
 	station = station + 1 if station + 1 < count else -1
 	static_left = STATIC_SECS
 	if station >= 0:
-		_ensure_loaded(station)
+		_request_load(station)
 		toast_text = "RADIO  %s" % RadioStations.STATIONS[station].name
 	else:
 		toast_text = "RADIO OFF"
 	toast_left = TOAST_SECS
 
-## Loads a music station's tracks and builds its playlist, once.
+## Asks for a music station's tracks to load on background threads, once.
+func _request_load(s: int) -> void:
+	if _requested[s] or not RadioStations.has_music(s):
+		return
+	_requested[s] = true
+	for path in RadioStations.track_paths(s):
+		ResourceLoader.load_threaded_request(path)
+
+## True when every track of the station has finished loading (or it has none).
+func _load_done(s: int) -> bool:
+	if _lists[s] != null or not RadioStations.has_music(s):
+		return true
+	_request_load(s)
+	for path in RadioStations.track_paths(s):
+		if ResourceLoader.load_threaded_get_status(path) == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
+			return false
+	return true
+
+## Collects a music station's tracks and builds its playlist, once. Blocks for any
+## track still loading, so the game loop only calls it after _load_done.
 func _ensure_loaded(s: int) -> void:
 	if _lists[s] != null or not RadioStations.has_music(s):
 		return
+	_request_load(s)
 	var lengths := PackedFloat32Array()
 	for path in RadioStations.track_paths(s):
-		var stream := load(path) as AudioStream
+		var stream := ResourceLoader.load_threaded_get(path) as AudioStream
 		if stream == null or stream.get_length() <= 0.0:
 			push_warning("radio: could not load %s" % path)
 			continue
@@ -147,7 +171,7 @@ func playlist_position(s: int) -> Dictionary:
 ## Tuning in starts the track partway through, where the station clock says.
 func _update_music() -> void:
 	var pos := {}
-	if station >= 0:
+	if station >= 0 and _load_done(station):
 		pos = playlist_position(station)
 	if pos.is_empty():
 		if _music.playing:
@@ -179,10 +203,15 @@ func _update_dj(delta: float) -> void:
 		_chime_left = 1.2
 	_in_break_before = in_break
 	dj_active = in_break
-	var want := db_to_linear(DUCK_DB) if in_break else 1.0
+	var want := duck_target(in_break, station >= 0 and RadioStations.has_music(station))
 	duck = lerpf(duck, want, 1.0 - exp(-DUCK_RATE * delta))
 	_dj_label.visible = in_break
 	_dj_label.text = dj_text
+
+## The music gain a DJ break aims for: ducked while a line is on and there is music
+## to duck, else full. Dale's station has no music, so nothing ducks under him.
+static func duck_target(in_break: bool, has_music: bool) -> float:
+	return db_to_linear(DUCK_DB) if in_break and has_music else 1.0
 
 ## A short rising chime (four sine pings) mixed into a block.
 func _add_chime(block: PackedVector2Array, n: int) -> void:

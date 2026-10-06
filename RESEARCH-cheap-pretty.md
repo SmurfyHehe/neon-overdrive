@@ -2,8 +2,9 @@
 
 > **STATUS UPDATE, 2026-10-06: background reading, partly overtaken.** Of the
 > "Direct application" list: item 1 (dim cool moonlight key) is built (`bbcb12f`);
-> item 4 (roadside MultiMesh with visibility ranges) and item 5 (blob shadow under
-> the car, `car_fx.gd`) are built in stage A (#84); item 6 (glow) was measured and
+> item 4 (roadside detail as MultiMesh: lamps, signs, barriers; no
+> `visibility_range` is set) and item 5 (blob shadow under the car, `car_fx.gd`) are
+> built in stage A (#84); item 6 (glow) was measured and
 > turned on tight (#67). Item 2 (vertex-colour roads) is not approved. **Item 3
 > (traffic as MultiMesh) is moot:** traffic shipped in #113 as individual cars
 > running the full raycast sim, not instances. The "keep 60 Hz" advice is

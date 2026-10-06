@@ -39,6 +39,7 @@ var lbl_rpm: Label
 var lbl_info: Label
 var lbl_hint: Label
 var rpm_bar: RpmBar
+var cluster: VBoxContainer   # the gear / speed / RPM block; hidden in the cockpit view
 
 ## Segmented RPM bar. Draws itself from frac / shift_frac / cue.
 class RpmBar extends Control:
@@ -87,6 +88,16 @@ static func gear_text(g: int) -> String:
 static func kmh(speed_ms: float) -> int:
 	return int(round(maxf(speed_ms, 0.0) * KMH_PER_MS))
 
+## Shift cue: manual box only, in a forward gear with a higher one to go to, at
+## or past SHIFT_POINT. The cockpit's LED strip flashes on the same rule.
+static func shift_cue(p: PlayerCar, frac: float) -> bool:
+	return (not p.automatic_transmission and p.gear >= 1
+		and p.gear < p.gear_ratios.size() and frac >= SHIFT_POINT)
+
+## The fast blink every cue shares (90 ms on, 90 ms off).
+static func blink() -> bool:
+	return int(Time.get_ticks_msec() / 90) % 2 == 0
+
 func _init(car: PlayerCar, cam: ChaseCamera, traffic_mgr: TrafficManager) -> void:
 	player = car
 	camera = cam
@@ -117,7 +128,7 @@ func _ready() -> void:
 		margin.add_theme_constant_override("margin_" + side, 24)
 	root.add_child(margin)
 
-	var cluster := VBoxContainer.new()
+	cluster = VBoxContainer.new()
 	cluster.size_flags_horizontal = Control.SIZE_SHRINK_END
 	cluster.size_flags_vertical = Control.SIZE_SHRINK_END
 	cluster.add_theme_constant_override("separation", 4)
@@ -183,6 +194,9 @@ func _process(_delta: float) -> void:
 	_refresh()
 
 func _refresh() -> void:
+	# In the cockpit the wheel's LCD and the cluster carry speed, gear and rpm
+	# (Roy, 2026-10-06); the warning lights and radio toast are other layers.
+	cluster.visible = camera.view != ChaseCamera.View.COCKPIT
 	var max_rpm := maxf(player.max_rpm, 1.0)
 	var rpm := player.motor_rpm
 	var frac := clampf(rpm / max_rpm, 0.0, 1.0)
@@ -190,7 +204,7 @@ func _refresh() -> void:
 	var engine_off: bool = player.realistic_clutch and not player.engine_running
 
 	lbl_gear.text = gear_text(gear)
-	lbl_mode.text = "A" if player.automatic_transmission else "M"
+	lbl_mode.text = PlayerCar.TRANSMISSION_LETTERS[player.transmission_mode()]
 	lbl_speed.text = str(kmh(player.current_speed()))
 	lbl_rpm.text = "%d rpm" % int(rpm)
 
@@ -199,10 +213,8 @@ func _refresh() -> void:
 	var shifting: bool = player.shift_flash_t > 0.0
 	lbl_gear.add_theme_color_override("font_color", SILVER if shifting else AMBER)
 
-	# Shift cue: manual box only, in a forward gear with a higher one to go to.
-	var cue: bool = (not player.automatic_transmission and gear >= 1
-		and gear < player.gear_ratios.size() and frac >= SHIFT_POINT)
-	var blink := int(Time.get_ticks_msec() / 90) % 2 == 0
+	var cue := shift_cue(player, frac)
+	var blink := Hud.blink()
 	rpm_bar.frac = frac
 	rpm_bar.cue = cue
 	rpm_bar.blink = blink

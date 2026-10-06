@@ -499,7 +499,7 @@ func lane_speed() -> float:
 ## game.gd's floating-origin shift). Clears lane-change and wreck state.
 func place(lane: float, dir: float, z: float, y: float, speed: float) -> void:
 	lane_x = lane
-	lane_i = maxi(0, roundi(absf(lane) / RoadChunkBuilder.LANE_W - 0.5))
+	lane_i = RoadChunkBuilder.lane_at(absf(lane))
 	direction = dir
 	changing = false
 	wrecked = false

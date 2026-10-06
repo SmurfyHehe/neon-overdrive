@@ -237,13 +237,9 @@ func _read_keyboard() -> void:
 	if Input.is_action_just_pressed("shift_up"):
 		manual_shift(1)
 	if Input.is_action_just_pressed("toggle_gearbox"):
-		automatic_transmission = not automatic_transmission
+		set_transmission_mode((transmission_mode() + 1) % Transmission.size())
 	if Input.is_action_just_pressed("reverse"):
 		toggle_reverse()
-	if Input.is_action_just_pressed("toggle_clutch_model"):
-		realistic_clutch = not realistic_clutch
-		engine_running = true
-		clutch_pedal = 0.0
 	clutch_input = 1.0 if Input.is_action_pressed("clutch") else 0.0
 	starter_input = Input.is_action_pressed("starter")
 	var throttle := Input.is_action_pressed("accelerate")
@@ -317,10 +313,48 @@ func steer_fraction() -> float:
 ## moving or mid-shift.
 const REVERSE_MAX_SPEED := 1.5  # m/s (~5 km/h)
 func toggle_reverse() -> bool:
-	if is_shifting or current_speed() > REVERSE_MAX_SPEED:
+	if is_shifting or current_speed() > REVERSE_MAX_SPEED or not clutch_ready():
 		return false
 	shift(1 - current_gear if current_gear == -1 else -1 - current_gear)
 	return true
+
+## Transmission modes (2026-10-06, Roy's list). G cycles them:
+## - AUTO: the car shifts itself (GEVP's automatic box), no clutch pedal.
+## - SEMI: you shift (Q/E), the clutch works itself, as on a paddle-shift car.
+## - MANUAL: you shift AND work the clutch: the realistic clutch model (pedal on
+##   C, stall, starter on X) and a gear change needs the pedal pressed.
+## The mode is not a third flag: it is read off automatic_transmission and
+## realistic_clutch, so specs, the tuner and tests that set those still agree
+## with the HUD. It replaces the old V "clutch model on/off" key. Every launch
+## starts in AUTO, like before (the car spec's default).
+enum Transmission { AUTO, SEMI, MANUAL }
+const TRANSMISSION_LETTERS := ["A", "S", "M"]
+## Clutch input (0..1) that counts as "clutch in" for a MANUAL gear change. It
+## reads the input, not GEVP's smoothed clutch_pedal: that one only moves while
+## the car is in gear with the engine running, so from neutral or after a stall
+## it would never let you select a gear.
+const SHIFT_CLUTCH_MIN := 0.6
+
+func transmission_mode() -> int:
+	if automatic_transmission:
+		return Transmission.AUTO
+	return Transmission.MANUAL if realistic_clutch else Transmission.SEMI
+
+func set_transmission_mode(mode: int) -> void:
+	automatic_transmission = mode == Transmission.AUTO
+	realistic_clutch = mode == Transmission.MANUAL
+	# Same reset the old V toggle did: never hand over a stalled engine or a
+	# half-pressed pedal from the other model.
+	engine_running = true
+	clutch_pedal = 0.0
+
+## In MANUAL a gear change needs the clutch in; in the other modes it always may.
+func clutch_ready() -> bool:
+	return transmission_mode() != Transmission.MANUAL or clutch_input >= SHIFT_CLUTCH_MIN
+
+func manual_shift(count: int) -> void:
+	if clutch_ready():
+		super.manual_shift(count)
 
 ## HUD compatibility -- game.gd reads player.gear (int, -1/0/1..N) and
 ## player.current_speed(); both map directly onto what Vehicle already

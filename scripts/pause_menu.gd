@@ -5,9 +5,35 @@ extends CanvasLayer
 # default buttons, no theme or styling. The menu's look is Roy's call later;
 # restyle here without touching GameState.
 
+# The Controls page is generated from the InputMap (action_get_events), so the
+# list can't drift from the real bindings. GROUPS only decides the order and
+# the plain-words labels; an action missing from it still shows up, under
+# "Other", so a new binding is never silently left off the page.
+const GROUPS := [
+	["Drive", [
+		["accelerate", "Throttle"], ["brake", "Brake / reverse"], ["handbrake", "Handbrake"],
+		["steer_left", "Steer left"], ["steer_right", "Steer right"], ["reverse", "Reverse gear (when stopped)"]]],
+	["Gears & Engine", [
+		["shift_up", "Shift up (manual)"], ["shift_down", "Shift down (manual)"], ["toggle_gearbox", "Auto / manual gearbox"],
+		["clutch", "Clutch (hold)"], ["starter", "Starter (hold)"], ["toggle_clutch_model", "Clutch model on / off"]]],
+	["Camera", [["camera_cycle", "Camera smoothing"], ["camera_view", "Chase / cockpit view"]]],
+	["Audio & Radio", [["mute", "Mute"], ["radio_next", "Next radio station"]]],
+	["Menus", [["pause", "Pause / back"], ["tuning_panel", "Tuning panel"], ["autotune_panel", "Auto-Tune panel"]]],
+	["Exhaust", [
+		["exhaust_loud_up", "Louder"], ["exhaust_loud_down", "Quieter"], ["exhaust_rasp_up", "More rasp"],
+		["exhaust_rasp_down", "Less rasp"], ["exhaust_pops_up", "More pops"], ["exhaust_pops_down", "Fewer pops"]]],
+]
+
+const SILVER := Color("#C9CED6")
+const AMBER := Color("#FFC066")
+
 var game_state: GameState
 var resume_button: Button
 var volume_sliders := {}   # channel -> HSlider
+var main_page: VBoxContainer
+var controls_page: VBoxContainer
+var controls_scroll: ScrollContainer
+var controls_back_button: Button
 
 func _init(state: GameState) -> void:
 	game_state = state
@@ -29,6 +55,7 @@ func _ready() -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
 	center.add_child(box)
+	main_page = box
 
 	var title := Label.new()
 	title.text = "PAUSED"
@@ -82,10 +109,12 @@ func _ready() -> void:
 				traffic.detail_distance = TrafficSettings.detail_distance)
 
 	resume_button = _add_button(box, "Resume", game_state.resume)
+	_add_button(box, "Controls", show_controls)
 	_add_button(box, "Service car (reset wear)", _service_car)
 	_add_button(box, "Restart", game_state.restart)
 	_add_button(box, "Quit", game_state.quit)
 
+	_build_controls_page(center)
 	game_state.state_changed.connect(_on_state_changed)
 
 ## Resets temperatures, tyre, clutch and brake wear (the garage will own this later).
@@ -123,4 +152,118 @@ func _add_button(parent: Control, text: String, action: Callable) -> Button:
 func _on_state_changed(new_state: GameState.State, _old_state: GameState.State) -> void:
 	visible = new_state == GameState.State.PAUSED
 	if visible:
-		resume_button.grab_focus()  # keyboard/controller can navigate the menu
+		show_main()  # always reopen on the main page
+
+# ---------- Controls page ----------
+func show_controls() -> void:
+	_refresh_controls()
+	main_page.visible = false
+	controls_page.visible = true
+	# Cap the list to the window so it scrolls instead of running off-screen.
+	controls_scroll.custom_minimum_size = Vector2(640, maxf(get_viewport().get_visible_rect().size.y * 0.7, 160.0))
+	controls_scroll.grab_focus()  # arrows / page keys scroll it
+
+func show_main() -> void:
+	main_page.visible = true
+	controls_page.visible = false
+	resume_button.grab_focus()  # keyboard/controller can navigate the menu
+
+func _build_controls_page(center: CenterContainer) -> void:
+	controls_page = VBoxContainer.new()
+	controls_page.add_theme_constant_override("separation", 8)
+	controls_page.visible = false
+	center.add_child(controls_page)
+	var title := Label.new()
+	title.text = "CONTROLS"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	controls_page.add_child(title)
+	controls_scroll = ScrollContainer.new()
+	controls_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	controls_scroll.custom_minimum_size = Vector2(640, 380)
+	controls_scroll.focus_mode = Control.FOCUS_ALL
+	controls_page.add_child(controls_scroll)
+	controls_back_button = _add_button(controls_page, "Back", show_main)
+
+## Rebuilds the list from the InputMap, so a rebound key shows up next time the page opens.
+func _refresh_controls() -> void:
+	for c in controls_scroll.get_children():
+		c.queue_free()
+	var list := VBoxContainer.new()
+	list.add_theme_constant_override("separation", 2)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	controls_scroll.add_child(list)
+	for group in controls_groups():
+		var heading := Label.new()
+		heading.text = group[0].to_upper()
+		heading.add_theme_color_override("font_color", AMBER)
+		list.add_child(heading)
+		var grid := GridContainer.new()
+		grid.columns = 3
+		grid.add_theme_constant_override("h_separation", 24)
+		list.add_child(grid)
+		for entry in group[1]:
+			_grid_label(grid, entry[1], SILVER, 280)
+			_grid_label(grid, keyboard_text(entry[0]), AMBER, 140)
+			_grid_label(grid, gamepad_text(entry[0]), SILVER, 140)
+		var gap := Control.new()
+		gap.custom_minimum_size = Vector2(0, 8)
+		list.add_child(gap)
+
+func _grid_label(parent: Control, text: String, colour: Color, min_w: float) -> void:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_color_override("font_color", colour)
+	l.custom_minimum_size = Vector2(min_w, 0)
+	parent.add_child(l)
+
+## GROUPS plus an "Other" group for any game action not listed there.
+## Built-in ui_* actions are not game controls and are skipped.
+static func controls_groups() -> Array:
+	var groups: Array = []
+	var known := {}
+	for g in GROUPS:
+		var rows: Array = []
+		for entry in g[1]:
+			known[entry[0]] = true
+			if InputMap.has_action(entry[0]):
+				rows.append(entry)
+		groups.append([g[0], rows])
+	var other: Array = []
+	for a in InputMap.get_actions():
+		var name := String(a)
+		if not known.has(name) and not name.begins_with("ui_"):
+			other.append([name, name.capitalize()])
+	if not other.is_empty():
+		groups.append(["Other", other])
+	return groups
+
+## Keyboard bindings of an action, e.g. "W / Up".
+static func keyboard_text(action: String) -> String:
+	var parts: Array[String] = []
+	for ev in InputMap.action_get_events(action):
+		if ev is InputEventKey:
+			var t: String = ev.as_text_keycode() if ev.keycode != 0 else ev.as_text_physical_keycode()
+			parts.append(t)
+	return " / ".join(parts) if not parts.is_empty() else "-"
+
+## Gamepad bindings of an action, e.g. "RT".
+static func gamepad_text(action: String) -> String:
+	var parts: Array[String] = []
+	for ev in InputMap.action_get_events(action):
+		if ev is InputEventJoypadButton:
+			parts.append(_pad_button_name(ev.button_index))
+		elif ev is InputEventJoypadMotion:
+			parts.append(_pad_axis_name(ev.axis, ev.axis_value))
+	return " / ".join(parts) if not parts.is_empty() else "-"
+
+static func _pad_button_name(i: int) -> String:
+	var names := {0: "A", 1: "B", 2: "X", 3: "Y", 4: "Back", 6: "Start", 9: "LB", 10: "RB"}
+	return names.get(i, "Button %d" % i)
+
+static func _pad_axis_name(axis: int, value: float) -> String:
+	match axis:
+		JOY_AXIS_LEFT_X: return "Left stick " + ("right" if value > 0.0 else "left")
+		JOY_AXIS_LEFT_Y: return "Left stick " + ("down" if value > 0.0 else "up")
+		JOY_AXIS_TRIGGER_LEFT: return "LT"
+		JOY_AXIS_TRIGGER_RIGHT: return "RT"
+	return "Axis %d" % axis

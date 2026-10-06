@@ -5,8 +5,9 @@ extends SceneTree
 # whole spawn band).
 #
 # Phase 1, "clear lane" (35 s): traffic uses own lanes 1-3 and all four
-# oncoming lanes; the scripted player holds lane 0 at full throttle and passes
-# dense traffic at its top speed (~240 km/h). Asserts, every tick:
+# oncoming lanes; the scripted player holds lane 0 (the passing lane) at full
+# throttle and passes dense traffic at its top speed (~240 km/h). Asserts,
+# every tick:
 # - no NaN or infinity anywhere in the player or any car
 # - the player and every full-sim car stay upright (up.y > 0.7, no flip) and
 #   above the road (no fall-through)

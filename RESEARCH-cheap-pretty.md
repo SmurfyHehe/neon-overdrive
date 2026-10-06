@@ -1,5 +1,16 @@
 # Research: how old games looked expensive and ran cheap (2026-09-29)
 
+> **STATUS UPDATE, 2026-10-06: background reading, partly overtaken.** Of the
+> "Direct application" list: item 1 (dim cool moonlight key) is built (`bbcb12f`);
+> item 4 (roadside detail as MultiMesh: lamps, signs, barriers; no
+> `visibility_range` is set) and item 5 (blob shadow under the car, `car_fx.gd`) are
+> built in stage A (#84); item 6 (glow) was measured and
+> turned on tight (#67). Item 2 (vertex-colour roads) is not approved. **Item 3
+> (traffic as MultiMesh) is moot:** traffic shipped in #113 as individual cars
+> running the full raycast sim, not instances. The "keep 60 Hz" advice is
+> superseded: physics runs at 120 Hz since #110. Written before traffic and audio
+> existed; milestone numbers in the intro are the old 11-milestone plan.
+
 Reference notes for Neon Overdrive's art/performance direction. Not a milestone —
 background for the environment, traffic, and art passes (roadmap milestones 2-5).
 

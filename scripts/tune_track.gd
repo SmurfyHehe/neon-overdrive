@@ -38,7 +38,10 @@ const SHIFT_RPM_FRACTION := 0.97  # upshift at this fraction of the spec's max_r
 const ACCEL_TIME := 35.0
 const CORNER_TIME := 30.0
 const CORNER_STEER := 0.3
-const MAX_STEPS := 4000        # safety stop for a run that never finishes
+# Safety stop for a run that never finishes: 4000 steps was ~67 s at 60 Hz; scaled so the
+# budget stays ~67 s at the game's 120 Hz (4000 steps was 33 s there, under the 35 s accel run).
+const MAX_SECONDS := 4000.0 / 60.0
+var max_steps := ceili(MAX_SECONDS * Engine.physics_ticks_per_second)
 
 enum Kind { ACCEL, BRAKE, CORNER }
 const ALL_KINDS := [Kind.ACCEL, Kind.BRAKE, Kind.CORNER]
@@ -179,7 +182,7 @@ func _evaluate_one(spec: Dictionary, kinds: Array) -> Dictionary:
 		runs.append(_spawn(spec, kind, kind))
 	var steps := 0
 	var pending := true
-	while pending and steps < MAX_STEPS:
+	while pending and steps < max_steps:
 		await get_tree().physics_frame
 		steps += 1
 		pending = false
@@ -191,7 +194,7 @@ func _evaluate_one(spec: Dictionary, kinds: Array) -> Dictionary:
 	var out := {"ok": true, "problems": []}
 	for r: Run in runs:
 		if not r.done:
-			r.failed = "did not finish in %d steps" % MAX_STEPS
+			r.failed = "did not finish in %d steps" % max_steps
 		if r.failed != "":
 			out.ok = false
 			out.problems.append("%s: %s" % [Kind.keys()[r.kind].to_lower(), r.failed])

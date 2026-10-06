@@ -42,6 +42,10 @@ static func all() -> Array[Dictionary]:
 		_entries.append(_e("torque_shape/peak_pos", "Peak position", 0.25, 0.95, ENGINE, false, false))
 		_entries.append(_e("torque_shape/plateau", "Plateau width", 0.0, 0.5, ENGINE, false, false))
 		_entries.append(_e("torque_shape/falloff", "Torque at redline", 0.2, 1.0, ENGINE, false, false))
+		# Exhaust (cosmetic, never Auto-Tune). In all() so tune slots store them;
+		# not on the car: EngineAudio reads them from the spec.
+		for k in ExhaustTune.KEYS:
+			_entries.append(_e("exhaust/" + k, k.capitalize(), 0.0, 1.0, NONE, false, false))
 		_entries.append(_e("coefficient_of_drag", "Drag coefficient", 0.20, 0.40))
 		_entries.append(_e("aero_downforce_coefficient_front", "Downforce front", 0.0, 1.0))
 		_entries.append(_e("aero_downforce_coefficient_rear", "Downforce rear", 0.0, 1.2))
@@ -58,6 +62,13 @@ static func auto_paths() -> Array[String]:
 	for e in all():
 		if e.auto:
 			out.append(e.path)
+	return out
+
+## The exhaust paths ("exhaust/loudness" ...): cosmetic, never Auto-Tune.
+static func exhaust_paths() -> Array[String]:
+	var out: Array[String] = []
+	for k in ExhaustTune.KEYS:
+		out.append("exhaust/" + k)
 	return out
 
 ## The entry for a path, or an empty dictionary if it is not tunable.

@@ -78,6 +78,8 @@ if /i not "%~1"=="quick" (
 	call :run tuner_settings "--headless --fixed-fps 60"
 	rem ~30 s: the new Tuner's presets on the track, every notch, the estimates (Tuner PR 3).
 	call :run tuner_presets "--headless --fixed-fps 60"
+	rem ~15 s: the stat panel's Test run through a worker process, the Mechanic's plain words (Tuner PR 4).
+	call :run tuner_test_run "--headless --fixed-fps 60"
 	rem Traffic (stage B step 3) at the game's 120 Hz tick: ~1 min of dense traffic, then the perf sweep.
 	call :run traffic_stability "--headless --fixed-fps 120"
 	call :run traffic_behaviour "--headless --fixed-fps 120"

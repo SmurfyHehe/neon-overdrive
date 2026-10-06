@@ -37,6 +37,11 @@ var model: TunerModel
 var manual: TuningPanel
 var exhaust: ExhaustPanel
 var auto: AutoTunePanel
+var mechanic: MechanicPanel
+var test_job: AutoTuneJob
+var test_button: Button
+var _test_poll := 0.0
+var _test_hash := 0  # the setup the running test run is measuring
 
 var page_ids: Array[String] = []
 var page_index := 0
@@ -136,7 +141,12 @@ func _ready() -> void:
 	setup.add_child(_label("Saved setups live on the Mechanic page for now.", DIM))
 	panel_pages["setup"] = setup
 	auto = AutoTunePanel.new(player, game_state)
-	panel_pages["mechanic"] = auto
+	var mech := VBoxContainer.new()
+	mech.add_theme_constant_override("separation", 8)
+	mechanic = MechanicPanel.new(auto)
+	mech.add_child(mechanic)
+	mech.add_child(auto)
+	panel_pages["mechanic"] = mech
 	var sound := VBoxContainer.new()
 	sound.add_child(_label("Sound and looks only: nothing here changes how the car drives.", DIM))
 	exhaust = ExhaustPanel.new(player)
@@ -151,9 +161,16 @@ func _ready() -> void:
 		holder.add_child(panel_pages[id])
 		panel_pages[id].visible = false
 
+	var right := VBoxContainer.new()
+	right.custom_minimum_size = Vector2(250, 0)
+	body.add_child(right)
 	stats = TunerStats.new()
-	stats.custom_minimum_size = Vector2(250, 0)
-	body.add_child(stats)
+	right.add_child(stats)
+	test_button = Button.new()
+	test_button.text = "Test run"
+	test_button.focus_mode = Control.FOCUS_ALL
+	test_button.pressed.connect(start_test_run)
+	right.add_child(test_button)
 
 	hint = _label("", SILVER)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -216,7 +233,7 @@ func show_page(id: String) -> void:
 	if id == "setup":
 		preset_buttons[0].grab_focus()
 	elif id == "mechanic":
-		(auto.goal_sliders.values()[0] as Control).grab_focus()
+		(mechanic.goal_buttons.values()[0] as Control).grab_focus()
 	elif id == "sound":
 		(exhaust.sliders.values()[0] as Control).grab_focus()
 	elif id == "advanced":
@@ -275,6 +292,44 @@ func _nudge(step: int) -> void:
 		manual.refresh_from_player()
 		auto.refresh_lock_labels()
 
+# ---------- test run ----------
+
+## Drives the current setup once round the hidden test track (an Auto-Tune job
+## with everything locked: it measures the starting tune and stops) and swaps
+## the estimates for measured numbers.
+func start_test_run() -> void:
+	if test_job != null and test_job.state == AutoTuneJob.State.RUNNING:
+		return
+	var locks := {}
+	for p in TuneParams.auto_paths():
+		locks[p] = true
+	test_job = AutoTuneJob.new()
+	if not test_job.start(CarSpec.clone_spec(player.spec), {"goals": {"accel": 1.0}, "locks": locks}, 1):
+		test_button.text = "Test run failed"
+		return
+	_test_hash = player.spec.hash()
+	test_button.text = "Testing..."
+	test_button.disabled = true
+
+func _process(delta: float) -> void:
+	if test_job == null or test_job.state != AutoTuneJob.State.RUNNING:
+		return
+	_test_poll += delta
+	if _test_poll < 0.25:
+		return
+	_test_poll = 0.0
+	var st := test_job.poll()
+	if st == AutoTuneJob.State.RUNNING:
+		return
+	test_button.disabled = false
+	test_button.text = "Test run"
+	if st == AutoTuneJob.State.DONE and not test_job.result.base_metrics.is_empty():
+		stats.measured = test_job.result.base_metrics
+		stats.measured_for = _test_hash  # changed meanwhile: _refresh drops it again
+		_refresh()
+	else:
+		test_button.text = "Test run failed"
+
 func _on_preset(name: String) -> void:
 	model.apply_preset(name)
 	manual.refresh_from_player()
@@ -318,6 +373,9 @@ func _refresh() -> void:
 			"sound": "How the exhaust sounds, and the flames. Purely cosmetic.",
 			"advanced": "Every raw gearing and power number, with the gear table.",
 		}.get(page.id, "")
+	if stats.measured_for != player.spec.hash():
+		stats.measured = {}  # measured on a setup the car no longer has
+	stats.measured_for = player.spec.hash()
 	stats.set_values(before_stats, TunerModel.estimate(player.spec))
 
 # ---------- small drawn widgets ----------
@@ -354,6 +412,10 @@ class TunerStats extends VBoxContainer:
 	]
 	var labels := {}
 	var bars := {}
+	## Track numbers from a Test run, for the setup they were measured on; any
+	## change to the car clears them back to estimates.
+	var measured := {}
+	var measured_for := 0
 
 	func _ready() -> void:
 		add_theme_constant_override("separation", 4)
@@ -383,6 +445,9 @@ class TunerStats extends VBoxContainer:
 			if k == "balance":
 				text = "Understeer" if v < -0.15 else ("Oversteer" if v > 0.15 else "Neutral")
 				text = "%s  %s" % [r[1], text]
+			elif _measured_value(k) != null:
+				v = _measured_value(k)
+				text = "%s  %s" % [r[1], (r[2] as String).replace("~", "") % v]
 			else:
 				text = "%s  %s" % [r[1], r[2] % v]
 				var d := v - b
@@ -392,6 +457,10 @@ class TunerStats extends VBoxContainer:
 			bars[k].now = inverse_lerp(r[3], r[4], v)
 			bars[k].before = inverse_lerp(r[3], r[4], b)
 			bars[k].queue_redraw()
+
+	func _measured_value(k: String) -> Variant:
+		var key: String = {"top": "top_speed_kmh", "accel": "t_0_100", "brake": "brake_dist_100", "grip": "peak_lat_g"}.get(k, "")
+		return float(measured[key]) if key != "" and measured.has(key) else null
 
 	class StatBar extends Control:
 		var now := 0.5

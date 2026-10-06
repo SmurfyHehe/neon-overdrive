@@ -57,8 +57,20 @@ func _run() -> void:
 	await _until(func(): return game.game_state.state == GameState.State.AUTOTUNE, 5.0)
 	_check(game.game_state.state == GameState.State.AUTOTUNE, "Y should open Auto-Tune")
 	_check(screen.visible and panel.is_visible_in_tree() and not _find(game, PauseMenu).visible, "Y should show the Tuner screen with Auto-Tune expanded")
-	_check(not raw.is_visible_in_tree() and screen.current_page() == "mechanic", "Y should show the Mechanic page; the raw gearing panel lives on Advanced (Tuner redesign PR 3)")
-	_check(root.gui_get_focus_owner() == panel.goal_sliders.values()[0], "first goal slider should have keyboard focus on open, has %s" % root.gui_get_focus_owner())
+	# Tuner redesign PR 4: Y opens the Mechanic page, its simple controls first.
+	_check(screen.mechanic.is_visible_in_tree() and root.gui_get_focus_owner() == screen.mechanic.goal_buttons.values()[0], "Y should focus the Mechanic's first goal, has %s" % root.gui_get_focus_owner())
+	_check(not panel.goal_sliders.values()[0].is_visible_in_tree() and not panel.lock_boxes.values()[0].is_visible_in_tree(), "raw goal weights and locks should hide until Advanced")
+	# The simple view: one goal at full weight, Keep gearbox locks the gears.
+	screen.mechanic.set_goal("braking")
+	screen.mechanic.keep_boxes.gearbox.button_pressed = true
+	var simple := panel.request()
+	_check(simple.goals.size() == 1 and simple.goals.has("braking") and simple.locks.has("final_drive") and simple.locks.has("gear_ratios/0") and not simple.locks.has("brake_force_multiplier"), "Mechanic's goal and Keep boxes did not reach the request: %s" % str(simple))
+	screen.mechanic.keep_boxes.gearbox.button_pressed = false
+	# The rest of this test drives the raw controls, as before.
+	screen.mechanic.set_advanced(true)
+	_check(panel.goal_sliders.values()[0].is_visible_in_tree(), "Advanced should show the raw controls")
+	for g in panel.goal_sliders:
+		panel.goal_sliders[g].value = 0
 	_check(paused, "Auto-Tune should pause the game like the raw panel")
 
 	# --- Run with no goal ---

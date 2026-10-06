@@ -581,6 +581,7 @@ func initialize():
 	
 	for wheel in wheel_array:
 		wheel.initialize()
+	apply_tyre_setup()
 	
 	if front_torque_split > 0.0 or variable_torque_split:
 		front_axle.is_drive_axle = true
@@ -631,6 +632,10 @@ func _physics_process(delta : float) -> void:
 	previous_global_position = global_position
 	speed = local_velocity.length()
 	
+	if _camber_active:
+		var right := global_basis.x
+		var flat := Vector3(right.x, 0.0, right.z).normalized()
+		body_tilt_deg = rad_to_deg(asin(clampf(global_basis.y.dot(flat), -1.0, 1.0)))
 	process_drag()
 	process_braking(delta)
 	process_steering(delta)
@@ -829,6 +834,23 @@ const AUTO_CLUTCH_SHUT_SPEED := 3.0
 ## (11) Feel pass (2026-10-06), DEVIATION: the local_velocity smoothing in _physics_process is
 ## tick-rate independent (weight pow(0.5, 60 * delta) instead of a flat 0.5 per tick).
 @export var tyre_load_sensitivity := 0.0
+## (12) Tuner redesign PR 1 (2026-10-06), DEVIATION: tyre pressure and static camber
+## (GEVP simulates neither). Per axle, in bar and degrees (negative = top of the
+## tyre leans in). The *_stock values are the car's factory setup: every effect is
+## a ratio against stock, so a car on its stock setup drives exactly as before
+## (traffic and cops never leave it). See gevp_wheel.gd process_tires and
+## apply_tyre_setup() below.
+@export var front_tyre_pressure := 2.2
+@export var rear_tyre_pressure := 2.2
+@export var tyre_pressure_stock := 2.2
+@export var front_static_camber := 0.0
+@export var rear_static_camber := 0.0
+@export var front_static_camber_stock := 0.0
+@export var rear_static_camber_stock := 0.0
+## Body roll toward +x (local right), degrees, read once a tick for the camber
+## model; only computed while some wheel is off its stock camber.
+var body_tilt_deg := 0.0
+var _camber_active := false
 var clutch_cap_mult := 1.0
 var torque_mult := 1.0
 var brake_mult := 1.0
@@ -1257,3 +1279,15 @@ func calculate_damping(weight : float, spring_rate : float, damping_ratio : floa
 
 func calculate_axle_spring_force(compression : float, spring_length : float, spring_rate : float) -> float:
 	return spring_length * compression * 1000.0 * spring_rate * 2.0
+
+## (12) Pushes tyre pressure and static camber onto the wheels. Called by
+## initialize() and by CarSpec when the tuner changes one of them.
+func apply_tyre_setup() -> void:
+	_camber_active = false
+	for w in wheel_array:
+		var front: bool = w == front_left_wheel or w == front_right_wheel
+		w.set_tyre_setup(front_tyre_pressure if front else rear_tyre_pressure, tyre_pressure_stock,
+			front_static_camber if front else rear_static_camber,
+			front_static_camber_stock if front else rear_static_camber_stock,
+			signf(w.position.x))
+		_camber_active = _camber_active or w.camber_active

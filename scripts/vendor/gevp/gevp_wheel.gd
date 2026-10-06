@@ -67,6 +67,16 @@ var current_cof := 0.0
 ## tyre temperature and wear (1.0 = no effect).
 var grip_mult := 1.0
 var current_rolling_resistance := 0.0
+## (12) Tuner redesign PR 1, DEVIATION: tyre pressure and camber, as ratios against
+## the car's stock setup (all 1.0 on stock). Set by set_tyre_setup().
+var pressure_stiffness_mult := 1.0
+var pressure_grip_mult := 1.0
+var pressure_roll_mult := 1.0
+var static_camber := 0.0
+var static_camber_stock := 0.0
+var camber_side := 0.0          # +1 on the car's +x side, -1 on the -x side
+var camber_long_mult := 1.0
+var camber_active := false
 var current_lateral_grip_assist := 0.0
 var current_longitudinal_grip_ratio := 0.0
 var current_tire_stiffness := 0.0
@@ -291,7 +301,7 @@ func process_tires(braking : bool, delta : float):
 	if slip_vector.is_zero_approx():
 		slip_vector = Vector2(0.0001, 0.0001)
 	
-	var cornering_stiffness := 0.5 * current_tire_stiffness * pow(contact_patch, 2.0)
+	var cornering_stiffness := 0.5 * current_tire_stiffness * pow(contact_patch, 2.0) * pressure_stiffness_mult
 	# (10) load sensitivity: grip per unit of load falls as the load rises, so weight
 	# transfer costs total grip (real tyres: Fy ~ Fz^0.7-0.9). vehicle.tyre_load_sensitivity
 	# is the exponent loss (0 = off, GEVP's old linear-in-load behaviour); the
@@ -299,7 +309,7 @@ func process_tires(braking : bool, delta : float):
 	var load_factor := 1.0
 	if vehicle.tyre_load_sensitivity > 0.0 and spring_force > 1.0:
 		load_factor = pow(clampf(spring_force / maxf(mass_over_wheel * 9.81, 1.0), 0.25, 4.0), -vehicle.tyre_load_sensitivity)
-	var friction := current_cof * grip_mult * load_factor * spring_force - (spring_force / (tire_width * contact_patch * 0.2))
+	var friction := current_cof * grip_mult * pressure_grip_mult * load_factor * spring_force - (spring_force / (tire_width * contact_patch * 0.2))
 	var deflect := 1.0 / (sqrt(pow(cornering_stiffness * slip_vector.y, 2.0) + pow(cornering_stiffness * slip_vector.x, 2.0)))
 	
 	## Adds in additional longitudinal grip when braking
@@ -316,6 +326,10 @@ func process_tires(braking : bool, delta : float):
 		force_vector.y = friction * current_longitudinal_grip_ratio * cornering_stiffness * slip_vector.y * brushx * braking_help * z_sign
 		force_vector.x = friction * cornering_stiffness * slip_vector.x * brushx * (absf(slip_vector.x * current_lateral_grip_assist) + 1.0)
 	
+	if camber_active:
+		force_vector.x *= _camber_lateral_mult()
+		force_vector.y *= camber_long_mult
+	
 	if absf(force_vector.y) > absf(max_y_force):
 		force_vector.y = max_y_force * signf(force_vector.y)
 		limit_spin = true
@@ -329,7 +343,44 @@ func process_tires(braking : bool, delta : float):
 
 func process_rolling_resistance() -> float:
 	var rolling_resistance_coefficient := 0.005 + (0.5 * (0.01 + (0.0095 * pow(local_velocity.z * 0.036, 2))))
-	return rolling_resistance_coefficient * spring_force * current_rolling_resistance
+	return rolling_resistance_coefficient * spring_force * current_rolling_resistance * pressure_roll_mult
+
+# ---------- (12) tyre pressure and camber ----------
+
+## Pressure (bar) away from stock: +/-0.6 bar moves response +/-15%. (0.4 made a 1.6 bar car spike to 2 g on the test track.)
+const PRESSURE_STIFFNESS_PER_BAR := 0.25
+## Peak grip is flat within this many bar of stock, then falls off.
+const PRESSURE_IDEAL_WINDOW := 0.1
+const PRESSURE_GRIP_LOSS_PER_BAR := 0.15  # 1.5% per 0.1 bar outside the window (0.25 spun a 1.6 bar car into a 2 g spike)
+const PRESSURE_ROLL_PER_BAR := 0.15       # harder tyres roll more freely
+## Camber: lateral grip peaks at this effective camber (degrees) ...
+const CAMBER_PEAK := -1.0
+## ... and falls by this share per degree squared away from it.
+const CAMBER_FALLOFF := 0.008
+## How much of the body roll shows up as camber change at the tyre.
+const CAMBER_ROLL_GAIN := 0.7
+## Launch and braking grip lost per degree of static camber.
+const CAMBER_LONG_LOSS := 0.01
+
+func set_tyre_setup(pressure: float, pressure_stock: float, camber: float, camber_stock: float, side: float) -> void:
+	var dp := pressure - pressure_stock
+	pressure_stiffness_mult = 1.0 + PRESSURE_STIFFNESS_PER_BAR * dp
+	pressure_grip_mult = 1.0 - PRESSURE_GRIP_LOSS_PER_BAR * maxf(absf(dp) - PRESSURE_IDEAL_WINDOW, 0.0)
+	pressure_roll_mult = 1.0 - PRESSURE_ROLL_PER_BAR * dp
+	static_camber = camber
+	static_camber_stock = camber_stock
+	camber_side = side
+	camber_active = not is_equal_approx(camber, camber_stock)
+	camber_long_mult = (1.0 - CAMBER_LONG_LOSS * absf(camber)) / (1.0 - CAMBER_LONG_LOSS * absf(camber_stock))
+
+static func camber_lateral_curve(effective_deg: float) -> float:
+	return maxf(1.0 - CAMBER_FALLOFF * pow(effective_deg - CAMBER_PEAK, 2.0), 0.4)
+
+## Lateral grip against stock at the current body roll: as the body leans toward
+## +x, the +x side's tyres lean out (camber goes positive), the -x side's lean in.
+func _camber_lateral_mult() -> float:
+	var roll := camber_side * vehicle.body_tilt_deg * CAMBER_ROLL_GAIN
+	return camber_lateral_curve(static_camber + roll) / camber_lateral_curve(static_camber_stock + roll)
 
 func get_reaction_torque() -> float:
 	return force_vector.y * tire_radius

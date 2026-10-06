@@ -44,6 +44,7 @@ func _fail(msg: String) -> void:
 	fails += 1
 
 func _initialize() -> void:
+	OS.set_environment("NEON_TRAFFIC", "0")  # an empty road, whatever run_tests.bat or the saved settings say
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	Engine.max_fps = 0
 	seed(777)
@@ -146,7 +147,8 @@ func _initialize() -> void:
 # Cars spread over 3 lanes our way and 2 oncoming, 12-160 m ahead of the
 # player, all inside the chase cam's view.
 func _slots(origin: Vector3) -> Array:
-	var lanes := [1.15, 3.45, 5.75, -1.15, -3.45]
+	var w := RoadChunkBuilder.LANE_W
+	var lanes := [w * 0.5, w * 1.5, w * 2.5, -w * 0.5, -w * 1.5]
 	var out := []
 	for i in TRAFFIC:
 		var x: float = lanes[i % lanes.size()]

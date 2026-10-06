@@ -623,7 +623,11 @@ func _physics_process(delta : float) -> void:
 			inertia = vehicle_inertia
 	
 	delta_time += delta
-	local_velocity = lerp(((global_transform.origin - previous_global_position) / delta) * global_transform.basis, local_velocity, 0.5)
+	# (11) DEVIATION: upstream blends 50/50 with last tick's value, which makes the
+	# smoothing time constant depend on the tick rate (twice as long at 120 Hz in
+	# wall-clock terms). Weight on the old value is now 0.5^(60*delta): identical
+	# to upstream at 60 Hz, same time constant at any rate.
+	local_velocity = lerp(((global_transform.origin - previous_global_position) / delta) * global_transform.basis, local_velocity, pow(0.5, 60.0 * delta))
 	previous_global_position = global_position
 	speed = local_velocity.length()
 	
@@ -822,6 +826,8 @@ const LAUNCH_FULL_RPM := 2200.0  # engagement reaches 1.0 here on a launch
 const AUTO_CLUTCH_SHUT_SPEED := 3.0
 ## (10) Phase C, DEVIATION: tyre_load_sensitivity (see gevp_wheel.gd process_tires) and
 ## clutch_cap_mult, the clutch's remaining grip from PowertrainHealth's clutch wear.
+## (11) Feel pass (2026-10-06), DEVIATION: the local_velocity smoothing in _physics_process is
+## tick-rate independent (weight pow(0.5, 60 * delta) instead of a flat 0.5 per tick).
 @export var tyre_load_sensitivity := 0.0
 var clutch_cap_mult := 1.0
 var torque_mult := 1.0

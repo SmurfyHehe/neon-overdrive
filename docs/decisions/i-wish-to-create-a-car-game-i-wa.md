@@ -1,5 +1,19 @@
 # Decision: turning Neon Overdrive into a car-culture game
 
+> **Status note, 2026-10-06 (the record below is unchanged).** Three lines in
+> section 1 are out of date:
+> - "a 60 Hz physics tick" is superseded: physics has run at **120 Hz** since
+>   PR #110 (tests run at 60 via `NEON_TICKS=60`; see ROADMAP).
+> - "the vehicle registry (PR #79)" was never merged: #79 is closed and its
+>   import pipeline is not used (ROADMAP "Decisions still valid").
+> - "the tuning panel and upgrade tree": the tuning panel (#69) and Auto-Tune
+>   shipped; the single shared upgrade tree is replaced by one branching mod tree
+>   per car (ROADMAP; answers GitHub #71). Nothing of the tree is built.
+>
+> Also since then: traffic shipped as full-sim lane-follow cars (#113), which
+> bears on section 3 ("rival and crew cars stay scripted"); that is an open
+> question for Roy in ROADMAP "Open for Roy".
+
 **Meeting:** 58d57ceb, 2 rounds (chair, pragmatist, skeptic, simplifier, nerd). Written 2026-09-30.
 **Prompt (Roy):** "I wish to create a car game. i want it to be about car culture. pulls, good driving, some drifting"
 **Status:** these are the meeting's recommendations. Roy has approved the direction but not the build order below. Nothing here is built until he signs off.

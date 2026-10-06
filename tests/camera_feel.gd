@@ -6,6 +6,8 @@ extends SceneTree
 #
 # Phases, one fresh game each where it matters:
 #   rest     -- car settles; FOV, distance and height sit at their rest values
+#   impact   -- a synthetic kerb-like knock (4 m/s over 0.05 s) fed straight to the
+#               camera at the current tick rate; peak trauma must not depend on it
 #   launch   -- full throttle with upshifts; FOV and dolly follow speed
 #   brake    -- hard braking from speed must NOT read as an impact
 #   kerb     -- steer onto the sidewalk ("Dirt"); surface rumble turns on
@@ -13,6 +15,8 @@ extends SceneTree
 #
 # Asserts (exit code 1 on failure):
 # - rest: fov within 0.5 deg of FOV_REST, dist/height at DIST/HEIGHT
+# - impact: peak trauma 0.10..0.25 at 60 AND at 120 Hz (rule: 4 m/s over 0.05 s
+#   is (4 - 48*0.05) * IMPACT_GAIN = 0.19 minus decay); run the test at both rates
 # - launch: reaches 28 m/s; fov rises with speed (correlation > 0.9), ends
 #   at least 8 deg wider; camera distance shortens (dolly)
 # - brake: largest per-tick velocity change stays under IMPACT_DV, trauma 0
@@ -58,8 +62,10 @@ var kerb_trauma := 0.0
 var max_shake_angle := 0.0
 var wall_hit_trauma := 0.0
 var shake_seen := false
+var impact_peak := 0.0
 
 func _initialize() -> void:
+	OS.set_environment("NEON_TRAFFIC", "0")  # an empty road, whatever run_tests.bat or the saved settings say
 	OS.add_logger(logger)
 	seed(777)
 	_spawn()
@@ -144,6 +150,17 @@ func _physics_process(_delta: float) -> bool:
 				if absf(cam.dist_now - C.DIST) > 0.05 or absf(cam.height_now - C.HEIGHT) > 0.05:
 					_fail("rest framing dist %.2f height %.2f" % [cam.dist_now, cam.height_now])
 				start_dist = cam.dist_now
+				_next("impact")
+		"impact":
+			# 4 m/s of velocity change spread evenly over 0.05 s of ticks.
+			var n := int(round(0.05 * Engine.physics_ticks_per_second))
+			if phase_ticks <= n:
+				cam.register_impact(4.0 / n)
+			impact_peak = maxf(impact_peak, cam.trauma)
+			if phase_ticks > n and cam.trauma <= 0.0:
+				print("impact: %d ticks of %.3f m/s at %d Hz, peak trauma %.3f" % [n, 4.0 / n, Engine.physics_ticks_per_second, impact_peak])
+				if impact_peak < 0.10 or impact_peak > 0.25:
+					_fail("synthetic knock peak trauma %.3f at %d Hz, expected 0.10..0.25" % [impact_peak, Engine.physics_ticks_per_second])
 				_next("launch")
 				_press(KEY_W, true)
 		"launch":

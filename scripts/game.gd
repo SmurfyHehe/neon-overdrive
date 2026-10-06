@@ -5,7 +5,7 @@ extends Node3D
 # NOW a vendored raycast Vehicle/Wheel controller -- see player.gd header for
 # why VehicleBody3D was replaced) per ROADMAP.md. Old scripts/main.gd is
 # abandoned, not reused. car_builder.gd IS reused (pure mesh construction).
-# This script owns the world (chunks, ground collision, camera, debug HUD)
+# This script owns the world (chunks, ground collision, camera)
 # and the player instance.
 
 const CHUNKS_AHEAD := 6
@@ -45,11 +45,8 @@ var game_state: GameState
 # Chase camera, its three smoothing modes (#31, C to cycle) and the stage A
 # speed feel (FOV, dolly, shake) all live in chase_camera.gd.
 var camera: ChaseCamera
-var lbl_cam: Label
 var radio: RadioManager
-
-var lbl_gear: Label
-var lbl_speed: Label
+var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
 func _ready() -> void:
 	# Auto-Tune worker mode (exported game): no world, just the search.
@@ -82,7 +79,9 @@ func _ready() -> void:
 	_setup_player()
 	_setup_traffic()
 	_setup_camera()
-	_setup_debug_hud()
+	fx = FxPack.new(player, camera)
+	add_child(fx)
+	_setup_hud()
 	_setup_game_state()
 	if benchmark:
 		add_child(Benchmark.new())
@@ -171,38 +170,37 @@ func _setup_world() -> void:
 func _setup_ground_collision() -> void:
 	var body := StaticBody3D.new()
 	var shape := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	# One big flat slab under the whole play area instead of per-chunk
+	# One flat ground under the whole play area instead of per-chunk
 	# collision -- the road is flat, so a single static shape is simplest
 	# and cheapest. Revisit if/when terrain height ever varies.
 	#
-	# BUG FIX (2026-09-12): this slab used to run from z=-200000 to z=0,
-	# which put its edge EXACTLY at the player's spawn point. The rear axle
-	# (at local z=+1.05) sat past that edge over empty space from frame one
-	# -- there's even a real visual road chunk back there (chunk index -1,
-	# CHUNKS_BEHIND=1, spans z=0 to +CHUNK_LEN=50) that the ground never
-	# covered. Only the front wheels ever found ground; the ungrounded rear
-	# axle torqued the car into a slow backflip and off the map every time.
-	# Shifting the slab forward by CHUNK_LEN covers that behind-chunk with
-	# margin to spare.
+	# History: it was a BoxShape3D slab. BUG FIX (2026-09-12): its edge once
+	# sat exactly at the spawn point, so the rear axle hung over nothing and
+	# the car backflipped off the map. Floating origin (issue #26) then cut it
+	# down to recenter_dist plus margin either way.
 	#
-	# Floating origin (issue #26): the car never gets more than
-	# recenter_dist from z=0 now, so the slab only has to cover that range
-	# plus margin either way (ahead, and behind for reversing) -- it never
-	# moves, and there is no far wall any more.
-	var ahead := recenter_dist + 500.0
-	var behind := recenter_dist + 100.0
-	box.size = Vector3(200.0, 2.0, ahead + behind)
-	shape.shape = box
-	shape.position = Vector3(0.0, -1.0, (behind - ahead) / 2.0)
+	# BUG FIX (2026-10-06, tests/recenter_kick.gd): now an infinite plane. At
+	# ~240 km/h the rear-bottom edge of the chassis collision box rides on the
+	# ground (aero downforce + squat), and box-vs-box with an edge lying flat
+	# on a face is ill-conditioned: on some ticks Godot's separating-axis test
+	# picks an edge-edge axis, the contact normal tilts 1-2 degrees and one
+	# step throws the car up and sideways. The rear springs over-extend, GEVP
+	# drops the rear tyre forces for a few ticks and the car weaves at 3-12
+	# m/s^2. It showed up ~0.5-1.5 s after a floating-origin recenter because
+	# recentering sends the car over the same stretch of slab again and again
+	# at full speed and the bad ticks depend on float rounding at that spot;
+	# with the slab moved along with the world on each recenter the run was
+	# clean. A plane has no edges, so the contact normal is always straight up,
+	# and it needs no size, so it no longer depends on recenter_dist.
+	shape.shape = WorldBoundaryShape3D.new()  # the plane y=0, solid below
 	body.add_child(shape)
 	# Physics rewrite (2026-09-13): the vendored Wheel raycast identifies
 	# surface type by the FIRST group on whatever collision body it hits
-	# (see scripts/vendor/gevp/gevp_wheel.gd process_forces). This base slab
+	# (see scripts/vendor/gevp/gevp_wheel.gd process_forces). This ground plane
 	# is the road+shoulder+curb surface, so it's tagged "Road" -- the raised
 	# sidewalk collision added per-chunk in road_chunk_builder.gd sits
 	# slightly higher and is tagged "Dirt", so a wheel over the sidewalk hits
-	# that closer box first regardless of this slab extending underneath it.
+	# that closer box first regardless of this plane extending underneath it.
 	body.add_to_group("Road")
 	add_child(body)
 
@@ -286,7 +284,8 @@ func _shift_origin(shift_chunks: int) -> void:
 		c.root.reset_physics_interpolation()
 	# Traffic (milestone 3): every car gets the same bookkeeping as the player.
 	traffic.shift_world(offset)
-	# The ground slab stays put: it is centred on the origin by design.
+	fx.shift_world(offset)  # skid marks are laid in world space
+	# The ground plane stays put: it is infinite.
 	# The camera follows the car's interpolated position in _process, so it
 	# needs nothing here.
 
@@ -325,61 +324,19 @@ func toggle_mute() -> void:
 	var bus := AudioServer.get_bus_index("Master")
 	AudioServer.set_bus_mute(bus, not AudioServer.is_bus_mute(bus))
 
-# ---------- temporary debug readout (real HUD is milestone 5) ----------
-func _setup_debug_hud() -> void:
-	var hud := CanvasLayer.new()
-	add_child(hud)
-	var font_color := Color(0, 0.96, 1)
-	lbl_gear = Label.new()
-	lbl_gear.position = Vector2(16, 12)
-	lbl_gear.add_theme_color_override("font_color", font_color)
-	hud.add_child(lbl_gear)
-	lbl_speed = Label.new()
-	lbl_speed.position = Vector2(16, 34)
-	lbl_speed.add_theme_color_override("font_color", font_color)
-	hud.add_child(lbl_speed)
-	lbl_cam = Label.new()
-	lbl_cam.position = Vector2(16, 56)
-	lbl_cam.add_theme_color_override("font_color", font_color)
-	hud.add_child(lbl_cam)
-	var controls := Label.new()
-	controls.position = Vector2(16, 400)
-	controls.add_theme_color_override("font_color", Color(0.71, 0.65, 0.84))
-	controls.text = "A/D steer  ·  W/S throttle/brake  ·  Space handbrake  ·  R reverse  ·  N radio  ·  F cockpit view  ·  V clutch model (Shift clutch, X starter)  ·  G auto/manual  ·  Q/E shift (manual)  ·  Esc pause  ·  T tuning  ·  Y auto-tune  ·  M mute"
-	hud.add_child(controls)
-
-func _update_debug_hud() -> void:
-	var gear_name := "R" if player.gear == -1 else ("N" if player.gear == 0 else str(player.gear))
-	lbl_gear.text = "GEAR %s" % gear_name
-	lbl_speed.text = "%d units/s" % int(player.current_speed())
-	if not player.engine_running:
-		lbl_speed.text += "   ENGINE OFF  (hold X to start)"
-	if player.turbo_boost_max > 0.0:
-		lbl_speed.text += "   BOOST %.2f / %.2f bar" % [player.boost, player.turbo_boost_max]
-	lbl_cam.text = "CAMERA %s  (C smoothing, F cockpit)   TRAFFIC %d cars, %d full-sim (Esc: sliders)" % [camera.mode_name(), traffic.cars.size(), traffic.detailed_count()]
-	# BUG FIX (2026-09-13): shift_flash_t was tracked on the player since
-	# milestone 2 but nothing ever read it -- shifting had zero feedback.
-	# Wired it to actually punch the gear label (bright flash + scale pop)
-	# for its ~0.2s window.
-	if player.shift_flash_t > 0.0:
-		lbl_gear.add_theme_color_override("font_color", Color(1, 1, 1))
-		lbl_gear.scale = Vector2(1.3, 1.3)
-	else:
-		lbl_gear.add_theme_color_override("font_color", Color(0, 0.96, 1))
-		lbl_gear.scale = Vector2(1.0, 1.0)
+# ---------- HUD (scripts/hud.gd) ----------
+func _setup_hud() -> void:
+	add_child(Hud.new(player, camera, traffic))
 
 # ---------- game state (pause / restart / quit, issue #27) ----------
 func _setup_game_state() -> void:
 	game_state = GameState.new()
 	add_child(game_state)
 	add_child(PauseMenu.new(game_state))
-	add_child(TuningPanel.new(player, game_state))
-	add_child(AutoTunePanel.new(player, game_state))
-	add_child(TunerTabs.new(game_state))
+	add_child(TunerScreen.new(player, game_state))
 	add_child(WarningLights.new(player))
 	radio = RadioManager.new()
 	add_child(radio)
 
 func _process(_delta: float) -> void:
 	_update_chunk_pool(player.position.z)
-	_update_debug_hud()

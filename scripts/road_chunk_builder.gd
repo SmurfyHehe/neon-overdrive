@@ -63,9 +63,8 @@ class_name RoadChunkBuilder
 # - narrower road: shoulder 1.6 -> 0.9 m, buildings 0.5 m behind the
 #   sidewalk instead of 1.0, and the lane-count cap moved from 4 to 3 in
 #   game.gd::_section_at(). The sidewalk stays 2.2 m (a drivable risk/reward
-#   shortcut by design; 1.8 m was tried and barely fit the car). LANE_W is
-#   unchanged on purpose (2.3 m is already narrower than a real lane, and
-#   traffic needs it).
+#   shortcut by design; 1.8 m was tried and barely fit the car). LANE_W was
+#   left at 2.3 m then; traffic milestone 4 widened it (see LANE_W).
 # - dense roadside detail, all MultiMesh: sodium street lamps every 25 m per
 #   side (staggered), a fake light pool on the road under each one (additive
 #   decal-style quad, zero lighting cost), posts every 5 m, and concrete walls
@@ -86,11 +85,19 @@ class_name RoadChunkBuilder
 # real roads mark both. Tapering would mean dividers appearing and
 # disappearing mid-span for a worse-looking result.
 
-const LANE_W := 2.3
+# Lane width. 2.3 m until traffic milestone 4 (2026-10-06, Roy's call after the
+# audit): with ~1.8-2.1 m cars that left about 0.25 m either side, and the
+# scripted player sideswiped oncoming traffic within seconds at 240 km/h.
+# Real highway lanes are 3.5-3.7 m; 3.2 m keeps the road a little tight for
+# the sense of speed and leaves ~1.1 m between bodies in adjacent lanes.
+# Everything else across the road (shoulder, curb, sidewalk, buildings,
+# lamps, lane dashes, traffic lane centres) is laid out from this constant.
+const LANE_W := 3.2
 const CHUNK_LEN := 50.0
 const DASH_SPACING := 4.0
 const SHOULDER_W := 0.9
 const CURB_W := 0.3
+const SIDEWALK_RAMP := 0.3  # width of the sloped road-side edge of the sidewalk collision
 const SIDEWALK_W := 2.2  # kept: the sidewalk is a drivable shortcut by design,
                          # and 1.8 m would barely fit the car's 1.76 m track
 # "Pylons" are delineator posts since stage A (node names kept). Denser
@@ -569,15 +576,25 @@ static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: 
 	var body: StaticBody3D = root.get_node(NodePath(body_name))
 	var col: CollisionShape3D = body.get_node(^"Shape")
 	var hull: ConvexPolygonShape3D = col.shape
-	# chunk start is z=0, end is z=-CHUNK_LEN; same 0.05..0.15 height band as
-	# the old box. Points are in chunk-local space, so the body sits at origin.
+	# chunk start is z=0, end is z=-CHUNK_LEN; top at 0.15 like the old box.
+	# Points are in chunk-local space, so the body sits at origin.
+	#
+	# The road-side edge is a ramp, not a wall (2026-10-06): it rises from the
+	# ground at the drawn sidewalk edge to full height SIDEWALK_RAMP further in.
+	# It used to be a 0.05-0.15 m vertical lip, and the chassis collision box
+	# rides within a few cm of the ground, so steering onto the sidewalk at a
+	# shallow angle could catch the box square on that lip and stop the car
+	# dead (tests/car_audio.gd's kerb phase, once the ground became a plane in
+	# PR #129). A sloped face pushes the box up instead.
 	var sx := float(side)
-	var pts := PackedVector3Array()
-	for y in [0.05, 0.15]:
-		pts.append(Vector3(inner0 * sx, y, 0.0))
-		pts.append(Vector3(outer0 * sx, y, 0.0))
-		pts.append(Vector3(inner1 * sx, y, -CHUNK_LEN))
-		pts.append(Vector3(outer1 * sx, y, -CHUNK_LEN))
+	var ramp0 := minf(SIDEWALK_RAMP, absf(outer0 - inner0))
+	var ramp1 := minf(SIDEWALK_RAMP, absf(outer1 - inner1))
+	var pts := PackedVector3Array([
+		Vector3(inner0 * sx, 0.0, 0.0), Vector3(outer0 * sx, 0.0, 0.0),
+		Vector3(inner1 * sx, 0.0, -CHUNK_LEN), Vector3(outer1 * sx, 0.0, -CHUNK_LEN),
+		Vector3((inner0 + ramp0) * sx, 0.15, 0.0), Vector3(outer0 * sx, 0.15, 0.0),
+		Vector3((inner1 + ramp1) * sx, 0.15, -CHUNK_LEN), Vector3(outer1 * sx, 0.15, -CHUNK_LEN),
+	])
 	hull.points = pts
 	body.position = Vector3.ZERO
 

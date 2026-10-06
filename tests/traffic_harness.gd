@@ -47,9 +47,20 @@ static func boot(tree: SceneTree, car_count: int, detail: float, seed_value: int
 ## A driver for PlayerCar.driver: holds the lane centre `lane_x` with the same
 ## pure-pursuit steering the traffic uses and a fixed throttle, lifted above
 ## `max_speed` (m/s). The player's wheelbase is 2.5 m (player.gd CFG, axle_z 1.25).
+##
+## Plus a damping term: it aims LAT_DAMP_T seconds of its own sideways
+## velocity short of the lane centre. Plain pure pursuit is barely damped at
+## 240 km/h: a 1 m/s sideways kick swung the player 1.8 m off the lane and was
+## still swinging +-0.6 m 25 s later (2026-10-06, probe at 120 Hz), and every
+## floating-origin shift or close pass gave it another kick, until it wandered
+## into the next lane. With the term the same kick peaks at 0.9 m and is gone
+## in ~10 s. Test driver only; traffic keeps plain pure pursuit (its lane
+## changes move the target on purpose, and it never goes 240).
+const LAT_DAMP_T := 3.0
+
 static func lane_driver(lane_x: float, throttle: float, max_speed: float = INF) -> Callable:
 	return func(c: Vehicle) -> void:
-		c.steering_input = TrafficCar.lane_steer(c, lane_x, -1.0, 2.5)
+		c.steering_input = TrafficCar.lane_steer(c, lane_x - c.linear_velocity.x * LAT_DAMP_T, -1.0, 2.5)
 		c.throttle_input = throttle if c.current_speed() < max_speed else 0.0
 		c.brake_input = 0.0
 		c.handbrake_input = 0.0
@@ -69,6 +80,13 @@ static func move_player_to_lane(p: PlayerCar, lane: float) -> void:
 		w.last_collision_point += offset
 	p.reset_physics_interpolation()
 
+## Sets a standing player moving at `speed` m/s straight ahead, sim history,
+## wheel spin and gear made consistent (the same handover traffic gets), so a
+## test can start at highway speed instead of spending 30 s accelerating.
+static func launch_player(p: PlayerCar, speed: float) -> void:
+	TrafficCar.set_moving(p, speed)
+	p.reset_physics_interpolation()
+
 ## False if any number the sim carries from tick to tick is NaN or infinite.
 static func finite(v: Vehicle) -> bool:
 	if not v.global_position.is_finite() or not v.linear_velocity.is_finite() or not v.angular_velocity.is_finite():
@@ -82,11 +100,23 @@ static func finite(v: Vehicle) -> bool:
 
 ## True if b's centre lies inside a box of these half-extents around a, in a's
 ## own frame. With half_x 1.5 and half_z 3.0 (the cars are 1.6 x 3.4 m) that
-## is bodies touching; with 0.6 and 1.2 it is one car deep inside another,
-## which only tunnelling produces.
-static func overlaps(a: Node3D, b: Node3D, half_x: float, half_z: float) -> bool:
+## is bodies touching. The box has a height bound too (half_y): without it a
+## car lying on its side, whose local frame is tipped, "overlapped" a car 13 m
+## away along its own up axis, and traffic_stability reported tunnelling that
+## never happened (2026-10-06).
+static func overlaps(a: Node3D, b: Node3D, half_x: float, half_z: float, half_y: float = 1.5) -> bool:
 	var l := a.to_local(b.global_position)
-	return absf(l.x) < half_x and absf(l.z) < half_z
+	return absf(l.x) < half_x and absf(l.z) < half_z and absf(l.y) < half_y
+
+## True if the two bodies' centres are closer than `dist` metres, in any
+## orientation: one car has passed (nearly) through the other. The cars are
+## 1.6 x 1.0 x 3.4 m boxes, so centres under 1 m apart is already some
+## interpenetration, and a pile-up of 3+ bodies at 100 km/h leaves 0.6-0.9 m
+## for a while without any body having tunnelled (seen 2026-10-06, centres
+## 0.58 m apart in a rolled wreck). Concentric centres (under 0.5 m) is what
+## passing through looks like.
+static func tunnelled(a: Node3D, b: Node3D, dist: float = 0.5) -> bool:
+	return a.global_position.distance_to(b.global_position) < dist
 
 static func stats(samples: PackedFloat32Array) -> Dictionary:
 	var s: Array = Array(samples)

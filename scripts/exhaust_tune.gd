@@ -6,6 +6,8 @@
 extends RefCounted
 class_name ExhaustTune
 
+const TestMode := preload("res://scripts/test_mode.gd")
+
 ## How loud the whole exhaust note is. 0.5 is the prototype's old level.
 var loudness := 0.5
 ## Roughness: harder edge, more buzz, more noise in the pulse.
@@ -16,11 +18,70 @@ var pops := 0.3
 ## 0 = no flames. Cosmetic: it only sizes the flame events.
 var flame := 0.0
 
+## Where the player's tune is kept between runs (one entry per car id). Tests
+## point this at a scratch file so they never read or write the real one.
+static var save_path := TestMode.path("user://exhaust_tune.json")
+
+const KEYS := ["loudness", "raspiness", "pops", "flame"]
+
 func _init(l := 0.5, r := 0.3, p := 0.3, f := 0.0) -> void:
 	loudness = l
 	raspiness = r
 	pops = p
 	flame = f
+
+## The four knobs as {key: float}, the form a car's spec holds under "exhaust"
+## and a saved file stores.
+func to_dict() -> Dictionary:
+	return {"loudness": loudness, "raspiness": raspiness, "pops": pops, "flame": flame}
+
+## Copies the knobs of a {key: float} dictionary into this tune (keys it does not
+## have are left alone), clamped to 0..1.
+func apply_dict(d: Dictionary) -> void:
+	loudness = clampf(float(d.get("loudness", loudness)), 0.0, 1.0)
+	raspiness = clampf(float(d.get("raspiness", raspiness)), 0.0, 1.0)
+	pops = clampf(float(d.get("pops", pops)), 0.0, 1.0)
+	flame = clampf(float(d.get("flame", flame)), 0.0, 1.0)
+
+## The saved tune of a car as {key: float}, or {} if there is none (no file, a
+## file that will not parse, or no entry for this car).
+static func load_saved(car_id: String) -> Dictionary:
+	var cars := _read_cars()
+	var d: Variant = cars.get(car_id)
+	if not d is Dictionary:
+		return {}
+	var out := {}
+	for k in KEYS:
+		if d.has(k) and (d[k] is float or d[k] is int):
+			out[k] = clampf(float(d[k]), 0.0, 1.0)
+	return out
+
+## Stores a car's tune, keeping the other cars' entries. A file that will not
+## parse is replaced. Returns false if the file cannot be written.
+static func save_car(car_id: String, d: Dictionary) -> bool:
+	var cars := _read_cars()
+	var entry := {}
+	for k in KEYS:
+		if d.has(k):
+			entry[k] = snappedf(float(d[k]), 0.001)
+	cars[car_id] = entry
+	var f := FileAccess.open(save_path, FileAccess.WRITE)
+	if f == null:
+		push_error("ExhaustTune: cannot write %s (%s)" % [save_path, error_string(FileAccess.get_open_error())])
+		return false
+	f.store_string(JSON.stringify({"version": 1, "cars": cars}, "	"))
+	return true
+
+static func _read_cars() -> Dictionary:
+	if not FileAccess.file_exists(save_path):
+		return {}
+	var json := JSON.new()  # parse() reports an error code; parse_string() prints an engine error
+	if json.parse(FileAccess.get_file_as_string(save_path)) != OK:
+		return {}
+	var parsed: Variant = json.data
+	if parsed is Dictionary and parsed.get("cars") is Dictionary:
+		return parsed.cars
+	return {}
 
 ## Per-car starting tunes, keyed by the fleet ids in docs/design/fleet/fleet.json.
 ## Order: loudness, raspiness, pops, flame. Researched 2026-10-05 and mostly

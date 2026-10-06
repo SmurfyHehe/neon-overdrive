@@ -23,6 +23,7 @@ var brake := 0.0
 var start_z := 0.0
 
 func _initialize() -> void:
+	OS.set_environment("NEON_TRAFFIC", "0")  # an empty road, whatever run_tests.bat or the saved settings say
 	change_scene_to_file("res://Game.tscn")
 
 func _drive(c: PlayerCar) -> void:
@@ -88,23 +89,27 @@ func _physics_process(_delta: float) -> bool:
 				return _end("car never got moving forward again")
 		Step.TABS:
 			var gs: GameState = game.game_state
-			var tabs: TunerTabs = null
+			var screen: TunerScreen = null
 			for c in game.get_children():
-				if c is TunerTabs:
-					tabs = c
-			_check(tabs != null, "no TunerTabs node")
+				if c is TunerScreen:
+					screen = c
+			_check(screen != null, "no TunerScreen node")
+			var tabs: TunerTabs = screen.tabs if screen != null else null
 			if tabs != null:
 				_check(not tabs.visible, "tabs should be hidden while playing")
 				gs.toggle_tuning()
-				_check(gs.state == GameState.State.TUNING and tabs.visible, "T should open the manual tab with the tab strip")
+				_check(gs.state == GameState.State.TUNING and tabs.visible and screen.visible, "T should open the Tuner screen with the tab strip")
+				_check(not screen.auto.visible, "T should leave Auto-Tune folded away")
+				_check(tabs.manual_button.focus_mode == Control.FOCUS_ALL and tabs.auto_button.focus_mode == Control.FOCUS_ALL, "tab buttons should be keyboard-focusable")
 				gs.switch_tuner(GameState.State.AUTOTUNE)
 				_check(gs.state == GameState.State.AUTOTUNE and tabs.visible and paused, "switching tab should keep the tuner open and the game paused")
+				_check(screen.auto.visible, "the Auto-Tune tab should expand the Auto-Tune section")
 				gs.toggle_tuning()
-				_check(gs.state == GameState.State.TUNING, "T from the Auto-Tune tab should show the manual tab")
+				_check(gs.state == GameState.State.TUNING and not screen.auto.visible, "T from the Auto-Tune tab should fold Auto-Tune away")
 				gs.toggle_autotune()
-				_check(gs.state == GameState.State.AUTOTUNE, "Y from the manual tab should show Auto-Tune")
+				_check(gs.state == GameState.State.AUTOTUNE and screen.auto.visible, "Y from the manual tab should expand Auto-Tune")
 				gs.toggle_pause()
-				_check(gs.state == GameState.State.PLAYING and not tabs.visible and not paused, "Esc should close the tuner and hide the tabs")
+				_check(gs.state == GameState.State.PLAYING and not tabs.visible and not screen.visible and not paused, "Esc should close the tuner and hide the tabs")
 			return _end("")
 	return false
 

@@ -34,6 +34,12 @@ var undo_button: Button
 var status_label: Label
 var result_label: Label
 var slot_name_edit: LineEdit
+var discard_button: Button
+## The goal sliders, search length and per-parameter locks: the Tuner screen's
+## Mechanic page hides them behind its Advanced box (Tuner redesign PR 4) and
+## drives them from its own simple controls. Shown when the panel stands alone.
+var advanced_parts: Array[Control] = []
+var advanced := true
 var slot_list: ItemList
 var save_button: Button
 var load_button: Button
@@ -65,10 +71,12 @@ func _ready() -> void:
 	# --- left: goals, budget, buttons ---
 	var left := VBoxContainer.new()
 	columns.add_child(left)
-	left.add_child(_heading("Goals (0 = off)"))
+	var goals_heading := _heading("Goals (0 = off)")
+	left.add_child(goals_heading)
 	var grid := GridContainer.new()
 	grid.columns = 3
 	left.add_child(grid)
+	advanced_parts.append_array([goals_heading, grid])
 	for goal in AutoTuneRules.GOALS:
 		var l := Label.new()
 		l.text = AutoTuneRules.GOALS[goal].label
@@ -92,11 +100,13 @@ func _ready() -> void:
 		budget_option.add_item(b[0])
 	budget_option.select(DEFAULT_BUDGET)
 	left.add_child(budget_option)
+	advanced_parts.append(budget_option)
 	var row := HBoxContainer.new()
 	left.add_child(row)
 	run_button = _button(row, "Run", _on_run)
 	cancel_button = _button(row, "Cancel", _on_cancel)
 	apply_button = _button(row, "Apply", _on_apply)
+	discard_button = _button(row, "Discard", _on_discard)
 	undo_button = _button(row, "Undo apply", _on_undo)
 	status_label = Label.new()
 	status_label.custom_minimum_size = Vector2(320, 0)
@@ -129,6 +139,7 @@ func _ready() -> void:
 	# --- middle: locks ---
 	var mid := VBoxContainer.new()
 	columns.add_child(mid)
+	advanced_parts.append(mid)
 	mid.add_child(_heading("Lock (never changed)"))
 	var locks := GridContainer.new()
 	locks.columns = 2
@@ -207,6 +218,7 @@ func _refresh_buttons() -> void:
 	run_button.disabled = running
 	cancel_button.disabled = not running
 	apply_button.disabled = running or not result.get("improved", false)
+	discard_button.disabled = running or result.is_empty()
 	undo_button.disabled = running or undo_spec.is_empty()
 	budget_option.disabled = running
 	var picked := not slot_list.get_selected_items().is_empty()
@@ -257,7 +269,7 @@ func _poll() -> void:
 		result = _job.result
 		var secs := (Time.get_ticks_msec() - _run_started_msec) / 1000.0
 		status_label.text = "Done: %d runs in %.0f s." % [int(result.evals), secs]
-		result_label.text = _result_text(result)
+		result_label.text = _result_text(result) if advanced else plain_result_text(result)
 	elif st == AutoTuneJob.State.FAILED:
 		status_label.text = "Search failed: %s" % _job.error
 	_refresh_buttons()
@@ -318,6 +330,78 @@ func _on_apply() -> void:
 	result_label.text = ""
 	refresh_lock_labels()
 	_refresh_buttons()
+
+func _on_discard() -> void:
+	if running:
+		return
+	result = {}
+	result_label.text = ""
+	status_label.text = "Discarded. The car is as it was."
+	_refresh_buttons()
+
+## Shows or hides the raw controls (goal weights, search length, per-parameter
+## locks) and switches the result between plain words and the raw table.
+func set_advanced(on: bool) -> void:
+	advanced = on
+	for c in advanced_parts:
+		c.visible = on
+	if not result.is_empty():
+		result_label.text = _result_text(result) if on else plain_result_text(result)
+	result_label.add_theme_font_override("font", _mono_font()) if on else result_label.remove_theme_font_override("font")
+
+## The result in words a player knows: one line per change, then what the
+## track measured, all changes together (the search does not measure them one by
+## one, so the effect is shown once, for the whole set).
+func plain_result_text(res: Dictionary) -> String:
+	if not res.get("improved", false):
+		var lines: Array[String] = ["The mechanic found nothing better for that goal. Your setup stays as it is."]
+		for n in res.get("notes", []):
+			lines.append(n)
+		return "\n".join(lines)
+	var lines: Array[String] = ["The mechanic suggests:"]
+	for p in TuneParams.auto_paths():
+		var old := TuneParams.get_value(player.spec, p)
+		var now := float(res.values[p])
+		if absf(old - now) > 1e-6:
+			lines.append("  " + change_words(p, old, now))
+	var b: Dictionary = res.base_metrics
+	var m: Dictionary = res.metrics
+	var effects: Array[String] = []
+	var d_acc: float = m.t_0_100 - b.t_0_100
+	if absf(d_acc) >= 0.02:
+		effects.append("0-100 %.2f s %s" % [absf(d_acc), "quicker" if d_acc < 0.0 else "slower"])
+	var d_top: float = m.top_speed_kmh - b.top_speed_kmh
+	if absf(d_top) >= 0.5:
+		effects.append("top speed %d km/h %s" % [roundi(absf(d_top)), "higher" if d_top > 0.0 else "lower"])
+	var d_brk: float = m.brake_dist_100 - b.brake_dist_100
+	if absf(d_brk) >= 0.2:
+		effects.append("stops %.1f m %s" % [absf(d_brk), "shorter" if d_brk < 0.0 else "longer"])
+	var d_lat: float = m.peak_lat_g - b.peak_lat_g
+	if absf(d_lat) >= 0.01:
+		effects.append("grip %+.2f g" % d_lat)
+	lines.append("")
+	lines.append("Measured on the track: " + (", ".join(effects) if not effects.is_empty() else "about the same") + ".")
+	lines.append("Apply keeps it, Discard throws it away.")
+	return "\n".join(lines)
+
+## One change in plain words, with the raw numbers after it.
+static func change_words(path: String, old: float, now: float) -> String:
+	var up := now > old
+	var nums := " (%.2f to %.2f)" % [old, now]
+	if path == "final_drive":
+		return ("Shorter gearing" if up else "Longer gearing") + nums
+	if path.begins_with("gear_ratios/"):
+		return "Gear %d %s" % [int(path.get_slice("/", 1)) + 1, "shorter" if up else "longer"] + nums
+	match path:
+		"coefficient_of_drag": return ("More drag" if up else "Less drag") + nums
+		"aero_downforce_coefficient_front": return ("More front downforce" if up else "Less front downforce") + nums
+		"aero_downforce_coefficient_rear": return ("More rear wing" if up else "Less rear wing") + nums
+		"brake_force_multiplier": return ("Harder brakes" if up else "Softer brakes") + nums
+		"tire_stiffnesses/Road": return ("Stiffer tyres" if up else "Softer tyres") + nums
+		"coefficient_of_friction/Road": return ("Grippier tyres" if up else "Less grippy tyres") + nums
+		"lateral_grip_assist/Road": return ("More cornering grip" if up else "Less cornering grip") + nums
+		"longitudinal_grip_ratio/Road": return ("More launch and braking grip" if up else "Less launch and braking grip") + nums
+	return "%s %s%s" % [TuneParams.find(path).get("label", path), "up" if up else "down", nums]
 
 func _on_undo() -> void:
 	if running or undo_spec.is_empty():

@@ -62,7 +62,7 @@ const IMPACT_GAIN := 0.12        # trauma per m/s over the threshold
 ## the passenger-side door mirror is still inside the view at the default FOV.
 enum View { CHASE, COCKPIT }
 const COCKPIT_EYE := Vector3(-0.32, 1.10, 0.30)  # car-local, -x is the driver's side (left-hand drive)
-const COCKPIT_FOV := 80.0
+const COCKPIT_FOV_SPEED_GAIN := 6.0  # degrees added at top speed; the base is ViewSettings.cockpit_fov (default 62)
 ## Head movement in the cockpit (Roy, 2026-10-06): the eye sways with the
 ## car's forces, capped at HEAD_MAX_M (4 cm) and HEAD_MAX_DEG (2 degrees).
 ## Lateral g pushes the head outward and rolls it with the body; braking
@@ -190,7 +190,7 @@ func _place_cockpit(delta: float) -> void:
 	_update_head(delta)
 	var tilt := Basis.from_euler(Vector3(deg_to_rad(head_tilt.x), 0.0, deg_to_rad(head_tilt.y)))
 	global_transform = Transform3D(xf.basis * tilt, xf * (COCKPIT_EYE + head_offset))
-	fov = COCKPIT_FOV + 6.0 * speed_t
+	fov = ViewSettings.cockpit_fov + COCKPIT_FOV_SPEED_GAIN * speed_t
 
 ## Head sway from lateral g (yaw rate x speed) and longitudinal g (the speed
 ## derivative the FOV already uses). +x is the passenger side: a left turn

@@ -10,10 +10,13 @@ stages A, B1 and Auto-Tune were removed from this file; they live in the PR
 descriptions (#84, #85, #86, #88, #90, #100) and in git history.
 
 **Open PRs, not merged (so not "done"):** #114 out-of-bounds walls + story bible +
-radio tracklist, #124 effects pack v1, #127 traffic M4 (brake, lane change,
-react), #129 recenter kick fix, #130 cockpit interior (mirrors, LED wheel,
-cluster, centre stack, shifter lever), #131 seated driver with arms (being cut
-down, see below), #132 docs notes.
+radio tracklist, #127 traffic M4 (brake, lane change, react), #130 cockpit interior
+(mirrors, LED wheel, cluster, centre stack, shifter lever), #131 seated driver with
+arms (being cut down, see below).
+
+**Merged since the last sync (main c76460e):** #124 effects pack v1, #129 recenter
+kick fix, #132 docs notes, #134 Dale to Dave ("The Dave Show"), #135 cockpit FOV
+default 62 with a 55-78 slider.
 
 ## What exists today
 
@@ -36,7 +39,7 @@ a build order. Nothing in them beyond what is listed as merged has been built.
 | Stage B step 4 (camera + HUD) | **Partly**: cockpit camera and turning steering wheel (`0872d0d`), warning lights, volume sliders, **HUD v1 with the RPM-bar shift cue, a Controls page in the pause menu and a palette test (#121)**, feel quick wins and camera B default (#119). Instrument cluster and visible shifter are only in open PR #130; transmission modes not started | #119, #121; `hud_*`, `palette` tests |
 | **One Tuner screen** (gearing, exhaust and Auto-Tune together) | **Merged** (#122). The header still shows key hints, which breaks the no-hints rule; the redesign fixes it | #122 |
 | **P1 sports coupe game model** | **Merged** (#123). Player drives the B1 sheet design | #123 |
-| **Radio** (4 file stations, #125: drift phonk, dark phonk, talk-only, synthwave) | **Merged** (#125). Still names Dale; rename to Dave and the "Neon FM" name are open. #115 closed as superseded | #125 |
+| **Radio** (4 file stations, #125: drift phonk, dark phonk, talk-only, synthwave) | **Merged** (#125). Talk station renamed to Dave ("The Dave Show"); the "Neon FM" name is open. #115 closed as superseded | #125 |
 | Keyboard steering ramp and cap reach the wheels | **Merged** (#126) | #126 |
 | Test hygiene (flaky `car_audio`, `traffic_stability`, `traffic_perf`, timeouts, tests no longer overwrite the user-folder saves) | **Merged** (#128) | `tests/run_one.ps1`, `scripts/test_mode.gd` |
 | **Traffic, stage B step 3** (lane-follow cars on a fixed 4+4-lane road, same raycast sim as the player, car-count and draw-distance sliders in the pause menu) | **Merged** (#113, `a9af0ea`). Full sim inside the draw distance; beyond it (150 m default) cars are frozen kinematic and cruise | `scripts/traffic_car.gd`, `traffic_manager.gd`, `traffic_settings.gd`; `traffic_spawn`, `traffic_stability`, `traffic_perf` |
@@ -49,7 +52,7 @@ a build order. Nothing in them beyond what is listed as merged has been built.
 | Garage + per-car mod trees | **NOT started** | |
 | Damage, fuel, stop places | **NOT started** (parked after the garage) | |
 | Police / heat / pursuit | **NOT started** | |
-| Effects pack | **In open PR #124** (v1), not merged | |
+| Effects pack | **Merged** (#124, v1) | #124 |
 | Currency / scoring / near-miss detection | **NOT started** | |
 | Events (rival, dig/roll race, highway run, touge, takeover), The List, meets, night loop | **NOT started** | |
 
@@ -89,13 +92,13 @@ above, not here.
 
 ### S: one small PR each
 
-1. **Dale to Dave in code and assets** ("The Dave Show"): `radio_stations.gd`,
-   `radio_manager.gd` header ("three stations"), captions, credits. Roy's "Neon FM" rename is open.
+1. ~~Dale to Dave in code and assets~~ **Done**: `radio_stations.gd`, `radio_manager.gd`, tests and credits; talk station is "The Dave Show".
+   Roy's "Neon FM" rename is still open.
 2. **Sightline fixes** (spec approved 2026-10-06): cockpit FOV default **62**, dash
    top **14 deg below eye** (now 6.5), **55% clear glass** (now about 35%), cowl
    at or below -14 deg, header at or above +24 deg, A-pillar 6 deg or less, vertex-baked
    light with no pure black. Rework on top of #130.
-3. **FOV slider 55-78** (default 62) in the pause-menu Settings.
+3. ~~FOV slider 55-78 (default 62) in the pause-menu Settings~~ **Done** (#135).
 4. **Head movement** (on by default, with an off switch).
 5. **Wheel angled toward the driver** without blocking the view (Roy 2026-10-06): the
    wheel top stays at or below -15 deg, tilted to face the driver, not a flat plate
@@ -273,7 +276,7 @@ open:
   `scripts/traffic_car.gd:22-23,184-205`, and that counts as full sim). Do rivals,
   crew and cops run full GEVP near the player too, or stay scripted?
 - **Dale to Dave.** Roy renamed the DJ to Dave ("The Dave Show"). Code and assets
-  on main (#125) still say Dale; the planning docs are updated in open PR #132.
+  now say Dave too ("The Dave Show").
   Audio-only or captions-only for his lines is still open.
 
 - Which 3 features the game must have on day one; the two idea pages that disagree

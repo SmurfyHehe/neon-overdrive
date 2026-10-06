@@ -1,9 +1,9 @@
 extends SceneTree
 
 # One Tuner screen test: runs the real Game.tscn and checks that
-# - T opens the screen with the Gearing & Power and Exhaust sections and the
-#   Auto-Tune section folded away; keyboard focus is on the first slider, Right
-#   moves a slider by one step and Down moves focus on
+# - T opens the screen on the Setup page (Tuner redesign PR 3) with no key hints;
+#   E/Q change page, Down/Right move a notch and write the car, presets apply
+#   and Stock puts the car back; the raw gearing panel still works
 # - the four exhaust sliders show the car's exhaust tune and write the player's
 #   spec (spec.exhaust), and the live EngineSynth.tune follows at once even
 #   though the game is paused
@@ -65,19 +65,31 @@ func _run() -> void:
 	await _tap(KEY_T)
 	await _until(func(): return game.game_state.state == GameState.State.TUNING, 5.0)
 	_check(screen.visible and paused, "T should open the Tuner screen and pause")
-	_check(screen.manual.is_visible_in_tree() and screen.exhaust.is_visible_in_tree(), "Gearing & Power and Exhaust should both show")
-	_check(not screen.auto.is_visible_in_tree(), "Auto-Tune should be folded away after T")
+	_check(screen.current_page() == "setup" and screen.preset_buttons[0].has_focus(), "T should open on the Setup page with Stock focused")
+	_check(not screen.auto.is_visible_in_tree(), "the Mechanic (Auto-Tune) page should not show after T")
 	_check(is_equal_approx(screen.exhaust.sliders.loudness.value, preset.loudness) and is_equal_approx(screen.exhaust.sliders.flame.value, preset.flame), "exhaust sliders should start on the car's preset")
+	_check(not screen.car_label.text.contains("T or Y") and not screen.hint.text.contains("Esc"), "no key hints on the screen")
 
-	# --- keyboard navigation ---
-	var fd: HSlider = screen.manual.sliders.final_drive
-	_check(root.gui_get_focus_owner() == fd, "first slider should have focus on open")
-	var before := fd.value
-	await _tap(KEY_RIGHT)
-	_check(fd.value > before and is_equal_approx(player.spec.final_drive, fd.value), "Right should move the focused slider (%f -> %f)" % [before, fd.value])
-	_check(screen.auto.lock_boxes["final_drive"].text.contains("%.2f" % fd.value), "Auto-Tune lock label should follow the slider: %s" % screen.auto.lock_boxes["final_drive"].text)
+	# --- keyboard navigation: E to Tyres, Down to front pressure, Right one notch ---
+	await _tap(KEY_E)
+	_check(screen.current_page() == "tyres", "E should go to the Tyres page, on %s" % screen.current_page())
+	var p0: float = player.spec.front_tyre_pressure
 	await _tap(KEY_DOWN)
-	_check(root.gui_get_focus_owner() != fd and root.gui_get_focus_owner() != null, "Down should move focus to another control")
+	await _tap(KEY_RIGHT)
+	_check(player.spec.front_tyre_pressure > p0 and is_equal_approx(player.front_tyre_pressure, player.spec.front_tyre_pressure), "Right should raise the front pressure (%f -> %f)" % [p0, player.spec.front_tyre_pressure])
+	_check(screen.preset_label.text.contains("(modified)"), "changing a setting should mark the setup modified: %s" % screen.preset_label.text)
+	await _tap(KEY_Q)
+	_check(screen.current_page() == "setup", "Q should go back to Setup")
+	screen.preset_buttons[2].pressed.emit()  # Grip
+	_check(screen.preset_label.text == "Setup: Grip" and player.spec.front_static_camber < 0.0, "the Grip preset should apply (label %s, camber %f)" % [screen.preset_label.text, player.spec.front_static_camber])
+	screen.preset_buttons[0].pressed.emit()  # back to Stock
+	_check(is_equal_approx(player.spec.front_tyre_pressure, CarSpec.coupe_default().front_tyre_pressure) and is_equal_approx(player.spec.front_static_camber, 0.0), "Stock should put the car back")
+
+	# --- the raw gearing panel (Advanced) still drives the Auto-Tune lock labels ---
+	var fd: HSlider = screen.manual.sliders.final_drive
+	fd.value = fd.value + 0.1
+	_check(is_equal_approx(player.spec.final_drive, fd.value), "the Advanced final drive slider should write the spec")
+	_check(screen.auto.lock_boxes["final_drive"].text.contains("%.2f" % fd.value), "Auto-Tune lock label should follow the slider: %s" % screen.auto.lock_boxes["final_drive"].text)
 
 	# --- exhaust sliders: spec and the live synth, while paused ---
 	screen.exhaust.sliders.loudness.value = 0.9

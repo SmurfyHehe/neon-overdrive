@@ -76,6 +76,8 @@ if /i not "%~1"=="quick" (
 	call :run tyre_model "--headless --fixed-fps 60"
 	rem ~60 s: every chassis setting at both ends on the same track (Tuner PR 2).
 	call :run tuner_settings "--headless --fixed-fps 60"
+	rem ~30 s: the new Tuner's presets on the track, every notch, the estimates (Tuner PR 3).
+	call :run tuner_presets "--headless --fixed-fps 60"
 	rem Traffic (stage B step 3) at the game's 120 Hz tick: ~1 min of dense traffic, then the perf sweep.
 	call :run traffic_stability "--headless --fixed-fps 120"
 	call :run traffic_behaviour "--headless --fixed-fps 120"

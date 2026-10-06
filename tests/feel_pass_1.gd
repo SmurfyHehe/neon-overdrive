@@ -106,11 +106,15 @@ func _physics_process(_delta: float) -> bool:
 				else:
 					_go(Step.WHEEL)
 		Step.GEAR_KEY:
+			# G cycles auto -> semi -> manual -> auto (transmission modes, 2026-10-06).
 			if waited == 20:
-				_check(not p.automatic_transmission, "G should switch to manual")
+				_check(p.transmission_mode() == PlayerCar.Transmission.SEMI, "G should switch to semi-automatic")
 				_tap(KEY_G)
 			if waited == 45:
-				_check(p.automatic_transmission, "G again should switch back to automatic")
+				_check(p.transmission_mode() == PlayerCar.Transmission.MANUAL, "G again should switch to full manual")
+				_tap(KEY_G)
+			if waited == 70:
+				_check(p.automatic_transmission, "a third G should come back to automatic")
 				return _end("")
 	return false
 

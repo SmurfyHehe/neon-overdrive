@@ -1,7 +1,7 @@
 # Synthesised engine sound (2026-09-29, Roy picked option C in
-# PROPOSAL-audio.md: "give it a try, go for C"). THROWAWAY PROTOTYPE -- its
-# job is to answer "does a coded engine sound good enough?" by ear, not to be
-# the final audio system.
+# PROPOSAL-audio.md: "give it a try, go for C"). It began as a throwaway
+# prototype; it is now the shipped engine voice (EngineAudio, PR #57), shaped
+# by the exhaust (#92), turbo (#102) and driveline (#104) work.
 #
 # No samples. A four-stroke fires each cylinder once per two crank turns, so
 # the firing rate is rpm / 60 * cylinders / 2. Each firing is a short pressure

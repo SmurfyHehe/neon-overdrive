@@ -4,8 +4,9 @@ extends SceneTree
 # - F is bound to camera_view; set_view switches the camera between the chase rig
 #   and the driver's eye
 # - in the cockpit the camera sits at the car-local eye point, faces the same way as
-#   the car, the body is hidden, the frame (dash, pillars, wheel) is shown, and the
-#   wheel turns with the steering
+#   the car, the body is kept off the cockpit camera (it moves to the mirror-only
+#   render layer, see CockpitFrame), the interior is shown, and the wheel turns
+#   with the steering
 # - the audio eases to cabin muffling (low-pass cutoffs down on Engine, Tires, World)
 #   and a louder, clearer radio, and back out in the chase view
 # Exit code 1 on failure. Run:
@@ -53,7 +54,7 @@ func _physics_process(_delta: float) -> bool:
 			if waited == 30:
 				_check(cam.perspective.cutoff(&"Engine") > 15000.0, "chase view should leave the Engine bus open (%.0f Hz)" % cam.perspective.cutoff(&"Engine"))
 				chase_music_db = AudioServer.get_bus_volume_db(AudioServer.get_bus_index(&"Music"))
-				_check(not cam.frame.visible and p.chassis_visual.visible, "chase view shows the body and no frame")
+				_check(not cam.frame.visible and not cam.frame.body_hidden_from_camera(), "chase view shows the body and no frame")
 				cam.set_view(ChaseCamera.View.COCKPIT)
 				steer = 0.8
 				_go(Step.COCKPIT)
@@ -65,10 +66,10 @@ func _physics_process(_delta: float) -> bool:
 				var fwd := -cam.global_basis.z
 				var car_fwd := -xf.basis.z
 				_check(fwd.dot(car_fwd) > 0.99, "the cockpit camera should face where the car faces (dot %.3f)" % fwd.dot(car_fwd))
-				_check(not p.chassis_visual.visible, "the body should be hidden in the cockpit")
+				_check(cam.frame.body_hidden_from_camera(), "the body should be off the cockpit camera in the cockpit")
 				_check(cam.frame.visible, "the cockpit frame should be shown")
 				_check(cam.fov >= ViewSettings.cockpit_fov and cam.fov <= ViewSettings.cockpit_fov + ChaseCamera.COCKPIT_FOV_SPEED_GAIN + 0.01, "the cockpit FOV should be the setting (%.0f) plus up to %.0f for speed, got %.2f" % [ViewSettings.cockpit_fov, ChaseCamera.COCKPIT_FOV_SPEED_GAIN, cam.fov])
-				_check(absf(cam.frame.wheel.rotation.y) > 0.3, "the wheel should turn with the steering (%.2f)" % cam.frame.wheel.rotation.y)
+				_check(absf(cam.frame.wheel.angle) > 0.3, "the wheel should turn with the steering (%.2f)" % cam.frame.wheel.angle)
 				_go(Step.BLEND_IN)
 		Step.BLEND_IN:
 			if waited == 40:
@@ -83,7 +84,7 @@ func _physics_process(_delta: float) -> bool:
 		Step.BACK:
 			if waited == 40:
 				_check(cam.perspective.cutoff(&"Engine") > 15000.0, "back in the chase view the Engine bus should open again (%.0f Hz)" % cam.perspective.cutoff(&"Engine"))
-				_check(p.chassis_visual.visible and not cam.frame.visible, "chase view should show the body and hide the frame again")
+				_check(not cam.frame.body_hidden_from_camera() and not cam.frame.visible, "chase view should show the body and hide the frame again")
 				return _end("")
 	return false
 

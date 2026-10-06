@@ -10,10 +10,13 @@ stages A, B1 and Auto-Tune were removed from this file; they live in the PR
 descriptions (#84, #85, #86, #88, #90, #100) and in git history.
 
 **Open PRs, not merged (so not "done"):** #114 out-of-bounds walls + story bible +
-radio tracklist, #124 effects pack v1, #127 traffic M4 (brake, lane change,
-react), #129 recenter kick fix, #130 cockpit interior (mirrors, LED wheel,
-cluster, centre stack, shifter lever), #131 seated driver with arms (being cut
-down, see below), #132 docs notes.
+radio tracklist, #127 traffic M4 (brake, lane change, react), #130 cockpit interior
+(mirrors, LED wheel, cluster, centre stack, shifter lever), #131 seated driver with
+arms (being cut down, see below).
+
+**Merged since the last sync (main c76460e):** #124 effects pack v1, #129 recenter
+kick fix, #132 docs notes, #134 Dale to Dave ("The Dave Show"), #135 cockpit FOV
+default 62 with a 55-78 slider.
 
 ## What exists today
 
@@ -49,7 +52,7 @@ a build order. Nothing in them beyond what is listed as merged has been built.
 | Garage + per-car mod trees | **NOT started** | |
 | Damage, fuel, stop places | **NOT started** (parked after the garage) | |
 | Police / heat / pursuit | **NOT started** | |
-| Effects pack | **In open PR #124** (v1), not merged | |
+| Effects pack | **Merged** (#124, v1) | #124 |
 | Currency / scoring / near-miss detection | **NOT started** | |
 | Events (rival, dig/roll race, highway run, touge, takeover), The List, meets, night loop | **NOT started** | |
 
@@ -95,7 +98,7 @@ above, not here.
    top **14 deg below eye** (now 6.5), **55% clear glass** (now about 35%), cowl
    at or below -14 deg, header at or above +24 deg, A-pillar 6 deg or less, vertex-baked
    light with no pure black. Rework on top of #130.
-3. **FOV slider 55-78** (default 62) in the pause-menu Settings.
+3. ~~FOV slider 55-78 (default 62) in the pause-menu Settings~~ **Done** (#135).
 4. **Head movement** (on by default, with an off switch).
 5. **Wheel angled toward the driver** without blocking the view (Roy 2026-10-06): the
    wheel top stays at or below -15 deg, tilted to face the driver, not a flat plate

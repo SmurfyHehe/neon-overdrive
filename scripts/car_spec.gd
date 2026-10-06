@@ -137,7 +137,7 @@ static func coupe_default() -> Dictionary:
 		# motor_drag stays at the default 0.005: 0.007 cost ~10 km/h of top speed.
 		"automatic_transmission": true,
 		"tyre_load_sensitivity": 0.12,  # Phase C: weight transfer costs grip (real tyres 0.1-0.3); 0 = off
-		"realistic_clutch": false,  # Phase C: clutch pedal, stall and starter; V toggles it in the game (off by default)
+		"realistic_clutch": false,  # Phase C: clutch pedal, stall and starter; on in the MANUAL gearbox mode (G cycles auto / semi / manual)
 		"turbo_boost_max": 0.0,  # Phase B: 0 = naturally aspirated; the T tuner can add boost
 		"brake_selects_reverse": false,  # R picks reverse (Roy); S only brakes
 		"automatic_time_between_shifts": 800.0,  # Phase A shift map: min ms between upshifts

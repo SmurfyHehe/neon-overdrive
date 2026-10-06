@@ -28,8 +28,9 @@ const SQUAT := 0.2        # m the camera drops at full speed effect
 const FOV_REST := 58.0
 const FOV_FAST := 74.0
 const FOV_SPEED_LO := 5.0    # m/s (18 km/h): widening starts
-const FOV_SPEED_HI := 45.0   # m/s (162 km/h): fully wide. Linear between, so
-                             # today's ~35 m/s top speed already gets 3/4 of it
+const FOV_SPEED_HI := 68.0   # m/s (245 km/h, about the car's top speed): fully wide.
+                             # Eased (see _speed_curve), so low speed still widens
+                             # noticeably instead of waiting for the top end
 const FOV_ACCEL_GAIN := 0.25 # deg per m/s^2 of forward acceleration
 const FOV_ACCEL_MIN := -2.0  # braking narrows a little
 const FOV_ACCEL_MAX := 3.0   # hard acceleration widens a little more
@@ -39,7 +40,7 @@ const ACCEL_RATE := 4.0      # 1/s smoothing on the acceleration term
 const DOLLY := 0.7
 
 # Shake. Rotation in radians, position in metres, at full strength.
-const SPEED_SHAKE_ROT := 0.008   # ~0.45 deg buzz at FOV_SPEED_HI and above
+const SPEED_SHAKE_ROT := 0.008   # ~0.45 deg buzz at FOV_SPEED_HI (top speed)
 const SPEED_SHAKE_POS := 0.015
 const SURFACE_SHAKE_ROT := 0.008 # kerb/sidewalk rumble ("Dirt" surface)
 const SURFACE_SHAKE_POS := 0.02
@@ -62,7 +63,7 @@ var view := View.CHASE
 var frame: CockpitFrame
 var perspective: PerspectiveAudio
 var target: PlayerCar
-var mode := 0
+var mode := 1  # B: light smoothing (A, the hard snap, is still on the C key cycle)
 ## Tests turn this off to compare the drawn position against the chase offset.
 var shake_enabled := true
 
@@ -127,19 +128,28 @@ func _physics_process(delta: float) -> void:
 	var v := target.linear_velocity
 	var dv := (v - _prev_vel).length()
 	_prev_vel = v
-	# the per-tick velocity change scales with the tick length, so scale the threshold
-	var dv_limit := IMPACT_DV * 60.0 / float(Engine.physics_ticks_per_second)
-	if dv > dv_limit:
-		trauma = minf(1.0, trauma + (dv - dv_limit) * IMPACT_GAIN * float(Engine.physics_ticks_per_second) / 60.0)
+	register_impact(dv)
 	var speed := target.current_speed()
 	_accel = (speed - _prev_speed) / delta
 	_prev_speed = speed
+
+## Feeds one tick's velocity change (m/s) into the impact shake. Split out so
+## tests/camera_feel.gd can check the tick-rate independence directly.
+func register_impact(dv: float) -> void:
+	# The per-tick velocity change scales with the tick length, so scale the
+	# threshold. The gain stays as is: at twice the rate each tick's excess is
+	# half as big and there are twice as many ticks, so the total trauma from
+	# one impact is already the same. (It used to be multiplied by rate/60 as
+	# well, which made kerb shake ~7x stronger at 120 Hz.)
+	var dv_limit := IMPACT_DV * 60.0 / float(Engine.physics_ticks_per_second)
+	if dv > dv_limit:
+		trauma = minf(1.0, trauma + (dv - dv_limit) * IMPACT_GAIN)
 
 func _process(delta: float) -> void:
 	_update_feel(delta)
 	if view == View.COCKPIT:
 		_place_cockpit()
-		frame.steering = -target.steering_input  # the wheel turns the way the car does
+		frame.steering = target.steer_fraction()  # the wheel turns the way the car does
 		if shake_enabled:
 			_shake(delta)
 		return
@@ -155,9 +165,17 @@ func _place_cockpit() -> void:
 	global_transform = Transform3D(xf.basis, xf * COCKPIT_EYE)
 	fov = COCKPIT_FOV + 6.0 * speed_t
 
+## 0..1 speed factor for FOV, dolly, squat and shake. Ease-out (1 - (1-t)^2):
+## the range now runs to top speed (68 m/s), so a straight line would leave
+## everyday speeds with a third of the effect. This gives about 0.15 at 10 m/s,
+## 0.6 at 28 m/s, 0.85 at 45 m/s and 1.0 at 68 m/s.
+static func _speed_curve(speed: float) -> float:
+	var t := clampf((speed - FOV_SPEED_LO) / (FOV_SPEED_HI - FOV_SPEED_LO), 0.0, 1.0)
+	return 1.0 - (1.0 - t) * (1.0 - t)
+
 func _update_feel(delta: float) -> void:
 	var speed := absf(target.current_speed())
-	var want_t := clampf((speed - FOV_SPEED_LO) / (FOV_SPEED_HI - FOV_SPEED_LO), 0.0, 1.0)
+	var want_t := _speed_curve(speed)
 	speed_t = lerpf(speed_t, want_t, 1.0 - exp(-FOV_RATE * delta))
 	var want_a := clampf(_accel * FOV_ACCEL_GAIN, FOV_ACCEL_MIN, FOV_ACCEL_MAX)
 	accel_fov = lerpf(accel_fov, want_a, 1.0 - exp(-ACCEL_RATE * delta))

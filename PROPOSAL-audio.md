@@ -1,5 +1,21 @@
 # Neon Overdrive — Audio Proposal (2026-09-29)
 
+> **STATUS UPDATE, 2026-10-06: mostly built; this file is history.** Section 1
+> ("there is none") and the line below about audio being backlogged no longer hold.
+> Built on `main`: engine option C, synthesised (`engine_synth.gd`, PR #57); stage A
+> wind, road roar, tyre squeal and kerb rumble (#84); mute option (#91); exhaust
+> loudness, rasp, pops and flames (#92); turbo whistle and blow-off (#102); gear
+> whine, shift thump, driveline clunk, landing thud and volume sliders (#104);
+> radio with generated synthwave stations (#105, #109, with DJ breaks, captions and
+> ducking); cockpit camera and perspective audio (#108). The cockpit view that
+> section 6 deferred is built (#108), so "Chase cam only for now" in ROADMAP is
+> superseded.
+>
+> **Not built:** the adaptive heat-driven music of section 5 (music exists only as
+> radio stations, and open PR #115 would replace those with file-based ones),
+> sampled engine recordings (option A), and per-car or per-upgrade engine sound
+> (GitHub #80). Heat and police do not exist yet. See ROADMAP for the current plan.
+
 > **STATUS: DIRECTION CHOSEN (Roy, 2026-09-29), nothing built yet.** Engine: try
 > **C** (synthesised) first; if a cheap way to get recordings turns up, **A** is
 > the better end state. Music: made in-project, or free / very cheap. Cockpit

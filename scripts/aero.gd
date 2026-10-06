@@ -58,12 +58,10 @@ static func _apply_downforce(v: Vehicle) -> void:
 ## another Vehicle is directly ahead and close, by recomputing the SAME drag
 ## formula process_drag() uses (all inputs -- air_density, speed,
 ## frontal_area, coefficient_of_drag -- are public on the vendor class) and
-## applying a forward force that offsets a fraction of it. No traffic cars
-## exist yet (milestone 3, not built) -- other vehicles register themselves
-## in the "aero_vehicles" group, so until traffic/cops exist this always
-## finds nothing and the effect is a real, tested mechanism sitting inert,
-## the same "built for real, dormant until it has something to act on"
-## pattern as car_spec.gd.
+## applying a forward force that offsets a fraction of it. Other vehicles
+## register themselves in the "aero_vehicles" group; traffic cars (stage B
+## step 3, #113) do, so the player can now draft them. Cars hidden beyond the
+## traffic draw distance leave the group (traffic_manager.gd).
 static func _apply_draft(v: Vehicle) -> void:
 	var draft_factor := _draft_factor(v)
 	if draft_factor <= 0.0:

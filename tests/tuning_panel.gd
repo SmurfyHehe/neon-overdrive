@@ -3,11 +3,12 @@ extends SceneTree
 # Tuning panel test (#62): runs the real Game.tscn and checks that
 # - CarSpec.build_torque_curve() at the default shape matches the old
 #   hand-placed curve, so adding the knobs did not change the car
-# - T opens the panel: tree paused, state TUNING, panel shown, pause menu not
+# - T opens the Tuner screen: tree paused, state TUNING, gearing panel shown,
+#   Auto-Tune section folded away, pause menu not, keyboard focus on the first slider
 # - moving sliders writes into the live Vehicle (gearing, torque, curve)
 # - the readout shows 253 km/h in 5th: #62's 230 at 7000 rpm, but GEVP
 #   only cuts at 110% of redline (7700 rpm)
-# - T closes it again, and Esc closes it too
+# - T closes it again, and Esc closes it too; focus is released on close
 #
 # Exit code 1 on failure. Run (a window opens for a few seconds):
 #   Godot_v4.7.2-stable_win64_console.exe --path . -s res://tests/tuning_panel.gd
@@ -47,7 +48,9 @@ func _process(_delta: float) -> bool:
 			var panel := _panel(game)
 			_check(paused, "T should pause the tree")
 			_check(game.game_state.state == GameState.State.TUNING, "state should be TUNING")
-			_check(panel.visible, "tuning panel should be visible")
+			_check(_screen(game).visible and panel.is_visible_in_tree(), "tuner screen should show the gearing panel")
+			_check(not _screen(game).auto.is_visible_in_tree(), "T should leave the Auto-Tune section folded away")
+			_check(root.gui_get_focus_owner() == panel.sliders.final_drive, "first slider should have keyboard focus on open, has %s" % root.gui_get_focus_owner())
 			_check(not _find(game, PauseMenu).visible, "pause menu should stay hidden")
 			_check(panel.readout.text.contains("253"), "readout should show 253 km/h in 5th:\n" + panel.readout.text)
 			panel.sliders.final_drive.value = 3.5
@@ -70,7 +73,8 @@ func _process(_delta: float) -> bool:
 		100:
 			_check(not paused, "second T should unpause")
 			_check(game.game_state.state == GameState.State.PLAYING, "state should be PLAYING")
-			_check(not _panel(game).visible, "panel should hide")
+			_check(not _screen(game).visible, "tuner screen should hide")
+			_check(root.gui_get_focus_owner() == null, "focus should be released on close")
 			_key(KEY_T)
 		140:
 			_key(KEY_ESCAPE)
@@ -95,8 +99,11 @@ func _check_default_curve() -> void:
 			failures.append("default curve differs at x=%.2f: %.4f vs %.4f" % [x, old.sample_baked(x), built.sample_baked(x)])
 			return
 
+func _screen(game: Node) -> TunerScreen:
+	return _find(game, TunerScreen)
+
 func _panel(game: Node) -> TuningPanel:
-	return _find(game, TuningPanel)
+	return _screen(game).manual
 
 func _find(game: Node, type) -> Node:
 	for c in game.get_children():

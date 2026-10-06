@@ -1,18 +1,23 @@
 extends SceneTree
 
 # Stage A audio test (2026-10-04): the generated loops are sane, and on a real
-# drive of Game.tscn (held keys, the same InputMap path a keyboard uses) each
-# layer of CarAudio follows what the car is doing.
+# drive of Game.tscn each layer of CarAudio follows what the car is doing.
+# The car is driven through PlayerCar.driver (throttle, handbrake and a
+# pure-pursuit lane keeper), not key events: the old bot steered bang-bang
+# through the keyboard ramp and swerved +-0.3 rad across the road whenever a
+# frame ran long, and that real slide squealed (flaked 1 run in 3 in the full
+# suite, 5 of 6 under CPU load; fixed 2026-10-06).
 #
 # Phases:
 #   idle   -- standing still: every layer silent
-#   launch -- full throttle with upshifts to 30 m/s: wind and road follow speed
+#   launch -- full throttle (automatic gearbox) to 30 m/s: wind and road follow speed
 #   slide  -- handbrake + full lock at speed: tyres squeal
 #   kerb   -- steer onto the sidewalk ("Dirt"): kerb rumble
 #
 # Asserts (exit code 1 on failure):
 # - each loop: finite, peak 0.8 (normalised), no click at the loop point,
-#   built in under 1 s total
+#   built in under 5 s total (it takes ~0.3 s; the limit is only there to catch
+#   a runaway, and a busy machine must not fail the test)
 # - idle: all four levels under 0.02
 # - launch: wind tracks speed^WIND_EXP (r > 0.95), road tracks speed (r > 0.9);
 #   at 30 m/s wind > 0.25 and road > 0.5; squeal stays under 0.15 while
@@ -46,7 +51,11 @@ var roads: PackedFloat32Array = []
 var cruise_squeal := 0.0
 var slide_squeal := 0.0
 var kerb_surface := 0.0
-var e_down := false
+## What the driver callable feeds the car, set per phase.
+var d_throttle := 0.0
+var d_handbrake := 0.0
+var d_steer := 0.0       # raw steering_input, used when d_lane_x is NAN
+var d_lane_x := NAN      # hold this world x with the traffic lane keeper
 var record: AudioEffectRecord
 var phase_marks := {}  # phase -> seconds into the recording when it started
 var t := 0.0
@@ -57,6 +66,7 @@ func _initialize() -> void:
 	record = AudioEffectRecord.new()
 	AudioServer.add_bus_effect(0, record)
 	seed(777)
+	OS.set_environment("NEON_TRAFFIC", "0")  # an empty road, whatever run_tests.bat or the saved settings say
 	game = (load("res://Game.tscn") as PackedScene).instantiate()
 	root.add_child(game)
 
@@ -64,12 +74,14 @@ func _fail(msg: String) -> void:
 	fails += 1
 	print("FAIL ", msg)
 
-func _press(k: Key, down: bool) -> void:
-	var e := InputEventKey.new()
-	e.keycode = k
-	e.physical_keycode = k
-	e.pressed = down
-	Input.parse_input_event(e)
+func _drive(c: PlayerCar) -> void:
+	c.throttle_input = d_throttle
+	c.brake_input = 0.0
+	c.handbrake_input = d_handbrake
+	if is_nan(d_lane_x):
+		c.steering_input = d_steer
+	else:
+		c.steering_input = TrafficCar.lane_steer(c, d_lane_x, -1.0, 2.5)
 
 func _check_loops() -> void:
 	var t0 := Time.get_ticks_usec()
@@ -77,7 +89,7 @@ func _check_loops() -> void:
 		CarAudio.stream(layer)
 	var ms := (Time.get_ticks_usec() - t0) / 1000.0
 	print("loops built in %.0f ms" % ms)
-	if ms > 1000.0:
+	if ms > 5000.0:
 		_fail("building the loops took %.0f ms" % ms)
 	for layer in ["wind", "road", "squeal", "surface"]:
 		var wav := CarAudio.stream(layer)
@@ -110,11 +122,6 @@ func _sidewalk_x(p: PlayerCar) -> float:
 	var cfg: Dictionary = game.call("_section_at", idx)
 	return RoadChunkBuilder._lane_w(cfg.own_lanes) + RoadChunkBuilder.SHOULDER_W + RoadChunkBuilder.CURB_W + RoadChunkBuilder.SIDEWALK_W / 2.0
 
-func _hold_heading(p: PlayerCar, aim_x: float = 0.0, max_term: float = 0.05) -> void:
-	var err: float = p.global_rotation.y + clampf((aim_x - p.global_position.x) * 0.02, -max_term, max_term)
-	_press(KEY_A, err < -0.02)
-	_press(KEY_D, err > 0.02)
-
 ## The handbrake slide leaves the car spun round and nearly stopped, and how it
 ## ends differs run to run (it sometimes sits sideways at 0 m/s and never gets
 ## to the sidewalk). The kerb phase only tests the surface layer, so start it
@@ -124,14 +131,6 @@ func _reset_for_kerb(p: PlayerCar) -> void:
 	p.linear_velocity = Vector3(0.0, 0.0, -12.0)
 	p.angular_velocity = Vector3.ZERO
 	p.shift(2 - p.current_gear)
-
-func _upshift(p: PlayerCar) -> void:
-	if e_down:
-		_press(KEY_E, false)
-		e_down = false
-	elif p.gear >= 1 and p.gear < 5 and p.linear_velocity.length() > 9.0 * p.gear and not p.is_shifting:
-		_press(KEY_E, true)
-		e_down = true
 
 func _next(name: String) -> void:
 	phase = name
@@ -157,7 +156,7 @@ func _physics_process(_delta: float) -> bool:
 		_finish()
 		return false
 	var p: PlayerCar = game.get("player")
-	p.automatic_transmission = false  # this bot shifts with E (the game default is automatic now)
+	p.driver = _drive
 	if audio == null:
 		for c in p.get_children():
 			if c is CarAudio:
@@ -181,10 +180,9 @@ func _physics_process(_delta: float) -> bool:
 						break
 				_check_players()
 				_next("launch")
-				_press(KEY_W, true)
+				d_throttle = 1.0
+				d_lane_x = 0.0
 		"launch":
-			_hold_heading(p)
-			_upshift(p)
 			speeds.append(speed)
 			winds.append(audio.wind_level)
 			roads.append(audio.road_level)
@@ -206,10 +204,10 @@ func _physics_process(_delta: float) -> bool:
 				if cruise_squeal >= 0.15:
 					_fail("tyres squeal while cruising straight (%.3f)" % cruise_squeal)
 				_next("slide")
-				_press(KEY_W, false)
-				_press(KEY_SPACE, true)
-				_press(KEY_A, true)
-				_press(KEY_D, false)
+				d_throttle = 0.0
+				d_handbrake = 1.0
+				d_lane_x = NAN
+				d_steer = 1.0  # full lock
 			elif phase_ticks > _sec(45):
 				_fail("launch never reached 30 m/s (%.1f)" % speed)
 				_finish()
@@ -219,17 +217,14 @@ func _physics_process(_delta: float) -> bool:
 				print("slide: squeal max %.2f" % slide_squeal)
 				if slide_squeal <= 0.4:
 					_fail("handbrake slide at speed only squealed %.2f" % slide_squeal)
-				_press(KEY_SPACE, false)
-				_press(KEY_A, false)
+				d_handbrake = 0.0
+				d_steer = 0.0
 				_next("kerb")
 				_reset_for_kerb(p)
-				_press(KEY_W, true)
+				d_throttle = 1.0
 		"kerb":
-			_upshift(p)
-			if speed > 8.0:
-				_hold_heading(p, _sidewalk_x(p), 0.15)
-			else:
-				_hold_heading(p, p.global_position.x)
+			# Aim at the sidewalk once moving; until then hold the line.
+			d_lane_x = _sidewalk_x(p) if speed > 8.0 else p.global_position.x
 			kerb_surface = maxf(kerb_surface, audio.surface_level)
 			# Two wheels on the sidewalk at ~10 m/s is ~0.25; silent is 0.
 			if kerb_surface > 0.25 or phase_ticks > _sec(25):

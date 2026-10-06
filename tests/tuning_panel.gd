@@ -38,6 +38,11 @@ func _physics_process(_delta: float) -> bool:
 	return false
 
 func _process(_delta: float) -> bool:
+	# Hold the script while a key is still down: releases are paced in physics
+	# ticks, and headless frames can outrun them, so a second T could land while
+	# the first was still held and never register as a new press.
+	if not releases.is_empty():
+		return false
 	frame += 1
 	var game := current_scene
 	match frame:
@@ -45,13 +50,19 @@ func _process(_delta: float) -> bool:
 			_check_default_curve()
 		20:
 			_key(KEY_T)
+		40:
+			if game.game_state.state == GameState.State.TUNING:
+				_check(_screen(game).current_page() == "setup", "T should open the tuner on Setup")
+				_screen(game).show_page("advanced")
 		60:
 			var panel := _panel(game)
 			_check(paused, "T should pause the tree")
 			_check(game.game_state.state == GameState.State.TUNING, "state should be TUNING")
-			_check(_screen(game).visible and panel.is_visible_in_tree(), "tuner screen should show the gearing panel")
-			_check(not _screen(game).auto.is_visible_in_tree(), "T should leave the Auto-Tune section folded away")
-			_check(root.gui_get_focus_owner() == panel.sliders.final_drive, "first slider should have keyboard focus on open, has %s" % root.gui_get_focus_owner())
+			# Tuner redesign PR 3: T opens on Setup; the raw gearing panel is on Advanced.
+			_check(_screen(game).visible and _screen(game).current_page() == "advanced", "the tuner should be open on Advanced")
+			_check(not _screen(game).auto.is_visible_in_tree(), "T should not show the Mechanic page")
+			_check(panel.is_visible_in_tree(), "the Advanced page should show the gearing panel")
+			_check(root.gui_get_focus_owner() == panel.sliders.final_drive, "first slider should have keyboard focus on Advanced, has %s" % root.gui_get_focus_owner())
 			_check(not _find(game, PauseMenu).visible, "pause menu should stay hidden")
 			_check(panel.readout.text.contains("253"), "readout should show 253 km/h in 5th:\n" + panel.readout.text)
 			panel.sliders.final_drive.value = 3.5

@@ -43,6 +43,16 @@ const DESIGN_WHEEL_X := 0.765
 ## physics stance.
 const BODY_LIFT := 0.12
 const GLOW_ENERGY := 2.5
+## Door mirrors (cockpit milestone, 2026-10-06): the sheet has none, so two small
+## paint-coloured cups on short stalks at the belt line by the A-pillars, open
+## toward the driver. Centre in body space (before BODY_LIFT) and the yaw of the
+## open face about +y; the cockpit's mirror glass and cameras sit in them.
+const MIRRORS := [
+	{"pos": Vector3(-1.01, 0.86, -0.55), "yaw": 12.0},
+	{"pos": Vector3(1.01, 0.86, -0.55), "yaw": -20.0},
+]
+const MIRROR_SIZE := Vector3(0.21, 0.125, 0.10)
+const MIRROR_INSIDE := Color("#0B0E14")
 ## Faces whose colour is the paint: flagged in the vertex alpha so one surface
 ## carries paint and trim and the paint can still change at runtime.
 const PAINT_MATS := ["paint", "roof"]
@@ -105,6 +115,10 @@ static func build_chassis_visual(paint: Color = PAINT) -> Node3D:
 		if mesh.surface_get_name(i) == "body":
 			body.set_surface_override_material(i, paint_mat)
 	root.add_child(body)
+	var mirrors := _build_mirrors()
+	mirrors.position = lift
+	mirrors.set_surface_override_material(0, paint_mat)   # same paint, recolours with the body
+	root.add_child(mirrors)
 
 	var slots := []
 	for s in Data.STICKER_SLOTS:
@@ -180,9 +194,31 @@ static func triangle_count() -> int:
 		n += 2 * _get_wheel_mesh(rear).surface_get_array_len(0) / 3
 	return n
 
-## Draw calls of one car: body surfaces plus one per wheel.
+## Draw calls of one car: body surfaces, the door mirrors, plus one per wheel.
 static func draw_call_count() -> int:
-	return _get_body_mesh().get_surface_count() + 4
+	return _get_body_mesh().get_surface_count() + 1 + 4
+
+## Triangles in the two door mirror cups (on top of triangle_count()).
+static func mirror_triangle_count() -> int:
+	var mi := _build_mirrors()
+	var n := (mi.mesh as ArrayMesh).surface_get_array_len(0) / 3
+	mi.free()
+	return n
+
+## The two door mirrors as one mesh (one draw call): a cup open toward the
+## driver, dark inside, paint outside (vertex alpha 0 = paint, like the body),
+## on a stalk from the door. Body space, like the body mesh.
+static func _build_mirrors() -> MeshInstance3D:
+	var k := CockpitKit.new()
+	var paint := Color(PAINT, 0.0)
+	for h in MIRRORS:
+		var pos: Vector3 = h.pos
+		var basis := Basis(Vector3.UP, deg_to_rad(float(h.yaw)))
+		k.cup(MIRROR_SIZE, pos, basis, paint, MIRROR_INSIDE, 0.035)
+		var side := signf(pos.x)
+		k.box(Vector3(0.12, 0.035, 0.05), Vector3(side * 0.90, pos.y - 0.015, pos.z), paint)
+	var mi := k.instance(null, "Mirrors")
+	return mi
 
 # ---------- meshes ----------
 
@@ -303,7 +339,10 @@ static func _get_wheel_material() -> ShaderMaterial:
 static func _get_glass_material() -> StandardMaterial3D:
 	if _glass_mat == null:
 		_glass_mat = StandardMaterial3D.new()
-		_glass_mat.albedo_color = Color(Data.COLORS.glass)
+		# See-through (cockpit milestone 2): the driver and cabin show through
+		# the windows in the chase view. Dark tint, so the outside look holds.
+		_glass_mat.albedo_color = Color(Color(Data.COLORS.glass), 0.5)
+		_glass_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		_glass_mat.metallic = 0.6
 		_glass_mat.roughness = 0.08
 	return _glass_mat

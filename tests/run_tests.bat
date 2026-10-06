@@ -52,6 +52,9 @@ call :run audio_master --headless
 call :run phase_a_engine --headless
 call :run tick_rate_120 "--headless --fixed-fps 120"
 call :run cockpit --headless
+call :run cockpit_interior --headless
+call :run cockpit_isolation "--headless --fixed-fps 120"
+call :run cockpit_driver --headless
 call :run tyres "--headless --fixed-fps 60"
 call :run clutch_model --headless
 call :run driveline_audio --headless
@@ -61,6 +64,7 @@ call :run powertrain_health "--headless --fixed-fps 60"
 call :run turbo "--headless --fixed-fps 60"
 call :run chassis_targets "--headless --fixed-fps 60"
 call :run reverse_and_tabs --headless
+call :run transmission_modes "--headless --fixed-fps 60"
 call :run auto_tune_worker_mode --headless
 call :run tune_params --headless
 call :run auto_tune_rules --headless
@@ -69,6 +73,8 @@ call :run traffic_spawn "--headless --fixed-fps 60"
 rem ~17 s: full throttle at ~245 km/h across floating-origin recenters (the old ground-slab kick), at the game's 120 Hz.
 call :run recenter_kick "--headless --fixed-fps 120"
 call :run fx_pack --headless
+call :run boundary_walls --headless
+call :run road_space --headless
 if /i not "%~1"=="quick" (
 	rem Headless, but ~2 min of simulated driving; --fixed-fps lets physics run faster than the clock.
 	call :run tune_track "--headless --fixed-fps 60"

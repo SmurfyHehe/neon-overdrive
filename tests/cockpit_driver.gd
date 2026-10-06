@@ -1,0 +1,232 @@
+extends SceneTree
+
+# The driver (cockpit milestone 2, 2026-10-06), headless and silent:
+# - a DriverModel sits in the CockpitFrame with head, torso, floating gloved
+#   hands (no arms), a gold bracelet on the right wrist, legs, within the
+#   triangle budget; the glove style matches the car
+# - the hands stay on the rim grips (within 2 cm) across a steering sweep,
+#   legs reach the pedals
+# - a manual shift moves the lever and sends the right hand to the knob, then
+#   back on the rim within 1 s
+# - a radio station change sends the right hand to the head unit and back
+# - pulling the handbrake sends the right hand to the lever, which it holds
+#   until the handbrake is released, then back on the rim
+# - the hands and wrists never rise above the rim top from the eye (at least
+#   CockpitFrame.WHEEL_TOP_MIN_DEG below it) in any of the above
+# - in the cockpit view the head and torso are hidden, in the chase view shown
+# - no engine errors during any of it
+# Exit code 1 on failure. Run:
+#   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/cockpit_driver.gd
+
+const TIMEOUT_TICKS := 60 * 40
+const TRI_MAX := 3000
+const TRI_MIN := 600
+const GRIP_TOL := 0.02
+
+class ErrorCounter extends Logger:
+	var errors: Array[String] = []
+	var _lock := Mutex.new()
+	func _log_error(function: String, file: String, line: int, code: String, rationale: String,
+			_editor_notify: bool, error_type: int, _script_backtraces: Array[ScriptBacktrace]) -> void:
+		if error_type == ERROR_TYPE_WARNING:
+			return
+		_lock.lock()
+		errors.append("%s (%s:%d in %s)" % [rationale if rationale != "" else code, file, line, function])
+		_lock.unlock()
+	func _log_message(_message: String, _error: bool) -> void:
+		pass
+
+enum Step { BOOT, SWEEP, SHIFT, RADIO, BRAKE, VIEWS, DONE }
+
+## Physics ticks for a number of seconds (the suite runs at 60, the game at 120).
+static func ticks(secs: float) -> int:
+	return int(round(secs * Engine.physics_ticks_per_second))
+
+var step := Step.BOOT
+var step_start := 0
+var tick := 0
+var failures: Array[String] = []
+var steer := 0.0
+var throttle := 0.0
+var logger := ErrorCounter.new()
+var sweep := [-1.0, -0.6, -0.2, 0.0, 0.3, 0.7, 1.0]
+var sweep_i := 0
+var shift_tick := -1
+var hand_at_knob := false
+var hand_back_tick := -1
+var hand_at_radio := false
+var lever_moved := false
+var handbrake := 0.0
+var hand_at_brake := false
+var hand_rode_brake := false
+var min_below_eye := 90.0     # degrees below the eye of the highest hand point seen
+var min_below_where := ""
+
+func _initialize() -> void:
+	ExhaustTune.save_path = "user://autotune/test_cockpit_driver_exhaust.json"
+	OS.add_logger(logger)
+	change_scene_to_file("res://Game.tscn")
+
+func _drive(c: PlayerCar) -> void:
+	c.throttle_input = throttle
+	c.brake_input = 0.0
+	c.handbrake_input = handbrake
+	c.steering_input = steer
+
+## Lowest angle below the eye's horizontal of the hands' grip and wrist points
+## (car space), kept as a running minimum with where it happened.
+func _track_view(d: DriverModel, where: String) -> void:
+	var eye := ChaseCamera.COCKPIT_EYE
+	for side in [-1, 1]:
+		for pt in [d.hand_position(side), d.wrist_position(side)]:
+			var v: Vector3 = eye - pt
+			var below := rad_to_deg(atan2(v.y, Vector2(v.x, v.z).length()))
+			if below < min_below_eye:
+				min_below_eye = below
+				min_below_where = "%s hand %d" % [where, side]
+
+func _physics_process(_delta: float) -> bool:
+	tick += 1
+	var game := current_scene
+	if game == null or game.get("player") == null or game.get("camera") == null:
+		return tick > TIMEOUT_TICKS and _end("Game never became ready")
+	var p: PlayerCar = game.player
+	var cam: ChaseCamera = game.camera
+	p.driver = _drive
+	var frame: CockpitFrame = cam.frame
+	var d: DriverModel = frame.driver
+	var waited := tick - step_start
+	if step != Step.BOOT:
+		_track_view(d, Step.keys()[step])
+	match step:
+		Step.BOOT:
+			_check(d != null and d.get_parent() == frame, "the driver should be a child of the cockpit frame")
+			for n in ["Torso", "Torso/TorsoMesh", "Torso/Head", "Torso/Head/HeadMesh",
+					"HandL", "HandR", "HandR/Bracelet", "ThighL", "ThighR", "ShinL", "ShinR", "FootL", "FootR"]:
+				_check(d.get_node_or_null(n) != null, "the driver should have a node %s" % n)
+			for n in ["UpperArmL", "UpperArmR", "ForearmL", "ForearmR"]:
+				_check(d.get_node_or_null(n) == null, "no arms: the driver should not have a node %s" % n)
+			_check(d.get_node_or_null("HandL/Bracelet") == null, "the bracelet is on the right wrist only")
+			_check(d.glove_style == PlayerCar.chassis_kind() or not DriverModel.GLOVE_STYLES.has(PlayerCar.chassis_kind()), "the glove style follows the car (%s)" % d.glove_style)
+			var gold := (d.bracelet.material_override if d.bracelet.material_override != null else d.bracelet.mesh.surface_get_material(0)) as StandardMaterial3D
+			_check(gold != null and gold.metallic >= 0.8, "the bracelet is metallic gold")
+			_check(d.bracelet.mesh.surface_get_array_len(0) / 3 >= 4 * 12 * DriverModel.LINKS - 1, "the bracelet is a ring of %d modelled links" % DriverModel.LINKS)
+			print("driver triangles: %d" % d.tri_count)
+			_check(d.tri_count >= TRI_MIN and d.tri_count <= TRI_MAX, "driver triangles %d, want %d..%d" % [d.tri_count, TRI_MIN, TRI_MAX])
+			for n in d.find_children("*", "VisualInstance3D", true, false):
+				_check((n as VisualInstance3D).layers == CockpitFrame.DRIVER_BIT, "driver meshes sit on the driver layer (%s)" % n.name)
+			for v in frame.mirrors.views:
+				_check((v.cam as Camera3D).cull_mask & CockpitFrame.DRIVER_BIT == 0, "mirror cameras never draw the driver")
+			cam.set_view(ChaseCamera.View.COCKPIT)
+			steer = sweep[0]
+			_go(Step.SWEEP)
+		Step.SWEEP:
+			if waited == ticks(0.35):
+				_check(absf(frame.steering - p.steer_fraction()) < 1e-4, "the frame reads the steering")
+				for side in [-1, 1]:
+					var gap: float = d.hand_position(side).distance_to(d.grip_position(side))
+					_check(gap <= GRIP_TOL, "hand %d is %.3f m off its rim grip at steer %.1f (wheel %.0f deg)" % [side, gap, steer, rad_to_deg(frame.wheel.angle)])
+					_check(d.leg_gap(side) < 0.03, "leg %d cannot reach its pedal (short by %.3f m)" % [side, d.leg_gap(side)])
+				# the grip really is on the rim centreline: the hand turns with the
+				# wheel up to the slide angle and stays there past it (car space,
+				# the wheel's own rotation left out)
+				var deg := rad_to_deg(frame.wheel.angle)
+				var held := -clampf(deg, -DriverModel.HAND_SLIDE_DEG, DriverModel.HAND_SLIDE_DEG)
+				var to_wheel := (frame.wheel_mount.transform * frame.wheel.transform).affine_inverse()
+				for side in [-1, 1]:
+					var local: Vector3 = to_wheel * d.hand_position(side)
+					var ang := rad_to_deg(atan2(local.y, local.x))
+					var nearest := frame.wheel.rim_point(ang)
+					_check(local.distance_to(nearest) <= GRIP_TOL, "hand %d is %.3f m off the rim centreline at wheel %.0f deg" % [side, local.distance_to(nearest), deg])
+					var world_ang := wrapf(ang - deg, -180.0, 180.0)
+					var want := wrapf((0.0 if side > 0 else 180.0) + held, -180.0, 180.0)
+					_check(absf(wrapf(world_ang - want, -180.0, 180.0)) < 8.0, "hand %d sits at %.0f deg of the rim, want %.0f (wheel %.0f)" % [side, world_ang, want, deg])
+				sweep_i += 1
+				if sweep_i < sweep.size():
+					steer = sweep[sweep_i]
+					step_start = tick
+				else:
+					steer = 0.0
+					throttle = 1.0
+					p.automatic_transmission = false
+					_go(Step.SHIFT)
+		Step.SHIFT:
+			if waited == ticks(0.5):
+				var before: int = p.gear
+				p.shift(1)
+				_check(p.is_shifting and p.requested_gear == before + 1, "shift(1) should start a shift to %d" % (before + 1))
+				shift_tick = tick
+			if shift_tick > 0:
+				lever_moved = lever_moved or frame.lever_moving
+				var knob: Vector3 = frame.lever.transform * frame.lever_knob.position
+				if d.hand_position(1).distance_to(knob) < 0.06:
+					hand_at_knob = true
+				if hand_at_knob and hand_back_tick < 0 and not d.is_busy() and d.hand_position(1).distance_to(d.grip_position(1)) <= GRIP_TOL:
+					hand_back_tick = tick
+			if waited == ticks(0.5) + ticks(1.25):
+				_check(lever_moved, "a manual shift should move the lever")
+				_check(hand_at_knob, "the right hand should reach the gear knob during a manual shift")
+				_check(hand_back_tick > 0 and hand_back_tick - shift_tick <= ticks(1.0), "the hand should be back on the rim within 1 s (%d ticks)" % (hand_back_tick - shift_tick))
+				_check(not d.is_busy(), "the driver is idle again after the shift")
+				throttle = 0.3
+				game.radio.next_station()
+				shift_tick = tick
+				_go(Step.RADIO)
+		Step.RADIO:
+			var btn: Vector3 = frame.radio_button_position()
+			if d.hand_position(1).distance_to(btn) < 0.10:
+				hand_at_radio = true
+			if waited == ticks(1.2):
+				_check(hand_at_radio, "a station change should send the right hand to the head unit")
+				_check(not d.is_busy() and d.hand_position(1).distance_to(d.grip_position(1)) <= GRIP_TOL, "the hand returns to the rim after the radio press")
+				_check(frame.radio_label.text != "RADIO OFF", "the head unit shows the station (%s)" % frame.radio_label.text)
+				throttle = 0.0
+				handbrake = 1.0
+				_go(Step.BRAKE)
+		Step.BRAKE:
+			var grip: Vector3 = frame.handbrake.transform * Vector3(0.0, 0.017, -0.21)
+			var at_lever := d.hand_position(1).distance_to(grip) < 0.08
+			if at_lever:
+				hand_at_brake = true
+				if frame.handbrake.rotation_degrees.x > 20.0:
+					hand_rode_brake = true
+			if waited == ticks(0.6):
+				_check(hand_at_brake and at_lever, "pulling the handbrake should put the right hand on the lever and keep it there")
+				_check(hand_rode_brake, "the hand rides the lever up as the handbrake lifts")
+				handbrake = 0.0
+			if waited == ticks(0.6) + ticks(0.5):
+				_check(not d.is_busy() and d.hand_position(1).distance_to(d.grip_position(1)) <= GRIP_TOL, "the hand returns to the rim after the handbrake is released")
+				throttle = 0.3
+				_go(Step.VIEWS)
+		Step.VIEWS:
+			if waited == ticks(0.1):
+				_check(not d.head.visible and not d.torso_mesh.visible, "in the cockpit view the head and torso are hidden")
+				_check((d.get_node("HandR") as Node3D).visible and (d.get_node("HandL") as Node3D).visible and d.bracelet.visible, "hands and bracelet stay visible in the cockpit")
+				print("hands: highest point seen %.1f deg below the eye (%s)" % [min_below_eye, min_below_where])
+				_check(min_below_eye >= CockpitFrame.WHEEL_TOP_MIN_DEG, "a hand rose to %.1f deg below the eye (%s); the road band must stay clear" % [min_below_eye, min_below_where])
+				cam.set_view(ChaseCamera.View.CHASE)
+			if waited == ticks(0.2):
+				_check(d.head.visible and d.torso_mesh.visible, "in the chase view the whole driver shows")
+				_check(frame.visible, "the interior is drawn in the chase view (through the glass)")
+				var glass := P1CoupeBuilder._get_glass_material()
+				_check(glass.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA and glass.albedo_color.a < 0.9, "the P1 glass is see-through")
+				_check(logger.errors.is_empty(), "engine errors: %s" % [logger.errors.slice(0, 5)])
+				return _end("")
+	return false
+
+func _go(next: Step) -> void:
+	step = next
+	step_start = tick
+
+func _check(ok: bool, msg: String) -> void:
+	if not ok:
+		failures.append(msg)
+
+func _end(msg: String) -> bool:
+	if msg != "":
+		failures.append(msg)
+	for f in failures:
+		printerr("FAIL: ", f)
+	print("cockpit_driver: ", "PASS" if failures.is_empty() else "FAIL")
+	quit(0 if failures.is_empty() else 1)
+	return true

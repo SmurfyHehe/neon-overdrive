@@ -53,17 +53,21 @@ const BOOT := Color("#121318")
 const SOLE := Color("#2C3038")
 
 ## Hand space (see _hand_mesh): the wrist runs along +z; the cuff closes it.
+## The cuff is glove-coloured with a thin band in the style's accent colour:
+## its end cap faces the driver, so a bright cap read as a disc (first probe).
 const WRIST_X := 0.03          # wrist centre, outward from the grip axis, times side
-const CUFF_R := 0.040
-const CUFF_Z0 := 0.070
-const CUFF_Z1 := 0.100
+const CUFF_R := 0.031
+const CUFF_Z0 := 0.065
+const CUFF_Z1 := 0.095
+const BAND_Z0 := 0.072
+const BAND_Z1 := 0.082
 ## Cuban-link bracelet on the right wrist: LINKS flat oblong links around the
 ## cuff, each tilted the other way from its neighbour so they read as interlocked.
-const LINKS := 10
-const LINK_R := 0.046          # chain radius (just outside the cuff)
+const LINKS := 8
+const LINK_R := 0.037          # chain radius (just outside the cuff)
 const LINK_Z := 0.088
-const LINK_LEN := 0.030        # along the chain (links overlap: the pitch is 0.029)
-const LINK_WIDE := 0.013       # across the chain
+const LINK_LEN := 0.028        # along the chain (links overlap: the pitch is 0.029)
+const LINK_WIDE := 0.012       # across the chain
 const LINK_BAR := 0.0045
 const LINK_TILT_DEG := 35.0
 const THIGH := 0.47
@@ -219,8 +223,13 @@ static func _hand_mesh(k: CockpitKit, side: int, glove: Color, cuff: Color) -> v
 	k.box(Vector3(0.05, 0.028, 0.028), Vector3(sx * 0.008, 0.03, 0.036), glove)                # thumb
 	k.box(Vector3(0.025, 0.028, 0.025), Vector3(-sx * 0.02, 0.03, 0.03), glove)                # thumb tip
 	k.box(Vector3(0.05, 0.03, 0.07), Vector3(sx * WRIST_X, 0.0, 0.06), glove)                  # wrist, toward the driver
-	# the closed cuff: a capped cylinder along +z around the wrist, nothing past it
-	k.cylinder(CUFF_R, CUFF_Z0, CUFF_Z1, Vector3(sx * WRIST_X, 0.0, 0.0), cuff, 10, Basis(Vector3.RIGHT, PI / 2.0))
+	# the closed cuff: a capped cylinder along +z around the wrist, nothing past
+	# it, in the glove colour, with a thin accent band round it
+	k.cylinder(CUFF_R, CUFF_Z0, CUFF_Z1, Vector3(sx * WRIST_X, 0.0, 0.0), glove, 10, Basis(Vector3.RIGHT, PI / 2.0))
+	var band := CockpitKit.new()
+	band.ring_sector(CUFF_R, CUFF_R + 0.003, 0.0, TAU, BAND_Z0, BAND_Z1, cuff, 10)
+	band.offset(Vector3(sx * WRIST_X, 0.0, 0.0))
+	k.merge(band)
 
 ## Gold Cuban-link bracelet round the right wrist (Roy, 2026-10-06): LINKS flat
 ## oblong links lying on the cuff, long side along the chain, each tilted the
@@ -245,7 +254,7 @@ func _build_bracelet() -> void:
 		k.box(short, c + b * Vector3(LINK_LEN * 0.5, 0.0, 0.0), GOLD, b)
 		k.box(short, c + b * Vector3(-LINK_LEN * 0.5, 0.0, 0.0), GOLD, b)
 	tri_count += k.tri_count()
-	var gold := CockpitKit.material(0.35, 1.0, 0.6)
+	var gold := CockpitKit.material(0.3, 0.85, 0.7)
 	bracelet = k.instance(gold, "Bracelet")
 	(hands[1] as Node3D).add_child(bracelet)
 

@@ -109,7 +109,7 @@ func _physics_process(_delta: float) -> bool:
 			_check(d.get_node_or_null("HandL/Bracelet") == null, "the bracelet is on the right wrist only")
 			_check(d.glove_style == PlayerCar.chassis_kind() or not DriverModel.GLOVE_STYLES.has(PlayerCar.chassis_kind()), "the glove style follows the car (%s)" % d.glove_style)
 			var gold := (d.bracelet.material_override if d.bracelet.material_override != null else d.bracelet.mesh.surface_get_material(0)) as StandardMaterial3D
-			_check(gold != null and gold.metallic > 0.9, "the bracelet is metallic gold")
+			_check(gold != null and gold.metallic >= 0.8, "the bracelet is metallic gold")
 			_check(d.bracelet.mesh.surface_get_array_len(0) / 3 >= 4 * 12 * DriverModel.LINKS - 1, "the bracelet is a ring of %d modelled links" % DriverModel.LINKS)
 			print("driver triangles: %d" % d.tri_count)
 			_check(d.tri_count >= TRI_MIN and d.tri_count <= TRI_MAX, "driver triangles %d, want %d..%d" % [d.tri_count, TRI_MIN, TRI_MAX])

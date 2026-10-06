@@ -23,6 +23,7 @@ var size_index := 0
 var size_set_tick := 0
 
 func _initialize() -> void:
+	OS.set_environment("NEON_TRAFFIC", "0")  # an empty road, whatever run_tests.bat or the saved settings say
 	_set_window(WINDOW_SIZES[0])
 	change_scene_to_file("res://Game.tscn")
 

@@ -26,6 +26,7 @@ var failures: Array[String] = []
 var releases := {}             # Key -> tick on which to release it
 
 func _initialize() -> void:
+	OS.set_environment("NEON_TRAFFIC", "0")  # an empty road, whatever run_tests.bat or the saved settings say
 	change_scene_to_file("res://Game.tscn")
 
 func _physics_process(_delta: float) -> bool:

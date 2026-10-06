@@ -82,11 +82,23 @@ static func finite(v: Vehicle) -> bool:
 
 ## True if b's centre lies inside a box of these half-extents around a, in a's
 ## own frame. With half_x 1.5 and half_z 3.0 (the cars are 1.6 x 3.4 m) that
-## is bodies touching; with 0.6 and 1.2 it is one car deep inside another,
-## which only tunnelling produces.
-static func overlaps(a: Node3D, b: Node3D, half_x: float, half_z: float) -> bool:
+## is bodies touching. The box has a height bound too (half_y): without it a
+## car lying on its side, whose local frame is tipped, "overlapped" a car 13 m
+## away along its own up axis, and traffic_stability reported tunnelling that
+## never happened (2026-10-06).
+static func overlaps(a: Node3D, b: Node3D, half_x: float, half_z: float, half_y: float = 1.5) -> bool:
 	var l := a.to_local(b.global_position)
-	return absf(l.x) < half_x and absf(l.z) < half_z
+	return absf(l.x) < half_x and absf(l.z) < half_z and absf(l.y) < half_y
+
+## True if the two bodies' centres are closer than `dist` metres, in any
+## orientation: one car has passed (nearly) through the other. The cars are
+## 1.6 x 1.0 x 3.4 m boxes, so centres under 1 m apart is already some
+## interpenetration, and a pile-up of 3+ bodies at 100 km/h leaves 0.6-0.9 m
+## for a while without any body having tunnelled (seen 2026-10-06, centres
+## 0.58 m apart in a rolled wreck). Concentric centres (under 0.5 m) is what
+## passing through looks like.
+static func tunnelled(a: Node3D, b: Node3D, dist: float = 0.5) -> bool:
+	return a.global_position.distance_to(b.global_position) < dist
 
 static func stats(samples: PackedFloat32Array) -> Dictionary:
 	var s: Array = Array(samples)

@@ -19,6 +19,7 @@ var start := 0.0
 var raised := 0.0
 
 func _initialize() -> void:
+	OS.set_environment("NEON_TRAFFIC", "0")  # an empty road, whatever run_tests.bat or the saved settings say
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://autotune"))
 	var f := FileAccess.open(SAVE_FILE, FileAccess.WRITE)  # start empty (overwrite; never deleted)
 	f.store_string("")

@@ -26,6 +26,7 @@ var game: Node
 var frame := 0
 
 func _initialize() -> void:
+	OS.set_environment("NEON_TRAFFIC", "0")  # an empty road, whatever run_tests.bat or the saved settings say
 	_render_sweep()
 	game = (load("res://Game.tscn") as PackedScene).instantiate()
 	root.add_child(game)

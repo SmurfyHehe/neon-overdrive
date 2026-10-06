@@ -1,11 +1,19 @@
 # Neon Overdrive — Roadmap
 
-**Status synced with `origin/main` at `ea71c13` (PR #116), 2026-10-06.** Checked
-against `git log origin/main`, `scripts/` and `tests/run_tests.bat`, not from
-memory. Since the last sync: traffic lane-follow (#113), the flaky `car_audio`
-fix (#112), the planning notes in `docs/planning/` (#117) and the Auto-Tune
-panel fix for 120 Hz (#116, `ea71c13`). Long build logs for stages A, B1 and Auto-Tune were removed from this file;
-they live in the PR descriptions (#84, #85, #86, #88, #90, #100) and in git history.
+**Status synced with `origin/main` at `284595c` (PR #128), 2026-10-06.** Checked
+against GitHub (main and every open PR), not from memory. Since the last sync:
+traffic lane-follow (#113), 120 Hz (#110), file radio (#125), HUD v1 with the
+RPM-bar shift cue and the Controls page (#121), the One Tuner screen (#122), the
+P1 coupe model (#123), feel quick wins (#119), keyboard steering (#126), test
+hygiene (#128) and the planning docs (#117, #118, #120). Long build logs for
+stages A, B1 and Auto-Tune were removed from this file; they live in the PR
+descriptions (#84, #85, #86, #88, #90, #100) and in git history.
+
+**Open PRs, not merged (so not "done"):** #114 out-of-bounds walls + story bible +
+radio tracklist, #124 effects pack v1, #127 traffic M4 (brake, lane change,
+react), #129 recenter kick fix, #130 cockpit interior (mirrors, LED wheel,
+cluster, centre stack, shifter lever), #131 seated driver with arms (being cut
+down, see below), #132 docs notes.
 
 ## What exists today
 
@@ -25,28 +33,32 @@ a build order. Nothing in them beyond what is listed as merged has been built.
 | **Phase A** (grip, idle controller, shift maps, master limiter) | **Merged** | #99; `phase_a_engine`, `audio_master` |
 | **Phase B** turbo, chassis, audio, heat/wear v1, radio v1 | **Merged** | #101–#105; `turbo`, `chassis_targets`, `driveline_audio`, `powertrain_health`, `radio` |
 | **Phase C** clutch, tyres, cockpit camera, radio 2, 120 Hz physics | **Merged** | #106–#110; `clutch_model`, `tyres`, `cockpit`, `tick_rate_120` |
-| Stage B step 4 (camera + HUD) | **Partly**: cockpit camera and turning steering wheel (`0872d0d`), warning lights, tuner tabs, volume sliders. No RPM-bar shift cue, instrument cluster or visible shifter found in `scripts/` | grep of `scripts/` |
+| Stage B step 4 (camera + HUD) | **Partly**: cockpit camera and turning steering wheel (`0872d0d`), warning lights, volume sliders, **HUD v1 with the RPM-bar shift cue, a Controls page in the pause menu and a palette test (#121)**, feel quick wins and camera B default (#119). Instrument cluster and visible shifter are only in open PR #130; transmission modes not started | #119, #121; `hud_*`, `palette` tests |
+| **One Tuner screen** (gearing, exhaust and Auto-Tune together) | **Merged** (#122). The header still shows key hints, which breaks the no-hints rule; the redesign fixes it | #122 |
+| **P1 sports coupe game model** | **Merged** (#123). Player drives the B1 sheet design | #123 |
+| **Radio** (4 file stations, #125: drift phonk, dark phonk, talk-only, synthwave) | **Merged** (#125). Still names Dale; rename to Dave and the "Neon FM" name are open. #115 closed as superseded | #125 |
+| Keyboard steering ramp and cap reach the wheels | **Merged** (#126) | #126 |
+| Test hygiene (flaky `car_audio`, `traffic_stability`, `traffic_perf`, timeouts, tests no longer overwrite the user-folder saves) | **Merged** (#128) | `tests/run_one.ps1`, `scripts/test_mode.gd` |
 | **Traffic, stage B step 3** (lane-follow cars on a fixed 4+4-lane road, same raycast sim as the player, car-count and draw-distance sliders in the pause menu) | **Merged** (#113, `a9af0ea`). Full sim inside the draw distance; beyond it (150 m default) cars are frozen kinematic and cruise | `scripts/traffic_car.gd`, `traffic_manager.gd`, `traffic_settings.gd`; `traffic_spawn`, `traffic_stability`, `traffic_perf` |
-| Traffic milestone 4 (brake, change lane, react to the player) | **NOT started** | `traffic_car.gd` is throttle-only speed hold plus lane keeping |
+| Traffic milestone 4 (brake, change lane, react to the player; 3.2 m lanes, 16-car default) | **In open PR #127**, not merged | `traffic_car.gd` on main is still throttle-only speed hold plus lane keeping |
+| Out-of-bounds walls (#28) | **In open PR #114**, not merged | `tests/boundary_walls.gd` |
+| Cockpit interior with live mirrors, LED wheel, cluster, centre stack, shifter lever, handbrake | **In open PR #130**, not merged. Needs the sightline rework below | |
+| Seated driver with forearm IK | **In open PR #131**, stacked on #130. Roy dropped forearms (see "Not started, sorted") | |
 | NPC cars (3) and cop cars (3) | **NOT started** (designs only) | |
 | Other 11 fleet cars (5 more player cars) | **NOT started** (`CarSpec` has the coupe only) | |
 | Garage + per-car mod trees | **NOT started** | |
 | Damage, fuel, stop places | **NOT started** (parked after the garage) | |
 | Police / heat / pursuit | **NOT started** | |
-| Effects pack | **NOT started** | |
+| Effects pack | **In open PR #124** (v1), not merged | |
 | Currency / scoring / near-miss detection | **NOT started** | |
 | Events (rival, dig/roll race, highway run, touge, takeover), The List, meets, night loop | **NOT started** | |
 
-**Next in Roy's order:** the rest of stage B (traffic milestone 4, finish camera +
-HUD, NPC cars), then C (currency/scoring) → **E (garage + per-car mod trees)** →
-**D (remaining player cars)** → F → G. Roy changed the order on 2026-10-06 so the
-garage and trees come before the other player cars (see "Decisions still valid").
-Traffic is lane-follow
-only and was not yet playable at speed in the 2026-10-06 audit
-(`docs/audit-2026-10-06.md`, open PR #118, not merged): the
-player rear-ended or side-swiped oncoming cars within seconds. Roy has
-decided the fixes (3.2 m lanes, a 16-car default; in progress on
-`feat/traffic-m4`, not merged); see "Decisions still valid".
+**Next in Roy's order:** finish stage B (land traffic M4 #127, finish camera + HUD:
+cockpit sightline, transmission modes, shifter, cluster; NPC cars), then C
+(currency/scoring) → **E (garage + per-car mod trees)** → **D (remaining player
+cars)** → F → G. Roy changed the order on 2026-10-06 so the garage and trees come
+before the other player cars (see "Decisions still valid"). The sorted list of
+everything not started is in "Not started, sorted" below.
 
 ## Stage plan (Roy, 2026-10-04) with revisions
 
@@ -56,15 +68,89 @@ Every stage is verified headless with real simulated input, logged here, and
 | Stage | Contents | Status |
 |---|---|---|
 | A | Feel + environment art | Done |
-| B | 1 design sheet · 2 exhaust · 3 traffic (full-sim, 4 lanes/direction, detail slider) · 4 camera + HUD · 5 NPC cars | 1, 2, 3 done (3 is lane-follow only, #113); 4 partly; 5 not started |
+| B | 1 design sheet · 2 exhaust · 3 traffic (full-sim, 4 lanes/direction, detail slider) · 4 camera + HUD · 5 NPC cars | 1, 2, 3 done (3 is lane-follow; reactive M4 is open PR #127); 4 partly; 5 not started |
 | C | Currency/scoring (damage, fuel, stops moved after the garage, 2026-10-05) | Not started |
 | E | Garage + branching mod tree per car. **Now before D** (Roy, 2026-10-06, overrides the C → D → E order) | Not started |
-| D | 5 remaining player cars, one at a time. **Now after E.** The P1 sports coupe game model is being built from the B1 sheet (2026-10-06, not merged) | Not started |
+| D | 5 remaining player cars, one at a time. **Now after E.** The P1 sports coupe game model is merged (#123) | Not started |
 | F | Heat/wanted + police, 3 cop cars | Not started |
 | G | Integration, balance, bug sweep, Windows export on request | Not started |
 
 Plus outside the original A–G list and already merged: Auto-Tune, the engine
 phases A–C, radio and audio.
+
+## Not started, sorted
+
+Smallest and most unblocked first. S = one small PR, M = one PR with new script and
+tests, L = several PRs or heavy art/audio/AI, XL = a stage of its own. Every code
+item needs a Remote Control session on Roy's laptop and its own sign-off before the
+PR starts. Source: `docs/planning/remaining-work-by-effort-2026-10-06.md`, updated
+with Roy's decisions of 2026-10-06. Items already in open PRs are in the status table
+above, not here.
+
+### S: one small PR each
+
+1. **Dale to Dave in code and assets** ("The Dave Show"): `radio_stations.gd`,
+   `radio_manager.gd` header ("three stations"), captions, credits. Roy's "Neon FM" rename is open.
+2. **Sightline fixes** (spec approved 2026-10-06): cockpit FOV default **62**, dash
+   top **14 deg below eye** (now 6.5), **55% clear glass** (now about 35%), cowl
+   at or below -14 deg, header at or above +24 deg, A-pillar 6 deg or less, vertex-baked
+   light with no pure black. Rework on top of #130.
+3. **FOV slider 55-78** (default 62) in the pause-menu Settings.
+4. **Head movement** (on by default, with an off switch).
+5. **Wheel angled toward the driver** without blocking the view (Roy 2026-10-06): the
+   wheel top stays at or below -15 deg, tilted to face the driver, not a flat plate
+   in the sightline. Rides with the sightline PR.
+6. **#31 camera smoothing** (3 modes, Roy tunes later).
+7. **Look-back key** and **proximity cue** (rear-traffic indicator).
+
+### M: one PR with new script and tests
+
+8. **Floating gloved hands** (Roy 2026-10-06): no forearms, per-car glove style,
+   kept at or below -18 deg and never blocking the view. Right hand does the
+   shifter, radio, handbrake and wheel turns. **Gold Cuban link bracelet on the
+   right wrist.** Reuse #131's glove mesh and reach timing, drop its forearm IK;
+   #131 conflicts with this and gets cut down or closed.
+9. **HUD rear strip**: the shared low-res rear camera also feeds a strip on the HUD,
+   plus the fake-glass setting and the look-back key (mirror decision of 2026-10-06).
+10. **Audio repetition pass** (separate PR, ask Roy first): exhaust pops are random
+    noise bursts in `engine_synth.gd` and fire too often; avoid loop fatigue in
+    every other sound too.
+11. **#80 engine sound per car and upgrade**: only meaningful once more cars exist.
+12. **Photo mode** (Roy's feature idea).
+
+### L: several PRs or heavy art/audio
+
+13. **Transmission modes** (Roy 2026-10-06): auto, semi-manual, full manual. Touches
+    the vendored GEVP sim (mark every edit `DEVIATION`), key bindings and tests.
+    **Before the visible shifter**; the shifter HUD follows the mode. Opus.
+14. **Visible shifter** follows 13.
+15. **Tuner redesign**, 4 PRs, simple real tuning terms, no on-screen key hints:
+    camber, tyre pressure, compound and toe modelled and tuned; peak torque and
+    redline move to Advanced.
+16. **Per-car clusters and interiors** (Stage D, one per car): each car's cockpit,
+    gauge cluster and mirrors are individual, not shared. The coupe comes first.
+17. **3 NPC cars** (N1 sedan, N2 hatch, N3 pickup): models, CarSpecs, silhouette checks.
+18. **Stage C currency and scoring**: near-miss formula, speed rep, HUD, save.
+19. **Crash/sandbox mode** (Roy's feature idea), after damage exists.
+20. **Damage, fuel, stop places**: after E.
+21. **Stage G integration**, balance, bug sweep, Windows export.
+
+### XL: a stage of its own
+
+22. **Stage E garage plus per-car mod trees** (8-15+ nodes x 6 cars). Answer #70-#74 first.
+23. **Stage D** other 5 player cars, one at a time, sign-off after each; fix the
+    outline twins P1/P3 and P2/P6.
+24. **Stage F heat, police, 3 cop cars** (police blue vs red/amber is Roy's call).
+25. **Districts** (Docks, Downtown, Cutter Canyon, Route 9, the old Airstrip): today
+    they exist only as story text in `docs/story-bible.md` (open PR #114); map sizes
+    from `docs/decisions/i-wish-to-create-a-car-game-i-wa-roy.md`. Districts are Roy's call.
+26. **Events** (dig/roll, highway run, touge, takeover), The List, story delivery.
+    Story is Roy's to write; names are placeholders. Loan and penalty mechanics are
+    dropped, the story bible wins.
+27. **#37 curves and elevation** (Path3D rework of the road builder).
+
+Needs Roy, not an agent: #62 gearing and top-speed tune (record it), #70-#74
+mod-tree questions, police blue, the 3 day-one features, districts, story.
 
 ## Decisions still valid
 
@@ -94,8 +180,8 @@ phases A–C, radio and audio.
   - **Order after traffic:** garage + per-car mod trees (E) come **before** the
     remaining player cars (D). This overrides C → D → E.
   - **P1 sports coupe:** the game model is being built from the B1 design sheet.
-  - **Radio (#115):** re-encode smaller (Vorbis q2–3, 32 kHz) and keep it in git,
-    not Git LFS.
+  - **Radio:** re-encoded smaller and kept in git, not Git LFS; shipped in #125
+    (#115 closed as superseded).
 - **Exhaust is cosmetic only.**
 - **GEVP is open for editing** (Roy, 2026-10-05). Every edit is marked `DEVIATION`
   in `scripts/vendor/gevp/gevp_vehicle.gd` (list under "Rules carried forward").
@@ -115,8 +201,9 @@ phases A–C, radio and audio.
   each night, one main activity plus one small extra. Events ranked pulls (dig,
   roll) > good driving (highway run, touge) > burnouts/takeovers. Ten-name street
   list, speed rep and respect, heat per car. Rivals and crew cars are scripted;
-  only the player runs full GEVP. Missed-payment layering and the top-3 scope cut
-  are still open for Roy. Not started.
+  only the player runs full GEVP. Missed-payment layering is **dropped**: the
+  story bible wins, the debt is story-only with no loan or penalty mechanics.
+  The top-3 scope cut is still open for Roy. Not started.
 - **Fleet table** (agreed 2026-09-13): players P1 sports coupe, P2 hot hatch,
   P3 tuner sedan, P4 kei roadster, P5 muscle sedan, P6 performance crossover;
   traffic N1 commuter sedan, N2 city hatchback, N3 pickup; cops C1 patrol sedan,
@@ -185,18 +272,20 @@ open:
   traffic only (cars past the draw distance run the kinematic lane cruise,
   `scripts/traffic_car.gd:22-23,184-205`, and that counts as full sim). Do rivals,
   crew and cops run full GEVP near the player too, or stay scripted?
-- **Debt.** The story bible (`docs/story-bible.md`, only on open PR #114) says
-  "debt is story-only, no penalty mechanics"; the game-concept line above and the
-  decisions doc still list missed-payment penalties as open.
-- **Dale.** The story bible says Dale is audio-only; open PR #115 makes him
-  talk-only with 6 caption lines (captions-only). Audio-only or captions-only?
+- **Dale to Dave.** Roy renamed the DJ to Dave ("The Dave Show"). Code and assets
+  on main (#125) still say Dale; the planning docs are updated in open PR #132.
+  Audio-only or captions-only for his lines is still open.
 
 - Which 3 features the game must have on day one; the two idea pages that disagree
   (no-prep, family debt, missed-payment penalties); crew system; setting; game name.
-- Stage B step 4 leftovers: RPM-bar shift cue, instrument cluster, visible shifter,
+- Stage B step 4 leftovers: instrument cluster and visible shifter (open PR #130),
   pause-menu Settings tab beyond volume.
 - Police blue vs red/amber light bar. Two stock outline twins (P1/P3, P2/P6).
 - Parked, do not touch unless Roy raises: top-speed plateau in `process_clutch()`,
   automatic-vs-manual clutch question.
 - Frame time on Roy's laptop (`benchmark.bat`); the exported `.exe` has never been
-  launched on Windows by an agent.
+  launched on Windows by an agent (a local exe build was approved; it needs a
+  Remote Control session).
+- Mirror camera: #130 uses one camera per mirror; Roy picked one shared low-res
+  camera sliced into three. Swap only if a 16-car perf check shows more than
+  about 10% fps loss.

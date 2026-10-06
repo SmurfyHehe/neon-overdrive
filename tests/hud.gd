@@ -55,10 +55,10 @@ func _physics_process(_delta: float) -> bool:
 	_check(hud.lbl_speed.text == str(Hud.kmh(p.current_speed())), "speed label '%s' does not match the car (%d km/h)" % [hud.lbl_speed.text, Hud.kmh(p.current_speed())])
 	_check(hud.lbl_unit.text == "km/h", "the unit should be km/h")
 	_check(hud.lbl_gear.text == Hud.gear_text(p.gear), "gear label '%s' does not match gear %d" % [hud.lbl_gear.text, p.gear])
-	_check(hud.lbl_mode.text == ("A" if p.automatic_transmission else "M"), "the A/M label should follow the gearbox")
+	_check(hud.lbl_mode.text == PlayerCar.TRANSMISSION_LETTERS[p.transmission_mode()], "the A/S/M label should follow the gearbox")
 	p.automatic_transmission = false
 	hud._refresh()
-	_check(hud.lbl_mode.text == "M", "manual gearbox should show M")
+	_check(hud.lbl_mode.text == ("M" if p.realistic_clutch else "S"), "a manual gearbox should show S, or M with the clutch pedal")
 	_check(hud.rpm_bar.frac >= 0.0 and hud.rpm_bar.frac <= 1.0, "the RPM bar fraction should be 0..1")
 	# shift cue: manual, first gear, rpm at the limit
 	p.current_gear = 1

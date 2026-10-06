@@ -149,7 +149,7 @@ static func coupe_default() -> Dictionary:
 		"rear_static_camber": 0.0,
 		"front_static_camber_stock": 0.0,
 		"rear_static_camber_stock": 0.0,
-		"realistic_clutch": false,  # Phase C: clutch pedal, stall and starter; V toggles it in the game (off by default)
+		"realistic_clutch": false,  # Phase C: clutch pedal, stall and starter; on in the MANUAL gearbox mode (G cycles auto / semi / manual)
 		"turbo_boost_max": 0.0,  # Phase B: 0 = naturally aspirated; the T tuner can add boost
 		"brake_selects_reverse": false,  # R picks reverse (Roy); S only brakes
 		"automatic_time_between_shifts": 800.0,  # Phase A shift map: min ms between upshifts

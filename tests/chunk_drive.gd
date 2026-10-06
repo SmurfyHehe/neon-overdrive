@@ -105,7 +105,7 @@ func _physics_process(_delta: float) -> bool:
 
 func _drive(c: PlayerCar) -> void:
 	# Heading hold: steer only when yaw drifts, nudged back toward x=0.
-	var err: float = c.global_rotation.y + clampf((RoadChunkBuilder.LANE_W * 1.5 - c.global_position.x) * 0.02, -0.05, 0.05)
+	var err: float = c.global_rotation.y + clampf((TrafficManager.lane_centre(1, false) - c.global_position.x) * 0.02, -0.05, 0.05)
 	var steer := 0.0
 	if err < -0.02:
 		steer = -1.0  # left (A)

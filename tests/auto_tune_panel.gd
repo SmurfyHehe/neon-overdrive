@@ -45,17 +45,20 @@ func _run() -> void:
 		return _end("Game.tscn never became ready")
 	var game := _ready_game()
 	var player: PlayerCar = game.player
-	var panel: AutoTunePanel = _find(game, AutoTunePanel)
-	var raw: TuningPanel = _find(game, TuningPanel)
-	_check(panel != null, "Game has no AutoTunePanel")
-	if panel == null:
+	var screen: TunerScreen = _find(game, TunerScreen)
+	_check(screen != null, "Game has no TunerScreen")
+	if screen == null:
 		return _end("")
+	var panel: AutoTunePanel = screen.auto
+	var raw: TuningPanel = screen.manual
 
 	# --- open: game paused, panel shown ---
 	await _tap(KEY_Y)
 	await _until(func(): return game.game_state.state == GameState.State.AUTOTUNE, 5.0)
 	_check(game.game_state.state == GameState.State.AUTOTUNE, "Y should open Auto-Tune")
-	_check(panel.visible and not raw.visible and not _find(game, PauseMenu).visible, "only the Auto-Tune panel should show")
+	_check(screen.visible and panel.is_visible_in_tree() and not _find(game, PauseMenu).visible, "Y should show the Tuner screen with Auto-Tune expanded")
+	_check(raw.is_visible_in_tree(), "the gearing sliders stay on the screen next to Auto-Tune")
+	_check(root.gui_get_focus_owner() == panel.goal_sliders.values()[0], "first goal slider should have keyboard focus on open, has %s" % root.gui_get_focus_owner())
 	_check(paused, "Auto-Tune should pause the game like the raw panel")
 
 	# --- Run with no goal ---

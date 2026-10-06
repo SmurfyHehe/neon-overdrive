@@ -1,7 +1,8 @@
 class_name TuningPanel
-extends CanvasLayer
+extends HBoxContainer
 
-# Gearing & power tuning panel (#62 step 1). T opens it; the game pauses
+# Gearing & power tuning panel (#62 step 1), the "Gearing & Power" section of
+# the Tuner screen (scripts/tuner_screen.gd). T opens the screen; the game pauses
 # (GameState.TUNING) and the sliders write straight into the player's Vehicle
 # properties, so the next stretch of driving after closing uses the new tune.
 # "Copy values" puts a car_spec.gd-ready snippet on the clipboard (and prints
@@ -39,6 +40,9 @@ const AIR_DENSITY := 1.2  # kg/m^3, for the drag-limited top speed estimate
 # really reaches are at 110% of the "Redline rpm" knob, not at it.
 const REV_CUT := 1.1
 
+## A slider or Reset changed the tune (the Auto-Tune lock labels show it).
+signal tune_changed
+
 var player: PlayerCar
 var game_state: GameState
 var values := {}
@@ -53,28 +57,13 @@ func _init(car: PlayerCar, state: GameState) -> void:
 	game_state = state
 
 func _ready() -> void:
-	process_mode = Node.PROCESS_MODE_ALWAYS
-	layer = 10  # same layer as the pause menu; they are never open together
-	visible = false
+	add_theme_constant_override("separation", 24)
 	_read_from_player()
 	start_values = values.duplicate()
 
-	var panel := PanelContainer.new()
-	panel.position = Vector2(16, 90)
-	var bg := StyleBoxFlat.new()  # near-opaque: bright buildings behind made the text unreadable
-	bg.bg_color = Color(0.03, 0.02, 0.07, 0.92)
-	bg.set_content_margin_all(10)
-	panel.add_theme_stylebox_override("panel", bg)
-	add_child(panel)
-	var columns := HBoxContainer.new()
-	columns.add_theme_constant_override("separation", 24)
-	panel.add_child(columns)
-
+	var columns := self
 	var left := VBoxContainer.new()
 	columns.add_child(left)
-	var title := Label.new()
-	title.text = "TUNING (#62)  -  T or Esc to close, game paused"
-	left.add_child(title)
 	var grid := GridContainer.new()
 	grid.columns = 3
 	left.add_child(grid)
@@ -115,23 +104,22 @@ func _ready() -> void:
 	game_state.state_changed.connect(_on_state_changed)
 	_apply()
 
-func _on_state_changed(new_state: GameState.State, _old_state: GameState.State) -> void:
-	visible = new_state == GameState.State.TUNING
-	if visible:
-		# Auto-Tune (or Reset) may have changed the spec since the panel was built.
-		_read_from_player()
-		for key in values:
-			sliders[key].set_value_no_signal(values[key])
-		_refresh()
-	else:
-		# Sliders keep keyboard focus otherwise and eat the arrow keys.
-		var focused := get_viewport().gui_get_focus_owner()
-		if focused:
-			focused.release_focus()
+func _on_state_changed(new_state: GameState.State, old_state: GameState.State) -> void:
+	if GameState.is_tuner(new_state) and not GameState.is_tuner(old_state):
+		refresh_from_player()  # something may have changed the spec while the screen was closed
+
+## Shows what the player's spec holds now. Called on open and whenever Auto-Tune
+## (Apply, Undo, a loaded tune slot) changes the car while this panel is on screen.
+func refresh_from_player() -> void:
+	_read_from_player()
+	for key in values:
+		sliders[key].set_value_no_signal(values[key])
+	_refresh()
 
 func _on_slider(value: float, key: String) -> void:
 	_write(key, value)
 	_refresh()
+	tune_changed.emit()
 
 func _path_of(key: String) -> String:
 	for k in KNOBS:
@@ -149,6 +137,7 @@ func _reset() -> void:
 		sliders[key].set_value_no_signal(start_values[key])
 	values = start_values.duplicate()
 	_apply()
+	tune_changed.emit()
 
 func _read_from_player() -> void:
 	for k in KNOBS:

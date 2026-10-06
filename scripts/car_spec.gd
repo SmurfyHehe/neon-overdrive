@@ -25,6 +25,8 @@ static func apply(v: Vehicle, spec: Dictionary) -> void:
 			# the curve built from it, so tuning the shape and the curve can't
 			# disagree.
 			v.torque_curve = _curve_from_shape(spec[key])
+		elif key == "exhaust":
+			continue  # cosmetic: EngineAudio reads it from the spec, the Vehicle has no such property
 		else:
 			v.set(key, _own(spec[key]))
 
@@ -199,6 +201,10 @@ static func coupe_default() -> Dictionary:
 		# real car, [stated]-flagged as likely to need retuning once driven.
 		"aero_downforce_coefficient_front": 0.35,
 		"aero_downforce_coefficient_rear": 0.55,
+
+		# Exhaust sound tune (cosmetic, never Auto-Tune; see TuneParams).
+		# Starts on the P1 preset; EngineAudio overlays the player's saved tune.
+		"exhaust": ExhaustTune.for_car("p1_coupe").to_dict(),
 	}
 
 ## Traffic tune (milestone 3, 2026-10-05): coupe_default() with commuter-car

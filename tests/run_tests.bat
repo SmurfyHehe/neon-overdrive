@@ -60,6 +60,7 @@ call :run powertrain_health "--headless --fixed-fps 60"
 call :run turbo "--headless --fixed-fps 60"
 call :run chassis_targets "--headless --fixed-fps 60"
 call :run reverse_and_tabs --headless
+call :run transmission_modes "--headless --fixed-fps 60"
 call :run auto_tune_worker_mode --headless
 call :run tune_params --headless
 call :run auto_tune_rules --headless

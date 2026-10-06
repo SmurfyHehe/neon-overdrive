@@ -27,6 +27,10 @@ const SIDE_FOV := 30.0      # ~42 deg wide on the 10:7 door glass
 const SIDE_YAW := 8.0       # degrees outward from straight back
 const SIDE_PITCH := -2.0
 const GLASS_TINT := Color(0.86, 0.87, 0.92)
+## Proximity cue (2026-10-06): the rearview glass warms toward sodium as a
+## car closes in behind (Hud.rear_threat drives it, 0..1).
+const CUE_TINT := Color(1.0, 0.72, 0.38)
+var rear_cue := 0.0
 const DARK_GLASS := Color("#171A20")
 
 ## Rearview glass: centre, size, and the angle that reflects straight back for the eye.
@@ -135,6 +139,12 @@ func set_strip(on: bool) -> void:
 ## The rearview render target, for the HUD strip.
 func rear_texture() -> ViewportTexture:
 	return views[0].vp.get_texture()
+
+## Warms the rearview glass by `level` (0 = plain glass, 1 = a car right behind).
+func set_rear_cue(level: float) -> void:
+	rear_cue = clampf(level, 0.0, 1.0)
+	if enabled and not views.is_empty():
+		views[0].mat.albedo_color = GLASS_TINT.lerp(CUE_TINT, rear_cue)
 
 ## The FxSettings flag at runtime (a pause-menu toggle later).
 func set_enabled(on: bool) -> void:

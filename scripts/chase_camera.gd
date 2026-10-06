@@ -78,6 +78,10 @@ const HEAD_RATE := 6.0
 var head_offset := Vector3.ZERO   # car-local, metres, current
 var head_tilt := Vector2.ZERO     # (pitch, roll) degrees, current
 var view := View.CHASE
+## Look back (hold the look_back key, B): the chase cam swings to the front
+## of the car and looks back at it, the same move as reversing; the cockpit
+## eye turns 180 degrees to the rear window.
+var look_back := false
 var frame: CockpitFrame
 var perspective: PerspectiveAudio
 var target: PlayerCar
@@ -149,6 +153,7 @@ func _physics_process(delta: float) -> void:
 		mode = (mode + 1) % MODE_NAMES.size()
 	if Input.is_action_just_pressed("camera_view"):
 		set_view(View.CHASE if view == View.COCKPIT else View.COCKPIT)
+	look_back = Input.is_action_pressed("look_back")
 	var v := target.linear_velocity
 	var dv := (v - _prev_vel).length()
 	_prev_vel = v
@@ -173,6 +178,8 @@ func _process(delta: float) -> void:
 	_update_feel(delta)
 	if view == View.COCKPIT:
 		_place_cockpit(delta)
+		if look_back:
+			global_transform.basis = global_transform.basis * Basis(Vector3.UP, PI)
 		if frame != null:
 			frame.steering = target.steer_fraction()  # the wheel turns the way the car does
 		if shake_enabled:
@@ -247,8 +254,8 @@ func _place(delta: float) -> void:
 	# times per tick. Following the raw position made car and road judder.
 	var p := target.get_global_transform_interpolated().origin
 	# Reversing flips the chase cam to the opposite side of the car looking
-	# the opposite way (2026-09-13 fix, kept).
-	var target_yaw := PI if target.gear == -1 else 0.0
+	# the opposite way (2026-09-13 fix, kept); so does holding look_back.
+	var target_yaw := PI if (target.gear == -1 or look_back) else 0.0
 	if mode == 0 or not _started:
 		_follow = Vector2(p.x, p.y)
 		_yaw = target_yaw

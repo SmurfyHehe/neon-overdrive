@@ -7,7 +7,9 @@ extends CanvasLayer
 # (the full list lives on the pause menu's Controls page). Top-centre, chase
 # view only: the rear strip, a mirror-image of the cockpit's rearview render
 # (CockpitMirrors; nothing extra is rendered for it), framed in dusk, switched
-# by FxSettings "rear_strip".
+# by FxSettings "rear_strip". Proximity cue (2026-10-06): as a car closes in
+# behind, the strip's frame thickens and warms to sodium, and in the cockpit
+# the rearview glass warms the same way; rear_threat() is the 0..1 level.
 #
 # Everything is anchored to the window edges, so it scales with the window.
 # Palette: "Amber vs Dusk" (ROADMAP). The one exception is the RPM bar, which
@@ -26,6 +28,11 @@ const KMH_PER_MS := 3.6
 const STRIP_SIZE := Vector2(320, 96)
 const STRIP_TOP := 12.0
 const STRIP_BORDER := 2.0
+## Proximity cue: a car behind, same way, within this corridor and range.
+const THREAT_HALF_WIDTH := 4.5   # m either side (own lane and the next)
+const THREAT_NEAR := 3.0         # m behind the car's origin: full cue
+const THREAT_FAR := 25.0         # m: cue starts
+const THREAT_RATE := 8.0         # 1/s smoothing
 ## Fraction of max_rpm where the manual shift cue lights.
 const SHIFT_POINT := 0.92
 ## Fractions of max_rpm where the bar turns amber, then red.
@@ -49,6 +56,8 @@ var rpm_bar: RpmBar
 var cluster: VBoxContainer   # the gear / speed / RPM block; hidden in the cockpit view
 var rear_strip: TextureRect
 var rear_frame: Panel
+var rear_style: StyleBoxFlat
+var rear_threat := 0.0   # 0..1, smoothed
 
 ## Segmented RPM bar. Draws itself from frac / shift_frac / cue.
 class RpmBar extends Control:
@@ -126,11 +135,11 @@ func _ready() -> void:
 	rear_frame = Panel.new()
 	rear_frame.name = "RearFrame"
 	rear_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var frame_style := StyleBoxFlat.new()
-	frame_style.bg_color = Color(DUSK, 0.85)
-	frame_style.border_color = Color(SILVER, 0.35)
-	frame_style.set_border_width_all(1)
-	rear_frame.add_theme_stylebox_override("panel", frame_style)
+	rear_style = StyleBoxFlat.new()
+	rear_style.bg_color = Color(DUSK, 0.85)
+	rear_style.border_color = Color(SILVER, 0.35)
+	rear_style.set_border_width_all(1)
+	rear_frame.add_theme_stylebox_override("panel", rear_style)
 	rear_frame.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	rear_frame.offset_left = -(STRIP_SIZE.x * 0.5 + STRIP_BORDER)
 	rear_frame.offset_right = STRIP_SIZE.x * 0.5 + STRIP_BORDER
@@ -228,6 +237,33 @@ func _refresh_rear_strip() -> void:
 	if mirrors != null and mirrors.strip != show:
 		mirrors.set_strip(show)
 
+## Closest car behind, going the same way, in the corridor: 0 none or far,
+## 1 right on the bumper. Raw, unsmoothed.
+func rear_threat_now() -> float:
+	var to_car := player.global_transform.affine_inverse()
+	var fwd := -player.global_transform.basis.z
+	var worst := 0.0
+	for c in traffic.cars:
+		var car := c as Node3D
+		if not car.visible:
+			continue
+		if (-car.global_transform.basis.z).dot(fwd) < 0.3:
+			continue   # oncoming or crossing
+		var local := to_car * car.global_position
+		if absf(local.x) > THREAT_HALF_WIDTH or local.z < THREAT_NEAR or local.z > THREAT_FAR:
+			continue
+		worst = maxf(worst, 1.0 - (local.z - THREAT_NEAR) / (THREAT_FAR - THREAT_NEAR))
+	return worst
+
+func _refresh_rear_cue() -> void:
+	var delta := get_process_delta_time()
+	rear_threat = lerpf(rear_threat, rear_threat_now(), 1.0 - exp(-THREAT_RATE * delta))
+	var level := rear_threat if rear_threat > 0.02 else 0.0
+	rear_style.border_color = Color(SILVER, 0.35).lerp(SODIUM, level)
+	rear_style.set_border_width_all(1 + int(round(3.0 * level)))
+	if camera.frame != null:
+		camera.frame.mirrors.set_rear_cue(level)
+
 func _label(parent: Control, font_size: int, colour: Color) -> Label:
 	var l := Label.new()
 	l.add_theme_font_size_override("font_size", font_size)
@@ -246,6 +282,7 @@ func _refresh() -> void:
 	# (Roy, 2026-10-06); the warning lights and radio toast are other layers.
 	cluster.visible = camera.view != ChaseCamera.View.COCKPIT
 	_refresh_rear_strip()
+	_refresh_rear_cue()
 	var max_rpm := maxf(player.max_rpm, 1.0)
 	var rpm := player.motor_rpm
 	var frac := clampf(rpm / max_rpm, 0.0, 1.0)

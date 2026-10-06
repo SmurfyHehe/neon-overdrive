@@ -1,34 +1,59 @@
 class_name TunerScreen
 extends CanvasLayer
 
-# The one Tuner screen. T opens it, Y opens it with Auto-Tune expanded, Esc
-# closes it; the game is paused while it is open (GameState.TUNING / AUTOTUNE).
+# The Tuner (Tuner redesign PR 3, 2026-10-06; proposal approved by Roy, see
+# docs/planning/tuner-redesign-proposal-2026-10-06.md). T opens it on Setup, Y on
+# Mechanic, Esc closes; the game is paused while it is open (GameState.TUNING /
+# AUTOTUNE).
 #
-# Three sections, one scrolling column:
-#   Gearing & Power  the raw sliders (TuningPanel). Primary: the tuner is raw.
-#   Exhaust          loudness, raspiness, pops, flame (ExhaustPanel), cosmetic.
-#   Auto-Tune        collapsible add-on (AutoTunePanel): goals, locks, run,
-#                    apply, undo, tune slots. Collapsed on T, expanded on Y.
+#   +------------+------------------------------+-------------+
+#   | page list  | the page: notch bars or a    | stat panel  |
+#   |            | panel (Mechanic, Sound, Adv) | before/now  |
+#   +------------+------------------------------+-------------+
+#   | hint: what the focused setting does                      |
 #
-# The sections are child panels that keep their own logic and tests. This node
-# only lays them out, shows and hides the screen with the game state, moves
-# keyboard focus in on open (so the arrow keys work at once) and out on close
-# (a focused slider would eat the arrow keys while driving), and keeps the
-# sections in step: a slider move refreshes the Auto-Tune lock labels, an Auto-Tune
-# Apply or slot load refreshes the sliders.
+# Pages, settings, presets and the estimates live in TunerModel. The older
+# panels keep their logic and tests and sit on their own pages: AutoTunePanel on
+# Mechanic (PR 4 simplifies it), ExhaustPanel on Sound, TuningPanel (raw gearing
+# and power, Copy values) on Advanced.
 #
-# Debug tool, deliberately plain Godot default controls, not the game's UI.
+# Keyboard only, no key hints on screen (they are on the pause menu's Controls
+# page): Q/E change page, Up/Down move between settings, Left/Right move one
+# notch, Enter picks a preset. On the panel pages the arrows move between that
+# panel's own controls. Look: "Gritty PS2 night", navy panel, silver labels,
+# amber values, sodium orange for focus and the "now" bars.
 
+const NAVY := Color("#0E1424")
+const NAVY_LIGHT := Color("#1B2A4A")
+const SILVER := Color("#C9CED6")
+const DIM := Color(0.79, 0.81, 0.84, 0.35)
+const AMBER := Color("#FFC066")
+const SODIUM := Color("#FF8A1F")
 const MARGIN := 16
 
 var player: PlayerCar
 var game_state: GameState
+var model: TunerModel
 var manual: TuningPanel
 var exhaust: ExhaustPanel
 var auto: AutoTunePanel
-var tabs: TunerTabs
-var scroll: ScrollContainer
-var auto_heading: Label
+
+var page_ids: Array[String] = []
+var page_index := 0
+var row_index := 0
+var page_labels: Array[Label] = []
+var page_title: Label
+var preset_label: Label
+var car_label: Label
+var hint: Label
+var content: VBoxContainer   # rows of the current settings page
+var panel_pages := {}        # page id -> Control (Setup, Mechanic, Sound, Advanced)
+var rows: Array = []         # [{setting, name, value, bar}] on a settings page
+var preset_buttons: Array[Button] = []
+var stats: TunerStats
+## Notches and stats when the screen opened, shown as ghosts.
+var before_notches := {}
+var before_stats := {}
 
 func _init(car: PlayerCar, state: GameState) -> void:
 	player = car
@@ -38,68 +63,114 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	layer = 10  # same layer as the pause menu; they are never open together
 	visible = false
+	model = TunerModel.new(player, player.spec, CarSpec.coupe_default())
+	for p in TunerModel.pages():
+		page_ids.append(p.id)
 
-	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	panel.offset_left = MARGIN
-	panel.offset_top = 8
-	panel.offset_right = -MARGIN
-	panel.offset_bottom = -MARGIN
+	var frame := PanelContainer.new()
+	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	frame.offset_left = MARGIN
+	frame.offset_top = 8
+	frame.offset_right = -MARGIN
+	frame.offset_bottom = -MARGIN
 	var bg := StyleBoxFlat.new()  # near-opaque: bright buildings behind made the text unreadable
-	bg.bg_color = Color(0.03, 0.02, 0.07, 0.95)
+	bg.bg_color = Color(NAVY, 0.96)
+	bg.border_color = NAVY_LIGHT
+	bg.set_border_width_all(2)
 	bg.set_content_margin_all(10)
-	panel.add_theme_stylebox_override("panel", bg)
-	add_child(panel)
+	frame.add_theme_stylebox_override("panel", bg)
+	add_child(frame)
 	var column := VBoxContainer.new()
-	panel.add_child(column)
+	column.add_theme_constant_override("separation", 8)
+	frame.add_child(column)
 
 	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 24)
 	column.add_child(header)
-	var title := Label.new()
-	title.text = "TUNER  -  T or Y or Esc to close, game paused"
-	header.add_child(title)
-	tabs = TunerTabs.new(game_state)
-	header.add_child(tabs)
+	car_label = _label("TUNER   P1 Coupe", SILVER)
+	car_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(car_label)
+	preset_label = _label("", AMBER)
+	header.add_child(preset_label)
 
-	scroll = ScrollContainer.new()
+	var body := HBoxContainer.new()
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", 16)
+	column.add_child(body)
+
+	var page_list := VBoxContainer.new()
+	page_list.custom_minimum_size = Vector2(130, 0)
+	body.add_child(page_list)
+	for p in TunerModel.pages():
+		var l := _label(p.title, SILVER)
+		page_list.add_child(l)
+		page_labels.append(l)
+
+	var middle := VBoxContainer.new()
+	middle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_child(middle)
+	page_title = _label("", SODIUM)
+	middle.add_child(page_title)
+	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.follow_focus = true
-	column.add_child(scroll)
-	var sections := VBoxContainer.new()
-	sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sections.add_theme_constant_override("separation", 6)
-	scroll.add_child(sections)
+	middle.add_child(scroll)
+	var holder := VBoxContainer.new()
+	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(holder)
+	content = VBoxContainer.new()
+	content.add_theme_constant_override("separation", 6)
+	holder.add_child(content)
 
-	sections.add_child(_heading("Gearing & Power"))
-	manual = TuningPanel.new(player, game_state)
-	sections.add_child(manual)
-	sections.add_child(_heading("Exhaust (sound and flames only; held keys U/J I/K O/L still work while driving)"))
-	exhaust = ExhaustPanel.new(player)
-	sections.add_child(exhaust)
-	auto_heading = _heading("Auto-Tune (add-on, Y to open, T to fold away)")
-	sections.add_child(auto_heading)
+	# Panel pages, built once and shown/hidden.
+	var setup := VBoxContainer.new()
+	setup.add_theme_constant_override("separation", 6)
+	setup.add_child(_label("Presets start from the car's stock setup. Pick one, then change anything you like.", SILVER))
+	for name in TunerModel.PRESETS:
+		var b := Button.new()
+		b.text = name
+		b.focus_mode = Control.FOCUS_ALL
+		b.pressed.connect(_on_preset.bind(name))
+		setup.add_child(b)
+		preset_buttons.append(b)
+	setup.add_child(_label("Saved setups live on the Mechanic page for now.", DIM))
+	panel_pages["setup"] = setup
 	auto = AutoTunePanel.new(player, game_state)
-	sections.add_child(auto)
+	panel_pages["mechanic"] = auto
+	var sound := VBoxContainer.new()
+	sound.add_child(_label("Sound and looks only: nothing here changes how the car drives.", DIM))
+	exhaust = ExhaustPanel.new(player)
+	sound.add_child(exhaust)
+	panel_pages["sound"] = sound
+	var adv := VBoxContainer.new()
+	adv.add_child(_label("Raw gearing and power, for fine work. Peak torque and redline move to the garage later.", DIM))
+	manual = TuningPanel.new(player, game_state)
+	adv.add_child(manual)
+	panel_pages["advanced"] = adv
+	for id in panel_pages:
+		holder.add_child(panel_pages[id])
+		panel_pages[id].visible = false
 
-	manual.tune_changed.connect(auto.refresh_lock_labels)
+	stats = TunerStats.new()
+	stats.custom_minimum_size = Vector2(250, 0)
+	body.add_child(stats)
+
+	hint = _label("", SILVER)
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.custom_minimum_size = Vector2(0, 44)
+	column.add_child(hint)
+
+	manual.tune_changed.connect(_on_panel_changed)
 	auto.tune_changed.connect(_on_auto_changed)
-	_set_auto_expanded(false)
 	game_state.state_changed.connect(_on_state_changed)
 
-func _heading(text: String) -> Label:
+func _label(text: String, colour: Color) -> Label:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_color_override("font_color", Color(1.0, 0.54, 0.12))  # the exhaust readout's orange, already in the game
+	l.add_theme_color_override("font_color", colour)
 	return l
 
-func _set_auto_expanded(expanded: bool) -> void:
-	auto.visible = expanded
-
-func _on_auto_changed() -> void:
-	manual.refresh_from_player()
-	exhaust.refresh()
+# ---------- open / close ----------
 
 func _on_state_changed(new_state: GameState.State, old_state: GameState.State) -> void:
 	visible = GameState.is_tuner(new_state)
@@ -107,24 +178,235 @@ func _on_state_changed(new_state: GameState.State, old_state: GameState.State) -
 		var was_open := GameState.is_tuner(old_state)
 		if not was_open:
 			exhaust.refresh()
-		_set_auto_expanded(new_state == GameState.State.AUTOTUNE)
-		_focus_in(new_state)
+			manual.refresh_from_player()
+			before_stats = TunerModel.estimate(player.spec)
+			before_notches = {}
+			for p in TunerModel.pages():
+				for s in p.settings:
+					before_notches[s.id] = model.notch(s)
+		show_page("mechanic" if new_state == GameState.State.AUTOTUNE else "setup")
 	else:
 		# Sliders and buttons keep keyboard focus otherwise and eat the arrow keys.
 		var focused := get_viewport().gui_get_focus_owner()
 		if focused:
 			focused.release_focus()
 
-## Keyboard focus goes to the first control of the section the key asked for:
-## the first gearing slider on T, the first Auto-Tune goal slider on Y.
-func _focus_in(state: GameState.State) -> void:
-	if state == GameState.State.AUTOTUNE:
-		var first: Control = auto.goal_sliders.values()[0]
-		first.grab_focus()
-		_scroll_to.call_deferred(auto_heading)  # after the layout has caught up with the section opening
-	else:
-		manual.sliders["final_drive"].grab_focus()
-		_scroll_to.call_deferred(null)
+func current_page() -> String:
+	return page_ids[page_index]
 
-func _scroll_to(target: Control) -> void:
-	scroll.scroll_vertical = 0 if target == null else int(target.position.y)
+func show_page(id: String) -> void:
+	page_index = page_ids.find(id)
+	row_index = 0
+	var page := TunerModel.page(id)
+	page_title.text = page.title.to_upper()
+	for i in page_labels.size():
+		page_labels[i].text = ("> " if i == page_index else "  ") + TunerModel.pages()[i].title
+		page_labels[i].add_theme_color_override("font_color", SODIUM if i == page_index else SILVER)
+	for pid in panel_pages:
+		panel_pages[pid].visible = pid == id
+	for c in content.get_children():
+		c.queue_free()
+	rows = []
+	var focused := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	if focused:
+		focused.release_focus()
+	for s in page.settings:
+		rows.append(_add_row(s))
+	_refresh()
+	if id == "setup":
+		preset_buttons[0].grab_focus()
+	elif id == "mechanic":
+		(auto.goal_sliders.values()[0] as Control).grab_focus()
+	elif id == "sound":
+		(exhaust.sliders.values()[0] as Control).grab_focus()
+	elif id == "advanced":
+		(manual.sliders["final_drive"] as Control).grab_focus()
+
+func _add_row(s: Dictionary) -> Dictionary:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 8)
+	content.add_child(h)
+	var name := _label(s.label, SILVER)
+	name.custom_minimum_size = Vector2(170, 0)
+	h.add_child(name)
+	var lo := _label(s.lo_word if s.kind == "range" else "", DIM)
+	lo.custom_minimum_size = Vector2(48, 0)
+	lo.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	h.add_child(lo)
+	var bar := NotchBar.new()
+	bar.custom_minimum_size = Vector2(176, 18)
+	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	bar.choices = s.options.size() if s.kind == "choice" else TunerModel.NOTCHES
+	h.add_child(bar)
+	var hi := _label(s.hi_word if s.kind == "range" else "", DIM)
+	hi.custom_minimum_size = Vector2(48, 0)
+	h.add_child(hi)
+	var value := _label("", AMBER)
+	h.add_child(value)
+	return {"setting": s, "name": name, "value": value, "bar": bar}
+
+# ---------- keyboard ----------
+
+func _input(event: InputEvent) -> void:
+	if not visible or not (event is InputEventKey) or not event.pressed:
+		return
+	if game_state.typing_in_text():
+		return  # a text box has the keys (tune slot names)
+	var key: int = (event as InputEventKey).keycode
+	match key:
+		KEY_Q:
+			show_page(page_ids[(page_index + page_ids.size() - 1) % page_ids.size()])
+		KEY_E:
+			show_page(page_ids[(page_index + 1) % page_ids.size()])
+		_:
+			if rows.is_empty():
+				return  # panel pages: their own controls take the arrows
+			match key:
+				KEY_UP: row_index = maxi(row_index - 1, 0)
+				KEY_DOWN: row_index = mini(row_index + 1, rows.size() - 1)
+				KEY_LEFT: _nudge(-1)
+				KEY_RIGHT: _nudge(1)
+				_: return
+			_refresh()
+	get_viewport().set_input_as_handled()
+
+func _nudge(step: int) -> void:
+	if model.nudge(rows[row_index].setting, step):
+		manual.refresh_from_player()
+		auto.refresh_lock_labels()
+
+func _on_preset(name: String) -> void:
+	model.apply_preset(name)
+	manual.refresh_from_player()
+	exhaust.refresh()
+	auto.refresh_lock_labels()
+	_refresh()
+
+func _on_panel_changed() -> void:
+	model.modified = true
+	auto.refresh_lock_labels()
+	_refresh()
+
+func _on_auto_changed() -> void:
+	model.modified = true
+	manual.refresh_from_player()
+	exhaust.refresh()
+	_refresh()
+
+# ---------- drawing ----------
+
+func _refresh() -> void:
+	preset_label.text = "Setup: " + model.preset_label()
+	for i in rows.size():
+		var r: Dictionary = rows[i]
+		var s: Dictionary = r.setting
+		var focused := i == row_index
+		r.name.text = ("> " if focused else "  ") + s.label
+		r.name.add_theme_color_override("font_color", SODIUM if focused else SILVER)
+		r.value.text = model.value_text(s)
+		r.bar.now = model.notch(s)
+		r.bar.before = before_notches.get(s.id, r.bar.now)
+		r.bar.focused = focused
+		r.bar.queue_redraw()
+	var page := TunerModel.page(current_page())
+	if not rows.is_empty():
+		hint.text = rows[row_index].setting.hint
+	else:
+		hint.text = {
+			"setup": "Stock: as it left the factory. Street: forgiving and comfortable. Grip: fast laps. Drift: easy slides.",
+			"mechanic": "The mechanic tries setups on a closed track and keeps what scores best for your goals.",
+			"sound": "How the exhaust sounds, and the flames. Purely cosmetic.",
+			"advanced": "Every raw gearing and power number, with the gear table.",
+		}.get(page.id, "")
+	stats.set_values(before_stats, TunerModel.estimate(player.spec))
+
+# ---------- small drawn widgets ----------
+
+## An 11-notch bar (or one segment per choice): filled up to "now" in sodium
+## orange, a dim tick where the setting was when the screen opened.
+class NotchBar extends Control:
+	var choices := 11
+	var now := 0
+	var before := 0
+	var focused := false
+
+	func _draw() -> void:
+		var gap := 2.0
+		var w := (size.x - gap * (choices - 1)) / choices
+		for i in choices:
+			var r := Rect2(i * (w + gap), 0.0, w, size.y)
+			var on := i == now if choices <= 4 else i <= now
+			var c := TunerScreen.SODIUM if on else Color(TunerScreen.NAVY_LIGHT, 1.0)
+			if on and not focused:
+				c = TunerScreen.AMBER
+			draw_rect(r, c)
+			if i == before and before != now:
+				draw_rect(Rect2(r.position.x, size.y - 3.0, w, 3.0), TunerScreen.SILVER)
+
+## Right-hand stat panel: before (dim) and now (orange) bars with the change.
+class TunerStats extends VBoxContainer:
+	const ROWS := [
+		["top", "Top speed", "~%d km/h", 150.0, 320.0, false],
+		["accel", "0-100", "~%.1f s", 10.0, 2.5, false],
+		["brake", "100-0", "~%d m", 60.0, 25.0, false],
+		["grip", "Grip", "~%.2f g", 0.8, 2.0, false],
+		["balance", "Balance", "%s", -1.0, 1.0, true],
+	]
+	var labels := {}
+	var bars := {}
+
+	func _ready() -> void:
+		add_theme_constant_override("separation", 4)
+		for r in ROWS:
+			var l := Label.new()
+			l.add_theme_color_override("font_color", TunerScreen.SILVER)
+			add_child(l)
+			labels[r[0]] = l
+			var b := StatBar.new()
+			b.custom_minimum_size = Vector2(0, 12)
+			b.centred = r[5]
+			add_child(b)
+			bars[r[0]] = b
+		var note := Label.new()
+		note.text = "~ = estimate"
+		note.add_theme_color_override("font_color", TunerScreen.DIM)
+		add_child(note)
+
+	func set_values(before: Dictionary, now: Dictionary) -> void:
+		if labels.is_empty() or now.is_empty():
+			return
+		for r in ROWS:
+			var k: String = r[0]
+			var v: float = now[k]
+			var b: float = before.get(k, v)
+			var text: String
+			if k == "balance":
+				text = "Understeer" if v < -0.15 else ("Oversteer" if v > 0.15 else "Neutral")
+				text = "%s  %s" % [r[1], text]
+			else:
+				text = "%s  %s" % [r[1], r[2] % v]
+				var d := v - b
+				if absf(d) > 0.005 * maxf(absf(b), 1.0):
+					text += ("   %+.0f" if k == "top" or k == "brake" else "   %+.2f") % d
+			labels[k].text = text
+			bars[k].now = inverse_lerp(r[3], r[4], v)
+			bars[k].before = inverse_lerp(r[3], r[4], b)
+			bars[k].queue_redraw()
+
+	class StatBar extends Control:
+		var now := 0.5
+		var before := 0.5
+		var centred := false
+
+		func _draw() -> void:
+			draw_rect(Rect2(Vector2.ZERO, size), TunerScreen.NAVY_LIGHT)
+			var n := clampf(now, 0.0, 1.0)
+			var b := clampf(before, 0.0, 1.0)
+			if centred:
+				var mid := size.x * 0.5
+				draw_rect(Rect2(mid - 1.0, 0.0, 2.0, size.y), TunerScreen.DIM)
+				draw_rect(Rect2(size.x * n - 3.0, 0.0, 6.0, size.y), TunerScreen.SODIUM)
+				draw_rect(Rect2(size.x * b - 1.0, size.y - 3.0, 2.0, 3.0), TunerScreen.SILVER)
+				return
+			draw_rect(Rect2(0.0, 0.0, size.x * b, size.y), TunerScreen.DIM)
+			draw_rect(Rect2(0.0, 2.0, size.x * n, size.y - 4.0), TunerScreen.SODIUM)

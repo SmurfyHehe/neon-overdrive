@@ -57,7 +57,7 @@ func _run() -> void:
 	await _until(func(): return game.game_state.state == GameState.State.AUTOTUNE, 5.0)
 	_check(game.game_state.state == GameState.State.AUTOTUNE, "Y should open Auto-Tune")
 	_check(screen.visible and panel.is_visible_in_tree() and not _find(game, PauseMenu).visible, "Y should show the Tuner screen with Auto-Tune expanded")
-	_check(raw.is_visible_in_tree(), "the gearing sliders stay on the screen next to Auto-Tune")
+	_check(not raw.is_visible_in_tree() and screen.current_page() == "mechanic", "Y should show the Mechanic page; the raw gearing panel lives on Advanced (Tuner redesign PR 3)")
 	_check(root.gui_get_focus_owner() == panel.goal_sliders.values()[0], "first goal slider should have keyboard focus on open, has %s" % root.gui_get_focus_owner())
 	_check(paused, "Auto-Tune should pause the game like the raw panel")
 

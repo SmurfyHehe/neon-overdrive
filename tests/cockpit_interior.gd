@@ -79,7 +79,7 @@ func _physics_process(_delta: float) -> bool:
 			_go(Step.CHASE)
 		Step.CHASE:
 			if waited == 30:
-				_check(not frame.visible, "the interior is hidden in the chase view")
+				_check(not frame.cockpit and frame.visible, "the interior is drawn in the chase view too (through the glass), cockpit mode off")
 				_check(not frame.mirrors.active and not frame.mirrors.is_rendering(), "mirrors must not render in the chase view")
 				_check(not frame.body_hidden_from_camera(), "the body is drawn in the chase view")
 				cam.set_view(ChaseCamera.View.COCKPIT)
@@ -87,7 +87,7 @@ func _physics_process(_delta: float) -> bool:
 				_go(Step.COCKPIT)
 		Step.COCKPIT:
 			if waited == 6:
-				_check(frame.visible and frame.mirrors.active, "the cockpit shows the interior and starts the mirrors")
+				_check(frame.cockpit and frame.visible and frame.mirrors.active, "the cockpit mode starts the mirrors")
 				_check(frame.mirrors.is_rendering(), "a mirror should be queued to render in the cockpit view")
 				_check(frame.body_hidden_from_camera(), "the body moves to the mirror-only layer in the cockpit")
 				_go(Step.WHEEL)
@@ -141,7 +141,7 @@ func _physics_process(_delta: float) -> bool:
 				_go(Step.BACK)
 		Step.BACK:
 			if waited == 6:
-				_check(not frame.visible and not frame.mirrors.active and not frame.mirrors.is_rendering(), "back in the chase view the mirrors stop")
+				_check(not frame.cockpit and not frame.mirrors.active and not frame.mirrors.is_rendering(), "back in the chase view the mirrors stop")
 				_check(not frame.body_hidden_from_camera(), "back in the chase view the body is drawn again")
 				print("cockpit triangles: %d (wheel %d)" % [frame.triangle_count(), frame.wheel.triangle_count()])
 				return _end("")
@@ -166,8 +166,8 @@ func _check_sightline(p: PlayerCar, frame: CockpitFrame) -> void:
 			var dir := Vector3(0, 0, -1).rotated(Vector3.RIGHT, deg_to_rad(pitch)).rotated(Vector3.UP, yaw)
 			for m in meshes:
 				var mi := m as MeshInstance3D
-				if not mi.mesh is ArrayMesh:
-					continue
+				if not mi.mesh is ArrayMesh or not mi.is_visible_in_tree():
+					continue   # the driver's head and torso are hidden in the cockpit view
 				var xf: Transform3D = to_car * mi.global_transform
 				var mesh := mi.mesh as ArrayMesh
 				for si in mesh.get_surface_count():

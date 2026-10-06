@@ -62,7 +62,7 @@ const SPEEDO_MAX_KMH := 300.0
 const LEVER_LEN := 0.23
 const LEVER_ROW_TILT := 16.0   # degrees fore/aft for a gear slot
 const LEVER_COL_TILT := 11.0   # degrees left/right per column
-const LEVER_SPEED := 9.0       # slot units per second along the gate path
+const LEVER_SPEED := 12.0      # slot units per second along the gate path
 const PEDAL_TRAVEL_DEG := 22.0
 
 # Colours (ROADMAP palette; dark cabin plastics around it)
@@ -95,6 +95,7 @@ var lever_knob: Node3D
 var handbrake: Node3D
 var pedals := {}                 # "throttle" / "brake" / "clutch" -> pivot Node3D
 var cabin_light: OmniLight3D
+var driver: DriverModel
 var steering := 0.0              # -1..1 from the car, set by the camera (tests set it too)
 var cockpit := false
 var lever_moving := false
@@ -109,7 +110,8 @@ func _init(car: PlayerCar) -> void:
 	name = "Cockpit"
 
 func _ready() -> void:
-	visible = false
+	# Always drawn: in the chase view the cabin and driver show through the glass.
+	visible = true
 	_build_static()
 	_build_wheel()
 	_build_cluster()
@@ -132,14 +134,17 @@ func _ready() -> void:
 	_lever_gear = player.gear
 	_lever_pos = _slot_of(player.gear)
 	_apply_lever(_lever_pos)
+	driver = DriverModel.new(self)
+	add_child(driver)
 
-## Cockpit view on or off: shows the cabin, starts the mirrors and moves the
-## car's own body and wheels to the mirror-only layer (back to the car layer
-## when leaving), so the cockpit camera does not draw them but the mirrors do.
+## Cockpit view on or off: starts or stops the mirrors, hides the driver's head
+## and torso (the camera is the head) and moves the car's own body and wheels
+## to the mirror-only layer (back to the car layer when leaving), so the
+## cockpit camera does not draw them but the mirrors do.
 func set_cockpit(on: bool) -> void:
 	cockpit = on
-	visible = on
 	mirrors.set_active(on)
+	driver.set_cockpit(on)
 	var bit := MIRROR_ONLY_BIT if on else CAR_BIT
 	if player.chassis_visual != null:
 		_set_layers(player.chassis_visual, bit)
@@ -176,7 +181,7 @@ func _build_static() -> void:
 	k.wedge(Vector3(1.74, 0.05, 0.40), Vector3(0.0, 0.905, -0.49), PLASTIC, -0.03, 0.0)
 	k.box(Vector3(1.74, 0.36, 0.12), Vector3(0.0, 0.73, -0.33), PLASTIC_LIGHT)
 	k.box(Vector3(1.74, 0.22, 0.32), Vector3(0.0, 0.48, -0.46), PLASTIC)
-	k.box(Vector3(1.78, 0.04, 0.06), Vector3(0.0, 0.915, -0.70), TRIM)          # cowl lip
+	k.box(Vector3(1.66, 0.03, 0.06), Vector3(0.0, 0.895, -0.70), TRIM)          # cowl lip, under the glass line
 	lit.box(Vector3(1.60, 0.006, 0.01), Vector3(0.0, 0.912, -0.275), Color(AMBER, 0.35))   # dash edge strip
 	# Cluster binnacle and its hood in front of the driver.
 	k.box(Vector3(0.34, 0.12, 0.10), Vector3(SEAT_X, CLUSTER_Y, -0.40), PLASTIC)
@@ -214,16 +219,18 @@ func _build_static() -> void:
 	lit.box(Vector3(0.006, 0.004, 0.60), Vector3(-0.133, 0.622, 0.05), Color(AMBER, 0.3))
 	lit.box(Vector3(0.006, 0.004, 0.60), Vector3(0.133, 0.622, 0.05), Color(AMBER, 0.3))
 	# Seats, driver and passenger.
+	# Low sports seats: cushion top about 0.48, so a seated eye lands at the
+	# cockpit camera's 1.06 (see DriverModel.PELVIS).
 	for sx in [SEAT_X, -SEAT_X]:
-		k.wedge(Vector3(0.50, 0.12, 0.50), Vector3(sx, 0.50, 0.42), SEAT, 0.03, 0.0)
-		k.box(Vector3(0.10, 0.10, 0.46), Vector3(sx - 0.21, 0.58, 0.40), SEAT_PANEL)  # cushion bolsters
-		k.box(Vector3(0.10, 0.10, 0.46), Vector3(sx + 0.21, 0.58, 0.40), SEAT_PANEL)
+		k.wedge(Vector3(0.50, 0.10, 0.50), Vector3(sx, 0.43, 0.36), SEAT, 0.03, 0.0)
+		k.box(Vector3(0.10, 0.10, 0.46), Vector3(sx - 0.21, 0.50, 0.34), SEAT_PANEL)  # cushion bolsters
+		k.box(Vector3(0.10, 0.10, 0.46), Vector3(sx + 0.21, 0.50, 0.34), SEAT_PANEL)
 		var recline := Basis(Vector3.RIGHT, deg_to_rad(12.0))
-		k.box(Vector3(0.50, 0.58, 0.10), Vector3(sx, 0.86, 0.69), SEAT, recline)
-		k.box(Vector3(0.09, 0.50, 0.14), Vector3(sx - 0.22, 0.86, 0.67), SEAT_PANEL, recline)
-		k.box(Vector3(0.09, 0.50, 0.14), Vector3(sx + 0.22, 0.86, 0.67), SEAT_PANEL, recline)
-		k.box(Vector3(0.22, 0.10, 0.08), Vector3(sx, 1.21, 0.80), SEAT, recline)         # headrest
-		k.box(Vector3(0.50, 0.08, 0.30), Vector3(sx, 0.42, 0.45), PLASTIC)              # seat base
+		k.box(Vector3(0.50, 0.58, 0.10), Vector3(sx, 0.76, 0.61), SEAT, recline)
+		k.box(Vector3(0.09, 0.50, 0.14), Vector3(sx - 0.22, 0.76, 0.59), SEAT_PANEL, recline)
+		k.box(Vector3(0.09, 0.50, 0.14), Vector3(sx + 0.22, 0.76, 0.59), SEAT_PANEL, recline)
+		k.box(Vector3(0.22, 0.10, 0.08), Vector3(sx, 1.10, 0.71), SEAT, recline)         # headrest
+		k.box(Vector3(0.50, 0.06, 0.30), Vector3(sx, 0.36, 0.39), PLASTIC)              # seat base
 	# Door cards, armrests, pulls, sills.
 	for side in [-1.0, 1.0]:
 		k.box(Vector3(0.06, 0.38, 0.95), Vector3(side * 0.86, 0.72, -0.02), PLASTIC_LIGHT)
@@ -432,7 +439,7 @@ func _build_pedals() -> void:
 	for p in [["throttle", -0.26, 0.045, 0.10], ["brake", -0.38, 0.065, 0.075], ["clutch", -0.50, 0.060, 0.075]]:
 		var pivot := Node3D.new()
 		pivot.name = String(p[0]).capitalize() + "Pedal"
-		pivot.position = Vector3(p[1], 0.54, -0.60)
+		pivot.position = Vector3(p[1], 0.54, -0.50)
 		var k := CockpitKit.new()
 		k.box(Vector3(0.018, 0.17, 0.012), Vector3(0.0, -0.085, 0.0), TRIM)
 		k.box(Vector3(p[2], p[3], 0.012), Vector3(0.0, -0.17, 0.004), PLASTIC_LIGHT)
@@ -456,7 +463,7 @@ func _build_light() -> void:
 	cabin_light.name = "CabinLight"
 	cabin_light.position = Vector3(0.0, 1.0, 0.05)
 	cabin_light.light_color = AMBER
-	cabin_light.light_energy = 1.0
+	cabin_light.light_energy = 1.1   # a touch more than the interior branch: the driver shows through the glass
 	cabin_light.omni_range = 2.2
 	cabin_light.omni_attenuation = 1.2
 	cabin_light.shadow_enabled = false
@@ -483,15 +490,20 @@ func _process(delta: float) -> void:
 	for key in pedals:
 		(pedals[key] as Node3D).rotation_degrees = Vector3(PEDAL_TRAVEL_DEG * float(inputs[key]), 0.0, 0.0)
 	handbrake.rotation_degrees = Vector3(28.0 * clampf(p.handbrake_input, 0.0, 1.0), 0.0, 0.0)
+	# Manual: the lever starts for the requested gear the moment the shift
+	# starts (the driver's hand rides it through the shift_time), and is set
+	# straight on gear changes that skip is_shifting (out of neutral).
+	if not p.automatic_transmission and p.is_shifting and _lever_gear != p.requested_gear:
+		move_lever_to(p.requested_gear)
 	if p.gear != _last_gear:
 		if p.automatic_transmission:
 			wheel.flick(1 if p.gear > _last_gear else -1)
-		else:
+		elif _lever_gear != p.gear:
 			move_lever_to(p.gear)
 		_last_gear = p.gear
 	if p.automatic_transmission and _lever_gear != 0 and not lever_moving:
 		move_lever_to(0)
-	elif not p.automatic_transmission and _lever_gear != p.gear and not lever_moving:
+	elif not p.automatic_transmission and _lever_gear != p.gear and not lever_moving and not p.is_shifting:
 		move_lever_to(p.gear)
 	_step_lever(delta)
 	_update_radio()

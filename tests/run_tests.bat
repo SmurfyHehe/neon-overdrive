@@ -55,6 +55,7 @@ call :run cockpit --headless
 call :run cockpit_interior --headless
 call :run cockpit_isolation "--headless --fixed-fps 120"
 call :run cockpit_head_motion --headless
+call :run hud_rear_strip --headless
 call :run cockpit_driver --headless
 call :run tyres "--headless --fixed-fps 60"
 call :run clutch_model --headless

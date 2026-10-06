@@ -113,6 +113,7 @@ func _physics_process(_delta: float) -> bool:
 				_check(not w.flashing and w.led_colours[7].is_equal_approx(Color(SteeringWheel.RED, 1.0)), "between blinks the middle LED is red")
 				w.update(0.5, false, false, 3500.0, 40, "1")
 				_check(w.lit_count == 0 and w.led_colours[0].a < 0.01, "at 50%% every LED is off (alpha 0)")
+				_check_sightline(p, frame)
 				steer = 0.0
 				throttle = 1.0
 				_go(Step.PEDALS)
@@ -144,6 +145,46 @@ func _physics_process(_delta: float) -> bool:
 				print("cockpit triangles: %d (wheel %d)" % [frame.triangle_count(), frame.wheel.triangle_count()])
 				return _end("")
 	return false
+
+## Roy (2026-10-06): the cluster must not block the road. Rays from the cockpit
+## eye across +-20 degrees, from the horizon down to the ground 10 m ahead of
+## the bumper, may hit nothing of the interior except the wheel rim (the band
+## stays clear of the A-pillars, which sit past 25 degrees).
+func _check_sightline(p: PlayerCar, frame: CockpitFrame) -> void:
+	var eye := ChaseCamera.COCKPIT_EYE
+	var ground_z := -(P1CoupeBuilder.LENGTH / 2.0) - 10.0
+	var ground_pitch := -rad_to_deg(atan2(eye.y, eye.z - ground_z))
+	var to_car := p.global_transform.affine_inverse()
+	var hits := {}
+	var rays := 0
+	var meshes: Array = frame.find_children("*", "MeshInstance3D", true, false)
+	for yaw_i in 11:
+		var yaw := deg_to_rad(-20.0 + 4.0 * yaw_i)
+		for pitch in [0.0, -1.0, -2.0, -3.0, -4.0, ground_pitch]:
+			rays += 1
+			var dir := Vector3(0, 0, -1).rotated(Vector3.RIGHT, deg_to_rad(pitch)).rotated(Vector3.UP, yaw)
+			for m in meshes:
+				var mi := m as MeshInstance3D
+				if not mi.mesh is ArrayMesh:
+					continue
+				var xf: Transform3D = to_car * mi.global_transform
+				var mesh := mi.mesh as ArrayMesh
+				for si in mesh.get_surface_count():
+					var verts: PackedVector3Array = mesh.surface_get_arrays(si)[Mesh.ARRAY_VERTEX]
+					var t := 0
+					while t + 2 < verts.size():
+						var hit = Geometry3D.ray_intersects_triangle(eye, dir, xf * verts[t], xf * verts[t + 1], xf * verts[t + 2])
+						t += 3
+						if hit == null:
+							continue
+						if mi.name == "WheelBody":
+							var local: Vector3 = frame.wheel.global_transform.affine_inverse() * (p.global_transform * hit)
+							if Vector2(local.x, local.y).length() >= 0.13:
+								continue   # the rim is allowed
+						var key := "%s@%.1f/%.1f" % [mi.name, rad_to_deg(yaw), pitch]
+						hits[key] = hit
+	print("sightline: %d rays, ground pitch %.2f deg, %d blocked" % [rays, ground_pitch, hits.size()])
+	_check(hits.is_empty(), "the cluster, dash, hub or column block the road from the eye: %s" % [hits.keys().slice(0, 8)])
 
 func _go(next: Step) -> void:
 	step = next

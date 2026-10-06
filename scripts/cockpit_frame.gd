@@ -38,10 +38,18 @@ const WHEEL_LOCK_RAD := LOCK_TO_LOCK_TURNS * TAU / 2.0
 const SEAT_X := -0.36
 const LIFT := P1CoupeBuilder.BODY_LIFT
 ## Wheel hub in car space and its tilt (top toward the driver).
-const WHEEL_POS := Vector3(SEAT_X, 0.84, -0.10)
-const WHEEL_TILT_DEG := 22.0
+const WHEEL_POS := Vector3(SEAT_X, 0.80, -0.10)   # 8 cm nearer the driver than on the interior branch, for the arms
+const WHEEL_TILT_DEG := 28.0
 const CLUSTER_Z := -0.349
-const DIAL_R := 0.07
+## Cluster centre height. Roy (2026-10-06): the cluster must not block the road.
+## From the eye (1.06 m) the ground 10 m ahead of the bumper is 4.9 degrees
+## down, so the binnacle hood tops out at 0.985 (6 degrees down at its nearest
+## edge) and the dials sit under it, seen over and through the top of the rim.
+const CLUSTER_Y := 0.95
+const DIAL_R := 0.05
+## Everything the cockpit adds is visual only; this switch (and NEON_COCKPIT=0)
+## leaves it out, for the isolation test and for A/B frame-cost runs.
+static var enabled := true
 const DIAL_SWEEP := 270.0   # degrees from empty (lower left) to full (lower right)
 const SPEEDO_MAX_KMH := 300.0
 const LEVER_LEN := 0.23
@@ -51,8 +59,8 @@ const LEVER_SPEED := 12.0      # slot units per second along the gate path
 const PEDAL_TRAVEL_DEG := 22.0
 
 # Colours (ROADMAP palette; dark cabin plastics around it)
-const PLASTIC := Color("#15171C")
-const PLASTIC_LIGHT := Color("#20232A")
+const PLASTIC := Color("#1C1F26")
+const PLASTIC_LIGHT := Color("#2A2E36")
 const LEATHER := Color("#121318")
 const SEAT := Color("#1D1F26")
 const SEAT_PANEL := Color("#2A2D35")
@@ -110,6 +118,9 @@ func _ready() -> void:
 	mirrors.cull_mask = MIRROR_CULL
 	add_child(mirrors)
 	_set_layers(self, INTERIOR_BIT)
+	# Visual only: nothing in here casts a shadow onto the car or the road.
+	for n in find_children("*", "GeometryInstance3D", true, false):
+		(n as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	# the shelf is also what the rearview camera sees under the rear glass
 	(get_node("Shelf") as VisualInstance3D).layers = INTERIOR_BIT | MIRROR_ONLY_BIT
 	_last_gear = player.gear
@@ -166,24 +177,24 @@ func _build_static() -> void:
 	k.box(Vector3(1.66, 0.03, 0.06), Vector3(0.0, 0.895, -0.70), TRIM)          # cowl lip, under the glass line
 	lit.box(Vector3(1.60, 0.006, 0.01), Vector3(0.0, 0.912, -0.275), Color(AMBER, 0.35))   # dash edge strip
 	# Cluster binnacle and its hood in front of the driver.
-	k.box(Vector3(0.42, 0.16, 0.10), Vector3(SEAT_X, 1.02, -0.40), PLASTIC)
-	k.wedge(Vector3(0.46, 0.02, 0.18), Vector3(SEAT_X, 1.11, -0.42), PLASTIC_LIGHT, 0.0, -0.025)
+	k.box(Vector3(0.34, 0.12, 0.10), Vector3(SEAT_X, CLUSTER_Y, -0.40), PLASTIC)
+	k.wedge(Vector3(0.38, 0.012, 0.16), Vector3(SEAT_X, CLUSTER_Y + 0.059, -0.42), PLASTIC_LIGHT, 0.0, -0.02)
 	# Dial faces (backlit dark), rings and tick marks.
-	for dx in [-0.10, 0.10]:
-		var c := Vector3(SEAT_X + dx, 1.02, CLUSTER_Z)
+	for dx in [-0.085, 0.085]:
+		var c := Vector3(SEAT_X + dx, CLUSTER_Y, CLUSTER_Z)
 		lit.cylinder(DIAL_R, -0.004, 0.0, c, Color(DIAL_FACE, 0.15), 16, Basis(Vector3.RIGHT, PI / 2.0))
 		k.cylinder(DIAL_R + 0.008, -0.008, -0.002, c + Vector3(0, 0, -0.001), TRIM, 16, Basis(Vector3.RIGHT, PI / 2.0))
 		var ticks := 9 if dx < 0.0 else 7
 		for i in ticks:
 			var a := deg_to_rad(225.0 - DIAL_SWEEP * float(i) / (ticks - 1))
 			var p := c + Vector3(cos(a), sin(a), 0.0) * (DIAL_R - 0.012) + Vector3(0, 0, 0.001)
-			lit.box(Vector3(0.004, 0.012, 0.002), p, Color(AMBER, 0.6), Basis(Vector3.BACK, a - PI / 2.0))
+			lit.box(Vector3(0.003, 0.009, 0.002), p, Color(AMBER, 0.6), Basis(Vector3.BACK, a - PI / 2.0))
 		if dx < 0.0:
 			# red zone on the tach, from the HUD's red band to the end
 			var a0 := deg_to_rad(225.0 - DIAL_SWEEP * Hud.RED_FROM)
 			var a1 := deg_to_rad(225.0 - DIAL_SWEEP)
 			var zone := CockpitKit.new()
-			zone.ring_sector(DIAL_R - 0.024, DIAL_R - 0.016, a1, a0, 0.0, 0.0015, Color(RED, 0.5), 4)
+			zone.ring_sector(DIAL_R - 0.019, DIAL_R - 0.013, a1, a0, 0.0, 0.0015, Color(RED, 0.5), 4)
 			zone.offset(c)
 			lit.merge(zone)
 	# Centre stack: vents, the radio bezel (the unit itself is built in _build_radio).
@@ -234,8 +245,8 @@ func _build_static() -> void:
 		k.box(Vector3(0.42, 0.012, 0.15), Vector3(sx, 1.283, 0.13), LEATHER, Basis(Vector3.RIGHT, deg_to_rad(-4.0)))
 	# Rearview mirror housing and stalk (the glass is a CockpitMirrors quad).
 	var rb := Basis(Vector3.UP, deg_to_rad(CockpitMirrors.REAR_YAW)) * Basis(Vector3.RIGHT, deg_to_rad(CockpitMirrors.REAR_PITCH))
-	k.box(Vector3(0.265, 0.09, 0.025), CockpitMirrors.REAR_POS + rb * Vector3(0, 0, -0.014), PLASTIC, rb)
-	k.box(Vector3(0.02, 0.10, 0.02), CockpitMirrors.REAR_POS + Vector3(0.0, 0.085, -0.02), PLASTIC)
+	k.box(Vector3(0.215, 0.072, 0.022), CockpitMirrors.REAR_POS + rb * Vector3(0, 0, -0.013), PLASTIC, rb)
+	k.box(Vector3(0.018, 0.08, 0.018), CockpitMirrors.REAR_POS + Vector3(0.0, 0.07, -0.02), PLASTIC)
 	# Floor, footwell and firewall; rear bulkhead. (The door mirror cups are on
 	# the body, P1CoupeBuilder; the parcel shelf is its own mesh, see _ready.)
 	k.box(Vector3(1.70, 0.04, 1.40), Vector3(0.0, 0.27, 0.15), CARPET)
@@ -271,17 +282,17 @@ func _build_wheel() -> void:
 	wheel = SteeringWheel.new()
 	wheel.name = "Wheel"
 	wheel_mount.add_child(wheel)
-	# Column and shroud from the hub back into the dash, along the mount's -z.
+	# A short column stub behind the hub (the long pole down the middle of the
+	# view is gone, Roy 2026-10-06); the shroud is on the dash face, under the cluster.
 	var k := CockpitKit.new()
-	k.cylinder(0.026, -0.22, -0.03, Vector3.ZERO, PLASTIC_LIGHT, 8, Basis(Vector3.RIGHT, -PI / 2.0))
-	k.box(Vector3(0.14, 0.10, 0.14), Vector3(0.0, -0.01, -0.17), PLASTIC)
+	k.cylinder(0.024, -0.09, -0.03, Vector3.ZERO, PLASTIC_LIGHT, 8, Basis(Vector3.RIGHT, -PI / 2.0))
 	wheel_mount.add_child(k.instance(CockpitKit.material(), "Column"))
 
 # ---------- instrument cluster ----------
 
 func _build_cluster() -> void:
-	tach_needle = _needle(Vector3(SEAT_X - 0.10, 1.02, CLUSTER_Z + 0.004), "TachNeedle")
-	speedo_needle = _needle(Vector3(SEAT_X + 0.10, 1.02, CLUSTER_Z + 0.004), "SpeedoNeedle")
+	tach_needle = _needle(Vector3(SEAT_X - 0.085, CLUSTER_Y, CLUSTER_Z + 0.004), "TachNeedle")
+	speedo_needle = _needle(Vector3(SEAT_X + 0.085, CLUSTER_Y, CLUSTER_Z + 0.004), "SpeedoNeedle")
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
@@ -290,26 +301,26 @@ func _build_cluster() -> void:
 	mm.mesh = box
 	mm.instance_count = 4
 	for i in 4:
-		mm.set_instance_transform(i, Transform3D(Basis(), Vector3(SEAT_X - 0.036 + 0.024 * i, 1.078, CLUSTER_Z + 0.002)))
+		mm.set_instance_transform(i, Transform3D(Basis().scaled(Vector3(0.7, 0.7, 1.0)), Vector3(SEAT_X - 0.027 + 0.018 * i, CLUSTER_Y + 0.03, CLUSTER_Z + 0.002)))
 		mm.set_instance_color(i, Color(AMBER, 0.0))
 	lamps = MultiMeshInstance3D.new()
 	lamps.name = "Lamps"
 	lamps.multimesh = mm
 	lamps.material_override = CockpitKit.glow_material(SteeringWheel.LED_ENERGY)
 	add_child(lamps)
-	lamp_text = _label("ENG   BRK   TYR   CLT", 14, Vector3(SEAT_X, 1.066, CLUSTER_Z + 0.002), SILVER, 0.00045)
+	lamp_text = _label("ENG BRK TYR CLT", 12, Vector3(SEAT_X, CLUSTER_Y + 0.015, CLUSTER_Z + 0.002), SILVER, 0.0004)
 	lamp_text.name = "LampText"
-	_label("x1000 rpm", 26, Vector3(SEAT_X - 0.10, 0.984, CLUSTER_Z + 0.002), AMBER, 0.0005)
-	_label("km/h", 26, Vector3(SEAT_X + 0.10, 0.984, CLUSTER_Z + 0.002), AMBER, 0.0005)
+	_label("x1000 rpm", 22, Vector3(SEAT_X - 0.085, CLUSTER_Y - 0.03, CLUSTER_Z + 0.002), AMBER, 0.0004)
+	_label("km/h", 22, Vector3(SEAT_X + 0.085, CLUSTER_Y - 0.03, CLUSTER_Z + 0.002), AMBER, 0.0004)
 
 func _needle(at: Vector3, node_name: String) -> Node3D:
 	var pivot := Node3D.new()
 	pivot.name = node_name
 	pivot.position = at
 	var k := CockpitKit.new()
-	k.box(Vector3(0.005, 0.062, 0.002), Vector3(0.0, 0.025, 0.0), Color(RED, 1.0))
-	k.box(Vector3(0.004, 0.012, 0.002), Vector3(0.0, -0.010, 0.0), Color(SILVER, 0.3))
-	k.cylinder(0.008, -0.001, 0.0015, Vector3.ZERO, Color(SILVER, 0.2), 8, Basis(Vector3.RIGHT, PI / 2.0))
+	k.box(Vector3(0.004, 0.044, 0.002), Vector3(0.0, 0.018, 0.0), Color(RED, 1.0))
+	k.box(Vector3(0.0035, 0.010, 0.002), Vector3(0.0, -0.008, 0.0), Color(SILVER, 0.3))
+	k.cylinder(0.006, -0.001, 0.0015, Vector3.ZERO, Color(SILVER, 0.2), 8, Basis(Vector3.RIGHT, PI / 2.0))
 	pivot.add_child(k.instance(CockpitKit.glow_material(SteeringWheel.LED_ENERGY)))
 	add_child(pivot)
 	return pivot
@@ -445,7 +456,7 @@ func _build_light() -> void:
 	cabin_light.name = "CabinLight"
 	cabin_light.position = Vector3(0.0, 1.0, 0.05)
 	cabin_light.light_color = AMBER
-	cabin_light.light_energy = 0.9
+	cabin_light.light_energy = 1.1   # a touch more than the interior branch: the driver shows through the glass
 	cabin_light.omni_range = 2.2
 	cabin_light.omni_attenuation = 1.2
 	cabin_light.shadow_enabled = false

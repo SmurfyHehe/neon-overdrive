@@ -39,6 +39,7 @@ var lbl_rpm: Label
 var lbl_info: Label
 var lbl_hint: Label
 var rpm_bar: RpmBar
+var cluster: VBoxContainer   # the gear / speed / RPM block; hidden in the cockpit view
 
 ## Segmented RPM bar. Draws itself from frac / shift_frac / cue.
 class RpmBar extends Control:
@@ -127,7 +128,7 @@ func _ready() -> void:
 		margin.add_theme_constant_override("margin_" + side, 24)
 	root.add_child(margin)
 
-	var cluster := VBoxContainer.new()
+	cluster = VBoxContainer.new()
 	cluster.size_flags_horizontal = Control.SIZE_SHRINK_END
 	cluster.size_flags_vertical = Control.SIZE_SHRINK_END
 	cluster.add_theme_constant_override("separation", 4)
@@ -193,6 +194,9 @@ func _process(_delta: float) -> void:
 	_refresh()
 
 func _refresh() -> void:
+	# In the cockpit the wheel's LCD and the cluster carry speed, gear and rpm
+	# (Roy, 2026-10-06); the warning lights and radio toast are other layers.
+	cluster.visible = camera.view != ChaseCamera.View.COCKPIT
 	var max_rpm := maxf(player.max_rpm, 1.0)
 	var rpm := player.motor_rpm
 	var frac := clampf(rpm / max_rpm, 0.0, 1.0)

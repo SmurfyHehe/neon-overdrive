@@ -61,7 +61,7 @@ const IMPACT_GAIN := 0.12        # trauma per m/s over the threshold
 ## ahead of the B-pillar, a hand's width inboard of the seat centre (-0.36) so
 ## the passenger-side door mirror is still inside the view at the default FOV.
 enum View { CHASE, COCKPIT }
-const COCKPIT_EYE := Vector3(-0.32, 1.06, 0.30)  # car-local, -x is the driver's side (left-hand drive)
+const COCKPIT_EYE := Vector3(-0.32, 1.10, 0.30)  # car-local, -x is the driver's side (left-hand drive)
 const COCKPIT_FOV := 80.0
 var view := View.CHASE
 var frame: CockpitFrame
@@ -108,8 +108,9 @@ func _ready() -> void:
 	# The interior lives on the car (car space), not on the camera, so the
 	# mirrors and (next PR) the driver sit where they are from any view. This
 	# camera never draws the mirror-only layer the body moves to in the cockpit.
-	frame = CockpitFrame.new(target)
-	target.add_child(frame)
+	if CockpitFrame.enabled and OS.get_environment("NEON_COCKPIT") != "0":
+		frame = CockpitFrame.new(target)
+		target.add_child(frame)
 	cull_mask &= ~CockpitFrame.MIRROR_ONLY_BIT
 	perspective = PerspectiveAudio.new()
 	add_child(perspective)
@@ -118,7 +119,10 @@ func _ready() -> void:
 func set_view(v: View) -> void:
 	view = v
 	var cockpit := v == View.COCKPIT
-	frame.set_cockpit(cockpit)
+	if frame != null:
+		frame.set_cockpit(cockpit)
+	elif target.chassis_visual != null:
+		target.chassis_visual.visible = not cockpit   # no cockpit built: the Phase C behaviour
 	perspective.set_cockpit(cockpit)
 
 func mode_name() -> String:
@@ -155,7 +159,8 @@ func _process(delta: float) -> void:
 	_update_feel(delta)
 	if view == View.COCKPIT:
 		_place_cockpit()
-		frame.steering = target.steer_fraction()  # the wheel turns the way the car does
+		if frame != null:
+			frame.steering = target.steer_fraction()  # the wheel turns the way the car does
 		if shake_enabled:
 			_shake(delta)
 		return

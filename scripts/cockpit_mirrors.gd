@@ -28,8 +28,10 @@ const GLASS_TINT := Color(0.86, 0.87, 0.92)
 const DARK_GLASS := Color("#171A20")
 
 ## Rearview glass: centre, size, and the angle that reflects straight back for the eye.
-const REAR_POS := Vector3(0.0, 1.16, -0.10)
-const REAR_SIZE_M := Vector2(0.24, 0.072)
+## Rearview glass: top centre of the windscreen (the glass top is y 1.34 at
+## z -0.04), hanging a hand below it, small; angled to reflect straight back.
+const REAR_POS := Vector3(0.0, 1.22, -0.13)
+const REAR_SIZE_M := Vector2(0.19, 0.056)
 const REAR_YAW := -23.0
 const REAR_PITCH := -8.0
 ## Door glass angles (yaw about +y, same sense as the housings in P1CoupeBuilder).

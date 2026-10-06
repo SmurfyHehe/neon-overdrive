@@ -58,6 +58,7 @@ func _ready() -> void:
 		return
 	AudioSettings.load_settings()
 	TrafficSettings.load_settings()
+	FxSettings.load_settings()   # cockpit mirrors on/off and quality ([fx] in settings.cfg)
 	ViewSettings.load_settings()
 	# NEON_TRAFFIC=<n> overrides the saved car count, like NEON_TICKS/NEON_MUTE:
 	# tests/run_tests.bat sets 0 so the older drive-bot tests, which steer

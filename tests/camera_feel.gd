@@ -60,6 +60,7 @@ var wall_hit_trauma := 0.0
 var shake_seen := false
 
 func _initialize() -> void:
+	OS.set_environment("NEON_TRAFFIC", "0")  # an empty road, whatever run_tests.bat or the saved settings say
 	OS.add_logger(logger)
 	seed(777)
 	_spawn()

@@ -34,6 +34,7 @@ var stubs: Array[Node3D] = []
 var step := 0
 
 func _initialize() -> void:
+	OS.set_environment("NEON_TRAFFIC", "0")  # an empty road, whatever run_tests.bat or the saved settings say
 	seed(24)
 	game = (load("res://Game.tscn") as PackedScene).instantiate()
 	root.add_child(game)

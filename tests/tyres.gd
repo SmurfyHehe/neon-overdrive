@@ -26,6 +26,7 @@ var failures: Array[String] = []
 var throttle := 0.0
 
 func _initialize() -> void:
+	OS.set_environment("NEON_TRAFFIC", "0")  # an empty road, whatever run_tests.bat or the saved settings say
 	_pure()
 	change_scene_to_file("res://Game.tscn")
 

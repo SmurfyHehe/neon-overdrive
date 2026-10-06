@@ -120,6 +120,8 @@ const SODIUM := Color(1.0, 0.55, 0.2)
 
 const WALL_H := 2.2         # gap walls between buildings
 const WALL_T := 0.3
+const BOUNDARY_H := 6.0  # invisible out-of-bounds wall (#28)
+const BOUNDARY_T := 1.0
 
 # Dash / pylon / barrier dimensions, previously inline magic numbers repeated
 # at each construction site. They are constants now because the shared meshes
@@ -596,6 +598,28 @@ static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: 
 	hull.points = pts
 	body.position = Vector3.ZERO
 
+# Invisible out-of-bounds wall (#28). Buildings are 22 m apart, so on their
+# own they leave gaps onto open, drivable slab. One reused box per side runs
+# the whole chunk just behind the sidewalk, at the building fronts' line.
+# It sits at the WIDER of the chunk's two ends so it never cuts into the
+# sidewalk on a taper; at the narrow end it is simply hidden inside the
+# buildings (they are 3-6 m deep). No group, so it is not a drivable surface.
+
+static func _new_boundary(body_name: String) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.name = body_name
+	var col := CollisionShape3D.new()
+	col.name = "Shape"
+	col.shape = BoxShape3D.new()
+	body.add_child(col)
+	return body
+
+static func _update_boundary(root: Node3D, body_name: String, inner_x: float, side: int) -> void:
+	var body: StaticBody3D = root.get_node(NodePath(body_name))
+	var box: BoxShape3D = (body.get_node(^"Shape") as CollisionShape3D).shape
+	box.size = Vector3(BOUNDARY_T, BOUNDARY_H, CHUNK_LEN)
+	body.position = Vector3((inner_x + BOUNDARY_T / 2.0) * float(side), BOUNDARY_H / 2.0, -CHUNK_LEN / 2.0)
+
 # ---------- buildings (reused nodes) ----------
 #
 # Buildings keep one MeshInstance3D + one StaticBody3D each rather than
@@ -656,7 +680,7 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 # ---------- build / rebuild ----------
 
 ## Creates the fixed node skeleton for a chunk: ten strips, two collision
-## bodies, seven MultiMeshInstance3D (pylons x2, dashes x2, lamps, lamp
+## bodies plus two out-of-bounds walls, seven MultiMeshInstance3D (pylons x2, dashes x2, lamps, lamp
 ## pools, gap walls), the barrier, and the building pairs.
 ## Runs ONCE per pooled chunk root -- everything after that is an in-place
 ## update, which is the whole point of the recycle path below.
@@ -674,6 +698,8 @@ static func _create_nodes(root: Node3D) -> void:
 
 	root.add_child(_new_sidewalk_collision("SidewalkColOwn"))
 	root.add_child(_new_sidewalk_collision("SidewalkColOnc"))
+	root.add_child(_new_boundary("BoundaryOwn"))
+	root.add_child(_new_boundary("BoundaryOnc"))
 
 	var slots := _dash_slots()
 	root.add_child(_new_multimesh("PylonsOwn", _get_pylon_mesh(), _get_pylon_mat_own(), _pylon_slots()))
@@ -759,6 +785,10 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 
 	_update_sidewalk_collision(root, "SidewalkColOwn", start_own_curb, end_own_curb, start_own_walk, end_own_walk, 1)
 	_update_sidewalk_collision(root, "SidewalkColOnc", start_onc_curb, end_onc_curb, start_onc_walk, end_onc_walk, -1)
+
+	# out-of-bounds walls, at the same set-back _update_building() uses
+	_update_boundary(root, "BoundaryOwn", maxf(start_own_walk, end_own_walk) + BUILDING_GAP, 1)
+	_update_boundary(root, "BoundaryOnc", maxf(start_onc_walk, end_onc_walk) + BUILDING_GAP, -1)
 
 	# edge pylons -- cosmetic rhythm/speed cues, interpolated along each
 	# shoulder's outer edge between this chunk's start and end width

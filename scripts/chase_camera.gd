@@ -139,7 +139,7 @@ func _process(delta: float) -> void:
 	_update_feel(delta)
 	if view == View.COCKPIT:
 		_place_cockpit()
-		frame.steering = -target.steering_input  # the wheel turns the way the car does
+		frame.steering = target.steer_fraction()  # the wheel turns the way the car does
 		if shake_enabled:
 			_shake(delta)
 		return

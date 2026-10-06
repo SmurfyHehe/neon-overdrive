@@ -60,6 +60,27 @@ func _ready() -> void:
 		row.add_child(s)
 		volume_sliders[channel] = s
 
+	# Traffic sliders (stage B step 3): car count and draw distance, applied to
+	# the running TrafficManager at once and saved with the volumes.
+	var traffic_title := Label.new()
+	traffic_title.text = "Traffic"
+	traffic_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(traffic_title)
+	_add_slider(box, "Cars", 0.0, TrafficSettings.CAR_COUNT_MAX, 5.0, TrafficSettings.car_count,
+		func(v: float) -> void:
+			TrafficSettings.set_car_count(int(v))
+			TrafficSettings.save_settings()
+			var traffic: Variant = get_parent().get("traffic")
+			if traffic != null:
+				traffic.set_car_count(TrafficSettings.car_count))
+	_add_slider(box, "Draw dist", TrafficSettings.DETAIL_MIN, TrafficSettings.DETAIL_MAX, 10.0, TrafficSettings.detail_distance,
+		func(v: float) -> void:
+			TrafficSettings.set_detail_distance(v)
+			TrafficSettings.save_settings()
+			var traffic: Variant = get_parent().get("traffic")
+			if traffic != null:
+				traffic.detail_distance = TrafficSettings.detail_distance)
+
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	_add_button(box, "Service car (reset wear)", _service_car)
 	_add_button(box, "Restart", game_state.restart)
@@ -72,6 +93,24 @@ func _service_car() -> void:
 	var player: Variant = get_parent().get("player")
 	if player != null and player.get("health") != null:
 		player.health.repair()
+
+func _add_slider(parent: Control, text: String, lo: float, hi: float, step: float, value: float, on_change: Callable) -> HSlider:
+	var row := HBoxContainer.new()
+	parent.add_child(row)
+	var name_label := Label.new()
+	name_label.text = text
+	name_label.custom_minimum_size = Vector2(70, 0)
+	row.add_child(name_label)
+	var s := HSlider.new()
+	s.min_value = lo
+	s.max_value = hi
+	s.step = step
+	s.value = value
+	s.custom_minimum_size = Vector2(180, 0)
+	s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	s.value_changed.connect(on_change)
+	row.add_child(s)
+	return s
 
 func _add_button(parent: Control, text: String, action: Callable) -> Button:
 	var b := Button.new()

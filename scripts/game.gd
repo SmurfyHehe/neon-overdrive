@@ -12,9 +12,18 @@ const CHUNKS_AHEAD := 6
 const CHUNKS_BEHIND := 1
 const POOL_SIZE := CHUNKS_AHEAD + CHUNKS_BEHIND + 1
 
-# RoadChunkBuilder, CarBuilder, PlayerCar are all global via class_name.
+# Stage B step 3 (2026-10-05): a highway with 4 lanes per direction (ROADMAP
+# stage B: "4 lanes per direction is now the spec"; stage A had capped it at 3
+# our way, 2 oncoming, varying per chunk). Lane counts no longer change from
+# chunk to chunk: lane-follow traffic holds one lane centre and never changes
+# lane (milestone 3), so a lane that narrowed away would strand its cars. The
+# builder's taper code and the per-chunk centre barrier are unchanged.
+const OWN_LANES := 4
+const ONC_LANES := 4
 
-var section_cache: Dictionary = {"-1": {"own_lanes": 3, "onc_lanes": 2, "barrier": false}}
+# RoadChunkBuilder, CarBuilder, PlayerCar, TrafficManager are all global via class_name.
+
+var section_cache: Dictionary = {"-1": {"own_lanes": OWN_LANES, "onc_lanes": ONC_LANES, "barrier": false}}
 var chunk_pool: Array = []  # Array of {root: Node3D, index: int}
 
 # Floating origin (issue #26). Float32 positions lose precision far from
@@ -30,6 +39,7 @@ var origin_index := 0
 var recenter_count := 0
 
 var player: PlayerCar
+var traffic: TrafficManager
 var game_state: GameState
 
 # Chase camera, its three smoothing modes (#31, C to cycle) and the stage A
@@ -50,6 +60,13 @@ func _ready() -> void:
 		AutoTuneJob.run_worker(get_tree(), worker_dir)
 		return
 	AudioSettings.load_settings()
+	TrafficSettings.load_settings()
+	# NEON_TRAFFIC=<n> overrides the saved car count, like NEON_TICKS/NEON_MUTE:
+	# tests/run_tests.bat sets 0 so the older drive-bot tests, which steer
+	# across lanes blind, do not hit traffic (tests/traffic_*.gd clear it).
+	var traffic_env := OS.get_environment("NEON_TRAFFIC")
+	if traffic_env.is_valid_int():
+		TrafficSettings.set_car_count(int(traffic_env))
 	if OS.get_environment("NEON_MUTE") == "1":
 		AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), true)
 	# Benchmark mode (-- --benchmark, see benchmark.gd) drives a fixed road so
@@ -63,6 +80,7 @@ func _ready() -> void:
 	_setup_ground_collision()
 	_setup_chunk_pool()
 	_setup_player()
+	_setup_traffic()
 	_setup_camera()
 	_setup_debug_hud()
 	_setup_game_state()
@@ -193,21 +211,10 @@ func _section_at(idx: int) -> Dictionary:
 	var key := str(idx)
 	if section_cache.has(key):
 		return section_cache[key]
-	var prev: Dictionary = section_cache.get(str(idx - 1), {"own_lanes": 3, "onc_lanes": 2, "barrier": false})
-	var own_roll := randf()
-	var own_delta := 0
-	if own_roll >= 0.55:
-		own_delta = 1 if own_roll < 0.78 else -1
-	# Stage A (narrower road): at most 3 lanes our way, was 4. The builder's
-	# MultiMesh capacity (MAX_OWN_LANES) still allows 4, so this only narrows.
-	var own_lanes: int = clampi(int(prev.own_lanes) + own_delta, 2, 3)
-	var onc_roll := randf()
-	var onc_delta := 0
-	if onc_roll >= 0.7:
-		onc_delta = 1 if onc_roll < 0.85 else -1
-	var onc_lanes: int = clampi(int(prev.onc_lanes) + onc_delta, 1, 2)
+	# Fixed lane counts since stage B step 3 (see OWN_LANES); only the centre
+	# barrier still rolls per chunk.
 	var barrier := randf() < 0.3
-	var cfg := {"own_lanes": own_lanes, "onc_lanes": onc_lanes, "barrier": barrier}
+	var cfg := {"own_lanes": OWN_LANES, "onc_lanes": ONC_LANES, "barrier": barrier}
 	section_cache[key] = cfg
 	return cfg
 
@@ -277,15 +284,35 @@ func _shift_origin(shift_chunks: int) -> void:
 		# Re-derived from the index, not +=, so error can never accumulate.
 		c.root.position = Vector3(0, 0, -float(c.index - origin_index) * RoadChunkBuilder.CHUNK_LEN)
 		c.root.reset_physics_interpolation()
+	# Traffic (milestone 3): every car gets the same bookkeeping as the player.
+	traffic.shift_world(offset)
 	# The ground slab stays put: it is centred on the origin by design.
 	# The camera follows the car's interpolated position in _process, so it
 	# needs nothing here.
 
 # ---------- player ----------
+## Where the player starts: in a lane, not on the centre line (x=0) as before
+## stage B step 3, now that the oncoming lanes carry traffic. Lane 1 of 4.
+const PLAYER_SPAWN_LANE := 1
+
 func _setup_player() -> void:
 	player = PlayerCar.new()
-	player.position = Vector3(0, 0.0, 0)
+	player.position = Vector3(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, 0)
 	add_child(player)
+
+# ---------- traffic (milestone 3, stage B step 3) ----------
+# Lane-follow traffic: the same raycast Vehicle as the player, see
+# traffic_car.gd / traffic_manager.gd. Count and draw distance come from the
+# pause menu's Traffic sliders (TrafficSettings). Added after the player, so
+# its cars' _physics_process runs after the player's.
+func _setup_traffic() -> void:
+	traffic = TrafficManager.new()
+	traffic.player = player
+	traffic.own_lanes = OWN_LANES
+	traffic.onc_lanes = ONC_LANES
+	traffic.car_count = TrafficSettings.car_count
+	traffic.detail_distance = TrafficSettings.detail_distance
+	add_child(traffic)
 
 # ---------- camera ----------
 func _setup_camera() -> void:
@@ -329,7 +356,7 @@ func _update_debug_hud() -> void:
 		lbl_speed.text += "   ENGINE OFF  (hold X to start)"
 	if player.turbo_boost_max > 0.0:
 		lbl_speed.text += "   BOOST %.2f / %.2f bar" % [player.boost, player.turbo_boost_max]
-	lbl_cam.text = "CAMERA %s  (C smoothing, F cockpit)" % camera.mode_name()
+	lbl_cam.text = "CAMERA %s  (C smoothing, F cockpit)   TRAFFIC %d cars, %d full-sim (Esc: sliders)" % [camera.mode_name(), traffic.cars.size(), traffic.detailed_count()]
 	# BUG FIX (2026-09-13): shift_flash_t was tracked on the player since
 	# milestone 2 but nothing ever read it -- shifting had zero feedback.
 	# Wired it to actually punch the gear label (bright flash + scale pop)

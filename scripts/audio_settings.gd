@@ -51,6 +51,7 @@ static func load_settings() -> void:
 
 static func save_settings() -> bool:
 	var cfg := ConfigFile.new()
+	cfg.load(path)  # keep the other sections (TrafficSettings); a missing file is fine
 	for channel in CHANNELS:
 		cfg.set_value("audio", channel.to_lower(), volumes[channel])
 	return cfg.save(path) == OK

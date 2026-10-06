@@ -17,7 +17,7 @@ extends SceneTree
 # - launch: wind tracks speed^2 (r > 0.95), road tracks speed (r > 0.9);
 #   at 30 m/s wind > 0.35 and road > 0.5; squeal stays under 0.15 while
 #   cruising straight above 20 m/s
-# - slide: squeal > 0.4
+# - slide: squeal > 0.4 (after 1.25 s of sliding)
 # - kerb: surface > 0.25
 # - four players, playing, on the World/Tires buses that exist
 # Also records the real mixed output (engine + these layers) from the Master
@@ -26,7 +26,13 @@ extends SceneTree
 # Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/car_audio.gd
 
-const MAX_TICKS := 60 * 120
+# Phase lengths are in seconds, not ticks: the suite runs at 60 Hz (NEON_TICKS=60)
+# but the game ships at 120, and the levels are smoothed per second, so a
+# tick count means different things at the two rates.
+const MAX_SECONDS := 120
+
+func _sec(seconds: float) -> int:
+	return int(seconds * Engine.physics_ticks_per_second)
 
 var fails := 0
 var game: Node
@@ -109,6 +115,16 @@ func _hold_heading(p: PlayerCar, aim_x: float = 0.0, max_term: float = 0.05) -> 
 	_press(KEY_A, err < -0.02)
 	_press(KEY_D, err > 0.02)
 
+## The handbrake slide leaves the car spun round and nearly stopped, and how it
+## ends differs run to run (it sometimes sits sideways at 0 m/s and never gets
+## to the sidewalk). The kerb phase only tests the surface layer, so start it
+## from a known state: lane centre, facing down the road, 12 m/s in 2nd.
+func _reset_for_kerb(p: PlayerCar) -> void:
+	p.global_transform = Transform3D(Basis.IDENTITY, Vector3(0.0, p.global_position.y, p.global_position.z))
+	p.linear_velocity = Vector3(0.0, 0.0, -12.0)
+	p.angular_velocity = Vector3.ZERO
+	p.shift(2 - p.current_gear)
+
 func _upshift(p: PlayerCar) -> void:
 	if e_down:
 		_press(KEY_E, false)
@@ -136,7 +152,7 @@ func _physics_process(_delta: float) -> bool:
 		return false
 	ticks += 1
 	phase_ticks += 1
-	if ticks > MAX_TICKS:
+	if ticks > _sec(MAX_SECONDS):
 		_fail("timed out in phase %s" % phase)
 		_finish()
 		return false
@@ -157,7 +173,7 @@ func _physics_process(_delta: float) -> bool:
 	var speed := p.current_speed()
 	match phase:
 		"idle":
-			if phase_ticks == 90:
+			if phase_ticks == _sec(1.5):
 				print("idle: wind %.3f road %.3f squeal %.3f surface %.3f" % [audio.wind_level, audio.road_level, audio.squeal_level, audio.surface_level])
 				for lv in [audio.wind_level, audio.road_level, audio.squeal_level, audio.surface_level]:
 					if lv > 0.02:
@@ -172,7 +188,7 @@ func _physics_process(_delta: float) -> bool:
 			speeds.append(speed)
 			winds.append(audio.wind_level)
 			roads.append(audio.road_level)
-			if speed > 20.0 and phase_ticks > 60 and not p.is_shifting:
+			if speed > 20.0 and phase_ticks > _sec(1.0) and not p.is_shifting:
 				cruise_squeal = maxf(cruise_squeal, audio.squeal_level)
 			if speed >= 30.0:
 				var sq := PackedFloat32Array()
@@ -180,7 +196,7 @@ func _physics_process(_delta: float) -> bool:
 					sq.append(v * v)
 				var rw := _corr(sq, winds)
 				var rr := _corr(speeds, roads)
-				print("launch: 30 m/s after %.1f s: wind %.2f (r=%.3f vs speed^2), road %.2f (r=%.3f vs speed), cruise squeal max %.3f" % [phase_ticks / 60.0, audio.wind_level, rw, audio.road_level, rr, cruise_squeal])
+				print("launch: 30 m/s after %.1f s: wind %.2f (r=%.3f vs speed^2), road %.2f (r=%.3f vs speed), cruise squeal max %.3f" % [phase_ticks / float(Engine.physics_ticks_per_second), audio.wind_level, rw, audio.road_level, rr, cruise_squeal])
 				if rw < 0.95:
 					_fail("wind does not follow speed^2 (r=%.3f)" % rw)
 				if rr < 0.9:
@@ -194,18 +210,19 @@ func _physics_process(_delta: float) -> bool:
 				_press(KEY_SPACE, true)
 				_press(KEY_A, true)
 				_press(KEY_D, false)
-			elif phase_ticks > 60 * 45:
+			elif phase_ticks > _sec(45):
 				_fail("launch never reached 30 m/s (%.1f)" % speed)
 				_finish()
 		"slide":
 			slide_squeal = maxf(slide_squeal, audio.squeal_level)
-			if phase_ticks >= 75:
+			if phase_ticks >= _sec(1.25):
 				print("slide: squeal max %.2f" % slide_squeal)
 				if slide_squeal <= 0.4:
 					_fail("handbrake slide at speed only squealed %.2f" % slide_squeal)
 				_press(KEY_SPACE, false)
 				_press(KEY_A, false)
 				_next("kerb")
+				_reset_for_kerb(p)
 				_press(KEY_W, true)
 		"kerb":
 			_upshift(p)
@@ -215,7 +232,7 @@ func _physics_process(_delta: float) -> bool:
 				_hold_heading(p, p.global_position.x)
 			kerb_surface = maxf(kerb_surface, audio.surface_level)
 			# Two wheels on the sidewalk at ~10 m/s is ~0.25; silent is 0.
-			if kerb_surface > 0.25 or phase_ticks > 60 * 25:
+			if kerb_surface > 0.25 or phase_ticks > _sec(25):
 				print("kerb: surface max %.2f" % kerb_surface)
 				if kerb_surface <= 0.25:
 					_fail("kerb rumble never came on (%.2f)" % kerb_surface)

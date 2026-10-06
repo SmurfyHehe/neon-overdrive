@@ -339,7 +339,10 @@ static func _get_wheel_material() -> ShaderMaterial:
 static func _get_glass_material() -> StandardMaterial3D:
 	if _glass_mat == null:
 		_glass_mat = StandardMaterial3D.new()
-		_glass_mat.albedo_color = Color(Data.COLORS.glass)
+		# See-through (cockpit milestone 2): the driver and cabin show through
+		# the windows in the chase view. Dark tint, so the outside look holds.
+		_glass_mat.albedo_color = Color(Color(Data.COLORS.glass), 0.5)
+		_glass_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		_glass_mat.metallic = 0.6
 		_glass_mat.roughness = 0.08
 	return _glass_mat

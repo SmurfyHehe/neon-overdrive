@@ -5,8 +5,8 @@ extends SceneTree
 #   and the driver's eye
 # - in the cockpit the camera sits at the car-local eye point, faces the same way as
 #   the car, the body is kept off the cockpit camera (it moves to the mirror-only
-#   render layer, see CockpitFrame), the interior is shown, and the wheel turns
-#   with the steering
+#   render layer, see CockpitFrame), the interior is in cockpit mode (it is
+#   drawn in both views since the driver PR), and the wheel turns with the steering
 # - the audio eases to cabin muffling (low-pass cutoffs down on Engine, Tires, World)
 #   and a louder, clearer radio, and back out in the chase view
 # Exit code 1 on failure. Run:
@@ -53,7 +53,7 @@ func _physics_process(_delta: float) -> bool:
 			if waited == 30:
 				_check(cam.perspective.cutoff(&"Engine") > 15000.0, "chase view should leave the Engine bus open (%.0f Hz)" % cam.perspective.cutoff(&"Engine"))
 				chase_music_db = AudioServer.get_bus_volume_db(AudioServer.get_bus_index(&"Music"))
-				_check(not cam.frame.visible and not cam.frame.body_hidden_from_camera(), "chase view shows the body and no frame")
+				_check(not cam.frame.cockpit and not cam.frame.body_hidden_from_camera(), "chase view shows the body, cockpit mode off")
 				cam.set_view(ChaseCamera.View.COCKPIT)
 				steer = 0.8
 				_go(Step.COCKPIT)
@@ -66,7 +66,7 @@ func _physics_process(_delta: float) -> bool:
 				var car_fwd := -xf.basis.z
 				_check(fwd.dot(car_fwd) > 0.99, "the cockpit camera should face where the car faces (dot %.3f)" % fwd.dot(car_fwd))
 				_check(cam.frame.body_hidden_from_camera(), "the body should be off the cockpit camera in the cockpit")
-				_check(cam.frame.visible, "the cockpit frame should be shown")
+				_check(cam.frame.cockpit and cam.frame.visible, "the cockpit frame should be in cockpit mode and shown")
 				_check(absf(cam.frame.wheel.angle) > 0.3, "the wheel should turn with the steering (%.2f)" % cam.frame.wheel.angle)
 				_go(Step.BLEND_IN)
 		Step.BLEND_IN:
@@ -82,7 +82,7 @@ func _physics_process(_delta: float) -> bool:
 		Step.BACK:
 			if waited == 40:
 				_check(cam.perspective.cutoff(&"Engine") > 15000.0, "back in the chase view the Engine bus should open again (%.0f Hz)" % cam.perspective.cutoff(&"Engine"))
-				_check(not cam.frame.body_hidden_from_camera() and not cam.frame.visible, "chase view should show the body and hide the frame again")
+				_check(not cam.frame.body_hidden_from_camera() and not cam.frame.cockpit, "chase view should show the body and leave cockpit mode")
 				return _end("")
 	return false
 

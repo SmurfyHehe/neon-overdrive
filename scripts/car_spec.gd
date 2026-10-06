@@ -303,7 +303,13 @@ static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
 	var w := Wheel.new()
 	w.position = pos
 	v.add_child(w)
-	var visual := TestCarBuilder.build_wheel_visual(v.front_tire_radius) if kind == TestCarBuilder.KIND else CarBuilder.build_wheel_visual(kind)
+	var visual: Node3D
+	if kind == TestCarBuilder.KIND:
+		visual = TestCarBuilder.build_wheel_visual(v.front_tire_radius)
+	elif kind == P1CoupeBuilder.KIND:
+		visual = P1CoupeBuilder.build_wheel_visual(v.front_tire_radius, pos)
+	else:
+		visual = CarBuilder.build_wheel_visual(kind)
 	w.wheel_node = visual
 	w.add_child(visual)
 	return w

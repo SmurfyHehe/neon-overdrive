@@ -32,7 +32,14 @@ class_name PlayerCar
 # also gets a REAL small physical bump for free from the sidewalk's raised
 # collision geometry, instead of the old scripted cosmetic jolt.
 
-const KIND := TestCarBuilder.KIND  # #63 neutral test car
+## The player's body: the P1 sports coupe from the B1 design sheet (stage D
+## step 1, Roy 2026-10-06). Visual only -- CFG, the collision box and CarSpec
+## are the same for both bodies. Set NEON_TEST_CAR=1 to drive the neutral #63
+## test box instead, to compare.
+const KIND := P1CoupeBuilder.KIND
+static func chassis_kind() -> String:
+	return TestCarBuilder.KIND if OS.get_environment("NEON_TEST_CAR") == "1" else KIND
+
 const CFG := {
 	"wheel_r": 0.34, "axle_z": 1.25, "wheel_x": 0.88,  # Phase B: wheelbase 2.5 m (was 2.1; real coupes 2.4-2.7)
 }
@@ -102,10 +109,11 @@ func _ready() -> void:
 	# upgraded with actual panel/bumper/mirror/spoiler/alloy-wheel detail (see
 	# car_builder.gd's _add_body_details/_add_glass/_build_alloy_wheel) instead
 	# of the old flat-box look.
-	# #63: the neutral test car, for judging handling and camera. The styled
-	# coupe (CarBuilder, KIND_CONFIGS["coupe"]) waits on the design in #16.
+	# The P1 sports coupe (P1CoupeBuilder), or the neutral #63 test car with
+	# NEON_TEST_CAR=1. Same physics either way; see chassis_kind().
+	var kind := chassis_kind()
 	if not sim_only:
-		chassis_visual = TestCarBuilder.build_chassis_visual()
+		chassis_visual = TestCarBuilder.build_chassis_visual() if kind == TestCarBuilder.KIND else P1CoupeBuilder.build_chassis_visual()
 		add_child(chassis_visual)
 
 	# BUG FIX (2026-09-13, verified headless): RigidBody3D falls asleep after
@@ -164,7 +172,7 @@ func _ready() -> void:
 	# spring_length + tire_radius above the chassis origin, same pattern the
 	# old VehicleWheel3D mount height used. CarSpec.build_wheels() computes
 	# this the same way, from the same CFG shape, for every car type.
-	CarSpec.build_wheels(self, KIND, CFG, front_spring_length, rear_spring_length)
+	CarSpec.build_wheels(self, kind, CFG, front_spring_length, rear_spring_length)
 
 	initialize()
 

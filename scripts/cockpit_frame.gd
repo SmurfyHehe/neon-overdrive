@@ -47,12 +47,19 @@ const LIFT := P1CoupeBuilder.BODY_LIFT
 const WHEEL_POS := Vector3(SEAT_X, 0.77, -0.18)
 const WHEEL_TILT_DEG := -25.0
 const WHEEL_TOP_MIN_DEG := 15.0
+## Sightline targets (Roy, 2026-10-06): the dash line (cowl, dash top, outside
+## the binnacle and the pillars) at least this far below the eye's horizontal,
+## and at least this share of the cockpit view, at the rest FOV, clear glass.
+## tests/cockpit_interior.gd measures both with rays from the eye.
+const DASH_TOP_MIN_DEG := 14.0
+const GLASS_MIN_FRACTION := 0.55
 const CLUSTER_Z := -0.349
 ## Cluster centre height. Roy (2026-10-06): the cluster must not block the road.
-## From the eye (1.06 m) the ground 10 m ahead of the bumper is 4.9 degrees
-## down, so the binnacle hood tops out at 0.985 (6 degrees down at its nearest
-## edge) and the dials sit under it, seen over and through the top of the rim.
-const CLUSTER_Y := 0.95
+## From the eye (1.10 m) the ground 10 m ahead of the bumper is 5 degrees
+## down; the binnacle hood tops out at 0.995 (9.3 degrees down at its nearest
+## edge), the dial tops at 10.6 degrees, and the dials sit under it, seen over
+## and through the top of the rim (centres 1 degree above the rim top).
+const CLUSTER_Y := 0.93
 const DIAL_R := 0.05
 ## Everything the cockpit adds is visual only; this switch (and NEON_COCKPIT=0)
 ## leaves it out, for the isolation test and for A/B frame-cost runs.
@@ -176,12 +183,16 @@ static func _set_layers(root: Node, bit: int) -> void:
 func _build_static() -> void:
 	var k := CockpitKit.new()
 	var lit := CockpitKit.new()
-	# Dashboard: a top that meets the windshield base (y 0.90, z -0.69), a face
-	# toward the driver, a knee panel, and the cowl lip.
-	k.wedge(Vector3(1.74, 0.05, 0.40), Vector3(0.0, 0.905, -0.49), PLASTIC, -0.03, 0.0)
+	# Dashboard: a top that falls from 0.93 at the driver's edge to 0.83 at the
+	# cowl (y 0.83, z -0.69), a face toward the driver, a knee panel, and the
+	# cowl lip. Roy (2026-10-06): the dash line sits at least DASH_TOP_MIN_DEG
+	# (14) below the eye across the driver's view (to 20 degrees off axis, where
+	# the cowl is further away); from the eye the cowl is the top of that line,
+	# so it dropped from the body's 0.90 glass base (was 11.4 degrees).
+	k.wedge(Vector3(1.74, 0.06, 0.40), Vector3(0.0, 0.80, -0.49), PLASTIC, 0.0, 0.10)   # base 0.77; top 0.83 far, 0.93 near
 	k.box(Vector3(1.74, 0.36, 0.12), Vector3(0.0, 0.73, -0.33), PLASTIC_LIGHT)
 	k.box(Vector3(1.74, 0.22, 0.32), Vector3(0.0, 0.48, -0.46), PLASTIC)
-	k.box(Vector3(1.66, 0.03, 0.06), Vector3(0.0, 0.895, -0.70), TRIM)          # cowl lip, under the glass line
+	k.box(Vector3(1.66, 0.03, 0.06), Vector3(0.0, 0.815, -0.70), TRIM)          # cowl lip, under the glass line
 	lit.box(Vector3(1.60, 0.006, 0.01), Vector3(0.0, 0.912, -0.275), Color(AMBER, 0.35))   # dash edge strip
 	# Cluster binnacle and its hood in front of the driver.
 	k.box(Vector3(0.34, 0.12, 0.10), Vector3(SEAT_X, CLUSTER_Y, -0.40), PLASTIC)
@@ -244,12 +255,16 @@ func _build_static() -> void:
 		k.box(Vector3(0.08, 0.48, 0.60), Vector3(side * 0.74, 0.70, 0.78), PLASTIC_LIGHT)
 	# A-pillars: from the cowl corners to the roof corners (body lines from the data).
 	for side in [-1.0, 1.0]:
-		_bar(k, Vector3(side * 0.78, 0.90, -0.69), Vector3(side * 0.62, 1.32, -0.03), 0.075, PLASTIC)
-	# Roof liner, windshield header, sun visors.
-	k.box(Vector3(1.36, 0.02, 0.80), Vector3(0.0, 1.295, 0.35), PLASTIC_LIGHT)
-	k.box(Vector3(1.30, 0.05, 0.08), Vector3(0.0, 1.30, -0.03), PLASTIC)
+		_bar(k, Vector3(side * 0.78, 0.83, -0.69), Vector3(side * 0.62, 1.345, -0.03), 0.075, PLASTIC)
+	# Roof liner, windshield header, sun visors. The eye is only 0.34 m behind
+	# the glass top (y 1.34 at z -0.04), so the header and the liner's front
+	# edge sit on that line, not under it: at 1.30 the header's underside hung
+	# 25 to 31 degrees above the eye and took the top of the view (Roy's
+	# clear-glass target, 2026-10-06). The visors fold flat against the liner.
+	k.box(Vector3(1.36, 0.02, 0.80), Vector3(0.0, 1.33, 0.35), PLASTIC_LIGHT)
+	k.box(Vector3(1.30, 0.05, 0.08), Vector3(0.0, 1.345, -0.03), PLASTIC)
 	for sx in [SEAT_X, -SEAT_X]:   # folded up against the liner, above the view line
-		k.box(Vector3(0.42, 0.012, 0.15), Vector3(sx, 1.283, 0.13), LEATHER, Basis(Vector3.RIGHT, deg_to_rad(-4.0)))
+		k.box(Vector3(0.42, 0.012, 0.15), Vector3(sx, 1.318, 0.13), LEATHER, Basis(Vector3.RIGHT, deg_to_rad(-2.0)))
 	# Rearview mirror housing and stalk (the glass is a CockpitMirrors quad).
 	var rb := Basis(Vector3.UP, deg_to_rad(CockpitMirrors.REAR_YAW)) * Basis(Vector3.RIGHT, deg_to_rad(CockpitMirrors.REAR_PITCH))
 	k.box(Vector3(0.215, 0.072, 0.022), CockpitMirrors.REAR_POS + rb * Vector3(0, 0, -0.013), PLASTIC, rb)

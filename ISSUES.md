@@ -1,6 +1,6 @@
 # Neon Overdrive — Issue List
 
-Audit 2026-09-29, refreshed 2026-10-06 against `origin/main` at `cb50e4a` and
+Audit 2026-09-29, refreshed 2026-10-06 against `origin/main` at `ea71c13` and
 `gh issue list --state all`.
 
 **GitHub issues are the live list.** This file keeps the audit's letter IDs

@@ -1,9 +1,10 @@
 # Neon Overdrive — Roadmap
 
-**Status synced with `origin/main` at `cb50e4a` (PR #117), 2026-10-06.** Checked
+**Status synced with `origin/main` at `ea71c13` (PR #116), 2026-10-06.** Checked
 against `git log origin/main`, `scripts/` and `tests/run_tests.bat`, not from
 memory. Since the last sync: traffic lane-follow (#113), the flaky `car_audio`
-fix (#112) and the planning notes in `docs/planning/` (#117). Long build logs for stages A, B1 and Auto-Tune were removed from this file;
+fix (#112), the planning notes in `docs/planning/` (#117) and the Auto-Tune
+panel fix for 120 Hz (#116, `ea71c13`). Long build logs for stages A, B1 and Auto-Tune were removed from this file;
 they live in the PR descriptions (#84, #85, #86, #88, #90, #100) and in git history.
 
 ## What exists today
@@ -37,12 +38,15 @@ a build order. Nothing in them beyond what is listed as merged has been built.
 | Events (rival, dig/roll race, highway run, touge, takeover), The List, meets, night loop | **NOT started** | |
 
 **Next in Roy's order:** the rest of stage B (traffic milestone 4, finish camera +
-HUD, NPC cars), then C (currency/scoring) → D → E → F → G. Traffic is lane-follow
+HUD, NPC cars), then C (currency/scoring) → **E (garage + per-car mod trees)** →
+**D (remaining player cars)** → F → G. Roy changed the order on 2026-10-06 so the
+garage and trees come before the other player cars (see "Decisions still valid").
+Traffic is lane-follow
 only and was not yet playable at speed in the 2026-10-06 audit
 (`docs/audit-2026-10-06.md`, open PR #118, not merged): the
-player rear-ended or side-swiped oncoming cars within seconds. The lane width,
-car-count default and sim radius that bear on this are Roy's calls; see "Open for
-Roy".
+player rear-ended or side-swiped oncoming cars within seconds. Roy has
+decided the fixes (3.2 m lanes, a 16-car default; in progress on
+`feat/traffic-m4`, not merged); see "Decisions still valid".
 
 ## Stage plan (Roy, 2026-10-04) with revisions
 
@@ -54,8 +58,8 @@ Every stage is verified headless with real simulated input, logged here, and
 | A | Feel + environment art | Done |
 | B | 1 design sheet · 2 exhaust · 3 traffic (full-sim, 4 lanes/direction, detail slider) · 4 camera + HUD · 5 NPC cars | 1, 2, 3 done (3 is lane-follow only, #113); 4 partly; 5 not started |
 | C | Currency/scoring (damage, fuel, stops moved after the garage, 2026-10-05) | Not started |
-| D | 5 remaining player cars, one at a time | Not started |
-| E | Garage + branching mod tree per car | Not started |
+| E | Garage + branching mod tree per car. **Now before D** (Roy, 2026-10-06, overrides the C → D → E order) | Not started |
+| D | 5 remaining player cars, one at a time. **Now after E.** The P1 sports coupe game model is being built from the B1 sheet (2026-10-06, not merged) | Not started |
 | F | Heat/wanted + police, 3 cop cars | Not started |
 | G | Integration, balance, bug sweep, Windows export on request | Not started |
 
@@ -78,8 +82,20 @@ phases A–C, radio and audio.
 - **Traffic is full-sim (Option C).** Shipped as: full raycast sim inside the draw
   distance, frozen lane cruise beyond it, with a "Traffic detail distance" slider
   (50–300 m, default 150 m) and a car-count slider (0–80, default 40). Target 60
-  fps on the i5-1235U. Whether "full-sim for every car" still holds with a sim
-  radius is Roy's call (see "Open for Roy").
+  fps on the i5-1235U.
+- **Roy's decisions of 2026-10-06 (answered in chat; the code changes are not
+  merged).**
+  - **Sim radius:** the kinematic lane cruise beyond the draw distance is OK and
+    counts as "full sim": every car near the player runs GEVP. Rivals, crew and
+    cops were not asked; that sub-question stays open.
+  - **Lane width:** 2.3 m becomes **3.2 m**. In progress on `feat/traffic-m4`.
+  - **Traffic default:** **40 becomes 16 cars**; the slider max stays 80. In
+    progress on `feat/traffic-m4`.
+  - **Order after traffic:** garage + per-car mod trees (E) come **before** the
+    remaining player cars (D). This overrides C → D → E.
+  - **P1 sports coupe:** the game model is being built from the B1 design sheet.
+  - **Radio (#115):** re-encode smaller (Vorbis q2–3, 32 kHz) and keep it in git,
+    not Git LFS.
 - **Exhaust is cosmetic only.**
 - **GEVP is open for editing** (Roy, 2026-10-05). Every edit is marked `DEVIATION`
   in `scripts/vendor/gevp/gevp_vehicle.gd` (list under "Rules carried forward").
@@ -160,23 +176,15 @@ headless. Git rules (stage by path, own worktree, PR only) are in `CLAUDE.md`.
 
 ## Open for Roy
 
-Raised by the 2026-10-06 audit; each is a contradiction between documents and code
-that is Roy's decision, so none is resolved here.
+Raised by the 2026-10-06 audit. Roy answered the sim radius, lane width and
+traffic default on 2026-10-06; those moved to "Decisions still valid". What stays
+open:
 
-- **Traffic sim radius.** "Full-sim traffic for every car" (stage B decision) vs
-  what shipped: cars past the draw distance are frozen kinematic bodies that cruise
-  with no raycast sim (`scripts/traffic_car.gd:22-23,184-205`). The game-concept
-  line above also says "rivals and crew cars are scripted; only the player runs
-  full GEVP". Is the shipped radius OK, and does "every car" include future rivals,
-  crew and cops?
-- **Lane width.** 2.3 m (`scripts/road_chunk_builder.gd:89`) against ~1.8 m cars
-  and real highway lanes of 3.5–3.7 m. Widen to about 3.2–3.5 m (more room to
-  weave, slightly less sense of speed), or keep it narrow on purpose?
-- **Traffic default.** 40 cars (`scripts/traffic_settings.gd:12`) against the
-  measured budget: about 0.22 ms per full-sim car per tick in the #113 commit
-  message, and 7–14 ms per tick with 18–22 full-sim cars at 40 cars and 150 m in
-  the audit, against an 8.33 ms tick at 120 Hz. Keep 40, or drop the default to
-  what fits 60 fps on the laptop (slider still to 80)?
+- **Rivals, crew and cops.** The game-concept line above says "rivals and crew cars
+  are scripted; only the player runs full GEVP". Roy's 2026-10-06 answer covers
+  traffic only (cars past the draw distance run the kinematic lane cruise,
+  `scripts/traffic_car.gd:22-23,184-205`, and that counts as full sim). Do rivals,
+  crew and cops run full GEVP near the player too, or stay scripted?
 - **Debt.** The story bible (`docs/story-bible.md`, only on open PR #114) says
   "debt is story-only, no penalty mechanics"; the game-concept line above and the
   decisions doc still list missed-payment penalties as open.

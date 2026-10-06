@@ -8,13 +8,19 @@ extends RefCounted
 #
 # Draw distance is also the sim-quality distance: a car beyond it is hidden and
 # runs the frozen lane cruise instead of the raycast sim (traffic_car.gd).
-# 300 m (the chunk pool) keeps every car in the full sim, which is Option C;
-# measured 2026-10-05 (tests/traffic_perf.gd, i5-1235U, headless): a full-sim
-# car costs about 0.22 ms per 120 Hz tick, so 40 cars at 300 m is 9.6 ms, over
-# the 8.33 ms tick with no rendering counted. The default of 150 m keeps
-# roughly half of 40 cars full-sim; Roy's in-game fps decides the final value.
+# 300 m (the chunk pool) keeps every car in the full sim, which is Option C.
+#
+# Budget (2026-10-06, traffic milestone 4, Roy: default 40 -> 16): a full-sim
+# car costs 0.19-0.36 ms per 120 Hz tick (tests/traffic_perf.gd, i5-1235U,
+# headless, so no rendering in that number). At 60 fps two 120 Hz ticks run
+# per rendered frame, so the 16.7 ms frame holds 2 ticks plus the render: the
+# physics budget is about 4 ms per tick, not the 8.33 ms tick length the old
+# 40-car default was sized against. ~0.6 ms of that is the player and the
+# world with no traffic, which leaves room for roughly 12-16 full-sim cars.
+# 16 cars at the 150 m default draw distance keeps most of them full-sim at
+# well under that. The slider still goes to 80 for machines with room.
 
-const CAR_COUNT_DEFAULT := 40
+const CAR_COUNT_DEFAULT := 16
 const CAR_COUNT_MAX := 80
 const DETAIL_DEFAULT := 150.0
 const DETAIL_MIN := 50.0

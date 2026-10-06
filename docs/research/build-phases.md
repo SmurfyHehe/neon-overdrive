@@ -39,7 +39,7 @@ estimates, not sourced. Detail is in `car-feel.md`.
 |---|---|---|---|
 | C1 | Bite-point clutch plus automatic launch and creep | M-L | Very high risk: it is the path every metric flows through. Re-baseline Auto-Tune. Make it opt-in through a spec key first |
 | C2 | Tyre load sensitivity (vendor patch in `process_tires`, `(Fz/Fz_nom)^-0.15`) | M | `_rederive` mirrors the wheel's tyre cache and `tune_params` tests check it |
-| C3 | 120 Hz physics (GEVP recommends it) | S to switch, large retest | Benchmark on the i5 first. `tune_track.gd` hard-codes `dt = 1/60` |
+| C3 | 120 Hz physics (GEVP recommends it) | S to switch, large retest | Done in #110 (physics at 120 Hz). `tune_track.gd` no longer hard-codes the step: it reads `Engine.physics_ticks_per_second` (`tune_track.gd:54`, `:228`) |
 | C4 | Tyre temperature and wear; oil; turbo health | M-L | Tuning-heavy; needs the gauges |
 | C5 | Cockpit camera, perspective audio buses, engine layer split (intake, exhaust, bay) | L + M, L | There is no cockpit camera today. The layer split pays off only after it |
 | C6 | Traffic engine audio with manual Doppler (Godot issue 38143 breaks the built-in one at speed) | M-L | Comes with traffic (Stage B step 3) |
@@ -48,7 +48,7 @@ estimates, not sourced. Detail is in `car-feel.md`.
 ## Constraints that cut across phases
 
 - GEVP edits are allowed (Roy, 2026-10-05). Mark each `DEVIATION`, list it in
-  ROADMAP "Rules carried forward".
+  ROADMAP "Rules carried forward" (the section was added 2026-10-06).
 - Gauges, the volume tab and a cockpit camera all depend on Stage B step 4 (camera
   and HUD). Until then heat shows as a plain warning strip.
 - Windowed key tests lose held keys when the window loses focus; write new

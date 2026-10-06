@@ -21,16 +21,22 @@ extends SceneTree
 #   Godot_v4.7.2-stable_win64_console.exe --path . -s res://tests/auto_tune_panel.gd
 
 const HOLD_TICKS := 6
-# Default coupe on the headless test track (tests/tune_track.gd).
-const EXPECT_TOP := 244.1
-const EXPECT_0_100 := 5.58
-const EXPECT_100_0 := 42.2
+# Default coupe on the headless test track (tests/tune_track.gd). The numbers depend
+# on the physics tick rate: run_tests.bat pins 60 (NEON_TICKS), the game runs 120.
+# Re-measure with `tune_track.gd` at the matching rate if the car's physics changes.
+var EXPECT_TOP := 244.1
+var EXPECT_0_100 := 5.60
+var EXPECT_100_0 := 42.7
 const TOLERANCE := 0.005
 const SLOT_FILE := "user://autotune/test_panel_slots.json"
 
 var failures: Array[String] = []
 
 func _initialize() -> void:
+	if Engine.physics_ticks_per_second >= 120:
+		EXPECT_TOP = 247.1
+		EXPECT_0_100 = 5.18
+		EXPECT_100_0 = 43.1
 	change_scene_to_file("res://Game.tscn")
 	_run()
 

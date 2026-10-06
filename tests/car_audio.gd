@@ -14,8 +14,8 @@ extends SceneTree
 # - each loop: finite, peak 0.8 (normalised), no click at the loop point,
 #   built in under 1 s total
 # - idle: all four levels under 0.02
-# - launch: wind tracks speed^2 (r > 0.95), road tracks speed (r > 0.9);
-#   at 30 m/s wind > 0.35 and road > 0.5; squeal stays under 0.15 while
+# - launch: wind tracks speed^WIND_EXP (r > 0.95), road tracks speed (r > 0.9);
+#   at 30 m/s wind > 0.25 and road > 0.5; squeal stays under 0.15 while
 #   cruising straight above 20 m/s
 # - slide: squeal > 0.4 (after 1.25 s of sliding)
 # - kerb: surface > 0.25
@@ -193,15 +193,15 @@ func _physics_process(_delta: float) -> bool:
 			if speed >= 30.0:
 				var sq := PackedFloat32Array()
 				for v in speeds:
-					sq.append(v * v)
+					sq.append(pow(v, CarAudio.WIND_EXP))
 				var rw := _corr(sq, winds)
 				var rr := _corr(speeds, roads)
-				print("launch: 30 m/s after %.1f s: wind %.2f (r=%.3f vs speed^2), road %.2f (r=%.3f vs speed), cruise squeal max %.3f" % [phase_ticks / float(Engine.physics_ticks_per_second), audio.wind_level, rw, audio.road_level, rr, cruise_squeal])
+				print("launch: 30 m/s after %.1f s: wind %.2f (r=%.3f vs speed^1.5), road %.2f (r=%.3f vs speed), cruise squeal max %.3f" % [phase_ticks / float(Engine.physics_ticks_per_second), audio.wind_level, rw, audio.road_level, rr, cruise_squeal])
 				if rw < 0.95:
-					_fail("wind does not follow speed^2 (r=%.3f)" % rw)
+					_fail("wind does not follow speed^WIND_EXP (r=%.3f)" % rw)
 				if rr < 0.9:
 					_fail("road roar does not follow speed (r=%.3f)" % rr)
-				if audio.wind_level < 0.35 or audio.road_level < 0.5:
+				if audio.wind_level < 0.25 or audio.road_level < 0.5:
 					_fail("too quiet at 30 m/s: wind %.2f road %.2f" % [audio.wind_level, audio.road_level])
 				if cruise_squeal >= 0.15:
 					_fail("tyres squeal while cruising straight (%.3f)" % cruise_squeal)

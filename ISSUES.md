@@ -1,10 +1,15 @@
 # Neon Overdrive — Issue List
 
-Audit 2026-09-29, refreshed 2026-10-05 against `origin/main` at `4bfed10`.
+Audit 2026-09-29, refreshed 2026-10-06 against `origin/main` at `cb50e4a` and
+`gh issue list --state all`.
 
 **GitHub issues are the live list.** This file keeps the audit's letter IDs
 (A1, E7, ...) so older PRs and comments still make sense, and maps each one to
-its GitHub issue. For the order to work in, see the triage issue #59.
+its GitHub issue. For the order to work in, see the triage issue #59 (its text is
+frozen at 2026-09-29 and out of date; it is still open).
+
+**Recommend closing (Roy decides; nothing was closed from here):** #18, #55 and
+#73 are done in code but still open on GitHub. Evidence is in the Closed table.
 
 ---
 
@@ -16,7 +21,7 @@ its GitHub issue. For the order to work in, see the triage issue #59.
 | D5 | `is_off_road()` defined, never called | #28 | Roy: keep it as a scoring hook |
 | C6 | Camera had no smoothing | #31 | PR #61 added 3 modes (C key); Roy tunes later |
 | E6 | No curves or elevation | #37 | Acknowledged; needs the Path3D rearchitecture |
-| E7 | Gear spread is the wrong shape | #62 | E7–E9 merged into #62. Gearing was evened in `764b3f0` (steps now about 1.3), but no test asserts the spread, so not closed |
+| E7 | Gear spread is the wrong shape | #62 (closed on GitHub 2026-09-29) | E7–E9 merged into #62. Gearing was evened in `764b3f0` (steps now about 1.3), but no test asserts the spread, so not closed |
 | E8 | Torque curve falls off too hard | #62 | Torque shape is now tunable (Auto-Tune 1b, `f5f9361`); Roy's tune not recorded |
 | E9 | Top gear set for 230 km/h, target ~200 | #62 | GEVP cuts at 1.1 × `max_rpm`, so the ceiling is ~253. The damp-0.1 cap at 124 km/h is fixed (`8cf2c89`, PR #89): 241.6 km/h at 35 s. `chassis_targets` now asserts 235–250 km/h; Roy likes ~300 through tuning, so the ~200 target is stale |
 | G3 | Car model shape needs Roy's direction | #16 | The test car (#63) is closed; the 12-car design sheet is merged (#85, #86) but no game models are built from it |
@@ -26,9 +31,8 @@ its GitHub issue. For the order to work in, see the triage issue #59.
 
 | GitHub | Issue |
 |---|---|
-| #48 | Workers are told to check the queue but `office-queue` refuses them (403) |
-| #62 | Gearing & power: sliders (PR #69, merged), Auto-Tune (#88, #90, #100, merged), then Roy's tune, then the upgrade tree |
-| #70 | Upgrade tree: stop at 200 km/h with a gear limit or a weaker engine? |
+| #62 | **Closed on GitHub 2026-09-29** (it was listed open here). Gearing & power: sliders (PR #69, merged), Auto-Tune (#88, #90, #100, merged); Roy's final tune is still not recorded, and the upgrade tree is #70–#74 |
+| #70 | Upgrade tree: stop at 200 km/h with a gear limit or a weaker engine? Conflicts with the 235–250 km/h stock target (`chassis_targets`) and Roy's ~300 km/h tuned goal, so it needs a decision or a rewrite |
 | #71 | Upgrade tree: one tree for every car, or one per car? (ROADMAP records Roy's decision: one per car; issue not closed here) |
 | #72 | Upgrade tree: can the player respec? |
 | #74 | Upgrade tree: do tiers cap which races you can enter? |
@@ -80,11 +84,12 @@ changes with the car and its upgrades; the engine, driveline and turbo sounds ex
 | F6 | This file was untracked | tracked since PR #6 |
 | G1 | Car rendered as a bare frame, loft winding (#14) | PR #45 |
 | G2 | Glass loft zero normals (#15) | PR #43 |
-| H1 | No audio at all (#18) | `093b3ef` (engine synth, PR #57), `18e0509` (stage A wind/road/squeal/kerb), `8890350` (Phase B driveline); tests `car_audio`, `audio_master`, `driveline_audio`. Engine-tuning direction is now #80 |
-| #55 | Keyboard steering reaches full lock at any speed | `764b3f0`; `tests/feel_pass_1.gd` checks the ramp and the speed cap |
+| H1 | No audio at all (#18) | `093b3ef` (engine synth, PR #57), `18e0509` (stage A wind/road/squeal/kerb), `8890350` (Phase B driveline); tests `car_audio`, `audio_master`, `driveline_audio`. Engine-tuning direction is now #80. **GitHub #18 is still open: recommend closing** (the issue says "never built"; audio is built and tested) |
+| #55 | Keyboard steering reaches full lock at any speed | `764b3f0`; `tests/feel_pass_1.gd` checks the ramp and the speed cap. **GitHub #55 is still open: recommend closing** |
+| #48 | Workers are told to check the queue but `office-queue` refuses them (403) | **Closed on GitHub 2026-09-29** (it was listed open here); docs fix in PR #77 (`3cc3b30`) |
 | #63 | Neutral test car | PR #68 (`e4f23cd`); `tests/test_car.gd` |
-| #73 | Real turbo lag needs a physics addition | `65a4303`; `tests/turbo.gd` |
-| #75 | `brake_force_multiplier` declared but never read | `ee9ee5a`; read in `gevp_vehicle.gd` (`DEVIATION`), set in `car_spec.gd`, and exercised by the brake run in `tests/tune_track.gd` (100-0 m) |
+| #73 | Real turbo lag needs a physics addition | `65a4303` (PR #102); `tests/turbo.gd` (boost lags, blow-off, torque gain). **GitHub #73 is still open: recommend closing** |
+| #75 | `brake_force_multiplier` declared but never read | `ee9ee5a` (PR #78); read in `gevp_vehicle.gd:1234` (marked "Local change to vendored GEVP (#75)", **not** `DEVIATION`), set in `car_spec.gd`, and exercised by the brake run in `tests/tune_track.gd` (100-0 m). Closed on GitHub 2026-09-29 |
 
 ---
 
@@ -92,7 +97,7 @@ changes with the car and its upgrades; the engine, driveline and turbo sounds ex
 
 **C3 / D5 (#28).** Buildings are 22 m apart, and past them is a flat slab you
 can drive on. Nothing stops the player leaving the road. `is_off_road()`
-(`scripts/player.gd:284`) is still not called anywhere on `origin/main`.
+(`scripts/player.gd:286`) is still not called anywhere on `origin/main`.
 
 **E7–E9 (#62).** Audit-time numbers, before `764b3f0` evened the gearing. With `wheel_r 0.34`, `final_drive 4.1` and a 7000 rpm
 redline, the ratios `[3.6, 2.4, 1.8, 1.4, 0.95]` give:

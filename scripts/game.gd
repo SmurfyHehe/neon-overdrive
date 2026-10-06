@@ -46,6 +46,7 @@ var game_state: GameState
 # speed feel (FOV, dolly, shake) all live in chase_camera.gd.
 var camera: ChaseCamera
 var radio: RadioManager
+var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
 func _ready() -> void:
 	# Auto-Tune worker mode (exported game): no world, just the search.
@@ -78,6 +79,8 @@ func _ready() -> void:
 	_setup_player()
 	_setup_traffic()
 	_setup_camera()
+	fx = FxPack.new(player, camera)
+	add_child(fx)
 	_setup_hud()
 	_setup_game_state()
 	if benchmark:
@@ -281,6 +284,7 @@ func _shift_origin(shift_chunks: int) -> void:
 		c.root.reset_physics_interpolation()
 	# Traffic (milestone 3): every car gets the same bookkeeping as the player.
 	traffic.shift_world(offset)
+	fx.shift_world(offset)  # skid marks are laid in world space
 	# The ground plane stays put: it is infinite.
 	# The camera follows the car's interpolated position in _process, so it
 	# needs nothing here.

@@ -155,6 +155,10 @@ func _tap(code: Key) -> void:
 	_key(code, true)
 	await _ticks(HOLD_TICKS)
 	_key(code, false)
+	# Key events reach the GUI when the input buffer is flushed, once per rendered
+	# frame; under load several physics ticks can pass in one frame.
+	await process_frame
+	await process_frame
 
 func _key(code: Key, pressed: bool) -> void:
 	var ev := InputEventKey.new()

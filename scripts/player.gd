@@ -179,9 +179,8 @@ func _ready() -> void:
 	current_gear = 1
 
 	# Aero (2026-09-13): registers this car for AeroModel's drafting lookup.
-	# No traffic exists yet (milestone 3), so today this group only ever has
-	# one member and drafting always finds nothing -- built for real ahead of
-	# time, same pattern as CarSpec, not dead code.
+	# Traffic cars (stage B step 3, #113) join the same group, so drafting now
+	# has something to find.
 	add_to_group("aero_vehicles")
 	health.enabled = not sim_only
 

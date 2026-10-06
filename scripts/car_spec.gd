@@ -7,10 +7,10 @@
 # extracted out of player.gd (which used to hardcode all of this inline) so
 # a future NPCCar/CopCar just builds its own spec dict -- possibly starting
 # from coupe_default() and overriding a few fields -- and calls the same
-# apply()/build_wheels()/build_collision() helpers PlayerCar now uses. Mods
-# (milestone 10) plug in here too: a mod multiplies/overrides entries in a
-# car's spec dict before CarSpec.apply() runs, rather than needing separate
-# code paths per mod.
+# apply()/build_wheels()/build_collision() helpers PlayerCar now uses (TrafficCar
+# does, since #113). Mods (the per-car mod trees of stage E, see ROADMAP) plug
+# in here too: a mod multiplies/overrides entries in a car's spec dict
+# before CarSpec.apply() runs, rather than needing separate code paths per mod.
 extends RefCounted
 class_name CarSpec
 

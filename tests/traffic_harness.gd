@@ -47,9 +47,20 @@ static func boot(tree: SceneTree, car_count: int, detail: float, seed_value: int
 ## A driver for PlayerCar.driver: holds the lane centre `lane_x` with the same
 ## pure-pursuit steering the traffic uses and a fixed throttle, lifted above
 ## `max_speed` (m/s). The player's wheelbase is 2.5 m (player.gd CFG, axle_z 1.25).
+##
+## Plus a damping term: it aims LAT_DAMP_T seconds of its own sideways
+## velocity short of the lane centre. Plain pure pursuit is barely damped at
+## 240 km/h: a 1 m/s sideways kick swung the player 1.8 m off the lane and was
+## still swinging +-0.6 m 25 s later (2026-10-06, probe at 120 Hz), and every
+## floating-origin shift or close pass gave it another kick, until it wandered
+## into the next lane. With the term the same kick peaks at 0.9 m and is gone
+## in ~10 s. Test driver only; traffic keeps plain pure pursuit (its lane
+## changes move the target on purpose, and it never goes 240).
+const LAT_DAMP_T := 3.0
+
 static func lane_driver(lane_x: float, throttle: float, max_speed: float = INF) -> Callable:
 	return func(c: Vehicle) -> void:
-		c.steering_input = TrafficCar.lane_steer(c, lane_x, -1.0, 2.5)
+		c.steering_input = TrafficCar.lane_steer(c, lane_x - c.linear_velocity.x * LAT_DAMP_T, -1.0, 2.5)
 		c.throttle_input = throttle if c.current_speed() < max_speed else 0.0
 		c.brake_input = 0.0
 		c.handbrake_input = 0.0
@@ -67,6 +78,13 @@ static func move_player_to_lane(p: PlayerCar, lane: float) -> void:
 	for w in p.wheel_array:
 		w.previous_global_position += offset
 		w.last_collision_point += offset
+	p.reset_physics_interpolation()
+
+## Sets a standing player moving at `speed` m/s straight ahead, sim history,
+## wheel spin and gear made consistent (the same handover traffic gets), so a
+## test can start at highway speed instead of spending 30 s accelerating.
+static func launch_player(p: PlayerCar, speed: float) -> void:
+	TrafficCar.set_moving(p, speed)
 	p.reset_physics_interpolation()
 
 ## False if any number the sim carries from tick to tick is NaN or infinite.

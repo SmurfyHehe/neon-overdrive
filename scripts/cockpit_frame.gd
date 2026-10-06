@@ -37,9 +37,16 @@ const WHEEL_LOCK_RAD := LOCK_TO_LOCK_TURNS * TAU / 2.0
 
 const SEAT_X := -0.36
 const LIFT := P1CoupeBuilder.BODY_LIFT
-## Wheel hub in car space and its tilt (top toward the driver).
-const WHEEL_POS := Vector3(SEAT_X, 0.80, -0.10)   # 8 cm nearer the driver than on the interior branch, for the arms
-const WHEEL_TILT_DEG := 28.0
+## Wheel hub in car space and its tilt about x. Roy (2026-10-06): the wheel
+## must point at the driver without blocking the view. Negative tilts the top
+## away from the driver so the face normal rises toward the eye like a real
+## column (at -25 the face looks 25 degrees up; the eye is 32 degrees up from
+## the hub). The hub is set so the rim top, grip included, sits WHEEL_TOP_MIN_DEG
+## below the eye: the LED strip and the LCD stay in view, the road band above
+## them stays clear (tests/cockpit_interior.gd checks both).
+const WHEEL_POS := Vector3(SEAT_X, 0.77, -0.18)
+const WHEEL_TILT_DEG := -25.0
+const WHEEL_TOP_MIN_DEG := 15.0
 const CLUSTER_Z := -0.349
 ## Cluster centre height. Roy (2026-10-06): the cluster must not block the road.
 ## From the eye (1.06 m) the ground 10 m ahead of the bumper is 4.9 degrees

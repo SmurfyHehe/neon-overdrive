@@ -1,14 +1,11 @@
 class_name FxSettings
 extends RefCounted
 
-# Effect toggles (2026-10-06): one on/off flag per cheap effect, so a pause-menu
+# Effects pack v1 (2026-10-06): one on/off flag per cheap effect, so a pause-menu
 # toggle can be wired to each later. Saved under [fx] in the same
 # user://settings.cfg the audio and traffic sliders use. NEON_FX=0 turns the
 # whole pack off for one run (frame-cost A/B, tests); it does not touch the file.
-#
-# Same shape as the effects-pack branch's file (vignette, speed lines, skid
-# marks, exhaust flames); this branch adds the cockpit mirrors and their
-# quality. Merging the two is a matter of keeping both lists.
+# The cockpit milestone adds the mirrors flag and their render quality.
 
 const EFFECTS := ["vignette", "speed_lines", "skid_marks", "exhaust_flames", "mirrors"]
 ## Mirror render size as a share of CockpitMirrors' base sizes: 0 = low (half),

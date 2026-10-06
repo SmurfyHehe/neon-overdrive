@@ -95,6 +95,9 @@ static func _rederive(v: Vehicle, spec: Dictionary, kind: String) -> void:
 		v.calculate_brake_force()
 	if kind == TuneParams.TYRE_SETUP:
 		v.apply_tyre_setup()
+	if kind == TuneParams.SUSPENSION:
+		v.apply_suspension()
+		v.calculate_brake_force()
 
 ## Baseline tuning -- currently identical to what PlayerCar shipped with
 ## (2026-09-13 physics rewrite + power/top-speed passes), NOT yet meaningfully
@@ -149,6 +152,19 @@ static func coupe_default() -> Dictionary:
 		"rear_static_camber": 0.0,
 		"front_static_camber_stock": 0.0,
 		"rear_static_camber_stock": 0.0,
+		# Tuner redesign PR 2: settings the car always had at GEVP's defaults,
+		# now in the spec so the tuner can move them (same values: no change).
+		"front_resting_ratio": 0.5,
+		"rear_resting_ratio": 0.5,
+		"front_toe": 0.01,
+		"rear_toe": 0.01,
+		"front_locking_differential_engage_torque": 200.0,
+		"rear_locking_differential_engage_torque": 200.0,
+		"front_brake_bias": -1.0,  # -1 = from the springs (GEVP's auto, ~0.55 on the coupe)
+		"traction_control_max_slip": 8.0,  # <= 0 = off
+		"stability_yaw_strength": 6.0,
+		"front_abs_spin_difference_threshold": 12.0,
+		"rear_abs_spin_difference_threshold": 12.0,
 		"realistic_clutch": false,  # Phase C: clutch pedal, stall and starter; V toggles it in the game (off by default)
 		"turbo_boost_max": 0.0,  # Phase B: 0 = naturally aspirated; the T tuner can add boost
 		"brake_selects_reverse": false,  # R picks reverse (Roy); S only brakes

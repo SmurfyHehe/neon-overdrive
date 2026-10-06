@@ -118,7 +118,8 @@ const PALETTE := [
 	Color(0.45, 0.3, 0.15), Color(0.3, 0.3, 0.32),
 ]
 
-## The player's footprint in the index (the #63 test car is 1.8 x 4.4 m).
+## The player's footprint in the index (the P1 coupe and the #63 test car
+## are both about 1.8 x 4.4 m).
 const PLAYER_HALF_W := 1.0
 const PLAYER_HALF_L := 2.2
 

@@ -5,17 +5,18 @@ extends RefCounted
 # toggle can be wired to each later. Saved under [fx] in the same
 # user://settings.cfg the audio and traffic sliders use. NEON_FX=0 turns the
 # whole pack off for one run (frame-cost A/B, tests); it does not touch the file.
-# The cockpit milestone adds the mirrors flag and their render quality, and
-# rear_strip (the HUD's rear-view strip in the chase view, fed by the same
+# The cockpit milestone adds the mirrors flag and their render quality,
+# head_motion (the cockpit eye swaying with the car's forces, ChaseCamera)
+# and rear_strip (the HUD's rear-view strip in the chase view, fed by the same
 # rearview mirror render).
 
-const EFFECTS := ["vignette", "speed_lines", "skid_marks", "exhaust_flames", "mirrors", "rear_strip"]
+const EFFECTS := ["vignette", "speed_lines", "skid_marks", "exhaust_flames", "mirrors", "head_motion", "rear_strip"]
 ## Mirror render size as a share of CockpitMirrors' base sizes: 0 = low (half),
 ## 1 = medium (base), 2 = high (double). Default medium.
 const MIRROR_QUALITIES := ["low", "medium", "high"]
 const MIRROR_QUALITY_DEFAULT := 1
 
-static var enabled := {"vignette": true, "speed_lines": true, "skid_marks": true, "exhaust_flames": true, "mirrors": true, "rear_strip": true}
+static var enabled := {"vignette": true, "speed_lines": true, "skid_marks": true, "exhaust_flames": true, "mirrors": true, "head_motion": true, "rear_strip": true}
 static var mirror_quality := MIRROR_QUALITY_DEFAULT
 
 static func is_on(effect: String) -> bool:

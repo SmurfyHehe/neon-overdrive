@@ -116,6 +116,7 @@ func _physics_process(_delta: float) -> bool:
 				_check(w.lit_count == 0 and w.led_colours[0].a < 0.01, "at 50%% every LED is off (alpha 0)")
 				_check_sightline(p, frame)
 				_check_wheel_pose(frame)
+				_check_view(p, frame, cam)
 				steer = 0.0
 				throttle = 1.0
 				_go(Step.PEDALS)
@@ -211,6 +212,101 @@ static func _side_rendering(frame: CockpitFrame) -> bool:
 		if frame.mirrors.views[i].vp.render_target_update_mode != SubViewport.UPDATE_DISABLED:
 			return true
 	return false
+
+## Roy (2026-10-06): the dash top at least CockpitFrame.DASH_TOP_MIN_DEG below
+## the eye, and at least CockpitFrame.GLASS_MIN_FRACTION of the cockpit view
+## clear glass. Both measured with rays from the eye in car space:
+## - the dash top: at yaws between the binnacle and the A-pillar, the first
+##   pitch below the horizon (half-degree steps) at which a ray hits any part
+##   of the interior; the highest of those is the dash line;
+## - clear glass: a 32 x 18 grid of rays over the camera's rest FOV at 16:9;
+##   a ray that hits nothing of the interior looks out through glass.
+func _check_view(p: PlayerCar, frame: CockpitFrame, cam: ChaseCamera) -> void:
+	var eye := ChaseCamera.COCKPIT_EYE
+	var to_car := p.global_transform.affine_inverse()
+	# gather every interior triangle in car space, with a bounding box per mesh
+	var meshes := []
+	for m in frame.find_children("*", "MeshInstance3D", true, false):
+		var mi := m as MeshInstance3D
+		if not mi.mesh is ArrayMesh or not mi.is_visible_in_tree():
+			continue
+		var xf: Transform3D = to_car * mi.global_transform
+		var tris: PackedVector3Array = []
+		var mesh := mi.mesh as ArrayMesh
+		for si in mesh.get_surface_count():
+			var verts: PackedVector3Array = mesh.surface_get_arrays(si)[Mesh.ARRAY_VERTEX]
+			for v in verts:
+				tris.append(xf * v)
+		if tris.is_empty():
+			continue
+		var lo := tris[0]
+		var hi := tris[0]
+		for v in tris:
+			lo = lo.min(v)
+			hi = hi.max(v)
+		meshes.append({"name": mi.name, "tris": tris, "aabb": AABB(lo, hi - lo).grow(0.001)})
+	# dash top: scan down from the horizon across the driver's view (+-20 deg,
+	# +yaw is left), skipping yaws where the first thing hit is the binnacle
+	# (near, in front of the driver) or an A-pillar (far out to the side)
+	var dash_top := 90.0
+	var dash_where := ""
+	for yi in 21:
+		var yaw_deg := -20.0 + 2.0 * yi
+		var pitch := 0.0
+		while pitch < 40.0:
+			var dir := Vector3(0, 0, -1).rotated(Vector3.RIGHT, deg_to_rad(-pitch)).rotated(Vector3.UP, deg_to_rad(yaw_deg))
+			var hit := _first_hit(meshes, eye, dir)
+			if not hit.is_empty():
+				var pt: Vector3 = hit.point
+				var binnacle := absf(pt.x - CockpitFrame.SEAT_X) < 0.22 and pt.z > -0.52
+				var pillar := absf(pt.x) > 0.55
+				if not binnacle and not pillar and pitch < dash_top:
+					dash_top = pitch
+					dash_where = "%s at yaw %.0f, %s" % [hit.name, yaw_deg, pt]
+				break
+			pitch += 0.5
+	# clear glass over the view
+	var fov := cam.fov
+	var results := {}
+	for test_fov in [fov, 62.0]:
+		var half_v := tan(deg_to_rad(test_fov) * 0.5)
+		var half_h := half_v * 16.0 / 9.0
+		var clear := 0
+		var total := 0
+		for j in 18:
+			var v := (0.5 - (float(j) + 0.5) / 18.0) * 2.0 * half_v
+			for i in 32:
+				var u := ((float(i) + 0.5) / 32.0 - 0.5) * 2.0 * half_h
+				total += 1
+				if _first_hit(meshes, eye, Vector3(u, v, -1.0).normalized()).is_empty():
+					clear += 1
+		results[test_fov] = float(clear) / float(total)
+	print("view: dash top %.1f deg below the eye (%s); clear glass %.1f%% at FOV %.0f, %.1f%% at FOV 62" % [dash_top, dash_where, results[fov] * 100.0, fov, results[62.0] * 100.0])
+	_check(dash_top >= CockpitFrame.DASH_TOP_MIN_DEG, "the dash top is only %.1f deg below the eye (%s), want %.0f" % [dash_top, dash_where, CockpitFrame.DASH_TOP_MIN_DEG])
+	# The share is asserted at FOV 62, the cockpit default PR #135 sets (this
+	# branch's rest FOV is printed too); the eye is 0.34 m from the glass top,
+	# so a wider view fills with header and pillars whatever the dash does.
+	_check(results[62.0] >= CockpitFrame.GLASS_MIN_FRACTION, "only %.1f%% of the view is clear glass at FOV 62, want %.0f%%" % [results[62.0] * 100.0, CockpitFrame.GLASS_MIN_FRACTION * 100.0])
+
+## The first mesh a ray from `from` along `dir` hits, as {name, point}; empty for none.
+static func _first_hit(meshes: Array, from: Vector3, dir: Vector3) -> Dictionary:
+	var best := INF
+	var best_hit := {}
+	for m in meshes:
+		var box: AABB = m.aabb
+		if not box.intersects_ray(from, dir):
+			continue
+		var tris: PackedVector3Array = m.tris
+		var t := 0
+		while t + 2 < tris.size():
+			var hit = Geometry3D.ray_intersects_triangle(from, dir, tris[t], tris[t + 1], tris[t + 2])
+			t += 3
+			if hit != null:
+				var d: float = from.distance_squared_to(hit)
+				if d < best:
+					best = d
+					best_hit = {"name": m.name, "point": hit}
+	return best_hit
 
 func _go(next: Step) -> void:
 	step = next

@@ -253,7 +253,7 @@ func _refresh() -> void:
 	var engine_off: bool = player.realistic_clutch and not player.engine_running
 
 	lbl_gear.text = gear_text(gear)
-	lbl_mode.text = "A" if player.automatic_transmission else "M"
+	lbl_mode.text = PlayerCar.TRANSMISSION_LETTERS[player.transmission_mode()]
 	lbl_speed.text = str(kmh(player.current_speed()))
 	lbl_rpm.text = "%d rpm" % int(rpm)
 

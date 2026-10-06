@@ -95,7 +95,15 @@ class_name RoadChunkBuilder
 const LANE_W := 3.2
 const CHUNK_LEN := 50.0
 const DASH_SPACING := 4.0
-const SHOULDER_W := 0.9
+# Road space (2026-10-06, Roy: "I want more space"): the shoulder went 0.9 ->
+# 1.4 m, and the lanes moved MEDIAN_GAP away from the centre line / barrier on
+# each side (the gap is plain paved road). Lanes stay LANE_W wide. Everything
+# outside the road edge (shoulder, curb, sidewalk, out-of-bounds walls,
+# buildings, lamps) is laid out from _lane_w(), so it all moved out with it.
+const SHOULDER_W := 1.4
+## Clear road between the centre line (or barrier) and the nearest lane, per
+## side. Roy's range is 0.2-0.6 m.
+const MEDIAN_GAP := 0.4
 const CURB_W := 0.3
 const SIDEWALK_RAMP := 0.3  # width of the sloped road-side edge of the sidewalk collision
 const SIDEWALK_W := 2.2  # kept: the sidewalk is a drivable shortcut by design,
@@ -466,8 +474,20 @@ static func _get_wall_mat() -> StandardMaterial3D:
 		_wall_mat.roughness = 0.95
 	return _wall_mat
 
+## Distance from the centre line to the road edge on a side with `lanes` lanes:
+## the median gap plus the lanes. (The name is older than the gap.)
 static func _lane_w(lanes: int) -> float:
-	return float(lanes) * LANE_W
+	return MEDIAN_GAP + float(lanes) * LANE_W
+
+## Centre of lane i (0 = nearest the centre line), as a distance from the centre
+## line. TrafficManager.lane_centre() adds the sign for the direction.
+static func lane_offset(lane_i: int) -> float:
+	return MEDIAN_GAP + (float(lane_i) + 0.5) * LANE_W
+
+## The inverse: which lane a distance from the centre line falls in (unclamped
+## above, 0 for anything inside the median gap).
+static func lane_at(dist: float) -> int:
+	return maxi(0, floori((dist - MEDIAN_GAP) / LANE_W))
 
 # ---------- tapered strips ----------
 #
@@ -880,13 +900,13 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var lane: MultiMesh = (root.get_node(^"LaneDashes") as MultiMeshInstance3D).multimesh
 	var written := 0
 	for lane_i in range(1, own_lanes):
-		var x: float = lane_i * LANE_W
+		var x: float = MEDIAN_GAP + lane_i * LANE_W
 		for i in range(slots):
 			var dz2 := -float(i) * DASH_SPACING - DASH_SPACING / 2.0
 			lane.set_instance_transform(written, Transform3D(Basis(), Vector3(x, DASH_Y, dz2)))
 			written += 1
 	for lane_i in range(1, onc_lanes):
-		var x2: float = -lane_i * LANE_W
+		var x2: float = -(MEDIAN_GAP + lane_i * LANE_W)
 		for i in range(slots):
 			var dz3 := -float(i) * DASH_SPACING - DASH_SPACING / 2.0
 			lane.set_instance_transform(written, Transform3D(Basis(), Vector3(x2, DASH_Y, dz3)))

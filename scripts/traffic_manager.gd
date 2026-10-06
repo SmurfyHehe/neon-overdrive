@@ -9,7 +9,7 @@ class_name TrafficManager
 # or creates them, the same pattern as game.gd's chunk pool.
 #
 # Lanes: the road is 4 lanes each way (game.gd), own lanes at positive x and
-# oncoming at negative x, lane i centred at (i + 0.5) * RoadChunkBuilder.LANE_W.
+# oncoming at negative x, lane i centred at RoadChunkBuilder.lane_offset(i).
 #
 # Occupancy index (milestone 4): rebuilt at the top of every tick (this node
 # runs before its cars). Every car and the player is an x-range across the
@@ -287,7 +287,7 @@ func lane_allowed(lane_i: int, oncoming: bool) -> bool:
 	return used.is_empty() or lane_i in used
 
 static func lane_centre(lane_i: int, oncoming: bool) -> float:
-	var x := (float(lane_i) + 0.5) * LANE_W
+	var x := RoadChunkBuilder.lane_offset(lane_i)
 	return -x if oncoming else x
 
 # ---------- occupancy index ----------
@@ -354,7 +354,10 @@ func _register(k: int) -> void:
 		_slots[s].append(k)
 
 func _slot_of(x: float) -> int:
-	return clampi(floori(x / LANE_W) + onc_lanes, 0, own_lanes + onc_lanes - 1)
+	# Own lanes are slots onc_lanes.., oncoming ones count down from onc_lanes - 1;
+	# the median gap belongs to the nearest lane on its side.
+	var i := RoadChunkBuilder.lane_at(absf(x))
+	return clampi(onc_lanes + i if x >= 0.0 else onc_lanes - 1 - i, 0, own_lanes + onc_lanes - 1)
 
 ## A lane change has started: the car now also occupies its new lane.
 func note_lane_change(car: TrafficCar) -> void:

@@ -147,7 +147,7 @@ func _physics_process(delta: float) -> bool:
 		_check(not s.in_view, "spawned in the camera's view")
 		_check(s.gap >= traffic.lane_gap, "spawned %.1f m from a car in its lane (min %.0f)" % [s.gap, traffic.lane_gap])
 		_check(s.ttc >= TrafficManager.SPAWN_TTC, "spawned %.1f s from contact (min %.0f)" % [s.ttc, TrafficManager.SPAWN_TTC])
-		var lane_i := absf(s.lane_x) / RoadChunkBuilder.LANE_W - 0.5
+		var lane_i := (absf(s.lane_x) - RoadChunkBuilder.MEDIAN_GAP) / RoadChunkBuilder.LANE_W - 0.5
 		_check(is_equal_approx(lane_i, roundf(lane_i)) and lane_i >= -0.01 and lane_i < 4.0, "lane_x %.2f is not a lane centre" % s.lane_x)
 		_check((s.lane_x > 0.0) == (s.direction < 0.0), "direction %.0f does not match lane side x=%.2f" % [s.direction, s.lane_x])
 		if s.lane_x > 0.0:

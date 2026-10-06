@@ -41,7 +41,7 @@ func _ready() -> void:
 	add_child(hud)
 	var lbl := Label.new()
 	lbl.position = Vector2(16, 56)
-	lbl.add_theme_color_override("font_color", Color(1, 0.3, 0.8))
+	lbl.add_theme_color_override("font_color", Color(1.0, 0.54, 0.12))  # sodium #FF8A1F
 	lbl.text = "BENCHMARK -- driving itself for %d s, then quits" % int(RUN_SECS + WARMUP_SECS)
 	hud.add_child(lbl)
 

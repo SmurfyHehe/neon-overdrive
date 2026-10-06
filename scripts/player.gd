@@ -32,7 +32,14 @@ class_name PlayerCar
 # also gets a REAL small physical bump for free from the sidewalk's raised
 # collision geometry, instead of the old scripted cosmetic jolt.
 
-const KIND := TestCarBuilder.KIND  # #63 neutral test car
+## The player's body: the P1 sports coupe from the B1 design sheet (stage D
+## step 1, Roy 2026-10-06). Visual only -- CFG, the collision box and CarSpec
+## are the same for both bodies. Set NEON_TEST_CAR=1 to drive the neutral #63
+## test box instead, to compare.
+const KIND := P1CoupeBuilder.KIND
+static func chassis_kind() -> String:
+	return TestCarBuilder.KIND if OS.get_environment("NEON_TEST_CAR") == "1" else KIND
+
 const CFG := {
 	"wheel_r": 0.34, "axle_z": 1.25, "wheel_x": 0.88,  # Phase B: wheelbase 2.5 m (was 2.1; real coupes 2.4-2.7)
 }
@@ -54,6 +61,14 @@ const STEER_RELEASE := 8.0       # per second back to centre, and when reversing
 const STEER_LOCK_MIN := 0.25     # fraction of lock left at STEER_FAST_SPEED
 const STEER_SLOW_SPEED := 4.0    # m/s (~15 km/h): full lock below this
 const STEER_FAST_SPEED := 50.0   # m/s (180 km/h): minimum lock from here up
+## Grip limit on the lock. GEVP's slip assist used to hold the front wheels to about
+## 0.27 of lock (~10 deg) from ~8 m/s up, erratically (it is switched off for the
+## player now, see _apply_keyboard_steering), and that is what the car felt like at 10 to 20 m/s.
+## Keeping it as an explicit cap leaves that range feeling the same. 1.0 turns it
+## off, and then the speed cap above alone decides (31 deg at 16 m/s, 21 deg at 30).
+const STEER_LOCK_GRIP := 0.27
+const STEER_GRIP_FROM := 3.0     # m/s: below this the grip limit does not apply (parking)
+const STEER_GRIP_FULL := 8.0     # m/s: it applies in full from here up
 
 const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Vehicle's own shift_time below
 
@@ -102,10 +117,11 @@ func _ready() -> void:
 	# upgraded with actual panel/bumper/mirror/spoiler/alloy-wheel detail (see
 	# car_builder.gd's _add_body_details/_add_glass/_build_alloy_wheel) instead
 	# of the old flat-box look.
-	# #63: the neutral test car, for judging handling and camera. The styled
-	# coupe (CarBuilder, KIND_CONFIGS["coupe"]) waits on the design in #16.
+	# The P1 sports coupe (P1CoupeBuilder), or the neutral #63 test car with
+	# NEON_TEST_CAR=1. Same physics either way; see chassis_kind().
+	var kind := chassis_kind()
 	if not sim_only:
-		chassis_visual = TestCarBuilder.build_chassis_visual()
+		chassis_visual = TestCarBuilder.build_chassis_visual() if kind == TestCarBuilder.KIND else P1CoupeBuilder.build_chassis_visual()
 		add_child(chassis_visual)
 
 	# BUG FIX (2026-09-13, verified headless): RigidBody3D falls asleep after
@@ -152,6 +168,8 @@ func _ready() -> void:
 	if spec.is_empty():
 		spec = CarSpec.coupe_default()
 	CarSpec.apply(self, spec)
+	if not sim_only:
+		_apply_keyboard_steering()
 
 	# BUG FIX (2026-09-13, verified headless): a wheel's raycast starts AT its
 	# own node position and extends DOWN by spring_length+tire_radius (set
@@ -164,7 +182,7 @@ func _ready() -> void:
 	# spring_length + tire_radius above the chassis origin, same pattern the
 	# old VehicleWheel3D mount height used. CarSpec.build_wheels() computes
 	# this the same way, from the same CFG shape, for every car type.
-	CarSpec.build_wheels(self, KIND, CFG, front_spring_length, rear_spring_length)
+	CarSpec.build_wheels(self, kind, CFG, front_spring_length, rear_spring_length)
 
 	initialize()
 
@@ -179,9 +197,8 @@ func _ready() -> void:
 	current_gear = 1
 
 	# Aero (2026-09-13): registers this car for AeroModel's drafting lookup.
-	# No traffic exists yet (milestone 3), so today this group only ever has
-	# one member and drafting always finds nothing -- built for real ahead of
-	# time, same pattern as CarSpec, not dead code.
+	# Traffic cars (stage B step 3, #113) join the same group, so drafting now
+	# has something to find.
 	add_to_group("aero_vehicles")
 	health.enabled = not sim_only
 
@@ -249,11 +266,51 @@ func _read_keyboard() -> void:
 	# Negating here (rather than swapping which key does what) keeps A=left/D=right
 	# reading naturally in the code while matching what the asset expects.
 	var speed_t := clampf((current_speed() - STEER_SLOW_SPEED) / (STEER_FAST_SPEED - STEER_SLOW_SPEED), 0.0, 1.0)
-	var target := steer_in * lerpf(1.0, STEER_LOCK_MIN, speed_t)
+	var target := steer_in * steer_lock_cap()
 	var coming_in := target != 0.0 and (_steer_smooth == 0.0 or signf(target) == signf(_steer_smooth))
 	var rate := lerpf(STEER_ATTACK, STEER_ATTACK_FAST, speed_t) if coming_in else STEER_RELEASE
 	_steer_smooth = move_toward(_steer_smooth, target, rate * get_physics_process_delta_time())
-	steering_input = -_steer_smooth
+	# GEVP raises the input to steering_exponent (1.5) before it reaches the
+	# wheels, which would turn the speed-capped lock into a fraction of itself
+	# (25% at 50 m/s became 12.5%). Undo it so the wheels get the lock the ramp
+	# and cap above ask for, the same as traffic_car.gd's lane_steer does.
+	steering_input = -signf(_steer_smooth) * pow(absf(_steer_smooth), 1.0 / maxf(steering_exponent, 0.1))
+
+## Keyboard steering (steer-feel PR): make the ramp and caps above the only thing
+## between the key and the wheels. GEVP turns the wheels toward the input at
+## steering_speed / (speed * steering_speed_decay) / max_steering_angle per second
+## (countersteer_speed / (speed * decay) back through centre). At the defaults (4.25
+## and 11) that is ~1 per second at 30 m/s and ~0.6 at 50 m/s, slower than
+## STEER_ATTACK (3 to 5), so the ramp and the cap never reached the wheels in time.
+## These values keep GEVP's limit above the ramp up to ~68 m/s.
+## GEVP's slip assist (backs the steering off when a front tyre's slip angle passes
+## steering_slip_assist, 0.15 rad) used to hold the wheels to ~0.27 of lock, with the
+## slow rates a gentle limit; with fast rates it flips the steering by ~0.25 every
+## tick (a 60 Hz chatter between 0.16 and 0.40 of lock). It is off here and
+## STEER_LOCK_GRIP stands in for it. Only the real, keyboard-driven car gets this:
+## sim_only cars (TuneTrack, the tuner's measurements) and traffic (its lane-keeper
+## is tuned to the slow wheels) keep GEVP's own numbers.
+const KEYBOARD_STEERING_SPEED := 60.0
+const KEYBOARD_COUNTERSTEER_SPEED := 150.0
+const KEYBOARD_SLIP_ASSIST := 10.0
+func _apply_keyboard_steering() -> void:
+	steering_speed = KEYBOARD_STEERING_SPEED
+	countersteer_speed = KEYBOARD_COUNTERSTEER_SPEED
+	steering_slip_assist = KEYBOARD_SLIP_ASSIST
+
+## The most lock (0..1) the keyboard may ask for at the current speed: the speed
+## cap (STEER_LOCK_MIN) or the grip limit (STEER_LOCK_GRIP), whichever is smaller.
+func steer_lock_cap() -> float:
+	var speed := current_speed()
+	var speed_t := clampf((speed - STEER_SLOW_SPEED) / (STEER_FAST_SPEED - STEER_SLOW_SPEED), 0.0, 1.0)
+	var grip_t := clampf((speed - STEER_GRIP_FROM) / (STEER_GRIP_FULL - STEER_GRIP_FROM), 0.0, 1.0)
+	return minf(lerpf(1.0, STEER_LOCK_MIN, speed_t), lerpf(1.0, STEER_LOCK_GRIP, grip_t))
+
+## The share of full lock the wheels are asked for, + = right (D). steering_input
+## is pre-distorted so GEVP's exponent comes out even (see _read_keyboard), so this
+## is what the HUD, the cockpit wheel and tests should read, not steering_input.
+func steer_fraction() -> float:
+	return -signf(steering_input) * pow(absf(steering_input), steering_exponent)
 
 ## R: drive to reverse and back, only when (nearly) stopped (Roy; ROADMAP stage B
 ## step 4). In reverse W drives the car backwards and S brakes. Does nothing while

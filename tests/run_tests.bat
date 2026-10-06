@@ -24,8 +24,11 @@ if "%NEON_TRAFFIC%"=="" set "NEON_TRAFFIC=0"
 
 set "FAILED="
 call :run smoke --headless
+call :run palette --headless
+call :run hud --headless
 call :run car_loft_normals --headless
 call :run test_car --headless
+call :run p1_coupe --headless
 call :run road_strip_winding --headless
 call :run sidewalk_collision_taper --headless
 call :run aero_draft_equivalence --headless
@@ -65,6 +68,8 @@ if /i not "%~1"=="quick" (
 	call :run game_state --headless
 	call :run tuning_panel --headless
 	call :run auto_tune_panel --headless
+	call :run tuner_screen --headless
+	call :run tuner_typing --headless
 	call :run roadside_detail
 	call :run fleet_silhouette_sweep
 	call :run fleet_budget_scene

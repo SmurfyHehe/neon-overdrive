@@ -4,9 +4,10 @@ extends SceneTree
 # tick with 80 cars all in the full raycast sim (draw distance 300 m covers the
 # whole spawn band).
 #
-# Phase 1, "clear lane" (35 s): traffic uses own lanes 0-2 and all four
-# oncoming lanes; the scripted player holds lane 3 at full throttle and passes
-# dense traffic at its top speed (~240 km/h). Asserts, every tick:
+# Phase 1, "clear lane" (35 s): traffic uses own lanes 1-3 and all four
+# oncoming lanes; the scripted player holds lane 0 (the passing lane) at full
+# throttle and passes dense traffic at its top speed (~240 km/h). Asserts,
+# every tick:
 # - no NaN or infinity anywhere in the player or any car
 # - the player and every full-sim car stay upright (up.y > 0.7, no flip) and
 #   above the road (no fall-through)
@@ -15,7 +16,7 @@ extends SceneTree
 #   and no two cars touch (every 10th tick)
 # - the player reaches at least 220 km/h and holds within 10% of its top speed
 #   over the last 5 s
-# Phase 2, "crash" (20 s): lane 3 opens to traffic and the player keeps full
+# Phase 2, "crash" (20 s): lane 0 opens to traffic and the player keeps full
 # throttle, so it rear-ends cars at up to 170 km/h closing. Asserts: still
 # finite, nobody through the floor, and no tunnelling (a car centre deep inside
 # another car's box). Flips and contacts are reported, not asserted.

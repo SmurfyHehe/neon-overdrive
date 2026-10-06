@@ -21,16 +21,22 @@ extends SceneTree
 #   Godot_v4.7.2-stable_win64_console.exe --path . -s res://tests/auto_tune_panel.gd
 
 const HOLD_TICKS := 6
-# Default coupe on the headless test track (tests/tune_track.gd).
-const EXPECT_TOP := 244.1
-const EXPECT_0_100 := 5.58
-const EXPECT_100_0 := 42.2
+# Default coupe on the headless test track (tests/tune_track.gd). The numbers depend
+# on the physics tick rate: run_tests.bat pins 60 (NEON_TICKS), the game runs 120.
+# Re-measure with `tune_track.gd` at the matching rate if the car's physics changes.
+var EXPECT_TOP := 244.1
+var EXPECT_0_100 := 5.60
+var EXPECT_100_0 := 42.7
 const TOLERANCE := 0.005
 const SLOT_FILE := "user://autotune/test_panel_slots.json"
 
 var failures: Array[String] = []
 
 func _initialize() -> void:
+	if Engine.physics_ticks_per_second >= 120:
+		EXPECT_TOP = 247.1
+		EXPECT_0_100 = 5.18
+		EXPECT_100_0 = 43.1
 	change_scene_to_file("res://Game.tscn")
 	_run()
 
@@ -39,17 +45,20 @@ func _run() -> void:
 		return _end("Game.tscn never became ready")
 	var game := _ready_game()
 	var player: PlayerCar = game.player
-	var panel: AutoTunePanel = _find(game, AutoTunePanel)
-	var raw: TuningPanel = _find(game, TuningPanel)
-	_check(panel != null, "Game has no AutoTunePanel")
-	if panel == null:
+	var screen: TunerScreen = _find(game, TunerScreen)
+	_check(screen != null, "Game has no TunerScreen")
+	if screen == null:
 		return _end("")
+	var panel: AutoTunePanel = screen.auto
+	var raw: TuningPanel = screen.manual
 
 	# --- open: game paused, panel shown ---
 	await _tap(KEY_Y)
 	await _until(func(): return game.game_state.state == GameState.State.AUTOTUNE, 5.0)
 	_check(game.game_state.state == GameState.State.AUTOTUNE, "Y should open Auto-Tune")
-	_check(panel.visible and not raw.visible and not _find(game, PauseMenu).visible, "only the Auto-Tune panel should show")
+	_check(screen.visible and panel.is_visible_in_tree() and not _find(game, PauseMenu).visible, "Y should show the Tuner screen with Auto-Tune expanded")
+	_check(raw.is_visible_in_tree(), "the gearing sliders stay on the screen next to Auto-Tune")
+	_check(root.gui_get_focus_owner() == panel.goal_sliders.values()[0], "first goal slider should have keyboard focus on open, has %s" % root.gui_get_focus_owner())
 	_check(paused, "Auto-Tune should pause the game like the raw panel")
 
 	# --- Run with no goal ---

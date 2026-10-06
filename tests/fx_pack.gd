@@ -42,6 +42,8 @@ var steer := 0.0
 var handbrake := 0.0
 
 func _initialize() -> void:
+	# Never read (or write) the player's saved exhaust tune: a test must see the preset.
+	ExhaustTune.save_path = "user://autotune/test_fx_pack_exhaust.json"
 	OS.add_logger(logger)
 	seed(777)
 	change_scene_to_file("res://Game.tscn")

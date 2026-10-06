@@ -7,6 +7,9 @@ extends SceneTree
 #   - the player's wheels carry the test-car wheel visual, sit at the physics
 #     wheel positions, and the visual's radius matches the physics tyre radius
 #
+# The player drives the P1 coupe by default (tests/p1_coupe.gd); this test sets
+# NEON_TEST_CAR=1 for itself so the player it builds is the test car.
+#
 # Run (headless is fine):
 #   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/test_car.gd
 
@@ -52,6 +55,7 @@ func _initialize() -> void:
 			_fail("tail light at z %.2f is not at the tail" % z)
 	car.free()
 
+	OS.set_environment("NEON_TEST_CAR", "1")
 	var player: PlayerCar = load("res://scripts/player.gd").new()
 	root.add_child(player)
 	await process_frame  # let the player's _ready build its wheels

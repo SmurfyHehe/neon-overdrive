@@ -7,10 +7,10 @@
 # extracted out of player.gd (which used to hardcode all of this inline) so
 # a future NPCCar/CopCar just builds its own spec dict -- possibly starting
 # from coupe_default() and overriding a few fields -- and calls the same
-# apply()/build_wheels()/build_collision() helpers PlayerCar now uses. Mods
-# (milestone 10) plug in here too: a mod multiplies/overrides entries in a
-# car's spec dict before CarSpec.apply() runs, rather than needing separate
-# code paths per mod.
+# apply()/build_wheels()/build_collision() helpers PlayerCar now uses (TrafficCar
+# does, since #113). Mods (the per-car mod trees of stage E, see ROADMAP) plug
+# in here too: a mod multiplies/overrides entries in a car's spec dict
+# before CarSpec.apply() runs, rather than needing separate code paths per mod.
 extends RefCounted
 class_name CarSpec
 
@@ -25,6 +25,8 @@ static func apply(v: Vehicle, spec: Dictionary) -> void:
 			# the curve built from it, so tuning the shape and the curve can't
 			# disagree.
 			v.torque_curve = _curve_from_shape(spec[key])
+		elif key == "exhaust":
+			continue  # cosmetic: EngineAudio reads it from the spec, the Vehicle has no such property
 		else:
 			v.set(key, _own(spec[key]))
 
@@ -199,6 +201,10 @@ static func coupe_default() -> Dictionary:
 		# real car, [stated]-flagged as likely to need retuning once driven.
 		"aero_downforce_coefficient_front": 0.35,
 		"aero_downforce_coefficient_rear": 0.55,
+
+		# Exhaust sound tune (cosmetic, never Auto-Tune; see TuneParams).
+		# Starts on the P1 preset; EngineAudio overlays the player's saved tune.
+		"exhaust": ExhaustTune.for_car("p1_coupe").to_dict(),
 	}
 
 ## Traffic tune (milestone 3, 2026-10-05): coupe_default() with commuter-car
@@ -297,7 +303,13 @@ static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
 	var w := Wheel.new()
 	w.position = pos
 	v.add_child(w)
-	var visual := TestCarBuilder.build_wheel_visual(v.front_tire_radius) if kind == TestCarBuilder.KIND else CarBuilder.build_wheel_visual(kind)
+	var visual: Node3D
+	if kind == TestCarBuilder.KIND:
+		visual = TestCarBuilder.build_wheel_visual(v.front_tire_radius)
+	elif kind == P1CoupeBuilder.KIND:
+		visual = P1CoupeBuilder.build_wheel_visual(v.front_tire_radius, pos)
+	else:
+		visual = CarBuilder.build_wheel_visual(kind)
 	w.wheel_node = visual
 	w.add_child(visual)
 	return w

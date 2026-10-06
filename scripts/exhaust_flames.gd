@@ -13,7 +13,7 @@ class_name ExhaustFlames
 # none while idle. Lives on the car's render layer so the blob shadow decal
 # does not darken it.
 #
-# Tips come from the chassis visual's "exhaust_tips" meta (TestCarBuilder); a
+# Tips come from the chassis visual's "exhaust_tips" meta (TestCarBuilder or P1CoupeBuilder); a
 # car without the meta gets one centre pipe.
 
 const LIFE := 0.14        # s one burst lasts
@@ -74,7 +74,10 @@ func _ready() -> void:
 		quad.size = Vector2(1.0, 1.0)
 		mi.mesh = quad
 		mi.material_override = _mat
-		mi.position = tip + Vector3(0.0, 0.0, 0.16)  # just past the pipe end (+Z is the tail)
+		# TestCarBuilder gives Vector3 tips; P1CoupeBuilder gives {pos, dir, r}.
+		var pos: Vector3 = tip.pos if tip is Dictionary else tip
+		var out: Vector3 = tip.dir if tip is Dictionary else Vector3(0.0, 0.0, 1.0)
+		mi.position = pos + out * 0.16  # just past the pipe end (+Z is the tail)
 		mi.layers = 1 << (CarFx.CAR_LAYER - 1)
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mi.visible = false

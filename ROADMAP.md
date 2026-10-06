@@ -36,7 +36,7 @@ a build order. Nothing in them beyond what is listed as merged has been built.
 | Stage B step 4 (camera + HUD) | **Partly**: cockpit camera and turning steering wheel (`0872d0d`), warning lights, volume sliders, **HUD v1 with the RPM-bar shift cue, a Controls page in the pause menu and a palette test (#121)**, feel quick wins and camera B default (#119). Instrument cluster and visible shifter are only in open PR #130; transmission modes not started | #119, #121; `hud_*`, `palette` tests |
 | **One Tuner screen** (gearing, exhaust and Auto-Tune together) | **Merged** (#122). The header still shows key hints, which breaks the no-hints rule; the redesign fixes it | #122 |
 | **P1 sports coupe game model** | **Merged** (#123). Player drives the B1 sheet design | #123 |
-| **Radio** (4 file stations, #125: drift phonk, dark phonk, talk-only, synthwave) | **Merged** (#125). Still names Dale; rename to Dave and the "Neon FM" name are open. #115 closed as superseded | #125 |
+| **Radio** (4 file stations, #125: drift phonk, dark phonk, talk-only, synthwave) | **Merged** (#125). Talk station renamed to Dave ("The Dave Show"); the "Neon FM" name is open. #115 closed as superseded | #125 |
 | Keyboard steering ramp and cap reach the wheels | **Merged** (#126) | #126 |
 | Test hygiene (flaky `car_audio`, `traffic_stability`, `traffic_perf`, timeouts, tests no longer overwrite the user-folder saves) | **Merged** (#128) | `tests/run_one.ps1`, `scripts/test_mode.gd` |
 | **Traffic, stage B step 3** (lane-follow cars on a fixed 4+4-lane road, same raycast sim as the player, car-count and draw-distance sliders in the pause menu) | **Merged** (#113, `a9af0ea`). Full sim inside the draw distance; beyond it (150 m default) cars are frozen kinematic and cruise | `scripts/traffic_car.gd`, `traffic_manager.gd`, `traffic_settings.gd`; `traffic_spawn`, `traffic_stability`, `traffic_perf` |
@@ -89,8 +89,8 @@ above, not here.
 
 ### S: one small PR each
 
-1. **Dale to Dave in code and assets** ("The Dave Show"): `radio_stations.gd`,
-   `radio_manager.gd` header ("three stations"), captions, credits. Roy's "Neon FM" rename is open.
+1. ~~Dale to Dave in code and assets~~ **Done**: `radio_stations.gd`, `radio_manager.gd`, tests and credits; talk station is "The Dave Show".
+   Roy's "Neon FM" rename is still open.
 2. **Sightline fixes** (spec approved 2026-10-06): cockpit FOV default **62**, dash
    top **14 deg below eye** (now 6.5), **55% clear glass** (now about 35%), cowl
    at or below -14 deg, header at or above +24 deg, A-pillar 6 deg or less, vertex-baked
@@ -273,7 +273,7 @@ open:
   `scripts/traffic_car.gd:22-23,184-205`, and that counts as full sim). Do rivals,
   crew and cops run full GEVP near the player too, or stay scripted?
 - **Dale to Dave.** Roy renamed the DJ to Dave ("The Dave Show"). Code and assets
-  on main (#125) still say Dale; the planning docs are updated in open PR #132.
+  now say Dave too ("The Dave Show").
   Audio-only or captions-only for his lines is still open.
 
 - Which 3 features the game must have on day one; the two idea pages that disagree

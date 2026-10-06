@@ -26,7 +26,9 @@ extends SceneTree
 # - peak yaw rate stays under MAX_YAW (normal running is ~0.014)
 # - the per-tick position step, recenter offset taken out, matches one tick
 #   of velocity (an unshifted saved position would read as a 1 km/s burst)
-# Run at the game's 120 Hz and at 60 (NEON_KICK_LOG=1 prints each bad tick):
+# Runs at the game's 120 Hz whatever NEON_TICKS says (run_tests.bat sets 60);
+# NEON_KICK_HZ=60 with --fixed-fps 60 runs it at 60. NEON_KICK_LOG=1 prints
+# each bad tick.
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --fixed-fps 120 --path . -s res://tests/recenter_kick.gd
 
 const Harness := preload("res://tests/traffic_harness.gd")
@@ -66,7 +68,9 @@ var top_speed := 0.0
 func _initialize() -> void:
 	OS.add_logger(logger)
 	ExhaustTune.save_path = "user://autotune/test_recenter_kick_exhaust.json"
-	rate = Engine.physics_ticks_per_second
+	var hz := OS.get_environment("NEON_KICK_HZ")
+	rate = int(hz) if hz.is_valid_int() else 120
+	Engine.physics_ticks_per_second = rate
 	log_ticks = OS.get_environment("NEON_KICK_LOG") == "1"
 	game = Harness.boot(self, 0, 300.0, 4242, RECENTER)
 

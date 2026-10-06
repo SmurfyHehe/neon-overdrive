@@ -80,7 +80,8 @@ func _physics_process(_delta: float) -> bool:
 		Step.CHASE:
 			if waited == 30:
 				_check(not frame.cockpit and frame.visible, "the interior is drawn in the chase view too (through the glass), cockpit mode off")
-				_check(not frame.mirrors.active and not frame.mirrors.is_rendering(), "mirrors must not render in the chase view")
+				# the HUD rear strip may queue the rearview in the chase view; the door mirrors never render there
+				_check(not frame.mirrors.active and not _side_rendering(frame), "door mirrors must not render in the chase view")
 				_check(not frame.body_hidden_from_camera(), "the body is drawn in the chase view")
 				cam.set_view(ChaseCamera.View.COCKPIT)
 				steer = 0.6
@@ -141,7 +142,7 @@ func _physics_process(_delta: float) -> bool:
 				_go(Step.BACK)
 		Step.BACK:
 			if waited == 6:
-				_check(not frame.cockpit and not frame.mirrors.active and not frame.mirrors.is_rendering(), "back in the chase view the mirrors stop")
+				_check(not frame.cockpit and not frame.mirrors.active and not _side_rendering(frame), "back in the chase view the door mirrors stop")
 				_check(not frame.body_hidden_from_camera(), "back in the chase view the body is drawn again")
 				print("cockpit triangles: %d (wheel %d)" % [frame.triangle_count(), frame.wheel.triangle_count()])
 				return _end("")
@@ -204,6 +205,12 @@ func _check_wheel_pose(frame: CockpitFrame) -> void:
 	print("wheel pose: face %.1f deg up, eye %.1f deg up from the hub, rim top %.1f deg below the eye" % [normal_up, eye_up, top_below])
 	_check(normal_up >= 15.0 and normal_up <= 35.0 and normal_up < eye_up, "the wheel face looks %.1f deg up; it should rise toward the driver's eye" % normal_up)
 	_check(top_below >= CockpitFrame.WHEEL_TOP_MIN_DEG, "the rim top is only %.1f deg below the eye" % top_below)
+
+static func _side_rendering(frame: CockpitFrame) -> bool:
+	for i in [1, 2]:
+		if frame.mirrors.views[i].vp.render_target_update_mode != SubViewport.UPDATE_DISABLED:
+			return true
+	return false
 
 func _go(next: Step) -> void:
 	step = next

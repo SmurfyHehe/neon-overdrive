@@ -17,9 +17,9 @@ class_name ExhaustFlames
 # car without the meta gets one centre pipe.
 
 const LIFE := 0.14        # s one burst lasts
-const SIZE_MIN := 0.24    # m, the smallest flame's quad
-const SIZE_MAX := 0.62    # m, at flame size 1
-const ENERGY := 2.4       # colour multiplier at full brightness (HDR, feeds glow)
+const SIZE_MIN := 0.32    # m, the smallest flame's quad (P1's flame knob is 0.2: it must still read)
+const SIZE_MAX := 0.75    # m, at flame size 1
+const ENERGY := 3.2       # colour multiplier at full brightness (HDR, feeds glow)
 const CORE := Color(1.0, 0.84, 0.52)   # amber #FFC066 lifted toward white
 const FRINGE := Color(1.0, 0.54, 0.12) # sodium #FF8A1F
 
@@ -42,8 +42,9 @@ var _mat: StandardMaterial3D
 var _left := 0.0
 var _peak := 0.0
 var _rng := RandomNumberGenerator.new()
-
-static var _tex: ImageTexture
+# Per instance, not static: a static texture would hold its RID past the
+# renderer's teardown at quit.
+var _tex: ImageTexture
 
 func _init(player: PlayerCar) -> void:
 	_player = player
@@ -107,7 +108,7 @@ func _process(delta: float) -> void:
 		_show(false)
 		return
 	var k := _left / LIFE                       # 1 -> 0 over the burst
-	var bright := _peak * (0.35 + 0.65 * k)
+	var bright := (0.25 + 0.75 * _peak) * (0.35 + 0.65 * k)  # a floor, so small presets still flash
 	var size := lerpf(SIZE_MIN, SIZE_MAX, _peak) * (0.55 + 0.45 * k)
 	var e := ENERGY * bright
 	_mat.albedo_color = Color(CORE.r * e, CORE.g * e, CORE.b * e, clampf(0.4 + 0.6 * k, 0.0, 1.0))
@@ -120,8 +121,8 @@ func _show(on: bool) -> void:
 	for q in _quads:
 		q.visible = on
 
-## 64x64 blob: amber-white core, sodium fringe, soft alpha falloff. Shared.
-static func _get_tex() -> ImageTexture:
+## 64x64 blob: amber-white core, sodium fringe, soft alpha falloff.
+func _get_tex() -> ImageTexture:
 	if _tex == null:
 		var n := 64
 		var img := Image.create(n, n, false, Image.FORMAT_RGBA8)

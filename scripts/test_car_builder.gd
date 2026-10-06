@@ -77,12 +77,13 @@ static func build_chassis_visual() -> Node3D:
 		tl.position = Vector3(x, 0.64, tail.z - 0.015)
 		root.add_child(tl)
 
-	# Twin tailpipes under the tail (effects pack v1): short dark stubs, and the
+	# Twin tailpipes under the tail (effects pack v1): short dark stubs flush
+	# with the tail face (the 4.4 m length is a tested spec), and the
 	# "exhaust_tips" meta ExhaustFlames reads to know where to draw its bursts.
 	var pipe_mat := CarBuilder._mat(Color(0.2, 0.2, 0.22), 0.0, 0.7, 0.4)
 	var tips: Array[Vector3] = []
 	for x in [-0.5, 0.5]:
-		var tip := Vector3(x, 0.3, tail.z + 0.04)
+		var tip := Vector3(x, 0.3, tail.z)
 		var pipe := CylinderMesh.new()
 		pipe.top_radius = 0.04
 		pipe.bottom_radius = 0.04
@@ -92,7 +93,7 @@ static func build_chassis_visual() -> Node3D:
 		mi.mesh = pipe
 		mi.material_override = pipe_mat
 		mi.rotation.x = PI / 2.0  # along Z
-		mi.position = tip - Vector3(0.0, 0.0, 0.06)
+		mi.position = tip - Vector3(0.0, 0.0, 0.08)
 		root.add_child(mi)
 		tips.append(tip)
 	root.set_meta("exhaust_tips", tips)

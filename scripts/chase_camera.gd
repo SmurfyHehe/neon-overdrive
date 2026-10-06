@@ -63,7 +63,25 @@ const IMPACT_GAIN := 0.12        # trauma per m/s over the threshold
 enum View { CHASE, COCKPIT }
 const COCKPIT_EYE := Vector3(-0.32, 1.10, 0.30)  # car-local, -x is the driver's side (left-hand drive)
 const COCKPIT_FOV_SPEED_GAIN := 6.0  # degrees added at top speed; the base is ViewSettings.cockpit_fov (default 62)
+## Head movement in the cockpit (Roy, 2026-10-06): the eye sways with the
+## car's forces, capped at HEAD_MAX_M (4 cm) and HEAD_MAX_DEG (2 degrees).
+## Lateral g pushes the head outward and rolls it with the body; braking
+## brings it forward and dips it, acceleration presses it back. The cap is
+## reached at HEAD_G_FULL g and the motion is smoothed at HEAD_RATE, so bumps
+## in the sim's speed reading do not twitch the view. FxSettings "head_motion"
+## ([fx] in settings.cfg, NEON_FX=0) is the off switch: off, the eye eases
+## back to COCKPIT_EYE and stays rigid to the car.
+const HEAD_MAX_M := 0.04
+const HEAD_MAX_DEG := 2.0
+const HEAD_G_FULL := 0.8
+const HEAD_RATE := 6.0
+var head_offset := Vector3.ZERO   # car-local, metres, current
+var head_tilt := Vector2.ZERO     # (pitch, roll) degrees, current
 var view := View.CHASE
+## Look back (hold the look_back key, B): the chase cam swings to the front
+## of the car and looks back at it, the same move as reversing; the cockpit
+## eye turns 180 degrees to the rear window.
+var look_back := false
 var frame: CockpitFrame
 var perspective: PerspectiveAudio
 var target: PlayerCar
@@ -135,6 +153,7 @@ func _physics_process(delta: float) -> void:
 		mode = (mode + 1) % MODE_NAMES.size()
 	if Input.is_action_just_pressed("camera_view"):
 		set_view(View.CHASE if view == View.COCKPIT else View.COCKPIT)
+	look_back = Input.is_action_pressed("look_back")
 	var v := target.linear_velocity
 	var dv := (v - _prev_vel).length()
 	_prev_vel = v
@@ -158,7 +177,9 @@ func register_impact(dv: float) -> void:
 func _process(delta: float) -> void:
 	_update_feel(delta)
 	if view == View.COCKPIT:
-		_place_cockpit()
+		_place_cockpit(delta)
+		if look_back:
+			global_transform.basis = global_transform.basis * Basis(Vector3.UP, PI)
 		if frame != null:
 			frame.steering = target.steer_fraction()  # the wheel turns the way the car does
 		if shake_enabled:
@@ -168,13 +189,32 @@ func _process(delta: float) -> void:
 	if shake_enabled:
 		_shake(delta)
 
-## Rigid to the car at the driver's eye, on the interpolated transform (same reason
-## as the chase cam), looking where the car points; a fixed FOV that widens a touch
-## with speed.
-func _place_cockpit() -> void:
+## At the driver's eye, on the interpolated transform (same reason as the
+## chase cam), looking where the car points, plus the head movement; a fixed
+## FOV that widens a touch with speed.
+func _place_cockpit(delta: float) -> void:
 	var xf := target.get_global_transform_interpolated()
-	global_transform = Transform3D(xf.basis, xf * COCKPIT_EYE)
+	_update_head(delta)
+	var tilt := Basis.from_euler(Vector3(deg_to_rad(head_tilt.x), 0.0, deg_to_rad(head_tilt.y)))
+	global_transform = Transform3D(xf.basis * tilt, xf * (COCKPIT_EYE + head_offset))
 	fov = ViewSettings.cockpit_fov + COCKPIT_FOV_SPEED_GAIN * speed_t
+
+## Head sway from lateral g (yaw rate x speed) and longitudinal g (the speed
+## derivative the FOV already uses). +x is the passenger side: a left turn
+## (yaw rate +) throws the head right and rolls the body right (negative roll
+## about +z); braking (accel -) moves it forward (-z) and dips it (negative
+## pitch about +x).
+func _update_head(delta: float) -> void:
+	var want_offset := Vector3.ZERO
+	var want_tilt := Vector2.ZERO
+	if FxSettings.is_on("head_motion"):
+		var lat_g := clampf(target.angular_velocity.y * target.current_speed() / 9.81 / HEAD_G_FULL, -1.0, 1.0)
+		var long_g := clampf(_accel / 9.81 / HEAD_G_FULL, -1.0, 1.0)
+		want_offset = Vector3(lat_g, 0.0, long_g).limit_length(1.0) * HEAD_MAX_M
+		want_tilt = Vector2(long_g, -lat_g).limit_length(1.0) * HEAD_MAX_DEG
+	var k := 1.0 - exp(-HEAD_RATE * delta)
+	head_offset = head_offset.lerp(want_offset, k)
+	head_tilt = head_tilt.lerp(want_tilt, k)
 
 ## 0..1 speed factor for FOV, dolly, squat and shake. Ease-out (1 - (1-t)^2):
 ## the range now runs to top speed (68 m/s), so a straight line would leave
@@ -214,8 +254,8 @@ func _place(delta: float) -> void:
 	# times per tick. Following the raw position made car and road judder.
 	var p := target.get_global_transform_interpolated().origin
 	# Reversing flips the chase cam to the opposite side of the car looking
-	# the opposite way (2026-09-13 fix, kept).
-	var target_yaw := PI if target.gear == -1 else 0.0
+	# the opposite way (2026-09-13 fix, kept); so does holding look_back.
+	var target_yaw := PI if (target.gear == -1 or look_back) else 0.0
 	if mode == 0 or not _started:
 		_follow = Vector2(p.x, p.y)
 		_yaw = target_yaw

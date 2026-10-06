@@ -12,6 +12,8 @@ extends Node3D
 #     the cockpit camera does not draw), never the interior or the driver, with
 #     a 250 m far clip and no glow pass.
 # FxSettings "mirrors" off leaves dark glass and never renders.
+# The HUD's rear strip (chase view) reuses the rearview render: with `strip`
+# on and the cockpit off, only the rear camera renders, every other frame.
 #
 # Car space, like the rest of the cockpit. The glass is angled so the camera's
 # straight-back view is what the driver's eye would see reflected.
@@ -25,6 +27,10 @@ const SIDE_FOV := 30.0      # ~42 deg wide on the 10:7 door glass
 const SIDE_YAW := 8.0       # degrees outward from straight back
 const SIDE_PITCH := -2.0
 const GLASS_TINT := Color(0.86, 0.87, 0.92)
+## Proximity cue (2026-10-06): the rearview glass warms toward sodium as a
+## car closes in behind (Hud.rear_threat drives it, 0..1).
+const CUE_TINT := Color(1.0, 0.72, 0.38)
+var rear_cue := 0.0
 const DARK_GLASS := Color("#171A20")
 
 ## Rearview glass: centre, size, and the angle that reflects straight back for the eye.
@@ -41,6 +47,7 @@ const SIDE_SIZE_M := Vector2(0.175, 0.098)
 const SIDE_INSET := 0.02
 
 var active := false        # the cockpit view is on
+var strip := false         # the HUD rear strip wants the rear render (chase view)
 var enabled := true        # FxSettings "mirrors"
 var views := []            # [{vp, cam, quad, mat}] rear, left, right
 var _frame := 0
@@ -116,12 +123,28 @@ func _add_mirror(mirror_name: String, pos: Vector3, size_m: Vector2, yaw_deg: fl
 	views.append({"vp": vp, "cam": cam, "quad": quad, "mat": mat, "local": local})
 	cam.global_transform = global_transform * local
 
-## Cockpit view on or off: nothing renders while off.
+## Cockpit view on or off: nothing renders while off, unless the strip asks.
 func set_active(on: bool) -> void:
 	active = on
 	if not on:
 		for v in views:
 			v.vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+
+## The HUD rear strip on or off (chase view only; the cockpit view has the mirror).
+func set_strip(on: bool) -> void:
+	strip = on
+	if not on and not active:
+		views[0].vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+
+## The rearview render target, for the HUD strip.
+func rear_texture() -> ViewportTexture:
+	return views[0].vp.get_texture()
+
+## Warms the rearview glass by `level` (0 = plain glass, 1 = a car right behind).
+func set_rear_cue(level: float) -> void:
+	rear_cue = clampf(level, 0.0, 1.0)
+	if enabled and not views.is_empty():
+		views[0].mat.albedo_color = GLASS_TINT.lerp(CUE_TINT, rear_cue)
 
 ## The FxSettings flag at runtime (a pause-menu toggle later).
 func set_enabled(on: bool) -> void:
@@ -149,7 +172,7 @@ func is_rendering() -> bool:
 ## Moves the cameras with the car (drawn on the interpolated transform, like the
 ## cockpit camera) and queues this frame's mirror.
 func _process(_delta: float) -> void:
-	if not active or not enabled or views.is_empty():
+	if not enabled or views.is_empty() or not (active or strip):
 		return
 	var xf := get_global_transform_interpolated()
 	for v in views:
@@ -158,6 +181,6 @@ func _process(_delta: float) -> void:
 	# UPDATE_ONCE draws on the next frame and drops back to DISABLED by itself.
 	if _frame % 2 == 0:
 		views[0].vp.render_target_update_mode = SubViewport.UPDATE_ONCE
-	else:
+	elif active:
 		views[1].vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 		views[2].vp.render_target_update_mode = SubViewport.UPDATE_ONCE

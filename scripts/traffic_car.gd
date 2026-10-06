@@ -211,7 +211,7 @@ func _ready() -> void:
 	half_l = (float(cfg.main_z1) - float(cfg.hood_z0)) / 2.0
 
 	if not sim_only:
-		chassis_visual = CarBuilder.build_chassis_visual(kind, color)
+		chassis_visual = CarBuilder.shared_chassis_visual(kind, color)
 		add_child(chassis_visual)
 
 	can_sleep = false

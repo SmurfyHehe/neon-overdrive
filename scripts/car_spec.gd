@@ -297,7 +297,9 @@ static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
 	var w := Wheel.new()
 	w.position = pos
 	v.add_child(w)
-	var visual := TestCarBuilder.build_wheel_visual(v.front_tire_radius) if kind == TestCarBuilder.KIND else CarBuilder.build_wheel_visual(kind)
+	# CarBuilder kinds (traffic) share one merged, cached wheel mesh per kind
+	# (traffic milestone 4, draw calls); the player's test car builds its own.
+	var visual := TestCarBuilder.build_wheel_visual(v.front_tire_radius) if kind == TestCarBuilder.KIND else CarBuilder.shared_wheel_visual(kind)
 	w.wheel_node = visual
 	w.add_child(visual)
 	return w

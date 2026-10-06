@@ -40,6 +40,10 @@ if (-not $done) {
 	if ($code -ne 0) { $status = "FAIL" }
 }
 $secs = [int][math]::Round(((Get-Date) - $start).TotalSeconds)
-Write-Host ("finished {0}  {1} s  {2}" -f (Get-Date).ToString("HH:mm:ss"), $secs, $status)
+# The exit code is printed on a failure: a test that printed PASS but exited non-zero
+# (a crash while shutting down) otherwise looks like a mystery.
+$note = ""
+if ($status -eq "FAIL") { $note = "  (exit code $code)" }
+Write-Host ("finished {0}  {1} s  {2}{3}" -f (Get-Date).ToString("HH:mm:ss"), $secs, $status, $note)
 if ($Log -ne "") { Add-Content -Path $Log -Value ("{0,5} s  {1,-8} {2}" -f $secs, $status, $Name) }
 exit $code

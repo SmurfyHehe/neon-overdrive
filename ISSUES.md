@@ -1,7 +1,7 @@
 # Neon Overdrive — Issue List
 
-Audit 2026-09-29, refreshed 2026-10-06 against `origin/main` at `ea71c13` and
-`gh issue list --state all`.
+Audit 2026-09-29, refreshed 2026-10-06 against `origin/main` at `284595c` and
+the open GitHub issues and pull requests.
 
 **GitHub issues are the live list.** This file keeps the audit's letter IDs
 (A1, E7, ...) so older PRs and comments still make sense, and maps each one to
@@ -9,7 +9,8 @@ its GitHub issue. For the order to work in, see the triage issue #59 (its text i
 frozen at 2026-09-29 and out of date; it is still open).
 
 **Recommend closing (Roy decides; nothing was closed from here):** #18, #55 and
-#73 are done in code but still open on GitHub. Evidence is in the Closed table.
+#73 are done in code but still open on GitHub, so they are marked **done** below.
+Evidence is in the Closed table.
 
 ---
 
@@ -17,14 +18,14 @@ frozen at 2026-09-29 and out of date; it is still open).
 
 | # | Issue | GitHub | Note |
 |---|---|---|---|
-| C3 | No out-of-bounds handling | #28 | D5 merged into it |
+| C3 | No out-of-bounds handling | #28 | D5 merged into it. Walls are in open PR #114, not merged |
 | D5 | `is_off_road()` defined, never called | #28 | Roy: keep it as a scoring hook |
-| C6 | Camera had no smoothing | #31 | PR #61 added 3 modes (C key); Roy tunes later |
+| C6 | Camera had no smoothing | #31 | PR #61 added 3 modes (C key); camera B is now the default (#119); Roy tunes later |
 | E6 | No curves or elevation | #37 | Acknowledged; needs the Path3D rearchitecture |
 | E7 | Gear spread is the wrong shape | #62 (closed on GitHub 2026-09-29) | E7–E9 merged into #62. Gearing was evened in `764b3f0` (steps now about 1.3), but no test asserts the spread, so not closed |
 | E8 | Torque curve falls off too hard | #62 | Torque shape is now tunable (Auto-Tune 1b, `f5f9361`); Roy's tune not recorded |
 | E9 | Top gear set for 230 km/h, target ~200 | #62 | GEVP cuts at 1.1 × `max_rpm`, so the ceiling is ~253. The damp-0.1 cap at 124 km/h is fixed (`8cf2c89`, PR #89): 241.6 km/h at 35 s. `chassis_targets` now asserts 235–250 km/h; Roy likes ~300 through tuning, so the ~200 target is stale |
-| G3 | Car model shape needs Roy's direction | #16 | The test car (#63) is closed; the 12-car design sheet is merged (#85, #86) but no game models are built from it |
+| G3 | Car model shape needs Roy's direction | #16 | The test car (#63) is closed; the 12-car design sheet is merged (#85, #86); the P1 coupe model is merged (#123), the other 11 cars are not built |
 | G4 | Player car has no self-lit elements | #17 | |
 
 ### Filed after the audit
@@ -38,8 +39,29 @@ frozen at 2026-09-29 and out of date; it is still open).
 | #74 | Upgrade tree: do tiers cap which races you can enter? |
 | #80 | Engine sound changes with the car, engine and upgrades |
 
+#71 is answered (one tree per car, ROADMAP) and #73 is done (see Closed); both are still open on GitHub.
+
 #70, #71, #72 and #74 are design questions for Roy about the upgrade tree in #62. #80 is Roy's request for engine sound that
 changes with the car and its upgrades; the engine, driveline and turbo sounds exist (`093b3ef`, `8890350`, `65a4303`), but not per-car or per-upgrade, so it stays open.
+
+### New planned work (not yet GitHub issues)
+
+Roy's decisions of 2026-10-06; sorted by effort in ROADMAP.md "Not started, sorted".
+File as GitHub issues when each is picked up.
+
+| ID | Work | ROADMAP item |
+|---|---|---|
+| P1 | Sightline fixes: FOV 62, dash 14 deg below eye, 55% clear glass, wheel angled toward the driver | S 2, 5 |
+| P2 | FOV slider 55-78 and head movement (with off switch) | S 3, 4 |
+| P3 | Floating gloved hands with a gold Cuban link bracelet on the right wrist, no forearms (#131 conflicts) | M 8 |
+| P4 | HUD rear strip, look-back key, proximity cue, fake-glass setting | S 7, M 9 |
+| P5 | Transmission modes (auto, semi, full manual), then the visible shifter | L 13, 14 |
+| P6 | Tuner redesign, 4 PRs, camber and tyre pressure modelled | L 15 |
+| P7 | Per-car clusters and interiors (Stage D) | L 16 |
+| P8 | Audio repetition pass (exhaust pops and loop fatigue) | M 10 |
+| P9 | Dale to Dave in code and assets ("The Dave Show") | S 1 |
+| P10 | Photo mode, crash/sandbox, districts (Roy's feature ideas) | M 12, L 19, XL 25 |
+
 
 ---
 
@@ -84,11 +106,11 @@ changes with the car and its upgrades; the engine, driveline and turbo sounds ex
 | F6 | This file was untracked | tracked since PR #6 |
 | G1 | Car rendered as a bare frame, loft winding (#14) | PR #45 |
 | G2 | Glass loft zero normals (#15) | PR #43 |
-| H1 | No audio at all (#18) | `093b3ef` (engine synth, PR #57), `18e0509` (stage A wind/road/squeal/kerb), `8890350` (Phase B driveline); tests `car_audio`, `audio_master`, `driveline_audio`. Engine-tuning direction is now #80. **GitHub #18 is still open: recommend closing** (the issue says "never built"; audio is built and tested) |
-| #55 | Keyboard steering reaches full lock at any speed | `764b3f0`; `tests/feel_pass_1.gd` checks the ramp and the speed cap. **GitHub #55 is still open: recommend closing** |
+| H1 | No audio at all (#18) | `093b3ef` (engine synth, PR #57), `18e0509` (stage A wind/road/squeal/kerb), `8890350` (Phase B driveline); tests `car_audio`, `audio_master`, `driveline_audio`. Engine-tuning direction is now #80. **DONE; GitHub #18 is still open: recommend closing** (the issue says "never built"; audio is built and tested) |
+| #55 | Keyboard steering reaches full lock at any speed | `764b3f0`; `tests/feel_pass_1.gd` checks the ramp and the speed cap. **DONE; GitHub #55 is still open: recommend closing** |
 | #48 | Workers are told to check the queue but `office-queue` refuses them (403) | **Closed on GitHub 2026-09-29** (it was listed open here); docs fix in PR #77 (`3cc3b30`) |
 | #63 | Neutral test car | PR #68 (`e4f23cd`); `tests/test_car.gd` |
-| #73 | Real turbo lag needs a physics addition | `65a4303` (PR #102); `tests/turbo.gd` (boost lags, blow-off, torque gain). **GitHub #73 is still open: recommend closing** |
+| #73 | Real turbo lag needs a physics addition | `65a4303` (PR #102); `tests/turbo.gd` (boost lags, blow-off, torque gain). **DONE; GitHub #73 is still open: recommend closing** |
 | #75 | `brake_force_multiplier` declared but never read | `ee9ee5a` (PR #78); read in `gevp_vehicle.gd:1234` (marked "Local change to vendored GEVP (#75)", **not** `DEVIATION`), set in `car_spec.gd`, and exercised by the brake run in `tests/tune_track.gd` (100-0 m). Closed on GitHub 2026-09-29 |
 
 ---

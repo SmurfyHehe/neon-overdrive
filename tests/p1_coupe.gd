@@ -34,6 +34,8 @@ func _check(ok: bool, msg: String) -> void:
 		_fail(msg)
 
 func _initialize() -> void:
+	# Never read (or write) the player's saved exhaust tune: a test must see the preset.
+	ExhaustTune.save_path = "user://autotune/test_p1_coupe_exhaust.json"
 	OS.set_environment("NEON_TEST_CAR", "")
 	_check(PlayerCar.chassis_kind() == P1CoupeBuilder.KIND, "the player should drive the P1 coupe by default, got %s" % PlayerCar.chassis_kind())
 

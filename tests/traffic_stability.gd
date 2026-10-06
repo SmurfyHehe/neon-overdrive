@@ -21,9 +21,13 @@ extends SceneTree
 # Phase 2, "crash" (20 s): lane 0 opens to traffic, traffic stops treating the
 # player as a car to keep clear of (TrafficManager.react_to_player, milestone
 # 4), and the player keeps full throttle, so it rear-ends cars at up to
-# 170 km/h closing. Asserts: still
-# finite, nobody through the floor, and no tunnelling (a car centre deep inside
-# another car's box). Flips and contacts are reported, not asserted.
+# 170 km/h closing. Asserts: still finite, nobody through the floor, and no
+# tunnelling (two car centres less than 0.5 m apart, i.e. one body passed
+# through another). Flips and contacts are reported, not asserted, as is the
+# closest approach of any two centres. (The tunnelling check used to be a
+# centre-in-box test in the other car's frame with no height bound; a car
+# thrown onto its side "tunnelled" into one 13 m away and failed 2 of 5
+# baseline runs on 2026-10-06.)
 #
 # Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --fixed-fps 120 --path . -s res://tests/traffic_stability.gd
@@ -57,6 +61,8 @@ var crash_min_up := 1.0
 var crash_contacts := 0
 var crash_top := 0.0
 var crash_end_speed := 0.0
+var crash_min_gap_player := INF  # closest centre-to-centre distance, player and a car
+var crash_min_gap_cars := INF    # same, two traffic cars (sampled every 10th tick)
 var min_y := INF
 
 func _initialize() -> void:
@@ -147,23 +153,31 @@ func _physics_process(_delta: float) -> bool:
 				continue
 			if Harness.overlaps(p, car, 1.5, 3.0):
 				crash_contacts += 1
-			if Harness.overlaps(p, car, 0.6, 1.2):
-				_check(false, "a car tunnelled into the player at tick %d" % tick)
+			crash_min_gap_player = minf(crash_min_gap_player, p.global_position.distance_to(car.global_position))
+			if Harness.tunnelled(p, car):
+				_check(false, "a car tunnelled into the player at tick %d (centres %.2f m apart)" % [tick, p.global_position.distance_to(car.global_position)])
 		if tick % 10 == 0:
-			_check_car_pairs(0.6, 1.2, "a car tunnelled into another at tick %d" % tick)
+			_check_car_pairs(0.0, 0.0, "a car tunnelled into another at tick %d" % tick, true)
 		if tick >= PHASE1_TICKS + PHASE2_TICKS:
-			print("traffic_stability phase 2 (crash): top %.1f km/h, end speed %.1f km/h, player min up.y %.3f, ticks in contact %d, min y %.3f m" % [
-				Harness.kmh(crash_top), Harness.kmh(crash_end_speed), crash_min_up, crash_contacts, min_y])
+			print("traffic_stability phase 2 (crash): top %.1f km/h, end speed %.1f km/h, player min up.y %.3f, ticks in contact %d, min y %.3f m, closest centres: player-car %.2f m, car-car %.2f m" % [
+				Harness.kmh(crash_top), Harness.kmh(crash_end_speed), crash_min_up, crash_contacts, min_y, crash_min_gap_player, crash_min_gap_cars])
 			return _end("")
 	return false
 
-func _check_car_pairs(half_x: float, half_z: float, msg: String) -> void:
+## Any two full-sim cars touching (box test of half_x x half_z) or, with
+## `deep`, one through the other (centres under 0.5 m apart).
+func _check_car_pairs(half_x: float, half_z: float, msg: String, deep := false) -> void:
 	var cars := traffic.cars
 	for i in cars.size():
 		if not cars[i].detailed:
 			continue
 		for j in range(i + 1, cars.size()):
-			if cars[j].detailed and Harness.overlaps(cars[i], cars[j], half_x, half_z):
+			if not cars[j].detailed:
+				continue
+			if deep:
+				crash_min_gap_cars = minf(crash_min_gap_cars, cars[i].global_position.distance_to(cars[j].global_position))
+			var hit: bool = Harness.tunnelled(cars[i], cars[j]) if deep else Harness.overlaps(cars[i], cars[j], half_x, half_z)
+			if hit:
 				_check(false, msg)
 				return
 

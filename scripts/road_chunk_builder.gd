@@ -97,6 +97,7 @@ const CHUNK_LEN := 50.0
 const DASH_SPACING := 4.0
 const SHOULDER_W := 0.9
 const CURB_W := 0.3
+const SIDEWALK_RAMP := 0.3  # width of the sloped road-side edge of the sidewalk collision
 const SIDEWALK_W := 2.2  # kept: the sidewalk is a drivable shortcut by design,
                          # and 1.8 m would barely fit the car's 1.76 m track
 # "Pylons" are delineator posts since stage A (node names kept). Denser
@@ -573,15 +574,25 @@ static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: 
 	var body: StaticBody3D = root.get_node(NodePath(body_name))
 	var col: CollisionShape3D = body.get_node(^"Shape")
 	var hull: ConvexPolygonShape3D = col.shape
-	# chunk start is z=0, end is z=-CHUNK_LEN; same 0.05..0.15 height band as
-	# the old box. Points are in chunk-local space, so the body sits at origin.
+	# chunk start is z=0, end is z=-CHUNK_LEN; top at 0.15 like the old box.
+	# Points are in chunk-local space, so the body sits at origin.
+	#
+	# The road-side edge is a ramp, not a wall (2026-10-06): it rises from the
+	# ground at the drawn sidewalk edge to full height SIDEWALK_RAMP further in.
+	# It used to be a 0.05-0.15 m vertical lip, and the chassis collision box
+	# rides within a few cm of the ground, so steering onto the sidewalk at a
+	# shallow angle could catch the box square on that lip and stop the car
+	# dead (tests/car_audio.gd's kerb phase, once the ground became a plane in
+	# PR #129). A sloped face pushes the box up instead.
 	var sx := float(side)
-	var pts := PackedVector3Array()
-	for y in [0.05, 0.15]:
-		pts.append(Vector3(inner0 * sx, y, 0.0))
-		pts.append(Vector3(outer0 * sx, y, 0.0))
-		pts.append(Vector3(inner1 * sx, y, -CHUNK_LEN))
-		pts.append(Vector3(outer1 * sx, y, -CHUNK_LEN))
+	var ramp0 := minf(SIDEWALK_RAMP, absf(outer0 - inner0))
+	var ramp1 := minf(SIDEWALK_RAMP, absf(outer1 - inner1))
+	var pts := PackedVector3Array([
+		Vector3(inner0 * sx, 0.0, 0.0), Vector3(outer0 * sx, 0.0, 0.0),
+		Vector3(inner1 * sx, 0.0, -CHUNK_LEN), Vector3(outer1 * sx, 0.0, -CHUNK_LEN),
+		Vector3((inner0 + ramp0) * sx, 0.15, 0.0), Vector3(outer0 * sx, 0.15, 0.0),
+		Vector3((inner1 + ramp1) * sx, 0.15, -CHUNK_LEN), Vector3(outer1 * sx, 0.15, -CHUNK_LEN),
+	])
 	hull.points = pts
 	body.position = Vector3.ZERO
 

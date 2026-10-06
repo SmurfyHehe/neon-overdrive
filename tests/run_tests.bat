@@ -5,6 +5,11 @@ rem   tests\run_tests.bat          all tests; a game window opens for ~1 min
 rem   tests\run_tests.bat quick    headless tests only, ~15 s, no window
 rem
 rem Godot is looked up in %GODOT%, then in Documents. Exit code 0 = all passed.
+rem
+rem Every test prints its start time and how many seconds it took, and the run
+rem ends with a table of all of them. A test still running after
+rem %TEST_TIMEOUT% seconds (default 600) is killed and counted as
+rem "name(TIMEOUT)" in the FAILED list (see tests\run_one.ps1).
 setlocal enabledelayedexpansion
 if "%GODOT%"=="" set "GODOT=%USERPROFILE%\Documents\Godot_v4.7.2-stable_win64_console.exe"
 if not exist "%GODOT%" (
@@ -22,7 +27,14 @@ if "%SOUND%"=="1" set "AUDIO="
 rem No traffic for the older drive-bot tests (they steer across lanes blind); the traffic_* tests ignore this and spawn their own.
 if "%NEON_TRAFFIC%"=="" set "NEON_TRAFFIC=0"
 
+rem Per-test timeout in seconds. The slowest tests take about 2 minutes, so 10 is generous.
+if "%TEST_TIMEOUT%"=="" set "TEST_TIMEOUT=600"
+set "TIMES=%TEMP%\neon_test_times.log"
+type nul > "%TIMES%"
+echo Started %DATE% %TIME:~0,8%
+
 set "FAILED="
+set "CRASHED="
 call :run smoke --headless
 call :run palette --headless
 call :run hud --headless
@@ -53,6 +65,9 @@ call :run tune_params --headless
 call :run auto_tune_rules --headless
 call :run tune_slots --headless
 call :run traffic_spawn "--headless --fixed-fps 60"
+rem ~17 s: full throttle at ~245 km/h across floating-origin recenters (the old ground-slab kick), at the game's 120 Hz.
+call :run recenter_kick "--headless --fixed-fps 120"
+call :run fx_pack --headless
 if /i not "%~1"=="quick" (
 	rem Headless, but ~2 min of simulated driving; --fixed-fps lets physics run faster than the clock.
 	call :run tune_track "--headless --fixed-fps 60"
@@ -65,6 +80,8 @@ if /i not "%~1"=="quick" (
 	rem Key-press tests run headless: a windowed run loses its held keys the moment the window loses focus (found 2026-10-05, it made chunk_drive and feel_pass_1 flaky).
 	rem These need a real window: headless drops MultiMesh data.
 	call :run chunk_drive
+	rem Also a real window (it reads the interpolated camera); ~45 s of driving 500 km down the road.
+	call :run floating_origin_drive
 	call :run game_state --headless
 	call :run tuning_panel --headless
 	call :run auto_tune_panel --headless
@@ -78,17 +95,22 @@ if /i not "%~1"=="quick" (
 	call :run feel_pass_1 --headless
 )
 echo.
+echo Per-test times:
+type "%TIMES%"
+echo Finished %DATE% %TIME:~0,8%
+rem A negative exit code is Godot crashing (often at shutdown, after the test printed PASS). The old script never counted those either; they are only listed.
+if defined CRASHED echo CRASHED, not counted as failed:!CRASHED!
 if defined FAILED (
-	echo FAILED:%FAILED%
+	echo FAILED:!FAILED!
 	exit /b 1
 )
-echo All tests passed.
+if defined CRASHED (echo No test failed, but see CRASHED above.) else echo All tests passed.
 exit /b 0
 
 :run
 echo.
-echo === %1
-"%GODOT%" %AUDIO% %~2 --path . -s res://tests/%1.gd
-
-if errorlevel 1 set "FAILED=!FAILED! %1"
+echo === %1  [%TIME:~0,8%]
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0run_one.ps1" -Godot "%GODOT%" -Name %1 -Flags "%~2" -Audio "%AUDIO%" -TimeoutSec %TEST_TIMEOUT% -Log "%TIMES%"
+set "RC=!errorlevel!"
+if !RC! equ 124 (set "FAILED=!FAILED! %1(TIMEOUT)") else if !RC! gtr 0 (set "FAILED=!FAILED! %1") else if !RC! lss 0 (set "CRASHED=!CRASHED! %1(!RC!)")
 exit /b 0

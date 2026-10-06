@@ -25,6 +25,7 @@ const SLOT_FILE := "user://autotune/test_tuner_screen_slots.json"
 var failures: Array[String] = []
 
 func _initialize() -> void:
+	OS.set_environment("NEON_TRAFFIC", "0")  # an empty road, whatever run_tests.bat or the saved settings say
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://autotune"))
 	for path in [EXHAUST_FILE, SLOT_FILE]:
 		var f := FileAccess.open(path, FileAccess.WRITE)  # start empty (overwrite; never deleted)

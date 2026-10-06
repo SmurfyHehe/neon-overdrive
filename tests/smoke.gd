@@ -47,6 +47,7 @@ var frame := 0
 var start_pos := Vector3.ZERO
 
 func _initialize() -> void:
+	OS.set_environment("NEON_TRAFFIC", "0")  # an empty road, whatever run_tests.bat or the saved settings say
 	OS.add_logger(logger)
 	seed(777)
 	var scene := load("res://Game.tscn") as PackedScene

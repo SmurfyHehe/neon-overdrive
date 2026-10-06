@@ -6,6 +6,8 @@
 extends RefCounted
 class_name ExhaustTune
 
+const TestMode := preload("res://scripts/test_mode.gd")
+
 ## How loud the whole exhaust note is. 0.5 is the prototype's old level.
 var loudness := 0.5
 ## Roughness: harder edge, more buzz, more noise in the pulse.
@@ -18,7 +20,7 @@ var flame := 0.0
 
 ## Where the player's tune is kept between runs (one entry per car id). Tests
 ## point this at a scratch file so they never read or write the real one.
-static var save_path := "user://exhaust_tune.json"
+static var save_path := TestMode.path("user://exhaust_tune.json")
 
 const KEYS := ["loudness", "raspiness", "pops", "flame"]
 

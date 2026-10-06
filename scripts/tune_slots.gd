@@ -15,13 +15,14 @@ extends RefCounted
 # will not parse is treated as empty and left untouched until the next save.
 
 const DEFAULT_PATH := "user://tune_slots.json"
+const TestMode := preload("res://scripts/test_mode.gd")
 const MAX_NAME_LENGTH := 24
 
 var path: String
 var _slots := {}   # name -> {path: float}
 
-func _init(file_path := DEFAULT_PATH) -> void:
-	path = file_path
+func _init(file_path := "") -> void:
+	path = file_path if file_path != "" else TestMode.path(DEFAULT_PATH)
 	_load_file()
 
 ## A name as it is stored: trimmed, at most MAX_NAME_LENGTH characters. Empty

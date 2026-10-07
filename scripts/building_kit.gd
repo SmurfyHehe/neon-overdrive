@@ -183,6 +183,10 @@ const TYPES := {
 	"parking": {"tiles": [[T_PARKING, 100]], "h": [6.0, 15.0], "sign": 0.0},
 	"garage": {"tiles": [[T_WAREHOUSE, 60], [T_CORRUGATED, 40]], "h": [0.0, 0.0], "sign": 0.7},
 	"warehouse": {"tiles": [[T_WAREHOUSE, 60], [T_CORRUGATED, 40]], "h": [7.0, 12.0], "sign": 0.0},
+	# Special buildings (step 5). A gas station is a kiosk at the back of its
+	# lot under a lit canopy; a diner is a glass box behind a tall pole sign.
+	"gas": {"tiles": [[T_SHOP, 100]], "h": [3.4, 3.4], "sign": 1.0, "word": "GAS"},
+	"diner": {"tiles": [[T_SHOP, 100]], "h": [4.4, 4.4], "sign": 1.0, "word": "DINER"},
 }
 # Mix for an ordinary street until districts (step 4) set their own.
 const STREET_MIX := [["apartment", 40], ["shop", 30], ["office", 18], ["parking", 12]]
@@ -208,7 +212,7 @@ static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, 
 	else:
 		var hr: Array = district.get("h", {}).get(type, spec.h)
 		floors = maxi(1, roundi(lerpf(hr[0], hr[1], h_roll) / fh))
-		if type != "shop":
+		if type != "shop" and type != "gas" and type != "diner":
 			floors = maxi(2, floors)
 	var h := float(floors) * fh
 	var tint: Color = TINTS[rng.randi() % TINTS.size()]
@@ -234,10 +238,18 @@ static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, 
 	if rng.randf() < float(spec.sign):
 		var pool: Array = BuildingSigns.GARAGE_WORDS if type == "garage" else BuildingSigns.SHOP_WORDS
 		word = pool[rng.randi() % pool.size()]
+		if spec.has("word"):
+			word = spec.word
 	var sign_color := rng.randi() % BuildingSigns.COLORS.size()
 	var sign_style := 1 if rng.randf() < 0.3 else 0
 	# short words on shops can hang as a blade over the sidewalk instead
 	var blade := type == "shop" and word.length() <= 5 and rng.randf() < 0.45
+	if type == "gas":
+		sign_color = 2  # forecourt fluorescent
+		sign_style = 1
+	elif type == "diner":
+		sign_color = 0  # sodium amber
+		sign_style = 0
 	if word != "":
 		mi.set_meta("sign_word", word)
 	elif mi.has_meta("sign_word"):
@@ -338,6 +350,8 @@ static func _draw_tile(img: Image, t: int, ground: bool, ox: int, oy: int) -> vo
 				for y in range(7, n, 2):
 					_rect(img, ox, oy, 6, y, 26, y + 1, _wall(0.36))
 				_rect(img, ox, oy, 5, 5, 27, 6, _wall(0.8))
+				# light spilling under a door left a hand's width open
+				_rect(img, ox, oy, 6, 30, 26, n, _glass(0.3))
 			else:
 				# high clerestory strip
 				_rect(img, ox, oy, 2, 3, 30, 7, _glass(0.18))

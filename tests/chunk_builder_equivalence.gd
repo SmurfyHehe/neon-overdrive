@@ -18,7 +18,8 @@ extends SceneTree
 #   props and billboards match between rebuild and fresh build
 # - districts: the drive starts downtown, all four districts appear, and
 #   wherever the setback changes a cross wall closes the step between the
-#   two out-of-bounds lines
+#   two out-of-bounds lines; every building type (special ones included)
+#   turns up
 # - budget: roadside buildings and furniture stay under 5,000 triangles
 #   per 50 m chunk (worst case over many chunks)
 #
@@ -193,12 +194,15 @@ func _check_districts() -> void:
 	if D.name_at(0) != "downtown":
 		_fail("the drive does not start downtown")
 	var seen := {}
+	var types := {}
 	var steps := 0
 	seed(99)
 	var c := B.build_chunk(0, _cfg(2, 2, false), _cfg(2, 2, false))
 	for idx in range(0, 400):
 		seen[D.name_at(idx)] = true
 		B.rebuild_chunk(c, idx, _cfg(2, 2, false), _cfg(2, 2, false))
+		for i in B._building_slots() * 2:
+			types[(c.get_node(NodePath("BuildingMesh%d" % i)) as Node).get_meta("building_type", "?")] = true
 		var changed := absf(D.setback_at(idx) - D.setback_at(idx - 1)) > 0.01
 		for nm in ["BoundaryStepOwn", "BoundaryStepOnc"]:
 			var body: StaticBody3D = c.get_node(NodePath(nm))
@@ -217,4 +221,7 @@ func _check_districts() -> void:
 	for n in ["downtown", "residential", "strip", "industrial"]:
 		if not seen.has(n):
 			_fail("district %s never appears in 400 chunks" % n)
-	print("districts: %s over 400 chunks, %d step walls" % [seen.keys(), steps])
+	for t in ["apartment", "shop", "office", "parking", "garage", "warehouse", "gas", "diner", "lot"]:
+		if not types.has(t):
+			_fail("building type %s never appears in 400 chunks" % t)
+	print("districts: %s over 400 chunks, %d step walls; types %s" % [seen.keys(), steps, types.keys()])

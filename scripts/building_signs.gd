@@ -23,7 +23,7 @@ const GLYPH_W := 6  # 5 px glyph + 1 px spacing
 # Word lists by building type. DINER is kept back for the diner itself.
 const SHOP_WORDS := ["LIQUOR", "PAWN", "LAUNDRY", "NOODLES", "VIDEO", "BAR", "CAFE", "OPEN", "24 HR", "KEYS"]
 const GARAGE_WORDS := ["TIRES", "PARTS", "AUTO", "BODY"]
-const SPECIAL_WORDS := ["DINER"]
+const SPECIAL_WORDS := ["DINER", "GAS"]
 # Rooftop billboards (step 3): generic, no brands.
 const BILLBOARD_WORDS := ["LOANS", "MOTEL", "DRIVE", "RADIO", "BAIL BONDS", "GOLD"]
 const COLORS := [
@@ -66,7 +66,8 @@ const SHADER := """
 shader_type spatial;
 render_mode diffuse_lambert, specular_disabled;
 
-uniform sampler2D words : source_color, filter_nearest_mipmap, repeat_disable;
+// no mipmaps: at a glancing angle a smaller mip drops whole letter columns
+uniform sampler2D words : source_color, filter_nearest, repeat_disable;
 uniform vec3 colors[4];
 uniform float energy = 1.5;
 uniform float rows = 24.0;
@@ -79,7 +80,7 @@ varying vec4 cd;
 void vertex() {
 	lpos = VERTEX;
 	lnrm = NORMAL;
-	cd = INSTANCE_CUSTOM;  // x: word row, y: word width px, z: colour, w: style
+	cd = INSTANCE_CUSTOM;  // x: word row, y: word width px, z: colour, w: style (0 lit letters, 1 lit panel, 2 dim floodlit billboard letters)
 }
 
 void fragment() {
@@ -98,7 +99,8 @@ void fragment() {
 		vec2 auv = vec2(clamp(px, 0.0, cd.y - 0.01) / atlas_w, (cd.x * 9.0 + py) / (rows * 9.0));
 		float glyph = texture(words, auv).r * inside;
 		vec3 col = colors[int(cd.z)];
-		float lit = cd.w < 0.5 ? glyph : (1.0 - glyph) * 0.75;
+		float lit = (cd.w > 0.5 && cd.w < 1.5) ? (1.0 - glyph) * 0.75 : glyph;
+		if (cd.w > 1.5) { lit *= 0.45; }
 		ALBEDO = mix(metal, col * 0.3, lit);
 		EMISSION = col * lit * energy;
 	}

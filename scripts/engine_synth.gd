@@ -41,6 +41,8 @@ var tone := 1.0
 ## 0..1: slow random drift of the pipe resonances and level, so a held rpm
 ## does not loop. 0 = the old perfectly steady note.
 var wander := 0.0
+## Overrun bangs per second with the anti-lag switch on (ExhaustTune.anti_lag).
+const ANTI_LAG_RATE := 14.0
 
 ## When each cylinder fires, as fractions of one four-stroke cycle (two crank
 ## turns), sorted, starting at 0.
@@ -192,6 +194,11 @@ func render(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVe
 	var pop_rate := 0.0  # pops per second
 	if overrun and tune.pops > 0.0:
 		pop_rate = tune.pops * (3.0 + 22.0 * rpm_norm)
+	if overrun and tune.anti_lag >= 0.5:
+		# Anti-lag crackle (cosmetic switch): a steady volley of bangs on every
+		# lift, whatever the pops knob says. Uses the existing pop voice; the
+		# dedicated crackle sound is separate work.
+		pop_rate = maxf(pop_rate, ANTI_LAG_RATE)
 	var pop_p := pop_rate / mix_rate
 	var pop_decay := exp(-1.0 / (0.02 * mix_rate))
 

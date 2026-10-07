@@ -26,6 +26,8 @@ if "%NEON_TICKS%"=="" set "NEON_TICKS=60"
 if "%SOUND%"=="1" set "AUDIO="
 rem No traffic for the older drive-bot tests (they steer across lanes blind); the traffic_* tests ignore this and spawn their own.
 if "%NEON_TRAFFIC%"=="" set "NEON_TRAFFIC=0"
+rem Straight road for the older drive tests (they steer blind down -Z); the curve tests set their own.
+if "%NEON_CURVES%"=="" set "NEON_CURVES=0"
 
 rem Per-test timeout in seconds. The slowest tests take about 2 minutes, so 10 is generous.
 if "%TEST_TIMEOUT%"=="" set "TEST_TIMEOUT=600"

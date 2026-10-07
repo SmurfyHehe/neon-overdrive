@@ -16,6 +16,9 @@ extends SceneTree
 # - no wheel ever touches a sidewalk while over the lanes: a chunk's collision
 #   that lags a recycle or an origin shift lies across a curved road for a
 #   tick and launches cars (RoadChunkBuilder.sync_collision)
+# - the chase camera follows the road (step R4): it looks within 10 deg of
+#   the road's direction and stays within 12 m of the car, through every bend
+#   and origin shift
 # - no engine or script errors logged
 # Prints the worst lane errors and where they happened.
 #
@@ -53,6 +56,9 @@ var traffic_err := 0.0
 var traffic_note := ""
 var worst_step := 0.0
 var samples := 0
+var cam_angle := 0.0
+var cam_note := ""
+var cam_dist := 0.0
 var traffic_errs := PackedFloat32Array()
 
 func _initialize() -> void:
@@ -73,6 +79,9 @@ func _setup() -> void:
 	traffic.set_car_count(CARS)
 	var p: PlayerCar = game.get("player")
 	p.driver = Harness.lane_driver(Harness.lane_x(PLAYER_LANE), 1.0, CRUISE)
+	var cam: Node = game.get("camera")
+	if cam != null:
+		cam.set("shake_enabled", false)
 	Harness.launch_player(p, CRUISE)
 
 func _physics_process(delta: float) -> bool:
@@ -105,6 +114,16 @@ func _physics_process(delta: float) -> bool:
 			player_err = e
 			player_note = "%.0f m in, road heading %.1f deg, curvature 1/%.0f m, %.0f km/h" % [
 				travelled, heading, _radius_at(u.z), Harness.kmh(p.current_speed())]
+	var cam := game.get("camera") as Camera3D
+	if cam != null and tick > RATE:
+		var cf := -cam.global_transform.basis.z
+		cf.y = 0.0
+		var rf := RoadFrame.basis_at(u.z) * Vector3.FORWARD
+		var ang := rad_to_deg(cf.normalized().angle_to(rf))
+		if ang > cam_angle:
+			cam_angle = ang
+			cam_note = "%.0f m in, road heading %.1f deg" % [travelled, heading]
+		cam_dist = maxf(cam_dist, cam.global_position.distance_to(p.global_position))
 	for car in traffic.cars:
 		if not Harness.finite(car):
 			return _end("non-finite state in a traffic car at tick %d" % tick)
@@ -150,11 +169,14 @@ func _end(msg: String) -> bool:
 	print("  traffic worst %.3f m off its path over %d samples (%s)" % [traffic_err, samples, traffic_note])
 	var st := Harness.stats(traffic_errs) if traffic_errs.size() > 0 else {}
 	print("  traffic path error: %s" % st)
+	print("  camera: worst %.1f deg off the road (%s), furthest %.1f m from the car" % [cam_angle, cam_note, cam_dist])
 	print("  wreck recycles %d, worst step error %.3f m" % [traffic.wreck_recycle_count if traffic != null else -1, worst_step])
 	_check(max_heading - min_heading > 10.0, "the road barely bent: heading only %.1f..%.1f deg" % [min_heading, max_heading])
 	_check(player_err < PLAYER_MAX_ERR, "the player drifted %.2f m off its lane (%s)" % [player_err, player_note])
 	_check(traffic_err < TRAFFIC_MAX_ERR, "a traffic car drifted %.2f m off its path (%s)" % [traffic_err, traffic_note])
 	_check(traffic == null or traffic.wreck_recycle_count == 0, "%d wrecked cars recycled" % (traffic.wreck_recycle_count if traffic != null else 0))
+	_check(cam_angle < 10.0, "the chase camera looked %.1f deg off the road (%s)" % [cam_angle, cam_note])
+	_check(cam_dist < 12.0, "the chase camera got %.1f m from the car" % cam_dist)
 	_check(shifts >= 5, "only %d origin shifts" % shifts)
 	_check(logger.errors.is_empty(), "%d errors logged: %s" % [logger.errors.size(), logger.errors.slice(0, 3)])
 	for f in fails:

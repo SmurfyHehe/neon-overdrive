@@ -95,6 +95,7 @@ class_name RoadChunkBuilder
 # lamps, lane dashes, traffic lane centres) is laid out from this constant.
 const BuildingKit := preload("res://scripts/building_kit.gd")
 const BuildingSigns := preload("res://scripts/building_signs.gd")
+const RoofProps := preload("res://scripts/roof_props.gd")
 
 const LANE_W := 3.2
 const CHUNK_LEN := 50.0
@@ -641,6 +642,7 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 	box.size = Vector3(w, h, d)
 	body.position = pos
 	info["d"] = d
+	info["w"] = w
 	info["front_x_abs"] = edge_x_abs + BUILDING_GAP
 	info["z"] = z
 	info["side"] = side
@@ -648,7 +650,7 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 
 ## Shop and garage signs (buildings step 2): one lightbox per signed
 ## building, on its front just above the ground floor, from one MultiMesh.
-static func _update_signs(root: Node3D, infos: Array) -> void:
+static func _update_signs(root: Node3D, infos: Array) -> int:
 	var mm: MultiMesh = (root.get_node(^"Signs") as MultiMeshInstance3D).multimesh
 	var n := 0
 	for info in infos:
@@ -668,6 +670,16 @@ static func _update_signs(root: Node3D, infos: Array) -> void:
 			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(x, y, info.z), info.side, sh, float(info.d) * 0.8)
 		n += 1
 	mm.visible_instance_count = n
+	return n
+
+## Rooftop props and billboards (buildings step 3); billboard faces take
+## the sign slots after the shop signs.
+static func _update_roofs(root: Node3D, infos: Array, signs_used: int) -> void:
+	var props: MultiMesh = (root.get_node(^"RoofProps") as MultiMeshInstance3D).multimesh
+	var signs: MultiMesh = (root.get_node(^"Signs") as MultiMeshInstance3D).multimesh
+	var counts := RoofProps.update(props, infos, signs, signs_used)
+	signs.visible_instance_count = counts[1]
+	root.set_meta("roof_props", counts[0])
 
 # ---------- build / rebuild ----------
 
@@ -718,7 +730,9 @@ static func _create_nodes(root: Node3D) -> void:
 	for i in range(_building_slots() * 2):
 		for n in _new_building(i):
 			root.add_child(n)
-	root.add_child(BuildingSigns.new_multimesh(_building_slots() * 2))
+	# shop signs plus rooftop billboards: at most two per building
+	root.add_child(BuildingSigns.new_multimesh(_building_slots() * 4))
+	root.add_child(RoofProps.new_multimesh())
 
 	root.set_meta("nodes_built", true)
 
@@ -816,7 +830,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		spans[1].append([bz + d_own / 2.0, bz - d_own / 2.0])
 		spans[-1].append([bz + d_onc / 2.0, bz - d_onc / 2.0])
 
-	_update_signs(root, infos)
+	_update_roofs(root, infos, _update_signs(root, infos))
 
 	# gap walls (stage A) -- close the open lots between buildings along the
 	# building-front line. Visual only: out-of-bounds collision is issue #28,

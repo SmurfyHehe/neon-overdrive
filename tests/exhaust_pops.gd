@@ -3,7 +3,7 @@ extends SceneTree
 # Pop voice test (2026-10-07, exhaust-sound-research-2026-10-07 option A).
 # Renders EngineSynth offline and checks the new crackle/pop voice:
 # - overrun pops come in clusters (a burble: more bangs than requests)
-# - the limiter makes short clusters, at most two bangs each
+# - the limiter bangs (pops 1, held on the limiter)
 # - anti-lag makes a dense crackle on a lift even with the pops knob at 0
 # - an upshift cut bangs only at flame >= ExhaustFlames.UPSHIFT_FLAME_MIN, and
 #   never hands out a flame event (ExhaustFlames queues its own upshift fire)

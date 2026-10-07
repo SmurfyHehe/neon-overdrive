@@ -21,6 +21,7 @@ var synth := EngineSynth.new()
 var _spec: Dictionary
 var _saved := {}
 var _seen_blow_offs := 0
+var _was_up_shifting := false
 var _vehicle: Vehicle
 var _playback: AudioStreamGeneratorPlayback
 
@@ -52,6 +53,12 @@ func _process(_delta: float) -> void:
 			synth.blow_off(synth.boost + 0.3)
 	else:
 		synth.boost = 0.0
+	# Flat-out upshift: the ignition cut bangs (the synth only does it on
+	# high-flame cars). Same edge and law as the upshift flame.
+	var up := _vehicle.is_up_shifting
+	if up and not _was_up_shifting and ExhaustFlames.upshift_spits(_vehicle):
+		synth.shift_cut(0.8 + 0.2 * clampf(_vehicle.throttle_input, 0.0, 1.0))
+	_was_up_shifting = up
 	var n := _playback.get_frames_available()
 	if n > 0:
 		_playback.push_buffer(synth.render(n, _vehicle.motor_rpm,

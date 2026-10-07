@@ -19,4 +19,5 @@ physics effect (Roy's stage B decision).
   stage B step 5, when the cars are built from `fleet.json` (which already has
   the tip positions).
 - **Where it is edited:** the Exhaust page of the Tuner screen (T): loudness, raspiness, pops and flame sliders, plus a reset to the car preset. The old held playtest keys (U/J, I/K, O/L) are gone. Changes save to disk once the game resumes.
+- **Presets are mostly judgement calls.** No per-car dB or pop data is
   published. Sources and reasoning are in the comment above `PRESETS`.

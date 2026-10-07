@@ -192,7 +192,7 @@ func glass_position(side: int) -> Vector3:
 
 ## Lights a door mirror's blind-spot dot: side 0 left, 1 right, level 0..1.
 func set_side_cue(side: int, level: float) -> void:
-	if 0 <= side < side_cue.size():
+	if side >= 0 and side < side_cue.size():
 		side_cue[side] = clampf(level, 0.0, 1.0)
 		if side < dots.size():
 			dots[side].visible = side_cue[side] >= DOT_ON

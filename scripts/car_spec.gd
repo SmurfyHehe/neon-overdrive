@@ -67,6 +67,11 @@ static func set_param(v: Vehicle, spec: Dictionary, path: String, value: float) 
 	if entry.is_empty():
 		push_error("CarSpec.set_param: '%s' is not a tunable path" % path)
 		return NAN
+	if not is_finite(value):
+		# clampf() passes NaN straight through, and one NaN on the car poisons
+		# the whole sim. Keep what is there (settings safety, 2026-10-07).
+		push_warning("CarSpec.set_param: ignored non-finite %s for '%s'" % [str(value), path])
+		return TuneParams.get_value(spec, path)
 	value = clampf(value, entry.min, entry.max)
 	TuneParams.set_value(spec, path, value)
 	if entry.on_car:

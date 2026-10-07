@@ -42,6 +42,11 @@ var test_job: AutoTuneJob
 var test_button: Button
 var _test_poll := 0.0
 var _test_hash := 0  # the setup the running test run is measuring
+var _test_started_ms := 0
+## A test run normally takes well under a minute; past this the worker is
+## treated as hung and killed, so the button can never stick (settings safety,
+## 2026-10-07).
+var test_timeout_s := 120.0
 
 var page_ids: Array[String] = []
 var page_index := 0
@@ -298,7 +303,8 @@ func _nudge(step: int) -> void:
 ## with everything locked: it measures the starting tune and stops) and swaps
 ## the estimates for measured numbers.
 func start_test_run() -> void:
-	if test_job != null and test_job.state == AutoTuneJob.State.RUNNING:
+	if test_running():
+		cancel_test_run("Test run cancelled")
 		return
 	var locks := {}
 	for p in TuneParams.auto_paths():
@@ -308,11 +314,24 @@ func start_test_run() -> void:
 		test_button.text = "Test run failed"
 		return
 	_test_hash = player.spec.hash()
-	test_button.text = "Testing..."
-	test_button.disabled = true
+	_test_started_ms = Time.get_ticks_msec()
+	test_button.text = "Testing... (cancel)"
+
+func test_running() -> bool:
+	return test_job != null and test_job.state == AutoTuneJob.State.RUNNING
+
+## Kills a running test run and says why on the button.
+func cancel_test_run(why: String) -> void:
+	if not test_running():
+		return
+	test_job.cancel()
+	test_button.text = why
 
 func _process(delta: float) -> void:
-	if test_job == null or test_job.state != AutoTuneJob.State.RUNNING:
+	if not test_running():
+		return
+	if Time.get_ticks_msec() - _test_started_ms > test_timeout_s * 1000.0:
+		cancel_test_run("Test run timed out")
 		return
 	_test_poll += delta
 	if _test_poll < 0.25:
@@ -321,7 +340,6 @@ func _process(delta: float) -> void:
 	var st := test_job.poll()
 	if st == AutoTuneJob.State.RUNNING:
 		return
-	test_button.disabled = false
 	test_button.text = "Test run"
 	if st == AutoTuneJob.State.DONE and not test_job.result.base_metrics.is_empty():
 		stats.measured = test_job.result.base_metrics

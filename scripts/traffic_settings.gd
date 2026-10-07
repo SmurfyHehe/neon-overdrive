@@ -33,14 +33,15 @@ static func set_car_count(n: int) -> void:
 	car_count = clampi(n, 0, CAR_COUNT_MAX)
 
 static func set_detail_distance(d: float) -> void:
-	detail_distance = clampf(d, DETAIL_MIN, DETAIL_MAX)
+	detail_distance = clampf(d, DETAIL_MIN, DETAIL_MAX) if is_finite(d) else DETAIL_DEFAULT  # clampf passes NaN through
 
 ## Reads the file (missing or damaged means defaults). Shares AudioSettings.path
 ## so tests that redirect one redirect both.
 static func load_settings() -> void:
 	var cfg := ConfigFile.new()
 	var ok := cfg.load(AudioSettings.path) == OK
-	set_car_count(int(cfg.get_value("traffic", "car_count", CAR_COUNT_DEFAULT)) if ok else CAR_COUNT_DEFAULT)
+	var n: Variant = cfg.get_value("traffic", "car_count", CAR_COUNT_DEFAULT) if ok else CAR_COUNT_DEFAULT
+	set_car_count(int(n) if is_finite(float(n)) else CAR_COUNT_DEFAULT)  # int(NaN) is a huge negative
 	set_detail_distance(float(cfg.get_value("traffic", "detail_distance", DETAIL_DEFAULT)) if ok else DETAIL_DEFAULT)
 
 ## Rewrites only the [traffic] section; the audio values stay.

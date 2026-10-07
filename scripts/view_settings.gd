@@ -13,7 +13,7 @@ const COCKPIT_FOV_MAX := 78.0
 static var cockpit_fov := COCKPIT_FOV_DEFAULT
 
 static func set_cockpit_fov(v: float) -> void:
-	cockpit_fov = clampf(v, COCKPIT_FOV_MIN, COCKPIT_FOV_MAX)
+	cockpit_fov = clampf(v, COCKPIT_FOV_MIN, COCKPIT_FOV_MAX) if is_finite(v) else COCKPIT_FOV_DEFAULT  # clampf passes NaN through
 
 ## Reads the file (missing or damaged means the default). Shares AudioSettings.path
 ## so tests that redirect one redirect all.

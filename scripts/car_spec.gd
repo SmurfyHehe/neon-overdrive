@@ -27,6 +27,8 @@ static func apply(v: Vehicle, spec: Dictionary) -> void:
 			v.torque_curve = _curve_from_shape(spec[key])
 		elif key == "exhaust":
 			continue  # cosmetic: EngineAudio reads it from the spec, the Vehicle has no such property
+		elif key == "engine_voice":
+			continue  # sound only (#80): EngineAudio hands it to EngineSynth
 		else:
 			v.set(key, _own(spec[key]))
 
@@ -233,6 +235,8 @@ static func coupe_default() -> Dictionary:
 		# Exhaust sound tune (cosmetic, never Auto-Tune; see TuneParams).
 		# Starts on the P1 preset; EngineAudio overlays the player's saved tune.
 		"exhaust": ExhaustTune.for_car("p1_coupe").to_dict(),
+		# What the engine itself sounds like (#80): a straight six. Not tunable.
+		"engine_voice": EngineVoice.for_car("p1_coupe"),
 	}
 
 ## Traffic tune (milestone 3, 2026-10-05): coupe_default() with commuter-car
@@ -252,6 +256,7 @@ static func traffic_default() -> Dictionary:
 	s["automatic_transmission"] = true
 	s["realistic_clutch"] = false
 	s["turbo_boost_max"] = 0.0
+	s["engine_voice"] = EngineVoice.for_car("n1_commuter")
 	return s
 
 ## Physics layers (milestone 3). Every car sits on CAR_LAYER and collides with

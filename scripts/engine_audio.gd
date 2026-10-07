@@ -34,6 +34,7 @@ func _ready() -> void:
 	_vehicle = get_parent() as Vehicle
 	synth.tune = ExhaustTune.for_car(START_PRESET)
 	_load_tune()
+	synth.apply_voice(_spec.get("engine_voice", {}))  # per-car engine (#80)
 	_setup_readout()
 	synth.mix_rate = AudioServer.get_mix_rate()
 	synth.idle_rpm = _vehicle.idle_rpm

@@ -188,7 +188,7 @@ That is 10 counted landmarks plus repeatable gas stations. More can be added at 
 
 ## 6. Mirrors and first person: the game looks for you
 
-Roy wants no keys. The cockpit already has head movement (on, with an off switch) and the proximity cue (`cockpit_mirrors.gd`).
+Roy first said no keys, then settled on one glance key, V (PR #174). The automatic glances below add to it. The cockpit already has head movement (on, with an off switch) and the proximity cue (`cockpit_mirrors.gd`).
 
 **What a blind spot indicator is:** a small light in or near the side mirror that turns on when a car is in the zone beside and just behind you, where the mirror cannot see it. Real cars have had them since the mid-2000s.
 
@@ -203,7 +203,7 @@ Proposal, all automatic:
 
 - Glances are short, capped to about one every 2 s, never during a corner at high steering lock, and follow the head-movement setting (off means off). Strength is a slider.
 - **Blind spot lamp: the story's first mod (Roy).** The cars are older designs, so they do not have it stock. Proposed beat (Roy writes the words): on the prologue night a car sits in your blind spot and nearly takes you out, or Ledger's crew uses that blind spot to box you in. Back at the garage, Walt (or Moose) hands you an aftermarket blind-spot lamp kit, and fitting it is the **first mod tutorial**: open the mod screen, fit the part, see it work on the next drive. The lamp is amber (palette `#FFC066`) in the mirror housing. It teaches the mod loop with a part that is useful, cheap and needs no balance work.
-- **Relation to PR #174:** that mirror proposal suggested hold-to-glance keys (Z/C). Roy has since said no keys, so the automatic glances above replace that part of #174. Its per-car mirror data and the amber blind-spot dot stay useful.
+- **Relation to PR #174:** after the "no keys" message, Roy decided on 2026-10-07 18:38 in the mirror thread to have ONE key, V: tap to glance at a mirror (side chosen from steering), auto-return after about 1.5 s, blind-spot dot yes, shoulder check later after its own research. So V is the manual glance and the automatic glances above are an addition on top, not a replacement. The over-the-shoulder rows wait for that research.
 - **Why it matters to the narrative:** first person is where the "mechanic" fantasy lives. The car talks through its gauges, sounds and the warm-up needle, and the driver's head moves like a real driver's. No HUD arrows, no key hints, consistent with the existing rules.
 
 ## 7. How the pieces connect (summary map)

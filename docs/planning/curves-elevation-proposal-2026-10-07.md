@@ -1,6 +1,12 @@
 # #37 Curves and elevation: proposal (docs only)
 
-Status: **proposal, awaiting Roy's sign-off.** No code until then.
+Status: **Roy answered 2026-10-07; final sign-off pending.** No code until then.
+
+Roy's answers:
+- **Order:** curves first, hills second.
+- **Geometry:** a Path3D spline, as the ROADMAP says. Section 2 is rewritten around that.
+- **Timing:** R1 now, R3 onwards after Stage C.
+- **Crests:** "think it out". See section 1.
 Main at `9c28d59`. Source for every "today" claim is a file:line on main.
 
 ## 0. What is true on main today
@@ -61,6 +67,23 @@ style. No hairpins and no junctions.
   - A 600 m floor means a stock car stays planted and a fully modded one goes light.
   - Option for Roy: allow a few tighter "jump" crests on purpose.
 
+**Crests, thought out (Roy asked).** Nothing has to be decided now. Hills are R5,
+after Stage C, and every crest is generated from knobs:
+
+- **Default:** every crest radius is at least 600 m.
+  - Traffic (32 m/s max) needs only 104 m to stay planted, so the AI never goes airborne.
+  - A stock car stays planted; a fully modded car above about 250 km/h goes light.
+    That's a reward for speed, not a hazard.
+- **Jump crests:** a "kicker" chance knob, 0 by default. When it fires, that crest's
+  radius drops to 150-250 m, so cars leave the ground at 140-180 km/h.
+  - Risk: you land blind into traffic you couldn't see, which feels unfair, not fun.
+  - Risk: GEVP landings bottom out the suspension and can bounce the car. That's
+    untested on this car.
+  - Turn it on for one R6 playtest only.
+- **No crests at all:** hilliness 0 gives curves only, with no code change.
+  - If R6 shows hills don't add anything, that's the answer.
+- **What decides it:** Roy drives R6 with three presets (0, default, kickers on) and picks one.
+
 **Per-run variation (plugs into Stage C).** Each seed gives:
 - a curviness value and a hilliness value, so some runs are gentle and some are twisty;
 - its own order of segments.
@@ -69,24 +92,29 @@ The same seed always gives the same road.
 
 ## 2. How the road is generated and how chunks join
 
-### Geometry choice: analytic arcs, not a Path3D spline
+### Geometry: a Path3D spline, one per chunk (Roy's pick)
 
-The ROADMAP says "Path3D rework" (ROADMAP.md:153, ISSUES E6). I recommend
-**against Path3D as the source of truth.** This contradicts the ROADMAP wording,
-so I'm flagging it for Roy.
+The road follows a `Curve3D` (Bezier spline), as ROADMAP.md:153 says. There is
+**one Path3D per chunk, about 50 m long, not one endless curve.** That choice is
+what answers the spline's known costs:
 
-| | Straights + circular arcs (recommended) | Path3D / Curve3D Bezier spline |
-|---|---|---|
-| Lanes | Lanes are concentric arcs, exact and closed-form | Lane offset curves of a Bezier aren't Beziers; tight bends can make them self-cross |
-| World → road position (traffic, every car, every tick) | Closed-form per segment | Iterative closest-point search over baked points |
-| Distance along the road | Exact | Approximated from the baked sample spacing |
-| Seeded generation | Trivial: a list of (length, curvature) pieces | Needs control-point placement, then fix-ups |
-| Shape freedom | Arcs and straights only (real roads are built this way) | Anything |
-| Steering feel at arc entry | Curvature jumps from 0 to 1/R. Small at R ≥ 300; transition curves can be added later | Smooth by construction |
+| Spline cost | Answer |
+|---|---|
+| Finding a car's road position (closest point) means searching the baked points | Each car searches only its own chunk's curve: about 50 baked points at a 1 m bake interval. That's 16 cars × 50 points per tick, which is trivial. Each car caches its chunk and offset |
+| Distance along the curve is approximate | 1 m bake interval. s is the chunk index × 50 plus the local baked offset, so the error never builds up across chunks |
+| Lane edges are offsets of the curve, not splines themselves, and can fold on tight bends | A fold needs a radius smaller than the offset. The widest offset is about 16 m and the minimum radius is 300 m, so it can't happen |
+| Smooth joins between chunks | Neighbouring chunks share the end point **and** the tangent handle (mirrored in and out handles), so position and direction are continuous. The seam test checks it |
+| Seeded generation needs control points | Each chunk's end point comes from the seed's "road" stream: a heading change and a height change, clamped by heading (±30°), radius (≥ 300 m) and grade (≤ 5%). The generator samples the curve and re-rolls if a bound is broken (a deterministic re-roll, from the same stream) |
+| Cost of building the curve | Baked once per chunk recycle, about 50 points, well under 0.1 ms |
 
-**Height** is a separate vertical profile h(s), the way real roads are designed:
-constant grades joined by parabolic vertical curves (crests and sags). This keeps
-"curves" and "hills" independent, so they can ship in separate steps.
+**Height lives in the same spline** (control points carry y). Curves-only steps keep
+every y at 0. R5 turns hilliness up and adds crests and sags by moving control
+points up and down; crest radius is checked the same way as turn radius.
+
+**Banking** would be the curve's tilt (`point_tilt`). It stays at 0 in v1.
+
+Free bonus: chunks get a Path3D node that shows up in the editor, so a curve
+is visible while debugging.
 
 ### The road-space frame
 
@@ -94,10 +122,11 @@ Everything uses one new class, `RoadFrame`. Here `s` is distance along the road
 and `d` is the signed lateral offset from the centre line.
 
 - `sample(s) -> Transform3D`:
-  - Origin on the centre line at height h(s).
-  - -Z basis along the tangent, including grade; X to the right; Y up.
-- `to_road(world_pos) -> Vector2(s, d)`. Each car caches its last s, so this is a
-  local closed-form lookup.
+  - Wraps `Curve3D.sample_baked_with_rotation`.
+  - Origin on the centre line, -Z along the tangent including grade, X to the right.
+- `to_road(world_pos) -> Vector2(s, d)`:
+  - `get_closest_offset` on the car's cached chunk curve.
+  - Steps to the neighbouring chunk when the offset lands at either end.
 - `lane_offset(i)` is unchanged, but it now means `d`, not world x.
 
 Lanes become `sample(s).origin + right * lane_offset(i)`. Traffic's `z → s` and
@@ -124,9 +153,9 @@ different feature.
 - **A chunk is 50 m of s, not 50 m of z.**
   - The builder samples the frame at 11 stations (every 5 m).
   - It extrudes the existing 10-strip cross-section along each station's right vector.
-- **Seams are exact.** Both chunks evaluate the same station s from the same function.
-  - That gives position continuity to float precision.
-  - Normals come analytically from the tangent, so shading is continuous too.
+- **Seams are exact.** A chunk's last station is the next chunk's first control
+  point: the same Vector3 and the same tangent. Normals come from that shared
+  tangent, so shading is continuous too.
 - Dashes, pylons and lamps are MultiMesh instances. Each instance gets its station's
   full transform, not just a translation. MultiMesh already supports this, at no draw-call cost.
 - **Buildings and walls** are rotated to the local frame.
@@ -167,9 +196,9 @@ different feature.
 | **A. Fake it in a shader** | Vertex shader bends the world visually; physics stays straight | Days, not weeks; zero physics risk | You never steer through a corner, which defeats a simcade. Lights, decals and raycasts don't line up with what you see. **Reject** |
 | **B. Curves first, elevation second** (recommended) | R1-R4 ship flat curves; R5 adds hills | Each half is testable alone. Curves keep the ground plane, so no collider change. The traffic refactor is proven before hills add slope physics | Two playtest cycles |
 | C. Both at once | One big change | One playtest | The largest diff in the repo, touching traffic, physics ground, camera and builder together. When it breaks, it's hard to tell which part did |
-| D. Path3D spline | Section 2 table | Free shapes | Slower traffic queries, messier lanes. Not worth it without junctions |
+| D. Arcs instead of a spline | Straights plus circular arcs, maths done by hand | Exact lanes, closed-form queries | **Roy picked Path3D.** Per-chunk curves make the spline's costs small (section 2) |
 
-**Recommendation: B with analytic arcs, ±30° bounded heading, no banking.**
+**Plan: B with a Path3D per chunk, ±30° bounded heading, no banking.**
 
 ## 5. Build order: one PR per step, each with a headless test
 
@@ -216,6 +245,11 @@ not the rendered scene.
    - Chassis-on-trimesh contacts can catch internal edges at chunk seams. Wheels are
      rays, so they're immune.
    - Mitigation: seam vertices are shared exactly; watch `traffic_stability`.
+4b. **Spline queries cost more than expected.**
+   - **Proved wrong if** `traffic_perf` after R1 shows `to_road` adding more than
+     5% to tick cost.
+   - Fix: query every second tick for far cars, or cache s and step it by v·dt
+     between queries.
 5. **Nobody notices.**
    - If the radii are too gentle, it still reads as "the same road" (Stage C premortem #1).
    - Prove it in R6 by Roy driving, not by numbers.
@@ -233,9 +267,10 @@ not the rendered scene.
 
 ## 7. Decisions for Roy
 
-1. **Order:** curves first, hills second (B)? Recommended.
-2. **Geometry:** arcs and grades instead of the ROADMAP's "Path3D"? Recommended.
-3. **Bends:** no hairpins or U-turns (heading kept within ±30°)? Recommended.
-4. **Crests:** planted below 250 km/h, light above? Or add a few deliberate jump crests?
-5. **Banking:** none in v1? Recommended.
-6. **When:** R1 now, R3 onwards after Stage C? Or move #37 ahead of Stage C?
+Answered 2026-10-07: curves first; Path3D; R1 now, the rest after Stage C;
+crests settled at the R6 playtest with three presets.
+
+Still open (defaults apply unless Roy objects):
+- **Bends:** no hairpins or U-turns; heading kept within ±30°.
+- **Banking:** none in v1.
+- **Sign-off:** R1 (invisible groundwork) to start.

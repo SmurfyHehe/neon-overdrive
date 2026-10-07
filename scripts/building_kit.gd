@@ -182,17 +182,23 @@ const TYPES := {
 	"office": {"tiles": [[T_OFFICE, 70], [T_CONCRETE, 30]], "h": [12.0, 30.0], "sign": 0.0},
 	"parking": {"tiles": [[T_PARKING, 100]], "h": [6.0, 15.0], "sign": 0.0},
 	"garage": {"tiles": [[T_WAREHOUSE, 60], [T_CORRUGATED, 40]], "h": [0.0, 0.0], "sign": 0.7},
+	"warehouse": {"tiles": [[T_WAREHOUSE, 60], [T_CORRUGATED, 40]], "h": [7.0, 12.0], "sign": 0.0},
 }
 # Mix for an ordinary street until districts (step 4) set their own.
 const STREET_MIX := [["apartment", 40], ["shop", 30], ["office", 18], ["parking", 12]]
 
 ## Picks a building's type and look from its own RNG and writes the look onto
 ## the mesh instance. is_low is the old "garage" roll (a low, wide shed);
-## h_roll is the height draw in [0, 1]. Returns
+## h_roll is the height draw in [0, 1]; district is a Districts spec (type
+## mix, height overrides, lit-window and billboard multipliers). Returns
 ## {h, type, tile, floor_h, sign, sign_color, sign_style}; h is a whole
 ## number of floors, sign is "" when the building has none.
-static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, h_roll: float, w: float, d: float, mix: Array = STREET_MIX) -> Dictionary:
-	var type: String = "garage" if is_low else _weighted_s(rng, mix)
+static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, h_roll: float, w: float, d: float, district: Dictionary = {}) -> Dictionary:
+	var type: String
+	if is_low:
+		type = district.get("low", "garage")
+	else:
+		type = _weighted_s(rng, district.get("mix", STREET_MIX))
 	var spec: Dictionary = TYPES[type]
 	var tile := _weighted(rng, spec.tiles)
 	var fh: float = FLOOR_H[tile]
@@ -200,7 +206,7 @@ static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, 
 	if type == "garage":
 		floors = 1
 	else:
-		var hr: Array = spec.h
+		var hr: Array = district.get("h", {}).get(type, spec.h)
 		floors = maxi(1, roundi(lerpf(hr[0], hr[1], h_roll) / fh))
 		if type != "shop":
 			floors = maxi(2, floors)
@@ -212,6 +218,7 @@ static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, 
 		density *= 0.4
 	elif tile == T_OFFICE:
 		density *= 0.6  # offices at 2 a.m. are mostly dark
+	density = minf(density * float(district.get("lit", 1.0)), 0.6)
 	mi.mesh = unit_box()
 	mi.material_override = material()
 	mi.scale = Vector3(w, h, d)
@@ -235,7 +242,7 @@ static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, 
 		mi.set_meta("sign_word", word)
 	elif mi.has_meta("sign_word"):
 		mi.remove_meta("sign_word")
-	return {"h": h, "type": type, "tile": tile, "floor_h": fh, "sign": word, "sign_color": sign_color, "sign_style": sign_style, "blade": blade, "roof_seed": rng.randi()}
+	return {"h": h, "type": type, "tile": tile, "floor_h": fh, "sign": word, "sign_color": sign_color, "sign_style": sign_style, "blade": blade, "roof_seed": rng.randi(), "billboard": float(district.get("billboard", 1.0))}
 
 static func _weighted_s(rng: RandomNumberGenerator, table: Array) -> String:
 	var total := 0

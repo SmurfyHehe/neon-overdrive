@@ -162,7 +162,12 @@ static func new_multimesh(capacity: int) -> MultiMeshInstance3D:
 ## from it toward the road, facing the oncoming traffic.
 static func place(mm: MultiMesh, i: int, word: String, color: int, style: int, front: Vector3, side: int, height: float, max_len: float, blade: bool = false, toward_traffic: float = 0.0) -> void:
 	var px := word_px(word)
-	var length := minf(max_len, height * float(px + 4) / float(ROW_PX))
+	var length := height * float(px + 4) / float(ROW_PX)
+	if length > max_len:
+		# keep the letters' shape: a squeezed pixel font drops columns
+		# (LOANS read as LOFNS), so a long word makes a lower sign instead
+		height *= max_len / length
+		length = max_len
 	var depth := 0.18
 	var turn: Basis
 	var center := front

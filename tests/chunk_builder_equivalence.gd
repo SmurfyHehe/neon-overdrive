@@ -14,8 +14,11 @@ extends SceneTree
 #   fresh at N -- every building's size, position, collision box, meta and
 #   facade parameters
 # - one shared building material across the whole pool
-# - every building has a type; every signed building gets a sign; rooftop
+# - every building has a type (empty lots are hidden and not solid); every signed building gets a sign; rooftop
 #   props and billboards match between rebuild and fresh build
+# - districts: the drive starts downtown, all four districts appear, and
+#   wherever the setback changes a cross wall closes the step between the
+#   two out-of-bounds lines
 # - budget: roadside buildings and furniture stay under 5,000 triangles
 #   per 50 m chunk (worst case over many chunks)
 #
@@ -38,6 +41,7 @@ func _initialize() -> void:
 	_check_rng_consumption()
 	_check_rebuild_matches_build()
 	_check_budget()
+	_check_districts()
 	print("chunk_builder_equivalence: %s" % ("PASS" if fails == 0 else "%d failure(s)" % fails))
 	quit(0 if fails == 0 else 1)
 
@@ -109,6 +113,11 @@ func _compare(a: Node3D, b: Node3D, label: String) -> void:
 		for k in ma.get_meta_list():
 			if mb.has_meta(k) and ma.get_meta(k) != mb.get_meta(k):
 				_fail("%s building %d: meta %s %s vs %s" % [label, i, k, ma.get_meta(k), mb.get_meta(k)])
+		if ma.get_meta("building_type", "") == "lot":
+			# an empty lot: hidden, no collision, nothing else to compare
+			if ma.visible or mb.visible or not (ba.get_node(^"Shape") as CollisionShape3D).disabled 					or not (bb.get_node(^"Shape") as CollisionShape3D).disabled:
+				_fail("%s building %d: an empty lot is still drawn or solid" % [label, i])
+			continue
 		for p in PARAMS:
 			var va = ma.get_instance_shader_parameter(p)
 			var vb = mb.get_instance_shader_parameter(p)
@@ -178,3 +187,34 @@ func _tris(n: Node) -> int:
 		var count := mm.instance_count if mm.visible_instance_count < 0 else mm.visible_instance_count
 		return _mesh_tris(mm.mesh) * count
 	return 0
+
+func _check_districts() -> void:
+	var D := B.Districts
+	if D.name_at(0) != "downtown":
+		_fail("the drive does not start downtown")
+	var seen := {}
+	var steps := 0
+	seed(99)
+	var c := B.build_chunk(0, _cfg(2, 2, false), _cfg(2, 2, false))
+	for idx in range(0, 400):
+		seen[D.name_at(idx)] = true
+		B.rebuild_chunk(c, idx, _cfg(2, 2, false), _cfg(2, 2, false))
+		var changed := absf(D.setback_at(idx) - D.setback_at(idx - 1)) > 0.01
+		for nm in ["BoundaryStepOwn", "BoundaryStepOnc"]:
+			var body: StaticBody3D = c.get_node(NodePath(nm))
+			var col: CollisionShape3D = body.get_node(^"Shape")
+			if col.disabled == changed:
+				_fail("chunk %d %s: step wall %s but setback %s" % [idx, nm, "off" if col.disabled else "on", "changes" if changed else "does not change"])
+			if changed:
+				steps += 1
+				var bound: StaticBody3D = c.get_node(NodePath(nm.replace("Step", "")))
+				var bx := absf(bound.position.x)
+				var half := ((col.shape as BoxShape3D).size.x) / 2.0
+				var sx := absf(body.position.x)
+				if bx < sx - half - 0.6 or bx > sx + half + 0.6:
+					_fail("chunk %d %s: step wall %.1f..%.1f misses the boundary at %.1f" % [idx, nm, sx - half, sx + half, bx])
+	c.free()
+	for n in ["downtown", "residential", "strip", "industrial"]:
+		if not seen.has(n):
+			_fail("district %s never appears in 400 chunks" % n)
+	print("districts: %s over 400 chunks, %d step walls" % [seen.keys(), steps])

@@ -130,6 +130,8 @@ patrol SUV.
 
   Add one wheel mesh drawn 4 times. That is about 5–7 draw calls per car, and
   swapped parts are merged into the body mesh when the build changes.
+  (2026-10-07: the traffic cars add a 4th body surface, the additive tail
+  flares that keep a car visible at night, so NpcCarBuilder cars are 8.)
 
 ## Verification
 

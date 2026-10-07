@@ -35,6 +35,8 @@ var body_hz := 110.0
 var body_q := 1.5
 var rasp_hz := 1200.0
 var rasp_q := 2.0
+## Overrun bangs per second with the anti-lag switch on (ExhaustTune.anti_lag).
+const ANTI_LAG_RATE := 14.0
 
 var _crank := 0.0  # crank position in revolutions, wraps at 2 (one full cycle)
 var _last_fire := -1
@@ -126,6 +128,11 @@ func render(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVe
 	var pop_rate := 0.0  # pops per second
 	if overrun and tune.pops > 0.0:
 		pop_rate = tune.pops * (3.0 + 22.0 * rpm_norm)
+	if overrun and tune.anti_lag >= 0.5:
+		# Anti-lag crackle (cosmetic switch): a steady volley of bangs on every
+		# lift, whatever the pops knob says. Uses the existing pop voice; the
+		# dedicated crackle sound is separate work.
+		pop_rate = maxf(pop_rate, ANTI_LAG_RATE)
 	var pop_p := pop_rate / mix_rate
 	var pop_decay := exp(-1.0 / (0.02 * mix_rate))
 

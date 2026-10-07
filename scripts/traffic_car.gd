@@ -88,6 +88,8 @@ var aero_downforce_coefficient_front := 0.0
 var aero_downforce_coefficient_rear := 0.0
 
 var chassis_visual: Node3D
+## Exhaust flames, only on a car whose spec has a flame value (null otherwise).
+var flames: ExhaustFlames
 var wheelbase := 2.5
 ## Footprint half sizes for the occupancy index: across the tyres, and
 ## bumper to the middle.
@@ -230,6 +232,12 @@ func _ready() -> void:
 	if not sim_only:
 		# Blob shadow only: 80 spotlights would be a rendering bill of their own.
 		CarFx.attach(self, half_l, false)
+		# Data-driven flames: only a car whose exhaust has a flame value gets
+		# the node (today only the C3 interceptor's preset); the rest pay nothing.
+		var ex: Variant = spec.get("exhaust")
+		if ex is Dictionary and float(ex.get("flame", 0.0)) > 0.0 and FxSettings.is_on("exhaust_flames"):
+			flames = ExhaustFlames.new(self)
+			add_child(flames)
 
 func _physics_process(delta: float) -> void:
 	if not detailed:
@@ -603,4 +611,6 @@ func shift_world(offset: Vector3) -> void:
 	for w in wheel_array:
 		w.previous_global_position += offset
 		w.last_collision_point += offset
+	if flames != null:
+		flames.shift_world(offset)
 	reset_physics_interpolation()

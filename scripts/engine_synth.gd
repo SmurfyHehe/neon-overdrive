@@ -35,9 +35,21 @@ var body_hz := 110.0
 var body_q := 1.5
 var rasp_hz := 1200.0
 var rasp_q := 2.0
+## Per-car engine voice (#80, see engine_voice.gd); apply_voice() sets these.
+## tone scales the throttle low-pass cutoff (below 1 = muffled, above = open).
+var tone := 1.0
+## 0..1: slow random drift of the pipe resonances and level, so a held rpm
+## does not loop. 0 = the old perfectly steady note.
+var wander := 0.0
+## Overrun bangs per second with the anti-lag switch on (ExhaustTune.anti_lag).
+const ANTI_LAG_RATE := 14.0
 
-var _crank := 0.0  # crank position in revolutions, wraps at 2 (one full cycle)
-var _last_fire := -1
+## When each cylinder fires, as fractions of one four-stroke cycle (two crank
+## turns), sorted, starting at 0.
+var _fire_at := PackedFloat32Array()
+var _next_fire := 0
+var _to_next := 0.0  # cycle fraction until _next_fire fires; 0 = on the first sample
+var _since := 0.0  # cycle fraction since the last firing
 var _fire_amp := 1.0
 var _rpm := -1.0
 var _thr := 0.0
@@ -67,15 +79,52 @@ var boost := 0.0
 var _whistle_phase := 0.0
 var _bov_env := 0.0
 var _bov_lp := 0.0
+# wander: current drift (-1..1) of the resonances and of the level, the values
+# they glide toward, and seconds until new targets are picked
+var _wander_res := 0.0
+var _wander_amp := 0.0
+var _wander_res_to := 0.0
+var _wander_amp_to := 0.0
+var _wander_left := 0.0
 
 func _init() -> void:
-	# Fixed per-cylinder spread: the same cylinder is always a little louder
-	# or quieter, so the pattern repeats every cycle like a real engine.
+	_setup_cylinders(EngineVoice.even_firing(cylinders), [], 0.2, 4)
+
+## Fixed per-cylinder spread: the same cylinder is always a little louder or
+## quieter, so the pattern repeats every cycle like a real engine. `amps` is an
+## optional built-in pattern (a V8's louder bank); `spread` is how far each
+## cylinder may sit below it. Spread 0.2 with seed 4 is the original voice.
+func _setup_cylinders(firing: PackedFloat32Array, amps: Array, spread: float, rng_seed: int) -> void:
+	_fire_at = firing
+	cylinders = firing.size()
 	var rng := RandomNumberGenerator.new()
-	rng.seed = 4
+	rng.seed = rng_seed
 	_cyl_amp.resize(cylinders)
 	for i in cylinders:
-		_cyl_amp[i] = rng.randf_range(0.8, 1.0)
+		var base: float = float(amps[i]) if i < amps.size() else 1.0
+		_cyl_amp[i] = base * rng.randf_range(1.0 - spread, 1.0)
+	_next_fire = 0
+	_to_next = 0.0
+	_since = 0.0
+
+## Sets this car's engine voice from a spec's "engine_voice" dictionary (see
+## engine_voice.gd). Keys it lacks keep their current values; {} changes nothing.
+func apply_voice(v: Dictionary) -> void:
+	if v.is_empty():
+		return
+	body_hz = float(v.get("body_hz", body_hz))
+	body_q = float(v.get("body_q", body_q))
+	rasp_hz = float(v.get("rasp_hz", rasp_hz))
+	rasp_q = float(v.get("rasp_q", rasp_q))
+	tone = float(v.get("tone", tone))
+	pulse_width = clampf(float(v.get("pulse_width", pulse_width)), 0.1, 0.9)
+	wander = clampf(float(v.get("wander", wander)), 0.0, 1.0)
+	var n := maxi(int(v.get("cylinders", cylinders)), 1)
+	var firing := PackedFloat32Array(v.get("firing", []))
+	if firing.size() != n:
+		firing = EngineVoice.even_firing(n)
+	_setup_cylinders(firing, v.get("cyl_amps", []), clampf(float(v.get("cyl_spread", 0.2)), 0.0, 0.6),
+			int(v.get("seed", 4)))
 
 ## The blow-off valve vents: a short "pssh" whose size follows how hot the boost was.
 func blow_off(strength: float) -> void:
@@ -101,21 +150,40 @@ func render(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVe
 	var rpm_step := (rpm - _rpm) / frames
 	var thr_step := (throttle - _thr) / frames
 
+	# Wander: the resonances and level drift between random targets a second or
+	# so apart, gliding, so nothing steps. Once per block, not per sample.
+	var res_mul := 1.0
+	var amp_mul := 1.0
+	if wander > 0.0:
+		var dt := frames / mix_rate
+		_wander_left -= dt
+		if _wander_left <= 0.0:
+			_wander_res_to = _rand()
+			_wander_amp_to = _rand()
+			_wander_left = 0.6 + 0.8 * absf(_rand())
+		var k := 1.0 - exp(-dt / 0.5)
+		_wander_res += k * (_wander_res_to - _wander_res)
+		_wander_amp += k * (_wander_amp_to - _wander_amp)
+		res_mul = 1.0 + 0.06 * wander * _wander_res
+		amp_mul = 1.0 + 0.1 * wander * _wander_amp
+
 	# Filter coefficients once per block; the resonances don't move with rpm.
-	var bw := TAU * body_hz / mix_rate
+	var bw := TAU * body_hz * res_mul / mix_rate
 	var ba := sin(bw) / (2.0 * body_q)
 	var b_b0 := ba / (1.0 + ba)
 	var b_a1 := -2.0 * cos(bw) / (1.0 + ba)
 	var b_a2 := (1.0 - ba) / (1.0 + ba)
-	var rw := TAU * rasp_hz / mix_rate
+	var rw := TAU * rasp_hz * (2.0 - res_mul) / mix_rate  # rasp drifts the other way
 	var ra := sin(rw) / (2.0 * rasp_q)
 	var r_b0 := ra / (1.0 + ra)
 	var r_a1 := -2.0 * cos(rw) / (1.0 + ra)
 	var r_a2 := (1.0 - ra) / (1.0 + ra)
 	var rpm_norm := clampf((rpm - idle_rpm) / (max_rpm - idle_rpm), 0.0, 1.0)
-	var cutoff := 500.0 + 2300.0 * throttle + 1500.0 * rpm_norm
+	var cutoff := (500.0 + 2300.0 * throttle + 1500.0 * rpm_norm) * tone
 	var lp_k := 1.0 - exp(-TAU * cutoff / mix_rate)
-	var fires_per_cycle := cylinders * 0.5
+	var n_cyl := _fire_at.size()
+	# Idle and light load misfire-wobble more than a loaded engine does.
+	var jitter := fire_jitter * (1.4 - 0.8 * throttle)
 	# Tune: loudness scales the whole note, raspiness opens the rasp band, adds
 	# noise and sharpens the pulse. Pops need a lifted throttle at rpm.
 	var gain := 0.35 + 1.3 * tune.loudness
@@ -126,21 +194,29 @@ func render(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVe
 	var pop_rate := 0.0  # pops per second
 	if overrun and tune.pops > 0.0:
 		pop_rate = tune.pops * (3.0 + 22.0 * rpm_norm)
+	if overrun and tune.anti_lag >= 0.5:
+		# Anti-lag crackle (cosmetic switch): a steady volley of bangs on every
+		# lift, whatever the pops knob says. Uses the existing pop voice; the
+		# dedicated crackle sound is separate work.
+		pop_rate = maxf(pop_rate, ANTI_LAG_RATE)
 	var pop_p := pop_rate / mix_rate
 	var pop_decay := exp(-1.0 / (0.02 * mix_rate))
 
 	for i in frames:
 		_rpm += rpm_step
 		_thr += thr_step
-		_crank += _rpm / 60.0 / mix_rate
-		if _crank >= 2.0:
-			_crank -= 2.0
-		var cyc := _crank * fires_per_cycle
-		var idx := int(cyc)
-		var p := cyc - idx
-		if idx != _last_fire:
-			_last_fire = idx
-			_fire_amp = _cyl_amp[idx % cylinders] * (1.0 + (_rand() * fire_jitter))
+		var dph := _rpm / 120.0 / mix_rate  # cycle fraction this sample
+		_since += dph
+		# Count down to the next cylinder's slot. The table can be uneven (V8
+		# banks, boxer headers); the pulse is timed from the last firing, so its
+		# shape doesn't depend on the gap.
+		_to_next -= dph
+		if _to_next <= 0.0:
+			_since = 0.0
+			_fire_amp = _cyl_amp[_next_fire] * (1.0 + (_rand() * jitter)) * amp_mul
+			var nxt := (_next_fire + 1) % n_cyl
+			_to_next += _fire_at[nxt] - _fire_at[_next_fire] + (1.0 if nxt == 0 else 0.0)
+			_next_fire = nxt
 			if redline and absf(_rand()) < limiter_cut:
 				_fire_amp = 0.0
 				# an unburnt charge going out the pipe: a bang at the limiter
@@ -148,6 +224,7 @@ func render(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVe
 					_pop_env = maxf(_pop_env, 0.6 + 0.4 * absf(_rand()))
 					_flame_peak = maxf(_flame_peak, tune.flame * (0.5 + 0.5 * absf(_rand())))
 
+		var p := _since * n_cyl
 		var pulse := 0.0
 		if p < width:
 			pulse = sin(PI * p / width) * _fire_amp

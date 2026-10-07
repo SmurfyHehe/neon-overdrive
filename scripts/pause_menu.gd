@@ -16,7 +16,7 @@ const GROUPS := [
 	["Gears & Engine", [
 		["shift_up", "Shift up (manual)"], ["shift_down", "Shift down (manual)"], ["toggle_gearbox", "Gearbox: auto / semi / manual"],
 		["clutch", "Clutch (hold, manual)"], ["starter", "Starter (hold, manual)"]]],
-	["Camera", [["camera_cycle", "Camera smoothing"], ["camera_view", "Chase / cockpit view"], ["look_back", "Look back (hold)"]]],
+	["Camera", [["camera_cycle", "Camera smoothing"], ["camera_view", "Chase / cockpit view"], ["look_back", "Look back (hold)"], ["look_glance", "Mirror glance (tap; steer picks side)"]]],
 	["Audio & Radio", [["mute", "Mute"], ["radio_next", "Next radio station"]]],
 	["Menus", [["pause", "Pause / back"], ["tuning_panel", "Tuning panel"], ["autotune_panel", "Auto-Tune panel"]]],
 	["Exhaust", [

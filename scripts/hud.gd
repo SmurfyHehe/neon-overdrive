@@ -61,6 +61,7 @@ var lbl_info: Label
 var lbl_hint: Label
 var rpm_bar: RpmBar
 var cluster: VBoxContainer   # the gear / speed / RPM block; hidden in the cockpit view
+var cluster_plate: PanelContainer   # the gauge-cluster plate around it (UI blend PR 3)
 var rear_strip: TextureRect
 var rear_frame: Panel
 var rear_style: StyleBoxFlat
@@ -187,7 +188,17 @@ func _ready() -> void:
 	cluster.size_flags_vertical = Control.SIZE_SHRINK_END
 	cluster.add_theme_constant_override("separation", 4)
 	cluster.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	margin.add_child(cluster)
+	# Gauge-cluster plate: dusk glass, navy edge, a sodium tape line across the top.
+	cluster_plate = PanelContainer.new()
+	cluster_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cluster_plate.size_flags_horizontal = Control.SIZE_SHRINK_END
+	cluster_plate.size_flags_vertical = Control.SIZE_SHRINK_END
+	var plate_box := UiTheme.box(Color(DUSK, 0.62), UiTheme.NAVY, 2, 0.0, Vector2(18, 10))
+	plate_box.border_width_top = 4
+	plate_box.border_color = UiTheme.NAVY
+	cluster_plate.add_theme_stylebox_override("panel", plate_box)
+	margin.add_child(cluster_plate)
+	cluster_plate.add_child(cluster)
 
 	# Row: gear (+ A/M) on the left, speed on the right.
 	var row := HBoxContainer.new()
@@ -200,21 +211,25 @@ func _ready() -> void:
 	gear_col.add_theme_constant_override("separation", -6)
 	gear_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(gear_col)
-	lbl_gear = _label(gear_col, 56, AMBER)
+	lbl_gear = _label(gear_col, 64, AMBER)
+	lbl_gear.add_theme_font_override("font", UiTheme.font("display"))
 	lbl_gear.custom_minimum_size = Vector2(52, 0)
 	lbl_gear.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl_mode = _label(gear_col, 16, SILVER)
+	lbl_mode.add_theme_font_override("font", UiTheme.font("mono"))
 	lbl_mode.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	var speed_col := VBoxContainer.new()
 	speed_col.add_theme_constant_override("separation", -10)
 	speed_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(speed_col)
-	lbl_speed = _label(speed_col, 64, SILVER)
+	lbl_speed = _label(speed_col, 84, SILVER)
+	lbl_speed.add_theme_font_override("font", UiTheme.font("display"))
 	lbl_speed.custom_minimum_size = Vector2(190, 0)
 	lbl_speed.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	lbl_unit = _label(speed_col, 16, SILVER)
 	lbl_unit.text = "km/h"
+	lbl_unit.add_theme_font_override("font", UiTheme.font("mono"))
 	lbl_unit.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	# Status line (ENGINE OFF / SHIFT), kept in the layout even when empty so
@@ -230,8 +245,10 @@ func _ready() -> void:
 	under.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cluster.add_child(under)
 	lbl_boost = _label(under, 14, AMBER)
+	lbl_boost.add_theme_font_override("font", UiTheme.font("mono"))
 	lbl_boost.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lbl_rpm = _label(under, 14, SILVER)
+	lbl_rpm.add_theme_font_override("font", UiTheme.font("mono"))
 	lbl_rpm.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 ## The rear strip shows in the chase view when the flag is on and the cockpit
@@ -316,6 +333,7 @@ func _refresh() -> void:
 	# In the cockpit the wheel's LCD and the cluster carry speed, gear and rpm
 	# (Roy, 2026-10-06); the warning lights and radio toast are other layers.
 	cluster.visible = camera.view != ChaseCamera.View.COCKPIT
+	cluster_plate.visible = cluster.visible
 	_refresh_rear_strip()
 	_refresh_rear_cue()
 	_refresh_side_cue()

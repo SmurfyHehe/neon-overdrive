@@ -16,7 +16,17 @@ var failures: Array[String] = []
 
 func _initialize() -> void:
 	await process_frame
-	_check(AudioSettings.path.get_file().begins_with("test_"), "not in test mode: would write %s" % AudioSettings.path)
+	# Never touch a real settings file. On 2026-10-07 a run of this test outside
+	# test mode wrote the damaged file below over Roy's user://settings.cfg: the
+	# check only logged a failure and carried on. Now it stops, and the damaged
+	# file gets a path of its own, so the shared test_settings.cfg that other
+	# tests load is never touched either.
+	if not AudioSettings.path.get_file().begins_with("test_"):
+		printerr("FAIL: not in test mode (settings path %s); run it as res://tests/settings_safety.gd. Nothing written." % AudioSettings.path)
+		quit(1)
+		return
+	var real_path := AudioSettings.path
+	AudioSettings.path = AudioSettings.path.get_base_dir().path_join("test_settings_safety_damaged.cfg")
 
 	# --- damaged settings file ---
 	var f := FileAccess.open(AudioSettings.path, FileAccess.WRITE)
@@ -43,6 +53,8 @@ func _initialize() -> void:
 	_check(is_finite(TrafficSettings.detail_distance), "set_detail_distance stored NaN")
 	ViewSettings.set_cockpit_fov(NAN)
 	_check(is_finite(ViewSettings.cockpit_fov), "set_cockpit_fov stored NaN")
+
+	AudioSettings.path = real_path
 
 	# --- brake bias Auto / Manual ---
 	var car := PlayerCar.new()

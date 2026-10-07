@@ -82,6 +82,7 @@ call :run boundary_walls --headless
 call :run road_space --headless
 call :run road_frame --headless
 call :run road_centerline --headless
+call :run road_alignment --headless
 if /i not "%~1"=="quick" (
 	rem Headless, but ~2 min of simulated driving; --fixed-fps lets physics run faster than the clock.
 	call :run tune_track "--headless --fixed-fps 60"
@@ -97,6 +98,7 @@ if /i not "%~1"=="quick" (
 	call :run traffic_stability "--headless --fixed-fps 120"
 	call :run traffic_behaviour "--headless --fixed-fps 120"
 	call :run traffic_perf "--headless --fixed-fps 120"
+	call :run curve_drive "--headless --fixed-fps 120"
 	call :run auto_tune_search "--headless --fixed-fps 60"
 	call :run auto_tune_job "--headless --fixed-fps 60"
 	rem Key-press tests run headless: a windowed run loses its held keys the moment the window loses focus (found 2026-10-05, it made chunk_drive and feel_pass_1 flaky).

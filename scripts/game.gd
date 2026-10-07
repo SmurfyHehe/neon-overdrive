@@ -75,6 +75,7 @@ func _ready() -> void:
 		seed(Benchmark.SEED)
 	else:
 		randomize()
+	_setup_road_shape()
 	_setup_world()
 	_setup_ground_collision()
 	_setup_chunk_pool()
@@ -206,6 +207,21 @@ func _setup_ground_collision() -> void:
 	body.add_to_group("Road")
 	add_child(body)
 
+# ---------- road shape (#37 curves) ----------
+## How bendy the road is, 0 (straight) to 1 (mostly bends); NEON_CURVES=<x>
+## overrides it. Off by default until the chase camera follows the road
+## (step R4). NEON_ROAD_SEED=<n> fixes the road for tests.
+@export var curviness := 0.0
+
+func _setup_road_shape() -> void:
+	var env := OS.get_environment("NEON_CURVES")
+	if env.is_valid_float():
+		curviness = float(env)
+	var seed_env := OS.get_environment("NEON_ROAD_SEED")
+	var road_seed := int(seed_env) if seed_env.is_valid_int() else randi()
+	RoadFrame.origin_index = origin_index
+	RoadFrame.align = RoadAlignment.new(road_seed, curviness) if curviness > 0.0 else null
+
 # ---------- section math (reused from old main.gd, keyed by chunk index instead of distance) ----------
 func _section_at(idx: int) -> Dictionary:
 	var key := str(idx)
@@ -265,9 +281,13 @@ func _physics_process(_delta: float) -> void:
 func _shift_origin(shift_chunks: int) -> void:
 	if shift_chunks == 0:
 		return
+	# The world moves so the new origin chunk's start lands on (0, 0, 0): on a
+	# straight road that is +shift_chunks * 50 along z; on a curved one
+	# (RoadFrame, #37) x moves too. Nothing is rotated.
+	var offset := -RoadFrame.chunk_xf(origin_index + shift_chunks, origin_index).origin
 	origin_index += shift_chunks
+	RoadFrame.origin_index = origin_index
 	recenter_count += 1
-	var offset := Vector3(0.0, 0.0, float(shift_chunks) * RoadChunkBuilder.CHUNK_LEN)
 
 	# The car. Velocity and spin carry over untouched (they are not
 	# positions). GEVP derives speed from the position it saved on the last
@@ -284,8 +304,11 @@ func _shift_origin(shift_chunks: int) -> void:
 
 	for c in chunk_pool:
 		# Re-derived from the index, not +=, so error can never accumulate.
-		c.root.position = Vector3(0, 0, -float(c.index - origin_index) * RoadChunkBuilder.CHUNK_LEN)
+		c.root.transform = RoadFrame.chunk_xf(c.index, origin_index)
 		c.root.reset_physics_interpolation()
+		# Now, not at the next transform flush: a stale chunk collider is
+		# invisible on a straight road but lies across a curved one (#37).
+		RoadChunkBuilder.sync_collision(c.root)
 	# Traffic (milestone 3): every car gets the same bookkeeping as the player.
 	traffic.shift_world(offset)
 	fx.shift_world(offset)  # skid marks are laid in world space

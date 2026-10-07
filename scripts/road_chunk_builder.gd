@@ -660,6 +660,7 @@ static func _new_sidewalk_collision(body_name: String) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = body_name
 	body.add_to_group("Dirt")
+	body.collision_layer = 1 << (CarSpec.KERB_LAYER - 1)  # wheels only, see CarSpec
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
 	var hull := ConvexPolygonShape3D.new()
@@ -705,6 +706,7 @@ static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: 
 static func _new_boundary(body_name: String) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = body_name
+	CarSpec.make_wall(body)
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
 	col.shape = BoxShape3D.new()
@@ -740,6 +742,7 @@ static func _new_building(index: int) -> Array:
 	mi.mesh = _box_mesh(Vector3.ONE)
 	var body := StaticBody3D.new()
 	body.name = "BuildingBody%d" % index
+	CarSpec.make_wall(body)
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
 	col.shape = BoxShape3D.new()

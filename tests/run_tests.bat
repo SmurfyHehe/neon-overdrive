@@ -76,6 +76,8 @@ call :run auto_tune_worker_mode --headless
 call :run tune_params --headless
 call :run auto_tune_rules --headless
 call :run tune_slots --headless
+rem The player's tune survives a reset and a relaunch (PlayerTune).
+call :run tune_persist --headless
 call :run traffic_spawn "--headless --fixed-fps 60"
 rem ~40 s: the traffic cars (stage B step 5) against their sheets, then a drive each at the game's 120 Hz.
 call :run npc_cars "--headless --fixed-fps 120"
@@ -84,6 +86,8 @@ call :run recenter_kick "--headless --fixed-fps 120"
 call :run fx_pack --headless
 call :run exhaust_flames --headless
 call :run boundary_walls --headless
+rem ~1 min: the player into the out-of-bounds wall at 16 speeds and angles, at the game's 120 Hz.
+call :run wall_hit "--headless --fixed-fps 120"
 call :run road_space --headless
 if /i not "%~1"=="quick" (
 	rem Headless, but ~2 min of simulated driving; --fixed-fps lets physics run faster than the clock.

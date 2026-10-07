@@ -12,8 +12,9 @@ extends Node3D
 # Cuban-link bracelet (Roy, same day), modelled as a ring of flat interlocking
 # links over the cuff.
 #
-# Hands grip the wheel rim at 9 and 3 and turn with it; past HAND_SLIDE_DEG of
-# wheel rotation the rim slides through the hands. Legs: analytic two-bone IK
+# Hands grip the wheel rim low, at about 8 and 4 (GRIP_DEG), and turn with it;
+# once a hand would leave GRIP_LOW_DEG..GRIP_HIGH_DEG the rim slides through
+# it. Legs: analytic two-bone IK
 # from the hips to the pedals (right foot throttle or brake, whichever is
 # pressed; left foot on the clutch with the clutch model on, else on the dead
 # pedal).
@@ -33,7 +34,7 @@ extends Node3D
 #   - idle: breathing, and a head bob from the road.
 # In the cockpit view the head and torso are hidden (the camera is the head);
 # in the chase view the whole driver shows through the glass. The hands never
-# rise above HAND_MIN_DEG below the eye, so the road band stays clear
+# rise above HAND_TOP_MIN_DEG below the eye, so the road band stays clear
 # (tests/cockpit_driver.gd).
 
 const SKIN := Color("#B9896A")
@@ -73,16 +74,19 @@ const LINK_BAR := 0.0045
 const LINK_TILT_DEG := 35.0
 const THIGH := 0.47
 const SHIN := 0.45
-## Beyond this wheel angle the rim slides through the hands, so they never
-## climb past about 2 and 10 o'clock: the sightline spec keeps every hand point
-## at least HAND_MIN_DEG below the eye (at 55 the top hand reached 15.7, at 35
-## it stays near 20.5, which leaves room for the head motion), and a real
-## driver shuffles past this much lock anyway.
-const HAND_SLIDE_DEG := 35.0
-## Sightline budget for the hands (notes: cockpit-interior-research, section 4):
-## no hand or wrist point higher than this many degrees below the eye, in any
-## state. tests/cockpit_driver.gd checks it every tick.
-const HAND_MIN_DEG := 18.0
+## Where the hands hold the rim, in degrees round the rim for the right hand
+## (0 = 3 o'clock, up is positive; the left hand mirrors it). At 9 and 3 the
+## knuckles and cuffs rose into the road view (2026-10-07), so the hands sit
+## low, at about 8 and 4. They turn with the wheel between GRIP_LOW_DEG (just
+## above the flat bottom) and GRIP_HIGH_DEG; past those the rim slides through
+## them, so a hand never climbs toward the top of the rim (a real driver
+## shuffles past that much lock anyway). HAND_TOP_MIN_DEG is the sightline
+## budget from docs/planning/cockpit-interior-research-2026-10-06.md: no part
+## of a gripping hand above this many degrees below the eye.
+const GRIP_DEG := -30.0
+const GRIP_LOW_DEG := -42.0
+const GRIP_HIGH_DEG := 15.0
+const HAND_TOP_MIN_DEG := 18.0
 ## Seated geometry, car space: the pelvis pivot and the head on the torso.
 const PELVIS := Vector3(CockpitFrame.SEAT_X, 0.50, 0.34)
 const RECLINE_DEG := 12.0
@@ -314,21 +318,27 @@ func _aim(node: Node3D, from: Vector3, to: Vector3, hint: Vector3) -> void:
 func _hip(side: int) -> Vector3:
 	return torso.transform * Vector3(float(side) * HIP_HALF, 0.02, 0.0)
 
-## Where a hand grips the rim, car space: the rim point at 9 or 3 turning
-## with the wheel, sliding once the wheel is past HAND_SLIDE_DEG. Hand space
+## Where a hand grips the rim, car space: the rim point at GRIP_DEG turning
+## with the wheel, held between GRIP_LOW_DEG and GRIP_HIGH_DEG. Hand space
 ## as in _hand_mesh (x outward, y up the rim, z toward the driver).
 func _grip_transform(side: int) -> Transform3D:
 	var wheel := frame.wheel
 	var wheel_deg := rad_to_deg(wheel.angle)
-	var slip := wheel_deg - clampf(wheel_deg, -HAND_SLIDE_DEG, HAND_SLIDE_DEG)
-	# the wheel turns the rim by -angle about its z; the hand stays at base + slip
-	var base := 0.0 if side > 0 else 180.0
-	var local_deg := base + slip
+	# the wheel turns the rim by -angle about its z, so on the rim the hand is
+	# at its car-space angle plus the wheel angle
+	var local_deg := grip_rim_deg(side, wheel_deg) + wheel_deg
 	var p := wheel.rim_point(local_deg)
 	# the mesh is already mirrored for the left hand, so both hands use the
-	# wheel's axes at their home point, turned only by the slip
-	var local_xf := Transform3D(Basis(Vector3.BACK, deg_to_rad(slip)), p)
+	# wheel's axes at 3 or 9 o'clock, turned round the rim to the grip
+	var base := 0.0 if side > 0 else 180.0
+	var local_xf := Transform3D(Basis(Vector3.BACK, deg_to_rad(local_deg - base)), p)
 	return _wheel_to_car(local_xf)
+
+## Where a hand sits round the rim for a wheel angle, car space (the wheel's
+## own rotation left out): degrees, 0 = 3 o'clock, up is positive.
+static func grip_rim_deg(side: int, wheel_deg: float) -> float:
+	var m := clampf(GRIP_DEG - float(side) * wheel_deg, GRIP_LOW_DEG, GRIP_HIGH_DEG)
+	return m if side > 0 else 180.0 - m
 
 ## Wheel space -> car space (the frame is at the car's origin).
 func _wheel_to_car(local_xf: Transform3D) -> Transform3D:

@@ -78,9 +78,21 @@ its own random stream from it, so changing one system does not reshuffle the oth
 | Road chunks | Order and roadside dressing from the existing pool |
 | Traffic density | 0.6× to 1.4× the slider value |
 | Time of night | Dusk, midnight or pre-dawn; all stay inside Amber vs. Dusk |
-| Weather | Clear or haze (fog density) only. Rain needs wet grip and spray, so it is a later item |
+| Weather | Clear or haze only, and haze only goes **denser** than today's 0.009 (see the fog rule below). Rain needs wet grip and spray, so it is a later item |
+| Moon | **Roy, 2026-10-07: a phasing moon**, not always full. The seed picks the phase; a visible moon disc (silver) and the existing moonlight key light (`game.gd:154`) scale with it |
 | Event type | A list with one entry today ("free run"). Events slot in later |
 | Weekly challenge | Stub only: a fixed seed from the calendar week, no UI |
+
+**Fog rule (the conflict).** The haze is not only weather. Since Stage A it also
+hides the short draw distance (`game.gd:100-116`: "a warm dark haze that swallows
+the distance", which makes the short draw distance free). Thinner haze would show
+road chunks and frozen traffic popping in at the 150 m detail distance and cost
+frame rate. So per-run haze may only be the same or denser, never thinner.
+
+**Graphics setting.** Roy wants the night and weather variation in any game mode,
+but only on the High graphics setting. There is no global graphics preset today
+(only mirror quality in `fx_settings.gd`), so C6 adds a Low/High preset; Low keeps
+today's fixed look.
 
 Traffic is full-sim physics, so the same seed gives the same start, not the same
 run. That is fine: we are not doing ghosts.
@@ -123,7 +135,8 @@ run. That is fine: we are not doing ghosts.
   | Driver aids (proposed) | traction control, stability, ABS thresholds |
 
   Power-only nodes (`max_torque`, `max_rpm`) are allowed inside a branch, never as
-  a whole branch. Exhaust stays cosmetic and never counts.
+  a whole branch. Exhaust stays cosmetic and never counts. Coloured tyre smoke
+  (Roy, 2026-10-07, for later) is a cosmetic mod and never counts either.
 
 ## 6. Emergent hooks
 
@@ -159,7 +172,7 @@ the one-file constants make balancing quick.
 | C3 | Streak, pot, banking, heat gain and payout tiers | Bank after 6 s; crash loses pot; heat tiers |
 | C4 | HUD: score, streak, pot, heat (palette test) | `palette` and HUD tests |
 | C5 | Instant retry and the summary screen | Crash to driving under 2 s, measured |
-| C6 | Run seed and per-run variation, weekly-seed stub | Same seed gives the same start settings |
+| C6 | Run seed and per-run variation, moon phases, Low/High graphics preset, weekly-seed stub | Same seed gives the same start settings; haze never below 0.009 |
 | C7 | Wallet and best-score table saves (off in test mode) | Save, reboot, read back |
 | C8 | Mod-tree data format and the "drives differently" check | Bad branch fails the check |
 | C9 | Dave summary lines and rival memory stub | Tags pick the right line |
@@ -174,5 +187,8 @@ After C5, a playtest of 20 runs against the falsification check, before C6-C9.
 3. Time-of-night variation and haze now, rain later: **yes**.
 4. Handling fields: grip/tyres, steering/diff, weight/balance, gearing, **plus
    research for more**; the proposed extra groups are in section 5 for sign-off.
+
+5. Second round: pot **A** (pot + bank); heat **yes**; variety **any mode, High
+   setting only**; a phasing moon; coloured smoke later as a mod.
 
 Still open: sign-off on the whole page and on the extra field groups.

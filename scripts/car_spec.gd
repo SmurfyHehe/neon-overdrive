@@ -254,6 +254,34 @@ static func traffic_default() -> Dictionary:
 	s["turbo_boost_max"] = 0.0
 	return s
 
+## The traffic cars (stage B step 5, NpcCarBuilder.KINDS): traffic_default()
+## with each car's own numbers, picked to feel like its class rather than
+## measured from a real car. Same sim as the player, different data. Unknown
+## kinds (the old box traffic car) get traffic_default().
+static func npc_spec(kind: String) -> Dictionary:
+	var s := traffic_default()
+	match kind:
+		"n1_commuter":
+			# Commuter sedan, ~2.5 l four, front drive: 1450 kg, 60% on the
+			# nose, soft and quiet. Gearing for ~110 km/h at 3000 rpm in 5th.
+			var gears: Array[float] = [3.30, 1.95, 1.35, 1.00, 0.78]
+			s["vehicle_mass"] = 1450.0
+			s["front_weight_distribution"] = 0.60
+			s["front_torque_split"] = 1.0
+			s["max_torque"] = 270.0
+			s["max_rpm"] = 6200.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.9
+			s["coefficient_of_drag"] = 0.30
+			s["frontal_area"] = 2.25
+			s["front_tire_width"] = 205.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 205.0
+			s["front_damping_ratio"] = 0.42
+			s["rear_damping_ratio"] = 0.42
+			s["front_arb_ratio"] = 0.15
+			s["rear_arb_ratio"] = 0.10
+	return s
+
 ## Physics layers (milestone 3). Every car sits on CAR_LAYER and collides with
 ## the world (WORLD_LAYER: ground slab, sidewalks, buildings) and with other
 ## cars. A Wheel is a RayCast3D on the default mask, layer 1 only, so a wheel
@@ -336,6 +364,9 @@ static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
 		visual = TestCarBuilder.build_wheel_visual(v.front_tire_radius)
 	elif kind == P1CoupeBuilder.KIND:
 		visual = P1CoupeBuilder.build_wheel_visual(v.front_tire_radius, pos)
+	elif NpcCarBuilder.is_npc(kind):
+		# Traffic cars (TrafficCar.build names the sheet variant).
+		visual = NpcCarBuilder.wheel_visual(kind, String(v.get("build")), pos)
 	else:
 		# CarBuilder kinds (traffic) share one merged, cached wheel mesh per
 		# kind (traffic milestone 4, draw calls).

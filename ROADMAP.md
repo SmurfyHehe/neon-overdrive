@@ -47,7 +47,9 @@ a build order. Nothing in them beyond what is listed as merged has been built.
 | Out-of-bounds walls (#28) | **In open PR #114**, not merged | `tests/boundary_walls.gd` |
 | Cockpit interior with live mirrors, LED wheel, cluster, centre stack, shifter lever, handbrake | **In open PR #130**, not merged. Needs the sightline rework below | |
 | Seated driver with forearm IK | **In open PR #131**, stacked on #130. Roy dropped forearms (see "Not started, sorted") | |
-| NPC cars (3) and cop cars (3) | **NOT started** (designs only) | |
+| NPC traffic cars (stage B step 5): N1 commuter sedan | **In open PR** (sheet model, 3 variants incl. taxi, own CarSpec; traffic is all N1 until N2/N3 land) | `scripts/npc_car_builder.gd`; `npc_cars` test |
+| NPC N2 city hatch, N3 pickup | **NOT started** (one PR each, after N1) | |
+| Cop cars (3) | **NOT started** (designs only) | |
 | Other 11 fleet cars (5 more player cars) | **NOT started** (`CarSpec` has the coupe only) | |
 | Garage + per-car mod trees | **NOT started** | |
 | Damage, fuel, stop places | **NOT started** (parked after the garage) | |

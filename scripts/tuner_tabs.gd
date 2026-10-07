@@ -1,8 +1,8 @@
 class_name TunerTabs
 extends HBoxContainer
 
-# The two buttons in the Tuner screen's header: "Tuner (T)" shows the screen with
-# the Auto-Tune section collapsed, "Auto-Tune (Y)" with it expanded. They just
+# The two buttons in the Tuner screen's header: "Tuner" shows the screen with
+# the Auto-Tune section collapsed, "Auto-Tune" with it expanded. They just
 # switch between the TUNING and AUTOTUNE states (the same thing the T and Y keys
 # do); the Tuner screen decides what each state looks like. The buttons are
 # keyboard-focusable (Tab, then Enter or Space); the screen drops focus on close.
@@ -18,8 +18,8 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
 	add_theme_constant_override("separation", 6)
-	manual_button = _tab("Tuner (T)", GameState.State.TUNING)
-	auto_button = _tab("Auto-Tune (Y)", GameState.State.AUTOTUNE)
+	manual_button = _tab("Tuner", GameState.State.TUNING)
+	auto_button = _tab("Auto-Tune", GameState.State.AUTOTUNE)
 	game_state.state_changed.connect(_on_state_changed)
 
 func _tab(text: String, target: GameState.State) -> Button:

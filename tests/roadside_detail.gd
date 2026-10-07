@@ -13,8 +13,8 @@ extends SceneTree
 #   leaving no gap wider than 0.3 m
 # - the lamp mesh: every triangle has area, a unit normal that matches its
 #   clockwise (Godot front-face) winding
-# - look rules: building windows use EMISSION_OP_MULTIPLY (the white-block
-#   bug), and road paint, posts, curb and barrier stay under the 1.0 glow
+# - look rules: building windows emit only through the facade mask (the
+#   white-block bug), and road paint, posts, curb and barrier stay under the 1.0 glow
 #   threshold (no neon); lamp heads are above it (they should bloom)
 #
 # Needs a real window: headless drops MultiMesh instance data.
@@ -152,10 +152,11 @@ func _check_lamp_mesh() -> void:
 	print("lamp mesh: %d surfaces checked" % mesh.get_surface_count())
 
 func _check_materials() -> void:
-	for garage in [false, true]:
-		var m := B._get_building_mat(garage)
-		if m.emission_operator != BaseMaterial3D.EMISSION_OP_MULTIPLY:
-			_fail("building material (garage=%s) emission is ADD: every face glows white" % garage)
+	# Buildings share the facade kit's one shader material; only masked
+	# glass emits (scripts/building_kit.gd), so no white-block faces.
+	var bm := B.BuildingKit.material()
+	if bm.shader == null or not bm.shader.code.contains("EMISSION = c * lit"):
+		_fail("building facade material lost its window-masked emission")
 	var dim := {
 		"lane dash": B._get_lane_dash_mat(), "centre dash": B._get_center_dash_mat(),
 		"edge line": B._get_edge_line_mat(), "curb": B._get_curb_mat(),

@@ -27,10 +27,10 @@ class_name RoadChunkBuilder
 # - roadside buildings beyond the sidewalks: real collision (StaticBody3D +
 #   BoxShape3D) so the player can't drive through them -- this is now the
 #   actual hard boundary of the drivable world, since the curb no longer is
-#   one. A random ~12% are tagged building_type="garage" (wider/shorter,
-#   warm-lit) -- purely a reserved visual variant for now, not wired to
-#   anything; milestone 8's stop-places can reuse the tag later instead of
-#   needing new building art.
+#   one. A random ~12% are tagged building_type="garage" (low sheds) --
+#   purely a reserved variant for now, not wired to anything; milestone 8's
+#   stop-places can reuse the tag later. Their look comes from
+#   scripts/building_kit.gd (buildings step 1, 2026-10-07).
 # - brighter/wider lane markings (the old dash/center-line material wasn't
 #   even emissive, just flat albedo -- part of why markings read as
 #   invisible) + a new solid (non-dashed) edge line along each lane's outer
@@ -73,6 +73,7 @@ class_name RoadChunkBuilder
 #   colour, which lit every face at 1.4x -- the solid white blocks in every
 #   screenshot. Now MULTIPLY (only the windows glow), world-space triplanar so
 #   windows are the same size on every building, and longer frontages.
+#   (Superseded 2026-10-07 by the facade kit, scripts/building_kit.gd.)
 
 # Curves + elevation are their own later architecture change (Path3D-driven
 # procedural mesh) and are explicitly NOT attempted here.
@@ -92,6 +93,8 @@ class_name RoadChunkBuilder
 # the sense of speed and leaves ~1.1 m between bodies in adjacent lanes.
 # Everything else across the road (shoulder, curb, sidewalk, buildings,
 # lamps, lane dashes, traffic lane centres) is laid out from this constant.
+const BuildingKit := preload("res://scripts/building_kit.gd")
+
 const LANE_W := 3.2
 const CHUNK_LEN := 50.0
 const DASH_SPACING := 4.0
@@ -159,8 +162,6 @@ const MAX_ONC_LANES := 4
 const CENTER_COLOR := Color(0.86, 0.62, 0.12)
 const LANE_DASH_COLOR := Color(0.82, 0.82, 0.78)
 const PAINT_ENERGY := 0.28
-const BUILDING_COLOR_GARAGE := Color(0.09, 0.08, 0.065)
-const BUILDING_COLOR_TOWER := Color(0.065, 0.062, 0.068)
 
 static var _own_mat: StandardMaterial3D
 static var _onc_mat: StandardMaterial3D
@@ -170,12 +171,9 @@ static var _sidewalk_mat: StandardMaterial3D
 static var _edge_line_mat: StandardMaterial3D
 static var _pylon_mat_own: StandardMaterial3D
 static var _pylon_mat_onc: StandardMaterial3D
-static var _window_tex: ImageTexture
 static var _barrier_mat: StandardMaterial3D
 static var _center_dash_mat: StandardMaterial3D
 static var _lane_dash_mat: StandardMaterial3D
-static var _building_mat_garage: StandardMaterial3D
-static var _building_mat_tower: StandardMaterial3D
 
 # Shared geometry, built once and reused by every chunk in the pool -- see the
 # "shared geometry" section below.
@@ -270,70 +268,6 @@ static func _get_pylon_mat_onc() -> StandardMaterial3D:
 	if _pylon_mat_onc == null:
 		_pylon_mat_onc = _flat_mat(Color(0.72, 0.62, 0.45), true, 0.35)
 	return _pylon_mat_onc
-
-## Procedural window-grid texture for buildings -- built once (a punched dot
-## grid of lit "windows" over a dark base) and shared across every building
-## material instance as an emission_texture, instead of spawning extra window
-## meshes per building.
-##
-## Stage A: a minority of windows lit (a city at 2 a.m., not an office at
-## noon), mostly warm incandescent with some cool fluorescent ones. Uses its
-## own seeded RNG so the pattern doesn't consume (or depend on) the global
-## random sequence the road layout uses.
-static func _get_window_tex() -> ImageTexture:
-	if _window_tex == null:
-		var rng := RandomNumberGenerator.new()
-		rng.seed = 2004
-		var img := Image.create(32, 32, false, Image.FORMAT_RGB8)
-		img.fill(Color(0.0, 0.0, 0.0))
-		var gy := 2
-		while gy < 30:
-			var gx := 1
-			while gx < 30:
-				if rng.randf() < 0.32:
-					var lit := Color(1.0, 0.78, 0.45) if rng.randf() < 0.7 else Color(0.62, 0.8, 1.0)
-					lit = lit * rng.randf_range(0.55, 1.0)
-					img.set_pixel(gx, gy, lit)
-					img.set_pixel(gx + 1, gy, lit)
-				gx += 4
-			gy += 4
-		_window_tex = ImageTexture.create_from_image(img)
-	return _window_tex
-
-## Cached building materials. Only two variants exist (garage / tower), but
-## _building_mat() used to be called per building -- 4 fresh
-## StandardMaterial3D per chunk, 32 across the pool, every one a duplicate of
-## one of these two. Cached like every other material in this file so the
-## renderer can batch them.
-static func _building_mat(base_color: Color) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
-	m.albedo_color = base_color
-	m.emission_enabled = true
-	m.emission_texture = _get_window_tex()
-	m.emission = Color(1, 1, 1)
-	# BUG FIX (stage A): the default operator is ADD, i.e. emission colour PLUS
-	# texture, so white + texture lit every face at >= 1.4 -- the solid white
-	# blocks. MULTIPLY makes the texture the mask: only windows emit.
-	m.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
-	m.emission_energy_multiplier = 1.25
-	# World-space mapping: windows are the same size on every building
-	# whatever its dimensions, and the 25 m tile divides the 1 km floating-
-	# origin shift exactly, so the pattern never jumps on a recenter.
-	m.uv1_triplanar = true
-	m.uv1_world_triplanar = true
-	m.uv1_scale = Vector3.ONE / 25.0
-	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	m.roughness = 0.85
-	return m
-
-static func _get_building_mat(is_garage: bool) -> StandardMaterial3D:
-	if is_garage:
-		if _building_mat_garage == null:
-			_building_mat_garage = _building_mat(BUILDING_COLOR_GARAGE)
-		return _building_mat_garage
-	if _building_mat_tower == null:
-		_building_mat_tower = _building_mat(BUILDING_COLOR_TOWER)
-	return _building_mat_tower
 
 ## The center barrier and the two dash colors were the three materials in this
 ## file that bypassed the static-var cache above, constructed fresh inside
@@ -648,19 +582,24 @@ static func _update_boundary(root: Node3D, body_name: String, inner_x: float, si
 # per-node building_type="garage" meta that milestone 8 is meant to reuse
 # cannot live on a MultiMesh instance.
 #
-# They are also the one case that does NOT share a mesh. Godot's BoxMesh lays
-# out UVs proportional to the box dimensions, so the window-grid emission
-# texture stretches with a building's height -- sharing one unit cube and
-# scaling the node would flatten that into a uniform grid, which is a real
-# visual change. Instead each slot keeps its own BoxMesh for the life of the
-# pool and has its size rewritten on rebuild: identical UVs to before, and
-# still nothing allocated per rebuild. They do now share the two cached
-# materials instead of one fresh material each.
+# Buildings step 1 (2026-10-07): every building now shares one unit cube and
+# one facade ShaderMaterial (scripts/building_kit.gd). The facade is mapped
+# from the building's own size in the shader, not from BoxMesh UVs, so the
+# node is simply scaled; tile, tint, floor count and lit-window density are
+# per-instance shader parameters.
+#
+# The look is drawn from a per-building RNG seeded by chunk index and slot,
+# NOT the global random sequence: the global draws below are kept exactly as
+# before (4 per building, in the same order), so the road layout game.gd
+# rolls after each chunk is unchanged for any seed, and a chunk rebuilt from
+# the pool looks the same as one built fresh.
+
+static var _bld_rng := RandomNumberGenerator.new()
 
 static func _new_building(index: int) -> Array:
 	var mi := MeshInstance3D.new()
 	mi.name = "BuildingMesh%d" % index
-	mi.mesh = _box_mesh(Vector3.ONE)
+	mi.mesh = BuildingKit.unit_box()
 	var body := StaticBody3D.new()
 	body.name = "BuildingBody%d" % index
 	var col := CollisionShape3D.new()
@@ -671,7 +610,7 @@ static func _new_building(index: int) -> Array:
 
 ## Returns the building's length along the road (its z size), so the gap
 ## walls can fill what is left between buildings.
-static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: float, side: int) -> float:
+static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: float, side: int, chunk_index: int = 0) -> float:
 	var mi: MeshInstance3D = root.get_node(NodePath("BuildingMesh%d" % index))
 	var body: StaticBody3D = root.get_node(NodePath("BuildingBody%d" % index))
 	var col: CollisionShape3D = body.get_node(^"Shape")
@@ -679,15 +618,19 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 
 	# Stage A: longer frontages (d, along the road) so the street reads as a
 	# continuous built-up corridor; w is how deep the block goes.
+	# Keep these four global calls exactly as they are (see the section
+	# comment; randf_range() takes more draws than randf(), so even swapping
+	# one for the other shifts the road layout).
 	var is_garage: bool = randf() < 0.12
 	var w: float = randf_range(4.0, 10.0)
 	var d: float = randf_range(9.0, 18.0)
-	var h: float = randf_range(3.0, 4.5) if is_garage else randf_range(6.0, 22.0)
-	var pos := Vector3((edge_x_abs + w / 2.0 + BUILDING_GAP) * float(side), h / 2.0, z)
+	var h_old: float = randf_range(3.0, 4.5) if is_garage else randf_range(6.0, 22.0)
+	var h_roll := inverse_lerp(3.0, 4.5, h_old) if is_garage else inverse_lerp(6.0, 22.0, h_old)
 
-	(mi.mesh as BoxMesh).size = Vector3(w, h, d)
+	_bld_rng.seed = hash([chunk_index, index])
+	var h := BuildingKit.dress(mi, _bld_rng, is_garage, h_roll, w, d)
+	var pos := Vector3((edge_x_abs + w / 2.0 + BUILDING_GAP) * float(side), h / 2.0, z)
 	mi.position = pos
-	mi.material_override = _get_building_mat(is_garage)
 	if is_garage:
 		mi.set_meta("building_type", "garage")
 	elif mi.has_meta("building_type"):
@@ -833,8 +776,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var bt: float = -bz / CHUNK_LEN
 		var own_edge_b: float = lerp(start_own_walk, end_own_walk, bt)
 		var onc_edge_b: float = lerp(start_onc_walk, end_onc_walk, bt)
-		var d_own := _update_building(root, i * 2, own_edge_b, bz, 1)
-		var d_onc := _update_building(root, i * 2 + 1, onc_edge_b, bz, -1)
+		var d_own := _update_building(root, i * 2, own_edge_b, bz, 1, chunk_index)
+		var d_onc := _update_building(root, i * 2 + 1, onc_edge_b, bz, -1, chunk_index)
 		spans[1].append([bz + d_own / 2.0, bz - d_own / 2.0])
 		spans[-1].append([bz + d_onc / 2.0, bz - d_onc / 2.0])
 

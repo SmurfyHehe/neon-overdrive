@@ -74,6 +74,7 @@ The cowl at −14° is a deliberate cheat: halfway between a real car (~−6°) 
 **Floating hands (Roy, 2026-10-06 15:50: wants hands, but floating)**
 - Two gloved/bare hands on the rim with **no forearms or arms**: each ends in a clean cuff, so nothing reaches back toward the body and nothing blocks the interior view.
 - Grip at 9 and 3 o'clock, parented to the wheel, so they turn with it (full lock is ~86°, no hand-over-hand needed).
+  - Update 2026-10-07: grip lowered to about 8 and 4 (`DriverModel.GRIP_DEG`); hands turn with the wheel only between the flat bottom and about half past 2 and slide past that, so they no longer ride up over the cluster at lock. `tests/cockpit_driver.gd` now checks every hand mesh corner against the −18° budget (was 9° at lock, now 19.4°).
 - Sightline budget: hand tops at or below **−18°** (inside the wheel's lower area, well under the −14° dash line); together ≤600 triangles, 1 draw call; same vertex-baked light, sodium sweep and gauge spill as the cabin.
 - Shifter hand: at FOV 62 the shifter sits below the screen edge (~−40°), so in step 1–2 hands stay on the wheel. When the visible shifter lands (proposal step 3), the right hand hops to the shifter for each manual shift and back (~0.25 s), never crossing the clear band.
 - Per car: glove or skin style is a field in the art brief (e.g. coupe: black leather driving gloves with an amber stitch).

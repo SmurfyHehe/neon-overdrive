@@ -261,12 +261,44 @@ static func traffic_default() -> Dictionary:
 ## its tyre numbers from the FIRST group of whatever it hits (gevp_wheel.gd
 ## process_forces), a car's first group is "aero_vehicles", and
 ## coefficient_of_friction["aero_vehicles"] does not exist.
+##
+## Walls (WALL_LAYER: the out-of-bounds walls and the buildings) are off layer
+## 1 for the same reason (2026-10-07). A car pressed against a wall leans into
+## it, its wheel rays tip with it and land on the wall face, and the springs
+## then push the car up the wall: Roy's "the car bugs out on the walls", up to
+## 4 m in the air and on its roof at 200 km/h (tests/wall_hit.gd). Car bodies
+## still collide with walls; wheels only ever see the ground and sidewalks.
+##
+## The sidewalks (KERB_LAYER) are the opposite: wheels see them, car bodies do
+## not. The chassis box rides ~4 cm off the road, so crossing the 15 cm kerb
+## ramp at speed used to drive the box up it like a ski jump (4 m/s straight
+## up at 126 km/h, tests/wall_hit.gd) and the car reached the wall airborne and
+## tumbled. Now the wheels climb the kerb through the suspension, as on a real
+## car, and the box can only touch the road, walls and other cars.
 const WORLD_LAYER := 1
 const CAR_LAYER := 2
+const WALL_LAYER := 3
+const KERB_LAYER := 4
 
 static func set_collision_layers(v: Vehicle) -> void:
 	v.collision_layer = 1 << (CAR_LAYER - 1)
-	v.collision_mask = (1 << (WORLD_LAYER - 1)) | (1 << (CAR_LAYER - 1))
+	v.collision_mask = (1 << (WORLD_LAYER - 1)) | (1 << (CAR_LAYER - 1)) | (1 << (WALL_LAYER - 1))
+
+## Puts a wall body on WALL_LAYER with a frictionless surface, so a car that
+## hits it slides along or bounces off instead of being grabbed and rolled.
+static func make_wall(body: StaticBody3D) -> void:
+	body.collision_layer = 1 << (WALL_LAYER - 1)
+	body.collision_mask = 0
+	body.physics_material_override = _wall_material()
+
+static var _wall_mat: PhysicsMaterial
+
+static func _wall_material() -> PhysicsMaterial:
+	if _wall_mat == null:
+		_wall_mat = PhysicsMaterial.new()
+		_wall_mat.friction = 0.0
+		_wall_mat.bounce = 0.1
+	return _wall_mat
 
 ## Rise-then-taper torque curve, loosely modeled on a real gasoline engine's
 ## band, not measured from anything specific -- same shape every car uses for
@@ -330,6 +362,7 @@ static func build_wheels(v: Vehicle, kind: String, wheel_cfg: Dictionary, front_
 static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
 	var w := Wheel.new()
 	w.position = pos
+	w.collision_mask = (1 << (WORLD_LAYER - 1)) | (1 << (KERB_LAYER - 1))
 	v.add_child(w)
 	var visual: Node3D
 	if kind == TestCarBuilder.KIND:

@@ -1,6 +1,8 @@
 # Game narrative fabric: how every system tells one story (proposal, 2026-10-07)
 
-Status: PROPOSAL, docs only. Roy signs off before anything is built. Story is Roy's to write: this is the bridge between the mechanics and his story, not the story. Every name is a placeholder from `docs/story-bible.md`. No loan or penalty mechanics; the debt stays story-only.
+Status: PROPOSAL, docs only. Roy signs off before anything is built. Story is Roy's to write: this is the bridge between the mechanics and his story, not the story. Every name is a placeholder from `docs/story-bible.md`.
+
+**Changed 2026-10-07 18:42 by Roy:** Pike is now a person in the game who takes money from the player (section 9). This replaces the old rule "no loan or penalty mechanics; the debt stays story-only" in the story bible and project memory. The story bible line needs Roy's edit; this doc does not change it.
 
 Inputs read (all on open branches, none merged yet): `docs/story-bible.md` (main), engine spec (`claude/project-thread-cgvj8u`), landmark research (`-8yyjao`), world vision W1-W5 (`-w9ubqr`), gas station (`-73z87a`), Stage C run loop (`-soqei8`). Car numbers from `scripts/car_spec.gd` on main `9c28d59`.
 
@@ -11,6 +13,15 @@ Roy's calls on 2026-10-07 that this doc follows:
 - Pike Lending storefront becomes a liquor store.
 - Landmark list approved, 10 target, no ceiling; landmarks and W1-W4 must be researched.
 - Mirrors: no keys. The game does it automatically in first person. Over-the-shoulder may be needed.
+
+Roy's answers to round 1 (2026-10-07 18:42):
+1. Daylight only in the garage: **yes**, unless story telling or another reason needs it (for example a daytime story scene).
+2. Prologue car weaker than today's: **yes**.
+3. Failure system: **all three** (limp + roadside patch, Ferris, crew), and research and brainstorm more (section 4b).
+4. Event power bands with a race spec: **yes**.
+5. Act 2 Ironbridge boss is Ledger's number two: **yes**.
+6. Blind-spot lamp: **installed in the story as the introduction to mods** (section 6).
+7. Pike: the storefront is gone, but Pike stays. He works with the corrupt mayor, the police and the rivals. He is the way the game takes money away from the player, and he drives a "save the garage" quest line, which is not the only storyline (section 9).
 
 ## One line
 
@@ -43,7 +54,9 @@ One in-game **night** is one session's unit. It wraps the Stage C run loop inste
  GARAGE: Cred banked, wear shows on the car, Dave's summary line
 ```
 
-**Day and night, a contradiction to settle.** The world vision says "no daytime" because day fights the Gritty PS2 night look. The coordinator's note said "work at the garage by day, race at night". Proposed fix: **daylight exists only inside the garage scene** (light through the roller door and windows, a menu scene, no world lighting cost). Streets are always night. This gives the shift structure without ever rendering the city in daylight.
+**Day and night, a contradiction to settle.** The world vision says "no daytime" because day fights the Gritty PS2 night look. The coordinator's note said "work at the garage by day, race at night". **Decided (Roy, yes): daylight exists only inside the garage scene** (light through the roller door and windows, a menu scene, no world lighting cost). Streets are night in play.
+
+**Exception for story (Roy):** daylight is allowed when the story needs it. The cheapest forms, in order: a daylight **still** (the story bible already delivers story as texts and stills), a short fixed-camera scene in a small daytime set (Pike's office, the mayor's press event, the garage forecourt), and only last a drivable daytime street. A drivable day needs its own light, fog and window setup across the world, so it would be its own proposal.
 
 ## 2. Act map: story beats, power tier, places, garage skills
 
@@ -110,12 +123,43 @@ Brainstormed options, with a recommendation:
 | E. Gas station quick fix | Partial repair at any gas station (already in the gas station doc) | Clerk sells the parts | Small Cred |
 | F. Early warning only | Ladder of signs before anything bad: dash lamp, rough audio, Dave says your car sounds sick on air | Dave noticing makes the radio feel alive | Nothing |
 
-**Recommendation: A + B as the system, F always on, C and D as story flavour.** The engine spec's "dead at 0, tow to garage" line should change to the limp floor. Damage only ever costs speed and time, never the car.
+**Decided (Roy): A, B, C and D all go in, F always on.** The engine spec's "dead at 0, tow to garage" line changes to the limp floor. Damage costs speed, time, favours or Cred, never the car.
+
+How the four sit together, so they do not overlap:
+
+| Situation | First choice | Why |
+|---|---|---|
+| Health 25-40, mid-run | Keep driving; warnings only (F) | You were told; your call |
+| Health 10, limp mode, near a gas station | Gas station quick fix (E) | Cheapest, no story cost |
+| Limp, nowhere near help | Roadside patch (B), once per night | You are the mechanic |
+| Patch already used tonight | Call Ferris (C): costs a favour, he arrives in 30-60 s of game time | Builds the Ferris relationship; favours become side jobs |
+| Ferris owed too many favours (say 3) | Crew call (D): Moose, once per night, only after he has joined | The crew carries you; Moose's drama lands harder |
+| None of the above | Limp home (A) | Always possible, never lost |
+
+**What other driving games do (research, from general game knowledge, not re-checked against sources):**
+
+| Game | What happens on a breakdown or wreck | Lesson for us |
+|---|---|---|
+| Need for Speed: Most Wanted (2005) | Busted three times and the car is impounded, and can be lost for good | The "lose the car" model Roy rejected. Players remember it as harsh |
+| Need for Speed Heat | Busted at night: lose the unbanked night's rep and money | A pot you can lose is accepted; matches Stage C's pot |
+| GTA V | Wasted or busted: a hospital or police fee, you keep the car | A small fee feels fair. Pike's corrupt police can use this (section 9) |
+| Euro Truck Simulator 2 | Breakdown: call a service, pay a fee, get teleported to a service station | Our Ferris call, but with a favour in place of a fee |
+| My Summer Car, Jalopy | You fix the car yourself at the roadside with parts you carry | Our roadside patch; fun because the player is the mechanic |
+| Forza Horizon | Damage is mostly cosmetic, no lasting cost | The other end: no stakes at all |
+
+**More ideas to brainstorm with Roy (not proposed yet):**
+- **Spare parts in the boot.** You choose what to carry before a night (a coolant bottle, a spare belt, a plug set). The roadside patch only works for what you carry, which makes packing a decision.
+- **Push-start** for cars with a manual gearbox when the battery is flat. It is a real trick and short to play.
+- **Hitch a tow from a stranger.** A random NPC pickup offers a tow for a story line or a rumour.
+- **Dave on air.** Call the station and Dave reads your breakdown out on air; a listener nearby turns up to help. Funny, and it uses the radio.
+- **Breakdown as an opening.** A rival stops by while you are on the shoulder: they mock you or offer a race once you are fixed.
+
+**Still to research properly:** a pass with real sources on breakdown systems in driving games and how players rated them, before the engine spec is rewritten.
 
 ### 4c. Service is how the shop survives
 
 - **Your car:** oil, plugs, coolant, gearbox, and later the rebuild (spec sec. 8 mini-games). Doing them well is how you get from T0 to T1, and keeping up with them is how you hold T3-T4 without heat and knock.
-- **Customer jobs:** the day shift has 1-3 customer cars. Same mini-games, on traffic models (N1-N3). They pay Cred, and each customer is someone from a landmark (the gas station clerk's hatch, the diner waitress's commuter, a dock worker's pickup). This is how landmarks feed the garage without any loan or penalty mechanic.
+- **Customer jobs:** the day shift has 1-3 customer cars. Same mini-games, on traffic models (N1-N3). They pay Cred, and each customer is someone from a landmark (the gas station clerk's hatch, the diner waitress's commuter, a dock worker's pickup). This is how landmarks feed the garage, and the Cred that pays Pike (section 9) comes from here and from night runs.
 - **Mini-game ladder by act:** Act 1 oil, plugs, intake. Act 2 coolant bleed, gearbox flush, radiator and intercooler fit, scrapyard swaps. Act 3 engine rebuild (the longest, about 45 s, the T4 gate). Each one teaches a thing the player then feels on the road.
 
 ## 5. Landmarks: why each place matters to the story
@@ -140,7 +184,7 @@ That is 10 counted landmarks plus repeatable gas stations. More can be added at 
 
 **Research still owed (Roy asked for it).** The landmark doc made a judgement on the count, with no verified source, and guessed the W1-W4 meaning before the world vision defined them. The world vision now defines W1 look pass, W2 dressing kit, W3 life, W4 night arc, W5 destinations. So landmark builds mostly fall in **W5**, not W1-W4, and the "World phase" column above shows the earliest phase whose kit they reuse. A follow-up research pass should check real reference for each place (US port-city liquor stores, tow yards, small-airfield hangars, 24 h diners at night) before any art. I have not done that research in this doc.
 
-**Debt holder, a question.** Roy replaced the Pike Lending **storefront**. The story bible still names Pike Lending as the **debt holder**. Options: keep Pike Lending as an unseen company (story only), or rename it. Roy's call; this doc does not need the answer.
+**Pike (Roy, 18:42):** the storefront is gone, but Pike stays as a character tied to the mayor, the police and the rivals. See section 9. Pike's world presence is not a storefront: he turns up at other places (a car outside the liquor store, a table at the diner, the mayor's event).
 
 ## 6. Mirrors and first person: the game looks for you
 
@@ -158,7 +202,8 @@ Proposal, all automatic:
 | Hard braking with a car close behind | Quick mirror glance | Optional, tune in playtest |
 
 - Glances are short, capped to about one every 2 s, never during a corner at high steering lock, and follow the head-movement setting (off means off). Strength is a slider.
-- **Blind spot lamp as a garage mod.** The cars are older designs, so they do not have it stock. Fitting an aftermarket amber blind-spot lamp (palette amber `#FFC066`) is an early, cheap mod. It is the mechanic improving their own car, which is the whole story in one part.
+- **Blind spot lamp: the story's first mod (Roy).** The cars are older designs, so they do not have it stock. Proposed beat (Roy writes the words): on the prologue night a car sits in your blind spot and nearly takes you out, or Ledger's crew uses that blind spot to box you in. Back at the garage, Walt (or Moose) hands you an aftermarket blind-spot lamp kit, and fitting it is the **first mod tutorial**: open the mod screen, fit the part, see it work on the next drive. The lamp is amber (palette `#FFC066`) in the mirror housing. It teaches the mod loop with a part that is useful, cheap and needs no balance work.
+- **Relation to PR #174:** that mirror proposal suggested hold-to-glance keys (Z/C). Roy has since said no keys, so the automatic glances above replace that part of #174. Its per-car mirror data and the amber blind-spot dot stay useful.
 - **Why it matters to the narrative:** first person is where the "mechanic" fantasy lives. The car talks through its gauges, sounds and the warm-up needle, and the driver's head moves like a real driver's. No HUD arrows, no key hints, consistent with the existing rules.
 
 ## 7. How the pieces connect (summary map)
@@ -176,6 +221,8 @@ Proposal, all automatic:
      |
      v
  DAVE on air: reacts to runs, engine health, story beats (text lines Roy writes)
+
+ PIKE (with the mayor and the police) --> takes Cred: debt milestones, busts at high heat --> "save the garage" quest
 ```
 
 ## 8. Build order (each its own proposal and PR, nothing batched)
@@ -186,13 +233,49 @@ This doc builds nothing. If approved, it changes these existing proposals before
 3. Landmark doc: swap the Pike storefront for the liquor store; re-map phases to W5; add the research pass.
 4. Cockpit/mirrors: auto-glance and the blind-spot lamp mod (section 6), after the interior redesign.
 5. Per-car tier presets: one data pass per car when the other 5 player cars are built.
+6. Story bible: Roy edits the "no loan or penalty mechanics" line and adds Pike, the mayor and the police (section 9).
+7. Pike money system: its own proposal after Stage C's wallet exists (Stage C step C7), and the police part after Stage F.
 
-## Open for Roy (one word each, recommendation marked)
+## 9. Pike, the mayor and the police: where the money goes
 
-1. Daylight only inside the garage, streets always night? **Yes (recommended)** / No
-2. Prologue car weaker than today's (T0, one night)? **Yes (recommended)** / No, start at stock
-3. Failure system: **limp floor + roadside patch (recommended)** / Ferris call / crew call
-4. Event power bands with a one-click race spec? **Yes (recommended)** / No caps at all
-5. Act 2 Ironbridge boss is Ledger's number two, Ledger only at the end? **Yes (recommended)** / No
-6. Blind-spot lamp as a garage mod rather than stock? **Mod (recommended)** / Stock
-7. Debt holder after the storefront change: keep Pike Lending unseen / rename (your words)
+**Roy's direction:** Pike works with the corrupt mayor, the police and the rival crews. He is how the game takes money from the player, and he drives a "save the garage" quest line that is one storyline among several.
+
+**Flag:** this reverses the earlier rule (story bible and project memory) that there are no loan or penalty mechanics. This doc follows Roy's newer word. The design below keeps the spirit of the old rule in one way: **Pike takes Cred, never cars, mods or save progress.**
+
+**The cast (placeholders, Roy names them):**
+- **Pike.** Holds the shop's debt. Calm, polite, never raises his voice, never drives. Ledger is his muscle on the street.
+- **The mayor.** Wants the waterfront cleared for a development; Dunmore Auto is in the way. Pike gets the debt, the mayor gets the land. Seen on billboards and a TV still, rarely in person.
+- **The police.** Some officers are on Pike's payroll. They are how "heat" (Stage C/F) turns into lost money. Police blue `#2E4FD8` stays reserved for them.
+
+**Ways Pike takes money (options for Roy):**
+
+| # | Mechanic | How it works | Feels like | Ties to |
+|---|---|---|---|---|
+| P1 | **Debt milestones (recommended core)** | The $60k is split into instalments due at story points (say end of each act). You pay from banked Cred at the garage. Missing one does not end the game: Pike escalates the story (section below) | The "save the garage" quest | Story spine, wallet (Stage C C7) |
+| P2 | **Busted by Pike's police (recommended)** | Caught at high heat: the corrupt cops take the unbanked pot plus a fine. Fine scales with heat tier | Fair: you pushed your luck | Stage C pot and heat, Stage F police |
+| P3 | **Weekly cut** | Pike's collector takes a small share (say 10%) of each night's banked Cred until the debt is paid | Steady pressure, can feel like a tax | Wallet |
+| P4 | **Pike's prices** | Parts and fuel cost more in districts Pike controls; taking a district back lowers them | You see his reach on the map | Act 2 districts |
+| P5 | **Rigged races** | Pike's events have a buy-in; win and you take his money, lose and he takes yours | Gambling with a face | Event board |
+| P6 | **Bribe the cops** | Pay to drop heat instantly | A choice, not a punishment | Heat |
+
+**Recommendation: P1 + P2 as the core, P4 as flavour, P3 off** (a steady cut on every night is the one most likely to feel like a chore). P5 and P6 are optional extras.
+
+**When you miss a milestone, Pike escalates (never game over):**
+1. A visit: Ledger's crew parks outside the garage; Dave mentions it on air.
+2. A squeeze: one garage service gets locked (for example the dyno) until you catch up, or part prices go up.
+3. A threat: a crew member gets leaned on; their drama starts early.
+4. The final notice: a story mission to pay in one go or win it back (a high-stakes race against Pike's driver).
+Each step is undone by paying or by a story win. The shop is only ever lost in the ending, if the story bible's "lose" ending stays.
+
+**How this fits the other storylines:** the save-the-garage quest is the money thread. The crew thread (recruits, poaching, drama), the district thread (crew leaders, Act 2), the kings thread (Act 3) and the Ledger rivalry run alongside it. Pike links them: he funds Ledger, the mayor's police chase you, and paying Pike off is what lets the shop survive to the finale.
+
+**Premortem:** it fails if money loss feels random. So every loss is shown before it happens (milestone date on the garage desk, heat tier on the HUD with what a bust costs), and every Pike number lives in the one tunables file.
+
+## Open for Roy, round 2 (recommendation marked)
+
+Round 1 is answered (top of this doc).
+
+1. Pike's money mechanics: **P1 milestones + P2 busts (recommended)** / add P3 weekly cut / other
+2. Missing a milestone escalates in the story, never game over? **Yes (recommended)** / No
+3. Is losing the shop still the "lose" ending, or should the debt always be beatable? **Keep the lose ending (recommended)** / Always beatable
+4. Breakdown extras to explore next: spare parts in the boot / push-start / stranger tow / Dave call-in / rival stop-by (pick any)

@@ -48,13 +48,26 @@ static func load_settings() -> void:
 	var cfg := ConfigFile.new()
 	var ok := cfg.load(AudioSettings.path) == OK
 	for e in EFFECTS:
-		enabled[e] = bool(cfg.get_value("fx", e, true)) if ok else true
+		enabled[e] = _as_bool(cfg.get_value("fx", e, true)) if ok else true
 	set_mirror_quality(int(cfg.get_value("fx", "mirror_quality", MIRROR_QUALITY_DEFAULT)) if ok else MIRROR_QUALITY_DEFAULT)
 	set_smoke(float(cfg.get_value("fx", "smoke_burnout", 1.0)) if ok else 1.0,
 		float(cfg.get_value("fx", "smoke_drift", 1.0)) if ok else 1.0)
 	if OS.get_environment("NEON_FX") == "0":
 		for e in EFFECTS:
 			enabled[e] = false
+
+## A flag from the file: bool() has no String constructor, and a hand-edited or
+## damaged file can hold "false" as text, so text and numbers are read too;
+## anything else counts as on.
+static func _as_bool(v: Variant) -> bool:
+	match typeof(v):
+		TYPE_BOOL:
+			return v
+		TYPE_INT, TYPE_FLOAT:
+			return v != 0
+		TYPE_STRING, TYPE_STRING_NAME:
+			return String(v).strip_edges().to_lower() not in ["false", "0", "off", "no"]
+	return true
 
 static func save_settings() -> bool:
 	var cfg := ConfigFile.new()

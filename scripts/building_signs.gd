@@ -15,7 +15,7 @@ extends RefCounted
 # Dusk: sodium amber, warm white, cold green-white fluorescent, one dusk
 # blue. No magenta, no cyan.
 
-const ROWS := 16
+const ROWS := 24
 const ROW_PX := 9
 const ATLAS_W := 64
 const GLYPH_W := 6  # 5 px glyph + 1 px spacing
@@ -24,6 +24,8 @@ const GLYPH_W := 6  # 5 px glyph + 1 px spacing
 const SHOP_WORDS := ["LIQUOR", "PAWN", "LAUNDRY", "NOODLES", "VIDEO", "BAR", "CAFE", "OPEN", "24 HR", "KEYS"]
 const GARAGE_WORDS := ["TIRES", "PARTS", "AUTO", "BODY"]
 const SPECIAL_WORDS := ["DINER"]
+# Rooftop billboards (step 3): generic, no brands.
+const BILLBOARD_WORDS := ["LOANS", "MOTEL", "DRIVE", "RADIO", "BAIL BONDS", "GOLD"]
 const COLORS := [
 	Color(1.0, 0.6, 0.2),     # sodium amber
 	Color(0.95, 0.9, 0.8),    # warm white
@@ -39,6 +41,8 @@ const FONT := {
 	"D": ["#### ", "#   #", "#   #", "#   #", "#   #", "#   #", "#### "],
 	"E": ["#####", "#    ", "#    ", "#### ", "#    ", "#    ", "#####"],
 	"F": ["#####", "#    ", "#    ", "#### ", "#    ", "#    ", "#    "],
+	"G": [" ####", "#    ", "#    ", "# ###", "#   #", "#   #", " ### "],
+	"M": ["#   #", "## ##", "# # #", "# # #", "#   #", "#   #", "#   #"],
 	"H": ["#   #", "#   #", "#   #", "#####", "#   #", "#   #", "#   #"],
 	"I": ["#####", "  #  ", "  #  ", "  #  ", "  #  ", "  #  ", "#####"],
 	"K": ["#   #", "#  # ", "# #  ", "##   ", "# #  ", "#  # ", "#   #"],
@@ -65,7 +69,7 @@ render_mode diffuse_lambert, specular_disabled;
 uniform sampler2D words : source_color, filter_nearest_mipmap, repeat_disable;
 uniform vec3 colors[4];
 uniform float energy = 1.5;
-uniform float rows = 16.0;
+uniform float rows = 24.0;
 uniform float atlas_w = 64.0;
 
 varying vec3 lpos;
@@ -106,7 +110,7 @@ static var _atlas: ImageTexture
 static var _box: BoxMesh
 
 static func words() -> Array:
-	return SHOP_WORDS + GARAGE_WORDS + SPECIAL_WORDS
+	return SHOP_WORDS + GARAGE_WORDS + SPECIAL_WORDS + BILLBOARD_WORDS
 
 static func word_row(word: String) -> int:
 	return words().find(word)
@@ -156,7 +160,7 @@ static func new_multimesh(capacity: int) -> MultiMeshInstance3D:
 ## from; side is +1 for buildings on the +x side of the road, -1 for the
 ## other. A band lies flat on the front facing the road; a blade sticks out
 ## from it toward the road, facing the oncoming traffic.
-static func place(mm: MultiMesh, i: int, word: String, color: int, style: int, front: Vector3, side: int, height: float, max_len: float, blade: bool = false) -> void:
+static func place(mm: MultiMesh, i: int, word: String, color: int, style: int, front: Vector3, side: int, height: float, max_len: float, blade: bool = false, toward_traffic: float = 0.0) -> void:
 	var px := word_px(word)
 	var length := minf(max_len, height * float(px + 4) / float(ROW_PX))
 	var depth := 0.18
@@ -166,7 +170,9 @@ static func place(mm: MultiMesh, i: int, word: String, color: int, style: int, f
 		turn = Basis(Vector3.UP, PI / 2.0)
 		center.x -= (length / 2.0 + 0.1) * float(side)
 	else:
-		turn = Basis() if side == 1 else Basis(Vector3.UP, PI)
+		# toward_traffic (radians) swings the face from square-on to the road
+		# toward drivers coming down it (towards -z), billboard style
+		turn = Basis(Vector3.UP, toward_traffic) if side == 1 else Basis(Vector3.UP, PI - toward_traffic)
 		center.x -= (depth / 2.0 + 0.01) * float(side)
 	var basis := turn * Basis.from_scale(Vector3(depth, height, length))
 	mm.set_instance_transform(i, Transform3D(basis, center))

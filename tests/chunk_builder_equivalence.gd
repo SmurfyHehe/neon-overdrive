@@ -14,7 +14,8 @@ extends SceneTree
 #   fresh at N -- every building's size, position, collision box, meta and
 #   facade parameters
 # - one shared building material across the whole pool
-# - every building has a type; every signed building gets exactly one sign
+# - every building has a type; every signed building gets a sign; rooftop
+#   props and billboards match between rebuild and fresh build
 # - budget: roadside buildings and furniture stay under 5,000 triangles
 #   per 50 m chunk (worst case over many chunks)
 #
@@ -127,8 +128,13 @@ func _compare(a: Node3D, b: Node3D, label: String) -> void:
 	for i in B._building_slots() * 2:
 		if (a.get_node(NodePath("BuildingMesh%d" % i)) as Node).has_meta("sign_word"):
 			signed += 1
-	if sa_n != sb_n or sa_n != signed:
+	# signs = shop signs + rooftop billboards
+	if sa_n != sb_n or sa_n < signed:
 		_fail("%s: %d / %d signs drawn for %d signed buildings" % [label, sa_n, sb_n, signed])
+	var pa: int = (a.get_node(^"RoofProps") as MultiMeshInstance3D).multimesh.visible_instance_count
+	var pb: int = (b.get_node(^"RoofProps") as MultiMeshInstance3D).multimesh.visible_instance_count
+	if pa != pb or pa != int(a.get_meta("roof_props", -1)):
+		_fail("%s: roof props %d vs %d" % [label, pa, pb])
 
 ## Triangles drawn by roadside buildings and furniture (everything outside
 ## the road surface strips), worst case over a run of chunks.

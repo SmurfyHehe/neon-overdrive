@@ -1,7 +1,8 @@
 # Settings safety: show the cost, allow the extremes (2026-10-07)
 
 Status: **proposal, docs only. Nothing built. Needs Roy's sign-off.**
-Source read: `origin/main` at `9c28d59`. Evidence: two headless sweeps on the
+Source read: `origin/main` at `9c28d59`, re-checked against `04466a5` (no setting
+ranges changed; the new mirror glance is not a setting). Evidence: two headless sweeps on the
 `TuneTrack` (accel, brake, fixed-steer corner on the default coupe), 82 + 25
 runs, plus a NaN round-trip check. Scratch scripts, not committed.
 

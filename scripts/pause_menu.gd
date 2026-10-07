@@ -1,9 +1,8 @@
 class_name PauseMenu
 extends CanvasLayer
 
-# Pause overlay (issue #27). Deliberately plain: a dim backdrop and Godot's
-# default buttons, no theme or styling. The menu's look is Roy's call later;
-# restyle here without touching GameState.
+# Pause overlay (issue #27), "Pulled over" (UI blend PR 1): a work plate with
+# label-tape tabs, themed by UiTheme. Restyle here without touching GameState.
 
 # The Controls page is generated from the InputMap (action_get_events), so the
 # list can't drift from the real bindings. GROUPS only decides the order and
@@ -24,14 +23,17 @@ const GROUPS := [
 		["exhaust_rasp_down", "Less rasp"], ["exhaust_pops_up", "More pops"], ["exhaust_pops_down", "Fewer pops"]]],
 ]
 
-const SILVER := Color("#C9CED6")
-const AMBER := Color("#FFC066")
+const SILVER := UiTheme.SILVER
+const AMBER := UiTheme.AMBER
 
 var game_state: GameState
 var resume_button: Button
 var volume_sliders := {}   # channel -> HSlider
 var fov_slider: HSlider
 var main_page: VBoxContainer
+var main_plate: PanelContainer
+var tabs: TabContainer
+var controls_plate: PanelContainer
 var controls_page: VBoxContainer
 var controls_scroll: ScrollContainer
 var controls_back_button: Button
@@ -51,57 +53,61 @@ func _ready() -> void:
 
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.theme = UiTheme.get_theme()
 	add_child(center)
 
+	var plate := PanelContainer.new()
+	center.add_child(plate)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 8)
-	center.add_child(box)
+	box.add_theme_constant_override("separation", 10)
+	plate.add_child(box)
 	main_page = box
+	main_plate = plate
 
-	var title := Label.new()
-	title.text = "PAUSED"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(title)
+	box.add_child(UiTheme.title_label("PULLED OVER"))
+	box.add_child(UiTheme.floor_tape())
+
+	tabs = TabContainer.new()
+	tabs.custom_minimum_size = Vector2(440, 0)
+	tabs.focus_mode = Control.FOCUS_ALL
+	box.add_child(tabs)
+
+	# Tab 1: the verbs. Tab 2: the settings, split by floor tape.
+	var verbs := VBoxContainer.new()
+	verbs.name = "Garage"
+	verbs.add_theme_constant_override("separation", 6)
+	tabs.add_child(verbs)
+	resume_button = _add_button(verbs, "Resume", game_state.resume)
+	_add_button(verbs, "Controls", show_controls)
+	_add_button(verbs, "Service car (reset wear)", _service_car)
+	_add_button(verbs, "Restart", game_state.restart)
+	_add_button(verbs, "Quit", game_state.quit)
+
+	var settings := VBoxContainer.new()
+	settings.name = "Settings"
+	settings.add_theme_constant_override("separation", 6)
+	tabs.add_child(settings)
 
 	# Volume sliders (Phase B). Keyboard: Tab or arrows to move, Left/Right to change.
-	var vol_title := Label.new()
-	vol_title.text = "Volume"
-	vol_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(vol_title)
+	_section(settings, "Volume")
 	for channel in AudioSettings.CHANNELS:
-		var row := HBoxContainer.new()
-		box.add_child(row)
-		var name_label := Label.new()
-		name_label.text = channel
-		name_label.custom_minimum_size = Vector2(100, 0)
-		row.add_child(name_label)
-		var s := HSlider.new()
-		s.min_value = 0.0
-		s.max_value = 1.0
-		s.step = 0.05
-		s.value = AudioSettings.volumes[channel]
-		s.custom_minimum_size = Vector2(180, 0)
-		s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		s.value_changed.connect(func(v: float) -> void:
-			AudioSettings.set_volume(channel, v)
-			AudioSettings.save_settings())
-		row.add_child(s)
-		volume_sliders[channel] = s
+		volume_sliders[channel] = _add_slider(settings, channel, 0.0, 1.0, 0.05, AudioSettings.volumes[channel],
+			func(v: float) -> void:
+				AudioSettings.set_volume(channel, v)
+				AudioSettings.save_settings())
 
 	# Traffic sliders (stage B step 3): car count and draw distance, applied to
 	# the running TrafficManager at once and saved with the volumes.
-	var traffic_title := Label.new()
-	traffic_title.text = "Traffic"
-	traffic_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(traffic_title)
-	_add_slider(box, "Cars", 0.0, TrafficSettings.CAR_COUNT_MAX, 5.0, TrafficSettings.car_count,
+	settings.add_child(UiTheme.floor_tape())
+	_section(settings, "Traffic")
+	_add_slider(settings, "Cars", 0.0, TrafficSettings.CAR_COUNT_MAX, 5.0, TrafficSettings.car_count,
 		func(v: float) -> void:
 			TrafficSettings.set_car_count(int(v))
 			TrafficSettings.save_settings()
 			var traffic: Variant = get_parent().get("traffic")
 			if traffic != null:
 				traffic.set_car_count(TrafficSettings.car_count))
-	_add_slider(box, "Draw dist", TrafficSettings.DETAIL_MIN, TrafficSettings.DETAIL_MAX, 10.0, TrafficSettings.detail_distance,
+	_add_slider(settings, "Draw dist", TrafficSettings.DETAIL_MIN, TrafficSettings.DETAIL_MAX, 10.0, TrafficSettings.detail_distance,
 		func(v: float) -> void:
 			TrafficSettings.set_detail_distance(v)
 			TrafficSettings.save_settings()
@@ -111,23 +117,39 @@ func _ready() -> void:
 
 	# View slider (2026-10-06): the cockpit FOV, 55-78, default 62; the speed
 	# widening (up to +6) rides on top of it. Applies at once, saved with the rest.
-	var view_title := Label.new()
-	view_title.text = "View"
-	view_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(view_title)
-	fov_slider = _add_slider(box, "Cockpit FOV", ViewSettings.COCKPIT_FOV_MIN, ViewSettings.COCKPIT_FOV_MAX, 1.0, ViewSettings.cockpit_fov,
+	settings.add_child(UiTheme.floor_tape())
+	_section(settings, "View")
+	fov_slider = _add_slider(settings, "Cockpit FOV", ViewSettings.COCKPIT_FOV_MIN, ViewSettings.COCKPIT_FOV_MAX, 1.0, ViewSettings.cockpit_fov,
 		func(v: float) -> void:
 			ViewSettings.set_cockpit_fov(v)
 			ViewSettings.save_settings())
 
-	resume_button = _add_button(box, "Resume", game_state.resume)
-	_add_button(box, "Controls", show_controls)
-	_add_button(box, "Service car (reset wear)", _service_car)
-	_add_button(box, "Restart", game_state.restart)
-	_add_button(box, "Quit", game_state.quit)
-
 	_build_controls_page(center)
 	game_state.state_changed.connect(_on_state_changed)
+
+## Q / E (and the controller bumpers) flip the pause tabs.
+func _input(event: InputEvent) -> void:
+	if not visible or not main_plate.visible:
+		return
+	var step := 0
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_Q: step = -1
+		elif event.keycode == KEY_E: step = 1
+	elif event is InputEventJoypadButton and event.pressed:
+		if event.button_index == JOY_BUTTON_LEFT_SHOULDER: step = -1
+		elif event.button_index == JOY_BUTTON_RIGHT_SHOULDER: step = 1
+	if step != 0:
+		tabs.current_tab = posmod(tabs.current_tab + step, tabs.get_tab_count())
+		get_viewport().set_input_as_handled()
+
+func _section(parent: Control, text: String) -> void:
+	var l := Label.new()
+	l.text = text.to_upper()
+	l.add_theme_font_override("font", UiTheme.font("display"))
+	l.add_theme_font_size_override("font_size", 24)
+	l.add_theme_color_override("font_color", UiTheme.AMBER)
+	parent.add_child(l)
+
 
 ## Resets temperatures, tyre, clutch and brake wear (the garage will own this later).
 func _service_car() -> void:
@@ -170,25 +192,31 @@ func _on_state_changed(new_state: GameState.State, _old_state: GameState.State) 
 func show_controls() -> void:
 	_refresh_controls()
 	main_page.visible = false
+	main_plate.visible = false
 	controls_page.visible = true
+	controls_plate.visible = true
 	# Cap the list to the window so it scrolls instead of running off-screen.
 	controls_scroll.custom_minimum_size = Vector2(640, maxf(get_viewport().get_visible_rect().size.y * 0.7, 160.0))
 	controls_scroll.grab_focus()  # arrows / page keys scroll it
 
 func show_main() -> void:
 	main_page.visible = true
+	main_plate.visible = true
 	controls_page.visible = false
+	controls_plate.visible = false
+	tabs.current_tab = 0
 	resume_button.grab_focus()  # keyboard/controller can navigate the menu
 
 func _build_controls_page(center: CenterContainer) -> void:
+	controls_plate = PanelContainer.new()
+	controls_plate.visible = false
+	center.add_child(controls_plate)
 	controls_page = VBoxContainer.new()
 	controls_page.add_theme_constant_override("separation", 8)
 	controls_page.visible = false
-	center.add_child(controls_page)
-	var title := Label.new()
-	title.text = "CONTROLS"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	controls_page.add_child(title)
+	controls_plate.add_child(controls_page)
+	controls_page.add_child(UiTheme.title_label("CONTROLS", 44))
+	controls_page.add_child(UiTheme.floor_tape())
 	controls_scroll = ScrollContainer.new()
 	controls_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	controls_scroll.custom_minimum_size = Vector2(640, 380)
@@ -225,6 +253,8 @@ func _grid_label(parent: Control, text: String, colour: Color, min_w: float) -> 
 	var l := Label.new()
 	l.text = text
 	l.add_theme_color_override("font_color", colour)
+	if colour == AMBER:
+		l.add_theme_font_override("font", UiTheme.font("mono"))
 	l.custom_minimum_size = Vector2(min_w, 0)
 	parent.add_child(l)
 

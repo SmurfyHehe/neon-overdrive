@@ -33,7 +33,38 @@ const KNOBS := [
 	["peak_pos", "Peak position", "torque_shape/peak_pos", 0.01],
 	["plateau", "Plateau width", "torque_shape/plateau", 0.01],
 	["falloff", "Torque at redline", "torque_shape/falloff", 0.01],
+	# Settings safety part 2 (2026-10-07): every chassis number, out to the
+	# Advanced hard limits (TuneParams.ADVANCED), past the simple pages' ranges.
+	["friction", "Tyre friction", "coefficient_of_friction/Road", 0.05],
+	["long_grip", "Longitudinal grip", "longitudinal_grip_ratio/Road", 0.05],
+	["stiffness", "Tyre stiffness", "tire_stiffnesses/Road", 0.5],
+	["pressure_f", "Pressure front bar", "front_tyre_pressure", 0.1],
+	["pressure_r", "Pressure rear bar", "rear_tyre_pressure", 0.1],
+	["camber_f", "Camber front deg", "front_static_camber", 0.5],
+	["camber_r", "Camber rear deg", "rear_static_camber", 0.5],
+	["toe_f", "Toe front rad", "front_toe", 0.005],
+	["toe_r", "Toe rear rad", "rear_toe", 0.005],
+	["ride_f", "Ride height front m", "front_spring_length", 0.01],
+	["ride_r", "Ride height rear m", "rear_spring_length", 0.01],
+	["spring_f", "Springs front", "front_resting_ratio", 0.05],
+	["spring_r", "Springs rear", "rear_resting_ratio", 0.05],
+	["damp_f", "Dampers front", "front_damping_ratio", 0.05],
+	["damp_r", "Dampers rear", "rear_damping_ratio", 0.05],
+	["arb_f", "Anti-roll bar front", "front_arb_ratio", 0.05],
+	["arb_r", "Anti-roll bar rear", "rear_arb_ratio", 0.05],
+	["diff_f", "Diff lock front Nm (low = locked)", "front_locking_differential_engage_torque", 50.0],
+	["diff_r", "Diff lock rear Nm (low = locked)", "rear_locking_differential_engage_torque", 50.0],
+	["brake", "Brake pressure", "brake_force_multiplier", 0.1],
+	["bias", "Brake bias front (-1 auto)", "front_brake_bias", 0.01],
+	["df_f", "Downforce front", "aero_downforce_coefficient_front", 0.05],
+	["df_r", "Rear wing", "aero_downforce_coefficient_rear", 0.05],
+	["steer", "Steering lock rad", "max_steering_angle", 0.01],
+	["abs_f", "ABS front threshold", "front_abs_spin_difference_threshold", 1.0],
+	["abs_r", "ABS rear threshold", "rear_abs_spin_difference_threshold", 1.0],
 ]
+## Gears must each be shorter than the one before; a slider stops this far short
+## of its neighbour (an out-of-order box makes the automatic hunt between gears).
+const GEAR_GAP := 0.01
 const AIR_DENSITY := 1.2  # kg/m^3, for the drag-limited top speed estimate
 # gevp_vehicle.gd process_motor() only cuts torque above max_rpm * 1.1, and the
 # torque curve holds its redline value up to there -- so the speeds a gear
@@ -73,8 +104,8 @@ func _ready() -> void:
 		grid.add_child(name_label)
 		var entry := TuneParams.find(k[2])
 		var s := HSlider.new()
-		s.min_value = entry.min
-		s.max_value = entry.max
+		s.min_value = entry.adv_min
+		s.max_value = entry.adv_max
 		s.step = k[3]
 		s.custom_minimum_size = Vector2(220, 0)
 		s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -117,9 +148,23 @@ func refresh_from_player() -> void:
 	_refresh()
 
 func _on_slider(value: float, key: String) -> void:
+	value = gear_in_order(key, value, values)
 	_write(key, value)
+	sliders[key].set_value_no_signal(values[key])
 	_refresh()
 	tune_changed.emit()
+
+## `value` for knob `key`, kept between its neighbouring gears in `vals` (gear 1
+## is the tallest ratio). Other knobs pass through.
+static func gear_in_order(key: String, value: float, vals: Dictionary) -> float:
+	if not key.begins_with("gear_"):
+		return value
+	var g := int(key.get_slice("_", 1))
+	if g > 1:
+		value = minf(value, float(vals["gear_%d" % (g - 1)]) - GEAR_GAP)
+	if g < GEAR_COUNT:
+		value = maxf(value, float(vals["gear_%d" % (g + 1)]) + GEAR_GAP)
+	return value
 
 func _path_of(key: String) -> String:
 	for k in KNOBS:
@@ -152,7 +197,7 @@ func _apply() -> void:
 func _refresh() -> void:
 	for k in KNOBS:
 		var step: float = k[3]
-		value_labels[k[0]].text = ("%d" % values[k[0]]) if step >= 1.0 else ("%.2f" % values[k[0]])
+		value_labels[k[0]].text = ("%d" % values[k[0]]) if step >= 1.0 else ("%.3f" % values[k[0]] if step < 0.01 else "%.2f" % values[k[0]])
 	readout.text = _readout_text()
 
 func _readout_text() -> String:

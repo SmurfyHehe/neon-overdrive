@@ -9,6 +9,8 @@ extends SceneTree
 # - the setters refuse NaN the same way
 # - Tuner: Bias mode Auto -> Manual keeps the split Auto was giving, Manual ->
 #   Auto writes -1 again, and the stock preset reads as Auto
+# - part 2: set_param clamps to the Advanced hard limits, a set brake bias
+#   never goes under BIAS_MIN, and Advanced gear sliders stay in order
 # Exit code 1 on failure. Run (headless):
 #   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/settings_safety.gd
 
@@ -82,6 +84,19 @@ func _initialize() -> void:
 		model.nudge(mode, -1)
 		_check(float(car.spec.front_brake_bias) < 0.0 and model.value_text(mode) == "Auto", "Left should go back to Auto (-1), got %s" % str(car.spec.front_brake_bias))
 		_check(absf(car.front_axle.brake_bias - auto_split) < 0.001, "back on Auto the car brakes at %.3f, not the Auto split %.3f" % [car.front_axle.brake_bias, auto_split])
+
+	# --- part 2: hard limits, bias floor, gear order ---
+	_check(is_equal_approx(CarSpec.set_param(car, car.spec, "rear_toe", -0.03), -0.03), "rear toe-out should be allowed down to the hard limit")
+	_check(is_equal_approx(CarSpec.set_param(car, car.spec, "rear_toe", -1.0), TuneParams.find("rear_toe").adv_min), "rear toe should clamp to its hard limit")
+	_check(is_equal_approx(CarSpec.set_param(car, car.spec, "front_brake_bias", 0.05), TuneParams.BIAS_MIN), "a set bias under the floor should rise to it")
+	_check(CarSpec.set_param(car, car.spec, "front_brake_bias", -0.4) == -1.0, "a negative bias should mean Auto (-1)")
+	for e in TuneParams.all():
+		_check(e.adv_min <= e.min and e.adv_max >= e.max, "%s: hard limits [%f, %f] narrower than the safe range [%f, %f]" % [e.path, e.adv_min, e.adv_max, e.min, e.max])
+	var gears := {"gear_1": 2.7, "gear_2": 1.9, "gear_3": 1.4, "gear_4": 1.1, "gear_5": 0.9}
+	_check(is_equal_approx(TuningPanel.gear_in_order("gear_2", 3.5, gears), 2.7 - TuningPanel.GEAR_GAP), "gear 2 went taller than gear 1")
+	_check(is_equal_approx(TuningPanel.gear_in_order("gear_2", 0.5, gears), 1.4 + TuningPanel.GEAR_GAP), "gear 2 went shorter than gear 3")
+	_check(is_equal_approx(TuningPanel.gear_in_order("gear_1", 4.9, gears), 4.9), "gear 1 has no taller neighbour to stop it")
+	_check(is_equal_approx(TuningPanel.gear_in_order("final_drive", 9.0, gears), 9.0), "only gears are boxed in")
 	car.queue_free()
 
 	for m in failures:

@@ -13,8 +13,8 @@ extends RefCounted
 # Auto-Tune v1 fields only (decided 2026-10-05): gearing, aero, brakes and the
 # Road tire keys. Engine and suspension join later, with tier caps.
 #
-# Ranges are absolute sanity limits, not tier limits. Gearing, drag and the
-# tire entries are provisional until the test track (tests/) has swept them.
+# min..max are the safe ranges (no spin), adv_min..adv_max the hard limits set_param
+# clamps to (see ADVANCED). Neither is a tier limit.
 
 const NONE := ""
 const TIRE := "tire"      # Road tire entries: wheels cache them per surface
@@ -29,8 +29,62 @@ const SUSPENSION := "suspension"  # spring/damper/ARB rates, toe, steering geome
 # it lives only in the spec and CarSpec turns it into the Vehicle's torque_curve.
 static var _entries: Array[Dictionary] = []
 
+## Hard limits for the Advanced page (settings safety part 2, 2026-10-07; plan
+## in docs/planning/settings-safety-design-2026-10-07.md, signed off by Roy).
+## "min"/"max" stay the SAFE range: no setting at either end spins the car, and
+## Auto-Tune, presets and the simple pages stay inside it. "adv_min"/"adv_max"
+## are where set_param() clamps: the fun extremes. A value is cut off only where
+## the test track showed the car flips, never reaches 100 km/h, or goes
+## non-finite; values that only spin it or make it slow stay in (shown red).
+## Paths not listed here have adv = safe.
+const ADVANCED := {
+	"final_drive": [2.0, 7.0],
+	"gear_ratios/0": [0.5, 5.0],  # 0.3 never reaches 100 km/h; 0.5 does
+	"gear_ratios/1": [0.5, 5.0],
+	"gear_ratios/2": [0.5, 5.0],
+	"gear_ratios/3": [0.5, 5.0],
+	"gear_ratios/4": [0.5, 5.0],
+	"max_torque": [150.0, 1500.0],  # 120 never reaches 100 km/h
+	"max_rpm": [3500.0, 13000.0],  # 2500 never reaches 100 km/h
+	"turbo_boost_max": [0.0, 3.0],
+	"torque_shape/low_end": [0.0, 1.0],
+	"torque_shape/peak_pos": [0.05, 1.0],
+	"torque_shape/plateau": [0.0, 1.0],
+	"torque_shape/falloff": [0.2, 1.5],  # 0.1 tops out at 99.5 km/h
+	"aero_downforce_coefficient_front": [0.0, 2.5],
+	"aero_downforce_coefficient_rear": [0.0, 3.0],
+	"brake_force_multiplier": [0.5, 6.0],
+	"tire_stiffnesses/Road": [4.0, 20.0],
+	"coefficient_of_friction/Road": [0.5, 3.5],
+	"longitudinal_grip_ratio/Road": [0.45, 2.0],  # 0.3 flips the car on launch
+	"front_tyre_pressure": [1.0, 3.6],
+	"rear_tyre_pressure": [1.0, 3.6],
+	"front_static_camber": [-8.0, 3.0],
+	"rear_static_camber": [-8.0, 3.0],
+	"front_toe": [-0.06, 0.06],
+	"rear_toe": [-0.03, 0.05],  # toe-out spins it: allowed, red
+	"front_spring_length": [0.08, 0.40],
+	"rear_spring_length": [0.08, 0.40],
+	"front_resting_ratio": [0.15, 1.0],
+	"rear_resting_ratio": [0.15, 1.0],
+	"front_damping_ratio": [0.1, 1.5],
+	"rear_damping_ratio": [0.1, 1.5],
+	"front_arb_ratio": [0.0, 1.2],
+	"rear_arb_ratio": [0.0, 1.2],
+	"front_locking_differential_engage_torque": [0.0, 3000.0],
+	"rear_locking_differential_engage_torque": [0.0, 3000.0],  # 5000 flipped once
+	"front_brake_bias": [-1.0, 0.95],  # set_param keeps 0..0.2 out (see BIAS_MIN)
+	"max_steering_angle": [0.349066, 1.047198],  # 20-60 deg
+	"front_abs_spin_difference_threshold": [4.0, 100.0],
+	"rear_abs_spin_difference_threshold": [4.0, 100.0],
+}
+## A set brake bias below this is raised to it; below 0 means Auto (-1).
+const BIAS_MIN := 0.2
+
 static func _e(path: String, label: String, lo: float, hi: float, rederive := NONE, auto := true, on_car := true) -> Dictionary:
-	return {"path": path, "label": label, "min": lo, "max": hi, "rederive": rederive, "auto": auto, "on_car": on_car}
+	var adv: Array = ADVANCED.get(path, [lo, hi])
+	return {"path": path, "label": label, "min": lo, "max": hi, "adv_min": adv[0], "adv_max": adv[1],
+		"rederive": rederive, "auto": auto, "on_car": on_car}
 
 static func all() -> Array[Dictionary]:
 	if _entries.is_empty():

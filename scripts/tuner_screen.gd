@@ -158,7 +158,7 @@ func _ready() -> void:
 	sound.add_child(exhaust)
 	panel_pages["sound"] = sound
 	var adv := VBoxContainer.new()
-	adv.add_child(_label("Raw gearing and power, for fine work. Peak torque and redline move to the garage later.", DIM))
+	adv.add_child(_label("Every raw number, out to the extremes. Peak torque and redline move to the garage later.", DIM))
 	manual = TuningPanel.new(player, game_state)
 	adv.add_child(manual)
 	panel_pages["advanced"] = adv
@@ -389,7 +389,7 @@ func _refresh() -> void:
 			"setup": "Stock: as it left the factory. Street: forgiving and comfortable. Grip: fast laps. Drift: easy slides.",
 			"mechanic": "The mechanic tries setups on a closed track and keeps what scores best for your goals.",
 			"sound": "How the exhaust sounds, and the flames. Purely cosmetic.",
-			"advanced": "Every raw gearing and power number, with the gear table.",
+			"advanced": "Every raw number, out to the extremes: gearing, power, tyres, suspension, diff, brakes, aero, assists.",
 		}.get(page.id, "")
 	if stats.measured_for != player.spec.hash():
 		stats.measured = {}  # measured on a setup the car no longer has

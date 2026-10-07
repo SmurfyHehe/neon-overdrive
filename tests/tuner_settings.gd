@@ -10,6 +10,8 @@ extends SceneTree
 # - extremes: every new setting at both ends of its range finishes the test track
 #   runs, finite, unflipped, without spinning (MAX_SLIP) or losing over 10% top
 #   speed. Prints how far each end moves each metric.
+# - Advanced: every path at its hard limit (TuneParams.ADVANCED) finishes the
+#   runs finite and unflipped and reaches 100 km/h; spinning is allowed there
 # Run (tests/run_tests.bat does):
 #   Godot_v4.7.2-stable_win64_console.exe --headless --fixed-fps 60 --path . -s res://tests/tuner_settings.gd
 # Exit code 1 on failure.
@@ -97,6 +99,37 @@ func _initialize() -> void:
 		_check(r.ok, "%s: %s" % [labels[i], str(r.problems)])
 		_check(float(r.get("max_slip_deg", 99.0)) < MAX_SLIP, "%s spins the car (%.0f deg slip)" % [labels[i], r.get("max_slip_deg", NAN)])
 		_check(float(r.get("top_speed_kmh", 0.0)) > res[0].top_speed_kmh * 0.9, "%s costs over 10%% top speed" % labels[i])
+
+	# --- Advanced hard limits (settings safety part 2, 2026-10-07) ---
+	# Every path whose hard limit is past its safe range, at that limit: the car
+	# may spin (that is the fun extreme, shown red), but it must stay finite,
+	# upright and still reach 100 km/h. Gears 2-4 are boxed in by their
+	# neighbours, so only gear 1 (tallest allowed) and gear 5 (shortest) are hit.
+	specs = []
+	labels = []
+	for e in TuneParams.all():
+		if e.path in ["gear_ratios/1", "gear_ratios/2", "gear_ratios/3"]:
+			continue
+		for end in [["adv_min", "min"], ["adv_max", "max"]]:
+			if is_equal_approx(e[end[0]], e[end[1]]):
+				continue
+			if e.path == "gear_ratios/0" and end[0] == "adv_min" or e.path == "gear_ratios/4" and end[0] == "adv_max":
+				continue
+			var s := CarSpec.clone_spec(base)
+			var v: float = e[end[0]]
+			if e.path == "front_brake_bias" and v < 0.0:
+				v = TuneParams.BIAS_MIN  # below that is Auto, which is stock
+			TuneParams.set_value(s, e.path, v)
+			specs.append(s)
+			labels.append("%s %s %s" % [e.path, end[0], str(snappedf(v, 0.001))])
+	track = _new_track()
+	res = await track.evaluate(specs)
+	track.queue_free()
+	print("--- Advanced limits (spin allowed) ---")
+	for i in res.size():
+		var r: Dictionary = res[i]
+		print("%-48s %8.1f %7.2f %7.1f %6.3f %6.1f" % [labels[i], r.get("top_speed_kmh", NAN), r.get("t_0_100", NAN), r.get("brake_dist_100", NAN), r.get("peak_lat_g", NAN), r.get("max_slip_deg", NAN)])
+		_check(r.ok, "Advanced %s: %s" % [labels[i], str(r.problems)])
 
 	print("tuner_settings: %s" % ("PASS" if failures.is_empty() else "FAIL (%d)" % failures.size()))
 	for f in failures:

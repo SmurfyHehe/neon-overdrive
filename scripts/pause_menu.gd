@@ -109,7 +109,7 @@ func _ready() -> void:
 			if traffic != null:
 				traffic.detail_distance = TrafficSettings.detail_distance)
 
-	# View slider (2026-10-06): the cockpit FOV, 55-78, default 62; the speed
+	# View slider (2026-10-06): the cockpit FOV, 55-78, default 76 (all mirrors in view); the speed
 	# widening (up to +6) rides on top of it. Applies at once, saved with the rest.
 	var view_title := Label.new()
 	view_title.text = "View"

@@ -59,10 +59,17 @@ const IMPACT_GAIN := 0.12        # trauma per m/s over the threshold
 ## whole interior, wheel, cluster, mirrors) is shown.
 ## The eye (cockpit milestone, 2026-10-06): seat height in the P1's cabin, just
 ## ahead of the B-pillar, a hand's width inboard of the seat centre (-0.36) so
-## the passenger-side door mirror is still inside the view at the default FOV.
+## the passenger-side door mirror sits closer to the view (see COCKPIT_YAW_DEG).
 enum View { CHASE, COCKPIT }
 const COCKPIT_EYE := Vector3(-0.32, 1.10, 0.30)  # car-local, -x is the driver's side (left-hand drive)
-const COCKPIT_FOV_SPEED_GAIN := 6.0  # degrees added at top speed; the base is ViewSettings.cockpit_fov (default 62)
+## Mirrors on screen (Roy, 2026-10-07: no glance keys, one-hand play). The eye
+## sits left of centre, so the passenger door mirror is ~61 deg right and the
+## driver's ~44 deg left; at 16:9 that takes a 90 deg vertical FOV to fit. A
+## fixed 8 deg turn of the head toward the car's centre balances the two
+## (~52 deg each side), so ViewSettings' default 76 shows all three mirrors
+## (tests/cockpit_mirror_fov.gd). Positive is to the right (passenger side).
+const COCKPIT_YAW_DEG := 8.0
+const COCKPIT_FOV_SPEED_GAIN := 6.0  # degrees added at top speed; the base is ViewSettings.cockpit_fov (default 76)
 ## Head movement in the cockpit (Roy, 2026-10-06): the eye sways with the
 ## car's forces, capped at HEAD_MAX_M (4 cm) and HEAD_MAX_DEG (2 degrees).
 ## Lateral g pushes the head outward and rolls it with the body; braking
@@ -191,12 +198,13 @@ func _process(delta: float) -> void:
 
 ## At the driver's eye, on the interpolated transform (same reason as the
 ## chase cam), looking where the car points, plus the head movement; a fixed
-## FOV that widens a touch with speed.
+## FOV that widens a touch with speed. The head is turned COCKPIT_YAW_DEG
+## toward the passenger side so both door mirrors stay in view.
 func _place_cockpit(delta: float) -> void:
 	var xf := target.get_global_transform_interpolated()
 	_update_head(delta)
 	var tilt := Basis.from_euler(Vector3(deg_to_rad(head_tilt.x), 0.0, deg_to_rad(head_tilt.y)))
-	global_transform = Transform3D(xf.basis * tilt, xf * (COCKPIT_EYE + head_offset))
+	global_transform = Transform3D(xf.basis * Basis(Vector3.UP, deg_to_rad(-COCKPIT_YAW_DEG)) * tilt, xf * (COCKPIT_EYE + head_offset))
 	fov = ViewSettings.cockpit_fov + COCKPIT_FOV_SPEED_GAIN * speed_t
 
 ## Head sway from lateral g (yaw rate x speed) and longitudinal g (the speed

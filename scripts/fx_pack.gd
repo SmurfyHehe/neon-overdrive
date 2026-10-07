@@ -45,3 +45,4 @@ func set_effect(effect: String, on: bool) -> void:
 ## Floating-origin recentre: the world moved by offset (game.gd _shift_origin).
 func shift_world(offset: Vector3) -> void:
 	skids.shift_world(offset)
+	flames.shift_world(offset)  # fireballs and smoke left behind in world space

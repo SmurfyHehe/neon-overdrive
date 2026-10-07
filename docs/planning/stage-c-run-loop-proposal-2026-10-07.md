@@ -141,8 +141,8 @@ the one-file constants make balancing quick.
 
 **Premortem (it failed; why?):**
 1. **The road is straight.** Seeded density and fog do not make run 20 feel
-   different from run 3. Mitigation: heat-driven traffic gives each run its own
-   shape. If testers still say "it's the same road", #37 curves moves up.
+   different from run 3. Mitigation: per-run density and night phase, then
+   police traffic in F. If testers still say "it's the same road", #37 curves moves up.
 2. **Heat is a free multiplier** until police exist. Roy's answer is police
    traffic, which is Stage F. If heat feels free in the C playtest, F comes sooner.
 3. **Near-miss detection misfires** in dense full-sim traffic (double counts,

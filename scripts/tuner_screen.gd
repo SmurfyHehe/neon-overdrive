@@ -38,6 +38,9 @@ var manual: TuningPanel
 var exhaust: ExhaustPanel
 var auto: AutoTunePanel
 var mechanic: MechanicPanel
+var adv_gate: VBoxContainer
+var adv_gate_button: Button
+var watchdog: TuneWatchdog
 var test_job: AutoTuneJob
 var test_button: Button
 var _test_poll := 0.0
@@ -74,6 +77,10 @@ func _ready() -> void:
 	layer = 10  # same layer as the pause menu; they are never open together
 	visible = false
 	model = TunerModel.new(player, player.spec, CarSpec.coupe_default())
+	# Auto-revert (settings safety part 4): its own layer next to this one, so
+	# it still shows after the screen closes.
+	watchdog = TuneWatchdog.new(player, game_state)
+	get_parent().add_child.call_deferred(watchdog)
 	for p in TunerModel.pages():
 		page_ids.append(p.id)
 
@@ -159,6 +166,21 @@ func _ready() -> void:
 	panel_pages["sound"] = sound
 	var adv := VBoxContainer.new()
 	adv.add_child(_label("Every raw number, out to the extremes. Peak torque and redline move to the garage later.", DIM))
+	# The one-time confirm (settings safety part 4): until it is accepted the
+	# page shows only this, not the sliders.
+	adv_gate = VBoxContainer.new()
+	adv_gate.add_theme_constant_override("separation", 8)
+	var warn := _label("Values here go out to the extremes: the car can spin, crawl or refuse to stop. Reset to stock always works, and a tune that leaves the car undrivable is reverted.", AMBER)
+	warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	warn.custom_minimum_size = Vector2(420, 0)
+	adv_gate.add_child(warn)
+	adv_gate_button = Button.new()
+	adv_gate_button.text = "Open Advanced"
+	adv_gate_button.focus_mode = Control.FOCUS_ALL
+	adv_gate_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	adv_gate_button.pressed.connect(accept_advanced)
+	adv_gate.add_child(adv_gate_button)
+	adv.add_child(adv_gate)
 	manual = TuningPanel.new(player, game_state)
 	adv.add_child(manual)
 	panel_pages["advanced"] = adv
@@ -234,6 +256,8 @@ func show_page(id: String) -> void:
 		focused.release_focus()
 	for s in page.settings:
 		rows.append(_add_row(s))
+	if not page.settings.is_empty():
+		rows.append(_add_reset_row())
 	_refresh()
 	if id == "setup":
 		preset_buttons[0].grab_focus()
@@ -242,7 +266,19 @@ func show_page(id: String) -> void:
 	elif id == "sound":
 		(exhaust.sliders.values()[0] as Control).grab_focus()
 	elif id == "advanced":
-		(manual.sliders["final_drive"] as Control).grab_focus()
+		var ok := TunerGate.advanced_ok()
+		adv_gate.visible = not ok
+		manual.visible = ok
+		if ok:
+			(manual.sliders["final_drive"] as Control).grab_focus()
+		else:
+			adv_gate_button.grab_focus()
+
+## Accepts the Advanced confirm once and for all, and opens the sliders.
+func accept_advanced() -> void:
+	TunerGate.set_advanced_ok(true)
+	if current_page() == "advanced":
+		show_page("advanced")
 
 func _add_row(s: Dictionary) -> Dictionary:
 	var block := VBoxContainer.new()
@@ -285,6 +321,28 @@ func _add_row(s: Dictionary) -> Dictionary:
 		block.add_child(pad)
 	return {"setting": s, "name": name, "value": value, "bar": bar, "line": line, "path": path}
 
+## The last row of every settings page: Right or Enter on it puts the page back
+## to stock (settings safety part 4). Other pages stay as they are.
+const RESET_ROW := {"id": "_reset", "kind": "reset", "label": "Reset page to stock",
+	"hint": "Puts every setting on this page back to how the car left the factory. The other pages stay as they are."}
+
+func _add_reset_row() -> Dictionary:
+	var name := _label(RESET_ROW.label, SILVER)
+	var pad := MarginContainer.new()
+	pad.add_theme_constant_override("margin_top", 6)
+	pad.add_child(name)
+	content.add_child(pad)
+	return {"setting": RESET_ROW, "name": name}
+
+## Resets the page on screen; true if anything changed.
+func reset_current_page() -> bool:
+	if not model.reset_page(current_page()):
+		return false
+	manual.refresh_from_player()
+	auto.refresh_lock_labels()
+	_refresh()
+	return true
+
 static func _notch_value(s: Dictionary, n: int) -> float:
 	var t := float(n) / float(TunerModel.NOTCHES - 1)
 	return lerpf(s.lo, s.hi, 1.0 - t if s.invert else t)
@@ -310,11 +368,19 @@ func _input(event: InputEvent) -> void:
 				KEY_DOWN: row_index = mini(row_index + 1, rows.size() - 1)
 				KEY_LEFT: _nudge(-1)
 				KEY_RIGHT: _nudge(1)
+				KEY_ENTER, KEY_KP_ENTER:
+					if rows[row_index].setting.kind != "reset":
+						return
+					_nudge(1)
 				_: return
 			_refresh()
 	get_viewport().set_input_as_handled()
 
 func _nudge(step: int) -> void:
+	if rows[row_index].setting.kind == "reset":
+		if step > 0:
+			reset_current_page()
+		return
 	if model.nudge(rows[row_index].setting, step):
 		manual.refresh_from_player()
 		auto.refresh_lock_labels()
@@ -398,6 +464,8 @@ func _refresh() -> void:
 		var focused := i == row_index
 		r.name.text = ("> " if focused else "  ") + s.label
 		r.name.add_theme_color_override("font_color", SODIUM if focused else SILVER)
+		if s.kind == "reset":
+			continue
 		r.value.text = model.value_text(s)
 		var danger := SettingDanger.Level.GREEN
 		if r.path != "":

@@ -253,6 +253,32 @@ func apply_preset(name: String) -> void:
 	preset = name
 	modified = false
 
+## Every path a page's settings write (ranges and choices).
+static func page_paths(id: String) -> Array[String]:
+	var out: Array[String] = []
+	var probe := TunerModel.new(null, CarSpec.coupe_default(), CarSpec.coupe_default())
+	for s in page(id).get("settings", []):
+		var paths: Array = s.paths if s.kind == "range" else probe.choice_values(s.id, 0).keys()
+		for p in paths:
+			if not out.has(p):
+				out.append(p)
+	if id == "aero":
+		out.append("coefficient_of_drag")  # follows the wings on this page
+	return out
+
+## Puts one page's settings back to the car's stock values (settings safety
+## part 4). Returns true if anything changed.
+func reset_page(id: String) -> bool:
+	var changed := false
+	for p in page_paths(id):
+		var v := TuneParams.get_value(stock, p)
+		if TuneParams.get_value(spec, p) != v:
+			_write(p, v)
+			changed = true
+	if changed:
+		_touched()
+	return changed
+
 func preset_label() -> String:
 	return preset + (" (modified)" if modified else "")
 

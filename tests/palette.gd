@@ -3,7 +3,8 @@ extends SceneTree
 # Palette test: scans scripts/*.gd (not scripts/vendor, not tests) for Color(...)
 # literals and fails on cyan or magenta. ROADMAP: palette "Amber vs Dusk", "no
 # magenta or cyan"; police blue #2E4FD8 is the one off-palette colour, and the
-# RPM bar's green is allowed because Roy asked for green -> red there.
+# RPM bar's green is allowed because Roy asked for green -> red there (and again
+# for the tuner's danger zones, scripts/setting_danger.gd, 2026-10-07).
 #
 # What counts (r, g, b in 0..1):
 #   cyan     g > 0.6 and b > 0.6 and r < 0.35

@@ -108,7 +108,6 @@ if /i not "%~1"=="quick" (
 	call :run roadside_detail
 	call :run fleet_silhouette_sweep
 	call :run fleet_budget_scene
-	call :run exhaust_keys --headless
 	call :run mute --headless
 	call :run feel_pass_1 --headless
 )

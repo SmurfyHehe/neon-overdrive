@@ -19,9 +19,6 @@ const GROUPS := [
 	["Camera", [["camera_cycle", "Camera smoothing"], ["camera_view", "Chase / cockpit view"], ["look_back", "Look back (hold)"]]],
 	["Audio & Radio", [["mute", "Mute"], ["radio_next", "Next radio station"]]],
 	["Menus", [["pause", "Pause / back"], ["tuning_panel", "Tuning panel"], ["autotune_panel", "Auto-Tune panel"]]],
-	["Exhaust", [
-		["exhaust_loud_up", "Louder"], ["exhaust_loud_down", "Quieter"], ["exhaust_rasp_up", "More rasp"],
-		["exhaust_rasp_down", "Less rasp"], ["exhaust_pops_up", "More pops"], ["exhaust_pops_down", "Fewer pops"]]],
 ]
 
 const SILVER := Color("#C9CED6")

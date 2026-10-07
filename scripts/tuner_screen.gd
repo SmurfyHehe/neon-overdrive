@@ -8,13 +8,13 @@ extends CanvasLayer
 #
 #   +------------+------------------------------+-------------+
 #   | page list  | the page: notch bars or a    | stat panel  |
-#   |            | panel (Mechanic, Sound, Adv) | before/now  |
+#   |            | panel (Mechanic, Exhaust, Adv) | before/now  |
 #   +------------+------------------------------+-------------+
 #   | hint: what the focused setting does                      |
 #
 # Pages, settings, presets and the estimates live in TunerModel. The older
 # panels keep their logic and tests and sit on their own pages: AutoTunePanel on
-# Mechanic (PR 4 simplifies it), ExhaustPanel on Sound, TuningPanel (raw gearing
+# Mechanic (PR 4 simplifies it), ExhaustPanel on Exhaust, TuningPanel (raw gearing
 # and power, Copy values) on Advanced.
 #
 # Keyboard only, no key hints on screen (they are on the pause menu's Controls
@@ -52,7 +52,7 @@ var preset_label: Label
 var car_label: Label
 var hint: Label
 var content: VBoxContainer   # rows of the current settings page
-var panel_pages := {}        # page id -> Control (Setup, Mechanic, Sound, Advanced)
+var panel_pages := {}        # page id -> Control (Setup, Mechanic, Exhaust, Advanced)
 var rows: Array = []         # [{setting, name, value, bar}] on a settings page
 var preset_buttons: Array[Button] = []
 var stats: TunerStats
@@ -147,11 +147,11 @@ func _ready() -> void:
 	mech.add_child(mechanic)
 	mech.add_child(auto)
 	panel_pages["mechanic"] = mech
-	var sound := VBoxContainer.new()
-	sound.add_child(_label("Sound and looks only: nothing here changes how the car drives.", DIM))
+	var exhaust_page := VBoxContainer.new()
+	exhaust_page.add_child(_label("Exhaust sound and flames only: nothing here changes how the car drives.", DIM))
 	exhaust = ExhaustPanel.new(player)
-	sound.add_child(exhaust)
-	panel_pages["sound"] = sound
+	exhaust_page.add_child(exhaust)
+	panel_pages["exhaust"] = exhaust_page
 	var adv := VBoxContainer.new()
 	adv.add_child(_label("Raw gearing and power, for fine work. Peak torque and redline move to the garage later.", DIM))
 	manual = TuningPanel.new(player, game_state)
@@ -234,7 +234,7 @@ func show_page(id: String) -> void:
 		preset_buttons[0].grab_focus()
 	elif id == "mechanic":
 		(mechanic.goal_buttons.values()[0] as Control).grab_focus()
-	elif id == "sound":
+	elif id == "exhaust":
 		(exhaust.sliders.values()[0] as Control).grab_focus()
 	elif id == "advanced":
 		(manual.sliders["final_drive"] as Control).grab_focus()
@@ -370,7 +370,7 @@ func _refresh() -> void:
 		hint.text = {
 			"setup": "Stock: as it left the factory. Street: forgiving and comfortable. Grip: fast laps. Drift: easy slides.",
 			"mechanic": "The mechanic tries setups on a closed track and keeps what scores best for your goals.",
-			"sound": "How the exhaust sounds, and the flames. Purely cosmetic.",
+			"exhaust": "How the exhaust sounds, and the flames. Purely cosmetic.",
 			"advanced": "Every raw gearing and power number, with the gear table.",
 		}.get(page.id, "")
 	if stats.measured_for != player.spec.hash():

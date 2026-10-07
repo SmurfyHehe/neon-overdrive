@@ -81,6 +81,14 @@ func _physics_process(_delta: float) -> bool:
 			var model := TunerModel.new(p, p.spec, CarSpec.coupe_default())
 			model.apply_preset("Grip")
 			CarSpec.set_param(p, p.spec, ARB, TuneParams.get_value(p.spec, ARB) + 0.07)
+			# Roy's named settings, set by hand so each is checked on its own:
+			# camber, pressure, toe and the Semi-slick compound.
+			CarSpec.set_param(p, p.spec, "front_static_camber", -2.75)
+			CarSpec.set_param(p, p.spec, "rear_tyre_pressure", 2.45)
+			CarSpec.set_param(p, p.spec, "front_toe", -0.008)
+			var semi: Dictionary = model.choice_values("compound", 2)
+			for path in semi:
+				CarSpec.set_param(p, p.spec, path, semi[path])
 			exhaust_loud = 0.83
 			CarSpec.set_param(p, p.spec, "exhaust/loudness", exhaust_loud)
 			expected = PlayerTune.values_from(p.spec)

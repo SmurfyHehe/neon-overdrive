@@ -24,8 +24,13 @@ extends RefCounted
 # The atlas is drawn here in code (no image asset to import), 32x32 px per
 # tile with nearest filtering for the PS2 look. Each tile is one bay wide and
 # one floor tall: RGB is albedo detail (multiplied by the tint), alpha marks
-# glass that may light up. Which windows are lit is decided per window in the
+# glass that may light up.
+#
+# Step 2 adds building types on top (see TYPES) and shop / garage signs
+# (scripts/building_signs.gd). Which windows are lit is decided per window in the
 # shader from a hash, so it never repeats from one building to the next.
+
+const BuildingSigns := preload("res://scripts/building_signs.gd")
 
 const TILE_PX := 32
 const TILES := 8
@@ -129,11 +134,12 @@ void fragment() {
 		float face = on_x ? (lnrm.x > 0.0 ? 1.0 : 2.0) : (lnrm.z > 0.0 ? 3.0 : 4.0);
 		vec3 key = vec3(floor(u), fl, seed * 7.13 + face * 31.7);
 		float h = hash3(key);
-		float lit = step(h, lit_density) * t.a;
+		// threshold the glass mask: a blurred far mip must not let wall emit
+		float lit = step(h, lit_density) * step(0.5, t.a);
 		float h2 = hash3(key + 19.19);
 		vec3 warm = vec3(1.0, 0.72, 0.38);
 		vec3 cool = vec3(0.74, 0.86, 0.7);  // white-green fluorescent
-		vec3 tv = vec3(0.62, 0.7, 1.0);
+		vec3 tv = vec3(0.42, 0.5, 0.8);
 		vec3 c = h2 < cool_bias[tile] ? cool : warm;
 		if (h2 > 0.96) { c = tv; }
 		EMISSION = c * lit * mix(0.55, 1.0, hash3(key + 3.7)) * emission_energy * glow[tile];
@@ -166,26 +172,38 @@ static func unit_box() -> BoxMesh:
 		_unit_box.size = Vector3.ONE
 	return _unit_box
 
-## Picks a building's look from its own RNG and writes it onto the mesh
-## instance. is_low is the old "garage" roll (a low, wide shed); h_roll is the
-## height draw in [0, 1]. Returns the building's real height (a whole number
-## of floors).
-static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, h_roll: float, w: float, d: float) -> float:
-	var tile: int
-	if is_low:
-		tile = [T_WAREHOUSE, T_WAREHOUSE, T_CORRUGATED, T_PARKING][rng.randi() % 4]
-	else:
-		tile = _weighted(rng, [
-			[T_APARTMENT, 26], [T_BRICK, 16], [T_CONCRETE, 16], [T_SHOP, 16],
-			[T_OFFICE, 12], [T_PARKING, 6], [T_CORRUGATED, 4], [T_WAREHOUSE, 4],
-		])
+# Building types (buildings step 2). A type picks the facade tiles that suit
+# it, its height range and whether it carries a sign. The old "garage" roll
+# (the low sheds) is the garage type: an auto shop with roller doors and a
+# TIRES / PARTS / AUTO / BODY sign, which milestone 8's stop-places can use.
+const TYPES := {
+	"apartment": {"tiles": [[T_APARTMENT, 60], [T_BRICK, 20], [T_CONCRETE, 20]], "h": [8.0, 24.0], "sign": 0.0},
+	"shop": {"tiles": [[T_SHOP, 100]], "h": [3.4, 10.5], "sign": 0.85},
+	"office": {"tiles": [[T_OFFICE, 70], [T_CONCRETE, 30]], "h": [12.0, 30.0], "sign": 0.0},
+	"parking": {"tiles": [[T_PARKING, 100]], "h": [6.0, 15.0], "sign": 0.0},
+	"garage": {"tiles": [[T_WAREHOUSE, 60], [T_CORRUGATED, 40]], "h": [0.0, 0.0], "sign": 0.7},
+}
+# Mix for an ordinary street until districts (step 4) set their own.
+const STREET_MIX := [["apartment", 40], ["shop", 30], ["office", 18], ["parking", 12]]
+
+## Picks a building's type and look from its own RNG and writes the look onto
+## the mesh instance. is_low is the old "garage" roll (a low, wide shed);
+## h_roll is the height draw in [0, 1]. Returns
+## {h, type, tile, floor_h, sign, sign_color, sign_style}; h is a whole
+## number of floors, sign is "" when the building has none.
+static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, h_roll: float, w: float, d: float, mix: Array = STREET_MIX) -> Dictionary:
+	var type: String = "garage" if is_low else _weighted_s(rng, mix)
+	var spec: Dictionary = TYPES[type]
+	var tile := _weighted(rng, spec.tiles)
 	var fh: float = FLOOR_H[tile]
 	var floors: int
-	if is_low:
-		floors = 2 if tile == T_PARKING else 1  # a one-deck car park reads as a shed
+	if type == "garage":
+		floors = 1
 	else:
-		# Same 6-22 m range as before, snapped to whole floors.
-		floors = maxi(2, roundi(lerpf(6.0, 22.0, h_roll) / fh))
+		var hr: Array = spec.h
+		floors = maxi(1, roundi(lerpf(hr[0], hr[1], h_roll) / fh))
+		if type != "shop":
+			floors = maxi(2, floors)
 	var h := float(floors) * fh
 	var tint: Color = TINTS[rng.randi() % TINTS.size()]
 	tint = tint * rng.randf_range(0.65, 0.85)
@@ -204,7 +222,31 @@ static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, 
 	mi.set_instance_shader_parameter("lit_density", density)
 	mi.set_instance_shader_parameter("seed", float(rng.randi() % 4096))
 	mi.set_meta("facade_tile", tile)
-	return h
+	mi.set_meta("building_type", type)
+	var word := ""
+	if rng.randf() < float(spec.sign):
+		var pool: Array = BuildingSigns.GARAGE_WORDS if type == "garage" else BuildingSigns.SHOP_WORDS
+		word = pool[rng.randi() % pool.size()]
+	var sign_color := rng.randi() % BuildingSigns.COLORS.size()
+	var sign_style := 1 if rng.randf() < 0.3 else 0
+	# short words on shops can hang as a blade over the sidewalk instead
+	var blade := type == "shop" and word.length() <= 5 and rng.randf() < 0.45
+	if word != "":
+		mi.set_meta("sign_word", word)
+	elif mi.has_meta("sign_word"):
+		mi.remove_meta("sign_word")
+	return {"h": h, "type": type, "tile": tile, "floor_h": fh, "sign": word, "sign_color": sign_color, "sign_style": sign_style, "blade": blade}
+
+static func _weighted_s(rng: RandomNumberGenerator, table: Array) -> String:
+	var total := 0
+	for e in table:
+		total += int(e[1])
+	var r := rng.randi() % total
+	for e in table:
+		r -= int(e[1])
+		if r < 0:
+			return String(e[0])
+	return String(table[0][0])
 
 static func _weighted(rng: RandomNumberGenerator, table: Array) -> int:
 	var total := 0

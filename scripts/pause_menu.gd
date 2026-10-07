@@ -31,6 +31,7 @@ var game_state: GameState
 var resume_button: Button
 var volume_sliders := {}   # channel -> HSlider
 var fov_slider: HSlider
+var smoothing_slider: HSlider
 var main_page: VBoxContainer
 var controls_page: VBoxContainer
 var controls_scroll: ScrollContainer
@@ -118,6 +119,11 @@ func _ready() -> void:
 	fov_slider = _add_slider(box, "Cockpit FOV", ViewSettings.COCKPIT_FOV_MIN, ViewSettings.COCKPIT_FOV_MAX, 1.0, ViewSettings.cockpit_fov,
 		func(v: float) -> void:
 			ViewSettings.set_cockpit_fov(v)
+			ViewSettings.save_settings())
+
+	smoothing_slider = _add_slider(box, "Camera", 0.0, float(ViewSettings.CAMERA_SMOOTHING_MAX), 1.0, float(ViewSettings.camera_smoothing),
+		func(v: float) -> void:
+			ViewSettings.set_camera_smoothing(int(v))
 			ViewSettings.save_settings())
 
 	resume_button = _add_button(box, "Resume", game_state.resume)

@@ -76,6 +76,7 @@ call :run traffic_spawn "--headless --fixed-fps 60"
 rem ~17 s: full throttle at ~245 km/h across floating-origin recenters (the old ground-slab kick), at the game's 120 Hz.
 call :run recenter_kick "--headless --fixed-fps 120"
 call :run fx_pack --headless
+call :run tyre_smoke --headless
 call :run boundary_walls --headless
 call :run road_space --headless
 if /i not "%~1"=="quick" (
@@ -98,6 +99,8 @@ if /i not "%~1"=="quick" (
 	rem Key-press tests run headless: a windowed run loses its held keys the moment the window loses focus (found 2026-10-05, it made chunk_drive and feel_pass_1 flaky).
 	rem These need a real window: headless drops MultiMesh data.
 	call :run chunk_drive
+	rem Tyre smoke draw cost: a burnout in front of the chase camera, smoke on vs off (budget 0.5 ms).
+	call :run tyre_smoke_perf
 	rem Also a real window (it reads the interpolated camera); ~45 s of driving 500 km down the road.
 	call :run floating_origin_drive
 	call :run game_state --headless

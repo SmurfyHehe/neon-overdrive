@@ -31,6 +31,8 @@ var game_state: GameState
 var resume_button: Button
 var volume_sliders := {}   # channel -> HSlider
 var fov_slider: HSlider
+var smoke_burnout_slider: HSlider
+var smoke_drift_slider: HSlider
 var main_page: VBoxContainer
 var controls_page: VBoxContainer
 var controls_scroll: ScrollContainer
@@ -119,6 +121,21 @@ func _ready() -> void:
 		func(v: float) -> void:
 			ViewSettings.set_cockpit_fov(v)
 			ViewSettings.save_settings())
+
+	# Tyre smoke amounts (2026-10-07): 0 = none, 1 = default, 2 = double.
+	# Read live by TyreSmoke each tick, saved with the rest.
+	var smoke_title := Label.new()
+	smoke_title.text = "Tyre smoke"
+	smoke_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(smoke_title)
+	smoke_burnout_slider = _add_slider(box, "Burnout", 0.0, FxSettings.SMOKE_MAX, 0.1, FxSettings.smoke_burnout,
+		func(v: float) -> void:
+			FxSettings.set_smoke(v, FxSettings.smoke_drift)
+			FxSettings.save_settings())
+	smoke_drift_slider = _add_slider(box, "Drift", 0.0, FxSettings.SMOKE_MAX, 0.1, FxSettings.smoke_drift,
+		func(v: float) -> void:
+			FxSettings.set_smoke(FxSettings.smoke_burnout, v)
+			FxSettings.save_settings())
 
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	_add_button(box, "Controls", show_controls)

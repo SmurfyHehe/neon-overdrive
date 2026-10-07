@@ -124,6 +124,8 @@ if /i not "%~1"=="quick" (
 	call :run night_lights
 	call :run fleet_silhouette_sweep
 	call :run fleet_budget_scene
+	rem Real window: reads rendered sky and moon pixels.
+	call :run sky_probe
 	call :run mute --headless
 	call :run feel_pass_1 --headless
 )

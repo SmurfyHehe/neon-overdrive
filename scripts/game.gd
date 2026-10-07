@@ -102,18 +102,22 @@ func _setup_world() -> void:
 	# dull sodium-orange city glow at the horizon, and a warm dark haze that
 	# swallows the distance -- denser than before, so the rows of street lamps
 	# fade into it (and the short draw distance is free, RESEARCH item 2).
-	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.008, 0.01, 0.018)
-	sky_mat.sky_horizon_color = Color(0.17, 0.095, 0.05)
-	sky_mat.ground_bottom_color = Color(0.008, 0.008, 0.01)
-	sky_mat.ground_horizon_color = Color(0.11, 0.065, 0.04)
-	var sky := Sky.new()
-	sky.sky_material = sky_mat
+	#
+	# MOON (2026-10-07): the gradient now lives in NightSky's sky shader, which
+	# adds a low phasing moon. And the fog no longer touches the sky: at the
+	# default fog_sky_affect of 1.0 it painted the whole sky one flat colour
+	# (measured: top, mid and horizon all ~RGB 24,16,10), hiding the gradient
+	# above and anything drawn in the sky. Distant buildings still fade into
+	# the fog colour, so they read as dark silhouettes against the horizon
+	# glow. fog_aerial_perspective would blend them into the sky exactly but
+	# cost ~0.16 ms on the i5-1235U (tests/sky_perf.gd), so it stays off.
+	var rng := RandomNumberGenerator.new()
 	env.background_mode = Environment.BG_SKY
-	env.sky = sky
+	env.sky = NightSky.build(NightSky.random_phase(rng))
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.1, 0.066, 0.042)
 	env.fog_density = 0.009
+	env.fog_sky_affect = 0.0
 	# NIGHT LIGHTING PASS (2026-09-29, RESEARCH-cheap-pretty.md item 1): the
 	# gradient sky is also the ambient source (Godot's default under BG_SKY),
 	# so its horizon glow fills the scene for free -- no extra light needed.

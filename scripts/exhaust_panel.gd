@@ -5,8 +5,7 @@ extends VBoxContainer
 # pops, flame), cosmetic only. They write into the player's spec under
 # "exhaust" through CarSpec.set_param(), the same path as the gearing sliders;
 # EngineAudio copies the spec into the live synth every frame, so changes are
-# heard at once, and saves the tune to disk once it settles. The held keys
-# U/J, I/K and O/L still work while driving and move the same values.
+# heard at once, and saves the tune to disk once it settles.
 #
 # These paths are in TuneParams.all() (so tune slots store them) but never in
 # TuneParams.auto_paths(): Auto-Tune does not touch them.

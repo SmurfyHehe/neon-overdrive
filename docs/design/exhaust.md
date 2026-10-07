@@ -18,10 +18,6 @@ physics effect (Roy's stage B decision).
   (0..1) since the last call. Drawing flames at the exhaust tips waits for
   stage B step 5, when the cars are built from `fleet.json` (which already has
   the tip positions).
-- **Playtest keys (temporary):** the player car starts on the P1 preset. Hold
-  U/J for loudness, I/K for raspiness, O/L for pops; a readout shows for a few
-  seconds. Flame has no key because there is nothing to see until step 5.
-- The knobs are not in the T tuning panel yet. PRs #88-90 are reworking that
-  panel; the exhaust controls go in with them.
+- **Where it is edited:** the Exhaust page of the Tuner screen (T): loudness, raspiness, pops and flame sliders, plus a reset to the car preset. The old held playtest keys (U/J, I/K, O/L) are gone. Changes save to disk once the game resumes.
 - **Presets are mostly judgement calls.** No per-car dB or pop data is
   published. Sources and reasoning are in the comment above `PRESETS`.

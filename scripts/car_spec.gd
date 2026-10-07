@@ -280,6 +280,25 @@ static func npc_spec(kind: String) -> Dictionary:
 			s["rear_damping_ratio"] = 0.42
 			s["front_arb_ratio"] = 0.15
 			s["rear_arb_ratio"] = 0.10
+		"n2_cityhatch":
+			# City hatchback, ~1.5 l four, front drive: light (1100 kg), short
+			# gearing that revs high, upright and draggy, narrow tyres.
+			var gears: Array[float] = [3.50, 2.05, 1.42, 1.06, 0.84]
+			s["vehicle_mass"] = 1100.0
+			s["front_weight_distribution"] = 0.62
+			s["front_torque_split"] = 1.0
+			s["max_torque"] = 215.0
+			s["max_rpm"] = 6600.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.1
+			s["coefficient_of_drag"] = 0.33
+			s["frontal_area"] = 2.15
+			s["front_tire_width"] = 185.0
+			s["rear_tire_width"] = 185.0
+			s["front_damping_ratio"] = 0.45
+			s["rear_damping_ratio"] = 0.45
+			s["front_arb_ratio"] = 0.18
+			s["rear_arb_ratio"] = 0.12
 	return s
 
 ## Physics layers (milestone 3). Every car sits on CAR_LAYER and collides with

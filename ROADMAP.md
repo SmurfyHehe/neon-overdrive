@@ -120,7 +120,7 @@ above, not here.
     noise bursts in `engine_synth.gd` and fire too often; avoid loop fatigue in
     every other sound too.
 11. **#80 engine sound per car and upgrade**: only meaningful once more cars exist.
-12. **Photo mode** (Roy's feature idea).
+12. ~~**Photo mode** (Roy's feature idea)~~ **Done** (P: free camera, HUD hidden, Enter saves a PNG to user://photos).
 
 ### L: several PRs or heavy art/audio
 

@@ -1,4 +1,5 @@
-# Exhaust tune (stage B step 2, 2026-10-05). Four knobs, all 0..1, all
+# Exhaust tune (stage B step 2, 2026-10-05). Four knobs, all 0..1, plus the
+# anti-lag switch (2026-10-07), all
 # COSMETIC: they change what the exhaust sounds and looks like and nothing
 # else. No wear, heat, fuel, police or physics effect (Roy's decision,
 # ROADMAP stage B). EngineSynth reads them; a flame visual reads the events
@@ -17,23 +18,29 @@ var pops := 0.3
 ## Flamethrower: how much fire a pop or a rev-limiter cut spits out the tip.
 ## 0 = no flames. Cosmetic: it only sizes the flame events.
 var flame := 0.0
+## Anti-lag crackle switch (exhaust flames, 2026-10-07, Roy: cosmetic only, its
+## own switch). 0 = off, 1 = on; a float so tune slots and the save file treat
+## it like the knobs. On: lifting off at rpm keeps banging and spitting fire the
+## way a rally car's anti-lag does. No boost, wear or physics effect.
+var anti_lag := 0.0
 
 ## Where the player's tune is kept between runs (one entry per car id). Tests
 ## point this at a scratch file so they never read or write the real one.
 static var save_path := TestMode.path("user://exhaust_tune.json")
 
-const KEYS := ["loudness", "raspiness", "pops", "flame"]
+const KEYS := ["loudness", "raspiness", "pops", "flame", "anti_lag"]
 
-func _init(l := 0.5, r := 0.3, p := 0.3, f := 0.0) -> void:
+func _init(l := 0.5, r := 0.3, p := 0.3, f := 0.0, al := 0.0) -> void:
 	loudness = l
 	raspiness = r
 	pops = p
 	flame = f
+	anti_lag = al
 
-## The four knobs as {key: float}, the form a car's spec holds under "exhaust"
-## and a saved file stores.
+## The knobs as {key: float}, the form a car's spec holds under "exhaust" and a
+## saved file stores.
 func to_dict() -> Dictionary:
-	return {"loudness": loudness, "raspiness": raspiness, "pops": pops, "flame": flame}
+	return {"loudness": loudness, "raspiness": raspiness, "pops": pops, "flame": flame, "anti_lag": anti_lag}
 
 ## Copies the knobs of a {key: float} dictionary into this tune (keys it does not
 ## have are left alone), clamped to 0..1.
@@ -42,6 +49,7 @@ func apply_dict(d: Dictionary) -> void:
 	raspiness = clampf(float(d.get("raspiness", raspiness)), 0.0, 1.0)
 	pops = clampf(float(d.get("pops", pops)), 0.0, 1.0)
 	flame = clampf(float(d.get("flame", flame)), 0.0, 1.0)
+	anti_lag = 1.0 if float(d.get("anti_lag", anti_lag)) >= 0.5 else 0.0  # a switch
 
 ## The saved tune of a car as {key: float}, or {} if there is none (no file, a
 ## file that will not parse, or no entry for this car).
@@ -84,7 +92,7 @@ static func _read_cars() -> Dictionary:
 	return {}
 
 ## Per-car starting tunes, keyed by the fleet ids in docs/design/fleet/fleet.json.
-## Order: loudness, raspiness, pops, flame. Researched 2026-10-05 and mostly
+## Order: loudness, raspiness, pops, flame. Anti-lag starts off on every car. Researched 2026-10-05 and mostly
 ## judgement calls: no per-car dB or pop data is published. Grounding:
 ## - pops are an ECU-tune effect (overrun fuel cut off, retarded ignition), so
 ##   stock-type cars pop rarely (https://www.bristol-tuning.com/services/overrun-pop-crackle/);

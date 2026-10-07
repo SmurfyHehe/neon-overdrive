@@ -77,6 +77,7 @@ rem ~17 s: full throttle at ~245 km/h across floating-origin recenters (the old 
 call :run recenter_kick "--headless --fixed-fps 120"
 call :run fx_pack --headless
 call :run tyre_smoke --headless
+call :run exhaust_flames --headless
 call :run boundary_walls --headless
 call :run road_space --headless
 if /i not "%~1"=="quick" (

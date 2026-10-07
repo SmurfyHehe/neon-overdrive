@@ -50,3 +50,4 @@ func set_effect(effect: String, on: bool) -> void:
 func shift_world(offset: Vector3) -> void:
 	skids.shift_world(offset)
 	smoke.shift_world(offset)
+	flames.shift_world(offset)  # fireballs and smoke left behind in world space

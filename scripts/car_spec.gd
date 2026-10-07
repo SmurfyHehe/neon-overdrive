@@ -252,6 +252,9 @@ static func traffic_default() -> Dictionary:
 	s["automatic_transmission"] = true
 	s["realistic_clutch"] = false
 	s["turbo_boost_max"] = 0.0
+	# A commuter's exhaust: no flames (ExhaustFlames reads this; only a car
+	# whose flame value is above 0 gets them, today the C3 interceptor).
+	s["exhaust"] = ExhaustTune.for_car("n1_commuter").to_dict()
 	return s
 
 ## Physics layers (milestone 3). Every car sits on CAR_LAYER and collides with

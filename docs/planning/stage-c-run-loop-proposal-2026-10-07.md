@@ -1,6 +1,7 @@
 # Stage C proposal: the run loop (scoring, currency, replay)
 
-**Status: proposal only. Nothing here is built. Waiting for Roy's sign-off.**
+**Status: proposal only. Nothing here is built. Roy answered four questions on
+2026-10-07; waiting for sign-off on the whole page.**
 Date 2026-10-07, checked against `origin/main` `9bf4f02` (PR #146).
 
 **Goal:** the 20th run is still fun. A run is one drive on the highway from
@@ -57,9 +58,9 @@ only things pushing back are **losing what you have not banked** and **heat**.
   the car on its wheels, so a crash is a judgement, not a physics accident.
 - **Heat** rises with each near-miss (v1 guess: +2 × streak) and with speed above
   a threshold, and cools slowly while you drive calmly. Tiers 30/60/90 raise the
-  payout (×1.25/×1.5/×2.0) **and** the traffic density ahead of you. More heat
-  means more money and more cars to hit. No police until Stage F; F reads the same
-  heat value.
+  payout (×1.25/×1.5/×2.0). **Roy, 2026-10-07: more heat brings police into the
+  traffic.** Cop cars do not exist yet (Stage F), so in Stage C heat raises payout
+  only and records the tier; Stage F spawns police traffic from the same heat value.
 - **Later, after the garage:** damage costs Cred to repair, fuel costs Cred and
   forces stops, so a big run can still lose money. That is the second pull against
   risk. Not in Stage C.
@@ -75,7 +76,7 @@ its own random stream from it, so changing one system does not reshuffle the oth
 | Seeded per run | v1 range |
 |---|---|
 | Road chunks | Order and roadside dressing from the existing pool |
-| Traffic density | 0.6× to 1.4× the slider value, plus heat scaling |
+| Traffic density | 0.6× to 1.4× the slider value |
 | Time of night | Dusk, midnight or pre-dawn; all stay inside Amber vs. Dusk |
 | Weather | Clear or haze (fog density) only. Rain needs wet grip and spray, so it is a later item |
 | Event type | A list with one entry today ("free run"). Events slot in later |
@@ -105,9 +106,24 @@ run. That is fine: we are not doing ghosts.
   `id, name, cost, requires, spec_overrides, drives_differently`. `spec_overrides`
   are `CarSpec` changes, as already decided for the trees.
 - **Every branch must change how the car drives**, not only numbers like power. A
-  test checks that each branch touches at least one handling field (grip, steering,
-  diff, weight balance, gearing, brake bias) and states the change in
-  `drives_differently`. Which fields count is Roy's call.
+  test checks that each branch touches at least one handling field and states the
+  change in `drives_differently`. Handling fields (Roy picked the first four; the
+  rest come from `scripts/car_spec.gd`):
+
+  | Group | `CarSpec` fields |
+  |---|---|
+  | Grip / tyres | `coefficient_of_friction`, `tire_stiffnesses`, tyre pressure, camber, toe, `tyre_load_sensitivity` |
+  | Steering / diff | `max_steering_angle`, locking-diff engage torque front/rear |
+  | Weight / balance | `vehicle_mass`, `front_weight_distribution`, `front_brake_bias`, `center_of_gravity_height_offset` |
+  | Gearing | `gear_ratios`, `final_drive`, `shift_time` |
+  | Suspension (proposed) | damping ratios, anti-roll bars, spring lengths (ride height) |
+  | Aero (proposed) | downforce front/rear, `coefficient_of_drag` |
+  | Drivetrain (proposed) | `front_torque_split` (RWD to AWD changes the car most) |
+  | Power delivery (proposed) | `torque_shape`, `turbo_boost_max` (turbo lag), `throttle_speed`, `motor_brake` |
+  | Driver aids (proposed) | traction control, stability, ABS thresholds |
+
+  Power-only nodes (`max_torque`, `max_rpm`) are allowed inside a branch, never as
+  a whole branch. Exhaust stays cosmetic and never counts.
 
 ## 6. Emergent hooks
 
@@ -127,8 +143,8 @@ the one-file constants make balancing quick.
 1. **The road is straight.** Seeded density and fog do not make run 20 feel
    different from run 3. Mitigation: heat-driven traffic gives each run its own
    shape. If testers still say "it's the same road", #37 curves moves up.
-2. **Heat is a free multiplier.** Without police it has no cost. Mitigation: heat
-   adds traffic. If that is not enough, Stage F has to come sooner.
+2. **Heat is a free multiplier** until police exist. Roy's answer is police
+   traffic, which is Stage F. If heat feels free in the C playtest, F comes sooner.
 3. **Near-miss detection misfires** in dense full-sim traffic (double counts,
    counts through walls). Mitigation: headless tests with scripted passes before
    any HUD work.
@@ -140,7 +156,7 @@ the one-file constants make balancing quick.
 |---|---|---|
 | C1 | `run_tuning.gd` constants, run state, crash detection ends the run | Scripted hit above and below the threshold |
 | C2 | Near-miss detector and the formula | Scripted passes at set gaps and speeds give the expected values |
-| C3 | Streak, pot, banking, heat gain and heat-driven density | Bank after 6 s; crash loses pot; heat tiers |
+| C3 | Streak, pot, banking, heat gain and payout tiers | Bank after 6 s; crash loses pot; heat tiers |
 | C4 | HUD: score, streak, pot, heat (palette test) | `palette` and HUD tests |
 | C5 | Instant retry and the summary screen | Crash to driving under 2 s, measured |
 | C6 | Run seed and per-run variation, weekly-seed stub | Same seed gives the same start settings |
@@ -150,10 +166,13 @@ the one-file constants make balancing quick.
 
 After C5, a playtest of 20 runs against the falsification check, before C6-C9.
 
-## Decisions for Roy
+## Roy's answers (2026-10-07)
 
-1. Pot and bank as the Stage C risk/reward (or straight banking with no pot)?
-2. Heat adds traffic density in Stage C (or heat is payout only until police)?
-3. Time-of-night variation is OK under "gritty PS2 night"?
-4. Rain later, haze only now?
-5. Which `CarSpec` fields count as "drives differently" for mod branches?
+1. Pot and bank: **yes**.
+2. Heat: **payout, and more heat brings police into traffic** (police in Stage F;
+   payout only in C).
+3. Time-of-night variation and haze now, rain later: **yes**.
+4. Handling fields: grip/tyres, steering/diff, weight/balance, gearing, **plus
+   research for more**; the proposed extra groups are in section 5 for sign-off.
+
+Still open: sign-off on the whole page and on the extra field groups.

@@ -358,11 +358,16 @@ func _process(delta: float) -> void:
 ## fire. GEVP raises is_up_shifting for the shift's length.
 func _watch_upshift(flame: float) -> void:
 	var up: bool = _car.is_up_shifting
-	if up and not _was_up_shifting and flame >= UPSHIFT_FLAME_MIN:
-		var rpm_norm := clampf((_car.motor_rpm - _car.idle_rpm) / maxf(_car.max_rpm - _car.idle_rpm, 1.0), 0.0, 1.0)
-		if _car.throttle_input > 0.6 and rpm_norm > 0.5:
-			queue_burst(flame * (0.8 + 0.2 * _rng.randf()), Kind.UPSHIFT)
+	if up and not _was_up_shifting and flame >= UPSHIFT_FLAME_MIN and upshift_spits(_car):
+		queue_burst(flame * (0.8 + 0.2 * _rng.randf()), Kind.UPSHIFT)
 	_was_up_shifting = up
+
+## The upshift law, shared with EngineAudio's upshift bang so sound and fire
+## agree: foot down and revs up when the shift starts. GEVP raises
+## is_up_shifting in auto, semi and manual alike.
+static func upshift_spits(car: Vehicle) -> bool:
+	var rpm_norm := clampf((car.motor_rpm - car.idle_rpm) / maxf(car.max_rpm - car.idle_rpm, 1.0), 0.0, 1.0)
+	return car.throttle_input > 0.6 and rpm_norm > 0.5
 
 ## A car with no EngineAudio (traffic): the synth's pop laws (engine_synth.gd
 ## render(): overrun rate, limiter bangs, the anti-lag volley), run per frame

@@ -250,7 +250,9 @@ func _physics_process(_delta: float) -> void:
 	# Runs before the car's own _physics_process (parent before child), so
 	# GEVP computes this step's velocity from positions that are already
 	# shifted consistently.
-	var z := player.global_position.z
+	# Road-space z (RoadFrame, #37): distance along the road, which is what
+	# the whole-chunk shift counts in.
+	var z := RoadFrame.unroll(player.global_position).z
 	if absf(z) >= recenter_dist:
 		_shift_origin(int(floor(-z / RoadChunkBuilder.CHUNK_LEN)))
 	if Input.is_action_just_pressed("mute"):
@@ -298,7 +300,7 @@ const PLAYER_SPAWN_LANE := 1
 
 func _setup_player() -> void:
 	player = PlayerCar.new()
-	player.position = Vector3(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, 0)
+	player.position = RoadFrame.roll(Vector3(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, 0))
 	add_child(player)
 
 # ---------- traffic (milestone 3, stage B step 3) ----------
@@ -341,4 +343,4 @@ func _setup_game_state() -> void:
 	add_child(radio)
 
 func _process(_delta: float) -> void:
-	_update_chunk_pool(player.position.z)
+	_update_chunk_pool(RoadFrame.unroll(player.position).z)

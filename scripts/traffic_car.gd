@@ -71,7 +71,9 @@ var sim_only := false
 ## target_speed (nothing to brake for, no lane changes).
 var traffic: TrafficManager
 
-## World x of the lane centre this car holds, or is changing INTO.
+## Road-space x (RoadFrame) of the lane centre this car holds, or is
+## changing INTO. Every x and z this car reasons in is road space: across and
+## along the road, the same as world axes only while the road is straight.
 var lane_x := 0.0
 ## Lane index on this car's side of the road, 0 next to the centre line.
 var lane_i := 0
@@ -281,7 +283,7 @@ func _accel_command(v: float) -> float:
 	lead_speed = 0.0
 	lead_is_player = false
 	if traffic != null:
-		var p := global_position
+		var p := RoadFrame.unroll(global_position)
 		_scan_in -= 1
 		if _scan_in <= 0:
 			_scan_in = LEAD_SCAN_TICKS
@@ -348,9 +350,10 @@ func _consider_lane_change(v: float) -> void:
 	var obstacle := lead_gap < OBSTACLE_RANGE and lead_speed < OBSTACLE_SPEED and target_speed > OBSTACLE_SPEED
 	if v < MIN_LC_SPEED and not obstacle:
 		return
-	var x := global_position.x
+	var u := RoadFrame.unroll(global_position)
+	var x := u.x
 	var skip_player := not traffic.react_to_player
-	var f_gap := traffic.scan(global_position.z, direction, x - half_w - CORRIDOR_MARGIN, x + half_w + CORRIDOR_MARGIN,
+	var f_gap := traffic.scan(u.z, direction, x - half_w - CORRIDOR_MARGIN, x + half_w + CORRIDOR_MARGIN,
 		false, _idx, half_l, LOOK_BEHIND, skip_player)
 	var f_speed := traffic.q_speed
 	var yielding := f_gap < INF and f_speed - v > YIELD_DV and f_gap / (f_speed - v) < YIELD_TTC
@@ -393,7 +396,7 @@ func _consider_lane_change(v: float) -> void:
 func _merge_safe(lx: float, v: float) -> bool:
 	var lo := lx - half_w - CORRIDOR_MARGIN
 	var hi := lx + half_w + CORRIDOR_MARGIN
-	var z := global_position.z
+	var z := RoadFrame.unroll(global_position).z
 	var skip_player := not traffic.react_to_player
 	_m_gap = traffic.scan(z, direction, lo, hi, true, _idx, half_l, LOOK_AHEAD, skip_player)
 	_m_speed = traffic.q_speed
@@ -437,10 +440,13 @@ func _path_x_at(t: float) -> float:
 ## Wreck bookkeeping. Returns true while the car looks crashed (it then
 ## stops: hazard brake); `wrecked` latches after WRECK_SECONDS.
 func _check_wreck(delta: float, v: float) -> bool:
-	var b := global_transform.basis
+	var u := RoadFrame.unroll(global_position)
+	var b := RoadFrame.basis_to_road(u.z, global_transform.basis)
 	var heading := -b.z.z * direction  # 1 = pointing down its lane
-	var off := absf(global_position.x - path_x())
-	var bad := b.y.y < WRECK_UP or ((heading < WRECK_HEADING or off > WRECK_OFF_PATH) and absf(v) < WRECK_MAX_SPEED)
+	var off := absf(u.x - path_x())
+	# Upside down is against world up, not the road's: a car on its roof is
+	# wrecked whatever the slope.
+	var bad := global_transform.basis.y.y < WRECK_UP or ((heading < WRECK_HEADING or off > WRECK_OFF_PATH) and absf(v) < WRECK_MAX_SPEED)
 	_wreck_t = _wreck_t + delta if bad else 0.0
 	var stuck := absf(v) < 0.5 and lead_gap > 30.0 and target_speed > 1.0
 	_stuck_t = _stuck_t + delta if stuck else 0.0
@@ -452,7 +458,8 @@ func _check_wreck(delta: float, v: float) -> bool:
 ## direction (see lane_steer).
 const VELOCITY_FRAME_MIN_SPEED := 3.0
 
-## Pure-pursuit steering toward the lane centre, as a steering_input in -1..1.
+## Pure-pursuit steering toward the lane centre (road-space x `lane`, so the
+## target follows the road through a bend), as a steering_input in -1..1.
 ## Shared with the tests' scripted player so there is one lane-keeper. Sign:
 ## GEVP yaws LEFT for a positive input (see player.gd's keyboard note), so a
 ## target on the right gives a negative input.
@@ -469,7 +476,9 @@ const VELOCITY_FRAME_MIN_SPEED := 3.0
 ## on the lane whenever it is moving along it, whatever its nose does.
 static func lane_steer(v: Vehicle, lane: float, dir: float, wb: float) -> float:
 	var lookahead := clampf(v.speed * LOOKAHEAD_SECONDS, LOOKAHEAD_MIN, LOOKAHEAD_MAX)
-	var target := Vector3(lane, v.global_position.y, v.global_position.z + dir * lookahead)
+	var u := RoadFrame.unroll(v.global_position)
+	var target := RoadFrame.roll(Vector3(lane, u.y, u.z + dir * lookahead))
+	target.y = v.global_position.y
 	var fwd := -v.global_transform.basis.z
 	var vel := v.linear_velocity
 	vel.y = 0.0
@@ -518,7 +527,7 @@ func place(lane: float, dir: float, z: float, y: float, speed: float) -> void:
 	_lead_k = -1
 	_scan_in = 0
 	var yaw := 0.0 if dir < 0.0 else PI
-	global_transform = Transform3D(Basis(Vector3.UP, yaw), Vector3(lane, y, z))
+	global_transform = RoadFrame.pose(lane, y, z, yaw)
 	set_moving(self, speed)
 	reset_physics_interpolation()
 	_cruise_speed = speed
@@ -539,14 +548,17 @@ func set_detailed(on: bool) -> void:
 		changing = false
 		# Snap to the lane, upright; nothing is drawn out here.
 		var yaw := 0.0 if direction < 0.0 else PI
-		global_transform = Transform3D(Basis(Vector3.UP, yaw), Vector3(lane_x, global_position.y, global_position.z))
+		var u := RoadFrame.unroll(global_position)
+		global_transform = RoadFrame.pose(lane_x, u.y, u.z, yaw)
 		reset_physics_interpolation()
 
 ## Frozen cruise: straight down the lane, with the follower law on its speed.
 func _cruise(delta: float) -> void:
 	var a := clampf(_accel_command(_cruise_speed), -A_BRAKE_FULL, 2.0)
 	_cruise_speed = maxf(_cruise_speed + a * delta, 0.0)
-	global_position.z += direction * _cruise_speed * delta
+	var u := RoadFrame.unroll(global_position)
+	u.z += direction * _cruise_speed * delta
+	global_transform = RoadFrame.pose(u.x, u.y, u.z, 0.0 if direction < 0.0 else PI)
 	previous_global_position = global_position
 	if traffic != null and traffic.react_to_player:
 		_decide_t -= delta
@@ -558,7 +570,7 @@ func _cruise(delta: float) -> void:
 ## (YIELD_TTC_HIDDEN), if a lane next to it is safe.
 func _hidden_yield() -> void:
 	var v := _cruise_speed
-	var fg := traffic.scan(global_position.z, direction, lane_x - half_w - CORRIDOR_MARGIN, lane_x + half_w + CORRIDOR_MARGIN,
+	var fg := traffic.scan(RoadFrame.unroll(global_position).z, direction, lane_x - half_w - CORRIDOR_MARGIN, lane_x + half_w + CORRIDOR_MARGIN,
 		false, _idx, half_l, LOOK_BEHIND, false)
 	if fg == INF or not traffic.q_player:
 		return
@@ -570,7 +582,8 @@ func _hidden_yield() -> void:
 		if traffic.lane_allowed(lane, oncoming) and _merge_safe(TrafficManager.lane_centre(lane, oncoming), v):
 			lane_i = lane
 			lane_x = TrafficManager.lane_centre(lane, oncoming)
-			global_position.x = lane_x
+			var u := RoadFrame.unroll(global_position)
+			global_transform = RoadFrame.pose(lane_x, u.y, u.z, 0.0 if direction < 0.0 else PI)
 			previous_global_position = global_position
 			lane_changes += 1
 			_scan_in = 0

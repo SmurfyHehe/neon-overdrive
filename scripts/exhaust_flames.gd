@@ -372,7 +372,7 @@ func _simulate_pops(delta: float, flame: float) -> void:
 	var spec: Dictionary = _car.get("spec")
 	var ex: Dictionary = spec.get("exhaust", {})
 	var pops := float(ex.get("pops", 0.0))
-	var anti_lag := float(ex.get("anti_lag", 0.0)) >= 0.5
+	var anti_lag := ExhaustTune.anti_lag_live(spec)
 	var rpm_norm := clampf((_car.motor_rpm - _car.idle_rpm) / maxf(_car.max_rpm - _car.idle_rpm, 1.0), 0.0, 1.0)
 	var rate := 0.0
 	if _car.throttle_amount < 0.08 and rpm_norm > 0.3:

@@ -58,6 +58,7 @@ call :run cockpit_head_motion --headless
 call :run hud_rear_strip --headless
 call :run look_back --headless
 call :run cockpit_driver --headless
+call :run cockpit_shifter --headless
 call :run tyres "--headless --fixed-fps 60"
 call :run clutch_model --headless
 call :run driveline_audio --headless

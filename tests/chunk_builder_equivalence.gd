@@ -14,6 +14,7 @@ extends SceneTree
 #   fresh at N -- every building's size, position, collision box, meta and
 #   facade parameters
 # - one shared building material across the whole pool
+# - every building has a type; every signed building gets exactly one sign
 # - budget: roadside buildings and furniture stay under 5,000 triangles
 #   per 50 m chunk (worst case over many chunks)
 #
@@ -112,11 +113,22 @@ func _compare(a: Node3D, b: Node3D, label: String) -> void:
 			var vb = mb.get_instance_shader_parameter(p)
 			if va == null or str(va) != str(vb):
 				_fail("%s building %d: facade %s %s vs %s" % [label, i, p, va, vb])
+		if not ma.has_meta("building_type"):
+			_fail("%s building %d: no building_type" % [label, i])
 		for m in [ma, mb]:
 			if shared == null:
 				shared = m.material_override
 			elif m.material_override != shared:
 				_fail("%s building %d: does not share the building material" % [label, i])
+
+	var sa_n: int = (a.get_node(^"Signs") as MultiMeshInstance3D).multimesh.visible_instance_count
+	var sb_n: int = (b.get_node(^"Signs") as MultiMeshInstance3D).multimesh.visible_instance_count
+	var signed := 0
+	for i in B._building_slots() * 2:
+		if (a.get_node(NodePath("BuildingMesh%d" % i)) as Node).has_meta("sign_word"):
+			signed += 1
+	if sa_n != sb_n or sa_n != signed:
+		_fail("%s: %d / %d signs drawn for %d signed buildings" % [label, sa_n, sb_n, signed])
 
 ## Triangles drawn by roadside buildings and furniture (everything outside
 ## the road surface strips), worst case over a run of chunks.

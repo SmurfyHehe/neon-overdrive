@@ -94,6 +94,7 @@ class_name RoadChunkBuilder
 # Everything else across the road (shoulder, curb, sidewalk, buildings,
 # lamps, lane dashes, traffic lane centres) is laid out from this constant.
 const BuildingKit := preload("res://scripts/building_kit.gd")
+const BuildingSigns := preload("res://scripts/building_signs.gd")
 
 const LANE_W := 3.2
 const CHUNK_LEN := 50.0
@@ -588,9 +589,10 @@ static func _update_boundary(root: Node3D, body_name: String, inner_x: float, si
 # node is simply scaled; tile, tint, floor count and lit-window density are
 # per-instance shader parameters.
 #
-# The look is drawn from a per-building RNG seeded by chunk index and slot,
-# NOT the global random sequence: the global draws below are kept exactly as
-# before (4 per building, in the same order), so the road layout game.gd
+# The look is drawn from a per-building RNG seeded by chunk index, slot and
+# the building's footprint, NOT from the global random sequence: the global
+# calls below are kept exactly as before (4 per building, in the same
+# order), so the road layout game.gd
 # rolls after each chunk is unchanged for any seed, and a chunk rebuilt from
 # the pool looks the same as one built fresh.
 
@@ -608,9 +610,10 @@ static func _new_building(index: int) -> Array:
 	body.add_child(col)
 	return [mi, body]
 
-## Returns the building's length along the road (its z size), so the gap
-## walls can fill what is left between buildings.
-static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: float, side: int, chunk_index: int = 0) -> float:
+## Returns the building's length along the road (its z size, so the gap
+## walls can fill what is left between buildings), its type and sign, and
+## where its front face is.
+static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: float, side: int, chunk_index: int = 0) -> Dictionary:
 	var mi: MeshInstance3D = root.get_node(NodePath("BuildingMesh%d" % index))
 	var body: StaticBody3D = root.get_node(NodePath("BuildingBody%d" % index))
 	var col: CollisionShape3D = body.get_node(^"Shape")
@@ -627,18 +630,44 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 	var h_old: float = randf_range(3.0, 4.5) if is_garage else randf_range(6.0, 22.0)
 	var h_roll := inverse_lerp(3.0, 4.5, h_old) if is_garage else inverse_lerp(6.0, 22.0, h_old)
 
-	_bld_rng.seed = hash([chunk_index, index])
-	var h := BuildingKit.dress(mi, _bld_rng, is_garage, h_roll, w, d)
+	# w and d come from the global sequence, so the look changes from run to
+	# run with the road while a rebuild of the same chunk still matches
+	_bld_rng.seed = hash([chunk_index, index, w, d])
+	var info := BuildingKit.dress(mi, _bld_rng, is_garage, h_roll, w, d)
+	var h: float = info.h
 	var pos := Vector3((edge_x_abs + w / 2.0 + BUILDING_GAP) * float(side), h / 2.0, z)
 	mi.position = pos
-	if is_garage:
-		mi.set_meta("building_type", "garage")
-	elif mi.has_meta("building_type"):
-		mi.remove_meta("building_type")
 
 	box.size = Vector3(w, h, d)
 	body.position = pos
-	return d
+	info["d"] = d
+	info["front_x_abs"] = edge_x_abs + BUILDING_GAP
+	info["z"] = z
+	info["side"] = side
+	return info
+
+## Shop and garage signs (buildings step 2): one lightbox per signed
+## building, on its front just above the ground floor, from one MultiMesh.
+static func _update_signs(root: Node3D, infos: Array) -> void:
+	var mm: MultiMesh = (root.get_node(^"Signs") as MultiMeshInstance3D).multimesh
+	var n := 0
+	for info in infos:
+		if info.sign == "":
+			continue
+		var fh: float = info.floor_h
+		var garage: bool = info.type == "garage"
+		var x: float = float(info.front_x_abs) * float(info.side)
+		if info.blade:
+			# over the sidewalk, clear of a car roof, one floor up
+			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(x, fh + 0.9, info.z), info.side, 0.8, 2.0, true)
+		else:
+			# shop: the dark band at the top of the shopfront glass; garage:
+			# over the roller doors
+			var sh := 0.6 if garage else 0.75
+			var y: float = fh - (0.45 if garage else 0.42)
+			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(x, y, info.z), info.side, sh, float(info.d) * 0.8)
+		n += 1
+	mm.visible_instance_count = n
 
 # ---------- build / rebuild ----------
 
@@ -689,6 +718,7 @@ static func _create_nodes(root: Node3D) -> void:
 	for i in range(_building_slots() * 2):
 		for n in _new_building(i):
 			root.add_child(n)
+	root.add_child(BuildingSigns.new_multimesh(_building_slots() * 2))
 
 	root.set_meta("nodes_built", true)
 
@@ -771,15 +801,22 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# roadside buildings -- real collision, the world's actual hard boundary
 	var n_buildings := _building_slots()
 	var spans := {1: [], -1: []}  # per side: [z_front, z_back] of each building
+	var infos := []
 	for i in range(n_buildings):
 		var bz := -float(i) * BUILDING_SPACING - BUILDING_SPACING / 2.0
 		var bt: float = -bz / CHUNK_LEN
 		var own_edge_b: float = lerp(start_own_walk, end_own_walk, bt)
 		var onc_edge_b: float = lerp(start_onc_walk, end_onc_walk, bt)
-		var d_own := _update_building(root, i * 2, own_edge_b, bz, 1, chunk_index)
-		var d_onc := _update_building(root, i * 2 + 1, onc_edge_b, bz, -1, chunk_index)
+		var own_info := _update_building(root, i * 2, own_edge_b, bz, 1, chunk_index)
+		var onc_info := _update_building(root, i * 2 + 1, onc_edge_b, bz, -1, chunk_index)
+		infos.append(own_info)
+		infos.append(onc_info)
+		var d_own: float = own_info.d
+		var d_onc: float = onc_info.d
 		spans[1].append([bz + d_own / 2.0, bz - d_own / 2.0])
 		spans[-1].append([bz + d_onc / 2.0, bz - d_onc / 2.0])
+
+	_update_signs(root, infos)
 
 	# gap walls (stage A) -- close the open lots between buildings along the
 	# building-front line. Visual only: out-of-bounds collision is issue #28,

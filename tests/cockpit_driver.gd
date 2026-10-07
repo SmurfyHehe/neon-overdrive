@@ -211,7 +211,7 @@ func _physics_process(_delta: float) -> bool:
 			if waited == ticks(0.6) + ticks(0.5):
 				_check(not d.is_busy() and d.hand_position(1).distance_to(d.grip_position(1)) <= GRIP_TOL, "the hand returns to the rim after the handbrake is released")
 				throttle = 0.3
-				game.radio.next_station()
+				frame.request_radio()
 				_go(Step.PRIORITY)
 		Step.PRIORITY:
 			# radio reach under way, then a shift, then the handbrake

@@ -1,0 +1,52 @@
+# Runs the quick (headless) test suite on every pull request and push to main,
+# with the same Godot version and the same tests\run_tests.bat the laptop uses.
+# To block merging when this fails, make "Tests / quick" a required check in
+# Settings > Branches > branch protection for main.
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quick:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      GODOT_VERSION: 4.7.2
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: godot
+          key: godot-${{ env.GODOT_VERSION }}-win64
+
+      - name: Download Godot
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $zip = "Godot_v$env:GODOT_VERSION-stable_win64.exe.zip"
+          Invoke-WebRequest "https://github.com/godotengine/godot-builds/releases/download/$env:GODOT_VERSION-stable/$zip" -OutFile $zip
+          Expand-Archive $zip -DestinationPath godot
+
+      - name: Import project
+        # Builds .godot/ (import cache and class cache) so scripts can load.
+        shell: pwsh
+        run: |
+          & "godot\Godot_v$env:GODOT_VERSION-stable_win64_console.exe" --headless --editor --quit --path .
+          exit 0
+
+      - name: Run quick tests
+        shell: cmd
+        run: |
+          set "GODOT=%GITHUB_WORKSPACE%\godot\Godot_v%GODOT_VERSION%-stable_win64_console.exe"
+          call tests\run_tests.bat quick

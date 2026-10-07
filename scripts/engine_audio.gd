@@ -78,6 +78,9 @@ func _physics_process(_delta: float) -> void:
 ## tick while the game is paused.
 func sync_tune() -> void:
 	synth.tune.apply_dict(_spec.get("exhaust", {}))
+	# Anti-lag is turbo-only: the synth sees it off on a car with no boost.
+	if not ExhaustTune.anti_lag_live(_spec):
+		synth.tune.anti_lag = 0.0
 
 func _load_tune() -> void:
 	var s: Variant = _vehicle.get("spec")

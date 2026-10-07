@@ -416,9 +416,12 @@ func is_off_road() -> bool:
 ## the chassis box meets a wall ~0.9 m above it, so a wall contact rolls or
 ## pitches the car with a lever no tyre force ever has: a 200 km/h glancing hit
 ## put it on its roof (tests/wall_hit.gd). While the body touches a wall, the
-## roll and pitch rates are held to WALL_TILT_RATE; yaw is left alone, so the
-## car still bounces and slides off the wall naturally.
+## roll and pitch rates are held to WALL_TILT_RATE, and past WALL_MAX_TILT it
+## cannot tip any further (sliding along the wall at 200 km/h, a steady roll at
+## the capped rate still put it on its side in 3 s). Righting is never limited,
+## and yaw is left alone, so the car still bounces and slides off naturally.
 const WALL_TILT_RATE := 0.5  # rad/s
+const WALL_MAX_TILT := deg_to_rad(25.0)
 
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	super(state)
@@ -428,7 +431,16 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		var yaw := b.y * w.dot(b.y)
 		var roll := b.z * clampf(w.dot(b.z), -WALL_TILT_RATE, WALL_TILT_RATE)
 		var pitch := b.x * clampf(w.dot(b.x), -WALL_TILT_RATE, WALL_TILT_RATE)
-		state.angular_velocity = yaw + roll + pitch
+		var tip := roll + pitch
+		# Turning about `axis` (positive) brings the car's up back to world up.
+		var tilt := b.y.angle_to(Vector3.UP)
+		if tilt > 0.001:
+			var axis := b.y.cross(Vector3.UP).normalized()
+			var limit := WALL_TILT_RATE * clampf(1.0 - tilt / WALL_MAX_TILT, 0.0, 1.0)
+			var r := tip.dot(axis)
+			if r < -limit:
+				tip += axis * (-limit - r)
+		state.angular_velocity = yaw + tip
 
 func _touching_wall(state: PhysicsDirectBodyState3D) -> bool:
 	var wall_bit := 1 << (CarSpec.WALL_LAYER - 1)

@@ -23,8 +23,9 @@ extends SceneTree
 # - it stays near upright (tilt under MAX_TILT; main reached 120 deg)
 # - it gains no speed from the wall: after contact |v| never jumps by more
 #   than MAX_KICK in one tick (full throttle is ~0.05 m/s per tick)
-# - it ends the run back on its wheels: upright, all four wheels on the ground,
-#   so the player can drive off without a reset
+# - it ends the run back on its wheels: upright, at least three wheels on the
+#   ground (parked against the wall, one wheel can hang over the 0.5 m gap
+#   between the sidewalk and the wall), so the player drives off without a reset
 # - every number stays finite
 # NEON_WALL_ONLY="55,30" runs one scenario; NEON_WALL_LOG=1 prints each tick.
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --fixed-fps 120 --path . -s res://tests/wall_hit.gd
@@ -166,7 +167,7 @@ func _report() -> void:
 		bad.append("rolled to %.0f deg" % s.tilt)
 	if s.kick > MAX_KICK:
 		bad.append("gained %.1f m/s in one tick" % s.kick)
-	if s.end_tilt > END_TILT or s.end_wheels < 4:
+	if s.end_tilt > END_TILT or s.end_wheels < 3:
 		bad.append("not back on its wheels (tilt %.0f deg, %d wheels down)" % [s.end_tilt, s.end_wheels])
 	print("%s: peak tilt %5.1f deg, biggest one-tick speed gain %4.2f m/s, end tilt %4.1f deg, %d wheels down  %s" % [name, s.tilt, s.kick, s.end_tilt, s.end_wheels, "ok" if bad.is_empty() else "FAIL " + ", ".join(bad)])
 	for b in bad:

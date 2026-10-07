@@ -33,7 +33,8 @@ extends Node3D
 #   - idle: breathing, and a head bob from the road.
 # In the cockpit view the head and torso are hidden (the camera is the head);
 # in the chase view the whole driver shows through the glass. The hands never
-# rise above the rim top, so the road band stays clear (tests/cockpit_driver.gd).
+# rise above HAND_MIN_DEG below the eye, so the road band stays clear
+# (tests/cockpit_driver.gd).
 
 const SKIN := Color("#B9896A")
 const HAIR := Color("#2A1E16")
@@ -73,10 +74,15 @@ const LINK_TILT_DEG := 35.0
 const THIGH := 0.47
 const SHIN := 0.45
 ## Beyond this wheel angle the rim slides through the hands, so they never
-## climb past about 11 and 5 o'clock: a hand on top of the rim would stick up
-## into the road band (the cuff end would be 12 degrees below the eye, the rim
-## top is 15.5), and a real driver shuffles past this much lock anyway.
-const HAND_SLIDE_DEG := 55.0
+## climb past about 2 and 10 o'clock: the sightline spec keeps every hand point
+## at least HAND_MIN_DEG below the eye (at 55 the top hand reached 15.7, at 35
+## it stays near 20.5, which leaves room for the head motion), and a real
+## driver shuffles past this much lock anyway.
+const HAND_SLIDE_DEG := 35.0
+## Sightline budget for the hands (notes: cockpit-interior-research, section 4):
+## no hand or wrist point higher than this many degrees below the eye, in any
+## state. tests/cockpit_driver.gd checks it every tick.
+const HAND_MIN_DEG := 18.0
 ## Seated geometry, car space: the pelvis pivot and the head on the torso.
 const PELVIS := Vector3(CockpitFrame.SEAT_X, 0.50, 0.34)
 const RECLINE_DEG := 12.0
@@ -389,12 +395,17 @@ func _update_events() -> void:
 			paddle_side = 1 if p.gear > _last_gear else -1
 			paddle_t = PADDLE_SECS
 		_last_gear = p.gear
+	# Priority (sightline spec): handbrake > shift > radio. A higher request
+	# takes the hand from a lower one mid-move, and a shift while the hand is
+	# on its way back goes straight back to the knob; the radio press is
+	# dropped (the station already changed), a shift under a held handbrake
+	# moves the lever on its own.
 	var moving := frame.lever_moving and not p.automatic_transmission
-	if moving and not _lever_was_moving and act == Act.GRIP:
+	if moving and not _lever_was_moving and not _is_brake() and act != Act.SHIFT_REACH and act != Act.SHIFT_HOLD:
 		_start(Act.SHIFT_REACH)
 	_lever_was_moving = moving
 	var brake_on := p.handbrake_input > 0.5
-	if brake_on and not _brake_was_on and act == Act.GRIP:
+	if brake_on and not _brake_was_on and not _is_brake():
 		_start(Act.BRAKE_REACH)
 	_brake_was_on = brake_on
 	if frame.radio != null:
@@ -406,6 +417,12 @@ func _update_events() -> void:
 				_start(Act.RADIO_REACH)
 			else:
 				queued_radio = true
+
+func _is_radio() -> bool:
+	return act == Act.RADIO_REACH or act == Act.RADIO_PRESS or act == Act.RADIO_RETURN
+
+func _is_brake() -> bool:
+	return act == Act.BRAKE_REACH or act == Act.BRAKE_HOLD
 
 func _start(a: Act) -> void:
 	act = a

@@ -54,6 +54,7 @@ func _physics_process(_delta: float) -> bool:
 	hud._refresh()
 	_check(hud.lbl_speed.text == str(Hud.kmh(p.current_speed())), "speed label '%s' does not match the car (%d km/h)" % [hud.lbl_speed.text, Hud.kmh(p.current_speed())])
 	_check(hud.lbl_unit.text == "km/h", "the unit should be km/h")
+	_check(hud.cluster_plate.visible == hud.cluster.visible and hud.cluster.get_parent() == hud.cluster_plate, "the cluster should sit on its plate and show with it")
 	_check(hud.lbl_gear.text == Hud.gear_text(p.gear), "gear label '%s' does not match gear %d" % [hud.lbl_gear.text, p.gear])
 	_check(hud.lbl_mode.text == PlayerCar.TRANSMISSION_LETTERS[p.transmission_mode()], "the A/S/M label should follow the gearbox")
 	p.automatic_transmission = false

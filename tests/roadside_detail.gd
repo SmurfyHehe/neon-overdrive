@@ -101,14 +101,16 @@ func _check_frontage(chunk: Node3D, label: String) -> void:
 		var spans: Array = []
 		for i in B._building_slots() * 2:
 			var body: StaticBody3D = chunk.get_node(NodePath("BuildingBody%d" % i))
-			if signf(body.position.x) != side:
-				continue
+			if signf(body.position.x) != side or (body.get_node(^"Shape") as CollisionShape3D).disabled:
+				continue  # other side, or an empty lot the gap walls close
 			var d: float = ((body.get_node(^"Shape") as CollisionShape3D).shape as BoxShape3D).size.z
 			spans.append([body.position.z + d / 2.0, body.position.z - d / 2.0, "building"])
 		for i in walls.visible_instance_count:
 			var t := walls.get_instance_transform(i)
 			if signf(t.origin.x) != side:
 				continue
+			if t.basis.get_scale().x > 1.0:
+				continue  # a district step wall runs across the lot, not along it
 			var length := t.basis.get_scale().z
 			spans.append([t.origin.z + length / 2.0, t.origin.z - length / 2.0, "wall"])
 		spans.sort_custom(func(a, b): return a[0] > b[0])

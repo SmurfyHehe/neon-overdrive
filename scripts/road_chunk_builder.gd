@@ -96,6 +96,7 @@ class_name RoadChunkBuilder
 const BuildingKit := preload("res://scripts/building_kit.gd")
 const BuildingSigns := preload("res://scripts/building_signs.gd")
 const RoofProps := preload("res://scripts/roof_props.gd")
+const Districts := preload("res://scripts/districts.gd")
 
 const LANE_W := 3.2
 const CHUNK_LEN := 50.0
@@ -576,6 +577,18 @@ static func _update_boundary(root: Node3D, body_name: String, inner_x: float, si
 	box.size = Vector3(BOUNDARY_T, BOUNDARY_H, CHUNK_LEN)
 	body.position = Vector3((inner_x + BOUNDARY_T / 2.0) * float(side), BOUNDARY_H / 2.0, -CHUNK_LEN / 2.0)
 
+## The district cross wall: spans x between the two boundary lines (xs.x and
+## xs.y, both |x|) at the chunk's start, z = 0. Disabled when there is no step.
+static func _update_step(root: Node3D, body_name: String, xs: Vector2, side: int, on: bool) -> void:
+	var body: StaticBody3D = root.get_node(NodePath(body_name))
+	var col: CollisionShape3D = body.get_node(^"Shape")
+	col.disabled = not on
+	var x0 := minf(xs.x, xs.y)
+	var x1 := maxf(xs.x, xs.y) + BOUNDARY_T
+	(col.shape as BoxShape3D).size = Vector3(maxf(x1 - x0, 0.1), BOUNDARY_H, BOUNDARY_T)
+	body.position = Vector3((x0 + x1) / 2.0 * float(side), BOUNDARY_H / 2.0, -BOUNDARY_T / 2.0)
+	body.set_meta("step", on)
+
 # ---------- buildings (reused nodes) ----------
 #
 # Buildings keep one MeshInstance3D + one StaticBody3D each rather than
@@ -626,24 +639,46 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 	# comment; randf_range() takes more draws than randf(), so even swapping
 	# one for the other shifts the road layout).
 	var is_garage: bool = randf() < 0.12
-	var w: float = randf_range(4.0, 10.0)
-	var d: float = randf_range(9.0, 18.0)
+	var w_draw: float = randf_range(4.0, 10.0)
+	var d_draw: float = randf_range(9.0, 18.0)
 	var h_old: float = randf_range(3.0, 4.5) if is_garage else randf_range(6.0, 22.0)
 	var h_roll := inverse_lerp(3.0, 4.5, h_old) if is_garage else inverse_lerp(6.0, 22.0, h_old)
 
 	# w and d come from the global sequence, so the look changes from run to
 	# run with the road while a rebuild of the same chunk still matches
-	_bld_rng.seed = hash([chunk_index, index, w, d])
-	var info := BuildingKit.dress(mi, _bld_rng, is_garage, h_roll, w, d)
+	_bld_rng.seed = hash([chunk_index, index, w_draw, d_draw])
+	# Districts (step 4) remap the same draws onto their own footprint
+	# ranges, push the fronts back by the chunk's setback, and leave some
+	# slots as empty lots (the gap walls close them).
+	var spec := Districts.spec(Districts.name_for_building(chunk_index, _bld_rng.randf()))
+	var w: float = lerpf(spec.w[0], spec.w[1], inverse_lerp(4.0, 10.0, w_draw))
+	var d: float = lerpf(spec.d[0], spec.d[1], inverse_lerp(9.0, 18.0, d_draw))
+	var front := edge_x_abs + BUILDING_GAP + Districts.setback_at(chunk_index)
+	if _bld_rng.randf() < float(spec.gap):
+		mi.visible = false
+		col.disabled = true
+		mi.scale = Vector3(w, 1.0, d)
+		box.size = mi.scale
+		mi.position = Vector3((front + w / 2.0) * float(side), 0.5, z)
+		body.position = mi.position
+		mi.set_meta("building_type", "lot")
+		for k in ["sign_word", "facade_tile"]:
+			if mi.has_meta(k):
+				mi.remove_meta(k)
+		return {"empty": true, "d": 0.0, "z": z, "side": side}
+	mi.visible = true
+	col.disabled = false
+	var info := BuildingKit.dress(mi, _bld_rng, is_garage, h_roll, w, d, spec)
 	var h: float = info.h
-	var pos := Vector3((edge_x_abs + w / 2.0 + BUILDING_GAP) * float(side), h / 2.0, z)
+	var pos := Vector3((front + w / 2.0) * float(side), h / 2.0, z)
 	mi.position = pos
 
 	box.size = Vector3(w, h, d)
 	body.position = pos
+	info["empty"] = false
 	info["d"] = d
 	info["w"] = w
-	info["front_x_abs"] = edge_x_abs + BUILDING_GAP
+	info["front_x_abs"] = front
 	info["z"] = z
 	info["side"] = side
 	return info
@@ -654,7 +689,7 @@ static func _update_signs(root: Node3D, infos: Array) -> int:
 	var mm: MultiMesh = (root.get_node(^"Signs") as MultiMeshInstance3D).multimesh
 	var n := 0
 	for info in infos:
-		if info.sign == "":
+		if info.empty or info.sign == "":
 			continue
 		var fh: float = info.floor_h
 		var garage: bool = info.type == "garage"
@@ -704,6 +739,8 @@ static func _create_nodes(root: Node3D) -> void:
 	root.add_child(_new_sidewalk_collision("SidewalkColOnc"))
 	root.add_child(_new_boundary("BoundaryOwn"))
 	root.add_child(_new_boundary("BoundaryOnc"))
+	root.add_child(_new_boundary("BoundaryStepOwn"))
+	root.add_child(_new_boundary("BoundaryStepOnc"))
 
 	var slots := _dash_slots()
 	root.add_child(_new_multimesh("PylonsOwn", _get_pylon_mesh(), _get_pylon_mat_own(), _pylon_slots()))
@@ -718,7 +755,8 @@ static func _create_nodes(root: Node3D) -> void:
 	# allocated once, like the dashes and pylons above.
 	root.add_child(_new_multimesh("Lamps", _get_lamp_mesh(), null, _lamp_slots() * 2))
 	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2))
-	root.add_child(_new_multimesh("GapWalls", _get_wall_mesh(), _get_wall_mat(), (_building_slots() + 1) * 2))
+	# +1 per side for the district step wall
+	root.add_child(_new_multimesh("GapWalls", _get_wall_mesh(), _get_wall_mat(), (_building_slots() + 2) * 2))
 
 	var wall := MeshInstance3D.new()
 	wall.name = "Barrier"
@@ -794,8 +832,20 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	_update_sidewalk_collision(root, "SidewalkColOnc", start_onc_curb, end_onc_curb, start_onc_walk, end_onc_walk, -1)
 
 	# out-of-bounds walls, at the same set-back _update_building() uses
-	_update_boundary(root, "BoundaryOwn", maxf(start_own_walk, end_own_walk) + BUILDING_GAP, 1)
-	_update_boundary(root, "BoundaryOnc", maxf(start_onc_walk, end_onc_walk) + BUILDING_GAP, -1)
+	# (plus the district's setback: strip malls sit behind a drivable lot)
+	var setback := Districts.setback_at(chunk_index)
+	var bound_own := maxf(start_own_walk, end_own_walk) + BUILDING_GAP + setback
+	var bound_onc := maxf(start_onc_walk, end_onc_walk) + BUILDING_GAP + setback
+	_update_boundary(root, "BoundaryOwn", bound_own, 1)
+	_update_boundary(root, "BoundaryOnc", bound_onc, -1)
+	# Where the setback changes from the previous chunk, a cross wall at this
+	# chunk's start closes the step between the two boundary lines, so the
+	# deeper lot does not open behind the shallower chunk's wall.
+	var prev_setback := Districts.setback_at(chunk_index - 1)
+	var step_own := Vector2(bound_own, start_own_walk + BUILDING_GAP + prev_setback)
+	var step_onc := Vector2(bound_onc, start_onc_walk + BUILDING_GAP + prev_setback)
+	_update_step(root, "BoundaryStepOwn", step_own, 1, absf(setback - prev_setback) > 0.01)
+	_update_step(root, "BoundaryStepOnc", step_onc, -1, absf(setback - prev_setback) > 0.01)
 
 	# edge pylons -- cosmetic rhythm/speed cues, interpolated along each
 	# shoulder's outer edge between this chunk's start and end width
@@ -848,11 +898,19 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			var length := z_from - z_to
 			if length > 0.3:
 				var zc := (z_from + z_to) / 2.0
-				var x: float = lerp(walk0, walk1, -zc / CHUNK_LEN) + BUILDING_GAP + WALL_T / 2.0
+				var x: float = lerp(walk0, walk1, -zc / CHUNK_LEN) + BUILDING_GAP + setback + WALL_T / 2.0
 				var basis := Basis.from_scale(Vector3(WALL_T, WALL_H, length))
 				walls.set_instance_transform(n_walls, Transform3D(basis, Vector3(x * float(side), WALL_H / 2.0, zc)))
 				n_walls += 1
 			z_from = e[1]
+		# the district step: a visible wall across the lot edge, where the
+		# invisible cross wall stands
+		var step: Vector2 = step_own if side == 1 else step_onc
+		if absf(setback - prev_setback) > 0.01:
+			var sx := absf(step.x - step.y)
+			var basis2 := Basis.from_scale(Vector3(sx, WALL_H, WALL_T))
+			walls.set_instance_transform(n_walls, Transform3D(basis2, Vector3((step.x + step.y) / 2.0 * float(side), WALL_H / 2.0, -WALL_T / 2.0)))
+			n_walls += 1
 	walls.visible_instance_count = n_walls
 
 	# street lamps + their light pools (stage A). Pole just outside the curb,

@@ -78,6 +78,8 @@ static func update(mm: MultiMesh, infos: Array, signs: MultiMesh, first_sign: in
 	var n_signs := first_sign
 	var rng := RandomNumberGenerator.new()
 	for info in infos:
+		if info.empty:
+			continue
 		rng.seed = int(info.roof_seed)
 		var side := int(info.side)
 		var w: float = info.w
@@ -112,10 +114,14 @@ static func update(mm: MultiMesh, infos: Array, signs: MultiMesh, first_sign: in
 					props.append([SHAPE_BOX, Vector3(1.1, 0.9, 1.3), _spot(rng, w, d, 0.8), 0.75])
 			"parking":
 				props.append([SHAPE_BOX, Vector3(3.0, 3.0, 3.2), _spot(rng, w, d, 0.6), 0.5])  # stair and lift core
+			"warehouse":
+				# roof vents and a fan housing on the long low roof
+				for k in 1 + rng.randi() % 3:
+					props.append([SHAPE_BOX, Vector3(1.6, 1.0, 1.6), _spot(rng, w, d, 0.8), 0.6])
 			"garage":
 				if rng.randf() < 0.5:
 					props.append([SHAPE_BOX, Vector3(1.1, 0.9, 1.3), _spot(rng, w, d, 0.8), 0.75])
-		var billboard: float = {"shop": 0.3, "garage": 0.35}.get(kind, 0.0)
+		var billboard: float = {"shop": 0.3, "garage": 0.35}.get(kind, 0.0) * float(info.get("billboard", 1.0))
 		var wants_billboard := rng.randf() < billboard and h < 12.0
 		for p in props:
 			if n >= CAPACITY:

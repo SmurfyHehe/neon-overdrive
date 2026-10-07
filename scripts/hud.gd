@@ -33,6 +33,13 @@ const THREAT_HALF_WIDTH := 4.5   # m either side (own lane and the next)
 const THREAT_NEAR := 3.0         # m behind the car's origin: full cue
 const THREAT_FAR := 25.0         # m: cue starts
 const THREAT_RATE := 8.0         # 1/s smoothing
+## Blind-spot cue (2026-10-07): a same-way car in the next lane, from a little
+## ahead of the car's origin to a few lengths behind, lights that side's door
+## mirror dot. Lanes are 3.2 m (RoadChunkBuilder.LANE_W).
+const SIDE_X_MIN := 1.4          # m out from the centreline: clear of our own lane's middle
+const SIDE_X_MAX := 5.0          # m: the next lane, not the one beyond
+const SIDE_Z_AHEAD := 3.0        # m ahead of the origin (alongside)
+const SIDE_Z_BEHIND := 8.0       # m behind
 ## Fraction of max_rpm where the manual shift cue lights.
 const SHIFT_POINT := 0.92
 ## Fractions of max_rpm where the bar turns amber, then red.
@@ -58,6 +65,7 @@ var rear_strip: TextureRect
 var rear_frame: Panel
 var rear_style: StyleBoxFlat
 var rear_threat := 0.0   # 0..1, smoothed
+var side_threat := [0.0, 0.0]   # left, right; 0..1, smoothed
 
 ## Segmented RPM bar. Draws itself from frac / shift_frac / cue.
 class RpmBar extends Control:
@@ -255,6 +263,33 @@ func rear_threat_now() -> float:
 		worst = maxf(worst, 1.0 - (local.z - THREAT_NEAR) / (THREAT_FAR - THREAT_NEAR))
 	return worst
 
+## Same-way cars in the blind spot: [left, right], each 1 when a car is in
+## that zone, else 0. Raw, unsmoothed.
+func side_threat_now() -> Array:
+	var to_car := player.global_transform.affine_inverse()
+	var fwd := -player.global_transform.basis.z
+	var out := [0.0, 0.0]
+	for c in traffic.cars:
+		var car := c as Node3D
+		if not car.visible:
+			continue
+		if (-car.global_transform.basis.z).dot(fwd) < 0.3:
+			continue   # oncoming or crossing
+		var local := to_car * car.global_position
+		var ax := absf(local.x)
+		if ax < SIDE_X_MIN or ax > SIDE_X_MAX or local.z < -SIDE_Z_AHEAD or local.z > SIDE_Z_BEHIND:
+			continue
+		out[0 if local.x < 0.0 else 1] = 1.0
+	return out
+
+func _refresh_side_cue() -> void:
+	var k := 1.0 - exp(-THREAT_RATE * get_process_delta_time())
+	var now := side_threat_now()
+	for i in 2:
+		side_threat[i] = lerpf(side_threat[i], now[i], k)
+		if camera.frame != null:
+			camera.frame.mirrors.set_side_cue(i, side_threat[i])
+
 func _refresh_rear_cue() -> void:
 	var delta := get_process_delta_time()
 	rear_threat = lerpf(rear_threat, rear_threat_now(), 1.0 - exp(-THREAT_RATE * delta))
@@ -283,6 +318,7 @@ func _refresh() -> void:
 	cluster.visible = camera.view != ChaseCamera.View.COCKPIT
 	_refresh_rear_strip()
 	_refresh_rear_cue()
+	_refresh_side_cue()
 	var max_rpm := maxf(player.max_rpm, 1.0)
 	var rpm := player.motor_rpm
 	var frac := clampf(rpm / max_rpm, 0.0, 1.0)

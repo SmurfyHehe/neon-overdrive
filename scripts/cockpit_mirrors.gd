@@ -12,6 +12,15 @@ extends Node3D
 #     the cockpit camera does not draw), never the interior or the driver, with
 #     a 250 m far clip and no glow pass.
 # FxSettings "mirrors" off leaves dark glass and never renders.
+# A mirror whose glass is outside the cockpit camera's view is not rendered
+# at all (2026-10-07: on the P1 the right door mirror sits 58 degrees right of
+# the eye, off screen at every FOV unless the driver glances at it). The
+# mirror the driver glances at (ChaseCamera.glance) renders every frame at
+# twice the resolution.
+# Blind-spot dots (2026-10-07): each door mirror has a small amber dot in its
+# outer top corner that lights while a same-direction car is alongside or
+# just behind on that side (Hud.side_threat drives it, 0..1). The dot shows
+# even with mirrors off.
 # The HUD's rear strip (chase view) reuses the rearview render: with `strip`
 # on and the cockpit off, only the rear camera renders, every other frame.
 #
@@ -31,6 +40,10 @@ const GLASS_TINT := Color(0.86, 0.87, 0.92)
 ## car closes in behind (Hud.rear_threat drives it, 0..1).
 const CUE_TINT := Color(1.0, 0.72, 0.38)
 var rear_cue := 0.0
+const DOT_COLOUR := Color("#FFC066")   # amber
+const DOT_RADIUS := 0.0075
+const DOT_ON := 0.35                   # side cue level that lights the dot
+var side_cue := [0.0, 0.0]             # left, right
 const DARK_GLASS := Color("#171A20")
 
 ## Rearview glass: centre, size, and the angle that reflects straight back for the eye.
@@ -51,6 +64,8 @@ var strip := false         # the HUD rear strip wants the rear render (chase vie
 var enabled := true        # FxSettings "mirrors"
 var views := []            # [{vp, cam, quad, mat}] rear, left, right
 var _frame := 0
+var focus := 0             # -1 left door mirror, +1 right, 0 none (ChaseCamera.glance)
+var dots := []             # [left, right] MeshInstance3D
 var cull_mask := 0
 
 func _ready() -> void:
@@ -69,7 +84,29 @@ func _ready() -> void:
 		var out := -1.0 if i == 0 else 1.0
 		_add_mirror("Left" if i == 0 else "Right", glass_pos, SIDE_SIZE_M, float(SIDE_GLASS_YAW[i]), 0.0,
 			_scaled(SIDE_SIZE), SIDE_FOV, out * SIDE_YAW, env)
+		_add_dot(views[i + 1].quad, out)
 	_apply_enabled()
+
+## The blind-spot dot: a small amber bead just proud of the glass in its
+## outer top corner (glass-local +x is the car's +x, so outer is `out`).
+func _add_dot(glass: MeshInstance3D, out: float) -> void:
+	var dot := MeshInstance3D.new()
+	dot.name = "BlindSpotDot"
+	var sm := SphereMesh.new()
+	sm.radius = DOT_RADIUS
+	sm.height = DOT_RADIUS * 2.0
+	sm.radial_segments = 8
+	sm.rings = 4
+	dot.mesh = sm
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = DOT_COLOUR
+	dot.material_override = mat
+	dot.position = Vector3(out * (SIDE_SIZE_M.x * 0.5 - 0.02), SIDE_SIZE_M.y * 0.5 - 0.018, 0.004)
+	dot.layers = CockpitFrame.INTERIOR_BIT
+	dot.visible = false
+	glass.add_child(dot)
+	dots.append(dot)
 
 static func _scaled(base: Vector2i) -> Vector2i:
 	var k := FxSettings.mirror_scale()
@@ -127,6 +164,7 @@ func _add_mirror(mirror_name: String, pos: Vector3, size_m: Vector2, yaw_deg: fl
 func set_active(on: bool) -> void:
 	active = on
 	if not on:
+		set_focus(0)
 		for v in views:
 			v.vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 
@@ -135,6 +173,40 @@ func set_strip(on: bool) -> void:
 	strip = on
 	if not on and not active:
 		views[0].vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+
+## The door mirror the driver glances at (-1 left, +1 right, 0 none): it
+## renders every frame at twice the resolution until the glance ends.
+func set_focus(side: int) -> void:
+	if side == focus:
+		return
+	focus = side
+	for i in 2:
+		var v: Dictionary = views[i + 1]
+		var k := 2 if focus == (-1 if i == 0 else 1) else 1
+		v.vp.size = _scaled(SIDE_SIZE) * k
+
+## Car-space centre of a door mirror's glass (-1 left, +1 right), which the
+## head glance aims at.
+func glass_position(side: int) -> Vector3:
+	return views[1 if side < 0 else 2].quad.position
+
+## Lights a door mirror's blind-spot dot: side 0 left, 1 right, level 0..1.
+func set_side_cue(side: int, level: float) -> void:
+	side_cue[side] = clampf(level, 0.0, 1.0)
+	if side < dots.size():
+		dots[side].visible = side_cue[side] >= DOT_ON
+
+## True when some part of a mirror's glass is inside the camera's view.
+static func glass_on_screen(cam: Camera3D, glass: MeshInstance3D) -> bool:
+	if cam == null:
+		return true
+	var half := (glass.mesh as QuadMesh).size * 0.5
+	var xf := glass.global_transform
+	for p in [Vector3.ZERO, Vector3(half.x, half.y, 0.0), Vector3(-half.x, half.y, 0.0),
+			Vector3(half.x, -half.y, 0.0), Vector3(-half.x, -half.y, 0.0)]:
+		if cam.is_position_in_frustum(xf * p):
+			return true
+	return false
 
 ## The rearview render target, for the HUD strip.
 func rear_texture() -> ViewportTexture:
@@ -179,8 +251,14 @@ func _process(_delta: float) -> void:
 		v.cam.global_transform = xf * v.local
 	_frame += 1
 	# UPDATE_ONCE draws on the next frame and drops back to DISABLED by itself.
-	if _frame % 2 == 0:
+	# In the cockpit, a mirror off screen is skipped; the glanced-at door
+	# mirror renders every frame.
+	var cam := get_viewport().get_camera_3d() if active else null
+	if _frame % 2 == 0 and (not active or glass_on_screen(cam, views[0].quad)):
 		views[0].vp.render_target_update_mode = SubViewport.UPDATE_ONCE
-	elif active:
-		views[1].vp.render_target_update_mode = SubViewport.UPDATE_ONCE
-		views[2].vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	if not active:
+		return
+	for i in [1, 2]:
+		var focused := focus == (-1 if i == 1 else 1)
+		if (focused or _frame % 2 == 1) and glass_on_screen(cam, views[i].quad):
+			views[i].vp.render_target_update_mode = SubViewport.UPDATE_ONCE

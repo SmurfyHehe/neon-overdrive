@@ -36,17 +36,17 @@ Sources: [Forza: look left/right threads](https://forums.forza.net/t/look-left-r
 
 ## 3. Recommendation: tap-to-glance on V, aimed at the mirror
 
-**Input (Roy, 2026-10-07 18:38): one key, V, tap to toggle, side from steering.** Tap V and the head turns to a door mirror; tap V again and it comes back. Steering, throttle and brakes keep working the whole time: only the camera moves, never the car.
+**Input (Roy, 2026-10-07 18:38 and 18:44): one key, V, tap to toggle, side from steering.** Steering, throttle and brakes keep working the whole time: only the camera moves, never the car.
 
-- **Which side:** read from the steering input at the moment of the tap. Holding A (steering left) = left mirror; holding D = right mirror; **no steering = right mirror**, because that is the one you can never see (the left one is mostly on screen already). So the common case, checking the right before moving over, is a bare tap.
+- **V + steering left (A)** turns the head to the left door mirror; **V + steering right (D)** to the right one. The side is read from the steering input at the moment of the tap.
+- **V with no steering looks straight ahead.** Tapping V + the same side again also comes back.
+- **Double tap V** (two taps within 0.3 s) always resets the head to straight ahead, as a failsafe.
 - **Locked once chosen:** steering after the tap does not swing the head across (a correction mid-glance would whip the view).
-- **Auto-return after ~1.5 s** if not tapped again. A toggle you forget about leaves you driving while looking sideways; the timer removes that. Tunable constant.
-- **Tapping V while looking** returns at once; tapping V with the other steering direction held swaps sides.
-- **V is free today** (camera cycle is C, view F, look back B, shifting Q/E), so no key moves.
-- **Why not two keys:** fewer keys to learn, and it matches how you drive: you look where you are about to go.
-- **Premortem:** looking left on a straight needs a small A nudge, which also steers a little. Fine in practice: the left mirror is already visible, and a lane change left means steering left anyway. If it annoys in play, add an optional second key for left only.
+- No auto-return: the head stays on the mirror until you tap V again.
+- **V is free today** (camera cycle is C, view F, look back B, shifting Q/E), so no key moves. Glance works in the cockpit view only.
+- **Premortem:** looking left on a straight needs a small A nudge, which also steers a little. Fine in practice: the left mirror is already on screen, and a lane change left means steering left anyway.
 
-Arrow-key players: V is still reachable with the left hand; optional second binding on . (free today).
+Arrow-key players: V is still reachable with the left hand.
 
 **Angle.** Not a fixed 45° or 90°: each glance **centres its door mirror**, computed from the car's mirror data, so every car's interior stays individual and a redesign moves the target with it. P1: left 40°, right 58°. Cap 75°. The head also leans a few cm toward the middle on a right glance, the way a driver's body moves, which keeps the A-pillar from cutting the glass.
 
@@ -64,15 +64,15 @@ Arrow-key players: V is still reachable with the left hand; optional second bind
 ## 5. Prototype plan (three small PRs, each with headless Godot checks)
 
 1. **Mirror visibility test + skip off-screen mirrors.** A headless test projects each mirror's glass corners through the cockpit camera at FOV 55/62/78 (straight ahead and glancing) and reports how much is on screen and whether the A-pillar covers it; fixes the wrong comment. Off-screen mirrors stop rendering. Measures fps at 16 traffic cars on Roy's laptop.
-2. **Glance key.** `look_glance` on V (tap to toggle, side from steering, auto-return), per-car glance targets from mirror data, ease + lean, focused-mirror boost, Controls page updated. Test: glancing right puts the right glass ≥ 90% on screen at FOV 62.
+2. **Glance key.** `look_glance` on V (tap to toggle, side from steering, double tap resets), per-car glance targets from mirror data, ease + lean, focused-mirror boost, Controls page updated. Test: glancing right puts the right glass ≥ 90% on screen at FOV 62.
 3. **Blind-spot dots on the door mirrors.**
 
 Separate from the sightline/hands branch (`fix/cockpit-hands-sightline` only touches the hands) so neither blocks the other. The cockpit redesign next week will move mirrors; glance targets come from data, so they follow.
 
 ## 6. Roy's decisions (2026-10-07 18:38)
 
-1. Input: **V, tap to toggle, side from steering** (no steering = right mirror; auto-return ~1.5 s). Replaces the two-key hold idea.
+1. Input: **V, tap to toggle, side from steering**; V alone looks ahead; double tap resets. Replaces the two-key hold idea.
 2. Blind-spot dot on the door mirrors: **yes**.
 3. Shoulder check: **later**, after its own research.
 
-Open: none. Ready to build on sign-off of this doc.
+Roy said GO (18:44). Built in the same PR as this doc (section 7).

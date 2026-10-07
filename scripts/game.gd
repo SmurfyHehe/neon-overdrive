@@ -256,6 +256,16 @@ func _physics_process(_delta: float) -> void:
 	if Input.is_action_just_pressed("mute"):
 		toggle_mute()
 	if Input.is_action_just_pressed("radio_next") and radio != null:
+		request_next_station()
+
+## Next station (N): with the cockpit built the driver's hand reaches the touch
+## screen and the station changes on the tap (CockpitFrame.request_radio), in
+## every view; with no cockpit (NEON_COCKPIT=0) it changes at once.
+func request_next_station() -> void:
+	var f: CockpitFrame = camera.frame if camera != null else null
+	if f != null and f.driver != null:
+		f.request_radio()
+	else:
 		radio.next_station()
 
 ## Moves the world back by shift_chunks whole chunks (positive = the car had

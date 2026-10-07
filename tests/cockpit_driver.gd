@@ -8,7 +8,9 @@ extends SceneTree
 #   legs reach the pedals
 # - a manual shift moves the lever and sends the right hand to the knob, then
 #   back on the rim within 1 s
-# - a radio station change sends the right hand to the head unit and back
+# - a next-station request sends the right hand to the touch screen, which taps
+#   the next tile (the station changes on the tap), and back (tests/touch_radio.gd
+#   covers the timing)
 # - pulling the handbrake sends the right hand to the lever, which it holds
 #   until the handbrake is released, then back on the rim
 # - the hands and wrists never rise above the rim top from the eye (at least
@@ -55,6 +57,7 @@ var shift_tick := -1
 var hand_at_knob := false
 var hand_back_tick := -1
 var hand_at_radio := false
+var radio_touch := Vector3.ZERO
 var lever_moved := false
 var handbrake := 0.0
 var hand_at_brake := false
@@ -169,17 +172,17 @@ func _physics_process(_delta: float) -> bool:
 				_check(hand_back_tick > 0 and hand_back_tick - shift_tick <= ticks(1.0), "the hand should be back on the rim within 1 s (%d ticks)" % (hand_back_tick - shift_tick))
 				_check(not d.is_busy(), "the driver is idle again after the shift")
 				throttle = 0.3
-				game.radio.next_station()
+				radio_touch = frame.radio_touch().pos
+				frame.request_radio()
 				shift_tick = tick
 				_go(Step.RADIO)
 		Step.RADIO:
-			var btn: Vector3 = frame.radio_button_position()
-			if d.hand_position(1).distance_to(btn) < 0.10:
+			if d.hand_position(1).distance_to(radio_touch) < 0.10:
 				hand_at_radio = true
 			if waited == ticks(1.2):
 				_check(hand_at_radio, "a station change should send the right hand to the head unit")
 				_check(not d.is_busy() and d.hand_position(1).distance_to(d.grip_position(1)) <= GRIP_TOL, "the hand returns to the rim after the radio press")
-				_check(frame.radio_label.text != "RADIO OFF", "the head unit shows the station (%s)" % frame.radio_label.text)
+				_check(game.radio.station == 0 and frame.head_unit.station == 0, "the tap tuned the first station and the screen shows it (%d)" % frame.head_unit.station)
 				throttle = 0.0
 				handbrake = 1.0
 				_go(Step.BRAKE)

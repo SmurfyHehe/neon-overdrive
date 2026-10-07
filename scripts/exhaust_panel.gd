@@ -24,6 +24,7 @@ var player: PlayerCar
 var sliders := {}
 var value_labels := {}
 var preset_button: Button
+var anti_lag_check: CheckButton
 
 func _init(car: PlayerCar) -> void:
 	player = car
@@ -50,6 +51,11 @@ func _ready() -> void:
 		v.custom_minimum_size = Vector2(60, 0)
 		grid.add_child(v)
 		value_labels[k[0]] = v
+	# Anti-lag crackle: a switch, not a knob (Roy, 2026-10-07). Cosmetic only.
+	anti_lag_check = CheckButton.new()
+	anti_lag_check.text = "Anti-lag crackle"
+	anti_lag_check.toggled.connect(func(on: bool) -> void: _on_slider(1.0 if on else 0.0, "anti_lag"))
+	add_child(anti_lag_check)
 	preset_button = Button.new()
 	preset_button.text = "Reset to car preset"
 	preset_button.pressed.connect(_reset_to_preset)
@@ -64,11 +70,13 @@ func refresh() -> void:
 		var v := TuneParams.get_value(player.spec, "exhaust/" + key)
 		sliders[key].set_value_no_signal(v)
 		value_labels[key].text = "%.2f" % v
+	anti_lag_check.set_pressed_no_signal(TuneParams.get_value(player.spec, "exhaust/anti_lag") >= 0.5)
 	_push_to_synth()
 
 func _on_slider(value: float, key: String) -> void:
 	var stored := CarSpec.set_param(player, player.spec, "exhaust/" + key, value)
-	value_labels[key].text = "%.2f" % stored
+	if value_labels.has(key):
+		value_labels[key].text = "%.2f" % stored
 	_push_to_synth()
 
 ## Live apply: EngineAudio copies the spec into the synth every frame, but it does

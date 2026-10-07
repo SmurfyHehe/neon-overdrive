@@ -32,16 +32,16 @@ const SPECS := {
 		"low": "shop", "billboard": 1.0,
 	},
 	"residential": {
-		"mix": [["apartment", 65], ["shop", 30], ["parking", 5]],
+		"mix": [["apartment", 63], ["shop", 29], ["parking", 4], ["diner", 4]],
 		"h": {"apartment": [8.0, 18.0]},
 		"d": [9.0, 18.0], "w": [6.0, 12.0], "setback": 1.5, "gap": 0.15, "lit": 1.25,
 		"low": "garage", "billboard": 0.5,
 	},
 	"strip": {
-		"mix": [["shop", 65], ["garage", 35]],
+		"mix": [["shop", 45], ["garage", 25], ["gas", 15], ["diner", 15]],
 		"h": {"shop": [3.4, 7.0]},
 		"d": [12.0, 22.0], "w": [8.0, 14.0], "setback": 8.0, "gap": 0.2, "lit": 1.0,
-		"low": "garage", "billboard": 1.5,
+		"low": "garage", "billboard": 1.0,
 	},
 	"industrial": {
 		"mix": [["warehouse", 75], ["garage", 25]],

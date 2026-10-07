@@ -670,6 +670,18 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 	col.disabled = false
 	var info := BuildingKit.dress(mi, _bld_rng, is_garage, h_roll, w, d, spec)
 	var h: float = info.h
+	# Special buildings (step 5) stand at the back of their lot: a gas
+	# station's kiosk behind its canopy, a diner behind its pole sign. The
+	# forecourt is behind the out-of-bounds wall like any building's
+	# footprint, so it is scenery, not a place to drive (yet).
+	var lot_front := front
+	if info.type == "gas" or info.type == "diner":
+		var lot := 16.0 if info.type == "gas" else 11.0
+		var body_w := 7.0
+		front = lot_front + lot - body_w
+		w = body_w
+		mi.scale = Vector3(w, h, d)
+		mi.set_instance_shader_parameter("size", Vector3(w, h, d))
 	var pos := Vector3((front + w / 2.0) * float(side), h / 2.0, z)
 	mi.position = pos
 
@@ -679,6 +691,7 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 	info["d"] = d
 	info["w"] = w
 	info["front_x_abs"] = front
+	info["lot_front_x_abs"] = lot_front
 	info["z"] = z
 	info["side"] = side
 	return info
@@ -694,7 +707,14 @@ static func _update_signs(root: Node3D, infos: Array) -> int:
 		var fh: float = info.floor_h
 		var garage: bool = info.type == "garage"
 		var x: float = float(info.front_x_abs) * float(info.side)
-		if info.blade:
+		var lot_x: float = float(info.lot_front_x_abs) * float(info.side)
+		if info.type == "gas":
+			# fascia along the front edge of the canopy
+			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(lot_x + 0.4 * float(info.side), 5.0, info.z), info.side, 0.6, 6.0)
+		elif info.type == "diner":
+			# high on its pole, square-on to the oncoming traffic
+			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(lot_x + 1.2 * float(info.side), 7.8, float(info.z) + float(info.d) * 0.35), info.side, 1.6, 4.5, false, PI / 2.0)
+		elif info.blade:
 			# over the sidewalk, clear of a car roof, one floor up
 			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(x, fh + 0.9, info.z), info.side, 0.8, 2.0, true)
 		else:

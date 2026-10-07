@@ -15,6 +15,8 @@ extends SceneTree
 # - a traffic car gets flames only from its spec's flame value: none on the
 #   commuter default, a node on the C3 interceptor preset, and that node's own
 #   pop law queues bursts on an overrun
+# - brightness follows the throttle: full jet energy at full throttle,
+#   GLOW_FLOOR (dim, not off) after a lift, fading over about THROTTLE_RELEASE
 # - switching exhaust_flames off clears everything on screen
 # - nothing logs an error
 # With a real renderer (no --headless) it also compiles the three shaders and
@@ -132,6 +134,27 @@ func _run() -> void:
 		_check(not c3.flames._queue.is_empty() or c3.flames.bursts > 0, "a C3 overrun should queue a burst")
 	plain.queue_free()
 	c3.queue_free()
+
+	# --- brightness follows the throttle
+	throttle = 1.0
+	if not await _until(func(): return fl.drive >= 1.0, 2.0):
+		_check(false, "drive should reach 1 at full throttle (%.2f)" % fl.drive)
+	fl.flash(0.8)
+	var e_full: float = fl._jet_mat.get_shader_parameter("energy")
+	_check(is_equal_approx(e_full, ExhaustFlames.JET_ENERGY), "full throttle: full jet energy (%.2f)" % e_full)
+	throttle = 0.0
+	# game time (summed process deltas), from the lift until the glow is at the floor
+	var fade := 0.0
+	while fl.drive > 0.0 and fade < 1.5:
+		await process_frame
+		fade += root.get_process_delta_time()
+	_check(fl.drive <= 0.0, "drive should fall to 0 after a lift (%.2f)" % fl.drive)
+	fl.flash(0.8)
+	await _frames(1)
+	var e_off: float = fl._jet_mat.get_shader_parameter("energy")
+	print("jet energy: full throttle %.2f, coasting %.2f; fade %.2f s" % [e_full, e_off, fade])
+	_check(is_equal_approx(e_off, ExhaustFlames.JET_ENERGY * ExhaustFlames.GLOW_FLOOR), "coasting: jet dims to GLOW_FLOOR (%.2f)" % e_off)
+	_check(fade >= 0.2 and fade <= 0.4, "the fade after a lift should take about THROTTLE_RELEASE (%.2f s)" % fade)
 
 	# --- off clears
 	fl.flash(1.0)

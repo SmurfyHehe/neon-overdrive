@@ -27,6 +27,13 @@ class_name ExhaustFlames
 #   UPSHIFT_FLAME_MIN (Roy, 2026-10-07: upshift flames only on high-flame cars).
 # All of it is cosmetic: nothing in the sim reads it.
 #
+# Brightness follows the throttle (2026-10-07): `drive` tracks the car's
+# throttle_amount, rising at once and falling over THROTTLE_RELEASE when the
+# foot comes off, and scales the jet, fireball and light energy between
+# GLOW_FLOOR and 1. The floor is not 0 because most flames are overrun pops,
+# which only fire off throttle: a coasting pop is dim, not gone. Only the
+# energy changes, so the heat colours stay as they are and no draw is added.
+#
 # Sync: the synth renders audio BUFFER ahead of what is heard, so an event
 # taken from it now is heard VISUAL_DELAY later. Every burst goes through a
 # small delay queue (queue_burst) and shows when its sound plays. The new
@@ -64,6 +71,14 @@ const LIGHT_LIFE := 0.08
 const LIGHT_ENERGY := 2.0
 const LIGHT_RANGE := 4.0
 const LIGHT_COLOR := Color(1.0, 0.68, 0.32)
+const JET_ENERGY := 1.7
+const BALL_ENERGY := 1.3
+## Brightness at zero throttle, as a share of full (see the header).
+const GLOW_FLOOR := 0.4
+## Seconds for `drive` to fall from 1 to 0 after the throttle lifts.
+const THROTTLE_RELEASE := 0.25
+## Seconds for `drive` to rise from 0 to 1 (the foot going down shows at once).
+const THROTTLE_ATTACK := 0.05
 
 const HOT := Color(1.0, 0.95, 0.85)    # white-hot, warm
 const AMBER := Color(1.0, 0.753, 0.4)  # #FFC066
@@ -214,6 +229,8 @@ var max_size := 0.0
 var upshift_bursts := 0
 ## The jets, one per tip (tests).
 var jets: Array[MeshInstance3D] = []
+## Smoothed throttle, 0..1: what the brightness follows.
+var drive := 0.0
 
 var _car: Vehicle
 var _audio: EngineAudio
@@ -303,6 +320,7 @@ func flash(size: float, kind: int = Kind.POP) -> void:
 	_jet_mat.set_shader_parameter("jet_len", lerpf(JET_LEN.x, JET_LEN.y, size))
 	_jet_mat.set_shader_parameter("jet_width", lerpf(JET_WIDTH.x, JET_WIDTH.y, size))
 	_jet_mat.set_shader_parameter("size", _jet_size)
+	_jet_mat.set_shader_parameter("energy", JET_ENERGY * glow())
 	for j in jets:
 		j.visible = true
 	var vel := _car.linear_velocity
@@ -339,8 +357,13 @@ func is_active() -> bool:
 			return true
 	return false
 
+## Brightness multiplier now: GLOW_FLOOR at no throttle, 1 at full.
+func glow() -> float:
+	return lerpf(GLOW_FLOOR, 1.0, drive)
+
 func _process(delta: float) -> void:
 	_clock += delta
+	_follow_throttle(delta)
 	var flame := flame_setting()
 	if _audio != null:
 		var f: float = _audio.synth.take_flames()
@@ -389,7 +412,15 @@ func _simulate_pops(delta: float, flame: float) -> void:
 		queue_burst(flame * (0.4 + 0.6 * _rng.randf()))
 		_pop_wait = (0.3 + 1.4 * _rng.randf()) / rate
 
+## Rise fast, fall over THROTTLE_RELEASE. throttle_amount is the pedal the
+## engine sees (the keyboard's 0/1 already ramped by the car), as audio uses.
+func _follow_throttle(delta: float) -> void:
+	var target := clampf(_car.throttle_amount, 0.0, 1.0)
+	var rate := 1.0 / (THROTTLE_ATTACK if target > drive else THROTTLE_RELEASE)
+	drive = move_toward(drive, target, rate * delta)
+
 func _animate(delta: float) -> void:
+	var g := glow()
 	if _jet_left > 0.0:
 		_jet_left -= delta
 		if _jet_left <= 0.0:
@@ -397,14 +428,17 @@ func _animate(delta: float) -> void:
 				j.visible = false
 		else:
 			_jet_mat.set_shader_parameter("burst", _jet_left / (JET_LIFE * (1.0 + 0.3 * _jet_size)))
+			_jet_mat.set_shader_parameter("energy", JET_ENERGY * g)
 	if _light_left > 0.0:
 		_light_left -= delta
 		var k := clampf(_light_left / LIGHT_LIFE, 0.0, 1.0)
-		_light.light_energy = LIGHT_ENERGY * (0.3 + 0.7 * _light_peak) * k * (0.8 + 0.4 * _rng.randf())
+		_light.light_energy = LIGHT_ENERGY * g * (0.3 + 0.7 * _light_peak) * k * (0.8 + 0.4 * _rng.randf())
 		if _light_left <= 0.0:
 			_light.visible = false
 	for b in _balls:
 		_age(b, delta, BALL_GROW)
+		if b.life > 0.0:
+			(b.mat as ShaderMaterial).set_shader_parameter("energy", BALL_ENERGY * g)
 	for s in _smokes:
 		_age(s, delta, SMOKE_GROW)
 
@@ -437,6 +471,7 @@ func _spawn(p: Dictionary, at: Vector3, vel: Vector3, life: float, r0: float, si
 	m.set_shader_parameter("seed", _rng.randf() * 10.0)
 	if m.shader == _ball_shader:
 		m.set_shader_parameter("size", size)
+		m.set_shader_parameter("energy", BALL_ENERGY * glow())
 
 ## Floating-origin recentre: the world moved by offset; move the loose balls and
 ## smoke with it (they are top-level, outside the car).

@@ -103,6 +103,7 @@ if /i not "%~1"=="quick" (
 	rem Also a real window (it reads the interpolated camera); ~45 s of driving 500 km down the road.
 	call :run floating_origin_drive
 	call :run game_state --headless
+	call :run photo_mode --headless
 	call :run tuning_panel --headless
 	call :run auto_tune_panel --headless
 	call :run tuner_screen --headless

@@ -8,9 +8,10 @@ class_name CockpitFrame
 # lines so it fits the car seen from outside:
 #   dashboard with a cluster (tach and speedo needles, warning lamps that mirror
 #   PowertrainHealth), the SteeringWheel (LED strip, LCD, paddles) on a column,
-#   a centre stack with the radio head unit showing the station, a console with
-#   a gear lever that follows the gearbox mode (H-gate in MANUAL, sequential
-#   stick in SEMI, R-N-D selector in AUTO) and a handbrake that lifts,
+#   a centre stack with the touch-screen HeadUnit (station tiles; the driver's
+#   hand taps them, the station changes on the tap), a console with a gear
+#   lever that follows the gearbox mode (H-gate in MANUAL, sequential stick in
+#   SEMI, R-N-D selector in AUTO) and a handbrake that lifts,
 #   two seats, door cards, sills, A- and B-pillars, roof liner, sun visors,
 #   floor and footwell, three pedals that follow the inputs, and the three
 #   CockpitMirrors. Dark materials, one dim amber cabin light, backlit trim.
@@ -99,7 +100,7 @@ var tach_needle: Node3D
 var speedo_needle: Node3D
 var lamps: MultiMeshInstance3D
 var lamp_text: Label3D
-var radio_label: Label3D
+var head_unit: HeadUnit         # the touch-screen radio on the centre stack
 var lever: Node3D
 var lever_knob: Node3D
 var handbrake: Node3D
@@ -148,6 +149,7 @@ func _ready() -> void:
 	set_lever_mode(player.transmission_mode())
 	driver = DriverModel.new(self)
 	add_child(driver)
+	driver.hand_contact.connect(_on_hand_contact)
 
 ## Cockpit view on or off: starts or stops the mirrors, hides the driver's head
 ## and torso (the camera is the head) and moves the car's own body and wheels
@@ -222,8 +224,8 @@ func _build_static() -> void:
 			lit.merge(zone)
 	# Centre stack: vents, the radio bezel (the unit itself is built in _build_radio).
 	k.box(Vector3(0.30, 0.24, 0.06), Vector3(0.0, 0.79, -0.30), PLASTIC_LIGHT)
-	for vx in [-0.09, 0.09]:
-		k.box(Vector3(0.09, 0.035, 0.012), Vector3(vx, 0.875, -0.267), PLASTIC)
+	for vx in [-0.09, 0.09]:   # vents under the head unit
+		k.box(Vector3(0.09, 0.03, 0.012), Vector3(vx, 0.712, -0.267), PLASTIC)
 	# Centre console with the gate plate and its H slots, tunnel, armrest.
 	k.box(Vector3(0.26, 0.20, 0.82), Vector3(0.0, 0.52, 0.11), PLASTIC)
 	k.box(Vector3(0.30, 0.18, 1.20), Vector3(0.0, 0.33, 0.10), CARPET)             # tunnel
@@ -367,20 +369,41 @@ func _label(text: String, size: int, at: Vector3, col: Color, px: float) -> Labe
 
 # ---------- radio head unit ----------
 
-func _build_radio() -> void:
-	var k := CockpitKit.new()
-	k.box(Vector3(0.24, 0.07, 0.014), Vector3(0.0, 0.80, -0.266), DIAL_FACE)
-	for kx in [-0.095, 0.095]:
-		k.cylinder(0.011, 0.0, 0.012, Vector3(kx, 0.80, -0.262), TRIM, 8, Basis(Vector3.RIGHT, -PI / 2.0))
-	for i in 4:
-		k.box(Vector3(0.018, 0.008, 0.004), Vector3(-0.045 + 0.03 * i, 0.772, -0.258), PLASTIC_LIGHT)
-	add_child(k.instance(CockpitKit.material(0.6, 0.2), "Radio"))
-	radio_label = _label("RADIO OFF", 30, Vector3(0.0, 0.808, -0.257), AMBER, 0.00045)
-	radio_label.name = "RadioLabel"
+## The head unit is its own builder (HeadUnit, styled per car), so the
+## interior redesign can restyle it without touching the hand or the radio.
+## On the stack right of the wheel, its bezel just under the dash top (0.91),
+## so the tiles show over the wheel from the seat (lower, they were cut off by
+## the bottom of the cockpit view).
+const HEAD_UNIT_POS := Vector3(0.0, 0.832, -0.254)
 
-## Where a reaching hand presses (next PR), car space.
-func radio_button_position() -> Vector3:
-	return Vector3(0.0, 0.772, -0.256)
+func _build_radio() -> void:
+	head_unit = HeadUnit.new(PlayerCar.chassis_kind())
+	head_unit.position = HEAD_UNIT_POS
+	add_child(head_unit)
+
+## Next station: the key only asks; the driver's right hand reaches the screen
+## and RadioManager.next_station() runs on the finger's contact
+## (_on_hand_contact). Waits for the hand if it is busy (a shift, the handbrake).
+func request_radio() -> void:
+	driver.request_radio()
+
+## Where the finger lands for the next station, car space, and which contact
+## that is: the next tile, or past the last one the knob (radio off).
+func radio_touch() -> Dictionary:
+	var count := RadioStations.station_count()
+	var s := _find_radio().station if _find_radio() != null else -1
+	if s + 1 < count:
+		return {"pos": head_unit.transform * head_unit.tile_point(s + 1), "contact": DriverModel.CONTACT_RADIO_TILE}
+	return {"pos": head_unit.transform * head_unit.off_point(), "contact": DriverModel.CONTACT_RADIO_KNOB}
+
+## The one place a hand touching something has an effect.
+func _on_hand_contact(target: StringName) -> void:
+	if target == DriverModel.CONTACT_RADIO_TILE or target == DriverModel.CONTACT_RADIO_KNOB:
+		var r := _find_radio()
+		if r != null:
+			r.next_station()
+		head_unit.tap(target == DriverModel.CONTACT_RADIO_KNOB and head_unit.has_knob)
+		_update_radio(0.0)
 
 # ---------- gear lever and handbrake ----------
 
@@ -591,7 +614,7 @@ func _process(delta: float) -> void:
 		if _lever_gear != p.gear and not lever_moving and not p.is_shifting:
 			move_lever_to(p.gear)
 	_step_lever(delta)
-	_update_radio()
+	_update_radio(delta)
 
 func _update_lamps() -> void:
 	var h := player.health
@@ -607,17 +630,23 @@ func _update_lamps() -> void:
 		var c: Color = RED if on[i][1] else AMBER
 		lamps.multimesh.set_instance_color(i, Color(c, 1.0 if lit else 0.0))
 
-func _update_radio() -> void:
-	if radio == null:
+func _find_radio() -> RadioManager:
+	if radio == null and is_inside_tree():
 		var scene := get_tree().current_scene
 		if scene != null and scene.get("radio") is RadioManager:
 			radio = scene.radio
-		else:
-			return
-	if radio.station < 0:
-		radio_label.text = "RADIO OFF"
-	else:
-		radio_label.text = RadioStations.STATIONS[radio.station].name.to_upper()
+	return radio
+
+func _update_radio(delta: float) -> void:
+	var r := _find_radio()
+	if r == null:
+		return
+	var bus := AudioServer.get_bus_index(&"Music")
+	var lvl := 0.0
+	if bus >= 0 and r.station >= 0:
+		var db := maxf(AudioServer.get_bus_peak_volume_left_db(bus, 0), AudioServer.get_bus_peak_volume_right_db(bus, 0))
+		lvl = clampf((db + 36.0) / 36.0, 0.0, 1.0)
+	head_unit.show_state(r.station, r.now_playing, lvl, delta)
 
 ## Triangles drawn by the cabin (static meshes, wheel, moving parts, mirrors).
 func triangle_count() -> int:

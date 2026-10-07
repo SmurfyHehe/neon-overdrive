@@ -26,12 +26,19 @@ extends Node3D
 #     the gate and returns to the rim;
 #   - automatic: a finger flick on the paddle (right on an upshift, left on a
 #     downshift), hands stay on the rim;
-#   - radio: on a station change the hand reaches the head unit, presses, and
-#     returns (queued if a shift or handbrake pull is in progress);
+#   - radio (touch screen, 2026-10-07): the next-station key only asks
+#     (request_radio); the hand reaches the HeadUnit, taps the next tile (past
+#     the last one it presses the knob: off) and returns. The station changes
+#     on the finger's contact, not on the key: CockpitFrame runs
+#     RadioManager.next_station() from hand_contact. Requests wait while a
+#     shift or handbrake pull has the hand;
 #   - handbrake: while the handbrake is pulled the hand holds the lever and
 #     rides it up and down, then returns to the rim;
 #   - steering: a small head yaw into the turn and a body lean from lateral g;
 #   - idle: breathing, and a head bob from the road.
+# Hand contact: one mechanism for every reach. The moment the hand arrives (the
+# knob, the handbrake grip) or the finger lands (the screen, the radio knob),
+# _contact() emits hand_contact(target); whatever the touch does hangs off that.
 # In the cockpit view the head and torso are hidden (the camera is the head);
 # in the chase view the whole driver shows through the glass. The hands never
 # rise above HAND_TOP_MIN_DEG below the eye, so the road band stays clear
@@ -100,6 +107,17 @@ const HEAD_YAW_RAD := 0.20       # at full steer fraction
 const LEAN_RAD_PER_G := 0.08
 const HIP_HALF := 0.09
 
+## hand_contact targets.
+const CONTACT_GEAR := &"gear_knob"
+const CONTACT_HANDBRAKE := &"handbrake"
+const CONTACT_RADIO_TILE := &"radio_tile"
+const CONTACT_RADIO_KNOB := &"radio_knob"
+## Next-station presses that may wait for the hand at once (more are dropped).
+const MAX_RADIO_REQUESTS := 4
+
+## The right hand touched something (one of the CONTACT_ names).
+signal hand_contact(target: StringName)
+
 enum Act { GRIP, SHIFT_REACH, SHIFT_HOLD, SHIFT_RETURN, RADIO_REACH, RADIO_PRESS, RADIO_RETURN, BRAKE_REACH, BRAKE_HOLD, BRAKE_RETURN }
 
 var frame: CockpitFrame
@@ -114,14 +132,18 @@ var legs := {}               # side -> {thigh, shin, foot}
 var glove_style := DEFAULT_GLOVE
 var act := Act.GRIP
 var act_t := 0.0
-var queued_radio := false
+var radio_requests := 0          # next-station presses waiting for the hand
+var contact_count := 0
+var last_contact := &""
+var _radio_target := Vector3.ZERO  # car space, where the finger lands this reach
+var _radio_contact := &""
+var _pressed := false              # the finger has landed this press
 var _brake_was_on := false
 var paddle_t := 0.0
 var paddle_side := 0
 var _hand_from := Transform3D()   # where the right hand left from, for blends
 var _hand_xf := Transform3D()     # the right hand's transform this frame (car space)
 var _last_gear := 0
-var _last_station := -2
 var _lever_was_moving := false
 var _lat_g := 0.0
 var _head_bob := 0.0
@@ -357,9 +379,10 @@ func _brake_hand_transform() -> Transform3D:
 	var b := Basis(Vector3(0, -1, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0))
 	return lever.transform * Transform3D(b, Vector3(0.0, 0.047, -0.21))
 
-## The right hand pressing the radio, car space.
+## The right hand pressing the head unit at _radio_target, car space: at
+## pressed = 1 the fingertips touch the glass (or the knob face).
 func _radio_hand_transform(pressed: float) -> Transform3D:
-	var p := frame.radio_button_position() + Vector3(0.0, -0.005, 0.075 - 0.02 * pressed)
+	var p := _radio_target + Vector3(0.0, -0.005, 0.075 - 0.02 * pressed)
 	var b := Basis(Vector3.BACK, deg_to_rad(-90.0)) * Basis(Vector3.RIGHT, deg_to_rad(15.0))   # palm down, fingers at the buttons
 	return Transform3D(b, p)
 
@@ -418,15 +441,26 @@ func _update_events() -> void:
 	if brake_on and not _brake_was_on and not _is_brake():
 		_start(Act.BRAKE_REACH)
 	_brake_was_on = brake_on
-	if frame.radio != null:
-		if _last_station == -2:
-			_last_station = frame.radio.station
-		elif frame.radio.station != _last_station:
-			_last_station = frame.radio.station
-			if act == Act.GRIP:
-				_start(Act.RADIO_REACH)
-			else:
-				queued_radio = true
+
+## Next station asked for (the key): the hand goes when it is free.
+func request_radio() -> void:
+	radio_requests = mini(radio_requests + 1, MAX_RADIO_REQUESTS)
+
+## Starts a reach for the screen: picks the touch point now (the next tile, or
+## the knob past the last one) so the hand flies to where the tap will land.
+func _begin_radio() -> void:
+	radio_requests -= 1
+	var touch := frame.radio_touch()
+	_radio_target = touch.pos
+	_radio_contact = touch.contact
+	_pressed = false
+	_start(Act.RADIO_REACH)
+
+## The hand touched target: the one place contacts are announced.
+func _contact(target: StringName) -> void:
+	contact_count += 1
+	last_contact = target
+	hand_contact.emit(target)
 
 func _is_radio() -> bool:
 	return act == Act.RADIO_REACH or act == Act.RADIO_PRESS or act == Act.RADIO_RETURN
@@ -455,15 +489,15 @@ func _step_act(delta: float) -> void:
 				paddle_t = maxf(paddle_t - delta, 0.0)
 				var k := sin(paddle_t / PADDLE_SECS * PI)
 				_hand_xf = grip * Transform3D(Basis(Vector3.UP, 0.35 * k), Vector3(0.0, 0.0, -0.012 * k))
-			if queued_radio:
-				queued_radio = false
-				_start(Act.RADIO_REACH)
+			if radio_requests > 0:
+				_begin_radio()
 			elif player.handbrake_input > 0.5:
 				_start(Act.BRAKE_REACH)   # pulled while the hand was busy, still held
 		Act.SHIFT_REACH:
 			var t := clampf(act_t / REACH_SECS, 0.0, 1.0)
 			_hand_xf = _hand_from.interpolate_with(_lever_hand_transform(), _ease(t))
 			if t >= 1.0:
+				_contact(CONTACT_GEAR)
 				_start(Act.SHIFT_HOLD)
 		Act.SHIFT_HOLD:
 			_hand_xf = _lever_hand_transform()
@@ -482,8 +516,14 @@ func _step_act(delta: float) -> void:
 		Act.RADIO_PRESS:
 			var t := clampf(act_t / PRESS_SECS, 0.0, 1.0)
 			_hand_xf = _radio_hand_transform(sin(t * PI))
+			if t >= 0.5 and not _pressed:
+				_pressed = true
+				_contact(_radio_contact)   # the station changes here
 			if t >= 1.0:
-				_start(Act.RADIO_RETURN)
+				if radio_requests > 0 and not (frame.lever_moving and not player.automatic_transmission):
+					_begin_radio()   # another press waiting: on to the next tile
+				else:
+					_start(Act.RADIO_RETURN)
 		Act.RADIO_RETURN:
 			var t := clampf(act_t / (RETURN_SECS + 0.08), 0.0, 1.0)
 			_hand_xf = _hand_from.interpolate_with(grip, _ease(t))
@@ -493,6 +533,7 @@ func _step_act(delta: float) -> void:
 			var t := clampf(act_t / BRAKE_REACH_SECS, 0.0, 1.0)
 			_hand_xf = _hand_from.interpolate_with(_brake_hand_transform(), _ease(t))
 			if t >= 1.0:
+				_contact(CONTACT_HANDBRAKE)
 				_start(Act.BRAKE_HOLD)
 		Act.BRAKE_HOLD:
 			_hand_xf = _brake_hand_transform()

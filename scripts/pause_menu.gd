@@ -90,7 +90,8 @@ func _ready() -> void:
 		volume_sliders[channel] = s
 
 	# Traffic sliders (stage B step 3): car count and draw distance, applied to
-	# the running TrafficManager at once and saved with the volumes.
+	# the running TrafficManager at once and saved with the volumes. Night
+	# lights (2026-10-07): tail lamps, flares and barrier reflectors.
 	var traffic_title := Label.new()
 	traffic_title.text = "Traffic"
 	traffic_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -109,6 +110,10 @@ func _ready() -> void:
 			var traffic: Variant = get_parent().get("traffic")
 			if traffic != null:
 				traffic.detail_distance = TrafficSettings.detail_distance)
+	_add_slider(box, "Night lights", TrafficSettings.LIGHT_GLOW_MIN, TrafficSettings.LIGHT_GLOW_MAX, 0.1, TrafficSettings.light_glow,
+		func(v: float) -> void:
+			TrafficSettings.set_light_glow(v)
+			TrafficSettings.save_settings())
 
 	# View slider (2026-10-06): the cockpit FOV, 55-78, default 62; the speed
 	# widening (up to +6) rides on top of it. Applies at once, saved with the rest.

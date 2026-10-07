@@ -24,6 +24,11 @@ extends Node3D
 #
 # The drivers are deliberately simple and fixed; the numbers are only comparable
 # between specs run by the same drivers.
+#
+# With record_trace on, the brake run (launch to 100 km/h, then full brakes) also
+# keeps a small telemetry trace for the Tuner's pit-wall result: speed, throttle
+# and brake every TRACE_STEP seconds, as metrics.trace = {step, speed, throttle,
+# brake} (speed in km/h). Off for the Auto-Tune search, which never shows one.
 
 const KMH := 1.0 / 3.6
 const LANE_SPACING := 40.0
@@ -38,6 +43,7 @@ const SHIFT_RPM_FRACTION := 0.97  # upshift at this fraction of the spec's max_r
 const ACCEL_TIME := 35.0
 const CORNER_TIME := 30.0
 const CORNER_STEER := 0.3
+const TRACE_STEP := 0.1        # seconds between trace samples (~100 per brake run)
 # Safety stop for a run that never finishes: 4000 steps was ~67 s at 60 Hz; scaled so the
 # budget stays ~67 s at the game's 120 Hz (4000 steps was 33 s there, under the 35 s accel run).
 const MAX_SECONDS := 4000.0 / 60.0
@@ -64,6 +70,9 @@ class Run extends RefCounted:
 	var lat_g_smooth := 0.0
 	var peak_lat_g := 0.0
 	var max_slip := 0.0
+	# trace (brake run with record_trace only): {step, speed, throttle, brake}
+	var trace := {}
+	var trace_ticks := 0
 
 	func drive(c: PlayerCar) -> void:
 		if done:
@@ -86,6 +95,15 @@ class Run extends RefCounted:
 			Kind.ACCEL: _accel(c)
 			Kind.BRAKE: _brake(c)
 			Kind.CORNER: _corner(c)
+		if not trace.is_empty():
+			_sample(c)
+
+	func _sample(c: PlayerCar) -> void:
+		if trace_ticks % maxi(1, roundi(TRACE_STEP / dt)) == 0:
+			trace.speed.append(snappedf(c.current_speed() * 3.6, 0.1))
+			trace.throttle.append(c.throttle_input)
+			trace.brake.append(c.brake_input)
+		trace_ticks += 1
 
 	func _shift(c: PlayerCar) -> void:
 		if c.current_gear >= 1 and c.current_gear < c.gear_ratios.size() and not c.is_shifting \
@@ -156,6 +174,8 @@ class Run extends RefCounted:
 ## more replaces the RigidBody's linear damping with that value, for what-if
 ## runs: Godot's old default of 0.1 capped the car near 124 km/h.
 var linear_damp_override := -1.0
+## Keep the brake run's telemetry trace (see the top of the file).
+var record_trace := false
 
 var steps_taken := 0  # physics steps the last evaluate() ran, all specs together
 var cars_simulated := 0  # cars in flight at any one step (3)
@@ -199,6 +219,8 @@ func _evaluate_one(spec: Dictionary, kinds: Array) -> Dictionary:
 			out.ok = false
 			out.problems.append("%s: %s" % [Kind.keys()[r.kind].to_lower(), r.failed])
 		out.merge(r.m)
+		if not r.trace.is_empty():
+			out.trace = r.trace
 	for key in out:
 		if out[key] is float and not is_finite(out[key]):
 			out.ok = false
@@ -230,6 +252,8 @@ func _spawn(spec: Dictionary, lane: int, kind: int) -> Run:
 	r.kind = kind
 	r.dt = 1.0 / Engine.physics_ticks_per_second
 	r.t = -SETTLE_TIME
+	if record_trace and kind == Kind.BRAKE:
+		r.trace = {"step": TRACE_STEP, "speed": [], "throttle": [], "brake": []}
 	var car := PlayerCar.new()
 	car.sim_only = true
 	car.spec = CarSpec.clone_spec(spec)

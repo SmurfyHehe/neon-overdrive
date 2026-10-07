@@ -11,8 +11,10 @@ extends SceneTree
 # - a radio station change sends the right hand to the head unit and back
 # - pulling the handbrake sends the right hand to the lever, which it holds
 #   until the handbrake is released, then back on the rim
-# - the hands and wrists never rise above the rim top from the eye (at least
-#   CockpitFrame.WHEEL_TOP_MIN_DEG below it) in any of the above
+# - priority: a shift takes the hand off a radio reach, the handbrake takes it
+#   off a shift
+# - the hands and wrists never rise above DriverModel.HAND_MIN_DEG below the
+#   eye in any of the above (the sightline spec)
 # - in the cockpit view the head and torso are hidden, in the chase view shown
 # - no engine errors during any of it
 # Exit code 1 on failure. Run:
@@ -36,7 +38,7 @@ class ErrorCounter extends Logger:
 	func _log_message(_message: String, _error: bool) -> void:
 		pass
 
-enum Step { BOOT, SWEEP, SHIFT, RADIO, BRAKE, VIEWS, DONE }
+enum Step { BOOT, SWEEP, SHIFT, RADIO, BRAKE, PRIORITY, VIEWS, DONE }
 
 ## Physics ticks for a number of seconds (the suite runs at 60, the game at 120).
 static func ticks(secs: float) -> int:
@@ -197,13 +199,28 @@ func _physics_process(_delta: float) -> bool:
 			if waited == ticks(0.6) + ticks(0.5):
 				_check(not d.is_busy() and d.hand_position(1).distance_to(d.grip_position(1)) <= GRIP_TOL, "the hand returns to the rim after the handbrake is released")
 				throttle = 0.3
+				game.radio.next_station()
+				_go(Step.PRIORITY)
+		Step.PRIORITY:
+			# radio reach under way, then a shift, then the handbrake
+			if waited == ticks(0.1):
+				_check(d.act == DriverModel.Act.RADIO_REACH, "the radio reach has started (%s)" % DriverModel.Act.keys()[d.act])
+				p.shift(1 if p.gear < 3 else -1)
+			if waited == ticks(0.2):
+				_check(d.act == DriverModel.Act.SHIFT_REACH or d.act == DriverModel.Act.SHIFT_HOLD, "a shift takes the hand off the radio (%s)" % DriverModel.Act.keys()[d.act])
+				handbrake = 1.0
+			if waited == ticks(0.3):
+				_check(d.act == DriverModel.Act.BRAKE_REACH or d.act == DriverModel.Act.BRAKE_HOLD, "the handbrake takes the hand off the shift (%s)" % DriverModel.Act.keys()[d.act])
+				handbrake = 0.0
+			if waited == ticks(1.3):
+				_check(not d.is_busy() and d.hand_position(1).distance_to(d.grip_position(1)) <= GRIP_TOL, "the hand is back on the rim after the pile-up")
 				_go(Step.VIEWS)
 		Step.VIEWS:
 			if waited == ticks(0.1):
 				_check(not d.head.visible and not d.torso_mesh.visible, "in the cockpit view the head and torso are hidden")
 				_check((d.get_node("HandR") as Node3D).visible and (d.get_node("HandL") as Node3D).visible and d.bracelet.visible, "hands and bracelet stay visible in the cockpit")
 				print("hands: highest point seen %.1f deg below the eye (%s)" % [min_below_eye, min_below_where])
-				_check(min_below_eye >= CockpitFrame.WHEEL_TOP_MIN_DEG, "a hand rose to %.1f deg below the eye (%s); the road band must stay clear" % [min_below_eye, min_below_where])
+				_check(min_below_eye >= DriverModel.HAND_MIN_DEG, "a hand rose to %.1f deg below the eye (%s); the road band must stay clear" % [min_below_eye, min_below_where])
 				cam.set_view(ChaseCamera.View.CHASE)
 			if waited == ticks(0.2):
 				_check(d.head.visible and d.torso_mesh.visible, "in the chase view the whole driver shows")

@@ -88,7 +88,7 @@ var spec_template := {}
 ## One car for every slot (tests); empty = the traffic mix below.
 var kind := ""
 ## Share of each traffic car in the pool (stage B step 5), NpcCarBuilder kinds.
-const MIX := {"n1_commuter": 1}
+const MIX := {"n1_commuter": 55, "n2_cityhatch": 45}
 var sim_only := false
 
 var cars: Array[TrafficCar] = []

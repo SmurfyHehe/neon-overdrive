@@ -131,6 +131,11 @@ var _m_gap := INF
 var _m_speed := 0.0
 
 var wrecked := false
+## True while the hazard brake holds (crashed, stuck or wrecked).
+var hazard := false
+## Lamp state last sent to the body (NpcCarBuilder.set_lamps), so the
+## instance uniforms are only written when it changes.
+var _lamp_key := -1
 var _wreck_t := 0.0
 var _stuck_t := 0.0
 
@@ -249,6 +254,17 @@ func _physics_process(delta: float) -> void:
 	_drive(delta)
 	super._physics_process(delta)
 	AeroModel.apply(self)
+	_update_lamps()
+
+## Brake lamps on any brake pedal (a held stop included), hazards while the
+## hazard brake holds. NPC bodies only; the old box cars have no such lamps.
+func _update_lamps() -> void:
+	if chassis_visual == null or not NpcCarBuilder.is_npc(kind):
+		return
+	var key := (1 if brake_input > 0.05 else 0) + (2 if hazard else 0)
+	if key != _lamp_key:
+		_lamp_key = key
+		NpcCarBuilder.set_lamps(chassis_visual, float(key & 1), hazard)
 
 ## The controller. Sets steering_input, throttle_input and brake_input.
 func _drive(delta: float) -> void:
@@ -259,7 +275,7 @@ func _drive(delta: float) -> void:
 			changing = false
 	_lc_cooldown -= delta
 	var a := _accel_command(v)
-	var hazard := _check_wreck(delta, v)
+	hazard = _check_wreck(delta, v)
 	var steer_x := lane_x
 	if changing:
 		var look := clampf(speed * LOOKAHEAD_SECONDS, LOOKAHEAD_MIN, LOOKAHEAD_MAX)
@@ -514,6 +530,7 @@ func place(lane: float, dir: float, z: float, y: float, speed: float) -> void:
 	direction = dir
 	changing = false
 	wrecked = false
+	hazard = false
 	_wreck_t = 0.0
 	_stuck_t = 0.0
 	_lc_cooldown = 0.0

@@ -31,22 +31,38 @@ class_name TyreSmoke
 # smoke is tinted by it. Nothing sets it yet; coloured smoke is a garage mod
 # for later.
 
-const MAX_PUFFS := 256
-## Puffs per second per wheel at full slip, full scorch, hot tyre, slider 1.
-const BURNOUT_RATE := 17.0   # generous
-const DRIFT_RATE := 7.0      # moderate
-const BURNOUT_LIFE := 2.6    # s
-const DRIFT_LIFE := 2.0      # s
-const SIZE_START := 0.55     # m across at birth
-const SIZE_GROW := 2.2       # m added by about one second (grows with sqrt(age))
-const ALPHA := 0.8           # peak opacity of a fresh puff
+const MAX_PUFFS := 384
+## Two profiles (v2, 2026-10-07 burnout smoke research). Rates are puffs per
+## second per wheel at full slip energy, full heat, slider 1; the rest are
+## per-puff ranges (min, max). Size is metres across: SIZE_START at birth,
+## the profile's end size by the end of the puff's life.
+const BURNOUT_RATE := 55.0   # 40..70
+const DRIFT_RATE := 22.0     # 15..30
+const BURNOUT_LIFE := Vector2(2.5, 4.5)   # s
+const DRIFT_LIFE := Vector2(1.5, 2.5)
+const BURNOUT_SIZE_END := 4.0
+const DRIFT_SIZE_END := 2.5
+const SIZE_START := 0.5
+const BURNOUT_ALPHA := Vector2(0.45, 0.6)   # peak opacity of a fresh puff
+const DRIFT_ALPHA := Vector2(0.25, 0.35)
+const BURNOUT_RISE := Vector2(0.5, 1.0)     # m/s
+const DRIFT_RISE := Vector2(0.3, 0.6)
+const DRIFT_STRETCH := 1.8   # drift puffs are this much longer along the velocity
+## One global wind (m/s) every puff drifts with.
+const WIND := Vector3(0.7, 0.0, 0.3)
+## When the pool is nearly full, new puffs are scaled down to this share of
+## their opacity, so a dense cloud does not saturate.
+const CROWDED_ALPHA := 0.6
 const SCORCH_TAU := 0.35     # s for the scorch to build toward the current slip
-const SCORCH_COOL_TAU := 0.25
-const SCORCH_START := 0.45   # below this no puffs at all (a chirp peaks near 0.35)
-const SCORCH_FULL := 0.85
-const TEMP_COLD := 45.0      # degC: a tyre this cool smokes at COLD_SHARE
-const TEMP_HOT := 110.0
-const COLD_SHARE := 0.55
+const SCORCH_COOL_TAU := 0.8 # slow cool-down: smoke lingers a moment after grip returns
+## Heat gate: smoothstep(HEAT_START, HEAT_FULL, heat). Heat is the larger of
+## the tyre's temperature share and the fast scorch, because the real tyre
+## temperature takes ~25 s to climb and a cold-start burnout must still smoke.
+## A chirp's scorch peaks near 0.35, below HEAT_START.
+const HEAT_START := 0.5
+const HEAT_FULL := 1.0
+const TEMP_COLD := 45.0      # degC: 0 on the temperature share
+const TEMP_HOT := 110.0      # degC: 1
 const DEFAULT_COLOUR := Color(0.78, 0.78, 0.8)
 
 const SHADER := """
@@ -65,12 +81,12 @@ uniform float lamp_own = 6.25;
 uniform float lamp_onc = 18.75;
 uniform float pool_inner = 2.5;
 uniform float pool_outer = 8.5;
-uniform float near_start = 2.5;
-uniform float near_end = 5.0;
-uniform float alpha_peak = 0.8;
+uniform float near_start = 0.8;
+uniform float near_end = 2.5;
+uniform vec3 wind = vec3(0.0);
 // Fill guard: no puff is drawn taller than this share of the screen height,
 // however close it drifts to the camera (overdraw is the whole cost here).
-uniform float screen_cap = 0.16;
+uniform float screen_cap = 0.10;
 
 varying float v_alpha;
 varying vec3 v_col;
@@ -78,8 +94,8 @@ varying float v_seed;
 
 void vertex() {
 	// Instance layout (TyreSmoke._emit): basis X = velocity, basis Y =
-	// (start size, growth, 0), origin = start point; custom = (birth, life,
-	// strength, seed).
+	// (start size, growth, 0), basis Z = (stretch along velocity, rise m/s, 0),
+	// origin = start point; custom = (birth, life, opacity, seed).
 	float age = now - INSTANCE_CUSTOM.x;
 	float life = INSTANCE_CUSTOM.y;
 	float t = clamp(age / life, 0.0, 1.0);
@@ -87,19 +103,27 @@ void vertex() {
 	vec3 vel = MODEL_MATRIX[0].xyz;
 	float size = MODEL_MATRIX[1].x + MODEL_MATRIX[1].y * sqrt(a);
 	// air drag on the throw-off, then a slow lift as the warm smoke rises
-	vec3 world = MODEL_MATRIX[3].xyz + vel * (1.0 - exp(-1.8 * a)) / 1.8 + vec3(0.0, 0.35 * a, 0.0);
+	float stretch = MODEL_MATRIX[2].x;
+	vec3 world = MODEL_MATRIX[3].xyz + vel * (1.0 - exp(-1.8 * a)) / 1.8 + vec3(0.0, MODEL_MATRIX[2].y * a, 0.0) + wind * a;
 	vec3 view_c = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
 	float dist = -view_c.z;
 	float near = smoothstep(near_start, near_end, dist);
 	// PROJECTION_MATRIX[1][1] = 1 / tan(fov / 2): the view height at dist is 2 * dist / it
 	size = min(size, screen_cap * 2.0 * dist / PROJECTION_MATRIX[1][1]);
 	float alive = step(0.0, age) * step(age, life);
-	v_alpha = alpha_peak * INSTANCE_CUSTOM.z * smoothstep(0.0, 0.06, t) * (1.0 - smoothstep(0.3, 1.0, t)) * near * alive;
+	v_alpha = INSTANCE_CUSTOM.z * smoothstep(0.0, 0.06, t) * (1.0 - smoothstep(0.3, 1.0, t)) * near * alive;
 	float k = v_alpha > 0.02 ? size : 0.0;   // invisible: collapse, no fill cost
 	v_seed = INSTANCE_CUSTOM.w;
 	float r = v_seed * 6.2832 + a * (v_seed - 0.5);
+	vec2 q = VERTEX.xy;
+	if (stretch > 0.0) {
+		// stretched puff: long axis along the velocity as seen on screen
+		vec2 vd = (VIEW_MATRIX * vec4(vel, 0.0)).xy;
+		r = length(vd) > 0.01 ? atan(vd.y, vd.x) : r;
+		q.x *= 1.0 + stretch;
+	}
 	mat2 rot = mat2(vec2(cos(r), sin(r)), vec2(-sin(r), cos(r)));
-	VERTEX = view_c + vec3(rot * VERTEX.xy * k, 0.0);
+	VERTEX = view_c + vec3(rot * q * k, 0.0);
 	// sodium tint from the nearest lamp pool: own-side lamps (x > 0) every
 	// 25 m from 6.25, oncoming (x < 0) from 18.75
 	float zo = mod(-world.z - lamp_own, lamp_spacing);
@@ -147,6 +171,7 @@ var _life: PackedFloat32Array = []
 var _scorch: PackedFloat32Array = []
 var _carry: PackedFloat32Array = []   # fractional puffs owed per wheel
 var _stock_stiffness := 10.0
+var _crowd := 0.0   # live puffs / pool, 0..1, refreshed each tick
 
 func _init(player: PlayerCar) -> void:
 	_player = player
@@ -182,7 +207,7 @@ func _ready() -> void:
 	_mat.set_shader_parameter("lamp_own", RoadChunkBuilder.LAMP_SPACING * 0.25)
 	_mat.set_shader_parameter("lamp_onc", RoadChunkBuilder.LAMP_SPACING * 0.75)
 	_mat.set_shader_parameter("pool_outer", RoadChunkBuilder.POOL_ALONG * 0.5)
-	_mat.set_shader_parameter("alpha_peak", ALPHA)
+	_mat.set_shader_parameter("wind", WIND)
 	material_override = _mat
 	set_colour(colour_from_spec(_player.spec))
 	var stock_road: Variant = CarSpec.coupe_default().get("tire_stiffnesses", {}).get("Road")
@@ -210,6 +235,7 @@ func _physics_process(delta: float) -> void:
 	_t += delta
 	var static_load := _player.mass * 9.81 / 4.0
 	var mods := amount_mods()
+	_crowd = float(live_count()) / float(MAX_PUFFS)
 	var fwd := -_player.global_transform.basis.z
 	var health := _player.health
 	for i in _player.wheel_array.size():
@@ -243,15 +269,16 @@ func step_scorch(i: int, strength: float, dt: float) -> float:
 	_scorch[i] += (strength - _scorch[i]) * (1.0 - exp(-dt / tau))
 	return _scorch[i]
 
-## Puffs per second for one wheel (pure, for tests): lat / lon are the slide
-## and wheelspin strengths 0..1, scorch the lagged slip, temp the tyre in degC,
-## burnout / drift the two sliders.
+## Puffs per second for one wheel (pure, for tests): base rate x slider x
+## smoothstep(0.5, 1.0, heat) x slip energy. lat / lon are the slide and
+## wheelspin strengths 0..1 (the slip energy), scorch the lagged slip, temp the
+## tyre in degC, burnout / drift the two sliders.
 static func puff_rate(lat: float, lon: float, scorch: float, temp: float, burnout: float, drift: float) -> float:
-	var gate := smoothstep(SCORCH_START, SCORCH_FULL, scorch)
+	var heat := maxf(scorch, clampf(inverse_lerp(TEMP_COLD, TEMP_HOT, temp), 0.0, 1.0))
+	var gate := smoothstep(HEAT_START, HEAT_FULL, heat)
 	if gate <= 0.0:
 		return 0.0
-	var heat := lerpf(COLD_SHARE, 1.0, smoothstep(TEMP_COLD, TEMP_HOT, temp))
-	return gate * heat * (lon * BURNOUT_RATE * burnout + lat * DRIFT_RATE * drift)
+	return gate * (lon * BURNOUT_RATE * burnout + lat * DRIFT_RATE * drift)
 
 ## Amount multipliers [front, rear] from the tyre setup: compound (the tuner
 ## scales tire_stiffnesses by 0.85 / 1.0 / 1.15 for Street / Sport /
@@ -269,11 +296,16 @@ func _emit(w: Wheel, fwd: Vector3, lat: float, lon: float, burnout: bool) -> voi
 	# Carried along a little by the car, flung back off a spinning tyre, spread sideways.
 	var vel := _player.linear_velocity * 0.25 - fwd * (2.0 * lon) \
 		+ Vector3(randf_range(-0.9, 0.9), randf_range(0.2, 0.7), randf_range(-0.9, 0.9))
-	var life := (BURNOUT_LIFE if burnout else DRIFT_LIFE) * randf_range(0.8, 1.15)
-	var strength := clampf(0.6 + 0.4 * maxf(lat, lon), 0.0, 1.0)
-	var xf := Transform3D(Basis(vel, Vector3(SIZE_START * randf_range(0.8, 1.2), SIZE_GROW * randf_range(0.8, 1.2), 0.0), Vector3.ZERO), p)
+	var life := randf_range(BURNOUT_LIFE.x, BURNOUT_LIFE.y) if burnout else randf_range(DRIFT_LIFE.x, DRIFT_LIFE.y)
+	var alpha := randf_range(BURNOUT_ALPHA.x, BURNOUT_ALPHA.y) if burnout else randf_range(DRIFT_ALPHA.x, DRIFT_ALPHA.y)
+	alpha *= lerpf(1.0, CROWDED_ALPHA, smoothstep(0.6, 1.0, _crowd))
+	var rise := randf_range(BURNOUT_RISE.x, BURNOUT_RISE.y) if burnout else randf_range(DRIFT_RISE.x, DRIFT_RISE.y)
+	var size_end := BURNOUT_SIZE_END if burnout else DRIFT_SIZE_END
+	var grow := (size_end - SIZE_START) / sqrt(life)
+	var xf := Transform3D(Basis(vel, Vector3(SIZE_START * randf_range(0.9, 1.1), grow * randf_range(0.9, 1.1), 0.0),
+		Vector3(0.0 if burnout else DRIFT_STRETCH, rise, 0.0)), p)
 	multimesh.set_instance_transform(_next, xf)
-	multimesh.set_instance_custom_data(_next, Color(_t, life, strength, randf()))
+	multimesh.set_instance_custom_data(_next, Color(_t, life, alpha, randf()))
 	_xf[_next] = xf
 	_birth[_next] = _t
 	_life[_next] = life

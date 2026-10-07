@@ -217,7 +217,11 @@ func _unit_checks(s: TyreSmoke) -> void:
 	var burn := TyreSmoke.puff_rate(0.0, 1.0, 1.0, 100.0, 1.0, 1.0)
 	var drift := TyreSmoke.puff_rate(1.0, 0.0, 1.0, 100.0, 1.0, 1.0)
 	_check(burn > drift * 2.0, "burnout (%.1f/s) should be generous next to drift (%.1f/s)" % [burn, drift])
-	_check(TyreSmoke.puff_rate(0.0, 1.0, 1.0, 120.0, 1.0, 1.0) > TyreSmoke.puff_rate(0.0, 1.0, 1.0, 40.0, 1.0, 1.0), "a hot tyre should smoke more than a cold one")
+	_check(TyreSmoke.puff_rate(0.0, 1.0, 0.7, 120.0, 1.0, 1.0) > TyreSmoke.puff_rate(0.0, 1.0, 0.7, 40.0, 1.0, 1.0), "a hot tyre should smoke more than a cold one")
+	# v2 profiles: burnout pours 40..70 puffs/s per wheel, drift 15..30; the pool is 384
+	_check(burn >= 40.0 and burn <= 70.0, "burnout rate %.1f should be 40..70 puffs/s" % burn)
+	_check(drift >= 15.0 and drift <= 30.0, "drift rate %.1f should be 15..30 puffs/s" % drift)
+	_check(TyreSmoke.MAX_PUFFS == 384, "pool should be 384 puffs")
 	_check(TyreSmoke.puff_rate(0.0, 1.0, 1.0, 100.0, 0.0, 1.0) == 0.0, "burnout slider 0 should stop burnout smoke")
 	_check(TyreSmoke.puff_rate(1.0, 0.0, 1.0, 100.0, 1.0, 0.0) == 0.0, "drift slider 0 should stop drift smoke")
 	_check(is_equal_approx(TyreSmoke.puff_rate(0.0, 1.0, 1.0, 100.0, 2.0, 1.0), burn * 2.0), "the burnout slider should scale the amount")

@@ -43,6 +43,15 @@ const KINDS := {
 		## Builds with a fixed paint instead of a random traffic neutral.
 		"build_paint": {"taxi": Color("#F2B53A")},
 	},
+	"n2_cityhatch": {
+		"data": preload("res://scripts/n2_cityhatch_data.gd"),
+		"length": 3.95, "width": 1.69, "height": 1.53, "clearance": 0.15,
+		"front_overhang": 0.80, "rear_overhang": 0.62,
+		"wheel_r": 0.295, "wheel_x": 0.73, "axle_z": 1.265,
+		"rest_y": -0.12,
+		"builds": {"stock": 55, "sport": 25, "rack": 20},
+		"build_paint": {},
+	},
 }
 
 ## fleet.json traffic_paints (weights), without Taxi amber: that one is the

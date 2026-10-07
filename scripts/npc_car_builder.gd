@@ -52,6 +52,15 @@ const KINDS := {
 		"builds": {"stock": 55, "sport": 25, "rack": 20},
 		"build_paint": {},
 	},
+	"n3_pickup": {
+		"data": preload("res://scripts/n3_pickup_data.gd"),
+		"length": 5.30, "width": 1.86, "height": 1.86, "clearance": 0.30,
+		"front_overhang": 0.92, "rear_overhang": 1.30,
+		"wheel_r": 0.39, "wheel_x": 0.79, "axle_z": 1.54,
+		"rest_y": -0.12,
+		"builds": {"stock": 50, "covered": 30, "sportsbar": 20},
+		"build_paint": {},
+	},
 }
 
 ## fleet.json traffic_paints (weights), without Taxi amber: that one is the

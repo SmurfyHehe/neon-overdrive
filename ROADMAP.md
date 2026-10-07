@@ -47,8 +47,7 @@ a build order. Nothing in them beyond what is listed as merged has been built.
 | Out-of-bounds walls (#28) | **In open PR #114**, not merged | `tests/boundary_walls.gd` |
 | Cockpit interior with live mirrors, LED wheel, cluster, centre stack, shifter lever, handbrake | **In open PR #130**, not merged. Needs the sightline rework below | |
 | Seated driver with forearm IK | **In open PR #131**, stacked on #130. Roy dropped forearms (see "Not started, sorted") | |
-| NPC traffic cars (stage B step 5): N1 commuter sedan, N2 city hatch | **In open PRs** #153 (N1 + plumbing) and the N2 PR stacked on it (sheet models, 3 variants each, own CarSpecs; mix N1 55 / N2 45) | `scripts/npc_car_builder.gd`; `npc_cars` test |
-| NPC N3 pickup | **NOT started** (one PR, after N2) | |
+| NPC traffic cars (stage B step 5): N1 commuter sedan, N2 city hatch, N3 pickup | **In open PRs** #153 (N1 + plumbing), #154 (N2) and the N3 PR, stacked in that order (sheet models, 3 variants each, own CarSpecs; mix N1 45 / N2 35 / N3 20) | `scripts/npc_car_builder.gd`; `npc_cars` test |
 | Cop cars (3) | **NOT started** (designs only) | |
 | Other 11 fleet cars (5 more player cars) | **NOT started** (`CarSpec` has the coupe only) | |
 | Garage + per-car mod trees | **NOT started** | |
@@ -73,7 +72,7 @@ Every stage is verified headless with real simulated input, logged here, and
 | Stage | Contents | Status |
 |---|---|---|
 | A | Feel + environment art | Done |
-| B | 1 design sheet · 2 exhaust · 3 traffic (full-sim, 4 lanes/direction, detail slider) · 4 camera + HUD · 5 NPC cars | 1, 2, 3 done (3 is lane-follow; reactive M4 is open PR #127); 4 partly; 5 not started |
+| B | 1 design sheet · 2 exhaust · 3 traffic (full-sim, 4 lanes/direction, detail slider) · 4 camera + HUD · 5 NPC cars | 1, 2, 3 done (3 is lane-follow; reactive M4 is open PR #127); 4 partly; 5 in open PRs #153, #154 and N3 |
 | C | Currency/scoring (damage, fuel, stops moved after the garage, 2026-10-05) | Not started |
 | E | Garage + branching mod tree per car. **Now before D** (Roy, 2026-10-06, overrides the C → D → E order) | Not started |
 | D | 5 remaining player cars, one at a time. **Now after E.** The P1 sports coupe game model is merged (#123) | Not started |

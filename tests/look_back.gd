@@ -64,9 +64,9 @@ func _put_car_behind(p: PlayerCar, dist: float, oncoming: bool) -> void:
 	var tm: TrafficManager = game.traffic
 	var c: TrafficCar = tm.cars[0]
 	var x := lane_x if not oncoming else lane_x + 0.5
-	c.place(x, 1.0 if oncoming else -1.0, p.global_position.z + dist, TrafficManager.REST_Y, 0.0)
+	c.place(x, 1.0 if oncoming else -1.0, p.global_position.z + dist, c.rest_y, 0.0)
 	var other: TrafficCar = tm.cars[1]
-	other.place(lane_x, -1.0, p.global_position.z - 200.0, TrafficManager.REST_Y, 0.0)
+	other.place(lane_x, -1.0, p.global_position.z - 200.0, other.rest_y, 0.0)
 
 func _physics_process(_delta: float) -> bool:
 	tick += 1

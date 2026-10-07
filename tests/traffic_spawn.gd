@@ -24,7 +24,7 @@ extends SceneTree
 # - set_car_count() (the pause-menu slider) removes and adds cars live
 # - TrafficSettings round-trips through its file and leaves the audio section
 # - no engine or script errors logged
-# Reports the settled chassis height (TrafficManager.REST_Y).
+# Reports how far the settled chassis height is from each car's rest_y.
 #
 # Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --fixed-fps 60 --path . -s res://tests/traffic_spawn.gd
@@ -122,7 +122,7 @@ func _physics_process(delta: float) -> bool:
 						tick, "own" if car.direction < 0 else "oncoming", p.global_position.z - car.global_position.z,
 						Harness.kmh(p.current_speed()), "done" if live_checked else "not yet"]
 				if tick > RATE * 5:
-					rest_y_sum += car.global_position.y
+					rest_y_sum += car.global_position.y - car.rest_y
 					rest_y_n += 1
 	if not Harness.finite(p):
 		return _end("non-finite player state at tick %d" % tick)
@@ -203,7 +203,7 @@ func _end(msg: String) -> bool:
 		tick, Harness.kmh(p.current_speed()), traffic.spawn_count, traffic.recycle_count, traffic.deferred_count, shifts])
 	print("traffic_spawn: min spawn distance %.1f m (limit %.0f), min lane gap at spawn %.1f m (limit %.0f), min time to contact at spawn %.1f s (limit %.0f), %d spawned behind, max path error %.2f m, worst step error %.3f m" % [
 		min_spawn_dist, traffic.spawn_min, min_spawn_gap, traffic.lane_gap, min_spawn_ttc, TrafficManager.SPAWN_TTC, behind_spawns, max_lane_err, worst_step_err])
-	print("traffic_spawn: settled chassis y = %.3f m (TrafficManager.REST_Y is %.3f)" % [rest_y, TrafficManager.REST_Y])
+	print("traffic_spawn: settled chassis y is %+.3f m from each car's rest_y (NpcCarBuilder.KINDS)" % rest_y)
 	for e in logger.errors:
 		fails.append("logged error: " + e)
 	for f in fails:

@@ -1,8 +1,10 @@
 # Fleet design sheet (stage B, step 1)
 
 These are the designs of all 12 cars, as audited in Godot on 2026-10-05.
-Nothing here is a game model yet: stage B step 5 builds the 3 traffic cars
-from these numbers, stage D the player cars and stage F the police cars.
+The game models are these proxies, exported by `tools/fleet_design/game_export.py`:
+the P1 coupe (`scripts/p1_coupe_builder.gd`) and the traffic cars, every
+variant (`scripts/npc_car_builder.gd`, stage B step 5). The other player cars
+come in stage D and the police cars in stage F.
 
 | File | What it is |
 |---|---|

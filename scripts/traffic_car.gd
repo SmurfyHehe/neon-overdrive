@@ -58,12 +58,16 @@ class_name TrafficCar
 # suspension on that step and sags; the honest cheap path is no sim at all
 # plus a clean handover.
 
-## CarBuilder.KIND_CONFIGS key for the body and wheel visuals. The three NPC
-## cars (stage B step 5) swap this and `spec` per car; nothing else changes.
+## Which car: an NpcCarBuilder.KINDS key (the stage B step 5 traffic cars,
+## e.g. "n1_commuter") or a CarBuilder.KIND_CONFIGS key (the old box cars).
 var kind := "coupe"
-## Vehicle tune (CarSpec dict). Empty = CarSpec.traffic_default(). Set before
+## The sheet variant of an NPC car (NpcCarBuilder.builds), e.g. "taxi".
+var build := "stock"
+## Vehicle tune (CarSpec dict). Empty = CarSpec.npc_spec(kind). Set before
 ## add_child(), like PlayerCar.spec.
 var spec := {}
+## Chassis origin height when settled on the springs (place() callers use it).
+var rest_y := TrafficManager.REST_Y
 var color := Color(0.6, 0.6, 0.65)
 ## No body mesh, lights or shadow (tests and the perf harness).
 var sim_only := false
@@ -206,23 +210,30 @@ func _ready() -> void:
 	# Not super._ready(): Vehicle's _ready() is initialize(), which needs the
 	# wheels built first (same as PlayerCar).
 	if spec.is_empty():
-		spec = CarSpec.traffic_default()
-	var cfg: Dictionary = CarBuilder.KIND_CONFIGS.get(kind, CarBuilder.KIND_CONFIGS["coupe"])
+		spec = CarSpec.npc_spec(kind)
+	var npc := NpcCarBuilder.is_npc(kind)
+	var cfg: Dictionary = NpcCarBuilder.config(kind) if npc else CarBuilder.KIND_CONFIGS.get(kind, CarBuilder.KIND_CONFIGS["coupe"])
 	wheelbase = float(cfg.axle_z) * 2.0
 	half_w = float(cfg.wheel_x) + 0.15
 	half_l = (float(cfg.main_z1) - float(cfg.hood_z0)) / 2.0
+	if npc:
+		rest_y = float(cfg.rest_y)
 
 	if not sim_only:
-		chassis_visual = CarBuilder.shared_chassis_visual(kind, color)
+		chassis_visual = NpcCarBuilder.chassis_visual(kind, build, color) if npc else CarBuilder.shared_chassis_visual(kind, color)
 		add_child(chassis_visual)
 
 	can_sleep = false
 	linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
 	linear_damp = PlayerCar.LINEAR_DAMP
 	CarSpec.set_collision_layers(self)
-	# Box sized from the body config, same height and seat as the player's
-	# (CarSpec.build_collision's verified ground clearance).
-	CarSpec.build_collision(self, Vector3(float(cfg.main_w), 1.0, float(cfg.main_z1) - float(cfg.hood_z0)), 0.7)
+	if npc:
+		# The sheet body's own box (NpcCarBuilder.config).
+		CarSpec.build_collision(self, cfg.col_size, cfg.col_y)
+	else:
+		# Box sized from the body config, same height and seat as the player's
+		# (CarSpec.build_collision's verified ground clearance).
+		CarSpec.build_collision(self, Vector3(float(cfg.main_w), 1.0, float(cfg.main_z1) - float(cfg.hood_z0)), 0.7)
 	CarSpec.apply(self, spec)
 	CarSpec.build_wheels(self, kind, cfg, front_spring_length, rear_spring_length)
 	initialize()

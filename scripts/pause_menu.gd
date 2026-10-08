@@ -31,6 +31,12 @@ var game_state: GameState
 var resume_button: Button
 var volume_sliders := {}   # channel -> HSlider
 var fov_slider: HSlider
+var fullscreen_check: CheckButton
+var resolution_option: OptionButton
+var render_scale_slider: HSlider
+var render_scale_label: Label
+var display_page: VBoxContainer
+var display_back_button: Button
 var main_page: VBoxContainer
 var controls_page: VBoxContainer
 var controls_scroll: ScrollContainer
@@ -122,12 +128,81 @@ func _ready() -> void:
 
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	_add_button(box, "Controls", show_controls)
+	_add_button(box, "Display", show_display)
 	_add_button(box, "Service car (reset wear)", _service_car)
 	_add_button(box, "Restart", game_state.restart)
 	_add_button(box, "Quit", game_state.quit)
 
 	_build_controls_page(center)
+	_build_display_page(center)
 	game_state.state_changed.connect(_on_state_changed)
+
+## Display page (menus A-list, 2026-10-08): fullscreen, window size, render
+## scale. Its own page, like Controls, because the main page already fills a
+## 648 px window. Each change applies at once and is saved (DisplaySettings).
+func _build_display_page(center: CenterContainer) -> void:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	box.visible = false
+	center.add_child(box)
+	display_page = box
+	var title := Label.new()
+	title.text = "DISPLAY"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+	fullscreen_check = CheckButton.new()
+	fullscreen_check.text = "Fullscreen"
+	fullscreen_check.button_pressed = DisplaySettings.fullscreen
+	fullscreen_check.toggled.connect(func(on: bool) -> void:
+		DisplaySettings.set_fullscreen(on)
+		_apply_display())
+	box.add_child(fullscreen_check)
+	var row := HBoxContainer.new()
+	box.add_child(row)
+	var name_label := Label.new()
+	name_label.text = "Window size"
+	name_label.custom_minimum_size = Vector2(100, 0)
+	row.add_child(name_label)
+	resolution_option = OptionButton.new()
+	resolution_option.custom_minimum_size = Vector2(180, 0)
+	for r in DisplaySettings.available_resolutions():
+		resolution_option.add_item("%d x %d" % [r.x, r.y])
+		resolution_option.set_item_metadata(resolution_option.item_count - 1, r)
+	resolution_option.item_selected.connect(func(i: int) -> void:
+		DisplaySettings.set_resolution(resolution_option.get_item_metadata(i))
+		_apply_display())
+	row.add_child(resolution_option)
+	render_scale_slider = _add_slider(box, "Render scale", DisplaySettings.RENDER_SCALE_MIN, DisplaySettings.RENDER_SCALE_MAX, 0.05, DisplaySettings.render_scale,
+		func(v: float) -> void:
+			DisplaySettings.set_render_scale(v)
+			_apply_display())
+	render_scale_label = Label.new()
+	render_scale_label.custom_minimum_size = Vector2(48, 0)
+	render_scale_slider.get_parent().add_child(render_scale_label)
+	_sync_display_controls()
+	display_back_button = _add_button(box, "Back", show_main)
+
+func show_display() -> void:
+	_sync_display_controls()
+	main_page.visible = false
+	controls_page.visible = false
+	display_page.visible = true
+	fullscreen_check.grab_focus()
+
+func _apply_display() -> void:
+	DisplaySettings.apply(get_window())
+	DisplaySettings.save_settings()
+	_sync_display_controls()
+
+## Puts the display controls back in step with DisplaySettings (also after a reset).
+func _sync_display_controls() -> void:
+	fullscreen_check.set_pressed_no_signal(DisplaySettings.fullscreen)
+	for i in resolution_option.item_count:
+		if resolution_option.get_item_metadata(i) == DisplaySettings.resolution:
+			resolution_option.select(i)
+	resolution_option.disabled = DisplaySettings.fullscreen  # fullscreen uses the screen's own size
+	render_scale_slider.set_value_no_signal(DisplaySettings.render_scale)
+	render_scale_label.text = "%d%%" % roundi(DisplaySettings.render_scale * 100.0)
 
 ## Resets temperatures, tyre, clutch and brake wear (the garage will own this later).
 func _service_car() -> void:
@@ -178,6 +253,7 @@ func show_controls() -> void:
 func show_main() -> void:
 	main_page.visible = true
 	controls_page.visible = false
+	display_page.visible = false
 	resume_button.grab_focus()  # keyboard/controller can navigate the menu
 
 func _build_controls_page(center: CenterContainer) -> void:

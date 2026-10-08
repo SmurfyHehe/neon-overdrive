@@ -65,6 +65,10 @@ func _ready() -> void:
 	TrafficSettings.load_settings()
 	FxSettings.load_settings()   # cockpit mirrors on/off and quality ([fx] in settings.cfg)
 	ViewSettings.load_settings()
+	# Fullscreen (the first-launch default), window size and render scale; the
+	# window is only touched in a real play session (DisplaySettings.player_run).
+	DisplaySettings.load_settings()
+	DisplaySettings.apply(get_window())
 	# NEON_TRAFFIC=<n> overrides the saved car count, like NEON_TICKS/NEON_MUTE:
 	# tests/run_tests.bat sets 0 so the older drive-bot tests, which steer
 	# across lanes blind, do not hit traffic (tests/traffic_*.gd clear it).
@@ -389,6 +393,8 @@ func _setup_hud() -> void:
 # ---------- game state (pause / restart / quit, issue #27) ----------
 func _setup_game_state() -> void:
 	game_state = GameState.new()
+	# Alt-tab (or any focus loss) pauses a real play session; tests keep running.
+	game_state.pause_on_focus_loss = DisplaySettings.player_run()
 	add_child(game_state)
 	add_child(PauseMenu.new(game_state))
 	add_child(TunerScreen.new(player, game_state))

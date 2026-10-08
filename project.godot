@@ -180,3 +180,10 @@ common/physics_interpolation=true
 [rendering]
 
 renderer/rendering_method="mobile"
+
+[shader_globals]
+
+city_reflections={
+"type": "float",
+"value": 1.0
+}

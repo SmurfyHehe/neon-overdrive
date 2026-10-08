@@ -20,7 +20,7 @@ const BLOCK_FRAMES := 40
 const SKIP := 10         # frames dropped after each switch
 
 ## Each setup: GraphicsSettings values on top of BASE. Presets take PRESET_VALUES.
-const BASE := {"aa": "off", "render_scale": 1.0, "film_look": false}
+const BASE := {"aa": "off", "render_scale": 1.0, "film_look": false, "reflections": false}
 const SETUPS := {
 	"base": {},
 	"fxaa": {"aa": "fxaa"},
@@ -29,6 +29,7 @@ const SETUPS := {
 	"msaa4": {"aa": "msaa4"},
 	"scale75": {"render_scale": 0.75},
 	"film_look": {"film_look": true},
+	"reflections": {"reflections": true},
 	"low": "low",
 	"medium": "medium",
 	"high": "high",

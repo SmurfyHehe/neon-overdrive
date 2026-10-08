@@ -35,15 +35,15 @@ const SCALE_MAX := 1.0
 ## +1.3 ms, MSAA 4x +1.9 ms, MSAA 2x + FXAA +2.3 ms, 75% scale -1.7 ms. So
 ## MSAA 2x is the free default and FXAA is not in any preset.
 const PRESET_VALUES := {
-	"low": {"aa": "msaa2", "render_scale": 0.75, "film_look": true},
-	"medium": {"aa": "msaa2", "render_scale": 1.0, "film_look": true},
-	"high": {"aa": "msaa4", "render_scale": 1.0, "film_look": true},
+	"low": {"aa": "msaa2", "render_scale": 0.75, "film_look": true, "reflections": true},
+	"medium": {"aa": "msaa2", "render_scale": 1.0, "film_look": true, "reflections": true},
+	"high": {"aa": "msaa4", "render_scale": 1.0, "film_look": true, "reflections": true},
 }
 
 ## On/off effects, in menu order, with their menu names. Each is read by the
-## node that draws it (film_look: WorldLook).
-const FLAGS := ["film_look"]
-const FLAG_NAMES := {"film_look": "Film look"}
+## node that draws it (film_look, reflections: WorldLook).
+const FLAGS := ["film_look", "reflections"]
+const FLAG_NAMES := {"film_look": "Film look", "reflections": "Reflections"}
 
 ## Nodes that switch with these settings join this group and implement
 ## apply_graphics().
@@ -52,7 +52,7 @@ const GROUP := "graphics_settings"
 static var preset := PRESET_DEFAULT  # one of PRESETS, or "custom"
 static var aa := "msaa2"
 static var render_scale := 1.0
-static var flags := {"film_look": true}
+static var flags := {"film_look": true, "reflections": true}
 
 static func is_on(flag: String) -> bool:
 	return bool(flags.get(flag, false))

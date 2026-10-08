@@ -201,6 +201,15 @@ static func _mat(color: Color, emission_energy: float = 0.0, metallic: float = 0
 		m.rim_tint = 0.35
 	return m
 
+## Glossy paint (polish pass, 2026-10-08): a clear coat over the body colour,
+## so traffic paint carries a sharp second highlight and mirrors the sky's
+## city reflections (NightSky city) like the player's car.
+static func _gloss(m: StandardMaterial3D) -> StandardMaterial3D:
+	m.clearcoat_enabled = true
+	m.clearcoat = 1.0
+	m.clearcoat_roughness = 0.1
+	return m
+
 ## Shared body detailing (2026-09-13 art pass, Roy: "the player model car and
 ## surroundings are horrendous, they don't even make me feel like im in
 ## beam.ng") -- used by BOTH build_car (traffic, with wheels attached) and
@@ -351,7 +360,7 @@ static func build_car(kind: String, color: Color) -> Node3D:
 	var root := Node3D.new()
 	root.set_meta("kind", kind)
 
-	var body_mat := _mat(color, 0.0, 0.6, 0.28, 0.4)
+	var body_mat := _gloss(_mat(color, 0.0, 0.6, 0.28, 0.4))
 	var glass_mat := _mat(Color(0.05, 0.1, 0.13), 0.0, 0.85, 0.12)
 	var roof_mat := _mat(Color(0.07, 0.07, 0.08), 0.0, 0.3, 0.5)
 	var wheel_mat := _mat(Color(0.08, 0.08, 0.1), 0.0, 0.2, 0.75)
@@ -435,7 +444,7 @@ static func build_chassis_visual(kind: String, color: Color) -> Node3D:
 	var root := Node3D.new()
 	root.set_meta("kind", kind)
 
-	var body_mat := _mat(color, 0.0, 0.6, 0.28, 0.4)
+	var body_mat := _gloss(_mat(color, 0.0, 0.6, 0.28, 0.4))
 	var glass_mat := _mat(Color(0.05, 0.1, 0.13), 0.0, 0.85, 0.12)
 	var roof_mat := _mat(Color(0.07, 0.07, 0.08), 0.0, 0.3, 0.5)
 	var light_mat := _mat(Color(1.0, 0.97, 0.87), 1.4)

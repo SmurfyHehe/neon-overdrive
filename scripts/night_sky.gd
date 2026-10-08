@@ -50,6 +50,31 @@ uniform float earthshine = 0.01;
 uniform vec3 haze_color : source_color = vec3(1.0, 0.75, 0.40);   // amber #FFC066
 uniform float haze_energy = 0.05;
 uniform float horizon_haze = 0.45;  // how much the low moon sinks into the glow
+// City in the reflections (polish pass, 2026-10-08): lit windows round the
+// horizon and the glow of the lamp rows, drawn into the radiance map only, so
+// glossy things (traffic paint, glass) mirror a city, the visible sky stays
+// as it was. 0 = off (GraphicsSettings "reflections", set by WorldLook).
+uniform float city = 0.0;
+
+float hash(vec2 p) {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+vec3 city_band(vec3 d) {
+	float az = atan(d.x, -d.z);
+	float top = 0.05 + 0.2 * hash(vec2(floor(az * 14.0), 3.0));
+	vec3 c = vec3(0.0);
+	if (d.y > -0.02 && d.y < top) {
+		vec2 g = vec2(az * 70.0, d.y * 55.0);
+		vec2 f = fract(g);
+		float pane = step(0.25, f.x) * step(f.x, 0.75) * step(0.3, f.y) * step(f.y, 0.75);
+		c += vec3(1.0, 0.75, 0.40) * pane * step(0.68, hash(floor(g))) * 0.5;
+	}
+	// The lamp rows either side, a soft sodium band above the skyline.
+	float side = smoothstep(0.5, 0.9, abs(d.x));
+	c += vec3(1.0, 0.55, 0.2) * side * exp(-pow((d.y - 0.32) * 9.0, 2.0)) * 0.12;
+	return c;
+}
 
 vec3 gradient(vec3 d) {
 	float v_angle = acos(clamp(d.y, -1.0, 1.0));
@@ -63,6 +88,9 @@ vec3 gradient(vec3 d) {
 
 void sky() {
 	vec3 col = gradient(EYEDIR);
+	if (AT_CUBEMAP_PASS && city > 0.0) {
+		col += city_band(EYEDIR) * city;
+	}
 	if (!AT_CUBEMAP_PASS) {
 		vec3 m = normalize(moon_dir);
 		float ang = acos(clamp(dot(EYEDIR, m), -1.0, 1.0));
@@ -131,6 +159,10 @@ static func random_phase(rng: RandomNumberGenerator) -> float:
 	if rng.randf() < 0.1:
 		return 0.0
 	return rng.randf_range(0.07, 0.93)
+
+## City lights in the reflections on (1) or off (0); the radiance map re-renders once.
+static func set_city(sky: Sky, amount: float) -> void:
+	(sky.sky_material as ShaderMaterial).set_shader_parameter("city", amount)
 
 static func set_phase(sky: Sky, phase: float) -> void:
 	(sky.sky_material as ShaderMaterial).set_shader_parameter("phase", fposmod(phase, 1.0))

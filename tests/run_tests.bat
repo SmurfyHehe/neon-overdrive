@@ -88,6 +88,7 @@ call :run road_space --headless
 call :run road_frame --headless
 call :run road_centerline --headless
 call :run road_alignment --headless
+call :run road_layout --headless
 if /i not "%~1"=="quick" (
 	rem Headless, but ~2 min of simulated driving; --fixed-fps lets physics run faster than the clock.
 	call :run tune_track "--headless --fixed-fps 60"

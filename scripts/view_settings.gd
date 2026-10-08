@@ -5,8 +5,12 @@ extends RefCounted
 # user://settings.cfg AudioSettings uses (its own [view] section). The pause
 # menu shows one slider; ChaseCamera reads cockpit_fov every frame, so a change
 # applies at once. The speed widening (up to +6 degrees) is added on top.
+# Default 76 (was 62, 2026-10-07): the smallest round FOV that keeps both door
+# mirrors and the rearview on screen at 16:9 with the cockpit head yaw (73 is
+# the bare minimum; the extra covers head sway). Below ~73 the passenger
+# mirror starts to leave the edge.
 
-const COCKPIT_FOV_DEFAULT := 62.0
+const COCKPIT_FOV_DEFAULT := 76.0
 const COCKPIT_FOV_MIN := 55.0
 const COCKPIT_FOV_MAX := 78.0
 

@@ -64,8 +64,9 @@ func _physics_process(_delta: float) -> bool:
 				var eye := xf * ChaseCamera.COCKPIT_EYE
 				_check(cam.global_position.distance_to(eye) < 0.2, "the cockpit camera should sit at the eye point (%.2f m away)" % cam.global_position.distance_to(eye))
 				var fwd := -cam.global_basis.z
-				var car_fwd := -xf.basis.z
-				_check(fwd.dot(car_fwd) > 0.99, "the cockpit camera should face where the car faces (dot %.3f)" % fwd.dot(car_fwd))
+				# where the car faces, turned the fixed COCKPIT_YAW_DEG toward the passenger side
+				var car_fwd := xf.basis * Basis(Vector3.UP, deg_to_rad(-ChaseCamera.COCKPIT_YAW_DEG)) * Vector3.FORWARD
+				_check(fwd.dot(car_fwd) > 0.999, "the cockpit camera should face where the car faces, turned %.0f deg (dot %.4f)" % [ChaseCamera.COCKPIT_YAW_DEG, fwd.dot(car_fwd)])
 				_check(cam.frame.body_hidden_from_camera(), "the body should be off the cockpit camera in the cockpit")
 				_check(cam.frame.cockpit and cam.frame.visible, "the cockpit frame should be in cockpit mode and shown")
 				_check(cam.fov >= ViewSettings.cockpit_fov and cam.fov <= ViewSettings.cockpit_fov + ChaseCamera.COCKPIT_FOV_SPEED_GAIN + 0.01, "the cockpit FOV should be the setting (%.0f) plus up to %.0f for speed, got %.2f" % [ViewSettings.cockpit_fov, ChaseCamera.COCKPIT_FOV_SPEED_GAIN, cam.fov])

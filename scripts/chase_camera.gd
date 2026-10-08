@@ -59,12 +59,20 @@ const IMPACT_GAIN := 0.12        # trauma per m/s over the threshold
 ## whole interior, wheel, cluster, mirrors) is shown.
 ## The eye (cockpit milestone, 2026-10-06): seat height in the P1's cabin, just
 ## ahead of the B-pillar, a hand's width inboard of the seat centre (-0.36).
-## The passenger-side door mirror is NOT in view from here (58 degrees right,
-## past the screen edge at every FOV the slider allows); the mirror glance
-## (look_glance, below) turns the head to it.
+## Looking dead ahead from here the passenger-side door mirror is 58 degrees
+## right, past the screen edge at every FOV the slider allows, so the head
+## rests turned COCKPIT_YAW_DEG toward it (below); the mirror glance
+## (look_glance) still turns the head fully to either door mirror.
 enum View { CHASE, COCKPIT }
 const COCKPIT_EYE := Vector3(-0.32, 1.10, 0.30)  # car-local, -x is the driver's side (left-hand drive)
-const COCKPIT_FOV_SPEED_GAIN := 6.0  # degrees added at top speed; the base is ViewSettings.cockpit_fov (default 62)
+## Mirrors on screen (Roy, 2026-10-07: no glance keys, one-hand play). The eye
+## sits left of centre, so the passenger door mirror is ~61 deg right and the
+## driver's ~44 deg left; at 16:9 that takes a 90 deg vertical FOV to fit. A
+## fixed 8 deg turn of the head toward the car's centre balances the two
+## (~52 deg each side), so ViewSettings' default 76 shows all three mirrors
+## (tests/cockpit_mirror_fov.gd). Positive is to the right (passenger side).
+const COCKPIT_YAW_DEG := 8.0
+const COCKPIT_FOV_SPEED_GAIN := 6.0  # degrees added at top speed; the base is ViewSettings.cockpit_fov (default 76)
 ## Head movement in the cockpit (Roy, 2026-10-06): the eye sways with the
 ## car's forces, capped at HEAD_MAX_M (4 cm) and HEAD_MAX_DEG (2 degrees).
 ## Lateral g pushes the head outward and rolls it with the body; braking
@@ -100,7 +108,7 @@ const GLANCE_DOUBLE_TAP := 0.3     # s between taps that reset to straight
 const GLANCE_RATE := 25.0          # 1/s: ~0.12 s to 95% of the turn
 const GLANCE_LEAN := Vector3(0.06, 0.0, -0.02)  # right glance: inboard, a touch forward
 var glance := 0                    # -1 left mirror, 0 ahead, +1 right mirror
-var glance_yaw := 0.0              # degrees, current, + = left (about +y)
+var glance_yaw := -COCKPIT_YAW_DEG # degrees, current, + = left (about +y); rests at the head yaw
 var glance_pitch := 0.0            # degrees, current
 var glance_lean := Vector3.ZERO    # car-local metres, current
 var _last_glance_tap := -10.0
@@ -162,7 +170,7 @@ func set_view(v: View) -> void:
 	var cockpit := v == View.COCKPIT
 	if not cockpit:
 		glance = 0   # the chase view has no head to turn
-		glance_yaw = 0.0
+		glance_yaw = -COCKPIT_YAW_DEG
 		glance_pitch = 0.0
 		glance_lean = Vector3.ZERO
 	if frame != null:
@@ -209,10 +217,11 @@ func glance_tap(steer: float) -> void:
 		frame.mirrors.set_focus(glance)
 
 ## Yaw (+ left) and pitch, in degrees, that centre a door mirror's glass from
-## the eye: side -1 left, +1 right. Car space, so the same for every frame.
+## the eye: side -1 left, +1 right; side 0 is the resting head yaw. Car space,
+## so the same for every frame.
 func glance_angles(side: int) -> Vector2:
 	if side == 0:
-		return Vector2.ZERO
+		return Vector2(-COCKPIT_YAW_DEG, 0.0)
 	var lean := GLANCE_LEAN if side > 0 else Vector3.ZERO
 	var to: Vector3
 	if frame != null and frame.mirrors != null:
@@ -252,7 +261,9 @@ func _process(delta: float) -> void:
 
 ## At the driver's eye, on the interpolated transform (same reason as the
 ## chase cam), looking where the car points, plus the head movement; a fixed
-## FOV that widens a touch with speed.
+## FOV that widens a touch with speed. At rest the head is turned
+## COCKPIT_YAW_DEG toward the passenger side so both door mirrors stay in
+## view (glance_yaw rests there, see glance_angles).
 func _place_cockpit(delta: float) -> void:
 	var xf := target.get_global_transform_interpolated()
 	_update_head(delta)

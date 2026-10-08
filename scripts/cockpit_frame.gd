@@ -121,6 +121,13 @@ var needles := {}                # gauge id -> needle pivot
 var scales := {}                 # ClusterFace.scales_for(player), refreshed when a tune changes them
 var shift_bar: MultiMeshInstance3D
 var shift_colours := PackedColorArray()   # per LED as given to the MultiMesh (headless can't read it back)
+## Shift-light strip on the hood (no-LED wheels): LED row height above the
+## hood's crown, its depth (set back from the lip at -0.25) and width. From
+## the eye it sits over 2 degrees above the rim top (tests/cockpit_interior.gd).
+const SHIFT_BAR_RISE := 0.012
+const SHIFT_BAR_Z := -0.33
+const SHIFT_BAR_W := 0.15
+var gear_label: Label3D            # the gear in the tach, for wheels without an LCD
 var pod: Node3D
 var pod_face: ClusterFace
 var pod_vp: SubViewport
@@ -355,8 +362,9 @@ func _build_dash(hard: CockpitKit, soft: CockpitKit) -> void:
 	# Hood: an arch over the dials, wrapping toward the driver, its top at the
 	# dash line; a filled half-disc closes the recess behind the plate, the
 	# side walls stop where the arch meets them.
-	var arch_c := Vector3(SEAT_X, cluster_y - 0.088, -0.36)
-	var r1 := pw + 0.01
+	var arch: Array = _hood_arch()
+	var arch_c: Vector3 = arch[0]
+	var r1: float = arch[1]
 	var a0 := asin(clampf((ry0 - arch_c.y) / r1, -1.0, 1.0))
 	var hood := CockpitKit.new()
 	hood.ring_sector(r1 - 0.015, r1, a0, PI - a0, 0.0, 0.11, _c("dash_top"), 16)
@@ -367,6 +375,12 @@ func _build_dash(hard: CockpitKit, soft: CockpitKit) -> void:
 	back.offset(arch_c + Vector3(0, 0, -0.002))
 	hard.merge(back)
 	hard.box(Vector3(rx1 - rx0, 0.012, 0.13), Vector3(SEAT_X, ry0, -0.315), _c("lower"))
+
+## The binnacle hood's arch: [centre, outer radius]. The hood is a ring
+## sector 0.015 thick, extruded 0.11 toward the driver from centre.z.
+func _hood_arch() -> Array:
+	var plate: Vector2 = style.cluster.get("plate", Vector2(0.34, 0.13))
+	return [Vector3(SEAT_X, cluster_y - 0.088, -0.36), plate.x * 0.5 + 0.025]
 
 ## A box from a to b, `w` across, for pillars.
 static func _bar(k: CockpitKit, a: Vector3, b: Vector3, w: float, col: Color) -> void:
@@ -443,10 +457,25 @@ func _build_cluster() -> void:
 	add_child(lamps)
 	lamp_text = _label("ENG BRK TYR CLT", 9, Vector3(SEAT_X + tach_at.x, lamp_y - 0.008, CLUSTER_Z + 0.002), _c("silver"), 0.0004)
 	lamp_text.name = "LampText"
-	# Shift lights: on the wheel when it has LEDs, else a bar of the same 15
-	# LEDs (same fill rule) along the top of the cluster, under the hood.
+	# Shift lights: on the wheel when it has LEDs, else the same 15 LEDs (same
+	# fill rule) in an aftermarket strip on top of the hood. Under the hood,
+	# at the top of the plate, the rim hid them.
 	if not style.wheel.get("leds", true) and cl.get("shift_bar", true):
-		_build_shift_bar(centre + Vector3(0.0, plate.y * 0.5 - 0.008, 0.003), plate.x * 0.62)
+		_build_shift_bar()
+	# Gear readout: a round wheel has no LCD and the HUD's gear hides in the
+	# cockpit, so the gear shows in the tach above its hub.
+	if not style.wheel.get("leds", true):
+		var gear_at := Vector3(SEAT_X + tach_at.x, cluster_y + tach_at.y + tach_r * 0.36, CLUSTER_Z + 0.003)
+		# a small dark window with a silver edge, so it reads as a display,
+		# not as one of the dial's numerals
+		var win := CockpitKit.new()
+		win.box(Vector3(0.016, 0.015, 0.001), gear_at + Vector3(0, 0, -0.0025), _c("silver"))
+		win.box(Vector3(0.0135, 0.0125, 0.001), gear_at + Vector3(0, 0, -0.0016), _c("rubber"))
+		var wm := win.instance(CockpitKit.surface_material("hard"))
+		wm.name = "GearWindow"
+		add_child(wm)
+		gear_label = _label("N", 44, gear_at, AMBER, 0.00026)
+		gear_label.name = "GearLabel"
 	_build_pod()
 
 ## A SubViewport with a ClusterFace drawing `gauges`, drawn once.
@@ -482,18 +511,29 @@ func _face_quad(vp: SubViewport, plate: Vector2, xf: Transform3D, node_name: Str
 	add_child(mi)
 	return mi
 
-func _build_shift_bar(at: Vector3, width: float) -> void:
+func _build_shift_bar() -> void:
 	var n := SteeringWheel.LED_COUNT
+	var arch: Array = _hood_arch()
+	var top: float = (arch[0] as Vector3).y + float(arch[1])
+	# A slim housing on the hood's crown, set back from the lip so the eye
+	# sees it over the rim; the LEDs sit on its face toward the driver.
+	var at := Vector3(SEAT_X, top + SHIFT_BAR_RISE, SHIFT_BAR_Z)
+	var width := SHIFT_BAR_W
+	var housing := CockpitKit.new()
+	housing.box(Vector3(width + 0.012, SHIFT_BAR_RISE + 0.018, 0.03), Vector3(SEAT_X, top + (SHIFT_BAR_RISE + 0.012) * 0.5 - 0.003, SHIFT_BAR_Z), _c("lower"))
+	var hm := housing.instance(CockpitKit.surface_material("hard"))
+	hm.name = "ShiftBarHousing"
+	add_child(hm)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
 	var box := BoxMesh.new()
-	box.size = Vector3(width / n * 0.7, 0.006, 0.003)
+	box.size = Vector3(width / n * 0.7, 0.007, 0.003)
 	mm.mesh = box
 	mm.instance_count = n
 	shift_colours.resize(n)
 	for i in n:
-		mm.set_instance_transform(i, Transform3D(Basis(), at + Vector3(lerpf(-width * 0.5, width * 0.5, float(i) / (n - 1)), 0.0, 0.0)))
+		mm.set_instance_transform(i, Transform3D(Basis(), at + Vector3(lerpf(-width * 0.5, width * 0.5, float(i) / (n - 1)), 0.0, 0.0155)))
 		var c := SteeringWheel.led_base_colour(i)
 		shift_colours[i] = Color(c, 0.0)
 		mm.set_instance_color(i, shift_colours[i])
@@ -794,6 +834,7 @@ func _process(delta: float) -> void:
 	if pod != null and pod.visible:
 		needles.boost.rotation = Vector3(0.0, 0.0, ClusterFace.needle_angle(gauge_value("boost"), DIAL_SWEEP))
 	_update_shift_bar(frac, cue, blink)
+	_update_gear_label(cue, blink)
 	_update_lamps()
 	var inputs := pedal_inputs()
 	for key in pedals:
@@ -816,6 +857,14 @@ func _process(delta: float) -> void:
 		move_lever_to(p.gear)
 	_step_lever(delta)
 	_update_radio()
+
+## The gear in the tach: amber, silver while a shift is in progress (the
+## HUD's flash) and on the shift cue's blink.
+func _update_gear_label(cue: bool, blink: bool) -> void:
+	if gear_label == null:
+		return
+	gear_label.text = Hud.gear_text(player.gear)
+	gear_label.modulate = SILVER if (player.shift_flash_t > 0.0 or (cue and blink)) else AMBER
 
 func _update_lamps() -> void:
 	var h := player.health

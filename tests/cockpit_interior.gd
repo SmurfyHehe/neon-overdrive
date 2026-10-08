@@ -143,6 +143,8 @@ func _physics_process(_delta: float) -> bool:
 					_check(frame.shift_colours[7].is_equal_approx(Color(SteeringWheel.RED, 1.0)), "between blinks the middle shift-bar LED is red")
 					frame._update_shift_bar(0.5, false, false)
 					_check(frame.shift_colours[0].a < 0.01, "at 50%% every shift-bar LED is off")
+					# no LCD: the gear shows in the tach
+					_check(frame.gear_label != null and frame.gear_label.text == Hud.gear_text(p.gear), "the tach shows the gear, got '%s' for %s" % [frame.gear_label.text if frame.gear_label else "<none>", Hud.gear_text(p.gear)])
 				_check_sightline(p, frame)
 				_check_wheel_pose(frame)
 				_check_view(p, frame, cam)
@@ -235,6 +237,16 @@ func _check_wheel_pose(frame: CockpitFrame) -> void:
 	print("wheel pose: face %.1f deg up, eye %.1f deg up from the hub, rim top %.1f deg below the eye" % [normal_up, eye_up, top_below])
 	_check(normal_up >= 15.0 and normal_up <= 35.0 and normal_up < eye_up, "the wheel face looks %.1f deg up; it should rise toward the driver's eye" % normal_up)
 	_check(top_below >= CockpitFrame.WHEEL_TOP_MIN_DEG, "the rim top is only %.1f deg below the eye" % top_below)
+	# The cluster's shift lights must clear the rim from the eye (under the
+	# hood the rim hid them): every LED sits higher in view than the rim top.
+	if frame.shift_bar != null:
+		var mm: MultiMesh = frame.shift_bar.multimesh
+		var worst := -90.0
+		for i in mm.instance_count:
+			var at: Vector3 = mm.get_instance_transform(i).origin
+			worst = maxf(worst, rad_to_deg(atan2(eye.y - at.y, eye.z - at.z)))
+		print("shift lights: lowest LED %.1f deg below the eye, rim top %.1f" % [worst, top_below])
+		_check(worst < top_below - 2.0, "the shift lights (%.1f deg below the eye) should sit clear above the rim top (%.1f)" % [worst, top_below])
 
 static func _side_rendering(frame: CockpitFrame) -> bool:
 	for i in [1, 2]:

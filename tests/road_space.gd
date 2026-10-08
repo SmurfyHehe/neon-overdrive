@@ -1,9 +1,9 @@
 extends SceneTree
 
 # Road space (2026-10-06): the lanes sit MEDIAN_GAP off the centre line, the
-# shoulder is 1.4 m, lanes stay 3.2 m, and everything laid out from the road
+# shoulder is 1.4 m, lanes are 3.4 m (3.2 until the 2026-10-08 lane-threading decision), and everything laid out from the road
 # edge moved out with it. Headless, no game scene:
-# - the numbers: LANE_W 3.2, SHOULDER_W 1.4, MEDIAN_GAP inside Roy's 0.2-0.6 m
+# - the numbers: LANE_W 3.4, SHOULDER_W 1.4, MEDIAN_GAP inside Roy's 0.2-0.6 m
 # - lane centres and the lane-from-distance inverse agree (traffic places cars
 #   with one and indexes them with the other), on both sides
 # - TrafficManager's occupancy slots: each lane centre, and the median gap,
@@ -23,7 +23,7 @@ func _initialize() -> void:
 	_run.call_deferred()
 
 func _run() -> void:
-	_check(is_equal_approx(B.LANE_W, 3.2), "lane width changed: %.2f (should stay 3.2)" % B.LANE_W)
+	_check(is_equal_approx(B.LANE_W, 3.4), "lane width changed: %.2f (should be 3.4)" % B.LANE_W)
 	_check(is_equal_approx(B.SHOULDER_W, 1.4), "shoulder %.2f, should be 1.4 (0.9 + 0.5)" % B.SHOULDER_W)
 	_check(B.MEDIAN_GAP >= 0.2 and B.MEDIAN_GAP <= 0.6, "median gap %.2f outside 0.2-0.6" % B.MEDIAN_GAP)
 

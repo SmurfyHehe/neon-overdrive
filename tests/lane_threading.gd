@@ -45,6 +45,10 @@ const BOT_CLEAR := 0.3
 const BOT_SPEED := 150.0 * KMH
 ## Gap the bot closes to behind a car that blocks it.
 const BOT_FOLLOW := 12.0
+## How far off the line the bot will move to line up on a gap, and how far
+## ahead it looks for the cars that make one.
+const BOT_AIM_MAX := 0.8
+const BOT_AIM_LOOK := 60.0
 ## Physics-tick timing starts this long into a run (the boot frame is long).
 const SETTLE_TICKS := 3 * RATE
 const SCENE_SECONDS := {"thread": 14.0, "door": 16.0, "no_room": 10.0}
@@ -91,6 +95,10 @@ var slow: Array = []
 func _initialize() -> void:
 	OS.add_logger(logger)
 	Engine.physics_ticks_per_second = RATE
+	# The scenes place the player by world x: straight, flat road (the sweep
+	# sets its own per run). run_tests.bat sets these too, a bare run did not.
+	OS.set_environment("NEON_CURVES", "0")
+	OS.set_environment("NEON_HILLS", "0")
 	game = Harness.boot(self, 0, 300.0, 808, 8000.0)
 
 func _physics_process(_delta: float) -> bool:
@@ -232,7 +240,8 @@ func _tick_door() -> void:
 		p.driver = speed_driver(Harness.lane_x(0), 160.0 * KMH)
 		if a.lane_i == 0:
 			door_changed_after = true
-	min_clear = minf(min_clear, clear_to(a))
+	var cl := clear_to(a)
+	min_clear = minf(min_clear, cl)
 
 func _end_door() -> void:
 	lines.append("B door: change toward the player while alongside: %s; changed lane after the player left: %s; closest %.2f m" % [
@@ -325,12 +334,44 @@ func _start_run() -> void:
 	_between = false
 	_between_ok = true
 
-## The sweep's scripted player: rides the lane 1/2 line at BOT_SPEED and
-## follows (brakes for) any car whose body comes within BOT_CLEAR of its path,
-## so it only goes through a gap that has opened.
+## The sweep's scripted player: rides the lane 1/2 line at BOT_SPEED, aims
+## at the middle of the gap between the nearest car on each side of the line
+## ahead (within BOT_AIM_MAX of the line, like a player lining up a gap), and
+## follows (brakes for) any car whose body comes within BOT_CLEAR of that
+## path, so it only goes through a gap that has opened.
 func _bot(c: Vehicle) -> void:
 	var pu := RoadFrame.unroll(c.global_position)
 	var v := -c.local_velocity.z
+	var line := line_x(1)
+	var aim := line
+	if traffic != null:
+		# Inner body edges of the nearest car ahead each side of the line.
+		var l_edge := -INF
+		var l_d := INF
+		var r_edge := INF
+		var r_d := INF
+		for car in traffic.cars:
+			if car.direction > 0.0:
+				continue
+			var u := RoadFrame.unroll(car.global_position)
+			var ahead := pu.z - u.z - car.half_l - P_HALF_L
+			if ahead < -2.0 * car.half_l - 2.0 * P_HALF_L or ahead > BOT_AIM_LOOK:
+				continue
+			if absf(u.x - line) > RoadChunkBuilder.LANE_W:
+				continue
+			if u.x < line and ahead < l_d:
+				l_d = ahead
+				l_edge = u.x + car.body_half_w
+			elif u.x >= line and ahead < r_d:
+				r_d = ahead
+				r_edge = u.x - car.body_half_w
+		if l_d < INF and r_d < INF:
+			aim = (l_edge + r_edge) * 0.5
+		elif l_d < INF:
+			aim = l_edge + P_HALF_W + BOT_CLEAR
+		elif r_d < INF:
+			aim = r_edge - P_HALF_W - BOT_CLEAR
+		aim = clampf(aim, line - BOT_AIM_MAX, line + BOT_AIM_MAX)
 	var block_gap := INF
 	var block_v := 0.0
 	if traffic != null:
@@ -341,7 +382,7 @@ func _bot(c: Vehicle) -> void:
 			var ahead := pu.z - u.z - car.half_l - P_HALF_L
 			if ahead < -1.0 or ahead > 120.0:
 				continue
-			if absf(u.x - line_x(1)) - car.body_half_w - P_HALF_W < BOT_CLEAR and ahead < block_gap:
+			if absf(u.x - aim) - car.body_half_w - P_HALF_W < BOT_CLEAR and ahead < block_gap:
 				block_gap = ahead
 				block_v = car.lane_speed()
 	var want := BOT_SPEED
@@ -350,7 +391,7 @@ func _bot(c: Vehicle) -> void:
 		# to BOT_FOLLOW), so the drivers see someone coming.
 		want = minf(want, block_v + clampf(0.4 * (block_gap - BOT_FOLLOW), -8.0, 7.0))
 	var side_v := RoadFrame.dir_to_road(pu.z, c.linear_velocity).x
-	c.steering_input = TrafficCar.lane_steer(c, line_x(1) - side_v * Harness.LAT_DAMP_T, -1.0, 2.5, Harness.PLAYER_UNDERSTEER_FF)
+	c.steering_input = TrafficCar.lane_steer(c, aim - side_v * Harness.LAT_DAMP_T, -1.0, 2.5, Harness.PLAYER_UNDERSTEER_FF)
 	c.handbrake_input = 0.0
 	if v > want + 1.0:
 		c.throttle_input = 0.0

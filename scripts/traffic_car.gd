@@ -204,8 +204,8 @@ const LEAD_SCAN_TICKS := 3
 
 ## Lane changes (see the header).
 const DECIDE_PERIOD := 0.25
-const LC_TIME := 3.0          # s for the 3.4 m S: peak sideways 1.9 m/s^2
-const LC_TIME_URGENT := 2.0   # obstacle or yielding: 3.9 m/s^2
+const LC_TIME := 3.1          # s for the 3.4 m S: peak sideways 1.75 m/s^2 (3.0 s when lanes were 3.2 m)
+const LC_TIME_URGENT := 2.06  # obstacle or yielding: 3.9 m/s^2
 const LC_COOLDOWN := 4.0
 const KEEP_RIGHT_AFTER := 6.0  # s after the last change before moving back right
 const KEEP_RIGHT_GAP := 80.0   # m of free lane wanted to move back right

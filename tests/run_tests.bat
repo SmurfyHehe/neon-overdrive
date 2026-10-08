@@ -104,6 +104,9 @@ if /i not "%~1"=="quick" (
 	call :run traffic_stability "--headless --fixed-fps 120"
 	call :run traffic_behaviour "--headless --fixed-fps 120"
 	call :run traffic_perf "--headless --fixed-fps 120"
+	rem Lane threading (road lane proposal step 0): three scripted scenes, then one 1 km run per traffic count (NEON_SWEEP=quick or unset for the bigger sweeps).
+	if "%NEON_SWEEP%"=="" set "NEON_SWEEP=one"
+	call :run lane_threading "--headless --fixed-fps 120"
 	call :run curve_drive "--headless --fixed-fps 120"
 	call :run hill_drive "--headless --fixed-fps 120"
 	call :run hill_park "--headless --fixed-fps 60"

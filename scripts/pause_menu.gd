@@ -24,6 +24,7 @@ const GROUPS := [
 		["exhaust_rasp_down", "Less rasp"], ["exhaust_pops_up", "More pops"], ["exhaust_pops_down", "Fewer pops"]]],
 ]
 
+const GameInfo := preload("res://scripts/game_info.gd")
 const SILVER := Color("#C9CED6")
 const AMBER := Color("#FFC066")
 
@@ -125,6 +126,14 @@ func _ready() -> void:
 	_add_button(box, "Service car (reset wear)", _service_car)
 	_add_button(box, "Restart", game_state.restart)
 	_add_button(box, "Quit", game_state.quit)
+
+	# Version line (release readiness, 2026-10-08), so a bug report can name the build.
+	var version_label := Label.new()
+	version_label.text = GameInfo.title()
+	version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	version_label.add_theme_color_override("font_color", SILVER)
+	version_label.add_theme_font_size_override("font_size", 12)
+	box.add_child(version_label)
 
 	_build_controls_page(center)
 	game_state.state_changed.connect(_on_state_changed)

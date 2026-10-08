@@ -175,13 +175,11 @@ func _process(delta: float) -> bool:
 				_check(fx.sparks.spawned == 0, "driving on the road should throw no sparks (%d)" % fx.sparks.spawned)
 				_go("light_hit")
 		"light_hit":
-			if step_t < 0.05:
-				samples.freezes = fx.hit_stop.freeze_count
-			else:
-				# Direct calls: a hit under the big tier never freezes.
-				fx.hit_stop.trigger(8.0)
-				_check(fx.hit_stop.freeze_count == samples.freezes and Engine.time_scale == 1.0, "an 8 m/s hit should not freeze")
-				_go("settle")
+			# Direct call: a hit under the big tier never freezes.
+			var before := fx.hit_stop.freeze_count
+			fx.hit_stop.trigger(8.0)
+			_check(fx.hit_stop.freeze_count == before and Engine.time_scale == 1.0, "an 8 m/s hit should not freeze")
+			_go("settle")
 		"settle":
 			_hold(p)
 			if step_t > 1.5:

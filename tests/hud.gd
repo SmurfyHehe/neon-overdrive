@@ -104,7 +104,12 @@ func _physics_process(_delta: float) -> bool:
 	var rows := 0
 	for n in menu.controls_scroll.find_children("*", "Label", true, false):
 		rows += 1
-	_check(rows >= names.size() * 3, "the Controls page should hold a row per action (%d labels for %d actions)" % [rows, names.size()])
+	var key_buttons := 0
+	for n in menu.controls_scroll.find_children("*", "Button", true, false):
+		key_buttons += 1
+	# A row is a label, KeyBindings.SLOTS key buttons (rebinding) and a gamepad label.
+	_check(rows >= names.size() * 2 and key_buttons >= names.size() * KeyBindings.SLOTS,
+		"the Controls page should hold a row per action (%d labels, %d key buttons for %d actions)" % [rows, key_buttons, names.size()])
 	gs.resume()
 	gs.pause()
 	_check(menu.main_page.visible and not menu.controls_page.visible, "reopening the pause menu should start on the main page")

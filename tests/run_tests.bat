@@ -124,6 +124,9 @@ if /i not "%~1"=="quick" (
 	call :run fleet_budget_scene
 	rem Real window: reads rendered sky and moon pixels.
 	call :run sky_probe
+	rem Real window: reads the cockpit mirrors' rendered pixels.
+	call :run mirror_pixels
+	call :run cockpit_mirror_fov
 	call :run exhaust_keys --headless
 	call :run mute --headless
 	call :run feel_pass_1 --headless

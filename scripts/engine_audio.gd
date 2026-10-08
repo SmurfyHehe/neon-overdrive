@@ -62,7 +62,18 @@ func _process(_delta: float) -> void:
 	var n := _playback.get_frames_available()
 	if n > 0:
 		_playback.push_buffer(synth.render(n, _vehicle.motor_rpm,
-				_vehicle.throttle_amount, _vehicle.motor_is_redline))
+				_vehicle.throttle_amount * tc_stutter(), _vehicle.motor_is_redline))
+
+## Traction control's sound (2026-10-08, Roy: light + sound): while TC cuts,
+## the engine note chops on and off like a real ignition cut, deeper the harder
+## it cuts. 1.0 = no effect (traffic cars have no TC).
+const TC_CHOP_HZ := 14.0
+func tc_stutter() -> float:
+	var tc: Variant = _vehicle.get("traction")
+	if not (tc is TractionControl) or tc.cut <= 0.05:
+		return 1.0
+	var off_phase := fmod(Time.get_ticks_msec() * 0.001 * TC_CHOP_HZ, 1.0) < 0.5
+	return 1.0 - clampf(tc.cut * 1.5, 0.0, 0.9) if off_phase else 1.0
 
 # Exhaust playtest keys: U/J loudness, I/K raspiness, O/L pops, held, while
 # driving. The same knobs are sliders on the Tuner screen (T), together with a

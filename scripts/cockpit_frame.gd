@@ -94,6 +94,9 @@ var wheel_mount: Node3D          # tilt and place; the wheel turns inside it
 var mirrors: CockpitMirrors
 var tach_needle: Node3D
 var speedo_needle: Node3D
+const LAMP_COUNT := 5  # ENG BRK TYR CLT, then TC (2026-10-08)
+## Whether the TC lamp is lit this frame (tests: headless drops MultiMesh colours).
+var tc_lamp_lit := false
 var lamps: MultiMeshInstance3D
 var lamp_text: Label3D
 var radio_label: Label3D
@@ -321,16 +324,16 @@ func _build_cluster() -> void:
 	var box := BoxMesh.new()
 	box.size = Vector3(0.018, 0.009, 0.003)
 	mm.mesh = box
-	mm.instance_count = 4
-	for i in 4:
-		mm.set_instance_transform(i, Transform3D(Basis().scaled(Vector3(0.7, 0.7, 1.0)), Vector3(SEAT_X - 0.027 + 0.018 * i, CLUSTER_Y + 0.03, CLUSTER_Z + 0.002)))
+	mm.instance_count = LAMP_COUNT
+	for i in LAMP_COUNT:
+		mm.set_instance_transform(i, Transform3D(Basis().scaled(Vector3(0.7, 0.7, 1.0)), Vector3(SEAT_X - 0.009 * (LAMP_COUNT - 1) + 0.018 * i, CLUSTER_Y + 0.03, CLUSTER_Z + 0.002)))
 		mm.set_instance_color(i, Color(AMBER, 0.0))
 	lamps = MultiMeshInstance3D.new()
 	lamps.name = "Lamps"
 	lamps.multimesh = mm
 	lamps.material_override = CockpitKit.glow_material(SteeringWheel.LED_ENERGY)
 	add_child(lamps)
-	lamp_text = _label("ENG BRK TYR CLT", 12, Vector3(SEAT_X, CLUSTER_Y + 0.015, CLUSTER_Z + 0.002), SILVER, 0.0004)
+	lamp_text = _label("ENG BRK TYR CLT  TC", 12, Vector3(SEAT_X, CLUSTER_Y + 0.015, CLUSTER_Z + 0.002), SILVER, 0.0004)
 	lamp_text.name = "LampText"
 	_label("x1000 rpm", 22, Vector3(SEAT_X - 0.085, CLUSTER_Y - 0.03, CLUSTER_Z + 0.002), AMBER, 0.0004)
 	_label("km/h", 22, Vector3(SEAT_X + 0.085, CLUSTER_Y - 0.03, CLUSTER_Z + 0.002), AMBER, 0.0004)
@@ -532,10 +535,13 @@ func _update_lamps() -> void:
 		[h.is_warning(PowertrainHealth.Warn.CLUTCH), false],
 	]
 	var slow_blink := int(Time.get_ticks_msec() / 350) % 2 == 0
-	for i in 4:
+	for i in 4:  # the PowertrainHealth lamps
 		var lit: bool = on[i][0] and (not on[i][1] or slow_blink)
 		var c: Color = RED if on[i][1] else AMBER
 		lamps.multimesh.set_instance_color(i, Color(c, 1.0 if lit else 0.0))
+	# TC (2026-10-08): flickers amber while traction control is cutting.
+	tc_lamp_lit = player.tcs_active and int(Time.get_ticks_msec() / WarningLights.TC_BLINK_MS) % 2 == 0
+	lamps.multimesh.set_instance_color(4, Color(AMBER, 1.0 if tc_lamp_lit else 0.0))
 
 func _update_radio() -> void:
 	if radio == null:

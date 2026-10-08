@@ -35,8 +35,6 @@ var car_slider: HSlider
 var detail_slider: HSlider
 var fullscreen_check: CheckButton
 var resolution_option: OptionButton
-var render_scale_slider: HSlider
-var render_scale_label: Label
 var display_page: VBoxContainer
 var confirm: ConfirmBox
 var page_title: Label
@@ -157,8 +155,8 @@ func _ready() -> void:
 	add_child(confirm)  # last, so it draws over every page
 	game_state.state_changed.connect(_on_state_changed)
 
-## Display page (menus A-list, 2026-10-08): fullscreen, window size, render
-## scale. Its own page, like Controls, because the main page already fills a
+## Display page (menus A-list, 2026-10-08): fullscreen and window size (the
+## resolution scale is on the Graphics page, PR #232). Its own page, like Controls, because the main page already fills a
 ## 648 px window. Each change applies at once and is saved (DisplaySettings).
 func _build_display_page(center: CenterContainer) -> void:
 	var box := VBoxContainer.new()
@@ -192,13 +190,6 @@ func _build_display_page(center: CenterContainer) -> void:
 		DisplaySettings.set_resolution(resolution_option.get_item_metadata(i))
 		_apply_display())
 	row.add_child(resolution_option)
-	render_scale_slider = _add_slider(box, "Render scale", DisplaySettings.RENDER_SCALE_MIN, DisplaySettings.RENDER_SCALE_MAX, 0.05, DisplaySettings.render_scale,
-		func(v: float) -> void:
-			DisplaySettings.set_render_scale(v)
-			_apply_display())
-	render_scale_label = Label.new()
-	render_scale_label.custom_minimum_size = Vector2(48, 0)
-	render_scale_slider.get_parent().add_child(render_scale_label)
 	_sync_display_controls()
 	_add_button(box, "Reset to defaults", func() -> void:
 		confirm.ask("Reset the display settings to their defaults?", "Reset", reset_display_defaults))
@@ -223,8 +214,6 @@ func _sync_display_controls() -> void:
 		if resolution_option.get_item_metadata(i) == DisplaySettings.resolution:
 			resolution_option.select(i)
 	resolution_option.disabled = DisplaySettings.fullscreen  # fullscreen uses the screen's own size
-	render_scale_slider.set_value_no_signal(DisplaySettings.render_scale)
-	render_scale_label.text = "%d%%" % roundi(DisplaySettings.render_scale * 100.0)
 
 ## Resets temperatures, tyre, clutch and brake wear (the garage will own this later).
 func _service_car() -> void:

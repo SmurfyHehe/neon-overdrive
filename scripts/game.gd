@@ -65,6 +65,7 @@ func _ready() -> void:
 	TrafficSettings.load_settings()
 	FxSettings.load_settings()   # cockpit mirrors on/off and quality ([fx] in settings.cfg)
 	ViewSettings.load_settings()
+	GraphicsSettings.load_settings()   # preset, edge smoothing, render scale ([graphics])
 	# NEON_TRAFFIC=<n> overrides the saved car count, like NEON_TICKS/NEON_MUTE:
 	# tests/run_tests.bat sets 0 so the older drive-bot tests, which steer
 	# across lanes blind, do not hit traffic (tests/traffic_*.gd clear it).
@@ -91,6 +92,7 @@ func _ready() -> void:
 	add_child(fx)
 	_setup_hud()
 	_setup_game_state()
+	GraphicsSettings.apply(get_tree())
 	if benchmark:
 		add_child(Benchmark.new())
 

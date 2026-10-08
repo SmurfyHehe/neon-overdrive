@@ -91,6 +91,18 @@ var spec_template := {}
 var kind := "coupe"
 var sim_only := false
 
+## Share of the cars that are on the road (living world step 2): the night
+## clock's hour band sets it through game.gd (NightBands.traffic_share). Cars
+## over the share are benched, parked hidden and frozen like a deferred spawn,
+## and only when they recycle out of sight; when the share rises a benched car
+## comes back through a normal spawn, one per tick. 1 = every car.
+var active_share := 1.0
+## Cars benched / brought back so far; tests watch them.
+var bench_count := 0
+var unbench_count := 0
+## Cars benched while the player could see them (should stay 0).
+var bench_seen := 0
+
 var cars: Array[TrafficCar] = []
 var spawn_count := 0
 var recycle_count := 0
@@ -166,18 +178,34 @@ func _physics_process(_delta: float) -> void:
 	var pv := _player_speed()
 	var band_hi := _spawn_band().y
 	var frame := Engine.get_physics_frames()
+	var target := active_target()
+	var active := active_count()
+	var brought_back := false
 	for car in cars:
+		if car.benched:
+			if active < target and not brought_back:
+				car.benched = false
+				active += 1
+				brought_back = true
+				unbench_count += 1
+				_respawn(car)
+			continue
 		var z := RoadFrame.unroll(car.global_position).z
 		var behind := z - pz
 		if behind > PARK_BEHIND * 0.5 and frame < car.retry_frame:
 			continue  # parked after a deferred spawn, waiting to retry
 		var receding := car.direction > 0.0 or car.lane_speed() < pv
-		if behind > recycle_behind or (behind > RECYCLE_RECEDING and receding) or -behind > band_hi + RoadChunkBuilder.CHUNK_LEN:
-			recycle_count += 1
-			_respawn(car)
-		elif car.wrecked and not in_view(car.global_position):
-			recycle_count += 1
+		var recycle := behind > recycle_behind or (behind > RECYCLE_RECEDING and receding) or -behind > band_hi + RoadChunkBuilder.CHUNK_LEN
+		var wreck := not recycle and car.wrecked and not in_view(car.global_position)
+		if not (recycle or wreck):
+			continue
+		recycle_count += 1
+		if wreck:
 			wreck_recycle_count += 1
+		if active > target:
+			_bench(car, pz)  # the band wants fewer cars: this one leaves out of sight
+			active -= 1
+		else:
 			_respawn(car)
 	for car in cars:
 		car.set_detailed(absf(RoadFrame.unroll(car.global_position).z - pz) <= detail_distance)
@@ -210,6 +238,29 @@ func in_view(pos: Vector3) -> bool:
 		if cam.is_position_in_frustum(RoadFrame.roll(u + Vector3(0.0, 0.6, dz))):
 			return true
 	return false
+
+## How many cars the hour band wants on the road (active_share of the pool).
+func active_target() -> int:
+	return clampi(roundi(float(cars.size()) * clampf(active_share, 0.0, 1.0)), 0, cars.size())
+
+## Cars not benched (on the road, or waiting for a free slot).
+func active_count() -> int:
+	var n := 0
+	for car in cars:
+		if not car.benched:
+			n += 1
+	return n
+
+## Takes a car off the road for now: parked hidden and frozen far behind,
+## where a deferred spawn waits, until the share rises again.
+func _bench(car: TrafficCar, pz: float) -> void:
+	if in_view(car.global_position):
+		bench_seen += 1
+	car.benched = true
+	bench_count += 1
+	car.set_detailed(false)
+	car.place(car.lane_x, car.direction, pz + PARK_BEHIND, REST_Y, 0.0)
+	_put(car)
 
 ## Puts a car in a free slot. If every slot is taken it parks the car far
 ## behind (hidden, frozen) and tries again next tick.
@@ -461,7 +512,7 @@ func set_car_count(n: int) -> void:
 		_make_car()
 	_build_index()
 	for car in cars:
-		if RoadFrame.unroll(car.global_position).z > _player_z() + PARK_BEHIND * 0.5:
+		if not car.benched and RoadFrame.unroll(car.global_position).z > _player_z() + PARK_BEHIND * 0.5:
 			_respawn(car)
 	car_count = n
 

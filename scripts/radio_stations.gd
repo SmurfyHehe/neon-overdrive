@@ -42,6 +42,14 @@ const TIME_LINES := {
 static func time_line(hour24: int) -> String:
 	return TIME_LINES.get(hour24, "Dave: Top of the hour. Still here, still awake.")
 
+## A station's DJ rotation: its own lines, plus (talk station, band >= 0) the
+## hour band's lines from NightBands, so Dave sounds like it's 3 a.m. at 3 a.m.
+static func dj_lines(station: int, band := -1) -> Array:
+	var lines: Array = STATIONS[station].dj
+	if band < 0 or lines.is_empty():
+		return lines
+	return lines + NightBands.band_lines(band)
+
 static func station_count() -> int:
 	return STATIONS.size()
 
@@ -65,8 +73,10 @@ static func track_paths(station: int) -> Array[String]:
 ## Talk station: where Dave is at `seconds` on the station clock:
 ## {"in_break": bool, "line": index into "dj", "into": seconds into the line}.
 ## Music stations never have a break (empty dj list).
-static func break_state(station: int, seconds: float) -> Dictionary:
-	var lines: Array = STATIONS[station].dj
+## `band` (NightBands.Band, -1 = none) adds Dave's lines for that part of the
+## night to his rotation (dj_lines).
+static func break_state(station: int, seconds: float, band := -1) -> Dictionary:
+	var lines: Array = dj_lines(station, band)
 	if lines.is_empty():
 		return {"in_break": false, "line": 0, "into": 0.0}
 	var pos := fposmod(seconds, DAVE_PERIOD)

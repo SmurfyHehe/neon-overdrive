@@ -31,9 +31,20 @@ var game_state: GameState
 var resume_button: Button
 var volume_sliders := {}   # channel -> HSlider
 var fov_slider: HSlider
+var car_slider: HSlider
+var detail_slider: HSlider
 var fullscreen_check: CheckButton
 var resolution_option: OptionButton
 var display_page: VBoxContainer
+var confirm: ConfirmBox
+var page_title: Label
+var reset_button: Button
+var service_button: Button
+var restart_button: Button
+var quit_button: Button
+var title_back_button: Button
+## Set while the menu is open as the title screen's Settings; called by Back.
+var _title_back: Callable
 var display_back_button: Button
 var main_page: VBoxContainer
 var controls_page: VBoxContainer
@@ -58,12 +69,13 @@ func _ready() -> void:
 	add_child(center)
 
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 8)
+	box.add_theme_constant_override("separation", 5)  # 8 overflowed a 648 px window once Reset joined
 	center.add_child(box)
 	main_page = box
 
 	var title := Label.new()
 	title.text = "PAUSED"
+	page_title = title
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 
@@ -98,14 +110,14 @@ func _ready() -> void:
 	traffic_title.text = "Traffic"
 	traffic_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(traffic_title)
-	_add_slider(box, "Cars", 0.0, TrafficSettings.CAR_COUNT_MAX, 5.0, TrafficSettings.car_count,
+	car_slider = _add_slider(box, "Cars", 0.0, TrafficSettings.CAR_COUNT_MAX, 5.0, TrafficSettings.car_count,
 		func(v: float) -> void:
 			TrafficSettings.set_car_count(int(v))
 			TrafficSettings.save_settings()
 			var traffic: Variant = get_parent().get("traffic")
 			if traffic != null:
 				traffic.set_car_count(TrafficSettings.car_count))
-	_add_slider(box, "Draw dist", TrafficSettings.DETAIL_MIN, TrafficSettings.DETAIL_MAX, 10.0, TrafficSettings.detail_distance,
+	detail_slider = _add_slider(box, "Draw dist", TrafficSettings.DETAIL_MIN, TrafficSettings.DETAIL_MAX, 10.0, TrafficSettings.detail_distance,
 		func(v: float) -> void:
 			TrafficSettings.set_detail_distance(v)
 			TrafficSettings.save_settings()
@@ -127,12 +139,20 @@ func _ready() -> void:
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	_add_button(box, "Controls", show_controls)
 	_add_button(box, "Display", show_display)
-	_add_button(box, "Service car (reset wear)", _service_car)
-	_add_button(box, "Restart", game_state.restart)
-	_add_button(box, "Quit", game_state.quit)
+	reset_button = _add_button(box, "Reset to defaults", func() -> void:
+		confirm.ask("Reset volume, traffic and view to their defaults?", "Reset", reset_main_defaults))
+	service_button = _add_button(box, "Service car (reset wear)", _service_car)
+	restart_button = _add_button(box, "Restart", func() -> void:
+		confirm.ask("Restart the run?", "Restart", game_state.restart))
+	quit_button = _add_button(box, "Quit", func() -> void:
+		confirm.ask("Quit to desktop?", "Quit", game_state.quit))
+	title_back_button = _add_button(box, "Back", close_title_settings)
+	title_back_button.visible = false
 
 	_build_controls_page(center)
 	_build_display_page(center)
+	confirm = ConfirmBox.new(game_state)
+	add_child(confirm)  # last, so it draws over every page
 	game_state.state_changed.connect(_on_state_changed)
 
 ## Display page (menus A-list, 2026-10-08): fullscreen and window size (the
@@ -171,6 +191,8 @@ func _build_display_page(center: CenterContainer) -> void:
 		_apply_display())
 	row.add_child(resolution_option)
 	_sync_display_controls()
+	_add_button(box, "Reset to defaults", func() -> void:
+		confirm.ask("Reset the display settings to their defaults?", "Reset", reset_display_defaults))
 	display_back_button = _add_button(box, "Back", show_main)
 
 func show_display() -> void:
@@ -226,9 +248,66 @@ func _add_button(parent: Control, text: String, action: Callable) -> Button:
 	return b
 
 func _on_state_changed(new_state: GameState.State, _old_state: GameState.State) -> void:
+	_set_title_mode(false)
 	visible = new_state == GameState.State.PAUSED
 	if visible:
 		show_main()  # always reopen on the main page
+
+## Volume, traffic and view back to their defaults (the Display page has its own reset).
+func reset_main_defaults() -> void:
+	for channel in AudioSettings.CHANNELS:
+		AudioSettings.set_volume(channel, 1.0)
+		volume_sliders[channel].set_value_no_signal(1.0)
+	AudioSettings.save_settings()
+	TrafficSettings.set_car_count(TrafficSettings.CAR_COUNT_DEFAULT)
+	TrafficSettings.set_detail_distance(TrafficSettings.DETAIL_DEFAULT)
+	TrafficSettings.save_settings()
+	var traffic: Variant = get_parent().get("traffic")
+	if traffic != null:
+		traffic.set_car_count(TrafficSettings.car_count)
+		traffic.detail_distance = TrafficSettings.detail_distance
+	car_slider.set_value_no_signal(TrafficSettings.car_count)
+	detail_slider.set_value_no_signal(TrafficSettings.detail_distance)
+	ViewSettings.set_cockpit_fov(ViewSettings.COCKPIT_FOV_DEFAULT)
+	ViewSettings.save_settings()
+	fov_slider.set_value_no_signal(ViewSettings.cockpit_fov)
+
+func reset_display_defaults() -> void:
+	DisplaySettings.reset_defaults()
+	_apply_display()
+
+# ---------- opened from the title screen ----------
+## The title screen's Settings: the same pages, without Resume / Service /
+## Restart / Quit (there is no run yet), and Back returns to the title.
+func open_title_settings(on_back: Callable) -> void:
+	_title_back = on_back
+	_set_title_mode(true)
+	visible = true
+	show_main()
+
+func close_title_settings() -> void:
+	visible = false
+	_set_title_mode(false)
+	if _title_back.is_valid():
+		_title_back.call()
+
+## Esc is Back while the menu is the title screen's Settings (GameState ignores
+## Esc in TITLE); the open "are you sure?" box takes it first.
+func _unhandled_input(event: InputEvent) -> void:
+	if not visible or not title_back_button.visible or confirm.is_open():
+		return
+	if event.is_action_pressed("ui_cancel"):
+		get_viewport().set_input_as_handled()
+		if main_page.visible:
+			close_title_settings()
+		else:
+			show_main()
+
+func _set_title_mode(on: bool) -> void:
+	for b in [resume_button, service_button, restart_button, quit_button]:
+		b.visible = not on
+	title_back_button.visible = on
+	page_title.text = "SETTINGS" if on else "PAUSED"
 
 # ---------- Controls page ----------
 func show_controls() -> void:
@@ -243,7 +322,7 @@ func show_main() -> void:
 	main_page.visible = true
 	controls_page.visible = false
 	display_page.visible = false
-	resume_button.grab_focus()  # keyboard/controller can navigate the menu
+	(title_back_button if title_back_button.visible else resume_button).grab_focus()  # keyboard/controller can navigate the menu
 
 func _build_controls_page(center: CenterContainer) -> void:
 	controls_page = VBoxContainer.new()

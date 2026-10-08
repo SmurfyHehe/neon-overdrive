@@ -20,7 +20,10 @@ extends Node
 # AUTOTUNE with it expanded (Y). The Auto-Tune search runs in a
 # separate headless Godot process (scripts/auto_tune_job.gd), because the game's
 # physics can neither run faster than real time nor be stepped by hand.
-enum State { PLAYING, PAUSED, TUNING, AUTOTUNE }
+# TITLE (menus A-list, 2026-10-08) is the title screen before the first drive:
+# paused like PAUSED, the TitleScreen shows instead of the pause menu. Only the
+# first boot of a session shows it; Restart goes straight back to the road.
+enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, TITLE }
 
 signal state_changed(new_state: State, old_state: State)
 
@@ -29,6 +32,25 @@ var state: State = State.PLAYING
 ## Pause when the window loses focus (alt-tab). Game turns it on for real play
 ## sessions only, so a test window that loses focus keeps running.
 var pause_on_focus_loss := false
+
+## Set once the player has left the title screen; a static, so it survives the
+## scene reload that Restart does (instant retry, no title in between).
+static var title_seen := false
+
+## True while a ConfirmBox is open: Esc belongs to the box (it means No), so the
+## polled pause key is ignored. swallow_pause_press() also skips the press that
+## closed the box, which the next physics tick would otherwise still see.
+var modal_open := false
+var _swallow_pause_until := -1
+
+func swallow_pause_press() -> void:
+	_swallow_pause_until = Engine.get_physics_frames() + 2
+
+## Title screen at boot: in a real play session, or when a test sets NEON_TITLE=1.
+static func wants_title() -> bool:
+	if title_seen:
+		return false
+	return OS.get_environment("NEON_TITLE") == "1" or DisplaySettings.player_run()
 
 # T, Y and Esc are polled, which means a key typed into a text field (a tune slot
 # name) would also switch tabs or close the tuner. _input() runs before the GUI
@@ -63,8 +85,13 @@ func _input(event: InputEvent) -> void:
 func _physics_process(_delta: float) -> void:
 	var blocked := _typed_into_text
 	_typed_into_text = {}
+	if state == State.TITLE and _title_freeze_at >= 0 and Engine.get_physics_frames() >= _title_freeze_at:
+		_title_freeze_at = -1
+		get_tree().paused = true
+	var swallowed := modal_open or Engine.get_physics_frames() <= _swallow_pause_until
 	if Input.is_action_just_pressed("pause") and not blocked.has(&"pause"):
-		toggle_pause()
+		if not swallowed:
+			toggle_pause()
 	elif Input.is_action_just_pressed("tuning_panel") and not blocked.has(&"tuning_panel"):
 		toggle_tuning()
 	elif Input.is_action_just_pressed("autotune_panel") and not blocked.has(&"autotune_panel"):
@@ -126,6 +153,27 @@ func close_autotune() -> void:
 	if state == State.AUTOTUNE:
 		get_tree().paused = false
 		_set_state(State.PLAYING)
+
+## The world freezes a few ticks after the title appears, so the car settles on
+## its springs and the camera reaches its place behind it first (a tree paused
+## on the very first frame left the camera looking sideways).
+const TITLE_SETTLE_TICKS := 20
+var _title_freeze_at := -1
+
+func enter_title() -> void:
+	if state != State.PLAYING:
+		return
+	_title_freeze_at = Engine.get_physics_frames() + TITLE_SETTLE_TICKS
+	_set_state(State.TITLE)
+
+## Drive from the title screen.
+func start_drive() -> void:
+	if state != State.TITLE:
+		return
+	title_seen = true
+	_title_freeze_at = -1
+	get_tree().paused = false
+	_set_state(State.PLAYING)
 
 # Fresh run: reload the whole scene. Cheapest correct reset -- no per-system
 # reset code to keep in sync as systems are added.

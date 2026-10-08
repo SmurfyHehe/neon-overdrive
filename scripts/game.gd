@@ -401,6 +401,9 @@ func _setup_game_state() -> void:
 	add_child(WarningLights.new(player))
 	radio = RadioManager.new()
 	add_child(radio)
+	add_child(TitleScreen.new(game_state))
+	if GameState.wants_title():
+		game_state.enter_title()
 
 func _process(_delta: float) -> void:
 	_update_chunk_pool(RoadFrame.unroll(player.position).z)

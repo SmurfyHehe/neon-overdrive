@@ -7,10 +7,18 @@ extends CanvasLayer
 # AUTOTUNE).
 #
 #   +------------+------------------------------+-------------+
-#   | page list  | the page: notch bars or a    | stat panel  |
-#   |            | panel (Mechanic, Sound, Adv) | before/now  |
+#   | page list  |   your car, on the bench     | stat panel  |
+#   |            |   (TunerBench: camera, work  | before/now  |
+#   |            |   light, the part outlined)  |             |
+#   |            +------------------------------+             |
+#   |            | the page: notch bars or a    |             |
+#   |            | panel (Mechanic, Sound, Adv) |             |
+#   |            | hint: what the setting does  |             |
 #   +------------+------------------------------+-------------+
-#   | hint: what the focused setting does                      |
+#
+# Car on the bench (Tuner UI overhaul PR 1, 2026-10-08): the panels are plates
+# round a clear middle where TunerBench shows the live car from a shop angle
+# per page. The plates leave the car window as big as each page allows.
 #
 # Pages, settings, presets and the estimates live in TunerModel. The older
 # panels keep their logic and tests and sit on their own pages: AutoTunePanel on
@@ -77,6 +85,13 @@ var stats: TunerStats
 ## Notches and stats when the screen opened, shown as ghosts.
 var before_notches := {}
 var before_stats := {}
+## The car on the bench, and the clear part of the screen it is framed in.
+var bench: TunerBench
+var car_window: Control
+var page_plate: PanelContainer
+var page_scroll: ScrollContainer
+## The chase camera's view before the Tuner opened (cockpit is put back on close).
+var _was_cockpit := false
 
 func _init(car: PlayerCar, state: GameState) -> void:
 	player = car
@@ -96,21 +111,23 @@ func _ready() -> void:
 
 	var frame := PanelContainer.new()
 	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
-	frame.offset_left = MARGIN
+	frame.offset_left = 10
 	frame.offset_top = 8
-	frame.offset_right = -MARGIN
-	frame.offset_bottom = -MARGIN
+	frame.offset_right = -10
+	frame.offset_bottom = -10
 	frame.theme = UiTheme.get_theme()  # job sheet: shared plates, slabs and fonts (UI blend PR 2)
-	var bg := UiTheme.plate_panel()  # near-opaque: bright buildings behind made the text unreadable
-	bg.set_content_margin_all(10)
-	frame.add_theme_stylebox_override("panel", bg)
+	# Clear: each column is its own near-opaque plate (bright buildings behind
+	# made bare text unreadable) and the car shows between them.
+	frame.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	add_child(frame)
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 8)
 	frame.add_child(column)
 
+	var header_plate := _plate(6)
+	column.add_child(header_plate)
 	var header := HBoxContainer.new()
-	column.add_child(header)
+	header_plate.add_child(header)
 	car_label = _label("JOB SHEET   P1 COUPE", SODIUM)
 	car_label.add_theme_font_override("font", UiTheme.font("display"))
 	car_label.add_theme_font_size_override("font_size", 32)
@@ -122,12 +139,14 @@ func _ready() -> void:
 
 	var body := HBoxContainer.new()
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 16)
+	body.add_theme_constant_override("separation", 10)
 	column.add_child(body)
 
+	var list_plate := _plate(8)
+	body.add_child(list_plate)
 	var page_list := VBoxContainer.new()
 	page_list.custom_minimum_size = Vector2(130, 0)
-	body.add_child(page_list)
+	list_plate.add_child(page_list)
 	for p in TunerModel.pages():
 		var l := _label(p.title, SILVER)
 		page_list.add_child(l)
@@ -135,14 +154,24 @@ func _ready() -> void:
 
 	var middle := VBoxContainer.new()
 	middle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	middle.add_theme_constant_override("separation", 8)
 	body.add_child(middle)
+	car_window = Control.new()
+	car_window.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	car_window.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	middle.add_child(car_window)
+	page_plate = _plate(8)
+	middle.add_child(page_plate)
+	var page_box := VBoxContainer.new()
+	page_box.add_theme_constant_override("separation", 6)
+	page_plate.add_child(page_box)
 	page_title = _label("", SODIUM)
-	middle.add_child(page_title)
+	page_box.add_child(page_title)
 	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.follow_focus = true
-	middle.add_child(scroll)
+	page_box.add_child(scroll)
+	page_scroll = scroll
 	var holder := VBoxContainer.new()
 	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(holder)
@@ -199,9 +228,11 @@ func _ready() -> void:
 		holder.add_child(panel_pages[id])
 		panel_pages[id].visible = false
 
+	var right_plate := _plate(8)
+	body.add_child(right_plate)
 	var right := VBoxContainer.new()
 	right.custom_minimum_size = Vector2(250, 0)
-	body.add_child(right)
+	right_plate.add_child(right)
 	stats = TunerStats.new()
 	right.add_child(stats)
 	pit_wall = PitWall.new()
@@ -216,11 +247,22 @@ func _ready() -> void:
 	hint = _label("", SILVER)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.custom_minimum_size = Vector2(0, 44)
-	column.add_child(hint)
+	page_box.add_child(hint)
+
+	bench = TunerBench.new(player)
+	get_parent().add_child.call_deferred(bench)
 
 	manual.tune_changed.connect(_on_panel_changed)
 	auto.tune_changed.connect(_on_auto_changed)
 	game_state.state_changed.connect(_on_state_changed)
+
+## A near-opaque work plate with `pad` pixels inside.
+func _plate(pad: int) -> PanelContainer:
+	var p := PanelContainer.new()
+	var bg := UiTheme.plate_panel()
+	bg.set_content_margin_all(pad)
+	p.add_theme_stylebox_override("panel", bg)
+	return p
 
 func _label(text: String, colour: Color) -> Label:
 	var l := Label.new()
@@ -242,12 +284,47 @@ func _on_state_changed(new_state: GameState.State, old_state: GameState.State) -
 			for p in TunerModel.pages():
 				for s in p.settings:
 					before_notches[s.id] = model.notch(s)
+			_open_bench()
 		show_page("mechanic" if new_state == GameState.State.AUTOTUNE else "setup")
 	else:
+		_close_bench()
 		# Sliders and buttons keep keyboard focus otherwise and eat the arrow keys.
 		var focused := get_viewport().gui_get_focus_owner()
 		if focused:
 			focused.release_focus()
+
+# ---------- the car on the bench ----------
+
+func _open_bench() -> void:
+	if bench == null or not bench.is_inside_tree():
+		return
+	var chase: Variant = get_parent().get("camera")
+	_was_cockpit = chase is ChaseCamera and chase.view == ChaseCamera.View.COCKPIT
+	if _was_cockpit:
+		chase.set_view(ChaseCamera.View.CHASE)  # the body is hidden in the cockpit
+	var layers := []
+	for c in get_parent().get_children():
+		if c is Hud or c is WarningLights:
+			layers.append(c)
+	bench.open(layers)
+
+func _close_bench() -> void:
+	if bench == null or not bench.is_open:
+		return
+	bench.close()
+	var chase: Variant = get_parent().get("camera")
+	if _was_cockpit and chase is ChaseCamera:
+		chase.set_view(ChaseCamera.View.COCKPIT)
+	_was_cockpit = false
+
+## How tall the page plate's scroll area is on each page: settings pages fit
+## their rows, the panel pages get more, and the car keeps the rest.
+func _page_height(id: String) -> float:
+	match id:
+		"setup": return 190.0
+		"mechanic", "advanced": return 360.0
+		"sound": return 300.0
+	return minf(30.0 * (TunerModel.page(id).settings.size() + 1) + 6.0, 300.0)
 
 func current_page() -> String:
 	return page_ids[page_index]
@@ -262,6 +339,9 @@ func show_page(id: String) -> void:
 		page_labels[i].add_theme_color_override("font_color", SODIUM if i == page_index else SILVER)
 	for pid in panel_pages:
 		panel_pages[pid].visible = pid == id
+	page_scroll.custom_minimum_size = Vector2(0, _page_height(id))
+	if bench != null and bench.outline != null:
+		bench.show_page(id)
 	for c in content.get_children():
 		c.queue_free()
 	rows = []
@@ -434,6 +514,8 @@ func cancel_test_run(why: String) -> void:
 	test_button.text = why
 
 func _process(delta: float) -> void:
+	if visible and bench != null and car_window != null:
+		bench.frame_rect = car_window.get_global_rect()
 	if not test_running():
 		return
 	if Time.get_ticks_msec() - _test_started_ms > test_timeout_s * 1000.0:

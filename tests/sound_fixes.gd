@@ -13,7 +13,8 @@ extends SceneTree
 #   window up at speed; the mirror whistle only above ~140 km/h
 # - tyres: each kind fed on one side plays on that side's player only
 # - shifts: up and down shifts count separately; the thump and clack players
-#   hold five random variants
+#   hold five random variants, and so does the chirp; every continuous wind and
+#   road layer and the scrape run as two takes of different lengths
 # - crashes: driving into a wall at 25 m/s is one hit of crunch size or more;
 #   a reset that zeroes the velocity in the air is not a hit; sliding along a
 #   wall scrapes
@@ -34,6 +35,8 @@ var drive: DrivelineAudio
 var persp: PerspectiveAudio
 var wall: StaticBody3D
 var scrape_peak := 0.0
+var biggest_hit := ""
+var biggest_dv := 0.0
 var quit_in := 0
 var samples := {}
 var key_down := false
@@ -218,11 +221,14 @@ func _process(delta: float) -> bool:
 				samples.hits0 = crash.impact_count
 				_go("crash")
 		"crash":
+			if crash.last_dv > biggest_dv and crash.impact_count > samples.hits0:
+				biggest_dv = crash.last_dv
+				biggest_hit = crash.last_tier
 			if step_t > 1.5:
 				var hits: int = crash.impact_count - samples.hits0
-				print("wall at 25 m/s: %d hit(s), last %s at %.1f m/s" % [hits, crash.last_tier, crash.last_dv])
+				print("wall at 25 m/s: %d hit(s), biggest %s at %.1f m/s" % [hits, biggest_hit, biggest_dv])
 				_check(hits >= 1, "driving into a wall at 25 m/s made no crash sound")
-				_check(crash.last_tier in ["crunch", "glass"], "a 25 m/s wall hit should crunch, got %s (%.1f m/s)" % [crash.last_tier, crash.last_dv])
+				_check(biggest_hit in ["crunch", "glass"], "a 25 m/s wall hit should crunch, got %s (%.1f m/s)" % [biggest_hit, biggest_dv])
 				wall.queue_free()
 				_go("scrape_setup")
 		"scrape_setup":
@@ -273,6 +279,15 @@ func _check_variants() -> void:
 		var pl := crash.get_node_or_null(tier.capitalize() + "Audio") as AudioStreamPlayer
 		var r := pl.stream as AudioStreamRandomizer if pl != null else null
 		_check(r != null and r.streams_count == CrashAudio.VARIANTS, "%s should hold %d variants" % [tier, CrashAudio.VARIANTS])
+	var chirp := car.get_node("ChirpAudio").stream as AudioStreamRandomizer
+	_check(chirp != null and chirp.streams_count == CarAudio.CHIRP_VARIANTS, "the chirp should hold %d variants" % CarAudio.CHIRP_VARIANTS)
+	for layer in CarAudio.PAIRED:
+		var a := car.get_node((layer as String).to_pascal_case() + "Audio") as AudioStreamPlayer
+		var b := car.get_node((layer + "_b").to_pascal_case() + "Audio") as AudioStreamPlayer
+		var la := (a.stream as AudioStreamWAV).loop_end
+		var lb := (b.stream as AudioStreamWAV).loop_end
+		_check(la != lb, "%s: the two takes should differ in length (%d, %d)" % [layer, la, lb])
+	_check(crash.get_node_or_null("ScrapeBAudio") != null, "the scrape should have a second take")
 
 func _finish() -> void:
 	if quit_in > 0 or game == null:

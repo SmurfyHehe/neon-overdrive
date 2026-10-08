@@ -10,8 +10,9 @@ class_name CrashAudio
 # how much the car's velocity changes in one tick. Here only the horizontal
 # part counts (landings are DrivelineAudio's), and only while the body is
 # actually touching something, so a respawn or a reset that zeroes the
-# velocity stays silent. A hit is summed over the ticks it lasts, then played
-# once at its size:
+# velocity stays silent. A hit opens a short window (HIT_WINDOW) and every
+# horizontal velocity change inside it is summed, so one crash that judders
+# over a few ticks is one sound at its full size, not several taps:
 # - tap    (under 3 m/s):  a light knock and a panel ring;
 # - thud   (3-7 m/s):      the body thump;
 # - crunch (7 m/s and up): the thud plus crumpling metal;
@@ -29,6 +30,7 @@ const THUD_DV := 3.0
 const CRUNCH_DV := 7.0
 const GLASS_DV := 10.0
 const GLASS_CHANCE := 0.65
+const HIT_WINDOW := 0.12         # s: one hit gathers everything this long after it starts
 const CONTACT_GRACE := 4         # ticks a contact counts after it ends (reports lag a tick)
 const COOLDOWN := 0.12           # s between two hits
 const GAIN := {"tap": 0.45, "thud": 0.75, "crunch": 0.8, "glass": 0.45}
@@ -48,8 +50,10 @@ static var _streams := {}
 var _vehicle: Vehicle
 var _players := {}
 var _scrape: AudioStreamPlayer
+var _scrape_b: AudioStreamPlayer  # a second take, another length: the two never line up into a repeat
 var _prev_vel := Vector3.ZERO
 var _hit_dv := 0.0
+var _hit_left := -1.0            # s left in the open hit window, < 0 = none open
 var _contact := 0
 var _wait := 0.0
 var _rng := RandomNumberGenerator.new()
@@ -76,13 +80,18 @@ func _ready() -> void:
 		p.max_polyphony = 3
 		add_child(p)
 		_players[tier] = p
-	_scrape = AudioStreamPlayer.new()
-	_scrape.name = "ScrapeAudio"
-	_scrape.stream = stream("scrape")
-	_scrape.bus = &"Tires"
-	_scrape.volume_db = -80.0
-	add_child(_scrape)
-	_scrape.play()
+	_scrape = _loop_player("ScrapeAudio", "scrape")
+	_scrape_b = _loop_player("ScrapeBAudio", "scrape_b")
+
+func _loop_player(node_name: String, layer: String) -> AudioStreamPlayer:
+	var p := AudioStreamPlayer.new()
+	p.name = node_name
+	p.stream = stream(layer)
+	p.bus = &"Tires"
+	p.volume_db = -80.0
+	add_child(p)
+	p.play()
+	return p
 
 func _physics_process(delta: float) -> void:
 	_wait = maxf(_wait - delta, 0.0)
@@ -92,11 +101,15 @@ func _physics_process(delta: float) -> void:
 	var touching := _vehicle.get_contact_count() > 0
 	_contact = CONTACT_GRACE if touching else maxi(_contact - 1, 0)
 	var dvh := Vector2(dv.x, dv.z).length()
-	if dvh / delta > IMPACT_ACCEL and _contact > 0:
+	if _hit_left >= 0.0:
 		_hit_dv += dvh
-	elif _hit_dv > 0.0:
-		impact(_hit_dv)
-		_hit_dv = 0.0
+		_hit_left -= delta
+		if _hit_left < 0.0:
+			impact(_hit_dv)
+			_hit_dv = 0.0
+	elif dvh / delta > IMPACT_ACCEL and _contact > 0:
+		_hit_dv = dvh
+		_hit_left = HIT_WINDOW
 
 func _process(delta: float) -> void:
 	var speed := _vehicle.speed
@@ -107,8 +120,11 @@ func _process(delta: float) -> void:
 	var target := smoothstep(SCRAPE_FROM, SCRAPE_FULL, speed) if touching else 0.0
 	var rate := ATTACK if target > scrape_level else RELEASE
 	scrape_level = lerpf(scrape_level, target, 1.0 - exp(-rate * delta))
-	_scrape.volume_db = linear_to_db(scrape_level * SCRAPE_GAIN) if scrape_level > 0.001 else -80.0
+	var db := linear_to_db(scrape_level * SCRAPE_GAIN * 0.71) if scrape_level > 0.001 else -80.0
+	_scrape.volume_db = db
+	_scrape_b.volume_db = db
 	_scrape.pitch_scale = 0.8 + 0.4 * clampf(speed / 30.0, 0.0, 1.2)
+	_scrape_b.pitch_scale = _scrape.pitch_scale * 0.97
 
 ## Plays one hit of this size (m/s of velocity change). Public so the listen
 ## pack and tests can fire hits directly.
@@ -153,8 +169,8 @@ static func _make(layer: String) -> AudioStreamWAV:
 	var r := float(MIX_RATE)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(layer)
-	if layer == "scrape":
-		return AudioDsp.to_wav(_scrape_loop(rng), MIX_RATE, true)
+	if layer.begins_with("scrape"):
+		return AudioDsp.to_wav(_scrape_loop(rng, 2.0 if layer == "scrape" else 2.7), MIX_RATE, true)
 	var tier := layer.rstrip("0123456789")
 	var secs: float = {"tap": 0.18, "thud": 0.45, "crunch": 0.95, "glass": 0.9}[tier]
 	var n := int(secs * r)
@@ -233,9 +249,9 @@ static func _make(layer: String) -> AudioStreamWAV:
 
 ## Metal dragging along a wall: noise in stick-slip bursts through hard,
 ## slightly detuned resonances, with grit on top.
-static func _scrape_loop(rng: RandomNumberGenerator) -> PackedFloat32Array:
+static func _scrape_loop(rng: RandomNumberGenerator, secs: float) -> PackedFloat32Array:
 	var r := float(MIX_RATE)
-	var n := int(2.0 * r)
+	var n := int(secs * r)
 	var fade := int(0.15 * r)
 	var total := n + fade
 	var res := [AudioDsp.bp(r, 720.0, 18.0), AudioDsp.bp(r, 1650.0, 20.0), AudioDsp.bp(r, 2900.0, 22.0)]

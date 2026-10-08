@@ -30,7 +30,7 @@ extends SceneTree
 # - the whole drive (launch, handbrake spin, kerb) makes no crash sound and no
 #   scrape (CrashAudio, 2026-10-08)
 # - every looping player (tyre kinds per side, buffet, rush, whistle, throb,
-#   road dark/bright, surface) playing, on the World/Tires buses that exist
+#   road dark/bright, each wind/road layer's second take, surface) playing, on the World/Tires buses that exist
 # Also records the real mixed output (engine + these layers) from the Master
 # bus to user://stage_a_drive.wav and reports how loud each phase is.
 #
@@ -94,6 +94,8 @@ func _check_loops() -> void:
 	AudioDsp.use_cache = false  # time and check the real build, not the disk cache
 	var t0 := Time.get_ticks_usec()
 	var layers := ["buffet", "rush", "whistle", "throb", "road_dark", "road_bright", "surface"]
+	for layer in CarAudio.PAIRED:
+		layers.append(layer + "_b")
 	for kind in CarAudio.KINDS:
 		layers.append(kind + "_l")
 		layers.append(kind + "_r")
@@ -259,6 +261,8 @@ func _physics_process(_delta: float) -> bool:
 func _check_players() -> void:
 	var want := {"BuffetAudio": &"World", "RushAudio": &"World", "WhistleAudio": &"World", "ThrobAudio": &"World",
 		"RoadDarkAudio": &"Tires", "RoadBrightAudio": &"Tires", "SurfaceAudio": &"Tires"}
+	for layer in CarAudio.PAIRED:
+		want[(layer + "_b").to_pascal_case() + "Audio"] = want[layer.to_pascal_case() + "Audio"]
 	for kind in CarAudio.KINDS:
 		want[kind.capitalize() + "LAudio"] = &"Tires"
 		want[kind.capitalize() + "RAudio"] = &"Tires"

@@ -29,6 +29,11 @@ class_name CarAudio
 #   sealed hush plus a seal whistle at speed; cracked open, the low "throb" a
 #   real car makes; fully open, the full buffet. The chase view is always
 #   outside sound.
+# - no audible repeat (Roy, 2026-10-08: "multiple sounds for things that are
+#   repetitive"): every continuous layer (wind buffet, rush, whistle, both
+#   road loops) plays as two takes of different lengths and seeds, a hair
+#   apart in pitch, so their sum never repeats; the chirp is five variants
+#   picked at random with pitch and volume jitter.
 # Volume and pitch move every frame through AudioStreamPlayer, so the mixing
 # itself is engine code, not GDScript. Every curve is a starting value for Roy
 # to judge by ear (the listen pack: tests/sound_listen_pack.gd).
@@ -59,6 +64,9 @@ const SPIN_FULL := 0.5
 const LOCK_START := 0.2
 const LOCK_FULL := 0.6
 const KINDS := ["scrub", "squeal", "spin", "lock"]
+## Continuous layers played as two takes (A, and "_b" of TAKE_B_SECS).
+const PAIRED := ["buffet", "rush", "whistle", "road_dark", "road_bright"]
+const CHIRP_VARIANTS := 5
 # Stage A's single-squeal thresholds. Skid marks (skid_marks.gd) still start
 # from these, so they are kept as they were.
 const LAT_START := 0.10
@@ -125,14 +133,17 @@ func _ready() -> void:
 		tyre[kind] = [0.0, 0.0]
 		_players[kind + "_l"] = _add_player(kind + "_l", &"Tires")
 		_players[kind + "_r"] = _add_player(kind + "_r", &"Tires")
-	_players.buffet = _add_player("buffet", &"World")
-	_players.rush = _add_player("rush", &"World")
-	_players.whistle = _add_player("whistle", &"World")
+	for layer in PAIRED:
+		var bus := &"Tires" if layer.begins_with("road") else &"World"
+		_players[layer] = _add_player(layer, bus)
+		_players[layer + "_b"] = _add_player(layer + "_b", bus)
 	_players.throb = _add_player("throb", &"World")
-	_players.road_dark = _add_player("road_dark", &"Tires")
-	_players.road_bright = _add_player("road_bright", &"Tires")
 	_players.surface = _add_player("surface", &"Tires")
 	_players.chirp = _add_player("chirp", &"Tires", false)
+	var chirps: Array[AudioStream] = []
+	for k in CHIRP_VARIANTS:
+		chirps.append(stream("chirp" if k == 0 else "chirp%d" % k))
+	_players.chirp.stream = AudioDsp.randomizer(chirps, 1.08, 2.0)
 
 func _add_player(layer: String, bus_name: StringName, looping := true) -> AudioStreamPlayer:
 	var p := AudioStreamPlayer.new()
@@ -215,14 +226,13 @@ func _process(delta: float) -> void:
 		_chirp_wait = CHIRP_COOLDOWN
 		var c: AudioStreamPlayer = _players.chirp
 		c.volume_db = linear_to_db(CHIRP_GAIN)
-		c.pitch_scale = 0.95 + _rng.randf() * 0.12
 		c.play()
 	_spin_prev = spin_now
 
 	# --- road: louder and brighter, barely higher
 	var bright := smoothstep(4.0, 45.0, speed)
-	_drive_layer(_players.road_dark, road_level * ROAD_GAIN * (1.0 - 0.55 * bright), 0.92 + 0.1 * clampf(speed / 45.0, 0.0, 1.2))
-	_drive_layer(_players.road_bright, road_level * ROAD_GAIN * bright, 0.94 + 0.1 * clampf(speed / 45.0, 0.0, 1.2))
+	_drive_pair("road_dark", road_level * ROAD_GAIN * (1.0 - 0.55 * bright), 0.92 + 0.1 * clampf(speed / 45.0, 0.0, 1.2))
+	_drive_pair("road_bright", road_level * ROAD_GAIN * bright, 0.94 + 0.1 * clampf(speed / 45.0, 0.0, 1.2))
 	_drive_layer(_players.surface, surface_level * SURFACE_GAIN, 0.5 + clampf(speed / 30.0, 0.0, 1.5))
 
 	# --- wind
@@ -238,9 +248,9 @@ func _process(delta: float) -> void:
 	var crack := smoothstep(0.02, 0.12, window) * (1.0 - smoothstep(0.3, 0.65, window))
 	throb_level = _approach(throb_level, cabin * crack * smoothstep(10.0, 30.0, speed), delta)
 	var wind_pitch := 0.96 + 0.08 * clampf(speed / WIND_FULL, 0.0, 1.2)
-	_drive_layer(_players.buffet, pow(wind_level, 0.8) * gust * inside * buffet_boost * BUFFET_GAIN * (1.0 - 0.35 * rush_mix), wind_pitch)
-	_drive_layer(_players.rush, wind_level * (0.6 + 0.4 * gust) * inside * lerpf(1.0, buffet_boost, 0.6) * RUSH_GAIN * (0.35 + 0.65 * rush_mix), wind_pitch)
-	_drive_layer(_players.whistle, whistle_level * gust * WHISTLE_GAIN, 0.97 + 0.12 * clampf((speed - WHISTLE_FROM) / 30.0, 0.0, 1.0))
+	_drive_pair("buffet", pow(wind_level, 0.8) * gust * inside * buffet_boost * BUFFET_GAIN * (1.0 - 0.35 * rush_mix), wind_pitch)
+	_drive_pair("rush", wind_level * (0.6 + 0.4 * gust) * inside * lerpf(1.0, buffet_boost, 0.6) * RUSH_GAIN * (0.35 + 0.65 * rush_mix), wind_pitch)
+	_drive_pair("whistle", whistle_level * gust * WHISTLE_GAIN, 0.97 + 0.12 * clampf((speed - WHISTLE_FROM) / 30.0, 0.0, 1.0))
 	_drive_layer(_players.throb, throb_level * THROB_GAIN, 0.9 + 0.2 * clampf(speed / 50.0, 0.0, 1.0))
 
 ## Gusts: a slow random wander of the wind level, quicker and wider at speed.
@@ -269,6 +279,12 @@ func _approach(current: float, target: float, delta: float) -> float:
 	var rate := ATTACK if target > current else RELEASE
 	return lerpf(current, target, 1.0 - exp(-rate * delta))
 
+## A PAIRED layer: both takes at -3 dB each (uncorrelated noise, so the sum
+## keeps the single loop's loudness), B a touch lower so they drift apart.
+func _drive_pair(layer: String, amplitude: float, pitch: float) -> void:
+	_drive_layer(_players[layer], amplitude * 0.71, pitch)
+	_drive_layer(_players[layer + "_b"], amplitude * 0.71, pitch * 0.985)
+
 func _drive_layer(p: AudioStreamPlayer, amplitude: float, pitch: float) -> void:
 	p.volume_db = linear_to_db(amplitude) if amplitude > 0.0005 else -80.0
 	p.pitch_scale = pitch
@@ -280,8 +296,10 @@ static func stream(layer: String) -> AudioStreamWAV:
 	return _streams[layer]
 
 static func _make(layer: String) -> AudioStreamWAV:
-	if layer == "chirp":
-		return AudioDsp.to_wav(_chirp(), MIX_RATE, false)
+	if layer.begins_with("chirp"):
+		return AudioDsp.to_wav(_chirp(hash(layer)), MIX_RATE, false)
+	if layer.ends_with("_b") and layer.trim_suffix("_b") in PAIRED:
+		return AudioDsp.to_wav(_loop(layer.trim_suffix("_b"), hash(layer), TAKE_B_SECS, 1.0), MIX_RATE, true)
 	var parts := layer.split("_")
 	if parts.size() == 2 and parts[0] in KINDS:
 		# left player: take A; right player: take B (other seed, other length)
@@ -441,19 +459,23 @@ static func _loop(layer: String, seed: int, secs: float, tune: float) -> PackedF
 	return AudioDsp.normalise(AudioDsp.seamless(s, n, fade))
 
 ## A short squeal that dies away: one chirp of rubber.
-static func _chirp() -> PackedFloat32Array:
+## Each variant (by seed) starts and ends on its own note and lasts its own length.
+static func _chirp(seed: int) -> PackedFloat32Array:
 	var r := float(MIX_RATE)
-	var n := int(0.18 * r)
 	var rng := RandomNumberGenerator.new()
-	rng.seed = 77
-	var f1 := AudioDsp.bp(r, 1300.0, 20.0)
-	var f2 := AudioDsp.bp(r, 1980.0, 20.0)
+	rng.seed = seed
+	var secs := rng.randf_range(0.13, 0.24)
+	var n := int(secs * r)
+	var f_from := rng.randf_range(1180.0, 1420.0)
+	var f_to := f_from * rng.randf_range(0.78, 0.9)
+	var f1 := AudioDsp.bp(r, f_from, 20.0)
+	var f2 := AudioDsp.bp(r, f_from * 1.52, 20.0)
 	var s := PackedFloat32Array()
 	s.resize(n)
 	for i in n:
 		var t := float(i) / r
 		if i % 64 == 0:
-			var f := lerpf(1300.0, 1080.0, t / 0.18)
+			var f := lerpf(f_from, f_to, t / secs)
 			f1.set_bp(r, f, 20.0)
 			f2.set_bp(r, f * 1.52, 20.0)
 		var w := rng.randf_range(-1.0, 1.0)

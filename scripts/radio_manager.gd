@@ -222,9 +222,14 @@ func _update_dj(delta: float) -> void:
 ## (a caption with the chime, like his other lines). Other stations and the
 ## radio off say nothing. True when Dave spoke.
 func announce_hour(hour24: int) -> bool:
+	return announce(RadioStations.time_line(hour24))
+
+## A one-off Dave line (time checks, tonight's events): on his station only,
+## with the chime, over the rotation. True when Dave spoke.
+func announce(text: String) -> bool:
 	if station < 0 or RadioStations.STATIONS[station].kind != "talk":
 		return false
-	_announce_text = RadioStations.time_line(hour24)
+	_announce_text = text
 	_announce_left = RadioStations.BREAK_SECS
 	_in_break_before = false   # a new line: chime even if a rotation line was up
 	return true

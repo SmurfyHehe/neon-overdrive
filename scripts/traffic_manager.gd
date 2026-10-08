@@ -102,6 +102,14 @@ var bench_count := 0
 var unbench_count := 0
 ## Cars benched while the player could see them (should stay 0).
 var bench_seen := 0
+## Share of spawns that are rule breakers (WorldMood sets it from tonight's
+## events through game.gd), never above RULE_BREAKER_CAP; of those,
+## weave_share drift weave_m metres around their lane (bar close).
+var rule_breaker_share := 0.0
+const RULE_BREAKER_CAP := 0.2
+var weave_share := 0.0
+var weave_m := 0.5
+var rule_breaker_spawns := 0
 
 var cars: Array[TrafficCar] = []
 var spawn_count := 0
@@ -251,6 +259,22 @@ func active_count() -> int:
 			n += 1
 	return n
 
+## Rule breakers on the road now (benched cars do not count).
+func rule_breakers_on_road() -> int:
+	var n := 0
+	for car in cars:
+		if car.rule_breaker and not car.benched:
+			n += 1
+	return n
+
+## A police crackdown: everyone on the road starts behaving at once, not only
+## the cars that spawn from now on.
+func reform_all() -> void:
+	for car in cars:
+		if car.rule_breaker:
+			car.set_rule_breaker(false, 0.0)
+			car.target_speed -= TrafficCar.RB_SPEED
+
 ## Takes a car off the road for now: parked hidden and frozen far behind,
 ## where a deferred spawn waits, until the share rises again.
 func _bench(car: TrafficCar, pz: float) -> void:
@@ -266,7 +290,11 @@ func _bench(car: TrafficCar, pz: float) -> void:
 ## behind (hidden, frozen) and tries again next tick.
 func _respawn(car: TrafficCar) -> void:
 	var pz := _player_z()
-	var slot := _find_slot(car, pz)
+	# Rule breakers (living world step 3): the event share, picked per spawn.
+	# No random draw at a 0 share: the benchmark and the traffic tests keep the
+	# exact random sequence they had before rule breakers existed.
+	var breaker := rule_breaker_share > 0.0 and randf() < minf(rule_breaker_share, RULE_BREAKER_CAP)
+	var slot := _find_slot(car, pz, TrafficCar.RB_SPEED if breaker else 0.0)
 	if slot.is_empty():
 		deferred_count += 1
 		car.set_detailed(false)
@@ -276,15 +304,19 @@ func _respawn(car: TrafficCar) -> void:
 		return
 	spawn_count += 1
 	car.target_speed = slot.speed
+	car.set_rule_breaker(breaker, weave_m if breaker and weave_share > 0.0 and randf() < weave_share else 0.0)
+	if breaker:
+		rule_breaker_spawns += 1
 	car.set_detailed(absf(slot.dist) <= detail_distance)
 	car.place(slot.lane_x, slot.direction, slot.z, REST_Y, slot.speed)
 	_put(car)
 	if log_spawns:
 		slot["player_z"] = pz
 		slot["player_speed"] = _player_speed()
+		slot["breaker"] = breaker
 		spawn_log.append(slot)
 
-func _find_slot(car: TrafficCar, pz: float) -> Dictionary:
+func _find_slot(car: TrafficCar, pz: float, extra_speed := 0.0) -> Dictionary:
 	var pv := _player_speed()
 	var band := _spawn_band()
 	for attempt in SLOT_TRIES:
@@ -294,7 +326,7 @@ func _find_slot(car: TrafficCar, pz: float) -> Dictionary:
 		var lane_i: int = lanes[randi() % lanes.size()] if not lanes.is_empty() else randi() % n_lanes
 		var lane_x := lane_centre(lane_i, oncoming)
 		var dir := 1.0 if oncoming else -1.0
-		var speed := lane_speed(lane_i, oncoming) + randf_range(-SPEED_JITTER, SPEED_JITTER)
+		var speed := lane_speed(lane_i, oncoming) + randf_range(-SPEED_JITTER, SPEED_JITTER) + extra_speed
 		var behind := not oncoming and speed > pv + BEHIND_DV and randf() < BEHIND_SHARE
 		var z := pz + randf_range(spawn_behind_min, spawn_behind_max) if behind else pz - randf_range(band.x, band.y)
 		var seen := in_view(RoadFrame.roll(Vector3(lane_x, 0.0, z)))

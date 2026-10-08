@@ -16,6 +16,12 @@ extends WorldEnvironment
 #   lean navy, highlights lean amber, a gentle S-curve on contrast. Amber vs.
 #   Dusk, pushed by the camera instead of by every material.
 # Off gives back the stage A linear look exactly.
+#
+# Reflections (flag "reflections"): fake city reflections, nothing re-rendered.
+# The player's paint traces its reflection to the lamp-head and building-front
+# planes in its shader (P1CoupeBuilder BODY_SHADER, the city_reflections
+# global), and the sky draws lit windows and lamp-row glow into its radiance
+# map only (NightSky city), which traffic paint and glass mirror.
 
 const AGX_EXPOSURE := 2.0
 const AGX_WHITE := 6.0
@@ -43,6 +49,10 @@ func apply_graphics() -> void:
 	environment.tonemap_white = AGX_WHITE if on else 1.0
 	environment.adjustment_enabled = on
 	environment.adjustment_color_correction = get_lut() if on else null
+	var refl := 1.0 if GraphicsSettings.is_on("reflections") else 0.0
+	RenderingServer.global_shader_parameter_set("city_reflections", refl)
+	if environment.sky != null and environment.sky.sky_material is ShaderMaterial:
+		NightSky.set_city(environment.sky, refl)
 
 ## The grade as a 3D lookup texture, built once.
 static func get_lut() -> ImageTexture3D:

@@ -64,13 +64,72 @@ render_mode cull_back;
 // Vertex alpha 0 marks paint (or rim) faces; they take the tint and a glossier finish.
 uniform vec3 paint : source_color = vec3(1.0, 0.54, 0.12);
 uniform float paint_metallic = 0.5;
-uniform float paint_roughness = 0.38;
+uniform float paint_roughness = 0.24;
+// Glossy paint (polish pass, 2026-10-08): a clear coat over the paint faces.
+uniform float clearcoat = 1.0;
+// Fake city reflections, 0 = off (GraphicsSettings "reflections", set by WorldLook).
+global uniform float city_reflections;
+const vec3 SODIUM = vec3(1.0, 0.55, 0.2);
+const vec3 WINDOW = vec3(1.0, 0.75, 0.40);
+const float LAMP_H = 7.4;        // lamp head height, m (RoadChunkBuilder.LAMP_POLE_H - 0.1)
+const float LAMP_SPACING = 12.5; // a lamp passes every 12.5 m (both sides staggered)
+const float LAMP_SIDE = 11.0;    // typical sideways distance car -> lamp head, m
+const float FRONTAGE = 16.0;     // typical sideways distance car -> building fronts, m
+
+float hash(vec2 p) {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+// What the paint would mirror, without rendering it: the reflection ray is
+// traced to two planes, the lamp heads overhead and the building fronts to
+// the sides, and those are drawn as functions of the hit point. The hit
+// moves as the car drives, so lamps slide over the roof and windows over the
+// doors. World-aligned on purpose: approximate on a bend, never wrong-looking.
+vec3 city(vec3 wp, vec3 r, vec3 car) {
+	vec3 c = vec3(0.0);
+	if (r.y > 0.05) {
+		float t = (LAMP_H - wp.y) / r.y;
+		vec3 h = wp + r * t;
+		float zz = fract(h.z / LAMP_SPACING + 0.5) - 0.5;
+		float dx = abs(h.x - car.x) - LAMP_SIDE;
+		float lamp = exp(-zz * zz * 900.0) * exp(-dx * dx * 0.06);
+		c += SODIUM * lamp * 6.0 / (1.0 + t * 0.08);
+	}
+	if (abs(r.x) > 0.2) {
+		float t = FRONTAGE / abs(r.x);
+		vec3 h = wp + r * t;
+		if (h.y > 0.0 && h.y < 30.0 && t < 60.0) {
+			vec2 g = vec2(h.z / 2.6, h.y / 3.2);
+			vec2 f = fract(g);
+			float pane = step(0.2, f.x) * step(f.x, 0.8) * step(0.3, f.y) * step(f.y, 0.75);
+			float lit = step(0.62, hash(floor(g) + sign(r.x) * 31.0));
+			// Where one pixel spans more than about a window (flat faces at a
+			// grazing angle) the grid would alias into speckle: fade it to its
+			// average brightness instead.
+			vec2 fw = fwidth(g);
+			float sharp = clamp(1.6 - 2.0 * max(fw.x, fw.y), 0.0, 1.0);
+			float w = mix(0.08, pane * lit, sharp);
+			c += WINDOW * w * 0.9 * (1.0 - t / 60.0);
+		}
+	}
+	return c;
+}
+
 void fragment() {
 	float p = 1.0 - COLOR.a;
 	ALBEDO = mix(COLOR.rgb, paint, p);
 	METALLIC = mix(0.1, paint_metallic, p);
 	ROUGHNESS = mix(0.75, paint_roughness, p);
 	SPECULAR = 0.5;
+	CLEARCOAT = clearcoat * p;
+	CLEARCOAT_ROUGHNESS = 0.08;
+	if (city_reflections > 0.0 && p > 0.0) {
+		vec3 wp = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+		vec3 n = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+		vec3 v = normalize(wp - CAMERA_POSITION_WORLD);
+		float fres = 0.04 + 0.96 * pow(1.0 - clamp(dot(n, -v), 0.0, 1.0), 5.0);
+		EMISSION += city(wp, reflect(v, n), NODE_POSITION_WORLD) * fres * p * city_reflections * (1.0 - paint_roughness);
+	}
 }
 """
 

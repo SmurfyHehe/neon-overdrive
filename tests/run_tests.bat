@@ -56,6 +56,7 @@ call :run phase_a_engine --headless
 call :run tick_rate_120 "--headless --fixed-fps 120"
 call :run cockpit --headless
 call :run cockpit_interior --headless
+call :run tc_lamp --headless
 call :run cockpit_isolation "--headless --fixed-fps 120"
 call :run cockpit_head_motion --headless
 call :run hud_rear_strip --headless

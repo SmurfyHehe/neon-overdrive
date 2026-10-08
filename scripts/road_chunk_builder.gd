@@ -77,8 +77,8 @@ class_name RoadChunkBuilder
 # Curves + elevation (#37, docs/planning/curves-elevation-proposal-2026-10-07.md):
 # every chunk carries its centreline as a Path3D ("Centerline"), and
 # everything below is laid out in the frame of that curve -- see the
-# "centreline" section. Step R2 keeps the curve straight, so the street is
-# exactly what it was; step R3 bends it.
+# "centreline" section. The curve's bend comes from RoadAlignment (step R3);
+# with no alignment it is straight and the street is what it always was.
 #
 # Interior lane-divider dashes and the center barrier/dash line are snapped
 # to each chunk's own (end-of-chunk) lane count, not tapered. Kept on purpose
@@ -499,8 +499,8 @@ static func lane_at(dist: float) -> int:
 # street is described the way it always was -- x across the road, y up, z
 # along it from 0 to -CHUNK_LEN -- and every point and transform is then put
 # through the curve's frame at s = -z (_at / _xf). On a straight curve that
-# frame is a plain translation, so nothing moves (step R2); a curved or
-# sloped curve (R3 / R5) bends and lifts the whole street with it.
+# frame is a plain translation; a curved one (RoadAlignment, step R3) bends
+# the whole street with it, and a sloped one (R5) will lift it.
 #
 # Anything long along the road (strips, sidewalk collision, out-of-bounds
 # walls, the barrier) is cut into STATIONS pieces so it can follow a bend.
@@ -554,13 +554,17 @@ static func _new_centerline() -> Path3D:
 	path.curve.bake_interval = CENTERLINE_BAKE
 	return path
 
-## Step R2: a straight 50 m line down -Z. R3 shapes it per chunk.
-static func _update_centerline(root: Node3D) -> Curve3D:
+## The chunk's arc (RoadAlignment, curvature k: 0 = straight) as a cubic
+## Bezier: handles along the start and end tangents, sized so the cubic
+## follows the circle to well under a millimetre at the road's radii.
+static func _update_centerline(root: Node3D, k: float) -> Curve3D:
 	var curve: Curve3D = (root.get_node(^"Centerline") as Path3D).curve
 	curve.clear_points()
-	var h := CHUNK_LEN / 3.0
+	var h := RoadAlignment.bezier_handle(k, CHUNK_LEN)
+	var turn := RoadAlignment.arc_heading(k, CHUNK_LEN)
+	var end_fwd := Vector3(-sin(turn), 0.0, -cos(turn))
 	curve.add_point(Vector3.ZERO, Vector3.ZERO, Vector3(0.0, 0.0, -h))
-	curve.add_point(Vector3(0.0, 0.0, -CHUNK_LEN), Vector3(0.0, 0.0, h), Vector3.ZERO)
+	curve.add_point(RoadAlignment.arc_point(k, CHUNK_LEN), -end_fwd * h, Vector3.ZERO)
 	return curve
 
 ## The chunk-local frame at distance s along a chunk's centreline: origin on
@@ -909,11 +913,13 @@ static func _create_nodes(root: Node3D) -> void:
 ## exact, small coordinate instead of a rounded huge one.
 static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary, origin_index: int = 0) -> void:
 	root.name = "Chunk_%d" % chunk_index
-	root.position = Vector3(0, 0, -float(chunk_index - origin_index) * CHUNK_LEN)
+	# Where the road's shape (RoadFrame / RoadAlignment, #37) puts this chunk;
+	# on a straight road that is (0, 0, -(chunk_index - origin_index) * 50).
+	root.transform = RoadFrame.chunk_xf(chunk_index, origin_index)
 	root.set_meta("chunk_index", chunk_index)
-	_curve = _update_centerline(root)
+	_curve = _update_centerline(root, RoadFrame.curvature(chunk_index))
 	_cache_frames(_curve)
-	_strip_n = strip_pieces(0.0)
+	_strip_n = strip_pieces(RoadFrame.curvature(chunk_index))
 
 	var own_lanes: int = clampi(int(cfg.own_lanes), 1, MAX_OWN_LANES)
 	var onc_lanes: int = clampi(int(cfg.onc_lanes), 1, MAX_ONC_LANES)
@@ -1088,3 +1094,20 @@ static func rebuild_chunk(root: Node3D, chunk_index: int, prev_cfg: Dictionary, 
 	if not root.has_meta("nodes_built"):
 		_create_nodes(root)
 	_apply(root, chunk_index, prev_cfg, cfg, origin_index)
+	sync_collision(root)
+
+## Hands a moved chunk's collision to the physics server now. Moving the
+## chunk root only tells its bodies they moved when Godot next flushes
+## transform notifications, but their reshaped pieces (sidewalk hulls, wall
+## boxes) reach the server at once; for the physics ticks in between, the new
+## pieces sat at the old chunk's place and angle. On the straight road the
+## two layouts were the same, so nobody noticed; on a curved one (#37) a
+## recycled chunk's sidewalk swept across the lanes for a tick and launched
+## traffic cars (tests/curve_drive.gd, 2026-10-07).
+static func sync_collision(root: Node3D) -> void:
+	if not root.is_inside_tree():
+		return
+	root.force_update_transform()
+	for c in root.get_children():
+		if c is CollisionObject3D:
+			(c as Node3D).force_update_transform()

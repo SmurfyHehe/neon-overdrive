@@ -70,9 +70,9 @@ func _run() -> void:
 		_check(TunerBench.SHOTS.has(id), "page %s has no shot" % id)
 		_check(not bench.outline.lines.is_empty(), "page %s outlines nothing" % id)
 		# the part (or the car) is in front of the camera and inside the car window
-		var centre := bench.project(TunerBench.SHOTS[id].look)
+		var centre := bench.project(bench._shot_look(id))
 		var win := screen.car_window.get_global_rect().grow(40.0)
-		_check(not bench.behind_camera(TunerBench.SHOTS[id].look) and win.has_point(centre),
+		_check(not bench.behind_camera(bench._shot_look(id)) and win.has_point(centre),
 			"page %s: the part should sit in the car window (%s not in %s)" % [id, centre, win])
 		if shots != "":
 			for i in 3:

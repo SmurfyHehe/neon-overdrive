@@ -33,6 +33,8 @@ var stock := {}
 var measured := {}
 var measured_for := 0
 var note: Label
+## "Next notch" line: what one more notch of the focused setting would change.
+var next_label: Label
 
 func _ready() -> void:
 	add_theme_constant_override("separation", 3)
@@ -69,6 +71,12 @@ func _ready() -> void:
 	note.text = "~ = estimate"
 	note.add_theme_color_override("font_color", TunerColours.DIM)
 	add_child(note)
+	next_label = Label.new()
+	next_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	next_label.custom_minimum_size = Vector2(220, 0)
+	next_label.add_theme_font_size_override("font_size", 14)
+	next_label.add_theme_color_override("font_color", TunerColours.VALUE)
+	add_child(next_label)
 
 ## `before` is kept for callers that track the screen-open values; the card
 ## compares with `stock`.
@@ -94,6 +102,38 @@ func set_values(_before: Dictionary, now: Dictionary) -> void:
 	note.text = "measured on the test track" if any_measured else "~ = estimate"
 	radar.set_values(radar_values(s), radar_values(now))
 	seesaw.set_values(float(now.balance), float(s.balance))
+
+## Shows what one notch on would do (faint dashes on the radar and a line of
+## words), or clears it with an empty dictionary.
+func set_preview(now: Dictionary, next: Dictionary, what := "") -> void:
+	if radar == null:
+		return
+	if next.is_empty():
+		radar.preview = []
+		next_label.text = ""
+		radar.queue_redraw()
+		return
+	radar.preview.assign(radar_values(next))
+	radar.queue_redraw()
+	next_label.text = preview_words(now, next, what)
+
+## "Next notch on Springs rear: ▼ -0.02 g grip, more oversteer" (or no change).
+static func preview_words(now: Dictionary, next: Dictionary, what := "") -> String:
+	var parts := []
+	var names := {"top": "top speed", "accel": "0-100", "brake": "100-0", "grip": "grip"}
+	var units := {"top": " km/h", "accel": " s", "brake": " m", "grip": " g"}
+	for r in ROWS:
+		var k: String = r[0]
+		if k == "balance":
+			continue
+		var d := TunerColours.delta(float(next[k]) - float(now[k]), r[5], DELTA_FMT[k], STEP[k])
+		if not d.level:
+			parts.append("%s%s %s" % [d.text, units[k], names[k]])
+	var db := float(next.balance) - float(now.balance)
+	if absf(db) > 0.02:
+		parts.append("more oversteer" if db > 0.0 else "more understeer")
+	var head := "Next notch" + (" on " + what if what != "" else "") + ": "
+	return head + (", ".join(parts) if not parts.is_empty() else "no change the estimates can see")
 
 static func balance_word(b: float) -> String:
 	return "Understeer" if b < -0.15 else ("Oversteer" if b > 0.15 else "Neutral")

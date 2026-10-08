@@ -44,6 +44,8 @@ const DIM := Color(0.79, 0.81, 0.84, 0.35)
 const AMBER := Color("#FFC066")
 const SODIUM := Color("#FF8A1F")
 const MARGIN := 16
+## Width of the page graphic's plate at the right of the car window.
+const GRAPHIC_W := 330.0
 
 var player: PlayerCar
 var game_state: GameState
@@ -90,6 +92,9 @@ var before_stats := {}
 ## The car on the bench, and the clear part of the screen it is framed in.
 var bench: TunerBench
 var car_window: Control
+## The page's drawn graphic, on a plate at the right of the car window (PR 3).
+var graphic_plate: PanelContainer
+var graphics := {}   # page id -> PageGraphic
 var page_plate: PanelContainer
 var page_scroll: ScrollContainer
 ## The chase camera's view before the Tuner opened (cockpit is put back on close).
@@ -162,6 +167,20 @@ func _ready() -> void:
 	car_window.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	car_window.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	middle.add_child(car_window)
+	graphic_plate = _plate(8)
+	graphic_plate.anchor_left = 1.0
+	graphic_plate.anchor_right = 1.0
+	graphic_plate.anchor_bottom = 1.0
+	graphic_plate.offset_left = -GRAPHIC_W
+	graphic_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	car_window.add_child(graphic_plate)
+	for p in TunerModel.pages():
+		var g := PageGraphic.for_page(p.id)
+		if g != null:
+			g.visible = false
+			g.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			graphic_plate.add_child(g)
+			graphics[p.id] = g
 	page_plate = _plate(8)
 	middle.add_child(page_plate)
 	var page_box := VBoxContainer.new()
@@ -326,7 +345,7 @@ func _page_height(id: String) -> float:
 		"setup": return 190.0
 		"mechanic", "advanced": return 360.0
 		"sound": return 300.0
-	return minf(30.0 * (TunerModel.page(id).settings.size() + 1) + 46.0, 320.0)  # rows, reset, the hint
+	return minf(36.0 * (TunerModel.page(id).settings.size() + 1) + 56.0, 330.0)  # rows, reset, the hint
 
 func current_page() -> String:
 	return page_ids[page_index]
@@ -342,6 +361,9 @@ func show_page(id: String) -> void:
 	for pid in panel_pages:
 		panel_pages[pid].visible = pid == id
 	page_scroll.custom_minimum_size = Vector2(0, _page_height(id))
+	for gid in graphics:
+		graphics[gid].visible = gid == id
+	graphic_plate.visible = graphics.has(id)
 	if bench != null and bench.outline != null:
 		bench.show_page(id)
 	for c in content.get_children():
@@ -531,7 +553,10 @@ func cancel_test_run(why: String) -> void:
 
 func _process(delta: float) -> void:
 	if visible and bench != null and car_window != null:
-		bench.frame_rect = car_window.get_global_rect()
+		var r := car_window.get_global_rect()
+		if graphic_plate.visible:
+			r.size.x -= GRAPHIC_W + 8.0  # frame the car beside the graphic
+		bench.frame_rect = r
 	if not test_running():
 		return
 	if Time.get_ticks_msec() - _test_started_ms > test_timeout_s * 1000.0:
@@ -620,12 +645,36 @@ func _refresh() -> void:
 		stats.measured = {}  # measured on a setup the car no longer has
 	stats.measured_for = player.spec.hash()
 	stats.stock = TunerModel.estimate(model.stock)
-	stats.set_values(before_stats, TunerModel.estimate(player.spec))
+	var est := TunerModel.estimate(player.spec)
+	stats.set_values(before_stats, est)
+	_refresh_graphic(est)
 	var flip := stats.measured.has("trace") and stock_run.has("trace")
 	stats.visible = not flip
 	pit_wall.visible = flip
 	if flip:
 		pit_wall.show_result(stats.measured, stock_run)
+
+## Hands the page graphic the car's setup, stock, and the next notch of the
+## focused setting; the performance card shows that next notch too.
+func _refresh_graphic(est: Dictionary) -> void:
+	var preview := {}
+	var focus: Dictionary = rows[row_index].setting if not rows.is_empty() else {}
+	if not focus.is_empty() and focus.kind != "reset":
+		var probe_spec := CarSpec.clone_spec(player.spec)
+		var probe := TunerModel.new(null, probe_spec, model.stock)
+		if probe.nudge(focus, 1):
+			preview = probe_spec
+	var preview_est := TunerModel.estimate(preview) if not preview.is_empty() else {}
+	stats.set_preview(est, preview_est, String(focus.get("label", "")))
+	var g: PageGraphic = graphics.get(current_page())
+	if g == null:
+		return
+	var compound := model.choice_index(TunerModel.page("tyres").settings[0])
+	g.show_setup(player.spec, model.stock, {
+		"preview": preview, "focus": focus.get("id", ""), "est": est, "stock_est": stats.stock,
+		"preview_est": preview_est, "wheel_r": PlayerCar.CFG.wheel_r, "compound": compound,
+		"auto_bias": player.front_axle.brake_bias if player.is_ready else 0.55,
+	})
 
 # ---------- small drawn widgets ----------
 

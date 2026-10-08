@@ -124,8 +124,13 @@ const LAMP_SPACING := 25.0
 const LAMP_SETBACK := 0.35  # pole distance outside the curb's outer edge
 const LAMP_POLE_H := 7.5
 const LAMP_ARM := 1.9       # how far the arm reaches out over the road
-const POOL_ACROSS := 13.0   # light pool size on the road, m
-const POOL_ALONG := 17.0
+const POOL_ACROSS := 15.0   # light pool size on the road, m (13 x 17 before the polish pass softened the edge)
+const POOL_ALONG := 19.0
+## Halo round each lamp head (polish pass, 2026-10-08): a camera-facing glow
+## quad, GraphicsSettings flag "lamp_halos" (WorldLook shows or hides the group).
+const HALO_SIZE := 3.4
+const HALO_DROP := 0.3      # below the pole top, the middle of the head
+const HALO_GROUP := "lamp_halos"
 const POOL_Y := 0.045       # just above the lane dashes (top at 0.035)
 const SODIUM := Color(1.0, 0.55, 0.2)
 
@@ -189,6 +194,8 @@ static var _barrier_mesh: BoxMesh
 static var _lamp_mesh: ArrayMesh
 static var _pool_mesh: PlaneMesh
 static var _pool_mat: StandardMaterial3D
+static var _halo_mesh: QuadMesh
+static var _halo_mat: StandardMaterial3D
 static var _wall_mesh: BoxMesh
 static var _wall_mat: StandardMaterial3D
 
@@ -444,8 +451,13 @@ static func _get_pool_mesh() -> PlaneMesh:
 static func _get_pool_mat() -> StandardMaterial3D:
 	if _pool_mat == null:
 		var grad := Gradient.new()
-		grad.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
-		grad.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.42), Color(1, 1, 1, 0)])
+		# Polish pass (2026-10-08): a smooth, roughly Gaussian falloff
+		# instead of two straight ramps, which showed a visible ring at 45% and
+		# a hard-looking rim. Same centre brightness, the pool a little larger.
+		grad.offsets = PackedFloat32Array([0.0, 0.2, 0.4, 0.6, 0.78, 0.9, 1.0])
+		grad.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.82), Color(1, 1, 1, 0.52),
+			Color(1, 1, 1, 0.25), Color(1, 1, 1, 0.09), Color(1, 1, 1, 0.025), Color(1, 1, 1, 0)])
+		grad.interpolation_mode = Gradient.GRADIENT_INTERPOLATE_CUBIC
 		var tex := GradientTexture2D.new()
 		tex.gradient = grad
 		tex.fill = GradientTexture2D.FILL_RADIAL
@@ -465,6 +477,45 @@ static func _get_pool_mat() -> StandardMaterial3D:
 		m.distance_fade_max_distance = 110.0
 		_pool_mat = m
 	return _pool_mat
+
+## Lamp halo: a camera-facing quad with a soft radial glow, added on top
+## (unshaded, BLEND_MODE_ADD), so the head reads as a light in haze, not a
+## lit box. Faded out with distance like the pools (and fog-free for the same
+## reason).
+static func _get_halo_mesh() -> QuadMesh:
+	if _halo_mesh == null:
+		_halo_mesh = QuadMesh.new()
+		_halo_mesh.size = Vector2.ONE
+	return _halo_mesh
+
+static func _get_halo_mat() -> StandardMaterial3D:
+	if _halo_mat == null:
+		var grad := Gradient.new()
+		grad.offsets = PackedFloat32Array([0.0, 0.08, 0.3, 0.6, 1.0])
+		grad.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.7), Color(1, 1, 1, 0.2),
+			Color(1, 1, 1, 0.05), Color(1, 1, 1, 0)])
+		grad.interpolation_mode = Gradient.GRADIENT_INTERPOLATE_CUBIC
+		var tex := GradientTexture2D.new()
+		tex.gradient = grad
+		tex.fill = GradientTexture2D.FILL_RADIAL
+		tex.fill_from = Vector2(0.5, 0.5)
+		tex.fill_to = Vector2(1.0, 0.5)
+		tex.width = 64
+		tex.height = 64
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		m.billboard_keep_scale = true
+		m.albedo_texture = tex
+		m.albedo_color = Color(SODIUM.r * 0.9, SODIUM.g * 0.9, SODIUM.b * 0.9, 1.0)
+		m.disable_fog = true
+		m.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
+		m.distance_fade_min_distance = 220.0  # min > max: fade OUT with distance
+		m.distance_fade_max_distance = 140.0
+		_halo_mat = m
+	return _halo_mat
 
 static func _get_wall_mesh() -> BoxMesh:
 	if _wall_mesh == null:
@@ -973,6 +1024,11 @@ static func _create_nodes(root: Node3D) -> void:
 	# allocated once, like the dashes and pylons above.
 	root.add_child(_new_multimesh("Lamps", _get_lamp_mesh(), null, _lamp_slots() * 2))
 	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2))
+	var halos := _new_multimesh("LampHalos", _get_halo_mesh(), _get_halo_mat(), _lamp_slots() * 2)
+	halos.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	halos.visible = GraphicsSettings.is_on("lamp_halos")
+	halos.add_to_group(HALO_GROUP)
+	root.add_child(halos)
 	root.add_child(_new_multimesh("GapWalls", _get_wall_mesh(), _get_wall_mat(), (_building_slots() + 1) * 2))
 
 	# The centre barrier, one piece per station so it can follow a bend (#37).
@@ -1107,6 +1163,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# arm over the road; the oncoming side is the same mesh turned 180 deg.
 	var lamps: MultiMesh = (root.get_node(^"Lamps") as MultiMeshInstance3D).multimesh
 	var pools: MultiMesh = (root.get_node(^"LampPools") as MultiMeshInstance3D).multimesh
+	var halos: MultiMesh = (root.get_node(^"LampHalos") as MultiMeshInstance3D).multimesh
 	var n_lamps := 0
 	for i in range(_lamp_slots()):
 		for side in [1, -1]:
@@ -1119,9 +1176,11 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			lamps.set_instance_transform(n_lamps, _xf_up(pole_x, 0.0, lz, turn))
 			var head_x := pole_x - (LAMP_ARM - 0.2) * float(side)
 			pools.set_instance_transform(n_lamps, _xf(head_x, POOL_Y, lz, Basis.from_scale(Vector3(POOL_ACROSS, 1.0, POOL_ALONG))))
+			halos.set_instance_transform(n_lamps, _xf_up(head_x, LAMP_POLE_H - HALO_DROP, lz, Basis.from_scale(Vector3.ONE * HALO_SIZE)))
 			n_lamps += 1
 	lamps.visible_instance_count = n_lamps
 	pools.visible_instance_count = n_lamps
+	halos.visible_instance_count = n_lamps
 
 	# center line / barrier -- snapped to this chunk's own end-of-chunk
 	# config, not tapered (see file header). Both the wall and the dash

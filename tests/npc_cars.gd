@@ -1,6 +1,7 @@
 extends SceneTree
 
-# The traffic cars (stage B step 5, NpcCarBuilder): every car, every build.
+# The traffic cars (stage B step 5, NpcCarBuilder) and the other sheet cars
+# it builds (player cars P2-P6, cops C1-C3): every car, every build.
 #
 # Model checks, per build:
 #   - the body's bounding box is the sheet's length and height (fleet.json dims,
@@ -24,6 +25,9 @@ const Harness := preload("res://tests/traffic_harness.gd")
 const Palette := preload("res://tests/palette.gd")
 
 const RATE := 120
+## Stock builds whose sheet body length leaves out a fitted kit: the cops'
+## push bars (the sheet's "nobar" builds measure the body alone).
+const STOCK_KIT_LEN := {"c1_patrol": 0.16, "c2_patrolsuv": 0.16}
 const CRUISE := 120.0 / 3.6
 
 var fails: Array[String] = []
@@ -58,13 +62,15 @@ func _model_checks(kind: String, build: String, d: Dictionary) -> void:
 	var calls := NpcCarBuilder.draw_call_count(kind, build)
 	print("npc_cars: %-22s %.2f x %.2f x %.2f m (sheet %.2f x %.2f x %.2f), %d tris, %d draw calls" % [
 		tag, aabb.size.z, aabb.size.x, aabb.size.y, d.length, d.width_body, d.height, tris, calls])
-	# The sheet's sizes are the stock build's; variant kits (a sport bumper, the
-	# taxi sign, a sports bar) may add a little.
+	# The sheet's sizes are the stock build's body; variant kits (a sport bumper,
+	# the taxi sign, a wing, a push bar) only ever add length, up to 16 cm.
+	var over := aabb.size.z - float(d.length)
 	if build == "stock":
-		_check(absf(aabb.size.z - float(d.length)) < 0.03, "%s is %.3f m long, the sheet says %.2f" % [tag, aabb.size.z, d.length])
+		var kit: float = STOCK_KIT_LEN.get(kind, 0.0)
+		_check(over > -0.03 and over < kit + 0.03, "%s is %.3f m long, the sheet says %.2f" % [tag, aabb.size.z, d.length])
 		_check(absf(aabb.size.y - float(d.height)) < 0.03, "%s is %.3f m tall, the sheet says %.2f" % [tag, aabb.size.y, d.height])
 	else:
-		_check(absf(aabb.size.z - float(d.length)) < 0.10, "%s is %.3f m long, the sheet says %.2f" % [tag, aabb.size.z, d.length])
+		_check(over > -0.03 and over < 0.16, "%s is %.3f m long, the sheet says %.2f" % [tag, aabb.size.z, d.length])
 	_check(aabb.size.x >= float(d.width_body) - 0.01, "%s is %.3f m wide, narrower than the sheet's %.2f body" % [tag, aabb.size.x, d.width_body])
 	_check(tris <= 4000, "%s has %d triangles, over the 4,000 traffic budget" % [tag, tris])
 	_check(calls == 7, "%s takes %d draw calls, not 7" % [tag, calls])
@@ -77,12 +83,17 @@ func _model_checks(kind: String, build: String, d: Dictionary) -> void:
 				break
 	var paints: Array = NpcCarBuilder.PAINTS.map(func(p): return p[0])
 	paints.append_array(NpcCarBuilder.KINDS[kind].build_paint.values())
+	if NpcCarBuilder.KINDS[kind].get("sheet_paint", false):
+		paints.append(NpcCarBuilder.sheet_paint(kind))
 	for c in paints:
 		_check(Palette.is_bad(c) == "", "%s paint %s is %s" % [tag, c.to_html(false), Palette.is_bad(c)])
 	var vis := NpcCarBuilder.chassis_visual(kind, build, Color.WHITE)
 	var axle: float = NpcCarBuilder.KINDS[kind].axle_z
 	for t in vis.get_meta("exhaust_tips"):
-		_check(t.pos.z > axle, "%s has an exhaust tip ahead of the rear axle" % tag)
+		# Rear-facing tips sit behind the rear axle; side pipes (P5 street) exit
+		# sideways ahead of it, by design.
+		if absf(t.dir.x) < 0.5:
+			_check(t.pos.z > axle, "%s has a rear exhaust tip ahead of the rear axle" % tag)
 	_check((vis.get_meta("sticker_slots") as Array).size() == 5, "%s has %d sticker placements, not 5 (door mirrored)" % [tag, (vis.get_meta("sticker_slots") as Array).size()])
 	vis.free()
 

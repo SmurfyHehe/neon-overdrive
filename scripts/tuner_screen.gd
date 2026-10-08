@@ -245,9 +245,12 @@ func show_page(id: String) -> void:
 		(manual.sliders["final_drive"] as Control).grab_focus()
 
 func _add_row(s: Dictionary) -> Dictionary:
+	var block := VBoxContainer.new()
+	block.add_theme_constant_override("separation", 0)
+	content.add_child(block)
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 8)
-	content.add_child(h)
+	block.add_child(h)
 	var name := _label(s.label, SILVER)
 	name.custom_minimum_size = Vector2(170, 0)
 	h.add_child(name)
@@ -265,7 +268,26 @@ func _add_row(s: Dictionary) -> Dictionary:
 	h.add_child(hi)
 	var value := _label("", AMBER)
 	h.add_child(value)
-	return {"setting": s, "name": name, "value": value, "bar": bar}
+	# Settings safety part 3: the bar's notches carry their danger zone, and a
+	# risky setting gets a consequence line under it that follows the value.
+	var path: String = s.paths[0] if s.kind == "range" else ""
+	if path != "":
+		for n in TunerModel.NOTCHES:
+			bar.zones.append(SettingDanger.level(path, _notch_value(s, n)))
+	var line: Label = null
+	if SettingDanger.LINES.has(path):
+		line = _label("", DIM)
+		line.add_theme_font_size_override("font_size", 13)
+		line.custom_minimum_size = Vector2(0, 0)
+		var pad := MarginContainer.new()
+		pad.add_theme_constant_override("margin_left", 178)
+		pad.add_child(line)
+		block.add_child(pad)
+	return {"setting": s, "name": name, "value": value, "bar": bar, "line": line, "path": path}
+
+static func _notch_value(s: Dictionary, n: int) -> float:
+	var t := float(n) / float(TunerModel.NOTCHES - 1)
+	return lerpf(s.lo, s.hi, 1.0 - t if s.invert else t)
 
 # ---------- keyboard ----------
 
@@ -377,6 +399,14 @@ func _refresh() -> void:
 		r.name.text = ("> " if focused else "  ") + s.label
 		r.name.add_theme_color_override("font_color", SODIUM if focused else SILVER)
 		r.value.text = model.value_text(s)
+		var danger := SettingDanger.Level.GREEN
+		if r.path != "":
+			var v := TuneParams.get_value(player.spec, r.path)
+			danger = SettingDanger.level(r.path, v)
+			if r.line != null:
+				r.line.text = SettingDanger.consequence(r.path, v, TuneParams.get_value(model.stock, r.path))
+				r.line.add_theme_color_override("font_color", DIM if danger == SettingDanger.Level.GREEN else SettingDanger.colour(danger))
+		r.value.add_theme_color_override("font_color", AMBER if danger == SettingDanger.Level.GREEN else SettingDanger.colour(danger))
 		r.bar.now = model.notch(s)
 		r.bar.before = before_notches.get(s.id, r.bar.now)
 		r.bar.focused = focused
@@ -399,12 +429,16 @@ func _refresh() -> void:
 # ---------- small drawn widgets ----------
 
 ## An 11-notch bar (or one segment per choice): filled up to "now" in sodium
-## orange, a dim tick where the setting was when the screen opened.
+## orange, a dim tick where the setting was when the screen opened. With zones
+## (one SettingDanger.Level per notch) each notch has a strip along its top in
+## green, amber or red, so the bar reads green to red toward its risky ends.
 class NotchBar extends Control:
+	const ZONE_STRIP := 3.0
 	var choices := 11
 	var now := 0
 	var before := 0
 	var focused := false
+	var zones: Array = []
 
 	func _draw() -> void:
 		var gap := 2.0
@@ -416,6 +450,10 @@ class NotchBar extends Control:
 			if on and not focused:
 				c = TunerScreen.AMBER
 			draw_rect(r, c)
+			if i < zones.size():
+				var zc := SettingDanger.colour(zones[i])
+				zc.a = 1.0 if i == now else 0.55
+				draw_rect(Rect2(r.position, Vector2(w, ZONE_STRIP)), zc)
 			if i == before and before != now:
 				draw_rect(Rect2(r.position.x, size.y - 3.0, w, 3.0), TunerScreen.SILVER)
 

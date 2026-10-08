@@ -80,6 +80,8 @@ var values := {}
 var start_values := {}
 var sliders := {}
 var value_labels := {}
+var line_labels := {}  # key -> consequence Label (settings safety part 3)
+var stock := CarSpec.coupe_default()  # what "Stock" means, as on the Tuner screen
 var readout: Label
 var copy_button: Button
 
@@ -96,7 +98,7 @@ func _ready() -> void:
 	var left := VBoxContainer.new()
 	columns.add_child(left)
 	var grid := GridContainer.new()
-	grid.columns = 3
+	grid.columns = 4
 	left.add_child(grid)
 	for k in KNOBS:
 		var name_label := Label.new()
@@ -117,6 +119,11 @@ func _ready() -> void:
 		v.custom_minimum_size = Vector2(60, 0)
 		grid.add_child(v)
 		value_labels[k[0]] = v
+		var line := Label.new()
+		line.custom_minimum_size = Vector2(300, 0)
+		line.add_theme_font_size_override("font_size", 13)
+		grid.add_child(line)
+		line_labels[k[0]] = line
 	var buttons := HBoxContainer.new()
 	left.add_child(buttons)
 	copy_button = Button.new()
@@ -198,6 +205,13 @@ func _refresh() -> void:
 	for k in KNOBS:
 		var step: float = k[3]
 		value_labels[k[0]].text = ("%d" % values[k[0]]) if step >= 1.0 else ("%.3f" % values[k[0]] if step < 0.01 else "%.2f" % values[k[0]])
+		# Danger colour and the consequence line (settings safety part 3).
+		var path: String = k[2]
+		var level := SettingDanger.level(path, values[k[0]])
+		var c := SettingDanger.colour(level)
+		value_labels[k[0]].add_theme_color_override("font_color", c)
+		line_labels[k[0]].text = SettingDanger.consequence(path, values[k[0]], TuneParams.get_value(stock, path))
+		line_labels[k[0]].add_theme_color_override("font_color", c if level != SettingDanger.Level.GREEN else Color(c, 0.6))
 	readout.text = _readout_text()
 
 func _readout_text() -> String:

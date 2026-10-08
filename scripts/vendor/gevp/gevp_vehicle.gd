@@ -646,6 +646,37 @@ func _physics_process(delta : float) -> void:
 	process_drive(delta)
 	process_forces(delta)
 	process_stability()
+	process_hill_hold()
+
+## (12) DEVIATION, #37 hills (2026-10-07): the brush tyre model's grip comes
+## from slip, so a locked wheel at a near standstill has almost none and a
+## braked car on a slope creeps down it (0.66 m in 10 s on 1.5%,
+## tests/hill_park.gd). Stand in for static friction: braked (or handbraked),
+## off the throttle, nearly stopped and on a real slope, cancel the pull of
+## gravity along the ground and bleed off the creep. Never acts on flat ground
+## (no gravity along it), so the flat road is untouched.
+const HILL_HOLD_SPEED := 0.5        # m/s: below this a braked car holds
+const HILL_HOLD_MIN_PULL := 0.05    # m/s^2 of gravity along the ground (~0.5% grade)
+const HILL_HOLD_TAU := 0.25         # s to bleed off what creep there is
+func process_hill_hold() -> void:
+	if throttle_input > 0.05 or (brake_input < 0.3 and handbrake_input < 0.5):
+		return
+	if linear_velocity.length() > HILL_HOLD_SPEED:
+		return
+	var n := Vector3.ZERO
+	var grounded := 0
+	for w in wheel_array:
+		if w.is_colliding():
+			n += w.get_collision_normal()
+			grounded += 1
+	if grounded < 3:
+		return
+	n = n.normalized()
+	var pull := current_gravity - n * current_gravity.dot(n)
+	if pull.length() < HILL_HOLD_MIN_PULL:
+		return
+	var creep := linear_velocity - n * linear_velocity.dot(n)
+	apply_central_force(-mass * (pull + creep / HILL_HOLD_TAU))
 
 func process_drag() -> void:
 	var drag := 0.5 * air_density * pow(speed, 2.0) * frontal_area * coefficient_of_drag

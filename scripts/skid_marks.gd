@@ -95,7 +95,8 @@ func _ready() -> void:
 		_xf[i] = zero
 	multimesh = mm
 	# The floating origin keeps everything within ~1 km of (0,0,0): never cull.
-	custom_aabb = AABB(Vector3(-300.0, -10.0, -2500.0), Vector3(600.0, 20.0, 5000.0))
+	# Hills (#37) climb up to 5% of that, so the box is tall as well.
+	custom_aabb = AABB(Vector3(-300.0, -150.0, -2500.0), Vector3(600.0, 300.0, 5000.0))
 	var shader := Shader.new()
 	shader.code = SHADER
 	_mat = ShaderMaterial.new()
@@ -150,7 +151,9 @@ func _lay(a: Vector3, b: Vector3, strength: float) -> void:
 	var len := dir.length()
 	dir /= len
 	var side := dir.cross(Vector3.UP).normalized()
-	var xf := Transform3D(Basis(side * WIDTH, Vector3.UP, dir * len), (a + b) * 0.5)
+	# Normal off the slope (#37 hills): the quad lies along the road surface
+	# either way, this keeps its lighting right on a grade.
+	var xf := Transform3D(Basis(side * WIDTH, side.cross(dir), dir * len), (a + b) * 0.5)
 	multimesh.set_instance_transform(_next, xf)
 	multimesh.set_instance_custom_data(_next, Color(_t, clampf(strength, 0.0, 1.0), 0.0, 0.0))
 	_xf[_next] = xf

@@ -513,6 +513,40 @@ const CENTERLINE_BAKE := 1.0
 
 ## The centreline of the chunk _apply() is laying out.
 static var _curve: Curve3D
+## Its frame every metre (origins and forward directions), sampled once per
+## _apply(): sampling the Curve3D for each of the ~600 points a chunk lays
+## out made a rebuild 10x slower than the straight builder (0.13 -> 1.3 ms on
+## the i5-1235U, 2026-10-07).
+static var _frame_o := PackedVector3Array()
+static var _frame_f := PackedVector3Array()
+static var _frame_xf: Array[Transform3D] = []
+
+static func _cache_frames(curve: Curve3D) -> void:
+	var n := int(CHUNK_LEN) + 1
+	_frame_o.resize(n)
+	_frame_f.resize(n)
+	_frame_xf.resize(n)
+	for i in n:
+		var f := station(curve, float(i))
+		_frame_o[i] = f.origin
+		_frame_f[i] = -f.basis.z
+		_frame_xf[i] = f
+
+## The cached frame at s metres along the chunk: exact on every whole metre
+## (where every strip, wall and dash corner sits), interpolated between (the
+## chord of a 300 m bend is off by 0.4 mm over a metre).
+static func _frame(s: float) -> Transform3D:
+	var sc := clampf(s, 0.0, CHUNK_LEN)
+	var i := mini(int(sc), int(CHUNK_LEN) - 1)
+	var t := sc - float(i)
+	if t == 0.0:
+		return _frame_xf[i]
+	if t == 1.0:
+		return _frame_xf[i + 1]
+	var o := _frame_o[i].lerp(_frame_o[i + 1], t)
+	var fwd := _frame_f[i].lerp(_frame_f[i + 1], t).normalized()
+	var right := fwd.cross(Vector3.UP).normalized()
+	return Transform3D(Basis(right, right.cross(fwd), -fwd), o)
 
 static func _new_centerline() -> Path3D:
 	var path := Path3D.new()
@@ -524,29 +558,65 @@ static func _new_centerline() -> Path3D:
 ## The chunk's arc (RoadAlignment, curvature k: 0 = straight) as a cubic
 ## Bezier: handles along the start and end tangents, sized so the cubic
 ## follows the circle to well under a millimetre at the road's radii.
-static func _update_centerline(root: Node3D, k: float) -> Curve3D:
+##
+## Hills (R5): the height rises by g s + vc s^2 / 2; a cubic's y follows that
+## parabola exactly when its handles carry the start and end slopes over a
+## third of the chunk each, which they do.
+static func _update_centerline(root: Node3D, k: float, g: float = 0.0, vc: float = 0.0) -> Curve3D:
 	var curve: Curve3D = (root.get_node(^"Centerline") as Path3D).curve
 	curve.clear_points()
 	var h := RoadAlignment.bezier_handle(k, CHUNK_LEN)
 	var turn := RoadAlignment.arc_heading(k, CHUNK_LEN)
 	var end_fwd := Vector3(-sin(turn), 0.0, -cos(turn))
-	curve.add_point(Vector3.ZERO, Vector3.ZERO, Vector3(0.0, 0.0, -h))
-	curve.add_point(RoadAlignment.arc_point(k, CHUNK_LEN), -end_fwd * h, Vector3.ZERO)
+	var g_end := g + vc * CHUNK_LEN
+	var end := RoadAlignment.arc_point(k, CHUNK_LEN) + Vector3(0.0, g * CHUNK_LEN + 0.5 * vc * CHUNK_LEN * CHUNK_LEN, 0.0)
+	curve.add_point(Vector3.ZERO, Vector3.ZERO, Vector3(0.0, g * CHUNK_LEN / 3.0, -h))
+	curve.add_point(end, -end_fwd * h - Vector3(0.0, g_end * CHUNK_LEN / 3.0, 0.0), Vector3.ZERO)
 	return curve
 
 ## The chunk-local frame at distance s along a chunk's centreline: origin on
 ## the centreline, -Z along the road, X to the right, Y up.
+##
+## s is distance along the road's plan (what RoadFrame and the layout count);
+## on a slope the curve itself is a touch longer (0.13% at 5%), so s is
+## scaled to it.
+##
+## Only the curve's position and direction are used: its own baked up vector
+## is carried along the curve and picks up a slight twist on a road that both
+## bends and climbs (7.7 cm at the road's edge by a chunk's end, a step at
+## every join). The road has no camber, so the frame is rebuilt from the
+## direction and world up, which cannot twist.
 static func station(curve: Curve3D, s: float) -> Transform3D:
-	return curve.sample_baked_with_rotation(clampf(s, 0.0, curve.get_baked_length()), false, false)
+	var len3 := curve.get_baked_length()
+	var xf := curve.sample_baked_with_rotation(clampf(s * len3 / CHUNK_LEN, 0.0, len3), false, false)
+	var fwd := -xf.basis.z
+	var right := fwd.cross(Vector3.UP).normalized()
+	return Transform3D(Basis(right, right.cross(fwd), -fwd), xf.origin)
 
 ## Chunk-local transform for something laid out at (x, y, z) in the straight
 ## street description, turned by `local` relative to the road.
 static func _xf(x: float, y: float, z: float, local: Basis = Basis()) -> Transform3D:
-	return station(_curve, -z) * Transform3D(local, Vector3(x, y, 0.0))
+	return _frame(-z) * Transform3D(local, Vector3(x, y, 0.0))
+
+## Like _xf, for things that stand upright whatever the slope (buildings,
+## walls, lamps, posts): placed at (x, z) on the road surface, raised y
+## straight up, and turned only to the road's heading.
+static func _xf_up(x: float, y: float, z: float, local: Basis = Basis()) -> Transform3D:
+	var f := _frame(-z)
+	var fwd := -f.basis.z
+	fwd.y = 0.0
+	return Transform3D(Basis.looking_at(fwd.normalized(), Vector3.UP) * local, f * Vector3(x, 0.0, 0.0) + Vector3(0.0, y, 0.0))
+
+## How far upright things reach below the road surface on a hilly road, so a
+## building or wall on a slope never shows a gap under its downhill end.
+const FOUNDATION := 4.0
+
+static func _foundation() -> float:
+	return FOUNDATION if RoadFrame.has_hills() else 0.0
 
 ## Chunk-local position of the straight-description point (x, y, z).
 static func _at(x: float, y: float, z: float) -> Vector3:
-	return station(_curve, -z) * Vector3(x, y, 0.0)
+	return _frame(-z) * Vector3(x, y, 0.0)
 
 # ---------- tapered strips ----------
 #
@@ -572,8 +642,8 @@ static func _strip_arrays(x_inner0: float, x_inner1: float, x_outer0: float, x_o
 	for k in STATIONS:
 		var t0 := float(k) / STATIONS
 		var t1 := float(k + 1) / STATIONS
-		var f0 := station(_curve, length * t0)
-		var f1 := station(_curve, length * t1)
+		var f0 := _frame(length * t0)
+		var f1 := _frame(length * t1)
 		var a := f0 * Vector3(lerpf(x_inner0, x_inner1, t0), y, 0.0)
 		var b := f0 * Vector3(lerpf(x_outer0, x_outer1, t0), y, 0.0)
 		var c := f1 * Vector3(lerpf(x_inner0, x_inner1, t1), y, 0.0)
@@ -734,9 +804,51 @@ static func _update_boundary(root: Node3D, body_name: String, inner_x: float, si
 	var seg := CHUNK_LEN / STATIONS
 	for k in STATIONS:
 		var col: CollisionShape3D = body.get_node(NodePath("Shape" if k == 0 else "Shape%d" % k))
-		(col.shape as BoxShape3D).size = Vector3(BOUNDARY_T, BOUNDARY_H, seg + BOUNDARY_OVERLAP)
-		col.transform = _xf((inner_x + BOUNDARY_T / 2.0) * float(side), BOUNDARY_H / 2.0, -seg * (float(k) + 0.5))
+		var f := _foundation()
+		(col.shape as BoxShape3D).size = Vector3(BOUNDARY_T, BOUNDARY_H + f, seg + BOUNDARY_OVERLAP)
+		col.transform = _xf_up((inner_x + BOUNDARY_T / 2.0) * float(side), (BOUNDARY_H - f) / 2.0, -seg * (float(k) + 0.5))
 	body.position = Vector3.ZERO
+
+# Road collision (#37 step R5). On a flat road the wheels drive on game.gd's
+# infinite ground plane; on a hilly one there is no single plane, so each
+# chunk carries its own surface: STATIONS quads across the whole drivable
+# width (out past the out-of-bounds walls), following the centreline, in the
+# "Road" group like the plane. Built always, switched on only with hills.
+
+## How far past the out-of-bounds walls the road collision reaches, m.
+const ROAD_COL_MARGIN := 2.0
+
+static func _new_road_collision() -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.name = "RoadCol"
+	body.add_to_group("Road")
+	var col := CollisionShape3D.new()
+	col.name = "Shape"
+	var tri := ConcavePolygonShape3D.new()
+	tri.backface_collision = true  # met from either side, whatever the winding
+	col.shape = tri
+	col.disabled = true
+	body.add_child(col)
+	return body
+
+static func _update_road_collision(root: Node3D, half_w: float) -> void:
+	var col: CollisionShape3D = root.get_node(^"RoadCol/Shape")
+	var tri: ConcavePolygonShape3D = col.shape
+	if not RoadFrame.has_hills():
+		col.disabled = true
+		tri.set_faces(PackedVector3Array())
+		return
+	var faces := PackedVector3Array()
+	for k in STATIONS:
+		var z0 := -CHUNK_LEN * float(k) / STATIONS
+		var z1 := -CHUNK_LEN * float(k + 1) / STATIONS
+		var a := _at(-half_w, 0.0, z0)
+		var b := _at(half_w, 0.0, z0)
+		var c := _at(-half_w, 0.0, z1)
+		var d := _at(half_w, 0.0, z1)
+		faces.append_array([a, c, b, b, c, d])
+	tri.set_faces(faces)
+	col.disabled = false
 
 # ---------- buildings (reused nodes) ----------
 #
@@ -781,7 +893,9 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 	var w: float = randf_range(4.0, 10.0)
 	var d: float = randf_range(9.0, 18.0)
 	var h: float = randf_range(3.0, 4.5) if is_garage else randf_range(6.0, 22.0)
-	var xf := _xf((edge_x_abs + w / 2.0 + BUILDING_GAP) * float(side), h / 2.0, z)
+	var f := _foundation()
+	var xf := _xf_up((edge_x_abs + w / 2.0 + BUILDING_GAP) * float(side), (h - f) / 2.0, z)
+	h += f
 
 	(mi.mesh as BoxMesh).size = Vector3(w, h, d)
 	mi.transform = xf
@@ -815,6 +929,7 @@ static func _create_nodes(root: Node3D) -> void:
 	root.add_child(_new_strip("SidewalkOwn", _get_sidewalk_mat()))
 	root.add_child(_new_strip("SidewalkOnc", _get_sidewalk_mat()))
 
+	root.add_child(_new_road_collision())
 	root.add_child(_new_sidewalk_collision("SidewalkColOwn"))
 	root.add_child(_new_sidewalk_collision("SidewalkColOnc"))
 	root.add_child(_new_boundary("BoundaryOwn"))
@@ -858,7 +973,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# on a straight road that is (0, 0, -(chunk_index - origin_index) * 50).
 	root.transform = RoadFrame.chunk_xf(chunk_index, origin_index)
 	root.set_meta("chunk_index", chunk_index)
-	_curve = _update_centerline(root, RoadFrame.curvature(chunk_index))
+	_curve = _update_centerline(root, RoadFrame.curvature(chunk_index), RoadFrame.start_grade(chunk_index), RoadFrame.vcurve(chunk_index))
+	_cache_frames(_curve)
 
 	var own_lanes: int = clampi(int(cfg.own_lanes), 1, MAX_OWN_LANES)
 	var onc_lanes: int = clampi(int(cfg.onc_lanes), 1, MAX_ONC_LANES)
@@ -907,6 +1023,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# out-of-bounds walls, at the same set-back _update_building() uses
 	_update_boundary(root, "BoundaryOwn", maxf(start_own_walk, end_own_walk) + BUILDING_GAP, 1)
 	_update_boundary(root, "BoundaryOnc", maxf(start_onc_walk, end_onc_walk) + BUILDING_GAP, -1)
+	_update_road_collision(root, maxf(maxf(start_own_walk, end_own_walk), maxf(start_onc_walk, end_onc_walk)) + BUILDING_GAP + BOUNDARY_T + ROAD_COL_MARGIN)
 
 	# edge pylons -- cosmetic rhythm/speed cues, interpolated along each
 	# shoulder's outer edge between this chunk's start and end width
@@ -918,8 +1035,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var pt: float = -pz / CHUNK_LEN
 		var own_edge: float = lerp(start_own_shoulder, end_own_shoulder, pt)
 		var onc_edge: float = lerp(start_onc_shoulder, end_onc_shoulder, pt)
-		pylons_own.set_instance_transform(i, _xf(own_edge, PYLON_HEIGHT / 2.0, pz))
-		pylons_onc.set_instance_transform(i, _xf(-onc_edge, PYLON_HEIGHT / 2.0, pz))
+		pylons_own.set_instance_transform(i, _xf_up(own_edge, PYLON_HEIGHT / 2.0, pz))
+		pylons_onc.set_instance_transform(i, _xf_up(-onc_edge, PYLON_HEIGHT / 2.0, pz))
 	pylons_own.visible_instance_count = n_pylons
 	pylons_onc.visible_instance_count = n_pylons
 
@@ -953,8 +1070,9 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			if length > 0.3:
 				var zc := (z_from + z_to) / 2.0
 				var x: float = lerp(walk0, walk1, -zc / CHUNK_LEN) + BUILDING_GAP + WALL_T / 2.0
-				var basis := Basis.from_scale(Vector3(WALL_T, WALL_H, length))
-				walls.set_instance_transform(n_walls, _xf(x * float(side), WALL_H / 2.0, zc, basis))
+				var f := _foundation()
+				var basis := Basis.from_scale(Vector3(WALL_T, WALL_H + f, length))
+				walls.set_instance_transform(n_walls, _xf_up(x * float(side), (WALL_H - f) / 2.0, zc, basis))
 				n_walls += 1
 			z_from = e[1]
 	walls.visible_instance_count = n_walls
@@ -972,7 +1090,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			var curb: float = lerp(start_own_curb, end_own_curb, lt) if side == 1 else lerp(start_onc_curb, end_onc_curb, lt)
 			var pole_x := (curb + LAMP_SETBACK) * float(side)
 			var turn := Basis() if side == 1 else Basis(Vector3.UP, PI)
-			lamps.set_instance_transform(n_lamps, _xf(pole_x, 0.0, lz, turn))
+			lamps.set_instance_transform(n_lamps, _xf_up(pole_x, 0.0, lz, turn))
 			var head_x := pole_x - (LAMP_ARM - 0.2) * float(side)
 			pools.set_instance_transform(n_lamps, _xf(head_x, POOL_Y, lz, Basis.from_scale(Vector3(POOL_ACROSS, 1.0, POOL_ALONG))))
 			n_lamps += 1

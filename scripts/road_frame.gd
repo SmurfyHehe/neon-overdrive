@@ -41,12 +41,31 @@ static func chunk_xf(i: int, origin: int = origin_index) -> Transform3D:
 	if align == null:
 		return Transform3D(Basis.IDENTITY, Vector3(0, 0, -float(i - origin) * L))
 	# Absolute positions are 64-bit; subtract before they become a Vector3.
+	# Turned only about world up: the chunk's slope lives in its centreline.
 	return Transform3D(Basis(Vector3.UP, align.start_heading(i)),
-		Vector3(align.start_x(i) - align.start_x(origin), 0.0, align.start_z(i) - align.start_z(origin)))
+		Vector3(align.start_x(i) - align.start_x(origin), align.start_height(i) - align.start_height(origin), align.start_z(i) - align.start_z(origin)))
 
 ## Curvature of chunk i, 1/m, + = bending left (0 on a straight road).
 static func curvature(i: int) -> float:
 	return 0.0 if align == null else align.curvature(i)
+
+## Grade at the start of chunk i (rise per metre) and its vertical curvature
+## (1/m, + = sag): the chunk's surface is start_grade s + vcurve s^2 / 2
+## above its start. 0 on a flat road.
+static func start_grade(i: int) -> float:
+	return 0.0 if align == null else align.start_grade(i)
+
+static func vcurve(i: int) -> float:
+	return 0.0 if align == null else align.vcurve(i)
+
+## Whether the road leaves y = 0 anywhere (the flat ground plane is not
+## enough then; every chunk carries its own road collision).
+static func has_hills() -> bool:
+	return align != null and align.has_hills()
+
+## Height of the road surface above the start of chunk i, s metres into it.
+static func _rise(i: int, s: float) -> float:
+	return start_grade(i) * s + 0.5 * vcurve(i) * s * s
 
 ## World position -> road space.
 static func unroll(p: Vector3) -> Vector3:
@@ -71,7 +90,8 @@ static func unroll(p: Vector3) -> Vector3:
 			i += mini(-1, floori(ahead / L))
 		else:
 			i += maxi(1, floori(ahead / L))
-	return Vector3(sd.y, local.y, -(float(i - origin_index) * L + sd.x))
+	# y: up from the road surface (world up; the road has no camber).
+	return Vector3(sd.y, local.y - _rise(i, sd.x), -(float(i - origin_index) * L + sd.x))
 
 ## Road space -> world position.
 static func roll(u: Vector3) -> Vector3:
@@ -81,15 +101,17 @@ static func roll(u: Vector3) -> Vector3:
 	var s := _s_in_chunk(u.z, i)
 	var k := align.curvature(i)
 	var h := RoadAlignment.arc_heading(k, s)
-	var local := RoadAlignment.arc_point(k, s) + Vector3(cos(h), 0.0, -sin(h)) * u.x + Vector3(0.0, u.y, 0.0)
+	var local := RoadAlignment.arc_point(k, s) + Vector3(cos(h), 0.0, -sin(h)) * u.x + Vector3(0.0, _rise(i, s) + u.y, 0.0)
 	return chunk_xf(i) * local
 
-## World orientation of the road's axes at road-space z (x across, y up,
-## -z forward).
+## World orientation of the road's axes at road-space z (x across, y up off
+## the surface, -z forward, up or down the slope).
 static func basis_at(z: float) -> Basis:
 	if align == null:
 		return Basis.IDENTITY
-	return Basis(Vector3.UP, heading_at(z))
+	# The heading, then the slope: nose up on a rising grade.
+	var i := _chunk_of(z)
+	return Basis(Vector3.UP, heading_at(z)) * Basis(Vector3.RIGHT, atan(align.grade_at(i, _s_in_chunk(z, i))))
 
 ## Road heading at road-space z, radians about world up (0 = down world -Z).
 static func heading_at(z: float) -> float:

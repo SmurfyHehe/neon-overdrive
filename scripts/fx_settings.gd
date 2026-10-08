@@ -9,14 +9,16 @@ extends RefCounted
 # head_motion (the cockpit eye swaying with the car's forces, ChaseCamera)
 # and rear_strip (the HUD's rear-view strip in the chase view, fed by the same
 # rearview mirror render).
+# The driving-feel pass (2026-10-08) adds sparks (wall and car scrapes) and
+# hit_stop (the blink of freeze on a big crash).
 
-const EFFECTS := ["vignette", "speed_lines", "skid_marks", "exhaust_flames", "mirrors", "head_motion", "rear_strip"]
+const EFFECTS := ["vignette", "speed_lines", "skid_marks", "exhaust_flames", "mirrors", "head_motion", "rear_strip", "sparks", "hit_stop"]
 ## Mirror render size as a share of CockpitMirrors' base sizes: 0 = low (half),
 ## 1 = medium (base), 2 = high (double). Default medium.
 const MIRROR_QUALITIES := ["low", "medium", "high"]
 const MIRROR_QUALITY_DEFAULT := 1
 
-static var enabled := {"vignette": true, "speed_lines": true, "skid_marks": true, "exhaust_flames": true, "mirrors": true, "head_motion": true, "rear_strip": true}
+static var enabled := {"vignette": true, "speed_lines": true, "skid_marks": true, "exhaust_flames": true, "mirrors": true, "head_motion": true, "rear_strip": true, "sparks": true, "hit_stop": true}
 static var mirror_quality := MIRROR_QUALITY_DEFAULT
 
 static func is_on(effect: String) -> bool:

@@ -360,10 +360,12 @@ func _place(delta: float) -> void:
 
 ## Smooth noise shake applied on top of the chase transform. Amplitude adds
 ## the three sources; impact uses trauma^2 so small knocks stay small.
+## ViewSettings.shake (the pause menu's Camera shake slider) scales it all.
 func _shake(delta: float) -> void:
 	var buzz := pow(speed_t, 1.5)
-	var rot := SPEED_SHAKE_ROT * buzz + SURFACE_SHAKE_ROT * surface_t + IMPACT_SHAKE_ROT * trauma * trauma
-	var pos := SPEED_SHAKE_POS * buzz + SURFACE_SHAKE_POS * surface_t + IMPACT_SHAKE_POS * trauma * trauma
+	var k := ViewSettings.shake
+	var rot := (SPEED_SHAKE_ROT * buzz + SURFACE_SHAKE_ROT * surface_t + IMPACT_SHAKE_ROT * trauma * trauma) * k
+	var pos := (SPEED_SHAKE_POS * buzz + SURFACE_SHAKE_POS * surface_t + IMPACT_SHAKE_POS * trauma * trauma) * k
 	if rot <= 0.0 and pos <= 0.0:
 		return
 	# Faster wobble for rough surface and hits than for the speed buzz.

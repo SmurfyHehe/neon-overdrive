@@ -93,9 +93,12 @@ class_name RoadChunkBuilder
 # scripted player sideswiped oncoming traffic within seconds at 240 km/h.
 # Real highway lanes are 3.5-3.7 m; 3.2 m keeps the road a little tight for
 # the sense of speed and leaves ~1.1 m between bodies in adjacent lanes.
+# 3.2 -> 3.4 m (2026-10-08, Roy's lane-threading decision): two centred 1.6 m
+# cars side by side now leave 1.8 m, so a little drift in their lanes opens
+# the 2.4 m gap a player's car threads (TrafficCar drift / make room).
 # Everything else across the road (shoulder, curb, sidewalk, buildings,
 # lamps, lane dashes, traffic lane centres) is laid out from this constant.
-const LANE_W := 3.2
+const LANE_W := 3.4
 const CHUNK_LEN := 50.0
 const DASH_SPACING := 4.0
 # Road space (2026-10-06, Roy: "I want more space"): the shoulder went 0.9 ->

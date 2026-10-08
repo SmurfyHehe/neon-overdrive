@@ -1,6 +1,6 @@
-# Corrupt police and Pike: story and gameplay proposal (2026-10-08, rev 3)
+# Corrupt police and Pike: story and gameplay proposal (2026-10-08, rev 4, final)
 
-Status: PROPOSAL, docs only. Nothing is built. Story is Roy's to write; every name is a placeholder. Police are Stage F, so this shapes Stage F and the story, it does not jump ahead of them.
+Status: DECIDED by Roy (rounds 1-3, 2026-10-08), except what the rookie does about the player at the end (open, 7b). Docs only. Nothing is built. Story is Roy's to write; every name is a placeholder. Police are Stage F, so this shapes Stage F and the story, it does not jump ahead of them.
 
 **Roy's ask (2026-10-08 12:29):** some police are corrupt and work with Pike. They side with Pike but also hate the player, because Pike uses racers against the player. Research it.
 
@@ -24,6 +24,15 @@ Inputs read: `docs/story-bible.md` (main 09455e0), narrative fabric (PR #175, se
 3. **The rookie meets you in private**, and also learns about you over time through Dave's broadcast (section 7).
 4. **Whether the rookie comes after you at the end is OPEN.** Roy: a big question that could break the story. Not decided here; risks in section 7b.
 5. **Bad cops take ALL the cash; honest cops take little or none.** The ticket is **not** assumed: research the real differences between good and bad cops first (section 6a). This replaces round-1 answer 3 ("cash and a ticket").
+
+## Decided (Roy, 2026-10-08 13:08), round 3
+
+1. **Honest cops catch you:** a ticket paid from your **bank**, plus a **tow fee that depends on your heat level**. You keep tonight's cash.
+2. **Bad cops catch you:** they take **all** tonight's cash and write **no ticket** (no trail).
+3. **Honest cops give up** a chase that gets too dangerous for traffic; **bad cops never give up**.
+4. **The scare:** bad cops creep up with lights off, then hit you with everything at once, **with their own different lights** (section 5b).
+5. **Hiding spots:** yes, and they can be **anywhere** on the map (still never on a road with no way out).
+6. **The rookie only takes proof got legally, and that is part of the story** (section 7).
 
 Earlier decisions kept: police voice lines are **captions + squelch now**, voices later (offline text-to-speech that passes the free-assets rule: Chatterbox MIT, Kokoro Apache 2.0). The police radio cast keeps its five roles. Pike takes Cred, never cars, mods or progress.
 
@@ -130,7 +139,7 @@ They are a little faster than honest police (Pike's money), so where they appear
 | Rule | Why |
 |---|---|
 | **Only one bad pair in the world at a time**, and only when the hidden "Pike reach" number allows it | Keeps them special and scary, not common |
-| **Lurk spots:** parked dark in places with cover: a closed lot, under an overpass, behind a billboard, a canyon pull-off, the docks. You can see them before they move if you look | Gives the player a fair chance to notice and pick another road |
+| **Lurk spots anywhere on the map (Roy)**: parked dark with cover, such as a closed lot, under an overpass, behind a billboard, a canyon pull-off, the docks, a downtown side street. You can see them before they move if you look | Gives the player a fair chance to notice and pick another road |
 | **Never spawn in front of you on a straight you cannot leave**; always where there is a side street or exit | Being faster must not mean "no way out" |
 | **Sent by Pike's racers** (tip-off, setup race): they arrive from behind, from the direction the tip came | The setup feels like a setup, not a random spawn |
 | **Faster on straights, worse in tight turns** (heavy push bar) | The counterplay is choosing twisty roads |
@@ -164,15 +173,15 @@ What an honest US officer does, from current policy guidance and how the real co
 
 **What this means for the game.** A corrupt cop writing a ticket would leave a trail, so the realistic bad-cop catch is **cash gone, no paper**. That also makes the difference clean: honest cops cost you **a ticket**, bad cops cost you **your cash**.
 
-Options for the honest arrest (Roy to pick):
+Options for the honest arrest. **Decided (round 3): H2 with the tow fee scaled by heat level.**
 
 | Option | Honest cops catch you | Bad cops catch you |
 |---|---|---|
-| **H1. Ticket only (recommended)** | A ticket (fine taken from your **bank** at the garage, size by what you did). You **keep** tonight's cash | All tonight's cash, no ticket |
-| H2. Ticket + impound fee | Ticket plus a tow fee to get the car back next night; cash kept | Same as above |
+| H1. Ticket only | A ticket (fine taken from your **bank** at the garage, size by what you did). You **keep** tonight's cash | All tonight's cash, no ticket |
+| **H2. Ticket + tow fee (DECIDED)** | Ticket from your bank plus a tow fee that grows with heat level; cash kept | Same as above |
 | H3. Small cut | A share of tonight's cash (say a quarter) as a fine on the spot | All of it |
 
-Why H1: the two kinds of cop then hurt you in two different ways the player can feel (bank vs tonight's pot), and it matches how honest police really work. It also means Stage C's "bust loses the pot" rule moves to bad cops only; that change needs your OK.
+Result: the two kinds of cop hurt you in two different ways the player can feel (honest: your bank; bad: tonight's pot). Stage C's "bust loses the pot" rule now applies to bad cops only; honest busts cost ticket + tow from the bank.
 
 Honest cops also **call off** a chase that gets too dangerous for traffic (the policy above), which bad cops never do. In play: if you are fast and the roads are busy, honest cops give up sooner. Bad cops never give up, which is part of the fear.
 
@@ -191,7 +200,7 @@ Honest cops also **call off** a chase that gets too dangerous for traffic (the p
 | **He sets the meeting**, not you: a note under your wiper, "Diner, 5 a.m., come alone" | He is in control; you do not recruit him |
 | **He meets you as a cop meets a witness**, in uniform or off duty, never in a race car, never at a meet | He questions you; he does not hang out |
 | **He takes nothing from you**: no money, no favours, pays for his own coffee | Nothing anyone could call a bribe |
-| **He only takes proof he can use by the book**: dashcam footage from a public road, a plate, a time and place. Anything you got by breaking in or stealing, he refuses | A real limit that shapes what you collect |
+| **He only takes proof he can use by the book** (decided, and part of the story): dashcam footage from a public road, a plate, a time and place. Anything you got by breaking in or stealing, he refuses, and the story can turn on it: one piece of proof you got the wrong way is useless, so you have to get it again the right way | A real limit that shapes what you collect |
 | **He says what he will not do**: "I won't look the other way for you. Not once." | Said out loud, so the player knows the line |
 | **He never warns you about honest police**, never helps you escape, never races | He stays on the side of the law |
 
@@ -244,15 +253,10 @@ Whatever is picked, two rules protect the story: the rookie never gets paid back
 - Art: the normal cop body plus props (push bar, spotlight, grille strobes, black wheels, tint, ghost livery texture). Simple meshes or Kenney CC0; original textures.
 - Sound: tuned engine voice from the per-car engine work. Captions + squelch now; voices later with offline text-to-speech (Chatterbox or Kokoro), radio filter. Squelch and static from the Sonniss GDC bundle (royalty-free, commercial, no credit). All pass the free-assets rule.
 
-## Round 2 answers recorded at the top. Questions for Roy, round 3 (recommendation marked)
+## Still open
 
-1. When honest cops catch you, what do you lose? **A ticket paid from your bank, you keep tonight's cash (recommended)** / a ticket plus a tow fee / a share of tonight's cash
-2. Bad cops take all your cash and write no ticket, because a ticket would leave a trail? **Yes (recommended)** / they still write one
-3. Honest cops give up a chase when it gets too dangerous for traffic, bad cops never give up? **Yes (recommended)** / no
-4. The scary lights: bad cops creep up with lights off, then hit you with everything at once and a deep siren you feel? **Yes (recommended)** / only the different lights, no lights-off creep
-5. Bad cops wait in hiding spots you can spot if you look, never on a road with no way out? **Yes (recommended)** / anywhere
-6. The rookie only takes proof that was got legally (like dashcam footage from the road)? **Yes (recommended)** / any proof
-7. What the rookie does about you at the end: **left open for now**, pick later from 7b when the story is written (recommended) / pick now
+- What the rookie does about the player at the end (section 7b). Roy: could break the story; decide when the story is written.
+- Names, dialogue and the exact story beats are Roy's to write.
 
 ## Sources
 

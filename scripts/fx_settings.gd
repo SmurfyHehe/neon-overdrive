@@ -1,6 +1,8 @@
 class_name FxSettings
 extends RefCounted
 
+const SafeSave := preload("res://scripts/safe_save.gd")
+
 # Effects pack v1 (2026-10-06): one on/off flag per cheap effect, so a pause-menu
 # toggle can be wired to each later. Saved under [fx] in the same
 # user://settings.cfg the audio and traffic sliders use. NEON_FX=0 turns the
@@ -43,7 +45,7 @@ static func mirror_scale() -> float:
 ## Reads the file (missing or damaged means all on) and applies NEON_FX=0.
 static func load_settings() -> void:
 	var cfg := ConfigFile.new()
-	var ok := cfg.load(AudioSettings.path) == OK
+	var ok := SafeSave.load_config(cfg, AudioSettings.path) == OK
 	for e in EFFECTS:
 		enabled[e] = _to_bool(cfg.get_value("fx", e, true)) if ok else true
 	set_mirror_quality(int(cfg.get_value("fx", "mirror_quality", MIRROR_QUALITY_DEFAULT)) if ok else MIRROR_QUALITY_DEFAULT)
@@ -53,8 +55,8 @@ static func load_settings() -> void:
 
 static func save_settings() -> bool:
 	var cfg := ConfigFile.new()
-	cfg.load(AudioSettings.path)  # keep the other sections; a missing file is fine
+	SafeSave.load_config(cfg, AudioSettings.path)  # keep the other sections; a missing file is fine
 	for e in EFFECTS:
 		cfg.set_value("fx", e, enabled[e])
 	cfg.set_value("fx", "mirror_quality", mirror_quality)
-	return cfg.save(AudioSettings.path) == OK
+	return SafeSave.save_config(cfg, AudioSettings.path)

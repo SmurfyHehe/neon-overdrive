@@ -27,6 +27,7 @@ func _initialize() -> void:
 	var f := FileAccess.open(FILE, FileAccess.WRITE)  # start empty; the file is only ever overwritten
 	f.store_string("")
 	f = null
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(FILE + ".bak"))  # an earlier run's SafeSave backup
 
 	var slots := TuneSlots.new(FILE)
 	_check(slots.names().is_empty(), "a fresh slot file should have no slots")
@@ -88,7 +89,8 @@ func _initialize() -> void:
 	_check(is_equal_approx(car.spec.final_drive, TuneParams.find("final_drive").adv_max), "99.0 should clamp to the hard limit, got %f" % car.spec.final_drive)
 	_check(car.spec.max_torque == before_torque, "a path the slot lacks changed")
 
-	# corrupt file
+	# corrupt file, with no SafeSave .bak to fall back to (tests/safe_save.gd covers the fallback)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(FILE + ".bak"))
 	var bad := FileAccess.open(FILE, FileAccess.WRITE)
 	bad.store_string("{ this is not json")
 	bad = null

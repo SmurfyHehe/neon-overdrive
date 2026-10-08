@@ -14,12 +14,15 @@ extends RefCounted
 # Deleting a slot only removes its entry; the file is never deleted. A file that
 # will not parse is treated as empty and left untouched; the next save copies it
 # to tune_slots.bad.json first, so a hand-edit typo never wipes every slot.
+# Saves go through SafeSave (.tmp, then rename; the previous save stays as
+# tune_slots.json.bak), and a missing or damaged file loads the .bak instead.
 # Values that are not finite numbers (JSON writes NaN as null) are dropped on
 # load, so a slot applies whole or keeps the current value for that path
 # (settings safety, 2026-10-07).
 
 const DEFAULT_PATH := "user://tune_slots.json"
 const TestMode := preload("res://scripts/test_mode.gd")
+const SafeSave := preload("res://scripts/safe_save.gd")
 const MAX_NAME_LENGTH := 24
 
 var path: String
@@ -95,19 +98,20 @@ static func _is_number(x: Variant) -> bool:
 func _load_file() -> void:
 	_slots = {}
 	_unreadable = false
-	if not FileAccess.file_exists(path):
-		return
-	var text := FileAccess.get_file_as_string(path)
-	if text.strip_edges() == "":
-		return  # nothing in it to lose
-	_unreadable = true
-	var json := JSON.new()  # parse() reports an error code; parse_string() prints an engine error
-	if json.parse(text) != OK:
-		return
-	var parsed: Variant = json.data
-	if not parsed is Dictionary or not parsed.get("slots") is Dictionary:
-		return
-	_unreadable = false
+	var text := FileAccess.get_file_as_string(path) if FileAccess.file_exists(path) else ""
+	var parsed: Variant = null
+	if text.strip_edges() != "":
+		var json := JSON.new()  # parse() reports an error code; parse_string() prints an engine error
+		if json.parse(text) == OK:
+			parsed = json.data
+		# Damaged: back it up before the next write (nothing to lose if it is empty).
+		_unreadable = not _is_slot_file(parsed)
+	if not _is_slot_file(parsed):
+		# Missing, empty or damaged (a crash mid-save, a hand edit): load the
+		# previous good save that SafeSave kept, if there is one.
+		parsed = SafeSave.read_json(SafeSave.backup_path(path))
+		if not _is_slot_file(parsed):
+			return
 	for n in parsed.slots:
 		var slot: Variant = parsed.slots[n]
 		if not slot is Dictionary:
@@ -125,9 +129,7 @@ func _write_file() -> bool:
 			push_error("TuneSlots: %s did not load and cannot be backed up (%s); not overwriting it" % [path, error_string(err)])
 			return false
 		_unreadable = false
-	var f := FileAccess.open(path, FileAccess.WRITE)
-	if f == null:
-		push_error("TuneSlots: cannot write %s (%s)" % [path, error_string(FileAccess.get_open_error())])
-		return false
-	f.store_string(JSON.stringify({"version": 1, "slots": _slots}, "\t"))
-	return true
+	return SafeSave.write_json(path, {"version": 1, "slots": _slots})
+
+static func _is_slot_file(parsed: Variant) -> bool:
+	return parsed is Dictionary and parsed.get("slots") is Dictionary

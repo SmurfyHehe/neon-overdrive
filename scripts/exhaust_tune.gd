@@ -8,6 +8,7 @@ extends RefCounted
 class_name ExhaustTune
 
 const TestMode := preload("res://scripts/test_mode.gd")
+const SafeSave := preload("res://scripts/safe_save.gd")
 
 ## How loud the whole exhaust note is. 0.5 is the prototype's old level.
 var loudness := 0.5
@@ -73,20 +74,10 @@ static func save_car(car_id: String, d: Dictionary) -> bool:
 		if d.has(k):
 			entry[k] = snappedf(float(d[k]), 0.001)
 	cars[car_id] = entry
-	var f := FileAccess.open(save_path, FileAccess.WRITE)
-	if f == null:
-		push_error("ExhaustTune: cannot write %s (%s)" % [save_path, error_string(FileAccess.get_open_error())])
-		return false
-	f.store_string(JSON.stringify({"version": 1, "cars": cars}, "	"))
-	return true
+	return SafeSave.write_json(save_path, {"version": 1, "cars": cars})
 
 static func _read_cars() -> Dictionary:
-	if not FileAccess.file_exists(save_path):
-		return {}
-	var json := JSON.new()  # parse() reports an error code; parse_string() prints an engine error
-	if json.parse(FileAccess.get_file_as_string(save_path)) != OK:
-		return {}
-	var parsed: Variant = json.data
+	var parsed: Variant = SafeSave.read_json(save_path)  # the .bak if the file is missing or damaged
 	if parsed is Dictionary and parsed.get("cars") is Dictionary:
 		return parsed.cars
 	return {}

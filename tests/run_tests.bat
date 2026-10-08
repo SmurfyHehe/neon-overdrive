@@ -51,6 +51,7 @@ call :run camera_feel --headless
 call :run car_audio --headless
 call :run fleet_design_check --headless
 call :run exhaust_tune --headless
+call :run safe_save --headless
 call :run audio_master --headless
 call :run phase_a_engine --headless
 call :run tick_rate_120 "--headless --fixed-fps 120"

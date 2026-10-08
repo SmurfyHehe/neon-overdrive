@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/tuner_kit/balance_seesaw.gd" id="1"]
+
+[node name="BalanceSeesaw" type="Control"]
+script = ExtResource("1")

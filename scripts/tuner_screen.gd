@@ -77,11 +77,13 @@ var page_title: Label
 var preset_label: Label
 var car_label: Label
 var hint: Label
+## The focused setting's hint, right under its row (UI overhaul PR 2).
+var row_hint: Label
 var content: VBoxContainer   # rows of the current settings page
 var panel_pages := {}        # page id -> Control (Setup, Mechanic, Sound, Advanced)
 var rows: Array = []         # [{setting, name, value, bar}] on a settings page
 var preset_buttons: Array[Button] = []
-var stats: TunerStats
+var stats: PerformanceCard
 ## Notches and stats when the screen opened, shown as ghosts.
 var before_notches := {}
 var before_stats := {}
@@ -233,7 +235,7 @@ func _ready() -> void:
 	var right := VBoxContainer.new()
 	right.custom_minimum_size = Vector2(250, 0)
 	right_plate.add_child(right)
-	stats = TunerStats.new()
+	stats = PerformanceCard.new()
 	right.add_child(stats)
 	pit_wall = PitWall.new()
 	pit_wall.visible = false
@@ -324,7 +326,7 @@ func _page_height(id: String) -> float:
 		"setup": return 190.0
 		"mechanic", "advanced": return 360.0
 		"sound": return 300.0
-	return minf(30.0 * (TunerModel.page(id).settings.size() + 1) + 6.0, 300.0)
+	return minf(30.0 * (TunerModel.page(id).settings.size() + 1) + 46.0, 320.0)  # rows, reset, the hint
 
 func current_page() -> String:
 	return page_ids[page_index]
@@ -352,6 +354,15 @@ func show_page(id: String) -> void:
 		rows.append(_add_row(s))
 	if not page.settings.is_empty():
 		rows.append(_add_reset_row())
+		row_hint = _label("", SILVER)
+		row_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		row_hint.custom_minimum_size = Vector2(420, 0)
+		row_hint.add_theme_font_size_override("font_size", 15)
+		var pad := MarginContainer.new()
+		pad.add_theme_constant_override("margin_left", 12)
+		pad.add_theme_constant_override("margin_bottom", 4)
+		pad.add_child(row_hint)
+		content.add_child(pad)
 	_refresh()
 	if id == "setup":
 		preset_buttons[0].grab_focus()
@@ -399,6 +410,11 @@ func _add_row(s: Dictionary) -> Dictionary:
 	var value := _label("", AMBER)
 	value.add_theme_font_override("font", UiTheme.font("mono"))
 	h.add_child(value)
+	# Against stock, beside the real number: "Stock" in steel blue, "+2 stiffer".
+	var rel := _label("", TunerColours.STOCK)
+	rel.add_theme_font_size_override("font_size", 14)
+	h.add_child(rel)
+	bar.stock = model.stock_notch(s)
 	# Settings safety part 3: the bar's notches carry their danger zone, and a
 	# risky setting gets a consequence line under it that follows the value.
 	var path: String = s.paths[0] if s.kind == "range" else ""
@@ -414,7 +430,7 @@ func _add_row(s: Dictionary) -> Dictionary:
 		pad.add_theme_constant_override("margin_left", 178)
 		pad.add_child(line)
 		block.add_child(pad)
-	return {"setting": s, "name": name, "value": value, "bar": bar, "line": line, "path": path}
+	return {"setting": s, "name": name, "value": value, "rel": rel, "bar": bar, "line": line, "path": path, "node": block}
 
 ## The last row of every settings page: Right or Enter on it puts the page back
 ## to stock (settings safety part 4). Other pages stay as they are.
@@ -427,7 +443,7 @@ func _add_reset_row() -> Dictionary:
 	pad.add_theme_constant_override("margin_top", 6)
 	pad.add_child(name)
 	content.add_child(pad)
-	return {"setting": RESET_ROW, "name": name}
+	return {"setting": RESET_ROW, "name": name, "node": pad}
 
 ## Resets the page on screen; true if anything changed.
 func reset_current_page() -> bool:
@@ -569,6 +585,9 @@ func _refresh() -> void:
 		if s.kind == "reset":
 			continue
 		r.value.text = model.value_text(s)
+		var rel_text := model.relative_text(s)
+		r.rel.text = "" if rel_text == r.value.text else rel_text
+		r.rel.add_theme_color_override("font_color", TunerColours.STOCK if rel_text == "Stock" else DIM)
 		var danger := SettingDanger.Level.GREEN
 		if r.path != "":
 			var v := TuneParams.get_value(player.spec, r.path)
@@ -584,7 +603,13 @@ func _refresh() -> void:
 	var page := TunerModel.page(current_page())
 	if not rows.is_empty():
 		hint.text = rows[row_index].setting.hint
+		hint.visible = false
+		# the hint sits right under the focused row, where the eye already is
+		var holder: Node = row_hint.get_parent()
+		content.move_child(holder, mini(rows[row_index].node.get_index() + 1, content.get_child_count() - 1))
+		row_hint.text = hint.text
 	else:
+		hint.visible = true
 		hint.text = {
 			"setup": "Stock: as it left the factory. Street: forgiving and comfortable. Grip: fast laps. Drift: easy slides.",
 			"mechanic": "The mechanic tries setups on a closed track and keeps what scores best for your goals.",
@@ -615,6 +640,8 @@ class NotchBar extends Control:
 	var before := 0
 	var focused := false
 	var zones: Array = []
+	## The car's stock notch: a steel-blue frame round it (-1 = none).
+	var stock := -1
 
 	func _draw() -> void:
 		var gap := 2.0
@@ -632,127 +659,8 @@ class NotchBar extends Control:
 				draw_rect(Rect2(r.position, Vector2(w, ZONE_STRIP)), zc)
 			if i == before and before != now:
 				draw_rect(Rect2(r.position.x, size.y - 3.0, w, 3.0), TunerScreen.SILVER)
-
-## Right-hand stat panel: before (dim) and now (orange) bars with the change.
-class TunerStats extends VBoxContainer:
-	const ROWS := [
-		["top", "Top speed", "~%d km/h", 150.0, 320.0, false],
-		["accel", "0-100", "~%.1f s", 10.0, 2.5, false],
-		["brake", "100-0", "~%d m", 60.0, 25.0, false],
-		["grip", "Grip", "~%.2f g", 0.8, 2.0, false],
-		["balance", "Balance", "%s", -1.0, 1.0, true],
-	]
-	var labels := {}
-	var bars := {}
-	## "vs stock" column: signed difference from the car's factory setup.
-	var vs := {}
-	var stock := {}
-	## Track numbers from a Test run, for the setup they were measured on; any
-	## change to the car clears them back to estimates.
-	var measured := {}
-	var measured_for := 0
-
-	func _ready() -> void:
-		add_theme_constant_override("separation", 4)
-		var head := HBoxContainer.new()
-		add_child(head)
-		var title := UiTheme.title_label("DYNO SHEET", 26, UiTheme.AMBER)
-		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		head.add_child(title)
-		var vs_head := Label.new()
-		vs_head.text = "VS STOCK"
-		vs_head.add_theme_font_override("font", UiTheme.font("mono"))
-		vs_head.add_theme_color_override("font_color", TunerScreen.DIM)
-		head.add_child(vs_head)
-		add_child(UiTheme.floor_tape())
-		for r in ROWS:
-			var line := HBoxContainer.new()
-			add_child(line)
-			var l := Label.new()
-			l.add_theme_color_override("font_color", TunerScreen.SILVER)
-			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			line.add_child(l)
-			var d := Label.new()
-			d.add_theme_font_override("font", UiTheme.font("mono"))
-			line.add_child(d)
-			vs[r[0]] = d
-			labels[r[0]] = l
-			var b := StatBar.new()
-			b.custom_minimum_size = Vector2(0, 12)
-			b.centred = r[5]
-			add_child(b)
-			bars[r[0]] = b
-		var note := Label.new()
-		note.text = "~ = estimate"
-		note.add_theme_color_override("font_color", TunerScreen.DIM)
-		add_child(note)
-
-	func set_values(before: Dictionary, now: Dictionary) -> void:
-		if labels.is_empty() or now.is_empty():
-			return
-		for r in ROWS:
-			var k: String = r[0]
-			var v: float = now[k]
-			var b: float = before.get(k, v)
-			var text: String
-			if k == "balance":
-				text = "Understeer" if v < -0.15 else ("Oversteer" if v > 0.15 else "Neutral")
-				text = "%s  %s" % [r[1], text]
-			elif _measured_value(k) != null:
-				v = _measured_value(k)
-				text = "%s  %s" % [r[1], (r[2] as String).replace("~", "") % v]
-			else:
-				text = "%s  %s" % [r[1], r[2] % v]
-				var d := v - b
-				if absf(d) > 0.005 * maxf(absf(b), 1.0):
-					text += ("   %+.0f" if k == "top" or k == "brake" else "   %+.2f") % d
-			labels[k].text = text
-			_set_vs(k, float(now[k]))
-			bars[k].now = inverse_lerp(r[3], r[4], v)
-			bars[k].before = inverse_lerp(r[3], r[4], b)
-			bars[k].queue_redraw()
-
-	## Signed delta against the stock estimate; amber up-arrow = better, dim down-arrow = worse.
-	func _set_vs(k: String, v: float) -> void:
-		var d: Label = vs[k]
-		if k == "balance" or not stock.has(k):
-			d.text = ""
-			return
-		var diff: float = v - float(stock[k])
-		var lower_is_better: bool = k == "accel" or k == "brake"
-		var step: float = 0.5 if k == "top" else (0.05 if k == "grip" else 0.05)
-		if k == "brake":
-			step = 0.5
-		if absf(diff) < step:
-			d.text = "stock"
-			d.add_theme_color_override("font_color", TunerScreen.DIM)
-			return
-		var better: bool = (diff < 0.0) == lower_is_better
-		var fmt: String = "%+.0f" if (k == "top" or k == "brake") else "%+.2f"
-		d.text = (fmt % diff) + (" ▲" if better else " ▼")
-		d.add_theme_color_override("font_color", TunerScreen.AMBER if better else TunerScreen.DIM)
-
-	func _measured_value(k: String) -> Variant:
-		var key: String = {"top": "top_speed_kmh", "accel": "t_0_100", "brake": "brake_dist_100", "grip": "peak_lat_g"}.get(k, "")
-		return float(measured[key]) if key != "" and measured.has(key) else null
-
-	class StatBar extends Control:
-		var now := 0.5
-		var before := 0.5
-		var centred := false
-
-		func _draw() -> void:
-			draw_rect(Rect2(Vector2.ZERO, size), TunerScreen.NAVY_LIGHT)
-			var n := clampf(now, 0.0, 1.0)
-			var b := clampf(before, 0.0, 1.0)
-			if centred:
-				var mid := size.x * 0.5
-				draw_rect(Rect2(mid - 1.0, 0.0, 2.0, size.y), TunerScreen.DIM)
-				draw_rect(Rect2(size.x * n - 3.0, 0.0, 6.0, size.y), TunerScreen.SODIUM)
-				draw_rect(Rect2(size.x * b - 1.0, size.y - 3.0, 2.0, 3.0), TunerScreen.SILVER)
-				return
-			draw_rect(Rect2(0.0, 0.0, size.x * b, size.y), TunerScreen.DIM)
-			draw_rect(Rect2(0.0, 2.0, size.x * n, size.y - 4.0), TunerScreen.SODIUM)
+			if i == stock:
+				draw_rect(r.grow(1.0), TunerColours.STOCK, false, 2.0)
 
 ## The pit-wall result of a Test run: speed trace of this run over the stock run,
 ## throttle and brake strips under it, and a delta column against stock.
@@ -773,7 +681,7 @@ class PitWall extends VBoxContainer:
 		var mono := SystemFont.new()
 		mono.font_names = PackedStringArray(["Consolas", "Courier New", "monospace"])
 		var title := Label.new()
-		title.text = "TEST RUN vs STOCK"
+		title.text = "TEST RUN VS STOCK"
 		title.add_theme_color_override("font_color", TunerScreen.SILVER)
 		add_child(title)
 		var what := Label.new()
@@ -811,14 +719,10 @@ class PitWall extends VBoxContainer:
 				continue
 			var d := float(mine[k]) - float(stock[k])
 			values[k].text = "%-6s %s" % [r[1], r[2] % float(mine[k])]
-			var shown: String = r[3] % d
-			# Below the shown precision counts as level: no arrow, dim.
-			var level := shown.substr(1).to_float() == 0.0
-			if level:
-				shown = r[3] % 0.0  # "+0.0", not "-0.0"
-			var better: bool = d * r[4] > 0.0
-			deltas[k].text = shown + ("  " if level else (" ▲" if better else " ▼"))
-			deltas[k].add_theme_color_override("font_color", TunerScreen.AMBER if better and not level else TunerScreen.DIM)
+			# Below the shown precision counts as level: "stock", no arrow.
+			var res := TunerColours.delta(d, r[4] > 0, r[3])
+			deltas[k].text = res.text
+			deltas[k].add_theme_color_override("font_color", res.colour)
 
 	## Speed against time, both runs on the same scale, then the throttle and
 	## brake strips of this run.
@@ -839,8 +743,8 @@ class PitWall extends VBoxContainer:
 			for kmh: float in [50.0, 100.0]:  # grid lines
 				var y := plot_h * (1.0 - kmh / top)
 				draw_line(Vector2(0.0, y), Vector2(size.x, y), TunerScreen.DIM, 1.0)
-			_line(stock.speed, n, top, plot_h, TunerScreen.SILVER)
-			_line(mine.speed, n, top, plot_h, TunerScreen.AMBER)
+			_line(stock.speed, n, top, plot_h, TunerColours.STOCK)
+			_line(mine.speed, n, top, plot_h, TunerColours.YOURS)
 			var w := size.x / maxf(n - 1, 1)
 			for i in mine.speed.size():
 				var x := float(i) * w

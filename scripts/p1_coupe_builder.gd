@@ -147,6 +147,13 @@ static func build_chassis_visual(paint: Color = PAINT) -> Node3D:
 	root.set_meta("body_mat", paint_mat)
 	root.set_meta("half_w", WIDTH / 2.0)
 	root.set_meta("half_l", LENGTH / 2.0)
+	# Vanity plates (R1): rear under the tail-panel sticker spot, front on the
+	# bumper above the grille; measured off the body mesh, lift included.
+	root.set_meta("plates", [
+		{"pos": Vector3(0.0, 0.31, 2.188) + lift, "normal": Vector3(0.0, 0.0, 1.0)},
+		{"pos": Vector3(0.0, 0.40, -2.247) + lift, "normal": Vector3(0.0, 0.0, -1.0)},
+	])
+	VanityPlate.attach(root)
 	return root
 
 static func recolor(car: Node3D, color: Color) -> void:

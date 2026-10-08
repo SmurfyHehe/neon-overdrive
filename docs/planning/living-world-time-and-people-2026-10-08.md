@@ -1,6 +1,6 @@
 # Living world: time, people and events (proposal, 2026-10-08)
 
-Status: PROPOSAL, docs only. Roy signs off before anything is built. Story is Roy's to write; names are placeholders.
+Status: PROPOSAL, docs only. Roy answered round 1 on 2026-10-08 (section 6). The first build step (L1) waits for Roy to say build. Story is Roy's to write; names are placeholders.
 
 Roy (2026-10-08): "the world doesn't feel real, there's no track of time or any sense of humanity in this game." Also: "what if the rule breaker share changed based off game events?"
 
@@ -35,10 +35,23 @@ A **game clock** means the game keeps its own time of night, like a watch that r
 
 Proposal:
 - A night runs **8 p.m. to 6 a.m.** in game time.
-- Speed: **1 real minute = 10 game minutes**, so a full night is about **1 real hour** (options in question 2).
+- Speed: **1 real minute of driving = 10 game minutes**, so a full night is about **1 hour of driving**, but **not one sitting** (see "Night length and play sessions" below).
 - Where you see it: the **clock on the car's dashboard** and Dave saying the time. No HUD timer, no key hints.
 - A **date and weekday**: "Friday, Oct 9". Weekends are busier and have meets; Monday is dead. The story's "debt due at season's end" becomes a real date on the garage calendar.
-- **Dawn**: from 5 a.m. the sky slowly goes from navy to pre-dawn blue (world vision W4). At 6 a.m. the night ends: you bank what you earned and wake up in the garage. Dawn is a soft deadline you feel, never a fail screen.
+- **Dawn**: from 5 a.m. the sky slowly goes from navy to pre-dawn blue (world vision W4). Dawn is a soft deadline you feel, never a fail screen.
+- **6 a.m. and you're not home (Roy, decided):** a short cutscene of you driving home tired and parking at the garage. You **keep your earnings**. Then the next night starts from the garage. Cheapest form: a few seconds of fixed camera on the existing road with a dawn sky, and the garage door closing (or a still, as the story bible already uses).
+
+### Night length and play sessions (Roy: a real night is much longer than 90 minutes, but nobody plays that long)
+
+The game night (8 p.m. to 6 a.m., 10 hours) is compressed, and **one night can stretch over several play sessions**.
+
+| Option | How it works | Good | Bad |
+|---|---|---|---|
+| A. One sitting | Night = 60 real min, must finish it in one go | Simple | Forces long sessions; quitting loses the night |
+| **B. Compressed + carried over (recommended)** | Clock runs 10x while driving. Quit any time: the time, place and unbanked earnings save, and the next session continues the same night | Play 10 or 90 minutes, the night still feels like one night | Needs save of the clock (small) |
+| C. Time jumps only | Clock moves only when you do things (a race = 30 min, a garage job = 1 h) | Very controllable | Driving around never moves time, so the world feels frozen again |
+
+**Recommendation: B, plus small jumps from C.** Driving runs the clock at 10x; stops add time on top (a garage job +1 h, a diner break +20 min, a race +15 min). So a night with a few stops is about **35-45 minutes of actual driving**, spread over as many sessions as you like. Night length is a setting (45 / 60 / 90 min of driving) for anyone who wants it longer.
 - Costs: one number in a small `WorldClock` script; zero GPU.
 - Assets: none.
 
@@ -113,18 +126,22 @@ Costs: a lookup table and the existing behaviour presets on `traffic_car.gd`. Th
 
 All performance claims are estimates; each phase is measured with the headless benchmark before it ships.
 
-## 6. Questions for Roy (one word each, my pick marked)
+## 6. Roy's answers (2026-10-08)
 
-1. **Add a game clock** that runs from 8 p.m. to 6 a.m.? **Yes** (recommended) / No.
-2. **How long is one night** in real time? 30 min / **60 min** (recommended) / 90 min.
-3. **In free roam, does time move?** **Yes** (recommended; a "stop clock" switch in settings) / No.
-4. **What happens at 6 a.m.?** **Bank and wake up in the garage** (recommended) / Keep driving in the dawn light.
-5. **Weekdays and dates**, weekends busier with meets? **Yes** (recommended) / No.
-6. **Rule breakers change with events** (3% normal, up to 20% on meet nights, near 0% during a police crackdown)? **Yes** (recommended) / No.
-7. **People only where you stop** (gas station, diner, meets), never along the highway? **Yes** (recommended) / No.
-8. **Robot-made voices (Kokoro) for Dave, callers, news and police** until something better is free with no credit? **Yes** (recommended) / No.
-9. **Assets that are free with no credit but not strictly public domain** (Quaternius, Sonniss, Mixamo: free to use in a sold game, you just can't resell the raw files)? **Yes** (recommended) / CC0 only.
-10. **First step: L1 clock + lit windows?** **Yes** (recommended) / Start elsewhere.
+"Changeable" = my pick, used until Roy says otherwise.
+
+| # | Question | Answer |
+|---|---|---|
+| 1 | Game clock 8 p.m. to 6 a.m. | **Yes** (Roy) |
+| 2 | Night length | **Compressed and carried over across sessions** (Roy: a night is longer than 90 min but you don't play that long). Section 1, option B |
+| 3 | Time moves in free roam | **Yes** (Roy), with a setting to stop it |
+| 4 | 6 a.m. not home | **Cutscene: drive home tired, park, keep earnings** (Roy) |
+| 5 | Weekdays and dates, busier weekends | **Yes**, changeable (Roy: don't know) |
+| 6 | Rule breakers change with events | **Yes**, changeable (Roy: don't know). Percentages in section 3 are starting values |
+| 7 | People only where you stop | **Yes**, changeable (Roy: don't know) |
+| 8 | Kokoro voices | **Open**: decided once the voice approach is chosen (sound and police threads) |
+| 9 | Free, no-credit assets that aren't strictly public domain | **Yes** (Roy) |
+| 10 | First step L1 (clock + windows switching on and off) | **Yes** (Roy), when Roy says build |
 
 ## Sources
 

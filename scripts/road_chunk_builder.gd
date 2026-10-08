@@ -513,6 +513,39 @@ const CENTERLINE_BAKE := 1.0
 
 ## The centreline of the chunk _apply() is laying out.
 static var _curve: Curve3D
+## Its frame every metre, sampled once per _apply() (_cache_frames). Sampling
+## the Curve3D for each of the ~600 points a chunk lays out cost about a
+## third of a rebuild (2026-10-07).
+static var _frame_xf: Array[Transform3D] = []
+static var _frame_o := PackedVector3Array()
+static var _frame_f := PackedVector3Array()
+
+static func _cache_frames(curve: Curve3D) -> void:
+	var n := int(CHUNK_LEN) + 1
+	_frame_xf.resize(n)
+	_frame_o.resize(n)
+	_frame_f.resize(n)
+	for i in n:
+		var f := station(curve, float(i))
+		_frame_xf[i] = f
+		_frame_o[i] = f.origin
+		_frame_f[i] = -f.basis.z
+
+## The cached frame s metres along the chunk: exact on every whole metre
+## (where nearly every corner sits), interpolated between (a metre's chord of
+## a 300 m bend is off by 0.4 mm).
+static func _frame(s: float) -> Transform3D:
+	var sc := clampf(s, 0.0, CHUNK_LEN)
+	var i := mini(int(sc), int(CHUNK_LEN) - 1)
+	var t := sc - float(i)
+	if t == 0.0:
+		return _frame_xf[i]
+	if t == 1.0:
+		return _frame_xf[i + 1]
+	var o := _frame_o[i].lerp(_frame_o[i + 1], t)
+	var fwd := _frame_f[i].lerp(_frame_f[i + 1], t).normalized()
+	var right := fwd.cross(Vector3.UP).normalized()
+	return Transform3D(Basis(right, right.cross(fwd), -fwd), o)
 
 static func _new_centerline() -> Path3D:
 	var path := Path3D.new()
@@ -538,11 +571,11 @@ static func station(curve: Curve3D, s: float) -> Transform3D:
 ## Chunk-local transform for something laid out at (x, y, z) in the straight
 ## street description, turned by `local` relative to the road.
 static func _xf(x: float, y: float, z: float, local: Basis = Basis()) -> Transform3D:
-	return station(_curve, -z) * Transform3D(local, Vector3(x, y, 0.0))
+	return _frame(-z) * Transform3D(local, Vector3(x, y, 0.0))
 
 ## Chunk-local position of the straight-description point (x, y, z).
 static func _at(x: float, y: float, z: float) -> Vector3:
-	return station(_curve, -z) * Vector3(x, y, 0.0)
+	return _frame(-z) * Vector3(x, y, 0.0)
 
 # ---------- tapered strips ----------
 #
@@ -556,38 +589,58 @@ static func _at(x: float, y: float, z: float) -> Vector3:
 # mirrored x values (outer < inner), which flips the winding, so the vertex
 # order is picked per side to keep every strip facing up.
 
+## Pieces a road strip is cut into along the chunk: enough that each piece's
+## straight chord stays within STRIP_SAG of the curve (8 on a 300 m bend), and
+## 1 on a straight, level chunk -- exactly the old single quad. The strips
+## were the bulk of a chunk rebuild at 10 pieces each (0.35 of 0.84 ms,
+## 2026-10-07).
+const STRIP_SAG := 0.02
+static func strip_pieces(k: float, vc: float = 0.0) -> int:
+	var c := maxf(absf(k), absf(vc))
+	if c < 1e-9:
+		return 1
+	return clampi(ceili(CHUNK_LEN * sqrt(c / (8.0 * STRIP_SAG))), 1, STATIONS)
+
+## The chunk _apply() is laying out: its strip piece count.
+static var _strip_n := 1
+
 static func _strip_arrays(x_inner0: float, x_inner1: float, x_outer0: float, x_outer1: float, length: float, y: float) -> Array:
-	# STATIONS quads along the strip, each corner put through the centreline
+	# _strip_n quads along the strip, each corner put through the centreline
 	# frame (#37). UVs as before: x across the strip, y along it (0..1 over
 	# the chunk), so the asphalt texture tiles exactly as it did.
+	var n := _strip_n
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var uvs := PackedVector2Array()
+	verts.resize(6 * n)
+	normals.resize(6 * n)
+	uvs.resize(6 * n)
 	# [a, b, c] runs clockwise seen from above only when outer is left of inner.
 	var mirrored := x_outer0 < x_inner0
-	for k in STATIONS:
-		var t0 := float(k) / STATIONS
-		var t1 := float(k + 1) / STATIONS
-		var f0 := station(_curve, length * t0)
-		var f1 := station(_curve, length * t1)
+	var f0 := _frame(0.0)
+	var t0 := 0.0
+	for k in n:
+		var t1 := float(k + 1) / float(n)
+		var f1 := _frame(length * t1)
 		var a := f0 * Vector3(lerpf(x_inner0, x_inner1, t0), y, 0.0)
 		var b := f0 * Vector3(lerpf(x_outer0, x_outer1, t0), y, 0.0)
 		var c := f1 * Vector3(lerpf(x_inner0, x_inner1, t1), y, 0.0)
 		var d := f1 * Vector3(lerpf(x_outer0, x_outer1, t1), y, 0.0)
-		var ua := Vector2(0, t0)
-		var ub := Vector2(1, t0)
-		var uc := Vector2(0, t1)
-		var ud := Vector2(1, t1)
 		var n0 := f0.basis.y
 		var n1 := f1.basis.y
+		var j := 6 * k
 		if mirrored:
-			verts.append_array([a, b, c, b, d, c])
-			uvs.append_array([ua, ub, uc, ub, ud, uc])
-			normals.append_array([n0, n0, n1, n0, n1, n1])
+			verts[j] = a; verts[j + 1] = b; verts[j + 2] = c; verts[j + 3] = b; verts[j + 4] = d; verts[j + 5] = c
+			uvs[j] = Vector2(0, t0); uvs[j + 1] = Vector2(1, t0); uvs[j + 2] = Vector2(0, t1)
+			uvs[j + 3] = Vector2(1, t0); uvs[j + 4] = Vector2(1, t1); uvs[j + 5] = Vector2(0, t1)
+			normals[j] = n0; normals[j + 1] = n0; normals[j + 2] = n1; normals[j + 3] = n0; normals[j + 4] = n1; normals[j + 5] = n1
 		else:
-			verts.append_array([a, c, b, b, c, d])
-			uvs.append_array([ua, uc, ub, ub, uc, ud])
-			normals.append_array([n0, n1, n0, n0, n1, n1])
+			verts[j] = a; verts[j + 1] = c; verts[j + 2] = b; verts[j + 3] = b; verts[j + 4] = c; verts[j + 5] = d
+			uvs[j] = Vector2(0, t0); uvs[j + 1] = Vector2(0, t1); uvs[j + 2] = Vector2(1, t0)
+			uvs[j + 3] = Vector2(1, t0); uvs[j + 4] = Vector2(0, t1); uvs[j + 5] = Vector2(1, t1)
+			normals[j] = n0; normals[j + 1] = n1; normals[j + 2] = n0; normals[j + 3] = n0; normals[j + 4] = n1; normals[j + 5] = n1
+		f0 = f1
+		t0 = t1
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
@@ -647,23 +700,26 @@ static func _lamp_slots() -> int:
 #
 # Real "Dirt"-group collision spanning the sidewalk band on one side for this
 # whole chunk. Created once per side and RESHAPED on rebuild -- the shape
-# resource is reused. It is a convex prism tapered exactly like the sidewalk
-# strip (issue #35), so the grip change and the height step sit under the
-# drawn curb edge all along a lane-count change.
+# resource is reused. It is tapered exactly like the sidewalk strip (issue
+# #35), so the grip change and the height step sit under the drawn curb edge
+# all along a lane-count change.
+#
+# Since #37 it is a triangle mesh of the sidewalk's ramp and top, following
+# the centreline, instead of a convex prism: a prism cannot follow a bend, and
+# ten convex pieces per side (Godot builds a hull for each) made the sidewalk
+# a third of a chunk rebuild. Wheels and the chassis only ever meet the ramp
+# and the top; the out-of-bounds wall stands just behind the outer edge.
 
 static func _new_sidewalk_collision(body_name: String) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = body_name
 	body.add_to_group("Dirt")
-	# One convex piece per station (#37) so the prism can follow a bend.
-	for k in STATIONS:
-		var col := CollisionShape3D.new()
-		col.name = "Shape" if k == 0 else "Shape%d" % k
-		var hull := ConvexPolygonShape3D.new()
-		# placeholder until _apply() reshapes it -- an empty hull logs an error
-		hull.points = PackedVector3Array([Vector3.ZERO, Vector3.RIGHT, Vector3.UP, Vector3.BACK])
-		col.shape = hull
-		body.add_child(col)
+	var col := CollisionShape3D.new()
+	col.name = "Shape"
+	var tri := ConcavePolygonShape3D.new()
+	tri.backface_collision = true  # met from either side, whatever the winding
+	col.shape = tri
+	body.add_child(col)
 	return body
 
 static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: float, inner1: float, outer0: float, outer1: float, side: int) -> void:
@@ -679,10 +735,11 @@ static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: 
 	# dead (tests/car_audio.gd's kerb phase, once the ground became a plane in
 	# PR #129). A sloped face pushes the box up instead.
 	#
-	# Cut into STATIONS pieces along the chunk, each corner through the
-	# centreline frame (#37); on a straight centreline the pieces tile the old
-	# single prism exactly.
+	# STATIONS pieces along the chunk, each corner through the centreline
+	# frame (#37); on a straight centreline the ramp and top are exactly the
+	# old prism's.
 	var sx := float(side)
+	var faces := PackedVector3Array()
 	for k in STATIONS:
 		var t0 := float(k) / STATIONS
 		var t1 := float(k + 1) / STATIONS
@@ -694,13 +751,15 @@ static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: 
 		var o1 := lerpf(outer0, outer1, t1)
 		var ramp0 := minf(SIDEWALK_RAMP, absf(o0 - i0))
 		var ramp1 := minf(SIDEWALK_RAMP, absf(o1 - i1))
-		var hull: ConvexPolygonShape3D = (body.get_node(NodePath("Shape" if k == 0 else "Shape%d" % k)) as CollisionShape3D).shape
-		hull.points = PackedVector3Array([
-			_at(i0 * sx, 0.0, z0), _at(o0 * sx, 0.0, z0),
-			_at(i1 * sx, 0.0, z1), _at(o1 * sx, 0.0, z1),
-			_at((i0 + ramp0) * sx, 0.15, z0), _at(o0 * sx, 0.15, z0),
-			_at((i1 + ramp1) * sx, 0.15, z1), _at(o1 * sx, 0.15, z1),
-		])
+		var foot0 := _at(i0 * sx, 0.0, z0)
+		var foot1 := _at(i1 * sx, 0.0, z1)
+		var lip0 := _at((i0 + ramp0) * sx, 0.15, z0)
+		var lip1 := _at((i1 + ramp1) * sx, 0.15, z1)
+		var top0 := _at(o0 * sx, 0.15, z0)
+		var top1 := _at(o1 * sx, 0.15, z1)
+		faces.append_array([foot0, foot1, lip0, lip0, foot1, lip1])  # the ramp
+		faces.append_array([lip0, lip1, top0, top0, lip1, top1])     # the top
+	((body.get_node(^"Shape") as CollisionShape3D).shape as ConcavePolygonShape3D).set_faces(faces)
 	body.position = Vector3.ZERO
 
 # Invisible out-of-bounds wall (#28). Buildings are 22 m apart, so on their
@@ -853,6 +912,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	root.position = Vector3(0, 0, -float(chunk_index - origin_index) * CHUNK_LEN)
 	root.set_meta("chunk_index", chunk_index)
 	_curve = _update_centerline(root)
+	_cache_frames(_curve)
+	_strip_n = strip_pieces(0.0)
 
 	var own_lanes: int = clampi(int(cfg.own_lanes), 1, MAX_OWN_LANES)
 	var onc_lanes: int = clampi(int(cfg.onc_lanes), 1, MAX_ONC_LANES)

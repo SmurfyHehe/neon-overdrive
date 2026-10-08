@@ -222,7 +222,38 @@ func value_text(s: Dictionary) -> String:
 			if float(spec.get("front_brake_bias", -1.0)) < 0.0:
 				return "Auto (%d%% front)" % roundi(100.0 * v)
 			return "%d%% front" % roundi(100.0 * v)
-	return "%d / 10" % notch(s)
+	return relative_text(s)  # no unit worth showing: say it against stock
+
+## Where the car's stock setup sits on this setting: a notch, or a choice index.
+func stock_notch(s: Dictionary) -> int:
+	var probe := TunerModel.new(null, stock, stock)
+	if s.kind == "choice":
+		var i := probe.choice_index(s)
+		return i if i >= 0 else _default_choice(s)
+	return probe.notch(s)
+
+## The words for each bar end when you move toward it ("+2 stiffer").
+const TOWARD := {"Soft": "softer", "Stiff": "stiffer", "Firm": "firmer", "Low": "lower", "High": "higher",
+	"Neg": "more negative", "Pos": "more positive", "Out": "more toe-out", "In": "more toe-in",
+	"Short": "shorter", "Long": "longer", "None": "less", "Max": "more", "Open": "more open",
+	"Locked": "more locked", "Rear": "more rear", "Front": "more front", "Less": "less", "More": "more",
+	"Zero": "less"}
+
+## The setting against stock in words: "Stock", "+2 stiffer", "3 softer"; a
+## choice reads "Stock" on the stock option and nothing otherwise.
+func relative_text(s: Dictionary) -> String:
+	var st := stock_notch(s)
+	var n := notch(s)
+	if s.kind == "choice":
+		return "Stock" if n == st else ""
+	var path: String = s.paths[0]
+	if absf(TuneParams.get_value(spec, path) - TuneParams.get_value(stock, path)) < 0.0005:
+		return "Stock"
+	var d := n - st
+	if d == 0:
+		return "near stock"
+	var word: String = TOWARD.get(s.hi_word if d > 0 else s.lo_word, "")
+	return ("+%d %s" % [d, word]) if d > 0 else ("%d %s" % [-d, word])
 
 func _range_value(s: Dictionary) -> float:
 	var p: String = s.paths[0]

@@ -22,7 +22,7 @@ Inputs read: `docs/story-bible.md` (main 09455e0), narrative fabric (PR #175, se
 1. **Car parts as proposed** (ghost paint, scraped push bar, spotlight, hidden strobes, dark windows), **plus different, scary lights**: the reaction should be "oh f***". Light design in section 5b.
 2. **Bad cop cars are faster:** yes. Where they are placed needs judging (section 5c).
 3. **The rookie meets you in private**, and also learns about you over time through Dave's broadcast (section 7).
-4. **Whether the rookie comes after you at the end is OPEN.** Roy: a big question that could break the story. Not decided here; risks in section 7b.
+4. **Whether the rookie comes after you at the end is OPEN.** Roy: a big question that could break the story. Not decided here; options and risks in section 7c.
 5. **Bad cops take ALL the cash; honest cops take little or none.** The ticket is **not** assumed: research the real differences between good and bad cops first (section 6a). This replaces round-1 answer 3 ("cash and a ticket").
 
 ## Decided (Roy, 2026-10-08 13:08), round 3

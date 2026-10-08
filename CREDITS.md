@@ -16,4 +16,6 @@ track whose licence requires credit (for example Creative Commons BY).
 
 ## Art and models
 
-None yet.
+| What | Source | Licence | Where |
+|---|---|---|---|
+| Game icon and boot image | Our own: drawn by `tools/make_brand_art.py` (Pillow shapes and a hand-made 5x7 block font, no installed typeface) | ours | `assets/ui/icon.png`, `assets/ui/boot.png` |

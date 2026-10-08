@@ -17,6 +17,9 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 config/name="Neon Overdrive"
 run/main_scene="res://Game.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
+boot_splash/bg_color=Color(0.054902, 0.0784314, 0.141176, 1)
+boot_splash/image="res://assets/ui/boot.png"
+config/icon="res://assets/ui/icon.png"
 
 [autoload]
 

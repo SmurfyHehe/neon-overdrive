@@ -26,6 +26,10 @@ signal state_changed(new_state: State, old_state: State)
 
 var state: State = State.PLAYING
 
+## Pause when the window loses focus (alt-tab). Game turns it on for real play
+## sessions only, so a test window that loses focus keeps running.
+var pause_on_focus_loss := false
+
 # T, Y and Esc are polled, which means a key typed into a text field (a tune slot
 # name) would also switch tabs or close the tuner. _input() runs before the GUI
 # sees the key, so it can tell whether a text control had focus when the key went
@@ -39,6 +43,10 @@ static func is_tuner(s: State) -> bool:
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and pause_on_focus_loss and state == State.PLAYING:
+		pause()
 
 ## True while a text control (LineEdit, TextEdit) has keyboard focus.
 func typing_in_text() -> bool:

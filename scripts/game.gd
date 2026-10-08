@@ -51,6 +51,7 @@ var game_state: GameState
 # speed feel (FOV, dolly, shake) all live in chase_camera.gd.
 var camera: ChaseCamera
 var radio: RadioManager
+var menu_sfx: MenuSfx
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
 func _ready() -> void:
@@ -403,6 +404,8 @@ func _setup_game_state() -> void:
 	radio = RadioManager.new()
 	add_child(radio)
 	add_child(TitleScreen.new(game_state))
+	menu_sfx = MenuSfx.new()  # clicks and ticks for every menu (menu_sfx.gd)
+	add_child(menu_sfx)
 	if GameState.wants_title():
 		game_state.enter_title()
 

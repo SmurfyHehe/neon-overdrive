@@ -16,6 +16,7 @@ var game_state: GameState
 var panel: Control
 var drive_button: Button
 var confirm: ConfirmBox
+var margin: MarginContainer  # the title and buttons; slides in from the left
 
 func _init(state: GameState) -> void:
 	game_state = state
@@ -49,7 +50,7 @@ func _ready() -> void:
 	band.anchor_right = 0.62
 	panel.add_child(band)
 
-	var margin := MarginContainer.new()
+	margin = MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	margin.add_theme_constant_override("margin_left", 72)
 	margin.add_theme_constant_override("margin_top", 64)
@@ -110,6 +111,10 @@ func _on_state_changed(new_state: GameState.State, old_state: GameState.State) -
 	if visible:
 		panel.visible = true
 		drive_button.grab_focus()
+		MenuMotion.slide_in(margin, Vector2.LEFT)
+		var sfx: Variant = get_parent().get("menu_sfx")
+		if sfx != null:
+			sfx.squelch()
 
 func _open_settings() -> void:
 	var menu := _pause_menu()
@@ -121,6 +126,7 @@ func _open_settings() -> void:
 func _back_from_settings() -> void:
 	panel.visible = true
 	drive_button.grab_focus()
+	MenuMotion.slide_in(margin, Vector2.LEFT)
 
 func _pause_menu() -> PauseMenu:
 	return _sibling("PauseMenu") as PauseMenu

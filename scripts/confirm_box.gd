@@ -16,6 +16,7 @@ var yes_button: Button
 var no_button: Button
 var _on_yes: Callable
 var _return_focus: Control
+var center: CenterContainer
 
 func _init(state: GameState) -> void:
 	game_state = state
@@ -29,7 +30,7 @@ func _ready() -> void:
 	dim.color = Color(0, 0, 0, 0.55)
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(dim)
-	var center := CenterContainer.new()
+	center = CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
 	var panel := PanelContainer.new()
@@ -71,6 +72,7 @@ func ask(text: String, yes_text: String, on_yes: Callable) -> void:
 	if game_state != null:
 		game_state.modal_open = true
 	no_button.grab_focus()
+	MenuMotion.slide_in(center, Vector2.DOWN)
 
 func is_open() -> bool:
 	return visible

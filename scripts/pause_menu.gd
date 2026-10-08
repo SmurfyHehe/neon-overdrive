@@ -37,6 +37,7 @@ var fullscreen_check: CheckButton
 var resolution_option: OptionButton
 var display_page: VBoxContainer
 var confirm: ConfirmBox
+var pages: CenterContainer  # holds every page; slid in on open and page changes
 var page_title: Label
 var reset_button: Button
 var service_button: Button
@@ -54,6 +55,7 @@ var controls_save_button: Button
 var controls_status: Label
 var _capture := {}        # {action, slot, button} while waiting for a key
 var _keys_dirty := false  # rebinds not saved yet
+var _was_subpage := false  # Back slides the main page in from the other side
 
 func _init(state: GameState) -> void:
 	game_state = state
@@ -71,6 +73,7 @@ func _ready() -> void:
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
+	pages = center
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 5)  # 8 overflowed a 648 px window once Reset joined
@@ -204,6 +207,8 @@ func show_display() -> void:
 	main_page.visible = false
 	controls_page.visible = false
 	display_page.visible = true
+	_was_subpage = true
+	MenuMotion.slide_in(pages)
 	fullscreen_check.grab_focus()
 
 func _apply_display() -> void:
@@ -259,6 +264,12 @@ func _on_state_changed(new_state: GameState.State, _old_state: GameState.State) 
 	visible = new_state == GameState.State.PAUSED
 	if visible:
 		show_main()  # always reopen on the main page
+		_squelch()
+
+func _squelch() -> void:
+	var sfx: Variant = get_parent().get("menu_sfx")
+	if sfx != null:
+		sfx.squelch()
 
 ## Volume, traffic and view back to their defaults (the Display page has its own reset).
 func reset_main_defaults() -> void:
@@ -291,6 +302,7 @@ func open_title_settings(on_back: Callable) -> void:
 	_set_title_mode(true)
 	visible = true
 	show_main()
+	_squelch()
 
 func close_title_settings() -> void:
 	visible = false
@@ -324,6 +336,8 @@ func show_controls() -> void:
 	controls_status.text = ""
 	main_page.visible = false
 	controls_page.visible = true
+	_was_subpage = true
+	MenuMotion.slide_in(pages)
 	# Cap the list to the window so it scrolls instead of running off-screen.
 	controls_scroll.custom_minimum_size = Vector2(700, maxf(get_viewport().get_visible_rect().size.y * 0.7, 160.0))
 	controls_scroll.grab_focus()  # arrows / page keys scroll it
@@ -332,6 +346,8 @@ func show_main() -> void:
 	main_page.visible = true
 	controls_page.visible = false
 	display_page.visible = false
+	MenuMotion.slide_in(pages, Vector2.LEFT if _was_subpage else Vector2.RIGHT)
+	_was_subpage = false
 	(title_back_button if title_back_button.visible else resume_button).grab_focus()  # keyboard/controller can navigate the menu
 
 func _build_controls_page(center: CenterContainer) -> void:

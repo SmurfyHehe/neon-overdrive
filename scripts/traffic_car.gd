@@ -105,6 +105,9 @@ var _idx := -1
 ## Physics frame before which a car parked by a deferred spawn does not
 ## retry (TrafficManager).
 var retry_frame := 0
+## Off the road for this hour band (TrafficManager.active_share): parked
+## hidden and frozen until the band wants more cars.
+var benched := false
 ## Index entry of the car ahead found by the last full scan; between scans
 ## its gap and speed are read straight from the index (see _accel_command).
 var _lead_k := -1

@@ -67,6 +67,7 @@ call :run clutch_model --headless
 call :run driveline_audio --headless
 call :run radio --headless
 call :run night_clock --headless
+call :run night_bands "--headless --fixed-fps 60"
 call :run view_settings --headless
 call :run powertrain_health "--headless --fixed-fps 60"
 call :run turbo "--headless --fixed-fps 60"

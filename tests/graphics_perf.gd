@@ -9,18 +9,18 @@ extends SceneTree
 # Reports, does not assert: the numbers are machine-dependent.
 #
 # GFX_RES=<w>x<h> sets the window (default 1920x1080, the laptop's screen).
-# GFX_SETUPS=a,b,c measures only those setups. GFX_SHOT_DIR=<dir> saves one
+# GFX_SETUPS=a,b,c measures only those setups, GFX_BLOCKS=<n> blocks each. GFX_SHOT_DIR=<dir> saves one
 # frame per setup there.
 # Run (real renderer; a window opens for ~1-2 min):
 #   Godot_v4.7.2-stable_win64_console.exe --path . --audio-driver Dummy -s res://tests/graphics_perf.gd
 
 const Harness := preload("res://tests/traffic_harness.gd")
-const BLOCKS := 8        # per setup
+var BLOCKS := 8          # per setup; GFX_BLOCKS=<n> overrides
 const BLOCK_FRAMES := 40
 const SKIP := 10         # frames dropped after each switch
 
 ## Each setup: GraphicsSettings values on top of BASE. Presets take PRESET_VALUES.
-const BASE := {"aa": "off", "render_scale": 1.0, "film_look": false, "reflections": false}
+const BASE := {"aa": "off", "render_scale": 1.0, "film_look": false, "reflections": false, "headlight_beam": false, "lamp_halos": false}
 const SETUPS := {
 	"base": {},
 	"fxaa": {"aa": "fxaa"},
@@ -30,6 +30,8 @@ const SETUPS := {
 	"scale75": {"render_scale": 0.75},
 	"film_look": {"film_look": true},
 	"reflections": {"reflections": true},
+	"headlight_beam": {"headlight_beam": true},
+	"lamp_halos": {"lamp_halos": true},
 	"low": "low",
 	"medium": "medium",
 	"high": "high",
@@ -46,6 +48,8 @@ var cpu := {}
 var shots := {}
 
 func _initialize() -> void:
+	if OS.get_environment("GFX_BLOCKS").is_valid_int():
+		BLOCKS = int(OS.get_environment("GFX_BLOCKS"))
 	var only := OS.get_environment("GFX_SETUPS")
 	for k in SETUPS:
 		if only == "" or k in only.split(","):
@@ -76,6 +80,12 @@ func _apply(setup: String) -> void:
 
 func _process(_delta: float) -> bool:
 	frame += 1
+	# A stray Esc into the test window pauses the game (and dims it under the
+	# menu); keep the measurement running on the live scene.
+	if paused:
+		for n in game.get_children():
+			if n is GameState:
+				n.resume()
 	if frame < 120:
 		return false
 	if frame == 120:

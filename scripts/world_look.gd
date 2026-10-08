@@ -22,6 +22,9 @@ extends WorldEnvironment
 # planes in its shader (P1CoupeBuilder BODY_SHADER, the city_reflections
 # global), and the sky draws lit windows and lamp-row glow into its radiance
 # map only (NightSky city), which traffic paint and glass mirror.
+#
+# Lamp halos (flag "lamp_halos"): shows or hides RoadChunkBuilder's halo
+# MultiMeshes. The headlight beam switches itself (HeadlightBeam).
 
 const AGX_EXPOSURE := 2.0
 const AGX_WHITE := 6.0
@@ -53,6 +56,8 @@ func apply_graphics() -> void:
 	RenderingServer.global_shader_parameter_set("city_reflections", refl)
 	if environment.sky != null and environment.sky.sky_material is ShaderMaterial:
 		NightSky.set_city(environment.sky, refl)
+	# Lamp halos: every chunk's halo MultiMesh is in this group (RoadChunkBuilder).
+	get_tree().set_group(RoadChunkBuilder.HALO_GROUP, "visible", GraphicsSettings.is_on("lamp_halos"))
 
 ## The grade as a 3D lookup texture, built once.
 static func get_lut() -> ImageTexture3D:

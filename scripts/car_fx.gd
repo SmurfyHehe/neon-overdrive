@@ -8,9 +8,13 @@ class_name CarFx
 # item 5, not a shadow map. Written for any Vehicle, so traffic and police can
 # reuse it later (they may want headlights off for cost; see the flag).
 
-const HEADLIGHT_RANGE := 55.0
-const HEADLIGHT_ANGLE := 30.0   # degrees, half-angle of the cone
-const HEADLIGHT_ENERGY := 28.0
+const HEADLIGHT_RANGE := 60.0
+## Polish pass (2026-10-08): wider (was 30) with a softer edge, so the lit
+## patch reaches the lane edges and fades instead of ending in a hard oval.
+## (A low-beam projector texture was tried: on the Mobile renderer it blacked
+## the light out entirely, so the shape stays the plain cone.)
+const HEADLIGHT_ANGLE := 38.0   # degrees, half-angle of the cone
+const HEADLIGHT_ENERGY := 30.0
 const HEADLIGHT_DIP := 5.0      # degrees down from level
 ## Render layer the car's own meshes move to, so the blob shadow (which only
 ## projects onto layer 1) darkens the road under the car but not the car.
@@ -30,11 +34,12 @@ static func attach(v: Vehicle, half_length: float, headlights: bool = true) -> v
 		spot.rotation_degrees = Vector3(-HEADLIGHT_DIP, 0.0, 0.0)
 		spot.spot_range = HEADLIGHT_RANGE
 		spot.spot_angle = HEADLIGHT_ANGLE
-		spot.spot_angle_attenuation = 0.85
+		spot.spot_angle_attenuation = 0.5
 		spot.light_energy = HEADLIGHT_ENERGY
 		spot.light_color = Color(1.0, 0.94, 0.82)
 		spot.shadow_enabled = false
 		v.add_child(spot)
+		v.add_child(HeadlightBeam.new(_lamp_positions(v, half_length)))
 
 	var blob := Decal.new()
 	blob.name = "BlobShadow"
@@ -46,6 +51,17 @@ static func attach(v: Vehicle, half_length: float, headlights: bool = true) -> v
 	blob.modulate = Color(0.0, 0.0, 0.0, 0.8)
 	blob.cull_mask = 1
 	v.add_child(blob)
+
+## Headlight lens positions in the car's space: the body's "headlights" meta
+## (P1 coupe) when it has one, else two lamps either side of the nose.
+static func _lamp_positions(v: Vehicle, half_length: float) -> Array:
+	for n in v.get_children():
+		if n is Node3D and n.has_meta("headlights"):
+			var out := []
+			for p in n.get_meta("headlights"):
+				out.append((n as Node3D).transform * Vector3(p))
+			return out
+	return [Vector3(-0.6, 0.62, -half_length), Vector3(0.6, 0.62, -half_length)]
 
 static func _get_blob_tex() -> GradientTexture2D:
 	if _blob_tex == null:

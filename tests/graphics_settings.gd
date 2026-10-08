@@ -9,7 +9,8 @@ extends SceneTree
 # - each on/off flag makes the preset custom and back
 # - the real Game.tscn boots with the settings applied to the root viewport,
 #   the pause menu's Graphics page exists, and picking a preset there applies it
-# - the film look switch changes the WorldLook tone curve and grade
+# - the film look switch changes the WorldLook tone curve and grade; the
+#   headlight beam and lamp halo switches show and hide them
 # - nothing logs an error the whole time
 # Exit code 1 on failure. Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/graphics_settings.gd
@@ -43,6 +44,9 @@ func _check(ok: bool, what: String) -> void:
 func _initialize() -> void:
 	OS.add_logger(logger)
 	_unit_checks()
+	# Boot from a clean scratch file: an interrupted earlier run can leave a
+	# [graphics] section behind in it.
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Harness.SETTINGS_PATH))
 	game = Harness.boot(self, 0, 300.0, 3)
 
 func _unit_checks() -> void:
@@ -98,8 +102,8 @@ func _process(_delta: float) -> bool:
 	frame += 1
 	if frame == 30:
 		var vp := root
-		var v: Dictionary = GraphicsSettings.PRESET_VALUES[GraphicsSettings.preset]
-		_check(is_equal_approx(vp.scaling_3d_scale, v.render_scale), "the game applies the render scale at boot")
+		_check(GraphicsSettings.preset == GraphicsSettings.PRESET_DEFAULT, "a clean start uses the default preset")
+		_check(is_equal_approx(vp.scaling_3d_scale, GraphicsSettings.render_scale), "the game applies the render scale at boot")
 		var menu: PauseMenu = null
 		for n in game.get_children():
 			if n is PauseMenu:
@@ -120,6 +124,14 @@ func _process(_delta: float) -> bool:
 			_check(look != null and look.environment.tonemap_mode == Environment.TONE_MAPPER_AGX and look.environment.adjustment_color_correction != null, "film look on: AgX curve and the grade LUT")
 			menu.gfx_flags["film_look"].button_pressed = false  # emits toggled
 			_check(look != null and look.environment.tonemap_mode == Environment.TONE_MAPPER_LINEAR and not look.environment.adjustment_enabled, "film look off from the menu: the linear stage A look")
+			var beam := game.player.get_node_or_null("HeadlightBeam") as HeadlightBeam
+			var halos := get_nodes_in_group(RoadChunkBuilder.HALO_GROUP)
+			_check(beam != null and beam.visible and beam.cones.size() == 2, "the player has two visible headlight beams")
+			_check(halos.size() > 0 and halos.all(func(n: Node) -> bool: return n.visible), "every chunk has visible lamp halos")
+			menu.gfx_flags["headlight_beam"].button_pressed = false
+			menu.gfx_flags["lamp_halos"].button_pressed = false
+			_check(beam != null and not beam.visible, "headlight beam off from the menu hides it")
+			_check(halos.all(func(n: Node) -> bool: return not n.visible), "lamp halos off from the menu hides them all")
 			menu.gfx_preset.item_selected.emit(0)  # Low again
 			menu.gfx_aa.item_selected.emit(0)
 			_check(GraphicsSettings.preset == "custom" and menu.gfx_preset.selected == 3, "a hand change shows Custom")

@@ -67,15 +67,60 @@ static func has_hills() -> bool:
 static func _rise(i: int, s: float) -> float:
 	return start_grade(i) * s + 0.5 * vcurve(i) * s * s
 
+## chunk_xf(i).affine_inverse(), cached (perf, 2026-10-08): unroll() runs
+## about a hundred times a physics tick (traffic, the chunk pool, the camera)
+## and building the transform from RoadAlignment's arrays then inverting it
+## was most of its cost. Same transform, computed once per chunk; the cache is
+## dropped whenever the floating origin moves or the road is replaced.
+##
+## unroll() itself is memoised per physics tick on the exact input position:
+## a traffic car asks about its own position several times a tick (the
+## follower, the bend look-ahead, the spawner, the occupancy index), and the
+## answer cannot change until the next tick moves it. Exact Vector3 keys, so
+## the result is the same bits the full search would return.
+static var _inv_cache := {}
+static var _inv_origin := 0
+static var _inv_align: RoadAlignment = null
+static var _memo := {}
+static var _memo_tick := -1
+
+## Drops both caches when the floating origin moves or the road is replaced.
+static func _check_caches() -> void:
+	if _inv_origin != origin_index or _inv_align != align:
+		_inv_cache.clear()
+		_memo.clear()
+		_inv_origin = origin_index
+		_inv_align = align
+
+static func _inv_xf(i: int) -> Transform3D:
+	var xf: Variant = _inv_cache.get(i)
+	if xf == null:
+		xf = chunk_xf(i).affine_inverse()
+		_inv_cache[i] = xf
+	return xf
+
 ## World position -> road space.
 static func unroll(p: Vector3) -> Vector3:
 	if align == null:
 		return p
+	_check_caches()
+	var tick := Engine.get_physics_frames()
+	if tick != _memo_tick:
+		_memo.clear()
+		_memo_tick = tick
+	var hit: Variant = _memo.get(p)
+	if hit != null:
+		return hit
+	var u := _unroll_uncached(p)
+	_memo[p] = u
+	return u
+
+static func _unroll_uncached(p: Vector3) -> Vector3:
 	var i := origin_index + floori(-p.z / L)
 	var local := Vector3.ZERO
 	var sd := Vector2.ZERO
 	for n in SEARCH_STEPS:
-		local = chunk_xf(i).affine_inverse() * p
+		local = _inv_xf(i) * p
 		sd = RoadAlignment.arc_project(align.curvature(i), local)
 		# Accept the chunk only if the point is beside it: a point far away can
 		# also project onto a curved chunk's circle further round.

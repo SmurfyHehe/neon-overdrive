@@ -10,9 +10,16 @@ class_name Benchmark
 # and keeps V-Sync on, so how the game feels is unchanged.
 #
 # While it runs: V-Sync off and no FPS cap, so frame times are real instead
-# of a flat 16.67 ms. A bot holds W, shifts up with E as speed builds, and
-# taps A/D to hold heading -- the same driving as tests/chunk_drive.gd, so the
-# two produce comparable numbers. Physics stays on the project tick rate (120 Hz).
+# of a flat 16.67 ms. A bot holds full throttle and steers to hold heading --
+# the same driving as tests/chunk_drive.gd, so the two produce comparable
+# numbers. It drives through PlayerCar.driver, not key events: a windowed run
+# drops held keys the moment the window loses focus, which left the car parked
+# (top_speed 0.8 m/s, 2026-10-08) and the numbers meaningless. The car shifts
+# itself (automatic is the launch default). Physics stays on the project tick
+# rate (120 Hz).
+#
+# The report also splits each frame into CPU and GPU render time (the
+# viewport's measured render time), so a slow result says which side to fix.
 #
 # When done it appends one result line to benchmark-results.txt (next to the
 # exe in an exported build, in user:// otherwise), prints it, and quits.
@@ -28,6 +35,10 @@ var t := 0.0
 var started := false
 var frames: PackedFloat32Array = []
 var draw_calls: PackedInt32Array = []  # one sample per measured frame
+var gpu_ms := 0.0  # summed viewport render time, GPU side
+var cpu_ms := 0.0  # summed viewport render time, CPU side (render thread)
+var process_ms := 0.0  # summed main-thread _process time (scripts)
+var physics_ms := 0.0  # summed physics step time (all ticks in the frame)
 var max_speed := 0.0
 
 static func requested() -> bool:
@@ -37,6 +48,7 @@ func _ready() -> void:
 	game = get_parent()
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	Engine.max_fps = 0
+	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 	var hud := CanvasLayer.new()
 	add_child(hud)
 	var lbl := Label.new()
@@ -45,17 +57,11 @@ func _ready() -> void:
 	lbl.text = "BENCHMARK -- driving itself for %d s, then quits" % int(RUN_SECS + WARMUP_SECS)
 	hud.add_child(lbl)
 
-func _press(k: Key, down: bool) -> void:
-	var e := InputEventKey.new()
-	e.keycode = k
-	e.physical_keycode = k
-	e.pressed = down
-	Input.parse_input_event(e)
-
 func _process(delta: float) -> void:
 	if not started:
 		started = true
-		_press(KEY_W, true)
+		var car: PlayerCar = game.get("player")
+		car.driver = _drive
 		return
 	t += delta
 	if t > WARMUP_SECS:
@@ -63,24 +69,34 @@ func _process(delta: float) -> void:
 		# The monitor holds the last rendered frame's count, so sample it every
 		# frame: a single read at the end only sees whatever the quit frame drew.
 		draw_calls.append(int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)))
+		var vp := get_viewport().get_viewport_rid()
+		gpu_ms += RenderingServer.viewport_get_measured_render_time_gpu(vp)
+		cpu_ms += RenderingServer.viewport_get_measured_render_time_cpu(vp)
+		process_ms += Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
+		physics_ms += Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
 
 	var p: PlayerCar = game.get("player")
-	var speed := p.linear_velocity.length()
-	max_speed = max(max_speed, speed)
-	# Heading hold: steer only when yaw (relative to the road, RoadFrame)
-	# drifts, nudged back toward the lane.
-	var u := RoadFrame.unroll(p.global_position)
-	var err: float = (p.global_rotation.y - RoadFrame.heading_at(u.z)) + clampf((TrafficManager.lane_centre(1, false) - u.x) * 0.02, -0.05, 0.05)
-	_press(KEY_A, err < -0.02)
-	_press(KEY_D, err > 0.02)
-	if p.gear >= 1 and p.gear < 6 and speed > 9.0 * p.gear and not p.is_shifting:
-		_press(KEY_E, true)
-		_press(KEY_E, false)
+	max_speed = max(max_speed, p.linear_velocity.length())
 
 	if t >= RUN_SECS + WARMUP_SECS:
 		set_process(false)
 		_report()
 		get_tree().quit()
+
+# Called by PlayerCar every physics tick. Heading hold: steer only when yaw
+# (relative to the road, RoadFrame) drifts, nudged back toward the lane.
+func _drive(c: PlayerCar) -> void:
+	var u := RoadFrame.unroll(c.global_position)
+	var err: float = (c.global_rotation.y - RoadFrame.heading_at(u.z)) + clampf((TrafficManager.lane_centre(1, false) - u.x) * 0.02, -0.05, 0.05)
+	var steer := 0.0
+	if err < -0.02:
+		steer = -1.0  # left (A)
+	elif err > 0.02:
+		steer = 1.0   # right (D)
+	c.throttle_input = 1.0
+	c.brake_input = 0.0
+	c.handbrake_input = 0.0
+	c.steering_input = -steer  # same sign flip as PlayerCar._read_keyboard
 
 func _report() -> void:
 	var s: Array = Array(frames)
@@ -104,11 +120,12 @@ func _report() -> void:
 		dc_sum += d
 		dc_max = maxi(dc_max, d)
 	var dc_avg := float(dc_sum) / maxi(1, draw_calls.size())
-	var line := "%s  %s  frames=%d avg=%.2fms (%d fps) 1%%low=%.2fms (%d fps) p50=%.2f p99=%.2f max=%.2f  draw_calls avg=%d max=%d  top_speed=%.1f m/s" % [
+	var size := get_viewport().get_visible_rect().size
+	var line := "%s  %s %dx%d  frames=%d avg=%.2fms (%d fps) 1%%low=%.2fms (%d fps) p50=%.2f p99=%.2f max=%.2f  gpu=%.2fms render_cpu=%.2fms process=%.2fms physics=%.2fms  traffic=%d@%dm  draw_calls avg=%d max=%d  top_speed=%.1f m/s" % [
 		Time.get_datetime_string_from_system(false, true),
-		ProjectSettings.get_setting("rendering/renderer/rendering_method"),
+		ProjectSettings.get_setting("rendering/renderer/rendering_method"), int(size.x), int(size.y),
 		n, avg, int(1000.0 / avg), low1, int(1000.0 / low1), s[n / 2], p99, s[n - 1],
-		roundi(dc_avg), dc_max, max_speed]
+		gpu_ms / n, cpu_ms / n, process_ms / n, physics_ms / n, TrafficSettings.car_count, roundi(TrafficSettings.detail_distance), roundi(dc_avg), dc_max, max_speed]
 	print("BENCHMARK ", line)
 	# Next to the exe in an exported build, where Roy can find it; user:// when
 	# run from the editor, whose "exe" is Godot itself.

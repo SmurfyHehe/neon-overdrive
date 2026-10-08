@@ -85,6 +85,13 @@ var content: VBoxContainer   # rows of the current settings page
 var panel_pages := {}        # page id -> Control (Setup, Mechanic, Sound, Advanced)
 var rows: Array = []         # [{setting, name, value, bar}] on a settings page
 var preset_buttons: Array[Button] = []
+## The Grip to Drift dial's keyboard control, and setup sheets A-C (UI overhaul PR 4).
+var character_slider: HSlider
+var sheet_labels := {}   # sheet name -> Label
+const SHEETS := ["Sheet A", "Sheet B", "Sheet C"]
+const PRESET_LINES := {"Stock": "As it left the factory", "Street": "Forgiving, comfortable",
+	"Grip": "Fast laps", "Drift": "Easy slides"}
+var _ticket_poll := 0.0
 var stats: PerformanceCard
 ## Notches and stats when the screen opened, shown as ghosts.
 var before_notches := {}
@@ -201,17 +208,60 @@ func _ready() -> void:
 	holder.add_child(content)
 
 	# Panel pages, built once and shown/hidden.
+	# Setup (UI overhaul PR 4): preset cards, the Grip to Drift dial, sheets A-C.
 	var setup := VBoxContainer.new()
-	setup.add_theme_constant_override("separation", 6)
-	setup.add_child(_label("Presets start from the car's stock setup. Pick one, then change anything you like.", SILVER))
+	setup.add_theme_constant_override("separation", 8)
+	var cards := HBoxContainer.new()
+	cards.add_theme_constant_override("separation", 8)
+	setup.add_child(cards)
 	for name in TunerModel.PRESETS:
 		var b := Button.new()
-		b.text = name
+		b.text = "%s
+%s" % [name.to_upper(), PRESET_LINES[name]]
+		b.custom_minimum_size = Vector2(0, 58)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.focus_mode = Control.FOCUS_ALL
+		b.add_theme_font_size_override("font_size", 16)
 		b.pressed.connect(_on_preset.bind(name))
-		setup.add_child(b)
+		cards.add_child(b)
 		preset_buttons.append(b)
-	setup.add_child(_label("Saved setups live on the Mechanic page for now.", DIM))
+	var dial_row := HBoxContainer.new()
+	dial_row.add_theme_constant_override("separation", 10)
+	setup.add_child(dial_row)
+	dial_row.add_child(_label("Grip", DIM))
+	character_slider = HSlider.new()
+	character_slider.min_value = 0
+	character_slider.max_value = TunerModel.CHARACTER_NOTCHES - 1
+	character_slider.step = 1
+	character_slider.value = TunerModel.CHARACTER_STOCK
+	character_slider.tick_count = TunerModel.CHARACTER_NOTCHES
+	character_slider.ticks_on_borders = true
+	character_slider.focus_mode = Control.FOCUS_ALL
+	character_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	character_slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	character_slider.value_changed.connect(_on_character)
+	dial_row.add_child(character_slider)
+	dial_row.add_child(_label("Drift", DIM))
+	var sheets := HBoxContainer.new()
+	sheets.add_theme_constant_override("separation", 8)
+	setup.add_child(sheets)
+	for sheet in SHEETS:
+		var col := VBoxContainer.new()
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sheets.add_child(col)
+		var l := _label("", AMBER)
+		l.add_theme_font_override("font", UiTheme.font("mono"))
+		col.add_child(l)
+		sheet_labels[sheet] = l
+		var bs := HBoxContainer.new()
+		col.add_child(bs)
+		for act in ["Load", "Save"]:
+			var b := Button.new()
+			b.text = act
+			b.focus_mode = Control.FOCUS_ALL
+			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			b.pressed.connect((load_sheet if act == "Load" else save_sheet).bind(sheet))
+			bs.add_child(b)
 	panel_pages["setup"] = setup
 	auto = AutoTunePanel.new(player, game_state)
 	var mech := VBoxContainer.new()
@@ -342,7 +392,7 @@ func _close_bench() -> void:
 ## their rows, the panel pages get more, and the car keeps the rest.
 func _page_height(id: String) -> float:
 	match id:
-		"setup": return 190.0
+		"setup": return 200.0
 		"mechanic", "advanced": return 360.0
 		"sound": return 300.0
 	return minf(36.0 * (TunerModel.page(id).settings.size() + 1) + 56.0, 330.0)  # rows, reset, the hint
@@ -552,6 +602,11 @@ func cancel_test_run(why: String) -> void:
 	test_button.text = why
 
 func _process(delta: float) -> void:
+	if visible and current_page() == "mechanic":
+		_ticket_poll += delta
+		if _ticket_poll > 0.25:  # the job ticket follows the mechanic's laps
+			_ticket_poll = 0.0
+			_refresh_graphic(TunerModel.estimate(player.spec))
 	if visible and bench != null and car_window != null:
 		var r := car_window.get_global_rect()
 		if graphic_plate.visible:
@@ -578,6 +633,31 @@ func _process(delta: float) -> void:
 		_refresh()
 	else:
 		test_button.text = "Test run failed"
+
+## The Grip to Drift dial moved: the setup becomes stock blended toward Grip or
+## Drift by that much (TunerModel.set_character).
+func _on_character(v: float) -> void:
+	model.set_character(roundi(v))
+	manual.refresh_from_player()
+	auto.refresh_lock_labels()
+	_refresh()
+
+## Setup sheets A-C: three fixed tune slots, shared with the Mechanic's list.
+func save_sheet(sheet: String) -> void:
+	auto.slots.save(sheet, player.spec)
+	auto._refresh_slots()
+	_refresh()
+
+func load_sheet(sheet: String) -> bool:
+	if not auto.slots.apply(sheet, player):
+		return false
+	model.preset = sheet
+	model.modified = false
+	manual.refresh_from_player()
+	exhaust.refresh()
+	auto.refresh_lock_labels()
+	_refresh()
+	return true
 
 func _on_preset(name: String) -> void:
 	model.apply_preset(name)
@@ -636,7 +716,7 @@ func _refresh() -> void:
 	else:
 		hint.visible = true
 		hint.text = {
-			"setup": "Stock: as it left the factory. Street: forgiving and comfortable. Grip: fast laps. Drift: easy slides.",
+			"setup": "Presets and the Grip to Drift dial start from stock: pick one, then change anything you like. Save a setup to a sheet to come back to it.",
 			"mechanic": "The mechanic tries setups on a closed track and keeps what scores best for your goals.",
 			"sound": "How the exhaust sounds, and the flames. Purely cosmetic.",
 			"advanced": "Every raw number, out to the extremes: gearing, power, tyres, suspension, diff, brakes, aero, assists.",
@@ -645,6 +725,10 @@ func _refresh() -> void:
 		stats.measured = {}  # measured on a setup the car no longer has
 	stats.measured_for = player.spec.hash()
 	stats.stock = TunerModel.estimate(model.stock)
+	if character_slider != null:
+		character_slider.set_value_no_signal(model.character)
+		for sheet in SHEETS:
+			sheet_labels[sheet].text = "%s  %s" % [sheet.right(1), "saved" if auto.slots.has(sheet) else "empty"]
 	var est := TunerModel.estimate(player.spec)
 	stats.set_values(before_stats, est)
 	_refresh_graphic(est)
@@ -670,7 +754,15 @@ func _refresh_graphic(est: Dictionary) -> void:
 	if g == null:
 		return
 	var compound := model.choice_index(TunerModel.page("tyres").settings[0])
+	var goal_name := ""
+	for gl in MechanicPanel.GOALS:
+		if gl[0] == mechanic.goal:
+			goal_name = gl[1]
+	var job: AutoTuneJob = auto._job
 	g.show_setup(player.spec, model.stock, {
+		"character": model.character, "label": model.preset_label(), "goal": goal_name, "running": auto.running,
+		"done": int(job.progress.done) if job != null else 0, "total": int(job.progress.total) if job != null else 0,
+		"result": auto.result if not auto.running else {},
 		"preview": preview, "focus": focus.get("id", ""), "est": est, "stock_est": stats.stock,
 		"preview_est": preview_est, "wheel_r": PlayerCar.CFG.wheel_r, "compound": compound,
 		"auto_bias": player.front_axle.brake_bias if player.is_ready else 0.55,
@@ -724,6 +816,8 @@ class PitWall extends VBoxContainer:
 	var trace: SpeedTrace
 	var values := {}   # metric key -> Label (name and value)
 	var deltas := {}   # metric key -> Label (signed delta and arrow)
+	## The result in words under the numbers (UI overhaul PR 4).
+	var verdict: Label
 
 	func _ready() -> void:
 		add_theme_constant_override("separation", 4)
@@ -754,9 +848,55 @@ class PitWall extends VBoxContainer:
 			d.add_theme_font_override("font", mono)
 			h.add_child(d)
 			deltas[r[0]] = d
+		verdict = Label.new()
+		verdict.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		verdict.custom_minimum_size = Vector2(230, 0)
+		verdict.add_theme_color_override("font_color", TunerScreen.AMBER)
+		add_child(verdict)
 
 	## `mine` and `stock` are Test run metrics, each with its trace.
+	## The Test run against stock in one or two plain sentences: what got
+	## better, what got worse, what stayed the same.
+	static func verdict_words(mine: Dictionary, stock: Dictionary) -> String:
+		var better := []
+		var worse := []
+		var same := []
+		var phrase := {
+			"t_0_100": ["quicker to 100 by %.2f s", "slower to 100 by %.2f s", "0-100", 0.02],
+			"top_speed_kmh": ["%.0f km/h more top speed", "%.0f km/h less top speed", "top speed", 0.5],
+			"brake_dist_100": ["stops %.1f m shorter", "stops %.1f m longer", "braking", 0.2],
+			"peak_lat_g": ["%.2f g more grip", "%.2f g less grip", "grip", 0.01],
+		}
+		for r in ROWS:
+			var k: String = r[0]
+			if not mine.has(k) or not stock.has(k):
+				continue
+			var d := float(mine[k]) - float(stock[k])
+			var p: Array = phrase[k]
+			if absf(d) < p[3]:
+				same.append(p[2])
+			elif (d > 0.0) == (r[4] > 0):
+				better.append(p[0] % absf(d))
+			else:
+				worse.append(p[1] % absf(d))
+		var out := []
+		if not better.is_empty():
+			out.append(_join(better).capitalize().left(1) + _join(better).substr(1) + ".")
+		if not worse.is_empty():
+			out.append("But " + _join(worse) + ".")
+		if better.is_empty() and worse.is_empty():
+			out.append("Same as stock on the test track.")
+		elif not same.is_empty():
+			out.append(_join(same).left(1).to_upper() + _join(same).substr(1) + " the same.")
+		return " ".join(out)
+
+	static func _join(parts: Array) -> String:
+		if parts.size() <= 1:
+			return "".join(parts)
+		return ", ".join(parts.slice(0, parts.size() - 1)) + " and " + str(parts[-1])
+
 	func show_result(mine: Dictionary, stock: Dictionary) -> void:
+		verdict.text = verdict_words(mine, stock)
 		trace.mine = mine.trace
 		trace.stock = stock.trace
 		trace.queue_redraw()

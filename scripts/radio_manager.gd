@@ -19,6 +19,11 @@ class_name RadioManager
 # threaded requests) the first time you tune it, so there is no frame hitch; the
 # music starts as soon as they are all in, at the place the station clock says.
 #
+# Reception (2026-10-08, Roy's small ideas): under a bridge or in a tunnel
+# (SoundZone) the signal fades; the music cuts out in short random drops and
+# crackle and hiss come up, then it all comes back on the way out. `listener`
+# is the player car (Game sets it).
+#
 # Tests run silent (Dummy audio driver) and assert on state: station, clock,
 # playlist position, static, levels, bus effect.
 
@@ -30,6 +35,9 @@ const SPEAKER_CUTOFF_HZ := 7500.0
 const GAIN := 0.8
 const DUCK_DB := -11.0          # the music under the DJ
 const DUCK_RATE := 6.0          # 1/s, how fast it ducks and comes back
+const RECEPTION_RATE := 4.0     # 1/s, how fast the signal follows where you are
+const CRACKLE_LEVEL := 0.22     # hiss at no signal
+const DROP_FROM := 0.75         # below this reception the music starts dropping out
 const CHIME_NOTES := [76, 79, 83, 88]   # E5 G5 B5 E6, the stinger at the start of a break
 
 ## -1 = off, else an index into RadioStations.STATIONS.
@@ -42,6 +50,12 @@ var dj_active := false
 var dj_text := ""
 var chime_count := 0
 var duck := 1.0                # current music gain, 1 = full
+var reception := 1.0           # 0 no signal (tunnel) .. 1 clear
+var dropout_count := 0
+var listener: Node3D
+var forced_reception := -1.0   # tests / listen pack: >= 0 overrides the zones
+var _cut_left := 0.0           # s left in a drop-out
+var _rx_rng := RandomNumberGenerator.new()
 ## File name (no extension) of the track on air, "" when nothing plays.
 var now_playing := ""
 var _dj_label: Label
@@ -186,7 +200,7 @@ func _update_music() -> void:
 		_playing_station = station
 		_playing_entry = pos.entry
 		now_playing = _tracks[station][pos.track]
-	_music.volume_db = linear_to_db(GAIN * duck)
+	_music.volume_db = linear_to_db(maxf(GAIN * duck * signal_gain(), 0.00001))
 
 ## DJ break bookkeeping for the tuned station: caption, ducking, and the chime when a
 ## break begins (also when you tune in mid-break, so you hear it start).
@@ -213,6 +227,24 @@ func _update_dj(delta: float) -> void:
 static func duck_target(in_break: bool, has_music: bool) -> float:
 	return db_to_linear(DUCK_DB) if in_break and has_music else 1.0
 
+## Follows the zone the car is in; rolls the dice for a drop-out.
+func _update_reception(delta: float) -> void:
+	var want := 1.0
+	if forced_reception >= 0.0:
+		want = forced_reception
+	elif is_instance_valid(listener):
+		want = SoundZone.reception_at(listener.global_position)
+	reception = lerpf(reception, want, 1.0 - exp(-RECEPTION_RATE * delta))
+	_cut_left = maxf(_cut_left - delta, 0.0)
+	if station >= 0 and reception < DROP_FROM and _cut_left <= 0.0 and _rx_rng.randf() < (DROP_FROM - reception) * 5.0 * delta:
+		_cut_left = _rx_rng.randf_range(0.06, 0.35)
+		dropout_count += 1
+
+## The music's share of the signal: nothing during a drop-out, fading with
+## bad reception.
+func signal_gain() -> float:
+	return 0.0 if _cut_left > 0.0 else smoothstep(0.05, 0.6, reception)
+
 ## A short rising chime (four sine pings) mixed into a block.
 func _add_chime(block: PackedVector2Array, n: int) -> void:
 	for i in n:
@@ -238,6 +270,7 @@ func _process(delta: float) -> void:
 	_label.text = toast_text
 	static_left = maxf(static_left - delta, 0.0)
 	_update_dj(delta)
+	_update_reception(delta)
 	_update_music()
 	if _playback == null:
 		return
@@ -248,12 +281,17 @@ func _process(delta: float) -> void:
 	block.resize(n)
 	if _chime_left > 0.0:
 		_add_chime(block, n)
-	if static_left > 0.0:
-		var level := clampf(static_left / STATIC_SECS, 0.0, 1.0) * 0.35
+	# bad reception: hiss (louder in a drop-out) and crackle clicks
+	var crackle := (1.0 - reception) * CRACKLE_LEVEL * (1.6 if _cut_left > 0.0 else 1.0) if station >= 0 else 0.0
+	if static_left > 0.0 or crackle > 0.002:
+		var level := clampf(static_left / STATIC_SECS, 0.0, 1.0) * 0.35 + crackle
+		var clicks := (1.0 - reception) * 0.0015
 		for i in n:
 			_rng = (_rng * 1103515245 + 12345) & 0x7fffffff
 			var nz := _rng / 1073741823.5 - 1.0
 			_static_lp += 0.5 * (nz - _static_lp)
 			var v := (nz - _static_lp) * level
+			if crackle > 0.0 and _rx_rng.randf() < clicks:
+				v += _rx_rng.randf_range(-0.5, 0.5)
 			block[i] += Vector2(v, v)
 	_playback.push_buffer(block)

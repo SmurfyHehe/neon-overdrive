@@ -394,6 +394,7 @@ func _setup_game_state() -> void:
 	add_child(TunerScreen.new(player, game_state))
 	add_child(WarningLights.new(player))
 	radio = RadioManager.new()
+	radio.listener = player  # reception follows the car (tunnels, bridges)
 	add_child(radio)
 
 func _process(_delta: float) -> void:

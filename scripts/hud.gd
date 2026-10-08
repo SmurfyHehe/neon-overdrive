@@ -49,6 +49,8 @@ const RED_FROM := 0.85
 var player: PlayerCar
 var camera: ChaseCamera
 var traffic: TrafficManager
+## The night clock (living world step 1); null in tests that build a bare HUD.
+var night_clock: NightClock
 
 var lbl_gear: Label
 var lbl_mode: Label
@@ -58,6 +60,7 @@ var lbl_status: Label
 var lbl_boost: Label
 var lbl_rpm: Label
 var lbl_info: Label
+var lbl_clock: Label
 var lbl_hint: Label
 var rpm_bar: RpmBar
 var cluster: VBoxContainer   # the gear / speed / RPM block; hidden in the cockpit view
@@ -188,6 +191,11 @@ func _ready() -> void:
 	cluster.add_theme_constant_override("separation", 4)
 	cluster.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	margin.add_child(cluster)
+
+	# The car's clock, over the speedo (the head unit shows it in the cockpit).
+	lbl_clock = _label(cluster, 18, AMBER)
+	lbl_clock.name = "Clock"
+	lbl_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	# Row: gear (+ A/M) on the left, speed on the right.
 	var row := HBoxContainer.new()
@@ -325,6 +333,7 @@ func _refresh() -> void:
 	var gear := player.gear
 	var engine_off: bool = player.realistic_clutch and not player.engine_running
 
+	lbl_clock.text = night_clock.text() if night_clock != null else ""
 	lbl_gear.text = gear_text(gear)
 	lbl_mode.text = PlayerCar.TRANSMISSION_LETTERS[player.transmission_mode()]
 	lbl_speed.text = str(kmh(player.current_speed()))

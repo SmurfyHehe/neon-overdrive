@@ -47,6 +47,9 @@ var now_playing := ""
 var _dj_label: Label
 var _chime_left := 0.0
 var _in_break_before := false
+## A one-off line (Dave's time check) that overrides the rotation while it runs.
+var _announce_text := ""
+var _announce_left := 0.0
 
 var _music: AudioStreamPlayer
 var _player: AudioStreamPlayer      # the static / chime generator
@@ -192,7 +195,11 @@ func _update_music() -> void:
 ## break begins (also when you tune in mid-break, so you hear it start).
 func _update_dj(delta: float) -> void:
 	var in_break := false
-	if station >= 0:
+	_announce_left = maxf(_announce_left - delta, 0.0)
+	if station >= 0 and _announce_left > 0.0:
+		in_break = true
+		dj_text = _announce_text
+	elif station >= 0:
 		var st := RadioStations.break_state(station, station_time(station))
 		in_break = st.in_break
 		if in_break:
@@ -207,6 +214,17 @@ func _update_dj(delta: float) -> void:
 	duck = lerpf(duck, want, 1.0 - exp(-DUCK_RATE * delta))
 	_dj_label.visible = in_break
 	_dj_label.text = dj_text
+
+## The hour struck on the night clock: on Dave's station he reads the time out
+## (a caption with the chime, like his other lines). Other stations and the
+## radio off say nothing. True when Dave spoke.
+func announce_hour(hour24: int) -> bool:
+	if station < 0 or RadioStations.STATIONS[station].kind != "talk":
+		return false
+	_announce_text = RadioStations.time_line(hour24)
+	_announce_left = RadioStations.BREAK_SECS
+	_in_break_before = false   # a new line: chime even if a rotation line was up
+	return true
 
 ## The music gain a DJ break aims for: ducked while a line is on and there is music
 ## to duck, else full. Dave's station has no music, so nothing ducks under him.

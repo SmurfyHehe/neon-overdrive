@@ -222,7 +222,19 @@ func _physics_process(delta: float) -> void:
 	else:
 		_read_keyboard()
 	_update_line_lock()
+	# Traction control (2026-10-08): ours, not the vendor's (which could never
+	# fire, see traction_control.gd). It cuts engine torque through the same
+	# hook the overheat derate uses, not the throttle, which would also soften
+	# the launch clutch and pull the automatic's upshifts early. The vendor
+	# check is zeroed for its tick so the two can never both act; the Tuner's
+	# value stays the level key.
+	traction.step(self, throttle_input, handbrake_input > 0.5, line_lock, delta)
+	torque_mult = health.torque_mult * (1.0 - traction.cut)
+	var tc_key := traction_control_max_slip
+	traction_control_max_slip = 0.0
 	super._physics_process(delta)
+	traction_control_max_slip = tc_key
+	tcs_active = traction.cut > 0.05
 
 	# Aero (2026-09-13): applied AFTER the vendor's own _physics_process so
 	# drafting can recompute and partially cancel the drag force it just
@@ -241,6 +253,7 @@ func _physics_process(delta: float) -> void:
 const LINE_LOCK_ON_SPEED := 4.0  # m/s; engages below this
 const LINE_LOCK_OFF_SPEED := 7.0  # m/s; releases above this (hysteresis)
 var line_lock := false
+var traction := TractionControl.new()
 var _line_lock_bias := Vector2.ZERO  # front, rear brake_bias saved on engage
 
 func _update_line_lock() -> void:

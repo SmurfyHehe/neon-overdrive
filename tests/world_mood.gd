@@ -11,7 +11,7 @@ extends SceneTree
 #   Dave says so. Wrecks are counted and printed.
 #
 # Setting sweep: NEON_TRAFFIC=4 / 16 / 40 / 80 (default 40, so enough cars
-# spawn for the share to mean something).
+# spawn for the share to mean something; 0 also means 40).
 #
 # Exit code 1 on failure. Run (headless):
 #   Godot_v4.7.2-stable_win64_console.exe --headless --fixed-fps 60 --path . -s res://tests/world_mood.gd
@@ -35,7 +35,9 @@ var heard_bar_close := false
 
 func _initialize() -> void:
 	var env := OS.get_environment("NEON_TRAFFIC")
-	cars = int(env) if env.is_valid_int() else 40
+	# run_tests.bat sets NEON_TRAFFIC=0 for the older drive tests; with no cars
+	# there is no share to measure, so 0 means the default here.
+	cars = int(env) if env.is_valid_int() and int(env) > 0 else 40
 	OS.set_environment("NEON_TRAFFIC", str(cars))
 	_table_tests()
 	NightClock.path = "user://test_world_mood.cfg"

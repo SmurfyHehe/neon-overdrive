@@ -43,7 +43,7 @@ const JACKET_TRIM := Color("#FF8A1F")   # sodium
 ## Glove per car: colour of the glove and of the closed cuff at the wrist.
 ## Keyed by PlayerCar.chassis_kind(); DEFAULT_GLOVE for anything unlisted.
 const GLOVE_STYLES := {
-	"p1_coupe": {"glove": Color("#111216"), "cuff": Color("#8A5A2A")},   # black leather, dull amber band
+	"p1_coupe": {"glove": Color("#23252B"), "cuff": Color("#8A5A2A")},   # black leather (lifted off near-black so it reads), dull amber band
 	"test": {"glove": Color("#2A2E36"), "cuff": Color("#C9CED6")},       # grey fabric, silver band
 }
 const DEFAULT_GLOVE := "p1_coupe"

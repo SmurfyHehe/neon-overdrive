@@ -47,11 +47,26 @@ func _physics_process(_delta: float) -> bool:
 	match step:
 		Step.BOOT:
 			_check(frame != null and frame.get_parent() == p, "the cockpit frame should be a child of the player car")
-			for n in ["Cabin", "Backlight", "WheelMount", "WheelMount/Wheel", "WheelMount/Wheel/Leds", "WheelMount/Wheel/Lcd",
+			for n in ["Cabin", "WheelMount", "WheelMount/Wheel", "ClusterFace", "ClusterView",
 					"WheelMount/Wheel/PaddleL", "WheelMount/Wheel/PaddleR", "TachNeedle", "SpeedoNeedle", "Lamps", "Radio",
 					"RadioLabel", "Lever", "Lever/Knob", "Handbrake", "ThrottlePedal", "BrakePedal", "ClutchPedal", "CabinLight",
 					"Mirrors", "Mirrors/RearView", "Mirrors/LeftView", "Mirrors/RightView", "Mirrors/RearGlass", "Shelf"]:
 				_check(frame.get_node_or_null(n) != null, "the cockpit should have a node %s" % n)
+			# Interiors pass: the shift lights are on the wheel (LED wheel) or in a
+			# bar on the cluster (round wheel); the LCD only comes with the LED wheel.
+			if frame.wheel.leds != null:
+				_check(frame.get_node_or_null("WheelMount/Wheel/Leds") != null and frame.get_node_or_null("WheelMount/Wheel/Lcd") != null, "an LED wheel has its LEDs and LCD")
+			else:
+				_check(frame.shift_bar != null and frame.get_node_or_null("ShiftBar") != null, "a wheel without LEDs puts the shift lights in the cluster")
+			# Each car's cluster reads its own spec (P1: 7000 rpm, ~230 km/h top in 5th).
+			var sc := ClusterFace.scales_for(p)
+			_check(sc.tach_max >= p.max_rpm + 400.0 and sc.tach_max <= p.max_rpm + 1400.0 and fmod(sc.tach_max, 1000.0) == 0.0, "the tach ends just past the car's limiter in whole thousands (%.0f for %.0f)" % [sc.tach_max, p.max_rpm])
+			_check(absf(sc.red_from - p.max_rpm * Hud.RED_FROM) < 1.0, "the red zone starts at the HUD's red share of max rpm")
+			var top_kmh: float = p.max_rpm / (p.gear_ratios[-1] * p.final_drive) * TAU * p.rear_tire_radius / 60.0 * 3.6
+			_check(sc.speedo_max >= top_kmh and sc.speedo_max <= top_kmh + 40.0 and fmod(sc.speedo_max, 20.0) == 0.0, "the speedo ends just past the car's top speed (%.0f for %.0f km/h)" % [sc.speedo_max, top_kmh])
+			_check(frame.style.cluster.gauges.size() >= 2 and frame.needles.size() >= frame.style.cluster.gauges.size(), "every gauge in the style has a needle")
+			if frame.pod != null:
+				_check(frame.pod.visible == (p.turbo_boost_max > 0.0), "the boost pod shows only with a turbo")
 			_check(frame.mirrors.views.size() == 3, "three mirrors")
 			for v in frame.mirrors.views:
 				var c: Camera3D = v.cam
@@ -101,19 +116,33 @@ func _physics_process(_delta: float) -> bool:
 				_check(signf(w.angle) == signf(frame.steering) and absf(w.rotation.z + w.angle) < 1e-4, "right steering turns the wheel clockwise (rotation.z = -angle)")
 				var frac := clampf(p.motor_rpm / p.max_rpm, 0.0, 1.0)
 				_check(w.lit_count == SteeringWheel.lit_count_for(frac), "live LED count follows the live rpm")
-				_check(w.lcd.text.contains("rpm") and w.lcd.text.contains("km/h") and w.lcd.text.contains(str(int(p.motor_rpm))) and w.lcd.text.contains(str(Hud.kmh(p.current_speed()))) and w.lcd.text.ends_with(Hud.gear_text(p.gear)), "the LCD shows rpm, km/h and the gear, got '%s'" % w.lcd.text.replace("\n", " / "))
+				if w.lcd != null:
+					_check(w.lcd.text.contains("rpm") and w.lcd.text.contains("km/h") and w.lcd.text.contains(str(int(p.motor_rpm))) and w.lcd.text.contains(str(Hud.kmh(p.current_speed()))) and w.lcd.text.ends_with(Hud.gear_text(p.gear)), "the LCD shows rpm, km/h and the gear, got '%s'" % w.lcd.text.replace("\n", " / "))
 				# flash on the shift cue: manual, gear 1 of several, past the shift point
 				p.automatic_transmission = false
 				var cue := Hud.shift_cue(p, 0.95)
 				_check(cue, "manual box in 1st past the shift point should cue a shift")
-				w.update(0.95, cue, true, 6650.0, 40, "1")
-				_check(w.lit_count == 15 and w.flashing, "all LEDs lit and flashing on the cue")
-				var mid := w.led_colours[7]
-				_check(mid.a > 0.99 and mid.r > 0.7 and mid.g > 0.7 and mid.b > 0.7, "a flashing LED goes silver, got %s" % mid)
-				w.update(0.95, cue, false, 6650.0, 40, "1")
-				_check(not w.flashing and w.led_colours[7].is_equal_approx(Color(SteeringWheel.RED, 1.0)), "between blinks the middle LED is red")
-				w.update(0.5, false, false, 3500.0, 40, "1")
-				_check(w.lit_count == 0 and w.led_colours[0].a < 0.01, "at 50%% every LED is off (alpha 0)")
+				if w.leds != null:
+					w.update(0.95, cue, true, 6650.0, 40, "1")
+					_check(w.lit_count == 15 and w.flashing, "all LEDs lit and flashing on the cue")
+					var mid := w.led_colours[7]
+					_check(mid.a > 0.99 and mid.r > 0.7 and mid.g > 0.7 and mid.b > 0.7, "a flashing LED goes silver, got %s" % mid)
+					w.update(0.95, cue, false, 6650.0, 40, "1")
+					_check(not w.flashing and w.led_colours[7].is_equal_approx(Color(SteeringWheel.RED, 1.0)), "between blinks the middle LED is red")
+					w.update(0.5, false, false, 3500.0, 40, "1")
+					_check(w.lit_count == 0 and w.led_colours[0].a < 0.01, "at 50%% every LED is off (alpha 0)")
+				else:
+					# the cluster's shift bar, same rule
+					frame._update_shift_bar(0.95, cue, true)
+					var lit_all := true
+					for c in frame.shift_colours:
+						lit_all = lit_all and c.a > 0.99
+					var mid := frame.shift_colours[7]
+					_check(lit_all and mid.r > 0.7 and mid.g > 0.7 and mid.b > 0.7, "all shift-bar LEDs lit and the flash goes silver, got %s" % mid)
+					frame._update_shift_bar(0.95, cue, false)
+					_check(frame.shift_colours[7].is_equal_approx(Color(SteeringWheel.RED, 1.0)), "between blinks the middle shift-bar LED is red")
+					frame._update_shift_bar(0.5, false, false)
+					_check(frame.shift_colours[0].a < 0.01, "at 50%% every shift-bar LED is off")
 				_check_sightline(p, frame)
 				_check_wheel_pose(frame)
 				_check_view(p, frame, cam)

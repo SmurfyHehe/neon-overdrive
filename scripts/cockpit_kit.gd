@@ -129,6 +129,23 @@ func offset(by: Vector3) -> void:
 	for i in _v.size():
 		_v[i] += by
 
+## Turns and moves everything built so far (a centre stack angled at the driver).
+func transform(xf: Transform3D) -> void:
+	for i in _v.size():
+		_v[i] = xf * _v[i]
+		_n[i] = (xf.basis * _n[i]).normalized()
+
+## PS2-style light baked into the vertex colours (interiors pass, 2026-10-08):
+## darker toward the floor (seams and footwell, `low` at `floor_y`, full at
+## `top_y` and above) and a little lighter on faces that look up at the glass
+## (`up` extra at a face pointing straight up). Call once, before instance().
+func bake(floor_y: float, top_y: float, low := 0.45, up := 0.18) -> void:
+	for i in _v.size():
+		var h := clampf((_v[i].y - floor_y) / maxf(top_y - floor_y, 0.01), 0.0, 1.0)
+		var f := lerpf(low, 1.0, h * h * (3.0 - 2.0 * h)) * (1.0 + up * maxf(_n[i].y, 0.0))
+		var c := _c[i]
+		_c[i] = Color(c.r * f, c.g * f, c.b * f, c.a)
+
 func merge(other: CockpitKit) -> void:
 	_v.append_array(other._v)
 	_n.append_array(other._n)
@@ -172,6 +189,64 @@ static func material(roughness := 0.85, metallic := 0.0, specular := 0.08) -> St
 	m.metallic = metallic
 	m.metallic_specular = specular
 	return m
+
+## Surface kinds for interiors (interiors pass, 2026-10-08): each is its own
+## material so dash plastic, soft dash top, cloth, leather, metal and rubber
+## catch the cabin light differently. Colour stays in the vertex colours; a
+## small tileable greyscale texture (generated once, no files) multiplies it,
+## mapped triplanar in the cabin's own space so the kit needs no UVs.
+## Shaded on purpose: the street-lamp light from the graphics pass lands on them.
+const SURFACES := {
+	"hard": {"rough": 0.80, "metal": 0.0, "spec": 0.10, "tex": "grain", "scale": 7.0},
+	"soft": {"rough": 0.95, "metal": 0.0, "spec": 0.05, "tex": "grain", "scale": 3.0},
+	"cloth": {"rough": 1.00, "metal": 0.0, "spec": 0.02, "tex": "weave", "scale": 14.0},
+	"leather": {"rough": 0.62, "metal": 0.0, "spec": 0.22, "tex": "grain", "scale": 11.0},
+	"metal": {"rough": 0.35, "metal": 0.70, "spec": 0.50, "tex": "brush", "scale": 9.0},
+	"rubber": {"rough": 1.00, "metal": 0.0, "spec": 0.02, "tex": "", "scale": 1.0},
+}
+static var _surface_tex := {}
+
+static func surface_material(kind: String) -> StandardMaterial3D:
+	var d: Dictionary = SURFACES.get(kind, SURFACES.hard)
+	var m := material(d.rough, d.metal, d.spec)
+	if d.tex != "":
+		m.albedo_texture = surface_texture(d.tex)
+		m.uv1_triplanar = true
+		m.uv1_scale = Vector3.ONE * float(d.scale)
+		m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	return m
+
+## 64 px greyscale tiles, 0.80..1.0 so they only ever darken a little:
+## "grain" fine plastic/leather noise, "weave" a cloth crosshatch, "brush"
+## brushed-metal streaks along x.
+static func surface_texture(kind: String) -> ImageTexture:
+	if _surface_tex.has(kind):
+		return _surface_tex[kind]
+	const N := 64
+	var img := Image.create(N, N, false, Image.FORMAT_L8)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(kind)
+	var row := PackedFloat32Array()
+	row.resize(N)
+	for y in N:
+		row[y] = rng.randf()
+	for y in N:
+		for x in N:
+			var v := 1.0
+			match kind:
+				"grain":
+					v = 0.86 + 0.14 * rng.randf()
+				"weave":
+					var a := 0.5 + 0.5 * sin(TAU * float(x + y) / 4.0)
+					var b := 0.5 + 0.5 * sin(TAU * float(x - y) / 4.0)
+					v = 0.80 + 0.12 * maxf(a, b) + 0.08 * rng.randf()
+				"brush":
+					v = 0.84 + 0.12 * row[y] + 0.04 * rng.randf()
+			img.set_pixel(x, y, Color(v, v, v))
+	img.generate_mipmaps()
+	var t := ImageTexture.create_from_image(img)
+	_surface_tex[kind] = t
+	return t
 
 const GLOW_SHADER := """
 shader_type spatial;

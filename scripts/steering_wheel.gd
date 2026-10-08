@@ -9,6 +9,12 @@ extends Node3D
 # o'clock with rpm, km/h and the gear, a plain centre pad, backlit spoke buttons
 # and two paddles behind the rim.
 #
+# Interiors pass (2026-10-08): the look is per car (InteriorStyle wheel).
+# `style` set before the wheel enters the tree picks it: "flat_led" is the wheel
+# above, "round" a period round wheel (rim tube, 2-4 spokes, dish, centre pad
+# with a small badge) for older cars, without LEDs or LCD (the cockpit puts
+# the shift lights in the cluster instead). Empty style = flat_led.
+#
 # Wheel space: X right, Y up, +Z toward the driver. The parent tilts and
 # places it; set_angle() turns it about its own axis (+ = turning right, i.e.
 # clockwise as the driver sees it). Draw calls: rim+spokes+pad+plate 1, LEDs
@@ -37,6 +43,9 @@ const SILVER := Color("#C9CED6")
 const RED := Color("#E5262B")
 const GREEN := Hud.RPM_GREEN       # the one allowed green (tests/palette.gd)
 
+var style := {}
+var radius := RADIUS      # rim centreline, from the style
+var flat_y := FLAT_Y      # share of radius; -1 = fully round
 var body: MeshInstance3D
 var leds: MultiMeshInstance3D
 var lcd: Label3D
@@ -49,11 +58,19 @@ var led_colours := PackedColorArray()   # per LED, alpha 1 = lit
 var _paddle_t := {-1: 0.0, 1: 0.0}
 
 func _ready() -> void:
-	_build_body()
-	_build_leds()
-	_build_lcd()
-	paddle_l = _paddle(-1.0)
-	paddle_r = _paddle(1.0)
+	if style.get("kind", "flat_led") == "round":
+		radius = style.get("radius", RADIUS)
+		flat_y = -1.0
+		_build_round()
+	else:
+		_build_body()
+	if style.get("leds", true):
+		_build_leds()
+	if style.get("lcd", true):
+		_build_lcd()
+	var with_paddles: bool = style.get("paddles", true)
+	paddle_l = _paddle(-1.0, with_paddles)
+	paddle_r = _paddle(1.0, with_paddles)
 
 ## Turn the wheel: + is right (clockwise for the driver).
 func set_angle(a: float) -> void:
@@ -65,12 +82,12 @@ func set_angle(a: float) -> void:
 ## driver's hands (next PR) grip here at 0 and 180.
 func rim_point(deg: float) -> Vector3:
 	var p := _centreline(deg_to_rad(deg))
-	return Vector3(p.x, p.y, 0.0)
+	return Vector3(p.x, p.y, style.get("dish", 0.0))
 
 ## Rim centreline with the flat bottom.
 func _centreline(t: float) -> Vector2:
-	var p := Vector2(cos(t), sin(t)) * RADIUS
-	p.y = maxf(p.y, FLAT_Y * RADIUS)
+	var p := Vector2(cos(t), sin(t)) * radius
+	p.y = maxf(p.y, flat_y * radius)
 	return p
 
 static func _is_grip(deg: float) -> bool:
@@ -131,6 +148,60 @@ func _build_body() -> void:
 	body = kit.instance(CockpitKit.material(0.7, 0.1, 0.15), "WheelBody")
 	add_child(body)
 
+## A period round wheel: a tube rim with a seam of stitch colour, `spokes`
+## (degrees, 0 = 3 o'clock) as flat bars in two tones, the rim dished toward
+## the driver, and a round centre pad with a small badge.
+func _build_round() -> void:
+	var kit := CockpitKit.new()
+	var grip: float = style.get("grip_r", GRIP_R)
+	var dish: float = style.get("dish", 0.0)
+	var rim_col: Color = style.get("rim", LEATHER)
+	var stitch: Color = style.get("stitch", STITCH)
+	const SEGS := 48
+	const PHIS := [0.0, 45.0, 90.0, 118.0, 130.0, 180.0, 225.0, 270.0, 315.0]
+	const SEAM := 3
+	var sides := PHIS.size()
+	var rings := []
+	for s in SEGS + 1:
+		var t := TAU * float(s % SEGS) / SEGS
+		var radial := Vector3(cos(t), sin(t), 0.0)
+		var c := radial * radius + Vector3(0, 0, dish)
+		var ring := []
+		for j in sides:
+			var phi := deg_to_rad(float(PHIS[j]))
+			ring.append(c + radial * (grip * cos(phi)) + Vector3(0, 0, grip * sin(phi)))
+		rings.append(ring)
+	for s in SEGS:
+		for j in sides:
+			var k := (j + 1) % sides
+			var col := stitch if j == SEAM else rim_col
+			# worn patches at 10 and 2 o'clock on the driver-facing faces
+			var deg := rad_to_deg(TAU * (float(s) + 0.5) / SEGS)
+			if j in [1, 2] and (absf(deg - 35.0) < 12.0 or absf(deg - 145.0) < 12.0):
+				col = rim_col.lightened(0.12)
+			kit.quad(rings[s][j], rings[s + 1][j], rings[s + 1][k], rings[s][k], col)
+	var spoke: Color = style.get("spoke", SPOKE)
+	var spoke_alt: Color = style.get("spoke_alt", spoke.darkened(0.3))
+	var w: float = style.get("spoke_w", 0.034)
+	var pad_r: float = style.get("pad_r", 0.05)
+	for deg in style.get("spokes", [0.0, 180.0, 270.0]):
+		var a := deg_to_rad(float(deg))
+		var dir := Vector3(cos(a), sin(a), 0.0)
+		var len := radius - pad_r * 0.6
+		var mid := dir * (pad_r * 0.6 + len * 0.5) + Vector3(0, 0, dish * 0.5)
+		var basis := Basis(Vector3.BACK, a - PI / 2.0)
+		# dished: the spoke rises from the hub to the rim
+		basis = basis * Basis(Vector3.RIGHT, -atan2(dish, len))
+		kit.box(Vector3(w, len, 0.008), mid, spoke, basis)
+		kit.box(Vector3(w * 0.45, len * 0.7, 0.002), mid + basis * Vector3(0, 0.0, 0.005), spoke_alt, basis)   # the drilled slot, read as a darker inlay
+	var pad: Color = style.get("pad", PAD)
+	kit.cylinder(pad_r, 0.0, 0.03, Vector3(0, 0, -0.004), pad, 16, Basis(Vector3.RIGHT, PI / 2.0))
+	kit.cylinder(pad_r * 1.08, -0.02, 0.0, Vector3(0, 0, -0.004), spoke_alt, 16, Basis(Vector3.RIGHT, PI / 2.0))
+	kit.cylinder(pad_r * 0.28, 0.03, 0.033, Vector3(0, 0, -0.004), style.get("badge", AMBER), 10, Basis(Vector3.RIGHT, PI / 2.0))
+	kit.cylinder(0.05, -0.05, -0.02, Vector3.ZERO, spoke_alt, 10, Basis(Vector3.RIGHT, PI / 2.0))   # boss
+	body = kit.instance(CockpitKit.surface_material("leather"), "WheelBody")
+	add_child(body)
+
 ## LED positions along the top plate, outer ends first (index 0 and 14 at the
 ## ends, 7 in the middle), plus the four button dots after them.
 func _build_leds() -> void:
@@ -177,15 +248,17 @@ func _build_lcd() -> void:
 	add_child(lcd)
 
 ## A paddle behind the rim at 9 (side -1) or 3 (side +1); pivots at its inner end.
-func _paddle(side: float) -> Node3D:
+func _paddle(side: float, with_mesh := true) -> Node3D:
 	var pivot := Node3D.new()
 	pivot.name = "PaddleL" if side < 0.0 else "PaddleR"
 	pivot.position = Vector3(side * 0.075, -0.005, -0.028)
+	add_child(pivot)
+	if not with_mesh:
+		return pivot   # no paddles on this car: the node stays for the finger's flick target
 	var kit := CockpitKit.new()
 	kit.box(Vector3(0.095, 0.036, 0.005), Vector3(side * 0.0475, 0.0, 0.0), CARBON)
 	kit.box(Vector3(0.012, 0.028, 0.012), Vector3(side * 0.012, 0.0, 0.004), SPOKE)
 	pivot.add_child(kit.instance(CockpitKit.material(0.6, 0.2)))
-	add_child(pivot)
 	return pivot
 
 ## Which LEDs are on at a share of max_rpm: pair k (0..7) lights from the ends
@@ -216,6 +289,8 @@ func _led_colour(i: int, lit: bool, flash: bool) -> Color:
 func update(frac: float, cue: bool, blink: bool, rpm: float, kmh: int, gear_text: String) -> void:
 	lit_count = lit_count_for(frac)
 	flashing = cue and blink
+	if leds == null:
+		return
 	var mm := leds.multimesh
 	for i in LED_COUNT:
 		var k := mini(i, LED_COUNT - 1 - i)
@@ -223,7 +298,8 @@ func update(frac: float, cue: bool, blink: bool, rpm: float, kmh: int, gear_text
 		var c := _led_colour(i, lit, flashing)
 		led_colours[i] = c   # what the MultiMesh was given (headless can't read it back)
 		mm.set_instance_color(i, c)
-	lcd.text = "%d rpm\n%d km/h  %s" % [int(rpm), kmh, gear_text]
+	if lcd != null:
+		lcd.text = "%d rpm\n%d km/h  %s" % [int(rpm), kmh, gear_text]
 
 ## Flick a paddle (-1 left/down, +1 right/up): it rotates toward the driver's
 ## pull and springs back over ~0.25 s.
@@ -248,5 +324,6 @@ func triangle_count() -> int:
 		if mesh is ArrayMesh:
 			for s in mesh.get_surface_count():
 				n += (mesh as ArrayMesh).surface_get_array_len(s) / 3
-	n += 12 * (LED_COUNT + 4)
+	if leds != null:
+		n += 12 * (LED_COUNT + 4)
 	return n

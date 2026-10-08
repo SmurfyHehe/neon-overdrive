@@ -9,6 +9,8 @@ Source of every repo claim: `main` at `09455e0`, fetched 2026-10-08 ~11:45Z.
 - Q1 recorded if free under that rule: **yes**. Q2 every traffic car audible: **yes**. Q3 US sirens: **yes**. Q4 captions + squelch: **yes**, plus research police voices, characters and voicelines (section 7). Q5 radio keeps playing with a pursuit layer: **yes**. Q6 engine-sim test first: **yes**. Q7 start order: **yes**.
 - **New complaints:** tyre sound, shifting sound and wind sound are poor, and crashes and collisions are too quiet. Section 1b says why each one sounds wrong, from the code, and the fix. The ranking in section 4 now puts these first after the exe fix.
 
+**Round 3 answers (2026-10-08 12:29Z):** police Q1 captions now: **yes**. Q2 cast of 5: **yes, but some of them are corrupt and work with Pike**, allied with Pike yet hostile to the player, because Pike uses racers against us; research it (section 7b; the story side is in another thread). Q3 chatter describes your car: **yes**. Q4 Sonniss download: **yes**. Q5 cockpit window: **an in-game control**, closed-window cockpit sound, a window that opens gradually, fully open approaching outside sound (section 9).
+
 ## 1. What exists today
 
 Checked by reading `scripts/`, `default_bus_layout.tres`, `assets/` and `PROPOSAL-audio.md`.
@@ -157,13 +159,67 @@ All seven answered yes (section 0). Kept here for the record: recorded sounds un
 
 **Captions:** every line also shows as a caption (already decided), so voices can come later without changing the system.
 
-## 8. New questions for Roy
+## 7b. Corrupt cops working with Pike (voices, characters, lines)
 
-1. **Police voices:** text to speech with a radio filter (Chatterbox), or captions plus squelch only for now and voices later? *Recommended: captions now, voices in the police stage.*
-2. **Police cast:** dispatcher, veteran, rookie, sergeant, air unit (5 voices). Keep, or fewer? *Recommended: keep 5.*
-3. **Chase chatter describes your car** (colour, type, direction, street): yes? *Recommended: yes. It makes chases feel personal and costs only short stitched pieces.*
-4. **Sonniss download:** OK for a laptop session to download one year's free bundle (tens of GB) onto your laptop? *Recommended: yes, one year only, then pick the files we need.*
-5. **Cockpit window:** wind in the cockpit as if the window is open (louder buffet) or closed (quiet whistle)? *Recommended: closed, with a key to roll it down later.*
+Story is Roy's to write; everything here is placeholder structure for him to pick from.
+
+**How other games did it.** Need for Speed Heat (2019) is the closest match: a police task force run by a corrupt lieutenant who uses the badge to steal racers' cars and money, while ordinary officers just chase you. GTA San Andreas does the same with a corrupt officer who leans on the player. The pattern that works: **most cops are honest and just doing their job; a small, named group is dirty**, and the player slowly learns who. That keeps chases fair while giving the story a villain inside the police.
+
+**Why would cops side with Pike and hate us?** Three motives the story can use (one or mixed):
+
+| Motive | How it works | Why they hate the player |
+|---|---|---|
+| **Pike pays them** | Cash or free repairs for looking away from Pike's crew | The player costs Pike money, so the payments are at risk |
+| **Pike feeds them arrests** | Pike's racers bait rival racers (including you) into police traps; the cops get easy busts and promotions, Pike loses competition | Every time you escape, their numbers and their deal look bad |
+| **Pike owns them** | A debt or a secret Pike holds over them | You might expose the arrangement |
+
+**Who's who in the cast of 5 (a starting proposal):**
+
+| Character | Honest or Pike's? | How it shows in the radio chatter |
+|---|---|---|
+| Dispatcher | Honest, unaware | By the book; occasionally confused when units ignore her calls |
+| Veteran unit | **Pike's man** | Goes quiet or "loses visual" when Pike's racers pass; personal and nasty toward you ("this one's mine") |
+| Rookie | Honest | Over-eager; notices things that don't add up ("Sarge, wasn't that Pike's car?"). A possible ally later |
+| Sergeant | **Runs the dirty side** | Orders roadblocks that happen to trap you and let others through; switches units to "channel 2" |
+| Air unit | Honest | Calls everything it sees from above, including things the dirty units would rather it didn't |
+
+**Ways the player hears the corruption (sound and captions):**
+- **Off-channel talk:** the sergeant says "switch to two", and a few lines later the player's radio catches a crackly private exchange ("Pike says the blue coupe goes down tonight"). Captions mark it as a different channel, with a different caption colour.
+- **Tell-tale orders:** dirty units call off the chase when a Pike racer is involved, or pile extra units onto you.
+- **Scanner as an item:** a police scanner bought from a gas station vendor (ties into the vendor-items research) lets the player hear the private channel at all. Without it, only the public channel.
+- **Line categories to add** to section 7's list: talking about Pike in code, letting a Pike racer go, singling you out, honest unit questioning a dirty one, dirty unit shutting them down.
+
+**Voices:** same TTS-plus-radio-filter plan as section 7. The dirty units' private channel gets a slightly different filter (narrower, more static) so the ear learns it.
+
+## 8. Round 2 questions: answered
+
+Captions now; cast of 5 with some corrupt; chatter describes your car; Sonniss download yes; cockpit window as an in-game control (section 9).
+
+## 9. Cockpit window control
+
+Roy wants the window in-game: closed-window cockpit sound, a window that opens gradually, and fully open sounding close to outside. The game already has the pieces: `perspective_audio.gd` blends every bus between "cockpit" and "chase" with a low-pass filter. The window adds a second dial inside the cockpit.
+
+**What changes as the window opens (0% closed to 100% open):**
+
+| Layer | Closed (0%) | Cracked (10-30%) | Fully open (100%) |
+|---|---|---|---|
+| Wind | Quiet seal whistle above about 120 km/h | **Throb**: the low pulsing pressure real cars make with one window cracked; loudest here | Loud full rush and buffet, gusting |
+| Engine and exhaust | Muffled (cabin low-pass, about 3.6 kHz) | Slightly brighter | Exhaust much clearer, close to the chase sound |
+| Tyres and road | Low rumble through the floor | Some hiss returns | Full road roar and squeal from outside |
+| Traffic, sirens, city | Faint | Clearer | **Heard much sooner and in direction.** Gameplay effect: you hear cops coming earlier |
+| Radio | Clear, the loudest thing in the cabin | Slightly masked | Competes with the wind; quieter by comparison (the player can turn it up) |
+
+**The trade-off makes it a choice, not a setting:** window up = quiet, clear radio; window down = you hear the world and the police first, at the cost of noise.
+
+**Controls (keyboard only, no on-screen hints):** one key rolls the window down while held and back up with a tap. The window glass animates in the cockpit so you can see the level. The chase camera always uses outside sound, whatever the window does. The level is remembered per drive.
+
+**Cost:** S. One extra value in `perspective_audio.gd`, a wind-throb layer, the glass animation, a key. Testable on the silent driver by asserting filter cutoffs and levels at 0%, 25% and 100%, and a listen pack at those three positions.
+
+## 10. New questions for Roy
+
+1. **Window key:** Z (hold to roll down, tap to roll up)? Z is currently unused. *Recommended: Z.*
+2. **Corrupt cops:** start with the sergeant and the veteran as Pike's men (dispatcher, rookie and air unit honest)? *Recommended: yes. Story details stay yours.*
+3. **Scanner item:** should hearing the dirty cops' private channel need a scanner bought at a gas station? *Recommended: yes. It gives the vendor a meaningful item.*
 
 ## Sources
 
@@ -176,6 +232,7 @@ All seven answered yes (section 0). Kept here for the record: recorded sounds un
 - [engine-sim by Ange Yaghi (MIT)](https://github.com/ange-yaghi/engine-sim)
 - [Sonniss GDC bundle licence v2.0](https://sonniss.com/gdc-bundle-license/)
 - [Pixabay content licence summary](https://pixabay.com/service/license-summary/)
+- [Need for Speed Heat (2019), Wikipedia](https://en.wikipedia.org/wiki/Need_for_Speed_Heat)
 - [Need for Speed: Most Wanted (2005), Wikipedia](https://en.wikipedia.org/wiki/Need_for_Speed:_Most_Wanted_(2005_video_game))
 - `voice-ai-research.md` (project files, 2026-10-07) for TTS licences
 - `PROPOSAL-audio.md` (2026-09-29) for the original engine options A / B / C

@@ -31,6 +31,11 @@ const CLIPS := [
 	["11_crashes", 9.0, "Hits every second: tap, tap, thud, thud, crunch, crunch, crunch + glass, crunch + glass (random variants)."],
 	["12_scrape_0-108kmh", 7.0, "Metal scrape along a wall, 0 to 108 km/h."],
 	["13_effects_slider", 8.0, "Drift squeal + wind at 144 km/h with the Effects slider at 100%, 50%, 25%, 0%."],
+	["14_highway_joints_50-100-150kmh", 9.0, "Road + highway joints (da-dum every 15 m) at 50, 100 and 150 km/h, 3 s each."],
+	["15_bridge_deck_hum", 7.0, "Road at 72 km/h, onto a steel bridge deck for 4 s and off again."],
+	["16_manholes", 5.0, "Road at 90 km/h, two manhole covers (front then rear wheel each)."],
+	["17_radio_tunnel_and_bridge", 14.0, "Radio only, cockpit: clear 3 s, into a tunnel (signal fades, drops, hiss), out again, then under a bridge (breaking up)."],
+	["18_engine_cooling_ticks", 25.0, "Hot engine switched off: 15 s just after stopping, then 10 s from 40 s later (slower, quieter)."],
 ]
 
 var game: Node
@@ -38,6 +43,8 @@ var p: PlayerCar
 var car: CarAudio
 var crash: CrashAudio
 var persp: PerspectiveAudio
+var radio: RadioManager
+var drive: DrivelineAudio
 var record: AudioEffectRecord
 var dir := ""
 var clip := -1
@@ -69,11 +76,13 @@ func _drive(c: PlayerCar) -> void:
 	c.handbrake_input = 0.0
 	c.steering_input = TrafficCar.lane_steer(c, 0.0, -1.0, 2.5) if c.current_speed() > 2.0 else 0.0
 
-func _mute(buses: Array) -> void:
+## Mutes these buses and unmutes the rest; the radio (Music) stays muted
+## unless `radio` is true.
+func _mute(buses: Array, radio_on := false) -> void:
 	for b in [&"Engine", &"Tires", &"World", &"Music", &"UI"]:
 		var i := AudioServer.get_bus_index(b)
 		if i >= 0:
-			AudioServer.set_bus_mute(i, b == &"Music" or b in buses)
+			AudioServer.set_bus_mute(i, (b == &"Music" and not radio_on) or b in buses)
 
 func _process(delta: float) -> bool:
 	if quit_in > 0:
@@ -91,7 +100,10 @@ func _process(delta: float) -> bool:
 		for c in p.get_children():
 			if c is CarAudio: car = c
 			if c is CrashAudio: crash = c
+			if c is DrivelineAudio: drive = c
 		persp = (game.get("camera") as ChaseCamera).perspective
+		radio = game.get("radio")
+		radio.next_station()   # tune now, so the tracks have loaded by the radio clip
 		gap_t = 1.5   # let the game settle first
 		return false
 	if not recording:
@@ -129,6 +141,8 @@ func _stop() -> void:
 	persp.set_cockpit(false)
 	persp.window = 0.0
 	AudioSettings.set_volume("Effects", 1.0)
+	radio.forced_reception = -1.0
+	p.engine_running = true
 	throttle = 0.0
 	brake = 0.0
 	gap_t = GAP
@@ -190,6 +204,40 @@ func _run(name: String, t: float, dur: float) -> void:
 			persp.set_cockpit(false)
 			car.forced = {"speed": 40.0, "on_road": 1.0, "squeal_l": 0.7, "squeal_r": 0.7}
 			AudioSettings.set_volume("Effects", [1.0, 0.5, 0.25, 0.0][mini(int(t / 2.0), 3)])
+		"14":
+			_mute([&"Engine", &"World"])
+			car.forced = {"speed": [14.0, 28.0, 42.0][mini(int(t / 3.0), 2)], "on_road": 1.0, "concrete": 1.0}
+		"15":
+			_mute([&"Engine", &"World"])
+			car.forced = {"speed": 20.0, "on_road": 1.0, "concrete": 0.0, "deck": 1.0 if t > 1.5 and t < 5.5 else 0.0}
+		"16":
+			_mute([&"Engine", &"World"])
+			car.forced = {"speed": 25.0, "on_road": 1.0, "concrete": 0.0}
+			for at in [0.8, 0.9, 3.0, 3.1]:
+				if t >= at and not fired.has(at):
+					fired[at] = true
+					car.hit_manhole(25.0)
+		"17":
+			_mute([&"Engine", &"Tires", &"World"], true)
+			car.forced = {"speed": 0.0, "on_road": 0.0}
+			persp.set_cockpit(true)   # the radio as you hear it in the car
+			var rx := 1.0
+			if t >= 3.0 and t < 7.5:
+				rx = 0.0      # the tunnel
+			elif t >= 10.0:
+				rx = 0.35     # under a bridge
+			radio.forced_reception = rx
+		"18":
+			_mute([&"Tires", &"World"])
+			car.forced = {"speed": 0.0, "on_road": 0.0}
+			if not fired.has("off"):
+				fired.off = true
+				p.engine_running = false
+				drive.heat = 1.0
+				drive.cooling = 0.0
+			if t >= 15.0 and not fired.has("later"):
+				fired.later = true
+				drive.cooling = 40.0
 
 func _done() -> void:
 	var f := FileAccess.open(dir.path_join("listen_pack.txt"), FileAccess.WRITE)

@@ -17,6 +17,11 @@ class_name DrivelineAudio
 #   speed, the lash in the driveline taking up (Engine bus);
 # - landing thud: when the wheels touch down after airtime, scaled by how fast
 #   the car was falling (Tires bus).
+# - cooling ticks (2026-10-08, Roy's small ideas): stopped with the engine off
+#   (a stall, or switched off in the manual mode), the hot exhaust and block
+#   tick and ping as they cool, quick at first and slowing to nothing over
+#   COOL_SECS. How many depends on how hot the engine got (`heat` rises while
+#   it runs, faster at high rpm). Six variants, random pitch (Engine bus).
 # thump_count (every shift), upshift_count, downshift_count, clunk_count and
 # landing_count rise on each event so tests (which
 # run with the silent Dummy audio driver) can assert on state, not on sound.
@@ -29,6 +34,10 @@ const THUMP_GAIN := 0.5
 const CLACK_GAIN := 0.32
 const VARIANTS := 5
 const NEUTRAL_GAP := 0.075        # s between a downshift's two clacks
+const TICK_GAIN := 0.3
+const TICK_VARIANTS := 6
+const COOL_SECS := 60.0           # ticks fade out over this long after the engine stops
+const HEAT_SECS := 45.0           # running this long at high rpm makes the engine fully hot
 const CLUNK_GAIN := 0.35
 const LANDING_GAIN := 0.7
 const CLUNK_COOLDOWN := 0.35      # s
@@ -42,6 +51,9 @@ var upshift_count := 0
 var downshift_count := 0
 var clunk_count := 0
 var landing_count := 0
+var tick_count := 0
+var heat := 0.0                   # 0 cold .. 1 hot
+var cooling := -1.0               # s since the engine stopped, < 0 = running (or cold)
 
 static var _streams := {}
 
@@ -53,6 +65,9 @@ var _landing: AudioStreamPlayer
 var _clack_up: AudioStreamPlayer
 var _clack_down: AudioStreamPlayer
 var _second_clack := -1.0         # s until a downshift's second clack, < 0 = none
+var _tick: AudioStreamPlayer
+var _tick_wait := 0.0
+var _tick_rng := RandomNumberGenerator.new()
 var _last_gear := 0
 var _throttle_state := 0   # 1 = throttle was open (>0.6), -1 = was closed (<0.1), 0 = neither yet
 var _clunk_wait := 0.0
@@ -73,6 +88,13 @@ func _ready() -> void:
 	_clack_down = _add_player("clack_down", &"Engine", false)
 	_clack_down.stream = variants("clack_down")
 	_clack_down.max_polyphony = 2
+	_tick = _add_player("tick", &"Engine", false)
+	var ticks: Array[AudioStream] = []
+	for k in TICK_VARIANTS:
+		ticks.append(stream("tick%d" % k))
+	_tick.stream = AudioDsp.randomizer(ticks, 1.12, 3.0)
+	_tick.max_polyphony = 2
+	_tick_rng.seed = 909
 	_clunk = _add_player("clunk", &"Engine", false)
 	_landing = _add_player("landing", &"Tires", false)
 	_last_gear = _vehicle.current_gear
@@ -128,6 +150,8 @@ func _process(delta: float) -> void:
 		_clunk_wait = CLUNK_COOLDOWN
 		_one_shot(_clunk, CLUNK_GAIN * clampf(v.speed / 20.0, 0.3, 1.0))
 
+	_cool(delta)
+
 	# --- landing thud
 	if v.get_wheel_contact_count() == 0:
 		_air_time += delta
@@ -138,6 +162,29 @@ func _process(delta: float) -> void:
 			_one_shot(_landing, LANDING_GAIN * clampf(_fall_speed / 8.0, 0.2, 1.0))
 		_air_time = 0.0
 		_fall_speed = 0.0
+
+## Heat while running; ticks once stopped with the engine off.
+func _cool(delta: float) -> void:
+	var v := _vehicle
+	if v.engine_running:
+		var load := clampf(v.motor_rpm / maxf(v.max_rpm, 1.0), 0.15, 1.0)
+		heat = minf(1.0, heat + delta * load / HEAT_SECS)
+		cooling = -1.0
+		return
+	if cooling < 0.0:
+		cooling = 0.0
+		_tick_wait = 0.4
+	cooling += delta
+	if v.speed > 1.0 or cooling > COOL_SECS or heat < 0.05:
+		return
+	_tick_wait -= delta
+	if _tick_wait > 0.0:
+		return
+	var left := 1.0 - cooling / COOL_SECS   # 1 just stopped .. 0 cold
+	tick_count += 1
+	_one_shot(_tick, TICK_GAIN * heat * (0.35 + 0.65 * left))
+	# gaps grow from ~0.3 s to several seconds, irregular
+	_tick_wait = lerpf(0.3, 5.0, pow(1.0 - left, 1.5)) * _tick_rng.randf_range(0.5, 1.5) / maxf(heat, 0.2)
 
 ## One completed gear change: clack and thump, up and down sounding different.
 func _shift_sound(up: bool, level: float) -> void:
@@ -160,7 +207,7 @@ func _one_shot(p: AudioStreamPlayer, gain: float) -> void:
 ## "clack_up" and "clack_down" are variant 0; "thump3" etc. pick a variant.
 static func stream(layer: String) -> AudioStreamWAV:
 	if not _streams.has(layer):
-		_streams[layer] = AudioDsp.cached("res://scripts/driveline_audio.gd", layer, _clack.bind(layer) if layer.begins_with("clack") else _make.bind(layer))
+		_streams[layer] = AudioDsp.cached("res://scripts/driveline_audio.gd", layer, _clack.bind(layer) if layer.begins_with("clack") else (_tick_sound.bind(layer) if layer.begins_with("tick") else _make.bind(layer)))
 	return _streams[layer]
 
 ## Every variant of a shift layer, picked at random per shift.
@@ -169,6 +216,24 @@ static func variants(layer: String) -> AudioStreamRandomizer:
 	for k in VARIANTS:
 		list.append(stream(layer if k == 0 else "%s%d" % [layer, k]))
 	return AudioDsp.randomizer(list, 1.06, 1.5)
+
+## A cooling tick ("tick0".."tick5"): a tiny high click, or a longer, lower
+## ping of a cooling pipe.
+static func _tick_sound(layer: String) -> AudioStreamWAV:
+	var r := float(MIX_RATE)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(layer)
+	var ping := rng.randf() < 0.4
+	var n := int((0.35 if ping else 0.08) * r)
+	var f := AudioDsp.bp(r, rng.randf_range(1300.0, 2200.0) if ping else rng.randf_range(2800.0, 5500.0), 70.0 if ping else 35.0)
+	var f2 := AudioDsp.bp(r, rng.randf_range(4000.0, 7000.0), 45.0)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	for i in n:
+		var t := float(i) / r
+		var click := rng.randf_range(-1.0, 1.0) * exp(-t * 1500.0)
+		s[i] = f.step(click) * exp(-t * (14.0 if ping else 60.0)) * 8.0 + f2.step(click) * exp(-t * 80.0) * 3.0
+	return AudioDsp.to_wav(AudioDsp.normalise(s, 0.9), MIX_RATE, false)
 
 ## A gearbox clack: a click and the ring of hard steel, over a knock. Upshifts
 ## sit lower and knock harder (into a taller gear); downshifts are brighter.

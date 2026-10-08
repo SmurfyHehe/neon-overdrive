@@ -148,7 +148,8 @@ func _setup_world() -> void:
 	env.glow_bloom = 0.0
 	env.glow_hdr_threshold = 1.0
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
-	var world_env := WorldEnvironment.new()
+	# WorldLook adds the switchable film look (AgX curve + grade) on top.
+	var world_env := WorldLook.new()
 	world_env.environment = env
 	add_child(world_env)
 	# Look B's "grainy filter" (stage A): a light, darken-only animated grain

@@ -5,7 +5,7 @@ extends SceneTree
 # cars, the car parked in its lane looking down the road, V-Sync off, and
 # alternates short blocks between the setups so slow drift (heat, clocks) hits
 # all of them equally. Reports the median GPU time per setup and its delta to
-# "base" (everything this pass adds switched off, no edge smoothing, full res).
+# "base" (every GraphicsSettings flag off, no edge smoothing, full res).
 # Reports, does not assert: the numbers are machine-dependent.
 #
 # GFX_RES=<w>x<h> sets the window (default 1920x1080, the laptop's screen).
@@ -20,7 +20,7 @@ const BLOCK_FRAMES := 40
 const SKIP := 10         # frames dropped after each switch
 
 ## Each setup: GraphicsSettings values on top of BASE. Presets take PRESET_VALUES.
-const BASE := {"aa": "off", "render_scale": 1.0}
+const BASE := {"aa": "off", "render_scale": 1.0, "film_look": false}
 const SETUPS := {
 	"base": {},
 	"fxaa": {"aa": "fxaa"},
@@ -28,6 +28,7 @@ const SETUPS := {
 	"msaa2_fxaa": {"aa": "msaa2_fxaa"},
 	"msaa4": {"aa": "msaa4"},
 	"scale75": {"render_scale": 0.75},
+	"film_look": {"film_look": true},
 	"low": "low",
 	"medium": "medium",
 	"high": "high",
@@ -68,6 +69,8 @@ func _apply(setup: String) -> void:
 		v.merge(s, true)
 		GraphicsSettings.aa = v.aa
 		GraphicsSettings.render_scale = v.render_scale
+		for f in GraphicsSettings.FLAGS:
+			GraphicsSettings.flags[f] = bool(v[f])
 	GraphicsSettings.apply(self)
 
 func _process(_delta: float) -> bool:

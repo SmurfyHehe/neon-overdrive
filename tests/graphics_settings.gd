@@ -6,8 +6,10 @@ extends SceneTree
 # - render scale clamps, and NaN falls back to 1
 # - save/load round-trips a preset and a custom set; a damaged file falls back
 #   to the default preset
+# - each on/off flag makes the preset custom and back
 # - the real Game.tscn boots with the settings applied to the root viewport,
 #   the pause menu's Graphics page exists, and picking a preset there applies it
+# - the film look switch changes the WorldLook tone curve and grade
 # - nothing logs an error the whole time
 # Exit code 1 on failure. Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/graphics_settings.gd
@@ -59,6 +61,12 @@ func _unit_checks() -> void:
 	_check(is_equal_approx(GraphicsSettings.render_scale, GraphicsSettings.SCALE_MIN), "render scale clamps low")
 	GraphicsSettings.set_render_scale(NAN)
 	_check(is_equal_approx(GraphicsSettings.render_scale, 1.0), "NaN render scale falls back to 1")
+	GraphicsSettings.set_preset("medium")
+	for f in GraphicsSettings.FLAGS:
+		GraphicsSettings.set_flag(f, not GraphicsSettings.is_on(f))
+		_check(GraphicsSettings.preset == "custom", "turning %s by hand makes the preset custom" % f)
+		GraphicsSettings.set_flag(f, not GraphicsSettings.is_on(f))
+		_check(GraphicsSettings.preset == "medium", "turning %s back names the preset again" % f)
 	GraphicsSettings.set_aa("bogus")
 	_check(GraphicsSettings.aa in GraphicsSettings.AA_MODES, "an unknown AA mode is ignored")
 
@@ -71,10 +79,11 @@ func _unit_checks() -> void:
 	GraphicsSettings.set_preset("medium")
 	GraphicsSettings.set_aa("msaa4")
 	GraphicsSettings.set_render_scale(0.65)
+	GraphicsSettings.set_flag("film_look", false)
 	GraphicsSettings.save_settings()
 	GraphicsSettings.set_preset("low")
 	GraphicsSettings.load_settings()
-	_check(GraphicsSettings.preset == "custom" and GraphicsSettings.aa == "msaa4" and is_equal_approx(GraphicsSettings.render_scale, 0.65), "a custom set loads back")
+	_check(GraphicsSettings.preset == "custom" and GraphicsSettings.aa == "msaa4" and is_equal_approx(GraphicsSettings.render_scale, 0.65) and not GraphicsSettings.is_on("film_look"), "a custom set loads back")
 
 	# Damaged file: the default preset.
 	var f := FileAccess.open(AudioSettings.path, FileAccess.WRITE)
@@ -104,6 +113,14 @@ func _process(_delta: float) -> bool:
 			_check(GraphicsSettings.preset == "high" and vp.msaa_3d == Viewport.MSAA_4X, "picking High in the menu applies MSAA 4x")
 			menu.gfx_preset.item_selected.emit(0)  # Low
 			_check(vp.scaling_3d_scale < 1.0 and vp.msaa_3d == Viewport.MSAA_2X, "picking Low applies its scale and MSAA 2x")
+			var look: WorldLook = null
+			for n in game.get_children():
+				if n is WorldLook:
+					look = n
+			_check(look != null and look.environment.tonemap_mode == Environment.TONE_MAPPER_AGX and look.environment.adjustment_color_correction != null, "film look on: AgX curve and the grade LUT")
+			menu.gfx_flags["film_look"].button_pressed = false  # emits toggled
+			_check(look != null and look.environment.tonemap_mode == Environment.TONE_MAPPER_LINEAR and not look.environment.adjustment_enabled, "film look off from the menu: the linear stage A look")
+			menu.gfx_preset.item_selected.emit(0)  # Low again
 			menu.gfx_aa.item_selected.emit(0)
 			_check(GraphicsSettings.preset == "custom" and menu.gfx_preset.selected == 3, "a hand change shows Custom")
 			menu.show_main()

@@ -221,6 +221,7 @@ func _physics_process(delta: float) -> void:
 		driver.call(self)
 	else:
 		_read_keyboard()
+	_update_line_lock()
 	super._physics_process(delta)
 
 	# Aero (2026-09-13): applied AFTER the vendor's own _physics_process so
@@ -228,6 +229,35 @@ func _physics_process(delta: float) -> void:
 	# applied this frame. See aero.gd for the actual force math.
 	AeroModel.apply(self)
 	health.step(self, delta)
+
+# Line lock (2026-10-08, Roy: "check that burnouts work"): brake and throttle
+# held together near a standstill put all the brake force on the front axle,
+# like a drag car's line lock, so the fronts hold the car and the rears spin.
+# Before this the pedal clamped the rears too and the engine bogged at about
+# 1,450 rpm with the rears turning at 2.8 m/s; with it, 4,400 rpm and 13.8 m/s
+# (headless, stock coupe, tests/burnout_line_lock.gd). Lifting either pedal or
+# rolling past LINE_LOCK_OFF_SPEED gives the normal split back at once. Player
+# only: traffic cars never hold both pedals and are not PlayerCars.
+const LINE_LOCK_ON_SPEED := 4.0  # m/s; engages below this
+const LINE_LOCK_OFF_SPEED := 7.0  # m/s; releases above this (hysteresis)
+var line_lock := false
+var _line_lock_bias := Vector2.ZERO  # front, rear brake_bias saved on engage
+
+func _update_line_lock() -> void:
+	if front_axle == null or rear_axle == null:
+		return
+	var want := brake_input > 0.5 and throttle_input > 0.6 and current_gear >= 1
+	want = want and speed < (LINE_LOCK_OFF_SPEED if line_lock else LINE_LOCK_ON_SPEED)
+	if want == line_lock:
+		return
+	line_lock = want
+	if want:
+		_line_lock_bias = Vector2(front_axle.brake_bias, rear_axle.brake_bias)
+		front_axle.brake_bias = 1.0
+		rear_axle.brake_bias = 0.0
+	else:
+		front_axle.brake_bias = _line_lock_bias.x
+		rear_axle.brake_bias = _line_lock_bias.y
 
 func _read_keyboard() -> void:
 	# Input (#29, #30): named InputMap actions (project.godot), all polled

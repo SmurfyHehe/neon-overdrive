@@ -14,6 +14,8 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	change_scene_to_file("res://Game.tscn")
 	var what := OS.get_cmdline_user_args()
+	if "title" in what:
+		OS.set_environment("NEON_TITLE", "1")
 	var t := 120
 	for w in what:
 		shots.append([t, w])
@@ -45,6 +47,16 @@ func _prepare(game: Node, what: String) -> void:
 		"play":
 			if gs.state == GameState.State.PAUSED:
 				gs.resume()
+		"title", "title_quit":
+			if what == "title_quit":
+				_find(game, "TitleScreen").confirm.ask("Quit to desktop?", "Quit", func() -> void: pass)
+		"drive":
+			gs.start_drive()
+		"title_settings":
+			_find(game, "TitleScreen")._open_settings()
+		"confirm":
+			gs.pause()
+			_find(game, "PauseMenu").restart_button.pressed.emit()
 		"display":
 			gs.pause()
 			_find(game, "PauseMenu").show_display()

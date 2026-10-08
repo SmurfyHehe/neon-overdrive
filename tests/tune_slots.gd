@@ -85,7 +85,7 @@ func _initialize() -> void:
 	var odd := TuneSlots.new(FILE)
 	var before_torque: float = car.spec.max_torque
 	_check(odd.apply("Odd", car), "apply of the hand-written slot failed")
-	_check(is_equal_approx(car.spec.final_drive, TuneParams.find("final_drive").max), "99.0 should clamp to the range, got %f" % car.spec.final_drive)
+	_check(is_equal_approx(car.spec.final_drive, TuneParams.find("final_drive").adv_max), "99.0 should clamp to the hard limit, got %f" % car.spec.final_drive)
 	_check(car.spec.max_torque == before_torque, "a path the slot lacks changed")
 
 	# corrupt file

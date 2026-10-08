@@ -159,7 +159,11 @@ static func violations(spec: Dictionary, request: Dictionary, origin: Dictionary
 	for path in TuneParams.auto_paths():
 		var e := TuneParams.find(path)
 		var v := TuneParams.get_value(spec, path)
-		if v < e.min - EPS or v > e.max + EPS or not is_finite(v):
+		# Auto-Tune searches the safe range, but a locked value the player set
+		# on the Advanced page only has to be inside the hard limits.
+		var lo: float = e.adv_min if is_locked(request, path) else e.min
+		var hi: float = e.adv_max if is_locked(request, path) else e.max
+		if v < lo - EPS or v > hi + EPS or not is_finite(v):
 			out.append("%s out of range (%f)" % [path, v])
 		if is_locked(request, path) and absf(v - TuneParams.get_value(origin, path)) > EPS:
 			out.append("%s is locked but changed" % path)

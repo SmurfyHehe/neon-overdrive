@@ -30,6 +30,8 @@ func show_setup(s: Dictionary, st: Dictionary, c := {}) -> void:
 ## The graphic for a Tuner page, or null for a page that has none.
 static func for_page(id: String) -> PageGraphic:
 	match id:
+		"setup": return SetupGraphic.new()
+		"mechanic": return JobTicketGraphic.new()
 		"tyres": return TyreGraphic.new()
 		"suspension": return SpringGraphic.new()
 		"gearbox": return GearboxGraphic.new()

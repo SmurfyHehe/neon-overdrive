@@ -31,6 +31,10 @@ var stock: Dictionary
 ## The preset last picked, and whether anything changed since.
 var preset := "Stock"
 var modified := false
+## The Grip to Drift dial: 0 = full Grip, CHARACTER_STOCK = stock, 10 = full Drift.
+var character := CHARACTER_STOCK
+const CHARACTER_STOCK := 5
+const CHARACTER_NOTCHES := 11
 
 static var _calib := {}
 
@@ -283,6 +287,7 @@ func apply_preset(name: String) -> void:
 		_drag_follows_downforce()
 	preset = name
 	modified = false
+	character = {"Grip": 0, "Drift": CHARACTER_NOTCHES - 1}.get(name, CHARACTER_STOCK)
 
 ## Every path a page's settings write (ranges and choices).
 static func page_paths(id: String) -> Array[String]:
@@ -311,7 +316,36 @@ func reset_page(id: String) -> bool:
 	return changed
 
 func preset_label() -> String:
+	if preset == "Dial":
+		return character_word(character) + (" (modified)" if modified else "")
 	return preset + (" (modified)" if modified else "")
+
+## The Grip to Drift dial (Tuner UI overhaul PR 4): one knob for the car's
+## character. Notch 5 is stock; toward 0 it blends stock into the Grip preset,
+## toward 10 into the Drift preset, every path in proportion. Like a preset it
+## starts from stock, so it replaces the setup (sound and looks stay).
+func set_character(n: int) -> void:
+	n = clampi(n, 0, CHARACTER_NOTCHES - 1)
+	var t := float(n - CHARACTER_STOCK) / float(CHARACTER_STOCK)
+	var target := _preset_values("Grip" if t < 0.0 else "Drift")
+	for e in TuneParams.all():
+		if e.path.begins_with("exhaust/"):
+			continue
+		_write(e.path, TuneParams.get_value(stock, e.path))
+	for p in target:
+		var from := TuneParams.get_value(stock, p)
+		_write(p, lerpf(from, float(target[p]), absf(t)))
+	if target.has("aero_downforce_coefficient_front") or target.has("aero_downforce_coefficient_rear"):
+		_drag_follows_downforce()
+	character = n
+	preset = "Stock" if n == CHARACTER_STOCK else "Dial"
+	modified = false
+
+## "Stock", "Grip 3", "Drift 5": how far the dial is from stock, and which way.
+static func character_word(n: int) -> String:
+	if n == CHARACTER_STOCK:
+		return "Stock"
+	return ("Grip %d" if n < CHARACTER_STOCK else "Drift %d") % absi(n - CHARACTER_STOCK)
 
 func _preset_values(name: String) -> Dictionary:
 	var out := {}

@@ -252,16 +252,38 @@ func _setup_road_shape() -> void:
 	var road_seed := int(seed_env) if seed_env.is_valid_int() else randi()
 	RoadFrame.origin_index = origin_index
 	RoadFrame.align = RoadAlignment.new(road_seed, curviness, hilliness, kicker_chance) if curviness > 0.0 or hilliness > 0.0 else null
+	# Lane adds and drops, median splits and exits (road lane proposal): a
+	# third stream from the same seed. NEON_LAYOUT=0 keeps the plain 4+4,
+	# NEON_LAYOUT=<metres> forces a change that often (the tests' sweep).
+	var busy_env := OS.get_environment("NEON_LAYOUT")
+	var busy := float(busy_env) if busy_env.is_valid_float() else 1.0
+	if Benchmark.requested():
+		busy = 0.0
+	RoadFrame.layout = RoadLayout.new(road_seed, RoadFrame.align, busy)
 
 # ---------- section math (reused from old main.gd, keyed by chunk index instead of distance) ----------
 func _section_at(idx: int) -> Dictionary:
 	var key := str(idx)
 	if section_cache.has(key):
 		return section_cache[key]
-	# Fixed lane counts since stage B step 3 (see OWN_LANES); only the centre
-	# barrier still rolls per chunk.
-	var barrier := randf() < 0.3
-	var cfg := {"own_lanes": OWN_LANES, "onc_lanes": ONC_LANES, "barrier": barrier}
+	# Fixed lane counts since stage B step 3 (see OWN_LANES) until the road
+	# layout's lane changes go live (road lane proposal step 3); only the
+	# centre barrier rolls per chunk, from the road seed when there is a layout.
+	var own := OWN_LANES
+	var onc := ONC_LANES
+	var barrier: bool
+	var lay := RoadFrame.layout
+	if lay != null:
+		if lay.lanes_live:
+			var p := lay.lanes_pair(float(idx) * RoadChunkBuilder.CHUNK_LEN)
+			own = p.x
+			onc = p.y
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash([lay.road_seed, idx, "barrier"])
+		barrier = rng.randf() < 0.3
+	else:
+		barrier = randf() < 0.3
+	var cfg := {"own_lanes": own, "onc_lanes": onc, "barrier": barrier}
 	section_cache[key] = cfg
 	return cfg
 

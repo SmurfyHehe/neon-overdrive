@@ -35,6 +35,14 @@ const EDGE_SLACK := 0.01
 static var align: RoadAlignment
 ## The chunk whose start sits at the world origin (game.gd's floating origin).
 static var origin_index := 0
+## Lane counts, median and exits along the road (RoadLayout, road lane
+## proposal step 1); null = the plain 4+4 road.
+static var layout: RoadLayout
+
+## Metres along the road from the start of chunk 0 for road-space z: what
+## RoadLayout is keyed by, independent of the floating origin.
+static func s_at(z: float) -> float:
+	return float(origin_index) * L - z
 
 ## World transform of chunk i's start: on the centre line, -Z along the road.
 static func chunk_xf(i: int, origin: int = origin_index) -> Transform3D:

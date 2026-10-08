@@ -41,6 +41,7 @@ var gfx_preset: OptionButton
 var gfx_aa: OptionButton
 var gfx_scale: HSlider
 var gfx_scale_label: Label
+var gfx_flags := {}   # flag -> CheckButton
 var _gfx_refreshing := false
 
 func _init(state: GameState) -> void:
@@ -207,6 +208,14 @@ func _build_graphics_page(center: CenterContainer) -> void:
 			_graphics_changed())
 	gfx_scale_label = Label.new()
 	gfx_scale.get_parent().add_child(gfx_scale_label)
+	for flag in GraphicsSettings.FLAGS:
+		var c := CheckButton.new()
+		c.text = GraphicsSettings.FLAG_NAMES[flag]
+		c.toggled.connect(func(on: bool) -> void:
+			GraphicsSettings.set_flag(flag, on)
+			_graphics_changed())
+		graphics_page.add_child(c)
+		gfx_flags[flag] = c
 	graphics_back_button = _add_button(graphics_page, "Back", show_main)
 
 func _add_option(parent: Control, text: String, items: Array, on_select: Callable) -> OptionButton:
@@ -239,6 +248,8 @@ func _refresh_graphics() -> void:
 	gfx_aa.select(maxi(GraphicsSettings.AA_MODES.find(GraphicsSettings.aa), 0))
 	gfx_scale.value = GraphicsSettings.render_scale
 	gfx_scale_label.text = "%d%%" % roundi(GraphicsSettings.render_scale * 100.0)
+	for flag in gfx_flags:
+		gfx_flags[flag].button_pressed = GraphicsSettings.is_on(flag)
 	_gfx_refreshing = false
 
 # ---------- Controls page ----------

@@ -35,10 +35,15 @@ const SCALE_MAX := 1.0
 ## +1.3 ms, MSAA 4x +1.9 ms, MSAA 2x + FXAA +2.3 ms, 75% scale -1.7 ms. So
 ## MSAA 2x is the free default and FXAA is not in any preset.
 const PRESET_VALUES := {
-	"low": {"aa": "msaa2", "render_scale": 0.75},
-	"medium": {"aa": "msaa2", "render_scale": 1.0},
-	"high": {"aa": "msaa4", "render_scale": 1.0},
+	"low": {"aa": "msaa2", "render_scale": 0.75, "film_look": true},
+	"medium": {"aa": "msaa2", "render_scale": 1.0, "film_look": true},
+	"high": {"aa": "msaa4", "render_scale": 1.0, "film_look": true},
 }
+
+## On/off effects, in menu order, with their menu names. Each is read by the
+## node that draws it (film_look: WorldLook).
+const FLAGS := ["film_look"]
+const FLAG_NAMES := {"film_look": "Film look"}
 
 ## Nodes that switch with these settings join this group and implement
 ## apply_graphics().
@@ -47,6 +52,15 @@ const GROUP := "graphics_settings"
 static var preset := PRESET_DEFAULT  # one of PRESETS, or "custom"
 static var aa := "msaa2"
 static var render_scale := 1.0
+static var flags := {"film_look": true}
+
+static func is_on(flag: String) -> bool:
+	return bool(flags.get(flag, false))
+
+static func set_flag(flag: String, on: bool) -> void:
+	if flag in FLAGS:
+		flags[flag] = on
+		_mark_custom()
 
 static func set_preset(p: String) -> void:
 	if not PRESET_VALUES.has(p):
@@ -55,6 +69,8 @@ static func set_preset(p: String) -> void:
 	var v: Dictionary = PRESET_VALUES[p]
 	aa = v.aa
 	render_scale = v.render_scale
+	for f in FLAGS:
+		flags[f] = bool(v[f])
 
 static func set_aa(mode: String) -> void:
 	if mode in AA_MODES:
@@ -69,7 +85,7 @@ static func set_render_scale(s: float) -> void:
 static func _mark_custom() -> void:
 	for p in PRESETS:
 		var v: Dictionary = PRESET_VALUES[p]
-		if v.aa == aa and is_equal_approx(v.render_scale, render_scale):
+		if v.aa == aa and is_equal_approx(v.render_scale, render_scale) and FLAGS.all(func(f: String) -> bool: return bool(v[f]) == is_on(f)):
 			preset = p
 			return
 	preset = "custom"
@@ -111,6 +127,8 @@ static func load_settings() -> void:
 			# "custom" (or damaged): read each value, keep the default for a bad one.
 			set_aa(str(cfg.get_value("graphics", "aa", aa)))
 			set_render_scale(float(cfg.get_value("graphics", "render_scale", render_scale)))
+			for f in FLAGS:
+				set_flag(f, FxSettings._to_bool(cfg.get_value("graphics", f, is_on(f))))
 	var forced := OS.get_environment("NEON_GFX")
 	if PRESET_VALUES.has(forced):
 		set_preset(forced)
@@ -122,4 +140,6 @@ static func save_settings() -> bool:
 	cfg.set_value("graphics", "preset", preset)
 	cfg.set_value("graphics", "aa", aa)
 	cfg.set_value("graphics", "render_scale", render_scale)
+	for f in FLAGS:
+		cfg.set_value("graphics", f, is_on(f))
 	return cfg.save(AudioSettings.path) == OK

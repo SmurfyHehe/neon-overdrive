@@ -73,6 +73,16 @@ const COCKPIT_KICK := 0.35       # share of both kicks in the cockpit
 const LAND_AIR_MIN := 0.15       # s with no wheel down before a landing counts
 const LAND_FALL_MIN := 1.5       # m/s falling at touchdown
 const LAND_FALL_FULL := 8.0      # m/s for the deepest dip
+# Shift kick (D2, 2026-10-08): each upshift nods the camera (and the head in
+# the cockpit) as the drive comes back in, harder for a flat-out shift near
+# the redline, softer with the automatic. A third spring, same slider.
+# FxSettings "shift_kick" is its off switch.
+const SHIFT_PITCH := 0.012       # rad (~0.7 deg) at peak
+const SHIFT_POS := 0.05          # m back along the view at peak
+const SHIFT_RATE := 14.0
+const SHIFT_DAMP := 0.4
+const SHIFT_AUTO := 0.5          # automatic gearbox: half as strong
+const SHIFT_MIN := 0.15          # a lazy part-throttle shift still nods a little
 
 ## Phase C: the cockpit view (F toggles). VIEW_CHASE is everything above; in
 ## VIEW_COCKPIT the camera sits at the driver's eye, rigid to the car, the body
@@ -141,6 +151,9 @@ var surface_t := 0.0   # 0..1, share of wheels on a rough surface (scaled by spe
 var nudge_x := 0.0     # spring state, about -1..1 at peak (+ = camera to the right)
 var dip := 0.0         # spring state, about 0..-1 at peak
 var landing_count := 0
+var shift_x := 0.0     # spring state, about 0..1 at peak
+var shift_count := 0
+var last_shift_strength := 0.0
 var dist_now := DIST
 var height_now := HEIGHT
 var anchor := Vector3.ZERO  # chase position before shake
@@ -157,6 +170,9 @@ var _noise := FastNoiseLite.new()
 var _nudge_v := 0.0
 var _dip_v := 0.0
 var _air := 0.0
+var _shift_v := 0.0
+var _gear := 0
+var _rpm_peak := 0.0   # recent peak revs: the sim drops them (and the throttle) during the shift itself
 var _fall := 0.0
 
 func _init(car: PlayerCar) -> void:
@@ -223,6 +239,8 @@ func _physics_process(delta: float) -> void:
 	_prev_vel = v
 	register_impact(dv)
 	_watch_landing(delta)
+	_rpm_peak = maxf(target.motor_rpm, _rpm_peak * exp(-2.0 * delta))
+	_watch_shift()
 	var speed := target.current_speed()
 	_accel = (speed - _prev_speed) / delta
 	_prev_speed = speed
@@ -300,6 +318,27 @@ func land(fall_speed: float) -> void:
 	var s := clampf((fall_speed - LAND_FALL_MIN) / (LAND_FALL_FULL - LAND_FALL_MIN), 0.15, 1.0)
 	_dip_v -= s * DIP_RATE / 0.6
 
+## An upshift of this strength (0..1): nod the camera. Public for tests.
+func shift_kick(strength: float) -> void:
+	shift_count += 1
+	last_shift_strength = strength
+	if not FxSettings.is_on("shift_kick"):
+		return
+	_shift_v += clampf(strength, 0.0, 1.0) * SHIFT_RATE / 0.62
+
+func _watch_shift() -> void:
+	var g := target.current_gear
+	if g > _gear and _gear >= 1:
+		# The pedal, not the sim's throttle (cut during the shift), and the revs
+		# it was pulling just before.
+		var revs := maxf(target.motor_rpm, _rpm_peak)
+		var hard := clampf(target.throttle_input, 0.0, 1.0) * clampf(revs / maxf(target.max_rpm, 1.0), 0.0, 1.0)
+		var s := lerpf(SHIFT_MIN, 1.0, hard)
+		if target.automatic_transmission:
+			s *= SHIFT_AUTO
+		shift_kick(s)
+	_gear = g
+
 func _watch_landing(delta: float) -> void:
 	if target.get_wheel_contact_count() == 0:
 		_air += delta
@@ -318,11 +357,15 @@ func _kick(delta: float, share: float) -> void:
 	var d := _spring(dip, _dip_v, DIP_RATE, DIP_DAMP, delta)
 	dip = d.x
 	_dip_v = d.y
+	var sh := _spring(shift_x, _shift_v, SHIFT_RATE, SHIFT_DAMP, delta)
+	shift_x = sh.x
+	_shift_v = sh.y
 	var k := ViewSettings.shake * share
-	if k <= 0.0 or (absf(nudge_x) < 0.0001 and absf(dip) < 0.0001):
+	if k <= 0.0 or (absf(nudge_x) < 0.0001 and absf(dip) < 0.0001 and absf(shift_x) < 0.0001):
 		return
-	global_position += global_basis.x * (nudge_x * NUDGE_POS * k) + global_basis.y * (dip * DIP_POS * k)
+	global_position += global_basis.x * (nudge_x * NUDGE_POS * k) + global_basis.y * (dip * DIP_POS * k) 		+ global_basis.z * (shift_x * SHIFT_POS * k)
 	rotate_object_local(Vector3.BACK, -nudge_x * NUDGE_ROLL * k)
+	rotate_object_local(Vector3.RIGHT, shift_x * SHIFT_PITCH * k)
 
 ## Damped spring toward 0 (position, velocity), in substeps so a slow frame
 ## cannot blow it up.

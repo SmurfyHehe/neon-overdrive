@@ -237,6 +237,8 @@ func _read_keyboard() -> void:
 		manual_shift(-1)
 	if Input.is_action_just_pressed("shift_up"):
 		manual_shift(1)
+	if Input.is_action_just_pressed("headlights"):
+		set_headlights(not headlights_on)
 	if Input.is_action_just_pressed("toggle_gearbox"):
 		set_transmission_mode((transmission_mode() + 1) % Transmission.size())
 	if Input.is_action_just_pressed("reverse"):
@@ -352,6 +354,17 @@ func set_transmission_mode(mode: int) -> void:
 ## In MANUAL a gear change needs the clutch in; in the other modes it always may.
 func clutch_ready() -> bool:
 	return transmission_mode() != Transmission.MANUAL or clutch_input >= SHIFT_CLUTCH_MIN
+
+## Headlights on/off (H, 2026-10-08). Only the beam (CarFx's "Headlights"
+## spot) for now: the lamp lenses share one glow mesh with the tail lamps.
+## Cops losing a car running dark waits for the police stage.
+var headlights_on := true
+
+func set_headlights(on: bool) -> void:
+	headlights_on = on
+	var spot := get_node_or_null("Headlights") as Light3D
+	if spot != null:
+		spot.visible = on
 
 func manual_shift(count: int) -> void:
 	if clutch_ready():

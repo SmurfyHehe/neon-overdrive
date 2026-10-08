@@ -11,15 +11,17 @@ extends RefCounted
 # rearview mirror render).
 # The driving-feel pass (2026-10-08) adds sparks (wall and car scrapes) and
 # hit_stop (the blink of freeze on a big crash), near_miss (whoosh and camera
-# nudge on a close pass) and landing_dip (the camera dip after a jump).
+# nudge on a close pass) and landing_dip (the camera dip after a jump);
+# then slipstream (wind drop and air lines in a wake) and shift_kick (the
+# camera nod on upshifts).
 
-const EFFECTS := ["vignette", "speed_lines", "skid_marks", "exhaust_flames", "mirrors", "head_motion", "rear_strip", "sparks", "hit_stop", "near_miss", "landing_dip"]
+const EFFECTS := ["vignette", "speed_lines", "skid_marks", "exhaust_flames", "mirrors", "head_motion", "rear_strip", "sparks", "hit_stop", "near_miss", "landing_dip", "slipstream", "shift_kick"]
 ## Mirror render size as a share of CockpitMirrors' base sizes: 0 = low (half),
 ## 1 = medium (base), 2 = high (double). Default medium.
 const MIRROR_QUALITIES := ["low", "medium", "high"]
 const MIRROR_QUALITY_DEFAULT := 1
 
-static var enabled := {"vignette": true, "speed_lines": true, "skid_marks": true, "exhaust_flames": true, "mirrors": true, "head_motion": true, "rear_strip": true, "sparks": true, "hit_stop": true, "near_miss": true, "landing_dip": true}
+static var enabled := {"vignette": true, "speed_lines": true, "skid_marks": true, "exhaust_flames": true, "mirrors": true, "head_motion": true, "rear_strip": true, "sparks": true, "hit_stop": true, "near_miss": true, "landing_dip": true, "slipstream": true, "shift_kick": true}
 static var mirror_quality := MIRROR_QUALITY_DEFAULT
 
 static func is_on(effect: String) -> bool:

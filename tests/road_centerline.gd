@@ -66,7 +66,7 @@ func _check_strip(mi: MeshInstance3D, label: String) -> void:
 	var arrays := (mi.mesh as ArrayMesh).surface_get_arrays(0)
 	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
-	_check(verts.size() == 6 * B.STATIONS, "%s: %d vertices, want %d" % [label, verts.size(), 6 * B.STATIONS])
+	_check(verts.size() == 6 * B._strip_n, "%s: %d vertices, want %d" % [label, verts.size(), 6 * B._strip_n])
 	# The strip's own corners: the two x values at the start (z=0) and at the end.
 	var start_x: Array[float] = []
 	var end_x: Array[float] = []

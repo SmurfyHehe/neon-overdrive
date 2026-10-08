@@ -46,6 +46,7 @@ var game_state: GameState
 # speed feel (FOV, dolly, shake) all live in chase_camera.gd.
 var camera: ChaseCamera
 var radio: RadioManager
+var _volume_unsaved := false      # volume keys moved it with no cockpit; saved on release
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
 func _ready() -> void:
@@ -250,7 +251,7 @@ func _update_chunk_pool(ref_z: float) -> void:
 			c.index = max_idx
 
 # ---------- floating origin (issue #26) ----------
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	# Runs before the car's own _physics_process (parent before child), so
 	# GEVP computes this step's velocity from positions that are already
 	# shifted consistently.
@@ -261,6 +262,7 @@ func _physics_process(_delta: float) -> void:
 		toggle_mute()
 	if Input.is_action_just_pressed("radio_next") and radio != null:
 		request_next_station()
+	_radio_volume_input(delta)
 
 ## Next station (N): with the cockpit built the driver's hand reaches the touch
 ## screen and the station changes on the tap (CockpitFrame.request_radio), in
@@ -271,6 +273,21 @@ func request_next_station() -> void:
 		f.request_radio()
 	else:
 		radio.next_station()
+
+## Radio volume (hold , or .): with the cockpit built the driver's hand goes
+## to the knob and the volume moves while it turns it (CockpitFrame); with no
+## cockpit the volume moves at once. It is the Music slider in the pause menu.
+func _radio_volume_input(delta: float) -> void:
+	var dir := int(Input.get_axis("radio_volume_down", "radio_volume_up"))
+	var f: CockpitFrame = camera.frame if camera != null else null
+	if f != null and f.driver != null:
+		f.set_volume_dir(dir)
+	elif dir != 0:
+		AudioSettings.set_volume("Music", AudioSettings.volumes["Music"] + dir * CockpitFrame.VOLUME_RATE * delta)
+		_volume_unsaved = true
+	elif _volume_unsaved:
+		_volume_unsaved = false
+		AudioSettings.save_settings()
 
 ## Moves the world back by shift_chunks whole chunks (positive = the car had
 ## driven forward, -z). Whole chunks keep chunk positions exact integers x 50.

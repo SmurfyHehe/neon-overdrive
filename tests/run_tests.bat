@@ -64,6 +64,7 @@ call :run cockpit_driver --headless
 call :run cockpit_shifter --headless
 call :run cockpit_shifter_rnd --headless
 call :run touch_radio --headless
+call :run radio_volume_knob --headless
 call :run tyres "--headless --fixed-fps 60"
 call :run clutch_model --headless
 call :run driveline_audio --headless

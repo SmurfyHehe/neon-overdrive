@@ -24,6 +24,8 @@ const GROUPS := [
 		["exhaust_rasp_down", "Less rasp"], ["exhaust_pops_up", "More pops"], ["exhaust_pops_down", "Fewer pops"]]],
 ]
 
+const LogFolder := preload("res://scripts/log_folder.gd")
+
 const SILVER := Color("#C9CED6")
 const AMBER := Color("#FFC066")
 
@@ -123,6 +125,7 @@ func _ready() -> void:
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	_add_button(box, "Controls", show_controls)
 	_add_button(box, "Service car (reset wear)", _service_car)
+	_add_button(box, "Open log folder", LogFolder.open)
 	_add_button(box, "Restart", game_state.restart)
 	_add_button(box, "Quit", game_state.quit)
 

@@ -1,17 +1,16 @@
 class_name DisplaySettings
 extends RefCounted
 
-# Display settings (menus A-list, 2026-10-08): fullscreen, window resolution and
-# a render-scale slider, in the shared user://settings.cfg ([display] section).
+# Display settings (menus A-list, 2026-10-08): fullscreen and window size, in
+# the shared user://settings.cfg ([display] section). The 3D resolution scale
+# lives in GraphicsSettings (PR #232, the Graphics page), not here.
 #
 # - Fullscreen is the default, so the very first launch opens fullscreen (no
 #   [display] section yet). It is Godot's borderless fullscreen, not exclusive,
 #   so alt-tab is instant.
 # - Resolution is the window size when not fullscreen. Fullscreen always uses
-#   the screen's own size; the render scale is the knob for speed there.
-# - Render scale draws the 3D world at a fraction of the window's pixels
-#   (Viewport.scaling_3d_scale) and stretches it up; the HUD and menus stay
-#   sharp. 100% is the old behaviour; 70% is a big win on integrated graphics.
+#   the screen's own size; the Graphics page's resolution scale is the knob
+#   for speed there.
 #
 # apply() only touches the window in a real play session (player_run()): tests
 # and the benchmark keep the window they were started with.
@@ -19,9 +18,6 @@ extends RefCounted
 const TestMode := preload("res://scripts/test_mode.gd")
 
 const FULLSCREEN_DEFAULT := true
-const RENDER_SCALE_DEFAULT := 1.0
-const RENDER_SCALE_MIN := 0.5
-const RENDER_SCALE_MAX := 1.0
 ## Window sizes offered in the menu; ones larger than the screen are hidden.
 const RESOLUTIONS: Array[Vector2i] = [
 	Vector2i(1280, 720), Vector2i(1366, 768), Vector2i(1600, 900),
@@ -30,7 +26,6 @@ const RESOLUTION_DEFAULT := Vector2i(1280, 720)
 
 static var fullscreen := FULLSCREEN_DEFAULT
 static var resolution := RESOLUTION_DEFAULT
-static var render_scale := RENDER_SCALE_DEFAULT
 
 static func set_fullscreen(on: bool) -> void:
 	fullscreen = on
@@ -38,13 +33,9 @@ static func set_fullscreen(on: bool) -> void:
 static func set_resolution(r: Vector2i) -> void:
 	resolution = r if RESOLUTIONS.has(r) else RESOLUTION_DEFAULT
 
-static func set_render_scale(v: float) -> void:
-	render_scale = clampf(v, RENDER_SCALE_MIN, RENDER_SCALE_MAX) if is_finite(v) else RENDER_SCALE_DEFAULT
-
 static func reset_defaults() -> void:
 	fullscreen = FULLSCREEN_DEFAULT
 	resolution = RESOLUTION_DEFAULT
-	render_scale = RENDER_SCALE_DEFAULT
 
 ## True in a real play session: not a test, not the benchmark, not headless.
 static func player_run() -> bool:
@@ -71,7 +62,6 @@ static func load_settings() -> void:
 	set_fullscreen(fs if fs is bool else str(fs).to_lower() == "true")
 	var r: Variant = cfg.get_value("display", "resolution", RESOLUTION_DEFAULT)
 	set_resolution(r if r is Vector2i else RESOLUTION_DEFAULT)
-	set_render_scale(float(cfg.get_value("display", "render_scale", RENDER_SCALE_DEFAULT)))
 
 ## Rewrites only the [display] section; the other sections stay.
 static func save_settings() -> bool:
@@ -79,15 +69,11 @@ static func save_settings() -> bool:
 	cfg.load(AudioSettings.path)
 	cfg.set_value("display", "fullscreen", fullscreen)
 	cfg.set_value("display", "resolution", resolution)
-	cfg.set_value("display", "render_scale", render_scale)
 	return cfg.save(AudioSettings.path) == OK
 
-## Render scale always; window mode and size only in a player run.
+## Window mode and size, only in a player run.
 static func apply(window: Window) -> void:
-	if window == null:
-		return
-	window.scaling_3d_scale = render_scale
-	if not player_run():
+	if window == null or not player_run():
 		return
 	if fullscreen:
 		window.mode = Window.MODE_FULLSCREEN

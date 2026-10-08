@@ -92,6 +92,7 @@ const SHEETS := ["Sheet A", "Sheet B", "Sheet C"]
 const PRESET_LINES := {"Stock": "As it left the factory", "Street": "Forgiving, comfortable",
 	"Grip": "Fast laps", "Drift": "Easy slides"}
 var _ticket_poll := 0.0
+var plate_edit: LineEdit
 var stats: PerformanceCard
 ## Notches and stats when the screen opened, shown as ghosts.
 var before_notches := {}
@@ -272,6 +273,19 @@ func _ready() -> void:
 	panel_pages["mechanic"] = mech
 	var sound := VBoxContainer.new()
 	sound.add_child(_label("Sound and looks only: nothing here changes how the car drives.", DIM))
+	# Vanity plate (R1): letters and numbers only, shown on the car as you type.
+	var plate_row := HBoxContainer.new()
+	plate_row.add_theme_constant_override("separation", 10)
+	sound.add_child(plate_row)
+	plate_row.add_child(_label("Plate", SILVER))
+	plate_edit = LineEdit.new()
+	plate_edit.max_length = VanityPlate.MAX_LEN
+	plate_edit.custom_minimum_size = Vector2(160, 0)
+	plate_edit.text = VanityPlate.current()
+	plate_edit.add_theme_font_override("font", UiTheme.font("mono"))
+	plate_edit.text_changed.connect(_on_plate_typed)
+	plate_edit.text_submitted.connect(func(_t: String) -> void: plate_edit.release_focus())
+	plate_row.add_child(plate_edit)
 	exhaust = ExhaustPanel.new(player)
 	sound.add_child(exhaust)
 	panel_pages["sound"] = sound
@@ -658,6 +672,17 @@ func load_sheet(sheet: String) -> bool:
 	auto.refresh_lock_labels()
 	_refresh()
 	return true
+
+## Letters and numbers only, upper case: the box shows what the plate will say,
+## the car's plates change as you type, and it is kept for next time.
+func _on_plate_typed(raw: String) -> void:
+	var t := VanityPlate.clean(raw)
+	if t != raw:
+		var caret := plate_edit.caret_column
+		plate_edit.text = t
+		plate_edit.caret_column = mini(caret, t.length())
+	VanityPlate.set_text(player.chassis_visual, t)
+	VanityPlate.save(t)
 
 func _on_preset(name: String) -> void:
 	model.apply_preset(name)

@@ -72,6 +72,7 @@ call :run tuner_bench "--headless --fixed-fps 60"
 call :run tuner_kit --headless
 call :run tuner_setup "--headless --fixed-fps 60"
 call :run quick_tune "--headless --fixed-fps 60"
+call :run vanity_plate "--headless --fixed-fps 60"
 call :run powertrain_health "--headless --fixed-fps 60"
 call :run turbo "--headless --fixed-fps 60"
 call :run chassis_targets "--headless --fixed-fps 60"

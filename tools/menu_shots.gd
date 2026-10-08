@@ -57,6 +57,9 @@ func _prepare(game: Node, what: String) -> void:
 		"confirm":
 			gs.pause()
 			_find(game, "PauseMenu").restart_button.pressed.emit()
+		"controls":
+			gs.pause()
+			_find(game, "PauseMenu").show_controls()
 		"display":
 			gs.pause()
 			_find(game, "PauseMenu").show_display()

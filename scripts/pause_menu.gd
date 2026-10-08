@@ -50,6 +50,10 @@ var main_page: VBoxContainer
 var controls_page: VBoxContainer
 var controls_scroll: ScrollContainer
 var controls_back_button: Button
+var controls_save_button: Button
+var controls_status: Label
+var _capture := {}        # {action, slot, button} while waiting for a key
+var _keys_dirty := false  # rebinds not saved yet
 
 func _init(state: GameState) -> void:
 	game_state = state
@@ -248,6 +252,9 @@ func _add_button(parent: Control, text: String, action: Callable) -> Button:
 	return b
 
 func _on_state_changed(new_state: GameState.State, _old_state: GameState.State) -> void:
+	if _keys_dirty:  # left with Esc instead of Save: drop the unsaved rebinds
+		KeyBindings.load_settings()
+		_keys_dirty = false
 	_set_title_mode(false)
 	visible = new_state == GameState.State.PAUSED
 	if visible:
@@ -300,6 +307,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		if main_page.visible:
 			close_title_settings()
+		elif controls_page.visible:
+			_leave_controls()
 		else:
 			show_main()
 
@@ -312,10 +321,11 @@ func _set_title_mode(on: bool) -> void:
 # ---------- Controls page ----------
 func show_controls() -> void:
 	_refresh_controls()
+	controls_status.text = ""
 	main_page.visible = false
 	controls_page.visible = true
 	# Cap the list to the window so it scrolls instead of running off-screen.
-	controls_scroll.custom_minimum_size = Vector2(640, maxf(get_viewport().get_visible_rect().size.y * 0.7, 160.0))
+	controls_scroll.custom_minimum_size = Vector2(700, maxf(get_viewport().get_visible_rect().size.y * 0.7, 160.0))
 	controls_scroll.grab_focus()  # arrows / page keys scroll it
 
 func show_main() -> void:
@@ -335,10 +345,23 @@ func _build_controls_page(center: CenterContainer) -> void:
 	controls_page.add_child(title)
 	controls_scroll = ScrollContainer.new()
 	controls_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	controls_scroll.custom_minimum_size = Vector2(640, 380)
+	controls_scroll.custom_minimum_size = Vector2(700, 380)
 	controls_scroll.focus_mode = Control.FOCUS_ALL
 	controls_page.add_child(controls_scroll)
-	controls_back_button = _add_button(controls_page, "Back", show_main)
+	# Rebinding (menus A-list): click a key, press the new one. Changes apply at
+	# once but only stick after Save; Back without Save puts the saved keys back.
+	controls_status = Label.new()
+	controls_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	controls_status.add_theme_color_override("font_color", SILVER)
+	controls_page.add_child(controls_status)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	controls_page.add_child(row)
+	_add_button(row, "Reset", func() -> void:
+		confirm.ask("Put every key back to the default?", "Reset", _reset_keys))
+	controls_save_button = _add_button(row, "Save", _save_keys)
+	controls_back_button = _add_button(row, "Back", _leave_controls)
 
 ## Rebuilds the list from the InputMap, so a rebound key shows up next time the page opens.
 func _refresh_controls() -> void:
@@ -354,16 +377,102 @@ func _refresh_controls() -> void:
 		heading.add_theme_color_override("font_color", AMBER)
 		list.add_child(heading)
 		var grid := GridContainer.new()
-		grid.columns = 3
-		grid.add_theme_constant_override("h_separation", 24)
+		grid.columns = 2 + KeyBindings.SLOTS
+		grid.add_theme_constant_override("h_separation", 16)
 		list.add_child(grid)
 		for entry in group[1]:
-			_grid_label(grid, entry[1], SILVER, 280)
-			_grid_label(grid, keyboard_text(entry[0]), AMBER, 140)
+			_grid_label(grid, entry[1], SILVER, 260)
+			var codes := KeyBindings.keys(entry[0])
+			for slot in KeyBindings.SLOTS:
+				var code: int = codes[slot] if slot < codes.size() else 0
+				var b := Button.new()
+				b.text = KeyBindings.key_name(code)
+				b.custom_minimum_size = Vector2(110, 0)
+				b.add_theme_color_override("font_color", AMBER)
+				b.set_meta("bind", [StringName(entry[0]), slot])
+				b.pressed.connect(_start_capture.bind(StringName(entry[0]), slot, b))
+				grid.add_child(b)
 			_grid_label(grid, gamepad_text(entry[0]), SILVER, 140)
 		var gap := Control.new()
 		gap.custom_minimum_size = Vector2(0, 8)
 		list.add_child(gap)
+
+# ---------- rebinding ----------
+func _start_capture(action: StringName, slot: int, button: Button) -> void:
+	if not _capture.is_empty():
+		return
+	_capture = {"action": action, "slot": slot, "button": button}
+	button.text = "Press a key"
+	controls_status.text = "Press the new key for this action. Esc cancels."
+	game_state.modal_open = true  # Esc cancels the capture, not the pause
+
+## Catches the next key before the GUI does (so Enter or Space can be bound
+## instead of pressing the focused button).
+func _input(event: InputEvent) -> void:
+	if _capture.is_empty() or not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	get_viewport().set_input_as_handled()
+	var code: int = event.keycode if event.keycode != 0 else event.physical_keycode
+	var action: StringName = _capture.action
+	var slot: int = _capture.slot
+	_capture = {}
+	game_state.modal_open = false
+	game_state.swallow_pause_press()
+	if code == KEY_ESCAPE:
+		_refresh_controls()
+		controls_status.text = _unsaved_text()
+		_focus_key(action, slot)
+		return
+	var other := KeyBindings.action_using(code, action)
+	KeyBindings.set_key(action, slot, code)
+	_keys_dirty = true
+	_refresh_controls()
+	controls_status.text = ("%s moved from %s (it got the old key)." % [KeyBindings.key_name(code), _label_for(other)]) if other != &"" else _unsaved_text()
+	_focus_key(action, slot)
+
+func _unsaved_text() -> String:
+	return "Not saved yet: Save keeps these keys." if _keys_dirty else ""
+
+func _save_keys() -> void:
+	KeyBindings.save_settings()
+	_keys_dirty = false
+	controls_status.text = "Saved."
+
+func _reset_keys() -> void:
+	KeyBindings.reset_defaults()
+	_keys_dirty = true
+	_refresh_controls()
+	controls_status.text = "Defaults back. Save to keep them."
+
+## Back: unsaved changes are dropped (the saved keys come back).
+func _leave_controls() -> void:
+	if _keys_dirty:
+		KeyBindings.load_settings()
+		_keys_dirty = false
+	show_main()
+
+func _label_for(action: StringName) -> String:
+	for g in GROUPS:
+		for entry in g[1]:
+			if entry[0] == String(action):
+				return entry[1]
+	return String(action).capitalize()
+
+## After a rebuild, focus the key button that was just changed.
+func _focus_key(action: StringName, slot: int) -> void:
+	await get_tree().process_frame
+	for b in _key_buttons(controls_scroll):
+		if b.has_meta("bind") and b.get_meta("bind") == [action, slot]:
+			b.grab_focus()
+			return
+
+func _key_buttons(n: Node) -> Array:
+	var out := []
+	for c in n.get_children():
+		if c is Button:
+			out.append(c)
+		out.append_array(_key_buttons(c))
+	return out
 
 func _grid_label(parent: Control, text: String, colour: Color, min_w: float) -> void:
 	var l := Label.new()

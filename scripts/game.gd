@@ -11,6 +11,11 @@ extends Node3D
 const CHUNKS_AHEAD := 6
 const CHUNKS_BEHIND := 1
 const POOL_SIZE := CHUNKS_AHEAD + CHUNKS_BEHIND + 1
+## On a hilly road (#37) there is no ground plane under the world, only the
+## chunks' own road: traffic lives and spawns up to 100 m behind the player
+## (TrafficManager.recycle_behind, spawn_behind_max), so keep 150 m of road
+## behind it, not 50.
+const CHUNKS_BEHIND_HILLS := 3
 
 # Stage B step 3 (2026-10-05): a highway with 4 lanes per direction (ROADMAP
 # stage B: "4 lanes per direction is now the spec"; stage A had capped it at 3
@@ -175,6 +180,10 @@ func _setup_world() -> void:
 
 # ---------- ground collision (new for milestone 2 -- chunks are visual only, wheels need something real to hit) ----------
 func _setup_ground_collision() -> void:
+	# Hills (#37): the road has no single plane; each chunk carries its own
+	# road collision instead (RoadChunkBuilder "RoadCol").
+	if RoadFrame.has_hills():
+		return
 	var body := StaticBody3D.new()
 	var shape := CollisionShape3D.new()
 	# One flat ground under the whole play area instead of per-chunk
@@ -217,17 +226,32 @@ func _setup_ground_collision() -> void:
 ## steer blind down world -Z). Benchmark runs stay straight so they compare
 ## with every earlier run. NEON_ROAD_SEED=<n> fixes the road for tests.
 @export var curviness := 0.5
+## How hilly, 0 (flat) to 1 (rolling the whole way); NEON_HILLS=<x> overrides
+## it (run_tests.bat sets 0). NEON_KICKERS=<x> is the chance a crest is a
+## jump: 0, for the R6 playtest preset only. Benchmark runs stay flat.
+@export var hilliness := 0.5
+@export var kicker_chance := 0.0
+
+func _chunks_behind() -> int:
+	return CHUNKS_BEHIND_HILLS if RoadFrame.has_hills() else CHUNKS_BEHIND
 
 func _setup_road_shape() -> void:
 	var env := OS.get_environment("NEON_CURVES")
 	if env.is_valid_float():
 		curviness = float(env)
+	var hills_env := OS.get_environment("NEON_HILLS")
+	if hills_env.is_valid_float():
+		hilliness = float(hills_env)
+	var kick_env := OS.get_environment("NEON_KICKERS")
+	if kick_env.is_valid_float():
+		kicker_chance = float(kick_env)
 	if Benchmark.requested():
 		curviness = 0.0
+		hilliness = 0.0
 	var seed_env := OS.get_environment("NEON_ROAD_SEED")
 	var road_seed := int(seed_env) if seed_env.is_valid_int() else randi()
 	RoadFrame.origin_index = origin_index
-	RoadFrame.align = RoadAlignment.new(road_seed, curviness) if curviness > 0.0 else null
+	RoadFrame.align = RoadAlignment.new(road_seed, curviness, hilliness, kicker_chance) if curviness > 0.0 or hilliness > 0.0 else null
 
 # ---------- section math (reused from old main.gd, keyed by chunk index instead of distance) ----------
 func _section_at(idx: int) -> Dictionary:
@@ -243,8 +267,8 @@ func _section_at(idx: int) -> Dictionary:
 
 # ---------- chunk pool ----------
 func _setup_chunk_pool() -> void:
-	for i in range(POOL_SIZE):
-		var idx := i - CHUNKS_BEHIND
+	for i in range(CHUNKS_AHEAD + _chunks_behind() + 1):
+		var idx := i - _chunks_behind()
 		var prev_cfg := _section_at(idx - 1)
 		var cfg := _section_at(idx)
 		var root := RoadChunkBuilder.build_chunk(idx, prev_cfg, cfg, origin_index)
@@ -257,7 +281,7 @@ func _update_chunk_pool(ref_z: float) -> void:
 	for c in chunk_pool:
 		max_idx = max(max_idx, c.index)
 	for c in chunk_pool:
-		if c.index < current_idx - CHUNKS_BEHIND:
+		if c.index < current_idx - _chunks_behind():
 			max_idx += 1
 			var prev_cfg := _section_at(max_idx - 1)
 			var cfg := _section_at(max_idx)

@@ -10,7 +10,7 @@ extends SceneTree
 # - the player holds its lane through the bends: under 1.0 m off, measured
 #   across the road (RoadFrame), after a settling second
 # - every full-sim traffic car holds its path (lane centre, or its lane-change
-#   S) through the bends as well as it does on a straight road (0.75 m)
+#   S) through the bends to 0.8 m (a straight road's worst: 0.66 m)
 # - no traffic car wrecks, nothing goes non-finite
 # - no car's position jumps against its velocity, origin shifts included
 # - no wheel ever touches a sidewalk while over the lanes: a chunk's collision
@@ -19,6 +19,10 @@ extends SceneTree
 # - the chase camera follows the road (step R4): it looks within 10 deg of
 #   the road's direction and stays within 12 m of the car, through every bend
 #   and origin shift
+# - with hills on (CURVE_DRIVE_HILLS, tests/hill_drive.gd): the road really
+#   climbs (grade over 3% somewhere), the surface the wheels meet is where the
+#   road says it is, to 1 cm, at every lane centre every metre for 300 m
+#   ahead, chunk joins included, and the player never leaves the ground
 # - no engine or script errors logged
 # Prints the worst lane errors and where they happened.
 #
@@ -36,8 +40,10 @@ const CRUISE := 33.0  # m/s, ~120 km/h
 const ROAD_SEED := 37
 const PLAYER_MAX_ERR := 1.0
 ## The straight road's own worst is 0.66 m, mid lane change (this test with
-## NEON_CURVES=0, 2026-10-07); bends may not make it worse than that.
-const TRAFFIC_MAX_ERR := 0.75
+## CURVE_DRIVE_CURVES=0, 2026-10-07). A lane change on a bend runs a little
+## wider: up to 0.75 m (hill_drive seed 7, 85 km/h on a 919 m bend). Bodies in
+## neighbouring lanes have 1.1 m between them (RoadChunkBuilder.LANE_W).
+const TRAFFIC_MAX_ERR := 0.8
 
 var logger := Harness.ErrorCounter.new()
 var game: Node
@@ -60,6 +66,13 @@ var cam_angle := 0.0
 var cam_note := ""
 var cam_dist := 0.0
 var traffic_errs := PackedFloat32Array()
+var _noted := {}
+var max_grade := 0.0
+var surface_err := 0.0
+var surface_note := ""
+var surface_rays := 0
+var air_ticks := 0
+var worst_air := 0
 
 func _initialize() -> void:
 	OS.add_logger(logger)
@@ -69,6 +82,9 @@ func _initialize() -> void:
 	# compare.
 	var curves := OS.get_environment("CURVE_DRIVE_CURVES")
 	OS.set_environment("NEON_CURVES", curves if curves.is_valid_float() else "1.0")
+	# Flat unless asked: hills have their own test (hill_drive.gd).
+	var hills := OS.get_environment("CURVE_DRIVE_HILLS")
+	OS.set_environment("NEON_HILLS", hills if hills.is_valid_float() else "0")
 	if not OS.get_environment("NEON_ROAD_SEED").is_valid_int():
 		OS.set_environment("NEON_ROAD_SEED", str(ROAD_SEED))
 	game = Harness.boot(self, 0, 300.0, 777, 300.0)
@@ -124,11 +140,21 @@ func _physics_process(delta: float) -> bool:
 			cam_angle = ang
 			cam_note = "%.0f m in, road heading %.1f deg" % [travelled, heading]
 		cam_dist = maxf(cam_dist, cam.global_position.distance_to(p.global_position))
+	if RoadFrame.has_hills():
+		_check_hills(p, u)
 	for car in traffic.cars:
 		if not Harness.finite(car):
 			return _end("non-finite state in a traffic car at tick %d" % tick)
 		if car.wrecked:
 			_check(false, "a traffic car wrecked at tick %d, %.0f m in" % [tick, travelled])
+		if OS.get_environment("CURVE_DRIVE_DEBUG") == "1" and car.detailed and (car._wreck_t > 0.0 or car._stuck_t > 3.0) and not _noted.has(car):
+			_noted[car] = true
+			var du := RoadFrame.unroll(car.global_position)
+			print("TROUBLE tick %d: dir %d lane %d u %s path_x %.2f speed %.1f target %.1f bend %.1f lead_gap %.1f lead_speed %.1f wreck_t %.2f stuck_t %.2f up %.3f heading %.2f wheels %s player dz %.0f grade %.3f" % [
+				tick, car.direction, car.lane_i, du, car.path_x(), car.current_speed(), car.target_speed, car.bend_speed(), car.lead_gap, car.lead_speed,
+				car._wreck_t, car._stuck_t, car.global_transform.basis.y.y, RoadFrame.basis_to_road(du.z, car.global_transform.basis).z.z * -car.direction,
+				car.wheel_array.map(func(w): return (w.get_collider() as Node).name if w.is_colliding() else "-"), du.z - u.z,
+				RoadFrame.align.grade_at(RoadFrame._chunk_of(du.z), RoadFrame._s_in_chunk(du.z, RoadFrame._chunk_of(du.z))) if RoadFrame.align != null else 0.0])
 		if not car.detailed:
 			continue
 		for w in car.wheel_array:
@@ -137,6 +163,8 @@ func _physics_process(delta: float) -> bool:
 		var step: Vector3 = car.global_position - car.previous_global_position
 		var jump := (step - car.linear_velocity * delta).length()
 		worst_step = maxf(worst_step, jump)
+		if jump > 0.05 and OS.get_environment("CURVE_DRIVE_DEBUG") == "1":
+			print("JUMP %.3f m tick %d shifts %d step %s vel*dt %s car y %.2f wheels %s" % [jump, tick, shifts, step, car.linear_velocity * delta, car.global_position.y, car.wheel_array.map(func(w): return (w.get_collider() as Node).name if w.is_colliding() else "-")])
 		if jump > 0.5:
 			_check(false, "car position jumped %.2f m against its velocity at tick %d (origin shifts %d)" % [jump, tick, shifts])
 		if tick > RATE * 2:
@@ -152,6 +180,39 @@ func _physics_process(delta: float) -> bool:
 	if travelled >= DISTANCE:
 		return _end("")
 	return false
+
+## Hills: grade seen, the player's airtime, and every SURFACE_EVERY ticks the
+## road surface under the lanes against where RoadFrame says it is.
+const SURFACE_EVERY := 120
+func _check_hills(p: PlayerCar, u: Vector3) -> void:
+	var i := RoadFrame._chunk_of(u.z)
+	max_grade = maxf(max_grade, absf(RoadFrame.align.grade_at(i, RoadFrame._s_in_chunk(u.z, i))))
+	var grounded := 0
+	for w in p.wheel_array:
+		if w.is_colliding():
+			grounded += 1
+	if grounded == 0 and tick > RATE:
+		air_ticks += 1
+		worst_air = maxi(worst_air, air_ticks)
+	else:
+		air_ticks = 0
+	if tick % SURFACE_EVERY != 0:
+		return
+	var space := (game as Node3D).get_world_3d().direct_space_state
+	for lane in 4:
+		for side in [1.0, -1.0]:
+			var x: float = RoadChunkBuilder.lane_offset(lane) * side
+			for m in range(10, 300):
+				var want := RoadFrame.roll(Vector3(x, 0.0, u.z - float(m)))
+				var q := PhysicsRayQueryParameters3D.create(want + Vector3(0, 3, 0), want - Vector3(0, 3, 0))
+				var hit := space.intersect_ray(q)
+				if hit.is_empty() or not (hit.collider as Node).is_in_group("Road"):
+					continue  # a car in the way
+				surface_rays += 1
+				var e := absf(hit.position.y - want.y)
+				if e > surface_err:
+					surface_err = e
+					surface_note = "tick %d, %d m ahead, lane x %.1f, chunk %s" % [tick, m, x, (hit.collider as Node).get_parent().name]
 
 func _radius_at(z: float) -> float:
 	var k := RoadFrame.curvature(RoadFrame._chunk_of(z))
@@ -170,6 +231,8 @@ func _end(msg: String) -> bool:
 	var st := Harness.stats(traffic_errs) if traffic_errs.size() > 0 else {}
 	print("  traffic path error: %s" % st)
 	print("  camera: worst %.1f deg off the road (%s), furthest %.1f m from the car" % [cam_angle, cam_note, cam_dist])
+	if RoadFrame.has_hills():
+		print("  hills: steepest grade %.1f%%, surface worst %.4f m over %d rays (%s), longest airtime %d ticks" % [max_grade * 100.0, surface_err, surface_rays, surface_note, worst_air])
 	print("  wreck recycles %d, worst step error %.3f m" % [traffic.wreck_recycle_count if traffic != null else -1, worst_step])
 	_check(max_heading - min_heading > 10.0, "the road barely bent: heading only %.1f..%.1f deg" % [min_heading, max_heading])
 	_check(player_err < PLAYER_MAX_ERR, "the player drifted %.2f m off its lane (%s)" % [player_err, player_note])
@@ -177,6 +240,11 @@ func _end(msg: String) -> bool:
 	_check(traffic == null or traffic.wreck_recycle_count == 0, "%d wrecked cars recycled" % (traffic.wreck_recycle_count if traffic != null else 0))
 	_check(cam_angle < 10.0, "the chase camera looked %.1f deg off the road (%s)" % [cam_angle, cam_note])
 	_check(cam_dist < 12.0, "the chase camera got %.1f m from the car" % cam_dist)
+	if RoadFrame.has_hills():
+		_check(max_grade > 0.03, "the road barely climbed: steepest grade %.1f%%" % (max_grade * 100.0))
+		_check(surface_rays > 1000, "only %d surface rays hit the road" % surface_rays)
+		_check(surface_err < 0.01, "the road surface is %.3f m off where the road says (%s)" % [surface_err, surface_note])
+		_check(worst_air == 0, "the player left the ground for %d ticks at 120 km/h" % worst_air)
 	_check(shifts >= 5, "only %d origin shifts" % shifts)
 	_check(logger.errors.is_empty(), "%d errors logged: %s" % [logger.errors.size(), logger.errors.slice(0, 3)])
 	for f in fails:

@@ -28,6 +28,7 @@ rem No traffic for the older drive-bot tests (they steer across lanes blind); th
 if "%NEON_TRAFFIC%"=="" set "NEON_TRAFFIC=0"
 rem Straight road for the older drive tests (they steer blind down -Z); the curve tests set their own.
 if "%NEON_CURVES%"=="" set "NEON_CURVES=0"
+if "%NEON_HILLS%"=="" set "NEON_HILLS=0"
 
 rem Per-test timeout in seconds. The slowest tests take about 2 minutes, so 10 is generous.
 if "%TEST_TIMEOUT%"=="" set "TEST_TIMEOUT=600"
@@ -104,6 +105,8 @@ if /i not "%~1"=="quick" (
 	call :run traffic_behaviour "--headless --fixed-fps 120"
 	call :run traffic_perf "--headless --fixed-fps 120"
 	call :run curve_drive "--headless --fixed-fps 120"
+	call :run hill_drive "--headless --fixed-fps 120"
+	call :run hill_park "--headless --fixed-fps 60"
 	call :run auto_tune_search "--headless --fixed-fps 60"
 	call :run auto_tune_job "--headless --fixed-fps 60"
 	rem Key-press tests run headless: a windowed run loses its held keys the moment the window loses focus (found 2026-10-05, it made chunk_drive and feel_pass_1 flaky).

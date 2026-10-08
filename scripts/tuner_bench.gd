@@ -61,6 +61,8 @@ var frame_rect := Rect2()
 var _eye := Vector3.ZERO
 var _look := Vector3.ZERO
 var _fov := 42.0
+## The page's shot is taken from the car's other side (its own side is blocked).
+var _mirror := false
 var _hidden: Array[CanvasItem] = []
 var _hidden_layers: Array[CanvasLayer] = []
 
@@ -153,13 +155,15 @@ func close() -> void:
 ## Swings to a page's shot (blends there over ~0.5 s) and outlines its part.
 func show_page(id: String) -> void:
 	page = id if SHOTS.has(id) else "setup"
+	_mirror = _blocked(page, false) and not _blocked(page, true)
 	outline.build(page)
 
 ## Jumps straight to the current page's shot (tests, screenshots).
 func snap() -> void:
 	var s: Dictionary = SHOTS[page]
+	_mirror = _blocked(page, false) and not _blocked(page, true)
 	_eye = shot_eye(page)
-	_look = s.look
+	_look = _shot_look(page)
 	_fov = s.fov
 	_place(1.0)
 
@@ -176,7 +180,26 @@ func shot_eye(id: String) -> Vector3:
 	var th := tan_h * win.x / maxf(vp.x, 1.0) * 0.9
 	var fit: Vector2 = s.fit
 	var dist := maxf(fit.x / maxf(th, 0.05), fit.y / maxf(tv, 0.05))
-	return Vector3(s.look) + Vector3(s.dir).normalized() * dist
+	var m := Vector3(-1.0, 1.0, 1.0) if _mirror else Vector3.ONE
+	return Vector3(s.look) * m + (Vector3(s.dir) * m).normalized() * dist
+
+func _shot_look(id: String) -> Vector3:
+	return Vector3(SHOTS[id].look) * (Vector3(-1.0, 1.0, 1.0) if _mirror else Vector3.ONE)
+
+## True if something solid (a kerb, a wall) sits between the part and the
+## camera on the shot's own side, so the shot is taken from the other side.
+func _blocked(id: String, mirrored: bool) -> bool:
+	if not is_inside_tree() or get_world_3d() == null:
+		return false
+	var was := _mirror
+	_mirror = mirrored
+	var basis := _car_basis()
+	var from := car.global_position + basis * _shot_look(id)
+	var to := car.global_position + basis * shot_eye(id)
+	_mirror = was
+	var q := PhysicsRayQueryParameters3D.create(from, to)
+	q.exclude = [car.get_rid()]
+	return not get_world_3d().direct_space_state.intersect_ray(q).is_empty()
 
 func _process(delta: float) -> void:
 	if not is_open:
@@ -187,7 +210,7 @@ func _process(delta: float) -> void:
 func _place(k: float) -> void:
 	var s: Dictionary = SHOTS[page]
 	_eye = _eye.lerp(shot_eye(page), k)
-	_look = _look.lerp(s.look, k)
+	_look = _look.lerp(_shot_look(page), k)
 	_fov = lerpf(_fov, s.fov, k)
 	var basis := _car_basis()
 	var origin := car.global_position

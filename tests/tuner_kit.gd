@@ -127,6 +127,43 @@ func _run() -> void:
 	var compound: Dictionary = TunerModel.page("tyres").settings[0]
 	_check(m2.stock_notch(compound) == 1 and m2.relative_text(compound) == "Stock", "stock compound is Sport")
 
+	# page graphics: every one loads from its scene and takes a setup
+	var stock_est := TunerModel.estimate(stock)
+	for id in ["tyres", "suspension", "gearbox", "engine", "diff", "brakes", "aero", "assists", "sound"]:
+		var pg := PageGraphic.for_page(id)
+		_check(pg != null, "page %s has no graphic" % id)
+		var scene_path := "res://scenes/tuner_kit/%s.tscn" % pg.get_script().resource_path.get_file().get_basename()
+		_check(ResourceLoader.exists(scene_path), "page %s's graphic has no scene: %s" % [id, scene_path])
+		pg.free()
+	var dyno := DynoGraphic.curves(stock)
+	var peak_rpm := 0.0
+	var peak := 0.0
+	for p in dyno.power:
+		if p.y > peak:
+			peak = p.y
+			peak_rpm = p.x
+	_check(peak > 100.0 and peak_rpm > 4000.0, "the coupe's power should peak high in the rev range: %.0f kW at %.0f rpm" % [peak, peak_rpm])
+	var boosted := CarSpec.clone_spec(stock)
+	boosted.turbo_boost_max = 1.0
+	_check(DynoGraphic.curves(boosted).power[12].y > dyno.power[12].y, "boost should lift the power curve")
+	_check(is_equal_approx(DiffGraphic.lock_of({"rear_locking_differential_engage_torque": 200.0}), 0.8), "200 Nm engage reads 80% lock, as the row does")
+	var drift := CarSpec.clone_spec(stock)
+	TunerModel.new(null, drift, stock).apply_preset("Drift")
+	_check(AssistLights.traction_level(stock) == 1 and AssistLights.traction_level(drift) == 0, "stock TC is Low, the Drift preset turns it off")
+	_check(TyreGraphic._patch(1.6).x > TyreGraphic._patch(2.8).x, "a lower pressure should draw a wider footprint")
+	var words := PerformanceCard.preview_words(e_stock, e_grip, "Compound")
+	_check(words.begins_with("Next notch on Compound: ") and words.contains("▲") and words.contains("grip"), "next-notch words: %s" % words)
+	_check(PerformanceCard.preview_words(e_stock, e_stock).ends_with("no change the estimates can see"), "no change should say so")
+	var shown := []
+	for id in ["tyres", "suspension", "gearbox", "engine"]:
+		var pg := PageGraphic.for_page(id)
+		pg.custom_minimum_size = Vector2(300, 200)
+		grid.add_child(pg)
+		shown.append(pg)
+	await process_frame
+	for pg in shown:
+		pg.show_setup(grip, stock, {"est": e_grip, "stock_est": stock_est, "wheel_r": PlayerCar.CFG.wheel_r, "compound": 2})
+
 	var shot := OS.get_environment("NEON_SHOT")
 	if shot != "":
 		for i in 4:

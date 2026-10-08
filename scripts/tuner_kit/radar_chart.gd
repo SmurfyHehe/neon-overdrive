@@ -9,6 +9,8 @@ extends Control
 var axes: Array[String] = ["Top speed", "Accel", "Braking", "Grip", "Handling"]
 var stock: Array[float] = [0.5, 0.5, 0.5, 0.5, 0.5]
 var now: Array[float] = [0.5, 0.5, 0.5, 0.5, 0.5]
+## One notch on from the focused setting, as faint amber dashes; empty = none.
+var preview: Array[float] = []
 
 func _init() -> void:
 	custom_minimum_size = Vector2(220, 190)
@@ -45,6 +47,16 @@ func _draw() -> void:
 	draw_polyline(mine, TunerColours.YOURS, 2.0, true)
 	base.append(base[0])
 	draw_polyline(base, TunerColours.STOCK, 1.5, true)
+	if preview.size() == n:
+		var ghost := PackedVector2Array()
+		for i in n + 1:
+			ghost.append(c + _spoke(i % n) * r * maxf(preview[i % n], 0.03))
+		for i in n:
+			var a := ghost[i]
+			var b := ghost[i + 1]
+			for k in 6:
+				if k % 2 == 0:
+					draw_line(a.lerp(b, k / 6.0), a.lerp(b, (k + 1) / 6.0), Color(TunerColours.VALUE, 0.8), 1.5, true)
 	var font := UiTheme.font("strong")
 	for i in n:
 		var d := _spoke(i)

@@ -131,7 +131,7 @@ func _ready() -> void:
 	copy_button.pressed.connect(_copy_values)
 	buttons.add_child(copy_button)
 	var reset := Button.new()
-	reset.text = "Reset"
+	reset.text = "Reset to stock"
 	reset.pressed.connect(_reset)
 	buttons.add_child(reset)
 
@@ -184,10 +184,12 @@ func _path_of(key: String) -> String:
 func _write(key: String, value: float) -> void:
 	values[key] = CarSpec.set_param(player, player.spec, _path_of(key), value)
 
+## Every knob back to the car's stock value (settings safety part 4; it used
+## to go back to the values at game start, which could be a saved extreme).
 func _reset() -> void:
-	for key in start_values:
-		sliders[key].set_value_no_signal(start_values[key])
-	values = start_values.duplicate()
+	for k in KNOBS:
+		values[k[0]] = TuneParams.get_value(stock, k[2])
+		sliders[k[0]].set_value_no_signal(values[k[0]])
 	_apply()
 	tune_changed.emit()
 

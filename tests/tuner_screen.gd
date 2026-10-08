@@ -78,6 +78,12 @@ func _run() -> void:
 	await _tap(KEY_RIGHT)
 	_check(player.spec.front_tyre_pressure > p0 and is_equal_approx(player.front_tyre_pressure, player.spec.front_tyre_pressure), "Right should raise the front pressure (%f -> %f)" % [p0, player.spec.front_tyre_pressure])
 	_check(screen.preset_label.text.contains("(modified)"), "changing a setting should mark the setup modified: %s" % screen.preset_label.text)
+	# consequence line and danger zones (settings safety part 3)
+	var prow: Dictionary = screen.rows[1]
+	_check(prow.line != null and prow.line.text.begins_with("High"), "front pressure up should say what it does: %s" % (prow.line.text if prow.line else "no line"))
+	_check(prow.bar.zones.size() == TunerModel.NOTCHES, "the pressure bar should carry a zone per notch")
+	var rp: Dictionary = screen.rows[2]  # rear pressure: amber at its ends on the simple page, never red
+	_check(rp.bar.zones[0] == SettingDanger.Level.AMBER and not rp.bar.zones.has(SettingDanger.Level.RED), "rear pressure zones: %s" % str(rp.bar.zones))
 	await _tap(KEY_Q)
 	_check(screen.current_page() == "setup", "Q should go back to Setup")
 	screen.preset_buttons[2].pressed.emit()  # Grip

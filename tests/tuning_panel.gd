@@ -53,6 +53,7 @@ func _process(_delta: float) -> bool:
 		40:
 			if game.game_state.state == GameState.State.TUNING:
 				_check(_screen(game).current_page() == "setup", "T should open the tuner on Setup")
+				TunerGate.set_advanced_ok(true)  # the one-time confirm is tests/tuner_safety_net.gd's
 				_screen(game).show_page("advanced")
 		60:
 			var panel := _panel(game)

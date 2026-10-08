@@ -330,16 +330,21 @@ func _place(delta: float) -> void:
 	# the 60 Hz physics tick, and with vsync off the camera updates several
 	# times per tick. Following the raw position made car and road judder.
 	var p := target.get_global_transform_interpolated().origin
+	# Road space (RoadFrame, #37): across / up / along the road. The rig sits
+	# behind the car ALONG THE ROAD and looks down it, so it swings round
+	# bends with the road instead of staring down world -Z; on a straight
+	# road this is exactly the old world-axis rig.
+	var u := RoadFrame.unroll(p)
 	# Reversing flips the chase cam to the opposite side of the car looking
 	# the opposite way (2026-09-13 fix, kept); so does holding look_back.
 	var target_yaw := PI if (target.gear == -1 or look_back) else 0.0
 	if mode == 0 or not _started:
-		_follow = Vector2(p.x, p.y)
+		_follow = Vector2(u.x, u.y)
 		_yaw = target_yaw
 		_started = true
 	else:
 		# Frame-rate independent ease: the same feel at 60 or 300 fps.
-		_follow = _follow.lerp(Vector2(p.x, p.y), 1.0 - exp(-FOLLOW_RATE * delta))
+		_follow = _follow.lerp(Vector2(u.x, u.y), 1.0 - exp(-FOLLOW_RATE * delta))
 		if mode == 2:
 			_yaw = lerpf(_yaw, target_yaw, 1.0 - exp(-SWING_RATE * delta))
 		else:
@@ -348,8 +353,8 @@ func _place(delta: float) -> void:
 	# height motion is smoothed); the dolly shortens it with speed.
 	var back := Vector3(0, 0, dist_now).rotated(Vector3.UP, _yaw)
 	var ahead := Vector3(0, 0, -LOOK_AHEAD).rotated(Vector3.UP, _yaw)
-	anchor = Vector3(_follow.x + back.x, _follow.y + height_now, p.z + back.z)
-	aim = Vector3(_follow.x + ahead.x, _follow.y + LOOK_HEIGHT, p.z + ahead.z)
+	anchor = RoadFrame.roll(Vector3(_follow.x + back.x, _follow.y + height_now, u.z + back.z))
+	aim = RoadFrame.roll(Vector3(_follow.x + ahead.x, _follow.y + LOOK_HEIGHT, u.z + ahead.z))
 	global_position = anchor
 	look_at(aim, Vector3.UP)
 

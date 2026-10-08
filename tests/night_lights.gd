@@ -40,7 +40,7 @@ func _run() -> void:
 		await process_frame
 	# Every chunk gets the barrier, so the reflectors are in view.
 	for c in game.get("chunk_pool"):
-		(c.root.get_node(^"Barrier") as MeshInstance3D).visible = true
+		(c.root.get_node(^"Barrier") as MultiMeshInstance3D).visible = true
 	var p: PlayerCar = game.get("player")
 	Harness.move_player_to_lane(p, Harness.lane_x(3))
 	var cars: Array[TrafficCar] = []

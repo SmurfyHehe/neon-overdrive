@@ -20,7 +20,7 @@ static func set_camera_smoothing(v: int) -> void:
 	camera_smoothing = clampi(v, 0, CAMERA_SMOOTHING_MAX)
 
 static func set_cockpit_fov(v: float) -> void:
-	cockpit_fov = clampf(v, COCKPIT_FOV_MIN, COCKPIT_FOV_MAX)
+	cockpit_fov = clampf(v, COCKPIT_FOV_MIN, COCKPIT_FOV_MAX) if is_finite(v) else COCKPIT_FOV_DEFAULT  # clampf passes NaN through
 
 ## Reads the file (missing or damaged means the default). Shares AudioSettings.path
 ## so tests that redirect one redirect all.

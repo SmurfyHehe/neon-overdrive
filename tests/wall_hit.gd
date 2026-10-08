@@ -79,13 +79,18 @@ func _wall_face(p: PlayerCar) -> float:
 	_find(game, "BoundaryOwn", found)
 	var best := INF
 	var best_dz := INF
+	# The wall is one box per centreline station (#37), each placed by its own
+	# CollisionShape3D transform; the body itself sits at the chunk origin.
 	for b in found:
-		var body := b as Node3D
-		var box := (body.get_node(^"Shape") as CollisionShape3D).shape as BoxShape3D
-		var dz := absf(body.global_position.z - p.global_position.z)
-		if dz < box.size.z / 2.0 + 1.0 and dz < best_dz:
-			best_dz = dz
-			best = body.global_position.x - box.size.x / 2.0
+		for c in (b as Node).get_children():
+			var col := c as CollisionShape3D
+			if col == null:
+				continue
+			var box := col.shape as BoxShape3D
+			var dz := absf(col.global_position.z - p.global_position.z)
+			if dz < box.size.z / 2.0 + 1.0 and dz < best_dz:
+				best_dz = dz
+				best = col.global_position.x - box.size.x / 2.0
 	return best
 
 func _start(p: PlayerCar) -> void:

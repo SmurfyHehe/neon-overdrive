@@ -57,10 +57,17 @@ static func boot(tree: SceneTree, car_count: int, detail: float, seed_value: int
 ## in ~10 s. Test driver only; traffic keeps plain pure pursuit (its lane
 ## changes move the target on purpose, and it never goes 240).
 const LAT_DAMP_T := 3.0
+## The player car's own bend feed-forward (TrafficCar.UNDERSTEER_FF is the
+## traffic tune): with the traffic's 0.0015 this driver crept 1.3 m to the
+## inside of a 351 m bend at 120 km/h, with none 0.95 m to the outside of a
+## 1245 m one (tests/curve_drive.gd, 2026-10-07).
+const PLAYER_UNDERSTEER_FF := 0.0008
 
 static func lane_driver(lane_x: float, throttle: float, max_speed: float = INF) -> Callable:
 	return func(c: Vehicle) -> void:
-		c.steering_input = TrafficCar.lane_steer(c, lane_x - c.linear_velocity.x * LAT_DAMP_T, -1.0, 2.5)
+		# Sideways velocity across the road (RoadFrame, #37), not world x.
+		var side_v := RoadFrame.dir_to_road(RoadFrame.unroll(c.global_position).z, c.linear_velocity).x
+		c.steering_input = TrafficCar.lane_steer(c, lane_x - side_v * LAT_DAMP_T, -1.0, 2.5, PLAYER_UNDERSTEER_FF)
 		c.throttle_input = throttle if c.current_speed() < max_speed else 0.0
 		c.brake_input = 0.0
 		c.handbrake_input = 0.0

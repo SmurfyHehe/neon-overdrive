@@ -52,7 +52,7 @@ static func clone_spec(spec: Dictionary) -> Dictionary:
 	return out
 
 ## THE write path for tuning (raw panel and Auto-Tune both). Clamps to the
-## registry range, writes the spec and the live car, then redoes whatever the
+## registry's Advanced hard limits (adv_min..adv_max), writes the spec and the live car, then redoes whatever the
 ## vendored Vehicle only works out once. Returns the value actually stored, or
 ## NAN for a path that is not in TuneParams.
 ##
@@ -67,7 +67,15 @@ static func set_param(v: Vehicle, spec: Dictionary, path: String, value: float) 
 	if entry.is_empty():
 		push_error("CarSpec.set_param: '%s' is not a tunable path" % path)
 		return NAN
-	value = clampf(value, entry.min, entry.max)
+	if not is_finite(value):
+		# clampf() passes NaN straight through, and one NaN on the car poisons
+		# the whole sim. Keep what is there (settings safety, 2026-10-07).
+		push_warning("CarSpec.set_param: ignored non-finite %s for '%s'" % [str(value), path])
+		return TuneParams.get_value(spec, path)
+	# The Advanced hard limits, not the safe range (settings safety part 2).
+	value = clampf(value, entry.adv_min, entry.adv_max)
+	if path == "front_brake_bias":
+		value = -1.0 if value < 0.0 else maxf(value, TuneParams.BIAS_MIN)
 	TuneParams.set_value(spec, path, value)
 	if entry.on_car:
 		TuneParams.set_value(v, path, value)

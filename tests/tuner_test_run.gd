@@ -8,6 +8,7 @@ extends SceneTree
 # - the run also records the brake run's trace (speed, throttle, brake samples)
 #   for this setup and for stock, and the stat panel flips to the pit-wall result:
 #   speed trace and a signed delta column (stock against stock reads level)
+# - pressing Test run again cancels it, and a run past the timeout is killed
 # - changing any setting afterwards puts the estimates back
 # - a second Test run, on a changed setup, reuses the stock run and shows a delta
 # Optional: NEON_SHOT=<png path> saves a screenshot of the pit-wall result.
@@ -41,12 +42,26 @@ func _run() -> void:
 	await process_frame
 	_check(screen.stats.labels.top.text.contains("~"), "before a test run the top speed should be an estimate: %s" % screen.stats.labels.top.text)
 
+	# pressing the button again cancels (settings safety, 2026-10-07)
 	screen.start_test_run()
-	_check(screen.test_button.disabled, "Test run should disable its button while it runs")
+	_check(screen.test_running(), "Test run did not start")
+	screen.start_test_run()
+	_check(not screen.test_running() and screen.test_button.text == "Test run cancelled", "a second press should cancel: %s" % screen.test_button.text)
+	# a hung worker is killed after the timeout
+	screen.test_timeout_s = 0.2
+	screen.start_test_run()
 	t0 = Time.get_ticks_msec()
-	while screen.test_button.disabled and Time.get_ticks_msec() - t0 < TIMEOUT_S * 1000.0:
+	while screen.test_running() and Time.get_ticks_msec() - t0 < 5000:
 		await process_frame
-	_check(not screen.test_button.disabled and screen.test_button.text == "Test run", "test run did not finish: %s" % screen.test_button.text)
+	_check(not screen.test_running() and screen.test_button.text == "Test run timed out", "the timeout did not stop the run: %s" % screen.test_button.text)
+	screen.test_timeout_s = TIMEOUT_S
+
+	screen.start_test_run()
+	_check(screen.test_running(), "Test run should be running")
+	t0 = Time.get_ticks_msec()
+	while screen.test_running() and Time.get_ticks_msec() - t0 < TIMEOUT_S * 1000.0:
+		await process_frame
+	_check(not screen.test_running() and screen.test_button.text == "Test run", "test run did not finish: %s" % screen.test_button.text)
 	var top_text: String = screen.stats.labels.top.text
 	print("after the test run: ", top_text)
 	_check(not top_text.contains("~") and top_text.contains(str(roundi(EXPECT_TOP))), "top speed should read the measured %d km/h: %s" % [roundi(EXPECT_TOP), top_text])

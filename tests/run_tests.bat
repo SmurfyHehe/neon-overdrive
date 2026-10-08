@@ -26,6 +26,9 @@ if "%NEON_TICKS%"=="" set "NEON_TICKS=60"
 if "%SOUND%"=="1" set "AUDIO="
 rem No traffic for the older drive-bot tests (they steer across lanes blind); the traffic_* tests ignore this and spawn their own.
 if "%NEON_TRAFFIC%"=="" set "NEON_TRAFFIC=0"
+rem Straight road for the older drive tests (they steer blind down -Z); the curve tests set their own.
+if "%NEON_CURVES%"=="" set "NEON_CURVES=0"
+if "%NEON_HILLS%"=="" set "NEON_HILLS=0"
 
 rem Per-test timeout in seconds. The slowest tests take about 2 minutes, so 10 is generous.
 if "%TEST_TIMEOUT%"=="" set "TEST_TIMEOUT=600"
@@ -81,6 +84,8 @@ call :run auto_tune_rules --headless
 call :run tune_slots --headless
 rem The player's tune survives a reset and a relaunch (PlayerTune).
 call :run tune_persist --headless
+call :run settings_safety --headless
+call :run setting_danger --headless
 call :run traffic_spawn "--headless --fixed-fps 60"
 rem ~40 s: the traffic cars (stage B step 5) against their sheets, then a drive each at the game's 120 Hz.
 call :run npc_cars "--headless --fixed-fps 120"
@@ -93,6 +98,9 @@ call :run boundary_walls --headless
 rem ~1 min: the player into the out-of-bounds wall at 16 speeds and angles, at the game's 120 Hz.
 call :run wall_hit "--headless --fixed-fps 120"
 call :run road_space --headless
+call :run road_frame --headless
+call :run road_centerline --headless
+call :run road_alignment --headless
 if /i not "%~1"=="quick" (
 	rem Headless, but ~2 min of simulated driving; --fixed-fps lets physics run faster than the clock.
 	call :run tune_track "--headless --fixed-fps 60"
@@ -104,10 +112,14 @@ if /i not "%~1"=="quick" (
 	call :run tuner_presets "--headless --fixed-fps 60"
 	rem ~15 s: the stat panel's Test run through a worker process, the Mechanic's plain words (Tuner PR 4).
 	call :run tuner_test_run "--headless --fixed-fps 60"
+	call :run tuner_safety_net "--headless --fixed-fps 60"
 	rem Traffic (stage B step 3) at the game's 120 Hz tick: ~1 min of dense traffic, then the perf sweep.
 	call :run traffic_stability "--headless --fixed-fps 120"
 	call :run traffic_behaviour "--headless --fixed-fps 120"
 	call :run traffic_perf "--headless --fixed-fps 120"
+	call :run curve_drive "--headless --fixed-fps 120"
+	call :run hill_drive "--headless --fixed-fps 120"
+	call :run hill_park "--headless --fixed-fps 60"
 	call :run auto_tune_search "--headless --fixed-fps 60"
 	call :run auto_tune_job "--headless --fixed-fps 60"
 	rem Key-press tests run headless: a windowed run loses its held keys the moment the window loses focus (found 2026-10-05, it made chunk_drive and feel_pass_1 flaky).

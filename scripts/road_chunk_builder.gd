@@ -74,8 +74,11 @@ class_name RoadChunkBuilder
 #   screenshot. Now MULTIPLY (only the windows glow), world-space triplanar so
 #   windows are the same size on every building, and longer frontages.
 
-# Curves + elevation are their own later architecture change (Path3D-driven
-# procedural mesh) and are explicitly NOT attempted here.
+# Curves + elevation (#37, docs/planning/curves-elevation-proposal-2026-10-07.md):
+# every chunk carries its centreline as a Path3D ("Centerline"), and
+# everything below is laid out in the frame of that curve -- see the
+# "centreline" section. The curve's bend comes from RoadAlignment (step R3);
+# with no alignment it is straight and the street is what it always was.
 #
 # Interior lane-divider dashes and the center barrier/dash line are snapped
 # to each chunk's own (end-of-chunk) lane count, not tapered. Kept on purpose
@@ -391,8 +394,8 @@ static func _get_pylon_mesh() -> BoxMesh:
 ## on it. Each dot is a camera-facing quad that never drops below
 ## REFLECTOR_MIN_SCREEN of the screen height and fades out past headlight reach
 ## (REFLECTOR_FADE), like a retroreflector the car's lamps stop catching.
-## One mesh for all ten dots, a child of the Barrier so it shows with it:
-## one draw call per barrier chunk. TrafficSettings.light_glow scales it.
+## One dot per barrier piece, a MultiMesh child of the Barrier so it shows
+## and bends with it: one draw call per barrier chunk. TrafficSettings.light_glow scales it.
 const REFLECTOR_SPACING := 5.0
 const REFLECTOR_NEAR_R := 0.06
 const REFLECTOR_MIN_SCREEN := 0.004
@@ -439,15 +442,16 @@ static func _get_reflector_mat() -> ShaderMaterial:
 		_reflector_mat.set_shader_parameter("gain", _reflector_glow)
 	return _reflector_mat
 
-## In the Barrier's local space (a box centred on the origin, CHUNK_LEN long).
+## In one barrier piece's local space (a box centred on the origin, one station long).
 static func _get_reflector_mesh() -> ArrayMesh:
 	if _reflector_mesh == null:
 		var verts := PackedVector3Array()
 		var uvs := PackedVector2Array()
 		var corners := [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, -1), Vector2(1, 1), Vector2(-1, 1)]
-		var n := int(CHUNK_LEN / REFLECTOR_SPACING)
+		var seg := CHUNK_LEN / STATIONS
+		var n := maxi(1, int(seg / REFLECTOR_SPACING))
 		for i in n:
-			var p := Vector3(0.0, BARRIER_H / 2.0 + 0.03, -CHUNK_LEN / 2.0 + (float(i) + 0.5) * REFLECTOR_SPACING)
+			var p := Vector3(0.0, BARRIER_H / 2.0 + 0.03, -seg / 2.0 + (float(i) + 0.5) * seg / n)
 			for uv in corners:
 				verts.append(p)
 				uvs.append(uv)
@@ -462,7 +466,7 @@ static func _get_reflector_mesh() -> ArrayMesh:
 
 static func _get_barrier_mesh() -> BoxMesh:
 	if _barrier_mesh == null:
-		_barrier_mesh = _box_mesh(Vector3(BARRIER_W, BARRIER_H, CHUNK_LEN))
+		_barrier_mesh = _box_mesh(Vector3(BARRIER_W, BARRIER_H, CHUNK_LEN / STATIONS))
 	return _barrier_mesh
 
 ## Street lamp, built once and shared by every chunk's lamp MultiMesh: a pole
@@ -566,6 +570,131 @@ static func lane_offset(lane_i: int) -> float:
 static func lane_at(dist: float) -> int:
 	return maxi(0, floori((dist - MEDIAN_GAP) / LANE_W))
 
+# ---------- centreline (#37 curves and elevation) ----------
+#
+# Each chunk's centreline is a Curve3D on a Path3D child, from the chunk root
+# (distance s = 0) to the chunk's end (s = CHUNK_LEN), forward = -Z. The
+# street is described the way it always was -- x across the road, y up, z
+# along it from 0 to -CHUNK_LEN -- and every point and transform is then put
+# through the curve's frame at s = -z (_at / _xf). On a straight curve that
+# frame is a plain translation; a curved one (RoadAlignment, step R3) bends
+# the whole street with it, and a sloped one (R5) will lift it.
+#
+# Anything long along the road (strips, sidewalk collision, out-of-bounds
+# walls, the barrier) is cut into STATIONS pieces so it can follow a bend.
+
+## Pieces per chunk for geometry that follows the curve: one every 5 m.
+const STATIONS := 10
+## Bake spacing of the centreline, m. Sampling interpolates between baked
+## points, so 1 m is plenty for the radii the road uses (300 m and up).
+const CENTERLINE_BAKE := 1.0
+
+## The centreline of the chunk _apply() is laying out.
+static var _curve: Curve3D
+## Its frame every metre, sampled once per _apply() (_cache_frames). Sampling
+## the Curve3D for each of the ~600 points a chunk lays out cost about a
+## third of a rebuild (2026-10-07).
+static var _frame_xf: Array[Transform3D] = []
+static var _frame_o := PackedVector3Array()
+static var _frame_f := PackedVector3Array()
+
+static func _cache_frames(curve: Curve3D) -> void:
+	var n := int(CHUNK_LEN) + 1
+	_frame_xf.resize(n)
+	_frame_o.resize(n)
+	_frame_f.resize(n)
+	for i in n:
+		var f := station(curve, float(i))
+		_frame_xf[i] = f
+		_frame_o[i] = f.origin
+		_frame_f[i] = -f.basis.z
+
+## The cached frame s metres along the chunk: exact on every whole metre
+## (where nearly every corner sits), interpolated between (a metre's chord of
+## a 300 m bend is off by 0.4 mm).
+static func _frame(s: float) -> Transform3D:
+	var sc := clampf(s, 0.0, CHUNK_LEN)
+	var i := mini(int(sc), int(CHUNK_LEN) - 1)
+	var t := sc - float(i)
+	if t == 0.0:
+		return _frame_xf[i]
+	if t == 1.0:
+		return _frame_xf[i + 1]
+	var o := _frame_o[i].lerp(_frame_o[i + 1], t)
+	var fwd := _frame_f[i].lerp(_frame_f[i + 1], t).normalized()
+	var right := fwd.cross(Vector3.UP).normalized()
+	return Transform3D(Basis(right, right.cross(fwd), -fwd), o)
+
+static func _new_centerline() -> Path3D:
+	var path := Path3D.new()
+	path.name = "Centerline"
+	path.curve = Curve3D.new()
+	path.curve.bake_interval = CENTERLINE_BAKE
+	return path
+
+## The chunk's arc (RoadAlignment, curvature k: 0 = straight) as a cubic
+## Bezier: handles along the start and end tangents, sized so the cubic
+## follows the circle to well under a millimetre at the road's radii.
+##
+## Hills (R5): the height rises by g s + vc s^2 / 2; a cubic's y follows that
+## parabola exactly when its handles carry the start and end slopes over a
+## third of the chunk each, which they do.
+static func _update_centerline(root: Node3D, k: float, g: float = 0.0, vc: float = 0.0) -> Curve3D:
+	var curve: Curve3D = (root.get_node(^"Centerline") as Path3D).curve
+	curve.clear_points()
+	var h := RoadAlignment.bezier_handle(k, CHUNK_LEN)
+	var turn := RoadAlignment.arc_heading(k, CHUNK_LEN)
+	var end_fwd := Vector3(-sin(turn), 0.0, -cos(turn))
+	var g_end := g + vc * CHUNK_LEN
+	var end := RoadAlignment.arc_point(k, CHUNK_LEN) + Vector3(0.0, g * CHUNK_LEN + 0.5 * vc * CHUNK_LEN * CHUNK_LEN, 0.0)
+	curve.add_point(Vector3.ZERO, Vector3.ZERO, Vector3(0.0, g * CHUNK_LEN / 3.0, -h))
+	curve.add_point(end, -end_fwd * h - Vector3(0.0, g_end * CHUNK_LEN / 3.0, 0.0), Vector3.ZERO)
+	return curve
+
+## The chunk-local frame at distance s along a chunk's centreline: origin on
+## the centreline, -Z along the road, X to the right, Y up.
+##
+## s is distance along the road's plan (what RoadFrame and the layout count);
+## on a slope the curve itself is a touch longer (0.13% at 5%), so s is
+## scaled to it.
+##
+## Only the curve's position and direction are used: its own baked up vector
+## is carried along the curve and picks up a slight twist on a road that both
+## bends and climbs (7.7 cm at the road's edge by a chunk's end, a step at
+## every join). The road has no camber, so the frame is rebuilt from the
+## direction and world up, which cannot twist.
+static func station(curve: Curve3D, s: float) -> Transform3D:
+	var len3 := curve.get_baked_length()
+	var xf := curve.sample_baked_with_rotation(clampf(s * len3 / CHUNK_LEN, 0.0, len3), false, false)
+	var fwd := -xf.basis.z
+	var right := fwd.cross(Vector3.UP).normalized()
+	return Transform3D(Basis(right, right.cross(fwd), -fwd), xf.origin)
+
+## Chunk-local transform for something laid out at (x, y, z) in the straight
+## street description, turned by `local` relative to the road.
+static func _xf(x: float, y: float, z: float, local: Basis = Basis()) -> Transform3D:
+	return _frame(-z) * Transform3D(local, Vector3(x, y, 0.0))
+
+## Like _xf, for things that stand upright whatever the slope (buildings,
+## walls, lamps, posts): placed at (x, z) on the road surface, raised y
+## straight up, and turned only to the road's heading.
+static func _xf_up(x: float, y: float, z: float, local: Basis = Basis()) -> Transform3D:
+	var f := _frame(-z)
+	var fwd := -f.basis.z
+	fwd.y = 0.0
+	return Transform3D(Basis.looking_at(fwd.normalized(), Vector3.UP) * local, f * Vector3(x, 0.0, 0.0) + Vector3(0.0, y, 0.0))
+
+## How far upright things reach below the road surface on a hilly road, so a
+## building or wall on a slope never shows a gap under its downhill end.
+const FOUNDATION := 4.0
+
+static func _foundation() -> float:
+	return FOUNDATION if RoadFrame.has_hills() else 0.0
+
+## Chunk-local position of the straight-description point (x, y, z).
+static func _at(x: float, y: float, z: float) -> Vector3:
+	return _frame(-z) * Vector3(x, y, 0.0)
+
 # ---------- tapered strips ----------
 #
 # These are the only per-chunk geometry whose SHAPE actually changes, since
@@ -578,26 +707,63 @@ static func lane_at(dist: float) -> int:
 # mirrored x values (outer < inner), which flips the winding, so the vertex
 # order is picked per side to keep every strip facing up.
 
+## Pieces a road strip is cut into along the chunk: enough that each piece's
+## straight chord stays within STRIP_SAG of the curve (8 on a 300 m bend), and
+## 1 on a straight, level chunk -- exactly the old single quad. The strips
+## were the bulk of a chunk rebuild at 10 pieces each (0.35 of 0.84 ms,
+## 2026-10-07).
+const STRIP_SAG := 0.02
+static func strip_pieces(k: float, vc: float = 0.0) -> int:
+	var c := maxf(absf(k), absf(vc))
+	if c < 1e-9:
+		return 1
+	return clampi(ceili(CHUNK_LEN * sqrt(c / (8.0 * STRIP_SAG))), 1, STATIONS)
+
+## The chunk _apply() is laying out: its strip piece count.
+static var _strip_n := 1
+
 static func _strip_arrays(x_inner0: float, x_inner1: float, x_outer0: float, x_outer1: float, length: float, y: float) -> Array:
-	var a := Vector3(x_inner0, y, 0.0)
-	var b := Vector3(x_outer0, y, 0.0)
-	var c := Vector3(x_inner1, y, -length)
-	var d := Vector3(x_outer1, y, -length)
-	var arrays := []
-	arrays.resize(Mesh.ARRAY_MAX)
+	# _strip_n quads along the strip, each corner put through the centreline
+	# frame (#37). UVs as before: x across the strip, y along it (0..1 over
+	# the chunk), so the asphalt texture tiles exactly as it did.
+	var n := _strip_n
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	verts.resize(6 * n)
+	normals.resize(6 * n)
+	uvs.resize(6 * n)
 	# [a, b, c] runs clockwise seen from above only when outer is left of inner.
 	var mirrored := x_outer0 < x_inner0
-	arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([a, b, c, b, d, c] if mirrored else [a, c, b, b, c, d])
-	arrays[Mesh.ARRAY_NORMAL] = PackedVector3Array([
-		Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP,
-	])
-	arrays[Mesh.ARRAY_TEX_UV] = PackedVector2Array([
-		Vector2(0, 0), Vector2(1, 0), Vector2(0, 1),
-		Vector2(1, 0), Vector2(1, 1), Vector2(0, 1),
-	] if mirrored else [
-		Vector2(0, 0), Vector2(0, 1), Vector2(1, 0),
-		Vector2(1, 0), Vector2(0, 1), Vector2(1, 1),
-	])
+	var f0 := _frame(0.0)
+	var t0 := 0.0
+	for k in n:
+		var t1 := float(k + 1) / float(n)
+		var f1 := _frame(length * t1)
+		var a := f0 * Vector3(lerpf(x_inner0, x_inner1, t0), y, 0.0)
+		var b := f0 * Vector3(lerpf(x_outer0, x_outer1, t0), y, 0.0)
+		var c := f1 * Vector3(lerpf(x_inner0, x_inner1, t1), y, 0.0)
+		var d := f1 * Vector3(lerpf(x_outer0, x_outer1, t1), y, 0.0)
+		var n0 := f0.basis.y
+		var n1 := f1.basis.y
+		var j := 6 * k
+		if mirrored:
+			verts[j] = a; verts[j + 1] = b; verts[j + 2] = c; verts[j + 3] = b; verts[j + 4] = d; verts[j + 5] = c
+			uvs[j] = Vector2(0, t0); uvs[j + 1] = Vector2(1, t0); uvs[j + 2] = Vector2(0, t1)
+			uvs[j + 3] = Vector2(1, t0); uvs[j + 4] = Vector2(1, t1); uvs[j + 5] = Vector2(0, t1)
+			normals[j] = n0; normals[j + 1] = n0; normals[j + 2] = n1; normals[j + 3] = n0; normals[j + 4] = n1; normals[j + 5] = n1
+		else:
+			verts[j] = a; verts[j + 1] = c; verts[j + 2] = b; verts[j + 3] = b; verts[j + 4] = c; verts[j + 5] = d
+			uvs[j] = Vector2(0, t0); uvs[j + 1] = Vector2(0, t1); uvs[j + 2] = Vector2(1, t0)
+			uvs[j + 3] = Vector2(1, t0); uvs[j + 4] = Vector2(0, t1); uvs[j + 5] = Vector2(1, t1)
+			normals[j] = n0; normals[j + 1] = n1; normals[j + 2] = n0; normals[j + 3] = n0; normals[j + 4] = n1; normals[j + 5] = n1
+		f0 = f1
+		t0 = t1
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	return arrays
 
 static func _new_strip(strip_name: String, mat: Material) -> MeshInstance3D:
@@ -652,9 +818,15 @@ static func _lamp_slots() -> int:
 #
 # Real "Dirt"-group collision spanning the sidewalk band on one side for this
 # whole chunk. Created once per side and RESHAPED on rebuild -- the shape
-# resource is reused. It is a convex prism tapered exactly like the sidewalk
-# strip (issue #35), so the grip change and the height step sit under the
-# drawn curb edge all along a lane-count change.
+# resource is reused. It is tapered exactly like the sidewalk strip (issue
+# #35), so the grip change and the height step sit under the drawn curb edge
+# all along a lane-count change.
+#
+# Since #37 it is a triangle mesh of the sidewalk's ramp and top, following
+# the centreline, instead of a convex prism: a prism cannot follow a bend, and
+# ten convex pieces per side (Godot builds a hull for each) made the sidewalk
+# a third of a chunk rebuild. Wheels and the chassis only ever meet the ramp
+# and the top; the out-of-bounds wall stands just behind the outer edge.
 
 static func _new_sidewalk_collision(body_name: String) -> StaticBody3D:
 	var body := StaticBody3D.new()
@@ -663,17 +835,14 @@ static func _new_sidewalk_collision(body_name: String) -> StaticBody3D:
 	body.collision_layer = 1 << (CarSpec.KERB_LAYER - 1)  # wheels only, see CarSpec
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
-	var hull := ConvexPolygonShape3D.new()
-	# placeholder until _apply() reshapes it -- an empty hull logs an error
-	hull.points = PackedVector3Array([Vector3.ZERO, Vector3.RIGHT, Vector3.UP, Vector3.BACK])
-	col.shape = hull
+	var tri := ConcavePolygonShape3D.new()
+	tri.backface_collision = true  # met from either side, whatever the winding
+	col.shape = tri
 	body.add_child(col)
 	return body
 
 static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: float, inner1: float, outer0: float, outer1: float, side: int) -> void:
 	var body: StaticBody3D = root.get_node(NodePath(body_name))
-	var col: CollisionShape3D = body.get_node(^"Shape")
-	var hull: ConvexPolygonShape3D = col.shape
 	# chunk start is z=0, end is z=-CHUNK_LEN; top at 0.15 like the old box.
 	# Points are in chunk-local space, so the body sits at origin.
 	#
@@ -684,16 +853,32 @@ static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: 
 	# shallow angle could catch the box square on that lip and stop the car
 	# dead (tests/car_audio.gd's kerb phase, once the ground became a plane in
 	# PR #129). A sloped face pushes the box up instead.
+	#
+	# STATIONS pieces along the chunk, each corner through the centreline
+	# frame (#37); on a straight centreline the ramp and top are exactly the
+	# old prism's.
 	var sx := float(side)
-	var ramp0 := minf(SIDEWALK_RAMP, absf(outer0 - inner0))
-	var ramp1 := minf(SIDEWALK_RAMP, absf(outer1 - inner1))
-	var pts := PackedVector3Array([
-		Vector3(inner0 * sx, 0.0, 0.0), Vector3(outer0 * sx, 0.0, 0.0),
-		Vector3(inner1 * sx, 0.0, -CHUNK_LEN), Vector3(outer1 * sx, 0.0, -CHUNK_LEN),
-		Vector3((inner0 + ramp0) * sx, 0.15, 0.0), Vector3(outer0 * sx, 0.15, 0.0),
-		Vector3((inner1 + ramp1) * sx, 0.15, -CHUNK_LEN), Vector3(outer1 * sx, 0.15, -CHUNK_LEN),
-	])
-	hull.points = pts
+	var faces := PackedVector3Array()
+	for k in STATIONS:
+		var t0 := float(k) / STATIONS
+		var t1 := float(k + 1) / STATIONS
+		var z0 := -CHUNK_LEN * t0
+		var z1 := -CHUNK_LEN * t1
+		var i0 := lerpf(inner0, inner1, t0)
+		var i1 := lerpf(inner0, inner1, t1)
+		var o0 := lerpf(outer0, outer1, t0)
+		var o1 := lerpf(outer0, outer1, t1)
+		var ramp0 := minf(SIDEWALK_RAMP, absf(o0 - i0))
+		var ramp1 := minf(SIDEWALK_RAMP, absf(o1 - i1))
+		var foot0 := _at(i0 * sx, 0.0, z0)
+		var foot1 := _at(i1 * sx, 0.0, z1)
+		var lip0 := _at((i0 + ramp0) * sx, 0.15, z0)
+		var lip1 := _at((i1 + ramp1) * sx, 0.15, z1)
+		var top0 := _at(o0 * sx, 0.15, z0)
+		var top1 := _at(o1 * sx, 0.15, z1)
+		faces.append_array([foot0, foot1, lip0, lip0, foot1, lip1])  # the ramp
+		faces.append_array([lip0, lip1, top0, top0, lip1, top1])     # the top
+	((body.get_node(^"Shape") as CollisionShape3D).shape as ConcavePolygonShape3D).set_faces(faces)
 	body.position = Vector3.ZERO
 
 # Invisible out-of-bounds wall (#28). Buildings are 22 m apart, so on their
@@ -707,17 +892,68 @@ static func _new_boundary(body_name: String) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = body_name
 	CarSpec.make_wall(body)
-	var col := CollisionShape3D.new()
-	col.name = "Shape"
-	col.shape = BoxShape3D.new()
-	body.add_child(col)
+	# One box per station (#37) so the wall can follow a bend.
+	for k in STATIONS:
+		var col := CollisionShape3D.new()
+		col.name = "Shape" if k == 0 else "Shape%d" % k
+		col.shape = BoxShape3D.new()
+		body.add_child(col)
 	return body
+
+## Boxes overlap their neighbours by this much, so the outside of a bend
+## never opens a gap between two straight pieces.
+const BOUNDARY_OVERLAP := 0.1
 
 static func _update_boundary(root: Node3D, body_name: String, inner_x: float, side: int) -> void:
 	var body: StaticBody3D = root.get_node(NodePath(body_name))
-	var box: BoxShape3D = (body.get_node(^"Shape") as CollisionShape3D).shape
-	box.size = Vector3(BOUNDARY_T, BOUNDARY_H, CHUNK_LEN)
-	body.position = Vector3((inner_x + BOUNDARY_T / 2.0) * float(side), BOUNDARY_H / 2.0, -CHUNK_LEN / 2.0)
+	var seg := CHUNK_LEN / STATIONS
+	for k in STATIONS:
+		var col: CollisionShape3D = body.get_node(NodePath("Shape" if k == 0 else "Shape%d" % k))
+		var f := _foundation()
+		(col.shape as BoxShape3D).size = Vector3(BOUNDARY_T, BOUNDARY_H + f, seg + BOUNDARY_OVERLAP)
+		col.transform = _xf_up((inner_x + BOUNDARY_T / 2.0) * float(side), (BOUNDARY_H - f) / 2.0, -seg * (float(k) + 0.5))
+	body.position = Vector3.ZERO
+
+# Road collision (#37 step R5). On a flat road the wheels drive on game.gd's
+# infinite ground plane; on a hilly one there is no single plane, so each
+# chunk carries its own surface: STATIONS quads across the whole drivable
+# width (out past the out-of-bounds walls), following the centreline, in the
+# "Road" group like the plane. Built always, switched on only with hills.
+
+## How far past the out-of-bounds walls the road collision reaches, m.
+const ROAD_COL_MARGIN := 2.0
+
+static func _new_road_collision() -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.name = "RoadCol"
+	body.add_to_group("Road")
+	var col := CollisionShape3D.new()
+	col.name = "Shape"
+	var tri := ConcavePolygonShape3D.new()
+	tri.backface_collision = true  # met from either side, whatever the winding
+	col.shape = tri
+	col.disabled = true
+	body.add_child(col)
+	return body
+
+static func _update_road_collision(root: Node3D, half_w: float) -> void:
+	var col: CollisionShape3D = root.get_node(^"RoadCol/Shape")
+	var tri: ConcavePolygonShape3D = col.shape
+	if not RoadFrame.has_hills():
+		col.disabled = true
+		tri.set_faces(PackedVector3Array())
+		return
+	var faces := PackedVector3Array()
+	for k in STATIONS:
+		var z0 := -CHUNK_LEN * float(k) / STATIONS
+		var z1 := -CHUNK_LEN * float(k + 1) / STATIONS
+		var a := _at(-half_w, 0.0, z0)
+		var b := _at(half_w, 0.0, z0)
+		var c := _at(-half_w, 0.0, z1)
+		var d := _at(half_w, 0.0, z1)
+		faces.append_array([a, c, b, b, c, d])
+	tri.set_faces(faces)
+	col.disabled = false
 
 # ---------- buildings (reused nodes) ----------
 #
@@ -763,10 +999,12 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 	var w: float = randf_range(4.0, 10.0)
 	var d: float = randf_range(9.0, 18.0)
 	var h: float = randf_range(3.0, 4.5) if is_garage else randf_range(6.0, 22.0)
-	var pos := Vector3((edge_x_abs + w / 2.0 + BUILDING_GAP) * float(side), h / 2.0, z)
+	var f := _foundation()
+	var xf := _xf_up((edge_x_abs + w / 2.0 + BUILDING_GAP) * float(side), (h - f) / 2.0, z)
+	h += f
 
 	(mi.mesh as BoxMesh).size = Vector3(w, h, d)
-	mi.position = pos
+	mi.transform = xf
 	mi.material_override = _get_building_mat(is_garage)
 	if is_garage:
 		mi.set_meta("building_type", "garage")
@@ -774,7 +1012,7 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 		mi.remove_meta("building_type")
 
 	box.size = Vector3(w, h, d)
-	body.position = pos
+	body.transform = xf
 	return d
 
 # ---------- build / rebuild ----------
@@ -785,6 +1023,7 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 ## Runs ONCE per pooled chunk root -- everything after that is an in-place
 ## update, which is the whole point of the recycle path below.
 static func _create_nodes(root: Node3D) -> void:
+	root.add_child(_new_centerline())
 	root.add_child(_new_strip("RoadOwn", _get_own_mat()))
 	root.add_child(_new_strip("RoadOnc", _get_onc_mat()))
 	root.add_child(_new_strip("EdgeLineOwn", _get_edge_line_mat()))
@@ -796,6 +1035,7 @@ static func _create_nodes(root: Node3D) -> void:
 	root.add_child(_new_strip("SidewalkOwn", _get_sidewalk_mat()))
 	root.add_child(_new_strip("SidewalkOnc", _get_sidewalk_mat()))
 
+	root.add_child(_new_road_collision())
 	root.add_child(_new_sidewalk_collision("SidewalkColOwn"))
 	root.add_child(_new_sidewalk_collision("SidewalkColOnc"))
 	root.add_child(_new_boundary("BoundaryOwn"))
@@ -816,18 +1056,15 @@ static func _create_nodes(root: Node3D) -> void:
 	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2))
 	root.add_child(_new_multimesh("GapWalls", _get_wall_mesh(), _get_wall_mat(), (_building_slots() + 1) * 2))
 
-	var wall := MeshInstance3D.new()
-	wall.name = "Barrier"
-	wall.mesh = _get_barrier_mesh()
-	wall.material_override = _get_barrier_mat()
-	wall.position = Vector3(0.0, BARRIER_Y, -CHUNK_LEN / 2.0)
-	var refl := MeshInstance3D.new()
-	refl.name = "Reflectors"
-	refl.mesh = _get_reflector_mesh()
+	# The centre barrier, one piece per station so it can follow a bend (#37).
+	# Its reflectors are a child with one piece per station too, placed with
+	# the same transforms, so they show and bend with it.
+	var barrier_mmi := _new_multimesh("Barrier", _get_barrier_mesh(), _get_barrier_mat(), STATIONS)
+	var refl := _new_multimesh("Reflectors", _get_reflector_mesh(), null, STATIONS)
 	refl.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	refl.extra_cull_margin = 1.0
-	wall.add_child(refl)
-	root.add_child(wall)
+	barrier_mmi.add_child(refl)
+	root.add_child(barrier_mmi)
 
 	for i in range(_building_slots() * 2):
 		for n in _new_building(i):
@@ -845,8 +1082,13 @@ static func _create_nodes(root: Node3D) -> void:
 ## exact, small coordinate instead of a rounded huge one.
 static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary, origin_index: int = 0) -> void:
 	root.name = "Chunk_%d" % chunk_index
-	root.position = Vector3(0, 0, -float(chunk_index - origin_index) * CHUNK_LEN)
+	# Where the road's shape (RoadFrame / RoadAlignment, #37) puts this chunk;
+	# on a straight road that is (0, 0, -(chunk_index - origin_index) * 50).
+	root.transform = RoadFrame.chunk_xf(chunk_index, origin_index)
 	root.set_meta("chunk_index", chunk_index)
+	_curve = _update_centerline(root, RoadFrame.curvature(chunk_index), RoadFrame.start_grade(chunk_index), RoadFrame.vcurve(chunk_index))
+	_cache_frames(_curve)
+	_strip_n = strip_pieces(RoadFrame.curvature(chunk_index), RoadFrame.vcurve(chunk_index))
 
 	var own_lanes: int = clampi(int(cfg.own_lanes), 1, MAX_OWN_LANES)
 	var onc_lanes: int = clampi(int(cfg.onc_lanes), 1, MAX_ONC_LANES)
@@ -895,6 +1137,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# out-of-bounds walls, at the same set-back _update_building() uses
 	_update_boundary(root, "BoundaryOwn", maxf(start_own_walk, end_own_walk) + BUILDING_GAP, 1)
 	_update_boundary(root, "BoundaryOnc", maxf(start_onc_walk, end_onc_walk) + BUILDING_GAP, -1)
+	_update_road_collision(root, maxf(maxf(start_own_walk, end_own_walk), maxf(start_onc_walk, end_onc_walk)) + BUILDING_GAP + BOUNDARY_T + ROAD_COL_MARGIN)
 
 	# edge pylons -- cosmetic rhythm/speed cues, interpolated along each
 	# shoulder's outer edge between this chunk's start and end width
@@ -906,8 +1149,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var pt: float = -pz / CHUNK_LEN
 		var own_edge: float = lerp(start_own_shoulder, end_own_shoulder, pt)
 		var onc_edge: float = lerp(start_onc_shoulder, end_onc_shoulder, pt)
-		pylons_own.set_instance_transform(i, Transform3D(Basis(), Vector3(own_edge, PYLON_HEIGHT / 2.0, pz)))
-		pylons_onc.set_instance_transform(i, Transform3D(Basis(), Vector3(-onc_edge, PYLON_HEIGHT / 2.0, pz)))
+		pylons_own.set_instance_transform(i, _xf_up(own_edge, PYLON_HEIGHT / 2.0, pz))
+		pylons_onc.set_instance_transform(i, _xf_up(-onc_edge, PYLON_HEIGHT / 2.0, pz))
 	pylons_own.visible_instance_count = n_pylons
 	pylons_onc.visible_instance_count = n_pylons
 
@@ -941,8 +1184,9 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			if length > 0.3:
 				var zc := (z_from + z_to) / 2.0
 				var x: float = lerp(walk0, walk1, -zc / CHUNK_LEN) + BUILDING_GAP + WALL_T / 2.0
-				var basis := Basis.from_scale(Vector3(WALL_T, WALL_H, length))
-				walls.set_instance_transform(n_walls, Transform3D(basis, Vector3(x * float(side), WALL_H / 2.0, zc)))
+				var f := _foundation()
+				var basis := Basis.from_scale(Vector3(WALL_T, WALL_H + f, length))
+				walls.set_instance_transform(n_walls, _xf_up(x * float(side), (WALL_H - f) / 2.0, zc, basis))
 				n_walls += 1
 			z_from = e[1]
 	walls.visible_instance_count = n_walls
@@ -960,9 +1204,9 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			var curb: float = lerp(start_own_curb, end_own_curb, lt) if side == 1 else lerp(start_onc_curb, end_onc_curb, lt)
 			var pole_x := (curb + LAMP_SETBACK) * float(side)
 			var turn := Basis() if side == 1 else Basis(Vector3.UP, PI)
-			lamps.set_instance_transform(n_lamps, Transform3D(turn, Vector3(pole_x, 0.0, lz)))
+			lamps.set_instance_transform(n_lamps, _xf_up(pole_x, 0.0, lz, turn))
 			var head_x := pole_x - (LAMP_ARM - 0.2) * float(side)
-			pools.set_instance_transform(n_lamps, Transform3D(Basis.from_scale(Vector3(POOL_ACROSS, 1.0, POOL_ALONG)), Vector3(head_x, POOL_Y, lz)))
+			pools.set_instance_transform(n_lamps, _xf(head_x, POOL_Y, lz, Basis.from_scale(Vector3(POOL_ACROSS, 1.0, POOL_ALONG))))
 			n_lamps += 1
 	lamps.visible_instance_count = n_lamps
 	pools.visible_instance_count = n_lamps
@@ -972,13 +1216,22 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# buffer always exist; only one of them is shown.
 	var slots := _dash_slots()
 	var center: MultiMesh = (root.get_node(^"CenterDashes") as MultiMeshInstance3D).multimesh
-	(root.get_node(^"Barrier") as MeshInstance3D).visible = barrier
+	var barrier_mmi := root.get_node(^"Barrier") as MultiMeshInstance3D
+	var refl_mm: MultiMesh = (barrier_mmi.get_node(^"Reflectors") as MultiMeshInstance3D).multimesh
+	var seg := CHUNK_LEN / STATIONS
+	for k in STATIONS:
+		var bxf := _xf(0.0, BARRIER_Y, -seg * (float(k) + 0.5))
+		barrier_mmi.multimesh.set_instance_transform(k, bxf)
+		refl_mm.set_instance_transform(k, bxf)
+	barrier_mmi.multimesh.visible_instance_count = STATIONS
+	refl_mm.visible_instance_count = STATIONS
+	barrier_mmi.visible = barrier
 	if barrier:
 		center.visible_instance_count = 0
 	else:
 		for i in range(slots):
 			var dz := -float(i) * DASH_SPACING - DASH_SPACING / 2.0
-			center.set_instance_transform(i, Transform3D(Basis(), Vector3(0.0, DASH_Y, dz)))
+			center.set_instance_transform(i, _xf(0.0, DASH_Y, dz))
 		center.visible_instance_count = slots
 
 	# interior lane dividers, both directions packed into one instance
@@ -989,13 +1242,13 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var x: float = MEDIAN_GAP + lane_i * LANE_W
 		for i in range(slots):
 			var dz2 := -float(i) * DASH_SPACING - DASH_SPACING / 2.0
-			lane.set_instance_transform(written, Transform3D(Basis(), Vector3(x, DASH_Y, dz2)))
+			lane.set_instance_transform(written, _xf(x, DASH_Y, dz2))
 			written += 1
 	for lane_i in range(1, onc_lanes):
 		var x2: float = -(MEDIAN_GAP + lane_i * LANE_W)
 		for i in range(slots):
 			var dz3 := -float(i) * DASH_SPACING - DASH_SPACING / 2.0
-			lane.set_instance_transform(written, Transform3D(Basis(), Vector3(x2, DASH_Y, dz3)))
+			lane.set_instance_transform(written, _xf(x2, DASH_Y, dz3))
 			written += 1
 	lane.visible_instance_count = written
 
@@ -1016,3 +1269,20 @@ static func rebuild_chunk(root: Node3D, chunk_index: int, prev_cfg: Dictionary, 
 	if not root.has_meta("nodes_built"):
 		_create_nodes(root)
 	_apply(root, chunk_index, prev_cfg, cfg, origin_index)
+	sync_collision(root)
+
+## Hands a moved chunk's collision to the physics server now. Moving the
+## chunk root only tells its bodies they moved when Godot next flushes
+## transform notifications, but their reshaped pieces (sidewalk hulls, wall
+## boxes) reach the server at once; for the physics ticks in between, the new
+## pieces sat at the old chunk's place and angle. On the straight road the
+## two layouts were the same, so nobody noticed; on a curved one (#37) a
+## recycled chunk's sidewalk swept across the lanes for a tick and launched
+## traffic cars (tests/curve_drive.gd, 2026-10-07).
+static func sync_collision(root: Node3D) -> void:
+	if not root.is_inside_tree():
+		return
+	root.force_update_transform()
+	for c in root.get_children():
+		if c is CollisionObject3D:
+			(c as Node3D).force_update_transform()

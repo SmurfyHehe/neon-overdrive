@@ -392,6 +392,7 @@ func _setup_game_state() -> void:
 	add_child(game_state)
 	add_child(PauseMenu.new(game_state))
 	add_child(TunerScreen.new(player, game_state))
+	add_child(QuickTune.new(player, game_state))  # in-car quick tune (Tuner UI overhaul PR 5)
 	add_child(WarningLights.new(player))
 	radio = RadioManager.new()
 	add_child(radio)

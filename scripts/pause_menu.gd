@@ -18,6 +18,7 @@ const GROUPS := [
 	["Camera", [["camera_cycle", "Camera smoothing"], ["camera_view", "Chase / cockpit view"], ["look_back", "Look back (hold)"], ["look_glance", "Mirror glance (tap; steer picks side)"]]],
 	["Audio & Radio", [["mute", "Mute"], ["radio_next", "Next radio station"]]],
 	["Menus", [["pause", "Pause / back"], ["tuning_panel", "Tuning panel"], ["autotune_panel", "Auto-Tune panel"]]],
+	["Quick tune (while driving)", [["quick_tune", "Open / next setting"], ["quick_tune_down", "Setting down"], ["quick_tune_up", "Setting up"]]],
 	["Exhaust", [
 		["exhaust_loud_up", "Louder"], ["exhaust_loud_down", "Quieter"], ["exhaust_rasp_up", "More rasp"],
 		["exhaust_rasp_down", "Less rasp"], ["exhaust_pops_up", "More pops"], ["exhaust_pops_down", "Fewer pops"]]],

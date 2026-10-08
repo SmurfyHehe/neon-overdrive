@@ -22,6 +22,12 @@ extends CanvasLayer
 # notch, Enter picks a preset. On the panel pages the arrows move between that
 # panel's own controls. Look: "Gritty PS2 night", navy panel, silver labels,
 # amber values, sodium orange for focus and the "now" bars.
+#
+# After a Test run the stat panel flips to a pit-wall result (UI direction blend,
+# signed off by Roy 2026-10-07, docs/planning/ui-direction-blend-2026-10-07.md
+# "Pit Wall"): the brake run's speed trace over the stock car's (silver = stock,
+# amber = yours), thin throttle and brake strips, and a signed delta column. Any
+# change to the car flips it back to the estimates.
 
 const NAVY := Color("#0E1424")
 const NAVY_LIGHT := Color("#1B2A4A")
@@ -50,6 +56,10 @@ var _test_started_ms := 0
 ## treated as hung and killed, so the button can never stick (settings safety,
 ## 2026-10-07).
 var test_timeout_s := 120.0
+## The stock car's Test run metrics (with its trace), measured once per screen:
+## the first Test run drives stock as well, later ones reuse it.
+var stock_run := {}
+var pit_wall: PitWall
 
 var page_ids: Array[String] = []
 var page_index := 0
@@ -194,6 +204,9 @@ func _ready() -> void:
 	body.add_child(right)
 	stats = TunerStats.new()
 	right.add_child(stats)
+	pit_wall = PitWall.new()
+	pit_wall.visible = false
+	right.add_child(pit_wall)
 	test_button = Button.new()
 	test_button.text = "Test run"
 	test_button.focus_mode = Control.FOCUS_ALL
@@ -400,7 +413,10 @@ func start_test_run() -> void:
 	for p in TuneParams.auto_paths():
 		locks[p] = true
 	test_job = AutoTuneJob.new()
-	if not test_job.start(CarSpec.clone_spec(player.spec), {"goals": {"accel": 1.0}, "locks": locks}, 1):
+	var options := {"trace": true}
+	if stock_run.is_empty():
+		options.stock = CarSpec.clone_spec(model.stock)
+	if not test_job.start(CarSpec.clone_spec(player.spec), {"goals": {"accel": 1.0}, "locks": locks}, 1, options):
 		test_button.text = "Test run failed"
 		return
 	_test_hash = player.spec.hash()
@@ -433,6 +449,8 @@ func _process(delta: float) -> void:
 	test_button.text = "Test run"
 	if st == AutoTuneJob.State.DONE and not test_job.result.base_metrics.is_empty():
 		stats.measured = test_job.result.base_metrics
+		if test_job.result.has("stock_metrics"):
+			stock_run = test_job.result.stock_metrics
 		stats.measured_for = _test_hash  # changed meanwhile: _refresh drops it again
 		_refresh()
 	else:
@@ -496,6 +514,11 @@ func _refresh() -> void:
 	stats.measured_for = player.spec.hash()
 	stats.stock = TunerModel.estimate(model.stock)
 	stats.set_values(before_stats, TunerModel.estimate(player.spec))
+	var flip := stats.measured.has("trace") and stock_run.has("trace")
+	stats.visible = not flip
+	pit_wall.visible = flip
+	if flip:
+		pit_wall.show_result(stats.measured, stock_run)
 
 # ---------- small drawn widgets ----------
 
@@ -648,3 +671,107 @@ class TunerStats extends VBoxContainer:
 				return
 			draw_rect(Rect2(0.0, 0.0, size.x * b, size.y), TunerScreen.DIM)
 			draw_rect(Rect2(0.0, 2.0, size.x * n, size.y - 4.0), TunerScreen.SODIUM)
+
+## The pit-wall result of a Test run: speed trace of this run over the stock run,
+## throttle and brake strips under it, and a delta column against stock.
+class PitWall extends VBoxContainer:
+	## [metric key, name, value format, delta format, +1 if higher is better]
+	const ROWS := [
+		["top_speed_kmh", "Top", "%.0f km/h", "%+.1f", 1],
+		["t_0_100", "0-100", "%.2f s", "%+.2f", -1],
+		["brake_dist_100", "100-0", "%.1f m", "%+.1f", -1],
+		["peak_lat_g", "Grip", "%.2f g", "%+.2f", 1],
+	]
+	var trace: SpeedTrace
+	var values := {}   # metric key -> Label (name and value)
+	var deltas := {}   # metric key -> Label (signed delta and arrow)
+
+	func _ready() -> void:
+		add_theme_constant_override("separation", 4)
+		var mono := SystemFont.new()
+		mono.font_names = PackedStringArray(["Consolas", "Courier New", "monospace"])
+		var title := Label.new()
+		title.text = "TEST RUN vs STOCK"
+		title.add_theme_color_override("font_color", TunerScreen.SILVER)
+		add_child(title)
+		var what := Label.new()
+		what.text = "Launch to 100, then full brakes"
+		what.add_theme_color_override("font_color", TunerScreen.DIM)
+		add_child(what)
+		trace = SpeedTrace.new()
+		trace.custom_minimum_size = Vector2(0, 130)
+		add_child(trace)
+		for r in ROWS:
+			var h := HBoxContainer.new()
+			add_child(h)
+			var v := Label.new()
+			v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			v.add_theme_font_override("font", mono)
+			v.add_theme_color_override("font_color", TunerScreen.SILVER)
+			h.add_child(v)
+			values[r[0]] = v
+			var d := Label.new()
+			d.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			d.add_theme_font_override("font", mono)
+			h.add_child(d)
+			deltas[r[0]] = d
+
+	## `mine` and `stock` are Test run metrics, each with its trace.
+	func show_result(mine: Dictionary, stock: Dictionary) -> void:
+		trace.mine = mine.trace
+		trace.stock = stock.trace
+		trace.queue_redraw()
+		for r in ROWS:
+			var k: String = r[0]
+			if not mine.has(k) or not stock.has(k):
+				values[k].text = "%-6s --" % r[1]
+				deltas[k].text = ""
+				continue
+			var d := float(mine[k]) - float(stock[k])
+			values[k].text = "%-6s %s" % [r[1], r[2] % float(mine[k])]
+			var shown: String = r[3] % d
+			# Below the shown precision counts as level: no arrow, dim.
+			var level := shown.substr(1).to_float() == 0.0
+			if level:
+				shown = r[3] % 0.0  # "+0.0", not "-0.0"
+			var better: bool = d * r[4] > 0.0
+			deltas[k].text = shown + ("  " if level else (" ▲" if better else " ▼"))
+			deltas[k].add_theme_color_override("font_color", TunerScreen.AMBER if better and not level else TunerScreen.DIM)
+
+	## Speed against time, both runs on the same scale, then the throttle and
+	## brake strips of this run.
+	class SpeedTrace extends Control:
+		const STRIP := 5.0
+		var mine := {}
+		var stock := {}
+
+		func _draw() -> void:
+			if mine.is_empty() or stock.is_empty():
+				return
+			var plot_h := size.y - 2.0 * (STRIP + 3.0)
+			draw_rect(Rect2(0.0, 0.0, size.x, plot_h), TunerScreen.NAVY_LIGHT)
+			var n := maxi(mine.speed.size(), stock.speed.size())
+			var top := 110.0
+			for v in mine.speed + stock.speed:
+				top = maxf(top, float(v) * 1.08)
+			for kmh: float in [50.0, 100.0]:  # grid lines
+				var y := plot_h * (1.0 - kmh / top)
+				draw_line(Vector2(0.0, y), Vector2(size.x, y), TunerScreen.DIM, 1.0)
+			_line(stock.speed, n, top, plot_h, TunerScreen.SILVER)
+			_line(mine.speed, n, top, plot_h, TunerScreen.AMBER)
+			var w := size.x / maxf(n - 1, 1)
+			for i in mine.speed.size():
+				var x := float(i) * w
+				var t: float = mine.throttle[i]
+				var b: float = mine.brake[i]
+				if t > 0.0:
+					draw_rect(Rect2(x, plot_h + 3.0, w + 0.5, STRIP), Color(TunerScreen.AMBER, t))
+				if b > 0.0:
+					draw_rect(Rect2(x, plot_h + STRIP + 6.0, w + 0.5, STRIP), Color(TunerScreen.SODIUM, b))
+
+		func _line(speed: Array, n: int, top: float, h: float, c: Color) -> void:
+			var pts := PackedVector2Array()
+			for i in speed.size():
+				pts.append(Vector2(size.x * i / maxf(n - 1, 1), h * (1.0 - float(speed[i]) / top)))
+			if pts.size() >= 2:
+				draw_polyline(pts, c, 2.0, true)

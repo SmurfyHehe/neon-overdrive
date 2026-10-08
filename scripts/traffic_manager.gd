@@ -90,6 +90,15 @@ var react_to_player := true
 var spec_template := {}
 var kind := "coupe"
 var sim_only := false
+## Lane threading (TrafficCar header): cars keep their own spot in the lane
+## and sometimes make room for a player lining up a gap. Off = every car on
+## its lane centre (older tests that measure lane-keeping to the centimetre).
+var lane_drift := true
+## Chance a car makes room when the player lines up on it; negative = the
+## per-lane, per-driver chances in TrafficCar.MAKE_ROOM_CHANCE. Tests force it.
+var make_room_chance := -1.0
+## Times a car decided to make room (tests and the slider sweep read it).
+var make_room_count := 0
 
 var cars: Array[TrafficCar] = []
 var spawn_count := 0
@@ -225,6 +234,9 @@ func _respawn(car: TrafficCar) -> void:
 		return
 	spawn_count += 1
 	car.target_speed = slot.speed
+	# A new driver: their own spot in the lane and manners (TrafficCar header).
+	car.drift_pref = clampf(randfn(0.0, TrafficCar.DRIFT_SD), -TrafficCar.DRIFT_MAX, TrafficCar.DRIFT_MAX)
+	car.rude = randf() < TrafficCar.RUDE_SHARE
 	car.set_detailed(absf(slot.dist) <= detail_distance)
 	car.place(slot.lane_x, slot.direction, slot.z, REST_Y, slot.speed)
 	_put(car)
@@ -351,8 +363,8 @@ func _put(car: TrafficCar) -> void:
 	var lo := o.x - ex
 	var hi := o.x + ex
 	if car.changing:
-		lo = minf(lo, car.lane_x - car.half_w)
-		hi = maxf(hi, car.lane_x + car.half_w)
+		lo = minf(lo, car.target_x() - car.half_w)
+		hi = maxf(hi, car.target_x() + car.half_w)
 	_lo[k] = lo
 	_hi[k] = hi
 	_z[k] = o.z
@@ -402,13 +414,19 @@ func entry_gap(k: int, z: float, dir: float, self_hl: float) -> float:
 func entry_speed(k: int, dir: float) -> float:
 	return _vz[k] * dir if k < _vz.size() else 0.0
 
+## The player's entry: road x and z, and z-velocity.
+func player_entry() -> Dictionary:
+	return {"x": (_lo[0] + _hi[0]) * 0.5, "z": _z[0], "vz": _vz[0]}
+
 ## Nearest entry ahead of (or behind) the point z, looking along `dir`, whose
 ## footprint overlaps the corridor [lo, hi] across the road, within `reach`
 ## metres centre to centre. Returns the bumper gap (self_hl + the other's half
 ## length taken off; negative = touching) or INF, and leaves the other's speed
 ## along `dir`, whether it is the player, and its id in q_speed / q_player /
-## q_idx. `skip` is the asker's own id.
-func scan(z: float, dir: float, lo: float, hi: float, ahead: bool, skip: int, self_hl: float, reach: float, skip_player: bool) -> float:
+## q_idx. `skip` is the asker's own id. `player_trim` narrows the corridor by
+## that much each side for the player while it is alongside (lengthwise
+## overlap), so a player threading past is not taken for a car cutting in.
+func scan(z: float, dir: float, lo: float, hi: float, ahead: bool, skip: int, self_hl: float, reach: float, skip_player: bool, player_trim: float = 0.0) -> float:
 	var best := INF
 	var best_d := INF
 	q_idx = -1
@@ -419,6 +437,8 @@ func scan(z: float, dir: float, lo: float, hi: float, ahead: bool, skip: int, se
 			if _hi[k] <= lo or _lo[k] >= hi:
 				continue
 			var d: float = (_z[k] - z) * dir
+			if k == 0 and player_trim > 0.0 and absf(d) < self_hl + _hl[0] and (_hi[0] <= lo + player_trim or _lo[0] >= hi - player_trim):
+				continue
 			if (d < 0.0) == ahead:
 				continue
 			d = absf(d)

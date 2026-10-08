@@ -44,6 +44,19 @@ class_name TrafficCar
 # obstacle, move over for something closing fast from behind (that includes
 # the player), pass a slower car, or drop back right onto a free lane.
 #
+# Lane position (threading, 2026-10-08, Roy's decision in
+# docs/planning/road-lane-changes-proposal-2026-10-08.md section 0): real
+# drivers do not sit on the lane centre. On the HighD freeway data
+# (PMC9690543) each driver keeps their own offset, spread with a standard
+# deviation of about 0.3 m, inside-lane drivers lean toward the median and
+# outside-lane drivers toward the shoulder. Each car rolls such a `drift` at
+# spawn and steers to lane centre + drift. On top of that, when the player
+# closes fast from behind, slightly off to one side (lining up a gap), the car
+# rolls once whether it eases away from that side to near its lane line: the
+# courtesy drivers give a motorbike. Some do, some don't (MAKE_ROOM_CHANCE,
+# less for a "rude" driver), so a gap is never guaranteed. While the player
+# is alongside, a car never drifts toward it or changes lane toward it.
+#
 # Wrecks: a car that is flipped, or slow and pointing the wrong way or off its
 # path, for WRECK_SECONDS stops trying (hazard stop: brakes on), and the
 # TrafficManager recycles it once the player cannot see it.
@@ -117,6 +130,23 @@ var lead_gap := INF
 var lead_speed := 0.0
 var lead_is_player := false
 
+## Offset from the lane centre, metres toward this side's road edge (+) or
+## the centre line (-); see the header. `_drift_want` is where it is heading.
+var drift := 0.0
+var _drift_want := 0.0
+## This driver's own preferred offset, rolled at spawn, and whether they
+## seldom make room (rolled at spawn too).
+var drift_pref := 0.0
+var rude := false
+## Make room: rolled once per approach of the player; while `making_room`
+## the car holds `_room_drift` (away from the player's side).
+var making_room := false
+var _room_rolled := false
+var _room_drift := 0.0
+var _room_lost_t := 0.0
+## Half the body's width (CarBuilder main_w / 2), for line clearances.
+var body_half_w := 0.8
+
 ## Lane change in progress (lane_x / lane_i already name the new lane).
 var changing := false
 var lane_changes := 0
@@ -174,8 +204,8 @@ const LEAD_SCAN_TICKS := 3
 
 ## Lane changes (see the header).
 const DECIDE_PERIOD := 0.25
-const LC_TIME := 3.0          # s for the 3.2 m S: peak sideways 1.75 m/s^2
-const LC_TIME_URGENT := 2.0   # obstacle or yielding: 3.9 m/s^2
+const LC_TIME := 3.1          # s for the 3.4 m S: peak sideways 1.75 m/s^2 (3.0 s when lanes were 3.2 m)
+const LC_TIME_URGENT := 2.06  # obstacle or yielding: 3.9 m/s^2
 const LC_COOLDOWN := 4.0
 const KEEP_RIGHT_AFTER := 6.0  # s after the last change before moving back right
 const KEEP_RIGHT_GAP := 80.0   # m of free lane wanted to move back right
@@ -203,6 +233,45 @@ const BEND_LAT_ACCEL := 2.0
 const BEND_LOOK := 80.0
 const BEND_SAMPLES := 3
 
+## Lane position (see the header). The mean lean of the inside lane (lane 0,
+## toward the median) and of the outermost lane (toward the shoulder), HighD's
+## 0.17-0.33 m and up to 0.30 m; lanes between have none.
+const LEAN_INSIDE := -0.25
+const LEAN_OUTSIDE := 0.2
+const DRIFT_SD := 0.3
+## A driver's own offset is clamped to this: two cars leaning toward each
+## other in neighbouring 3.4 m lanes still keep 0.8 m between bodies.
+const DRIFT_MAX := 0.5
+## Making room goes this close to the lane line (body edge to line).
+const ROOM_LINE_MARGIN := 0.1
+## Sideways rate of the drift, m/s: a slow wander, and a quicker ease over.
+const DRIFT_RATE := 0.25
+const ROOM_RATE := 0.6
+## Chance a driver makes room, per lane from the inside lane out (more in
+## the slow lanes), and the factor for a rude driver.
+const MAKE_ROOM_CHANCE: Array[float] = [0.3, 0.4, 0.5, 0.55]
+const RUDE_SHARE := 0.2
+const RUDE_FACTOR := 0.25
+## The player triggers it when offset ROOM_DX_MIN..ROOM_DX_MAX sideways from
+## the car (lined up on a gap, not squarely behind it: that is the move-over
+## case) and either closing faster than ROOM_DV with under ROOM_TTC to the
+## car's tail (within ROOM_RANGE), or sitting within ROOM_NEAR behind it and
+## not dropping back (a player hanging there, lined up, wants through).
+const ROOM_DV := 3.0
+const ROOM_TTC := 5.0
+const ROOM_RANGE := 120.0
+const ROOM_NEAR := 25.0
+const ROOM_DX_MIN := 0.6
+const ROOM_DX_MAX := 3.0
+## Making room ends this many metres after the player's tail clears the car's
+## nose, or after the trigger has been gone this long.
+const ROOM_CLEAR := 10.0
+const ROOM_LOST_SECONDS := 2.0
+## Alongside: the player within this much (on top of both half lengths) along
+## the road and ALONGSIDE_DX across. No drift toward it, no lane change toward it.
+const ALONGSIDE_DZ := 4.0
+const ALONGSIDE_DX := 4.5
+
 ## Wrecks.
 const WRECK_SECONDS := 3.0
 const WRECK_UP := 0.5          # basis.y.y below this: on its side or roof
@@ -220,6 +289,7 @@ func _ready() -> void:
 	wheelbase = float(cfg.axle_z) * 2.0
 	half_w = float(cfg.wheel_x) + 0.15
 	half_l = (float(cfg.main_z1) - float(cfg.hood_z0)) / 2.0
+	body_half_w = float(cfg.main_w) / 2.0
 
 	if not sim_only:
 		chassis_visual = CarBuilder.shared_chassis_visual(kind, color)
@@ -266,10 +336,11 @@ func _drive(delta: float) -> void:
 	_lc_cooldown -= delta
 	var a := _accel_command(v)
 	var hazard := _check_wreck(delta, v)
-	var steer_x := lane_x
+	_update_drift(delta, v)
+	var steer_x := target_x()
 	if changing:
 		var look := clampf(speed * LOOKAHEAD_SECONDS, LOOKAHEAD_MIN, LOOKAHEAD_MAX)
-		steer_x = _path_x_at(_lc_t + look / maxf(absf(v), 1.0))
+		steer_x = _path_x_at(_lc_t + look / maxf(absf(v), 1.0)) + _out() * drift
 	steering_input = lane_steer(self, steer_x, direction, wheelbase)
 	handbrake_input = 0.0
 	if hazard:
@@ -299,7 +370,7 @@ func _accel_command(v: float) -> float:
 			if changing:
 				lo = minf(lo, lane_x - half_w - CORRIDOR_MARGIN)
 				hi = maxf(hi, lane_x + half_w + CORRIDOR_MARGIN)
-			lead_gap = traffic.scan(p.z, direction, lo, hi, true, _idx, half_l, LOOK_AHEAD, false)
+			lead_gap = traffic.scan(p.z, direction, lo, hi, true, _idx, half_l, LOOK_AHEAD, false, _player_trim())
 			lead_speed = traffic.q_speed
 			lead_is_player = traffic.q_player
 			_lead_k = traffic.q_idx
@@ -308,6 +379,100 @@ func _accel_command(v: float) -> float:
 			lead_speed = traffic.entry_speed(_lead_k, direction)
 			lead_is_player = _lead_k == 0
 	return follow_accel(v, minf(target_speed, bend_speed()), lead_gap, lead_speed)
+
+## How much narrower the corridor is for a player ALONGSIDE (threading past):
+## down from the tyres plus CORRIDOR_MARGIN to the body plus 0.15 m, so a car
+## does not stand on its brakes for a player squeezing by with 0.25 m to spare
+## (the player's index footprint is 0.1 m wider than its body).
+func _player_trim() -> float:
+	return maxf(half_w + CORRIDOR_MARGIN - (body_half_w + 0.15), 0.0)
+
+## +1 if this car's side of the road is at positive road x (own direction),
+## -1 if negative: turns an outward drift into road x.
+func _out() -> float:
+	return 1.0 if lane_x >= 0.0 else -1.0
+
+## The mean lean of lane `lane` on a side with `n` lanes (see LEAN_INSIDE).
+static func lane_lean(lane: int, n: int) -> float:
+	if n <= 1:
+		return 0.0
+	if lane <= 0:
+		return LEAN_INSIDE
+	if lane >= n - 1:
+		return LEAN_OUTSIDE
+	return 0.0
+
+## Furthest a car may drift from its lane centre before its body is within
+## ROOM_LINE_MARGIN of the line.
+func room_max() -> float:
+	return maxf(RoadChunkBuilder.LANE_W / 2.0 - body_half_w - ROOM_LINE_MARGIN, 0.0)
+
+## Where this car wants to sit in its lane when nobody is threading by,
+## outward metres: the lane's lean plus this driver's own offset.
+func _home_drift() -> float:
+	if traffic == null or not traffic.lane_drift:
+		return 0.0
+	var n := traffic.onc_lanes if direction > 0.0 else traffic.own_lanes
+	return clampf(lane_lean(lane_i, n) + drift_pref, -DRIFT_MAX, DRIFT_MAX)
+
+## The player relative to this car, from the occupancy index: dz (+ = ahead
+## of this car along its direction), dx (road x, player minus this car's
+## path), closing (m/s the player gains on it), gap (bumper gap while behind).
+## Empty with no traffic manager or react_to_player off.
+func _player_rel(v: float) -> Dictionary:
+	if traffic == null or not traffic.react_to_player:
+		return {}
+	var e := traffic.player_entry()
+	var z := RoadFrame.unroll(global_position).z
+	var dz: float = (float(e.z) - z) * direction
+	return {"dz": dz, "dx": float(e.x) - path_x(), "closing": float(e.vz) * direction - v,
+		"gap": -dz - half_l - TrafficManager.PLAYER_HALF_L}
+
+## True if the player is alongside this car (see ALONGSIDE_DZ), on the side
+## `side` points to (+ = larger road x) if side is not 0.
+func player_alongside(rel: Dictionary, side: float = 0.0) -> bool:
+	if rel.is_empty():
+		return false
+	if absf(rel.dz) > half_l + TrafficManager.PLAYER_HALF_L + ALONGSIDE_DZ or absf(rel.dx) > ALONGSIDE_DX:
+		return false
+	return side == 0.0 or signf(rel.dx) == signf(side)
+
+## Moves `drift` toward where this driver wants to be: its own spot, or out of
+## the player's way while making room. Never toward a player alongside.
+func _update_drift(delta: float, v: float) -> void:
+	var rel := _player_rel(v)
+	var room := room_max()
+	if not rel.is_empty() and traffic.lane_drift:
+		var closing_in: bool = rel.gap < ROOM_RANGE and rel.closing > ROOM_DV and rel.gap / rel.closing < ROOM_TTC
+		var hanging: bool = rel.gap < ROOM_NEAR and rel.closing > -1.0
+		var lined_up: bool = rel.gap > 0.0 and (closing_in or hanging) \
+				and absf(rel.dx) > ROOM_DX_MIN and absf(rel.dx) < ROOM_DX_MAX
+		if lined_up and not _room_rolled:
+			_room_rolled = true
+			var chance := traffic.make_room_chance
+			if chance < 0.0:
+				chance = MAKE_ROOM_CHANCE[clampi(lane_i, 0, MAKE_ROOM_CHANCE.size() - 1)] * (RUDE_FACTOR if rude else 1.0)
+			if randf() < chance:
+				making_room = true
+				traffic.make_room_count += 1
+				# Away from the player's side, in outward units.
+				_room_drift = -signf(rel.dx) * _out() * room
+		if making_room:
+			_room_lost_t = 0.0 if lined_up or player_alongside(rel) else _room_lost_t + delta
+			if rel.dz > half_l + TrafficManager.PLAYER_HALF_L + ROOM_CLEAR or _room_lost_t > ROOM_LOST_SECONDS:
+				making_room = false
+		# A new approach rolls again once the player is well past or well back.
+		if _room_rolled and not making_room and (rel.dz > half_l + TrafficManager.PLAYER_HALF_L + ROOM_CLEAR or rel.gap > ROOM_RANGE * 1.5):
+			_room_rolled = false
+	else:
+		making_room = false
+	_drift_want = clampf(_room_drift if making_room else _home_drift(), -room, room)
+	var nd := move_toward(drift, _drift_want, (ROOM_RATE if making_room else DRIFT_RATE) * delta)
+	# The door stays open: a player alongside on the side this would move
+	# toward stops the move (an outward step times _out() is the road-x move).
+	if nd != drift and player_alongside(rel, (nd - drift) * _out()):
+		return
+	drift = nd
 
 ## Fastest this car takes the road from here to BEND_LOOK m ahead: no more
 ## than BEND_LAT_ACCEL of cornering on the tightest bend in that stretch (#37).
@@ -383,8 +548,13 @@ func _consider_lane_change(v: float) -> void:
 	var oncoming := direction > 0.0
 	var best := -1
 	var best_score := -INF
+	var rel := _player_rel(v)
 	for lane in [lane_i - 1, lane_i + 1]:
 		if not traffic.lane_allowed(lane, oncoming):
+			continue
+		# Nobody closes the door mid-squeeze (threading): no change toward a
+		# player alongside.
+		if player_alongside(rel, TrafficManager.lane_centre(lane, oncoming) - lane_x):
 			continue
 		if keep_right and lane != lane_i + 1:
 			continue
@@ -435,7 +605,7 @@ func _merge_safe(lx: float, v: float) -> bool:
 	return fs <= v or (fs - v) * (fs - v) / (2.0 * maxf(fg - S_STOP, 0.3)) <= B_SAFE
 
 func _start_lane_change(lane: int, urgent: bool) -> void:
-	_lc_from = path_x()
+	_lc_from = _base_x()
 	lane_i = lane
 	lane_x = TrafficManager.lane_centre(lane, direction > 0.0)
 	changing = true
@@ -447,9 +617,17 @@ func _start_lane_change(lane: int, urgent: bool) -> void:
 	traffic.note_lane_change(self)
 
 ## Where the car's path is across the road now: the lane centre, or the
-## lane-change S.
+## lane-change S, plus its drift in the lane.
 func path_x() -> float:
+	return _base_x() + _out() * drift
+
+## The path without the drift: lane centre or the lane-change S.
+func _base_x() -> float:
 	return _path_x_at(_lc_t) if changing else lane_x
+
+## Road x of the spot this car is heading for in its (new) lane.
+func target_x() -> float:
+	return lane_x + _out() * drift
 
 func _path_x_at(t: float) -> float:
 	var u := clampf(t / _lc_dur, 0.0, 1.0)
@@ -558,11 +736,16 @@ func place(lane: float, dir: float, z: float, y: float, speed: float) -> void:
 	_wreck_t = 0.0
 	_stuck_t = 0.0
 	_lc_cooldown = 0.0
+	making_room = false
+	_room_rolled = false
+	_room_lost_t = 0.0
+	drift = _home_drift()
+	_drift_want = drift
 	_decide_t = randf() * DECIDE_PERIOD
 	_lead_k = -1
 	_scan_in = 0
 	var yaw := 0.0 if dir < 0.0 else PI
-	global_transform = RoadFrame.pose(lane, y, z, yaw)
+	global_transform = RoadFrame.pose(target_x(), y, z, yaw)
 	set_moving(self, speed)
 	reset_physics_interpolation()
 	_cruise_speed = speed
@@ -584,7 +767,7 @@ func set_detailed(on: bool) -> void:
 		# Snap to the lane, upright; nothing is drawn out here.
 		var yaw := 0.0 if direction < 0.0 else PI
 		var u := RoadFrame.unroll(global_position)
-		global_transform = RoadFrame.pose(lane_x, u.y, u.z, yaw)
+		global_transform = RoadFrame.pose(target_x(), u.y, u.z, yaw)
 		reset_physics_interpolation()
 
 ## Frozen cruise: straight down the lane, with the follower law on its speed.
@@ -605,7 +788,7 @@ func _cruise(delta: float) -> void:
 ## (YIELD_TTC_HIDDEN), if a lane next to it is safe.
 func _hidden_yield() -> void:
 	var v := _cruise_speed
-	var fg := traffic.scan(RoadFrame.unroll(global_position).z, direction, lane_x - half_w - CORRIDOR_MARGIN, lane_x + half_w + CORRIDOR_MARGIN,
+	var fg := traffic.scan(RoadFrame.unroll(global_position).z, direction, target_x() - half_w - CORRIDOR_MARGIN, target_x() + half_w + CORRIDOR_MARGIN,
 		false, _idx, half_l, LOOK_BEHIND, false)
 	if fg == INF or not traffic.q_player:
 		return
@@ -617,8 +800,10 @@ func _hidden_yield() -> void:
 		if traffic.lane_allowed(lane, oncoming) and _merge_safe(TrafficManager.lane_centre(lane, oncoming), v):
 			lane_i = lane
 			lane_x = TrafficManager.lane_centre(lane, oncoming)
+			drift = _home_drift()
+			_drift_want = drift
 			var u := RoadFrame.unroll(global_position)
-			global_transform = RoadFrame.pose(lane_x, u.y, u.z, 0.0 if direction < 0.0 else PI)
+			global_transform = RoadFrame.pose(target_x(), u.y, u.z, 0.0 if direction < 0.0 else PI)
 			previous_global_position = global_position
 			lane_changes += 1
 			_scan_in = 0

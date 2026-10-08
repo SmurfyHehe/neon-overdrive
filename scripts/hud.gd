@@ -35,7 +35,7 @@ const THREAT_FAR := 25.0         # m: cue starts
 const THREAT_RATE := 8.0         # 1/s smoothing
 ## Blind-spot cue (2026-10-07): a same-way car in the next lane, from a little
 ## ahead of the car's origin to a few lengths behind, lights that side's door
-## mirror dot. Lanes are 3.2 m (RoadChunkBuilder.LANE_W).
+## mirror dot. Lanes are 3.4 m (RoadChunkBuilder.LANE_W).
 const SIDE_X_MIN := 1.4          # m out from the centreline: clear of our own lane's middle
 const SIDE_X_MAX := 5.0          # m: the next lane, not the one beyond
 const SIDE_Z_AHEAD := 3.0        # m ahead of the origin (alongside)

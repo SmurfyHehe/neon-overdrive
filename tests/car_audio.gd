@@ -16,15 +16,21 @@ extends SceneTree
 #
 # Asserts (exit code 1 on failure):
 # - each loop: finite, peak 0.8 (normalised), no click at the loop point,
-#   built in under 5 s total (it takes ~0.3 s; the limit is only there to catch
-#   a runaway, and a busy machine must not fail the test)
+#   built in under 12 s total (about 3.8 s since the 2026-10-08 rebuild, once
+#   per change: the game loads them from user://audio_cache after that; the
+#   limit is only there to catch a runaway, and a busy machine must not fail)
 # - idle: all four levels under 0.02
 # - launch: wind tracks speed^WIND_EXP (r > 0.95), road tracks speed (r > 0.9);
 #   at 30 m/s wind > 0.25 and road > 0.5; squeal stays under 0.15 while
 #   cruising straight above 20 m/s
-# - slide: squeal > 0.4 (after 1.25 s of sliding)
+# - slide: squeal > 0.4 (after 1.25 s of sliding), and the tyre kind heard is
+#   a sliding one (squeal or lock), not wheelspin
+#   (2026-10-08: tyres are four kinds per side; squeal_level is all of them)
 # - kerb: surface > 0.25
-# - four players, playing, on the World/Tires buses that exist
+# - the whole drive (launch, handbrake spin, kerb) makes no crash sound and no
+#   scrape (CrashAudio, 2026-10-08)
+# - every looping player (tyre kinds per side, buffet, rush, whistle, throb,
+#   road dark/bright, surface) playing, on the World/Tires buses that exist
 # Also records the real mixed output (engine + these layers) from the Master
 # bus to user://stage_a_drive.wav and reports how loud each phase is.
 #
@@ -51,6 +57,7 @@ var roads: PackedFloat32Array = []
 var cruise_squeal := 0.0
 var slide_squeal := 0.0
 var kerb_surface := 0.0
+var slide_kinds := {}
 ## What the driver callable feeds the car, set per phase.
 var d_throttle := 0.0
 var d_handbrake := 0.0
@@ -84,24 +91,33 @@ func _drive(c: PlayerCar) -> void:
 		c.steering_input = TrafficCar.lane_steer(c, d_lane_x, -1.0, 2.5)
 
 func _check_loops() -> void:
+	AudioDsp.use_cache = false  # time and check the real build, not the disk cache
 	var t0 := Time.get_ticks_usec()
-	for layer in ["wind", "road", "squeal", "surface"]:
+	var layers := ["buffet", "rush", "whistle", "throb", "road_dark", "road_bright", "surface"]
+	for kind in CarAudio.KINDS:
+		layers.append(kind + "_l")
+		layers.append(kind + "_r")
+	for layer in layers:
 		CarAudio.stream(layer)
 	var ms := (Time.get_ticks_usec() - t0) / 1000.0
 	print("loops built in %.0f ms" % ms)
-	if ms > 5000.0:
+	AudioDsp.use_cache = true
+	if ms > 12000.0:
 		_fail("building the loops took %.0f ms" % ms)
-	for layer in ["wind", "road", "squeal", "surface"]:
+	for layer in layers:
 		var wav := CarAudio.stream(layer)
 		# wav.data returns a copy on every access: read it once.
 		var data := wav.data
-		var n := data.size() / 2
+		# stereo tyre loops: check the near channel (left for _l, right for _r)
+		var ch := 2 if wav.stereo else 1
+		var off := 2 if layer.ends_with("_r") else 0
+		var n := data.size() / (2 * ch)
 		var s := PackedFloat32Array()
 		s.resize(n)
 		var peak := 0.0
 		var diff_sq := 0.0
 		for i in n:
-			s[i] = data.decode_s16(i * 2) / 32767.0
+			s[i] = data.decode_s16(i * 2 * ch + off) / 32767.0
 			peak = maxf(peak, absf(s[i]))
 			if i > 0:
 				diff_sq += (s[i] - s[i - 1]) * (s[i] - s[i - 1])
@@ -213,10 +229,16 @@ func _physics_process(_delta: float) -> bool:
 				_finish()
 		"slide":
 			slide_squeal = maxf(slide_squeal, audio.squeal_level)
+			for kind in CarAudio.KINDS:
+				slide_kinds[kind] = maxf(slide_kinds.get(kind, 0.0), maxf(audio.tyre[kind][0], audio.tyre[kind][1]))
 			if phase_ticks >= _sec(1.25):
-				print("slide: squeal max %.2f" % slide_squeal)
+				print("slide: squeal max %.2f, by kind %s" % [slide_squeal, slide_kinds])
 				if slide_squeal <= 0.4:
 					_fail("handbrake slide at speed only squealed %.2f" % slide_squeal)
+				if maxf(slide_kinds.squeal, slide_kinds.lock) <= 0.4:
+					_fail("a handbrake slide should sound as a squeal or a lock-up, got %s" % slide_kinds)
+				if slide_kinds.spin > maxf(slide_kinds.squeal, slide_kinds.lock):
+					_fail("a handbrake slide sounded mostly like wheelspin %s" % slide_kinds)
 				d_handbrake = 0.0
 				d_steer = 0.0
 				_next("kerb")
@@ -235,7 +257,11 @@ func _physics_process(_delta: float) -> bool:
 	return false
 
 func _check_players() -> void:
-	var want := {"WindAudio": &"World", "RoadAudio": &"Tires", "SquealAudio": &"Tires", "SurfaceAudio": &"Tires"}
+	var want := {"BuffetAudio": &"World", "RushAudio": &"World", "WhistleAudio": &"World", "ThrobAudio": &"World",
+		"RoadDarkAudio": &"Tires", "RoadBrightAudio": &"Tires", "SurfaceAudio": &"Tires"}
+	for kind in CarAudio.KINDS:
+		want[kind.capitalize() + "LAudio"] = &"Tires"
+		want[kind.capitalize() + "RAudio"] = &"Tires"
 	for n in want:
 		var player := audio.get_node_or_null(NodePath(n)) as AudioStreamPlayer
 		if player == null:
@@ -255,6 +281,12 @@ func _finish() -> void:
 		var err := wav.save_to_wav(path)
 		print("recording: %.1f s -> %s (error %d)" % [wav.data.size() / 4.0 / AudioServer.get_mix_rate(), ProjectSettings.globalize_path(path), err])
 		_report_loudness(wav)
+	var p: PlayerCar = game.get("player")
+	for c in p.get_children():
+		if c is CrashAudio:
+			print("crash sounds during the drive: %d (last %s %.1f m/s)" % [c.impact_count, c.last_tier, c.last_dv])
+			if c.impact_count > 0:
+				_fail("a normal drive made %d crash sound(s)" % c.impact_count)
 	print("car_audio: %s" % ("PASS" if fails == 0 else "%d failure(s)" % fails))
 	# Free the game (and its playing generators) first, quit a few frames later.
 	game.queue_free()

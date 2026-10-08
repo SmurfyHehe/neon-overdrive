@@ -90,10 +90,8 @@ func _ready() -> void:
 	frame.offset_top = 8
 	frame.offset_right = -MARGIN
 	frame.offset_bottom = -MARGIN
-	var bg := StyleBoxFlat.new()  # near-opaque: bright buildings behind made the text unreadable
-	bg.bg_color = Color(NAVY, 0.96)
-	bg.border_color = NAVY_LIGHT
-	bg.set_border_width_all(2)
+	frame.theme = UiTheme.get_theme()  # job sheet: shared plates, slabs and fonts (UI blend PR 2)
+	var bg := UiTheme.plate_panel()  # near-opaque: bright buildings behind made the text unreadable
 	bg.set_content_margin_all(10)
 	frame.add_theme_stylebox_override("panel", bg)
 	add_child(frame)
@@ -103,10 +101,13 @@ func _ready() -> void:
 
 	var header := HBoxContainer.new()
 	column.add_child(header)
-	car_label = _label("TUNER   P1 Coupe", SILVER)
+	car_label = _label("JOB SHEET   P1 COUPE", SODIUM)
+	car_label.add_theme_font_override("font", UiTheme.font("display"))
+	car_label.add_theme_font_size_override("font_size", 32)
 	car_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(car_label)
 	preset_label = _label("", AMBER)
+	preset_label.add_theme_font_override("font", UiTheme.font("mono"))
 	header.add_child(preset_label)
 
 	var body := HBoxContainer.new()
@@ -303,6 +304,7 @@ func _add_row(s: Dictionary) -> Dictionary:
 	hi.custom_minimum_size = Vector2(48, 0)
 	h.add_child(hi)
 	var value := _label("", AMBER)
+	value.add_theme_font_override("font", UiTheme.font("mono"))
 	h.add_child(value)
 	# Settings safety part 3: the bar's notches carry their danger zone, and a
 	# risky setting gets a consequence line under it that follows the value.
@@ -492,6 +494,7 @@ func _refresh() -> void:
 	if stats.measured_for != player.spec.hash():
 		stats.measured = {}  # measured on a setup the car no longer has
 	stats.measured_for = player.spec.hash()
+	stats.stock = TunerModel.estimate(model.stock)
 	stats.set_values(before_stats, TunerModel.estimate(player.spec))
 
 # ---------- small drawn widgets ----------
@@ -536,6 +539,9 @@ class TunerStats extends VBoxContainer:
 	]
 	var labels := {}
 	var bars := {}
+	## "vs stock" column: signed difference from the car's factory setup.
+	var vs := {}
+	var stock := {}
 	## Track numbers from a Test run, for the setup they were measured on; any
 	## change to the car clears them back to estimates.
 	var measured := {}
@@ -543,10 +549,28 @@ class TunerStats extends VBoxContainer:
 
 	func _ready() -> void:
 		add_theme_constant_override("separation", 4)
+		var head := HBoxContainer.new()
+		add_child(head)
+		var title := UiTheme.title_label("DYNO SHEET", 26, UiTheme.AMBER)
+		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		head.add_child(title)
+		var vs_head := Label.new()
+		vs_head.text = "VS STOCK"
+		vs_head.add_theme_font_override("font", UiTheme.font("mono"))
+		vs_head.add_theme_color_override("font_color", TunerScreen.DIM)
+		head.add_child(vs_head)
+		add_child(UiTheme.floor_tape())
 		for r in ROWS:
+			var line := HBoxContainer.new()
+			add_child(line)
 			var l := Label.new()
 			l.add_theme_color_override("font_color", TunerScreen.SILVER)
-			add_child(l)
+			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			line.add_child(l)
+			var d := Label.new()
+			d.add_theme_font_override("font", UiTheme.font("mono"))
+			line.add_child(d)
+			vs[r[0]] = d
 			labels[r[0]] = l
 			var b := StatBar.new()
 			b.custom_minimum_size = Vector2(0, 12)
@@ -578,9 +602,30 @@ class TunerStats extends VBoxContainer:
 				if absf(d) > 0.005 * maxf(absf(b), 1.0):
 					text += ("   %+.0f" if k == "top" or k == "brake" else "   %+.2f") % d
 			labels[k].text = text
+			_set_vs(k, float(now[k]))
 			bars[k].now = inverse_lerp(r[3], r[4], v)
 			bars[k].before = inverse_lerp(r[3], r[4], b)
 			bars[k].queue_redraw()
+
+	## Signed delta against the stock estimate; amber up-arrow = better, dim down-arrow = worse.
+	func _set_vs(k: String, v: float) -> void:
+		var d: Label = vs[k]
+		if k == "balance" or not stock.has(k):
+			d.text = ""
+			return
+		var diff: float = v - float(stock[k])
+		var lower_is_better: bool = k == "accel" or k == "brake"
+		var step: float = 0.5 if k == "top" else (0.05 if k == "grip" else 0.05)
+		if k == "brake":
+			step = 0.5
+		if absf(diff) < step:
+			d.text = "stock"
+			d.add_theme_color_override("font_color", TunerScreen.DIM)
+			return
+		var better: bool = (diff < 0.0) == lower_is_better
+		var fmt: String = "%+.0f" if (k == "top" or k == "brake") else "%+.2f"
+		d.text = (fmt % diff) + (" ▲" if better else " ▼")
+		d.add_theme_color_override("font_color", TunerScreen.AMBER if better else TunerScreen.DIM)
 
 	func _measured_value(k: String) -> Variant:
 		var key: String = {"top": "top_speed_kmh", "accel": "t_0_100", "brake": "brake_dist_100", "grip": "peak_lat_g"}.get(k, "")

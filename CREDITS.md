@@ -17,3 +17,9 @@ track whose licence requires credit (for example Creative Commons BY).
 ## Art and models
 
 None yet.
+
+## Fonts
+
+| What | Author | Licence | Where |
+|---|---|---|---|
+| Big Shoulders Display, Barlow Semi Condensed, Share Tech Mono | Google Fonts families (Patric King / Jeremy Tribby / Carrois Apostrophe) | SIL Open Font Licence 1.1 (`assets/fonts/OFL-fonts.txt`) | `assets/fonts/`, loaded by `scripts/ui_theme.gd` |

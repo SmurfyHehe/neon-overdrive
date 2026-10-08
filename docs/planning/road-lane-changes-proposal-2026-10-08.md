@@ -338,19 +338,24 @@ ramp leads to a small hand-made lot and back onto the highway. That's how
 real US highways work (gas at the exit), and it gives the stage C stops and
 the gas station ideas a physical place on the map.
 
-## 10. Roy's answers so far
+## 10. Decisions (Roy, 2026-10-08)
 
 1. Split lanes = **threading between cars** (section 0).
 2. Signs **fit the world style**, not US green (section 1).
 3. Palette open: red and blue allowed (gantry warning lights, police).
+4. Threading: **both**. NPCs drift in their lane and sometimes make room,
+   **and** lanes widen a little: 3.2 -> **3.4 m** (my pick for "to a certain
+   extent"; tuned in play). At 3.4 m two centred cars leave about 1.55 m, so a
+   0.43 m nudge each way opens the 2.4 m gap.
+5. Scope: **lane changes, median splits and exits, now.**
+6. Forks: **later, maybe.**
+7. Narrowest highway **2+2**; widest **4 plus an auxiliary lane** between an
+   on-ramp and the next exit.
+8. Frequency: **by district** (city 1.5-2 km, outskirts 4-5 km). Roy left this
+   open; this is my pick.
+9. Map: **fixed districts, landmarks and exits; bends and traffic new each
+   run.**
+10. Exits: **loop back first, later lead to stops** (gas station, garage) and
+    a more living world.
 
-## 11. Questions for Roy
-
-1. Threading: **NPCs drift in their lane and sometimes make room** / widen lanes to 3.5 m
-2. Scope now: **lane changes, median splits and exits** / lanes only
-3. Forks: **later, at a few fixed points between districts** / never
-4. Narrowest highway: **2+2** / 1+1
-5. Widest: **4 + an auxiliary lane at interchanges** / 5 full lanes
-6. How often: **by district (city 1.5-2 km, outskirts 4-5 km)** / one fixed rate
-7. Map: **hybrid (fixed districts and exits, seeded details)** / new every run / fully fixed
-8. Exits: **loop back first, then lead to stops (gas, garage)** / loop back only
+Build order: section 6, threading (step 0) first.

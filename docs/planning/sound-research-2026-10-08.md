@@ -215,11 +215,14 @@ Roy wants the window in-game: closed-window cockpit sound, a window that opens g
 
 **Cost:** S. One extra value in `perspective_audio.gd`, a wind-throb layer, the glass animation, a key. Testable on the silent driver by asserting filter cutoffs and levels at 0%, 25% and 100%, and a listen pack at those three positions.
 
-## 10. New questions for Roy
+## 10. Decided (Roy, 2026-10-08 12:45Z)
 
-1. **Window key:** Z (hold to roll down, tap to roll up)? Z is currently unused. *Recommended: Z.*
-2. **Corrupt cops:** start with the sergeant and the veteran as Pike's men (dispatcher, rookie and air unit honest)? *Recommended: yes. Story details stay yours.*
-3. **Scanner item:** should hearing the dirty cops' private channel need a scanner bought at a gas station? *Recommended: yes. It gives the vendor a meaningful item.*
+- **Window key: Z** (hold to roll down, tap to roll up).
+- **The sergeant and the veteran are Pike's men**; dispatcher, rookie and air unit are honest.
+- **A police scanner bought at a gas station** is needed to hear the dirty cops' private channel.
+- Related answers from the same message, for the story and police threads: Pike is taking over everything and pays the dirty cops and owns their debts; dirty cops drive **their own corrupt police cars** with menacing details that set them apart from normal cops; they take your cash and still give you a ticket.
+
+Nothing is built yet. This doc stays a plan until Roy says build.
 
 ## Sources
 

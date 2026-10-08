@@ -32,6 +32,10 @@ extends Node3D
 #     on the finger's contact, not on the key: CockpitFrame runs
 #     RadioManager.next_station() from hand_contact. Requests wait while a
 #     shift or handbrake pull has the hand;
+#   - radio volume (2026-10-08): while a volume key is held the hand goes to
+#     the knob and turns it (screen-only units: the finger rides the volume
+#     bar); CockpitFrame moves the volume only while the hand is on it
+#     (is_turning_volume), and the knob's pointer follows the volume;
 #   - handbrake: while the handbrake is pulled the hand holds the lever and
 #     rides it up and down, then returns to the rim;
 #   - steering: a small head yaw into the turn and a body lean from lateral g;
@@ -112,13 +116,17 @@ const CONTACT_GEAR := &"gear_knob"
 const CONTACT_HANDBRAKE := &"handbrake"
 const CONTACT_RADIO_TILE := &"radio_tile"
 const CONTACT_RADIO_KNOB := &"radio_knob"
+const CONTACT_RADIO_VOLUME := &"radio_volume"
+## How long the hand stays on the volume knob after the key is let go, so
+## short taps in a row don't send it back and forth.
+const VOLUME_LINGER_SECS := 0.35
 ## Next-station presses that may wait for the hand at once (more are dropped).
 const MAX_RADIO_REQUESTS := 4
 
 ## The right hand touched something (one of the CONTACT_ names).
 signal hand_contact(target: StringName)
 
-enum Act { GRIP, SHIFT_REACH, SHIFT_HOLD, SHIFT_RETURN, RADIO_REACH, RADIO_PRESS, RADIO_RETURN, BRAKE_REACH, BRAKE_HOLD, BRAKE_RETURN }
+enum Act { GRIP, SHIFT_REACH, SHIFT_HOLD, SHIFT_RETURN, RADIO_REACH, RADIO_PRESS, RADIO_RETURN, VOLUME_REACH, VOLUME_HOLD, BRAKE_REACH, BRAKE_HOLD, BRAKE_RETURN }
 
 var frame: CockpitFrame
 var player: PlayerCar
@@ -133,6 +141,8 @@ var glove_style := DEFAULT_GLOVE
 var act := Act.GRIP
 var act_t := 0.0
 var radio_requests := 0          # next-station presses waiting for the hand
+var volume_dir := 0              # volume key held: -1 down, +1 up, 0 none (set by the game)
+var _volume_idle := 0.0          # seconds on the knob with no key held
 var contact_count := 0
 var last_contact := &""
 var _radio_target := Vector3.ZERO  # car space, where the finger lands this reach
@@ -463,7 +473,30 @@ func _contact(target: StringName) -> void:
 	hand_contact.emit(target)
 
 func _is_radio() -> bool:
-	return act == Act.RADIO_REACH or act == Act.RADIO_PRESS or act == Act.RADIO_RETURN
+	return act == Act.RADIO_REACH or act == Act.RADIO_PRESS or act == Act.RADIO_RETURN 			or act == Act.VOLUME_REACH or act == Act.VOLUME_HOLD
+
+## The hand is on the volume control and a volume key is held: CockpitFrame
+## moves the volume only while this is true.
+func is_turning_volume() -> bool:
+	return act == Act.VOLUME_HOLD and volume_dir != 0
+
+## Volume key held: the hand reaches the knob (or the screen's volume bar on
+## knobless units) and turns it while the key is down.
+func _begin_volume() -> void:
+	_volume_idle = 0.0
+	_start(Act.VOLUME_REACH)
+
+## The right hand on the volume control, car space: fingertips on the knob
+## face, the wrist rolled with the knob's pointer (screen-only units: the
+## finger on the bar, sliding with the level).
+func _volume_hand_transform() -> Transform3D:
+	_radio_target = frame.volume_touch()
+	var xf := _radio_hand_transform(1.0)
+	var unit := frame.head_unit
+	if unit != null and unit.knob != null:
+		var axis := (unit.transform.basis * Vector3.BACK).normalized()   # the knob's spindle, car space
+		xf.basis = Basis(axis, unit.knob.rotation.z) * xf.basis
+	return xf
 
 func _is_brake() -> bool:
 	return act == Act.BRAKE_REACH or act == Act.BRAKE_HOLD
@@ -491,6 +524,8 @@ func _step_act(delta: float) -> void:
 				_hand_xf = grip * Transform3D(Basis(Vector3.UP, 0.35 * k), Vector3(0.0, 0.0, -0.012 * k))
 			if radio_requests > 0:
 				_begin_radio()
+			elif volume_dir != 0:
+				_begin_volume()
 			elif player.handbrake_input > 0.5:
 				_start(Act.BRAKE_REACH)   # pulled while the hand was busy, still held
 		Act.SHIFT_REACH:
@@ -522,8 +557,23 @@ func _step_act(delta: float) -> void:
 			if t >= 1.0:
 				if radio_requests > 0 and not (frame.lever_moving and not player.automatic_transmission):
 					_begin_radio()   # another press waiting: on to the next tile
+				elif volume_dir != 0:
+					_begin_volume()
 				else:
 					_start(Act.RADIO_RETURN)
+		Act.VOLUME_REACH:
+			var t := clampf(act_t / (REACH_SECS + 0.08), 0.0, 1.0)
+			_hand_xf = _hand_from.interpolate_with(_volume_hand_transform(), _ease(t))
+			if t >= 1.0:
+				_contact(CONTACT_RADIO_VOLUME)
+				_start(Act.VOLUME_HOLD)
+		Act.VOLUME_HOLD:
+			_hand_xf = _volume_hand_transform()
+			_volume_idle = 0.0 if volume_dir != 0 else _volume_idle + delta
+			if radio_requests > 0 and volume_dir == 0:
+				_begin_radio()
+			elif _volume_idle >= VOLUME_LINGER_SECS:
+				_start(Act.RADIO_RETURN)
 		Act.RADIO_RETURN:
 			var t := clampf(act_t / (RETURN_SECS + 0.08), 0.0, 1.0)
 			_hand_xf = _hand_from.interpolate_with(grip, _ease(t))

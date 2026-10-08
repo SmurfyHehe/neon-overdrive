@@ -101,6 +101,7 @@ var speedo_needle: Node3D
 var lamps: MultiMeshInstance3D
 var lamp_text: Label3D
 var head_unit: HeadUnit         # the touch-screen radio on the centre stack
+var _volume_dirty := false       # volume turned since the last save
 var lever: Node3D
 var lever_knob: Node3D
 var handbrake: Node3D
@@ -396,6 +397,17 @@ func radio_touch() -> Dictionary:
 		return {"pos": head_unit.transform * head_unit.tile_point(s + 1), "contact": DriverModel.CONTACT_RADIO_TILE}
 	return {"pos": head_unit.transform * head_unit.off_point(), "contact": DriverModel.CONTACT_RADIO_KNOB}
 
+## Volume key state from the game (-1 down, +1 up, 0 none): the hand goes to
+## the knob; the volume moves only while it is there (_update_volume).
+func set_volume_dir(dir: int) -> void:
+	if driver != null:
+		driver.volume_dir = dir
+
+## Where the hand takes the volume, car space: the knob, or on a touch-only
+## screen the VOLUME bar at the current level.
+func volume_touch() -> Vector3:
+	return head_unit.transform * head_unit.volume_point()
+
 ## The one place a hand touching something has an effect.
 func _on_hand_contact(target: StringName) -> void:
 	if target == DriverModel.CONTACT_RADIO_TILE or target == DriverModel.CONTACT_RADIO_KNOB:
@@ -637,7 +649,25 @@ func _find_radio() -> RadioManager:
 			radio = scene.radio
 	return radio
 
+## Radio volume, 0..1 per second while the hand turns the knob (full sweep in
+## two seconds of holding the key).
+const VOLUME_RATE := 0.5
+
+## Turns the volume while the hand is on the knob, keeps the knob on the
+## volume (the pause menu's Music slider moves it too), and saves when the hand
+## lets go. The Music slider is the radio's volume: one setting, two controls.
+func _update_volume(delta: float) -> void:
+	var turning := driver != null and driver.is_turning_volume()
+	if turning:
+		var v: float = AudioSettings.volumes["Music"]
+		AudioSettings.set_volume("Music", v + driver.volume_dir * VOLUME_RATE * delta)
+	elif _volume_dirty:
+		AudioSettings.save_settings()
+	_volume_dirty = turning
+	head_unit.show_volume(AudioSettings.volumes["Music"], delta)
+
 func _update_radio(delta: float) -> void:
+	_update_volume(delta)
 	var r := _find_radio()
 	if r == null:
 		return

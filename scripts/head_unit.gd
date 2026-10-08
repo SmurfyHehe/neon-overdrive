@@ -20,6 +20,11 @@ extends Node3D
 # a little too bright, with a physical volume knob beside it (pressing the knob
 # turns the radio off); a modern factory screen is touch only, and "off" is a
 # power spot on the glass.
+#
+# Volume (2026-10-08): the knob turns with the radio's volume (the Music
+# slider, AudioSettings), VOL_ARC_DEG either side of the top. While the volume
+# changes the header shows a VOLUME bar for VOL_SHOW_SECS; on a touch-only
+# screen that bar is where the finger slides (volume_point).
 
 const NAVY := Color("#1B2A4A")
 const NAVY_DEEP := Color("#0E1424")
@@ -42,6 +47,9 @@ const KNOB_R := 0.014
 const KNOB_DEPTH := 0.018
 const KNOB_PRESS := 0.004
 const TICK_SECS := 0.028
+const VOL_ARC_DEG := 135.0
+const VOL_SHOW_SECS := 1.5
+const VOL_BAR := Rect2(18, 52, 330, 26)   # screen px, in the header
 
 ## Keyed by PlayerCar.chassis_kind(); DEFAULT_STYLE for anything unlisted.
 ##   aftermarket: printed bezel, tablet proud of the stack
@@ -74,6 +82,9 @@ var knob: Node3D
 var _tick: AudioStreamPlayer
 var _meter_t := 0.0
 var _knob_t := 0.0
+var volume := 1.0                 # 0..1, what the knob and the VOLUME bar show
+var _vol_show_t := 0.0            # > 0 while the VOLUME bar is up
+var _vol_seen := false            # the first volume is the saved one: no bar for it
 
 static func style_for(kind: String) -> Dictionary:
 	return STYLES[kind] if STYLES.has(kind) else STYLES[DEFAULT_STYLE]
@@ -150,9 +161,11 @@ func _build_knob() -> void:
 	knob.add_child(k.instance(CockpitKit.material(0.35, 0.6, 0.4), "KnobMesh"))
 	add_child(knob)
 
-## Knob centre at rest, node space: beside the screen on the driver's side (-x).
+## Knob centre at rest, node space: beside the screen on the driver's side
+## (-x), at the top corner, where it shows over the wheel from the seat (at the
+## bottom it sat below the cockpit view, so its turning couldn't be seen).
 func _knob_base() -> Vector3:
-	return Vector3(-SCREEN_W * 0.5 - BEZEL_BORDER - KNOB_R - 0.010, -SCREEN_H * 0.5 + KNOB_R + 0.004, -BEZEL_DEPTH)
+	return Vector3(-SCREEN_W * 0.5 - BEZEL_BORDER - KNOB_R - 0.010, SCREEN_H * 0.5 - KNOB_R - 0.004, -BEZEL_DEPTH)
 
 ## A short synthesized tick for a tap: a few cycles of a decaying 2.4 kHz click.
 func _build_tick() -> void:
@@ -190,6 +203,18 @@ func off_point() -> Vector3:
 		return _knob_base() + Vector3(0.0, 0.0, KNOB_DEPTH)
 	return _px_to_local(POWER_SPOT)
 
+## Where the hand takes the volume: the knob's face, or the VOLUME bar at the
+## current level on a touch-only screen (node space).
+func volume_point() -> Vector3:
+	if has_knob:
+		return _knob_base() + Vector3(0.0, 0.0, KNOB_DEPTH)
+	return _px_to_local(Vector2(VOL_BAR.position.x + VOL_BAR.size.x * volume, VOL_BAR.get_center().y))
+
+## Knob angle for a volume, radians about the spindle (+z): VOL_ARC_DEG to
+## the left at 0, straight up at half, VOL_ARC_DEG to the right at full.
+static func knob_angle(v: float) -> float:
+	return deg_to_rad(VOL_ARC_DEG - 2.0 * VOL_ARC_DEG * clampf(v, 0.0, 1.0))
+
 static func tile_rect(i: int) -> Rect2:
 	var n := RadioStations.station_count()
 	var w := (PX.x - 2.0 * MARGIN - TILE_GAP * (n - 1)) / n
@@ -216,6 +241,25 @@ func show_state(s: int, track: String, lvl: float, delta: float) -> void:
 		_knob_t = maxf(_knob_t - delta, 0.0)
 		knob.position = _knob_base() - Vector3(0.0, 0.0, KNOB_PRESS * sin(_knob_t / 0.15 * PI))
 
+## The radio's volume (0..1) this frame: turns the knob, and raises the
+## VOLUME bar while it changes.
+func show_volume(v: float, delta: float) -> void:
+	var changed := _vol_seen and not is_equal_approx(v, volume)
+	_vol_seen = true
+	volume = v
+	if changed:
+		_vol_show_t = VOL_SHOW_SECS
+		_redraw()
+	elif _vol_show_t > 0.0:
+		_vol_show_t = maxf(_vol_show_t - delta, 0.0)
+		if _vol_show_t == 0.0:
+			_redraw()
+	if knob != null:
+		knob.rotation.z = knob_angle(volume)
+
+func is_volume_shown() -> bool:
+	return _vol_show_t > 0.0
+
 ## The finger touched the unit: tick, and push the knob in for an off press.
 func tap(on_knob: bool) -> void:
 	taps += 1
@@ -231,7 +275,7 @@ func is_dimmed() -> bool:
 func _redraw() -> void:
 	if canvas == null:
 		return
-	canvas.modulate = OFF_DIM if station < 0 else Color.WHITE
+	canvas.modulate = OFF_DIM if station < 0 and _vol_show_t <= 0.0 else Color.WHITE
 	canvas.queue_redraw()
 	viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
@@ -262,6 +306,8 @@ class ScreenCanvas extends Control:
 			var lit := on and float(i) / bars < unit.level
 			var col := (HeadUnit.SODIUM if i >= 7 else HeadUnit.AMBER) if lit else HeadUnit.NAVY
 			draw_rect(Rect2(x, 46, 8, 40), col)
+		if unit.is_volume_shown():
+			_volume_bar(font)
 		if not unit.has_knob:
 			draw_circle(HeadUnit.POWER_SPOT, 14.0, HeadUnit.NAVY)
 			draw_arc(HeadUnit.POWER_SPOT, 8.0, -PI * 0.35, PI * 1.35, 16, HeadUnit.SILVER, 2.0)
@@ -280,6 +326,21 @@ class ScreenCanvas extends Control:
 		# a little glare across the glass, and a thumb smudge where it gets tapped
 		draw_colored_polygon(PackedVector2Array([Vector2(w * 0.55, 0), Vector2(w * 0.72, 0), Vector2(w * 0.40, h), Vector2(w * 0.23, h)]), Color(1, 1, 1, 0.035))
 		draw_circle(Vector2(w * 0.62, h * 0.62), 22.0, Color(1, 1, 1, 0.025))
+
+	## The VOLUME bar over the header while the volume changes: ten segments,
+	## amber up to the level, sodium for the top three, and the percentage.
+	func _volume_bar(font: Font) -> void:
+		draw_rect(Rect2(0, 0, HeadUnit.PX.x, HeadUnit.TILE_Y - 6.0), HeadUnit.NAVY_DEEP)
+		draw_string(font, Vector2(HeadUnit.MARGIN, 34), "VOLUME", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, HeadUnit.SILVER.darkened(0.25))
+		var r := HeadUnit.VOL_BAR
+		var segs := 10
+		var sw := r.size.x / segs
+		for i in segs:
+			var lit := (float(i) + 0.5) / segs <= unit.volume
+			var col := (HeadUnit.SODIUM if i >= 7 else HeadUnit.AMBER) if lit else HeadUnit.NAVY
+			draw_rect(Rect2(r.position.x + i * sw, r.position.y, sw - 4.0, r.size.y), col)
+		draw_string(font, Vector2(r.end.x + 16.0, r.end.y - 2.0), "%d" % roundi(unit.volume * 100.0),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 26, HeadUnit.AMBER)
 
 	## Track art generated from the palette, one motif per station.
 	func _art(r: Rect2, i: int) -> void:

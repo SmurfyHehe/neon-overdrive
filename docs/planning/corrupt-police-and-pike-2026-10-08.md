@@ -1,4 +1,4 @@
-# Corrupt police and Pike: story and gameplay proposal (2026-10-08, rev 2)
+# Corrupt police and Pike: story and gameplay proposal (2026-10-08, rev 3)
 
 Status: PROPOSAL, docs only. Nothing is built. Story is Roy's to write; every name is a placeholder. Police are Stage F, so this shapes Stage F and the story, it does not jump ahead of them.
 
@@ -10,26 +10,34 @@ Inputs read: `docs/story-bible.md` (main 09455e0), narrative fabric (PR #175, se
 
 1. **Why they serve Pike:** Pike is trying to take over everything. The bad cops get paid, and he owns their debts.
 2. **You can spot a bad cop** by menacing items on their cars. We need **distinct corrupt police cars** (section 5).
-3. **When bad cops catch you, they take the cash and give you a ticket.**
+3. ~~When bad cops catch you, they take the cash and give you a ticket.~~ Replaced in round 2, answer 5.
 4. Bad cops do **not necessarily** back off when someone is watching. Witnesses are not a guaranteed escape.
 5. **Pike's racers set you up:** yes.
 6. **The rookie can be won over**, but he must keep the moral high ground and never team up with racing criminals (the player). Research how (section 7).
 7. **The bad cops are the sergeant and his partner.** From the sound questions, the **veteran** is also Pike's man, so the veteran is the sergeant's partner.
 8. **The story ends with the bad cops exposed.**
 
+## Decided (Roy, 2026-10-08 12:53), round 2
+
+1. **Car parts as proposed** (ghost paint, scraped push bar, spotlight, hidden strobes, dark windows), **plus different, scary lights**: the reaction should be "oh f***". Light design in section 5b.
+2. **Bad cop cars are faster:** yes. Where they are placed needs judging (section 5c).
+3. **The rookie meets you in private**, and also learns about you over time through Dave's broadcast (section 7).
+4. **Whether the rookie comes after you at the end is OPEN.** Roy: a big question that could break the story. Not decided here; risks in section 7b.
+5. **Bad cops take ALL the cash; honest cops take little or none.** The ticket is **not** assumed: research the real differences between good and bad cops first (section 6a). This replaces round-1 answer 3 ("cash and a ticket").
+
 Earlier decisions kept: police voice lines are **captions + squelch now**, voices later (offline text-to-speech that passes the free-assets rule: Chatterbox MIT, Kokoro Apache 2.0). The police radio cast keeps its five roles. Pike takes Cred, never cars, mods or progress.
 
 ## One line
 
-**Pike owns two cops, and you can see it on their cars.** The sergeant and his veteran partner drive marked-but-wrong police cars paid for with Pike's money, go quiet on the radio when they come for you, and take your cash and write you a ticket. An honest rookie works to bring them down without ever becoming your friend.
+**Pike owns two cops, and you can see it on their cars.** The sergeant and his veteran partner drive marked-but-wrong police cars paid for with Pike's money, go quiet on the radio when they come for you, and take all your cash. An honest rookie works to bring them down and meets you in private, but never becomes your partner.
 
 ## Steelman and premortem
 
 - Steelman: a small, named pair of bad cops with their own cars makes the corruption personal and readable. The player learns to dread one silhouette in the mirror, and the ending (exposing them) is a clear goal.
 - Premortem, it failed because:
   1. Players could not tell bad cops from honest ones. Fix: the cars look different (section 5) and the radio goes quiet. Two tells, one you see and one you hear, no HUD marker.
-  2. Bad cops felt unfair. Fix: they only ever take tonight's unbanked cash plus a ticket, and they can always be outdriven.
-  3. The rookie read as the player's buddy, breaking Roy's rule. Fix: the rookie never meets, helps or thanks the player (section 7).
+  2. Bad cops felt unfair. Fix: they only ever take tonight's unbanked cash, and they can always be outdriven.
+  3. The rookie read as the player's buddy, breaking Roy's rule. Fix: he meets you only on his terms, takes nothing, never helps you escape (section 7).
   4. Two extra cop cars cost too much art. Fix: they are the normal cop body with bolt-on props, not new models.
 - Falsification: if playtesters, shown a chase clip, cannot say whether a bad cop was in it, the car props are too subtle.
 
@@ -98,7 +106,35 @@ Ideas, all original, all built from simple meshes or Kenney CC0 parts plus our o
 
 **Palette:** red and blue are allowed (expanded palette). The police blue `#2E4FD8` and a matching red stay for all police lights; bad cops differ by pattern and placement, not by new colours. The spotlight is plain white. The ghost livery is navy-black `#0E1424` on black, so it fits Amber vs. Dusk.
 
-**Recommended set for the first build:** ghost livery, scraped push bar, A-pillar spotlight, grille strobes with no roof bar, dark tint. Those five read from far away. The rest come later.
+**Chosen set for the first build (Roy):** ghost livery, scraped push bar, A-pillar spotlight, grille strobes with no roof bar, dark tint. The rest come later.
+
+### 5b. The lights: the "oh f***" moment (Roy: different and scary)
+
+The scare is a **contrast**: a dark, silent car becomes a wall of light and noise all at once, inside your mirror. Built in layers:
+
+| Layer | What happens | Why it scares |
+|---|---|---|
+| **1. Dark run** | They tail you with **headlights off**. In the mirror you see nothing but a faint shape against the streetlights, and you hear a tuned engine that is not yours | You feel something is there before you can see it |
+| **2. The hit** | At about 20-30 m everything comes on in the same frame: high beams, the A-pillar spotlight swung straight into your rear window, grille and rear-window strobes | Sudden white glare fills the mirrors and the cockpit; a jump scare you earned by being careless |
+| **3. Wig-wag headlights** | Their headlights alternate left-right fast (real police "wig-wag" flashers) | Aggressive, reads as "pull over now" even at a glance |
+| **4. Red-heavy strobes** | Honest cars flash an even red and blue. Bad cars flash **mostly red** in a **fast, broken, irregular** rhythm, with only a little blue | Red reads as danger; the broken rhythm looks wrong, like a glitch |
+| **5. The rumble** | Instead of a normal wail, one burst of a **deep, low siren you feel more than hear**, then silence. Real police use this: the Federal Signal **Rumbler** drops the siren tone by 75% and shakes nearby cars for about 8 s ([Federal Signal](https://www.fedsig.com/product/rumbler)) | The cockpit shakes (camera shake, bass in the speakers). Nothing else in the game sounds like it |
+| **6. Red cabin glow** | A dim red light inside their cabin shows a faceless shape behind the tint | Faceless, wrong colour, very PS2-horror |
+
+In first person the spotlight and wig-wags hit the cockpit glass and mirrors (bloom and glare), which is where the scare lands hardest. Cost: lights and a mirror glare pass the game needs anyway; a low synth sine burst for the rumble (original, no asset licence needed). Honest cars keep their normal steady pattern and normal wail, so the difference is obvious.
+
+### 5c. Where the bad cars show up (Roy: faster, placement needs judging)
+
+They are a little faster than honest police (Pike's money), so where they appear decides whether they are fair. Proposed rules:
+
+| Rule | Why |
+|---|---|
+| **Only one bad pair in the world at a time**, and only when the hidden "Pike reach" number allows it | Keeps them special and scary, not common |
+| **Lurk spots:** parked dark in places with cover: a closed lot, under an overpass, behind a billboard, a canyon pull-off, the docks. You can see them before they move if you look | Gives the player a fair chance to notice and pick another road |
+| **Never spawn in front of you on a straight you cannot leave**; always where there is a side street or exit | Being faster must not mean "no way out" |
+| **Sent by Pike's racers** (tip-off, setup race): they arrive from behind, from the direction the tip came | The setup feels like a setup, not a random spawn |
+| **Faster on straights, worse in tight turns** (heavy push bar) | The counterplay is choosing twisty roads |
+| **Story nights** place them by hand (the shakedown in Act 1, the Turn at the liquor store) | Story beats happen where Roy wants them |
 
 ## 6. How bad cops play differently
 
@@ -108,8 +144,37 @@ Ideas, all original, all built from simple meshes or Kenney CC0 parts plus our o
 | **Driving** | Follow, box, roadblock at high heat | Ram and push early, spotlight you, ignore "pursuit called off". A little faster (tuned engines) |
 | **Where they show up** | Anywhere you break the law in their sight | Wherever Pike's racers send them (R1, R2). More often at night in docks, back roads and the canyon, but they **can come anywhere** |
 | **Witnesses** | n/a | **Not a guaranteed escape** (Roy). They are a bit more careful near the helicopter, but they do not simply leave |
-| **When they catch you** | **Bust:** a fair fine, as Stage C P2 sets | **Shakedown:** they take **all of tonight's unbanked cash** and **write you a ticket** too. Cash goes to Pike. The ticket is a real fine (it is on paper) |
+| **When they catch you** | **Arrest by the book** (options in 6a): little or no cash taken | **Shakedown:** they take **all of tonight's unbanked cash**. No paperwork assumed (6a). Cash goes to Pike |
 | **How to beat them** | Driving, the escapes from the helicopter design | Out-drive them. They are faster but heavier; the push bar makes them worse in tight turns. Lose the spotlight with hard turns and cover, like the helicopter beam |
+
+### 6a. Good cops and bad cops: what really differs (Roy: research, do not assume a ticket)
+
+What an honest US officer does, from current policy guidance and how the real corruption cases were caught:
+
+| Thing | Honest officer (procedure) | Corrupt officer (the real cases) |
+|---|---|---|
+| **Starting a chase** | Many departments now limit pursuits. The Police Executive Research Forum (2023) recommends chasing only when a violent crime has happened and the driver is an immediate danger; otherwise find another way, "you can get a suspect another day" ([Police1 on the PERF report](https://www.police1.com/suspect-pursuit/articles/perf-report-recommends-limiting-police-pursuits-to-violent-crimes-suspects-who-pose-imminent-threats-Am1uwNdLFpoXkIr1)) | Chases whoever they are told to, for as long as they want |
+| **Ending a chase** | Calls it off when it gets too dangerous (traffic, speed, people around). Supervisor can order it ended | Ignores "call it off" |
+| **Radio** | Reports everything: where, what car, what for | Goes quiet; nothing on the record |
+| **Cameras** | Dashcam and body camera on | Cameras "off" or "broken" |
+| **Money** | Does not take your cash. If cash is seized as evidence, it is logged and you get a receipt | Takes it, no receipt, no record (Baltimore unit robbed people during stops and searches) |
+| **Paper** | Writes the ticket or report for what you did; it goes to court | Avoids paper, because paper is evidence against them. A ticket would show they stopped you |
+| **Force** | The minimum needed | Rams, threatens, hurts |
+| **Afterwards** | Your record shows the offence | Nothing on record, but they remember you |
+
+**What this means for the game.** A corrupt cop writing a ticket would leave a trail, so the realistic bad-cop catch is **cash gone, no paper**. That also makes the difference clean: honest cops cost you **a ticket**, bad cops cost you **your cash**.
+
+Options for the honest arrest (Roy to pick):
+
+| Option | Honest cops catch you | Bad cops catch you |
+|---|---|---|
+| **H1. Ticket only (recommended)** | A ticket (fine taken from your **bank** at the garage, size by what you did). You **keep** tonight's cash | All tonight's cash, no ticket |
+| H2. Ticket + impound fee | Ticket plus a tow fee to get the car back next night; cash kept | Same as above |
+| H3. Small cut | A share of tonight's cash (say a quarter) as a fine on the spot | All of it |
+
+Why H1: the two kinds of cop then hurt you in two different ways the player can feel (bank vs tonight's pot), and it matches how honest police really work. It also means Stage C's "bust loses the pot" rule moves to bad cops only; that change needs your OK.
+
+Honest cops also **call off** a chase that gets too dangerous for traffic (the policy above), which bad cops never do. In play: if you are fast and the roads are busy, honest cops give up sooner. Bad cops never give up, which is part of the fear.
 
 **Getting proof:** escaping a shakedown, or getting a bad cop into the helicopter's beam, earns a clue (a dashcam still, a plate, a number). Clues join the gas station clues for the Pike story.
 
@@ -119,21 +184,38 @@ Ideas, all original, all built from simple meshes or Kenney CC0 parts plus our o
 
 **What the research says:** honest insiders who bring down corrupt cops usually **go around the department, not to criminals**. Serpico reported inside, was ignored, and went to the press; the Baltimore unit fell to federal investigators. In both, the honest side never worked with the people breaking the law.
 
-**So the rookie and the player are never allies. They share an enemy and never meet as friends.** He is "won over" to the **truth**, not to the player.
+**Roy's call (round 2): he meets you in private, and he also learns about you over time through Dave's broadcast.** So the rookie and the player meet, but they are **never partners**. He is won over to the **truth**, not to the player. How he keeps the high ground while meeting you:
 
-| Option | How it works | Keeps his high ground? |
-|---|---|---|
-| **A. The drop (recommended)** | You never speak to him. You leave proof where he will find it: an unsigned envelope at a gas station, or a tip Dave reads on air. The rookie checks it himself, by the book | **Yes.** He acts on evidence, not on a racer's word |
-| **B. Dave in the middle (recommended, with A)** | The rookie listens to Graveyard TV. Dave airs what you found; the rookie hears it like any listener. Dave is the "press", like Serpico's newspaper | **Yes.** A journalist, not a criminal, is the link |
-| C. A grudging deal | He meets you once and says "give me the proof, and I'll still bring you in" | Partly. Roy's rule suggests not |
-| D. Saves you once | He pulls you out of a shakedown | No. That is siding with you |
+| Rule for every meeting | Why it keeps his high ground |
+|---|---|
+| **He sets the meeting**, not you: a note under your wiper, "Diner, 5 a.m., come alone" | He is in control; you do not recruit him |
+| **He meets you as a cop meets a witness**, in uniform or off duty, never in a race car, never at a meet | He questions you; he does not hang out |
+| **He takes nothing from you**: no money, no favours, pays for his own coffee | Nothing anyone could call a bribe |
+| **He only takes proof he can use by the book**: dashcam footage from a public road, a plate, a time and place. Anything you got by breaking in or stealing, he refuses | A real limit that shapes what you collect |
+| **He says what he will not do**: "I won't look the other way for you. Not once." | Said out loud, so the player knows the line |
+| **He never warns you about honest police**, never helps you escape, never races | He stays on the side of the law |
+
+**How he learns about you over time (Dave's broadcast):** the rookie is a listener. Dave reads out things that happen in your nights: a shakedown on a dark road, a racer's car with Pike's money in it, "a listener" who caught a cop car with no plates on camera. The rookie pieces it together like a detective, and his radio captions show it ("Dispatch, was there a stop on Pier Road at two? ... No record? Copy."). The meetings come only after he already suspects.
 
 **How it plays out (proposed beats, Roy writes the words):**
-1. **Act 1:** the rookie chases you like any honest cop. He is good, polite on the radio, and does not let you go.
-2. **Act 2:** he notices the sergeant and the veteran keep going quiet. The dispatcher's captions show him asking about it. He gets told to drop it.
-3. **The Turn:** like Serpico, the bad cops leave him without backup in a dangerous moment (no "officer needs help" call). He survives. He now knows.
-4. **Act 3:** your proof reaches him by the drop and Dave's broadcast. He never thanks you. On air you hear him say something like "I don't care who sent it. It checks out."
-5. **Ending:** the rookie arrests the sergeant and the veteran. Then he turns to you: **"You're next."** You get a ticket, or a head start. He keeps his high ground, and the player keeps an honest rival for later.
+1. **Act 1:** the rookie chases you like any honest cop. Good, polite on the radio, never lets you go.
+2. **Act 2:** Dave's broadcasts about shakedowns get his attention. He notices the sergeant and the veteran keep going quiet, asks about it, is told to drop it.
+3. **The Turn:** like Serpico, the bad cops leave him without backup in a dangerous moment. He survives. Next night, the note on your wiper: first private meeting. He tells you what he wants (proof he can use) and what he will never do.
+4. **Act 3:** you bring him proof in two or three short meetings, each one tense. He never thanks you. On Dave's show you hear the effect: a stop "with no record" now has one.
+5. **Ending:** the rookie arrests the sergeant and the veteran. **What he does about you next is open** (7b).
+
+### 7b. Open: what the rookie does about you at the end (Roy: could break the story)
+
+Not decided. Each option and how it could hurt the story:
+
+| Option | What happens | Story risk |
+|---|---|---|
+| He comes after you ("you're next") | Arrests the bad cops, then turns on you; a final chase or a warning | Can make the win feel hollow, and makes all your help feel like it was used against you. Also clashes with "the shop is saved" if you end in cuffs |
+| He lets you go once | "Tonight you get a head start. Next time, no." | Bends his high ground at the very end, the thing Roy wants protected |
+| He does nothing about you | Arrests them and walks away; you never see him again | Safe but flat; wastes a strong character |
+| He becomes your honest rival after the story | Free roam after the ending: he leads the honest police, a fair, tough cop who chases you | Keeps his high ground and gives free roam a face; needs the post-ending free play to exist (it does: legends reunion) |
+
+Whatever is picked, two rules protect the story: the rookie never gets paid back for the meetings, and the ending never takes the shop or the car away because of him.
 
 ## 8. How it fits heat and the helicopter
 
@@ -150,11 +232,11 @@ Ideas, all original, all built from simple meshes or Kenney CC0 parts plus our o
 | Beat | What happens with the bad cops |
 |---|---|
 | Prologue | After Ledger beats you, a ghost-livery car pulls you over and waves Ledger's car past |
-| Act 1 | First shakedown: cash gone, ticket written. Dave on air: "funny, the ticket's real, the cash isn't on it" |
+| Act 1 | First shakedown: cash gone, no paper. Dave on air: "funny, no record of any stop on Pier Road last night" |
 | Act 2 | Pike's racers start the tip-offs and setup races. The rookie starts asking questions |
-| Turn | The night Dave's tower goes silent: the sergeant's car is outside the liquor store with Ironbridge's cars. The rookie is left without backup |
-| Act 3 | You collect proof and get it to the rookie by the drop and Dave's broadcast |
-| Ending | The rookie arrests the sergeant and the veteran during the Ledger rematch night. Then: "You're next." |
+| Turn | The night Dave's tower goes silent: the sergeant's car is outside the liquor store with Ironbridge's cars. The rookie is left without backup; next night, his note on your wiper |
+| Act 3 | Private meetings: you bring proof he can use by the book. Dave's show carries the rest |
+| Ending | The rookie arrests the sergeant and the veteran during the Ledger rematch night. What he does about you: open (7b) |
 
 ## 10. Cost and assets
 
@@ -162,18 +244,22 @@ Ideas, all original, all built from simple meshes or Kenney CC0 parts plus our o
 - Art: the normal cop body plus props (push bar, spotlight, grille strobes, black wheels, tint, ghost livery texture). Simple meshes or Kenney CC0; original textures.
 - Sound: tuned engine voice from the per-car engine work. Captions + squelch now; voices later with offline text-to-speech (Chatterbox or Kokoro), radio filter. Squelch and static from the Sonniss GDC bundle (royalty-free, commercial, no credit). All pass the free-assets rule.
 
-## Questions for Roy, round 2 (recommendation marked)
+## Round 2 answers recorded at the top. Questions for Roy, round 3 (recommendation marked)
 
-1. Which car props go in first? **Ghost paint, scraped push bar, spotlight, hidden strobes, dark windows (recommended)** / all of them / pick your own
-2. Should the bad cops' cars be a bit faster than normal police? **Yes, a little (recommended)** / no, same speed
-3. How does your proof reach the rookie? **An unsigned drop plus Dave's broadcast, you never meet him (recommended)** / he meets you once
-4. After he arrests the bad cops, does the rookie come after you? **Yes, "you're next" (recommended)** / no, he lets you go once
-5. Bad cop ticket: bigger than a normal ticket? **Yes, double (recommended)** / same
+1. When honest cops catch you, what do you lose? **A ticket paid from your bank, you keep tonight's cash (recommended)** / a ticket plus a tow fee / a share of tonight's cash
+2. Bad cops take all your cash and write no ticket, because a ticket would leave a trail? **Yes (recommended)** / they still write one
+3. Honest cops give up a chase when it gets too dangerous for traffic, bad cops never give up? **Yes (recommended)** / no
+4. The scary lights: bad cops creep up with lights off, then hit you with everything at once and a deep siren you feel? **Yes (recommended)** / only the different lights, no lights-off creep
+5. Bad cops wait in hiding spots you can spot if you look, never on a road with no way out? **Yes (recommended)** / anywhere
+6. The rookie only takes proof that was got legally (like dashcam footage from the road)? **Yes (recommended)** / any proof
+7. What the rookie does about you at the end: **left open for now**, pick later from 7b when the story is written (recommended) / pick now
 
 ## Sources
 
 - [Need for Speed Heat, Wikipedia](https://en.wikipedia.org/wiki/Need_for_Speed_Heat)
 - [Need for Speed: Undercover, Wikipedia](https://en.wikipedia.org/wiki/Need_for_Speed:_Undercover)
+- [PERF report recommends limiting police pursuits, Police1 (2023)](https://www.police1.com/suspect-pursuit/articles/perf-report-recommends-limiting-police-pursuits-to-violent-crimes-suspects-who-pose-imminent-threats-Am1uwNdLFpoXkIr1)
+- [Rumbler low-frequency siren, Federal Signal](https://www.fedsig.com/product/rumbler)
 - [Frank Serpico, Wikipedia](https://en.wikipedia.org/wiki/Frank_Serpico)
 - [How the GTTF cops were caught, WYPR (2018)](https://www.wypr.org/wypr-news/2018-06-06/how-the-gttf-cops-were-caught-and-why-didnt-local-authorities-catch-em)
 - [Drug dealers testify against Baltimore Police at trial, The Daily Record (2018)](https://thedailyrecord.com/2018/02/01/baltimore-police-trial/)

@@ -213,14 +213,17 @@ func _setup_ground_collision() -> void:
 
 # ---------- road shape (#37 curves) ----------
 ## How bendy the road is, 0 (straight) to 1 (mostly bends); NEON_CURVES=<x>
-## overrides it. Off by default until the chase camera follows the road
-## (step R4). NEON_ROAD_SEED=<n> fixes the road for tests.
-@export var curviness := 0.0
+## overrides it (tests/run_tests.bat sets 0 for the older drive tests, which
+## steer blind down world -Z). Benchmark runs stay straight so they compare
+## with every earlier run. NEON_ROAD_SEED=<n> fixes the road for tests.
+@export var curviness := 0.5
 
 func _setup_road_shape() -> void:
 	var env := OS.get_environment("NEON_CURVES")
 	if env.is_valid_float():
 		curviness = float(env)
+	if Benchmark.requested():
+		curviness = 0.0
 	var seed_env := OS.get_environment("NEON_ROAD_SEED")
 	var road_seed := int(seed_env) if seed_env.is_valid_int() else randi()
 	RoadFrame.origin_index = origin_index

@@ -108,6 +108,14 @@ var retry_frame := 0
 ## Off the road for this hour band (TrafficManager.active_share): parked
 ## hidden and frozen until the band wants more cars.
 var benched := false
+## Rule breaker (living world step 3): picked at each spawn from the event
+## share (WorldMood). Speeds, tailgates, passes sooner and cuts in tighter, but
+## keeps the full margins to the player (PLAYER_TTC, PLAYER_MIN_GAP), so it
+## reads as a character, never as a car aimed at you.
+var rule_breaker := false
+## Drifts this many metres either side of its lane (bar close); 0 = holds it.
+var weave := 0.0
+var _weave_t := 0.0
 ## Index entry of the car ahead found by the last full scan; between scans
 ## its gap and speed are read straight from the index (see _accel_command).
 var _lead_k := -1
@@ -197,7 +205,14 @@ const B_SAFE := 2.5            # m/s^2 a change may ask of anyone
 const LC_MIN_GAP_T := 0.5      # s of speed (plus S0) kept to the new leader/follower
 const PLAYER_TTC := 8.0        # s of closing time a player behind must have
 const PLAYER_MIN_GAP := 15.0
-const MIN_LC_SPEED := 8.0      # m/s; below it only obstacles trigger a change
+## Rule breakers (see rule_breaker).
+const RB_SPEED := 6.9          # m/s over the lane speed (+25 km/h)
+const RB_T_GAP := 0.6          # s kept to the car ahead instead of T_GAP: tailgating
+const RB_LC_MIN_GAP_T := 0.25  # s instead of LC_MIN_GAP_T: cuts in
+const RB_LC_COOLDOWN := 1.5
+const RB_PASS_DV := 0.5
+const WEAVE_PERIOD := 5.0      # s for one drift left and back
+const MIN_LC_SPEED := 8.0     # m/s; below it only obstacles trigger a change
 
 ## Bends (#37): cornering traffic will take, m/s^2 (a calm driver's 0.2 g;
 ## at 2.5 a car at 109 km/h on a 385 m bend still ran 0.76 m wide), and how
@@ -273,6 +288,9 @@ func _drive(delta: float) -> void:
 	if changing:
 		var look := clampf(speed * LOOKAHEAD_SECONDS, LOOKAHEAD_MIN, LOOKAHEAD_MAX)
 		steer_x = _path_x_at(_lc_t + look / maxf(absf(v), 1.0))
+	elif weave > 0.0:
+		_weave_t += delta
+		steer_x += weave * sin(TAU * _weave_t / WEAVE_PERIOD)
 	steering_input = lane_steer(self, steer_x, direction, wheelbase)
 	handbrake_input = 0.0
 	if hazard:
@@ -310,7 +328,7 @@ func _accel_command(v: float) -> float:
 			lead_gap = traffic.entry_gap(_lead_k, p.z, direction, half_l)
 			lead_speed = traffic.entry_speed(_lead_k, direction)
 			lead_is_player = _lead_k == 0
-	return follow_accel(v, minf(target_speed, bend_speed()), lead_gap, lead_speed)
+	return follow_accel(v, minf(target_speed, bend_speed()), lead_gap, lead_speed, _t_gap())
 
 ## Fastest this car takes the road from here to BEND_LOOK m ahead: no more
 ## than BEND_LAT_ACCEL of cornering on the tightest bend in that stretch (#37).
@@ -326,10 +344,10 @@ func bend_speed() -> float:
 ## The follower law (see the header): acceleration wanted at speed v, cruise
 ## speed v0, behind something `gap` metres ahead (bumper to bumper, INF for a
 ## free road) moving at vl along this car's direction.
-static func follow_accel(v: float, v0: float, gap: float, vl: float) -> float:
+static func follow_accel(v: float, v0: float, gap: float, vl: float, t_gap := T_GAP) -> float:
 	if gap == INF:
 		return maxf(K_V * (v0 - v), -B_COMF)
-	var v_des := clampf(vl + K_GAP * (gap - (S0 + T_GAP * v)), 0.0, v0)
+	var v_des := clampf(vl + K_GAP * (gap - (S0 + t_gap * v)), 0.0, v0)
 	var a := K_V * (v_des - v)
 	if v > vl:
 		var a_req := (v - vl) * (v - vl) / (2.0 * maxf(gap - S_STOP, 0.3))
@@ -360,10 +378,22 @@ func _apply_accel(v: float, a: float) -> void:
 
 ## How fast this car could go behind something `gap` ahead at vl (the
 ## follower's speed command), for comparing lanes.
+func _t_gap() -> float:
+	return RB_T_GAP if rule_breaker else T_GAP
+
+func _lc_gap_t() -> float:
+	return RB_LC_MIN_GAP_T if rule_breaker else LC_MIN_GAP_T
+
+## Set at every spawn (TrafficManager._respawn).
+func set_rule_breaker(on: bool, weave_m: float) -> void:
+	rule_breaker = on
+	weave = weave_m if on else 0.0
+	_weave_t = randf() * WEAVE_PERIOD if weave > 0.0 else 0.0
+
 func _potential(v: float, gap: float, vl: float) -> float:
 	if gap == INF:
 		return target_speed
-	return clampf(vl + K_GAP * (gap - (S0 + T_GAP * v)), 0.0, target_speed)
+	return clampf(vl + K_GAP * (gap - (S0 + _t_gap() * v)), 0.0, target_speed)
 
 func _consider_lane_change(v: float) -> void:
 	if changing or _lc_cooldown > 0.0:
@@ -379,7 +409,7 @@ func _consider_lane_change(v: float) -> void:
 	var f_speed := traffic.q_speed
 	var yielding := f_gap < INF and f_speed - v > YIELD_DV and f_gap / (f_speed - v) < YIELD_TTC
 	var cur_pot := _potential(v, lead_gap, lead_speed)
-	var constrained := lead_gap < INF and cur_pot < target_speed - PASS_DV
+	var constrained := lead_gap < INF and cur_pot < target_speed - (RB_PASS_DV if rule_breaker else PASS_DV)
 	var keep_right := not (obstacle or yielding or constrained) and _lc_cooldown < -KEEP_RIGHT_AFTER
 	if not (obstacle or yielding or constrained or keep_right):
 		return
@@ -421,7 +451,7 @@ func _merge_safe(lx: float, v: float) -> bool:
 	var skip_player := not traffic.react_to_player
 	_m_gap = traffic.scan(z, direction, lo, hi, true, _idx, half_l, LOOK_AHEAD, skip_player)
 	_m_speed = traffic.q_speed
-	if _m_gap < S0 + LC_MIN_GAP_T * v:
+	if _m_gap < S0 + _lc_gap_t() * v:
 		return false
 	if v > _m_speed and (v - _m_speed) * (v - _m_speed) / (2.0 * maxf(_m_gap - S_STOP, 0.3)) > B_SAFE:
 		return false
@@ -433,7 +463,7 @@ func _merge_safe(lx: float, v: float) -> bool:
 	var fs := traffic.q_speed
 	if traffic.q_player:
 		return fg >= PLAYER_MIN_GAP and (fs <= v or fg / (fs - v) >= PLAYER_TTC)
-	if fg < S0 + LC_MIN_GAP_T * fs:
+	if fg < S0 + _lc_gap_t() * fs:
 		return false
 	return fs <= v or (fs - v) * (fs - v) / (2.0 * maxf(fg - S_STOP, 0.3)) <= B_SAFE
 
@@ -444,7 +474,7 @@ func _start_lane_change(lane: int, urgent: bool) -> void:
 	changing = true
 	_lc_t = 0.0
 	_lc_dur = LC_TIME_URGENT if urgent else LC_TIME
-	_lc_cooldown = LC_COOLDOWN
+	_lc_cooldown = RB_LC_COOLDOWN if rule_breaker else LC_COOLDOWN
 	lane_changes += 1
 	_scan_in = 0
 	traffic.note_lane_change(self)

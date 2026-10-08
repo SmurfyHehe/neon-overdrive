@@ -1,6 +1,6 @@
-# Corrupt police and Pike: story and gameplay proposal (2026-10-08, rev 4, final)
+# Corrupt police and Pike: story and gameplay proposal (2026-10-08, rev 5)
 
-Status: DECIDED by Roy (rounds 1-3, 2026-10-08), except what the rookie does about the player at the end (open, 7b). Docs only. Nothing is built. Story is Roy's to write; every name is a placeholder. Police are Stage F, so this shapes Stage F and the story, it does not jump ahead of them.
+Status: DECIDED by Roy (rounds 1-3, 2026-10-08), except what the rookie does about the player at the end (open, 7c). Docs only. Nothing is built. Story is Roy's to write; every name is a placeholder. Police are Stage F, so this shapes Stage F and the story, it does not jump ahead of them.
 
 **Roy's ask (2026-10-08 12:29):** some police are corrupt and work with Pike. They side with Pike but also hate the player, because Pike uses racers against the player. Research it.
 
@@ -211,20 +211,52 @@ Honest cops also **call off** a chase that gets too dangerous for traffic (the p
 2. **Act 2:** Dave's broadcasts about shakedowns get his attention. He notices the sergeant and the veteran keep going quiet, asks about it, is told to drop it.
 3. **The Turn:** like Serpico, the bad cops leave him without backup in a dangerous moment. He survives. Next night, the note on your wiper: first private meeting. He tells you what he wants (proof he can use) and what he will never do.
 4. **Act 3:** you bring him proof in two or three short meetings, each one tense. He never thanks you. On Dave's show you hear the effect: a stop "with no record" now has one.
-5. **Ending:** the rookie arrests the sergeant and the veteran. **What he does about you next is open** (7b).
+5. **Ending:** the rookie arrests the sergeant and the veteran. **What he does about you next is open** (7c).
 
-### 7b. Open: what the rookie does about you at the end (Roy: could break the story)
+### 7b. How real life handles the honest cop (Roy asked, 2026-10-08 14:25)
 
-Not decided. Each option and how it could hurt the story:
+**Real cases.** Every real case below ends the same way: the bad cops are caught, and the honest cop pays for it.
 
-| Option | What happens | Story risk |
+| Case | What happened | What it means for the rookie |
 |---|---|---|
-| He comes after you ("you're next") | Arrests the bad cops, then turns on you; a final chase or a warning | Can make the win feel hollow, and makes all your help feel like it was used against you. Also clashes with "the shop is saved" if you end in cuffs |
-| He lets you go once | "Tonight you get a head start. Next time, no." | Bends his high ground at the very end, the thing Roy wants protected |
-| He does nothing about you | Arrests them and walks away; you never see him again | Safe but flat; wastes a strong character |
-| He becomes your honest rival after the story | Free roam after the ending: he leads the honest police, a fair, tough cop who chases you | Keeps his high ground and gives free roam a face; needs the post-ending free play to exist (it does: legends reunion) |
+| **Frank Serpico**, NYPD, 1967-71 | Reported bribes inside the department; nothing happened. Went to the *New York Times*, which led to the Knapp Commission. Shot during an arrest; colleagues did not call for help. Still seen as a traitor by many officers ([Wikipedia](https://en.wikipedia.org/wiki/Frank_Serpico)) | The inside is blocked, so the honest cop goes to the press: our Dave |
+| **Robert Leuci** ("Prince of the City"), NYPD narcotics, early 1970s | Was himself part of a dirty unit. Agreed to wear a wire for federal prosecutors on one condition: he would not have to give up his partners. His tapes helped indict 52 officers. In the film his partners turn on him, one dies by suicide, and his cousin in the Mafia ends up dead ([Wikipedia](https://en.wikipedia.org/wiki/Prince_of_the_City)) | Working with the dirty side to catch them costs everything. This is why the rookie must stay clean |
+| **Rampart scandal**, LAPD, 1998-2000 | Exposed not by an honest cop but by a **dirty one who flipped**: Officer Rafael Pérez, caught stealing cocaine, traded testimony for a lighter sentence and named about 70 officers. 106 convictions overturned, about $125 million paid in settlements, five years of federal oversight ([Wikipedia](https://en.wikipedia.org/wiki/Rampart_scandal)) | A second route: the veteran could flip on the sergeant to save himself |
+| **Baltimore Gun Trace Task Force**, 2016-18 | Caught by **federal investigators**, not by colleagues. At trial, **drug dealers the officers had robbed testified** against them ([The Daily Record](https://thedailyrecord.com/2018/02/01/baltimore-police-trial/), [WYPR](https://www.wypr.org/wypr-news/2018-06-06/how-the-gttf-cops-were-caught-and-why-didnt-local-authorities-catch-em)) | Real prosecutors **do** use criminals as witnesses, but never let them off for it. So the rookie can hear the player out and still owe them nothing |
+| **Adrian Schoolcraft**, NYPD, 2008-10 | Secretly recorded his precinct's arrest quotas and hidden crimes. Superiors harassed him, then officers entered his flat and had him held in a psychiatric ward. He gave the tapes to a newspaper; settled with the NYPD for $600,000 in 2015 ([Wikipedia](https://en.wikipedia.org/wiki/Adrian_Schoolcraft)) | The department attacks the whistleblower, not the bad cops |
+| **Joe Crystal**, Baltimore detective, 2012-14 | Testified against two officers who beat a man; found a **dead rat on his car**, was shunned, and left the force ([CBS Baltimore](https://www.cbsnews.com/baltimore/news/dead-rat-on-his-car-police-probe-allegations-of-detective-who-testifed-against-2-officers)) | The cost is personal: threats, no backup, no friends |
 
-Whatever is picked, two rules protect the story: the rookie never gets paid back for the meetings, and the ending never takes the shop or the car away because of him.
+**Films and games with the same shape.**
+
+| Story | The honest one | How it ends for them |
+|---|---|---|
+| **Training Day** (2001) | Rookie Jake Hoyt, one day with corrupt Det. Alonzo Harris. Early on, Jake stops two addicts attacking a girl. Later a gang is paid to kill him, but the girl turns out to be the gang leader's cousin, so they let him go ([Wikipedia](https://en.wikipedia.org/wiki/Training_Day)) | Jake survives because he did the right thing for a stranger, not because he made a deal. He takes Alonzo's stolen money as evidence. Alonzo is killed by the Russians he owed |
+| **Serpico** (1973 film) | Serpico, as above | Wins the hearing, loses his career, leaves the country |
+| **L.A. Confidential** (1997) | Ed Exley, by-the-book and ambitious | Kills the corrupt captain himself; the department covers it up and gives Exley a medal for keeping quiet ([Wikipedia](https://en.wikipedia.org/wiki/L.A._Confidential_(film))) |
+| **GTA San Andreas** (2004) | Officer Jimmy Hernandez, a newer member of the corrupt C.R.A.S.H. unit | Reports to Internal Affairs; Tenpenny and Pulaski find out and kill him ([GTA Wiki](https://gta.fandom.com/wiki/Jimmy_Hernandez)) |
+| **Need for Speed Heat** (2019) | (no honest cop hero; the racers expose Mercer) | Mercer falls; his partner takes over the unit and vows to end street racing ([Wikipedia](https://en.wikipedia.org/wiki/Need_for_Speed_Heat)) |
+| The Wire, The Departed, Sleeping Dogs (from memory, not re-checked) | Honest or undercover cops inside a dirty system | Usually win the case and lose something personal |
+
+**The pattern to steal:** the honest cop wins the case and loses something; he never becomes the criminal's friend; when criminals help him, it is because of something he did right, not a deal (Training Day's girl).
+
+### 7c. Open: what the rookie does about you at the end (more ideas)
+
+Roy: could break the story. Not decided. Expanded list:
+
+| # | Idea | What happens | Story risk |
+|---|---|---|---|
+| E1 | **"You're next"** | Arrests them, turns on you: a final chase or a warning | Can make the win feel hollow; clashes with "the shop is saved" if you end in cuffs |
+| E2 | **Head start** | "Tonight you get a head start. Next time, no." | Bends his high ground at the very end |
+| E3 | **Walks away** | Arrests them and you never see him again | Safe but flat; wastes a strong character |
+| E4 | **One ticket** | He writes you a single ticket on the spot, for something real you did back in Act 1 ("Pier Road, red light"). Then leaves | Low risk. Keeps his line without wrecking the win; a small, dry ending that fits the tone |
+| E5 | **New sergeant** | He is promoted into the sergeant's job. In free roam after the story he leads the honest police: harder chases, but fair, no shakedowns | Low risk. Gives free roam a face; needs no extra scene |
+| E6 | **He pays for it** (Serpico, Crystal, Schoolcraft) | The department punishes him: desk job, dead rat on his car, he quits. You see him later working nights at the gas station or driving for Ferris | Bittersweet and true to life; may feel like a downer after your win |
+| E7 | **The veteran flips** (Rampart) | The sergeant's partner turns on him to save himself; the rookie gets the confession | Gives the veteran a last scene; shares the credit away from the rookie |
+| E8 | **The trial** (Baltimore) | You must testify. Your own racing comes out in court: you get a fine, he gets the conviction | Strong and real; adds a non-driving scene the game has no system for yet |
+| E9 | **He is killed** (GTA San Andreas) | The bad cops get to him before the end; you finish it for him | Very dark; makes the ending a revenge story, which is a different game |
+| E10 | **Your choices decide** | How cleanly you got the proof decides which ending you get (E1, E4 or E5) | Most work: two or three endings to build and test |
+
+**Recommendation: E4 + E5.** At the arrest he writes you one ticket, his line held. After the credits he is the new sergeant and the honest police you race in free roam are his. It keeps his high ground, never takes the shop or the win away, and costs one short scene plus a name on the free-roam police. E6 is the most true to life if you want a harder ending.
 
 ## 8. How it fits heat and the helicopter
 
@@ -245,7 +277,7 @@ Whatever is picked, two rules protect the story: the rookie never gets paid back
 | Act 2 | Pike's racers start the tip-offs and setup races. The rookie starts asking questions |
 | Turn | The night Dave's tower goes silent: the sergeant's car is outside the liquor store with Ironbridge's cars. The rookie is left without backup; next night, his note on your wiper |
 | Act 3 | Private meetings: you bring proof he can use by the book. Dave's show carries the rest |
-| Ending | The rookie arrests the sergeant and the veteran during the Ledger rematch night. What he does about you: open (7b) |
+| Ending | The rookie arrests the sergeant and the veteran during the Ledger rematch night. What he does about you: open (7c) |
 
 ## 10. Cost and assets
 
@@ -255,7 +287,7 @@ Whatever is picked, two rules protect the story: the rookie never gets paid back
 
 ## Still open
 
-- What the rookie does about the player at the end (section 7b). Roy: could break the story; decide when the story is written.
+- What the rookie does about the player at the end (section 7c). Recommended: E4 one ticket + E5 new sergeant.
 - Names, dialogue and the exact story beats are Roy's to write.
 
 ## Sources
@@ -264,6 +296,13 @@ Whatever is picked, two rules protect the story: the rookie never gets paid back
 - [Need for Speed: Undercover, Wikipedia](https://en.wikipedia.org/wiki/Need_for_Speed:_Undercover)
 - [PERF report recommends limiting police pursuits, Police1 (2023)](https://www.police1.com/suspect-pursuit/articles/perf-report-recommends-limiting-police-pursuits-to-violent-crimes-suspects-who-pose-imminent-threats-Am1uwNdLFpoXkIr1)
 - [Rumbler low-frequency siren, Federal Signal](https://www.fedsig.com/product/rumbler)
+- [Rampart scandal, Wikipedia](https://en.wikipedia.org/wiki/Rampart_scandal)
+- [Prince of the City, Wikipedia](https://en.wikipedia.org/wiki/Prince_of_the_City)
+- [Adrian Schoolcraft, Wikipedia](https://en.wikipedia.org/wiki/Adrian_Schoolcraft)
+- [Dead rat on his car, CBS Baltimore](https://www.cbsnews.com/baltimore/news/dead-rat-on-his-car-police-probe-allegations-of-detective-who-testifed-against-2-officers)
+- [Training Day, Wikipedia](https://en.wikipedia.org/wiki/Training_Day)
+- [L.A. Confidential (film), Wikipedia](https://en.wikipedia.org/wiki/L.A._Confidential_(film))
+- [Jimmy Hernandez, GTA Wiki](https://gta.fandom.com/wiki/Jimmy_Hernandez)
 - [Frank Serpico, Wikipedia](https://en.wikipedia.org/wiki/Frank_Serpico)
 - [How the GTTF cops were caught, WYPR (2018)](https://www.wypr.org/wypr-news/2018-06-06/how-the-gttf-cops-were-caught-and-why-didnt-local-authorities-catch-em)
 - [Drug dealers testify against Baltimore Police at trial, The Daily Record (2018)](https://thedailyrecord.com/2018/02/01/baltimore-police-trial/)

@@ -27,7 +27,7 @@ static var volumes := {"Master": 1.0, "Engine": 1.0, "Effects": 1.0, "Music": 1.
 static func set_volume(channel: String, value: float) -> void:
 	if not CHANNELS.has(channel):
 		return
-	volumes[channel] = clampf(value, 0.0, 1.0)
+	volumes[channel] = clampf(value, 0.0, 1.0) if is_finite(value) else 1.0  # clampf passes NaN through
 	_apply(channel)
 
 static func apply_all() -> void:
@@ -51,7 +51,8 @@ static func load_settings() -> void:
 	var cfg := ConfigFile.new()
 	var ok := cfg.load(path) == OK
 	for channel in CHANNELS:
-		volumes[channel] = clampf(float(cfg.get_value("audio", channel.to_lower(), 1.0)), 0.0, 1.0) if ok else 1.0
+		var v := float(cfg.get_value("audio", channel.to_lower(), 1.0)) if ok else 1.0
+		volumes[channel] = clampf(v, 0.0, 1.0) if is_finite(v) else 1.0  # a hand-edited "nan" loads as NaN
 	apply_all()
 
 static func save_settings() -> bool:

@@ -73,6 +73,7 @@ call :run auto_tune_worker_mode --headless
 call :run tune_params --headless
 call :run auto_tune_rules --headless
 call :run tune_slots --headless
+call :run settings_safety --headless
 call :run traffic_spawn "--headless --fixed-fps 60"
 rem ~17 s: full throttle at ~245 km/h across floating-origin recenters (the old ground-slab kick), at the game's 120 Hz.
 call :run recenter_kick "--headless --fixed-fps 120"

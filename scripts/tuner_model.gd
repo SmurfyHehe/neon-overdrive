@@ -81,6 +81,7 @@ static func pages() -> Array:
 		]},
 		{"id": "brakes", "title": "Brakes", "settings": [
 			_range("brake_force_multiplier", "Brake pressure", ["brake_force_multiplier"], 1.0, 3.0, "Soft", "Hard", "More pressure stops harder until the tyres lock; past that, ABS does the work.", "x"),
+			_choice("bias_mode", "Bias mode", ["Auto", "Manual"], "Auto splits the braking from the springs, as the factory does. Manual lets you set the split yourself."),
 			_range("front_brake_bias", "Brake bias", ["front_brake_bias"], 0.45, 0.75, "Rear", "Front", "More front bias is stable under braking. More rear bias helps the car rotate into a corner, and can spin it.", "bias"),
 		]},
 		{"id": "aero", "title": "Aero", "settings": [
@@ -152,6 +153,8 @@ func set_notch(s: Dictionary, n: int) -> void:
 
 ## 0-based index of the option the car is on, or -1 for none (a custom value).
 func choice_index(s: Dictionary) -> int:
+	if s.id == "bias_mode":
+		return 0 if float(spec.get("front_brake_bias", -1.0)) < 0.0 else 1  # Manual is any set value
 	for i in s.options.size():
 		if _matches(choice_values(s.id, i)):
 			return i
@@ -190,12 +193,16 @@ func choice_values(id: String, i: int) -> Dictionary:
 			var off := TuneParams.find("front_abs_spin_difference_threshold").max as float
 			return {"front_abs_spin_difference_threshold": [off, float(stock.front_abs_spin_difference_threshold)][i],
 				"rear_abs_spin_difference_threshold": [off, float(stock.rear_abs_spin_difference_threshold)][i]}
+		"bias_mode":
+			# Manual starts from the split Auto was giving, so switching changes nothing yet.
+			var auto_bias: float = car.front_axle.brake_bias if car != null and car.is_ready else 0.55
+			return {"front_brake_bias": [-1.0, _clamp_path("front_brake_bias", snappedf(auto_bias, 0.01))][i]}
 		"stability":
 			return {"stability_yaw_strength": [0.0, float(stock.stability_yaw_strength) * 0.5, float(stock.stability_yaw_strength)][i]}
 	return {}
 
 func _default_choice(s: Dictionary) -> int:
-	return {"compound": 1, "power_band": 1, "traction": 1, "abs": 1, "stability": 2}.get(s.id, 0)
+	return {"compound": 1, "power_band": 1, "traction": 1, "abs": 1, "stability": 2, "bias_mode": 0}.get(s.id, 0)
 
 func value_text(s: Dictionary) -> String:
 	if s.kind == "choice":

@@ -26,6 +26,13 @@ static func set_on(effect: String, on: bool) -> void:
 	if enabled.has(effect):
 		enabled[effect] = on
 
+## A file value as a switch. bool("false") is true (any non-empty string), so a
+## hand-edited quoted "false" would leave the effect on.
+static func _to_bool(x: Variant) -> bool:
+	if x is String:
+		return x.strip_edges().to_lower() in ["true", "1", "yes", "on"]
+	return bool(x)
+
 static func set_mirror_quality(q: int) -> void:
 	mirror_quality = clampi(q, 0, MIRROR_QUALITIES.size() - 1)
 
@@ -38,7 +45,7 @@ static func load_settings() -> void:
 	var cfg := ConfigFile.new()
 	var ok := cfg.load(AudioSettings.path) == OK
 	for e in EFFECTS:
-		enabled[e] = bool(cfg.get_value("fx", e, true)) if ok else true
+		enabled[e] = _to_bool(cfg.get_value("fx", e, true)) if ok else true
 	set_mirror_quality(int(cfg.get_value("fx", "mirror_quality", MIRROR_QUALITY_DEFAULT)) if ok else MIRROR_QUALITY_DEFAULT)
 	if OS.get_environment("NEON_FX") == "0":
 		for e in EFFECTS:

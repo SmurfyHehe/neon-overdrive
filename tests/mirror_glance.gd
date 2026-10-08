@@ -3,9 +3,10 @@ extends SceneTree
 # Mirror glance, off-screen mirror skip and blind-spot dots (2026-10-07),
 # headless and silent:
 # - "look_glance" is bound (V) and listed on the Controls page
-# - cockpit view, straight ahead, FOV 62: the rearview and left door mirror
-#   glass are on screen, the right door mirror is not, and it is never queued
-#   to render
+# - cockpit view, head at rest, FOV 55 (the slider's narrowest): the rearview is on
+#   screen, both door mirrors are not (at the default FOV all three are, see
+#   tests/cockpit_mirror_fov.gd), and neither door mirror is ever queued to
+#   render
 # - tap V holding right: the head turns to the right door mirror (whole glass
 #   on screen), it is the focused mirror at twice the resolution; steering left
 #   afterwards does not swing the head across
@@ -46,6 +47,7 @@ var failures: Array[String] = []
 var logger := ErrorCounter.new()
 var game: Node
 var right_queued := 0
+var left_queued := 0
 var tap_release := -1
 
 func _initialize() -> void:
@@ -104,6 +106,8 @@ func _physics_process(_delta: float) -> bool:
 	var m: CockpitMirrors = cam.frame.mirrors if cam.frame != null else null
 	if m != null and m.views[2].vp.render_target_update_mode != SubViewport.UPDATE_DISABLED and step == Step.STRAIGHT:
 		right_queued += 1
+	if m != null and m.views[1].vp.render_target_update_mode != SubViewport.UPDATE_DISABLED and step == Step.STRAIGHT:
+		left_queued += 1
 	match step:
 		Step.BOOT:
 			if waited < 5:
@@ -125,7 +129,10 @@ func _physics_process(_delta: float) -> bool:
 			_check(listed, "look_glance is on the Controls page")
 			cam.shake_enabled = false
 			root.size = Vector2i(1280, 720)   # headless defaults to 64x64; the angles assume 16:9
-			ViewSettings.set_cockpit_fov(ViewSettings.COCKPIT_FOV_DEFAULT)
+			# The narrowest FOV: the only one where the resting head turn
+			# (ChaseCamera.COCKPIT_YAW_DEG) still leaves the right mirror off
+			# screen, to check an off-screen mirror is skipped.
+			ViewSettings.set_cockpit_fov(ViewSettings.COCKPIT_FOV_MIN)
 			_put_car(p, 0.0, 200.0, false)
 			cam.set_view(ChaseCamera.View.COCKPIT)
 			_go(Step.STRAIGHT)
@@ -136,9 +143,9 @@ func _physics_process(_delta: float) -> bool:
 				var right := _on_screen(cam, m.views[2].quad)
 				print("straight ahead, FOV %.0f: rearview %.0f%%, left %.0f%%, right %.0f%% on screen" % [cam.fov, rear * 100, left * 100, right * 100])
 				_check(rear > 0.9, "the rearview is on screen looking ahead (%.2f)" % rear)
-				_check(left > 0.5, "the left door mirror is on screen looking ahead (%.2f)" % left)
-				_check(right == 0.0 and not CockpitMirrors.glass_on_screen(cam, m.views[2].quad), "the right door mirror is off screen looking ahead (%.2f)" % right)
-				_check(right_queued == 0, "an off-screen mirror is never queued to render (%d ticks)" % right_queued)
+				_check(left == 0.0 and not CockpitMirrors.glass_on_screen(cam, m.views[1].quad), "at FOV 55 the left door mirror is off screen (%.2f)" % left)
+				_check(right == 0.0 and not CockpitMirrors.glass_on_screen(cam, m.views[2].quad), "at FOV 55 the right door mirror is off screen (%.2f)" % right)
+				_check(left_queued == 0 and right_queued == 0, "an off-screen mirror is never queued to render (%d, %d ticks)" % [left_queued, right_queued])
 				Input.action_press("steer_right")
 				_tap()
 				_go(Step.TAP_RIGHT)
@@ -165,7 +172,7 @@ func _physics_process(_delta: float) -> bool:
 				_go(Step.AHEAD)
 		Step.AHEAD:
 			if waited == SETTLE:
-				_check(cam.glance == 0 and absf(cam.glance_yaw) < 1.0, "tap V with no steering looks ahead again (glance %d, yaw %.1f)" % [cam.glance, cam.glance_yaw])
+				_check(cam.glance == 0 and absf(cam.glance_yaw + ChaseCamera.COCKPIT_YAW_DEG) < 1.0, "tap V with no steering looks ahead again (glance %d, yaw %.1f)" % [cam.glance, cam.glance_yaw])
 				_check(cam.glance_lean.length() < 0.005, "the lean comes back (%s)" % cam.glance_lean)
 				_check(m.focus == 0 and m.views[2].vp.size == CockpitMirrors._scaled(CockpitMirrors.SIDE_SIZE), "no focus, normal size (%d, %s)" % [m.focus, m.views[2].vp.size])
 				Input.action_press("steer_left")
@@ -189,7 +196,7 @@ func _physics_process(_delta: float) -> bool:
 				_tap()
 			if waited == SETTLE:
 				Input.action_release("steer_right")
-				_check(cam.glance == 0 and absf(cam.glance_yaw) < 1.0, "a double tap resets to straight ahead (glance %d, yaw %.1f)" % [cam.glance, cam.glance_yaw])
+				_check(cam.glance == 0 and absf(cam.glance_yaw + ChaseCamera.COCKPIT_YAW_DEG) < 1.0, "a double tap resets to straight ahead (glance %d, yaw %.1f)" % [cam.glance, cam.glance_yaw])
 				cam.set_view(ChaseCamera.View.CHASE)
 				Input.action_press("steer_right")
 				_tap()

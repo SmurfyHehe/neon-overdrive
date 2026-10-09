@@ -2,8 +2,8 @@
 
 These are the designs of all 12 cars, as audited in Godot on 2026-10-05.
 The game models are these proxies, exported by `tools/fleet_design/game_export.py`:
-the P1 coupe (`scripts/p1_coupe_builder.gd`) and the traffic cars, every
-variant (`scripts/npc_car_builder.gd`, stage B step 5). The other player cars
+the P1 coupe (`scripts/car/p1_coupe_builder.gd`) and the traffic cars, every
+variant (`scripts/traffic/npc_car_builder.gd`, stage B step 5). The other player cars
 come in stage D and the police cars in stage F.
 
 | File | What it is |
@@ -37,12 +37,19 @@ folder. The proxies are design references, not the game models.
   its outline: a light bar, a push bar, an A-pillar spotlight or antennas.
   Livery is navy `#1B2A4A` with silver `#C9CED6` doors and roof.
 
-## The 12 cars
+## The 13 cars
+
+P0 is the prologue car (Roy, 2026-10-09): a worn rear-engine beater, power
+tier T0, an original design inspired only by the rear-engine air-cooled
+economy cars of the 1960s (no brand, no logos). It came after the B1 audit, so
+it is not in `verify.json`, `outline_check.png` or `audit/`; its sheet is
+`sheets/p0_beater.png` and its game model `scripts/car/p0_beater_data.gd`.
 
 Sizes are in metres. H is the overall height, including roof gear.
 
 | Car | L × W × H | Wheelbase | Silhouette rule (short) |
 |---|---|---|---|
+| P0 Rear-engine beater (starter, added 2026-10-09) | 4.05 × 1.58 × 1.50 | 2.40 | one dome nose to tail, pontoon fenders bulging at each wheel, round lamps up on the front fenders, louvred engine lid, tall narrow tyres in sagging arches |
 | P1 Sports coupe | 4.42 × 1.80 × 1.24 | 2.52 | long hood, cabin pushed back, fastback, hoop wing, pop-ups |
 | P2 Hot hatch | 4.05 × 1.83 × 1.40 | 2.56 | short brick, narrow upright cabin on box-blistered hips, upright hatch under an overhanging spoiler |
 | P3 Tuner sedan | 4.48 × 1.78 × 1.36 | 2.62 | square four-door, boxed overfenders, pedestal wing, 4 round tail lamps |
@@ -80,7 +87,7 @@ patrol SUV.
     both see it (moved there in the audit from rear windows and trunk lids;
     the hot hatch's old one sat under its spoiler).
 
-  Checked in Godot (`tests/fleet_design_check.gd`): every slot lies on the body
+  Checked in Godot (`tests/fleet/fleet_design_check.gd`): every slot lies on the body
   in every build, nothing hovers over it, the chase cam sees the rear one, and
   every orbit camera sees at least one, all 96 of them (the sun strip is what
   covers the 3 ground-level views of the nose that the hood slot missed). Each slot's 3D centre,
@@ -96,6 +103,7 @@ patrol SUV.
 
 - **Palette:** Amber vs. Dusk, as listed in ROADMAP.md.
 - **Hero paints:**
+  - P0 Faded sage `#8C9B88`, with a primer-grey front lid `#5F5B58` (the one panel never painted)
   - P1 Sodium `#FF8A1F`
   - P2 Rally red `#C41E24`
   - P3 Pearl white `#E9E6DF` with bronze wheels
@@ -116,7 +124,7 @@ patrol SUV.
 - **Proxy size:** 2.2k–3.0k triangles per car without the light and grille
   decals, 2.4k–3.3k with them (what Godot draws), against targets of 10k
   (player), 6k (police) and 4k (traffic).
-- **Measured in Godot** (`tests/fleet_budget_scene.gd`, the stage A scene from
+- **Measured in Godot** (`tests/fleet/fleet_budget_scene.gd`, the stage A scene from
   the chase cam): 30 traffic cars as separate meshes add 150 draw calls
   (176 → 326, 5 per car); drawn as one MultiMesh per design they add 6.
   At full budget (30 traffic, 3 police, the player) a frame has about 157k
@@ -136,7 +144,7 @@ patrol SUV.
 ## Verification
 
 - **Audit (2026-10-05), in Godot 4.7.2:**
-  - `tests/fleet_silhouette_sweep.gd` renders each car's outline from 96 orbit
+  - `tests/fleet/fleet_silhouette_sweep.gd` renders each car's outline from 96 orbit
     cameras (every 15°, at 2°, 15°, 35° and 60° up) plus the chase view, and
     flags "outline twins": two cars whose outlines nowhere differ by more than
     1% of their size. B1 had 9 such view-pairs; 2 remain, each at one high

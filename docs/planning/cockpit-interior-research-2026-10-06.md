@@ -5,7 +5,7 @@ Research only. Nothing is built; Roy signs off before any build. Mirrors are cov
 
 ## 1. What Roy is looking at (read from main @ bd7957c)
 
-- `scripts/cockpit_frame.gd` is unchanged since the Phase C commit (0872d0d); no interior branch exists on origin. So the build Roy saw is almost certainly this stand-in (inferred: a local unpushed build would not show up here).
+- `scripts/view/cockpit_frame.gd` is unchanged since the Phase C commit (0872d0d); no interior branch exists on origin. So the build Roy saw is almost certainly this stand-in (inferred: a local unpushed build would not show up here).
 - It is 5 unshaded boxes + a torus wheel, all near-black (`#0D0D12`, `#1A171F`), child of the camera. Camera: eye `(-0.30, 1.05, -0.15)` car-local, vertical FOV **78°** (~110° horizontal at 16:9). The coupe body is hidden in cockpit view, so there is no hood.
 - Measured from the code (angles from the eye, looking straight ahead):
 
@@ -74,7 +74,7 @@ The cowl at −14° is a deliberate cheat: halfway between a real car (~−6°) 
 **Floating hands (Roy, 2026-10-06 15:50: wants hands, but floating)**
 - Two gloved/bare hands on the rim with **no forearms or arms**: each ends in a clean cuff, so nothing reaches back toward the body and nothing blocks the interior view.
 - Grip at 9 and 3 o'clock, parented to the wheel, so they turn with it (full lock is ~86°, no hand-over-hand needed).
-  - Update 2026-10-07: grip lowered to about 8 and 4 (`DriverModel.GRIP_DEG`); hands turn with the wheel only between the flat bottom and about half past 2 and slide past that, so they no longer ride up over the cluster at lock. `tests/cockpit_driver.gd` now checks every hand mesh corner against the −18° budget (was 9° at lock, now 19.4°).
+  - Update 2026-10-07: grip lowered to about 8 and 4 (`DriverModel.GRIP_DEG`); hands turn with the wheel only between the flat bottom and about half past 2 and slide past that, so they no longer ride up over the cluster at lock. `tests/view/cockpit_driver.gd` now checks every hand mesh corner against the −18° budget (was 9° at lock, now 19.4°).
 - Sightline budget: hand tops at or below **−18°** (inside the wheel's lower area, well under the −14° dash line); together ≤600 triangles, 1 draw call; same vertex-baked light, sodium sweep and gauge spill as the cabin.
 - Shifter hand: at FOV 62 the shifter sits below the screen edge (~−40°), so in step 1–2 hands stay on the wheel. When the visible shifter lands (proposal step 3), the right hand hops to the shifter for each manual shift and back (~0.25 s), never crossing the clear band.
 - Per car: glove or skin style is a field in the art brief (e.g. coupe: black leather driving gloves with an amber stitch).
@@ -155,8 +155,8 @@ Not started: waits for the first laptop session Roy allows (one request is alrea
 Model: Opus or Sonnet (geometry and a test, no art judgement). The art pass after it is Fable.
 
 Changes (values only, no new art):
-- `scripts/chase_camera.gd`: `COCKPIT_FOV` 78 → 62 (speed widening +6 stays); `COCKPIT_EYE` lateral −0.30 → −0.35. Eye height and z unchanged in this PR (the frame is camera-local, so z only matters once the hood or body shows).
-- `scripts/cockpit_frame.gd`, re-placed to the spec:
+- `scripts/view/chase_camera.gd`: `COCKPIT_FOV` 78 → 62 (speed widening +6 stays); `COCKPIT_EYE` lateral −0.30 → −0.35. Eye height and z unchanged in this PR (the frame is camera-local, so z only matters once the hood or body shows).
+- `scripts/view/cockpit_frame.gd`, re-placed to the spec:
   - Wheel centre (0, −0.334, −0.62): rim top at −15.5°, below the dash line (now −10.4°). Grip tube 0.03 → 0.034 m.
   - Dash slab and lip top at −14.5° (lip top y ≈ −0.285 at z −1.10; now −20.8°). The dash comes *up* a little because the wheel no longer hides it, and road stays visible from ~4 m.
   - Roof edge bottom at +24° or higher (y ≥ 0.467 at z −1.05; now +24.6°, roughly unchanged).
@@ -168,7 +168,7 @@ Changes (values only, no new art):
   - a pillar is wider than 6°;
   - clear glass in the centre column is below 55% of screen height.
   It also prints the measured angles so the numbers in this file can be checked.
-- `tests/cockpit.gd` must keep passing (view switch, wheel turns, audio muffling).
+- `tests/view/cockpit.gd` must keep passing (view switch, wheel turns, audio muffling).
 - Hands are built in the art pass (step 2), but the sightline test already reserves their budget: anything tagged as hands must stay at or below −18°.
 
 Verification: real headless Godot runs of `cockpit_sightline` and `cockpit` (plus the full `run_tests.bat`), then one cockpit screenshot at 0 and 100 km/h from the laptop so Roy judges the view before merging.

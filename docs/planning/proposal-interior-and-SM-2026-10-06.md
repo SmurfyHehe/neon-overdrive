@@ -2,7 +2,7 @@
 
 Nothing is built. Each numbered step is its own PR, and I stop for your sign-off before each one starts and before each one is called done. Approving this page approves the order only, not a batch.
 
-## What is ugly now (read from `scripts/cockpit_frame.gd`, 61 lines)
+## What is ugly now (read from `scripts/view/cockpit_frame.gd`, 61 lines)
 - Everything is flat, unshaded near-black boxes (`SHADING_MODE_UNSHADED`), so there is no depth, no light and no texture. The dash reads as a black slab.
 - A-pillars and roof edge are plain tilted boxes; no door cards, mirror, seat, dash hood or centre console.
 - The wheel is a thin torus with three stick spokes; no hub, no stitching, no grip shape.

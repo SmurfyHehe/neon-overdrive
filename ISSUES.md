@@ -107,11 +107,11 @@ File as GitHub issues when each is picked up.
 | G1 | Car rendered as a bare frame, loft winding (#14) | PR #45 |
 | G2 | Glass loft zero normals (#15) | PR #43 |
 | H1 | No audio at all (#18) | `093b3ef` (engine synth, PR #57), `18e0509` (stage A wind/road/squeal/kerb), `8890350` (Phase B driveline); tests `car_audio`, `audio_master`, `driveline_audio`. Engine-tuning direction is now #80. **DONE; GitHub #18 is still open: recommend closing** (the issue says "never built"; audio is built and tested) |
-| #55 | Keyboard steering reaches full lock at any speed | `764b3f0`; `tests/feel_pass_1.gd` checks the ramp and the speed cap. **DONE; GitHub #55 is still open: recommend closing** |
+| #55 | Keyboard steering reaches full lock at any speed | `764b3f0`; `tests/car/feel_pass_1.gd` checks the ramp and the speed cap. **DONE; GitHub #55 is still open: recommend closing** |
 | #48 | Workers are told to check the queue but `office-queue` refuses them (403) | **Closed on GitHub 2026-09-29** (it was listed open here); docs fix in PR #77 (`3cc3b30`) |
-| #63 | Neutral test car | PR #68 (`e4f23cd`); `tests/test_car.gd` |
-| #73 | Real turbo lag needs a physics addition | `65a4303` (PR #102); `tests/turbo.gd` (boost lags, blow-off, torque gain). **DONE; GitHub #73 is still open: recommend closing** |
-| #75 | `brake_force_multiplier` declared but never read | `ee9ee5a` (PR #78); read in `gevp_vehicle.gd:1234` (marked "Local change to vendored GEVP (#75)", **not** `DEVIATION`), set in `car_spec.gd`, and exercised by the brake run in `tests/tune_track.gd` (100-0 m). Closed on GitHub 2026-09-29 |
+| #63 | Neutral test car | PR #68 (`e4f23cd`); `tests/fleet/test_car.gd` |
+| #73 | Real turbo lag needs a physics addition | `65a4303` (PR #102); `tests/car/turbo.gd` (boost lags, blow-off, torque gain). **DONE; GitHub #73 is still open: recommend closing** |
+| #75 | `brake_force_multiplier` declared but never read | `ee9ee5a` (PR #78); read in `gevp_vehicle.gd:1234` (marked "Local change to vendored GEVP (#75)", **not** `DEVIATION`), set in `car_spec.gd`, and exercised by the brake run in `tests/tuning/tune_track.gd` (100-0 m). Closed on GitHub 2026-09-29 |
 
 ---
 
@@ -119,7 +119,7 @@ File as GitHub issues when each is picked up.
 
 **C3 / D5 (#28).** Buildings are 22 m apart, and past them is a flat slab you
 can drive on. Nothing stops the player leaving the road. `is_off_road()`
-(`scripts/player.gd:286`) is still not called anywhere on `origin/main`.
+(`scripts/car/player.gd:286`) is still not called anywhere on `origin/main`.
 
 **E7–E9 (#62).** Audit-time numbers, before `764b3f0` evened the gearing. With `wheel_r 0.34`, `final_drive 4.1` and a 7000 rpm
 redline, the ratios `[3.6, 2.4, 1.8, 1.4, 0.95]` give:

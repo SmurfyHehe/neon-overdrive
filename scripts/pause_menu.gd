@@ -42,6 +42,8 @@ var gfx_aa: OptionButton
 var gfx_scale: HSlider
 var gfx_scale_label: Label
 var gfx_flags := {}   # flag -> CheckButton
+var gfx_test_button: Button
+var gfx_test_label: Label
 var _gfx_refreshing := false
 
 func _init(state: GameState) -> void:
@@ -216,6 +218,12 @@ func _build_graphics_page(center: CenterContainer) -> void:
 			_graphics_changed())
 		graphics_page.add_child(c)
 		gfx_flags[flag] = c
+	# Test my PC (small-ideas M3): the same check the first launch runs.
+	gfx_test_button = _add_button(graphics_page, "Test my PC", test_my_pc)
+	gfx_test_label = Label.new()
+	gfx_test_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	gfx_test_label.add_theme_color_override("font_color", SILVER)
+	graphics_page.add_child(gfx_test_label)
 	graphics_back_button = _add_button(graphics_page, "Back", show_main)
 
 func _add_option(parent: Control, text: String, items: Array, on_select: Callable) -> OptionButton:
@@ -239,6 +247,19 @@ func _graphics_changed() -> void:
 	GraphicsSettings.apply(get_tree())
 	GraphicsSettings.save_settings()
 	_refresh_graphics()
+
+## Measures this PC for a few seconds and picks a preset (QualityCheck).
+func test_my_pc() -> void:
+	if get_parent().get_node_or_null(^"QualityCheck") != null:
+		return
+	var qc := QualityCheck.new()
+	qc.finished.connect(func(preset: String, gpu_ms: float) -> void:
+		gfx_test_label.text = "Picked %s (Medium drew a frame in %.1f ms)" % [preset.capitalize(), gpu_ms]
+		gfx_test_button.disabled = false
+		_refresh_graphics())
+	gfx_test_button.disabled = true
+	gfx_test_label.text = "Testing..."
+	get_parent().add_child(qc)
 
 ## Shows the current values; the guard stops the widgets' own signals re-applying them.
 func _refresh_graphics() -> void:

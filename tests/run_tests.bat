@@ -129,6 +129,8 @@ if /i not "%~1"=="quick" (
 	call :run sky_probe
 	rem Real window: lamp positions come from MultiMesh transforms.
 	call :run passing_lamp_light
+	rem Real window: reads GPU frame times.
+	call :run quality_check
 	call :run exhaust_keys --headless
 	call :run mute --headless
 	call :run feel_pass_1 --headless

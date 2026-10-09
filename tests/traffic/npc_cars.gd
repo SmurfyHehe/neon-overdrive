@@ -6,7 +6,7 @@ extends SceneTree
 # Model checks, per build:
 #   - the body's bounding box is the sheet's length and height (fleet.json dims,
 #     3 cm, stock build) and at least its body width (the mirrors stick out past it);
-#   - triangles within the 4,000 traffic budget, and 8 draw calls;
+#   - triangles within the 4,000 traffic budget, and 8 draw calls (+1 underside);
 #   - two tail flares (one per side), behind the rear axle;
 #   - no magenta or cyan in any vertex colour or paint (tests/core/palette.gd rule);
 #   - exhaust tips behind the rear axle, 4 sticker slot placements on the body.
@@ -75,7 +75,10 @@ func _model_checks(kind: String, build: String, d: Dictionary) -> void:
 		_check(over > -0.03 and over < 0.16, "%s is %.3f m long, the sheet says %.2f" % [tag, aabb.size.z, d.length])
 	_check(aabb.size.x >= float(d.width_body) - 0.01, "%s is %.3f m wide, narrower than the sheet's %.2f body" % [tag, aabb.size.x, d.width_body])
 	_check(tris <= 4000, "%s has %d triangles, over the 4,000 traffic budget" % [tag, tris])
-	_check(calls == 8, "%s takes %d draw calls, not 8" % [tag, calls])
+	# 8 for the body and wheels, +1 for the underside the player and cop classes
+	# have up close (Undercarriage.draw_calls; traffic has none).
+	var want := 8 + Undercarriage.draw_calls(Undercarriage.role_for_kind(kind))
+	_check(calls == want, "%s takes %d draw calls, not %d" % [tag, calls, want])
 	for i in mesh.get_surface_count():
 		var cols: PackedColorArray = mesh.surface_get_arrays(i)[Mesh.ARRAY_COLOR]
 		for c in cols:

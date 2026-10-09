@@ -26,6 +26,8 @@ if "%NEON_TICKS%"=="" set "NEON_TICKS=60"
 if "%SOUND%"=="1" set "AUDIO="
 rem No traffic for the older drive-bot tests (they steer across lanes blind); the traffic_* tests ignore this and spawn their own.
 if "%NEON_TRAFFIC%"=="" set "NEON_TRAFFIC=0"
+rem No patrol car (police F1) in the older drive tests; tests/traffic/police_*.gd set their own.
+if "%NEON_POLICE%"=="" set "NEON_POLICE=0"
 rem Straight road for the older drive tests (they steer blind down -Z); the curve tests set their own.
 if "%NEON_CURVES%"=="" set "NEON_CURVES=0"
 if "%NEON_HILLS%"=="" set "NEON_HILLS=0"
@@ -101,6 +103,12 @@ rem The player's tune survives a reset and a relaunch (PlayerTune).
 call :run tuning/tune_persist --headless
 call :run core/settings_safety --headless
 call :run core/setting_danger --headless
+rem Save system: atomic files, 3 slots, chases, rename migration (scripts/save/).
+call :run core/save_system --headless
+rem F0: cash and bank through reloads, chases and 6 a.m. (and the HUD and pause screen).
+call :run core/wallet --headless
+rem Police F0/F1: heat levels and icons, cop_can_see_player, headlights off hides, night one lines.
+call :run traffic/police_heat --headless
 call :run traffic/traffic_spawn "--headless --fixed-fps 60"
 rem ~40 s: the traffic cars (stage B step 5) against their sheets, then a drive each at the game's 120 Hz.
 rem npc_cars drives every kind (13 since the player and cop cars joined), about 15 min: give it 20.
@@ -173,6 +181,10 @@ if /i not "%~1"=="quick" (
 	rem Also a real window (it reads the interpolated camera); ~45 s of driving 500 km down the road.
 	call :run world/floating_origin_drive
 	call :run core/game_state --headless
+	rem Save system in the game: resume exactly after a quit, quit mid-chase busts.
+	call :run core/save_resume --headless
+	rem Police F1 in the game: the stand-in patrol car spawns unseen, spots a lit car, not a dark one.
+	call :run traffic/police_patrol --headless
 	call :run tuning/tuning_panel --headless
 	call :run tuning/auto_tune_panel --headless
 	call :run tuning/tuner_screen --headless

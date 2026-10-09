@@ -61,8 +61,24 @@ var radio: RadioManager
 var night_clock: NightClock  # 8 p.m. to 6 a.m., saved (night_clock.gd); windows follow it
 var _bands := false  # hour bands drive traffic and Dave (bands_on)
 var world_mood: WorldMood  # tonight's events: rule-breaker share, bar close, meets, crackdowns
+var police_heat: PoliceHeat  # heat level + cop_can_see_player (police F0/F1)
+var police: PolicePatrol     # the stand-in patrol car; null with NEON_POLICE=0 or a benchmark
+var heat_icons: HeatIcons
 const TestMode := preload("res://scripts/core/test_mode.gd")
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
+
+# Save system (run structure, 2026-10-09): auto-save into one of 3 slots, and a
+# resume puts the run back where it was (scripts/save/). road_seed is kept so a
+# saved run rebuilds the same road; run is what read_run() gave back ({} =
+# a fresh start at the beginning of the road).
+const SaveDirector := preload("res://scripts/save/save_director.gd")
+const UserDirMigration := preload("res://scripts/save/user_dir_migration.gd")
+var saver: SaveDirector
+## Tonight's cash and the bank (F0, scripts/core/wallet.gd).
+var wallet: Node
+const Wallet := preload("res://scripts/core/wallet.gd")
+var road_seed := 0
+var run := {}
 
 func _ready() -> void:
 	# Auto-Tune worker mode (exported game): no world, just the search.
@@ -72,6 +88,8 @@ func _ready() -> void:
 		set_physics_process(false)
 		AutoTuneJob.run_worker(get_tree(), worker_dir)
 		return
+	# Before anything reads user://: a renamed build copies the old folder in.
+	UserDirMigration.run()
 	AudioSettings.load_settings()
 	TrafficSettings.load_settings()
 	FxSettings.load_settings()   # cockpit mirrors on/off and quality ([fx] in settings.cfg)
@@ -103,12 +121,20 @@ func _ready() -> void:
 		seed(Benchmark.SEED)
 	else:
 		randomize()
+	saver = SaveDirector.new(self)
+	if not benchmark:
+		run = saver.read_run()
 	# The clock first: the building window texture is painted for its time
 	# when the first chunk is built.
 	night_clock = NightClock.new()
 	if benchmark:
 		night_clock.fixed_minutes = NightClock.BENCHMARK_MINUTES  # same windows every run
 	add_child(night_clock)
+	if run.get("clock") is Dictionary:
+		night_clock.set_time(run.clock.get("minutes", 0.0), run.clock.get("night", 1))
+	wallet = Wallet.new()
+	wallet.name = "Wallet"
+	add_child(wallet)
 	# City lights: before the first chunk, which leaves the crossing's mouth
 	# open. Never in a benchmark run (same road every time).
 	Junction.enabled = TrafficSettings.city_lights and not benchmark
@@ -123,6 +149,7 @@ func _ready() -> void:
 	add_child(fx)
 	_setup_hud()
 	_setup_game_state()
+	_setup_police(benchmark)
 	# Dynamic resolution holds the frame rate inside the tier; benchmark runs
 	# keep a fixed scale (comparable numbers) unless --dynres=1.
 	if not benchmark or Benchmark.opt("dynres") == "1":
@@ -132,6 +159,7 @@ func _ready() -> void:
 	GraphicsSettings.apply(get_tree())
 	if benchmark:
 		add_child(Benchmark.new())
+	add_child(saver)
 
 func _setup_world() -> void:
 	var env := Environment.new()
@@ -288,7 +316,20 @@ func _setup_road_shape() -> void:
 		curviness = Benchmark.opt_float("curves", 0.0)
 		hilliness = Benchmark.opt_float("hills", 0.0)
 	var seed_env := OS.get_environment("NEON_ROAD_SEED")
-	var road_seed := int(seed_env) if seed_env.is_valid_int() else randi()
+	road_seed = int(seed_env) if seed_env.is_valid_int() else randi()
+	if not run.is_empty():
+		# A resumed run: its own road, and the floating origin where it was.
+		road_seed = int(run.road.seed)
+		curviness = float(run.road.curviness)
+		hilliness = float(run.road.hilliness)
+		kicker_chance = float(run.road.kicker_chance)
+		origin_index = int(run.origin_index)
+		recenter_count = int(run.get("recenter_count", 0))
+		if run.get("sections") is Dictionary:
+			for k in run.sections:
+				if run.sections[k] is Dictionary and str(k).is_valid_int():
+					section_cache[str(k)] = {"own_lanes": OWN_LANES, "onc_lanes": ONC_LANES,
+						"barrier": run.sections[k].get("barrier", false) == true}
 	RoadFrame.origin_index = origin_index
 	RoadFrame.align = RoadAlignment.new(road_seed, curviness, hilliness, kicker_chance) if curviness > 0.0 or hilliness > 0.0 else null
 	# Lane adds and drops, median splits and exits (road lane proposal): a
@@ -328,8 +369,14 @@ func _section_at(idx: int) -> Dictionary:
 
 # ---------- chunk pool ----------
 func _setup_chunk_pool() -> void:
+	# The chunk the car starts on: 0 for a fresh run, the saved car's for a
+	# resumed one (its index counts from origin_index, like _update_chunk_pool).
+	var start := 0
+	if not run.is_empty():
+		var z := RoadFrame.unroll(SaveDirector.v3(run.car.xform.slice(9, 12))).z
+		start = int(floor(-z / RoadChunkBuilder.CHUNK_LEN)) + origin_index
 	for i in range(CHUNKS_AHEAD + _chunks_behind() + CHUNKS_SPARE + 1):
-		var idx := i - _chunks_behind() - CHUNKS_SPARE
+		var idx := start + i - _chunks_behind() - CHUNKS_SPARE
 		var prev_cfg := _section_at(idx - 1)
 		var cfg := _section_at(idx)
 		var root := RoadChunkBuilder.build_chunk(idx, prev_cfg, cfg, origin_index)
@@ -420,6 +467,8 @@ func _shift_origin(shift_chunks: int) -> void:
 		RoadChunkBuilder.sync_collision(c.root)
 	# Traffic (milestone 3): every car gets the same bookkeeping as the player.
 	traffic.shift_world(offset)
+	if police != null:
+		police.shift_world(offset)
 	fx.shift_world(offset)  # skid marks are laid in world space
 	# The ground plane stays put: it is infinite.
 	# The camera follows the car's interpolated position in _process, so it
@@ -433,7 +482,11 @@ const PLAYER_SPAWN_LANE := 1
 func _setup_player() -> void:
 	player = PlayerCar.new()
 	player.position = RoadFrame.roll(Vector3(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, 0))
+	if not run.is_empty():
+		player.transform = SaveDirector.array_to_xform(run.car.xform)
 	add_child(player)
+	if not run.is_empty():
+		saver.restore_car(player, run.car)
 
 # ---------- traffic (milestone 3, stage B step 3) ----------
 # Lane-follow traffic: the same raycast Vehicle as the player, see
@@ -472,19 +525,30 @@ func toggle_mute() -> void:
 func _setup_hud() -> void:
 	var hud := Hud.new(player, camera, traffic)
 	hud.night_clock = night_clock
+	hud.wallet = wallet
 	add_child(hud)
 
 # ---------- game state (pause / restart / quit, issue #27) ----------
 func _setup_game_state() -> void:
 	game_state = GameState.new()
 	add_child(game_state)
-	add_child(PauseMenu.new(game_state))
+	var pause := PauseMenu.new(game_state)
+	pause.wallet = wallet
+	add_child(pause)
 	add_child(TunerScreen.new(player, game_state))
 	add_child(WarningLights.new(player))
 	add_child(PhotoMode.new(game_state, camera))
 	radio = RadioManager.new()
 	radio.listener = player  # reception follows the car (tunnels, bridges)
 	add_child(radio)
+	if run.get("radio") is float or run.get("radio") is int:
+		radio.tune_to(int(run.radio))
+	game_state.state_changed.connect(saver.on_state_changed)
+	game_state.restarting.connect(saver.on_restart)
+	game_state.quitting.connect(saver.save_now)
+	# 6 a.m.: tonight's cash goes into the bank (F0).
+	night_clock.night_ended.connect(func(_n: int) -> void: wallet.bank_night())
+	night_clock.night_ended.connect(func(_n: int) -> void: saver.save_now.call_deferred())
 	world_mood = WorldMood.new()
 	add_child(world_mood)
 	world_mood.event_started.connect(_on_event)
@@ -493,6 +557,30 @@ func _setup_game_state() -> void:
 	_bands = bands_on()
 	night_clock.hour_changed.connect(_on_hour)
 	night_clock.night_ended.connect(func(_n: int) -> void: radio.announce_hour(NightClock.END_HOUR))
+
+# ---------- police (F0/F1, scripts/traffic/police_heat.gd) ----------
+## Heat always exists (it is the hook police systems ask); the patrol car only
+## when PolicePatrol.enabled. Night one's lines go to Dave when his station is
+## on, else to the heat caption.
+func _setup_police(benchmark: bool) -> void:
+	police_heat = PoliceHeat.new()
+	police_heat.name = "PoliceHeat"
+	police_heat.player = player
+	police_heat.night_clock = night_clock
+	add_child(police_heat)
+	heat_icons = HeatIcons.new(police_heat)
+	add_child(heat_icons)
+	police_heat.line_said.connect(func(text: String) -> void:
+		if not radio.announce(text):
+			heat_icons.say(text))
+	game_state.restarting.connect(police_heat.reset)
+	if PolicePatrol.enabled(benchmark):
+		police = PolicePatrol.new()
+		police.name = "Police"
+		police.player = player
+		police.traffic = traffic
+		police.heat = police_heat
+		add_child(police)
 
 ## Dave reads the hour out. 8 p.m. only ever comes from the roll into the next
 ## night, right after his 6 a.m. sign-off, so it is skipped.

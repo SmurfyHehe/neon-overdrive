@@ -29,7 +29,7 @@ extends RefCounted
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
 const AtomicJson := preload("res://scripts/save/atomic_json.gd")
-const TestMode := preload("res://scripts/test_mode.gd")
+const TestMode := preload("res://scripts/core/test_mode.gd")
 
 const SLOTS := 3
 const DEFAULT_ROOT := "user://saves"

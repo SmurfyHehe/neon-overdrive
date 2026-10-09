@@ -22,7 +22,7 @@ extends Node
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
-const TestMode := preload("res://scripts/test_mode.gd")
+const TestMode := preload("res://scripts/core/test_mode.gd")
 
 const RUN_VERSION := 1
 const AUTOSAVE_SECS := 30.0

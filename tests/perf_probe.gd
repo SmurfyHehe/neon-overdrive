@@ -31,7 +31,18 @@ func _initialize() -> void:
 	var cars := int(_env("PROBE_CARS", str(TrafficSettings.CAR_COUNT_DEFAULT)))
 	var detail := float(_env("PROBE_DETAIL", str(TrafficSettings.DETAIL_DEFAULT)))
 	measure_frames = int(float(_env("PROBE_SECS", "20")) * 60.0)
-	game = Harness.boot(self, cars, detail, 777)
+	# Harness.boot(), but with a settings file of its own: the harness's file
+	# is shared with every traffic test, and a test running at the same time
+	# (another worktree, run_tests.bat) can rewrite it between our save and the
+	# game's load, so the probe silently measured 0 cars (2026-10-09).
+	seed(777)
+	OS.set_environment("NEON_TRAFFIC", str(cars))
+	AudioSettings.path = "user://perf_probe_settings.cfg"
+	TrafficSettings.set_car_count(cars)
+	TrafficSettings.set_detail_distance(detail)
+	TrafficSettings.save_settings()
+	game = (load("res://Game.tscn") as PackedScene).instantiate()
+	root.add_child(game)
 	process_frame.connect(_tick)
 
 func _env(k: String, d: String) -> String:
@@ -43,6 +54,9 @@ func _tick() -> void:
 	if frame == 2:
 		var p: Vehicle = game.get("player")
 		p.set("driver", Harness.lane_driver(Harness.lane_x(3), 1.0, 33.0))
+	if frame == WARMUP_FRAMES and _env("PROBE_PROFILE", "") != "" and EngineDebugger.is_active():
+		# Script profiler, streamed to a remote debugger (--remote-debug).
+		EngineDebugger.profiler_enable("servers", true, [400])
 	var now := Time.get_ticks_usec()
 	if frame > WARMUP_FRAMES:
 		samples.append((now - last_us) / 1000.0)

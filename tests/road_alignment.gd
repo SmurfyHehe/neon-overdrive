@@ -12,7 +12,7 @@ extends SceneTree
 #   built chunks' road strips meet their neighbours' to 1 mm in the world
 # - RoadFrame.unroll(roll(u)) == u to 1 mm across the road, 20 km of it,
 #   including far behind (where parked traffic waits) and after an origin shift
-# - unroll's caches return exactly what the uncached search does
+# - unroll's and chunk_xf's caches return exactly what the uncached code does
 # Exit code 1 on failure. Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/road_alignment.gd
 
@@ -86,6 +86,9 @@ func _joins_and_roundtrip(origin: int) -> void:
 			# repeat call (memo hit) and the full search agree exactly.
 			if RoadFrame.unroll(w) != RoadFrame._unroll_uncached(w):
 				cache_mismatch += 1
+		# chunk_xf's cache (perf, 2026-10-09): the same bits as building it.
+		if RoadFrame.chunk_xf(i) != RoadFrame._chunk_xf_uncached(i, RoadFrame.origin_index):
+			cache_mismatch += 1
 	# Far behind, where TrafficManager parks cars it has no slot for: found
 	# (float32 at 10 km is good to a centimetre, plenty for a hidden car).
 	RoadFrame.origin_index = origin + CHUNKS
@@ -95,7 +98,7 @@ func _joins_and_roundtrip(origin: int) -> void:
 		_check(far < 0.02, "origin %d: a car parked %.0f m behind comes back %.3f m off" % [origin, z, far])
 	_check(worst_join < EPS, "origin %d: chunks open a %.4f m gap at a join" % [origin, worst_join])
 	_check(worst_rt < EPS, "origin %d: roll/unroll round trip off by %.4f m" % [origin, worst_rt])
-	_check(cache_mismatch == 0, "origin %d: cached unroll differs from the full search %d times" % [origin, cache_mismatch])
+	_check(cache_mismatch == 0, "origin %d: cached unroll or chunk_xf differs from the uncached one %d times" % [origin, cache_mismatch])
 	print("origin %d: worst join %.5f m, worst round trip %.5f m" % [origin, worst_join, worst_rt])
 
 func _built_chunks() -> void:

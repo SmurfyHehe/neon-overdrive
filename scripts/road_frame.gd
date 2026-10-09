@@ -37,9 +37,24 @@ static var align: RoadAlignment
 static var origin_index := 0
 
 ## World transform of chunk i's start: on the centre line, -Z along the road.
+## Cached per chunk for the current origin (perf, 2026-10-09): roll() and
+## pose() run it for every traffic car every tick, and rebuilding it from
+## RoadAlignment's arrays was most of their cost. RoadAlignment only ever
+## appends chunks, so a chunk's transform cannot change until the origin
+## moves or the road is replaced, which drop the cache (_check_caches).
 static func chunk_xf(i: int, origin: int = origin_index) -> Transform3D:
 	if align == null:
 		return Transform3D(Basis.IDENTITY, Vector3(0, 0, -float(i - origin) * L))
+	if origin != origin_index:
+		return _chunk_xf_uncached(i, origin)
+	_check_caches()
+	var xf: Variant = _xf_cache.get(i)
+	if xf == null:
+		xf = _chunk_xf_uncached(i, origin)
+		_xf_cache[i] = xf
+	return xf
+
+static func _chunk_xf_uncached(i: int, origin: int) -> Transform3D:
 	# Absolute positions are 64-bit; subtract before they become a Vector3.
 	# Turned only about world up: the chunk's slope lives in its centreline.
 	return Transform3D(Basis(Vector3.UP, align.start_heading(i)),
@@ -79,6 +94,7 @@ static func _rise(i: int, s: float) -> float:
 ## answer cannot change until the next tick moves it. Exact Vector3 keys, so
 ## the result is the same bits the full search would return.
 static var _inv_cache := {}
+static var _xf_cache := {}  # chunk_xf(i), see there
 static var _inv_origin := 0
 static var _inv_align: RoadAlignment = null
 static var _memo := {}
@@ -88,6 +104,7 @@ static var _memo_tick := -1
 static func _check_caches() -> void:
 	if _inv_origin != origin_index or _inv_align != align:
 		_inv_cache.clear()
+		_xf_cache.clear()
 		_memo.clear()
 		_inv_origin = origin_index
 		_inv_align = align
@@ -154,9 +171,13 @@ static func roll(u: Vector3) -> Vector3:
 static func basis_at(z: float) -> Basis:
 	if align == null:
 		return Basis.IDENTITY
-	# The heading, then the slope: nose up on a rising grade.
+	# The heading, then the slope: nose up on a rising grade. heading_at(z)
+	# inlined (same chunk, same s): this runs for every traffic car several
+	# times a tick.
 	var i := _chunk_of(z)
-	return Basis(Vector3.UP, heading_at(z)) * Basis(Vector3.RIGHT, atan(align.grade_at(i, _s_in_chunk(z, i))))
+	var s := _s_in_chunk(z, i)
+	var h := align.start_heading(i) + RoadAlignment.arc_heading(align.curvature(i), s)
+	return Basis(Vector3.UP, h) * Basis(Vector3.RIGHT, atan(align.grade_at(i, s)))
 
 ## Road heading at road-space z, radians about world up (0 = down world -Z).
 static func heading_at(z: float) -> float:

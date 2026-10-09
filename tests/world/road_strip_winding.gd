@@ -7,7 +7,7 @@ extends SceneTree
 # the mirrored oncoming side; CULL_DISABLED on the asphalt hid that, while the
 # player-side curb and edge line (single-sided) simply never rendered.
 #
-# Replaces tests/chunk_builder_equivalence.gd, which guarded the 01a84cb
+# Replaces tests/world/chunk_builder_equivalence.gd, which guarded the 01a84cb
 # refactor and was retired here by design.
 #
 # Run (headless is fine, no MultiMesh involved):

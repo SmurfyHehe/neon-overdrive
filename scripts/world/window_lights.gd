@@ -2,8 +2,9 @@ class_name WindowLights
 extends RefCounted
 
 # Building windows that follow the night clock (living world step 1,
-# 2026-10-08). Every building shares one small window-grid texture as its
-# emission mask (RoadChunkBuilder._building_mat), so switching windows is one
+# 2026-10-08). The facade buildings (BuildingKit, buildings step 1) choose lit
+# windows in their shader and follow this curve through BuildingKit.set_lit_scale;
+# the window-grid texture below is the older shared emission mask, so switching it is one
 # 32x32 texture update for the whole city: no per-building work, no extra draw
 # calls, nothing on the GPU but a 3 KB upload, and only when a window actually
 # changes (a few times per game hour).
@@ -18,6 +19,7 @@ extends RefCounted
 # Stage A's static texture had 32% of window slots lit (a city at midnight);
 # the evening curve passes through that at midnight.
 
+const BuildingKit := preload("res://scripts/world/building_kit.gd")
 const SIZE := 32
 ## Evening curve: share of windows lit, by game minutes since 8 p.m.
 const EVENING := [[0.0, 0.58], [120.0, 0.46], [240.0, 0.32], [360.0, 0.19], [480.0, 0.10], [600.0, 0.08]]
@@ -51,6 +53,9 @@ static func texture() -> ImageTexture:
 ## Called by the night clock as it runs; uploads only when a window changed.
 static func set_minutes(m: float) -> void:
 	_minutes = m
+	# The facade buildings (BuildingKit) pick lit windows in their shader; they
+	# follow the same curve, relative to midnight's share.
+	BuildingKit.set_lit_scale(lit_fraction_target(m) / lit_fraction_target(240.0))
 	if _tex == null:
 		return
 	if _paint():

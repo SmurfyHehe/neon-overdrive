@@ -21,8 +21,8 @@ const START_HOUR := 20
 const END_HOUR := 6
 const NIGHT_MINUTES := 600.0          # 8 p.m. to 6 a.m.
 ## How long one game hour lasts in real seconds of driving: a whole night is
-## 10 of these (20 minutes at 120 s).
-const REAL_SECONDS_PER_HOUR := 120.0
+## 10 of these (40 minutes at 240 s; was 20 until 2026-10-09).
+const REAL_SECONDS_PER_HOUR := 240.0
 ## The clock saves itself every this many game minutes, and on exit.
 const SAVE_EVERY_MINUTES := 15.0
 const DEFAULT_PATH := "user://night_clock.cfg"

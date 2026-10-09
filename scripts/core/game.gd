@@ -94,9 +94,9 @@ func _ready() -> void:
 	# NEON_TRAFFIC=<n> overrides the saved car count, like NEON_TICKS/NEON_MUTE:
 	# tests/run_tests.bat sets 0 so the older drive-bot tests, which steer
 	# across lanes blind, do not hit traffic (tests/traffic_*.gd clear it).
-	var budget_env := OS.get_environment("NEON_REBUILD_BUDGET")
-	if budget_env.is_valid_float():
-		rebuild_budget_ms = float(budget_env)
+	var stages_env := OS.get_environment("NEON_REBUILD_STAGES")
+	if stages_env.is_valid_int():
+		rebuild_stages_per_frame = maxi(1, int(stages_env))
 	var traffic_env := OS.get_environment("NEON_TRAFFIC")
 	if traffic_env.is_valid_int():
 		TrafficSettings.set_car_count(int(traffic_env))
@@ -346,15 +346,16 @@ var chunk_event_hook: Callable = Callable()
 ## Chunk rebuilds in flight (RoadChunkBuilder.rebuild_begin), oldest first.
 ## A recycled chunk used to be rewritten whole in the frame it fell behind,
 ## ~3 ms (tests/world/chunk_rebuild_perf.gd) landing in one frame every 50 m of
-## road: a visible hitch at speed. Now each frame runs stages until
-## rebuild_budget_ms is spent (always at least one, so a job cannot stall),
-## and a job takes a few frames. The chunk is parked out of the way and not solid until it
+## road: a visible hitch at speed. Now each frame runs rebuild_stages_per_frame
+## stages (about 1 ms; a count, not a wall-clock budget, so a run is the same
+## on a loaded machine and the physics tests stay reproducible), and a job
+## takes three or four frames. The chunk is parked out of the way and not solid until it
 ## is done; it is 250-350 m ahead, in the fog, where it appeared from nothing
 ## before too.
 var _rebuild_jobs: Array = []
-## NEON_REBUILD_BUDGET=<ms> overrides it (a huge value rebuilds a chunk whole
+## NEON_REBUILD_STAGES=<n> overrides it (a huge value rebuilds a chunk whole
 ## in one frame again, to bisect a test against the spreading).
-var rebuild_budget_ms := 1.0
+var rebuild_stages_per_frame := 3
 
 func _update_chunk_pool(ref_z: float) -> void:
 	var current_idx := int(floor(-ref_z / RoadChunkBuilder.CHUNK_LEN)) + origin_index
@@ -377,11 +378,11 @@ func _run_rebuild_jobs() -> void:
 	if _rebuild_jobs.is_empty():
 		return
 	var t0 := Time.get_ticks_usec()
-	while not _rebuild_jobs.is_empty():
+	for i in rebuild_stages_per_frame:
+		if _rebuild_jobs.is_empty():
+			break
 		if RoadChunkBuilder.rebuild_step(_rebuild_jobs[0]):
 			_rebuild_jobs.pop_front()
-		if SpikeLog.since(t0) >= rebuild_budget_ms:
-			break
 	SpikeLog.mark("chunk_rebuild", SpikeLog.since(t0))
 
 ## Finishes every rebuild in flight now (tests that walk the pool by hand).

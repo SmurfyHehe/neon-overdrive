@@ -53,6 +53,21 @@ const CABIN_OFFSET := {
 static func cabin_offset(kind: String) -> Vector3:
 	return CABIN_OFFSET.get(kind, Vector3.ZERO)
 
+## Where the eye goes while the driver looks back (ChaseCamera, hold B in the
+## cockpit): an offset from the car's cockpit eye, in car space, reached with
+## the head's turn. The default leans to the cabin centreline (x 0, between
+## the seats: the eye is at -0.32), up 4 cm and 15 cm back toward the seat
+## back, so the driver's own headrest (0.36 off the centreline) and the
+## B-pillar fall outside the view and the rear window fills it. A car whose
+## cabin puts something else in that line (a rear seat close behind, a tall
+## centre console) gets its own entry here; a per-car cabin (CabinSpec)
+## can later derive it from its own seat and rear glass positions.
+const LOOK_BACK_SHIFT_DEFAULT := Vector3(0.32, 0.04, 0.15)
+const LOOK_BACK_SHIFT := {}
+
+static func look_back_shift(kind: String) -> Vector3:
+	return LOOK_BACK_SHIFT.get(kind, LOOK_BACK_SHIFT_DEFAULT)
+
 static func ids() -> Array[String]:
 	var out: Array[String] = []
 	for k in KINDS:

@@ -292,6 +292,160 @@ static func coupe_worn() -> Dictionary:
 ## numbers -- a smaller engine, more drag, street tyres, hardly any downforce.
 ## Same simulation, different data; the three NPC cars (stage B step 5) replace
 ## this with their own dicts. Not measured from a real car.
+## The player's cars (stage D, 2026-10-09; PlayerCars.KINDS): coupe_default()
+## is the P1; each other car is the P1's tune with its own numbers from the
+## PR #197 car table (torque and mass are starting values for the D data pass,
+## not measured) and fleet.json's tyre widths. The same sim, different data;
+## the mod trees (stage E) override these the same way.
+## Turbo cars: the table's torque is the peak ON boost. GEVP's turbo multiplies
+## engine torque by 1 + turbo_gain (0.45) at full boost, whatever
+## turbo_boost_max is, so their max_torque is the table value / TURBO_PEAK.
+const TURBO_PEAK := 1.45
+
+static func player_spec(kind: String) -> Dictionary:
+	var s := coupe_default()
+	match kind:
+		"p0_beater":
+			# The prologue car (Roy, 2026-10-09): a worn rear-engine, air-cooled
+			# flat four. About 290 Nm, power tier T0 (0.29 Nm/kg: under the T1
+			# band's 0.30). Nothing is wrong with it on paper; it is just slow:
+			# the torque is all low down and gone by 4500 (torque_shape falls
+			# early, low redline), long gears (five: TuneParams tunes gear_ratios/0-4,
+			# so every player car carries five), narrow hard tyres on soft
+			# springs, 60% of the weight over the back axle, and the drag of a
+			# brick. Stability aids off: it never had any.
+			var gears: Array[float] = [3.80, 2.30, 1.55, 1.10, 0.86]
+			s["vehicle_mass"] = 1000.0
+			s["front_weight_distribution"] = 0.40
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 290.0
+			s["max_rpm"] = 4800.0
+			s["idle_rpm"] = 850.0
+			s["torque_shape"] = {"low_end": 0.55, "peak_pos": 0.40, "plateau": 0.1, "falloff": 0.35}
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.1
+			s["coefficient_of_drag"] = 0.46
+			s["frontal_area"] = 2.0
+			s["front_tire_width"] = 155.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 165.0
+			s["coefficient_of_friction"] = {"Road": 0.95, "Dirt": 0.8}
+			s["front_damping_ratio"] = 0.32
+			s["rear_damping_ratio"] = 0.32
+			s["front_arb_ratio"] = 0.05
+			s["rear_arb_ratio"] = 0.0
+			s["front_spring_length"] = 0.26
+			s["rear_spring_length"] = 0.28
+			s["center_of_gravity_height_offset"] = 0.02
+			s["traction_control_max_slip"] = 0.0
+			s["stability_yaw_strength"] = 0.0
+			s["brake_force_multiplier"] = 1.8
+			s["aero_downforce_coefficient_front"] = 0.0
+			s["aero_downforce_coefficient_rear"] = 0.0
+			s["shift_time"] = 0.35
+			s["automatic_time_between_shifts"] = 1200.0
+		"p2_hothatch":
+			# Kobo, T1: 2.0 turbo four, front drive, light, short gears. Launches.
+			var gears: Array[float] = [3.25, 2.00, 1.45, 1.12, 0.90]
+			s["vehicle_mass"] = 1080.0
+			s["front_weight_distribution"] = 0.62
+			s["front_torque_split"] = 1.0
+			s["max_torque"] = 340.0 / TURBO_PEAK
+			s["max_rpm"] = 7200.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.2
+			s["coefficient_of_drag"] = 0.34
+			s["frontal_area"] = 2.05
+			s["front_tire_width"] = 225.0
+			s["rear_tire_width"] = 225.0
+			s["front_arb_ratio"] = 0.25
+			s["rear_arb_ratio"] = 0.32   # a stiff rear bar: lift-off tuck, not plough
+			s["turbo_boost_max"] = 0.5
+		"p3_tuner":
+			# Ronin, T2: 2.6 straight six, rear drive (the tree adds AWD). Revs.
+			var gears: Array[float] = [3.20, 1.95, 1.40, 1.07, 0.85]
+			s["vehicle_mass"] = 1300.0
+			s["front_weight_distribution"] = 0.54
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 520.0 / TURBO_PEAK
+			s["max_rpm"] = 7800.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.1
+			s["coefficient_of_drag"] = 0.33
+			s["frontal_area"] = 2.1
+			s["front_tire_width"] = 245.0
+			s["rear_tire_width"] = 245.0
+			s["turbo_boost_max"] = 0.7
+		"p4_kei":
+			# Mite, T1: 0.66 triple behind the seats, rear drive, 760 kg, 9500
+			# redline. Corners; slow on the straights. No turbo stock: "Small
+			# turbo" is a node of its tree (PR #197), and the Tuner's torque floor
+			# is 150 Nm, under which a boosted base would have to sit.
+			var gears: Array[float] = [3.40, 2.20, 1.60, 1.20, 0.95]
+			s["vehicle_mass"] = 760.0
+			s["front_weight_distribution"] = 0.42
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 180.0
+			# 8500 rpm, not the sheet's 9500: with this little torque the engine
+			# never got there and the automatic never left 2nd (tests/player_cars.gd,
+			# the same finding as the AI kei's 8000 in npc_spec). The curve
+			# holds to the top, so it does reach the shift point.
+			s["max_rpm"] = 8500.0
+			s["idle_rpm"] = 1100.0
+			s["torque_shape"] = {"low_end": 0.35, "peak_pos": 0.7, "plateau": 0.15, "falloff": 0.8}
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.6
+			s["coefficient_of_drag"] = 0.36
+			s["frontal_area"] = 1.6
+			s["front_tire_width"] = 175.0
+			s["rear_tire_width"] = 185.0
+			s["max_steering_angle"] = deg_to_rad(42.0)
+			s["center_of_gravity_height_offset"] = -0.12
+		"p5_muscle":
+			# Marlowe, T3: 5.7 V8, rear drive, lazy auto, 1800 kg. Torque. (Five
+			# ratios like every player car; the sheet's 4-speed feel is in the
+			# long gaps and the slow shift.)
+			var gears: Array[float] = [2.60, 1.75, 1.25, 0.95, 0.72]
+			s["vehicle_mass"] = 1800.0
+			s["front_weight_distribution"] = 0.55
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 820.0
+			s["max_rpm"] = 5800.0
+			s["idle_rpm"] = 700.0
+			s["torque_shape"] = {"low_end": 0.6, "peak_pos": 0.45, "plateau": 0.15, "falloff": 0.6}
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.4
+			s["coefficient_of_drag"] = 0.36
+			s["frontal_area"] = 2.35
+			s["front_tire_width"] = 255.0
+			s["rear_tire_width"] = 320.0
+			s["front_damping_ratio"] = 0.40
+			s["rear_damping_ratio"] = 0.40
+			s["front_arb_ratio"] = 0.15
+			s["rear_arb_ratio"] = 0.10
+			s["shift_time"] = 0.3
+		"p6_crossover":
+			# Cairn, T2: 2.0 turbo flat four, AWD 40:60, tall, lifted. Grips.
+			var gears: Array[float] = [3.30, 2.00, 1.40, 1.07, 0.85]
+			s["vehicle_mass"] = 1450.0
+			s["front_weight_distribution"] = 0.58
+			s["front_torque_split"] = 0.4
+			s["max_torque"] = 580.0 / TURBO_PEAK
+			s["max_rpm"] = 6800.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.0
+			s["coefficient_of_drag"] = 0.36
+			s["frontal_area"] = 2.45
+			s["front_tire_width"] = 235.0
+			s["rear_tire_width"] = 235.0
+			s["coefficient_of_friction"] = {"Road": 1.2, "Dirt": 1.05}
+			s["center_of_gravity_height_offset"] = 0.05
+			s["turbo_boost_max"] = 0.7
+		_:
+			return s  # p1_coupe, or an unknown kind: the coupe
+	s["exhaust"] = ExhaustTune.for_car(kind).to_dict()
+	s["engine_voice"] = EngineVoice.for_car(kind)
+	return s
+
 static func traffic_default() -> Dictionary:
 	var s := coupe_default()
 	s["vehicle_mass"] = 1250.0
@@ -386,6 +540,174 @@ static func npc_spec(kind: String) -> Dictionary:
 			# degrees), and a stiff front bar plus rear toe-in did not cure it.
 			s["coefficient_of_friction"] = {"Road": 0.78, "Dirt": 0.72}
 			s["center_of_gravity_height_offset"] = 0.15
+		# The rest of the B1 sheet as AI cars (NpcCarBuilder.KINDS, not in the
+		# traffic MIX). Class numbers, not the player tune: when a player car
+		# becomes drivable (stage D) it gets its own spec like coupe_default().
+		"p0_beater":
+			# The beater as an AI car: the player's own numbers (CarSpec.
+			# player_spec), it has no faster version.
+			var ps := player_spec("p0_beater")
+			for k in ["vehicle_mass", "front_weight_distribution", "front_torque_split", "max_torque", "max_rpm",
+					"idle_rpm", "torque_shape", "gear_ratios", "final_drive", "coefficient_of_drag", "frontal_area",
+					"front_tire_width", "rear_tire_width", "coefficient_of_friction", "front_damping_ratio",
+					"rear_damping_ratio", "front_arb_ratio", "rear_arb_ratio", "front_spring_length",
+					"rear_spring_length", "center_of_gravity_height_offset", "engine_voice", "exhaust"]:
+				s[k] = ps[k]
+		"p2_hothatch":
+			# Hot hatch (Golf GTI / Civic Si class), 2.0 l four, front drive: light
+			# and short-geared, a stiffer rear bar so it rotates rather than ploughs.
+			var gears: Array[float] = [3.25, 2.00, 1.45, 1.12, 0.90]
+			s["vehicle_mass"] = 1200.0
+			s["front_weight_distribution"] = 0.62
+			s["front_torque_split"] = 1.0
+			s["max_torque"] = 300.0
+			s["max_rpm"] = 7200.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.2
+			s["coefficient_of_drag"] = 0.34
+			s["frontal_area"] = 2.05
+			s["front_tire_width"] = 225.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 225.0
+			s["front_damping_ratio"] = 0.50
+			s["rear_damping_ratio"] = 0.50
+			s["front_arb_ratio"] = 0.25
+			s["rear_arb_ratio"] = 0.30
+		"p3_tuner":
+			# Tuner sedan (Skyline / Evo class), turbo six, four-wheel drive
+			# with a rear bias, revs high.
+			var gears: Array[float] = [3.20, 1.95, 1.40, 1.07, 0.85]
+			s["vehicle_mass"] = 1400.0
+			s["front_weight_distribution"] = 0.56
+			s["front_torque_split"] = 0.4
+			s["max_torque"] = 420.0
+			s["max_rpm"] = 7500.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.1
+			s["coefficient_of_drag"] = 0.33
+			s["frontal_area"] = 2.1
+			s["front_tire_width"] = 245.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 245.0
+			s["front_damping_ratio"] = 0.50
+			s["rear_damping_ratio"] = 0.50
+			s["front_arb_ratio"] = 0.25
+			s["rear_arb_ratio"] = 0.22
+		"p4_kei":
+			# Kei roadster (Beat / Cappuccino class), tiny mid-mounted three,
+			# rear drive: 750 kg, little torque, very short gearing. 8000 rpm, not
+			# a real Beat's 9000: with this little torque the engine never reached
+			# 9000 and the automatic never left 1st (tests/npc_cars.gd).
+			var gears: Array[float] = [3.40, 2.20, 1.60, 1.20, 0.95]
+			s["vehicle_mass"] = 750.0
+			s["front_weight_distribution"] = 0.42
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 200.0
+			s["max_rpm"] = 8000.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.4
+			s["coefficient_of_drag"] = 0.36
+			s["frontal_area"] = 1.6
+			s["front_tire_width"] = 175.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 185.0
+			s["front_damping_ratio"] = 0.50
+			s["rear_damping_ratio"] = 0.50
+			s["front_arb_ratio"] = 0.20
+			s["rear_arb_ratio"] = 0.15
+		"p5_muscle":
+			# Muscle sedan (Impala SS class), big V8, rear drive: heavy and
+			# torquey, long gears, fat rear tyres, soft.
+			var gears: Array[float] = [2.60, 1.60, 1.15, 0.90, 0.70]
+			s["vehicle_mass"] = 1750.0
+			s["front_weight_distribution"] = 0.55
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 560.0
+			s["max_rpm"] = 5800.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.4
+			s["coefficient_of_drag"] = 0.36
+			s["frontal_area"] = 2.35
+			s["front_tire_width"] = 255.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 320.0
+			s["front_damping_ratio"] = 0.40
+			s["rear_damping_ratio"] = 0.40
+			s["front_arb_ratio"] = 0.15
+			s["rear_arb_ratio"] = 0.10
+		"p6_crossover":
+			# Performance crossover (Allroad / Integrale class), turbo four,
+			# four-wheel drive, tall and a little draggy.
+			var gears: Array[float] = [3.30, 2.00, 1.40, 1.07, 0.85]
+			s["vehicle_mass"] = 1500.0
+			s["front_weight_distribution"] = 0.58
+			s["front_torque_split"] = 0.5
+			s["max_torque"] = 400.0
+			s["max_rpm"] = 6800.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.0
+			s["coefficient_of_drag"] = 0.36
+			s["frontal_area"] = 2.45
+			s["front_tire_width"] = 235.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 235.0
+			s["front_damping_ratio"] = 0.45
+			s["rear_damping_ratio"] = 0.45
+			s["front_arb_ratio"] = 0.20
+			s["rear_arb_ratio"] = 0.18
+		"c1_patrol":
+			# Patrol sedan (Crown Vic / Charger Pursuit class), V8, rear drive:
+			# heavy, police-spec damping, long gears.
+			var gears: Array[float] = [2.80, 1.70, 1.20, 0.95, 0.75]
+			s["vehicle_mass"] = 1900.0
+			s["front_weight_distribution"] = 0.55
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 430.0
+			s["max_rpm"] = 6000.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.55
+			s["coefficient_of_drag"] = 0.34
+			s["frontal_area"] = 2.4
+			s["front_tire_width"] = 235.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 235.0
+			s["front_damping_ratio"] = 0.45
+			s["rear_damping_ratio"] = 0.45
+			s["front_arb_ratio"] = 0.20
+			s["rear_arb_ratio"] = 0.12
+		"c2_patrolsuv":
+			# Patrol SUV (Interceptor Utility / Tahoe class), twin-turbo V6,
+			# four-wheel drive: the heaviest car, tall, a barn door for drag.
+			var gears: Array[float] = [3.40, 2.10, 1.45, 1.10, 0.85]
+			s["vehicle_mass"] = 2300.0
+			s["front_weight_distribution"] = 0.54
+			s["front_torque_split"] = 0.4
+			s["max_torque"] = 520.0
+			s["max_rpm"] = 6000.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.7
+			s["coefficient_of_drag"] = 0.40
+			s["frontal_area"] = 3.0
+			s["front_tire_width"] = 255.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 255.0
+			s["front_damping_ratio"] = 0.40
+			s["rear_damping_ratio"] = 0.40
+			s["front_arb_ratio"] = 0.22
+			s["rear_arb_ratio"] = 0.12
+			s["center_of_gravity_height_offset"] = 0.0
+		"c3_interceptor":
+			# Unmarked interceptor (Charger / Mustang pursuit class),
+			# supercharged V8, rear drive: the fastest cop, firm and wide-tyred.
+			var gears: Array[float] = [2.90, 1.90, 1.35, 1.05, 0.82]
+			s["vehicle_mass"] = 1950.0
+			s["front_weight_distribution"] = 0.54
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 650.0
+			s["max_rpm"] = 6200.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.3
+			s["coefficient_of_drag"] = 0.33
+			s["frontal_area"] = 2.25
+			s["front_tire_width"] = 255.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 275.0
+			s["front_damping_ratio"] = 0.50
+			s["rear_damping_ratio"] = 0.50
+			s["front_arb_ratio"] = 0.22
+			s["rear_arb_ratio"] = 0.16
 	return s
 
 ## Physics layers (milestone 3). Every car sits on CAR_LAYER and collides with

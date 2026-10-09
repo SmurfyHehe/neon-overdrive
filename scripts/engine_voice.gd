@@ -51,6 +51,10 @@ const PRESETS := {
 			"body_hz": 70.0, "body_q": 1.3, "rasp_hz": 900.0, "rasp_q": 1.6, "tone": 0.8,
 			"pulse_width": 0.42, "wander": 0.8},
 	# Performance crossover, flat four with unequal headers: the paired rumble.
+	# The beater: a small air-cooled flat four, even firing but rattly (wide
+	# cylinder spread, lots of wander), thin body, tinny rasp. Tired, not angry.
+	"p0_beater": {"cylinders": 4, "cyl_spread": 0.26, "seed": 13, "body_hz": 150.0, "body_q": 1.1,
+			"rasp_hz": 1500.0, "rasp_q": 1.3, "tone": 0.7, "pulse_width": 0.42, "wander": 1.2},
 	"p6_crossover": {"cylinders": 4, "firing": _BOXER_UNEQUAL, "cyl_spread": 0.15, "seed": 67,
 			"body_hz": 95.0, "body_q": 1.5, "rasp_hz": 1250.0, "rasp_q": 1.9, "tone": 0.95,
 			"pulse_width": 0.36, "wander": 0.7},

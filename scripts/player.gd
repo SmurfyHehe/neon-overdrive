@@ -37,8 +37,27 @@ class_name PlayerCar
 ## are the same for both bodies. Set NEON_TEST_CAR=1 to drive the neutral #63
 ## test box instead, to compare.
 const KIND := P1CoupeBuilder.KIND
+## Stage D (2026-10-09): the player drives any of PlayerCars.KINDS. The pause
+## menu's Car page picks one (PlayerCars.selected, saved in settings.cfg);
+## NEON_CAR=<kind> picks one for a test or a shell run; NEON_TEST_CAR=1 wins.
 static func chassis_kind() -> String:
-	return TestCarBuilder.KIND if OS.get_environment("NEON_TEST_CAR") == "1" else KIND
+	if OS.get_environment("NEON_TEST_CAR") == "1":
+		return TestCarBuilder.KIND
+	var env := OS.get_environment("NEON_CAR")
+	if env != "" and PlayerCars.is_player_kind(env):
+		return env
+	return PlayerCars.selected
+
+## The sheet build the body wears (NpcCarBuilder kinds; CarSpec._build_wheel
+## reads it for the wheel mesh). The player's cars are stock until the garage.
+var build := "stock"
+
+## Wheel hardpoints for this car: the P1's CFG, or the sheet car's
+## NpcCarBuilder.config (wheel_r, axle_z, wheel_x, plus its collision box).
+static func wheel_config(kind: String) -> Dictionary:
+	if NpcCarBuilder.is_npc(kind):
+		return NpcCarBuilder.config(kind)
+	return CFG
 
 const CFG := {
 	"wheel_r": 0.34, "axle_z": 1.25, "wheel_x": 0.88,  # Phase B: wheelbase 2.5 m (was 2.1; real coupes 2.4-2.7)
@@ -128,8 +147,16 @@ func _ready() -> void:
 	# The P1 sports coupe (P1CoupeBuilder), or the neutral #63 test car with
 	# NEON_TEST_CAR=1. Same physics either way; see chassis_kind().
 	var kind := chassis_kind()
+	var cfg := wheel_config(kind)
 	if not sim_only:
-		chassis_visual = TestCarBuilder.build_chassis_visual() if kind == TestCarBuilder.KIND else P1CoupeBuilder.build_chassis_visual()
+		if kind == TestCarBuilder.KIND:
+			chassis_visual = TestCarBuilder.build_chassis_visual()
+		elif NpcCarBuilder.is_npc(kind):
+			# A sheet car (P0, P2-P6): the same mesh path as the AI cars, in
+			# the sheet's own paint.
+			chassis_visual = NpcCarBuilder.chassis_visual(kind, build, NpcCarBuilder.sheet_paint(kind))
+		else:
+			chassis_visual = P1CoupeBuilder.build_chassis_visual()
 		add_child(chassis_visual)
 
 	# BUG FIX (2026-09-13, verified headless): RigidBody3D falls asleep after
@@ -165,7 +192,11 @@ func _ready() -> void:
 	# Phase A: 1.0 m tall (was 0.6, bottom face unchanged at y=0.2) so the
 	# derived roll inertia is ~460 kg m2 (was ~380; a real 1300 kg coupe is
 	# about 400-600). Yaw inertia about 1840 stays in the real 1500-2200 band.
-	CarSpec.build_collision(self, Vector3(1.6, 1.0, 3.4), 0.7)
+	if NpcCarBuilder.is_npc(kind):
+		# The sheet body's own box (NpcCarBuilder.config), as TrafficCar.
+		CarSpec.build_collision(self, cfg.col_size, cfg.col_y)
+	else:
+		CarSpec.build_collision(self, Vector3(1.6, 1.0, 3.4), 0.7)
 
 	# ---- Vehicle-level tuning ----
 	# CarSpec refactor (2026-09-13, Roy: "i want full physics everywhere ...
@@ -177,9 +208,11 @@ func _ready() -> void:
 	# exact simulation instead of a separate/cheaper one. Values are UNCHANGED
 	# from before this refactor -- verified headless (see ship notes).
 	if spec.is_empty():
-		spec = CarSpec.coupe_default()
-		# The game's own car: last run's tune comes back (PlayerTune). A car
-		# built from a given spec (test track, Auto-Tune worker) keeps it as is.
+		spec = CarSpec.player_spec(kind)
+		# The game's own car: last run's tune comes back (PlayerTune, one file
+		# per car). A car built from a given spec (test track, Auto-Tune
+		# worker) keeps it as is.
+		PlayerTune.kind = kind
 		PlayerTune.apply_saved(spec)
 		_keeps_tune = true
 		_saved_tune = PlayerTune.values_from(spec)
@@ -198,7 +231,7 @@ func _ready() -> void:
 	# spring_length + tire_radius above the chassis origin, same pattern the
 	# old VehicleWheel3D mount height used. CarSpec.build_wheels() computes
 	# this the same way, from the same CFG shape, for every car type.
-	CarSpec.build_wheels(self, kind, CFG, front_spring_length, rear_spring_length)
+	CarSpec.build_wheels(self, kind, cfg, front_spring_length, rear_spring_length)
 
 	initialize()
 

@@ -110,6 +110,7 @@ static func _read_cars() -> Dictionary:
 ## Players are loud and rude, traffic quiet, police subdued. Roy can retune any.
 const PRESETS := {
 	"p1_coupe":       [0.55, 0.55, 0.35, 0.20],
+	"p0_beater":      [0.30, 0.25, 0.20, 0.00],  # one rusty pipe, no flames
 	"p2_hothatch":    [0.45, 0.60, 0.30, 0.10],
 	"p3_tuner":       [0.70, 0.70, 0.60, 0.45],
 	"p4_kei":         [0.40, 0.70, 0.35, 0.15],

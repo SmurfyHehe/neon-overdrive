@@ -78,6 +78,7 @@ func _ready() -> void:
 		TrafficSettings.set_car_count(TrafficSettings.CAR_COUNT_DEFAULT)
 		TrafficSettings.set_detail_distance(Benchmark.opt_float("detail", TrafficSettings.DETAIL_DEFAULT))
 		TrafficSettings.set_car_count(int(Benchmark.opt_float("traffic", TrafficSettings.CAR_COUNT_DEFAULT)))
+	PlayerCars.load_settings()   # which car the player spawns in ([player] in settings.cfg)
 	# NEON_TRAFFIC=<n> overrides the saved car count, like NEON_TICKS/NEON_MUTE:
 	# tests/run_tests.bat sets 0 so the older drive-bot tests, which steer
 	# across lanes blind, do not hit traffic (tests/traffic_*.gd clear it).

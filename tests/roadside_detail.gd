@@ -176,6 +176,7 @@ func _check_materials() -> void:
 		var m: StandardMaterial3D = dim[k]
 		if m.emission_enabled and m.emission_energy_multiplier >= 1.0:
 			_fail("%s glows (emission energy %.2f >= glow threshold 1.0): neon is out (Look Board B)" % [k, m.emission_energy_multiplier])
-	var head := B._get_lamp_mesh().surface_get_material(1) as StandardMaterial3D
-	if head == null or not head.emission_enabled or head.emission_energy_multiplier < 1.0:
+	# A shader since the failing/dead lamps (2026-10-09): working lamps get the energy as is.
+	var head := B._get_lamp_mesh().surface_get_material(1) as ShaderMaterial
+	if head == null or float(head.get_shader_parameter("energy")) < 1.0:
 		_fail("lamp head does not glow")

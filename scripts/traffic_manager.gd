@@ -232,6 +232,7 @@ func in_view(pos: Vector3) -> bool:
 ## Puts a car in a free slot. If every slot is taken it parks the car far
 ## behind (hidden, frozen) and tries again next tick.
 func _respawn(car: TrafficCar) -> void:
+	var t0 := Time.get_ticks_usec()
 	var pz := _player_z()
 	var slot := _find_slot(car, pz)
 	if slot.is_empty():
@@ -240,12 +241,14 @@ func _respawn(car: TrafficCar) -> void:
 		car.place(car.lane_x, car.direction, pz + PARK_BEHIND, car.rest_y, 0.0)
 		car.retry_frame = Engine.get_physics_frames() + DEFER_TICKS
 		_put(car)
+		SpikeLog.mark("traffic_defer", SpikeLog.since(t0))
 		return
 	spawn_count += 1
 	car.target_speed = slot.speed
 	car.set_detailed(absf(slot.dist) <= detail_distance)
 	car.place(slot.lane_x, slot.direction, slot.z, car.rest_y, slot.speed)
 	_put(car)
+	SpikeLog.mark("traffic_respawn", SpikeLog.since(t0))
 	if log_spawns:
 		slot["player_z"] = pz
 		slot["player_speed"] = _player_speed()

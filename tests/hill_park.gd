@@ -63,6 +63,7 @@ func _setup() -> void:
 	while walk > road_z:
 		walk = maxf(walk - 25.0, road_z)
 		game.call("_update_chunk_pool", walk)
+	game.call("flush_rebuilds")  # rebuilds are spread over frames; the car needs the road now
 	TrafficCar.set_moving(p, 0.0)
 	p.reset_physics_interpolation()
 	p.driver = func(c: Vehicle) -> void:

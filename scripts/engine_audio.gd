@@ -14,6 +14,15 @@ const ENGINE_VOLUME := 0.5  # EngineSynth's own default level
 ## Placeholder until the cars are built from fleet.json (stage B step 5).
 const START_PRESET := "p1_coupe"
 
+## Lift-off blow-off: the pedal drops below LIFT_OFF within LIFT_WINDOW seconds of being
+## above LIFT_HOT, on at least LIFT_BOOST of full boost. GEVP's own count only trips when
+## throttle_amount falls from over 0.5 to under 0.2 in a single tick, which in practice
+## means a gearshift or the limiter cut, never a driver easing off the pedal.
+const LIFT_HOT := 0.6
+const LIFT_OFF := 0.2
+const LIFT_WINDOW := 0.6
+const LIFT_BOOST := 0.3
+
 var synth := EngineSynth.new()
 ## The exhaust tune lives in the car's spec under "exhaust" (a dictionary, the
 ## same one the Tuner screen's sliders and tune slots write); this node copies it
@@ -21,6 +30,8 @@ var synth := EngineSynth.new()
 var _spec: Dictionary
 var _saved := {}
 var _seen_blow_offs := 0
+var _since_hot := 9.0     # seconds since the throttle last sat above LIFT_HOT
+var _lift_vented := false # this lift has already vented; rearms when the throttle is back on
 var _was_up_shifting := false
 var _vehicle: Vehicle
 var _playback: AudioStreamGeneratorPlayback
@@ -41,7 +52,7 @@ func _ready() -> void:
 	play()
 	_playback = get_stream_playback()
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if _playback == null:
 		return
 	sync_tune()
@@ -50,6 +61,8 @@ func _process(_delta: float) -> void:
 		synth.boost = clampf(_vehicle.boost / _vehicle.turbo_boost_max, 0.0, 1.0)
 		if _vehicle.blow_off_count != _seen_blow_offs:
 			_seen_blow_offs = _vehicle.blow_off_count
+			synth.blow_off(synth.boost + 0.3)
+		if lift_off_vent(delta):
 			synth.blow_off(synth.boost + 0.3)
 	else:
 		synth.boost = 0.0
@@ -63,6 +76,21 @@ func _process(_delta: float) -> void:
 	if n > 0:
 		_playback.push_buffer(synth.render(n, _vehicle.motor_rpm,
 				_vehicle.throttle_amount, _vehicle.motor_is_redline))
+
+## True on the frame the driver lifts off a hot boost. Needs the throttle to have been
+## on within LIFT_WINDOW and the boost above LIFT_BOOST; one vent per lift.
+func lift_off_vent(delta: float) -> bool:
+	var thr := _vehicle.throttle_input
+	if thr > LIFT_HOT:
+		_since_hot = 0.0
+		_lift_vented = false
+	else:
+		_since_hot += delta
+	if thr < LIFT_OFF and not _lift_vented and _since_hot <= LIFT_WINDOW \
+			and synth.boost > LIFT_BOOST:
+		_lift_vented = true
+		return true
+	return false
 
 # The exhaust tune is edited on the Tuner screen (Exhaust page) through
 # CarSpec.set_param(), the single write path, so the spec stays the one copy.

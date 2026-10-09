@@ -133,6 +133,7 @@ var tach_needle: Node3D
 var speedo_needle: Node3D
 var lamps: MultiMeshInstance3D
 var lamp_text: Label3D
+var trinket: DashTrinket        # the charm on the rear-view mirror (CabinMods.trinket)
 var head_unit: HeadUnit         # the touch-screen radio on the centre stack
 var lever: Node3D
 var lever_knob: Node3D
@@ -182,6 +183,11 @@ func _ready() -> void:
 	if control == "":
 		control = str(player.spec.get("window_control", DEFAULT_WINDOW_CONTROL))
 	set_window_control(control)
+	# Interior mods batch 1 (2026-10-09): the hanging trinket and the shift
+	# knob / short shifter, both reading CabinMods; before the layer pass.
+	trinket = DashTrinket.new(player, PlayerCar.chassis_kind())
+	add_child(trinket)
+	add_child(ShifterMods.new(self))
 	mirrors = CockpitMirrors.new()
 	mirrors.name = "Mirrors"
 	mirrors.cull_mask = MIRROR_CULL

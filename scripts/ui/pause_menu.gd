@@ -33,6 +33,10 @@ var resume_button: Button
 var volume_sliders := {}   # channel -> HSlider
 var fov_slider: HSlider
 var smoothing_slider: HSlider
+var trinket_option: OptionButton
+var knob_option: OptionButton
+var short_option: OptionButton
+var strut_option: OptionButton
 var smoke_burnout_slider: HSlider
 var smoke_drift_slider: HSlider
 var main_page: VBoxContainer
@@ -162,6 +166,39 @@ func _ready() -> void:
 			ViewSettings.set_camera_smoothing(int(v))
 			ViewSettings.save_settings())
 
+	# Interior mods batch 1 (2026-10-09): the parts fitted in the cabin and
+	# under the hood (CabinMods; the garage will own these later). The trinket
+	# and the knob show at once (the cockpit polls); the short shifter and the
+	# strut bar change the running car here too (_apply_cabin_mods).
+	var mods_title := Label.new()
+	mods_title.text = "Interior"
+	mods_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(mods_title)
+	var trinket_names := []
+	for id in DashTrinket.IDS:
+		trinket_names.append(DashTrinket.NAMES[id])
+	trinket_option = _add_option(box, "Trinket", trinket_names, func(i: int) -> void:
+		CabinMods.set_trinket(DashTrinket.IDS[clampi(i, 0, DashTrinket.IDS.size() - 1)])
+		CabinMods.save_settings())
+	trinket_option.selected = DashTrinket.index_of(CabinMods.trinket)
+	var knob_names := []
+	for id in CabinMods.KNOB_IDS:
+		knob_names.append(CabinMods.KNOB_NAMES[id])
+	knob_option = _add_option(box, "Shift knob", knob_names, func(i: int) -> void:
+		CabinMods.set_shift_knob(CabinMods.KNOB_IDS[clampi(i, 0, CabinMods.KNOB_IDS.size() - 1)])
+		CabinMods.save_settings())
+	knob_option.selected = CabinMods.knob_index()
+	short_option = _add_option(box, "Short shifter", ["Off", "On"], func(i: int) -> void:
+		CabinMods.set_short_shifter(i == 1)
+		CabinMods.save_settings()
+		_apply_cabin_mods())
+	short_option.selected = 1 if CabinMods.short_shifter else 0
+	strut_option = _add_option(box, "Strut bar", ["Off", "On"], func(i: int) -> void:
+		CabinMods.set_strut_bar(i == 1)
+		CabinMods.save_settings()
+		_apply_cabin_mods())
+	strut_option.selected = 1 if CabinMods.strut_bar else 0
+
 	# Tyre smoke amounts (2026-10-07): 0 = none, 1 = default, 2 = double.
 	# Read live by TyreSmoke each tick, saved with the rest.
 	var smoke_title := Label.new()
@@ -198,6 +235,13 @@ func _ready() -> void:
 	_build_cars_page(center)
 	_build_graphics_page(center)
 	game_state.state_changed.connect(_on_state_changed)
+
+## The strut bar on or off the running car (StrutBar.sync); the sim effects
+## follow on their own (the CabinMods node on the car reads the picks each tick).
+func _apply_cabin_mods() -> void:
+	var player: Variant = get_parent().get("player")
+	if player != null:
+		StrutBar.sync(player)
 
 ## Resets temperatures, tyre, clutch and brake wear (the garage will own this later).
 func _service_car() -> void:

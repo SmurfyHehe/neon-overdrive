@@ -54,6 +54,11 @@ func _tick() -> void:
 	if frame == 2:
 		var p: Vehicle = game.get("player")
 		p.set("driver", Harness.lane_driver(Harness.lane_x(3), 1.0, 33.0))
+	if frame == WARMUP_FRAMES:
+		# NEON_BENCH_SKIP=<classes>: stop those subsystems' per-frame work, to
+		# attribute the cost (see Benchmark.apply_skips). After warm-up, so the
+		# scene is fully built first.
+		Benchmark.apply_skips(root, OS.get_environment("NEON_BENCH_SKIP"))
 	if frame == WARMUP_FRAMES and _env("PROBE_PROFILE", "") != "" and EngineDebugger.is_active():
 		# Script profiler, streamed to a remote debugger (--remote-debug).
 		EngineDebugger.profiler_enable("servers", true, [400])

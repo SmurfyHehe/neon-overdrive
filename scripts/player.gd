@@ -264,6 +264,11 @@ func _ready() -> void:
 		# Stage A (2026-10-04): headlights + blob shadow, since the world is dark
 		# on purpose now (Look Board B). After the body and wheels exist, because
 		# it moves their meshes to the car's own render layer.
+		# Real wheels and brakes (car parts plan 2026-10-09, session 1): open
+		# rims, glowing discs, calipers and springs. Before CarFx so they land on
+		# the car layer. Not on the test car (its wheels are a diagnostic).
+		if kind == P1CoupeBuilder.KIND:
+			CarParts.attach(self, {"hub_x": P1CoupeBuilder.DESIGN_WHEEL_X})
 		CarFx.attach(self, chassis_visual.get_meta("half_l", 2.2))
 
 func _physics_process(delta: float) -> void:

@@ -46,7 +46,7 @@ func _init(target: Vehicle, target_spec: Dictionary, stock_spec: Dictionary) -> 
 ##              with invert). lo_word / hi_word are the words at the ends.
 ##   "choice" : named options, each a function of the stock spec giving
 ##              {path: value}. Shown as one word; Left/Right step through them.
-## Pages without settings (Setup, Mechanic, Sound, Advanced) are drawn by the screen.
+## Pages without settings (Setup, Mechanic, Exhaust, Advanced) are drawn by the screen.
 static func pages() -> Array:
 	return [
 		{"id": "setup", "title": "Setup", "settings": []},
@@ -81,6 +81,7 @@ static func pages() -> Array:
 		]},
 		{"id": "brakes", "title": "Brakes", "settings": [
 			_range("brake_force_multiplier", "Brake pressure", ["brake_force_multiplier"], 1.0, 3.0, "Soft", "Hard", "More pressure stops harder until the tyres lock; past that, ABS does the work.", "x"),
+			_choice("bias_mode", "Bias mode", ["Auto", "Manual"], "Auto splits the braking from the springs, as the factory does. Manual lets you set the split yourself."),
 			_range("front_brake_bias", "Brake bias", ["front_brake_bias"], 0.45, 0.75, "Rear", "Front", "More front bias is stable under braking. More rear bias helps the car rotate into a corner, and can spin it.", "bias"),
 		]},
 		{"id": "aero", "title": "Aero", "settings": [
@@ -94,7 +95,7 @@ static func pages() -> Array:
 			_range("max_steering_angle", "Steering lock", ["max_steering_angle"], deg_to_rad(30.0), deg_to_rad(50.0), "Less", "More", "More lock turns tighter and catches bigger slides, but makes the car twitchy.", "rad_deg"),
 		]},
 		{"id": "mechanic", "title": "Mechanic", "settings": []},
-		{"id": "sound", "title": "Sound", "settings": []},
+		{"id": "exhaust", "title": "Exhaust", "settings": []},
 		{"id": "advanced", "title": "Advanced", "settings": []},
 	]
 
@@ -152,6 +153,8 @@ func set_notch(s: Dictionary, n: int) -> void:
 
 ## 0-based index of the option the car is on, or -1 for none (a custom value).
 func choice_index(s: Dictionary) -> int:
+	if s.id == "bias_mode":
+		return 0 if float(spec.get("front_brake_bias", -1.0)) < 0.0 else 1  # Manual is any set value
 	for i in s.options.size():
 		if _matches(choice_values(s.id, i)):
 			return i
@@ -190,12 +193,16 @@ func choice_values(id: String, i: int) -> Dictionary:
 			var off := TuneParams.find("front_abs_spin_difference_threshold").max as float
 			return {"front_abs_spin_difference_threshold": [off, float(stock.front_abs_spin_difference_threshold)][i],
 				"rear_abs_spin_difference_threshold": [off, float(stock.rear_abs_spin_difference_threshold)][i]}
+		"bias_mode":
+			# Manual starts from the split Auto was giving, so switching changes nothing yet.
+			var auto_bias: float = car.front_axle.brake_bias if car != null and car.is_ready else 0.55
+			return {"front_brake_bias": [-1.0, _clamp_path("front_brake_bias", snappedf(auto_bias, 0.01))][i]}
 		"stability":
 			return {"stability_yaw_strength": [0.0, float(stock.stability_yaw_strength) * 0.5, float(stock.stability_yaw_strength)][i]}
 	return {}
 
 func _default_choice(s: Dictionary) -> int:
-	return {"compound": 1, "power_band": 1, "traction": 1, "abs": 1, "stability": 2}.get(s.id, 0)
+	return {"compound": 1, "power_band": 1, "traction": 1, "abs": 1, "stability": 2, "bias_mode": 0}.get(s.id, 0)
 
 func value_text(s: Dictionary) -> String:
 	if s.kind == "choice":
@@ -236,7 +243,7 @@ func _on_notch(s: Dictionary) -> bool:
 func apply_preset(name: String) -> void:
 	for e in TuneParams.all():
 		if e.path.begins_with("exhaust/"):
-			continue  # sound is cosmetic and has its own page
+			continue  # exhaust is cosmetic and has its own page
 		_write(e.path, TuneParams.get_value(stock, e.path))
 	var vals := _preset_values(name)
 	for p in vals:
@@ -245,6 +252,32 @@ func apply_preset(name: String) -> void:
 		_drag_follows_downforce()
 	preset = name
 	modified = false
+
+## Every path a page's settings write (ranges and choices).
+static func page_paths(id: String) -> Array[String]:
+	var out: Array[String] = []
+	var probe := TunerModel.new(null, CarSpec.coupe_default(), CarSpec.coupe_default())
+	for s in page(id).get("settings", []):
+		var paths: Array = s.paths if s.kind == "range" else probe.choice_values(s.id, 0).keys()
+		for p in paths:
+			if not out.has(p):
+				out.append(p)
+	if id == "aero":
+		out.append("coefficient_of_drag")  # follows the wings on this page
+	return out
+
+## Puts one page's settings back to the car's stock values (settings safety
+## part 4). Returns true if anything changed.
+func reset_page(id: String) -> bool:
+	var changed := false
+	for p in page_paths(id):
+		var v := TuneParams.get_value(stock, p)
+		if TuneParams.get_value(spec, p) != v:
+			_write(p, v)
+			changed = true
+	if changed:
+		_touched()
+	return changed
 
 func preset_label() -> String:
 	return preset + (" (modified)" if modified else "")

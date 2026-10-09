@@ -11,6 +11,11 @@ extends Node3D
 const CHUNKS_AHEAD := 6
 const CHUNKS_BEHIND := 1
 const POOL_SIZE := CHUNKS_AHEAD + CHUNKS_BEHIND + 1
+## On a hilly road (#37) there is no ground plane under the world, only the
+## chunks' own road: traffic lives and spawns up to 100 m behind the player
+## (TrafficManager.recycle_behind, spawn_behind_max), so keep 150 m of road
+## behind it, not 50.
+const CHUNKS_BEHIND_HILLS := 3
 
 # Stage B step 3 (2026-10-05): a highway with 4 lanes per direction (ROADMAP
 # stage B: "4 lanes per direction is now the spec"; stage A had capped it at 3
@@ -46,6 +51,7 @@ var game_state: GameState
 # speed feel (FOV, dolly, shake) all live in chase_camera.gd.
 var camera: ChaseCamera
 var radio: RadioManager
+var night_clock: NightClock  # 8 p.m. to 6 a.m., saved (night_clock.gd); windows follow it
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
 func _ready() -> void:
@@ -60,6 +66,7 @@ func _ready() -> void:
 	TrafficSettings.load_settings()
 	FxSettings.load_settings()   # cockpit mirrors on/off and quality ([fx] in settings.cfg)
 	ViewSettings.load_settings()
+	PlayerCars.load_settings()   # which car the player spawns in ([player] in settings.cfg)
 	# NEON_TRAFFIC=<n> overrides the saved car count, like NEON_TICKS/NEON_MUTE:
 	# tests/run_tests.bat sets 0 so the older drive-bot tests, which steer
 	# across lanes blind, do not hit traffic (tests/traffic_*.gd clear it).
@@ -75,6 +82,13 @@ func _ready() -> void:
 		seed(Benchmark.SEED)
 	else:
 		randomize()
+	# The clock first: the building window texture is painted for its time
+	# when the first chunk is built.
+	night_clock = NightClock.new()
+	if benchmark:
+		night_clock.fixed_minutes = NightClock.BENCHMARK_MINUTES  # same windows every run
+	add_child(night_clock)
+	_setup_road_shape()
 	_setup_world()
 	_setup_ground_collision()
 	_setup_chunk_pool()
@@ -102,18 +116,22 @@ func _setup_world() -> void:
 	# dull sodium-orange city glow at the horizon, and a warm dark haze that
 	# swallows the distance -- denser than before, so the rows of street lamps
 	# fade into it (and the short draw distance is free, RESEARCH item 2).
-	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.008, 0.01, 0.018)
-	sky_mat.sky_horizon_color = Color(0.17, 0.095, 0.05)
-	sky_mat.ground_bottom_color = Color(0.008, 0.008, 0.01)
-	sky_mat.ground_horizon_color = Color(0.11, 0.065, 0.04)
-	var sky := Sky.new()
-	sky.sky_material = sky_mat
+	#
+	# MOON (2026-10-07): the gradient now lives in NightSky's sky shader, which
+	# adds a low phasing moon. And the fog no longer touches the sky: at the
+	# default fog_sky_affect of 1.0 it painted the whole sky one flat colour
+	# (measured: top, mid and horizon all ~RGB 24,16,10), hiding the gradient
+	# above and anything drawn in the sky. Distant buildings still fade into
+	# the fog colour, so they read as dark silhouettes against the horizon
+	# glow. fog_aerial_perspective would blend them into the sky exactly but
+	# cost ~0.16 ms on the i5-1235U (tests/sky_perf.gd), so it stays off.
+	var rng := RandomNumberGenerator.new()
 	env.background_mode = Environment.BG_SKY
-	env.sky = sky
+	env.sky = NightSky.build(NightSky.random_phase(rng))
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.1, 0.066, 0.042)
 	env.fog_density = 0.009
+	env.fog_sky_affect = 0.0
 	# NIGHT LIGHTING PASS (2026-09-29, RESEARCH-cheap-pretty.md item 1): the
 	# gradient sky is also the ambient source (Godot's default under BG_SKY),
 	# so its horizon glow fills the scene for free -- no extra light needed.
@@ -170,6 +188,10 @@ func _setup_world() -> void:
 
 # ---------- ground collision (new for milestone 2 -- chunks are visual only, wheels need something real to hit) ----------
 func _setup_ground_collision() -> void:
+	# Hills (#37): the road has no single plane; each chunk carries its own
+	# road collision instead (RoadChunkBuilder "RoadCol").
+	if RoadFrame.has_hills():
+		return
 	var body := StaticBody3D.new()
 	var shape := CollisionShape3D.new()
 	# One flat ground under the whole play area instead of per-chunk
@@ -206,6 +228,39 @@ func _setup_ground_collision() -> void:
 	body.add_to_group("Road")
 	add_child(body)
 
+# ---------- road shape (#37 curves) ----------
+## How bendy the road is, 0 (straight) to 1 (mostly bends); NEON_CURVES=<x>
+## overrides it (tests/run_tests.bat sets 0 for the older drive tests, which
+## steer blind down world -Z). Benchmark runs stay straight so they compare
+## with every earlier run. NEON_ROAD_SEED=<n> fixes the road for tests.
+@export var curviness := 0.5
+## How hilly, 0 (flat) to 1 (rolling the whole way); NEON_HILLS=<x> overrides
+## it (run_tests.bat sets 0). NEON_KICKERS=<x> is the chance a crest is a
+## jump: 0, for the R6 playtest preset only. Benchmark runs stay flat.
+@export var hilliness := 0.5
+@export var kicker_chance := 0.0
+
+func _chunks_behind() -> int:
+	return CHUNKS_BEHIND_HILLS if RoadFrame.has_hills() else CHUNKS_BEHIND
+
+func _setup_road_shape() -> void:
+	var env := OS.get_environment("NEON_CURVES")
+	if env.is_valid_float():
+		curviness = float(env)
+	var hills_env := OS.get_environment("NEON_HILLS")
+	if hills_env.is_valid_float():
+		hilliness = float(hills_env)
+	var kick_env := OS.get_environment("NEON_KICKERS")
+	if kick_env.is_valid_float():
+		kicker_chance = float(kick_env)
+	if Benchmark.requested():
+		curviness = 0.0
+		hilliness = 0.0
+	var seed_env := OS.get_environment("NEON_ROAD_SEED")
+	var road_seed := int(seed_env) if seed_env.is_valid_int() else randi()
+	RoadFrame.origin_index = origin_index
+	RoadFrame.align = RoadAlignment.new(road_seed, curviness, hilliness, kicker_chance) if curviness > 0.0 or hilliness > 0.0 else null
+
 # ---------- section math (reused from old main.gd, keyed by chunk index instead of distance) ----------
 func _section_at(idx: int) -> Dictionary:
 	var key := str(idx)
@@ -220,8 +275,8 @@ func _section_at(idx: int) -> Dictionary:
 
 # ---------- chunk pool ----------
 func _setup_chunk_pool() -> void:
-	for i in range(POOL_SIZE):
-		var idx := i - CHUNKS_BEHIND
+	for i in range(CHUNKS_AHEAD + _chunks_behind() + 1):
+		var idx := i - _chunks_behind()
 		var prev_cfg := _section_at(idx - 1)
 		var cfg := _section_at(idx)
 		var root := RoadChunkBuilder.build_chunk(idx, prev_cfg, cfg, origin_index)
@@ -234,7 +289,7 @@ func _update_chunk_pool(ref_z: float) -> void:
 	for c in chunk_pool:
 		max_idx = max(max_idx, c.index)
 	for c in chunk_pool:
-		if c.index < current_idx - CHUNKS_BEHIND:
+		if c.index < current_idx - _chunks_behind():
 			max_idx += 1
 			var prev_cfg := _section_at(max_idx - 1)
 			var cfg := _section_at(max_idx)
@@ -250,12 +305,24 @@ func _physics_process(_delta: float) -> void:
 	# Runs before the car's own _physics_process (parent before child), so
 	# GEVP computes this step's velocity from positions that are already
 	# shifted consistently.
-	var z := player.global_position.z
+	# Road-space z (RoadFrame, #37): distance along the road, which is what
+	# the whole-chunk shift counts in.
+	var z := RoadFrame.unroll(player.global_position).z
 	if absf(z) >= recenter_dist:
 		_shift_origin(int(floor(-z / RoadChunkBuilder.CHUNK_LEN)))
 	if Input.is_action_just_pressed("mute"):
 		toggle_mute()
 	if Input.is_action_just_pressed("radio_next") and radio != null:
+		request_next_station()
+
+## Next station (N): with the cockpit built the driver's hand reaches the touch
+## screen and the station changes on the tap (CockpitFrame.request_radio), in
+## every view; with no cockpit (NEON_COCKPIT=0) it changes at once.
+func request_next_station() -> void:
+	var f: CockpitFrame = camera.frame if camera != null else null
+	if f != null and f.driver != null:
+		f.request_radio()
+	else:
 		radio.next_station()
 
 ## Moves the world back by shift_chunks whole chunks (positive = the car had
@@ -263,9 +330,13 @@ func _physics_process(_delta: float) -> void:
 func _shift_origin(shift_chunks: int) -> void:
 	if shift_chunks == 0:
 		return
+	# The world moves so the new origin chunk's start lands on (0, 0, 0): on a
+	# straight road that is +shift_chunks * 50 along z; on a curved one
+	# (RoadFrame, #37) x moves too. Nothing is rotated.
+	var offset := -RoadFrame.chunk_xf(origin_index + shift_chunks, origin_index).origin
 	origin_index += shift_chunks
+	RoadFrame.origin_index = origin_index
 	recenter_count += 1
-	var offset := Vector3(0.0, 0.0, float(shift_chunks) * RoadChunkBuilder.CHUNK_LEN)
 
 	# The car. Velocity and spin carry over untouched (they are not
 	# positions). GEVP derives speed from the position it saved on the last
@@ -282,8 +353,11 @@ func _shift_origin(shift_chunks: int) -> void:
 
 	for c in chunk_pool:
 		# Re-derived from the index, not +=, so error can never accumulate.
-		c.root.position = Vector3(0, 0, -float(c.index - origin_index) * RoadChunkBuilder.CHUNK_LEN)
+		c.root.transform = RoadFrame.chunk_xf(c.index, origin_index)
 		c.root.reset_physics_interpolation()
+		# Now, not at the next transform flush: a stale chunk collider is
+		# invisible on a straight road but lies across a curved one (#37).
+		RoadChunkBuilder.sync_collision(c.root)
 	# Traffic (milestone 3): every car gets the same bookkeeping as the player.
 	traffic.shift_world(offset)
 	fx.shift_world(offset)  # skid marks are laid in world space
@@ -298,7 +372,7 @@ const PLAYER_SPAWN_LANE := 1
 
 func _setup_player() -> void:
 	player = PlayerCar.new()
-	player.position = Vector3(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, 0)
+	player.position = RoadFrame.roll(Vector3(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, 0))
 	add_child(player)
 
 # ---------- traffic (milestone 3, stage B step 3) ----------
@@ -328,7 +402,9 @@ func toggle_mute() -> void:
 
 # ---------- HUD (scripts/hud.gd) ----------
 func _setup_hud() -> void:
-	add_child(Hud.new(player, camera, traffic))
+	var hud := Hud.new(player, camera, traffic)
+	hud.night_clock = night_clock
+	add_child(hud)
 
 # ---------- game state (pause / restart / quit, issue #27) ----------
 func _setup_game_state() -> void:
@@ -337,8 +413,17 @@ func _setup_game_state() -> void:
 	add_child(PauseMenu.new(game_state))
 	add_child(TunerScreen.new(player, game_state))
 	add_child(WarningLights.new(player))
+	add_child(PhotoMode.new(game_state, camera))
 	radio = RadioManager.new()
 	add_child(radio)
+	night_clock.hour_changed.connect(_on_hour)
+	night_clock.night_ended.connect(func(_n: int) -> void: radio.announce_hour(NightClock.END_HOUR))
+
+## Dave reads the hour out. 8 p.m. only ever comes from the roll into the next
+## night, right after his 6 a.m. sign-off, so it is skipped.
+func _on_hour(hour24: int) -> void:
+	if hour24 != NightClock.START_HOUR:
+		radio.announce_hour(hour24)
 
 func _process(_delta: float) -> void:
-	_update_chunk_pool(player.position.z)
+	_update_chunk_pool(RoadFrame.unroll(player.position).z)

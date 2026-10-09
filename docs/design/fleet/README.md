@@ -37,12 +37,19 @@ folder. The proxies are design references, not the game models.
   its outline: a light bar, a push bar, an A-pillar spotlight or antennas.
   Livery is navy `#1B2A4A` with silver `#C9CED6` doors and roof.
 
-## The 12 cars
+## The 13 cars
+
+P0 is the prologue car (Roy, 2026-10-09): a worn rear-engine beater, power
+tier T0, an original design inspired only by the rear-engine air-cooled
+economy cars of the 1960s (no brand, no logos). It came after the B1 audit, so
+it is not in `verify.json`, `outline_check.png` or `audit/`; its sheet is
+`sheets/p0_beater.png` and its game model `scripts/p0_beater_data.gd`.
 
 Sizes are in metres. H is the overall height, including roof gear.
 
 | Car | L × W × H | Wheelbase | Silhouette rule (short) |
 |---|---|---|---|
+| P0 Rear-engine beater (starter, added 2026-10-09) | 4.05 × 1.58 × 1.50 | 2.40 | one dome nose to tail, pontoon fenders bulging at each wheel, round lamps up on the front fenders, louvred engine lid, tall narrow tyres in sagging arches |
 | P1 Sports coupe | 4.42 × 1.80 × 1.24 | 2.52 | long hood, cabin pushed back, fastback, hoop wing, pop-ups |
 | P2 Hot hatch | 4.05 × 1.83 × 1.40 | 2.56 | short brick, narrow upright cabin on box-blistered hips, upright hatch under an overhanging spoiler |
 | P3 Tuner sedan | 4.48 × 1.78 × 1.36 | 2.62 | square four-door, boxed overfenders, pedestal wing, 4 round tail lamps |
@@ -96,6 +103,7 @@ patrol SUV.
 
 - **Palette:** Amber vs. Dusk, as listed in ROADMAP.md.
 - **Hero paints:**
+  - P0 Faded sage `#8C9B88`, with a primer-grey front lid `#5F5B58` (the one panel never painted)
   - P1 Sodium `#FF8A1F`
   - P2 Rally red `#C41E24`
   - P3 Pearl white `#E9E6DF` with bronze wheels
@@ -130,6 +138,8 @@ patrol SUV.
 
   Add one wheel mesh drawn 4 times. That is about 5–7 draw calls per car, and
   swapped parts are merged into the body mesh when the build changes.
+  (2026-10-07: the traffic cars add a 4th body surface, the additive tail
+  flares that keep a car visible at night, so NpcCarBuilder cars are 8.)
 
 ## Verification
 

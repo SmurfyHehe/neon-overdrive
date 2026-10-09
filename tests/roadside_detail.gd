@@ -13,8 +13,8 @@ extends SceneTree
 #   leaving no gap wider than 0.3 m
 # - the lamp mesh: every triangle has area, a unit normal that matches its
 #   clockwise (Godot front-face) winding
-# - look rules: building windows use EMISSION_OP_MULTIPLY (the white-block
-#   bug), and road paint, posts, curb and barrier stay under the 1.0 glow
+# - look rules: building windows emit only through the facade mask (the
+#   white-block bug), and road paint, posts, curb and barrier stay under the 1.0 glow
 #   threshold (no neon); lamp heads are above it (they should bloom)
 #
 # Needs a real window: headless drops MultiMesh instance data.
@@ -91,6 +91,16 @@ func _check_chunk(chunk: Node3D, prev: Dictionary, cfg: Dictionary, label: Strin
 			var dz := mm.get_instance_transform(i).origin.z - mm.get_instance_transform(i + 1).origin.z
 			if absf(dz - B.PYLON_SPACING) > EPS:
 				_fail("%s %s: posts %d->%d are %.2f m apart" % [label, node_name, i, i + 1, dz])
+	# centre barrier: one piece per centreline station (#37), end to end on the centre line
+	var bar := chunk.get_node(^"Barrier") as MultiMeshInstance3D
+	if bool(cfg.barrier) != bar.visible:
+		_fail("%s: barrier shown %s" % [label, bar.visible])
+	if cfg.barrier:
+		var seg := B.CHUNK_LEN / B.STATIONS
+		for k in B.STATIONS:
+			var o := bar.multimesh.get_instance_transform(k).origin
+			if absf(o.x) > EPS or absf(o.y - B.BARRIER_Y) > EPS or absf(o.z + seg * (k + 0.5)) > EPS:
+				_fail("%s: barrier piece %d at %s" % [label, k, o])
 	_check_frontage(chunk, label)
 
 ## Buildings (z spans from their collision boxes) plus gap walls must tile
@@ -101,14 +111,16 @@ func _check_frontage(chunk: Node3D, label: String) -> void:
 		var spans: Array = []
 		for i in B._building_slots() * 2:
 			var body: StaticBody3D = chunk.get_node(NodePath("BuildingBody%d" % i))
-			if signf(body.position.x) != side:
-				continue
+			if signf(body.position.x) != side or (body.get_node(^"Shape") as CollisionShape3D).disabled:
+				continue  # other side, or an empty lot the gap walls close
 			var d: float = ((body.get_node(^"Shape") as CollisionShape3D).shape as BoxShape3D).size.z
 			spans.append([body.position.z + d / 2.0, body.position.z - d / 2.0, "building"])
 		for i in walls.visible_instance_count:
 			var t := walls.get_instance_transform(i)
 			if signf(t.origin.x) != side:
 				continue
+			if t.basis.get_scale().x > 1.0:
+				continue  # a district step wall runs across the lot, not along it
 			var length := t.basis.get_scale().z
 			spans.append([t.origin.z + length / 2.0, t.origin.z - length / 2.0, "wall"])
 		spans.sort_custom(func(a, b): return a[0] > b[0])
@@ -152,10 +164,11 @@ func _check_lamp_mesh() -> void:
 	print("lamp mesh: %d surfaces checked" % mesh.get_surface_count())
 
 func _check_materials() -> void:
-	for garage in [false, true]:
-		var m := B._get_building_mat(garage)
-		if m.emission_operator != BaseMaterial3D.EMISSION_OP_MULTIPLY:
-			_fail("building material (garage=%s) emission is ADD: every face glows white" % garage)
+	# Buildings share the facade kit's one shader material; only masked
+	# glass emits (scripts/building_kit.gd), so no white-block faces.
+	var bm := B.BuildingKit.material()
+	if bm.shader == null or not bm.shader.code.contains("EMISSION = c * lit"):
+		_fail("building facade material lost its window-masked emission")
 	var dim := {
 		"lane dash": B._get_lane_dash_mat(), "centre dash": B._get_center_dash_mat(),
 		"edge line": B._get_edge_line_mat(), "curb": B._get_curb_mat(),

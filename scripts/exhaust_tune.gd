@@ -1,4 +1,5 @@
-# Exhaust tune (stage B step 2, 2026-10-05). Four knobs, all 0..1, all
+# Exhaust tune (stage B step 2, 2026-10-05). Four knobs, all 0..1, plus the
+# anti-lag switch (2026-10-07), all
 # COSMETIC: they change what the exhaust sounds and looks like and nothing
 # else. No wear, heat, fuel, police or physics effect (Roy's decision,
 # ROADMAP stage B). EngineSynth reads them; a flame visual reads the events
@@ -17,23 +18,33 @@ var pops := 0.3
 ## Flamethrower: how much fire a pop or a rev-limiter cut spits out the tip.
 ## 0 = no flames. Cosmetic: it only sizes the flame events.
 var flame := 0.0
+## Anti-lag crackle switch (exhaust flames, 2026-10-07, Roy: cosmetic only, its
+## own switch). 0 = off, 1 = on; a float so tune slots and the save file treat
+## it like the knobs. On: lifting off at rpm keeps banging and spitting fire the
+## way a rally car's anti-lag does. No boost, wear or physics effect.
+## Turbo cars only (exhaust sound research, option A, 2026-10-07): every car
+## preset has it on (for_car()), but it only fires while the car has a turbo (see
+## anti_lag_live()). A naturally aspirated car keeps the switch and stays quiet.
+## A bare ExhaustTune.new() (a synth with no car) has it off.
+var anti_lag := 0.0
 
 ## Where the player's tune is kept between runs (one entry per car id). Tests
 ## point this at a scratch file so they never read or write the real one.
 static var save_path := TestMode.path("user://exhaust_tune.json")
 
-const KEYS := ["loudness", "raspiness", "pops", "flame"]
+const KEYS := ["loudness", "raspiness", "pops", "flame", "anti_lag"]
 
-func _init(l := 0.5, r := 0.3, p := 0.3, f := 0.0) -> void:
+func _init(l := 0.5, r := 0.3, p := 0.3, f := 0.0, al := 0.0) -> void:
 	loudness = l
 	raspiness = r
 	pops = p
 	flame = f
+	anti_lag = al
 
-## The four knobs as {key: float}, the form a car's spec holds under "exhaust"
-## and a saved file stores.
+## The knobs as {key: float}, the form a car's spec holds under "exhaust" and a
+## saved file stores.
 func to_dict() -> Dictionary:
-	return {"loudness": loudness, "raspiness": raspiness, "pops": pops, "flame": flame}
+	return {"loudness": loudness, "raspiness": raspiness, "pops": pops, "flame": flame, "anti_lag": anti_lag}
 
 ## Copies the knobs of a {key: float} dictionary into this tune (keys it does not
 ## have are left alone), clamped to 0..1.
@@ -42,6 +53,7 @@ func apply_dict(d: Dictionary) -> void:
 	raspiness = clampf(float(d.get("raspiness", raspiness)), 0.0, 1.0)
 	pops = clampf(float(d.get("pops", pops)), 0.0, 1.0)
 	flame = clampf(float(d.get("flame", flame)), 0.0, 1.0)
+	anti_lag = 1.0 if float(d.get("anti_lag", anti_lag)) >= 0.5 else 0.0  # a switch
 
 ## The saved tune of a car as {key: float}, or {} if there is none (no file, a
 ## file that will not parse, or no entry for this car).
@@ -84,7 +96,7 @@ static func _read_cars() -> Dictionary:
 	return {}
 
 ## Per-car starting tunes, keyed by the fleet ids in docs/design/fleet/fleet.json.
-## Order: loudness, raspiness, pops, flame. Researched 2026-10-05 and mostly
+## Order: loudness, raspiness, pops, flame. Anti-lag starts off on every car. Researched 2026-10-05 and mostly
 ## judgement calls: no per-car dB or pop data is published. Grounding:
 ## - pops are an ECU-tune effect (overrun fuel cut off, retarded ignition), so
 ##   stock-type cars pop rarely (https://www.bristol-tuning.com/services/overrun-pop-crackle/);
@@ -98,6 +110,7 @@ static func _read_cars() -> Dictionary:
 ## Players are loud and rude, traffic quiet, police subdued. Roy can retune any.
 const PRESETS := {
 	"p1_coupe":       [0.55, 0.55, 0.35, 0.20],
+	"p0_beater":      [0.30, 0.25, 0.20, 0.00],  # one rusty pipe, no flames
 	"p2_hothatch":    [0.45, 0.60, 0.30, 0.10],
 	"p3_tuner":       [0.70, 0.70, 0.60, 0.45],
 	"p4_kei":         [0.40, 0.70, 0.35, 0.15],
@@ -111,6 +124,14 @@ const PRESETS := {
 	"c3_interceptor": [0.50, 0.40, 0.15, 0.05],
 }
 
+## Whether anti-lag fires on this car: the switch is on and the car has a turbo
+## (turbo_boost_max > 0). The one rule both the synth feed (EngineAudio) and the
+## traffic flame sim use, so sound and fire agree.
+static func anti_lag_live(spec: Dictionary) -> bool:
+	var ex: Variant = spec.get("exhaust", {})
+	var on := ex is Dictionary and float(ex.get("anti_lag", 0.0)) >= 0.5
+	return on and float(spec.get("turbo_boost_max", 0.0)) > 0.0
+
 static func for_car(id: String) -> ExhaustTune:
 	var p: Array = PRESETS.get(id, [0.5, 0.3, 0.3, 0.0])
-	return ExhaustTune.new(p[0], p[1], p[2], p[3])
+	return ExhaustTune.new(p[0], p[1], p[2], p[3], 1.0)  # anti-lag on: it fires only with a turbo

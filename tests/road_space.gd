@@ -58,7 +58,8 @@ func _run() -> void:
 		_check(absf(maxf(absf(road.position.x), absf(road.end.x)) - edge) < EPS, "drawn road ends at %.2f, not %.2f" % [maxf(absf(road.position.x), absf(road.end.x)), edge])
 		var walk_out: float = edge + B.SHOULDER_W + B.CURB_W + B.SIDEWALK_W
 		var wall: StaticBody3D = chunk.get_node(^"BoundaryOwn" if side == 1 else ^"BoundaryOnc")
-		var inner_face := absf(wall.position.x) - B.BOUNDARY_T / 2.0
+		# The wall is one box per centreline station (#37); they all sit at one x.
+		var inner_face := absf(wall.position.x + (wall.get_node(^"Shape") as Node3D).position.x) - B.BOUNDARY_T / 2.0
 		_check(absf(inner_face - (walk_out + B.BUILDING_GAP)) < EPS, "side %d: wall inner face at %.2f, sidewalk ends %.2f" % [side, inner_face, walk_out])
 	print("road_space: %s" % ("PASS" if fails == 0 else "FAIL (%d)" % fails))
 	quit(1 if fails > 0 else 0)

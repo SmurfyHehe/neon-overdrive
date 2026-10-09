@@ -16,12 +16,10 @@ const GROUPS := [
 	["Gears & Engine", [
 		["shift_up", "Shift up (manual)"], ["shift_down", "Shift down (manual)"], ["toggle_gearbox", "Gearbox: auto / semi / manual"],
 		["clutch", "Clutch (hold, manual)"], ["starter", "Starter (hold, manual)"]]],
-	["Camera", [["camera_cycle", "Camera smoothing"], ["camera_view", "Chase / cockpit view"], ["look_back", "Look back (hold)"]]],
+	["Camera", [["camera_cycle", "Camera smoothing"], ["camera_view", "Chase / cockpit view"], ["look_back", "Look back (hold)"], ["look_glance", "Mirror glance (tap; steer picks side)"], ["window", "Side window (hold: down, tap: up)"]]],
 	["Audio & Radio", [["mute", "Mute"], ["radio_next", "Next radio station"]]],
+	["Photo mode", [["photo_mode", "Photo mode"], ["photo_forward", "Forward"], ["photo_back", "Back"], ["photo_left", "Left"], ["photo_right", "Right"], ["photo_down", "Down"], ["photo_up", "Up"], ["photo_fast", "Faster (hold)"], ["photo_look_left", "Look left"], ["photo_look_right", "Look right"], ["photo_look_up", "Look up"], ["photo_look_down", "Look down"], ["photo_fov_narrow", "Zoom in"], ["photo_fov_wide", "Zoom out"], ["photo_shot", "Save photo"]]],
 	["Menus", [["pause", "Pause / back"], ["tuning_panel", "Tuning panel"], ["autotune_panel", "Auto-Tune panel"]]],
-	["Exhaust", [
-		["exhaust_loud_up", "Louder"], ["exhaust_loud_down", "Quieter"], ["exhaust_rasp_up", "More rasp"],
-		["exhaust_rasp_down", "Less rasp"], ["exhaust_pops_up", "More pops"], ["exhaust_pops_down", "Fewer pops"]]],
 ]
 
 const SILVER := Color("#C9CED6")
@@ -31,10 +29,14 @@ var game_state: GameState
 var resume_button: Button
 var volume_sliders := {}   # channel -> HSlider
 var fov_slider: HSlider
+var smoothing_slider: HSlider
+var smoke_burnout_slider: HSlider
+var smoke_drift_slider: HSlider
 var main_page: VBoxContainer
 var controls_page: VBoxContainer
 var controls_scroll: ScrollContainer
 var controls_back_button: Button
+var cars_page: VBoxContainer
 
 func _init(state: GameState) -> void:
 	game_state = state
@@ -89,7 +91,8 @@ func _ready() -> void:
 		volume_sliders[channel] = s
 
 	# Traffic sliders (stage B step 3): car count and draw distance, applied to
-	# the running TrafficManager at once and saved with the volumes.
+	# the running TrafficManager at once and saved with the volumes. Night
+	# lights (2026-10-07): tail lamps, flares and barrier reflectors.
 	var traffic_title := Label.new()
 	traffic_title.text = "Traffic"
 	traffic_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -108,6 +111,10 @@ func _ready() -> void:
 			var traffic: Variant = get_parent().get("traffic")
 			if traffic != null:
 				traffic.detail_distance = TrafficSettings.detail_distance)
+	_add_slider(box, "Night lights", TrafficSettings.LIGHT_GLOW_MIN, TrafficSettings.LIGHT_GLOW_MAX, 0.1, TrafficSettings.light_glow,
+		func(v: float) -> void:
+			TrafficSettings.set_light_glow(v)
+			TrafficSettings.save_settings())
 
 	# View slider (2026-10-06): the cockpit FOV, 55-78, default 62; the speed
 	# widening (up to +6) rides on top of it. Applies at once, saved with the rest.
@@ -120,13 +127,35 @@ func _ready() -> void:
 			ViewSettings.set_cockpit_fov(v)
 			ViewSettings.save_settings())
 
+	smoothing_slider = _add_slider(box, "Camera", 0.0, float(ViewSettings.CAMERA_SMOOTHING_MAX), 1.0, float(ViewSettings.camera_smoothing),
+		func(v: float) -> void:
+			ViewSettings.set_camera_smoothing(int(v))
+			ViewSettings.save_settings())
+
+	# Tyre smoke amounts (2026-10-07): 0 = none, 1 = default, 2 = double.
+	# Read live by TyreSmoke each tick, saved with the rest.
+	var smoke_title := Label.new()
+	smoke_title.text = "Tyre smoke"
+	smoke_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(smoke_title)
+	smoke_burnout_slider = _add_slider(box, "Burnout", 0.0, FxSettings.SMOKE_MAX, 0.1, FxSettings.smoke_burnout,
+		func(v: float) -> void:
+			FxSettings.set_smoke(v, FxSettings.smoke_drift)
+			FxSettings.save_settings())
+	smoke_drift_slider = _add_slider(box, "Drift", 0.0, FxSettings.SMOKE_MAX, 0.1, FxSettings.smoke_drift,
+		func(v: float) -> void:
+			FxSettings.set_smoke(FxSettings.smoke_burnout, v)
+			FxSettings.save_settings())
+
 	resume_button = _add_button(box, "Resume", game_state.resume)
+	_add_button(box, "Car: " + PlayerCars.title(PlayerCar.chassis_kind()), show_cars)
 	_add_button(box, "Controls", show_controls)
 	_add_button(box, "Service car (reset wear)", _service_car)
 	_add_button(box, "Restart", game_state.restart)
 	_add_button(box, "Quit", game_state.quit)
 
 	_build_controls_page(center)
+	_build_cars_page(center)
 	game_state.state_changed.connect(_on_state_changed)
 
 ## Resets temperatures, tyre, clutch and brake wear (the garage will own this later).
@@ -170,6 +199,7 @@ func _on_state_changed(new_state: GameState.State, _old_state: GameState.State) 
 func show_controls() -> void:
 	_refresh_controls()
 	main_page.visible = false
+	cars_page.visible = false
 	controls_page.visible = true
 	# Cap the list to the window so it scrolls instead of running off-screen.
 	controls_scroll.custom_minimum_size = Vector2(640, maxf(get_viewport().get_visible_rect().size.y * 0.7, 160.0))
@@ -178,6 +208,7 @@ func show_controls() -> void:
 func show_main() -> void:
 	main_page.visible = true
 	controls_page.visible = false
+	cars_page.visible = false
 	resume_button.grab_focus()  # keyboard/controller can navigate the menu
 
 func _build_controls_page(center: CenterContainer) -> void:
@@ -279,3 +310,37 @@ static func _pad_axis_name(axis: int, value: float) -> String:
 		JOY_AXIS_TRIGGER_LEFT: return "LT"
 		JOY_AXIS_TRIGGER_RIGHT: return "RT"
 	return "Axis %d" % axis
+
+# ---------- Car page (stage D, Roy 2026-10-09) ----------
+## One button per player car (PlayerCars.KINDS). Picking one saves it and
+## restarts the run in that car; the garage replaces this page later.
+func show_cars() -> void:
+	main_page.visible = false
+	controls_page.visible = false
+	cars_page.visible = true
+	var first := cars_page.get_child(1)
+	if first is Button:
+		(first as Button).grab_focus()
+
+func _build_cars_page(center: CenterContainer) -> void:
+	cars_page = VBoxContainer.new()
+	cars_page.add_theme_constant_override("separation", 8)
+	cars_page.visible = false
+	center.add_child(cars_page)
+	var title := Label.new()
+	title.text = "CAR  (restarts the run)"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cars_page.add_child(title)
+	var now := PlayerCar.chassis_kind()
+	for k in PlayerCars.KINDS:
+		var text := "%s   %d Nm / %d kg" % [PlayerCars.title(k.id), int(k.nm), int(k.kg)]
+		if k.id == now:
+			text += "   (driving)"
+		var b := _add_button(cars_page, text, _pick_car.bind(String(k.id)))
+		b.custom_minimum_size = Vector2(420, 0)
+	_add_button(cars_page, "Back", show_main)
+
+func _pick_car(kind: String) -> void:
+	PlayerCars.select(kind)
+	PlayerCars.save_settings()
+	game_state.restart()

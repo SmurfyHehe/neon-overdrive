@@ -28,7 +28,7 @@ a build order. Nothing in them beyond what is listed as merged has been built.
 |---|---|---|
 | **A** Feel + environment (camera, FOV, shake, wind/road/squeal audio, lamps, gritty PS2 look) | **Merged**, Roy signed off 2026-10-05 | #84; `camera_feel`, `car_audio`, `roadside_detail` tests |
 | **B1** Design sheet for all 12 cars, audit, 4 sticker slots | **Merged** (design only, no game models) | #85, #86, #93; `fleet_design_check`, `fleet_proxies`, `fleet_silhouette_sweep`, `fleet_budget_scene` |
-| **B2** Exhaust (loudness, rasp, pops, flames; cosmetic only) | **Merged** | #92 (`af4ce02`); `exhaust_tune`, `exhaust_keys` |
+| **B2** Exhaust (loudness, rasp, pops, flames; cosmetic only) | **Merged** | #92 (`af4ce02`); `exhaust_tune`; held keys retired, now the Exhaust page of the Tuner |
 | Flaky-test fix | **Merged** | #87 (`61fe113`); `game_state`, `chunk_drive`, `tuning_panel` |
 | Linear damp 0 (car was capped at ~124 km/h) | **Merged** | #89 (`8cf2c89`) |
 | **Auto-Tune 0–7** (spec dict, hidden test track, goals/locks, search, panel, slots, exported-game fix, reverse key) | **Merged** | #88, #90, #100; `tune_params`, `tune_track`, `auto_tune_*`, `tune_slots`, `reverse_and_tabs` |
@@ -120,7 +120,7 @@ above, not here.
     noise bursts in `engine_synth.gd` and fire too often; avoid loop fatigue in
     every other sound too.
 11. **#80 engine sound per car and upgrade**: only meaningful once more cars exist.
-12. **Photo mode** (Roy's feature idea).
+12. ~~**Photo mode** (Roy's feature idea)~~ **Done** (P: free camera, HUD hidden, Enter saves a PNG to user://photos).
 
 ### L: several PRs or heavy art/audio
 

@@ -5,8 +5,7 @@ extends VBoxContainer
 # pops, flame), cosmetic only. They write into the player's spec under
 # "exhaust" through CarSpec.set_param(), the same path as the gearing sliders;
 # EngineAudio copies the spec into the live synth every frame, so changes are
-# heard at once, and saves the tune to disk once it settles. The held keys
-# U/J, I/K and O/L still work while driving and move the same values.
+# heard at once, and saves the tune to disk once it settles.
 #
 # These paths are in TuneParams.all() (so tune slots store them) but never in
 # TuneParams.auto_paths(): Auto-Tune does not touch them.
@@ -24,6 +23,7 @@ var player: PlayerCar
 var sliders := {}
 var value_labels := {}
 var preset_button: Button
+var anti_lag_check: CheckButton
 
 func _init(car: PlayerCar) -> void:
 	player = car
@@ -50,6 +50,11 @@ func _ready() -> void:
 		v.custom_minimum_size = Vector2(60, 0)
 		grid.add_child(v)
 		value_labels[k[0]] = v
+	# Anti-lag crackle: a switch, not a knob (Roy, 2026-10-07). Cosmetic only.
+	anti_lag_check = CheckButton.new()
+	anti_lag_check.text = "Anti-lag crackle"
+	anti_lag_check.toggled.connect(func(on: bool) -> void: _on_slider(1.0 if on else 0.0, "anti_lag"))
+	add_child(anti_lag_check)
 	preset_button = Button.new()
 	preset_button.text = "Reset to car preset"
 	preset_button.pressed.connect(_reset_to_preset)
@@ -64,11 +69,17 @@ func refresh() -> void:
 		var v := TuneParams.get_value(player.spec, "exhaust/" + key)
 		sliders[key].set_value_no_signal(v)
 		value_labels[key].text = "%.2f" % v
+	anti_lag_check.set_pressed_no_signal(TuneParams.get_value(player.spec, "exhaust/anti_lag") >= 0.5)
+	# Turbo cars only: the switch keeps its value but greys out with no boost.
+	var turbo := float(player.spec.get("turbo_boost_max", 0.0)) > 0.0
+	anti_lag_check.disabled = not turbo
+	anti_lag_check.text = "Anti-lag crackle" if turbo else "Anti-lag crackle (needs a turbo)"
 	_push_to_synth()
 
 func _on_slider(value: float, key: String) -> void:
 	var stored := CarSpec.set_param(player, player.spec, "exhaust/" + key, value)
-	value_labels[key].text = "%.2f" % stored
+	if value_labels.has(key):
+		value_labels[key].text = "%.2f" % stored
 	_push_to_synth()
 
 ## Live apply: EngineAudio copies the spec into the synth every frame, but it does

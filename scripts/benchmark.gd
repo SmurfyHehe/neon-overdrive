@@ -67,8 +67,10 @@ func _process(delta: float) -> void:
 	var p: PlayerCar = game.get("player")
 	var speed := p.linear_velocity.length()
 	max_speed = max(max_speed, speed)
-	# Heading hold: steer only when yaw drifts, nudged back toward x=0.
-	var err: float = p.global_rotation.y + clampf((TrafficManager.lane_centre(1, false) - p.global_position.x) * 0.02, -0.05, 0.05)
+	# Heading hold: steer only when yaw (relative to the road, RoadFrame)
+	# drifts, nudged back toward the lane.
+	var u := RoadFrame.unroll(p.global_position)
+	var err: float = (p.global_rotation.y - RoadFrame.heading_at(u.z)) + clampf((TrafficManager.lane_centre(1, false) - u.x) * 0.02, -0.05, 0.05)
 	_press(KEY_A, err < -0.02)
 	_press(KEY_D, err > 0.02)
 	if p.gear >= 1 and p.gear < 6 and speed > 9.0 * p.gear and not p.is_shifting:

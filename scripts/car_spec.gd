@@ -27,6 +27,8 @@ static func apply(v: Vehicle, spec: Dictionary) -> void:
 			v.torque_curve = _curve_from_shape(spec[key])
 		elif key == "exhaust":
 			continue  # cosmetic: EngineAudio reads it from the spec, the Vehicle has no such property
+		elif key == "engine_voice":
+			continue  # sound only (#80): EngineAudio hands it to EngineSynth
 		else:
 			v.set(key, _own(spec[key]))
 
@@ -50,7 +52,7 @@ static func clone_spec(spec: Dictionary) -> Dictionary:
 	return out
 
 ## THE write path for tuning (raw panel and Auto-Tune both). Clamps to the
-## registry range, writes the spec and the live car, then redoes whatever the
+## registry's Advanced hard limits (adv_min..adv_max), writes the spec and the live car, then redoes whatever the
 ## vendored Vehicle only works out once. Returns the value actually stored, or
 ## NAN for a path that is not in TuneParams.
 ##
@@ -65,7 +67,15 @@ static func set_param(v: Vehicle, spec: Dictionary, path: String, value: float) 
 	if entry.is_empty():
 		push_error("CarSpec.set_param: '%s' is not a tunable path" % path)
 		return NAN
-	value = clampf(value, entry.min, entry.max)
+	if not is_finite(value):
+		# clampf() passes NaN straight through, and one NaN on the car poisons
+		# the whole sim. Keep what is there (settings safety, 2026-10-07).
+		push_warning("CarSpec.set_param: ignored non-finite %s for '%s'" % [str(value), path])
+		return TuneParams.get_value(spec, path)
+	# The Advanced hard limits, not the safe range (settings safety part 2).
+	value = clampf(value, entry.adv_min, entry.adv_max)
+	if path == "front_brake_bias":
+		value = -1.0 if value < 0.0 else maxf(value, TuneParams.BIAS_MIN)
 	TuneParams.set_value(spec, path, value)
 	if entry.on_car:
 		TuneParams.set_value(v, path, value)
@@ -233,12 +243,168 @@ static func coupe_default() -> Dictionary:
 		# Exhaust sound tune (cosmetic, never Auto-Tune; see TuneParams).
 		# Starts on the P1 preset; EngineAudio overlays the player's saved tune.
 		"exhaust": ExhaustTune.for_car("p1_coupe").to_dict(),
+		# What the engine itself sounds like (#80): a straight six. Not tunable.
+		"engine_voice": EngineVoice.for_car("p1_coupe"),
 	}
 
 ## Traffic tune (milestone 3, 2026-10-05): coupe_default() with commuter-car
 ## numbers -- a smaller engine, more drag, street tyres, hardly any downforce.
 ## Same simulation, different data; the three NPC cars (stage B step 5) replace
 ## this with their own dicts. Not measured from a real car.
+## The player's cars (stage D, 2026-10-09; PlayerCars.KINDS): coupe_default()
+## is the P1; each other car is the P1's tune with its own numbers from the
+## PR #197 car table (torque and mass are starting values for the D data pass,
+## not measured) and fleet.json's tyre widths. The same sim, different data;
+## the mod trees (stage E) override these the same way.
+## Turbo cars: the table's torque is the peak ON boost. GEVP's turbo multiplies
+## engine torque by 1 + turbo_gain (0.45) at full boost, whatever
+## turbo_boost_max is, so their max_torque is the table value / TURBO_PEAK.
+const TURBO_PEAK := 1.45
+
+static func player_spec(kind: String) -> Dictionary:
+	var s := coupe_default()
+	match kind:
+		"p0_beater":
+			# The prologue car (Roy, 2026-10-09): a worn rear-engine, air-cooled
+			# flat four. About 290 Nm, power tier T0 (0.29 Nm/kg: under the T1
+			# band's 0.30). Nothing is wrong with it on paper; it is just slow:
+			# the torque is all low down and gone by 4500 (torque_shape falls
+			# early, low redline), long gears (five: TuneParams tunes gear_ratios/0-4,
+			# so every player car carries five), narrow hard tyres on soft
+			# springs, 60% of the weight over the back axle, and the drag of a
+			# brick. Stability aids off: it never had any.
+			var gears: Array[float] = [3.80, 2.30, 1.55, 1.10, 0.86]
+			s["vehicle_mass"] = 1000.0
+			s["front_weight_distribution"] = 0.40
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 290.0
+			s["max_rpm"] = 4800.0
+			s["idle_rpm"] = 850.0
+			s["torque_shape"] = {"low_end": 0.55, "peak_pos": 0.40, "plateau": 0.1, "falloff": 0.35}
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.1
+			s["coefficient_of_drag"] = 0.46
+			s["frontal_area"] = 2.0
+			s["front_tire_width"] = 155.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 165.0
+			s["coefficient_of_friction"] = {"Road": 0.95, "Dirt": 0.8}
+			s["front_damping_ratio"] = 0.32
+			s["rear_damping_ratio"] = 0.32
+			s["front_arb_ratio"] = 0.05
+			s["rear_arb_ratio"] = 0.0
+			s["front_spring_length"] = 0.26
+			s["rear_spring_length"] = 0.28
+			s["center_of_gravity_height_offset"] = 0.02
+			s["traction_control_max_slip"] = 0.0
+			s["stability_yaw_strength"] = 0.0
+			s["brake_force_multiplier"] = 1.8
+			s["aero_downforce_coefficient_front"] = 0.0
+			s["aero_downforce_coefficient_rear"] = 0.0
+			s["shift_time"] = 0.35
+			s["automatic_time_between_shifts"] = 1200.0
+		"p2_hothatch":
+			# Kobo, T1: 2.0 turbo four, front drive, light, short gears. Launches.
+			var gears: Array[float] = [3.25, 2.00, 1.45, 1.12, 0.90]
+			s["vehicle_mass"] = 1080.0
+			s["front_weight_distribution"] = 0.62
+			s["front_torque_split"] = 1.0
+			s["max_torque"] = 340.0 / TURBO_PEAK
+			s["max_rpm"] = 7200.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.2
+			s["coefficient_of_drag"] = 0.34
+			s["frontal_area"] = 2.05
+			s["front_tire_width"] = 225.0
+			s["rear_tire_width"] = 225.0
+			s["front_arb_ratio"] = 0.25
+			s["rear_arb_ratio"] = 0.32   # a stiff rear bar: lift-off tuck, not plough
+			s["turbo_boost_max"] = 0.5
+		"p3_tuner":
+			# Ronin, T2: 2.6 straight six, rear drive (the tree adds AWD). Revs.
+			var gears: Array[float] = [3.20, 1.95, 1.40, 1.07, 0.85]
+			s["vehicle_mass"] = 1300.0
+			s["front_weight_distribution"] = 0.54
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 520.0 / TURBO_PEAK
+			s["max_rpm"] = 7800.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.1
+			s["coefficient_of_drag"] = 0.33
+			s["frontal_area"] = 2.1
+			s["front_tire_width"] = 245.0
+			s["rear_tire_width"] = 245.0
+			s["turbo_boost_max"] = 0.7
+		"p4_kei":
+			# Mite, T1: 0.66 triple behind the seats, rear drive, 760 kg, 9500
+			# redline. Corners; slow on the straights. No turbo stock: "Small
+			# turbo" is a node of its tree (PR #197), and the Tuner's torque floor
+			# is 150 Nm, under which a boosted base would have to sit.
+			var gears: Array[float] = [3.40, 2.20, 1.60, 1.20, 0.95]
+			s["vehicle_mass"] = 760.0
+			s["front_weight_distribution"] = 0.42
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 180.0
+			# 8500 rpm, not the sheet's 9500: with this little torque the engine
+			# never got there and the automatic never left 2nd (tests/player_cars.gd,
+			# the same finding as the AI kei's 8000 in npc_spec). The curve
+			# holds to the top, so it does reach the shift point.
+			s["max_rpm"] = 8500.0
+			s["idle_rpm"] = 1100.0
+			s["torque_shape"] = {"low_end": 0.35, "peak_pos": 0.7, "plateau": 0.15, "falloff": 0.8}
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.6
+			s["coefficient_of_drag"] = 0.36
+			s["frontal_area"] = 1.6
+			s["front_tire_width"] = 175.0
+			s["rear_tire_width"] = 185.0
+			s["max_steering_angle"] = deg_to_rad(42.0)
+			s["center_of_gravity_height_offset"] = -0.12
+		"p5_muscle":
+			# Marlowe, T3: 5.7 V8, rear drive, lazy auto, 1800 kg. Torque. (Five
+			# ratios like every player car; the sheet's 4-speed feel is in the
+			# long gaps and the slow shift.)
+			var gears: Array[float] = [2.60, 1.75, 1.25, 0.95, 0.72]
+			s["vehicle_mass"] = 1800.0
+			s["front_weight_distribution"] = 0.55
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 820.0
+			s["max_rpm"] = 5800.0
+			s["idle_rpm"] = 700.0
+			s["torque_shape"] = {"low_end": 0.6, "peak_pos": 0.45, "plateau": 0.15, "falloff": 0.6}
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.4
+			s["coefficient_of_drag"] = 0.36
+			s["frontal_area"] = 2.35
+			s["front_tire_width"] = 255.0
+			s["rear_tire_width"] = 320.0
+			s["front_damping_ratio"] = 0.40
+			s["rear_damping_ratio"] = 0.40
+			s["front_arb_ratio"] = 0.15
+			s["rear_arb_ratio"] = 0.10
+			s["shift_time"] = 0.3
+		"p6_crossover":
+			# Cairn, T2: 2.0 turbo flat four, AWD 40:60, tall, lifted. Grips.
+			var gears: Array[float] = [3.30, 2.00, 1.40, 1.07, 0.85]
+			s["vehicle_mass"] = 1450.0
+			s["front_weight_distribution"] = 0.58
+			s["front_torque_split"] = 0.4
+			s["max_torque"] = 580.0 / TURBO_PEAK
+			s["max_rpm"] = 6800.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.0
+			s["coefficient_of_drag"] = 0.36
+			s["frontal_area"] = 2.45
+			s["front_tire_width"] = 235.0
+			s["rear_tire_width"] = 235.0
+			s["coefficient_of_friction"] = {"Road": 1.2, "Dirt": 1.05}
+			s["center_of_gravity_height_offset"] = 0.05
+			s["turbo_boost_max"] = 0.7
+		_:
+			return s  # p1_coupe, or an unknown kind: the coupe
+	s["exhaust"] = ExhaustTune.for_car(kind).to_dict()
+	s["engine_voice"] = EngineVoice.for_car(kind)
+	return s
+
 static func traffic_default() -> Dictionary:
 	var s := coupe_default()
 	s["vehicle_mass"] = 1250.0
@@ -252,6 +418,10 @@ static func traffic_default() -> Dictionary:
 	s["automatic_transmission"] = true
 	s["realistic_clutch"] = false
 	s["turbo_boost_max"] = 0.0
+	s["engine_voice"] = EngineVoice.for_car("n1_commuter")
+	# A commuter's exhaust: no flames (ExhaustFlames reads this; only a car
+	# whose flame value is above 0 gets them, today the C3 interceptor).
+	s["exhaust"] = ExhaustTune.for_car("n1_commuter").to_dict()
 	return s
 
 ## The traffic cars (stage B step 5, NpcCarBuilder.KINDS): traffic_default()
@@ -323,6 +493,16 @@ static func npc_spec(kind: String) -> Dictionary:
 		# The rest of the B1 sheet as AI cars (NpcCarBuilder.KINDS, not in the
 		# traffic MIX). Class numbers, not the player tune: when a player car
 		# becomes drivable (stage D) it gets its own spec like coupe_default().
+		"p0_beater":
+			# The beater as an AI car: the player's own numbers (CarSpec.
+			# player_spec), it has no faster version.
+			var ps := player_spec("p0_beater")
+			for k in ["vehicle_mass", "front_weight_distribution", "front_torque_split", "max_torque", "max_rpm",
+					"idle_rpm", "torque_shape", "gear_ratios", "final_drive", "coefficient_of_drag", "frontal_area",
+					"front_tire_width", "rear_tire_width", "coefficient_of_friction", "front_damping_ratio",
+					"rear_damping_ratio", "front_arb_ratio", "rear_arb_ratio", "front_spring_length",
+					"rear_spring_length", "center_of_gravity_height_offset", "engine_voice", "exhaust"]:
+				s[k] = ps[k]
 		"p2_hothatch":
 			# Hot hatch (Golf GTI / Civic Si class), 2.0 l four, front drive: light
 			# and short-geared, a stiffer rear bar so it rotates rather than ploughs.
@@ -487,12 +667,44 @@ static func npc_spec(kind: String) -> Dictionary:
 ## its tyre numbers from the FIRST group of whatever it hits (gevp_wheel.gd
 ## process_forces), a car's first group is "aero_vehicles", and
 ## coefficient_of_friction["aero_vehicles"] does not exist.
+##
+## Walls (WALL_LAYER: the out-of-bounds walls and the buildings) are off layer
+## 1 for the same reason (2026-10-07). A car pressed against a wall leans into
+## it, its wheel rays tip with it and land on the wall face, and the springs
+## then push the car up the wall: Roy's "the car bugs out on the walls", up to
+## 4 m in the air and on its roof at 200 km/h (tests/wall_hit.gd). Car bodies
+## still collide with walls; wheels only ever see the ground and sidewalks.
+##
+## The sidewalks (KERB_LAYER) are the opposite: wheels see them, car bodies do
+## not. The chassis box rides ~4 cm off the road, so crossing the 15 cm kerb
+## ramp at speed used to drive the box up it like a ski jump (4 m/s straight
+## up at 126 km/h, tests/wall_hit.gd) and the car reached the wall airborne and
+## tumbled. Now the wheels climb the kerb through the suspension, as on a real
+## car, and the box can only touch the road, walls and other cars.
 const WORLD_LAYER := 1
 const CAR_LAYER := 2
+const WALL_LAYER := 3
+const KERB_LAYER := 4
 
 static func set_collision_layers(v: Vehicle) -> void:
 	v.collision_layer = 1 << (CAR_LAYER - 1)
-	v.collision_mask = (1 << (WORLD_LAYER - 1)) | (1 << (CAR_LAYER - 1))
+	v.collision_mask = (1 << (WORLD_LAYER - 1)) | (1 << (CAR_LAYER - 1)) | (1 << (WALL_LAYER - 1))
+
+## Puts a wall body on WALL_LAYER with a frictionless surface, so a car that
+## hits it slides along or bounces off instead of being grabbed and rolled.
+static func make_wall(body: StaticBody3D) -> void:
+	body.collision_layer = 1 << (WALL_LAYER - 1)
+	body.collision_mask = 0
+	body.physics_material_override = _wall_material()
+
+static var _wall_mat: PhysicsMaterial
+
+static func _wall_material() -> PhysicsMaterial:
+	if _wall_mat == null:
+		_wall_mat = PhysicsMaterial.new()
+		_wall_mat.friction = 0.0
+		_wall_mat.bounce = 0.1
+	return _wall_mat
 
 ## Rise-then-taper torque curve, loosely modeled on a real gasoline engine's
 ## band, not measured from anything specific -- same shape every car uses for
@@ -556,6 +768,7 @@ static func build_wheels(v: Vehicle, kind: String, wheel_cfg: Dictionary, front_
 static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
 	var w := Wheel.new()
 	w.position = pos
+	w.collision_mask = (1 << (WORLD_LAYER - 1)) | (1 << (KERB_LAYER - 1))
 	v.add_child(w)
 	var visual: Node3D
 	if kind == TestCarBuilder.KIND:

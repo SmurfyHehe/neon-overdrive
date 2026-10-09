@@ -177,7 +177,7 @@ static func unit_box() -> BoxMesh:
 # (the low sheds) is the garage type: an auto shop with roller doors and a
 # TIRES / PARTS / AUTO / BODY sign, which milestone 8's stop-places can use.
 const TYPES := {
-	"apartment": {"tiles": [[T_APARTMENT, 60], [T_BRICK, 20], [T_CONCRETE, 20]], "h": [8.0, 24.0], "sign": 0.0},
+	"apartment": {"tiles": [[T_APARTMENT, 60], [T_BRICK, 20], [T_CONCRETE, 20]], "h": [8.0, 24.0], "sign": 0.3},  # a corner shop under the flats
 	"shop": {"tiles": [[T_SHOP, 100]], "h": [3.4, 10.5], "sign": 0.85},
 	"office": {"tiles": [[T_OFFICE, 70], [T_CONCRETE, 30]], "h": [12.0, 30.0], "sign": 0.0},
 	"parking": {"tiles": [[T_PARKING, 100]], "h": [6.0, 15.0], "sign": 0.0},

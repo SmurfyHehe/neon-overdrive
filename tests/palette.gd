@@ -4,6 +4,9 @@ extends SceneTree
 # literals and fails on cyan or magenta. ROADMAP: palette "Amber vs Dusk", "no
 # magenta or cyan"; police blue #2E4FD8 is the one off-palette colour, and the
 # RPM bar's green is allowed because Roy asked for green -> red there.
+# Shop signs (scripts/building_signs.gd) are exempt since Roy opened the
+# palette for them on 2026-10-09 ("more shop signs yes, the palette is open,
+# not just red and blue"): neon-style sign colours are the point there.
 #
 # What counts (r, g, b in 0..1):
 #   cyan     g > 0.6 and b > 0.6 and r < 0.35
@@ -99,6 +102,9 @@ func _initialize() -> void:
 			printerr("FAIL: ", m)
 		quit(1)
 
+## Files with an open palette (see the header).
+const EXEMPT := ["building_signs.gd"]
+
 func _collect(dir_path: String, out: Array[String]) -> void:
 	var d := DirAccess.open(dir_path)
 	if d == null:
@@ -107,7 +113,7 @@ func _collect(dir_path: String, out: Array[String]) -> void:
 		if sub != "vendor":
 			_collect(dir_path.path_join(sub), out)
 	for f in d.get_files():
-		if f.ends_with(".gd"):
+		if f.ends_with(".gd") and not EXEMPT.has(f):
 			out.append(dir_path.path_join(f))
 
 func _check(ok: bool, msg: String) -> void:

@@ -11,17 +11,22 @@ extends RefCounted
 # carry the word, the edges are dark sheet metal.
 #
 # Words are original and generic (no brands), drawn into a small atlas in
-# code with a 5x7 pixel font for the PS2 look. Colours stay in Amber vs
-# Dusk: sodium amber, warm white, cold green-white fluorescent, one dusk
-# blue. No magenta, no cyan.
+# code with a 5x7 pixel font for the PS2 look.
+#
+# More signs, more colours (2026-10-09, Roy: "more shop signs yes", "the
+# palette is open, not just red and blue"): the four Amber vs. Dusk colours
+# are joined by sign-tube red, hot pink, teal, violet, lime and cold blue,
+# eight more words, and some apartment blocks now have a lit shop on the
+# ground floor (building_kit "apartment" sign chance).
 
-const ROWS := 16
+const ROWS := 24
 const ROW_PX := 9
 const ATLAS_W := 64
 const GLYPH_W := 6  # 5 px glyph + 1 px spacing
 
 # Word lists by building type. DINER is kept back for the diner itself.
-const SHOP_WORDS := ["LIQUOR", "PAWN", "LAUNDRY", "NOODLES", "VIDEO", "BAR", "CAFE", "OPEN", "24 HR", "KEYS"]
+const SHOP_WORDS := ["LIQUOR", "PAWN", "LAUNDRY", "NOODLES", "VIDEO", "BAR", "CAFE", "OPEN", "24 HR", "KEYS",
+	"MOTEL", "PIZZA", "ARCADE", "TATTOO", "HOTEL", "RAMEN", "DONUTS", "GYM"]
 const GARAGE_WORDS := ["TIRES", "PARTS", "AUTO", "BODY"]
 const SPECIAL_WORDS := ["DINER"]
 const COLORS := [
@@ -29,6 +34,12 @@ const COLORS := [
 	Color(0.95, 0.9, 0.8),    # warm white
 	Color(0.62, 0.95, 0.58),  # cold fluorescent green-white
 	Color(0.36, 0.46, 1.0),   # dusk blue
+	Color(1.0, 0.16, 0.12),   # sign-tube red
+	Color(1.0, 0.25, 0.62),   # hot pink
+	Color(0.15, 0.95, 0.85),  # teal
+	Color(0.62, 0.3, 1.0),    # violet
+	Color(0.7, 1.0, 0.2),     # lime
+	Color(0.3, 0.75, 1.0),    # cold blue
 ]
 const ENERGY := 1.5  # above the 1.0 glow threshold: signs bloom, facades do not
 
@@ -39,10 +50,12 @@ const FONT := {
 	"D": ["#### ", "#   #", "#   #", "#   #", "#   #", "#   #", "#### "],
 	"E": ["#####", "#    ", "#    ", "#### ", "#    ", "#    ", "#####"],
 	"F": ["#####", "#    ", "#    ", "#### ", "#    ", "#    ", "#    "],
+	"G": [" ####", "#    ", "#    ", "#  ##", "#   #", "#   #", " ### "],
 	"H": ["#   #", "#   #", "#   #", "#####", "#   #", "#   #", "#   #"],
 	"I": ["#####", "  #  ", "  #  ", "  #  ", "  #  ", "  #  ", "#####"],
 	"K": ["#   #", "#  # ", "# #  ", "##   ", "# #  ", "#  # ", "#   #"],
 	"L": ["#    ", "#    ", "#    ", "#    ", "#    ", "#    ", "#####"],
+	"M": ["#   #", "## ##", "# # #", "# # #", "#   #", "#   #", "#   #"],
 	"N": ["#   #", "##  #", "# # #", "#  ##", "#   #", "#   #", "#   #"],
 	"O": [" ### ", "#   #", "#   #", "#   #", "#   #", "#   #", " ### "],
 	"P": ["#### ", "#   #", "#   #", "#### ", "#    ", "#    ", "#    "],
@@ -54,6 +67,7 @@ const FONT := {
 	"V": ["#   #", "#   #", "#   #", "#   #", "#   #", " # # ", "  #  "],
 	"W": ["#   #", "#   #", "#   #", "# # #", "# # #", "## ##", "#   #"],
 	"Y": ["#   #", "#   #", " # # ", "  #  ", "  #  ", "  #  ", "  #  "],
+	"Z": ["#####", "    #", "   # ", "  #  ", " #   ", "#    ", "#####"],
 	"2": [" ### ", "#   #", "    #", "   # ", "  #  ", " #   ", "#####"],
 	"4": ["#   #", "#   #", "#   #", "#####", "    #", "    #", "    #"],
 }
@@ -63,7 +77,7 @@ shader_type spatial;
 render_mode diffuse_lambert, specular_disabled;
 
 uniform sampler2D words : source_color, filter_nearest_mipmap, repeat_disable;
-uniform vec3 colors[4];
+uniform vec3 colors[10];
 uniform float energy = 1.5;
 uniform float rows = 16.0;
 uniform float atlas_w = 64.0;

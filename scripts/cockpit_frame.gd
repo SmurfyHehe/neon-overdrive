@@ -8,8 +8,10 @@ class_name CockpitFrame
 # lines so it fits the car seen from outside:
 #   dashboard with a cluster (tach and speedo needles, warning lamps that mirror
 #   PowertrainHealth), the SteeringWheel (LED strip, LCD, paddles) on a column,
-#   a centre stack with the radio head unit showing the station, a console with
-#   an H-gate gear lever that moves to the gear and a handbrake that lifts,
+#   a centre stack with the touch-screen HeadUnit (station tiles; the driver's
+#   hand taps them, the station changes on the tap), a console with a gear
+#   lever that follows the gearbox mode (H-gate in MANUAL, sequential stick in
+#   SEMI, R-N-D selector in AUTO) and a handbrake that lifts,
 #   two seats, door cards, sills, A- and B-pillars, roof liner, sun visors,
 #   floor and footwell, three pedals that follow the inputs, and the three
 #   CockpitMirrors. Dark materials, one dim amber cabin light, backlit trim.
@@ -70,6 +72,8 @@ const LEVER_LEN := 0.23
 const LEVER_ROW_TILT := 16.0   # degrees fore/aft for a gear slot
 const LEVER_COL_TILT := 11.0   # degrees left/right per column
 const LEVER_SPEED := 12.0      # slot units per second along the gate path
+## SEMI: the tap waits this long, so the driver's hand (DriverModel.REACH_SECS) is on it first.
+const SEQ_WAIT := 0.22
 const PEDAL_TRAVEL_DEG := 22.0
 
 # Colours (ROADMAP palette; dark cabin plastics around it)
@@ -96,7 +100,7 @@ var tach_needle: Node3D
 var speedo_needle: Node3D
 var lamps: MultiMeshInstance3D
 var lamp_text: Label3D
-var radio_label: Label3D
+var head_unit: HeadUnit         # the touch-screen radio on the centre stack
 var lever: Node3D
 var lever_knob: Node3D
 var handbrake: Node3D
@@ -109,6 +113,10 @@ var lever_moving := false
 var _lever_gear := 0
 var _lever_pos := Vector2.ZERO   # (col, row) in slot units, row -1 forward, +1 back
 var _lever_path: Array[Vector2] = []
+var lever_mode := -1             # PlayerCar.Transmission the lever shows
+var _lever_heads := {}           # mode -> knob mesh
+var _gate_labels := {}           # mode -> pattern label on the console
+var _lever_wait := 0.0
 var _last_gear := 0
 var _static_tris := 0
 
@@ -138,11 +146,10 @@ func _ready() -> void:
 	# the shelf is also what the rearview camera sees under the rear glass
 	(get_node("Shelf") as VisualInstance3D).layers = INTERIOR_BIT | MIRROR_ONLY_BIT
 	_last_gear = player.gear
-	_lever_gear = player.gear
-	_lever_pos = _slot_of(player.gear)
-	_apply_lever(_lever_pos)
+	set_lever_mode(player.transmission_mode())
 	driver = DriverModel.new(self)
 	add_child(driver)
+	driver.hand_contact.connect(_on_hand_contact)
 
 ## Cockpit view on or off: starts or stops the mirrors, hides the driver's head
 ## and torso (the camera is the head) and moves the car's own body and wheels
@@ -217,8 +224,8 @@ func _build_static() -> void:
 			lit.merge(zone)
 	# Centre stack: vents, the radio bezel (the unit itself is built in _build_radio).
 	k.box(Vector3(0.30, 0.24, 0.06), Vector3(0.0, 0.79, -0.30), PLASTIC_LIGHT)
-	for vx in [-0.09, 0.09]:
-		k.box(Vector3(0.09, 0.035, 0.012), Vector3(vx, 0.875, -0.267), PLASTIC)
+	for vx in [-0.09, 0.09]:   # vents under the head unit
+		k.box(Vector3(0.09, 0.03, 0.012), Vector3(vx, 0.712, -0.267), PLASTIC)
 	# Centre console with the gate plate and its H slots, tunnel, armrest.
 	k.box(Vector3(0.26, 0.20, 0.82), Vector3(0.0, 0.52, 0.11), PLASTIC)
 	k.box(Vector3(0.30, 0.18, 1.20), Vector3(0.0, 0.33, 0.10), CARPET)             # tunnel
@@ -362,20 +369,41 @@ func _label(text: String, size: int, at: Vector3, col: Color, px: float) -> Labe
 
 # ---------- radio head unit ----------
 
-func _build_radio() -> void:
-	var k := CockpitKit.new()
-	k.box(Vector3(0.24, 0.07, 0.014), Vector3(0.0, 0.80, -0.266), DIAL_FACE)
-	for kx in [-0.095, 0.095]:
-		k.cylinder(0.011, 0.0, 0.012, Vector3(kx, 0.80, -0.262), TRIM, 8, Basis(Vector3.RIGHT, -PI / 2.0))
-	for i in 4:
-		k.box(Vector3(0.018, 0.008, 0.004), Vector3(-0.045 + 0.03 * i, 0.772, -0.258), PLASTIC_LIGHT)
-	add_child(k.instance(CockpitKit.material(0.6, 0.2), "Radio"))
-	radio_label = _label("RADIO OFF", 30, Vector3(0.0, 0.808, -0.257), AMBER, 0.00045)
-	radio_label.name = "RadioLabel"
+## The head unit is its own builder (HeadUnit, styled per car), so the
+## interior redesign can restyle it without touching the hand or the radio.
+## On the stack right of the wheel, its bezel just under the dash top (0.91),
+## so the tiles show over the wheel from the seat (lower, they were cut off by
+## the bottom of the cockpit view).
+const HEAD_UNIT_POS := Vector3(0.0, 0.832, -0.254)
 
-## Where a reaching hand presses (next PR), car space.
-func radio_button_position() -> Vector3:
-	return Vector3(0.0, 0.772, -0.256)
+func _build_radio() -> void:
+	head_unit = HeadUnit.new(PlayerCar.chassis_kind())
+	head_unit.position = HEAD_UNIT_POS
+	add_child(head_unit)
+
+## Next station: the key only asks; the driver's right hand reaches the screen
+## and RadioManager.next_station() runs on the finger's contact
+## (_on_hand_contact). Waits for the hand if it is busy (a shift, the handbrake).
+func request_radio() -> void:
+	driver.request_radio()
+
+## Where the finger lands for the next station, car space, and which contact
+## that is: the next tile, or past the last one the knob (radio off).
+func radio_touch() -> Dictionary:
+	var count := RadioStations.station_count()
+	var s := _find_radio().station if _find_radio() != null else -1
+	if s + 1 < count:
+		return {"pos": head_unit.transform * head_unit.tile_point(s + 1), "contact": DriverModel.CONTACT_RADIO_TILE}
+	return {"pos": head_unit.transform * head_unit.off_point(), "contact": DriverModel.CONTACT_RADIO_KNOB}
+
+## The one place a hand touching something has an effect.
+func _on_hand_contact(target: StringName) -> void:
+	if target == DriverModel.CONTACT_RADIO_TILE or target == DriverModel.CONTACT_RADIO_KNOB:
+		var r := _find_radio()
+		if r != null:
+			r.next_station()
+		head_unit.tap(target == DriverModel.CONTACT_RADIO_KNOB and head_unit.has_knob)
+		_update_radio(0.0)
 
 # ---------- gear lever and handbrake ----------
 
@@ -390,12 +418,33 @@ func _build_lever() -> void:
 	lever_knob = Node3D.new()
 	lever_knob.name = "Knob"
 	lever_knob.position = Vector3(0.0, LEVER_LEN, 0.0)
-	var kk := CockpitKit.new()
-	kk.box(Vector3(0.040, 0.046, 0.040), Vector3.ZERO, LEATHER)
-	kk.box(Vector3(0.028, 0.004, 0.028), Vector3(0.0, 0.025, 0.0), SILVER)
-	lever_knob.add_child(kk.instance(CockpitKit.material(0.6, 0.2)))
 	lever.add_child(lever_knob)
 	add_child(lever)
+	# one head per gearbox mode on the same knob point (the hand's target), and
+	# the pattern printed on the console behind the boot; set_lever_mode shows one
+	var mat := CockpitKit.material(0.6, 0.2)
+	var h := CockpitKit.new()   # MANUAL: leather knob, silver top
+	h.box(Vector3(0.040, 0.046, 0.040), Vector3.ZERO, LEATHER)
+	h.box(Vector3(0.028, 0.004, 0.028), Vector3(0.0, 0.025, 0.0), SILVER)
+	var s := CockpitKit.new()   # SEMI: taller sequential grip, silver collar
+	s.cylinder(0.019, -0.03, 0.035, Vector3.ZERO, LEATHER, 10)
+	s.cylinder(0.021, -0.034, -0.026, Vector3.ZERO, SILVER, 10)
+	var a := CockpitKit.new()   # AUTO: T-handle with the lock button
+	a.box(Vector3(0.066, 0.030, 0.034), Vector3(0.0, 0.004, 0.0), LEATHER)
+	a.box(Vector3(0.012, 0.006, 0.014), Vector3(-0.02, 0.021, 0.0), SILVER)
+	var heads := {
+		PlayerCar.Transmission.MANUAL: [h, "KnobH", "1 3 5\n2 4 6 R"],
+		PlayerCar.Transmission.SEMI: [s, "KnobSeq", "−\n+"],
+		PlayerCar.Transmission.AUTO: [a, "KnobAuto", "R\nN\nD"],
+	}
+	for m in heads:
+		var mi: MeshInstance3D = (heads[m][0] as CockpitKit).instance(mat, heads[m][1])
+		lever_knob.add_child(mi)
+		_lever_heads[m] = mi
+		var l := _label(heads[m][2], 40, lever.position + Vector3(0.05, 0.004, 0.0), SILVER, 0.0005)
+		l.name = "Gate" + (heads[m][1] as String).trim_prefix("Knob")
+		l.rotation_degrees = Vector3(-90.0, 0.0, 0.0)   # flat on the console, top line forward
+		_gate_labels[m] = l
 
 func _build_handbrake() -> void:
 	handbrake = Node3D.new()
@@ -408,9 +457,30 @@ func _build_handbrake() -> void:
 	handbrake.add_child(k.instance(CockpitKit.material(0.6, 0.3)))
 	add_child(handbrake)
 
-## The H-gate slot of a gear as (column, row): row -1 forward (odd gears), +1
-## back (even gears, reverse), 0 the neutral gate. Reverse is right of the last column.
+## Shows the lever for a gearbox mode (PlayerCar.Transmission) and puts it in
+## that mode's slot for the current gear, with no move.
+func set_lever_mode(mode: int) -> void:
+	lever_mode = mode
+	for m in _lever_heads:
+		(_lever_heads[m] as Node3D).visible = m == mode
+		(_gate_labels[m] as Node3D).visible = m == mode
+	_lever_path.clear()
+	_lever_wait = 0.0
+	lever_moving = false
+	_lever_gear = player.gear
+	_lever_pos = _slot_of(player.gear)
+	_apply_lever(_lever_pos)
+
+## The slot of a gear as (column, row), row -1 forward and +1 back, in the
+## current lever mode. MANUAL, the H-gate: odd gears forward, even gears and
+## reverse back, 0 the neutral gate, reverse right of the last column. SEMI:
+## the sequential stick rests in the centre in every gear. AUTO: one column,
+## R forward, N, D back.
 func _slot_of(g: int) -> Vector2:
+	if lever_mode == PlayerCar.Transmission.SEMI:
+		return Vector2.ZERO
+	if lever_mode == PlayerCar.Transmission.AUTO:
+		return Vector2(0.0, signf(float(g)))
 	if g == 0:
 		return Vector2.ZERO
 	var n_cols := int(ceil(float(player.gear_ratios.size()) / 2.0))
@@ -424,9 +494,18 @@ func _apply_lever(p: Vector2) -> void:
 	lever.rotation_degrees = Vector3(p.y * LEVER_ROW_TILT, 0.0, -p.x * LEVER_COL_TILT)
 
 ## Start moving the lever to a gear, through the neutral gate like a hand would.
+## SEMI: a tap instead, back for an upshift and forward for a downshift, then
+## back to the centre, after SEQ_WAIT so the driver's hand is on it first.
 func move_lever_to(g: int) -> void:
 	var to := _slot_of(g)
 	_lever_path.clear()
+	if lever_mode == PlayerCar.Transmission.SEMI:
+		_lever_path.append(Vector2(0.0, 1.0 if g > _lever_gear else -1.0))
+		_lever_path.append(Vector2.ZERO)
+		_lever_wait = SEQ_WAIT
+		_lever_gear = g
+		lever_moving = true
+		return
 	if _lever_pos.y != 0.0:
 		_lever_path.append(Vector2(_lever_pos.x, 0.0))
 	if to.x != _lever_pos.x:
@@ -441,6 +520,9 @@ func lever_knob_position() -> Vector3:
 func _step_lever(delta: float) -> void:
 	if _lever_path.is_empty():
 		lever_moving = false
+		return
+	if _lever_wait > 0.0:
+		_lever_wait -= delta
 		return
 	var next := _lever_path[0]
 	_lever_pos = _lever_pos.move_toward(next, LEVER_SPEED * delta)
@@ -505,23 +587,34 @@ func _process(delta: float) -> void:
 	for key in pedals:
 		(pedals[key] as Node3D).rotation_degrees = Vector3(PEDAL_TRAVEL_DEG * float(inputs[key]), 0.0, 0.0)
 	handbrake.rotation_degrees = Vector3(28.0 * clampf(p.handbrake_input, 0.0, 1.0), 0.0, 0.0)
-	# Manual: the lever starts for the requested gear the moment the shift
-	# starts (the driver's hand rides it through the shift_time), and is set
-	# straight on gear changes that skip is_shifting (out of neutral).
-	if not p.automatic_transmission and p.is_shifting and _lever_gear != p.requested_gear:
-		move_lever_to(p.requested_gear)
-	if p.gear != _last_gear:
-		if p.automatic_transmission:
+	# The lever follows the gearbox mode (G cycles it in the game).
+	if p.transmission_mode() != lever_mode:
+		set_lever_mode(p.transmission_mode())
+	if p.automatic_transmission:
+		# the box shifts itself: paddle flicks on the wheel, the selector only
+		# moves between R, N and D
+		if p.gear != _last_gear:
 			wheel.flick(1 if p.gear > _last_gear else -1)
-		elif _lever_gear != p.gear:
+			_last_gear = p.gear
+		if not lever_moving and _lever_gear != p.gear:
+			if _slot_of(p.gear) != _slot_of(_lever_gear):
+				move_lever_to(p.gear)
+			else:
+				_lever_gear = p.gear
+	else:
+		# Manual and semi: the lever starts for the requested gear the moment
+		# the shift starts (the driver's hand rides it through the shift_time),
+		# and is set straight on gear changes that skip is_shifting (out of neutral).
+		if p.is_shifting and _lever_gear != p.requested_gear:
+			move_lever_to(p.requested_gear)
+		if p.gear != _last_gear:
+			if _lever_gear != p.gear:
+				move_lever_to(p.gear)
+			_last_gear = p.gear
+		if _lever_gear != p.gear and not lever_moving and not p.is_shifting:
 			move_lever_to(p.gear)
-		_last_gear = p.gear
-	if p.automatic_transmission and _lever_gear != 0 and not lever_moving:
-		move_lever_to(0)
-	elif not p.automatic_transmission and _lever_gear != p.gear and not lever_moving and not p.is_shifting:
-		move_lever_to(p.gear)
 	_step_lever(delta)
-	_update_radio()
+	_update_radio(delta)
 
 func _update_lamps() -> void:
 	var h := player.health
@@ -537,17 +630,27 @@ func _update_lamps() -> void:
 		var c: Color = RED if on[i][1] else AMBER
 		lamps.multimesh.set_instance_color(i, Color(c, 1.0 if lit else 0.0))
 
-func _update_radio() -> void:
-	if radio == null:
+func _find_radio() -> RadioManager:
+	if radio == null and is_inside_tree():
 		var scene := get_tree().current_scene
 		if scene != null and scene.get("radio") is RadioManager:
 			radio = scene.radio
-		else:
-			return
-	if radio.station < 0:
-		radio_label.text = "RADIO OFF"
-	else:
-		radio_label.text = RadioStations.STATIONS[radio.station].name.to_upper()
+	return radio
+
+func _update_radio(delta: float) -> void:
+	# The car clock (NightClock) is drawn on the head unit's screen.
+	var scene := get_tree().current_scene if is_inside_tree() else null
+	if scene != null and scene.get("night_clock") is NightClock:
+		head_unit.show_clock(scene.night_clock.text())
+	var r := _find_radio()
+	if r == null:
+		return
+	var bus := AudioServer.get_bus_index(&"Music")
+	var lvl := 0.0
+	if bus >= 0 and r.station >= 0:
+		var db := maxf(AudioServer.get_bus_peak_volume_left_db(bus, 0), AudioServer.get_bus_peak_volume_right_db(bus, 0))
+		lvl = clampf((db + 36.0) / 36.0, 0.0, 1.0)
+	head_unit.show_state(r.station, r.now_playing, lvl, delta)
 
 ## Triangles drawn by the cabin (static meshes, wheel, moving parts, mirrors).
 func triangle_count() -> int:

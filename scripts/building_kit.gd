@@ -83,6 +83,9 @@ uniform int tiles = 8;
 uniform float bay_w[8];
 uniform float cool_bias[8];
 uniform float glow[8];
+// Night clock (living world step 1): scales every building's lit density, so
+// the same windows go dark in the same order through the night (WindowLights).
+uniform float lit_scale = 1.0;
 
 instance uniform int tile = 0;
 instance uniform vec3 tint : source_color = vec3(0.3);
@@ -90,15 +93,16 @@ instance uniform vec3 size = vec3(1.0);
 instance uniform float floor_h = 3.2;
 instance uniform float lit_density = 0.3;
 instance uniform float seed = 0.0;
+// How far the block reaches below the road (a hill's foundation): floors are
+// counted from the road, not from the block's bottom.
+instance uniform float base = 0.0;
 
 varying vec3 lpos;
 varying vec3 lnrm;
-varying float wy;
 
 void vertex() {
 	lpos = VERTEX * size;  // the mesh is a shared unit cube, scaled by the node
 	lnrm = NORMAL;
-	wy = (MODEL_MATRIX * vec4(VERTEX, 1.0)).y;
 }
 
 float hash3(vec3 p) {
@@ -120,7 +124,7 @@ void fragment() {
 		float len = on_x ? size.z : size.x;
 		float bays = max(1.0, round(len / bay_w[tile]));
 		float u = (coord + len * 0.5) / len * bays;
-		float v = max(wy, 0.0) / floor_h;
+		float v = max(lpos.y + size.y * 0.5 - base, 0.0) / floor_h;
 		float fl = floor(v);
 		float row = fl < 0.5 ? 1.0 : 0.0;  // atlas row 1 = ground floor
 		vec2 cell = vec2(fract(u), 1.0 - fract(v));
@@ -135,7 +139,7 @@ void fragment() {
 		vec3 key = vec3(floor(u), fl, seed * 7.13 + face * 31.7);
 		float h = hash3(key);
 		// threshold the glass mask: a blurred far mip must not let wall emit
-		float lit = step(h, lit_density) * step(0.5, t.a);
+		float lit = step(h, lit_density * lit_scale) * step(0.5, t.a);
 		float h2 = hash3(key + 19.19);
 		vec3 warm = vec3(1.0, 0.72, 0.38);
 		vec3 cool = vec3(0.74, 0.86, 0.7);  // white-green fluorescent
@@ -148,6 +152,7 @@ void fragment() {
 """
 
 static var _material: ShaderMaterial
+static var _lit_scale := 1.0
 static var _atlas: ImageTexture
 static var _unit_box: BoxMesh
 
@@ -163,7 +168,15 @@ static func material() -> ShaderMaterial:
 		_material.set_shader_parameter("bay_w", PackedFloat32Array(BAY_W))
 		_material.set_shader_parameter("cool_bias", PackedFloat32Array(COOL_BIAS))
 		_material.set_shader_parameter("glow", PackedFloat32Array(GLOW))
+		_material.set_shader_parameter("lit_scale", _lit_scale)
 	return _material
+
+## Night clock hook (WindowLights.set_minutes): 1 is the midnight look the
+## lit densities were tuned for, more early in the evening, less near dawn.
+static func set_lit_scale(k: float) -> void:
+	_lit_scale = k
+	if _material != null:
+		_material.set_shader_parameter("lit_scale", k)
 
 ## One unit cube shared by every building; the node's scale sets its size.
 static func unit_box() -> BoxMesh:

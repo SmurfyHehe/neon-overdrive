@@ -50,9 +50,9 @@ func _initialize() -> void:
 
 	# Clamping.
 	var hi := CarSpec.set_param(live, live.spec, "final_drive", 99.0)
-	_check(is_equal_approx(hi, 5.5) and is_equal_approx(live.final_drive, 5.5), "final_drive not clamped high")
+	_check(is_equal_approx(hi, 7.0) and is_equal_approx(live.final_drive, 7.0), "final_drive not clamped to its hard limit")
 	var lo := CarSpec.set_param(live, live.spec, "coefficient_of_friction/Road", -1.0)
-	_check(is_equal_approx(lo, 1.0) and is_equal_approx(live.coefficient_of_friction["Road"], 1.0), "friction not clamped low")
+	_check(is_equal_approx(lo, 0.5) and is_equal_approx(live.coefficient_of_friction["Road"], 0.5), "friction not clamped to its hard limit")
 	CarSpec.set_param(live, live.spec, "final_drive", lerpf(2.5, 5.5, 0.7))
 	CarSpec.set_param(live, live.spec, "coefficient_of_friction/Road", lerpf(1.0, 2.5, 0.7))
 	_check(TuneParams.find("engine_power").is_empty(), "unknown path should not be in the registry")

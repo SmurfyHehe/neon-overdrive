@@ -8,7 +8,10 @@ extends SceneTree
 # - apply() puts the tune on a live car through set_param(): spec and car agree,
 #   gear_ratios stays Array[float], values outside a range are clamped, a slot
 #   missing a path leaves that path alone
-# - a corrupt file reads as empty and does not crash; saving then repairs it
+# - a corrupt file reads as empty and does not crash; saving then repairs it,
+#   after copying the corrupt file to tune_slots.bad.json
+# - NaN (null in JSON), strings and arrays in a slot are skipped, the rest of the
+#   slot still applies, and set_param() refuses NaN
 # - deleting a slot never deletes the file
 #
 # Exit code 1 on failure. Run (headless):
@@ -82,7 +85,7 @@ func _initialize() -> void:
 	var odd := TuneSlots.new(FILE)
 	var before_torque: float = car.spec.max_torque
 	_check(odd.apply("Odd", car), "apply of the hand-written slot failed")
-	_check(is_equal_approx(car.spec.final_drive, TuneParams.find("final_drive").max), "99.0 should clamp to the range, got %f" % car.spec.final_drive)
+	_check(is_equal_approx(car.spec.final_drive, TuneParams.find("final_drive").adv_max), "99.0 should clamp to the hard limit, got %f" % car.spec.final_drive)
 	_check(car.spec.max_torque == before_torque, "a path the slot lacks changed")
 
 	# corrupt file
@@ -91,8 +94,23 @@ func _initialize() -> void:
 	bad = null
 	var broken := TuneSlots.new(FILE)
 	_check(broken.names().is_empty(), "a corrupt file should read as no slots")
+	var backup := broken.bad_path()
 	_check(broken.save("Fresh", tuned) and ",".join(TuneSlots.new(FILE).names()) == "Fresh", "saving should repair a corrupt file")
+	_check(FileAccess.file_exists(backup) and FileAccess.get_file_as_string(backup) == "{ this is not json", "the corrupt file was not backed up to %s before the save" % backup)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(backup))  # this test's own backup
 
+	# non-finite values (JSON writes NaN as null): dropped on load, the rest applies
+	var nan_file := FileAccess.open(FILE, FileAccess.WRITE)
+	nan_file.store_string(JSON.stringify({"version": 1, "slots": {"Nan": {"final_drive": NAN, "max_torque": "lots", "gear_ratios/0": [1], "max_rpm": 6500.0}}}))
+	nan_file = null
+	var nan_slots := TuneSlots.new(FILE)
+	var fd_before: float = car.spec.final_drive
+	var torque_before: float = car.spec.max_torque
+	_check(nan_slots.apply("Nan", car), "apply of a slot with bad values failed")
+	_check(car.spec.final_drive == fd_before and car.spec.max_torque == torque_before, "a null or string value changed the car")
+	_check(is_equal_approx(car.spec.max_rpm, 6500.0), "the good value in a slot with bad ones was not applied")
+	_check(is_finite(car.final_drive), "the live car got a non-finite final drive")
+	_check(is_equal_approx(CarSpec.set_param(car, car.spec, "final_drive", NAN), fd_before) and car.spec.final_drive == fd_before, "set_param stored a NaN")
 	# delete removes the entry, not the file
 	_check(broken.delete("Fresh") and not broken.has("Fresh"), "delete failed")
 	_check(FileAccess.file_exists(FILE), "delete removed the file")

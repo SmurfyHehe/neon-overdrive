@@ -10,6 +10,8 @@ class_name TrafficManager
 #
 # Lanes: the road is 4 lanes each way (game.gd), own lanes at positive x and
 # oncoming at negative x, lane i centred at RoadChunkBuilder.lane_offset(i).
+# Every x and z here is road space (RoadFrame, #37): across and along the
+# road, not world axes. On today's straight road the two are the same.
 #
 # Occupancy index (milestone 4): rebuilt at the top of every tick (this node
 # runs before its cars). Every car and the player is an x-range across the
@@ -83,10 +85,12 @@ const SPEED_JITTER := 2.5
 ## Spawns, merges and moving over take the player into account as a car that
 ## may not brake. Tests turn it off to force rear-end crashes.
 var react_to_player := true
-## Spec every car is cloned from; empty = CarSpec.traffic_default(). Swap it
-## (or hand each car its own in _make_car) for the three NPC cars later.
+## Spec every car is cloned from; empty = each car's own CarSpec.npc_spec().
 var spec_template := {}
-var kind := "coupe"
+## One car for every slot (tests); empty = the traffic mix below.
+var kind := ""
+## Share of each traffic car in the pool (stage B step 5), NpcCarBuilder kinds.
+const MIX := {"n1_commuter": 45, "n2_cityhatch": 35, "n3_pickup": 20}
 var sim_only := false
 
 var cars: Array[TrafficCar] = []
@@ -109,7 +113,8 @@ const PARK_BEHIND := 10000.0
 ## Chassis origin height of a car settled on its springs on the flat road
 ## (origin is at y=0 with the springs fully extended, so it is negative).
 ## Measured by tests/traffic_spawn.gd, which prints the mean; cars are placed
-## here so a spawn has no settling hop.
+## here so a spawn has no settling hop. This is the old box car's; the NPC cars
+## carry their own (TrafficCar.rest_y, NpcCarBuilder.KINDS).
 const REST_Y := -0.124
 
 const PALETTE := [
@@ -145,10 +150,14 @@ func _ready() -> void:
 
 func _make_car() -> TrafficCar:
 	var car := TrafficCar.new()
-	car.kind = kind
+	car.kind = kind if kind != "" else _pick_kind()
 	car.sim_only = sim_only
 	car.traffic = self
-	car.color = PALETTE[randi() % PALETTE.size()]
+	if NpcCarBuilder.is_npc(car.kind):
+		car.build = NpcCarBuilder.pick_build(car.kind)
+		car.color = NpcCarBuilder.pick_paint(car.kind, car.build)
+	else:
+		car.color = PALETTE[randi() % PALETTE.size()]
 	if not spec_template.is_empty():
 		car.spec = CarSpec.clone_spec(spec_template)
 	# Off the road and far behind until _respawn places it, so a car never
@@ -158,14 +167,25 @@ func _make_car() -> TrafficCar:
 	cars.append(car)
 	return car
 
+func _pick_kind() -> String:
+	var total := 0
+	for k in MIX:
+		total += int(MIX[k])
+	var r := randi() % total
+	for k in MIX:
+		r -= int(MIX[k])
+		if r < 0:
+			return k
+	return MIX.keys()[0]
+
 func _physics_process(_delta: float) -> void:
 	_build_index()
-	var pz := player.global_position.z
+	var pz := _player_z()
 	var pv := _player_speed()
 	var band_hi := _spawn_band().y
 	var frame := Engine.get_physics_frames()
 	for car in cars:
-		var z := car.global_position.z
+		var z := RoadFrame.unroll(car.global_position).z
 		var behind := z - pz
 		if behind > PARK_BEHIND * 0.5 and frame < car.retry_frame:
 			continue  # parked after a deferred spawn, waiting to retry
@@ -178,46 +198,53 @@ func _physics_process(_delta: float) -> void:
 			wreck_recycle_count += 1
 			_respawn(car)
 	for car in cars:
-		car.set_detailed(absf(car.global_position.z - pz) <= detail_distance)
+		car.set_detailed(absf(RoadFrame.unroll(car.global_position).z - pz) <= detail_distance)
+
+## The player's road-space z (RoadFrame): metres along the road.
+func _player_z() -> float:
+	return RoadFrame.unroll(player.global_position).z
 
 func _player_speed() -> float:
-	return -player.linear_velocity.z if player is RigidBody3D else 0.0
+	if not player is RigidBody3D:
+		return 0.0
+	return -RoadFrame.dir_to_road(_player_z(), player.linear_velocity).z
 
 ## [nearest, furthest] metres ahead of the player a car may be placed.
 func _spawn_band() -> Vector2:
 	var lo := maxf(spawn_min, detail_distance + SPAWN_HIDE_MARGIN)
 	return Vector2(lo, maxf(spawn_max, lo + SPAWN_BAND))
 
-## Whether the player can see this point: inside the draw distance and inside
-## the active camera's view (a few points along the car, so a car straddling
-## the frustum edge counts as seen). Occlusion is not considered.
+## Whether the player can see this world point: inside the draw distance and
+## inside the active camera's view (a few points along the car, so a car
+## straddling the frustum edge counts as seen). Occlusion is not considered.
 func in_view(pos: Vector3) -> bool:
-	if absf(pos.z - player.global_position.z) > detail_distance:
+	var u := RoadFrame.unroll(pos)
+	if absf(u.z - _player_z()) > detail_distance:
 		return false
 	var cam := get_viewport().get_camera_3d()
 	if cam == null:
 		return true
 	for dz in [-2.0, 0.0, 2.0]:
-		if cam.is_position_in_frustum(pos + Vector3(0.0, 0.6, dz)):
+		if cam.is_position_in_frustum(RoadFrame.roll(u + Vector3(0.0, 0.6, dz))):
 			return true
 	return false
 
 ## Puts a car in a free slot. If every slot is taken it parks the car far
 ## behind (hidden, frozen) and tries again next tick.
 func _respawn(car: TrafficCar) -> void:
-	var pz := player.global_position.z
+	var pz := _player_z()
 	var slot := _find_slot(car, pz)
 	if slot.is_empty():
 		deferred_count += 1
 		car.set_detailed(false)
-		car.place(car.lane_x, car.direction, pz + PARK_BEHIND, REST_Y, 0.0)
+		car.place(car.lane_x, car.direction, pz + PARK_BEHIND, car.rest_y, 0.0)
 		car.retry_frame = Engine.get_physics_frames() + DEFER_TICKS
 		_put(car)
 		return
 	spawn_count += 1
 	car.target_speed = slot.speed
 	car.set_detailed(absf(slot.dist) <= detail_distance)
-	car.place(slot.lane_x, slot.direction, slot.z, REST_Y, slot.speed)
+	car.place(slot.lane_x, slot.direction, slot.z, car.rest_y, slot.speed)
 	_put(car)
 	if log_spawns:
 		slot["player_z"] = pz
@@ -237,7 +264,7 @@ func _find_slot(car: TrafficCar, pz: float) -> Dictionary:
 		var speed := lane_speed(lane_i, oncoming) + randf_range(-SPEED_JITTER, SPEED_JITTER)
 		var behind := not oncoming and speed > pv + BEHIND_DV and randf() < BEHIND_SHARE
 		var z := pz + randf_range(spawn_behind_min, spawn_behind_max) if behind else pz - randf_range(band.x, band.y)
-		var seen := in_view(Vector3(lane_x, 0.0, z))
+		var seen := in_view(RoadFrame.roll(Vector3(lane_x, 0.0, z)))
 		if seen:
 			continue
 		var check := _slot_check(car, lane_x, z, dir, speed)
@@ -307,18 +334,19 @@ func _build_index() -> void:
 			_slots.append([])
 	for s in _slots:
 		s.clear()
-	var p := player.global_position
+	var p := RoadFrame.unroll(player.global_position)
 	_lo[0] = p.x - PLAYER_HALF_W
 	_hi[0] = p.x + PLAYER_HALF_W
 	_z[0] = p.z
-	_vz[0] = player.linear_velocity.z if player is RigidBody3D else 0.0
+	_vz[0] = RoadFrame.dir_to_road(p.z, player.linear_velocity).z if player is RigidBody3D else 0.0
 	_hl[0] = PLAYER_HALF_L
 	_register(0)
 	for i in cars.size():
 		cars[i]._idx = i + 1
 		_put(cars[i])
 
-## Writes a car's entry (footprint across the road, z, z-velocity) and adds
+## Writes a car's entry (footprint across the road, z, z-velocity, all in
+## road space: RoadFrame) and adds
 ## it to the lane slots it touches. Called again after a respawn or a lane
 ## change starts; the stale slot it may still sit in is harmless, the range
 ## test uses the fresh entry.
@@ -326,25 +354,26 @@ func _put(car: TrafficCar) -> void:
 	var k := car._idx
 	if k < 0 or k >= _lo.size():
 		return
-	var t := car.global_transform
+	var o := RoadFrame.unroll(car.global_position)
 	var ex := car.half_w
 	var ez := car.half_l
 	var vz := car.direction * car._cruise_speed
 	if car.detailed:
 		# Footprint of the turned body: a car spun across the road blocks more.
-		var fx := absf(t.basis.z.x)
-		var fz := absf(t.basis.z.z)
+		var axis := RoadFrame.dir_to_road(o.z, car.global_transform.basis.z)
+		var fx := absf(axis.x)
+		var fz := absf(axis.z)
 		ex = car.half_w * fz + car.half_l * fx
 		ez = car.half_l * fz + car.half_w * fx
-		vz = car.linear_velocity.z
-	var lo := t.origin.x - ex
-	var hi := t.origin.x + ex
+		vz = RoadFrame.dir_to_road(o.z, car.linear_velocity).z
+	var lo := o.x - ex
+	var hi := o.x + ex
 	if car.changing:
 		lo = minf(lo, car.lane_x - car.half_w)
 		hi = maxf(hi, car.lane_x + car.half_w)
 	_lo[k] = lo
 	_hi[k] = hi
-	_z[k] = t.origin.z
+	_z[k] = o.z
 	_vz[k] = vz
 	_hl[k] = ez
 	_register(k)
@@ -434,9 +463,9 @@ func set_car_count(n: int) -> void:
 	n = maxi(n, 0)
 	while cars.size() > n:
 		var far: TrafficCar = cars[0]
-		var pz := player.global_position.z
+		var pz := _player_z()
 		for car in cars:
-			if absf(car.global_position.z - pz) > absf(far.global_position.z - pz):
+			if absf(RoadFrame.unroll(car.global_position).z - pz) > absf(RoadFrame.unroll(far.global_position).z - pz):
 				far = car
 		cars.erase(far)
 		# queue_free() runs at the end of the frame, and a car added below could
@@ -450,7 +479,7 @@ func set_car_count(n: int) -> void:
 		_make_car()
 	_build_index()
 	for car in cars:
-		if car.global_position.z > player.global_position.z + PARK_BEHIND * 0.5:
+		if RoadFrame.unroll(car.global_position).z > _player_z() + PARK_BEHIND * 0.5:
 			_respawn(car)
 	car_count = n
 

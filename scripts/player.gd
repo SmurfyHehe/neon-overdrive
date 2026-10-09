@@ -91,6 +91,14 @@ var spec := {}
 var driver := Callable()
 var sim_only := false
 
+## The tune kept between runs (PlayerTune): only the game's own car, the one
+## built from the default spec, loads and saves it.
+const PlayerTune := preload("res://scripts/player_tune.gd")
+const TUNE_CHECK_SECS := 1.0
+var _keeps_tune := false
+var _saved_tune := {}
+var _tune_check_left := TUNE_CHECK_SECS
+
 # Aero (2026-09-13, Roy: "add aerodynamics to the game" -> "full aero model"):
 # these live here rather than on the vendored Vehicle class (kept unmodified,
 # see header) and get set the same way every other tuning number does, via
@@ -132,6 +140,9 @@ func _ready() -> void:
 	# frame 150 and linear_velocity stayed pinned at ~0 forever after. A
 	# player-controlled vehicle should never sleep.
 	can_sleep = false
+	# Contacts are reported so _integrate_forces can tell a wall hit (see below).
+	contact_monitor = true
+	max_contacts_reported = 8
 
 	linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
 	linear_damp = LINEAR_DAMP
@@ -167,6 +178,11 @@ func _ready() -> void:
 	# from before this refactor -- verified headless (see ship notes).
 	if spec.is_empty():
 		spec = CarSpec.coupe_default()
+		# The game's own car: last run's tune comes back (PlayerTune). A car
+		# built from a given spec (test track, Auto-Tune worker) keeps it as is.
+		PlayerTune.apply_saved(spec)
+		_keeps_tune = true
+		_saved_tune = PlayerTune.values_from(spec)
 	CarSpec.apply(self, spec)
 	if not sim_only:
 		_apply_keyboard_steering()
@@ -210,6 +226,7 @@ func _ready() -> void:
 		# Stage A (2026-10-04): wind, road, tyre and kerb sound next to the engine.
 		add_child(CarAudio.new())
 		add_child(DrivelineAudio.new())
+		add_child(CrashAudio.new())  # crashes and scrapes (2026-10-08)
 
 		# Stage A (2026-10-04): headlights + blob shadow, since the world is dark
 		# on purpose now (Look Board B). After the body and wheels exist, because
@@ -228,6 +245,20 @@ func _physics_process(delta: float) -> void:
 	# applied this frame. See aero.gd for the actual force math.
 	AeroModel.apply(self)
 	health.step(self, delta)
+	if _keeps_tune:
+		_tune_check_left -= delta
+		if _tune_check_left <= 0.0:
+			_tune_check_left = TUNE_CHECK_SECS
+			_save_tune_if_changed()
+
+func _exit_tree() -> void:
+	if _keeps_tune:
+		_save_tune_if_changed()  # restart reloads the scene; quit frees it
+
+func _save_tune_if_changed() -> void:
+	var now := PlayerTune.values_from(spec)
+	if now != _saved_tune and PlayerTune.save(spec):
+		_saved_tune = now
 
 func _read_keyboard() -> void:
 	# Input (#29, #30): named InputMap actions (project.godot), all polled
@@ -378,5 +409,44 @@ func current_speed() -> float:
 func is_off_road() -> bool:
 	for w in wheel_array:
 		if w.surface_type != "Road":
+			return true
+	return false
+
+## Wall hits (2026-10-07, Roy: the car bugs out on the out-of-bounds walls). The
+## centre of mass sits ~16 cm under the road (CarSpec's stability choice), and
+## the chassis box meets a wall ~0.9 m above it, so a wall contact rolls or
+## pitches the car with a lever no tyre force ever has: a 200 km/h glancing hit
+## put it on its roof (tests/wall_hit.gd). While the body touches a wall, the
+## roll and pitch rates are held to WALL_TILT_RATE, and past WALL_MAX_TILT it
+## cannot tip any further (sliding along the wall at 200 km/h, a steady roll at
+## the capped rate still put it on its side in 3 s). Righting is never limited,
+## and yaw is left alone, so the car still bounces and slides off naturally.
+const WALL_TILT_RATE := 0.5  # rad/s
+const WALL_MAX_TILT := deg_to_rad(25.0)
+
+func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
+	super(state)
+	if _touching_wall(state):
+		var b := state.transform.basis
+		var w := state.angular_velocity
+		var yaw := b.y * w.dot(b.y)
+		var roll := b.z * clampf(w.dot(b.z), -WALL_TILT_RATE, WALL_TILT_RATE)
+		var pitch := b.x * clampf(w.dot(b.x), -WALL_TILT_RATE, WALL_TILT_RATE)
+		var tip := roll + pitch
+		# Turning about `axis` (positive) brings the car's up back to world up.
+		var tilt := b.y.angle_to(Vector3.UP)
+		if tilt > 0.001:
+			var axis := b.y.cross(Vector3.UP).normalized()
+			var limit := WALL_TILT_RATE * clampf(1.0 - tilt / WALL_MAX_TILT, 0.0, 1.0)
+			var r := tip.dot(axis)
+			if r < -limit:
+				tip += axis * (-limit - r)
+		state.angular_velocity = yaw + tip
+
+func _touching_wall(state: PhysicsDirectBodyState3D) -> bool:
+	var wall_bit := 1 << (CarSpec.WALL_LAYER - 1)
+	for i in state.get_contact_count():
+		var other := state.get_contact_collider_object(i) as CollisionObject3D
+		if other != null and other.collision_layer & wall_bit:
 			return true
 	return false

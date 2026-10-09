@@ -212,7 +212,9 @@ func _check_districts() -> void:
 			if changed:
 				steps += 1
 				var bound: StaticBody3D = c.get_node(NodePath(nm.replace("Step", "")))
-				var bx := absf(bound.position.x)
+				# the boundary is one box per centreline station (#37); the
+				# first one ("Shape") is at the chunk start, where the step is
+				var bx := absf((bound.get_node(^"Shape") as Node3D).transform.origin.x + bound.position.x)
 				var half := ((col.shape as BoxShape3D).size.x) / 2.0
 				var sx := absf(body.position.x)
 				if bx < sx - half - 0.6 or bx > sx + half + 0.6:

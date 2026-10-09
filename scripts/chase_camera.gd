@@ -108,7 +108,8 @@ var _clock := 0.0                  # physics seconds, for the double tap
 var frame: CockpitFrame
 var perspective: PerspectiveAudio
 var target: PlayerCar
-var mode := 1  # B: light smoothing (A, the hard snap, is still on the C key cycle)
+var mode := ViewSettings.camera_smoothing  # follows the saved setting (pause menu, C key); tests may override
+var _seen_smoothing := ViewSettings.camera_smoothing
 ## Tests turn this off to compare the drawn position against the chase offset.
 var shake_enabled := true
 
@@ -178,10 +179,19 @@ func mode_name() -> String:
 # needs exactly one velocity sample per tick.
 func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("camera_cycle"):
-		mode = (mode + 1) % MODE_NAMES.size()
+		ViewSettings.set_camera_smoothing((ViewSettings.camera_smoothing + 1) % MODE_NAMES.size())
+		ViewSettings.save_settings()
+	if ViewSettings.camera_smoothing != _seen_smoothing:   # menu or C key changed it
+		_seen_smoothing = ViewSettings.camera_smoothing
+		mode = _seen_smoothing
 	if Input.is_action_just_pressed("camera_view"):
 		set_view(View.CHASE if view == View.COCKPIT else View.COCKPIT)
 	look_back = Input.is_action_pressed("look_back")
+	perspective.window_key(Input.is_action_pressed("window"), delta)
+	if perspective.car_audio == null:
+		for c in target.get_children():
+			if c is CarAudio:
+				perspective.car_audio = c
 	_clock += delta
 	if view == View.COCKPIT and Input.is_action_just_pressed("look_glance"):
 		glance_tap(Input.get_axis("steer_left", "steer_right"))
@@ -325,16 +335,21 @@ func _place(delta: float) -> void:
 	# the 60 Hz physics tick, and with vsync off the camera updates several
 	# times per tick. Following the raw position made car and road judder.
 	var p := target.get_global_transform_interpolated().origin
+	# Road space (RoadFrame, #37): across / up / along the road. The rig sits
+	# behind the car ALONG THE ROAD and looks down it, so it swings round
+	# bends with the road instead of staring down world -Z; on a straight
+	# road this is exactly the old world-axis rig.
+	var u := RoadFrame.unroll(p)
 	# Reversing flips the chase cam to the opposite side of the car looking
 	# the opposite way (2026-09-13 fix, kept); so does holding look_back.
 	var target_yaw := PI if (target.gear == -1 or look_back) else 0.0
 	if mode == 0 or not _started:
-		_follow = Vector2(p.x, p.y)
+		_follow = Vector2(u.x, u.y)
 		_yaw = target_yaw
 		_started = true
 	else:
 		# Frame-rate independent ease: the same feel at 60 or 300 fps.
-		_follow = _follow.lerp(Vector2(p.x, p.y), 1.0 - exp(-FOLLOW_RATE * delta))
+		_follow = _follow.lerp(Vector2(u.x, u.y), 1.0 - exp(-FOLLOW_RATE * delta))
 		if mode == 2:
 			_yaw = lerpf(_yaw, target_yaw, 1.0 - exp(-SWING_RATE * delta))
 		else:
@@ -343,8 +358,8 @@ func _place(delta: float) -> void:
 	# height motion is smoothed); the dolly shortens it with speed.
 	var back := Vector3(0, 0, dist_now).rotated(Vector3.UP, _yaw)
 	var ahead := Vector3(0, 0, -LOOK_AHEAD).rotated(Vector3.UP, _yaw)
-	anchor = Vector3(_follow.x + back.x, _follow.y + height_now, p.z + back.z)
-	aim = Vector3(_follow.x + ahead.x, _follow.y + LOOK_HEIGHT, p.z + ahead.z)
+	anchor = RoadFrame.roll(Vector3(_follow.x + back.x, _follow.y + height_now, u.z + back.z))
+	aim = RoadFrame.roll(Vector3(_follow.x + ahead.x, _follow.y + LOOK_HEIGHT, u.z + ahead.z))
 	global_position = anchor
 	look_at(aim, Vector3.UP)
 

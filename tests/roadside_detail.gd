@@ -91,6 +91,16 @@ func _check_chunk(chunk: Node3D, prev: Dictionary, cfg: Dictionary, label: Strin
 			var dz := mm.get_instance_transform(i).origin.z - mm.get_instance_transform(i + 1).origin.z
 			if absf(dz - B.PYLON_SPACING) > EPS:
 				_fail("%s %s: posts %d->%d are %.2f m apart" % [label, node_name, i, i + 1, dz])
+	# centre barrier: one piece per centreline station (#37), end to end on the centre line
+	var bar := chunk.get_node(^"Barrier") as MultiMeshInstance3D
+	if bool(cfg.barrier) != bar.visible:
+		_fail("%s: barrier shown %s" % [label, bar.visible])
+	if cfg.barrier:
+		var seg := B.CHUNK_LEN / B.STATIONS
+		for k in B.STATIONS:
+			var o := bar.multimesh.get_instance_transform(k).origin
+			if absf(o.x) > EPS or absf(o.y - B.BARRIER_Y) > EPS or absf(o.z + seg * (k + 0.5)) > EPS:
+				_fail("%s: barrier piece %d at %s" % [label, k, o])
 	_check_frontage(chunk, label)
 
 ## Buildings (z spans from their collision boxes) plus gap walls must tile

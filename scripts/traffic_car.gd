@@ -58,12 +58,16 @@ class_name TrafficCar
 # suspension on that step and sags; the honest cheap path is no sim at all
 # plus a clean handover.
 
-## CarBuilder.KIND_CONFIGS key for the body and wheel visuals. The three NPC
-## cars (stage B step 5) swap this and `spec` per car; nothing else changes.
+## Which car: an NpcCarBuilder.KINDS key (the stage B step 5 traffic cars,
+## e.g. "n1_commuter") or a CarBuilder.KIND_CONFIGS key (the old box cars).
 var kind := "coupe"
-## Vehicle tune (CarSpec dict). Empty = CarSpec.traffic_default(). Set before
+## The sheet variant of an NPC car (NpcCarBuilder.builds), e.g. "taxi".
+var build := "stock"
+## Vehicle tune (CarSpec dict). Empty = CarSpec.npc_spec(kind). Set before
 ## add_child(), like PlayerCar.spec.
 var spec := {}
+## Chassis origin height when settled on the springs (place() callers use it).
+var rest_y := TrafficManager.REST_Y
 var color := Color(0.6, 0.6, 0.65)
 ## No body mesh, lights or shadow (tests and the perf harness).
 var sim_only := false
@@ -71,7 +75,9 @@ var sim_only := false
 ## target_speed (nothing to brake for, no lane changes).
 var traffic: TrafficManager
 
-## World x of the lane centre this car holds, or is changing INTO.
+## Road-space x (RoadFrame) of the lane centre this car holds, or is
+## changing INTO. Every x and z this car reasons in is road space: across and
+## along the road, the same as world axes only while the road is straight.
 var lane_x := 0.0
 ## Lane index on this car's side of the road, 0 next to the centre line.
 var lane_i := 0
@@ -129,6 +135,11 @@ var _m_gap := INF
 var _m_speed := 0.0
 
 var wrecked := false
+## True while the hazard brake holds (crashed, stuck or wrecked).
+var hazard := false
+## Lamp state last sent to the body (NpcCarBuilder.set_lamps), so the
+## instance uniforms are only written when it changes.
+var _lamp_key := -1
 var _wreck_t := 0.0
 var _stuck_t := 0.0
 
@@ -194,6 +205,13 @@ const PLAYER_TTC := 8.0        # s of closing time a player behind must have
 const PLAYER_MIN_GAP := 15.0
 const MIN_LC_SPEED := 8.0      # m/s; below it only obstacles trigger a change
 
+## Bends (#37): cornering traffic will take, m/s^2 (a calm driver's 0.2 g;
+## at 2.5 a car at 109 km/h on a 385 m bend still ran 0.76 m wide), and how
+## far ahead it looks for the tightest bend, at BEND_SAMPLES points.
+const BEND_LAT_ACCEL := 2.0
+const BEND_LOOK := 80.0
+const BEND_SAMPLES := 3
+
 ## Wrecks.
 const WRECK_SECONDS := 3.0
 const WRECK_UP := 0.5          # basis.y.y below this: on its side or roof
@@ -206,23 +224,30 @@ func _ready() -> void:
 	# Not super._ready(): Vehicle's _ready() is initialize(), which needs the
 	# wheels built first (same as PlayerCar).
 	if spec.is_empty():
-		spec = CarSpec.traffic_default()
-	var cfg: Dictionary = CarBuilder.KIND_CONFIGS.get(kind, CarBuilder.KIND_CONFIGS["coupe"])
+		spec = CarSpec.npc_spec(kind)
+	var npc := NpcCarBuilder.is_npc(kind)
+	var cfg: Dictionary = NpcCarBuilder.config(kind) if npc else CarBuilder.KIND_CONFIGS.get(kind, CarBuilder.KIND_CONFIGS["coupe"])
 	wheelbase = float(cfg.axle_z) * 2.0
 	half_w = float(cfg.wheel_x) + 0.15
 	half_l = (float(cfg.main_z1) - float(cfg.hood_z0)) / 2.0
+	if npc:
+		rest_y = float(cfg.rest_y)
 
 	if not sim_only:
-		chassis_visual = CarBuilder.shared_chassis_visual(kind, color)
+		chassis_visual = NpcCarBuilder.chassis_visual(kind, build, color) if npc else CarBuilder.shared_chassis_visual(kind, color)
 		add_child(chassis_visual)
 
 	can_sleep = false
 	linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
 	linear_damp = PlayerCar.LINEAR_DAMP
 	CarSpec.set_collision_layers(self)
-	# Box sized from the body config, same height and seat as the player's
-	# (CarSpec.build_collision's verified ground clearance).
-	CarSpec.build_collision(self, Vector3(float(cfg.main_w), 1.0, float(cfg.main_z1) - float(cfg.hood_z0)), 0.7)
+	if npc:
+		# The sheet body's own box (NpcCarBuilder.config).
+		CarSpec.build_collision(self, cfg.col_size, cfg.col_y)
+	else:
+		# Box sized from the body config, same height and seat as the player's
+		# (CarSpec.build_collision's verified ground clearance).
+		CarSpec.build_collision(self, Vector3(float(cfg.main_w), 1.0, float(cfg.main_z1) - float(cfg.hood_z0)), 0.7)
 	CarSpec.apply(self, spec)
 	CarSpec.build_wheels(self, kind, cfg, front_spring_length, rear_spring_length)
 	initialize()
@@ -246,6 +271,17 @@ func _physics_process(delta: float) -> void:
 	_drive(delta)
 	super._physics_process(delta)
 	AeroModel.apply(self)
+	_update_lamps()
+
+## Brake lamps on any brake pedal (a held stop included), hazards while the
+## hazard brake holds. NPC bodies only; the old box cars have no such lamps.
+func _update_lamps() -> void:
+	if chassis_visual == null or not NpcCarBuilder.is_npc(kind):
+		return
+	var key := (1 if brake_input > 0.05 else 0) + (2 if hazard else 0)
+	if key != _lamp_key:
+		_lamp_key = key
+		NpcCarBuilder.set_lamps(chassis_visual, float(key & 1), hazard)
 
 ## The controller. Sets steering_input, throttle_input and brake_input.
 func _drive(delta: float) -> void:
@@ -256,7 +292,7 @@ func _drive(delta: float) -> void:
 			changing = false
 	_lc_cooldown -= delta
 	var a := _accel_command(v)
-	var hazard := _check_wreck(delta, v)
+	hazard = _check_wreck(delta, v)
 	var steer_x := lane_x
 	if changing:
 		var look := clampf(speed * LOOKAHEAD_SECONDS, LOOKAHEAD_MIN, LOOKAHEAD_MAX)
@@ -281,7 +317,7 @@ func _accel_command(v: float) -> float:
 	lead_speed = 0.0
 	lead_is_player = false
 	if traffic != null:
-		var p := global_position
+		var p := RoadFrame.unroll(global_position)
 		_scan_in -= 1
 		if _scan_in <= 0:
 			_scan_in = LEAD_SCAN_TICKS
@@ -298,7 +334,18 @@ func _accel_command(v: float) -> float:
 			lead_gap = traffic.entry_gap(_lead_k, p.z, direction, half_l)
 			lead_speed = traffic.entry_speed(_lead_k, direction)
 			lead_is_player = _lead_k == 0
-	return follow_accel(v, target_speed, lead_gap, lead_speed)
+	return follow_accel(v, minf(target_speed, bend_speed()), lead_gap, lead_speed)
+
+## Fastest this car takes the road from here to BEND_LOOK m ahead: no more
+## than BEND_LAT_ACCEL of cornering on the tightest bend in that stretch (#37).
+## INF on a straight road. Without it the fast lane (115 km/h) took a 350 m
+## bend at 3.1 m/s^2 and ran 1.6 m wide (tests/curve_drive.gd, 2026-10-07).
+func bend_speed() -> float:
+	var z := RoadFrame.unroll(global_position).z
+	var k := 0.0
+	for d in BEND_SAMPLES:
+		k = maxf(k, absf(RoadFrame.curvature_at(z + direction * BEND_LOOK * float(d) / float(BEND_SAMPLES - 1))))
+	return INF if k < 1e-6 else sqrt(BEND_LAT_ACCEL / k)
 
 ## The follower law (see the header): acceleration wanted at speed v, cruise
 ## speed v0, behind something `gap` metres ahead (bumper to bumper, INF for a
@@ -348,9 +395,10 @@ func _consider_lane_change(v: float) -> void:
 	var obstacle := lead_gap < OBSTACLE_RANGE and lead_speed < OBSTACLE_SPEED and target_speed > OBSTACLE_SPEED
 	if v < MIN_LC_SPEED and not obstacle:
 		return
-	var x := global_position.x
+	var u := RoadFrame.unroll(global_position)
+	var x := u.x
 	var skip_player := not traffic.react_to_player
-	var f_gap := traffic.scan(global_position.z, direction, x - half_w - CORRIDOR_MARGIN, x + half_w + CORRIDOR_MARGIN,
+	var f_gap := traffic.scan(u.z, direction, x - half_w - CORRIDOR_MARGIN, x + half_w + CORRIDOR_MARGIN,
 		false, _idx, half_l, LOOK_BEHIND, skip_player)
 	var f_speed := traffic.q_speed
 	var yielding := f_gap < INF and f_speed - v > YIELD_DV and f_gap / (f_speed - v) < YIELD_TTC
@@ -393,7 +441,7 @@ func _consider_lane_change(v: float) -> void:
 func _merge_safe(lx: float, v: float) -> bool:
 	var lo := lx - half_w - CORRIDOR_MARGIN
 	var hi := lx + half_w + CORRIDOR_MARGIN
-	var z := global_position.z
+	var z := RoadFrame.unroll(global_position).z
 	var skip_player := not traffic.react_to_player
 	_m_gap = traffic.scan(z, direction, lo, hi, true, _idx, half_l, LOOK_AHEAD, skip_player)
 	_m_speed = traffic.q_speed
@@ -437,10 +485,13 @@ func _path_x_at(t: float) -> float:
 ## Wreck bookkeeping. Returns true while the car looks crashed (it then
 ## stops: hazard brake); `wrecked` latches after WRECK_SECONDS.
 func _check_wreck(delta: float, v: float) -> bool:
-	var b := global_transform.basis
+	var u := RoadFrame.unroll(global_position)
+	var b := RoadFrame.basis_to_road(u.z, global_transform.basis)
 	var heading := -b.z.z * direction  # 1 = pointing down its lane
-	var off := absf(global_position.x - path_x())
-	var bad := b.y.y < WRECK_UP or ((heading < WRECK_HEADING or off > WRECK_OFF_PATH) and absf(v) < WRECK_MAX_SPEED)
+	var off := absf(u.x - path_x())
+	# Upside down is against world up, not the road's: a car on its roof is
+	# wrecked whatever the slope.
+	var bad := global_transform.basis.y.y < WRECK_UP or ((heading < WRECK_HEADING or off > WRECK_OFF_PATH) and absf(v) < WRECK_MAX_SPEED)
 	_wreck_t = _wreck_t + delta if bad else 0.0
 	var stuck := absf(v) < 0.5 and lead_gap > 30.0 and target_speed > 1.0
 	_stuck_t = _stuck_t + delta if stuck else 0.0
@@ -448,11 +499,19 @@ func _check_wreck(delta: float, v: float) -> bool:
 		wrecked = true
 	return bad or wrecked
 
+## Extra path curvature asked for per m/s^2 of cornering the road's bend
+## needs (see lane_steer), for the traffic tune: 0.0015 took the mean drift
+## on bends from 0.35 m to 0.11 m and the worst back to the straight road's
+## (tests/curve_drive.gd); 0.003 overshot to the inside. Another car passes
+## its own. NEON_UNDERSTEER_FF overrides it for tuning runs.
+static var UNDERSTEER_FF := float(OS.get_environment("NEON_UNDERSTEER_FF")) if OS.get_environment("NEON_UNDERSTEER_FF").is_valid_float() else 0.0015
+
 ## Below this speed the bearing uses the body heading, above it the velocity
 ## direction (see lane_steer).
 const VELOCITY_FRAME_MIN_SPEED := 3.0
 
-## Pure-pursuit steering toward the lane centre, as a steering_input in -1..1.
+## Pure-pursuit steering toward the lane centre (road-space x `lane`, so the
+## target follows the road through a bend), as a steering_input in -1..1.
 ## Shared with the tests' scripted player so there is one lane-keeper. Sign:
 ## GEVP yaws LEFT for a positive input (see player.gd's keyboard note), so a
 ## target on the right gives a negative input.
@@ -467,9 +526,11 @@ const VELOCITY_FRAME_MIN_SPEED := 3.0
 ## road at every gain from 0.03 down to 0.0001 per metre-second: at 65 m/s a
 ## thousandth of lock is 1 m/s^2 sideways. With the velocity frame the car is
 ## on the lane whenever it is moving along it, whatever its nose does.
-static func lane_steer(v: Vehicle, lane: float, dir: float, wb: float) -> float:
+static func lane_steer(v: Vehicle, lane: float, dir: float, wb: float, understeer_ff: float = UNDERSTEER_FF) -> float:
 	var lookahead := clampf(v.speed * LOOKAHEAD_SECONDS, LOOKAHEAD_MIN, LOOKAHEAD_MAX)
-	var target := Vector3(lane, v.global_position.y, v.global_position.z + dir * lookahead)
+	var u := RoadFrame.unroll(v.global_position)
+	var target := RoadFrame.roll(Vector3(lane, u.y, u.z + dir * lookahead))
+	target.y = v.global_position.y
 	var fwd := -v.global_transform.basis.z
 	var vel := v.linear_velocity
 	vel.y = 0.0
@@ -485,6 +546,16 @@ static func lane_steer(v: Vehicle, lane: float, dir: float, wb: float) -> float:
 	var dist := maxf(Vector2(lateral, ahead).length(), 0.01)
 	var alpha := atan2(lateral, ahead)  # bearing to the target, + = right
 	var curvature := 2.0 * sin(alpha) / dist
+	# Bends (#37): pure pursuit asks for the path's geometric curvature, but
+	# the tyres need extra lock to hold it at speed (understeer), so on a bend
+	# the car settled toward the outside until the lateral error made up the
+	# difference: 0.3 m on average for traffic, nearly 1 m for the scripted
+	# player at 120 km/h (tests/curve_drive.gd, 2026-10-07). Feed the extra in
+	# directly, in proportion to the cornering acceleration the bend asks for.
+	# Zero on a straight road. The bend's curvature is the road's (left +)
+	# for a car driving down it, mirrored for one driving up it (dir +1).
+	var bend := RoadFrame.curvature_at(u.z) * -dir
+	curvature -= understeer_ff * v.speed * v.speed * bend
 	var steer_angle := atan(wb * curvature)
 	var want := clampf(steer_angle / v.max_steering_angle, -1.0, 1.0)
 	# GEVP raises the input to steering_exponent (1.5) before it reaches the
@@ -511,6 +582,7 @@ func place(lane: float, dir: float, z: float, y: float, speed: float) -> void:
 	direction = dir
 	changing = false
 	wrecked = false
+	hazard = false
 	_wreck_t = 0.0
 	_stuck_t = 0.0
 	_lc_cooldown = 0.0
@@ -518,7 +590,7 @@ func place(lane: float, dir: float, z: float, y: float, speed: float) -> void:
 	_lead_k = -1
 	_scan_in = 0
 	var yaw := 0.0 if dir < 0.0 else PI
-	global_transform = Transform3D(Basis(Vector3.UP, yaw), Vector3(lane, y, z))
+	global_transform = RoadFrame.pose(lane, y, z, yaw)
 	set_moving(self, speed)
 	reset_physics_interpolation()
 	_cruise_speed = speed
@@ -539,14 +611,17 @@ func set_detailed(on: bool) -> void:
 		changing = false
 		# Snap to the lane, upright; nothing is drawn out here.
 		var yaw := 0.0 if direction < 0.0 else PI
-		global_transform = Transform3D(Basis(Vector3.UP, yaw), Vector3(lane_x, global_position.y, global_position.z))
+		var u := RoadFrame.unroll(global_position)
+		global_transform = RoadFrame.pose(lane_x, u.y, u.z, yaw)
 		reset_physics_interpolation()
 
 ## Frozen cruise: straight down the lane, with the follower law on its speed.
 func _cruise(delta: float) -> void:
 	var a := clampf(_accel_command(_cruise_speed), -A_BRAKE_FULL, 2.0)
 	_cruise_speed = maxf(_cruise_speed + a * delta, 0.0)
-	global_position.z += direction * _cruise_speed * delta
+	var u := RoadFrame.unroll(global_position)
+	u.z += direction * _cruise_speed * delta
+	global_transform = RoadFrame.pose(u.x, u.y, u.z, 0.0 if direction < 0.0 else PI)
 	previous_global_position = global_position
 	if traffic != null and traffic.react_to_player:
 		_decide_t -= delta
@@ -558,7 +633,7 @@ func _cruise(delta: float) -> void:
 ## (YIELD_TTC_HIDDEN), if a lane next to it is safe.
 func _hidden_yield() -> void:
 	var v := _cruise_speed
-	var fg := traffic.scan(global_position.z, direction, lane_x - half_w - CORRIDOR_MARGIN, lane_x + half_w + CORRIDOR_MARGIN,
+	var fg := traffic.scan(RoadFrame.unroll(global_position).z, direction, lane_x - half_w - CORRIDOR_MARGIN, lane_x + half_w + CORRIDOR_MARGIN,
 		false, _idx, half_l, LOOK_BEHIND, false)
 	if fg == INF or not traffic.q_player:
 		return
@@ -570,7 +645,8 @@ func _hidden_yield() -> void:
 		if traffic.lane_allowed(lane, oncoming) and _merge_safe(TrafficManager.lane_centre(lane, oncoming), v):
 			lane_i = lane
 			lane_x = TrafficManager.lane_centre(lane, oncoming)
-			global_position.x = lane_x
+			var u := RoadFrame.unroll(global_position)
+			global_transform = RoadFrame.pose(lane_x, u.y, u.z, 0.0 if direction < 0.0 else PI)
 			previous_global_position = global_position
 			lane_changes += 1
 			_scan_in = 0

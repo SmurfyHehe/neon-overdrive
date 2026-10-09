@@ -13,10 +13,11 @@ extends RefCounted
 # kills the worker. The worker side is scripts/auto_tune_worker.gd.
 #
 # Files, all in user://autotune/ and overwritten per job (never deleted):
-#   request.json   {values: {path: float}, request: {goals, locks}, budget}
+#   request.json   {values: {path: float}, request: {goals, locks}, budget,
+#                   trace: bool, stock: {path: float} (both optional, Test run)}
 #   progress.json  {done, total, best}
-#   result.json    {ok: true, ...AutoTuneSearch result with spec as values} or
-#                  {ok: false, error}
+#   result.json    {ok: true, ...AutoTuneSearch result with spec as values,
+#                  stock_metrics when a stock spec was sent} or {ok: false, error}
 # Specs travel as {path: value} over every TuneParams path (engine knobs
 # included), applied on top of CarSpec.coupe_default() -- a spec is arrays and
 # nested dictionaries, and JSON would lose Array[float].
@@ -52,8 +53,10 @@ var exe := ""
 # ---------- game side ----------
 
 ## Starts a search on `spec` (a full car spec). False, with `error` set, if no
-## Godot executable can be found or the process will not start.
-func start(spec: Dictionary, request: Dictionary, budget: int) -> bool:
+## Godot executable can be found or the process will not start. `options` (the
+## Tuner's Test run): trace = true keeps the brake run's telemetry trace in the
+## metrics; stock = a full spec to run first, returned as stock_metrics.
+func start(spec: Dictionary, request: Dictionary, budget: int, options := {}) -> bool:
 	exe = find_godot()
 	if exe == "":
 		error = "Auto-Tune needs a Godot executable to run its search in. Set the GODOT environment variable to Godot_v4.7.2-stable_win64_console.exe."
@@ -64,7 +67,10 @@ func start(spec: Dictionary, request: Dictionary, budget: int) -> bool:
 	# Truncate the previous job's files so a stale result can't be mistaken for this one.
 	write_json(dir.path_join(RESULT_FILE), {})
 	write_json(dir.path_join(PROGRESS_FILE), {})
-	write_json(dir.path_join(REQUEST_FILE), {"values": values_from_spec(spec), "request": request, "budget": budget})
+	var req := {"values": values_from_spec(spec), "request": request, "budget": budget, "trace": options.get("trace", false)}
+	if options.has("stock"):
+		req.stock = values_from_spec(options.stock)
+	write_json(dir.path_join(REQUEST_FILE), req)
 	var args := PackedStringArray(["--headless", "--fixed-fps", str(Engine.physics_ticks_per_second)])
 	if exe == OS.get_executable_path() and OS.has_feature("template"):
 		# The exported game: it finds its own .pck and runs the worker as a mode
@@ -154,12 +160,19 @@ static func run_worker(tree: SceneTree, dir: String) -> void:
 	await tree.process_frame
 	var base := spec_from_values(req.values)
 	var track := TuneTrack.new()
+	track.record_trace = req.get("trace", false)
 	tree.root.add_child(track)
+	var stock_metrics := {}
+	if req.has("stock"):  # first, in the same lanes, so the two runs compare like for like
+		stock_metrics = (await track.evaluate([spec_from_values(req.stock)]))[0]
 	var progress_path := dir.path_join(PROGRESS_FILE)
 	var on_progress := func(done: int, total: int, best: float) -> void:
 		write_json(progress_path, {"done": done, "total": total, "best": best})
 	var r: Dictionary = await AutoTuneSearch.new().run(track, base, req.request, int(req.budget), on_progress)
-	write_json(dir.path_join(RESULT_FILE), result_to_json(r))
+	var out := result_to_json(r)
+	if req.has("stock"):
+		out.stock_metrics = stock_metrics
+	write_json(dir.path_join(RESULT_FILE), out)
 	tree.quit(0)
 
 # ---------- shared by both sides ----------

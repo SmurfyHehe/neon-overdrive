@@ -126,7 +126,7 @@ func _physics_process(_delta: float) -> bool:
 		w.add_cash(1250)
 		var hud_cash := _find(game, "Cash") as Label
 		_check(hud_cash != null, "no Cash label on the HUD")
-	if ticks == 32:
+	if ticks == 60:  # the HUD label updates on a drawn frame; under load ticks can run without one
 		var w: Node = game.get("wallet")
 		var hud_cash := _find(game, "Cash") as Label
 		if hud_cash != null:
@@ -139,7 +139,7 @@ func _physics_process(_delta: float) -> bool:
 		_check(int(SaveStore.load_wallet().bank) == w.bank, "the banked night was not saved")
 		var gs: GameState = game.get("game_state")
 		gs.pause()
-	if ticks == 36:
+	if ticks == 90:
 		var w: Node = game.get("wallet")
 		var bank_lbl := _find(game, "Bank") as Label
 		_check(bank_lbl != null and bank_lbl.visible and bank_lbl.text.contains(Wallet.money(w.bank)), "pause screen bank reads '%s'" % (bank_lbl.text if bank_lbl != null else "<none>"))

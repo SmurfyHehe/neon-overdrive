@@ -89,8 +89,7 @@ func _loop_player(node_name: String, layer: String) -> AudioStreamPlayer:
 	p.stream = stream(layer)
 	p.bus = &"Tires"
 	p.volume_db = -80.0
-	add_child(p)
-	p.play()
+	add_child(p)  # started by AudioDsp.drive_loop when the scrape is audible
 	return p
 
 func _physics_process(delta: float) -> void:
@@ -120,11 +119,11 @@ func _process(delta: float) -> void:
 	var target := smoothstep(SCRAPE_FROM, SCRAPE_FULL, speed) if touching else 0.0
 	var rate := ATTACK if target > scrape_level else RELEASE
 	scrape_level = lerpf(scrape_level, target, 1.0 - exp(-rate * delta))
-	var db := linear_to_db(scrape_level * SCRAPE_GAIN * 0.71) if scrape_level > 0.001 else -80.0
-	_scrape.volume_db = db
-	_scrape_b.volume_db = db
-	_scrape.pitch_scale = 0.8 + 0.4 * clampf(speed / 30.0, 0.0, 1.2)
-	_scrape_b.pitch_scale = _scrape.pitch_scale * 0.97
+	var amp := scrape_level * SCRAPE_GAIN * 0.71 if scrape_level > 0.001 else 0.0
+	var pitch := 0.8 + 0.4 * clampf(speed / 30.0, 0.0, 1.2)
+	# both loops stopped while silent (AudioDsp.drive_loop), not mixed at -80 dB
+	AudioDsp.drive_loop(_scrape, amp, pitch)
+	AudioDsp.drive_loop(_scrape_b, amp, pitch * 0.97)
 
 ## Plays one hit of this size (m/s of velocity change). Public so the listen
 ## pack and tests can fire hits directly.

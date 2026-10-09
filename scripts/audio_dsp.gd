@@ -151,6 +151,22 @@ static func panned(take: PackedFloat32Array, rate: int, side: int, far := 0.4) -
 
 ## A random-variant stream: each play picks one of `variants` and nudges its
 ## pitch and volume, so repeated hits never sound identical.
+## Level and pitch of a looping player (2026-10-09, audio CPU pass). A player
+## at -80 dB still costs the audio thread a resample and a mix every block, and
+## a car carries some thirty of them, most silent most of the time. Below
+## SILENT the player is stopped; it starts again from silence when the layer
+## comes back, so nothing clicks. Noise loops have no "position" to lose.
+const SILENT := 0.0005
+static func drive_loop(p: AudioStreamPlayer, amplitude: float, pitch: float) -> void:
+	if amplitude > SILENT:
+		p.volume_db = linear_to_db(amplitude)
+		p.pitch_scale = pitch
+		if not p.playing:
+			p.play()
+	elif p.playing:
+		p.volume_db = -80.0
+		p.stop()
+
 static func randomizer(variants: Array[AudioStream], pitch := 1.08, volume_db := 2.0) -> AudioStreamRandomizer:
 	var r := AudioStreamRandomizer.new()
 	for v in variants:

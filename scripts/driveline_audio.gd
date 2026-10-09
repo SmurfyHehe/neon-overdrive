@@ -83,9 +83,7 @@ func _add_player(layer: String, bus_name: StringName, looping: bool) -> AudioStr
 	p.stream = stream(layer)
 	p.bus = bus_name
 	p.volume_db = -80.0
-	add_child(p)
-	if looping:
-		p.play()
+	add_child(p)  # a loop is started by AudioDsp.drive_loop once it is audible
 	return p
 
 func _process(delta: float) -> void:
@@ -98,8 +96,9 @@ func _process(delta: float) -> void:
 	var target := speed_gate * gear_weight * load if in_gear else 0.0
 	var rate := ATTACK if target > whine_level else RELEASE
 	whine_level = lerpf(whine_level, target, 1.0 - exp(-rate * delta))
-	_whine.volume_db = linear_to_db(whine_level * WHINE_GAIN) if whine_level > 0.002 else -80.0
-	_whine.pitch_scale = clampf(v.motor_rpm / 60.0 * WHINE_TEETH / WHINE_BASE_HZ, 0.3, 4.0)
+	# stopped while silent (AudioDsp.drive_loop): a -80 dB loop still cost a mix every block
+	AudioDsp.drive_loop(_whine, whine_level * WHINE_GAIN if whine_level > 0.002 else 0.0,
+			clampf(v.motor_rpm / 60.0 * WHINE_TEETH / WHINE_BASE_HZ, 0.3, 4.0))
 
 	# --- shift thump: when a gear change completes
 	if v.current_gear != _last_gear:

@@ -34,9 +34,16 @@ class_name CarAudio
 #   road loops) plays as two takes of different lengths and seeds, a hair
 #   apart in pitch, so their sum never repeats; the chirp is five variants
 #   picked at random with pitch and volume jitter.
-# Volume and pitch move every frame through AudioStreamPlayer, so the mixing
-# itself is engine code, not GDScript. Every curve is a starting value for Roy
-# to judge by ear (the listen pack: tests/sound_listen_pack.gd).
+# Volume and pitch move through AudioStreamPlayer, so the mixing itself is
+# engine code, not GDScript. Every curve is a starting value for Roy to judge
+# by ear (the listen pack: tests/sound_listen_pack.gd).
+#
+# Cost (2026-10-09, audio CPU pass for the integrated-graphics laptop): the
+# levels are recomputed UPDATE_HZ times a second, not every frame (the ramps
+# use the real elapsed time, so they move at the same speed), and a loop that
+# has faded to silence is stopped rather than mixed at -80 dB
+# (AudioDsp.drive_loop). Nothing audible changes: a layer only stops once it
+# is below -66 dB and starts again from there.
 
 const MIX_RATE := 32000
 const LOOP_SECS := 2.0
@@ -89,6 +96,8 @@ const SURFACE_GAIN := 0.6
 const SEALED_WIND := 0.18
 const OPEN_BUFFET := 2.6
 
+## Level updates per second; a 60 fps frame in two skips every other one.
+const UPDATE_HZ := 30.0
 const ATTACK := 18.0  # 1/s, how fast a layer rises
 const RELEASE := 7.0  # 1/s, how fast it falls
 const CHIRP_COOLDOWN := 0.5
@@ -121,6 +130,7 @@ var _gust_target := 1.0
 var _gust_wait := 0.0
 var _chirp_wait := 0.0
 var _spin_prev := 0.0
+var _since_update := 0.0
 
 func _ready() -> void:
 	_vehicle = get_parent() as Vehicle
@@ -151,9 +161,7 @@ func _add_player(layer: String, bus_name: StringName, looping := true) -> AudioS
 	p.stream = stream(layer)
 	p.bus = bus_name
 	p.volume_db = -80.0
-	add_child(p)
-	if looping:
-		p.play()
+	add_child(p)  # a loop is started by AudioDsp.drive_loop once it is audible
 	return p
 
 ## What the car is doing this frame, as plain numbers (so the listen pack can
@@ -180,20 +188,29 @@ func _read_car() -> Dictionary:
 		var load := minf(clampf(w.spring_force / static_load, 0.0, 1.5), 1.0)
 		var lat := absf(w.slip_vector.x)
 		var lon := w.slip_vector.y
-		var amounts := {
-			# scrub fades out as the slide grows into a squeal
-			"scrub": smoothstep(SCRUB_START, SCRUB_FULL, lat) * (1.0 - 0.8 * smoothstep(SQUEAL_START, SQUEAL_FULL, lat)),
-			"squeal": smoothstep(SQUEAL_START, SQUEAL_FULL, lat),
-			"spin": smoothstep(SPIN_START, SPIN_FULL, -lon),
-			"lock": smoothstep(LOCK_START, LOCK_FULL, lon),
-		}
-		for kind in KINDS:
-			st[kind + side] = maxf(st[kind + side], amounts[kind] * load)
+		var squeal := smoothstep(SQUEAL_START, SQUEAL_FULL, lat)
+		# scrub fades out as the slide grows into a squeal
+		var scrub := smoothstep(SCRUB_START, SCRUB_FULL, lat) * (1.0 - 0.8 * squeal)
+		var k := "scrub" + side
+		st[k] = maxf(st[k], scrub * load)
+		k = "squeal" + side
+		st[k] = maxf(st[k], squeal * load)
+		k = "spin" + side
+		st[k] = maxf(st[k], smoothstep(SPIN_START, SPIN_FULL, -lon) * load)
+		k = "lock" + side
+		st[k] = maxf(st[k], smoothstep(LOCK_START, LOCK_FULL, lon) * load)
 	st.on_road = float(grounded - rough) / 4.0
 	st.on_rough = float(rough) / 4.0
 	return st
 
-func _process(delta: float) -> void:
+func _process(frame_delta: float) -> void:
+	# Every UPDATE_HZ: the ramps below take the time since the last update, so
+	# skipping frames changes when they are sampled, not how fast they move.
+	_since_update += frame_delta
+	if _since_update < 1.0 / UPDATE_HZ - 0.002:
+		return
+	var delta := _since_update
+	_since_update = 0.0
 	var st := _read_car()
 	for k in forced:
 		st[k] = forced[k]
@@ -286,8 +303,7 @@ func _drive_pair(layer: String, amplitude: float, pitch: float) -> void:
 	_drive_layer(_players[layer + "_b"], amplitude * 0.71, pitch * 0.985)
 
 func _drive_layer(p: AudioStreamPlayer, amplitude: float, pitch: float) -> void:
-	p.volume_db = linear_to_db(amplitude) if amplitude > 0.0005 else -80.0
-	p.pitch_scale = pitch
+	AudioDsp.drive_loop(p, amplitude, pitch)
 
 ## The shared stream for one layer, generated on first use.
 static func stream(layer: String) -> AudioStreamWAV:

@@ -30,7 +30,10 @@ extends SceneTree
 # - the whole drive (launch, handbrake spin, kerb) makes no crash sound and no
 #   scrape (CrashAudio, 2026-10-08)
 # - every looping player (tyre kinds per side, buffet, rush, whistle, throb,
-#   road dark/bright, each wind/road layer's second take, surface) playing, on the World/Tires buses that exist
+#   road dark/bright, each wind/road layer's second take, surface) exists on
+#   the World/Tires buses that exist, and plays exactly when it is audible
+#   (2026-10-09: a silent loop is stopped, not mixed at -80 dB), so at the
+#   standstill every one is stopped
 # Also records the real mixed output (engine + these layers) from the Master
 # bus to user://stage_a_drive.wav and reports how loud each phase is.
 #
@@ -270,8 +273,10 @@ func _check_players() -> void:
 		var player := audio.get_node_or_null(NodePath(n)) as AudioStreamPlayer
 		if player == null:
 			_fail("missing %s" % n)
-		elif not player.playing or player.bus != want[n] or AudioServer.get_bus_index(want[n]) < 0:
-			_fail("%s: playing=%s bus=%s" % [n, player.playing, player.bus])
+		elif player.bus != want[n] or AudioServer.get_bus_index(want[n]) < 0:
+			_fail("%s: bus=%s" % [n, player.bus])
+		elif player.playing != (player.volume_db > -79.0):
+			_fail("%s: playing=%s at %.1f dB (a loop should play exactly when audible)" % [n, player.playing, player.volume_db])
 
 func _finish() -> void:
 	if quit_in > 0 or game == null:

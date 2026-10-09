@@ -62,6 +62,10 @@ call :run car/phase_a_engine --headless
 call :run core/tick_rate_120 "--headless --fixed-fps 120"
 call :run view/cockpit --headless
 call :run view/cockpit_interior --headless
+call :run view/car_fov --headless
+set NEON_CAR=p6_crossover
+call :run view/cockpit_interior --headless
+set NEON_CAR=
 call :run view/cockpit_isolation "--headless --fixed-fps 120"
 call :run view/cockpit_head_motion --headless
 call :run ui/hud_rear_strip --headless

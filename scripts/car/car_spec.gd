@@ -37,6 +37,8 @@ static func apply(v: Vehicle, spec: Dictionary) -> void:
 			ForcedInduction.set_kind(v, String(spec[key]))  # not a Vehicle property (C1)
 		elif key == "driver_grip_deg":
 			continue  # cosmetic: where the driver's hands rest on the rim (DriverModel)
+		elif key == "cockpit_fov" or key == "chase_fov" or key == "chase_height":
+			continue  # cosmetic: the car's own camera framing (ChaseCamera)
 		else:
 			v.set(key, _own(spec[key]))
 
@@ -282,6 +284,18 @@ static func coupe_default() -> Dictionary:
 		# coupe's flat-bottom wheel. Per car so each interior keeps its own
 		# driver; the sightline cap (DriverModel.GRIP_HIGH_DEG) bounds it.
 		"driver_grip_deg": 0.0,
+		# Camera framing per car (ChaseCamera reads these; the P1's values are
+		# the defaults, so a car that sets none looks as it always did):
+		# - cockpit_fov: vertical degrees from the driver's eye before the
+		#   player's slider (Settings, default 62) moves it. The sightline test
+		#   (tests/view/cockpit_interior.gd) holds the dash line and the clear
+		#   glass share at this FOV for every player car.
+		# - chase_fov: vertical degrees at rest; the speed widening adds 16.
+		# - chase_height: metres above the car's origin. A tall car needs more,
+		#   or its own roof fills the middle of the screen and hides the road.
+		"cockpit_fov": 62.0,
+		"chase_fov": 58.0,
+		"chase_height": 1.85,
 	}
 
 ## The starter car (balance slice 1, 2026-10-09): the P1 coupe "as found" under
@@ -447,6 +461,10 @@ static func player_spec(kind: String) -> Dictionary:
 			s["shift_time"] = 0.3
 		"p6_crossover":
 			# Cairn, T2: 2.0 turbo flat four, AWD 40:60, tall, lifted. Grips.
+			# Camera: 1.61 m tall on a 0.22 m lift, so the chase camera sits
+			# higher (the P1's 1.85 m is level with this roof) and a touch wider.
+			s["chase_height"] = 2.35
+			s["chase_fov"] = 62.0
 			var gears: Array[float] = [3.30, 2.00, 1.40, 1.07, 0.85]
 			s["vehicle_mass"] = 1450.0
 			s["front_weight_distribution"] = 0.58

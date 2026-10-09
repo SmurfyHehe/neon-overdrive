@@ -72,7 +72,10 @@ const COCKPIT_EYE := Vector3(-0.32, 1.10, 0.30)  # car-local, -x is the driver's
 ## The eye in this car: COCKPIT_EYE moved by the car's cabin offset
 ## (PlayerCars.cabin_offset; zero for the P1). Set in _init with the frame.
 var eye := COCKPIT_EYE
-const COCKPIT_FOV_SPEED_GAIN := 6.0  # degrees added at top speed; the base is ViewSettings.cockpit_fov (default 62)
+const COCKPIT_FOV_SPEED_GAIN := 6.0  # degrees added at top speed; the base is the car's cockpit_fov plus the slider's offset from 62
+## The cockpit FOV never leaves this range whatever the car's base and the slider add up to.
+const COCKPIT_FOV_MIN := 50.0
+const COCKPIT_FOV_MAX := 84.0
 ## Head movement in the cockpit (Roy, 2026-10-06): the eye sways with the
 ## car's forces, capped at HEAD_MAX_M (4 cm) and HEAD_MAX_DEG (2 degrees).
 ## Lateral g pushes the head outward and rolls it with the body; braking
@@ -146,6 +149,34 @@ func _init(car: PlayerCar) -> void:
 	_noise.seed = 9431
 	_noise.frequency = 1.0
 	near = 0.05
+
+## Per-car framing (CarSpec cosmetic keys; the defaults are the P1's): the
+## chase FOV at rest (it widens by FOV_FAST - FOV_REST at speed), the chase
+## height above the car's origin, and the cockpit FOV before the player's
+## slider. A car with no such key (a test stub, a mod spec) gets the defaults.
+func chase_fov_rest() -> float:
+	return _spec_float("chase_fov", FOV_REST, 40.0, 90.0)
+
+func chase_height() -> float:
+	return _spec_float("chase_height", HEIGHT, 1.0, 4.0)
+
+## The cockpit FOV now: this car's own base, moved by how far the player's
+## slider (ViewSettings.cockpit_fov, default 62) is from its default, so the
+## slider keeps working the same on every car. Kept inside a sane range.
+func cockpit_fov_base() -> float:
+	return _spec_float("cockpit_fov", ViewSettings.COCKPIT_FOV_DEFAULT, 45.0, 90.0)
+
+func cockpit_fov_now() -> float:
+	var f := cockpit_fov_base() + (ViewSettings.cockpit_fov - ViewSettings.COCKPIT_FOV_DEFAULT)
+	return clampf(f, COCKPIT_FOV_MIN, COCKPIT_FOV_MAX)
+
+func _spec_float(key: String, fallback: float, lo: float, hi: float) -> float:
+	var sp: Variant = target.get("spec") if target != null else null
+	if sp is Dictionary and (sp as Dictionary).has(key):
+		var v := float((sp as Dictionary)[key])
+		if is_finite(v):
+			return clampf(v, lo, hi)
+	return fallback
 
 func _ready() -> void:
 	current = true
@@ -258,7 +289,7 @@ func _place_cockpit(delta: float) -> void:
 	var turn := Basis.from_euler(Vector3(deg_to_rad(look_pitch), deg_to_rad(look_yaw), 0.0))
 	var tilt := Basis.from_euler(Vector3(deg_to_rad(head_tilt.x), 0.0, deg_to_rad(head_tilt.y)))
 	global_transform = Transform3D(xf.basis * turn * tilt, xf * (eye + head_offset))
-	fov = ViewSettings.cockpit_fov + COCKPIT_FOV_SPEED_GAIN * speed_t
+	fov = cockpit_fov_now() + COCKPIT_FOV_SPEED_GAIN * speed_t
 
 ## Eases the head toward where the arrow keys point it (or back to straight
 ## ahead), and focuses the door mirror it has turned to.
@@ -309,11 +340,12 @@ func _update_feel(delta: float) -> void:
 	speed_t = lerpf(speed_t, want_t, 1.0 - exp(-FOV_RATE * delta))
 	var want_a := clampf(_accel * FOV_ACCEL_GAIN, FOV_ACCEL_MIN, FOV_ACCEL_MAX)
 	accel_fov = lerpf(accel_fov, want_a, 1.0 - exp(-ACCEL_RATE * delta))
-	fov = lerpf(FOV_REST, FOV_FAST, speed_t) + accel_fov
+	var rest := chase_fov_rest()
+	fov = lerpf(rest, rest + (FOV_FAST - FOV_REST), speed_t) + accel_fov
 	# Dolly: scale the distance by how much the frustum widened, part way.
-	var widen := tan(deg_to_rad(FOV_REST) * 0.5) / tan(deg_to_rad(fov) * 0.5)
+	var widen := tan(deg_to_rad(rest) * 0.5) / tan(deg_to_rad(fov) * 0.5)
 	dist_now = DIST * (DOLLY * widen + (1.0 - DOLLY))
-	height_now = HEIGHT - SQUAT * speed_t
+	height_now = chase_height() - SQUAT * speed_t
 	trauma = maxf(0.0, trauma - TRAUMA_DECAY * delta)
 	var rough := 0
 	var grounded := 0

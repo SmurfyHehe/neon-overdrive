@@ -49,7 +49,8 @@ static func chassis_kind() -> String:
 	return PlayerCars.selected
 
 ## The sheet build the body wears (NpcCarBuilder kinds; CarSpec._build_wheel
-## reads it for the wheel mesh). The player's cars are stock until the garage.
+## reads it for the wheel mesh). Set from PlayerCars.look_for(kind) in _ready
+## (the temporary default kit, looks only) until the garage owns it.
 var build := "stock"
 
 ## Wheel hardpoints for this car: the P1's CFG, or the sheet car's
@@ -151,6 +152,8 @@ func _ready() -> void:
 	# NEON_TEST_CAR=1. Same physics either way; see chassis_kind().
 	var kind := chassis_kind()
 	var cfg := wheel_config(kind)
+	var look := PlayerCars.look_for(kind)
+	build = String(look.build)
 	if not sim_only:
 		if kind == TestCarBuilder.KIND:
 			chassis_visual = TestCarBuilder.build_chassis_visual()
@@ -271,8 +274,15 @@ func _ready() -> void:
 		# Real wheels and brakes (car parts plan 2026-10-09, session 1): open
 		# rims, glowing discs, calipers and springs. Before CarFx so they land on
 		# the car layer. Not on the test car (its wheels are a diagnostic).
-		if kind == P1CoupeBuilder.KIND:
-			CarParts.attach(self, {"hub_x": P1CoupeBuilder.DESIGN_WHEEL_X})
+		# Every player car wears the set (2026-10-09, the temporary default
+		# look): the rim style and tint come from PlayerCars.LOOK.
+		if kind != TestCarBuilder.KIND:
+			var parts := {"rim": String(look.get("rim", "five"))}
+			if look.has("rim_color"):
+				parts["rim_color"] = look.rim_color
+			if kind == P1CoupeBuilder.KIND:
+				parts["hub_x"] = P1CoupeBuilder.DESIGN_WHEEL_X
+			CarParts.attach(self, parts)
 		CarFx.attach(self, chassis_visual.get_meta("half_l", 2.2))
 
 func _physics_process(delta: float) -> void:

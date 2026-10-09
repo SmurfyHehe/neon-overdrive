@@ -1,6 +1,6 @@
 # Cars as the main attraction: feel, sound and personality (proposal, 2026-10-09)
 
-Status: PROPOSAL, docs only. Nothing here is built. Roy's ask: "enhance our design of the cars. The cars should be the main attraction of the game."
+Status: SIGNED OFF by Roy 2026-10-09 08:36Z (section 9). Nothing built yet. Roy's ask: "enhance our design of the cars. The cars should be the main attraction of the game."
 
 Checked against `origin/main` **282343f** (git, 2026-10-09): `scripts/car_spec.gd` (only `coupe_default()` and the three traffic specs exist as driveable data), `scripts/engine_voice.gd` (12 per-car engine voices already defined), `scripts/engine_synth.gd` (engine made sample by sample in GDScript), `scripts/powertrain_health.gd` (engine heat, brake fade, tyre and clutch wear), `scripts/vendor/gevp/gevp_vehicle.gd` (the knobs listed below), `docs/design/fleet/` (the 12-car design sheet). No `AudioStreamPlayer3D` on main yet, so traffic is still silent there.
 
@@ -188,7 +188,7 @@ Recommendation: no rewrite. Do three targeted game-wide changes, in this order: 
 | A4 | Odometer, logbook and history card data, saved per car | Sonnet: mechanical |
 | A5 | Per-car cockpit camera sway and steering ramp numbers | Fable: feel |
 | A6 | Listen pack and the two-second check for all car voices | Sonnet: render plus report |
-| A7 | Dirt layer and garage wash | Fable: look |
+| A7 | Dirt layer and a garage wash mini-game (decided) | Fable: look and play |
 
 ### B: medium, for Roy to know about
 
@@ -222,15 +222,14 @@ Recommendation: no rewrite. Do three targeted game-wide changes, in this order: 
 - **"Every NPC engine audible" vs frame rate:** decided yes, but the current synth can't run per traffic car. Section 3d keeps the decision and makes it cheap.
 - **Exhaust cosmetic only** stays true: exhaust mods change sound and looks, not speed.
 
-## 9. Questions for Roy (one word each, my pick first)
+## 9. Decided (Roy, 2026-10-09 08:36Z, his numbers 106-113 and 122)
 
-The logbook (section 5) is assumed yes.
-
-1. When you lift off mid-corner in the cheap starter Bug, should the back step out a little (scary at first, fun once you learn it)? **Yes** / No
-2. When you start a car, should each one start its own way (the Bug coughs twice, the muscle car shakes the cabin)? **Yes** / No
-3. Should every car have one small habit you learn to live with, like a pop-up lamp that sometimes sticks? **Yes** / No
-4. Should mods be allowed to change what a car *is*, so a fully built Bug drives like the coupe? **No, it stays a Bug** / Yes
-5. Should cars get dirty during a night and come out clean from the garage? **Yes** / No
-6. Should a car rattle and squeak more as it gets hurt, until the garage fixes it? **Yes** / No
-7. Should you pick a nickname for each car that Dave then says on the radio? **Yes** / No
-8. Should we change how every car loses grip, so some snap and some slide long? It means re-testing every tune once. **Yes** / No
+All yes, with two changes:
+- **Bug tail steps out on lift-off:** yes.
+- **Each car starts its own way:** yes.
+- **One small habit per car** (pop-up that sticks etc.): yes.
+- **Mods and the Bug:** a Bug stays a Bug, but it can become an **enhanced Bug**. Its tree makes it faster and sharper, while the fingerprint test (2c) keeps its rear-engine character.
+- **Dirt:** yes, but cleaning is a **cleaning mini-game** at the garage, not an automatic wash. A7 changes to: dirt layer plus a short wash mini-game (Fable).
+- **Rattles grow with damage:** yes. **Logbook:** yes. **Nicknames Dave says on air:** yes.
+- **Change how each car loses grip (tyre let-go shape, 6b):** yes, re-test every tune once.
+- Status: **signed off, ready to build** in the order in section 7.

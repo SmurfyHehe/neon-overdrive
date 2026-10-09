@@ -115,7 +115,7 @@ func _physics_process(_delta: float) -> bool:
 				_check(not w.flashing and w.led_colours[7].is_equal_approx(Color(SteeringWheel.RED, 1.0)), "between blinks the middle LED is red")
 				w.update(0.5, false, false, 3500.0, 40, "1")
 				_check(w.lit_count == 0 and w.led_colours[0].a < 0.01, "at 50%% every LED is off (alpha 0)")
-				_check_sightline(p, frame)
+				_check_sightline(p, frame, cam)
 				_check_wheel_pose(frame)
 				_check_view(p, frame, cam)
 				steer = 0.0
@@ -154,8 +154,8 @@ func _physics_process(_delta: float) -> bool:
 ## eye across +-20 degrees, from the horizon down to the ground 10 m ahead of
 ## the bumper, may hit nothing of the interior except the wheel rim (the band
 ## stays clear of the A-pillars, which sit past 25 degrees).
-func _check_sightline(p: PlayerCar, frame: CockpitFrame) -> void:
-	var eye := ChaseCamera.COCKPIT_EYE
+func _check_sightline(p: PlayerCar, frame: CockpitFrame, cam: ChaseCamera) -> void:
+	var eye := cam.eye  # this car's eye: the P1's moved by its cabin offset
 	var ground_z := -(P1CoupeBuilder.LENGTH / 2.0) - 10.0
 	var ground_pitch := -rad_to_deg(atan2(eye.y, eye.z - ground_z))
 	var to_car := p.global_transform.affine_inverse()
@@ -231,7 +231,7 @@ static func _see_through(mi: MeshInstance3D) -> bool:
 ## - clear glass: a 32 x 18 grid of rays over the camera's rest FOV at 16:9;
 ##   a ray that hits nothing of the interior looks out through glass.
 func _check_view(p: PlayerCar, frame: CockpitFrame, cam: ChaseCamera) -> void:
-	var eye := ChaseCamera.COCKPIT_EYE
+	var eye := cam.eye
 	var to_car := p.global_transform.affine_inverse()
 	# gather every interior triangle in car space, with a bounding box per mesh
 	var meshes := []
@@ -267,8 +267,9 @@ func _check_view(p: PlayerCar, frame: CockpitFrame, cam: ChaseCamera) -> void:
 			var hit := _first_hit(meshes, eye, dir)
 			if not hit.is_empty():
 				var pt: Vector3 = hit.point
-				var binnacle := absf(pt.x - CockpitFrame.SEAT_X) < 0.22 and pt.z > -0.52
-				var pillar := absf(pt.x) > 0.55
+				var fp := pt - frame.position  # the binnacle and pillars sit where the P1's do, in the cabin's own frame
+				var binnacle := absf(fp.x - CockpitFrame.SEAT_X) < 0.22 and fp.z > -0.52
+				var pillar := absf(fp.x) > 0.55
 				if not binnacle and not pillar and pitch < dash_top:
 					dash_top = pitch
 					dash_where = "%s at yaw %.0f, %s" % [hit.name, yaw_deg, pt]
@@ -277,7 +278,8 @@ func _check_view(p: PlayerCar, frame: CockpitFrame, cam: ChaseCamera) -> void:
 	# clear glass over the view
 	var fov := cam.fov
 	var results := {}
-	for test_fov in [fov, 62.0]:
+	var base := cam.cockpit_fov_base()   # this car's own FOV before the slider
+	for test_fov in [fov, 62.0, base]:
 		var half_v := tan(deg_to_rad(test_fov) * 0.5)
 		var half_h := half_v * 16.0 / 9.0
 		var clear := 0
@@ -296,6 +298,9 @@ func _check_view(p: PlayerCar, frame: CockpitFrame, cam: ChaseCamera) -> void:
 	# branch's rest FOV is printed too); the eye is 0.34 m from the glass top,
 	# so a wider view fills with header and pillars whatever the dash does.
 	_check(results[62.0] >= CockpitFrame.GLASS_MIN_FRACTION, "only %.1f%% of the view is clear glass at FOV 62, want %.0f%%" % [results[62.0] * 100.0, CockpitFrame.GLASS_MIN_FRACTION * 100.0])
+	# And at the car's own FOV (CarSpec "cockpit_fov"), the one the player gets
+	# with the slider at its default.
+	_check(results[base] >= CockpitFrame.GLASS_MIN_FRACTION, "only %.1f%% of the view is clear glass at this car's FOV %.0f, want %.0f%%" % [results[base] * 100.0, base, CockpitFrame.GLASS_MIN_FRACTION * 100.0])
 
 ## The first mesh a ray from `from` along `dir` hits, as {name, point}; empty for none.
 static func _first_hit(meshes: Array, from: Vector3, dir: Vector3) -> Dictionary:

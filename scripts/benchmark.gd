@@ -36,6 +36,9 @@ const WARMUP_SECS := 2.0  # skip shader-compile hitches at startup
 ## mirrors  0/1 cockpit mirrors (project)     mirror_q 0 low, 1 medium, 2 high
 ## view     chase | cockpit (chase)           window   1 = driver window half down
 ## res      window size, e.g. 1920x1080 (default: the project window)
+## gfx      low | medium | high: a graphics tier (GraphicsSettings), whose
+##          traffic and draw distance become the defaults (the saved preset)
+## dynres   1 = dynamic resolution on (off by default, for fixed-scale numbers)
 ## Defaults reproduce the old benchmark exactly, so earlier lines still compare.
 ## The radio always plays (it is part of the game), so every run has it on.
 const DEFAULT_SECS := 45.0
@@ -201,6 +204,7 @@ func _report() -> void:
 		ProjectSettings.get_setting("rendering/renderer/rendering_method"), int(size.x), int(size.y),
 		n, avg, int(1000.0 / avg), low1, int(1000.0 / low1), s[n / 2], p99, s[n - 1],
 		gpu_ms / n, cpu_ms / n, process_ms / n, physics_ms / n, TrafficSettings.car_count, roundi(TrafficSettings.detail_distance), roundi(dc_avg), dc_max, max_speed, spikes33, spikes50]
+	line += "  gfx=%s scale_end=%.2f" % [GraphicsSettings.preset, get_viewport().scaling_3d_scale]
 	line += "  opts=[%s]" % " ".join(OS.get_cmdline_user_args())
 	print("BENCHMARK ", line)
 	# Next to the exe in an exported build, where Roy can find it; user:// when

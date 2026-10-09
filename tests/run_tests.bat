@@ -64,6 +64,7 @@ call :run hud_rear_strip --headless
 call :run look_back --headless
 call :run mirror_glance --headless
 call :run cockpit_driver --headless
+call :run cockpit_window --headless
 call :run cockpit_shifter --headless
 call :run cockpit_shifter_rnd --headless
 call :run touch_radio --headless

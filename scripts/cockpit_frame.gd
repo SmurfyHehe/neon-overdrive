@@ -76,6 +76,28 @@ const LEVER_SPEED := 12.0      # slot units per second along the gate path
 const SEQ_WAIT := 0.22
 const PEDAL_TRAVEL_DEG := 22.0
 
+## The driver's side window (2026-10-09, Roy: "the Z to roll up and roll down
+## needs an animation"). The glass is a pane just inside the door skin that
+## slides into the door card by GLASS_TRAVEL as the window opens; below the
+## belt line it is inside the card, so it simply disappears. What works it
+## follows the car's spec ("window_control": "crank" or "switch"): an old car
+## has a crank on the door card the driver's left hand turns (CRANK_TURNS from
+## shut to open), a modern one a rocker on the armrest the thumb presses. Both
+## are a few dozen triangles; the glass is 4. The window value itself is
+## PerspectiveAudio's (ChaseCamera hands it over each tick, set_window()).
+const GLASS_X := -0.875
+const GLASS_BOTTOM := 0.955
+const GLASS_TOP := 1.30
+const GLASS_TRAVEL := 0.36
+const CRANK_POS := Vector3(-0.826, 0.65, -0.18)   # hub on the door card, forward of and below the armrest (the hand on the knob stays under the sightline)
+const CRANK_ARM := 0.085
+const CRANK_KNOB_X := 0.03                        # knob mid-length, inward from the arm
+const CRANK_TURNS := 2.5
+const SWITCH_POS := Vector3(-0.80, 0.787, 0.02)   # rocker on the outboard edge of the armrest
+const SWITCH_TILT_DEG := 14.0
+const WINDOW_CONTROLS := ["crank", "switch"]
+const DEFAULT_WINDOW_CONTROL := "switch"
+
 # Colours (ROADMAP palette; dark cabin plastics around it)
 const PLASTIC := Color("#1C1F26")
 const PLASTIC_LIGHT := Color("#2A2E36")
@@ -108,6 +130,13 @@ var pedals := {}                 # "throttle" / "brake" / "clutch" -> pivot Node
 var cabin_light: OmniLight3D
 var driver: DriverModel
 var steering := 0.0              # -1..1 from the car, set by the camera (tests set it too)
+var window := 0.0                # 0 closed .. 1 down, set by the camera (PerspectiveAudio's value)
+var window_direction := 0        # +1 rolling down, -1 rolling up, 0 at rest (same source)
+var window_control := DEFAULT_WINDOW_CONTROL
+var glass: MeshInstance3D        # the sliding pane
+var crank: Node3D                # the crank's hub pivot (crank cars), else null
+var window_switch: Node3D        # the rocker's pivot (switch cars), else null
+var _window_parts: Node3D        # whatever set_window_control() built
 var cockpit := false
 var lever_moving := false
 var _lever_gear := 0
@@ -135,6 +164,11 @@ func _ready() -> void:
 	_build_handbrake()
 	_build_pedals()
 	_build_light()
+	_build_glass()
+	var control := OS.get_environment("NEON_WINDOW_CONTROL")   # tests and the screenshot tool
+	if control == "":
+		control = str(player.spec.get("window_control", DEFAULT_WINDOW_CONTROL))
+	set_window_control(control)
 	mirrors = CockpitMirrors.new()
 	mirrors.name = "Mirrors"
 	mirrors.cull_mask = MIRROR_CULL
@@ -299,6 +333,106 @@ static func _bar(k: CockpitKit, a: Vector3, b: Vector3, w: float, col: Color) ->
 		x = Vector3.RIGHT
 	var z := x.cross(y).normalized()
 	k.box(Vector3(w, len, w * 1.2), (a + b) * 0.5, col, Basis(x, y, z))
+
+# ---------- the side window ----------
+
+## The driver's door glass: a trapezoid between the belt line, the roof line,
+## the A-pillar and the B-pillar, both faces (the chase view sees it through
+## the body's own glass), tinted like the body's windows.
+func _build_glass() -> void:
+	var k := CockpitKit.new()
+	var tint := Color(Color(P1CoupeBuilder.Data.COLORS.glass), 0.55)
+	var a := Vector3(GLASS_X, GLASS_BOTTOM, -0.49)   # bottom front, at the A-pillar foot
+	var b := Vector3(GLASS_X, GLASS_BOTTOM, 0.42)    # bottom rear, at the B-pillar
+	var c := Vector3(GLASS_X, GLASS_TOP, 0.42)
+	var d := Vector3(GLASS_X, GLASS_TOP, -0.07)      # top front, where the A-pillar meets the roof
+	k.quad(a, b, c, d, tint)
+	k.quad(a, d, c, b, tint)
+	var m := StandardMaterial3D.new()
+	m.vertex_color_use_as_albedo = true
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.metallic = 0.6
+	m.roughness = 0.08
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	glass = k.instance(m, "WindowGlass")
+	add_child(glass)
+
+## Builds (or rebuilds) what works the window: "crank" or "switch". Called at
+## build from the car's spec; the screenshot tool switches it live.
+func set_window_control(control: String) -> void:
+	if not WINDOW_CONTROLS.has(control):
+		push_warning("CockpitFrame: unknown window_control '%s', using %s" % [control, DEFAULT_WINDOW_CONTROL])
+		control = DEFAULT_WINDOW_CONTROL
+	window_control = control
+	if _window_parts != null:
+		_window_parts.queue_free()
+	crank = null
+	window_switch = null
+	_window_parts = Node3D.new()
+	_window_parts.name = "WindowControl"
+	add_child(_window_parts)
+	var mat := CockpitKit.material(0.6, 0.3, 0.2)
+	if control == "crank":
+		# Boss on the door card; the arm and its peg knob turn about the door
+		# normal (x). Chrome arm, black knob, like a 70s door.
+		var boss := CockpitKit.new()
+		boss.cylinder(0.02, 0.0, 0.012, CRANK_POS, TRIM, 10, Basis(Vector3.BACK, -PI / 2.0))
+		_window_parts.add_child(boss.instance(mat, "CrankBoss"))
+		crank = Node3D.new()
+		crank.name = "Crank"
+		crank.position = CRANK_POS
+		_window_parts.add_child(crank)
+		var k := CockpitKit.new()
+		k.box(Vector3(0.014, CRANK_ARM + 0.03, 0.022), Vector3(0.016, CRANK_ARM * 0.5, 0.0), SILVER)
+		k.cylinder(0.011, 0.012, 0.022, Vector3(0.0, 0.0, 0.0), SILVER, 8, Basis(Vector3.BACK, -PI / 2.0))   # hub cap
+		k.cylinder(0.011, 0.008, 0.052, Vector3(0.0, CRANK_ARM, 0.0), PLASTIC, 10, Basis(Vector3.BACK, -PI / 2.0))   # the peg knob
+		crank.add_child(k.instance(mat, "Arm"))
+	else:
+		# A small bezel let into the armrest with one rocker in it, an amber
+		# index mark on the rocker so it reads in the dark.
+		var bezel := CockpitKit.new()
+		bezel.box(Vector3(0.05, 0.006, 0.07), SWITCH_POS + Vector3(0.0, -0.006, 0.0), PLASTIC)
+		bezel.box(Vector3(0.026, 0.004, 0.044), SWITCH_POS + Vector3(0.0, -0.004, 0.0), DIAL_FACE)
+		_window_parts.add_child(bezel.instance(mat, "SwitchBezel"))
+		window_switch = Node3D.new()
+		window_switch.name = "Switch"
+		window_switch.position = SWITCH_POS
+		_window_parts.add_child(window_switch)
+		var k := CockpitKit.new()
+		k.box(Vector3(0.018, 0.008, 0.034), Vector3(0.0, 0.004, 0.0), TRIM)
+		k.box(Vector3(0.004, 0.002, 0.016), Vector3(0.0, 0.009, 0.0), AMBER)
+		window_switch.add_child(k.instance(mat, "Rocker"))
+	_set_layers(_window_parts, INTERIOR_BIT)
+	for n in _window_parts.find_children("*", "GeometryInstance3D", true, false):
+		(n as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_apply_window()
+
+## The window value and which way it is going, from the camera each physics
+## tick (PerspectiveAudio.window). Tests call it directly.
+func set_window(openness: float, direction: int) -> void:
+	window = clampf(openness, 0.0, 1.0)
+	window_direction = direction
+	_apply_window()
+
+func _apply_window() -> void:
+	if glass != null:
+		glass.position = Vector3(0.0, -GLASS_TRAVEL * window, 0.0)
+	if crank != null:
+		crank.rotation = Vector3(-window * CRANK_TURNS * TAU, 0.0, 0.0)
+	if window_switch != null:
+		window_switch.rotation_degrees = Vector3(SWITCH_TILT_DEG * float(window_direction), 0.0, 0.0)
+
+## Where the glass's bottom edge is now, car space y (tests).
+func glass_bottom_y() -> float:
+	return GLASS_BOTTOM + glass.position.y
+
+## The crank's knob, mid-length, car space: where the hand holds it.
+func crank_knob_position() -> Vector3:
+	return crank.transform * Vector3(CRANK_KNOB_X, CRANK_ARM, 0.0)
+
+## The top face of the rocker, car space: where the thumb lands.
+func switch_press_position() -> Vector3:
+	return SWITCH_POS + Vector3(0.0, 0.009, 0.0)
 
 # ---------- wheel and column ----------
 

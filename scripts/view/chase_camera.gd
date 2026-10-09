@@ -89,9 +89,22 @@ var head_offset := Vector3.ZERO   # car-local, metres, current
 var head_tilt := Vector2.ZERO     # (pitch, roll) degrees, current
 var view := View.CHASE
 ## Look back (hold the look_back key, B): the chase cam swings to the front
-## of the car and looks back at it, the same move as reversing; the cockpit
-## eye turns 180 degrees to the rear window.
+## of the car and looks back at it, the same move as reversing. In the
+## cockpit the head turns over the driver's shoulder to the rear glass, and
+## rises to the cabin's centreline to do it (Roy, 2026-10-09: "theres
+## something blocking my pov"): turning 180 degrees in the seat put the
+## driver's own headrest and the rear bulkhead across the view. Racing games
+## with a usable cockpit look-back cheat the same way (Gran Turismo, Forza
+## and the NFS cockpit cams lift the eye above the headrests and look back
+## and a little down through the rear window). LOOK_BACK_EYE is that spot,
+## car space, LOOK_BACK_PITCH_DEG the dip, LOOK_BACK_RATE the ease (about
+## a quarter second there and back; the turn goes left, this is left-hand
+## drive). It moves with the car's cabin offset like the eye does.
 var look_back := false
+const LOOK_BACK_EYE := Vector3(0.0, 1.19, 0.38)
+const LOOK_BACK_PITCH_DEG := -6.0
+const LOOK_BACK_RATE := 14.0
+var _back := 0.0   # 0 at the eye facing forward .. 1 looking back
 ## Look around (Roy, 2026-10-09): hold the arrow keys in the cockpit view to
 ## turn the head (left/right) and tilt it (up/down); release and it eases back
 ## straight ahead. This replaces the V mirror glance. Only the camera turns,
@@ -237,8 +250,6 @@ func _process(delta: float) -> void:
 		frame.steering = target.steer_fraction()  # the wheel turns the way the car does, in every view
 	if view == View.COCKPIT:
 		_place_cockpit(delta)
-		if look_back:
-			global_transform.basis = global_transform.basis * Basis(Vector3.UP, PI)
 		if shake_enabled:
 			_shake(delta)
 			global_position += global_basis.y * BUMP_POS * bump
@@ -257,7 +268,13 @@ func _place_cockpit(delta: float) -> void:
 	_update_look(delta)
 	var turn := Basis.from_euler(Vector3(deg_to_rad(look_pitch), deg_to_rad(look_yaw), 0.0))
 	var tilt := Basis.from_euler(Vector3(deg_to_rad(head_tilt.x), 0.0, deg_to_rad(head_tilt.y)))
-	global_transform = Transform3D(xf.basis * turn * tilt, xf * (eye + head_offset))
+	# looking back: the head turns left through 180 degrees and rises to the
+	# centreline over the headrests, eased so the swing reads as a head turn
+	_back = lerpf(_back, 1.0 if look_back else 0.0, 1.0 - exp(-LOOK_BACK_RATE * delta))
+	var back_eye := LOOK_BACK_EYE + (eye - COCKPIT_EYE)
+	var at := (eye + head_offset).lerp(back_eye, _back)
+	var back_turn := Basis(Vector3.UP, PI * _back) * Basis(Vector3.RIGHT, deg_to_rad(LOOK_BACK_PITCH_DEG) * _back)
+	global_transform = Transform3D(xf.basis * back_turn * turn * tilt, xf * at)
 	fov = ViewSettings.cockpit_fov + COCKPIT_FOV_SPEED_GAIN * speed_t
 
 ## Eases the head toward where the arrow keys point it (or back to straight

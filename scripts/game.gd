@@ -252,11 +252,15 @@ func _setup_road_shape() -> void:
 	var kick_env := OS.get_environment("NEON_KICKERS")
 	if kick_env.is_valid_float():
 		kicker_chance = float(kick_env)
-	if Benchmark.requested():
+	# NEON_BENCH_ROAD=1 keeps the shape (curves and hills as set above) in a
+	# benchmark run, on a fixed seed: the straight benchmark misses every
+	# road-space cost (RoadFrame, bent chunks) real play pays.
+	var bench_road := Benchmark.requested() and OS.get_environment("NEON_BENCH_ROAD") == "1"
+	if Benchmark.requested() and not bench_road:
 		curviness = 0.0
 		hilliness = 0.0
 	var seed_env := OS.get_environment("NEON_ROAD_SEED")
-	var road_seed := int(seed_env) if seed_env.is_valid_int() else randi()
+	var road_seed := int(seed_env) if seed_env.is_valid_int() else (Benchmark.SEED if bench_road else randi())
 	RoadFrame.origin_index = origin_index
 	RoadFrame.align = RoadAlignment.new(road_seed, curviness, hilliness, kicker_chance) if curviness > 0.0 or hilliness > 0.0 else null
 

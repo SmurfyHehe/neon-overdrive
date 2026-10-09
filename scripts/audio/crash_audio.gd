@@ -245,8 +245,11 @@ func _physics_process(delta: float) -> void:
 	var dv := v - _prev_vel
 	_prev_vel = v
 	_read_contacts(v)
+	# Only a side contact makes a crash: the underbody grazing a kerb or the
+	# road has its own sound (ground_hit), and #281's lifted hull lets a kerb
+	# jolt touch the underside without the body hitting anything (2026-10-09).
 	var touching := false
-	for kind in _grace:
+	for kind in ["concrete", "metal", "car"]:
 		touching = touching or _grace[kind] > 0
 	var dvh := Vector2(dv.x, dv.z).length()
 	if _hit_left >= 0.0:

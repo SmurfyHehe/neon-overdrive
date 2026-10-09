@@ -103,7 +103,11 @@ call :run core/settings_safety --headless
 call :run core/setting_danger --headless
 call :run traffic/traffic_spawn "--headless --fixed-fps 60"
 rem ~40 s: the traffic cars (stage B step 5) against their sheets, then a drive each at the game's 120 Hz.
+rem npc_cars drives every kind (13 since the player and cop cars joined), about 15 min: give it 20.
+set "TT_SAVED=%TEST_TIMEOUT%"
+if %TEST_TIMEOUT% LSS 1200 set "TEST_TIMEOUT=1200"
 call :run traffic/npc_cars "--headless --fixed-fps 120"
+set "TEST_TIMEOUT=%TT_SAVED%"
 rem Player cars (stage D): every PlayerCars.KINDS car boots as the player and gets a drive test.
 call :run fleet/player_cars "--headless --fixed-fps 120"
 rem ~17 s: full throttle at ~245 km/h across floating-origin recenters (the old ground-slab kick), at the game's 120 Hz.

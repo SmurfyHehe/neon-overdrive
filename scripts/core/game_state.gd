@@ -39,6 +39,7 @@ static func is_tuner(s: State) -> bool:
 
 func _ready() -> void:
 	PhotoMode.ensure_actions()
+	CarPanels.ensure_actions()
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 ## True while a text control (LineEdit, TextEdit) has keyboard focus.

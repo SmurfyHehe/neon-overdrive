@@ -148,7 +148,9 @@ static func build_chassis_visual(paint: Color = PAINT) -> Node3D:
 	root.set_meta("half_w", WIDTH / 2.0)
 	root.set_meta("half_l", LENGTH / 2.0)
 	# The real underside (car-parts plan, section 5b): one more draw call.
-	Undercarriage.attach(root, undercarriage_params(), Undercarriage.ROLE_PLAYER)
+	var under := undercarriage_params()
+	root.set_meta("under_params", under)   # CarPanels cuts the hood and doors from these
+	Undercarriage.attach(root, under, Undercarriage.ROLE_PLAYER)
 	return root
 
 ## What the underside is built from, in car space (lift included). The

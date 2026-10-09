@@ -161,6 +161,21 @@ The damage design keeps a body number from day one; dents wait. These are the ch
 - **Start-up ritual:** pressing X in the garage is a moment: lights, crank, idle settle, the cockpit gauges sweep.
 - **Turntable and photo mode:** already planned in the garage design and photo mode; add a "listen" button on the turntable that revs the engine.
 
+## 6b. Game-wide changes (Roy: "if you need an overhaul for the entire game I'm not against it")
+
+Checked on main 282343f before judging. The tyre model already has load sensitivity, camber and pressure (`gevp_wheel.gd` process_tires, `tyre_load_sensitivity` 0.12 in `car_spec.gd`), and friction was recalibrated in Phase A. So the physics is not the bottleneck. The gaps are in how cars are *described* and in the cost of sound.
+
+| Overhaul | What it gives the cars | Cost | Risk | Verdict |
+|---|---|---|---|---|
+| **One "car definition" per car** that holds everything about it: spec, character knobs, engine voice, sound sheet, quirks, history card, mod tree file, interior and cluster, fingerprint targets. Today these are spread over `car_spec.gd`, `engine_voice.gd`, builder scripts and fleet.json | Adding a car becomes filling in one file; nothing about a car can be forgotten; the garage, Dave, tests and AI all read the same place | M | Low: a wrapper around what exists, moved car by car | **Do it**, first, before the new cars land. Opus (data model) |
+| **Tyre "let-go" shape per car** (how sharply grip falls after its peak): a peak-and-falloff curve per tyre instead of one shape for all | The biggest single source of handling personality: the kei snaps, the muscle car slides long and lazy, the coupe is progressive | M | Medium: every tune and Auto-Tune result must be re-run | **Do it**, right after the fingerprint test exists so the change is measured. Opus |
+| **Engine sound moved out of GDScript** (native code, or pre-rendered loops for every car including the player's) | Frees CPU for traffic engines, more layers per car (intake, turbo, mechanical noise), no crackle under load | M (pre-render) / L (native code) | Native code needs a C++ build on the laptop and in exports; pre-render loses a little of the live synth's smoothness | **Pre-render for traffic now** (section 3d). Measure the player synth's CPU in the stress test; go native only if it shows up |
+| **engine-sim style physical engine sound** (already decided: test it) | The most realistic engine voices possible | L | Licence check for any code used; heavy CPU | Keep as the planned test; don't block anything on it |
+| **Car lighting and paint quality**: a "hero" paint shader (flake, clear coat sheen under street lamps), better reflections on the player car only | Cars look like the star in every screenshot and in the garage | M | Integrated graphics: must stay player-car-only and switch off on Low | **Do it** with the garage work. Fable |
+| **Full physics rewrite or a different engine** (Unity, Unreal) | Nothing the current sim can't do | XL | Months lost, all tuning and tests thrown away | **No** |
+
+Recommendation: no rewrite. Do three targeted game-wide changes, in this order: (1) the car definition file, (2) the fingerprint test (A1), (3) the tyre let-go shape. Then pre-render traffic sound and add the hero paint as their parent work comes up. Together that's about 4-5 PRs, and each one can be undone on its own.
+
 ## 7. Workload: A / B / C, build order, model
 
 ### A: small, build first (after sign-off)
@@ -196,7 +211,7 @@ The damage design keeps a body number from day one; dents wait. These are the ch
 | C3 | Rival and cop cars with their own learned-by-ear sound (needs racing AI and Stage F) |
 | C4 | Cabin sound per car interior (each interior is its own, decided), recorded material sets |
 
-**Order:** A1 → A2 → A3 → A5 → A4 → A6 → A7, then B as their parent systems land (B2 after damage, B4 with the garage, B3 checked against the sound mix session). Every step is its own PR with real headless Godot runs.
+**Order:** car definition file (6b) → A1 → tyre let-go shape (6b) → A2 → A3 → A5 → A4 → A6 → A7, then B as their parent systems land (B2 after damage, B4 with the garage, B3 checked against the sound mix session). Every step is its own PR with real headless Godot runs.
 
 **Overlaps to check before building:** the player cars session (Fable, incl. Bug), balance car speeds (Fable), sound mix (Opus) and hands/wheel animation sessions are in flight. A2 must use the Bug's data from the player cars session; balance keeps the speed knobs, this keeps the character knobs.
 
@@ -209,11 +224,13 @@ The damage design keeps a body number from day one; dents wait. These are the ch
 
 ## 9. Questions for Roy (one word each, my pick first)
 
+The logbook (section 5) is assumed yes.
+
 1. When you lift off mid-corner in the cheap starter Bug, should the back step out a little (scary at first, fun once you learn it)? **Yes** / No
 2. When you start a car, should each one start its own way (the Bug coughs twice, the muscle car shakes the cabin)? **Yes** / No
 3. Should every car have one small habit you learn to live with, like a pop-up lamp that sometimes sticks? **Yes** / No
 4. Should mods be allowed to change what a car *is*, so a fully built Bug drives like the coupe? **No, it stays a Bug** / Yes
 5. Should cars get dirty during a night and come out clean from the garage? **Yes** / No
 6. Should a car rattle and squeak more as it gets hurt, until the garage fixes it? **Yes** / No
-7. Should each car keep a logbook (km driven, top speed, wins, cop escapes)? **Yes** / No
-8. Should you pick a nickname for each car that Dave then says on the radio? **Yes** / No
+7. Should you pick a nickname for each car that Dave then says on the radio? **Yes** / No
+8. Should we change how every car loses grip, so some snap and some slide long? It means re-testing every tune once. **Yes** / No

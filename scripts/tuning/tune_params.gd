@@ -29,6 +29,24 @@ const SUSPENSION := "suspension"  # spring/damper/ARB rates, toe, steering geome
 # it lives only in the spec and CarSpec turns it into the Vehicle's torque_curve.
 static var _entries: Array[Dictionary] = []
 
+## Most forward gears a car can have (the Advanced ranges above stop here).
+const MAX_GEARS := 8
+## Forward gears of the car being tuned. The registry lists one "gear_ratios/N"
+## entry per gear, so it follows this: set it when the player's car is built
+## (PlayerCar._ready) and every consumer of all() sees the right number.
+static var _gear_count := 5
+
+static func gear_count() -> int:
+	return _gear_count
+
+## Sets the forward gear count (clamped to 1..MAX_GEARS) and rebuilds the
+## registry when it changed.
+static func set_gear_count(n: int) -> void:
+	n = clampi(n, 1, MAX_GEARS)
+	if n != _gear_count:
+		_gear_count = n
+		_entries.clear()
+
 ## Hard limits for the Advanced page (settings safety part 2, 2026-10-07; plan
 ## in docs/planning/settings-safety-design-2026-10-07.md, signed off by Roy).
 ## "min"/"max" stay the SAFE range: no setting at either end spins the car, and
@@ -44,6 +62,9 @@ const ADVANCED := {
 	"gear_ratios/2": [0.5, 5.0],
 	"gear_ratios/3": [0.5, 5.0],
 	"gear_ratios/4": [0.5, 5.0],
+	"gear_ratios/5": [0.5, 5.0],
+	"gear_ratios/6": [0.5, 5.0],
+	"gear_ratios/7": [0.5, 5.0],
 	"max_torque": [150.0, 1500.0],  # 120 never reaches 100 km/h
 	"max_rpm": [3500.0, 13000.0],  # 2500 never reaches 100 km/h
 	"turbo_boost_max": [0.0, 3.0],
@@ -89,7 +110,7 @@ static func _e(path: String, label: String, lo: float, hi: float, rederive := NO
 static func all() -> Array[Dictionary]:
 	if _entries.is_empty():
 		_entries.append(_e("final_drive", "Final drive", 2.5, 5.5))
-		for i in 5:
+		for i in _gear_count:
 			_entries.append(_e("gear_ratios/%d" % i, "Gear %d" % (i + 1), 0.5, 4.5))
 		_entries.append(_e("max_torque", "Peak torque Nm", 150.0, 900.0, ENGINE, false))
 		_entries.append(_e("max_rpm", "Redline rpm", 4000.0, 10000.0, ENGINE, false))

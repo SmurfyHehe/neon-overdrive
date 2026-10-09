@@ -223,6 +223,7 @@ func _ready() -> void:
 		_keeps_tune = true
 		_saved_tune = PlayerTune.values_from(spec)
 	CarSpec.apply(self, spec)
+	TuneParams.set_gear_count(gear_ratios.size())   # the tuner lists one box per gear of this car
 	if not sim_only:
 		_apply_keyboard_steering()
 

@@ -127,6 +127,8 @@ if /i not "%~1"=="quick" (
 	call :run curve_drive "--headless --fixed-fps 120"
 	call :run hill_drive "--headless --fixed-fps 120"
 	call :run hill_park "--headless --fixed-fps 60"
+	rem ~8 s: brake + throttle from a stop holds the fronts only (line lock burnout).
+	call :run burnout_line_lock "--headless --fixed-fps 120"
 	call :run auto_tune_search "--headless --fixed-fps 60"
 	call :run auto_tune_job "--headless --fixed-fps 60"
 	rem Key-press tests run headless: a windowed run loses its held keys the moment the window loses focus (found 2026-10-05, it made chunk_drive and feel_pass_1 flaky).

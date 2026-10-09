@@ -95,9 +95,9 @@ func _physics_process(_delta: float) -> bool:
 			for c in game.get_children():
 				if c is PauseMenu:
 					menu = c
-			_check(menu != null and menu.smoke_burnout_slider != null and menu.smoke_drift_slider != null,
+			_check(menu != null and menu.settings.smoke_burnout_slider != null and menu.settings.smoke_drift_slider != null,
 				"the pause menu should have Burnout and Drift smoke sliders")
-			_check(menu == null or menu.smoke_burnout_slider.focus_mode != Control.FOCUS_NONE, "the smoke sliders should take keyboard focus")
+			_check(menu == null or menu.settings.smoke_burnout_slider.focus_mode != Control.FOCUS_NONE, "the smoke sliders should take keyboard focus")
 			_unit_checks(s)
 			s.clear()
 			s.emitted = 0

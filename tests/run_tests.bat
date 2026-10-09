@@ -42,6 +42,8 @@ call :run core/smoke --headless
 call :run core/game_info --headless
 call :run core/palette --headless
 call :run ui/hud --headless
+call :run ui/settings_screen --headless
+call :run core/key_bindings --headless
 call :run fleet/car_loft_normals --headless
 call :run fleet/test_car --headless
 call :run fleet/p1_coupe --headless

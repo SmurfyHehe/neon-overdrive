@@ -266,6 +266,9 @@ func _build_static() -> void:
 	var c_leather := Color("#3F362E") if worn else LEATHER
 	var c_carpet := Color("#1A1612") if worn else CARPET
 	var strip := Color(AMBER, 0.0 if worn else 0.35)
+	# the beater's dash is painted metal in the body's faded paint, not moulded plastic
+	var c_dash := Color("#6B7668") if worn else c_plastic
+	var c_dash_face := Color("#5E6A5C") if worn else c_plastic_light
 	var seat_x := float(cab.seat_x)
 	var seat_h := float(cab.seat_h)
 	var seat_z := float(cab.seat_z)
@@ -295,8 +298,8 @@ func _build_static() -> void:
 	var dash_depth := face_z - cowl.y
 	var top_near := cl.x
 	var top_far := cowl.x   # the lip's top is the cowl line itself
-	k.wedge(Vector3(dash_w, 0.06, dash_depth), Vector3(0.0, cowl.x - 0.03, (cowl.y + face_z) * 0.5), c_plastic, 0.0, top_near - top_far)
-	k.box(Vector3(dash_w, 0.36, 0.12), Vector3(0.0, top_near - 0.20, face_z), c_plastic_light)
+	k.wedge(Vector3(dash_w, 0.06, dash_depth), Vector3(0.0, cowl.x - 0.03, (cowl.y + face_z) * 0.5), c_dash, 0.0, top_near - top_far)
+	k.box(Vector3(dash_w, 0.36, 0.12), Vector3(0.0, top_near - 0.20, face_z), c_dash_face)
 	var knee_depth := minf(0.32, face_z - cowl.y + 0.12)   # never past the firewall (the kei's dash is 6 cm deep)
 	k.box(Vector3(dash_w, 0.22, knee_depth), Vector3(0.0, top_near - 0.45, face_z + 0.03 - knee_depth * 0.5), c_plastic)
 	k.box(Vector3(dash_w - 0.08, 0.03, 0.06), Vector3(0.0, cowl.x - 0.015, cowl.y), c_trim)  # cowl lip, under the glass line
@@ -653,6 +656,13 @@ func _build_wheel() -> void:
 	add_child(wheel_mount)
 	wheel = SteeringWheel.new()
 	wheel.name = "Wheel"
+	if String(cab.get("trim", "stock")) == "worn":
+		# the beater: a thin ivory rim, grey seam, painted spokes to match the dash
+		wheel.rim_colour = Color("#D9D2BC")
+		wheel.seam_colour = Color("#9A947F")
+		wheel.spoke_colour = Color("#6B7668")
+		wheel.carbon_colour = Color("#7E8A7B")
+		wheel.carbon_alt_colour = Color("#6B7668")
 	wheel_mount.add_child(wheel)
 	# A short column stub behind the hub (the long pole down the middle of the
 	# view is gone, Roy 2026-10-06); the shroud is on the dash face, under the cluster.

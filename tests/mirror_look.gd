@@ -1,26 +1,28 @@
 extends SceneTree
 
-# Mirror glance, off-screen mirror skip and blind-spot dots (2026-10-07),
-# headless and silent:
-# - "look_glance" is bound (V) and listed on the Controls page
+# Door mirrors under free look, off-screen mirror skip and blind-spot dots
+# (2026-10-07; the V + A/D glance was replaced by the arrow free look,
+# 2026-10-09), headless and silent:
+# - "look_glance" is gone from the InputMap and the Controls page
 # - cockpit view, straight ahead, FOV 62: the rearview and left door mirror
 #   glass are on screen, the right door mirror is not, and it is never queued
 #   to render
-# - tap V holding right: the head turns to the right door mirror (whole glass
-#   on screen), it is the focused mirror at twice the resolution; steering left
-#   afterwards does not swing the head across
-# - tap V with no steering: back to straight ahead, focus cleared
-# - tap V holding left: the head turns to the left door mirror
-# - a quick double tap (holding right) resets to straight ahead
-# - chase view: the glance key does nothing
+# - hold the Right arrow: as the head passes the right door mirror the whole
+#   glass is on screen, it is the focused mirror at twice the resolution, and
+#   the head leans inboard
+# - let go: back to straight ahead, focus cleared, lean gone
+# - hold the Left arrow: the left door mirror gets the focus as the head
+#   passes it
+# - chase view: the arrows never focus a mirror
 # - blind spot: a same-way car in the right lane, just behind, lights only the
 #   right dot; on the left, only the left dot; a car straight behind in our
 #   lane or an oncoming car alongside lights neither
 # Exit code 1 on failure. Run:
-#   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/mirror_glance.gd
+#   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/mirror_look.gd
 
 const TIMEOUT_TICKS := 60 * 30
-const SETTLE := 45   # ticks for the head to finish turning; also past the 0.3 s double-tap window
+const SETTLE := 45   # ticks for the view to settle
+const SWEEP_MAX := 240   # ticks allowed for an arrow sweep to reach a mirror or come back
 const Harness := preload("res://tests/traffic_harness.gd")
 
 class ErrorCounter extends Logger:
@@ -36,7 +38,7 @@ class ErrorCounter extends Logger:
 	func _log_message(_message: String, _error: bool) -> void:
 		pass
 
-enum Step { BOOT, STRAIGHT, TAP_RIGHT, RIGHT, AHEAD, LEFT, DOUBLE, CHASE,
+enum Step { BOOT, STRAIGHT, LOOK_RIGHT, AHEAD, LOOK_LEFT, CHASE,
 	SPOT_RIGHT, SPOT_LEFT, SPOT_BEHIND, SPOT_ONCOMING, DONE }
 
 var step := Step.BOOT
@@ -46,10 +48,10 @@ var failures: Array[String] = []
 var logger := ErrorCounter.new()
 var game: Node
 var right_queued := 0
-var tap_release := -1
+var seen := false   # the sweep reached its mirror
 
 func _initialize() -> void:
-	ExhaustTune.save_path = "user://autotune/test_mirror_glance_exhaust.json"
+	ExhaustTune.save_path = "user://autotune/test_mirror_look_exhaust.json"
 	OS.add_logger(logger)
 	game = Harness.boot(self, 2, 300.0, 7)
 
@@ -76,10 +78,13 @@ static func _on_screen(cam: Camera3D, glass: MeshInstance3D) -> float:
 				inside += 1
 	return inside / 25.0
 
-## One tap of the real key on this tick (released a tick later).
-func _tap() -> void:
-	Input.action_press("look_glance")
-	tap_release = tick + 1
+## A real key event, as the keyboard would send it.
+static func _key(code: Key, down: bool) -> void:
+	var ev := InputEventKey.new()
+	ev.keycode = code
+	ev.pressed = down
+	Input.parse_input_event(ev)
+	Input.flush_buffered_events()
 
 ## Places traffic car 0 at (dx, dz) from the player (+x right, +z behind),
 ## going our way unless `oncoming`; car 1 far away.
@@ -92,8 +97,6 @@ func _put_car(p: PlayerCar, dx: float, dz: float, oncoming: bool) -> void:
 
 func _physics_process(_delta: float) -> bool:
 	tick += 1
-	if tick == tap_release:
-		Input.action_release("look_glance")
 	if game == null or game.get("player") == null or game.get("camera") == null or game.get("traffic") == null:
 		return tick > TIMEOUT_TICKS and _end("Game never became ready")
 	var p: PlayerCar = game.player
@@ -111,18 +114,13 @@ func _physics_process(_delta: float) -> bool:
 			_check(m != null, "the cockpit has mirrors")
 			if m == null:
 				return _end("")
-			_check(InputMap.has_action("look_glance"), "look_glance is an input action")
-			var keys := []
-			for ev in InputMap.action_get_events("look_glance"):
-				if ev is InputEventKey:
-					keys.append((ev as InputEventKey).keycode)
-			_check(keys.has(KEY_V), "look_glance is on V (%s)" % [keys])
+			_check(not InputMap.has_action("look_glance"), "the V mirror glance action is gone")
 			var listed := false
 			for group in PauseMenu.controls_groups():
 				for row in group[1]:
 					if row[0] == "look_glance":
 						listed = true
-			_check(listed, "look_glance is on the Controls page")
+			_check(not listed, "the mirror glance is off the Controls page")
 			cam.shake_enabled = false
 			root.size = Vector2i(1280, 720)   # headless defaults to 64x64; the angles assume 16:9
 			ViewSettings.set_cockpit_fov(ViewSettings.COCKPIT_FOV_DEFAULT)
@@ -139,65 +137,52 @@ func _physics_process(_delta: float) -> bool:
 				_check(left > 0.5, "the left door mirror is on screen looking ahead (%.2f)" % left)
 				_check(right == 0.0 and not CockpitMirrors.glass_on_screen(cam, m.views[2].quad), "the right door mirror is off screen looking ahead (%.2f)" % right)
 				_check(right_queued == 0, "an off-screen mirror is never queued to render (%d ticks)" % right_queued)
-				Input.action_press("steer_right")
-				_tap()
-				_go(Step.TAP_RIGHT)
-		Step.TAP_RIGHT:
-			if waited == 2:
-				Input.action_release("steer_right")
-				Input.action_press("steer_left")   # a correction mid-glance
-			if waited == SETTLE:
+				_key(KEY_RIGHT, true)
+				seen = false
+				_go(Step.LOOK_RIGHT)
+		Step.LOOK_RIGHT:
+			var want := cam.mirror_angles(1)
+			if not seen and absf(cam.look_yaw - want.x) < 6.0:
+				seen = true
 				var right := _on_screen(cam, m.views[2].quad)
-				var want := cam.glance_angles(1)
-				print("glance right: yaw %.1f (target %.1f), pitch %.1f, right mirror %.0f%% on screen" % [cam.glance_yaw, want.x, cam.glance_pitch, right * 100])
-				_check(cam.glance == 1, "tap V holding right glances right (%d)" % cam.glance)
-				_check(want.x < -45.0 and absf(cam.glance_yaw - want.x) < 1.0, "the head has turned to the right mirror (%.1f of %.1f)" % [cam.glance_yaw, want.x])
-				_check(right >= 0.9, "the right door mirror is on screen (%.2f)" % right)
+				print("look right: yaw %.1f (mirror at %.1f), lean %s, right mirror %.0f%% on screen" % [cam.look_yaw, want.x, cam.look_lean, right * 100])
+				_check(want.x < -45.0, "the right mirror is well off to the right (%.1f)" % want.x)
+				_check(right >= 0.9, "the right door mirror is on screen when looking at it (%.2f)" % right)
 				_check(m.focus == 1, "the right mirror is the focused one (%d)" % m.focus)
 				_check(m.views[2].vp.size == CockpitMirrors._scaled(CockpitMirrors.SIDE_SIZE) * 2, "and renders at twice the size (%s)" % m.views[2].vp.size)
-				_go(Step.RIGHT)
-		Step.RIGHT:
-			if waited == 1:
-				Input.action_release("steer_left")
-				_check(cam.glance == 1, "steering left after the tap keeps the head right (%d)" % cam.glance)
-			if waited == 40:   # past the double-tap window
-				_tap()
+				_check(cam.look_lean.x > 0.04, "the head leans inboard looking right (%s)" % cam.look_lean)
+				_key(KEY_RIGHT, false)
 				_go(Step.AHEAD)
+			elif waited == SWEEP_MAX:
+				_key(KEY_RIGHT, false)
+				return _end("holding Right never reached the right mirror (yaw %.1f, mirror %.1f)" % [cam.look_yaw, want.x])
 		Step.AHEAD:
-			if waited == SETTLE:
-				_check(cam.glance == 0 and absf(cam.glance_yaw) < 1.0, "tap V with no steering looks ahead again (glance %d, yaw %.1f)" % [cam.glance, cam.glance_yaw])
-				_check(cam.glance_lean.length() < 0.005, "the lean comes back (%s)" % cam.glance_lean)
+			if absf(cam.look_yaw) < 0.5 or waited == SWEEP_MAX:
+				_check(absf(cam.look_yaw) < 0.5, "letting go looks ahead again (yaw %.1f)" % cam.look_yaw)
+				_check(cam.look_lean.length() < 0.005, "the lean comes back (%s)" % cam.look_lean)
 				_check(m.focus == 0 and m.views[2].vp.size == CockpitMirrors._scaled(CockpitMirrors.SIDE_SIZE), "no focus, normal size (%d, %s)" % [m.focus, m.views[2].vp.size])
-				Input.action_press("steer_left")
-				_tap()
-				_go(Step.LEFT)
-		Step.LEFT:
-			if waited == 2:
-				Input.action_release("steer_left")
-			if waited == SETTLE:
+				_key(KEY_LEFT, true)
+				seen = false
+				_go(Step.LOOK_LEFT)
+		Step.LOOK_LEFT:
+			var want := cam.mirror_angles(-1)
+			if not seen and absf(cam.look_yaw - want.x) < 6.0:
+				seen = true
 				var left := _on_screen(cam, m.views[1].quad)
-				print("glance left: yaw %.1f, left mirror %.0f%% on screen" % [cam.glance_yaw, left * 100])
-				_check(cam.glance == -1 and cam.glance_yaw > 30.0, "tap V holding left glances left (glance %d, yaw %.1f)" % [cam.glance, cam.glance_yaw])
-				_check(left >= 0.9, "the left door mirror is on screen (%.2f)" % left)
-				Input.action_press("steer_right")
-				_tap()
-				_go(Step.DOUBLE)
-		Step.DOUBLE:
-			if waited == 2:   # the camera reads the tap on the tick after the press
-				_check(cam.glance == 1, "the first tap of the double tap swaps sides (%d)" % cam.glance)
-			if waited == 6:   # 0.05 s later
-				_tap()
-			if waited == SETTLE:
-				Input.action_release("steer_right")
-				_check(cam.glance == 0 and absf(cam.glance_yaw) < 1.0, "a double tap resets to straight ahead (glance %d, yaw %.1f)" % [cam.glance, cam.glance_yaw])
+				print("look left: yaw %.1f (mirror at %.1f), left mirror %.0f%% on screen" % [cam.look_yaw, want.x, left * 100])
+				_check(left >= 0.9, "the left door mirror is on screen when looking at it (%.2f)" % left)
+				_check(m.focus == -1, "the left mirror is the focused one (%d)" % m.focus)
+			if waited == SWEEP_MAX:
+				_key(KEY_LEFT, false)
+				_check(seen, "holding Left reached the left mirror (yaw %.1f, mirror %.1f)" % [cam.look_yaw, want.x])
+				_check(m.focus == 0, "past the left mirror the focus clears (%d at yaw %.1f)" % [m.focus, cam.look_yaw])
 				cam.set_view(ChaseCamera.View.CHASE)
-				Input.action_press("steer_right")
-				_tap()
+				_key(KEY_RIGHT, true)
 				_go(Step.CHASE)
 		Step.CHASE:
-			if waited == 10:
-				Input.action_release("steer_right")
-				_check(cam.glance == 0, "the chase view ignores the glance key (%d)" % cam.glance)
+			if waited == 60:
+				_key(KEY_RIGHT, false)
+				_check(m.focus == 0, "the chase view never focuses a mirror (%d)" % m.focus)
 				cam.set_view(ChaseCamera.View.COCKPIT)
 				_put_car(p, 3.2, 3.0, false)
 				_go(Step.SPOT_RIGHT)
@@ -237,6 +222,6 @@ func _end(msg: String) -> bool:
 		failures.append(msg)
 	for f in failures:
 		printerr("FAIL: ", f)
-	print("mirror_glance: ", "PASS" if failures.is_empty() else "FAIL")
+	print("mirror_look: ", "PASS" if failures.is_empty() else "FAIL")
 	quit(0 if failures.is_empty() else 1)
 	return true

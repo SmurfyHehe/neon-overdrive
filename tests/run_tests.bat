@@ -62,7 +62,8 @@ call :run cockpit_isolation "--headless --fixed-fps 120"
 call :run cockpit_head_motion --headless
 call :run hud_rear_strip --headless
 call :run look_back --headless
-call :run mirror_glance --headless
+call :run mirror_look --headless
+call :run free_look --headless
 call :run cockpit_driver --headless
 call :run cockpit_shifter --headless
 call :run cockpit_shifter_rnd --headless

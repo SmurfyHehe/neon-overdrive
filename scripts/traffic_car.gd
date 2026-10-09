@@ -71,6 +71,10 @@ var rest_y := TrafficManager.REST_Y
 var color := Color(0.6, 0.6, 0.65)
 ## No body mesh, lights or shadow (tests and the perf harness).
 var sim_only := false
+## Races (race_controller.gd): a live rival is never recycled or frozen; once
+## released it drives on and is removed when out of range instead of respawning.
+var race_pinned := false
+var race_released := false
 ## The spawner, for the occupancy queries. Null = plain lane follow at
 ## target_speed (nothing to brake for, no lane changes).
 var traffic: TrafficManager

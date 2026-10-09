@@ -52,6 +52,7 @@ var game_state: GameState
 var camera: ChaseCamera
 var radio: RadioManager
 var night_clock: NightClock  # 8 p.m. to 6 a.m., saved (night_clock.gd); windows follow it
+var race: RaceController  # race core RC1 (race_controller.gd)
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
 func _ready() -> void:
@@ -409,6 +410,9 @@ func _setup_hud() -> void:
 func _setup_game_state() -> void:
 	game_state = GameState.new()
 	add_child(game_state)
+	# Before the pause menu, which reads it for the race button.
+	race = RaceController.new(player, traffic, night_clock, game_state)
+	add_child(race)
 	add_child(PauseMenu.new(game_state))
 	add_child(TunerScreen.new(player, game_state))
 	add_child(WarningLights.new(player))

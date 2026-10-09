@@ -184,21 +184,63 @@ func _physics_process(_delta: float) -> void:
 	var pv := _player_speed()
 	var band_hi := _spawn_band().y
 	var frame := Engine.get_physics_frames()
+	var gone: Array[TrafficCar] = []
 	for car in cars:
+		if car.race_pinned:
+			continue  # a live race rival is never recycled (race_controller.gd)
 		var z := RoadFrame.unroll(car.global_position).z
 		var behind := z - pz
 		if behind > PARK_BEHIND * 0.5 and frame < car.retry_frame:
 			continue  # parked after a deferred spawn, waiting to retry
 		var receding := car.direction > 0.0 or car.lane_speed() < pv
-		if behind > recycle_behind or (behind > RECYCLE_RECEDING and receding) or -behind > band_hi + RoadChunkBuilder.CHUNK_LEN:
+		var out := behind > recycle_behind or (behind > RECYCLE_RECEDING and receding) or -behind > band_hi + RoadChunkBuilder.CHUNK_LEN
+		var dead := car.wrecked and not in_view(car.global_position)
+		if (out or dead) and car.race_released:
+			gone.append(car)  # an ex-rival leaves for good instead of joining the pool
+		elif out:
 			recycle_count += 1
 			_respawn(car)
-		elif car.wrecked and not in_view(car.global_position):
+		elif dead:
 			recycle_count += 1
 			wreck_recycle_count += 1
 			_respawn(car)
+	for car in gone:
+		cars.erase(car)
+		car.queue_free()
+	if not gone.is_empty():
+		_build_index()
 	for car in cars:
-		car.set_detailed(absf(RoadFrame.unroll(car.global_position).z - pz) <= detail_distance)
+		# A race rival stays full sim however far away it is: the kinematic
+		# cruise would teleport it through bends and traffic (races plan,
+		# premortem 5). One extra full car is inside the traffic budget.
+		car.set_detailed(car.race_pinned or absf(RoadFrame.unroll(car.global_position).z - pz) <= detail_distance)
+
+## Races (RC1): one extra full-sim car, in the index like any other car so
+## traffic sees it and it sees traffic. Pinned: never recycled, never frozen,
+## until release_rival() hands it back.
+func add_rival(kind_name: String, lane_x: float, z: float, speed: float, paint: Color) -> TrafficCar:
+	var car := TrafficCar.new()
+	car.kind = kind_name
+	car.traffic = self
+	car.race_pinned = true
+	car.color = paint
+	if NpcCarBuilder.is_npc(car.kind):
+		car.build = NpcCarBuilder.pick_build(car.kind)
+	car.position = Vector3(0.0, REST_Y, 10000.0)
+	add_child(car)
+	cars.append(car)
+	_build_index()
+	car.target_speed = speed
+	car.place(lane_x, -1.0, z, car.rest_y, speed)
+	_put(car)
+	return car
+
+## The race is over: the rival drives on as traffic and is removed once it is
+## out of range, so it never vanishes in front of the player.
+func release_rival(car: TrafficCar) -> void:
+	if car != null and is_instance_valid(car):
+		car.race_pinned = false
+		car.race_released = true
 
 ## The player's road-space z (RoadFrame): metres along the road.
 func _player_z() -> float:

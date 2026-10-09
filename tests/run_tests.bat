@@ -89,6 +89,8 @@ call :run tune_persist --headless
 call :run settings_safety --headless
 call :run setting_danger --headless
 call :run traffic_spawn "--headless --fixed-fps 60"
+rem ~45 s: race core (RC1): win across a recenter, lose, give up from the pause menu.
+call :run race_core "--headless --fixed-fps 60"
 rem ~40 s: the traffic cars (stage B step 5) against their sheets, then a drive each at the game's 120 Hz.
 call :run npc_cars "--headless --fixed-fps 120"
 rem ~17 s: full throttle at ~245 km/h across floating-origin recenters (the old ground-slab kick), at the game's 120 Hz.

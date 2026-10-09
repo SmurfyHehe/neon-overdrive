@@ -26,6 +26,11 @@ signal state_changed(new_state: State, old_state: State)
 
 var state: State = State.PLAYING
 
+## True while a race is live (race_controller.gd). A race is not its own State:
+## the game stays PLAYING so pause and photo mode work as usual; only the Tuner
+## is shut, so a tune cannot change mid-race.
+var race_active := false
+
 # T, Y and Esc are polled, which means a key typed into a text field (a tune slot
 # name) would also switch tabs or close the tuner. _input() runs before the GUI
 # sees the key, so it can tell whether a text control had focus when the key went
@@ -113,7 +118,7 @@ func toggle_tuning() -> void:
 		close_tuning()
 	elif state == State.AUTOTUNE:
 		switch_tuner(State.TUNING)  # T from the Auto-Tune tab opens the manual tab
-	elif state == State.PLAYING:
+	elif state == State.PLAYING and not race_active:  # no tuning mid-race
 		get_tree().paused = true
 		_set_state(State.TUNING)
 
@@ -128,7 +133,7 @@ func toggle_autotune() -> void:
 		close_autotune()
 	elif state == State.TUNING:
 		switch_tuner(State.AUTOTUNE)  # Y from the manual tab opens the Auto-Tune tab
-	elif state == State.PLAYING:
+	elif state == State.PLAYING and not race_active:
 		get_tree().paused = true
 		_set_state(State.AUTOTUNE)
 

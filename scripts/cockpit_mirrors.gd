@@ -163,6 +163,7 @@ func _add_mirror(mirror_name: String, pos: Vector3, size_m: Vector2, yaw_deg: fl
 ## Cockpit view on or off: nothing renders while off, unless the strip asks.
 func set_active(on: bool) -> void:
 	active = on
+	_sync_view_group()
 	if not on:
 		set_focus(0)
 		for v in views:
@@ -171,6 +172,7 @@ func set_active(on: bool) -> void:
 ## The HUD rear strip on or off (chase view only; the cockpit view has the mirror).
 func set_strip(on: bool) -> void:
 	strip = on
+	_sync_view_group()
 	if not on and not active:
 		views[0].vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 
@@ -225,7 +227,20 @@ func set_enabled(on: bool) -> void:
 	FxSettings.set_on("mirrors", on)
 	_apply_enabled()
 
+## The mirror cameras that are drawing join ViewGuard.GROUP, so traffic and the
+## road chunks never pop in or out where a mirror can see (rear: cockpit view or
+## the HUD strip; door mirrors: cockpit view).
+func _sync_view_group() -> void:
+	for i in views.size():
+		var cam: Camera3D = views[i].cam
+		var live := enabled and (active or (i == 0 and strip))
+		if live and not cam.is_in_group(ViewGuard.GROUP):
+			cam.add_to_group(ViewGuard.GROUP)
+		elif not live and cam.is_in_group(ViewGuard.GROUP):
+			cam.remove_from_group(ViewGuard.GROUP)
+
 func _apply_enabled() -> void:
+	_sync_view_group()
 	for v in views:
 		if enabled:
 			v.mat.albedo_texture = v.vp.get_texture()

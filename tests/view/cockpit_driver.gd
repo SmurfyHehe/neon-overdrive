@@ -2,8 +2,9 @@ extends SceneTree
 
 # The driver (cockpit milestone 2, 2026-10-06), headless and silent:
 # - a DriverModel sits in the CockpitFrame with head, torso, floating gloved
-#   hands (no arms), a gold bracelet on the right wrist, legs, within the
-#   triangle budget; the glove style matches the car
+#   hands, a gold bracelet on the right wrist, legs, within the triangle
+#   budget (the PersonKit body under 1,500); the glove style matches the car;
+#   the sleeves show in both views; the heels rest on the carpet
 # - the hands stay on the rim grips (within 2 cm) across a steering sweep,
 #   the wheel rolls to the car's steering, legs reach the pedals
 # - a manual shift moves the lever and sends the right hand to the knob, then
@@ -24,6 +25,7 @@ extends SceneTree
 
 const TIMEOUT_TICKS := 60 * 40
 const TRI_MAX := 3000
+const BODY_TRI_MAX := 1500   # the PersonKit body, hands and trinkets apart (Roy, 2026-10-09)
 const TRI_MIN := 600
 const GRIP_TOL := 0.02
 
@@ -116,8 +118,11 @@ func _physics_process(_delta: float) -> bool:
 			for n in ["Torso", "Torso/TorsoMesh", "Torso/Head", "Torso/Head/HeadMesh",
 					"HandL", "HandR", "HandR/Bracelet", "ThighL", "ThighR", "ShinL", "ShinR", "FootL", "FootR"]:
 				_check(d.get_node_or_null(n) != null, "the driver should have a node %s" % n)
+			# the sleeves (PersonKit, 2026-10-09; Roy: arms in the car as well)
 			for n in ["UpperArmL", "UpperArmR", "ForearmL", "ForearmR"]:
-				_check(d.get_node_or_null(n) == null, "no arms: the driver should not have a node %s" % n)
+				_check(d.get_node_or_null(n) != null, "the driver should have a sleeve node %s" % n)
+			print("body kit triangles: %d (budget %d)" % [d.body_tris, BODY_TRI_MAX])
+			_check(d.body_tris > 0 and d.body_tris <= BODY_TRI_MAX, "body kit triangles %d, want at most %d" % [d.body_tris, BODY_TRI_MAX])
 			_check(d.get_node_or_null("HandL/Bracelet") == null, "the bracelet is on the right wrist only")
 			_check(d.glove_style == PlayerCar.chassis_kind() or not DriverModel.GLOVE_STYLES.has(PlayerCar.chassis_kind()), "the glove style follows the car (%s)" % d.glove_style)
 			var gold := (d.bracelet.material_override if d.bracelet.material_override != null else d.bracelet.mesh.surface_get_material(0)) as StandardMaterial3D
@@ -232,12 +237,18 @@ func _physics_process(_delta: float) -> bool:
 		Step.VIEWS:
 			if waited == ticks(0.1):
 				_check(not d.head.visible and not d.torso_mesh.visible, "in the cockpit view the head and torso are hidden")
+				for n in ["UpperArmL", "UpperArmR", "ForearmL", "ForearmR"]:
+					_check((d.get_node(n) as Node3D).visible, "in the cockpit view the sleeves show (%s)" % n)
+				for side in [-1, 1]:
+					_check(absf(d.heel_position(side).y - DriverModel.FLOOR_Y) < 1e-3, "foot %d: the heel rests on the carpet (y %.3f)" % [side, d.heel_position(side).y])
 				_check((d.get_node("HandR") as Node3D).visible and (d.get_node("HandL") as Node3D).visible and d.bracelet.visible, "hands and bracelet stay visible in the cockpit")
 				print("hands: highest point seen %.1f deg below the eye (%s)" % [min_below_eye, min_below_where])
 				_check(min_below_eye >= DriverModel.HAND_TOP_MIN_DEG, "a hand rose to %.1f deg below the eye (%s); the road band must stay clear" % [min_below_eye, min_below_where])
 				cam.set_view(ChaseCamera.View.CHASE)
 			if waited == ticks(0.2):
 				_check(d.head.visible and d.torso_mesh.visible, "in the chase view the whole driver shows")
+				for n in ["UpperArmL", "UpperArmR", "ForearmL", "ForearmR"]:
+					_check((d.get_node(n) as Node3D).visible, "in the chase view the sleeves show (%s)" % n)
 				_check(frame.visible, "the interior is drawn in the chase view (through the glass)")
 				var glass := P1CoupeBuilder._get_glass_material()
 				_check(glass.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA and glass.albedo_color.a < 0.9, "the P1 glass is see-through")

@@ -471,8 +471,37 @@ static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
 ## tuned, so it's a parameter, not hardcoded here.
 static func build_collision(v: Vehicle, size: Vector3, y_offset: float = 0.5) -> void:
 	var col := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = size
-	col.shape = box
+	col.shape = chassis_hull(size)
 	col.position = Vector3(0.0, y_offset, 0.0)
 	v.add_child(col)
+
+## Underbody lift (m) at the box's ends and sides, and the half-size of the flat
+## patch left at full depth in the middle (fractions of the box's half length
+## and half width, capped in metres).
+const HULL_LIFT := 0.18
+const HULL_PATCH_Z := 0.3
+const HULL_PATCH_X := 0.4
+
+## The chassis shape: the `size` box with its underside lifted towards the
+## ends and sides, like a real car's approach and departure angles. The box's
+## bottom corners sat 3-8 cm off the road, and throttle squat (about 3 deg) or
+## brake dive (about 1.6 deg) over 1.7 m of half length put one in the road at
+## 2 m/s: a body contact, so CrashAudio's metal scrape played on a clean road
+## (Roy 2026-10-09, tests/car_scrape.gd). The hull keeps the box's exact
+## bounding box, which is all the physics engine reads for mass distribution
+## (GodotPhysics takes a convex shape's inertia from its AABB), so inertia, the
+## centre of mass, and every side and top face are unchanged.
+static func chassis_hull(size: Vector3) -> ConvexPolygonShape3D:
+	var h := size * 0.5
+	var lift := minf(HULL_LIFT, size.y * 0.3)
+	var px := minf(h.x * HULL_PATCH_X, 0.35)
+	var pz := minf(h.z * HULL_PATCH_Z, 0.6)
+	var pts := PackedVector3Array()
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			pts.append(Vector3(sx * h.x, h.y, sz * h.z))                 # roof corners
+			pts.append(Vector3(sx * h.x, -h.y + lift, sz * h.z))         # lifted underside corners
+			pts.append(Vector3(sx * px, -h.y, sz * pz))                  # the flat patch at full depth
+	var hull := ConvexPolygonShape3D.new()
+	hull.points = pts
+	return hull

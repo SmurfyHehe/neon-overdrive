@@ -80,6 +80,7 @@ call :run audio/sound_fixes --headless
 call :run audio/road_sounds --headless
 call :run audio/crash_variety --headless
 call :run audio/audio_mix --headless
+call :run audio/kei_voice --headless
 call :run audio/radio --headless
 call :run world/night_clock --headless
 call :run world/night_bands "--headless --fixed-fps 60"

@@ -15,6 +15,9 @@ const ENGINE_VOLUME := 0.5  # EngineSynth's own default level
 const START_PRESET := "p1_coupe"
 
 var synth := EngineSynth.new()
+## Mechanical layers over the synth's block (engine_layers.gd); a no-op for
+## any car whose voice sets none of them.
+var layers := EngineLayers.new()
 ## The exhaust tune lives in the car's spec under "exhaust" (a dictionary, the
 ## same one the Tuner screen's sliders and tune slots write); this node copies it
 ## into synth.tune every frame and keeps a saved copy on disk.
@@ -38,9 +41,13 @@ func _ready() -> void:
 	synth.tune = ExhaustTune.for_car(START_PRESET)
 	_load_tune()
 	synth.apply_voice(_spec.get("engine_voice", {}))  # per-car engine (#80)
+	layers.apply_voice(_spec.get("engine_voice", {}))
 	synth.mix_rate = AudioServer.get_mix_rate()
 	synth.idle_rpm = _vehicle.idle_rpm
 	synth.max_rpm = _vehicle.max_rpm
+	layers.mix_rate = synth.mix_rate
+	layers.idle_rpm = synth.idle_rpm
+	layers.max_rpm = synth.max_rpm
 	var gen := AudioStreamGenerator.new()
 	gen.mix_rate = synth.mix_rate
 	gen.buffer_length = BUFFER_SECS
@@ -86,7 +93,7 @@ func _process(_delta: float) -> void:
 
 ## Worker thread: one block, straight into the stream.
 func _render(n: int, rpm: float, throttle: float, redline: bool) -> void:
-	_playback.push_buffer(synth.render(n, rpm, throttle, redline))
+	_playback.push_buffer(layers.process(synth.render(n, rpm, throttle, redline), rpm, throttle, redline))
 
 ## Waits for the block in flight (if any) and collects its flame events.
 func _join() -> void:

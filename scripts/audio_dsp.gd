@@ -88,6 +88,33 @@ class Biquad:
 		z2 = b2 * x - a2 * y
 		return y
 
+## Two-pole resonator: one unit impulse rings as a unit sine at `hz` that dies
+## away as e^(-decay * t). The building block of modal (struck-object) sounds:
+## a panel, a guardrail or a glass shard is a handful of these at once.
+class Reso:
+	var c1 := 0.0
+	var c2 := 0.0
+	var g := 0.0
+	var y1 := 0.0
+	var y2 := 0.0
+
+	func setup(rate: float, hz: float, decay: float) -> Reso:
+		var w := TAU * minf(hz, rate * 0.45) / rate
+		var r := exp(-decay / rate)
+		c1 = 2.0 * r * cos(w)
+		c2 = -r * r
+		g = sin(w)
+		return self
+
+	func step(x: float) -> float:
+		var y := g * x + c1 * y1 + c2 * y2
+		y2 = y1
+		y1 = y
+		return y
+
+static func reso(rate: float, hz: float, decay: float) -> Reso:
+	return Reso.new().setup(rate, hz, decay)
+
 static func bp(rate: float, hz: float, q: float) -> Biquad:
 	return Biquad.new().set_bp(rate, hz, q)
 

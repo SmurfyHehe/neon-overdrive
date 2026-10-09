@@ -28,14 +28,20 @@ const CLIPS := [
 	["08_tyre_lockup", 7.0, "Lock-up at 72 km/h: fade in on both sides, then left only, right only."],
 	["09_tyre_chirps", 4.0, "Three launch chirps (wheelspin snapping on)."],
 	["10_shifts_real_drive", 16.0, "Real drive, engine on: full throttle through the gears, then hard braking down through them."],
-	["11_crashes", 9.0, "Hits every second: tap, tap, thud, thud, crunch, crunch, crunch + glass, crunch + glass (random variants)."],
-	["12_scrape_0-108kmh", 7.0, "Metal scrape along a wall, 0 to 108 km/h."],
-	["13_effects_slider", 8.0, "Drift squeal + wind at 144 km/h with the Effects slider at 100%, 50%, 25%, 0%."],
-	["14_highway_joints_50-100-150kmh", 9.0, "Road + highway joints (da-dum every 15 m) at 50, 100 and 150 km/h, 3 s each."],
-	["15_bridge_deck_hum", 7.0, "Road at 72 km/h, onto a steel bridge deck for 4 s and off again."],
-	["16_manholes", 5.0, "Road at 90 km/h, two manhole covers (front then rear wheel each)."],
-	["17_radio_tunnel_and_bridge", 14.0, "Radio only, cockpit: clear 3 s, into a tunnel (signal fades, drops, hiss), out again, then under a bridge (breaking up)."],
-	["18_engine_cooling_ticks", 25.0, "Hot engine switched off: 15 s just after stopping, then 10 s from 40 s later (slower, quieter)."],
+	["11_hits_concrete", 9.0, "Hits off a wall, one a second: tap, tap, thud, thud, thud + debris, crunch, crunch + glass, crunch + glass (random takes, sparks most times)."],
+	["12_hits_metal", 9.0, "The same hits off a guardrail (metal)."],
+	["13_hits_car", 9.0, "The same hits off another car (no sparks)."],
+	["14_ground_hits", 7.0, "The floor pan slamming onto the road, six times, light to heavy."],
+	["15_scrape_concrete", 10.0, "Scraping a wall, 0 to 108 km/h, held: takes crossfade every few seconds, bite at the start, sparks from ~22 km/h."],
+	["16_scrape_metal", 10.0, "Scraping a guardrail, same sweep."],
+	["17_scrape_car", 10.0, "Rubbing against another car, same sweep (no sparks)."],
+	["18_scrape_underbody", 10.0, "Floor pan grinding on the road, same sweep."],
+	["19_effects_slider", 8.0, "Drift squeal + wind at 144 km/h with the Effects slider at 100%, 50%, 25%, 0%."],
+	["20_highway_joints_50-100-150kmh", 9.0, "Road + highway joints (da-dum every 15 m) at 50, 100 and 150 km/h, 3 s each."],
+	["21_bridge_deck_hum", 7.0, "Road at 72 km/h, onto a steel bridge deck for 4 s and off again."],
+	["22_manholes", 5.0, "Road at 90 km/h, two manhole covers (front then rear wheel each)."],
+	["23_radio_tunnel_and_bridge", 14.0, "Radio only, cockpit: clear 3 s, into a tunnel (signal fades, drops, hiss), out again, then under a bridge (breaking up)."],
+	["24_engine_cooling_ticks", 25.0, "Hot engine switched off: 15 s just after stopping, then 10 s from 40 s later (slower, quieter)."],
 ]
 
 var game: Node
@@ -187,37 +193,45 @@ func _run(name: String, t: float, dur: float) -> void:
 			car.forced = {}
 			throttle = 1.0 if t < 10.0 else 0.0
 			brake = 0.0 if t < 10.0 else 0.8
-		"11":
+		"11", "12", "13":
 			_mute([&"Engine", &"World"])
 			car.forced = {"speed": 0.0, "on_road": 0.0}
-			var hits := [2.0, 2.0, 5.0, 5.0, 9.0, 9.0, 14.0, 14.0]
+			var hits := [2.0, 2.0, 4.0, 5.0, 6.5, 8.0, 12.0, 14.0]
 			var i := int(t)
 			if t >= 0.5 and i < hits.size() and not fired.has(i):
 				fired[i] = true
-				crash.impact(hits[i])
-		"12":
+				crash.impact(hits[i], {"11": "concrete", "12": "metal", "13": "car"}[name.substr(0, 2)])
+		"14":
 			_mute([&"Engine", &"World"])
 			car.forced = {"speed": 0.0, "on_road": 0.0}
-			crash.forced_scrape_speed = 30.0 * clampf(t / (dur - 1.0), 0.0, 1.0) if t < dur - 0.5 else -1.0
-		"13":
+			var i := int(t)
+			if t >= 0.5 and i < 6 and not fired.has(i):
+				fired[i] = true
+				crash.ground_hit(3.0 + i)
+		"15", "16", "17", "18":
+			_mute([&"Engine", &"World"])
+			car.forced = {"speed": 0.0, "on_road": 0.0}
+			crash.forced_scrape_kind = {"15": "concrete", "16": "metal", "17": "car", "18": "underbody"}[name.substr(0, 2)]
+			crash.forced_scrape_speed = 30.0 * clampf(t / 5.0, 0.0, 1.0) if t < dur - 0.7 else -1.0
+		"19":
 			_mute([&"Engine"])
 			persp.set_cockpit(false)
 			car.forced = {"speed": 40.0, "on_road": 1.0, "squeal_l": 0.7, "squeal_r": 0.7}
 			AudioSettings.set_volume("Effects", [1.0, 0.5, 0.25, 0.0][mini(int(t / 2.0), 3)])
-		"14":
+		"20":
 			_mute([&"Engine", &"World"])
 			car.forced = {"speed": [14.0, 28.0, 42.0][mini(int(t / 3.0), 2)], "on_road": 1.0, "concrete": 1.0}
-		"15":
+		"21":
 			_mute([&"Engine", &"World"])
 			car.forced = {"speed": 20.0, "on_road": 1.0, "concrete": 0.0, "deck": 1.0 if t > 1.5 and t < 5.5 else 0.0}
-		"16":
+		"22":
 			_mute([&"Engine", &"World"])
 			car.forced = {"speed": 25.0, "on_road": 1.0, "concrete": 0.0}
 			for at in [0.8, 0.9, 3.0, 3.1]:
 				if t >= at and not fired.has(at):
 					fired[at] = true
 					car.hit_manhole(25.0)
-		"17":
+		"23":
 			_mute([&"Engine", &"Tires", &"World"], true)
 			car.forced = {"speed": 0.0, "on_road": 0.0}
 			persp.set_cockpit(true)   # the radio as you hear it in the car
@@ -227,7 +241,7 @@ func _run(name: String, t: float, dur: float) -> void:
 			elif t >= 10.0:
 				rx = 0.35     # under a bridge
 			radio.forced_reception = rx
-		"18":
+		"24":
 			_mute([&"Tires", &"World"])
 			car.forced = {"speed": 0.0, "on_road": 0.0}
 			if not fired.has("off"):

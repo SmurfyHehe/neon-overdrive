@@ -89,9 +89,21 @@ var head_offset := Vector3.ZERO   # car-local, metres, current
 var head_tilt := Vector2.ZERO     # (pitch, roll) degrees, current
 var view := View.CHASE
 ## Look back (hold the look_back key, B): the chase cam swings to the front
-## of the car and looks back at it, the same move as reversing; the cockpit
-## eye turns 180 degrees to the rear window.
+## of the car and looks back at it, the same move as reversing. In the cockpit
+## (Roy, 2026-10-09: "something blocking my POV") the driver does what a
+## driver does in a coupe: turns the head over the inboard shoulder and leans
+## to the cabin centreline, between the seats, so the view is through the
+## rear window and not into the back of the driver's own headrest (which sat
+## 0.4 m straight behind the eye when the camera only spun in place). The
+## turn eases in over LOOK_BACK_TIME and eases back out on release
+## (smoothstep: no snap at either end), the eye slides to
+## PlayerCars.look_back_shift(kind) over the same ease, and the arrow-key look
+## and the head sway still apply on top. No interior geometry is hidden or
+## faded: the move itself clears the view, the same from any car.
 var look_back := false
+const LOOK_BACK_TIME := 0.22       # s, 0 -> 1 (the ease is applied on top)
+var look_back_t := 0.0             # 0 facing ahead .. 1 at the rear window, linear
+var look_back_shift := Vector3.ZERO  # car-local eye offset at look_back_t 1; set in _ready
 ## Look around (Roy, 2026-10-09): hold the arrow keys in the cockpit view to
 ## turn the head (left/right) and tilt it (up/down); release and it eases back
 ## straight ahead. This replaces the V mirror glance. Only the camera turns,
@@ -154,6 +166,7 @@ func _ready() -> void:
 	# mirrors and (next PR) the driver sit where they are from any view. This
 	# camera never draws the mirror-only layer the body moves to in the cockpit.
 	eye = COCKPIT_EYE + PlayerCars.cabin_offset(PlayerCar.chassis_kind())
+	look_back_shift = PlayerCars.look_back_shift(PlayerCar.chassis_kind())
 	if CockpitFrame.enabled and OS.get_environment("NEON_COCKPIT") != "0":
 		frame = CockpitFrame.new(target)
 		frame.position = PlayerCars.cabin_offset(PlayerCar.chassis_kind())
@@ -169,6 +182,7 @@ func set_view(v: View) -> void:
 	if not cockpit:
 		look_yaw = 0.0   # the chase view has no head to turn
 		look_pitch = 0.0
+		look_back_t = 0.0
 		_set_look_focus(0)
 	if frame != null:
 		frame.set_cockpit(cockpit)
@@ -200,7 +214,7 @@ func _physics_process(delta: float) -> void:
 	if frame != null:
 		frame.set_window(perspective.window, perspective.window_direction())
 	# where the driver's head points, for the radio and the window's wind
-	perspective.head_yaw_deg = look_yaw + (180.0 if look_back else 0.0) if view == View.COCKPIT else 0.0
+	perspective.head_yaw_deg = look_yaw - look_back_yaw_deg() if view == View.COCKPIT else 0.0
 	if perspective.car_audio == null:
 		for c in target.get_children():
 			if c is CarAudio:
@@ -237,8 +251,6 @@ func _process(delta: float) -> void:
 		frame.steering = target.steer_fraction()  # the wheel turns the way the car does, in every view
 	if view == View.COCKPIT:
 		_place_cockpit(delta)
-		if look_back:
-			global_transform.basis = global_transform.basis * Basis(Vector3.UP, PI)
 		if shake_enabled:
 			_shake(delta)
 			global_position += global_basis.y * BUMP_POS * bump
@@ -255,21 +267,33 @@ func _place_cockpit(delta: float) -> void:
 	var xf := target.get_global_transform_interpolated()
 	_update_head(delta)
 	_update_look(delta)
-	var turn := Basis.from_euler(Vector3(deg_to_rad(look_pitch), deg_to_rad(look_yaw), 0.0))
+	# The look-back turn is to the right (over the inboard shoulder, left-hand
+	# drive): yaw + is left, so it is subtracted.
+	var turn := Basis.from_euler(Vector3(deg_to_rad(look_pitch), deg_to_rad(look_yaw - look_back_yaw_deg()), 0.0))
 	var tilt := Basis.from_euler(Vector3(deg_to_rad(head_tilt.x), 0.0, deg_to_rad(head_tilt.y)))
-	global_transform = Transform3D(xf.basis * turn * tilt, xf * (eye + head_offset))
+	global_transform = Transform3D(xf.basis * turn * tilt, xf * (eye + head_offset + look_back_shift * look_back_ease()))
 	fov = ViewSettings.cockpit_fov + COCKPIT_FOV_SPEED_GAIN * speed_t
 
+## 0..1, the look-back turn with its ease in and out.
+func look_back_ease() -> float:
+	return smoothstep(0.0, 1.0, look_back_t)
+
+## How far the head has turned to the rear window, degrees (0 ahead, 180 back).
+func look_back_yaw_deg() -> float:
+	return 180.0 * look_back_ease()
+
 ## Eases the head toward where the arrow keys point it (or back to straight
-## ahead), and focuses the door mirror it has turned to.
+## ahead), turns it to the rear window while look_back is held, and focuses
+## the door mirror it has turned to (none while looking back).
 func _update_look(delta: float) -> void:
+	look_back_t = move_toward(look_back_t, 1.0 if look_back else 0.0, delta / LOOK_BACK_TIME)
 	var want_yaw := Input.get_axis("look_right", "look_left") * LOOK_YAW_MAX
 	var up := Input.get_axis("look_down", "look_up")
 	var want_pitch := up * (LOOK_PITCH_UP if up > 0.0 else LOOK_PITCH_DOWN)
 	var k := 1.0 - exp(-LOOK_RATE * delta)
 	look_yaw = lerpf(look_yaw, want_yaw, k)
 	look_pitch = lerpf(look_pitch, want_pitch, k)
-	_set_look_focus(0 if absf(look_yaw) < LOOK_MIRROR_YAW else (-1 if look_yaw > 0.0 else 1))
+	_set_look_focus(0 if absf(look_yaw) < LOOK_MIRROR_YAW or look_back_t > 0.5 else (-1 if look_yaw > 0.0 else 1))
 
 func _set_look_focus(side: int) -> void:
 	if side == _look_focus:

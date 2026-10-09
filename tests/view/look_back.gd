@@ -4,8 +4,10 @@ extends SceneTree
 # - "look_back" is bound (B) and listed on the Controls page
 # - chase view: holding it puts the camera in front of the car looking back
 #   (the same swing as reversing); releasing it returns the camera behind
-# - cockpit view: holding it turns the eye to face the car's rear, still at
-#   the eye; releasing it faces forward again
+# - cockpit view: holding it turns the head to face the car's rear with an
+#   ease (part way after a few ticks, not a snap), leaning the eye to the
+#   cabin centreline so the driver's own headrest is outside the view;
+#   releasing it eases back to the eye, facing forward again
 # - proximity cue: a traffic car placed 6 m behind in the lane raises
 #   Hud.rear_threat toward 1, warms the strip frame to sodium and thickens
 #   it, and warms the cockpit rearview glass; a car 40 m back, or an oncoming
@@ -38,6 +40,7 @@ var failures: Array[String] = []
 var logger := ErrorCounter.new()
 var game: Node
 var lane_x := 0.0
+var saw_mid_turn := false   # a tick where the cockpit head was part way round
 
 func _initialize() -> void:
 	ExhaustTune.save_path = "user://autotune/test_look_back_exhaust.json"
@@ -116,14 +119,40 @@ func _physics_process(_delta: float) -> bool:
 				Input.action_press("look_back")
 				_go(Step.COCKPIT_BACK)
 		Step.COCKPIT_BACK:
-			if waited == 6:
+			# The turn runs on render frames (ChaseCamera._process), which a
+			# headless run does not pace against the physics ticks, so the
+			# ease is checked by sampling: some tick before the end must see
+			# the head part way round, never a snap from ahead to behind.
+			if waited < 30 and absf(_facing(p, cam)) < 0.9:
+				saw_mid_turn = true
+			if waited == 30:
+				_check(saw_mid_turn, "the head turns with an ease: some tick saw it part way round, not a snap")
 				var rel := p.global_transform.affine_inverse() * cam.global_position
-				_check(rel.distance_to(ChaseCamera.COCKPIT_EYE) < 0.02, "in the cockpit the eye stays put while looking back (%s)" % rel)
+				var want := ChaseCamera.COCKPIT_EYE + PlayerCars.look_back_shift(PlayerCar.chassis_kind())
+				_check(rel.distance_to(want) < 0.02, "in the cockpit the eye leans to the look-back position %s (%s)" % [want, rel])
+				_check(absf(rel.x) < 0.05, "which is on the cabin centreline, between the seats (x %.2f)" % rel.x)
 				_check(_facing(p, cam) < -0.9, "the cockpit eye faces the rear (facing %.2f)" % _facing(p, cam))
+				# The driver's own headrest (CockpitFrame: 0.36 off the centreline,
+				# at eye height, 0.71 back) must be outside the view, else it is
+				# the thing "blocking my POV" (Roy, 2026-10-09).
+				var headrest := p.global_transform * (Vector3(-0.36, 1.10, 0.71) + PlayerCars.cabin_offset(PlayerCar.chassis_kind()))
+				var to_hr := (headrest - cam.global_position).normalized()
+				var off_axis := rad_to_deg(acos(clampf(to_hr.dot(-cam.global_transform.basis.z), -1.0, 1.0)))
+				var aspect := cam.get_viewport().get_visible_rect().size.aspect()
+				var half_h := rad_to_deg(atan(tan(deg_to_rad(cam.fov) * 0.5) * aspect))
+				print("look back: headrest %.0f degrees off the view axis, half-width of the view %.0f" % [off_axis, half_h])
+				_check(off_axis > half_h, "the driver's headrest is outside the view (%.0f > %.0f degrees)" % [off_axis, half_h])
 				Input.action_release("look_back")
 				_go(Step.COCKPIT_FWD)
 		Step.COCKPIT_FWD:
-			if waited == 6:
+			if waited == 1:
+				saw_mid_turn = false
+			if waited < 30 and absf(_facing(p, cam)) < 0.9:
+				saw_mid_turn = true
+			if waited == 30:
+				_check(saw_mid_turn, "released, the head eases back the same way, not a snap")
+				var rel := p.global_transform.affine_inverse() * cam.global_position
+				_check(rel.distance_to(ChaseCamera.COCKPIT_EYE) < 0.02, "and the eye is back at the driver's eye (%s)" % rel)
 				_check(_facing(p, cam) > 0.9, "released, the cockpit eye faces forward (facing %.2f)" % _facing(p, cam))
 				_check(hud.rear_threat < 0.02, "no cue with nothing behind (%.2f)" % hud.rear_threat)
 				cam.set_view(ChaseCamera.View.CHASE)

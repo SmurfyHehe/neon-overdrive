@@ -54,6 +54,17 @@ static var selected := DEFAULT
 ## dish, the muscle's black monoblock -> five in rim_dark, the crossover's
 ## rally gold -> mesh in rim_gold). The beater sits on steelies, like a beater
 ## should.
+## THE SWITCH (Roy, 2026-10-09 timeline: "for the story mode i dont want no
+## free mods given to the player in his car but because we dont have garage
+## built or mod tree i want all the mods applied in the meanwhile"). true: the
+## dev default below, every car in its kit. false: every car stock and on the
+## plain five-spoke, mods earned or bought in the garage. Story mode flips it
+## to false once the garage exists; nothing else reads LOOK directly.
+static var dev_default_look := true
+
+## Every car stock (what look_for gives with the switch off).
+const STOCK_LOOK := {"build": "stock", "rim": "five", "rim_color": Color("#C9CED6")}
+
 const LOOK := {
 	"p0_beater": {"build": "stock", "rim": "steel", "rim_color": Color("#8D939C")},
 	"p1_coupe": {"build": "stock", "rim": "five", "rim_color": Color("#C9CED6")},
@@ -68,7 +79,9 @@ const LOOK := {
 ## the car's data (a sheet without that build, e.g. after a car is re-exported
 ## with other build names, wears "stock" instead of failing to build).
 static func look_for(kind: String) -> Dictionary:
-	var l: Dictionary = LOOK.get(kind, {"build": "stock", "rim": "five"}).duplicate()
+	if not dev_default_look:
+		return STOCK_LOOK.duplicate()
+	var l: Dictionary = LOOK.get(kind, STOCK_LOOK).duplicate()
 	if NpcCarBuilder.is_npc(kind) and not NpcCarBuilder.builds(kind).has(l.build):
 		l.build = "stock"
 	return l

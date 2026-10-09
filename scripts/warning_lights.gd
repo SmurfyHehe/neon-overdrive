@@ -47,4 +47,4 @@ func _process(_delta: float) -> void:
 
 func _apply_light(l: Label, on: bool, severe: bool) -> void:
 	l.visible = on and (not severe or int(Time.get_ticks_msec() / 350) % 2 == 0)
-	l.add_theme_color_override("font_color", RED if severe else AMBER)
+	Hud.set_font_color(l, RED if severe else AMBER)  # only on a change

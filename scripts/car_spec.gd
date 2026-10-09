@@ -346,6 +346,12 @@ static func build_wheels(v: Vehicle, kind: String, wheel_cfg: Dictionary, front_
 static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
 	var w := Wheel.new()
 	w.position = pos
+	# GEVP casts each wheel itself (force_raycast_update() in process_forces)
+	# every tick. Left enabled, RayCast3D also casts on its own right after,
+	# from the same spot, and a frozen traffic car's wheels kept casting with
+	# no sim reading them: half the wheel raycasts were wasted (frame-rate
+	# pass, 2026-10-08). is_colliding() and friends still read the last cast.
+	w.enabled = false
 	v.add_child(w)
 	var visual: Node3D
 	if kind == TestCarBuilder.KIND:

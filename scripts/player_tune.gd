@@ -7,7 +7,9 @@ extends RefCounted
 #
 # What is kept: the value of every tunable path (TuneParams.all(), the same set
 # a tune slot holds) except the exhaust ones, which ExhaustTune already saves
-# in its own file. Stored as JSON {"version": 1, "values": {path: float}}.
+# in its own file, and the paths a mod tree node owns (ModTree.OWNED_PATHS:
+# peak torque, redline), so a restart never undoes a node. Stored as JSON
+# {"version": 1, "values": {path: float}}.
 #
 # PlayerCar loads it in _ready() when it builds the default coupe, and saves it
 # when the tune has changed (checked once a second while driving, since the
@@ -25,11 +27,12 @@ const TestMode := preload("res://scripts/test_mode.gd")
 static var path := DEFAULT_PATH
 static var enabled := not TestMode.active()
 
-## The paths that are kept: every tunable one except the exhaust's.
+## The paths that are kept: every tunable one except the exhaust's and the
+## node-owned ones.
 static func paths() -> Array[String]:
 	var out: Array[String] = []
 	for e in TuneParams.all():
-		if not e.path.begins_with("exhaust/"):
+		if not e.path.begins_with("exhaust/") and not ModTree.owns(e.path):
 			out.append(e.path)
 	return out
 

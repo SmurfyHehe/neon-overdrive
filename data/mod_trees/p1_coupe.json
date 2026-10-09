@@ -1,0 +1,43 @@
+{
+	"version": 1,
+	"car_id": "p1_coupe",
+	"_note": "P1 mod tree, foundation v1. Binary shape: service -> 2 L1 forks -> 4 L2 -> 8 capstones (Grip or Slide). Deltas are v1 guesses; the E7 feel test sets them. Ops: [\"mul\", k] multiplies the stock-plus-parent value, [\"add\", d] adds, [\"set\", v] replaces. 'windows' fixes a Tuner slider's range while the node is fitted. 'engine': true marks a node that changes the engine; each engine keeps its own tune. Prices are in nights of play (data/mod_trees/tunables.json turns them into Cred). 'band' is the minimum story band (PR #175, T0-T5).",
+	"nodes": [
+		{"id": "service", "parent": "", "level": 0, "label": "Service", "feel": "Fresh plugs, no leaks: the tired engine pulls clean again.", "nights": 0.5, "band": 0,
+			"deltas": {"max_torque": ["mul", 1.04]}},
+
+		{"id": "turbo", "parent": "service", "level": 1, "label": "Turbo", "feel": "A small turbo: soft below 3,500 rpm, then a shove.", "nights": 1.5, "band": 1, "engine": true,
+			"deltas": {"max_torque": ["mul", 1.12], "torque_shape/low_end": ["add", -0.05], "torque_shape/peak_pos": ["add", 0.05], "turbo_boost_max": ["set", 0.5]},
+			"windows": {"turbo_boost_max": [0.0, 0.8]}},
+		{"id": "na", "parent": "service", "level": 1, "label": "Stay NA", "feel": "Cams and intake: sharper throttle, 500 more rpm.", "nights": 1.0, "band": 1, "engine": true,
+			"deltas": {"max_torque": ["mul", 1.06], "max_rpm": ["add", 500.0], "torque_shape/falloff": ["add", 0.05]}},
+
+		{"id": "big_turbo", "parent": "turbo", "level": 2, "label": "Big single turbo", "feel": "Lag, then a wall of power at the top.", "nights": 3.5, "band": 2, "engine": true,
+			"deltas": {"max_torque": ["mul", 1.25], "torque_shape/low_end": ["add", -0.08], "torque_shape/peak_pos": ["add", 0.08], "turbo_boost_max": ["set", 0.9]},
+			"windows": {"turbo_boost_max": [0.0, 1.5]}},
+		{"id": "twin_scroll", "parent": "turbo", "level": 2, "label": "Twin-scroll", "feel": "Boost from low revs: a flat, wide pull.", "nights": 3.5, "band": 2, "engine": true,
+			"deltas": {"max_torque": ["mul", 1.14], "torque_shape/low_end": ["add", 0.1], "torque_shape/plateau": ["add", 0.15], "turbo_boost_max": ["set", 0.7]},
+			"windows": {"turbo_boost_max": [0.0, 1.0]}},
+		{"id": "screamer", "parent": "na", "level": 2, "label": "Screamer", "feel": "Revs to 9,000 and wants to live there.", "nights": 3.5, "band": 2, "engine": true,
+			"deltas": {"max_torque": ["mul", 1.05], "max_rpm": ["add", 1500.0], "torque_shape/peak_pos": ["add", 0.15], "torque_shape/falloff": ["add", 0.2]}},
+		{"id": "stroker", "parent": "na", "level": 2, "label": "Stroker", "feel": "Big torque low down; lazy near the top.", "nights": 3.5, "band": 2, "engine": true,
+			"deltas": {"max_torque": ["mul", 1.22], "max_rpm": ["add", -500.0], "torque_shape/low_end": ["add", 0.15], "torque_shape/peak_pos": ["add", -0.1]}},
+
+		{"id": "big_turbo_grip", "parent": "big_turbo", "level": 3, "label": "Grip", "chassis": "grip", "nights": 6.0, "band": 3},
+		{"id": "big_turbo_slide", "parent": "big_turbo", "level": 3, "label": "Slide", "chassis": "slide", "nights": 6.0, "band": 3},
+		{"id": "twin_scroll_grip", "parent": "twin_scroll", "level": 3, "label": "Grip", "chassis": "grip", "nights": 6.0, "band": 3},
+		{"id": "twin_scroll_slide", "parent": "twin_scroll", "level": 3, "label": "Slide", "chassis": "slide", "nights": 6.0, "band": 3},
+		{"id": "screamer_grip", "parent": "screamer", "level": 3, "label": "Grip", "chassis": "grip", "nights": 6.0, "band": 3},
+		{"id": "screamer_slide", "parent": "screamer", "level": 3, "label": "Slide", "chassis": "slide", "nights": 6.0, "band": 3},
+		{"id": "stroker_grip", "parent": "stroker", "level": 3, "label": "Grip", "chassis": "grip", "nights": 6.0, "band": 3},
+		{"id": "stroker_slide", "parent": "stroker", "level": 3, "label": "Slide", "chassis": "slide", "nights": 6.0, "band": 3}
+	],
+
+	"chassis": {
+		"grip": {"feel": "Planted: sticky rubber, a wing that works, the car goes where you point it.",
+			"deltas": {"coefficient_of_friction/Road": ["mul", 1.06], "aero_downforce_coefficient_front": ["add", 0.15], "aero_downforce_coefficient_rear": ["add", 0.25],
+				"front_static_camber": ["set", -1.0], "rear_static_camber": ["set", -0.8], "front_arb_ratio": ["add", 0.05]}},
+		"slide": {"feel": "Loose on purpose: a locked rear, more lock, the back steps out and stays out.",
+			"deltas": {"rear_locking_differential_engage_torque": ["set", 80.0], "max_steering_angle": ["set", 0.82], "rear_arb_ratio": ["add", 0.08], "rear_tyre_pressure": ["add", 0.2]}}
+	}
+}

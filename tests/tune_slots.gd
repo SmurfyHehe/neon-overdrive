@@ -3,7 +3,9 @@ extends SceneTree
 # Named tune slots test (Auto-Tune step 7, scripts/tune_slots.gd). Checks
 # - save / names / has / values / delete, names sorted, a name is trimmed and
 #   cut to 24 characters, an empty name is refused, saving under a name replaces
-# - a slot holds EVERY tunable path (engine knobs and torque shape included)
+# - a slot holds every tunable path (engine knobs and torque shape included)
+#   except the ones a mod tree node owns (peak torque, redline), and apply()
+#   ignores those in an old slot that has them
 # - it survives a new TuneSlots on the same file (really on disk)
 # - apply() puts the tune on a live car through set_param(): spec and car agree,
 #   gear_ratios stays Array[float], values outside a range are clamped, a slot
@@ -33,7 +35,7 @@ func _initialize() -> void:
 	var tuned := CarSpec.coupe_default()
 	TuneParams.set_value(tuned, "final_drive", 3.4)
 	TuneParams.set_value(tuned, "gear_ratios/2", 1.7)
-	TuneParams.set_value(tuned, "max_torque", 455.0)            # raw-only
+	TuneParams.set_value(tuned, "max_torque", 455.0)            # node-owned: never stored
 	TuneParams.set_value(tuned, "torque_shape/plateau", 0.3)    # raw-only
 	TuneParams.set_value(tuned, "brake_force_multiplier", 1.2)
 
@@ -47,10 +49,14 @@ func _initialize() -> void:
 	_check(slots.names().has("x".repeat(TuneSlots.MAX_NAME_LENGTH)), "long name not cut to %d: %s" % [TuneSlots.MAX_NAME_LENGTH, str(slots.names())])
 	slots.delete("x".repeat(TuneSlots.MAX_NAME_LENGTH))
 
-	# every tunable path is in the slot
+	# every tunable path is in the slot, except the node-owned ones
 	var v := slots.values("Street")
-	_check(v.size() == TuneParams.all().size(), "slot has %d values, expected %d" % [v.size(), TuneParams.all().size()])
+	var want := TuneParams.all().size() - ModTree.OWNED_PATHS.size()
+	_check(v.size() == want, "slot has %d values, expected %d" % [v.size(), want])
 	for e in TuneParams.all():
+		if ModTree.owns(e.path):
+			_check(not v.has(e.path), "%s is node-owned and must not be in a slot" % e.path)
+			continue
 		_check(v.has(e.path) and is_equal_approx(v[e.path], TuneParams.get_value(tuned, e.path)), "%s not stored" % e.path)
 
 	# replace
@@ -63,7 +69,7 @@ func _initialize() -> void:
 	# really on disk
 	var again := TuneSlots.new(FILE)
 	_check(",".join(again.names()) == "Drag,Street", "slots not read back from disk: %s" % str(again.names()))
-	_check(is_equal_approx(again.values("Street").max_torque, 455.0), "engine knob not read back")
+	_check(is_equal_approx(again.values("Street")["torque_shape/plateau"], 0.3), "engine knob not read back")
 
 	# apply on a live car
 	var car := PlayerCar.new()
@@ -71,6 +77,9 @@ func _initialize() -> void:
 	await process_frame
 	_check(again.apply("Street", car), "apply failed")
 	for e in TuneParams.all():
+		if ModTree.owns(e.path):
+			_check(is_equal_approx(TuneParams.get_value(car.spec, e.path), TuneParams.get_value(CarSpec.coupe_default(), e.path)), "%s: a slot changed a node-owned value" % e.path)
+			continue
 		_check(is_equal_approx(TuneParams.get_value(car.spec, e.path), TuneParams.get_value(tuned, e.path)), "%s: spec %s, slot %s" % [e.path, TuneParams.get_value(car.spec, e.path), TuneParams.get_value(tuned, e.path)])
 		if e.on_car:
 			_check(is_equal_approx(TuneParams.get_value(car, e.path), TuneParams.get_value(tuned, e.path)), "%s: live car not updated" % e.path)
@@ -80,13 +89,14 @@ func _initialize() -> void:
 
 	# clamping and missing paths, from a hand-written file
 	var hand := FileAccess.open(FILE, FileAccess.WRITE)
-	hand.store_string(JSON.stringify({"version": 1, "slots": {"Odd": {"final_drive": 99.0, "no_such_param": 1.0}}}))
+	hand.store_string(JSON.stringify({"version": 1, "slots": {"Odd": {"final_drive": 99.0, "no_such_param": 1.0, "max_torque": 700.0, "max_rpm": 9000.0}}}))
 	hand = null
 	var odd := TuneSlots.new(FILE)
 	var before_torque: float = car.spec.max_torque
+	var before_rpm: float = car.spec.max_rpm
 	_check(odd.apply("Odd", car), "apply of the hand-written slot failed")
 	_check(is_equal_approx(car.spec.final_drive, TuneParams.find("final_drive").adv_max), "99.0 should clamp to the hard limit, got %f" % car.spec.final_drive)
-	_check(car.spec.max_torque == before_torque, "a path the slot lacks changed")
+	_check(car.spec.max_torque == before_torque and car.spec.max_rpm == before_rpm, "an old slot's torque or redline (node-owned) was applied")
 
 	# corrupt file
 	var bad := FileAccess.open(FILE, FileAccess.WRITE)
@@ -101,14 +111,14 @@ func _initialize() -> void:
 
 	# non-finite values (JSON writes NaN as null): dropped on load, the rest applies
 	var nan_file := FileAccess.open(FILE, FileAccess.WRITE)
-	nan_file.store_string(JSON.stringify({"version": 1, "slots": {"Nan": {"final_drive": NAN, "max_torque": "lots", "gear_ratios/0": [1], "max_rpm": 6500.0}}}))
+	nan_file.store_string(JSON.stringify({"version": 1, "slots": {"Nan": {"final_drive": NAN, "max_torque": "lots", "gear_ratios/0": [1], "rear_arb_ratio": 0.33}}}))
 	nan_file = null
 	var nan_slots := TuneSlots.new(FILE)
 	var fd_before: float = car.spec.final_drive
 	var torque_before: float = car.spec.max_torque
 	_check(nan_slots.apply("Nan", car), "apply of a slot with bad values failed")
 	_check(car.spec.final_drive == fd_before and car.spec.max_torque == torque_before, "a null or string value changed the car")
-	_check(is_equal_approx(car.spec.max_rpm, 6500.0), "the good value in a slot with bad ones was not applied")
+	_check(is_equal_approx(car.spec.rear_arb_ratio, 0.33), "the good value in a slot with bad ones was not applied")
 	_check(is_finite(car.final_drive), "the live car got a non-finite final drive")
 	_check(is_equal_approx(CarSpec.set_param(car, car.spec, "final_drive", NAN), fd_before) and car.spec.final_drive == fd_before, "set_param stored a NaN")
 	# delete removes the entry, not the file

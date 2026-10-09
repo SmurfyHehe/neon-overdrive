@@ -27,7 +27,7 @@ const KINDS := [
 	{"id": "p2_hothatch", "label": "Hot hatch", "name": "Kobo", "tier": "T1", "nm": 340, "kg": 1080},
 	{"id": "p3_tuner", "label": "Tuner sedan", "name": "Ronin", "tier": "T2", "nm": 520, "kg": 1300},
 	{"id": "p4_kei", "label": "Kei roadster", "name": "Mite", "tier": "T1", "nm": 180, "kg": 760},
-	{"id": "p5_muscle", "label": "Muscle sedan", "name": "Marlowe", "tier": "T3", "nm": 820, "kg": 1800},
+	{"id": "p5_muscle", "label": "Muscle hardtop", "name": "Marlowe", "tier": "T3", "nm": 820, "kg": 1800},
 	{"id": "p6_crossover", "label": "Perf. crossover", "name": "Cairn", "tier": "T2", "nm": 580, "kg": 1450},
 ]
 

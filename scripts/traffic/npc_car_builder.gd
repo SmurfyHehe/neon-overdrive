@@ -130,13 +130,17 @@ const KINDS := {
 	},
 	"p5_muscle": {
 		"data": preload("res://scripts/car/p5_muscle_data.gd"),
-		"length": 5.35, "width": 2.02, "height": 1.3, "clearance": 0.15,
-		"front_overhang": 1.12, "rear_overhang": 1.28,
-		"wheel_r": 0.345, "wheel_x": 0.83, "axle_z": 1.475,
+		"length": 5.00, "width": 1.93, "height": 1.33, "clearance": 0.17,
+		"front_overhang": 1.30, "rear_overhang": 1.18,
+		"wheel_r": 0.34, "wheel_x": 0.80, "axle_z": 1.26,
 		"rest_y": -0.12,
 		"builds": {"stock": 50, "street": 30, "full": 20},
 		"build_paint": {},
 		"sheet_paint": true,
+		# Cherry is a dark paint: a glossier finish than the fleet default so
+		# the bevelled shoulder crease draws one clean highlight line under a
+		# sodium lamp instead of going black (better-cars section 1).
+		"paint_finish": {"metallic": 0.55, "roughness": 0.26},
 	},
 	"p6_crossover": {
 		"data": preload("res://scripts/car/p6_crossover_data.gd"),
@@ -209,8 +213,9 @@ render_mode cull_back;
 // Fixed slots: the body, lamp and flare shaders on one car share its instance
 // uniforms by slot, so unnumbered ones collide (brake lamps painted the body).
 instance uniform vec3 paint : source_color, instance_index(0) = vec3(0.79, 0.81, 0.84);
-uniform float paint_metallic = 0.45;
-uniform float paint_roughness = 0.45;
+// Slots 1-3 are the lamp shaders' brake/hazard and CarParts' brake_heat.
+instance uniform float paint_metallic : instance_index(4) = 0.45;
+instance uniform float paint_roughness : instance_index(5) = 0.45;
 void fragment() {
 	float p = 1.0 - COLOR.a;
 	ALBEDO = mix(COLOR.rgb, paint, p);
@@ -389,6 +394,10 @@ static func chassis_visual(kind: String, build: String, paint: Color, role := ""
 	mi.position = lift
 	mi.mesh = body_mesh(kind, build)
 	mi.set_instance_shader_parameter("paint", paint)
+	var finish: Dictionary = k.get("paint_finish", {})
+	if not finish.is_empty():
+		mi.set_instance_shader_parameter("paint_metallic", finish.metallic)
+		mi.set_instance_shader_parameter("paint_roughness", finish.roughness)
 	# The tail flares grow past the body's box at a distance.
 	mi.extra_cull_margin = 2.0
 	root.add_child(mi)
@@ -571,7 +580,9 @@ static func _get_body_material() -> ShaderMaterial:
 static func _get_wheel_material(data: GDScript) -> ShaderMaterial:
 	if _wheel_mat == null:
 		var sh := Shader.new()
-		sh.code = BODY_SHADER.replace("instance uniform vec3 paint : source_color, instance_index(0)", "uniform vec3 paint : source_color")
+		sh.code = BODY_SHADER.replace("instance uniform vec3 paint : source_color, instance_index(0)", "uniform vec3 paint : source_color") \
+			.replace("instance uniform float paint_metallic : instance_index(4)", "uniform float paint_metallic") \
+			.replace("instance uniform float paint_roughness : instance_index(5)", "uniform float paint_roughness")
 		_wheel_mat = ShaderMaterial.new()
 		_wheel_mat.shader = sh
 		_wheel_mat.set_shader_parameter("paint", Color(data.COLORS.rim))

@@ -67,6 +67,12 @@ overridden per car with a `panels` dict in its definition:
 - trunk: up-facing faces from the rear glass line plus 3 cm to 15 cm before
   the tail, within 0.66 m of the centreline.
 
+P5 stock (muscle hardtop, rebuilt 2026-10-09): 3608 triangles in 12 meshes
+(body 2632, hood 163, trunk 123, doors 49 + 49, mirrors 48, scoop 12, exhaust
+60, wheels 4 x 118). A part tagged like a panel (its hood scoop is tagged
+`hood` for the body shop) is named by its type instead, so the panel keeps
+its node name.
+
 P1 stock: 3056 triangles in 13 meshes (body 2095, hood 154, trunk 57, doors
 27 + 27, mirrors 48, spoiler 88, pop-ups 28, exhaust 60, wheels 4 x 118),
 budget 10 000. The sheet proxy was 2760; the panel cuts add the split

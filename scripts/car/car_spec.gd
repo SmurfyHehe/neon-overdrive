@@ -432,10 +432,10 @@ static func player_spec(kind: String) -> Dictionary:
 			s["torque_shape"] = {"low_end": 0.6, "peak_pos": 0.45, "plateau": 0.15, "falloff": 0.6}
 			s["gear_ratios"] = gears
 			s["final_drive"] = 3.4
-			s["coefficient_of_drag"] = 0.36
-			s["frontal_area"] = 2.35
-			s["front_tire_width"] = 255.0
-			s["rear_tire_width"] = 320.0
+			s["coefficient_of_drag"] = 0.38   # 2026-10-09 hardtop: 1.93 x 1.33 m, blunt nose
+			s["frontal_area"] = 2.1
+			s["front_tire_width"] = 235.0
+			s["rear_tire_width"] = 260.0
 			s["front_damping_ratio"] = 0.40
 			s["rear_damping_ratio"] = 0.40
 			s["front_arb_ratio"] = 0.15
@@ -631,7 +631,7 @@ static func npc_spec(kind: String) -> Dictionary:
 			s["front_arb_ratio"] = 0.20
 			s["rear_arb_ratio"] = 0.15
 		"p5_muscle":
-			# Muscle sedan (Impala SS class), big V8, rear drive: heavy and
+			# Muscle hardtop (late-60s two-door), big V8, rear drive: heavy and
 			# torquey, long gears, fat rear tyres, soft.
 			var gears: Array[float] = [2.60, 1.60, 1.15, 0.90, 0.70]
 			s["vehicle_mass"] = 1750.0
@@ -641,10 +641,10 @@ static func npc_spec(kind: String) -> Dictionary:
 			s["max_rpm"] = 5800.0
 			s["gear_ratios"] = gears
 			s["final_drive"] = 3.4
-			s["coefficient_of_drag"] = 0.36
-			s["frontal_area"] = 2.35
-			s["front_tire_width"] = 255.0   # fleet.json physics_hint
-			s["rear_tire_width"] = 320.0
+			s["coefficient_of_drag"] = 0.38
+			s["frontal_area"] = 2.1
+			s["front_tire_width"] = 235.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 260.0
 			s["front_damping_ratio"] = 0.40
 			s["rear_damping_ratio"] = 0.40
 			s["front_arb_ratio"] = 0.15

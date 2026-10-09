@@ -7,7 +7,7 @@ design sheet without parsing the 2.5 MB fleet file at boot.
     python game_export.py n1_commuter   # a traffic car (stage B step 5)
 
 A traffic car (n1_commuter, n2_cityhatch, n3_pickup) goes to
-scripts/<id>_data.gd with every build (stock and its 2 variants), since
+scripts/car/<id>_data.gd (traffic: scripts/traffic/) with every build (stock and its 2 variants), since
 traffic picks a variant per car (npc_main).
 
 Positions are int16 millimetres, base64 (same packing as proxies.json);
@@ -23,7 +23,7 @@ import textwrap
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, '..', '..', 'docs', 'design', 'fleet', 'proxies.json')
-OUT = os.path.join(HERE, '..', '..', 'scripts', 'p1_coupe_data.gd')
+OUT = os.path.join(HERE, '..', '..', 'scripts', 'car', 'p1_coupe_data.gd')
 CAR_ID = 'p1_coupe'
 BUILD = 'stock'
 CHUNK = 120
@@ -126,7 +126,7 @@ def npc_main(car_id):
     with open(SRC) as f:
         data = json.load(f)
     car = next(c for c in data['cars'] if c['id'] == car_id)
-    out = os.path.join(HERE, '..', '..', 'scripts', '%s_data.gd' % car_id)
+    out = os.path.join(HERE, '..', '..', 'scripts', 'car' if car_id.startswith(('p', 'c')) else 'traffic', '%s_data.gd' % car_id)
     names = sorted({n for b in car['builds'] for n in b['names']})
     colors = {n: color_of(n, car, data) for n in names}
     lines = [

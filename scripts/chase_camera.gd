@@ -52,6 +52,11 @@ const TRAUMA_DECAY := 1.6        # 1/s
 ## speed is several times over it.
 const IMPACT_DV := 0.8
 const IMPACT_GAIN := 0.12        # trauma per m/s over the threshold
+## Road bumps (2026-10-08): a highway joint or a manhole cover under a wheel
+## (CarAudio.road_bump) jolts the view up this far at full strength, then it
+## settles back in about a tenth of a second.
+const BUMP_POS := 0.012
+const BUMP_DECAY := 30.0         # 1/s
 
 ## Phase C: the cockpit view (F toggles). VIEW_CHASE is everything above; in
 ## VIEW_COCKPIT the camera sits at the driver's eye, rigid to the car, the body
@@ -111,6 +116,7 @@ var shake_enabled := true
 var speed_t := 0.0     # 0..1, eased speed factor
 var accel_fov := 0.0   # current acceleration FOV term, degrees
 var trauma := 0.0      # 0..1, impact shake energy
+var bump := 0.0        # 0..1, the last road bump, decaying
 var surface_t := 0.0   # 0..1, share of wheels on a rough surface (scaled by speed)
 var dist_now := DIST
 var height_now := HEIGHT
@@ -185,6 +191,7 @@ func _physics_process(delta: float) -> void:
 		for c in target.get_children():
 			if c is CarAudio:
 				perspective.car_audio = c
+				c.road_bump.connect(road_bump)
 	var v := target.linear_velocity
 	var dv := (v - _prev_vel).length()
 	_prev_vel = v
@@ -205,8 +212,13 @@ func register_impact(dv: float) -> void:
 	if dv > dv_limit:
 		trauma = minf(1.0, trauma + (dv - dv_limit) * IMPACT_GAIN)
 
+## A joint or a manhole under a wheel (0..1).
+func road_bump(strength: float) -> void:
+	bump = maxf(bump, clampf(strength, 0.0, 1.0))
+
 func _process(delta: float) -> void:
 	_update_feel(delta)
+	bump *= exp(-BUMP_DECAY * delta)
 	if view == View.COCKPIT:
 		_place_cockpit(delta)
 		if look_back:
@@ -215,10 +227,12 @@ func _process(delta: float) -> void:
 			frame.steering = target.steer_fraction()  # the wheel turns the way the car does
 		if shake_enabled:
 			_shake(delta)
+			global_position += global_basis.y * BUMP_POS * bump
 		return
 	_place(delta)
 	if shake_enabled:
 		_shake(delta)
+		global_position += global_basis.y * BUMP_POS * bump
 
 ## At the driver's eye, on the interpolated transform (same reason as the
 ## chase cam), looking where the car points, plus the head movement; a fixed

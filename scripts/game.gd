@@ -444,6 +444,7 @@ func _setup_game_state() -> void:
 	add_child(WarningLights.new(player))
 	add_child(PhotoMode.new(game_state, camera))
 	radio = RadioManager.new()
+	radio.listener = player  # reception follows the car (tunnels, bridges)
 	add_child(radio)
 	world_mood = WorldMood.new()
 	add_child(world_mood)

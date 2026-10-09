@@ -34,6 +34,12 @@ class_name CarAudio
 #   road loops) plays as two takes of different lengths and seeds, a hair
 #   apart in pitch, so their sum never repeats; the chirp is five variants
 #   picked at random with pitch and volume jitter.
+# - road features (2026-10-08, Roy's small ideas): highway joints -- a da-dum
+#   (front axle, then rear) every JOINT_SPACING metres that speeds up with the
+#   car; a metal hum on bridge decks; a clank over manhole covers. Joints and
+#   covers also nudge the chase camera (road_bump). Bridges, decks and covers
+#   come from SoundZone markers the road will place; joints play on the whole
+#   road for now (JOINTS_EVERYWHERE), since all of it is highway.
 # Volume and pitch move every frame through AudioStreamPlayer, so the mixing
 # itself is engine code, not GDScript. Every curve is a starting value for Roy
 # to judge by ear (the listen pack: tests/sound_listen_pack.gd).
@@ -67,6 +73,17 @@ const KINDS := ["scrub", "squeal", "spin", "lock"]
 ## Continuous layers played as two takes (A, and "_b" of TAKE_B_SECS).
 const PAIRED := ["buffet", "rush", "whistle", "road_dark", "road_bright"]
 const CHIRP_VARIANTS := 5
+
+# Road features.
+const JOINT_SPACING := 15.0       # m between expansion joints (a concrete slab)
+const JOINTS_EVERYWHERE := true   # the whole road is highway for now; false = only in CONCRETE zones
+const JOINT_GAIN := 0.35
+const MANHOLE_GAIN := 0.55
+const DECK_GAIN := 0.45
+const ROAD_VARIANTS := 5
+
+## A joint or a manhole under a wheel, 0..1: the chase camera kicks a little.
+signal road_bump(strength: float)
 # Stage A's single-squeal thresholds. Skid marks (skid_marks.gd) still start
 # from these, so they are kept as they were.
 const LAT_START := 0.10
@@ -103,6 +120,10 @@ var throb_level := 0.0
 var gust := 1.0
 var tyre := {}           # kind -> [left, right] level, 0..1
 var chirp_count := 0
+var joint_count := 0       # every axle crossing, so a da-dum counts 2
+var manhole_count := 0
+var deck_level := 0.0
+var odometer := 0.0        # m driven, for the joint spacing
 
 # Set by PerspectiveAudio every frame: 0 chase .. 1 cockpit, and the window.
 var cabin := 0.0
@@ -121,6 +142,8 @@ var _gust_target := 1.0
 var _gust_wait := 0.0
 var _chirp_wait := 0.0
 var _spin_prev := 0.0
+var _wheelbase := 2.6
+var _on_cover := {}        # wheel index -> on a manhole last frame
 
 func _ready() -> void:
 	_vehicle = get_parent() as Vehicle
@@ -144,6 +167,17 @@ func _ready() -> void:
 	for k in CHIRP_VARIANTS:
 		chirps.append(stream("chirp" if k == 0 else "chirp%d" % k))
 	_players.chirp.stream = AudioDsp.randomizer(chirps, 1.08, 2.0)
+	for layer in ["joint", "manhole"]:
+		var list: Array[AudioStream] = []
+		for k in ROAD_VARIANTS:
+			list.append(stream("%s%d" % [layer, k]))
+		var p := _add_player(layer, &"Tires", false)
+		p.stream = AudioDsp.randomizer(list, 1.06, 1.5)
+		p.max_polyphony = 4
+		_players[layer] = p
+	_players.deck = _add_player("deck", &"Tires")
+	if _vehicle != null:
+		_wheelbase = maxf(1.5, absf(_vehicle.front_axle_position.z - _vehicle.rear_axle_position.z))
 
 func _add_player(layer: String, bus_name: StringName, looping := true) -> AudioStreamPlayer:
 	var p := AudioStreamPlayer.new()
@@ -159,7 +193,7 @@ func _add_player(layer: String, bus_name: StringName, looping := true) -> AudioS
 ## What the car is doing this frame, as plain numbers (so the listen pack can
 ## set them directly).
 func _read_car() -> Dictionary:
-	var st := {"speed": 0.0, "on_road": 0.0, "on_rough": 0.0}
+	var st := {"speed": 0.0, "on_road": 0.0, "on_rough": 0.0, "deck": 0.0, "concrete": 0.0}
 	for kind in KINDS:
 		st[kind + "_l"] = 0.0
 		st[kind + "_r"] = 0.0
@@ -190,6 +224,15 @@ func _read_car() -> Dictionary:
 		for kind in KINDS:
 			st[kind + side] = maxf(st[kind + side], amounts[kind] * load)
 	st.on_road = float(grounded - rough) / 4.0
+	var here := _vehicle.global_position
+	st.deck = 1.0 if SoundZone.find(SoundZone.Kind.BRIDGE_DECK, here) != null else 0.0
+	st.concrete = 1.0 if JOINTS_EVERYWHERE or SoundZone.find(SoundZone.Kind.CONCRETE, here) != null else 0.0
+	for i in _vehicle.wheel_array.size():
+		var w: Wheel = _vehicle.wheel_array[i]
+		var on := w.is_colliding() and SoundZone.find(SoundZone.Kind.MANHOLE, w.get_collision_point()) != null
+		if on and not _on_cover.get(i, false):
+			hit_manhole(st.speed)
+		_on_cover[i] = on
 	st.on_rough = float(rough) / 4.0
 	return st
 
@@ -234,6 +277,7 @@ func _process(delta: float) -> void:
 	_drive_pair("road_dark", road_level * ROAD_GAIN * (1.0 - 0.55 * bright), 0.92 + 0.1 * clampf(speed / 45.0, 0.0, 1.2))
 	_drive_pair("road_bright", road_level * ROAD_GAIN * bright, 0.94 + 0.1 * clampf(speed / 45.0, 0.0, 1.2))
 	_drive_layer(_players.surface, surface_level * SURFACE_GAIN, 0.5 + clampf(speed / 30.0, 0.0, 1.5))
+	_road_features(st, speed, delta)
 
 	# --- wind
 	_update_gust(speed, delta)
@@ -252,6 +296,39 @@ func _process(delta: float) -> void:
 	_drive_pair("rush", wind_level * (0.6 + 0.4 * gust) * inside * lerpf(1.0, buffet_boost, 0.6) * RUSH_GAIN * (0.35 + 0.65 * rush_mix), wind_pitch)
 	_drive_pair("whistle", whistle_level * gust * WHISTLE_GAIN, 0.97 + 0.12 * clampf((speed - WHISTLE_FROM) / 30.0, 0.0, 1.0))
 	_drive_layer(_players.throb, throb_level * THROB_GAIN, 0.9 + 0.2 * clampf(speed / 50.0, 0.0, 1.0))
+
+## Joints, bridge-deck hum.
+func _road_features(st: Dictionary, speed: float, delta: float) -> void:
+	var before := odometer
+	odometer += speed * delta
+	if st.on_road > 0.0 and st.concrete > 0.0 and speed > 1.0:
+		var strength := smoothstep(2.0, 35.0, speed) * (0.55 + 0.45 * float(st.on_road))
+		# front axle on the joint ("da"), then the rear one a wheelbase later ("dum")
+		if floor(odometer / JOINT_SPACING) > floor(before / JOINT_SPACING):
+			_joint(strength, 1.0)
+		if floor((odometer - _wheelbase) / JOINT_SPACING) > floor((before - _wheelbase) / JOINT_SPACING):
+			_joint(strength, 0.85)
+	deck_level = _approach(deck_level, float(st.deck) * smoothstep(3.0, 30.0, speed), delta)
+	_drive_layer(_players.deck, deck_level * DECK_GAIN, 0.6 + clampf(speed / 40.0, 0.0, 1.3))
+
+func _joint(strength: float, pitch: float) -> void:
+	joint_count += 1
+	var p: AudioStreamPlayer = _players.joint
+	p.volume_db = linear_to_db(maxf(JOINT_GAIN * strength, 0.001))
+	p.pitch_scale = pitch
+	p.play()
+	road_bump.emit(strength * 0.5)
+
+## One wheel over a manhole cover. Public for the listen pack and tests.
+func hit_manhole(speed: float) -> void:
+	if speed < 1.0:
+		return
+	manhole_count += 1
+	var strength := smoothstep(1.0, 25.0, speed)
+	var p: AudioStreamPlayer = _players.manhole
+	p.volume_db = linear_to_db(maxf(MANHOLE_GAIN * (0.4 + 0.6 * strength), 0.001))
+	p.play()
+	road_bump.emit(strength * 0.8)
 
 ## Gusts: a slow random wander of the wind level, quicker and wider at speed.
 func _update_gust(speed: float, delta: float) -> void:
@@ -296,6 +373,8 @@ static func stream(layer: String) -> AudioStreamWAV:
 	return _streams[layer]
 
 static func _make(layer: String) -> AudioStreamWAV:
+	if layer.begins_with("joint") or layer.begins_with("manhole"):
+		return AudioDsp.to_wav(_road_hit(layer), MIX_RATE, false)
 	if layer.begins_with("chirp"):
 		return AudioDsp.to_wav(_chirp(hash(layer)), MIX_RATE, false)
 	if layer.ends_with("_b") and layer.trim_suffix("_b") in PAIRED:
@@ -424,6 +503,18 @@ static func _loop(layer: String, seed: int, secs: float, tune: float) -> PackedF
 					f2.set_bp(r, 2480.0 * drift, 50.0)
 				var w := rng.randf_range(-1.0, 1.0)
 				s[i] = (f1.step(w) + 0.5 * f2.step(w)) * (0.6 + 0.4 * sin(TAU * 1.0 * t))
+		"deck":
+			# tyres on a steel bridge deck: a buzzing hum from the grating,
+			# with a rough metallic edge
+			var f0 := 95.0
+			var res := AudioDsp.bp(r, 520.0, 6.0)
+			var ph := 0.0
+			for i in total:
+				var t := float(i) / r
+				var w := rng.randf_range(-1.0, 1.0)
+				ph = fmod(ph + TAU * f0 / r, TAU)
+				var tone := sin(ph) + 0.6 * sin(2.0 * ph) + 0.4 * sin(3.0 * ph) + 0.25 * sin(5.0 * ph)
+				s[i] = tone * (0.7 + 0.3 * absf(w)) * 0.5 + res.step(w) * 1.5 * (0.8 + 0.2 * sin(TAU * 3.0 * t))
 		"throb":
 			# a cracked window: low pressure pulsing about 7 times a second
 			var f1 := AudioDsp.lp(r, 90.0, 1.0)
@@ -459,6 +550,42 @@ static func _loop(layer: String, seed: int, secs: float, tune: float) -> PackedF
 	return AudioDsp.normalise(AudioDsp.seamless(s, n, fade))
 
 ## A short squeal that dies away: one chirp of rubber.
+## A joint ("joint0".."joint4"): the tyre dropping into the gap -- a soft
+## click -- and the slab thump under it. A manhole ("manhole0".."manhole4"):
+## a heavier clank, the iron cover ringing and rattling once in its seat.
+static func _road_hit(layer: String) -> PackedFloat32Array:
+	var r := float(MIX_RATE)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(layer)
+	var cover := layer.begins_with("manhole")
+	var n := int((0.45 if cover else 0.22) * r)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var thump_hz := rng.randf_range(65.0, 90.0) * (0.85 if cover else 1.0)
+	var click := AudioDsp.bp(r, rng.randf_range(700.0, 1100.0), 2.0)
+	var body := AudioDsp.lp(r, 250.0)
+	var rings: Array[AudioDsp.Biquad] = []
+	if cover:
+		for k in 3:
+			rings.append(AudioDsp.bp(r, rng.randf_range(300.0, 750.0) * (1.0 + k * 0.7), 22.0))
+	var rattle := rng.randf_range(0.035, 0.06)
+	for i in n:
+		var t := float(i) / r
+		var w := rng.randf_range(-1.0, 1.0)
+		var v := sin(TAU * thump_hz * t) * exp(-t * (14.0 if cover else 24.0)) + body.step(w) * exp(-t * 30.0) * 2.0
+		v += click.step(w) * exp(-t * 90.0) * (0.8 if cover else 0.5)
+		if cover:
+			var hit := w * (exp(-t * 200.0) + 0.6 * exp(-maxf(t - rattle, 0.0) * 200.0) * float(t >= rattle))
+			var ring := 0.0
+			for f in rings:
+				ring += f.step(hit)
+			v += ring * 6.0 * exp(-t * 9.0)
+		s[i] = v
+	var fade := int(0.003 * r)
+	for i in fade:
+		s[i] *= float(i) / fade
+	return AudioDsp.normalise(s, 0.9)
+
 ## Each variant (by seed) starts and ends on its own note and lasts its own length.
 static func _chirp(seed: int) -> PackedFloat32Array:
 	var r := float(MIX_RATE)

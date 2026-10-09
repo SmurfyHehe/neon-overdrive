@@ -95,6 +95,9 @@ var chassis_visual: Node3D
 var _steer_smooth := 0.0
 ## Heat and wear (Phase B). Off for sim_only cars so TuneTrack stays clean.
 var health := PowertrainHealth.new()
+## Fuel and limp mode (Stage C). Off for sim_only cars, like health.
+var fuel := FuelTank.new()
+var limp := LimpMode.new()
 
 ## This car's tune: the one dictionary Vehicle properties are set from and that
 ## CarSpec.set_param() keeps in step with the live car. Set it before add_child()
@@ -250,6 +253,7 @@ func _ready() -> void:
 	# has something to find.
 	add_to_group("aero_vehicles")
 	health.enabled = not sim_only
+	fuel.enabled = not sim_only
 
 	# Engine sound (2026-09-29, prototype of PROPOSAL-audio.md option C): a
 	# synthesised engine driven by this car's motor_rpm/throttle. Added after
@@ -277,6 +281,10 @@ func _physics_process(delta: float) -> void:
 	else:
 		_read_keyboard()
 	_update_line_lock()
+	# Limp mode: the slowest active cause caps the speed by fading the throttle.
+	limp.update(fuel.is_empty(), health.engine_temp if health.enabled else 0.0)
+	if limp.is_limping():
+		throttle_input *= limp.throttle_scale(current_speed() * 3.6)
 	super._physics_process(delta)
 
 	# Aero (2026-09-13): applied AFTER the vendor's own _physics_process so
@@ -284,6 +292,9 @@ func _physics_process(delta: float) -> void:
 	# applied this frame. See aero.gd for the actual force math.
 	AeroModel.apply(self)
 	health.step(self, delta)
+	fuel.step_values(delta, health.engine_load if health.enabled else throttle_amount, engine_running)
+	if limp.is_limping():
+		torque_mult = limp.torque_mult(health.torque_mult)
 	if _keeps_tune:
 		_tune_check_left -= delta
 		if _tune_check_left <= 0.0:

@@ -12,6 +12,7 @@ var skids: SkidMarks
 var flames: ExhaustFlames
 var sparks: ScrapeSparks      # driving-feel pass (2026-10-08)
 var hit_stop: HitStop
+var near_miss: NearMiss
 
 var _player: PlayerCar
 var _camera: ChaseCamera
@@ -37,6 +38,8 @@ func _ready() -> void:
 		if c is CrashAudio:
 			hit_stop = HitStop.new(c)
 			add_child(hit_stop)
+	near_miss = NearMiss.new(_player, _camera)
+	add_child(near_miss)
 	apply_settings()
 
 ## Push the FxSettings flags to the nodes.
@@ -48,6 +51,7 @@ func apply_settings() -> void:
 	sparks.enabled = FxSettings.is_on("sparks")
 	if hit_stop != null:
 		hit_stop.enabled = FxSettings.is_on("hit_stop")
+	near_miss.enabled = FxSettings.is_on("near_miss")
 
 ## Flip one effect (FxSettings.EFFECTS) live, and remember it.
 func set_effect(effect: String, on: bool) -> void:

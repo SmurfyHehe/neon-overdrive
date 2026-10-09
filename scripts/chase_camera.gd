@@ -53,6 +53,27 @@ const TRAUMA_DECAY := 1.6        # 1/s
 const IMPACT_DV := 0.8
 const IMPACT_GAIN := 0.12        # trauma per m/s over the threshold
 
+# Kicks (driving-feel pass, 2026-10-08). Two springs on top of the placed
+# camera, both scaled by the Camera shake slider (ViewSettings.shake):
+# - near-miss nudge (NearMiss calls nudge()): a shove sideways, away from the
+#   car that went by, with a touch of roll, then back;
+# - landing dip: after a jump (all wheels off for LAND_AIR_MIN), the camera
+#   drops with the suspension, deeper for a harder landing, and springs back.
+#   FxSettings "landing_dip" is its off switch ("near_miss" is NearMiss's).
+# Peaks are at strength 1; the cockpit gets a smaller share (the head is
+# bolted to the car there).
+const NUDGE_POS := 0.08          # m sideways at peak
+const NUDGE_ROLL := 0.012        # rad (~0.7 deg) at peak
+const NUDGE_RATE := 16.0         # rad/s spring
+const NUDGE_DAMP := 0.5
+const DIP_POS := 0.22            # m down at peak, chase view
+const DIP_RATE := 12.0
+const DIP_DAMP := 0.45
+const COCKPIT_KICK := 0.35       # share of both kicks in the cockpit
+const LAND_AIR_MIN := 0.15       # s with no wheel down before a landing counts
+const LAND_FALL_MIN := 1.5       # m/s falling at touchdown
+const LAND_FALL_FULL := 8.0      # m/s for the deepest dip
+
 ## Phase C: the cockpit view (F toggles). VIEW_CHASE is everything above; in
 ## VIEW_COCKPIT the camera sits at the driver's eye, rigid to the car, the body
 ## is kept off this camera (it stays in the mirrors) and the CockpitFrame (the
@@ -117,6 +138,9 @@ var speed_t := 0.0     # 0..1, eased speed factor
 var accel_fov := 0.0   # current acceleration FOV term, degrees
 var trauma := 0.0      # 0..1, impact shake energy
 var surface_t := 0.0   # 0..1, share of wheels on a rough surface (scaled by speed)
+var nudge_x := 0.0     # spring state, about -1..1 at peak (+ = camera to the right)
+var dip := 0.0         # spring state, about 0..-1 at peak
+var landing_count := 0
 var dist_now := DIST
 var height_now := HEIGHT
 var anchor := Vector3.ZERO  # chase position before shake
@@ -130,6 +154,10 @@ var _prev_speed := 0.0
 var _accel := 0.0
 var _t := 0.0
 var _noise := FastNoiseLite.new()
+var _nudge_v := 0.0
+var _dip_v := 0.0
+var _air := 0.0
+var _fall := 0.0
 
 func _init(car: PlayerCar) -> void:
 	target = car
@@ -194,6 +222,7 @@ func _physics_process(delta: float) -> void:
 	var dv := (v - _prev_vel).length()
 	_prev_vel = v
 	register_impact(dv)
+	_watch_landing(delta)
 	var speed := target.current_speed()
 	_accel = (speed - _prev_speed) / delta
 	_prev_speed = speed
@@ -248,12 +277,62 @@ func _process(delta: float) -> void:
 			global_transform.basis = global_transform.basis * Basis(Vector3.UP, PI)
 		if frame != null:
 			frame.steering = target.steer_fraction()  # the wheel turns the way the car does
+		_kick(delta, COCKPIT_KICK)
 		if shake_enabled:
 			_shake(delta)
 		return
 	_place(delta)
+	_kick(delta, 1.0)
 	if shake_enabled:
 		_shake(delta)
+
+## A near miss on this side (-1 left, +1 right), 0..1 strong: shove the camera
+## away from it. Called by NearMiss.
+func nudge(side: int, strength: float) -> void:
+	# A spring at NUDGE_DAMP peaks at about 0.55 x v0 / rate, so this v0 peaks at ~strength.
+	_nudge_v += -float(side) * clampf(strength, 0.0, 1.0) * NUDGE_RATE / 0.55
+
+## A landing at this fall speed (m/s): dip the camera. Public for tests.
+func land(fall_speed: float) -> void:
+	landing_count += 1
+	if not FxSettings.is_on("landing_dip"):
+		return
+	var s := clampf((fall_speed - LAND_FALL_MIN) / (LAND_FALL_FULL - LAND_FALL_MIN), 0.15, 1.0)
+	_dip_v -= s * DIP_RATE / 0.6
+
+func _watch_landing(delta: float) -> void:
+	if target.get_wheel_contact_count() == 0:
+		_air += delta
+		_fall = maxf(_fall, -target.linear_velocity.y)
+		return
+	if _air >= LAND_AIR_MIN and _fall >= LAND_FALL_MIN:
+		land(_fall)
+	_air = 0.0
+	_fall = 0.0
+
+## Steps both kick springs and offsets the placed camera by them.
+func _kick(delta: float, share: float) -> void:
+	var n := _spring(nudge_x, _nudge_v, NUDGE_RATE, NUDGE_DAMP, delta)
+	nudge_x = n.x
+	_nudge_v = n.y
+	var d := _spring(dip, _dip_v, DIP_RATE, DIP_DAMP, delta)
+	dip = d.x
+	_dip_v = d.y
+	var k := ViewSettings.shake * share
+	if k <= 0.0 or (absf(nudge_x) < 0.0001 and absf(dip) < 0.0001):
+		return
+	global_position += global_basis.x * (nudge_x * NUDGE_POS * k) + global_basis.y * (dip * DIP_POS * k)
+	rotate_object_local(Vector3.BACK, -nudge_x * NUDGE_ROLL * k)
+
+## Damped spring toward 0 (position, velocity), in substeps so a slow frame
+## cannot blow it up.
+static func _spring(x: float, v: float, rate: float, damp: float, delta: float) -> Vector2:
+	var steps := maxi(1, ceili(delta * 240.0))
+	var h := delta / steps
+	for i in steps:
+		v += (-rate * rate * x - 2.0 * damp * rate * v) * h
+		x += v * h
+	return Vector2(x, v)
 
 ## At the driver's eye, on the interpolated transform (same reason as the
 ## chase cam), looking where the car points, plus the head movement; a fixed

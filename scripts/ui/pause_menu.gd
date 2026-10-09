@@ -181,7 +181,8 @@ func _ready() -> void:
 	_add_button(box, "Car: " + PlayerCars.title(PlayerCar.chassis_kind()), show_cars)
 	_add_button(box, "Graphics", show_graphics)
 	_add_button(box, "Controls", show_controls)
-	_add_button(box, "Service car (reset wear)", _service_car)
+	_add_button(box, "Service car (reset wear and damage)", _service_car)
+	_add_button(box, "Call a tow (engine dead)", _call_tow)
 	_add_button(box, "Open log folder", LogFolder.open)
 	_add_button(box, "Restart", game_state.restart)
 	_add_button(box, "Quit", game_state.quit)
@@ -204,6 +205,24 @@ func _service_car() -> void:
 	var player: Variant = get_parent().get("player")
 	if player != null and player.get("health") != null:
 		player.health.repair()
+		player.damage.garage_repair(null)  # free until the garage and the bank exist
+
+## Ferris's tow (damage slice 1): only for a dead engine, never in a chase.
+## The car goes home, the night ends, and the garage at home fixes it; the
+## bank pays once it exists (null = free for now). Chases come with Stage F.
+func _call_tow() -> void:
+	var game := get_parent()
+	var player: Variant = game.get("player")
+	if player == null or player.get("damage") == null or not player.damage.is_engine_dead():
+		return
+	if not player.damage.tow(null, false):
+		return
+	player.damage.garage_repair(null)
+	player.health.repair()
+	var clock: Variant = game.get("night_clock")
+	if clock != null:
+		clock.end_night()
+	game_state.restart()
 
 func _add_slider(parent: Control, text: String, lo: float, hi: float, step: float, value: float, on_change: Callable) -> HSlider:
 	var row := HBoxContainer.new()

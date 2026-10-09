@@ -85,6 +85,11 @@ func advance(real_seconds: float) -> void:
 		save_clock()
 	WindowLights.set_minutes(minutes)
 
+## Skip to 6 a.m. (a tow home ends the night, damage slice 1). The dawn
+## signal fires as if the night had been driven out.
+func end_night() -> void:
+	advance((NIGHT_MINUTES - minutes) * REAL_SECONDS_PER_HOUR / 60.0 + 0.001)
+
 func _exit_tree() -> void:
 	if fixed_minutes < 0.0:
 		save_clock()

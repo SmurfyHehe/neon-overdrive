@@ -375,6 +375,9 @@ func _refresh() -> void:
 	if engine_off:
 		lbl_status.text = "ENGINE OFF · hold X to start"
 		Hud.set_font_color(lbl_status, RED)
+	elif player.damage.is_engine_dead():
+		lbl_status.text = "ENGINE DEAD · tow in the pause menu"
+		Hud.set_font_color(lbl_status, RED)
 	elif player.limp.is_limping():
 		lbl_status.text = "LIMP · " + LimpMode.cause_name(player.limp.cause)
 		Hud.set_font_color(lbl_status, RED)

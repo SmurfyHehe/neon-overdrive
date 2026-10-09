@@ -101,6 +101,7 @@ rem ~1 min: the player into the out-of-bounds wall at 16 speeds and angles, at t
 call :run wall_hit "--headless --fixed-fps 120"
 call :run road_space --headless
 call :run chunk_builder_equivalence --headless
+call :run chunk_rebuild_perf --headless
 call :run road_frame --headless
 call :run road_centerline --headless
 call :run road_alignment --headless

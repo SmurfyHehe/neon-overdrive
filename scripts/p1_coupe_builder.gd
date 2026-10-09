@@ -81,9 +81,20 @@ const GLOW_SHADER := """
 shader_type spatial;
 render_mode unshaded, cull_disabled;
 uniform float energy = 2.5;
+uniform float brake_gain = 2.2;
+// Brake lamps (2026-10-09): per-instance, set by set_lamps(). Slots 1 and 2 are
+// free: the body shader above has no instance uniforms.
+instance uniform float brake : instance_index(1) = 0.0;
+instance uniform float reverse : instance_index(2) = 0.0;
 void fragment() {
-	ALBEDO = COLOR.rgb;
-	EMISSION = COLOR.rgb * energy;
+	vec3 c = COLOR.rgb;
+	// Linear colours: the tail red is the only lamp with green and blue near 0.
+	float tail = step(0.4, c.r) * step(c.g, 0.06) * step(c.b, 0.06);
+	// Reverse: the tail lens goes warm white until the brake is on (brake wins,
+	// red and brighter). The sheet has no separate reverse lens.
+	c = mix(c, vec3(0.8, 0.62, 0.35), tail * reverse * (1.0 - brake) * 0.8);
+	ALBEDO = c;
+	EMISSION = c * energy * mix(1.0, 1.0 + brake * brake_gain, tail);
 }
 """
 
@@ -148,6 +159,14 @@ static func build_chassis_visual(paint: Color = PAINT) -> Node3D:
 	root.set_meta("half_w", WIDTH / 2.0)
 	root.set_meta("half_l", LENGTH / 2.0)
 	return root
+
+## Brake lamps on/off (0..1) and reverse lamps for the player's body; `vis`
+## is its chassis_visual. Two instance uniforms on the Body, no material change.
+static func set_lamps(vis: Node3D, brake: float, reverse: bool) -> void:
+	var mi := vis.get_node_or_null(^"Body") as MeshInstance3D
+	if mi != null:
+		mi.set_instance_shader_parameter("brake", brake)
+		mi.set_instance_shader_parameter("reverse", 1.0 if reverse else 0.0)
 
 static func recolor(car: Node3D, color: Color) -> void:
 	var m: ShaderMaterial = car.get_meta("body_mat")

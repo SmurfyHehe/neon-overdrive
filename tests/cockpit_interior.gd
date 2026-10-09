@@ -20,6 +20,9 @@ enum Step { BOOT, CHASE, COCKPIT, WHEEL, PEDALS, SHIFT, BACK, DONE }
 var step := Step.BOOT
 var step_start := 0
 var tick := 0
+## The most of the view the dash trinket may cover (it is measured apart from the cabin).
+const CHARM_MAX_VIEW_SHARE := 0.015
+
 var failures: Array[String] = []
 var steer := 0.0
 var throttle := 0.0
@@ -226,6 +229,7 @@ func _check_view(p: PlayerCar, frame: CockpitFrame, cam: ChaseCamera) -> void:
 	var to_car := p.global_transform.affine_inverse()
 	# gather every interior triangle in car space, with a bounding box per mesh
 	var meshes := []
+	var charm := []   # the dash trinket's mesh: swings, optional, measured on its own below
 	for m in frame.find_children("*", "MeshInstance3D", true, false):
 		var mi := m as MeshInstance3D
 		if not mi.mesh is ArrayMesh or not mi.is_visible_in_tree():
@@ -244,7 +248,11 @@ func _check_view(p: PlayerCar, frame: CockpitFrame, cam: ChaseCamera) -> void:
 		for v in tris:
 			lo = lo.min(v)
 			hi = hi.max(v)
-		meshes.append({"name": mi.name, "tris": tris, "aabb": AABB(lo, hi - lo).grow(0.001)})
+		var entry := {"name": mi.name, "tris": tris, "aabb": AABB(lo, hi - lo).grow(0.001)}
+		if mi.name == &"Charm":
+			charm.append(entry)
+		else:
+			meshes.append(entry)
 	# dash top: scan down from the horizon across the driver's view (+-20 deg,
 	# +yaw is left), skipping yaws where the first thing hit is the binnacle
 	# (near, in front of the driver) or an A-pillar (far out to the side)
@@ -281,6 +289,20 @@ func _check_view(p: PlayerCar, frame: CockpitFrame, cam: ChaseCamera) -> void:
 				if _first_hit(meshes, eye, Vector3(u, v, -1.0).normalized()).is_empty():
 					clear += 1
 		results[test_fov] = float(clear) / float(total)
+		if test_fov == 62.0 and not charm.is_empty():
+			# the trinket (2026-10-09) is a small hanging accessory the player can turn off,
+			# so Roy's 55% is the cabin without it; the charm itself may take at most
+			# CHARM_MAX_VIEW_SHARE of the view on top
+			var with_charm := 0
+			for j in 18:
+				var v2 := (0.5 - (float(j) + 0.5) / 18.0) * 2.0 * half_v
+				for i in 32:
+					var u2 := ((float(i) + 0.5) / 32.0 - 0.5) * 2.0 * half_h
+					if _first_hit(charm, eye, Vector3(u2, v2, -1.0).normalized()).is_empty():
+						with_charm += 1
+			var blocked := float(total - with_charm) / float(total)
+			print("trinket: blocks %.1f%% of the view" % (blocked * 100.0))
+			_check(blocked <= CHARM_MAX_VIEW_SHARE, "the dash trinket blocks %.1f%% of the view, want at most %.1f%%" % [blocked * 100.0, CHARM_MAX_VIEW_SHARE * 100.0])
 	print("view: dash top %.1f deg below the eye (%s); clear glass %.1f%% at FOV %.0f, %.1f%% at FOV 62" % [dash_top, dash_where, results[fov] * 100.0, fov, results[62.0] * 100.0])
 	_check(dash_top >= CockpitFrame.DASH_TOP_MIN_DEG, "the dash top is only %.1f deg below the eye (%s), want %.0f" % [dash_top, dash_where, CockpitFrame.DASH_TOP_MIN_DEG])
 	# The share is asserted at FOV 62, the cockpit default PR #135 sets (this

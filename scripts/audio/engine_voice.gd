@@ -17,11 +17,15 @@
 # - wander is the anti-repetition layer: a slow random drift of the pipe
 #   resonance and loudness so a held rpm never loops the same block. Real
 #   engines vary cycle to cycle; a perfectly steady synth tires the ear.
+# - the mechanical layers (thin, buzz, intake, whine, rattle: engine_layers.gd)
+#   are the rest of what an engine bay sounds like. Optional; a voice without
+#   them costs nothing extra.
 extends RefCounted
 class_name EngineVoice
 
 const KEYS := ["cylinders", "firing", "cyl_amps", "cyl_spread", "seed",
-		"body_hz", "body_q", "rasp_hz", "rasp_q", "tone", "pulse_width", "wander"]
+		"body_hz", "body_q", "rasp_hz", "rasp_q", "tone", "pulse_width", "wander",
+		"thin", "thin_hz", "buzz", "buzz_harm", "buzz_q", "intake", "whine", "whine_teeth", "rattle"]
 
 # Firing tables, as fractions of one four-stroke cycle (two crank turns).
 const _BOXER_UNEQUAL := [0.0, 0.28, 0.5, 0.78]
@@ -43,9 +47,17 @@ const PRESETS := {
 	# Tuner sedan, straight six on a bigger pipe: deeper than the coupe, raspier.
 	"p3_tuner": {"cylinders": 6, "cyl_spread": 0.14, "seed": 37, "body_hz": 98.0, "body_q": 1.4,
 			"rasp_hz": 1150.0, "rasp_q": 1.8, "tone": 1.05, "pulse_width": 0.26, "wander": 0.7},
-	# Kei roadster, tiny three: high, thrummy, a little uneven.
-	"p4_kei": {"cylinders": 3, "cyl_spread": 0.18, "seed": 41, "body_hz": 210.0, "body_q": 1.7,
-			"rasp_hz": 2300.0, "rasp_q": 2.4, "tone": 1.2, "pulse_width": 0.30, "wander": 0.7},
+	# Kei roadster, a 0.66 l triple (reworked 2026-10-09, Roy: "sounds bad").
+	# A real kei engine is heard through what surrounds the combustion, not a
+	# boom: a buzzy, thin, high note (short pulses, the pipe resonance up at
+	# 280 Hz with almost no low end left by the thin tailpipe), a resonance
+	# that climbs with the revs (buzz on the 7th firing harmonic), an intake
+	# whir, its own gear whine and a heat-shield rattle at idle. The mechanical
+	# layers are EngineLayers (engine_layers.gd); only this car sets them.
+	"p4_kei": {"cylinders": 3, "cyl_spread": 0.10, "seed": 41, "body_hz": 280.0, "body_q": 1.4,
+			"rasp_hz": 3100.0, "rasp_q": 2.8, "tone": 1.45, "pulse_width": 0.22, "wander": 0.6,
+			"thin": 0.85, "thin_hz": 170.0, "buzz": 0.55, "buzz_harm": 7.0, "buzz_q": 4.5,
+			"intake": 0.4, "whine": 0.3, "whine_teeth": 23.0, "rattle": 0.4},
 	# Muscle sedan, big crossplane V8: low boom, heavy lope, dark.
 	"p5_muscle": {"cylinders": 8, "firing": _V8_FIRING, "cyl_amps": _V8_BANKS, "cyl_spread": 0.2, "seed": 53,
 			"body_hz": 70.0, "body_q": 1.3, "rasp_hz": 900.0, "rasp_q": 1.6, "tone": 0.8,

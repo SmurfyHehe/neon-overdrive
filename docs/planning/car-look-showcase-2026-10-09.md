@@ -98,6 +98,13 @@ shader work on the one paint material the P1 already has.
   leapfrog to the nearest street lamps and light the car layer only. The
   car flashes sodium every 12.5 m. This is the classic night-drive rhythm
   and it is what makes the paint finishes readable at all.
+  **Colour of the flash** (Roy asked, his 115): the lamp is sodium orange,
+  so the light is orange; what you see is orange *mixed with the paint*.
+  A white car flashes warm cream, a sodium car glows brighter sodium, a
+  navy car shows orange only on its highlights and stays dark in the
+  flats, a gloss car shows a sharp hot spot and a matte car a soft wash.
+  Shop signs and traffic lights that light the car later use their own
+  colour the same way, so under a red sign the flash is red.
 - **Fresnel tint.** At grazing angles the paint picks up the navy sky, so a
   sodium car has navy edges and a white car has blue-grey sides. Two
   uniforms on the shader.
@@ -305,7 +312,75 @@ wheel. A1-A6 touch materials, lights and wheels, so they can run beside
 those without file clashes except `p1_coupe_builder.gd`, which the player-cars
 session owns until it lands.
 
-## 12. Contradictions found
+## 12. Car modelling pipeline: step by step (decided, Roy 123)
+
+Tools, all free and fine for a sold game (asset rule): **Blender** (GPL
+tool; files it makes are ours), **Python** (already used by
+`tools/fleet_design/`), **Godot's glTF importer**, **Inkscape** or Python
+PIL for decals and gauge faces. No downloaded models, textures or kits.
+
+| Step | What is made | Runs where | Model | Done when |
+|---|---|---|---|---|
+| 1 | `tools/car_pipeline/build_car.py`: a Blender script that reads one car from `fleet.json` and builds the loft body as a real mesh, then adds one bevel loop on hard edges, paint and trim material slots, and named empties for the attachment points (hood, bumpers, skirts, wing, lamps, tips, 4 sticker slots, 4 wheels, 6 camera presets) | Cloud session (Blender runs headless in the container) or laptop | Opus for the script design, Sonnet to finish it | P1 exports as `assets/cars/p1_coupe/body.glb` and the fleet audit tests still pass on it |
+| 2 | UV scheme: one shared layout per car (paint faces, trim, glass, lamps), plus a second UV channel for the wear mask and shut lines | Same script | Sonnet | Decal slots project cleanly in Godot |
+| 3 | One car shader for all cars: paint (colour, finish, Fresnel, flake), trim, glass, lamp, tyre, wear mask channels; replaces the P1 shader and `car_builder._mat` on player cars | Laptop (needs a real run to look at) | Fable | P1 looks the same or better than today under A1-A2 lighting |
+| 4 | Parts as separate glb pieces per attachment point: hood x3, bumpers x3 each, skirts/wide-body x3, wing x4, tips x4, plus the signature slot; built by the same script from a parts table in `fleet.json` | Cloud for the script, laptop to check | Fable | Every P1 part swaps live in a test scene |
+| 5 | Wheels: 4 rim glb pieces plus a tyre with a sidewall UV ring, brake disc and caliper | Cloud | Fable | Shared by all player cars |
+| 6 | Godot loader: `CarAssembler` that loads body plus chosen parts, applies the shader, places wheels, reads camera presets; player.gd and the garage use it. Generator stays for traffic and police | Laptop | Opus | Headless test builds P1 in all part combinations, counts triangles against budget |
+| 7 | P1 first (proof), then the beater, then P2-P6 one PR each, each with its own interior scene and cluster | Laptop, Fable | Fable | Roy signs off each car from the turntable |
+
+Four sessions before P1 comes out the far end (steps 1-3 plus 6), then
+one per car. Steps 1, 2, 4 and 5 can run in cloud threads in parallel with
+nothing on the laptop; steps 3, 6 and 7 are laptop sessions.
+
+Guards: the script is the only source of car geometry, so a change to
+`fleet.json` rebuilds every car and the B1 audit tests stay true; triangle
+budget per car is checked in the headless test; the generator is kept
+until every player car has crossed over, so nothing breaks in between.
+
+## 13. Low / Medium / High: a steady frame rate on any hardware (Roy 123)
+
+Goal: 60 fps on Roy's laptop at Medium, a stable 30 or 60 on weaker
+machines at Low, and High for people with a real GPU. Builds on the
+`FxSettings` switch already planned as graphics A9.
+
+| Tier | Car and paint | Lights and reflections | Shadows | Screen | World |
+|---|---|---|---|---|---|
+| **Low** | Shader keeps colour and finish; no Fresnel, no flake, no wear mask blend; wheels use the simple rim; brake discs off | No lamp lights on the car; fake city band off (flat dark reflection); lamp glare off | Blob only | FXAA, resolution scale 0.77 with FSR1, grain kept, glow off | Traffic cap lower, far cars as simple mode sooner, wet road off, decals as quads |
+| **Medium** (Roy's laptop) | Everything in the shader on | 2 lamp lights on the car layer; fake city band on; glare on | Blob, soft dark patch | SMAA, scale 1.0, glow on | Wet road some nights, full traffic cap |
+| **High** | Same plus the pearl flake noise at full | 4 lamp lights; reflection probe refreshed every few seconds in the garage | Real shadow under the car (one short shadow map), DOF in the garage and photo mode | MSAA 2x plus SMAA | Wet road full, extra street dressing |
+
+How it stays steady:
+
+- **Auto pick on first launch:** run the existing benchmark scene for 3 s
+  at Medium; under 50 fps pick Low, over 100 pick High, else Medium. Save
+  the choice; the pause menu shows it and lets Roy override.
+- **Dynamic resolution inside a tier:** if the frame time stays above the
+  budget for 2 s, drop the resolution scale by 0.1 (down to 0.66), raise it
+  back when there is headroom for 5 s. Mobile supports FSR1 so this stays
+  sharp. This is what keeps the rate steady during a 30-car pile-up without
+  changing what the game looks like.
+- **Frame cap:** V-sync on by default; a 30 fps cap option for Low.
+- **Measured, not guessed:** every tier gets a line in the stress-test
+  session's report (frame time at the start line, in traffic, in the garage)
+  before it ships; the stress-test and speed session already running is the
+  place for that.
+
+## 14. Roy's answers (2026-10-09, his 114-123)
+
+| # | Question | Answer |
+|---|---|---|
+| 114 | Default finish | **Gloss** |
+| 115 | Flash under lamps | **Yes**; colour is the lamp's orange mixed with the paint (section 3) |
+| 116 | Brake glow | Yes |
+| 117 | Pop-up animation | Yes |
+| 118 | New-car reveal | Yes |
+| 119 | Rolling shot before races | Yes |
+| 120 | Rust on the beater | Yes |
+| 121 | Rims | Four |
+| 123 | Modelling pipeline | **Yes**, plus Low / Medium / High graphics settings for a steady frame rate |
+
+## 15. Contradictions found
 
 - The fleet sheet lists ride height under swappable body parts; the garage
   note moved it to the Tuner. This doc follows the garage note.
@@ -314,7 +389,7 @@ session owns until it lands.
 - Graphics note calls the paint item "A4" and this doc reuses the number for
   wheels; the tables above are this doc's own numbering.
 
-## 13. Questions for Roy (one word each, my pick first)
+## 16. Questions for Roy (answered 2026-10-09, see section 14)
 
 1. Default paint finish on your car at the start: **gloss**, satin or matte?
 2. Should your car flash orange every time it passes under a street lamp? **Yes** / no.

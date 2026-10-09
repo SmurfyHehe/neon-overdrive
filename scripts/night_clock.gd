@@ -85,6 +85,13 @@ func advance(real_seconds: float) -> void:
 		save_clock()
 	WindowLights.set_minutes(minutes)
 
+## Jumps the clock on by `game_minutes` (a race takes 15, RaceSession). Rolls
+## into the next night like driving would. A pinned clock does not move.
+func add_minutes(game_minutes: float) -> void:
+	if fixed_minutes >= 0.0:
+		return
+	advance(game_minutes * REAL_SECONDS_PER_HOUR / 60.0)
+
 func _exit_tree() -> void:
 	if fixed_minutes < 0.0:
 		save_clock()

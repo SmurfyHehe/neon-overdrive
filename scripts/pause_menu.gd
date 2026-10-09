@@ -27,6 +27,7 @@ const AMBER := Color("#FFC066")
 
 var game_state: GameState
 var resume_button: Button
+var give_up_button: Button
 var volume_sliders := {}   # channel -> HSlider
 var fov_slider: HSlider
 var smoothing_slider: HSlider
@@ -147,6 +148,8 @@ func _ready() -> void:
 			FxSettings.save_settings())
 
 	resume_button = _add_button(box, "Resume", game_state.resume)
+	# Only while a race runs (RC1, Roy 88): a loss, no pay, back to the road.
+	give_up_button = _add_button(box, "Give up", _give_up)
 	_add_button(box, "Controls", show_controls)
 	_add_button(box, "Service car (reset wear)", _service_car)
 	_add_button(box, "Restart", game_state.restart)
@@ -154,6 +157,16 @@ func _ready() -> void:
 
 	_build_controls_page(center)
 	game_state.state_changed.connect(_on_state_changed)
+
+func _race() -> RaceSession:
+	var race: Variant = get_parent().get("race")
+	return race if race is RaceSession else null
+
+func _give_up() -> void:
+	var race := _race()
+	if race != null:
+		race.give_up()
+	game_state.resume()
 
 ## Resets temperatures, tyre, clutch and brake wear (the garage will own this later).
 func _service_car() -> void:
@@ -190,6 +203,8 @@ func _add_button(parent: Control, text: String, action: Callable) -> Button:
 func _on_state_changed(new_state: GameState.State, _old_state: GameState.State) -> void:
 	visible = new_state == GameState.State.PAUSED
 	if visible:
+		var race := _race()
+		give_up_button.visible = race != null and race.is_racing()
 		show_main()  # always reopen on the main page
 
 # ---------- Controls page ----------

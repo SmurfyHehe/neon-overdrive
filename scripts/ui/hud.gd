@@ -51,6 +51,8 @@ var camera: ChaseCamera
 var traffic: TrafficManager
 ## The night clock (living world step 1); null in tests that build a bare HUD.
 var night_clock: NightClock
+## Tonight's cash (F0, scripts/core/wallet.gd); null in tests that build a bare HUD.
+var wallet: Node
 
 var lbl_gear: Label
 var lbl_mode: Label
@@ -62,6 +64,7 @@ var lbl_rpm: Label
 var lbl_fuel: Label
 var lbl_info: Label
 var lbl_clock: Label
+var lbl_cash: Label
 var lbl_hint: Label
 var rpm_bar: RpmBar
 var cluster: VBoxContainer   # the gear / speed / RPM block; hidden in the cockpit view
@@ -212,6 +215,10 @@ func _ready() -> void:
 	lbl_clock = _label(cluster, 18, AMBER)
 	lbl_clock.name = "Clock"
 	lbl_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	# Tonight's cash, under the clock (F0); the bank is on the pause screen.
+	lbl_cash = _label(cluster, 18, AMBER)
+	lbl_cash.name = "Cash"
+	lbl_cash.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	# Row: gear (+ A/M) on the left, speed on the right.
 	var row := HBoxContainer.new()
@@ -355,6 +362,7 @@ func _refresh() -> void:
 	var engine_off: bool = player.realistic_clutch and not player.engine_running
 
 	lbl_clock.text = night_clock.text() if night_clock != null else ""
+	lbl_cash.text = wallet.money(wallet.cash) if wallet != null else ""
 	lbl_gear.text = gear_text(gear)
 	lbl_mode.text = PlayerCar.TRANSMISSION_LETTERS[player.transmission_mode()]
 	lbl_speed.text = str(kmh(player.current_speed()))

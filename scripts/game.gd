@@ -66,6 +66,7 @@ func _ready() -> void:
 	TrafficSettings.load_settings()
 	FxSettings.load_settings()   # cockpit mirrors on/off and quality ([fx] in settings.cfg)
 	ViewSettings.load_settings()
+	GraphicsSettings.load_settings()   # preset, edge smoothing, render scale ([graphics])
 	# Benchmark mode (-- --benchmark, see benchmark.gd) drives a fixed road so
 	# runs are comparable; normal play gets a fresh one each time. It also runs
 	# the default traffic (car count and draw distance), not whatever the
@@ -104,6 +105,7 @@ func _ready() -> void:
 	add_child(fx)
 	_setup_hud()
 	_setup_game_state()
+	GraphicsSettings.apply(get_tree())
 	if benchmark:
 		add_child(Benchmark.new())
 

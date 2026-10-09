@@ -36,6 +36,13 @@ var main_page: VBoxContainer
 var controls_page: VBoxContainer
 var controls_scroll: ScrollContainer
 var controls_back_button: Button
+var graphics_page: VBoxContainer
+var graphics_back_button: Button
+var gfx_preset: OptionButton
+var gfx_aa: OptionButton
+var gfx_scale: HSlider
+var gfx_scale_label: Label
+var _gfx_refreshing := false
 
 func _init(state: GameState) -> void:
 	game_state = state
@@ -147,12 +154,14 @@ func _ready() -> void:
 			FxSettings.save_settings())
 
 	resume_button = _add_button(box, "Resume", game_state.resume)
+	_add_button(box, "Graphics", show_graphics)
 	_add_button(box, "Controls", show_controls)
 	_add_button(box, "Service car (reset wear)", _service_car)
 	_add_button(box, "Restart", game_state.restart)
 	_add_button(box, "Quit", game_state.quit)
 
 	_build_controls_page(center)
+	_build_graphics_page(center)
 	game_state.state_changed.connect(_on_state_changed)
 
 ## Resets temperatures, tyre, clutch and brake wear (the garage will own this later).
@@ -192,10 +201,77 @@ func _on_state_changed(new_state: GameState.State, _old_state: GameState.State) 
 	if visible:
 		show_main()  # always reopen on the main page
 
+# ---------- Graphics page (polish pass, 2026-10-08) ----------
+# A preset picker plus each setting on its own (GraphicsSettings). Every change
+# applies at once and is saved; changing one setting makes the preset "Custom".
+func show_graphics() -> void:
+	_refresh_graphics()
+	main_page.visible = false
+	controls_page.visible = false
+	graphics_page.visible = true
+	gfx_preset.grab_focus()
+
+func _build_graphics_page(center: CenterContainer) -> void:
+	graphics_page = VBoxContainer.new()
+	graphics_page.add_theme_constant_override("separation", 8)
+	graphics_page.visible = false
+	center.add_child(graphics_page)
+	var title := Label.new()
+	title.text = "GRAPHICS"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	graphics_page.add_child(title)
+	gfx_preset = _add_option(graphics_page, "Preset", ["Low", "Medium", "High", "Custom"], func(i: int) -> void:
+		if i < GraphicsSettings.PRESETS.size():
+			GraphicsSettings.set_preset(GraphicsSettings.PRESETS[i])
+		_graphics_changed())
+	gfx_aa = _add_option(graphics_page, "Edge smoothing", GraphicsSettings.AA_NAMES, func(i: int) -> void:
+		GraphicsSettings.set_aa(GraphicsSettings.AA_MODES[i])
+		_graphics_changed())
+	gfx_scale = _add_slider(graphics_page, "Resolution", GraphicsSettings.SCALE_MIN, GraphicsSettings.SCALE_MAX, 0.05, GraphicsSettings.render_scale,
+		func(v: float) -> void:
+			GraphicsSettings.set_render_scale(v)
+			_graphics_changed())
+	gfx_scale_label = Label.new()
+	gfx_scale.get_parent().add_child(gfx_scale_label)
+	graphics_back_button = _add_button(graphics_page, "Back", show_main)
+
+func _add_option(parent: Control, text: String, items: Array, on_select: Callable) -> OptionButton:
+	var row := HBoxContainer.new()
+	parent.add_child(row)
+	var name_label := Label.new()
+	name_label.text = text
+	name_label.custom_minimum_size = Vector2(140, 0)
+	row.add_child(name_label)
+	var o := OptionButton.new()
+	for item in items:
+		o.add_item(item)
+	o.custom_minimum_size = Vector2(180, 0)
+	o.item_selected.connect(on_select)
+	row.add_child(o)
+	return o
+
+func _graphics_changed() -> void:
+	if _gfx_refreshing:
+		return
+	GraphicsSettings.apply(get_tree())
+	GraphicsSettings.save_settings()
+	_refresh_graphics()
+
+## Shows the current values; the guard stops the widgets' own signals re-applying them.
+func _refresh_graphics() -> void:
+	_gfx_refreshing = true
+	var idx := GraphicsSettings.PRESETS.find(GraphicsSettings.preset)
+	gfx_preset.select(idx if idx >= 0 else GraphicsSettings.PRESETS.size())
+	gfx_aa.select(maxi(GraphicsSettings.AA_MODES.find(GraphicsSettings.aa), 0))
+	gfx_scale.value = GraphicsSettings.render_scale
+	gfx_scale_label.text = "%d%%" % roundi(GraphicsSettings.render_scale * 100.0)
+	_gfx_refreshing = false
+
 # ---------- Controls page ----------
 func show_controls() -> void:
 	_refresh_controls()
 	main_page.visible = false
+	graphics_page.visible = false
 	controls_page.visible = true
 	# Cap the list to the window so it scrolls instead of running off-screen.
 	controls_scroll.custom_minimum_size = Vector2(640, maxf(get_viewport().get_visible_rect().size.y * 0.7, 160.0))
@@ -204,6 +280,7 @@ func show_controls() -> void:
 func show_main() -> void:
 	main_page.visible = true
 	controls_page.visible = false
+	graphics_page.visible = false
 	resume_button.grab_focus()  # keyboard/controller can navigate the menu
 
 func _build_controls_page(center: CenterContainer) -> void:

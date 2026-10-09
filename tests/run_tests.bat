@@ -95,6 +95,7 @@ rem ~17 s: full throttle at ~245 km/h across floating-origin recenters (the old 
 call :run recenter_kick "--headless --fixed-fps 120"
 call :run fx_pack --headless
 call :run tyre_smoke --headless
+call :run graphics_settings --headless
 call :run exhaust_flames --headless
 call :run boundary_walls --headless
 rem ~1 min: the player into the out-of-bounds wall at 16 speeds and angles, at the game's 120 Hz.

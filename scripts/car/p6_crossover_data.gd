@@ -14,6 +14,29 @@ const NAMES := ["chrome", "exh_hole", "glass", "grille", "head", "paint", "pilla
 const COLORS := {"chrome": "#C9CED6", "exh_hole": "#050608", "glass": "#151D2E", "grille": "#0D1017", "head": "#FFE7BD", "paint": "#B8A27A", "pillar": "#10141C", "rim": "#2A2D33", "rim_gap": "#0B0E14", "rim_gold": "#C8A04A", "roof": "#B8A27A", "tail": "#E5262B", "tire": "#15171C", "tire_side": "#1C1F26", "trim": "#1A1D24", "under": "#0B0E14"}
 const EMISSIVE := ["head", "pol_b", "pol_r", "tail", "turn"]
 const GLASS := ["glass"]
+## The cabin, car space (the car at rest, lift included), measured from this
+## body by tools/fleet_design/cabin_measure.gd (2026-10-09) and hand-tuned.
+## CockpitFrame builds the interior from these; nothing in it is the coupe's.
+const CABIN := {
+	"seat_x": -0.355, "seat_h": 0.666, "seat_z": 0.130,
+	"eye": Vector3(-0.315, 1.286, 0.070),
+	"floor_y": 0.356, "belt_y": 1.157,
+	"cowl": Vector2(1.002, -0.990), "dash_face_z": -0.560,
+	"header": Vector2(1.625, -0.300), "roof_y": 1.620, "roof_z1": 1.530, "open_top": false,
+	"door_x": 0.750, "door_x_rear": 0.751, "door_x_front": 0.747, "glass_x": 0.723, "glass_top": 1.593,
+	"a_pillar": [Vector3(0.844, 1.002, -0.990), Vector3(0.588, 1.625, -0.300)],
+	"b_pillar_z": 0.230, "rear_z": 1.446,
+	"shelf": {"y": 1.125, "z0": 1.446, "z1": 1.950, "half_w": 0.800},
+	"wheel": Vector3(-0.355, 0.956, -0.410), "wheel_tilt_deg": -25.0,
+	"cluster": Vector2(1.116, -0.579), "cluster_style": "dials", "speedo_max_kmh": 260.0,
+	"head_unit": Vector3(0.0, 1.018, -0.484),
+	"lever": Vector3(0.0, 0.801, -0.250), "handbrake": Vector3(0.0, 0.801, 0.210),
+	"pedals": Vector3(-0.255, 0.626, -0.730),
+	"crank": Vector3(-0.746, 0.836, -0.410), "switch": Vector3(-0.720, 0.973, -0.210),
+	"rear_mirror": Vector3(0.0, 1.470, -0.380),
+	"door_mirror": Vector3(0.953, 1.207, -0.850),
+	"console": "tunnel", "seats": "bucket",
+}
 ## Build name -> body_tris, tris_total, body_pos (chunks), body_mat, wheels
 ## (front and rear right-hand wheel, hub-relative), slots, tips. Car space.
 const BUILDS := {

@@ -33,25 +33,9 @@ const KINDS := [
 
 static var selected := DEFAULT
 
-## Where the P1's cabin (CockpitFrame, the cockpit eye, the mirrors) sits in
-## each other car, as an offset in car space: no scaling (scaled parents break
-## the mirror cameras), just moved to the car's own windshield base (fleet.json
-## cabin.A against the P1's, in z) and part of the way up to its roof (the
-## seat rises less than the roof does). The stage D interior passes (D-n.2,
-## PR #197) give every car its own cabin; until then this is the P1's cabin
-## sat in the right place, so the view, the wheel and the mirrors fit the
-## car's glass rather than the coupe's.
-const CABIN_OFFSET := {
-	"p0_beater": Vector3(0.0, 0.156, -0.01),
-	"p2_hothatch": Vector3(0.0, 0.096, -0.21),
-	"p3_tuner": Vector3(0.0, 0.072, -0.12),
-	"p4_kei": Vector3(0.0, -0.066, -0.075),
-	"p5_muscle": Vector3(0.0, 0.036, -0.025),
-	"p6_crossover": Vector3(0.0, 0.22, -0.29),
-}
-
-static func cabin_offset(kind: String) -> Vector3:
-	return CABIN_OFFSET.get(kind, Vector3.ZERO)
+## Every car's cabin is its own now (CABIN in its data file, CabinSpec);
+## the stage D stand-in offset table that sat the coupe's cabin in each
+## car is gone (interior pass, 2026-10-09).
 
 static func ids() -> Array[String]:
 	var out: Array[String] = []

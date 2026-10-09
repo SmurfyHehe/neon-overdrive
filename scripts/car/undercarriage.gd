@@ -202,7 +202,13 @@ static func build_kit(p: Dictionary, role: String) -> CockpitKit:
 	# exhaust takes the other), plus the spare wheel well behind the axle.
 	var tank_x := -0.22 if _exhaust_side(p) > 0.0 else 0.22
 	k.box(Vector3(0.80, 0.13, 0.50), Vector3(tank_x, d.call(0.07), axle_z - 0.68), COL_PART)
-	k.cylinder(0.30, -0.05, 0.0, Vector3(0.0, floor_y, axle_z + 0.5), COL_PART, 10)
+	# The spare-wheel well behind the axle stays inside the rear overhang: on the
+	# kei (0.49 m overhang) and the hatch it reached past the bumper (interior
+	# pass, 2026-10-09; tests/fleet/interior_fit.gd).
+	var well_room: float = float(p.half_l) - 0.10 - axle_z
+	var well_r := clampf(well_room * 0.5, 0.12, 0.30)
+	var well_z := minf(axle_z + 0.5, float(p.half_l) - 0.10 - well_r)
+	k.cylinder(well_r, -0.05, 0.0, Vector3(0.0, floor_y, well_z), COL_PART, 10)
 	# Crossover-style skid plate under the front, when there is room.
 	if room > 0.14:
 		k.box(Vector3(2.0 * wheel_x - 0.6, 0.02, 0.5), Vector3(0.0, d.call(0.10), -axle_z - 0.1), COL_PART)

@@ -119,7 +119,7 @@ func _physics_process(_delta: float) -> bool:
 				_check(control == "switch", "the control is crank or switch (%s)" % control)
 				_check(frame.window_switch != null and frame.crank == null, "a switch car has a rocker and no crank")
 				_check(frame.get_node_or_null("WindowControl/Switch/Rocker") != null, "the switch has a rocker")
-			_check(cam.window_openness() == 0.0 and frame.glass_bottom_y() == CockpitFrame.GLASS_BOTTOM, "the window starts closed, the glass up")
+			_check(cam.window_openness() == 0.0 and is_equal_approx(frame.glass_bottom_y(), CockpitFrame.GLASS_BOTTOM), "the window starts closed, the glass up")
 			_check(not d.left_at_window(), "the left hand starts on the rim")
 			cam.set_view(ChaseCamera.View.COCKPIT)
 			Input.action_press("window")
@@ -166,7 +166,7 @@ func _physics_process(_delta: float) -> bool:
 					_check(absf(frame.window_switch.rotation_degrees.x + CockpitFrame.SWITCH_TILT_DEG) < 1e-3, "the rocker tilts the other way rolling up (%.1f)" % frame.window_switch.rotation_degrees.x)
 			if waited == ticks(PerspectiveAudio.WINDOW_UP_SECS + 1.0):
 				_check(cam.window_openness() == 0.0, "after the tap the window is shut (%.2f)" % cam.window_openness())
-				_check(frame.glass_bottom_y() == CockpitFrame.GLASS_BOTTOM, "the glass is back up")
+				_check(is_equal_approx(frame.glass_bottom_y(), CockpitFrame.GLASS_BOTTOM), "the glass is back up")
 				_check(not d.left_at_window() and d.hand_position(-1).distance_to(d.grip_position(-1)) <= GRIP_TOL, "the left hand is back on the rim after rolling up")
 				_go(Step.DONE)
 		Step.DONE:

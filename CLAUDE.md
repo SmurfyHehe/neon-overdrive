@@ -86,6 +86,32 @@ Roy approves changes before they reach `main` (decided 2026-09-29).
   words.
 - **Only Roy merges.** Do not merge your own PR, and do not push to `main`.
 
+## Where files live
+
+Scripts and tests are grouped by area (reorganised 2026-10-09). The same
+folder names are used under `scripts/` and `tests/`:
+
+| Folder | What goes there |
+|---|---|
+| `core/` | game boot, game state, tick rate, test mode, benchmark, settings plumbing |
+| `car/` | the player car, CarSpec, builders, aero, powertrain health, saved tune |
+| `fleet/` (tests only) | the fleet design sheet checks |
+| `view/` | chase camera, cockpit, mirrors, driver model, steering wheel |
+| `traffic/` | traffic cars, manager, settings, NPC car builders and data |
+| `world/` | road, chunks, road frame, night clock, sky, building windows |
+| `audio/` | engine synth and voices, car/driveline/crash audio, radio |
+| `fx/` | exhaust flames, skid marks, tyre smoke, screen effects |
+| `tuning/` | tune params, slots, auto-tune, tuner model |
+| `ui/` | HUD, pause menu, tuner screens, panels, head unit, photo mode |
+
+`scripts/vendor/gevp` stays where it is. Shared test helpers sit next to the
+tests that use them (`tests/traffic/traffic_harness.gd`). In
+`tests/run_tests.bat` a test is named by its folder: `call :run world/chunk_drive`.
+
+- **New files go in the folder that fits**, not in the `scripts/` or `tests/`
+  root.
+- **After pulling the reorganisation, refresh the class cache** (next section).
+
 ## After pulling: game won't boot? Refresh the class cache
 
 Godot keeps a per-machine cache of `class_name` scripts in

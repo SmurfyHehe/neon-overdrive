@@ -41,7 +41,7 @@ Sources: ROADMAP/ISSUES/CLAUDE `-origin-main-2026-10-06.md`, `docs/story-bible.m
 "Gritty PS2 night", Street-Spec reference, no neon. Amber vs. Dusk (sky #1B2A4A, sodium #FF8A1F), no magenta/cyan. Police blue #2E4FD8 is the only off-palette colour. Open: police blue vs red/amber light bar.
 
 ## Physics
-Vendored GEVP raycast sim, open for editing; each edit marked `DEVIATION` in `scripts/vendor/gevp/gevp_vehicle.gd`. Physics at 120 Hz; tests at 60 via `NEON_TICKS=60` plus `tests/tick_rate_120.gd`. Parked: top-speed plateau in `process_clutch()`, auto-vs-manual clutch.
+Vendored GEVP raycast sim, open for editing; each edit marked `DEVIATION` in `scripts/vendor/gevp/gevp_vehicle.gd`. Physics at 120 Hz; tests at 60 via `NEON_TICKS=60` plus `tests/core/tick_rate_120.gd`. Parked: top-speed plateau in `process_clutch()`, auto-vs-manual clutch.
 
 ## Radio
 - main: `radio_sequencer.gd` has six generated stations (Neon FM, Night Drive, Open Road, Chrome Radio, Sunset Drive, Midnight Run) with DJ text breaks; no audio files. `radio_manager.gd` header still says "Three generated stations".

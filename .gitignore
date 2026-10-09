@@ -19,3 +19,4 @@ build/
 # Claude Code local state - worktrees are checkouts of this same repo,
 # plus machine-local session data. Never commit.
 .claude/
+bench-results/

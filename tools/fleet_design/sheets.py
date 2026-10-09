@@ -355,10 +355,12 @@ def overview():
     sheet = Image.new('RGB', (W, H), SHADOW)
     d = ImageDraw.Draw(sheet)
     d.text((34, 22), 'NEON OVERDRIVE  ·  FLEET DESIGN SHEET (STAGE B1)', font=F('b', 50), fill=SILVER)
-    d.text((36, 86), '12 original cars, real-inspired proportions  ·  Amber vs. Dusk  ·  design proxies: the game models '
-                     'are built from the same numbers in B2 and D', font=F('m', 22), fill=MUTED)
-    tile_w = (W - 60 - 5 * 12) // 6
+    d.text((36, 86), ('%d original cars, real-inspired proportions  ·  Amber vs. Dusk  ·  design proxies: the game models '
+                      'are built from the same numbers in B2 and D') % len(cars.FLEET), font=F('m', 22), fill=MUTED)
     rows = [[('PLAYER FLEET', 'player')], [('TRAFFIC', 'npc'), ('POLICE', 'cop')]]
+    # tiles per row: the widest row (7 player cars since the beater, 2026-10-09)
+    cols = max(sum(1 for D in cars.FLEET if D['role'] in [r for _, r in row]) for row in rows)
+    tile_w = (W - 60 - (cols - 1) * 12) // cols
     y = 135
     for row in rows:
         k = 0
@@ -380,11 +382,11 @@ def overview():
             box = (x, y, x + tile_w, y + 375)
             panel(sheet, box)
             im = hero_shot(D)
-            im.thumbnail((tile_w - 16, 250), Image.LANCZOS)
-            sheet.paste(im, (x + (tile_w - im.width) // 2, y + 10 + (250 - im.height) // 2))
+            im.thumbnail((tile_w - 16, 230), Image.LANCZOS)
+            sheet.paste(im, (x + (tile_w - im.width) // 2, y + 10 + (230 - im.height) // 2))
             code = D['id'].split('_')[0].upper()
-            d.text((x + 12, y + 270), f"{code}  {D['label']}", font=F('b', 21), fill=SILVER)
-            text_block(d, (x + 12, y + 302), D['rule'], F('r', 15), MUTED, tile_w - 24, gap=2)
+            d.text((x + 12, y + 250), f"{code}  {D['label']}", font=F('b', 20), fill=SILVER)
+            text_block(d, (x + 12, y + 280), D['rule'], F('r', 14), MUTED, tile_w - 24, gap=2)
         y += 395
     # side lineup at true scale (outline only)
     d.text((34, y), 'SIDE OUTLINES AT TRUE SCALE', font=F('b', 26), fill=AMBER)

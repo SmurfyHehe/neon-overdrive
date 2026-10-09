@@ -1,5 +1,5 @@
 # Frozen copy of AeroModel._draft_factor() as it was before issue #24
-# (scripts/aero.gd at 4c1ddca). Used only by tests/aero_draft_equivalence.gd
+# (scripts/car/aero.gd at 4c1ddca). Used only by tests/car/aero_draft_equivalence.gd
 # as the "before" reference. The body is verbatim; the only change is that
 # the parameter is typed Node3D instead of Vehicle, so the test can use plain
 # Node3D stand-ins (the body only touches Node3D API).

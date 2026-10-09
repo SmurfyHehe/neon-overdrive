@@ -84,6 +84,7 @@ call :run recenter_kick "--headless --fixed-fps 120"
 call :run fx_pack --headless
 call :run graphics_settings --headless
 call :run lamp_states --headless
+call :run brake_glow "--headless --fixed-fps 60"
 call :run exhaust_flames --headless
 call :run boundary_walls --headless
 call :run road_space --headless

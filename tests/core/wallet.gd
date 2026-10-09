@@ -18,7 +18,7 @@ extends SceneTree
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
 const Wallet := preload("res://scripts/core/wallet.gd")
-const Harness := preload("res://tests/traffic_harness.gd")
+const Harness := preload("res://tests/traffic/traffic_harness.gd")
 
 const ROOT := "user://test_wallet"
 const AMOUNTS := [1, 250, 98765]

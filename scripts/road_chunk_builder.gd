@@ -941,10 +941,10 @@ static func _update_step(root: Node3D, body_name: String, xs: Vector2, side: int
 #
 # The look is drawn from a per-building RNG seeded by chunk index, slot and
 # the building's footprint, NOT from the global random sequence: the global
-# calls below are kept exactly as before (4 per building, in the same
-# order), so the road layout game.gd
-# rolls after each chunk is unchanged for any seed, and a chunk rebuilt from
-# the pool looks the same as one built fresh.
+# calls are kept exactly as before (4 per building, in the same order, now
+# taken up front by _layout() and handed in as `draws`), so the road layout
+# game.gd rolls after each chunk is unchanged for any seed, and a chunk
+# rebuilt from the pool looks the same as one built fresh.
 
 static var _bld_rng := RandomNumberGenerator.new()
 

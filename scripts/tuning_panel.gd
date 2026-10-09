@@ -231,7 +231,7 @@ func _readout_text() -> String:
 			peak_kw = kw
 			peak_rpm = rpm
 	var lines: Array[String] = []
-	lines.append("NOW  gear %s   %d rpm   %d km/h" % [_gear_name(), int(player.motor_rpm), int(player.current_speed() * 3.6)])
+	lines.append("NOW  gear %s   %d rpm   %d km/h" % [_gear_name(), int(player.motor_rpm), Hud.kmh(player.current_speed())])
 	lines.append("")
 	lines.append("Peak power  %d kW (%d hp) at %d rpm" % [peak_kw, peak_kw * 1.341, peak_rpm])
 	lines.append("At redline  %d%% of peak power" % roundi(100.0 * _power_kw(redline) / peak_kw))

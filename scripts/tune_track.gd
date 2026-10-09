@@ -100,7 +100,7 @@ class Run extends RefCounted:
 
 	func _sample(c: PlayerCar) -> void:
 		if trace_ticks % maxi(1, roundi(TRACE_STEP / dt)) == 0:
-			trace.speed.append(snappedf(c.current_speed() * 3.6, 0.1))
+			trace.speed.append(snappedf(absf(c.current_speed()) * 3.6, 0.1))
 			trace.throttle.append(c.throttle_input)
 			trace.brake.append(c.brake_input)
 		trace_ticks += 1

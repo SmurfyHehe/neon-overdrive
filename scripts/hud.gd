@@ -115,7 +115,10 @@ static func gear_text(g: int) -> String:
 	return str(g)
 
 static func kmh(speed_ms: float) -> int:
-	return int(round(maxf(speed_ms, 0.0) * KMH_PER_MS))
+	# Magnitude, not signed: reversing reads the same km/h as driving forward
+	# (the R in the gear display says which way). Signed speed stays on
+	# PlayerCar.current_speed() for gear logic, camera and sound.
+	return int(round(absf(speed_ms) * KMH_PER_MS))
 
 ## Shift cue: manual box only, in a forward gear with a higher one to go to, at
 ## or past SHIFT_POINT. The cockpit's LED strip flashes on the same rule.

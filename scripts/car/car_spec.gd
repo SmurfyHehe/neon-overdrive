@@ -33,6 +33,8 @@ static func apply(v: Vehicle, spec: Dictionary) -> void:
 			continue  # sound only (B1): EngineAudio hands it to TurboSynth
 		elif key == "window_control":
 			continue  # cosmetic: how the cockpit's side window is worked (CockpitFrame)
+		elif key == "boost_kind":
+			ForcedInduction.set_kind(v, String(spec[key]))  # not a Vehicle property (C1)
 		elif key == "driver_grip_deg":
 			continue  # cosmetic: where the driver's hands rest on the rim (DriverModel)
 		else:

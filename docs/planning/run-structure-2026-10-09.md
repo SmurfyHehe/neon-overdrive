@@ -1,6 +1,6 @@
 # Run structure, nights and progression (proposal, 2026-10-09)
 
-Status: PROPOSAL, docs only. Nothing here is built. Roy answered 7 of the 8 questions on 2026-10-09 07:47Z (see "Decided" at the end); new season after the story is still open. The first slice goes to a laptop session when Roy says build.
+Status: PROPOSAL, docs only. Nothing here is built. Roy answered all 8 questions on 2026-10-09 (07:47Z and 08:18Z, see "Decided" at the end). The first slice goes to a laptop session when Roy says build.
 
 Roy (2026-10-09): use all the usage today, make a gameplan. This is the "repeatability" part of Stage C: what one night is, what a whole story run is, what you keep and what you lose, and how the game saves.
 
@@ -18,7 +18,7 @@ Read for this: notes `living-world-time-and-people-2026-10-08`, `rival-and-car-l
   2. **Nights blurred together.** 30 identical highways. Fix: every night has a weekday, an event (bar close, meet night, crackdown, crash ahead) and a fresh road seed, while districts, stations and landmarks stay put so you can plan.
   3. **The save file broke and the player lost 20 nights.** Fix: write to a temp file, then swap; keep the last 3 good copies; a broken file falls back to the previous one, never to a new game.
   4. **The first nights were a slog in the slow Bug.** Fix: first-night pay comes from easy wins (short races against beaters, a parts run), and the Bug's first Service (0.5 night) lands by night 2.
-  5. **The run ends and there is no reason to start again.** Fix: a "new season" mode after the story, plus free roam in the finished save (questions 2 and 3).
+  5. **The run ends and there is no reason to start again.** Fix: free mode in the finished save (Roy: decided), with the city's events and nights still running.
 - **Falsification:** if a tester stops after night 3 and says "it's the same every night", the per-night variety is too weak and the event table needs to come forward before more content.
 
 ## 1. One night (the run)
@@ -95,18 +95,18 @@ What works: the games players remember kindly (Recettear, Majora's Mask, Dead Ri
 
 ## 3. What carries over, what resets
 
-| Thing | Next night | Bust (honest cop) | Bust (bad cop) | New season (after the story) |
+| Thing | Next night | Bust (honest cop) | Bust (bad cop) | Free mode (after the story) |
 |---|---|---|---|---|
-| Bank | Kept | Ticket + tow taken, by heat level | Kept | Reset (question 3) |
+| Bank | Kept | Ticket + tow taken, by heat level | Kept | Kept |
 | Tonight's cash | Banked at dawn | **Kept** | **All gone** | n/a |
-| Cars owned | Kept | Kept | Kept | Kept (question 3) |
+| Cars owned | Kept | Kept | Kept | Kept |
 | Mods and parts | Kept | Kept | Kept | Kept |
 | Saved tunes | Kept | Kept | Kept | Kept |
-| Damage and fuel | Repaired only at the garage (paid) | Car towed home as is | As is | Fresh |
+| Damage and fuel | Repaired only at the garage (paid) | Car towed home as is | As is | Kept, same rules |
 | Heat | Back to 0 at dawn | 0 | 0 | 0 |
-| Story flags and act | Kept | Kept | Kept | Reset to Act 1, rivals one tier stronger |
-| Rep (near misses, wins) | Kept | Small loss | Kept | Kept as a total, shown on the title screen |
-| Night count, calendar date | +1 | Clock +1 h | none | Back to night 1 |
+| Story flags and act | Kept | Kept | Kept | Story finished; no more story beats or deadlines |
+| Rep (near misses, wins) | Kept | Small loss | Kept | Kept |
+| Night count, calendar date | +1 | Clock +1 h | none | Keeps counting |
 
 Bank can drop to zero but never below, and you always keep a car (stops doc: death-spiral guard). Fuel credit for an empty bank comes off tomorrow's bank (decided).
 
@@ -127,14 +127,15 @@ Two different things, kept apart so retrying never undoes a bust:
 | Cars | Story: crew cars, scrapyard rebuilds, cars won from crews (rival doc). No dealership | Every car has a reason |
 | Gas station shop items | Scanner etc. bought once from the bank | Stops doc |
 | Free roam with time frozen | After night 1 | Living world: setting to stop the clock |
-| New season | After the story ends, either branch | Section 6 |
+| Free mode | After the story ends | Section 6 |
 | Photo mode, crash mode | From the start | Chosen extras |
 
-## 6. After the story
+## 6. After the story: free mode (Roy, 2026-10-09)
 
-- **Free roam in the finished save:** nights keep coming, the city keeps its events, you keep everything. Races pay as in Act 3.
-- **New season (OPEN, Roy undecided):** start again at night 1 with your garage of cars and mods, bank reset, rivals and cops one tier up, story beats replayed short (Dave reads a one-line recap instead of cutscenes). This is the roguelite "one more run".
-- Later, from the ideas doc (not in this plan): ghost of your best run (D13), "tonight's city" shared daily seed with a leaderboard (L8). Both reuse the per-night seed from section 1.
+**Keeps:** your save carries on with every car, mod, tune, the bank and rep; nights, money, cops, fuel and city events all keep running, and races pay as in Act 3.
+**Drops:** story beats, debt deadlines and act unlocks (the whole city is open); there is no "start the story again with your garage" mode, a new story is a new save slot from the Bug.
+
+Later, from the ideas doc (not in this plan): ghost of your best run (D13), "tonight's city" shared daily seed with a leaderboard (L8). Both reuse the per-night seed from section 1.
 
 ## 7. Saving (crash-safe)
 
@@ -158,7 +159,7 @@ Proposal:
 | Balance plan | Night pay, act lengths, difficulty table | Taken as-is; the economy model (layer B) reads the same season data file |
 | Mod tree (E2: garage save) | Garage save | Writes `garage.json` from R1; E2 only adds its fields |
 | Living world | Clock, hour bands, events, dawn | R2 adds the night start/end around the existing clock; events table is R4 |
-| Menus A-list (running on the laptop) | Title screen | R3 adds Continue / New season / slot picker to that title screen; coordinate, don't build a second one |
+| Menus A-list (running on the laptop) | Title screen | R3 adds Continue / New game / slot picker to that title screen; coordinate, don't build a second one |
 | Corrupt police | Bust rules | R5 is the bust hook; the cops themselves are Stage F |
 | Rival and car ladder | Where cars come from, acts | Season table above |
 
@@ -172,7 +173,7 @@ Proposal:
 | R4 | Per-night variety: new road seed each night, fixed named district order, tonight's event table driving traffic mood | M | R2 | Opus for the district map, Sonnet for the table |
 | R5 | Bust hooks: honest (bank charge, tow home, +1 h) and bad cop (cash wiped), callable from a test console until police exist | S | R1, R2 | Sonnet |
 | R6 | Race retry (+15 min) and the act checkpoint retry for a missed deadline, once racing and story beats exist | M | racing, R3 | Sonnet |
-| R7 | After the story: free roam continue, New season with tier-up | M | story content | Opus |
+| R7 | Free mode after the story: story off, whole city open, everything kept | S | story content | Sonnet |
 
 **First slice = R1 + R2.** After it, you can quit mid-night and come back to the same night, see a night end and the money land in the bank, and the save survives being killed mid-write. Both can start now without police, racing or the garage scene. Then R3-R5 in that order; R6-R7 wait for racing and story.
 
@@ -180,15 +181,9 @@ Proposal:
 
 1. Race retry right away: **yes, costs 15 minutes of the night.**
 2. Keep driving the city after the story: **yes.**
-3. New season after the story: **open** (Roy: "don't know yet"). See below.
+3. After the story: **free mode** (Roy, 08:18Z). No new-season mode; see section 6.
 4. Autosave only, three slots: **yes.**
 5. Quit during a chase, bust still happens: **yes.**
 6. Missed story deadline: **retry the act** (research above; recommendation: back to the act's first night, keeping cars, mods and rep).
 7. City opens by act: **yes.**
 8. One night of driving: **about 40 minutes.**
-
-### Still open: new season after the story
-
-**Yes:** when the story ends you can start it again from night 1 with all your cars and mods, an empty bank and rivals and cops one step tougher, so a second playthrough is about racing your best builds against harder crews. **No:** a new story always starts from scratch with the Bug, so every playthrough has the full climb from beater to finale car, but your finished garage only lives on in free roam.
-
-Plain-word question when the coordinator relays it: **After the story ends, start it again keeping your cars and mods, against tougher rivals?** Yes (recommended) / No, always start fresh with the Bug.

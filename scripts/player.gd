@@ -73,6 +73,8 @@ const STEER_GRIP_FULL := 8.0     # m/s: it applies in full from here up
 const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Vehicle's own shift_time below
 
 var chassis_visual: Node3D
+## The coupe's engine bay under an opening hood (car-parts plan 8b, 2026-10-09); null on other bodies.
+var engine_bay: EngineBay
 var _steer_smooth := 0.0
 ## Heat and wear (Phase B). Off for sim_only cars so TuneTrack stays clean.
 var health := PowertrainHealth.new()
@@ -131,6 +133,8 @@ func _ready() -> void:
 	if not sim_only:
 		chassis_visual = TestCarBuilder.build_chassis_visual() if kind == TestCarBuilder.KIND else P1CoupeBuilder.build_chassis_visual()
 		add_child(chassis_visual)
+		if chassis_visual.get_meta("kind", "") == P1CoupeBuilder.KIND:
+			engine_bay = EngineBay.attach(self, chassis_visual)
 
 	# BUG FIX (2026-09-13, verified headless): RigidBody3D falls asleep after
 	# ~0.5s of low apparent velocity (standard Godot sleep threshold), and

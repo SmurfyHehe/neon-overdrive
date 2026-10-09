@@ -106,6 +106,8 @@ call :run core/save_system --headless
 rem F0: cash and bank through reloads, chases and 6 a.m. (and the HUD and pause screen).
 call :run core/wallet --headless
 call :run traffic/traffic_spawn "--headless --fixed-fps 60"
+rem ~45 s: race core (RC1): win across a recenter, lose, give up from the pause menu.
+call :run core/race_core "--headless --fixed-fps 60"
 rem ~40 s: the traffic cars (stage B step 5) against their sheets, then a drive each at the game's 120 Hz.
 rem npc_cars drives every kind (13 since the player and cop cars joined), about 15 min: give it 20.
 set "TT_SAVED=%TEST_TIMEOUT%"

@@ -59,6 +59,7 @@ var game_state: GameState
 var camera: ChaseCamera
 var radio: RadioManager
 var night_clock: NightClock  # 8 p.m. to 6 a.m., saved (night_clock.gd); windows follow it
+var race: RaceController  # race core RC1 (race_controller.gd)
 var _bands := false  # hour bands drive traffic and Dave (bands_on)
 var world_mood: WorldMood  # tonight's events: rule-breaker share, bar close, meets, crackdowns
 const TestMode := preload("res://scripts/core/test_mode.gd")
@@ -526,6 +527,9 @@ func _setup_hud() -> void:
 func _setup_game_state() -> void:
 	game_state = GameState.new()
 	add_child(game_state)
+	# Before the pause menu, which reads it for the race button.
+	race = RaceController.new(player, traffic, night_clock, game_state)
+	add_child(race)
 	var pause := PauseMenu.new(game_state)
 	pause.wallet = wallet
 	add_child(pause)

@@ -86,6 +86,11 @@ func advance(real_seconds: float) -> void:
 		save_clock()
 	WindowLights.set_minutes(minutes)
 
+## Game minutes jump forward at once (a race costs 15 min, living-world rule).
+## Goes through advance() so the hour and dawn signals still fire.
+func add_minutes(game_minutes: float) -> void:
+	advance(game_minutes * REAL_SECONDS_PER_HOUR / 60.0)
+
 func _exit_tree() -> void:
 	if fixed_minutes < 0.0:
 		save_clock()

@@ -89,6 +89,19 @@ func _initialize() -> void:
 func _check_rules() -> void:
 	var saved_align := RoadFrame.align
 	var saved_layout := RoadFrame.layout
+	# Crash sounds (CrashAudio.classify): a barrier follows the same rules as
+	# any wall. A side hit is a crash; the car touching it with a mostly
+	# vertical normal (its underside on the barrier top or a cushion) is the
+	# underbody, which has its own sound and never triggers a crash.
+	for kind in [RoadBarriers.CONCRETE, RoadBarriers.GUARDRAIL, RoadBarriers.CABLE, "cushion"]:
+		var wall := StaticBody3D.new()
+		CarSpec.make_wall(wall)
+		wall.set_meta("barrier", kind)
+		if CrashAudio.classify(wall, Vector3(1.0, 0.0, 0.0)) != "concrete":
+			_fail("crash sounds: a side hit on %s is not a crash surface" % kind)
+		if CrashAudio.classify(wall, Vector3(0.1, 0.99, 0.0)) != "underbody":
+			_fail("crash sounds: the underside on %s is not underbody" % kind)
+		wall.free()
 	# Districts -> types.
 	for c in range(0, 400):
 		var want: String = RoadBarriers.BY_DISTRICT[Districts.name_at(c)]
@@ -322,7 +335,8 @@ func _report() -> void:
 		RoadBarriers.CONCRETE:
 			concrete_end[key] = s.end_speed
 		RoadBarriers.CABLE:
-			if concrete_end.has(key) and s.end_speed >= concrete_end[key] - 0.5:
+			# Concrete that stopped the car dead (a wedge, not a rank to beat) is no yardstick.
+			if concrete_end.has(key) and concrete_end[key] > 3.0 and s.end_speed >= concrete_end[key] - 0.5:
 				bad.append("the cable did not slow it (%.1f m/s, concrete %.1f)" % [s.end_speed, concrete_end[key]])
 		RoadBarriers.GUARDRAIL:
 			var sideways: float = s.speed * sin(deg_to_rad(s.angle))

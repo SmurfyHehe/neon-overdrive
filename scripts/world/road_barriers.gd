@@ -95,11 +95,13 @@ const CUSHION_CRUMPLED := 0.35
 
 ## Collision box per type: width, height. Taller than the look where it
 ## matters: at 45 m/s and 60 degrees a car rode 0.9 m up an 0.85 m box, so
-## the guardrail and cable boxes reach 1.1 m (tests/barrier_hit.gd).
+## the guardrail and cable boxes reach 1.1 m (tests/world/barrier_hit.gd). The
+## cable box is 0.5 m wide, as thick as the concrete: at 0.3 m a car at 25 m/s
+## and 30 degrees sometimes passed straight through it.
 const COLLISION := {
 	CONCRETE: Vector2(0.5, 0.9),
 	GUARDRAIL: Vector2(0.34, 1.1),
-	CABLE: Vector2(0.3, 1.1),
+	CABLE: Vector2(0.5, 1.1),
 }
 
 ## PlayerCar contact effects.

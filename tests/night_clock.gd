@@ -161,7 +161,7 @@ func _physics_process(_delta: float) -> bool:
 				var hud: Hud = _find_hud()
 				_check(hud != null and hud.lbl_clock.text == clock.text(), "the HUD shows the clock (%s)" % (hud.lbl_clock.text if hud else "no HUD"))
 				var frame = _find_frame()
-				_check(frame != null and frame.clock_label.text == clock.text(), "the head unit shows the clock (%s)" % (frame.clock_label.text if frame else "no cockpit"))
+				_check(frame != null and frame.head_unit.clock_text == clock.text(), "the head unit shows the clock (%s)" % (frame.head_unit.clock_text if frame else "no cockpit"))
 				clock.speed = 120.0   # one game minute per tick at 60 Hz
 				_go(Step.MIDNIGHT)
 		Step.MIDNIGHT:

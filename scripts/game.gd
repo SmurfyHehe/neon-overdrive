@@ -312,6 +312,16 @@ func _physics_process(_delta: float) -> void:
 	if Input.is_action_just_pressed("mute"):
 		toggle_mute()
 	if Input.is_action_just_pressed("radio_next") and radio != null:
+		request_next_station()
+
+## Next station (N): with the cockpit built the driver's hand reaches the touch
+## screen and the station changes on the tap (CockpitFrame.request_radio), in
+## every view; with no cockpit (NEON_COCKPIT=0) it changes at once.
+func request_next_station() -> void:
+	var f: CockpitFrame = camera.frame if camera != null else null
+	if f != null and f.driver != null:
+		f.request_radio()
+	else:
 		radio.next_station()
 
 ## Moves the world back by shift_chunks whole chunks (positive = the car had
@@ -402,6 +412,7 @@ func _setup_game_state() -> void:
 	add_child(PauseMenu.new(game_state))
 	add_child(TunerScreen.new(player, game_state))
 	add_child(WarningLights.new(player))
+	add_child(PhotoMode.new(game_state, camera))
 	radio = RadioManager.new()
 	add_child(radio)
 	night_clock.hour_changed.connect(_on_hour)

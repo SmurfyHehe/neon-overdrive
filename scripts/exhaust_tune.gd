@@ -22,6 +22,10 @@ var flame := 0.0
 ## own switch). 0 = off, 1 = on; a float so tune slots and the save file treat
 ## it like the knobs. On: lifting off at rpm keeps banging and spitting fire the
 ## way a rally car's anti-lag does. No boost, wear or physics effect.
+## Turbo cars only (exhaust sound research, option A, 2026-10-07): every car
+## preset has it on (for_car()), but it only fires while the car has a turbo (see
+## anti_lag_live()). A naturally aspirated car keeps the switch and stays quiet.
+## A bare ExhaustTune.new() (a synth with no car) has it off.
 var anti_lag := 0.0
 
 ## Where the player's tune is kept between runs (one entry per car id). Tests
@@ -119,6 +123,14 @@ const PRESETS := {
 	"c3_interceptor": [0.50, 0.40, 0.15, 0.05],
 }
 
+## Whether anti-lag fires on this car: the switch is on and the car has a turbo
+## (turbo_boost_max > 0). The one rule both the synth feed (EngineAudio) and the
+## traffic flame sim use, so sound and fire agree.
+static func anti_lag_live(spec: Dictionary) -> bool:
+	var ex: Variant = spec.get("exhaust", {})
+	var on := ex is Dictionary and float(ex.get("anti_lag", 0.0)) >= 0.5
+	return on and float(spec.get("turbo_boost_max", 0.0)) > 0.0
+
 static func for_car(id: String) -> ExhaustTune:
 	var p: Array = PRESETS.get(id, [0.5, 0.3, 0.3, 0.0])
-	return ExhaustTune.new(p[0], p[1], p[2], p[3])
+	return ExhaustTune.new(p[0], p[1], p[2], p[3], 1.0)  # anti-lag on: it fires only with a turbo

@@ -91,7 +91,7 @@ func _physics_process(_delta: float) -> bool:
 		if not String(a).begins_with("ui_"):
 			_check(names.has(String(a)), "action '%s' is missing from the Controls page" % a)
 	var titles: Array = groups.map(func(g): return g[0])
-	for t in ["Drive", "Gears & Engine", "Camera", "Audio & Radio", "Menus", "Exhaust"]:
+	for t in ["Drive", "Gears & Engine", "Camera", "Audio & Radio", "Menus"]:
 		_check(titles.has(t), "Controls page has no '%s' group" % t)
 	_check(PauseMenu.keyboard_text("accelerate").contains("W"), "accelerate should list W, got '%s'" % PauseMenu.keyboard_text("accelerate"))
 	_check(PauseMenu.keyboard_text("pause").contains("Escape"), "pause should list Escape, got '%s'" % PauseMenu.keyboard_text("pause"))

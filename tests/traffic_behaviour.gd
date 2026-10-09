@@ -165,7 +165,7 @@ func _drive_player(lane: int, speed: float, cap: float) -> void:
 func _put(car: TrafficCar, lane: int, ahead: float, speed: float, target: float) -> void:
 	car.target_speed = target
 	car.set_detailed(true)
-	car.place(Harness.lane_x(lane), -1.0, p.global_position.z - ahead, TrafficManager.REST_Y, speed)
+	car.place(Harness.lane_x(lane), -1.0, p.global_position.z - ahead, car.rest_y, speed)
 
 func _two_cars(lanes: Array[int]) -> void:
 	traffic.own_lanes_used = lanes

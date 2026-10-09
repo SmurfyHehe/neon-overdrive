@@ -15,7 +15,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="Neon Overdrive"
-run/main_scene="res://Game.tscn"
+run/main_scene="res://Boot.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 
 [autoload]

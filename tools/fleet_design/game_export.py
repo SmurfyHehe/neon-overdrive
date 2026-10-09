@@ -1,4 +1,4 @@
-"""Write scripts/p1_coupe_data.gd: the P1 sports coupe's stock design proxy
+"""Write scripts/car/p1_coupe_data.gd: the P1 sports coupe's stock design proxy
 (docs/design/fleet/proxies.json, stage B1 as merged) packed as GDScript
 constants, so the game builds the player's car from the exact shape on the
 design sheet without parsing the 2.5 MB fleet file at boot.
@@ -12,7 +12,7 @@ traffic picks a variant per car (npc_main).
 
 Positions are int16 millimetres, base64 (same packing as proxies.json);
 material indices are uint8, base64. Colours are resolved per material name
-the way tests/fleet_proxies.gd does it (car colours first, then the base
+the way tests/fleet/fleet_proxies.gd does it (car colours first, then the base
 palette), so the builder needs nothing else.
 """
 import base64
@@ -121,7 +121,7 @@ def remap_mats(b64, remap):
 
 def npc_main(car_id):
     """Every build of one traffic car into scripts/<id>_data.gd, for
-    scripts/npc_car_builder.gd. One NAMES list for all builds (material
+    scripts/traffic/npc_car_builder.gd. One NAMES list for all builds (material
     indices are remapped onto it), wheels as the right-hand wheel of each axle."""
     with open(SRC) as f:
         data = json.load(f)

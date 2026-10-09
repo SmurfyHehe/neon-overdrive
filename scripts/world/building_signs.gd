@@ -162,7 +162,10 @@ static func new_multimesh(capacity: int) -> MultiMeshInstance3D:
 ## from; side is +1 for buildings on the +x side of the road, -1 for the
 ## other. A band lies flat on the front facing the road; a blade sticks out
 ## from it toward the road, facing the oncoming traffic.
-static func place(mm: MultiMesh, i: int, word: String, color: int, style: int, front: Vector3, side: int, height: float, max_len: float, blade: bool = false, toward_traffic: float = 0.0) -> void:
+## Returns the transform written, in the straight road description: callers
+## keep it, because reading it back from the MultiMesh is not safe (see
+## RoadChunkBuilder._bend_instances).
+static func place(mm: MultiMesh, i: int, word: String, color: int, style: int, front: Vector3, side: int, height: float, max_len: float, blade: bool = false, toward_traffic: float = 0.0) -> Transform3D:
 	var px := word_px(word)
 	var length := height * float(px + 4) / float(ROW_PX)
 	if length > max_len:
@@ -182,8 +185,10 @@ static func place(mm: MultiMesh, i: int, word: String, color: int, style: int, f
 		turn = Basis(Vector3.UP, toward_traffic) if side == 1 else Basis(Vector3.UP, PI - toward_traffic)
 		center.x -= (depth / 2.0 + 0.01) * float(side)
 	var basis := turn * Basis.from_scale(Vector3(depth, height, length))
-	mm.set_instance_transform(i, Transform3D(basis, center))
+	var xf := Transform3D(basis, center)
+	mm.set_instance_transform(i, xf)
 	mm.set_instance_custom_data(i, Color(float(word_row(word)), float(px), float(color), float(style)))
+	return xf
 
 static func atlas() -> ImageTexture:
 	if _atlas == null:

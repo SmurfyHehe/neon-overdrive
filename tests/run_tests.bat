@@ -184,6 +184,7 @@ if /i not "%~1"=="quick" (
 	call :run tuning/tuner_screen --headless
 	call :run tuning/tuner_typing --headless
 	call :run world/roadside_detail
+	call :run world/floating_structures
 	rem ~10 s, real window (shaders): traffic tail lamps, brake lamps, distance flares, barrier reflectors.
 	call :run traffic/night_lights
 	call :run fleet/fleet_silhouette_sweep

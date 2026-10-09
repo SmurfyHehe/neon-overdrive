@@ -60,8 +60,8 @@ const IMPACT_GAIN := 0.12        # trauma per m/s over the threshold
 ## The eye (cockpit milestone, 2026-10-06): seat height in the P1's cabin, just
 ## ahead of the B-pillar, a hand's width inboard of the seat centre (-0.36).
 ## The passenger-side door mirror is NOT in view from here (58 degrees right,
-## past the screen edge at every FOV the slider allows); the mirror glance
-## (look_glance, below) turns the head to it.
+## past the screen edge at every FOV the slider allows); free look (the
+## arrows, below) turns the head to it.
 enum View { CHASE, COCKPIT }
 const COCKPIT_EYE := Vector3(-0.32, 1.10, 0.30)  # car-local, -x is the driver's side (left-hand drive)
 const COCKPIT_FOV_SPEED_GAIN := 6.0  # degrees added at top speed; the base is ViewSettings.cockpit_fov (default 62)
@@ -84,27 +84,29 @@ var view := View.CHASE
 ## of the car and looks back at it, the same move as reversing; the cockpit
 ## eye turns 180 degrees to the rear window.
 var look_back := false
-## Mirror glance (Roy, 2026-10-07): tap V (look_glance) while steering to
-## turn the head to that side's door mirror; tap V with no steering to look
-## ahead again; a quick double tap always resets to straight ahead. Only the
-## camera turns, never the car, and the side is fixed at the tap so steering
-## corrections mid-glance do not swing the view across. The yaw centres the
-## door mirror's glass (from the cockpit's mirror data, so each car's own
-## mirrors set it), capped at GLANCE_MAX_DEG; a right glance also leans the
-## head toward the middle of the car. See
+## Free look (Roy, 2026-10-09): hold an arrow key (look_left/right/up/down)
+## to turn the view that way; let go and it swings back to centre. Works in
+## both views: the chase cam orbits round the car, the cockpit turns the head
+## The arrows used to double W/A/S/D for driving; they are look-only now,
+## and they replace the V + A/D mirror glance (removed, Roy 2026-10-09).
+## In the cockpit, looking toward a door mirror (within MIRROR_FOCUS_DEG of
+## its glass) makes it the focused mirror (every frame, twice the
+## resolution), and looking right leans the head inboard (up to LOOK_LEAN at
+## the right mirror) so the passenger-side glass clears the A-pillar. See
 ## docs/planning/mirror-usability-head-rotation-2026-10-07.md.
-const GLANCE_MAX_DEG := 75.0
-const GLANCE_DEFAULT_DEG := 45.0   # no cockpit mirrors built
-const GLANCE_STEER_MIN := 0.3      # steering input that picks a side
-const GLANCE_DOUBLE_TAP := 0.3     # s between taps that reset to straight
-const GLANCE_RATE := 25.0          # 1/s: ~0.12 s to 95% of the turn
-const GLANCE_LEAN := Vector3(0.06, 0.0, -0.02)  # right glance: inboard, a touch forward
-var glance := 0                    # -1 left mirror, 0 ahead, +1 right mirror
-var glance_yaw := 0.0              # degrees, current, + = left (about +y)
-var glance_pitch := 0.0            # degrees, current
-var glance_lean := Vector3.ZERO    # car-local metres, current
-var _last_glance_tap := -10.0
-var _clock := 0.0                  # physics seconds, for the double tap
+const LOOK_SPEED := 150.0          # deg/s while held
+const LOOK_YAW_MAX := 100.0        # deg either side
+const LOOK_UP_MAX := 25.0
+const LOOK_DOWN_MAX := 30.0
+const LOOK_RETURN_RATE := 12.0     # 1/s back to centre on release (~0.25 s to 95%)
+const LOOK_LEAN := Vector3(0.06, 0.0, -0.02)  # looking right: inboard, a touch forward
+const MIRROR_FOCUS_DEG := 20.0
+const MIRROR_MAX_DEG := 75.0
+const MIRROR_DEFAULT_DEG := 45.0   # no cockpit mirrors built
+var look_input := Vector2.ZERO     # x + left, y + up; read on the physics tick
+var look_yaw := 0.0                # degrees, current, + = left (about +y)
+var look_pitch := 0.0              # degrees, current, + = up
+var look_lean := Vector3.ZERO      # car-local metres, current
 var frame: CockpitFrame
 var perspective: PerspectiveAudio
 var target: PlayerCar
@@ -162,10 +164,7 @@ func set_view(v: View) -> void:
 	view = v
 	var cockpit := v == View.COCKPIT
 	if not cockpit:
-		glance = 0   # the chase view has no head to turn
-		glance_yaw = 0.0
-		glance_pitch = 0.0
-		glance_lean = Vector3.ZERO
+		look_lean = Vector3.ZERO   # the chase view has no head to lean
 	if frame != null:
 		frame.set_cockpit(cockpit)
 	elif target.chassis_visual != null:
@@ -187,14 +186,12 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("camera_view"):
 		set_view(View.CHASE if view == View.COCKPIT else View.COCKPIT)
 	look_back = Input.is_action_pressed("look_back")
+	look_input = Vector2(Input.get_axis("look_right", "look_left"), Input.get_axis("look_down", "look_up"))
 	perspective.window_key(Input.is_action_pressed("window"), delta)
 	if perspective.car_audio == null:
 		for c in target.get_children():
 			if c is CarAudio:
 				perspective.car_audio = c
-	_clock += delta
-	if view == View.COCKPIT and Input.is_action_just_pressed("look_glance"):
-		glance_tap(Input.get_axis("steer_left", "steer_right"))
 	var v := target.linear_velocity
 	var dv := (v - _prev_vel).length()
 	_prev_vel = v
@@ -203,34 +200,19 @@ func _physics_process(delta: float) -> void:
 	_accel = (speed - _prev_speed) / delta
 	_prev_speed = speed
 
-## One tap of the glance key with the steering input at that moment (-1 full
-## left .. +1 full right). A double tap resets to straight ahead; steering
-## picks that side, or comes back if already looking there; no steering
-## looks ahead.
-func glance_tap(steer: float) -> void:
-	var double := _clock - _last_glance_tap < GLANCE_DOUBLE_TAP
-	_last_glance_tap = _clock
-	if double or absf(steer) < GLANCE_STEER_MIN:
-		glance = 0
-	else:
-		var side := 1 if steer > 0.0 else -1
-		glance = 0 if glance == side else side
-	if frame != null and frame.mirrors != null:
-		frame.mirrors.set_focus(glance)
-
 ## Yaw (+ left) and pitch, in degrees, that centre a door mirror's glass from
 ## the eye: side -1 left, +1 right. Car space, so the same for every frame.
-func glance_angles(side: int) -> Vector2:
+func mirror_angles(side: int) -> Vector2:
 	if side == 0:
 		return Vector2.ZERO
-	var lean := GLANCE_LEAN if side > 0 else Vector3.ZERO
+	var lean := LOOK_LEAN if side > 0 else Vector3.ZERO
 	var to: Vector3
 	if frame != null and frame.mirrors != null:
 		to = frame.mirrors.glass_position(side) - (COCKPIT_EYE + lean)
 	else:
-		return Vector2(-side * GLANCE_DEFAULT_DEG, 0.0)
+		return Vector2(-side * MIRROR_DEFAULT_DEG, 0.0)
 	var flat := Vector2(to.x, -to.z).length()
-	var yaw := clampf(rad_to_deg(atan2(-to.x, -to.z)), -GLANCE_MAX_DEG, GLANCE_MAX_DEG)
+	var yaw := clampf(rad_to_deg(atan2(-to.x, -to.z)), -MIRROR_MAX_DEG, MIRROR_MAX_DEG)
 	return Vector2(yaw, rad_to_deg(atan2(to.y, flat)))
 
 ## Feeds one tick's velocity change (m/s) into the impact shake. Split out so
@@ -247,6 +229,7 @@ func register_impact(dv: float) -> void:
 
 func _process(delta: float) -> void:
 	_update_feel(delta)
+	step_look(look_input, delta)
 	if view == View.COCKPIT:
 		_place_cockpit(delta)
 		if look_back:
@@ -266,20 +249,37 @@ func _process(delta: float) -> void:
 func _place_cockpit(delta: float) -> void:
 	var xf := target.get_global_transform_interpolated()
 	_update_head(delta)
-	_update_glance(delta)
-	var turn := Basis.from_euler(Vector3(deg_to_rad(glance_pitch), deg_to_rad(glance_yaw), 0.0))
+	_update_mirror_look()
+	var turn := Basis.from_euler(Vector3(deg_to_rad(look_pitch), deg_to_rad(look_yaw), 0.0))
 	var tilt := Basis.from_euler(Vector3(deg_to_rad(head_tilt.x), 0.0, deg_to_rad(head_tilt.y)))
-	global_transform = Transform3D(xf.basis * turn * tilt, xf * (COCKPIT_EYE + head_offset + glance_lean))
+	global_transform = Transform3D(xf.basis * turn * tilt, xf * (COCKPIT_EYE + head_offset + look_lean))
 	fov = ViewSettings.cockpit_fov + COCKPIT_FOV_SPEED_GAIN * speed_t
 
-## Eases the head toward the glance target (or back to straight ahead).
-func _update_glance(delta: float) -> void:
-	var want := glance_angles(glance)
-	var want_lean := GLANCE_LEAN if glance > 0 else Vector3.ZERO
-	var k := 1.0 - exp(-GLANCE_RATE * delta)
-	glance_yaw = lerpf(glance_yaw, want.x, k)
-	glance_pitch = lerpf(glance_pitch, want.y, k)
-	glance_lean = glance_lean.lerp(want_lean, k)
+## Free look: a held direction turns the view at LOOK_SPEED up to its limit;
+## a released axis eases back to centre. Split out so tests can drive it.
+func step_look(input: Vector2, delta: float) -> void:
+	var k := 1.0 - exp(-LOOK_RETURN_RATE * delta)
+	if input.x != 0.0:
+		look_yaw = clampf(look_yaw + input.x * LOOK_SPEED * delta, -LOOK_YAW_MAX, LOOK_YAW_MAX)
+	else:
+		look_yaw = 0.0 if absf(look_yaw) < 0.05 else lerpf(look_yaw, 0.0, k)
+	if input.y != 0.0:
+		look_pitch = clampf(look_pitch + input.y * LOOK_SPEED * delta, -LOOK_DOWN_MAX, LOOK_UP_MAX)
+	else:
+		look_pitch = 0.0 if absf(look_pitch) < 0.05 else lerpf(look_pitch, 0.0, k)
+
+## Cockpit free look and the door mirrors: the lean while looking right, and
+## which mirror (if any) the head is turned to.
+func _update_mirror_look() -> void:
+	var right := mirror_angles(1).x
+	look_lean = LOOK_LEAN * clampf(look_yaw / right, 0.0, 1.0) if right < 0.0 else Vector3.ZERO
+	if frame == null or frame.mirrors == null:
+		return
+	var side := 0
+	for sd in [-1, 1]:
+		if look_yaw * -sd > 0.0 and absf(look_yaw - mirror_angles(sd).x) < MIRROR_FOCUS_DEG:
+			side = sd
+	frame.mirrors.set_focus(side)
 
 ## Head sway from lateral g (yaw rate x speed) and longitudinal g (the speed
 ## derivative the FOV already uses). +x is the passenger side: a left turn
@@ -356,12 +356,16 @@ func _place(delta: float) -> void:
 			_yaw = target_yaw
 	# Distance along the road stays locked to the car (only sideways and
 	# height motion is smoothed); the dolly shortens it with speed.
-	var back := Vector3(0, 0, dist_now).rotated(Vector3.UP, _yaw)
-	var ahead := Vector3(0, 0, -LOOK_AHEAD).rotated(Vector3.UP, _yaw)
+	# Free look orbits the rig round the car on top of that (+ = look left).
+	var orbit := _yaw + deg_to_rad(look_yaw)
+	var back := Vector3(0, 0, dist_now).rotated(Vector3.UP, orbit)
+	var ahead := Vector3(0, 0, -LOOK_AHEAD).rotated(Vector3.UP, orbit)
 	anchor = RoadFrame.roll(Vector3(_follow.x + back.x, _follow.y + height_now, u.z + back.z))
 	aim = RoadFrame.roll(Vector3(_follow.x + ahead.x, _follow.y + LOOK_HEIGHT, u.z + ahead.z))
 	global_position = anchor
 	look_at(aim, Vector3.UP)
+	if look_pitch != 0.0:
+		rotate_object_local(Vector3.RIGHT, deg_to_rad(look_pitch))
 
 ## Smooth noise shake applied on top of the chase transform. Amplitude adds
 ## the three sources; impact uses trauma^2 so small knocks stay small.

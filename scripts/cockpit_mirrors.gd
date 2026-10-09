@@ -14,9 +14,9 @@ extends Node3D
 # FxSettings "mirrors" off leaves dark glass and never renders.
 # A mirror whose glass is outside the cockpit camera's view is not rendered
 # at all (2026-10-07: on the P1 the right door mirror sits 58 degrees right of
-# the eye, off screen at every FOV unless the driver glances at it). The
-# mirror the driver glances at (ChaseCamera.glance) renders every frame at
-# twice the resolution.
+# the eye, off screen at every FOV unless the driver looks at it). The
+# mirror the driver looks at (free look on the arrows, ChaseCamera) renders
+# every frame at twice the resolution.
 # Blind-spot dots (2026-10-07): each door mirror has a small amber dot in its
 # outer top corner that lights while a same-direction car is alongside or
 # just behind on that side (Hud.side_threat drives it, 0..1). The dot shows
@@ -174,8 +174,8 @@ func set_strip(on: bool) -> void:
 	if not on and not active:
 		views[0].vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 
-## The door mirror the driver glances at (-1 left, +1 right, 0 none): it
-## renders every frame at twice the resolution until the glance ends.
+## The door mirror the driver looks at (-1 left, +1 right, 0 none): it
+## renders every frame at twice the resolution until the look moves away.
 func set_focus(side: int) -> void:
 	if side == focus:
 		return
@@ -185,8 +185,8 @@ func set_focus(side: int) -> void:
 		var k := 2 if focus == (-1 if i == 0 else 1) else 1
 		v.vp.size = _scaled(SIDE_SIZE) * k
 
-## Car-space centre of a door mirror's glass (-1 left, +1 right), which the
-## head glance aims at.
+## Car-space centre of a door mirror's glass (-1 left, +1 right), which
+## ChaseCamera.mirror_angles aims at.
 func glass_position(side: int) -> Vector3:
 	return views[1 if side < 0 else 2].quad.position
 
@@ -252,7 +252,7 @@ func _process(_delta: float) -> void:
 		v.cam.global_transform = xf * v.local
 	_frame += 1
 	# UPDATE_ONCE draws on the next frame and drops back to DISABLED by itself.
-	# In the cockpit, a mirror off screen is skipped; the glanced-at door
+	# In the cockpit, a mirror off screen is skipped; the looked-at door
 	# mirror renders every frame.
 	var cam := get_viewport().get_camera_3d() if active else null
 	if _frame % 2 == 0 and (not active or glass_on_screen(cam, views[0].quad)):

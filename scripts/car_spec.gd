@@ -29,6 +29,8 @@ static func apply(v: Vehicle, spec: Dictionary) -> void:
 			continue  # cosmetic: EngineAudio reads it from the spec, the Vehicle has no such property
 		elif key == "engine_voice":
 			continue  # sound only (#80): EngineAudio hands it to EngineSynth
+		elif key == "driver_grip_deg":
+			continue  # cosmetic: where the driver's hands rest on the rim (DriverModel)
 		else:
 			v.set(key, _own(spec[key]))
 
@@ -245,6 +247,11 @@ static func coupe_default() -> Dictionary:
 		"exhaust": ExhaustTune.for_car("p1_coupe").to_dict(),
 		# What the engine itself sounds like (#80): a straight six. Not tunable.
 		"engine_voice": EngineVoice.for_car("p1_coupe"),
+		# Where the driver's hands rest on the wheel, degrees up from 3 o'clock
+		# for the right hand (DriverModel, 2026-10-09): nine and three on the
+		# coupe's flat-bottom wheel. Per car so each interior keeps its own
+		# driver; the sightline cap (DriverModel.GRIP_HIGH_DEG) bounds it.
+		"driver_grip_deg": 0.0,
 	}
 
 ## Traffic tune (milestone 3, 2026-10-05): coupe_default() with commuter-car

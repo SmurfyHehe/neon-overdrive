@@ -36,6 +36,17 @@ const MIRROR_CULL := 1 | CAR_BIT | MIRROR_ONLY_BIT
 ## wheel's car. Full keyboard lock (steer_fraction 1) is half of this each way.
 const LOCK_TO_LOCK_TURNS := 1.5
 const WHEEL_LOCK_RAD := LOCK_TO_LOCK_TURNS * TAU / 2.0
+## How the wheel rolls (2026-10-09, Roy: continuous steering, not left/right):
+## the drawn wheel chases the car's steering through a damped spring, its rim
+## speed capped at WHEEL_RATE_DEG (a driver's hands' pace: full lock in half a
+## second), so a keyboard tap rolls it round and back instead of snapping it,
+## and it eases into lock rather than hitting it. WHEEL_DAMPING a little under
+## critical lets it overshoot a touch as it returns through straight, like a
+## wheel self-centring under loose hands. The car's own steering (PlayerCar)
+## is untouched: this is what the hands and the eye see.
+const WHEEL_RATE_DEG := 540.0
+const WHEEL_SPRING_HZ := 3.0
+const WHEEL_DAMPING := 0.85
 
 const SEAT_X := -0.36
 const LIFT := P1CoupeBuilder.BODY_LIFT
@@ -108,6 +119,8 @@ var pedals := {}                 # "throttle" / "brake" / "clutch" -> pivot Node
 var cabin_light: OmniLight3D
 var driver: DriverModel
 var steering := 0.0              # -1..1 from the car, set by the camera (tests set it too)
+var wheel_angle := 0.0           # the drawn wheel, radians, + = right (chases steering)
+var _wheel_vel := 0.0            # rad/s
 var cockpit := false
 var lever_moving := false
 var _lever_gear := 0
@@ -569,6 +582,30 @@ func _build_light() -> void:
 
 # ---------- per frame ----------
 
+## The drawn wheel chases steering * WHEEL_LOCK_RAD: a spring with its speed
+## capped, clamped at lock. Semi-implicit Euler in substeps of at most
+## WHEEL_SUBSTEP, so a long frame (a hitch, a loaded machine) cannot make the
+## spring overshoot or blow up.
+const WHEEL_SUBSTEP := 1.0 / 120.0
+func _step_wheel(delta: float) -> void:
+	var target := clampf(steering, -1.0, 1.0) * WHEEL_LOCK_RAD
+	var w := TAU * WHEEL_SPRING_HZ
+	var vmax := deg_to_rad(WHEEL_RATE_DEG)
+	var n := maxi(int(ceil(delta / WHEEL_SUBSTEP)), 1)
+	var h := delta / n
+	for i in n:
+		_wheel_vel += (w * w * (target - wheel_angle) - 2.0 * WHEEL_DAMPING * w * _wheel_vel) * h
+		_wheel_vel = clampf(_wheel_vel, -vmax, vmax)
+		wheel_angle += _wheel_vel * h
+		if absf(wheel_angle) >= WHEEL_LOCK_RAD:
+			wheel_angle = clampf(wheel_angle, -WHEEL_LOCK_RAD, WHEEL_LOCK_RAD)
+			_wheel_vel = 0.0
+	wheel.set_angle(wheel_angle)
+
+## The rim's speed right now, radians per second (the hands pace their slides on it).
+func wheel_rate() -> float:
+	return _wheel_vel
+
 func _process(delta: float) -> void:
 	if not visible:
 		return
@@ -577,7 +614,7 @@ func _process(delta: float) -> void:
 	var frac := clampf(p.motor_rpm / max_rpm, 0.0, 1.0)
 	var cue := Hud.shift_cue(p, frac)
 	var blink := Hud.blink()
-	wheel.set_angle(steering * WHEEL_LOCK_RAD)
+	_step_wheel(delta)
 	wheel.update(frac, cue, blink, p.motor_rpm, Hud.kmh(p.current_speed()), Hud.gear_text(p.gear))
 	tach_needle.rotation = Vector3(0.0, 0.0, deg_to_rad(135.0 - DIAL_SWEEP * frac))
 	var kmh := clampf(absf(p.current_speed()) * Hud.KMH_PER_MS / SPEEDO_MAX_KMH, 0.0, 1.0)

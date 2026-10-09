@@ -418,11 +418,22 @@ func _build_static() -> void:
 	if not (cab.shelf as Dictionary).is_empty():
 		bulk_top = minf(bulk_top, float(cab.shelf.y) - 0.02)   # under the shelf
 	k.box(Vector3((door_x_r - 0.16) * 2.0, bulk_top - (floor_y + 0.26), 0.04), Vector3(0.0, (bulk_top + floor_y + 0.26) * 0.5, rear_z), c_plastic_light)   # between the rear arches
+	if worn:
+		# Half stripped (Roy, 2026-10-09: the beater starts with no back seat and
+		# torn carpet): bare floor pan showing through three torn patches, and the
+		# rear deck is painted steel, not carpet.
+		var pan := Color("#4A4A48")
+		for patch in [[Vector3(seat_x + 0.05, 0.0, seat_z - 0.55), Vector2(0.34, 0.26)],
+				[Vector3(-seat_x - 0.10, 0.0, seat_z - 0.30), Vector2(0.28, 0.40)],
+				[Vector3(0.0, 0.0, rear_z - 0.30), Vector2(floor_half * 1.6, 0.30)]]:
+			var at: Vector3 = patch[0]
+			var sz: Vector2 = patch[1]
+			k.box(Vector3(sz.x, 0.006, sz.y), Vector3(at.x, floor_y + 0.022, at.z), pan)
 	_static_tris = k.tri_count() + lit.tri_count()
 	if not open_top and not (cab.shelf as Dictionary).is_empty():
 		var sh: Dictionary = cab.shelf
 		var shelf := CockpitKit.new()
-		shelf.box(Vector3(float(sh.half_w) * 2.0, 0.04, float(sh.z1) - float(sh.z0)), Vector3(0.0, float(sh.y), (float(sh.z0) + float(sh.z1)) * 0.5), c_carpet)
+		shelf.box(Vector3(float(sh.half_w) * 2.0, 0.04, float(sh.z1) - float(sh.z0)), Vector3(0.0, float(sh.y), (float(sh.z0) + float(sh.z1)) * 0.5), Color("#4A4A48") if worn else c_carpet)
 		_static_tris += shelf.tri_count()
 		add_child(shelf.instance(CockpitKit.material(), "Shelf"))
 	add_child(k.instance(CockpitKit.material(0.85, 0.05), "Cabin"))

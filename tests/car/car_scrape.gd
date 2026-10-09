@@ -19,7 +19,13 @@ extends SceneTree
 #   - the player (P1 coupe): sit 3 s, full throttle to 180 km/h, full brake to
 #     a stop, lane changes at 120 km/h, full-lock swerves, brake in a turn;
 #   - every traffic car kind: settle 3 s, accelerate to 120 km/h on its own
-#     controller, brake from 100 km/h to a stop.
+#     controller, brake from 100 km/h to a stop;
+#   - tests/car_scrape_tunes.gd: the player's manoeuvres (shorter) on tuned coupes (SWEEP: the Tuner's lowest,
+#     stiffest, softest and tallest suspension with the most power, brakes and
+#     grip, and Roy's own saved tune), built from the tune and, for some, tuned
+#     live after the build the way the Tuner does it.
+# Walls and buildings do not count (a tuned car can slide into one in the
+# swerves); only touching the road does.
 # CAR_SCRAPE_HILLS=1 runs the same on the hilly bending road, to compare
 # (prints only; the hill road adds real bumps and crests).
 #
@@ -35,6 +41,12 @@ var logger := Harness.ErrorCounter.new()
 var fails: Array[String] = []
 var game: Node
 var hills := false
+var strict := true
+## Set by tests/car_scrape_tunes.gd: run the tuned coupes (SWEEP) instead.
+var sweep := false
+## Seconds per timed manoeuvre; the sweep runs them shorter to fit the runner.
+var lane_s := 15
+var swerve_s := 8
 
 # Player scenario state.
 var steer := 0.0
@@ -65,13 +77,16 @@ func _initialize() -> void:
 func _run() -> void:
 	for i in RATE:
 		await physics_frame
-	await _inertia_unchanged()
 	var p: PlayerCar = game.get("player")
-	_watch(p, "player")
-	await _drive_player(p)
-	_unwatch(p)
-	for kind in NpcCarBuilder.KINDS:
-		await _drive_traffic(kind, p)
+	if not sweep:
+		await _inertia_unchanged()
+		_watch(p, "player")
+		await _drive_player(p)
+		_unwatch(p)
+		for kind in NpcCarBuilder.KINDS:
+			await _drive_traffic(kind, p)
+	else:
+		await _sweep(p)
 	_finish()
 
 # --- handling is unchanged ---------------------------------------------------
@@ -124,9 +139,21 @@ func _unwatch(v: Vehicle) -> void:
 	v.body_entered.disconnect(v.get_meta("scrape_cb"))
 
 func _sample(v: Vehicle, label: String) -> void:
-	if v.get_contact_count() > 0:
+	if _touches_road(v):
 		contact_ticks[label] = int(contact_ticks.get(label, 0)) + 1
 	min_clear[label] = minf(min_clear.get(label, INF), _clearance(v))
+
+## Body contact with anything but the chunks' walls, buildings and median
+## barriers (a full-lock swerve on a tuned car can slide into those; that is a
+## crash, not a scrape). The barriers (R1, #303) stand 1 m left of the inner
+## lane's edge; a swerve from lane 1 drifts onto them (car centre at x 1.0,
+## barrier face at 0.17, measured 2026-10-09).
+func _touches_road(v: Vehicle) -> bool:
+	for b in v.get_colliding_bodies():
+		var n := String(b.name)
+		if not (n.begins_with("Boundary") or n.begins_with("Building") or n == "BarrierCol"):
+			return true
+	return false
 
 ## Lowest point of the body shape above the road under it (m).
 func _clearance(v: Vehicle) -> float:
@@ -157,19 +184,20 @@ func _report(label: String, extra: String) -> void:
 	var n: int = contact_ticks.get(label, 0)
 	print("car_scrape: %-26s contact ticks %5d  lowest underside %6.3f m  %s %s" % [
 		label, n, min_clear.get(label, INF), extra, contact_names.get(label, {}) if n > 0 else ""])
-	if not hills:
+	if strict and not hills:
 		_check(n == 0, "%s touched something %d ticks on a flat road with nothing around: %s" % [label, n, contact_names.get(label, {})])
 
 # --- the player ------------------------------------------------------------
 
-func _drive_player(p: PlayerCar) -> void:
+func _drive_player(p: PlayerCar, prefix := "player") -> void:
+	lane_target = 1
 	p.driver = func(c: Vehicle) -> void:
 		c.steering_input = steer
 		c.throttle_input = throttle
 		c.brake_input = brake
 		c.handbrake_input = 0.0
 	for ph in PHASES:
-		var label: String = "player/" + ph
+		var label: String = prefix + "/" + ph
 		current_label = label
 		var t := 0
 		var done := false
@@ -203,11 +231,11 @@ func _drive_player(p: PlayerCar) -> void:
 				"lane_changes":
 					lane_target = 1 + int(t / (RATE * 3)) % 2
 					steer = track; throttle = 0.5 if spd < CRUISE else 0.0; brake = 0.0
-					done = t > RATE * 15
+					done = t > RATE * lane_s
 				"swerve":
 					steer = 1.0 if int(t / 30) % 2 == 0 else -1.0
 					throttle = 0.5 if spd < 30.0 else 0.0; brake = 0.0
-					done = t > RATE * 8
+					done = t > RATE * swerve_s
 				"brake_in_turn":
 					steer = 0.5; throttle = 0.0; brake = 1.0
 					done = t > RATE * 4
@@ -215,6 +243,109 @@ func _drive_player(p: PlayerCar) -> void:
 				_sample(p, label)
 		_report(label, "")
 	p.driver = Callable()
+
+# --- tuner settings sweep ----------------------------------------------------
+
+## Tunes that move the body down or pitch it harder than stock. Every value is
+## inside the Tuner's safe range (TuneParams min..max), which is also all a
+## saved tune can load as (PlayerTune.apply_saved clamps to it).
+const SWEEP := {
+	# Roy's saved tune on 2026-10-09: ride height at the Tuner's minimum.
+	"roy_oct9": {"front_spring_length": 0.16, "rear_spring_length": 0.18,
+		"front_resting_ratio": 0.5, "rear_resting_ratio": 0.5,
+		"front_damping_ratio": 0.55, "rear_damping_ratio": 0.55,
+		"max_torque": 460.0, "turbo_boost_max": 1.5, "brake_force_multiplier": 2.5,
+		"aero_downforce_coefficient_front": 0.35, "aero_downforce_coefficient_rear": 0.55,
+		"coefficient_of_friction/Road": 1.2, "longitudinal_grip_ratio/Road": 1.1},
+	# Lowest, softest, most power, hardest brakes, most grip and downforce.
+	"low_soft": {"front_spring_length": 0.16, "rear_spring_length": 0.18,
+		"front_resting_ratio": 0.3, "rear_resting_ratio": 0.3,
+		"front_damping_ratio": 0.25, "rear_damping_ratio": 0.25,
+		"max_torque": 900.0, "turbo_boost_max": 1.5, "brake_force_multiplier": 3.0,
+		"aero_downforce_coefficient_front": 1.0, "aero_downforce_coefficient_rear": 1.2,
+		"coefficient_of_friction/Road": 2.5, "longitudinal_grip_ratio/Road": 1.2},
+	# Lowest and stiffest.
+	"low_stiff": {"front_spring_length": 0.16, "rear_spring_length": 0.18,
+		"front_resting_ratio": 0.7, "rear_resting_ratio": 0.55,
+		"front_damping_ratio": 0.9, "rear_damping_ratio": 0.9,
+		"max_torque": 900.0, "turbo_boost_max": 1.5, "brake_force_multiplier": 3.0},
+	# Each car's own engine, brakes and grip; only the suspension at the
+	# Tuner's corners (tests/car/car_scrape_cars.gd runs these on every car).
+	"stock": {},
+	"springs_low_soft": {"front_spring_length": 0.16, "rear_spring_length": 0.18,
+		"front_resting_ratio": 0.3, "rear_resting_ratio": 0.3,
+		"front_damping_ratio": 0.25, "rear_damping_ratio": 0.25},
+	"springs_low_stiff": {"front_spring_length": 0.16, "rear_spring_length": 0.18,
+		"front_resting_ratio": 0.7, "rear_resting_ratio": 0.55,
+		"front_damping_ratio": 0.9, "rear_damping_ratio": 0.9},
+	# Tallest and softest: prints only (see PRINT_ONLY).
+	"high_soft": {"front_spring_length": 0.28, "rear_spring_length": 0.27,
+		"front_resting_ratio": 0.3, "rear_resting_ratio": 0.3,
+		"front_damping_ratio": 0.25, "rear_damping_ratio": 0.25,
+		"brake_force_multiplier": 3.0,
+		"coefficient_of_friction/Road": 2.5, "longitudinal_grip_ratio/Road": 1.2},
+}
+
+## Tunes measured but not failed. high_soft: softest springs and dampers on the
+## tallest springs. At 120 km/h and in full-lock swerves all four springs run
+## out of travel and the body lands on the road (contacts with 0-7 cm of
+## spring left, 2026-10-09). That is the suspension bottoming out, which a
+## bump stop would fix (GEVP has none), not the body shape.
+var print_only: Array = ["high_soft"]
+## Tunes also run "live". Live and built match since CarSpec.remount_wheels.
+const LIVE := ["roy_oct9"]
+## Which player cars and tunes the sweep runs; tests/car/car_scrape_cars.gd
+## runs the other PlayerCars.KINDS (same Tuner range for every car).
+var sweep_kinds: Array = ["p1_coupe"]
+var sweep_tunes: Array = ["roy_oct9", "low_soft", "low_stiff", "high_soft"]
+var live_tunes: Array = LIVE
+
+## Each tune two ways: "built" = the car is built from the tuned spec (a saved
+## tune at launch, or after a restart), "live" = a stock car changed through
+## CarSpec.set_param() after it is built (dragging the Tuner sliders mid-run).
+func _sweep(p: PlayerCar) -> void:
+	lane_s = 6
+	swerve_s = 4
+	p.freeze = true
+	p.process_mode = Node.PROCESS_MODE_DISABLED
+	var was_selected := PlayerCars.selected
+	for kind in sweep_kinds:
+		# PlayerCar takes its body (and collision hull) from PlayerCars.selected.
+		PlayerCars.selected = kind
+		for tune_name in sweep_tunes:
+			for mode in (["built", "live"] if tune_name in live_tunes else ["built"]):
+				var car := PlayerCar.new()
+				car.sim_only = true
+				var spec := CarSpec.player_spec(kind)
+				if mode == "built":
+					for path in SWEEP[tune_name]:
+						TuneParams.set_value(spec, path, SWEEP[tune_name][path])
+				car.spec = spec
+				car.position = Vector3(Harness.lane_x(1), p.global_position.y, p.global_position.z - 40.0)
+				game.add_child(car)
+				# Wheels start with their last position at the origin; make the sim
+				# history match where the car is, or the first tick launches it.
+				Harness.launch_player(car, 0.0)
+				# The road streams around game.player: hand it the tuned car.
+				game.set("player", car)
+				if mode == "live":
+					for path in SWEEP[tune_name]:
+						CarSpec.set_param(car, car.spec, path, SWEEP[tune_name][path])
+				var prefix := "%s/%s" % [tune_name, mode]
+				if sweep_kinds.size() > 1 or kind != "p1_coupe":
+					prefix = "%s/%s" % [kind, prefix]
+				strict = not tune_name in print_only
+				# Settle unmeasured: the drop from the spawn height, or from the
+				# old ride height when the tune lands on a built car.
+				for i in RATE * 3:
+					await physics_frame
+				_watch(car, prefix)
+				await _drive_player(car, prefix)
+				_unwatch(car)
+				game.set("player", p)
+				car.queue_free()
+				await physics_frame
+	PlayerCars.selected = was_selected
 
 # --- traffic cars ----------------------------------------------------------
 

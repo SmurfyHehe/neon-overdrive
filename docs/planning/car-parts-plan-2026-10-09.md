@@ -1,6 +1,6 @@
 # Real car parts in the cars: plan (2026-10-09)
 
-Status: PLAN, docs only. Nothing built. Roy's ask (his 133): "make sure you
+Status: DECIDED 2026-10-09 (Roy answered all 8, his 135-142, section 10). Docs only, nothing built; build order for RC sessions in section 8b. Roy's ask (his 133): "make sure you
 actually build the car parts in the car: engine, shocks, brake calipers and
 rotor etc etc", and "I want to open the hood and doors at the gas station
 too if I wish." Also from Roy via the coordinator: the hood opens in the
@@ -236,7 +236,49 @@ edges here).
 | P4 Kei roadster | 3-cylinder | Mid, under a small lid behind the seats | Tiny bay, mostly the lid and the engine |
 | P5 Muscle sedan | V8 | Front, tall | Hood pins; the cowl scoop sits over the intake |
 | P6 Crossover | Boxer-turbo (AWD) | Front, low and wide | Skid plate under the bay |
-| Traffic N1-N3, police C1-C3 | none | closed | Wheels, discs and calipers only (the cop interceptor gets the big disc so it reads from behind); no bay, no opening |
+| Ally cars (crew: Juno's hatch, Pilar's kei, Walt's) and enemy cars (rival crews, Pike's men) | Same as the player car they are built from | Same | Full road set and real undercarriage (Roy 140, 141); bay and opening panels only when the story shows a crew car in the garage |
+| Police C1-C3 | none | closed | Wheels, discs with glow, calipers and the real undercarriage (the interceptor gets the big disc so it reads from behind); no bay, no opening |
+| Traffic N1-N3 | none | closed | Wheels only; a flat dark under-tray merged into the body, no separate parts |
+
+### 5b. The undercarriage, every class (Roy 140)
+
+Roy wants a real underside on his car, on ally cars and on enemy cars, not a
+flat plate. It matters because the chase cam looks down at rivals ahead,
+the cockpit mirrors look up at cops behind, jumps and off-ramps show the
+underside, and photo mode goes low.
+
+| Piece | Shared mesh | Per car |
+|---|---|---|
+| Floor pan with sills and the tunnel | one per body class (coupe, hatch, sedan, kei, muscle, crossover, Bug) | shut to the body's outline by the pipeline |
+| Front and rear subframes, control arms, anti-roll bars | shared, scaled by track | mount points |
+| Exhaust: manifold down-pipe, cat, mid pipe, muffler, tips | shared pieces on a route | `exhaust_route_0..n` points |
+| Driveshaft and diff (RWD, AWD), or the transverse box (FWD) | shared, 3 layouts | drive layout from the car data |
+| Fuel tank, spare well, skid plate (crossover), fuel cell (side node) | shared | position |
+| Springs and dampers (already in the road set) | shared | travel |
+
+How it is drawn: the whole static underside is **one merged mesh with one
+dark material** (vertex-coloured, three value steps, no lights of its own),
+so it costs one draw call per car. Only the springs and dampers move, and
+they are the road set's `MultiMesh` already. Under the car at the lift the
+same mesh is seen at arm's length, so it is modelled to read at 1 m, not
+just at 10 m.
+
+Per class:
+
+| Class | Underside | LOD rule | Draw calls per car | Triangles |
+|---|---|---|---|---|
+| Player | Real set, full detail | Always LOD0 | +1 (plus the road set's +2) | about 900 |
+| Ally and enemy cars | Real set, same mesh family as the player car they are built from | LOD0 within 40 m, LOD1 (merged dark plate, no pipes) to 80 m, nothing beyond | +1 within 40 m | about 900 |
+| Police | Real set, cop variant (push-bar brackets, no muffler on the interceptor) | LOD0 within 40 m (they are behind you, mirrors look up at them), LOD1 to 80 m | +1 within 40 m | about 700 |
+| Traffic | Flat dark tray merged into the body mesh | none | +0 | +30 |
+
+Worst case on the road is a chase: player plus 3 enemy cars plus 4 cops in
+range is 8 undersides at +1 draw call each, plus discs and glow on all 8
+(Roy 141), about **+24 draw calls and +12,000 triangles** over today. That
+is inside the draw-call headroom the stress-test session has to report
+before A1 merges, and it is the number the undercarriage session measures
+first (section 7). Low tier keeps the player's underside and drops the
+others to the dark plate.
 
 ## 6. How it uses the pipeline and the one-data-file-per-car
 
@@ -289,8 +331,9 @@ research), so draw calls are the number to watch, triangles second.
 |---|---|---|---|
 | P1 today | 7 | about 2,800 | Always |
 | Road set, LOD0 (within 20 m, chase cam, photo mode): 4 discs + 4 calipers merged into the wheel mesh's material set, 4 shocks as one `MultiMesh`, under-car as one dark mesh | +3 | +1,600 | Always for the player car; nearby rivals and cops |
-| Road set, LOD1 (20-60 m): disc as a flat dark face in the rim, no shocks, no under-car | +0 | +200 | Rivals and cops at distance; traffic always uses this |
-| LOD2 (beyond 60 m): today's merged body, closed rim | 0 | 0 | Traffic, far cars |
+| Road set, LOD0 on ally, enemy and police cars within 40 m (Roy 140, 141): discs with glow, calipers, shocks, real underside | +3 each | +1,600 each | Chases and races; the undercarriage session measures the 8-car worst case first |
+| Road set, LOD1 (40-80 m): disc as a flat dark face in the rim, no shocks, dark under-plate | +0 | +200 | Allies, enemies and cops at distance |
+| LOD2 (beyond 80 m): today's merged body, closed rim | 0 | 0 | Traffic always; far cars |
 | Hood open (bay group added to the tree): block, head, intake, turbo, intercooler, radiator, dressing merged into 2 draw calls, plus the hood piece | +3 | +3,500 | Garage, station, photo mode only; never while moving |
 | Doors open: 2 door pieces, 2 door cards, interior already loaded | +2 | +900 | Same |
 | Wheel off on the lift: hub, pads, arms | +2 | +700 | Garage only |
@@ -302,9 +345,9 @@ still, so their extra is paid when the CPU is idle.
 
 | Tier | Road parts | Open panels | Effects |
 |---|---|---|---|
-| **Low** | Rim with a flat dark disc face, no caliper mesh (a dark paint patch), no shocks, no under-car | Hood and doors open, bay drawn as one merged mesh without decals | No rotor glow, no tyre shine |
-| **Medium** (Roy's laptop) | Full road set at LOD0 on the player car, LOD1 on rivals and cops | Full bay with decals | Rotor glow, tyre shine, shock motion |
-| **High** | Road set LOD0 on rivals and cops within 60 m too | Full, plus the one real shadow under the car in the garage so the bay has depth | Heat haze sprite over hot discs, exhaust tip glow |
+| **Low** | Player: rim with a flat dark disc face, no caliper mesh (a dark paint patch), no shocks, real underside kept. Others: dark under-plate, flat disc | Hood and doors open, bay drawn as one merged mesh without decals | Rotor glow on the player only, no tyre shine |
+| **Medium** (Roy's laptop) | Full road set at LOD0 on the player car and on ally, enemy and police cars within 40 m; LOD1 beyond | Full bay with decals | Rotor glow on all of them, tyre shine, shock motion |
+| **High** | LOD0 range out to 80 m | Full, plus the one real shadow under the car in the garage so the bay has depth | Heat haze sprite over hot discs, exhaust tip glow |
 
 Measured, not guessed: the stress-test session's `benchmark.bat` line before
 and after A1, at Medium, with full traffic. A1 does not merge if the start
@@ -343,11 +386,29 @@ line frame time rises by more than 0.3 ms.
 | C3 | Interiors seen through open doors matched to the per-car interiors (car-look section 7); weight-rung stripped cabin and cage |
 | C4 | Dents on the panels (decided later) using the same separate pieces |
 
-**Build order:** A1 first because it is visible every night and measures the
-frame cost early; A2 and A3 together after pipeline step 1 gives the P1 a
-split body (or a hand split as a bridge); A4 before A5; A6 with the damage
-session. B1 can start in a cloud thread beside A1-A3 once Blender is
-available there.
+### 8b. Ordered build list for RC sessions (Roy 142: wheels and brakes AND the engine bay, "and more")
+
+One laptop session each. The first three touch different files and can run
+at the same time; 4 waits for a split body; 5 is cloud work; 6 and 7 wait
+for 5. Every session ends with a real headless run, screenshots for Roy,
+and a `benchmark.bat` line.
+
+| Order | Session | What Roy sees when it lands | Files it owns | Model | Can run beside |
+|---|---|---|---|---|---|
+| 1 | **Wheels and brakes**: open-spoke rims (car-look A4), disc, caliper, shock and spring on the P1; rotor glow from `brake_temp`; the same set on cop, ally and enemy cars within range with LOD1 beyond (Roy 141) | Red calipers and glowing discs behind the spokes on every car that matters, springs working | wheel visual code, a new `car_parts.gd`, `powertrain_health` read-only | Fable | 2, 3 |
+| 2 | **Engine bay (P1)**: inline-6, intake, radiator and fan, strut tops, battery and loom, manifold, as a hidden group; a temporary key shows it in photo mode until session 4 opens the hood | A real engine under the hood | new `engine_bay.gd` plus bay meshes; nothing in the body builder | Fable | 1, 3 |
+| 3 | **Undercarriage, all classes** (section 5b): floor pan, subframes, arms, exhaust route, driveshaft, diff, tank; one merged dark mesh per car; cop variant; dark plate on traffic; the 8-car chase benchmark | A real underside on you, allies, enemies and cops, from the mirrors, jumps and photo mode | new `undercarriage.gd` plus meshes; `fleet.json` route points | Fable for the look, Sonnet if run as a second session for the cop and traffic variants | 1, 2 |
+| 4 | **Hood, doors, trunk**: body split into panels with hinge points (pipeline step 1, or a hand split of the P1 as a bridge), open and close animation, one key each when stopped, anywhere (Roy 135), auto-close on drive-off (136), trunk and hatch too (137); door cards keep the window roll state | Open the hood and doors at the station, in the garage and in photo mode | `p1_coupe_builder.gd` (after the player-cars session lands), `player.gd` input, photo mode | Fable | after 1-3, beside 5 |
+| 5 | **Data model** (cloud): `mechanical` section in the car definition file, `visual` field on tree nodes, `PartsState`, headless checks that every node's parts exist and the budget holds per tier | Nothing yet; makes 6 and 7 data-driven | car definition file, mod tree files, tests | Opus | beside 4 |
+| 6 | **Swaps**: turbo set, intake set, brakes, suspension, diff cover, plaque for the internal nodes (Roy 139), wired to the tree and the parts ladder with the live swap in the garage | Buy the big single and watch it fill the bumper mouth | `car_parts.gd`, `engine_bay.gd`, garage tree card | Fable | after 5, beside 7 |
+| 7 | **Damage visuals**: oil mist, bent fan, split hose, cracked intercooler, leaning damper, broken lens, tape labels (Roy 138), the once-a-night "let go" | A crash that shows under the hood and in the wheel well | damage hooks, decals, `engine_bay.gd` read-only | Opus | after 5, beside 6 |
+| 8 | **Beater and the rest**: the Bug's rear lid and flat-4, then P2-P6 one per session as each car comes through the pipeline | Every car with its own bay, panels and underside | per-car builders and data | Fable | after 6 |
+
+Clashes to respect: `p1_coupe_builder.gd` belongs to the player-cars
+session until it lands (sessions 1-3 add nodes beside the body, they do
+not edit it); the window-roll session owns the door glass state; the
+stress-test session owns the benchmark line and must be sent the 8-car
+chase number from session 3.
 
 **In flight, not duplicated:** player cars incl. the Bug (owns
 `p1_coupe_builder.gd` until it lands; A1 waits for it or branches from it),
@@ -376,13 +437,46 @@ design thread (owns the part numbers A6 reads).
   damage also tilts a wheel.** Both are fine together: the look sets the rest
   camber, damage adds to it on one corner.
 
-## 10. Questions for Roy (one word each, my pick first)
+## 10. Roy's answers (2026-10-09, his 135-142)
 
-1. **Where can you open the hood and doors?** Anywhere you are stopped, photo mode included / only the garage and the gas station
-2. **Drive off with the hood up:** it closes by itself / it stays up and blocks the view
-3. **Trunk opens too (and the hatch on the hatchback):** yes / no
-4. **Broken parts under the hood get a tape label naming them when you look:** yes / no label
-5. **Stroker and cams are inside the engine, so show a build plaque on the cam cover for them:** plaque / nothing
-6. **The Grip capstone's downforce shows as an under-car splitter and flat floor (the wing stays a body-shop buy):** under-car / nothing visible
-7. **Glowing brake discs on police cars chasing you (traffic stays plain):** cops / nobody but you
-8. **Build first:** wheels and brakes on the road (A1) / the engine bay (A3)
+| # | Question | Answer | What changed |
+|---|---|---|---|
+| 135 | Where can you open the hood and doors | **Anywhere** you are stopped, photo mode included | as proposed |
+| 136 | Drive off with the hood up | **Closes itself** | as proposed |
+| 137 | Trunk and hatch open too | **Yes** | as proposed |
+| 138 | Tape labels on broken parts | **Yes** | as proposed |
+| 139 | Plaque for the internal engine nodes | **"idk, research"** | section 10a below; recommendation: plaque plus cam cover now, x-ray view on the lift later |
+| 140 | Grip aero as under-car splitter and flat floor | **Yes, and a real undercarriage on user, ally and enemy cars** | new section 5b, session 3 in 8b |
+| 141 | Glowing discs on which cars | **Me, allies, enemies and cops** (traffic stays plain) | road set at LOD0 on all four classes within range; tiers in section 7 |
+| 142 | Build first | **Both, and more** | ordered list in section 8b, sessions 1-3 in parallel |
+
+### 10a. Research for 139: how other games show upgrades you cannot see from outside
+
+Checked 2026-10-09. Web results were thin on the exact "does the model
+change" question (sources below), so the game-by-game lines are from my own
+knowledge of those games and are marked as such; the recommendation does
+not depend on any one of them.
+
+| Game | Engine bay | Internal upgrades (cams, pistons, stroker) | What we can take |
+|---|---|---|---|
+| Forza Horizon 5 (from memory) | Forzavista opens the hood; an engine swap changes the engine model | Not shown; the parts menu is a list with stat bars | Swaps change the visible block; internals are a card, not a model |
+| Need for Speed Heat and Unbound (from memory) | Hood opens in the garage and the engine model follows the swap; turbo and intake kits show on some cars | Not shown | Same |
+| Gran Turismo 7 (from memory) | No engine bay view | Not shown | Nothing |
+| Car Mechanic Simulator 2021 | Every part is a real object; rebuild orders list pistons, rods, crank and cams one by one (sources below) | Shown, as parts you take out and put in; players complain the internals are not animated | The **mini-game is the place to see internals**: our timing game already opens the engine |
+| My Summer Car, Street Legal Racing (from memory) | Every part real, hand-fitted | Shown while fitting, hidden once the engine is closed | Same lesson: internals are seen while working, not after |
+| BeamNG.drive (from memory) | Engine and turbo visible as parts; internals are a config choice | Not modelled as geometry | Config card plus the visible block is enough |
+| Automation (from memory) | Builds a full engine model per design, with a cutaway view | Shown as a cutaway render | A cutaway or x-ray view is the best way to show internals without opening anything |
+
+**Recommendation (my pick first):** for the stroker, cams and screamer
+nodes, (1) a build plaque on the cam cover and a changed cover or intake
+piece, so the bay still changes; (2) the timing-marks and torque-sequence
+mini-games show the actual cams and crank while you fit them, which is how
+the mechanic sims do it; (3) later, a **cutaway view** on the lift (C5
+below) that fades the block to show pistons, cams and the crank turning at
+idle, the one thing players asked Car Mechanic Simulator for. Alternative:
+nothing visible and only the card changes, which every arcade racer does and
+which Roy's "actually build the parts" ask argues against.
+
+Sources: [racinggames.gg on FH5 engine audio](https://racinggames.gg/article/forza-horizon-5-to-feature-new-engine-audio-for-each-car), [GTPlanet FH5 thread](https://www.gtplanet.net/forum/threads/forza-horizon-5-general-discussion.399481/post-13448841), [PC Games NFS Unbound review](https://www.pcgames.de/Need-for-Speed-Unbound-Spiel-74062/Tests/Review-Wertung-Gameplay-Release-Criterion-Electronic-Arts-Rennspiel-1408566/3/), [games.gg NFS Unbound](https://games.gg/need-for-speed-unbound/), [CMS 2021 Mayen M8 rebuild guide](https://www.magicgameworld.com/?p=126847), [CMS 2021 Steam discussion on animation](https://steamcommunity.com/app/1190000/discussions/0/4342112975491929332), [CMS 2021 engine swap list](https://www.gameskinny.com/tips/car-mechanic-simulator-2021-engine-swap-list/).
+
+Added to C: **C5** cutaway view on the lift (block fades, internals turn at idle), Fable, after session 6.

@@ -40,3 +40,29 @@ per-car microsecond costs are the usable numbers. Re-run on a quiet machine.
 - Physics at 60 Hz instead of 120 Hz roughly halves traffic cost.
 - `detail_distance` 150 m to ~100 m freezes more far cars.
 - Engine synth at a lower sample rate cuts its cost but changes the sound.
+
+## Graphics tiers (2026-10-09)
+
+Low / Medium / High (`GraphicsSettings`, pause menu > Graphics) set the GPU
+side (edge smoothing, render scale) and the CPU side (traffic car count,
+traffic sim/draw distance, cockpit mirror render size), because traffic is
+most of the frame on this laptop.
+
+| Tier | AA | Scale | Cars | Sim distance | Mirrors |
+|---|---|---|---|---|---|
+| Low | MSAA 2x | 0.75 | 10 | 100 m | low (half size) |
+| Medium | MSAA 2x | 1.0 | 16 | 150 m | medium |
+| High | MSAA 4x | 1.0 | 25 | 200 m | high (double) |
+
+- **First launch** (no preset saved): the game starts at Medium, skips 2 s,
+  then times 3 s with V-sync off. Median frame under 50 fps picks Low, over
+  100 picks High (`GraphicsAutoPick`). The menu shows it was automatic.
+- **Dynamic resolution** (on by default, `DynamicResolution`): GPU time over
+  90% of the frame budget for 2 s drops the render scale 0.1 (floor 0.66, or
+  0.5 from Low's 0.75); it climbs back when the predicted GPU time at the
+  higher scale is under 75% of budget for 5 s. It reads GPU time, so when
+  the CPU is the slow side it leaves the picture alone.
+- **Frame cap**: V-sync or 30 fps.
+- Measure: `powershell -File tools/bench-sweep.ps1 -Set tiers`.
+- Not in any tier (behaviour changes, Roy's call): physics at 60 Hz instead
+  of 120 Hz, a lower engine-synth sample rate.

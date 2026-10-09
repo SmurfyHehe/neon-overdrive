@@ -66,6 +66,8 @@ func _unit_checks() -> void:
 	GraphicsSettings.set_preset("low")
 	_check(GraphicsSettings.save_settings(), "save works")
 	GraphicsSettings.set_preset("high")
+	TrafficSettings.load_settings()   # a preset also writes traffic and mirror values (tiers)
+	FxSettings.load_settings()
 	GraphicsSettings.load_settings()
 	_check(GraphicsSettings.preset == "low" and GraphicsSettings.aa == GraphicsSettings.PRESET_VALUES.low.aa, "a saved preset loads back")
 	GraphicsSettings.set_preset("medium")
@@ -73,6 +75,8 @@ func _unit_checks() -> void:
 	GraphicsSettings.set_render_scale(0.65)
 	GraphicsSettings.save_settings()
 	GraphicsSettings.set_preset("low")
+	TrafficSettings.load_settings()
+	FxSettings.load_settings()
 	GraphicsSettings.load_settings()
 	_check(GraphicsSettings.preset == "custom" and GraphicsSettings.aa == "msaa4" and is_equal_approx(GraphicsSettings.render_scale, 0.65), "a custom set loads back")
 
@@ -89,8 +93,8 @@ func _process(_delta: float) -> bool:
 	frame += 1
 	if frame == 30:
 		var vp := root
-		var v: Dictionary = GraphicsSettings.PRESET_VALUES[GraphicsSettings.preset]
-		_check(is_equal_approx(vp.scaling_3d_scale, v.render_scale), "the game applies the render scale at boot")
+		# The harness boots with its own traffic values, so the preset reads Custom.
+		_check(is_equal_approx(vp.scaling_3d_scale, GraphicsSettings.render_scale), "the game applies the render scale at boot")
 		var menu: PauseMenu = null
 		for n in game.get_children():
 			if n is PauseMenu:

@@ -11,11 +11,14 @@
 #   quick   baseline + heaviest-load + 3 resolution scales            (~5 runs)
 #   full    traffic ladder, hills/curves route, lane changes, cockpit with
 #           mirrors (low/med/high) and window, render scales, MSAA     (~20 runs)
+#   tiers   Low / Medium / High at 1920x1080: plain drive, then the heavy
+#           route in the cockpit, then Medium heavy with dynamic resolution
+#           on (--gfx, --dynres in benchmark.gd)                       (~7 runs)
 # Each run is identical road + seed (benchmark.gd), so rows compare directly.
 # Results also go to bench-results/<timestamp>.md (gitignored).
 param(
 	[string] $Godot = "$HOME/Documents/Godot_v4.7.2-stable_win64_console.exe",
-	[ValidateSet("quick", "full", "custom")] [string] $Set = "quick",
+	[ValidateSet("quick", "full", "tiers", "custom")] [string] $Set = "quick",
 	[int] $Secs = 30,
 	[string[]] $Custom = @(),
 	[string] $Label = "",
@@ -46,6 +49,12 @@ $configs = switch ($Set) {
 		"--traffic=16 --res=1920x1080", "--traffic=16 --res=1920x1080 --scale=0.75", "--traffic=16 --res=1920x1080 --scale=0.5",
 		"--traffic=16 --msaa=0", "--traffic=16 --msaa=2", "--traffic=16 --msaa=4",
 		"--traffic=80 --detail=300 --hills=1 --curves=1 --weave=1 --view=cockpit --mirrors=1 --mirror_q=2 --window=1 --msaa=4") }
+	"tiers" { @(
+		"--gfx=low --res=1920x1080", "--gfx=medium --res=1920x1080", "--gfx=high --res=1920x1080",
+		"--gfx=low --res=1920x1080 --hills=1 --curves=1 --weave=1 --view=cockpit --window=1",
+		"--gfx=medium --res=1920x1080 --hills=1 --curves=1 --weave=1 --view=cockpit --window=1",
+		"--gfx=high --res=1920x1080 --hills=1 --curves=1 --weave=1 --view=cockpit --window=1",
+		"--gfx=medium --res=1920x1080 --hills=1 --curves=1 --weave=1 --view=cockpit --window=1 --dynres=1") }
 	"custom" { $Custom }
 }
 

@@ -42,6 +42,12 @@ var gfx_preset: OptionButton
 var gfx_aa: OptionButton
 var gfx_scale: HSlider
 var gfx_scale_label: Label
+var gfx_mirrors: OptionButton
+var gfx_dynres: OptionButton
+var gfx_cap: OptionButton
+var gfx_auto_label: Label
+var traffic_cars_slider: HSlider
+var traffic_dist_slider: HSlider
 var _gfx_refreshing := false
 
 func _init(state: GameState) -> void:
@@ -103,17 +109,21 @@ func _ready() -> void:
 	traffic_title.text = "Traffic"
 	traffic_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(traffic_title)
-	_add_slider(box, "Cars", 0.0, TrafficSettings.CAR_COUNT_MAX, 5.0, TrafficSettings.car_count,
+	# A graphics tier sets these two as well (GraphicsSettings): moving one by
+	# hand makes the Graphics preset read "Custom".
+	traffic_cars_slider = _add_slider(box, "Cars", 0.0, TrafficSettings.CAR_COUNT_MAX, 5.0, TrafficSettings.car_count,
 		func(v: float) -> void:
 			TrafficSettings.set_car_count(int(v))
 			TrafficSettings.save_settings()
+			GraphicsSettings.refresh_preset()
 			var traffic: Variant = get_parent().get("traffic")
 			if traffic != null:
 				traffic.set_car_count(TrafficSettings.car_count))
-	_add_slider(box, "Draw dist", TrafficSettings.DETAIL_MIN, TrafficSettings.DETAIL_MAX, 10.0, TrafficSettings.detail_distance,
+	traffic_dist_slider = _add_slider(box, "Draw dist", TrafficSettings.DETAIL_MIN, TrafficSettings.DETAIL_MAX, 10.0, TrafficSettings.detail_distance,
 		func(v: float) -> void:
 			TrafficSettings.set_detail_distance(v)
 			TrafficSettings.save_settings()
+			GraphicsSettings.refresh_preset()
 			var traffic: Variant = get_parent().get("traffic")
 			if traffic != null:
 				traffic.detail_distance = TrafficSettings.detail_distance)
@@ -233,6 +243,23 @@ func _build_graphics_page(center: CenterContainer) -> void:
 			_graphics_changed())
 	gfx_scale_label = Label.new()
 	gfx_scale.get_parent().add_child(gfx_scale_label)
+	# Tiers (2026-10-09): the CPU side of a preset is the traffic sliders on
+	# the main page plus the mirror render size here.
+	gfx_mirrors = _add_option(graphics_page, "Mirrors", ["Low", "Medium", "High"], func(i: int) -> void:
+		FxSettings.set_mirror_quality(i)
+		GraphicsSettings.refresh_preset()
+		_graphics_changed())
+	gfx_dynres = _add_option(graphics_page, "Dynamic resolution", ["On", "Off"], func(i: int) -> void:
+		GraphicsSettings.set_dynamic_res(i == 0)
+		_graphics_changed())
+	gfx_cap = _add_option(graphics_page, "Frame cap", ["V-sync", "30 fps"], func(i: int) -> void:
+		GraphicsSettings.set_fps_cap(GraphicsSettings.FPS_CAPS[i])
+		_graphics_changed())
+	gfx_auto_label = Label.new()
+	gfx_auto_label.text = "Preset picked automatically on first launch"
+	gfx_auto_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	gfx_auto_label.add_theme_color_override("font_color", Color(1.0, 0.75, 0.4))  # amber #FFC066
+	graphics_page.add_child(gfx_auto_label)
 	graphics_back_button = _add_button(graphics_page, "Back", show_main)
 
 func _add_option(parent: Control, text: String, items: Array, on_select: Callable) -> OptionButton:
@@ -253,6 +280,7 @@ func _add_option(parent: Control, text: String, items: Array, on_select: Callabl
 func _graphics_changed() -> void:
 	if _gfx_refreshing:
 		return
+	GraphicsSettings.auto_picked = false   # a hand choice replaces the automatic one
 	GraphicsSettings.apply(get_tree())
 	GraphicsSettings.save_settings()
 	_refresh_graphics()
@@ -265,6 +293,10 @@ func _refresh_graphics() -> void:
 	gfx_aa.select(maxi(GraphicsSettings.AA_MODES.find(GraphicsSettings.aa), 0))
 	gfx_scale.value = GraphicsSettings.render_scale
 	gfx_scale_label.text = "%d%%" % roundi(GraphicsSettings.render_scale * 100.0)
+	gfx_mirrors.select(FxSettings.mirror_quality)
+	gfx_dynres.select(0 if GraphicsSettings.dynamic_res else 1)
+	gfx_cap.select(maxi(GraphicsSettings.FPS_CAPS.find(GraphicsSettings.fps_cap), 0))
+	gfx_auto_label.visible = GraphicsSettings.auto_picked
 	_gfx_refreshing = false
 
 # ---------- Controls page ----------
@@ -278,6 +310,9 @@ func show_controls() -> void:
 	controls_scroll.grab_focus()  # arrows / page keys scroll it
 
 func show_main() -> void:
+	# A graphics tier (menu or first-launch pick) may have moved the traffic values.
+	traffic_cars_slider.set_value_no_signal(TrafficSettings.car_count)
+	traffic_dist_slider.set_value_no_signal(TrafficSettings.detail_distance)
 	main_page.visible = true
 	controls_page.visible = false
 	graphics_page.visible = false

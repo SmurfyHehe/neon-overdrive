@@ -71,11 +71,15 @@ func _ready() -> void:
 	# runs are comparable; normal play gets a fresh one each time. It also runs
 	# the default traffic (car count and draw distance), not whatever the
 	# pause menu last saved, so two machines or two days compare like for like.
+	# --gfx=<low|medium|high> runs a graphics tier (its traffic and draw
+	# distance become the defaults that --traffic/--detail override).
 	var benchmark := Benchmark.requested()
 	if benchmark:
-		TrafficSettings.set_car_count(TrafficSettings.CAR_COUNT_DEFAULT)
-		TrafficSettings.set_detail_distance(Benchmark.opt_float("detail", TrafficSettings.DETAIL_DEFAULT))
-		TrafficSettings.set_car_count(int(Benchmark.opt_float("traffic", TrafficSettings.CAR_COUNT_DEFAULT)))
+		var tier: Dictionary = GraphicsSettings.PRESET_VALUES.get(Benchmark.opt("gfx"), GraphicsSettings.PRESET_VALUES.medium)
+		if GraphicsSettings.PRESET_VALUES.has(Benchmark.opt("gfx")):
+			GraphicsSettings.set_preset(Benchmark.opt("gfx"))
+		TrafficSettings.set_detail_distance(Benchmark.opt_float("detail", tier.detail))
+		TrafficSettings.set_car_count(int(Benchmark.opt_float("traffic", tier.traffic)))
 	# NEON_TRAFFIC=<n> overrides the saved car count, like NEON_TICKS/NEON_MUTE:
 	# tests/run_tests.bat sets 0 so the older drive-bot tests, which steer
 	# across lanes blind, do not hit traffic (tests/traffic_*.gd clear it).
@@ -105,6 +109,12 @@ func _ready() -> void:
 	add_child(fx)
 	_setup_hud()
 	_setup_game_state()
+	# Dynamic resolution holds the frame rate inside the tier; benchmark runs
+	# keep a fixed scale (comparable numbers) unless --dynres=1.
+	if not benchmark or Benchmark.opt("dynres") == "1":
+		add_child(DynamicResolution.new())
+	if GraphicsAutoPick.wanted():
+		add_child(GraphicsAutoPick.new())   # first launch: time a few seconds, pick a tier
 	GraphicsSettings.apply(get_tree())
 	if benchmark:
 		add_child(Benchmark.new())
@@ -394,6 +404,7 @@ func _setup_traffic() -> void:
 	traffic.onc_lanes = ONC_LANES
 	traffic.car_count = TrafficSettings.car_count
 	traffic.detail_distance = TrafficSettings.detail_distance
+	traffic.add_to_group(GraphicsSettings.GROUP)   # a graphics tier sets count and distance
 	add_child(traffic)
 
 # ---------- camera ----------

@@ -69,13 +69,14 @@ var dots := []             # [left, right] MeshInstance3D
 var cull_mask := 0
 
 func _ready() -> void:
+	add_to_group(GraphicsSettings.GROUP)
 	enabled = FxSettings.is_on("mirrors")
 	var env: Environment = null
 	var world := get_viewport().find_world_3d()
 	if world != null and world.environment != null:
 		env = world.environment.duplicate()
 		env.glow_enabled = false
-	_add_mirror("Rear", REAR_POS, REAR_SIZE_M, REAR_YAW, REAR_PITCH, _scaled(REAR_SIZE), REAR_FOV, 0.0, env)
+	_add_mirror("Rear", REAR_POS, REAR_SIZE_M, REAR_YAW, REAR_PITCH, REAR_SIZE, REAR_FOV, 0.0, env)
 	for i in 2:
 		var h: Dictionary = P1CoupeBuilder.MIRRORS[i]
 		var pos: Vector3 = h.pos + Vector3(0.0, P1CoupeBuilder.BODY_LIFT, 0.0)
@@ -83,7 +84,7 @@ func _ready() -> void:
 		var glass_pos := pos + hb * Vector3(0.0, 0.0, P1CoupeBuilder.MIRROR_SIZE.z * 0.5 - SIDE_INSET)
 		var out := -1.0 if i == 0 else 1.0
 		_add_mirror("Left" if i == 0 else "Right", glass_pos, SIDE_SIZE_M, float(SIDE_GLASS_YAW[i]), 0.0,
-			_scaled(SIDE_SIZE), SIDE_FOV, out * SIDE_YAW, env)
+			SIDE_SIZE, SIDE_FOV, out * SIDE_YAW, env)
 		_add_dot(views[i + 1].quad, out)
 	_apply_enabled()
 
@@ -113,10 +114,10 @@ static func _scaled(base: Vector2i) -> Vector2i:
 	return Vector2i(maxi(16, int(base.x * k)), maxi(16, int(base.y * k)))
 
 func _add_mirror(mirror_name: String, pos: Vector3, size_m: Vector2, yaw_deg: float, pitch_deg: float,
-		px: Vector2i, fov: float, cam_yaw_out: float, env: Environment) -> void:
+		base_px: Vector2i, fov: float, cam_yaw_out: float, env: Environment) -> void:
 	var vp := SubViewport.new()
 	vp.name = mirror_name + "View"
-	vp.size = px
+	vp.size = _scaled(base_px)
 	vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	vp.msaa_3d = Viewport.MSAA_DISABLED
 	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_DISABLED
@@ -157,8 +158,15 @@ func _add_mirror(mirror_name: String, pos: Vector3, size_m: Vector2, yaw_deg: fl
 	quad.rotation_degrees = Vector3(pitch_deg, yaw_deg, 0.0)
 	quad.layers = CockpitFrame.INTERIOR_BIT
 	add_child(quad)
-	views.append({"vp": vp, "cam": cam, "quad": quad, "mat": mat, "local": local})
+	views.append({"vp": vp, "cam": cam, "quad": quad, "mat": mat, "local": local, "base_px": base_px})
 	cam.global_transform = global_transform * local
+
+## Mirror quality changed (a graphics tier, GraphicsSettings.apply): resize
+## the renders live.
+func apply_graphics() -> void:
+	for i in views.size():
+		var glanced: bool = i > 0 and focus == (-1 if i == 1 else 1)
+		views[i].vp.size = _scaled(views[i].base_px) * (2 if glanced else 1)
 
 ## Cockpit view on or off: nothing renders while off, unless the strip asks.
 func set_active(on: bool) -> void:

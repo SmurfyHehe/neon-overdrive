@@ -93,6 +93,9 @@ func _ready() -> void:
 	_setup_hud()
 	_setup_game_state()
 	GraphicsSettings.apply(get_tree())
+	# First launch: measure this PC and pick Low/Medium/High (QualityCheck).
+	if QualityCheck.should_auto_run():
+		add_child(QualityCheck.new())
 	if benchmark:
 		add_child(Benchmark.new())
 

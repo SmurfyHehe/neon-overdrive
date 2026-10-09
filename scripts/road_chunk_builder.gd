@@ -194,6 +194,11 @@ static var _barrier_mesh: BoxMesh
 static var _lamp_mesh: ArrayMesh
 static var _pool_mesh: PlaneMesh
 static var _pool_mat: ShaderMaterial
+static var _streak_mat: ShaderMaterial
+## Wet road (WetRoad decides per night): set_wet() makes the asphalt dark and
+## glossy and shows the lamp streaks; new chunks read it when built.
+static var wet := false
+const STREAK_GROUP := "lamp_streaks"
 static var _halo_mesh: QuadMesh
 static var _halo_mat: ShaderMaterial
 static var _wall_mesh: BoxMesh
@@ -481,6 +486,69 @@ void fragment() {
 }
 """
 
+## Wet-road lamp reflections (2026-10-09, Roy: "wet road some nights"): on a
+## wet night each lamp throws a long streak of sodium light across the road
+## toward the viewer, the way a light smears on wet asphalt. One quad per lamp
+## (the pool mesh), laid flat and turned in the vertex shader to point from the
+## lamp's foot at the camera; brightest round the mirror point (for a lamp
+## LAMP_POLE_H up and an eye ~1.5 m up, ~83% of the way to the camera),
+## dimmed with its lamp like the pools.
+const LAMP_STREAK_SHADER := """
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, fog_disabled, cull_disabled, world_vertex_coords;
+uniform vec3 color : source_color;
+uniform float lamp_h = 7.4;
+uniform float width = 0.7;
+uniform float fade_near = 120.0;
+uniform float fade_far = 220.0;
+varying float lit;
+varying float mirror_t;
+varying float dist;
+// Lamp state per instance (INSTANCE_CUSTOM): r = 0 working, 0.5 failing
+// (flickers), 1 dead; g = a per-lamp seed so failing lamps fall out of step.
+float lamp_level(vec4 c, float t) {
+	if (c.r > 0.75) {
+		return 0.0;
+	}
+	if (c.r > 0.25) {
+		float s = c.g * 97.0;
+		// A failing sodium lamp: steady mostly, then a burst of stutter,
+		// then a few seconds out while it tries to restrike.
+		float cycle = fract(t / 9.0 + c.g);
+		float stutter = step(0.3, fract(sin(floor(t * 14.0 + s) * 12.9898) * 43758.5453));
+		float hum = 0.85 + 0.15 * sin(t * 100.0 + s);
+		float out_ = step(0.82, cycle);
+		float burst = step(0.62, cycle) * (1.0 - out_);
+		return hum * mix(1.0, stutter, burst) * (1.0 - out_) + out_ * 0.04 * stutter;
+	}
+	return 1.0;
+}
+
+
+void vertex() {
+	lit = lamp_level(INSTANCE_CUSTOM, TIME);
+	vec3 foot = MODEL_MATRIX[3].xyz;
+	vec3 cam = CAMERA_POSITION_WORLD;
+	vec2 to_cam = cam.xz - foot.xz;
+	dist = length(to_cam);
+	vec2 d = to_cam / max(dist, 0.001);
+	vec2 n = vec2(-d.y, d.x);
+	float eye = max(cam.y - foot.y, 0.3);
+	mirror_t = lamp_h / (lamp_h + eye);
+	// UV.y 0..1 runs from the lamp's foot most of the way to the camera.
+	float t = UV.y * 0.97;
+	vec2 p = foot.xz + d * t * dist + n * (UV.x - 0.5) * width * (0.7 + 0.6 * t);
+	VERTEX = vec3(p.x, foot.y, p.y);
+}
+void fragment() {
+	float t = UV.y * 0.97;
+	float along = exp(-pow((t - mirror_t) / 0.22, 2.0));
+	float across = exp(-pow((UV.x - 0.5) / 0.22, 2.0));
+	float fade = clamp((fade_far - dist) / (fade_far - fade_near), 0.0, 1.0);
+	ALBEDO = color * along * across * lit * fade;
+}
+"""
+
 ## Share of street lamps that are failing (flicker) and dead (Roy, 2026-10-08:
 ## "a few"). Picked per lamp from its chunk and slot, so a lamp keeps its state
 ## when the road comes round again and a chunk rebuild gives the same street.
@@ -590,6 +658,28 @@ static func _get_halo_mesh() -> QuadMesh:
 		_halo_mesh = QuadMesh.new()
 		_halo_mesh.size = Vector2.ONE
 	return _halo_mesh
+
+static func _get_streak_mat() -> ShaderMaterial:
+	if _streak_mat == null:
+		_streak_mat = ShaderMaterial.new()
+		_streak_mat.shader = _lamp_shader(LAMP_STREAK_SHADER)
+		_streak_mat.set_shader_parameter("color", Color(SODIUM * 0.3, 1.0))
+		_streak_mat.set_shader_parameter("lamp_h", LAMP_POLE_H - HALO_DROP)
+	return _streak_mat
+
+## Wet or dry asphalt: dry is the stage A matte (roughness 0.9); wet is darker
+## and nearly mirror-smooth, so the headlights, moon and lamp light catch it.
+static func set_wet(on: bool, tree: SceneTree = null) -> void:
+	wet = on
+	for m in [_get_own_mat(), _get_onc_mat(), _get_shoulder_mat(), _get_sidewalk_mat()]:
+		var sm := m as StandardMaterial3D
+		var base: Color = sm.get_meta("dry_color", sm.albedo_color)
+		sm.set_meta("dry_color", base)
+		sm.albedo_color = base * (Color(0.55, 0.57, 0.62) if on else Color.WHITE)
+		sm.roughness = 0.12 if on else 0.9
+		sm.metallic_specular = 0.8 if on else 0.5
+	if tree != null:
+		tree.set_group(STREAK_GROUP, "visible", on)
 
 static func _get_halo_mat() -> ShaderMaterial:
 	if _halo_mat == null:
@@ -1130,6 +1220,13 @@ static func _create_nodes(root: Node3D) -> void:
 	halos.visible = GraphicsSettings.is_on("lamp_halos")
 	halos.add_to_group(HALO_GROUP)
 	root.add_child(halos)
+	var streaks := _new_multimesh("LampStreaks", _get_pool_mesh(), _get_streak_mat(), _lamp_slots() * 2, true)
+	streaks.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	streaks.visible = wet
+	# The shader moves the quad toward the camera, far outside its own box.
+	streaks.custom_aabb = AABB(Vector3(-200, -5, -250), Vector3(400, 20, 500))
+	streaks.add_to_group(STREAK_GROUP)
+	root.add_child(streaks)
 	root.add_child(_new_multimesh("GapWalls", _get_wall_mesh(), _get_wall_mat(), (_building_slots() + 1) * 2))
 
 	# The centre barrier, one piece per station so it can follow a bend (#37).
@@ -1265,6 +1362,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var lamps: MultiMesh = (root.get_node(^"Lamps") as MultiMeshInstance3D).multimesh
 	var pools: MultiMesh = (root.get_node(^"LampPools") as MultiMeshInstance3D).multimesh
 	var halos: MultiMesh = (root.get_node(^"LampHalos") as MultiMeshInstance3D).multimesh
+	var streaks: MultiMesh = (root.get_node(^"LampStreaks") as MultiMeshInstance3D).multimesh
 	var n_lamps := 0
 	for i in range(_lamp_slots()):
 		for side in [1, -1]:
@@ -1282,10 +1380,13 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			lamps.set_instance_custom_data(n_lamps, state)
 			pools.set_instance_custom_data(n_lamps, state)
 			halos.set_instance_custom_data(n_lamps, state)
+			streaks.set_instance_transform(n_lamps, _xf(head_x, POOL_Y + 0.004, lz))
+			streaks.set_instance_custom_data(n_lamps, state)
 			n_lamps += 1
 	lamps.visible_instance_count = n_lamps
 	pools.visible_instance_count = n_lamps
 	halos.visible_instance_count = n_lamps
+	streaks.visible_instance_count = n_lamps
 
 	# center line / barrier -- snapped to this chunk's own end-of-chunk
 	# config, not tapered (see file header). Both the wall and the dash

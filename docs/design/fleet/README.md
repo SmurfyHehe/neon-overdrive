@@ -54,7 +54,7 @@ Sizes are in metres. H is the overall height, including roof gear.
 | P2 Hot hatch | 4.05 × 1.83 × 1.40 | 2.56 | short brick, narrow upright cabin on box-blistered hips, upright hatch under an overhanging spoiler |
 | P3 Tuner sedan | 4.48 × 1.78 × 1.36 | 2.62 | square four-door, boxed overfenders, pedestal wing, 4 round tail lamps |
 | P4 Kei roadster | 3.30 × 1.40 × 1.13 | 2.27 | tiny, open, twin headrest humps |
-| P5 Muscle sedan | 5.35 × 2.02 × 1.30 | 2.95 | land yacht, tall cowl scoop, chopped cabin, hourglass hips, ducktail, full-width tail bar |
+| P5 Muscle hardtop | 5.00 × 1.93 × 1.33 | 2.52 | two-door hardtop, long hood, coke-bottle hips, bevelled shoulder crease, forward scoop, twin round lamps, full-width tail bar (rebuilt 2026-10-09) |
 | P6 Perf. crossover | 4.35 × 1.84 × 1.61 | 2.62 | lifted rally hatch, black-clad box flares, roof rack with crossbars past the roof edge |
 | N1 Commuter sedan | 4.80 × 1.82 × 1.51 | 2.80 | soft tall cabin, tall nose, short high deck |
 | N2 City hatchback | 3.95 × 1.69 × 1.53 | 2.53 | tall cab-forward egg, lamps up the pillars |

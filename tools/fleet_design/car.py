@@ -14,9 +14,14 @@ from geom import Mesh, box, prism, cylinder_x, ngon, rect, pl, place_on_surface
 
 # Strip index of each edge of the half-section, bottom to top:
 #  0 keel->floor edge, 1 wheel-well inner wall, 2 well top, 3 rocker band,
-#  4 lower door, 5 upper door, 6 shoulder ledge, 7 side glass,
-#  8 roof/hood outer, 9 roof/hood centre
-N_HALF = 11  # points P0..P10 per half-section
+#  4 lower door, 5 shoulder bevel, 6 upper door, 7 shoulder ledge,
+#  8 side glass, 9 roof/hood outer, 10 roof/hood centre
+# Strip 5 is the bevel on the shoulder crease (better-cars section 1, the
+# muscle car): a narrow facet between the lower and upper door faces that
+# catches one clean highlight line under a street light. Cars without
+# 'crease_bevel' put P6 on P5, so the facet is empty and Mesh.tri drops it;
+# their meshes are unchanged.
+N_HALF = 12  # points P0..P11 per half-section
 
 
 class CarModel:
@@ -82,17 +87,25 @@ def half_section(D, s):
     P[2] = (xin, ya)
     P[3] = (hw - sill_in, y3)
     P[4] = (hw - sill_in * 0.35, y4)
-    P[5] = (hw, y5)
-    P[6] = (hw - tumble, y6)
-    P[7] = (hw - tumble - gb_in, y7)
+    bevel = D.get('crease_bevel', 0.0)
+    if bevel > 0.0:
+        # the crease sits at (hw, y5); the facet runs from just below it on
+        # the lower door face to just above it, tucked in with the tumblehome
+        P[5] = (hw - bevel * 0.35, y5 - bevel)
+        P[6] = (hw - bevel * 0.15, y5 + bevel * 0.6)
+    else:
+        P[5] = (hw, y5)
+        P[6] = P[5]
+    P[7] = (hw - tumble, y6)
+    P[8] = (hw - tumble - gb_in, y7)
 
     o = _open_region(D, s)
     cab = D['cabin']
     if o is not None:
         wall = o.get('wall', 0.05)
-        P[8] = (P[7][0] - wall, y7)
-        P[9] = (P[8][0], o['floor'])
-        P[10] = (0.0, o['floor'])
+        P[9] = (P[8][0] - wall, y7)
+        P[10] = (P[9][0], o['floor'])
+        P[11] = (0.0, o['floor'])
         return P, {'open': o}
 
     if cab['A'] <= s <= cab['C']:
@@ -101,11 +114,11 @@ def half_section(D, s):
         t = max(0.0, min(1.0, t))
         rw = pl(cab['roof_w'], s) if isinstance(cab['roof_w'], list) else cab['roof_w']
         drop = cab.get('roof_drop', 0.035)
-        P[8] = (P[7][0] + t * (rw - P[7][0]), y7 + t * (top - drop - y7))
+        P[9] = (P[8][0] + t * (rw - P[8][0]), y7 + t * (top - drop - y7))
     else:
-        P[8] = P[7]
-    P[9] = (0.5 * P[8][0], P[8][1] + 0.72 * (top - P[8][1]))
-    P[10] = (0.0, top)
+        P[9] = P[8]
+    P[10] = (0.5 * P[9][0], P[9][1] + 0.72 * (top - P[9][1]))
+    P[11] = (0.0, top)
     return P, {}
 
 
@@ -114,9 +127,10 @@ def _strip_mat(D, j, s, info):
     if j <= 2:
         return 'under'
     if j == 3:
-        return 'trim' if D.get('rocker_trim') else 'paint'
-    if j in (4, 5):
+        return D.get('rocker_mat', 'trim') if D.get('rocker_trim') else 'paint'
+    if j in (4, 5, 6):
         return 'paint'
+    j -= 1   # strips above the shoulder bevel keep their old numbers below
     if j == 6:
         return 'paint'
     if 'open' in info:
@@ -203,10 +217,10 @@ def loft(D):
     n = len(rings[0])
 
     def strip_of(k):
-        if k <= 9:
+        if k <= N_HALF - 2:
             return k
-        if k <= 18:
-            return 19 - k
+        if k <= 2 * N_HALF - 4:
+            return 2 * N_HALF - 3 - k
         return 0
 
     # orientation: the right waist strip must face +X
@@ -230,7 +244,12 @@ def loft(D):
 
     # end caps: front faces -Z, rear faces +Z
     for ring, want in ((rings[0], -1.0), (rings[-1], 1.0)):
-        c = sum(ring) / len(ring)
+        # centroid without the bevel points when there is no bevel (P6 on P5,
+        # ring indices 6 and 16), so bevel-less cars keep their old caps
+        cring = ring
+        if np.array_equal(ring[6], ring[5]):
+            cring = [q for i, q in enumerate(ring) if i not in (6, 16)]
+        c = sum(cring) / len(cring)
         cap = Mesh()
         for k in range(n):
             cap.tri(c, ring[k], ring[(k + 1) % n], 'paint')
@@ -372,8 +391,8 @@ def add_part(model, p):
     if t == 'mirrors':
         s = p.get('s', D['cabin']['A'] + 0.14)
         P = _section_at(D, s)
-        x = P[7][0] + p.get('out', 0.09)
-        y = P[7][1] + p.get('up', 0.09)
+        x = P[8][0] + p.get('out', 0.09)
+        y = P[8][1] + p.get('up', 0.09)
         for sx in (1, -1):
             box(m, (sx * x, y, z(s)), (0.1, 0.075, 0.14), p.get('mat', 'paint'), {'-z': 'trim'})
             box(m, (sx * (x - 0.06), y - 0.01, z(s) + 0.02), (0.06, 0.03, 0.06), 'trim')
@@ -458,8 +477,8 @@ def add_part(model, p):
         cab = D['cabin']
         s = cab['A'] + p.get('ds', 0.07)
         P = _section_at(D, s)
-        x = -(P[7][0] + 0.07)
-        y = P[7][1] + p.get('up', 0.12)
+        x = -(P[8][0] + 0.07)
+        y = P[8][1] + p.get('up', 0.12)
         box(m, (x, y, z(s)), (0.04, 0.16, 0.04), 'trim')
         box(m, (x - 0.02, y + 0.10, z(s) - 0.03), (0.14, 0.14, 0.19), 'chrome', {'-z': 'head_off'})
 
@@ -505,6 +524,38 @@ def add_part(model, p):
             # headrest fairing: a tapered block
             pts = [(z(s) - 0.06, y0), (z(s) + 0.30, y0), (z(s) + 0.05, h), (z(s) - 0.04, h)]
             prism(m, pts, sx * x - w / 2, sx * x + w / 2, p.get('mat', 'paint'))
+
+    elif t == 'scoop' and p.get('face') == 'front':
+        # Forward-facing hood scoop that reads as a scoop, not a crate
+        # (better-cars section 1): the mouth at s0 is the widest and tallest
+        # point, the top lip overhangs it, and the body tapers in width and
+        # height back to s1 where it fairs into the hood. The mouth is a dark
+        # inset quad just in front of the face.
+        s0, s1, w, h = p['s0'], p['s1'], p['w'], p['h']
+        w1 = p.get('w1', w * 0.7)
+        lip = p.get('lip', 0.05)
+        mat = p.get('mat', 'paint')
+        y0 = pl(D['top'], s0) - 0.005
+        y1 = pl(D['top'], s1) - 0.005
+        z0, z1 = z(s0), z(s1)
+        A = {sx: np.array([sx * w / 2, y0, z0]) for sx in (1, -1)}
+        B = {sx: np.array([sx * w / 2, y0 + h, z0 - lip]) for sx in (1, -1)}
+        C = {sx: np.array([sx * w1 / 2, y1 + 0.012, z1]) for sx in (1, -1)}
+        E = {sx: np.array([sx * w1 / 2, y1, z1]) for sx in (1, -1)}
+        m.quad(A[1], B[1], C[1], E[1], mat)          # right side, faces +x
+        m.quad(A[-1], E[-1], C[-1], B[-1], mat)      # left side, faces -x
+        m.quad(B[1], B[-1], C[-1], C[1], mat)        # top, faces up
+        m.quad(E[1], C[1], C[-1], E[-1], mat)        # tail, faces back
+        m.quad(A[1], A[-1], B[-1], B[1], mat)        # face, looks forward
+        n = np.array([0.0, -h, -lip])
+        n = n / np.linalg.norm(n)
+        mx, my = 0.03, 0.02
+        up = (B[1] - A[1]) / h
+        a = A[1] + up * my + np.array([-mx, 0, 0]) + n * 0.003
+        b = A[-1] + up * my + np.array([mx, 0, 0]) + n * 0.003
+        c = B[-1] - up * my + np.array([mx, 0, 0]) + n * 0.003
+        d = B[1] - up * my + np.array([-mx, 0, 0]) + n * 0.003
+        m.quad(a, b, c, d, p.get('mouth_mat', 'grille'))
 
     elif t == 'scoop':
         s0, s1, w, h = p['s0'], p['s1'], p['w'], p['h']

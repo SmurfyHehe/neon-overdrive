@@ -76,6 +76,7 @@ import render as frender    # noqa: E402
 from geom import Mesh, pl   # noqa: E402
 
 GENERATOR = 'neon-overdrive tools/car_pipeline/build_car.py'
+PANEL_NAMES = ('body', 'hood', 'trunk', 'door_l', 'door_r')
 BEVEL_WIDTH = 0.012        # one chamfer loop, 1.2 cm (car-look section 2, pass 1)
 BEVEL_ANGLE_DEG = 30.0     # only edges sharper than this get the loop
 WELD_EPS = 1e-4
@@ -429,6 +430,10 @@ def build_scene(D, build_name):
         if not len(pm.mesh):
             continue
         name = p.get('tag') or p['type']
+        if name in PANEL_NAMES:
+            # a part tagged like a panel (the muscle car's hood scoop is tagged
+            # 'hood' for the body shop) must not take the panel's node name
+            name = p['type']
         parts.setdefault(name, Mesh()).extend(pm.mesh)
     for name, m in parts.items():
         arr = m.array()

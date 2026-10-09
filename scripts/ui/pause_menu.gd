@@ -30,6 +30,7 @@ const AMBER := Color("#FFC066")
 
 var game_state: GameState
 var resume_button: Button
+var race_button: Button
 var volume_sliders := {}   # channel -> HSlider
 var fov_slider: HSlider
 var smoothing_slider: HSlider
@@ -39,6 +40,9 @@ var main_page: VBoxContainer
 var controls_page: VBoxContainer
 var controls_scroll: ScrollContainer
 var controls_back_button: Button
+## The bank (F0, scripts/core/wallet.gd), shown under the title; null in bare tests.
+var wallet: Node
+var bank_label: Label
 var cars_page: VBoxContainer
 var graphics_page: VBoxContainer
 var graphics_back_button: Button
@@ -80,6 +84,11 @@ func _ready() -> void:
 	title.text = "PAUSED"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
+	bank_label = Label.new()
+	bank_label.name = "Bank"
+	bank_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(bank_label)
+	_refresh_bank()
 
 	# Volume sliders (Phase B). Keyboard: Tab or arrows to move, Left/Right to change.
 	var vol_title := Label.new()
@@ -182,6 +191,7 @@ func _ready() -> void:
 	_add_button(box, "Graphics", show_graphics)
 	_add_button(box, "Controls", show_controls)
 	_add_button(box, "Service car (reset wear)", _service_car)
+	race_button = _add_button(box, "Race a test rival", _race_pressed)
 	_add_button(box, "Open log folder", LogFolder.open)
 	_add_button(box, "Restart", game_state.restart)
 	_add_button(box, "Quit", game_state.quit)
@@ -204,6 +214,25 @@ func _service_car() -> void:
 	var player: Variant = get_parent().get("player")
 	if player != null and player.get("health") != null:
 		player.health.repair()
+
+## Race core (RC1): until meet spots exist (RC3) a race starts from here, and
+## mid-race the same button is "Give up race" (Roy 88). Either way the game
+## resumes at once.
+func _race_pressed() -> void:
+	var race: RaceController = get_parent().get("race")
+	if race == null:
+		return
+	if race.is_racing():
+		race.give_up()
+	else:
+		race.start_race()
+	game_state.resume()
+
+func _refresh_race_button() -> void:
+	var race: Variant = get_parent().get("race")
+	race_button.visible = race != null
+	if race != null:
+		race_button.text = "Give up race" if race.is_racing() else "Race a test rival"
 
 func _add_slider(parent: Control, text: String, lo: float, hi: float, step: float, value: float, on_change: Callable) -> HSlider:
 	var row := HBoxContainer.new()
@@ -234,7 +263,15 @@ func _add_button(parent: Control, text: String, action: Callable) -> Button:
 func _on_state_changed(new_state: GameState.State, _old_state: GameState.State) -> void:
 	visible = new_state == GameState.State.PAUSED
 	if visible:
+		_refresh_race_button()
 		show_main()  # always reopen on the main page
+		_refresh_bank()
+
+## "Bank $4,200 · tonight $350"
+func _refresh_bank() -> void:
+	bank_label.visible = wallet != null
+	if wallet != null:
+		bank_label.text = "Bank %s  ·  tonight %s" % [wallet.money(wallet.bank), wallet.money(wallet.cash)]
 
 # ---------- Graphics page (polish pass, 2026-10-08) ----------
 # A preset picker plus each setting on its own (GraphicsSettings). Every change

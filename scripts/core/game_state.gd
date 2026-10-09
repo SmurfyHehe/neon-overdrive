@@ -23,8 +23,17 @@ extends Node
 enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO }
 
 signal state_changed(new_state: State, old_state: State)
+## Just before a restart reloads the scene / before the game quits (the save
+## system: a restart starts a fresh run, a quit saves it).
+signal restarting
+signal quitting
 
 var state: State = State.PLAYING
+
+## True while a race is live (race_controller.gd). A race is not its own State:
+## the game stays PLAYING so pause and photo mode work as usual; only the Tuner
+## is shut, so a tune cannot change mid-race.
+var race_active := false
 
 # T, Y and Esc are polled, which means a key typed into a text field (a tune slot
 # name) would also switch tabs or close the tuner. _input() runs before the GUI
@@ -113,7 +122,7 @@ func toggle_tuning() -> void:
 		close_tuning()
 	elif state == State.AUTOTUNE:
 		switch_tuner(State.TUNING)  # T from the Auto-Tune tab opens the manual tab
-	elif state == State.PLAYING:
+	elif state == State.PLAYING and not race_active:  # no tuning mid-race
 		get_tree().paused = true
 		_set_state(State.TUNING)
 
@@ -128,7 +137,7 @@ func toggle_autotune() -> void:
 		close_autotune()
 	elif state == State.TUNING:
 		switch_tuner(State.AUTOTUNE)  # Y from the manual tab opens the Auto-Tune tab
-	elif state == State.PLAYING:
+	elif state == State.PLAYING and not race_active:
 		get_tree().paused = true
 		_set_state(State.AUTOTUNE)
 
@@ -140,10 +149,12 @@ func close_autotune() -> void:
 # Fresh run: reload the whole scene. Cheapest correct reset -- no per-system
 # reset code to keep in sync as systems are added.
 func restart() -> void:
+	restarting.emit()
 	get_tree().paused = false
 	get_tree().reload_current_scene()
 
 func quit() -> void:
+	quitting.emit()
 	get_tree().quit()
 
 func _set_state(new_state: State) -> void:

@@ -238,13 +238,19 @@ func _physics_process(_delta: float) -> void:
 	var reveal := reveal_distance()
 	for car in cars:
 		var d := absf(RoadFrame.unroll(car.global_position).z - pz)
-		car.set_detailed(d <= detail_distance)
+		# A race rival stays full sim however far away it is: the kinematic
+		# cruise would teleport it through bends and traffic (races plan,
+		# premortem 5). One extra full car is inside the traffic budget.
+		car.set_detailed(car.race_pinned or d <= detail_distance)
 		var want := d <= reveal or (car.visible and d <= reveal + HIDE_HYSTERESIS)
 		if want != car.visible and not car.sim_only:
 			if event_hook.is_valid():
 				event_hook.call("show" if want else "hide", car, car.global_position)
 			car.set_shown(want)
+	var gone: Array[TrafficCar] = []
 	for car in cars:
+		if car.race_pinned:
+			continue  # a live race rival is never recycled (race_controller.gd)
 		if car.benched:
 			if active < target and not brought_back:
 				car.benched = false
@@ -265,6 +271,9 @@ func _physics_process(_delta: float) -> void:
 		var wreck := not recycle and car.wrecked and not _car_seen(car)
 		if not (recycle or wreck):
 			continue
+		if car.race_released:
+			gone.append(car)  # an ex-rival leaves for good instead of joining the pool
+			continue
 		recycle_count += 1
 		if wreck:
 			wreck_recycle_count += 1
@@ -273,8 +282,40 @@ func _physics_process(_delta: float) -> void:
 			active -= 1
 		else:
 			_respawn(car)
-	if cars.size() > target_count:
+	for car in gone:
+		cars.erase(car)
+		car.queue_free()
+	if not gone.is_empty():
+		_build_index()
+	if _pool_size() > target_count:
 		_trim_cars()
+
+## Races (RC1): one extra full-sim car, in the index like any other car so
+## traffic sees it and it sees traffic. Pinned: never recycled, never frozen,
+## until release_rival() hands it back.
+func add_rival(kind_name: String, lane_x: float, z: float, speed: float, paint: Color) -> TrafficCar:
+	var car := TrafficCar.new()
+	car.kind = kind_name
+	car.traffic = self
+	car.race_pinned = true
+	car.color = paint
+	if NpcCarBuilder.is_npc(car.kind):
+		car.build = NpcCarBuilder.pick_build(car.kind)
+	car.position = Vector3(0.0, REST_Y, 10000.0)
+	add_child(car)
+	cars.append(car)
+	_build_index()
+	car.target_speed = speed
+	car.place(lane_x, -1.0, z, car.rest_y, speed)
+	_put(car)
+	return car
+
+## The race is over: the rival drives on as traffic and is removed once it is
+## out of range, so it never vanishes in front of the player.
+func release_rival(car: TrafficCar) -> void:
+	if car != null and is_instance_valid(car):
+		car.race_pinned = false
+		car.race_released = true
 
 ## Metres from the player out to which cars are drawn.
 func reveal_distance() -> float:
@@ -320,13 +361,23 @@ func in_view(pos: Vector3) -> bool:
 
 ## How many cars the hour band wants on the road (active_share of the pool).
 func active_target() -> int:
-	return clampi(roundi(float(cars.size()) * clampf(active_share, 0.0, 1.0)), 0, cars.size())
+	var pool := _pool_size()
+	return clampi(roundi(float(pool) * clampf(active_share, 0.0, 1.0)), 0, pool)
+
+## Traffic cars, not counting a race rival (live or released): the rival is
+## an extra car on top of the traffic count (race_controller.gd).
+func _pool_size() -> int:
+	var n := 0
+	for car in cars:
+		if not (car.race_pinned or car.race_released):
+			n += 1
+	return n
 
 ## Cars not benched (on the road, or waiting for a free slot).
 func active_count() -> int:
 	var n := 0
 	for car in cars:
-		if not car.benched:
+		if not (car.benched or car.race_pinned or car.race_released):
 			n += 1
 	return n
 
@@ -615,7 +666,7 @@ func set_car_count(n: int) -> void:
 	n = maxi(n, 0)
 	target_count = n
 	_trim_cars()
-	while cars.size() < n:
+	while _pool_size() < n:
 		_make_car()
 	_build_index()
 	for car in cars:
@@ -626,10 +677,12 @@ func set_car_count(n: int) -> void:
 ## Frees surplus cars (furthest first) that are out of every camera's sight.
 func _trim_cars() -> void:
 	var pz := _player_z()
-	while cars.size() > target_count:
+	while _pool_size() > target_count:
 		var far: TrafficCar = null
 		var far_d := -1.0
 		for car in cars:
+			if car.race_pinned or car.race_released:
+				continue  # the race rival is not part of the pool
 			var d := absf(RoadFrame.unroll(car.global_position).z - pz)
 			if d > far_d and not _car_seen(car):
 				far = car

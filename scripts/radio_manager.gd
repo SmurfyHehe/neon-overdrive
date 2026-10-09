@@ -44,6 +44,9 @@ var chime_count := 0
 var duck := 1.0                # current music gain, 1 = full
 ## File name (no extension) of the track on air, "" when nothing plays.
 var now_playing := ""
+## The night clock's hour band (NightBands.Band, set by game.gd); -1 = none,
+## Dave's plain rotation. His station adds a few lines that fit the band.
+var band := -1
 var _dj_label: Label
 var _chime_left := 0.0
 var _in_break_before := false
@@ -200,10 +203,10 @@ func _update_dj(delta: float) -> void:
 		in_break = true
 		dj_text = _announce_text
 	elif station >= 0:
-		var st := RadioStations.break_state(station, station_time(station))
+		var st := RadioStations.break_state(station, station_time(station), band)
 		in_break = st.in_break
 		if in_break:
-			var lines: Array = RadioStations.STATIONS[station].dj
+			var lines: Array = RadioStations.dj_lines(station, band)
 			dj_text = lines[st.line]
 	if in_break and not _in_break_before:
 		chime_count += 1
@@ -219,9 +222,14 @@ func _update_dj(delta: float) -> void:
 ## (a caption with the chime, like his other lines). Other stations and the
 ## radio off say nothing. True when Dave spoke.
 func announce_hour(hour24: int) -> bool:
+	return announce(RadioStations.time_line(hour24))
+
+## A one-off Dave line (time checks, tonight's events): on his station only,
+## with the chime, over the rotation. True when Dave spoke.
+func announce(text: String) -> bool:
 	if station < 0 or RadioStations.STATIONS[station].kind != "talk":
 		return false
-	_announce_text = RadioStations.time_line(hour24)
+	_announce_text = text
 	_announce_left = RadioStations.BREAK_SECS
 	_in_break_before = false   # a new line: chime even if a rotation line was up
 	return true

@@ -73,6 +73,8 @@ call :run driveline_audio --headless
 call :run sound_fixes --headless
 call :run radio --headless
 call :run night_clock --headless
+call :run night_bands "--headless --fixed-fps 60"
+call :run world_mood "--headless --fixed-fps 60"
 call :run view_settings --headless
 call :run camera_smoothing_setting --headless
 call :run powertrain_health "--headless --fixed-fps 60"

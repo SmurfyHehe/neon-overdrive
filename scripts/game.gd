@@ -52,6 +52,9 @@ var game_state: GameState
 var camera: ChaseCamera
 var radio: RadioManager
 var night_clock: NightClock  # 8 p.m. to 6 a.m., saved (night_clock.gd); windows follow it
+var _bands := false  # hour bands drive traffic and Dave (bands_on)
+var world_mood: WorldMood  # tonight's events: rule-breaker share, bar close, meets, crackdowns
+const TestMode := preload("res://scripts/test_mode.gd")
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
 func _ready() -> void:
@@ -420,6 +423,12 @@ func _setup_game_state() -> void:
 	add_child(PhotoMode.new(game_state, camera))
 	radio = RadioManager.new()
 	add_child(radio)
+	world_mood = WorldMood.new()
+	add_child(world_mood)
+	world_mood.event_started.connect(_on_event)
+	if OS.get_environment("NEON_CRACKDOWN") == "1":
+		world_mood.start_crackdown(night_clock.minutes)
+	_bands = bands_on()
 	night_clock.hour_changed.connect(_on_hour)
 	night_clock.night_ended.connect(func(_n: int) -> void: radio.announce_hour(NightClock.END_HOUR))
 
@@ -427,7 +436,40 @@ func _setup_game_state() -> void:
 ## night, right after his 6 a.m. sign-off, so it is skipped.
 func _on_hour(hour24: int) -> void:
 	if hour24 != NightClock.START_HOUR:
-		radio.announce_hour(hour24)
+		if hour24 == 2 and world_mood.crackdown_until < 0.0:
+			radio.announce(WorldMood.BAR_CLOSE_LINE)  # bar close starts on the hour
+		else:
+			radio.announce_hour(hour24)
+
+## Hour bands (living world step 2, night_bands.gd): the clock sets how much
+## of the Traffic slider is on the road and which lines Dave adds. Off in the
+## benchmark (its traffic must match earlier runs) and, in tests, unless the
+## test pins the start time with NEON_CLOCK (the test clock file is shared, so
+## any other test would get whatever time the last one left behind).
+func bands_on() -> bool:
+	if Benchmark.requested():
+		return false
+	return not TestMode.active() or OS.get_environment("NEON_CLOCK") != ""
+
+func _update_bands() -> void:
+	if not _bands:
+		return
+	var m := night_clock.minutes
+	world_mood.update(m)
+	var crackdown := world_mood.crackdown_until >= 0.0
+	traffic.active_share = minf(NightBands.traffic_share(m) + WorldMood.traffic_bonus(m), 1.0)
+	traffic.rule_breaker_share = WorldMood.rule_breaker_share(m, world_mood.meet_night, crackdown)
+	traffic.weave_share = WorldMood.weave_share(m, crackdown)
+	radio.band = NightBands.band_of(m)
+
+## Tonight's events (world_mood.gd): Dave mentions a meet or a crackdown as it
+## starts, and in a crackdown everyone already on the road starts behaving.
+func _on_event(e: int) -> void:
+	if e == WorldMood.Event.CRACKDOWN:
+		traffic.reform_all()
+	if WorldMood.EVENT_LINES.has(e):
+		radio.announce(WorldMood.EVENT_LINES[e])
 
 func _process(_delta: float) -> void:
+	_update_bands()
 	_update_chunk_pool(RoadFrame.unroll(player.position).z)

@@ -360,6 +360,7 @@ func _bench(car: TrafficCar, pz: float) -> void:
 ## Puts a car in a free slot. If every slot is taken it parks the car far
 ## behind (hidden, frozen) and tries again next tick.
 func _respawn(car: TrafficCar) -> void:
+	var t0 := Time.get_ticks_usec()
 	var pz := _player_z()
 	if car.visible and event_hook.is_valid():
 		event_hook.call("despawn", car, car.global_position)
@@ -375,6 +376,7 @@ func _respawn(car: TrafficCar) -> void:
 		car.place(car.lane_x, car.direction, pz + PARK_BEHIND, car.rest_y, 0.0)
 		car.retry_frame = Engine.get_physics_frames() + DEFER_TICKS
 		_put(car)
+		SpikeLog.mark("traffic_defer", SpikeLog.since(t0))
 		return
 	spawn_count += 1
 	car.target_speed = slot.speed
@@ -387,6 +389,7 @@ func _respawn(car: TrafficCar) -> void:
 	_put(car)
 	if car.visible and event_hook.is_valid():
 		event_hook.call("spawn", car, car.global_position)
+	SpikeLog.mark("traffic_respawn", SpikeLog.since(t0))
 	if log_spawns:
 		slot["player_z"] = pz
 		slot["player_speed"] = _player_speed()

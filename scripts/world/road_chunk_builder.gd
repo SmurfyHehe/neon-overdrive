@@ -941,10 +941,10 @@ static func _update_step(root: Node3D, body_name: String, xs: Vector2, side: int
 #
 # The look is drawn from a per-building RNG seeded by chunk index, slot and
 # the building's footprint, NOT from the global random sequence: the global
-# calls below are kept exactly as before (4 per building, in the same
-# order), so the road layout game.gd
-# rolls after each chunk is unchanged for any seed, and a chunk rebuilt from
-# the pool looks the same as one built fresh.
+# calls are kept exactly as before (4 per building, in the same order, now
+# taken up front by _layout() and handed in as `draws`), so the road layout
+# game.gd rolls after each chunk is unchanged for any seed, and a chunk
+# rebuilt from the pool looks the same as one built fresh.
 
 static var _bld_rng := RandomNumberGenerator.new()
 
@@ -964,7 +964,9 @@ static func _new_building(index: int) -> Array:
 ## Returns the building's length along the road (its z size, so the gap
 ## walls can fill what is left between buildings), its type and sign, and
 ## where its front face is.
-static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: float, side: int, chunk_index: int = 0) -> Dictionary:
+## draws are the building's four global RNG draws, taken by _layout() in
+## the old order: [is_garage, w_draw, d_draw, h_old].
+static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: float, side: int, chunk_index: int, draws: Array) -> Dictionary:
 	var mi: MeshInstance3D = root.get_node(NodePath("BuildingMesh%d" % index))
 	var body: StaticBody3D = root.get_node(NodePath("BuildingBody%d" % index))
 	var col: CollisionShape3D = body.get_node(^"Shape")
@@ -972,13 +974,10 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 
 	# Stage A: longer frontages (d, along the road) so the street reads as a
 	# continuous built-up corridor; w is how deep the block goes.
-	# Keep these four global calls exactly as they are (see the section
-	# comment; randf_range() takes more draws than randf(), so even swapping
-	# one for the other shifts the road layout).
-	var is_garage: bool = randf() < 0.12
-	var w_draw: float = randf_range(4.0, 10.0)
-	var d_draw: float = randf_range(9.0, 18.0)
-	var h_old: float = randf_range(3.0, 4.5) if is_garage else randf_range(6.0, 22.0)
+	var is_garage: bool = draws[0]
+	var w_draw: float = draws[1]
+	var d_draw: float = draws[2]
+	var h_old: float = draws[3]
 	var h_roll := inverse_lerp(3.0, 4.5, h_old) if is_garage else inverse_lerp(6.0, 22.0, h_old)
 
 	# w and d come from the global sequence, so the look changes from run to
@@ -1169,136 +1168,233 @@ static func _create_nodes(root: Node3D) -> void:
 ## node is created, freed, or reparented here -- this is what replaces the
 ## old queue_free()-everything teardown.
 ##
+## Frame-spike pass (2026-10-09): the rewrite is cut into STAGES, each a
+## static function over the chunk's `layout` (every width and roll the old
+## single _apply() computed up front), so game.gd can run a recycled chunk's
+## rebuild a stage or two per frame (rebuild_begin / rebuild_step) instead of
+## all ~3 ms in one frame. The atomic path (rebuild_chunk, build_chunk, the
+## tests) runs the same stages back to back, so the two produce the same chunk
+## (tests/chunk_rebuild_perf.gd checks it).
+##
 ## origin_index is the floating-origin offset (game.gd, issue #26): the chunk
 ## that currently sits at world z=0. The subtraction is done in ints BEFORE
 ## converting to float, so a chunk millions of indices out still lands on an
 ## exact, small coordinate instead of a rounded huge one.
-static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary, origin_index: int = 0) -> void:
-	root.name = "Chunk_%d" % chunk_index
-	# Where the road's shape (RoadFrame / RoadAlignment, #37) puts this chunk;
-	# on a straight road that is (0, 0, -(chunk_index - origin_index) * 50).
-	root.transform = RoadFrame.chunk_xf(chunk_index, origin_index)
-	root.set_meta("chunk_index", chunk_index)
-	_curve = _update_centerline(root, RoadFrame.curvature(chunk_index), RoadFrame.start_grade(chunk_index), RoadFrame.vcurve(chunk_index))
-	_cache_frames(_curve)
-	_strip_n = strip_pieces(RoadFrame.curvature(chunk_index), RoadFrame.vcurve(chunk_index))
 
+## Spike attribution (spike_log.gd): logs the stage that ended now and
+## returns the start of the next one. Free unless the benchmark is running.
+static func _stage(tag: String, since_usec: int) -> int:
+	if SpikeLog.enabled:
+		SpikeLog.mark(tag, SpikeLog.since(since_usec))
+		return Time.get_ticks_usec()
+	return since_usec
+
+## The stages of a rebuild, in order. "setup" places the root and primes the
+## centreline; "collision" comes next so the chunk is solid before anything
+## is drawn; "finish" shows it and hands its bodies to the physics server.
+const STAGES: Array[String] = ["setup", "collision", "strips", "pylons", "buildings", "signs_roofs", "walls", "lamps", "dashes", "finish"]
+
+## Everything the stages need, computed once per rebuild: lane widths at both
+## ends, the derived shoulder/curb/sidewalk/boundary edges, the district
+## setbacks, and the buildings' global RNG draws. The draws are taken here,
+## up front and in the old order (four per building, own side then oncoming,
+## slot by slot), so the global random sequence the road layout rolls through
+## is exactly what it was when the buildings were placed inside _apply(): a
+## staged rebuild that spreads over frames (with traffic spawns drawing from
+## the same sequence in between) still lays out the same road for a seed.
+static func _layout(chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary) -> Dictionary:
 	var own_lanes: int = clampi(int(cfg.own_lanes), 1, MAX_OWN_LANES)
 	var onc_lanes: int = clampi(int(cfg.onc_lanes), 1, MAX_ONC_LANES)
-	# City lights (Junction, J0): no centre barrier on a chunk the crossing
-	# touches. Read here, not rolled in game.gd's _section_at, so the road
-	# layout's random sequence is the same with the switch on or off.
-	var barrier: bool = cfg.barrier and not Junction.touches(chunk_index)
-	var start_own_w := _lane_w(prev_cfg.own_lanes)
-	var end_own_w := _lane_w(own_lanes)
-	var start_onc_w := _lane_w(prev_cfg.onc_lanes)
-	var end_onc_w := _lane_w(onc_lanes)
-
-	# road surfaces (tapered)
-	_update_strip(root, "RoadOwn", 0.0, 0.0, start_own_w, end_own_w)
-	_update_strip(root, "RoadOnc", 0.0, 0.0, -start_onc_w, -end_onc_w)
-
-	# solid edge line along each lane's OUTER boundary -- distinct from the
-	# dashed interior lane splits handled further below
-	_update_strip(root, "EdgeLineOwn", start_own_w - 0.12, end_own_w - 0.12, start_own_w + 0.03, end_own_w + 0.03, 0.012)
-	_update_strip(root, "EdgeLineOnc", -(start_onc_w - 0.12), -(end_onc_w - 0.12), -(start_onc_w + 0.03), -(end_onc_w + 0.03), 0.012)
-
-	# shoulders (tapered, flush with the road edge)
-	var start_own_shoulder := start_own_w + SHOULDER_W
-	var end_own_shoulder := end_own_w + SHOULDER_W
-	var start_onc_shoulder := start_onc_w + SHOULDER_W
-	var end_onc_shoulder := end_onc_w + SHOULDER_W
-	_update_strip(root, "ShoulderOwn", start_own_w, end_own_w, start_own_shoulder, end_own_shoulder)
-	_update_strip(root, "ShoulderOnc", -start_onc_w, -end_onc_w, -start_onc_shoulder, -end_onc_shoulder)
-
-	# curb -- crossable rumble strip, NOT a collision wall (see file header)
-	var start_own_curb := start_own_shoulder + CURB_W
-	var end_own_curb := end_own_shoulder + CURB_W
-	var start_onc_curb := start_onc_shoulder + CURB_W
-	var end_onc_curb := end_onc_shoulder + CURB_W
-	_update_strip(root, "CurbOwn", start_own_shoulder, end_own_shoulder, start_own_curb, end_own_curb, 0.1)
-	_update_strip(root, "CurbOnc", -start_onc_shoulder, -end_onc_shoulder, -start_onc_curb, -end_onc_curb, 0.1)
-
-	# sidewalk -- drivable, lower grip (comes from the Dirt collision below)
-	var start_own_walk := start_own_curb + SIDEWALK_W
-	var end_own_walk := end_own_curb + SIDEWALK_W
-	var start_onc_walk := start_onc_curb + SIDEWALK_W
-	var end_onc_walk := end_onc_curb + SIDEWALK_W
-	_update_strip(root, "SidewalkOwn", start_own_curb, end_own_curb, start_own_walk, end_own_walk, 0.1)
-	_update_strip(root, "SidewalkOnc", -start_onc_curb, -end_onc_curb, -start_onc_walk, -end_onc_walk, 0.1)
-
-	_update_sidewalk_collision(root, "SidewalkColOwn", start_own_curb, end_own_curb, start_own_walk, end_own_walk, 1)
-	_update_sidewalk_collision(root, "SidewalkColOnc", start_onc_curb, end_onc_curb, start_onc_walk, end_onc_walk, -1)
-
+	var L := {
+		"index": chunk_index,
+		"own_lanes": own_lanes,
+		"onc_lanes": onc_lanes,
+		# City lights (Junction, J0): no centre barrier on a chunk the crossing
+		# touches. Read here, not rolled in game.gd's _section_at, so the road
+		# layout's random sequence is the same with the switch on or off.
+		"barrier": bool(cfg.barrier) and not Junction.touches(chunk_index),
+		"k": RoadFrame.curvature(chunk_index),
+		"g": RoadFrame.start_grade(chunk_index),
+		"vc": RoadFrame.vcurve(chunk_index),
+		"start_own_w": _lane_w(prev_cfg.own_lanes),
+		"end_own_w": _lane_w(own_lanes),
+		"start_onc_w": _lane_w(prev_cfg.onc_lanes),
+		"end_onc_w": _lane_w(onc_lanes),
+		"setback": Districts.setback_at(chunk_index),
+		"prev_setback": Districts.setback_at(chunk_index - 1),
+	}
+	L["start_own_shoulder"] = L.start_own_w + SHOULDER_W
+	L["end_own_shoulder"] = L.end_own_w + SHOULDER_W
+	L["start_onc_shoulder"] = L.start_onc_w + SHOULDER_W
+	L["end_onc_shoulder"] = L.end_onc_w + SHOULDER_W
+	L["start_own_curb"] = L.start_own_shoulder + CURB_W
+	L["end_own_curb"] = L.end_own_shoulder + CURB_W
+	L["start_onc_curb"] = L.start_onc_shoulder + CURB_W
+	L["end_onc_curb"] = L.end_onc_shoulder + CURB_W
+	L["start_own_walk"] = L.start_own_curb + SIDEWALK_W
+	L["end_own_walk"] = L.end_own_curb + SIDEWALK_W
+	L["start_onc_walk"] = L.start_onc_curb + SIDEWALK_W
+	L["end_onc_walk"] = L.end_onc_curb + SIDEWALK_W
 	# out-of-bounds walls, at the same set-back _update_building() uses
 	# (plus the district's setback: strip malls sit behind a drivable lot)
-	var setback := Districts.setback_at(chunk_index)
-	var bound_own := maxf(start_own_walk, end_own_walk) + BUILDING_GAP + setback
-	var bound_onc := maxf(start_onc_walk, end_onc_walk) + BUILDING_GAP + setback
-	_update_boundary(root, "BoundaryOwn", bound_own, 1)
-	_update_boundary(root, "BoundaryOnc", bound_onc, -1)
+	L["bound_own"] = maxf(L.start_own_walk, L.end_own_walk) + BUILDING_GAP + L.setback
+	L["bound_onc"] = maxf(L.start_onc_walk, L.end_onc_walk) + BUILDING_GAP + L.setback
 	# Where the setback changes from the previous chunk, a cross wall at this
 	# chunk's start closes the step between the two boundary lines, so the
 	# deeper lot does not open behind the shallower chunk's wall.
-	var prev_setback := Districts.setback_at(chunk_index - 1)
-	var step_own := Vector2(bound_own, start_own_walk + BUILDING_GAP + prev_setback)
-	var step_onc := Vector2(bound_onc, start_onc_walk + BUILDING_GAP + prev_setback)
-	_update_step(root, "BoundaryStepOwn", step_own, 1, absf(setback - prev_setback) > 0.01)
-	_update_step(root, "BoundaryStepOnc", step_onc, -1, absf(setback - prev_setback) > 0.01)
-	_update_road_collision(root, maxf(bound_own, bound_onc) + BOUNDARY_T + ROAD_COL_MARGIN)
+	L["step_own"] = Vector2(L.bound_own, L.start_own_walk + BUILDING_GAP + L.prev_setback)
+	L["step_onc"] = Vector2(L.bound_onc, L.start_onc_walk + BUILDING_GAP + L.prev_setback)
+	L["step_on"] = absf(L.setback - L.prev_setback) > 0.01
+	# Keep these four global calls exactly as they are (see above;
+	# randf_range() takes more draws than randf(), so even swapping one for
+	# the other shifts the road layout).
+	var draws := []
+	for i in range(_building_slots() * 2):
+		var is_garage: bool = randf() < 0.12
+		var w_draw: float = randf_range(4.0, 10.0)
+		var d_draw: float = randf_range(9.0, 18.0)
+		var h_old: float = randf_range(3.0, 4.5) if is_garage else randf_range(6.0, 22.0)
+		draws.append([is_garage, w_draw, d_draw, h_old])
+	L["draws"] = draws
+	return L
 
-	# edge pylons -- cosmetic rhythm/speed cues, interpolated along each
-	# shoulder's outer edge between this chunk's start and end width
+## The chunk's collision bodies: on, or off (layer 0) while a staged rebuild
+## is in flight, so a half-rewritten sidewalk or wall never meets a wheel.
+## Each body's real layer is kept in meta the first time it is switched off.
+static func _set_solid(root: Node3D, on: bool) -> void:
+	for c in root.get_children():
+		if c is CollisionObject3D:
+			var body := c as CollisionObject3D
+			if on:
+				if body.has_meta("layer"):
+					body.collision_layer = body.get_meta("layer")
+			else:
+				if not body.has_meta("layer"):
+					body.set_meta("layer", body.collision_layer)
+				body.collision_layer = 0
+
+## Primes the static centreline/frame cache for this chunk: a staged rebuild
+## runs its stages on different frames, and build_chunk() of another chunk
+## (startup) or a test may have run in between.
+static func _prime(root: Node3D, job: Dictionary) -> void:
+	var curve: Curve3D = (root.get_node(^"Centerline") as Path3D).curve
+	if _curve != curve:
+		_curve = curve
+		_cache_frames(_curve)
+	_strip_n = job.strip_n
+
+static func _stage_setup(root: Node3D, job: Dictionary) -> void:
+	var L: Dictionary = job.layout
+	root.name = "Chunk_%d" % L.index
+	# Where the road's shape (RoadFrame / RoadAlignment, #37) puts this chunk;
+	# on a straight road that is (0, 0, -(chunk_index - origin_index) * 50).
+	# Parked PARK_BELOW under its place until the finish stage: out of every
+	# camera and the fog, with its collision off, while the stages rewrite
+	# it. (Not visible = false: the dummy renderer of a headless run drops a
+	# hidden MultiMesh's instance data, so the tests could not see the chunk
+	# it had built; a transform costs nothing either way.)
+	root.transform = RoadFrame.chunk_xf(L.index, job.origin_index).translated(Vector3(0.0, PARK_BELOW, 0.0))
+	root.set_meta("chunk_index", L.index)
+	root.set_meta("rebuilding", true)
+	_curve = _update_centerline(root, L.k, L.g, L.vc)
+	_cache_frames(_curve)
+	_strip_n = strip_pieces(L.k, L.vc)
+	job["strip_n"] = _strip_n
+	# Physics interpolation is on (ISSUES B7): without this reset the
+	# recycled chunk would slide from its old spot to the new one over a
+	# frame instead of jumping there.
+	root.reset_physics_interpolation()
+
+static func _stage_collision(root: Node3D, L: Dictionary) -> void:
+	_update_sidewalk_collision(root, "SidewalkColOwn", L.start_own_curb, L.end_own_curb, L.start_own_walk, L.end_own_walk, 1)
+	_update_sidewalk_collision(root, "SidewalkColOnc", L.start_onc_curb, L.end_onc_curb, L.start_onc_walk, L.end_onc_walk, -1)
+	_update_boundary(root, "BoundaryOwn", L.bound_own, 1)
+	_update_boundary(root, "BoundaryOnc", L.bound_onc, -1)
+	_update_step(root, "BoundaryStepOwn", L.step_own, 1, L.step_on)
+	_update_step(root, "BoundaryStepOnc", L.step_onc, -1, L.step_on)
+	_update_road_collision(root, maxf(L.bound_own, L.bound_onc) + BOUNDARY_T + ROAD_COL_MARGIN)
+
+static func _stage_strips(root: Node3D, L: Dictionary) -> void:
+	# road surfaces (tapered)
+	_update_strip(root, "RoadOwn", 0.0, 0.0, L.start_own_w, L.end_own_w)
+	_update_strip(root, "RoadOnc", 0.0, 0.0, -L.start_onc_w, -L.end_onc_w)
+	# solid edge line along each lane's OUTER boundary -- distinct from the
+	# dashed interior lane splits handled in the dashes stage
+	_update_strip(root, "EdgeLineOwn", L.start_own_w - 0.12, L.end_own_w - 0.12, L.start_own_w + 0.03, L.end_own_w + 0.03, 0.012)
+	_update_strip(root, "EdgeLineOnc", -(L.start_onc_w - 0.12), -(L.end_onc_w - 0.12), -(L.start_onc_w + 0.03), -(L.end_onc_w + 0.03), 0.012)
+	# shoulders (tapered, flush with the road edge)
+	_update_strip(root, "ShoulderOwn", L.start_own_w, L.end_own_w, L.start_own_shoulder, L.end_own_shoulder)
+	_update_strip(root, "ShoulderOnc", -L.start_onc_w, -L.end_onc_w, -L.start_onc_shoulder, -L.end_onc_shoulder)
+	# curb -- crossable rumble strip, NOT a collision wall (see file header)
+	_update_strip(root, "CurbOwn", L.start_own_shoulder, L.end_own_shoulder, L.start_own_curb, L.end_own_curb, 0.1)
+	_update_strip(root, "CurbOnc", -L.start_onc_shoulder, -L.end_onc_shoulder, -L.start_onc_curb, -L.end_onc_curb, 0.1)
+	# sidewalk -- drivable, lower grip (comes from the Dirt collision)
+	_update_strip(root, "SidewalkOwn", L.start_own_curb, L.end_own_curb, L.start_own_walk, L.end_own_walk, 0.1)
+	_update_strip(root, "SidewalkOnc", -L.start_onc_curb, -L.end_onc_curb, -L.start_onc_walk, -L.end_onc_walk, 0.1)
+
+## edge pylons -- cosmetic rhythm/speed cues, interpolated along each
+## shoulder's outer edge between this chunk's start and end width
+static func _stage_pylons(root: Node3D, L: Dictionary) -> void:
 	var pylons_own: MultiMesh = (root.get_node(^"PylonsOwn") as MultiMeshInstance3D).multimesh
 	var pylons_onc: MultiMesh = (root.get_node(^"PylonsOnc") as MultiMeshInstance3D).multimesh
 	var n_pylons := _pylon_slots()
 	var n_posts := 0
 	for i in range(n_pylons):
 		var pz := -float(i) * PYLON_SPACING - PYLON_SPACING / 2.0
-		if Junction.in_mouth(chunk_index, pz):
+		if Junction.in_mouth(L.index, pz):
 			continue  # none across the crossing's mouth
 		var pt: float = -pz / CHUNK_LEN
-		var own_edge: float = lerp(start_own_shoulder, end_own_shoulder, pt)
-		var onc_edge: float = lerp(start_onc_shoulder, end_onc_shoulder, pt)
+		var own_edge: float = lerp(L.start_own_shoulder, L.end_own_shoulder, pt)
+		var onc_edge: float = lerp(L.start_onc_shoulder, L.end_onc_shoulder, pt)
 		pylons_own.set_instance_transform(n_posts, _xf_up(own_edge, PYLON_HEIGHT / 2.0, pz))
 		pylons_onc.set_instance_transform(n_posts, _xf_up(-onc_edge, PYLON_HEIGHT / 2.0, pz))
 		n_posts += 1
 	pylons_own.visible_instance_count = n_posts
 	pylons_onc.visible_instance_count = n_posts
 
-	# roadside buildings -- real collision, the world's actual hard boundary
+## roadside buildings -- real collision, the world's actual hard boundary.
+## Leaves the buildings' infos and the per-side [z_front, z_back] spans on
+## the job for the signs, roofs and gap walls.
+static func _stage_buildings(root: Node3D, job: Dictionary) -> void:
+	var L: Dictionary = job.layout
 	var n_buildings := _building_slots()
-	var spans := {1: [], -1: []}  # per side: [z_front, z_back] of each building
+	var spans := {1: [], -1: []}
 	var infos := []
 	for i in range(n_buildings):
 		var bz := -float(i) * BUILDING_SPACING - BUILDING_SPACING / 2.0
 		var bt: float = -bz / CHUNK_LEN
-		var own_edge_b: float = lerp(start_own_walk, end_own_walk, bt)
-		var onc_edge_b: float = lerp(start_onc_walk, end_onc_walk, bt)
-		var own_info := _clear_at_junction(root, i * 2, _update_building(root, i * 2, own_edge_b, bz, 1, chunk_index), chunk_index)
-		var onc_info := _clear_at_junction(root, i * 2 + 1, _update_building(root, i * 2 + 1, onc_edge_b, bz, -1, chunk_index), chunk_index)
+		var own_edge_b: float = lerp(L.start_own_walk, L.end_own_walk, bt)
+		var onc_edge_b: float = lerp(L.start_onc_walk, L.end_onc_walk, bt)
+		var own_info := _clear_at_junction(root, i * 2, _update_building(root, i * 2, own_edge_b, bz, 1, L.index, L.draws[i * 2]), L.index)
+		var onc_info := _clear_at_junction(root, i * 2 + 1, _update_building(root, i * 2 + 1, onc_edge_b, bz, -1, L.index, L.draws[i * 2 + 1]), L.index)
 		infos.append(own_info)
 		infos.append(onc_info)
 		var d_own: float = own_info.d
 		var d_onc: float = onc_info.d
 		spans[1].append([bz + d_own / 2.0, bz - d_own / 2.0])
 		spans[-1].append([bz + d_onc / 2.0, bz - d_onc / 2.0])
+	job["infos"] = infos
+	job["spans"] = spans
 
-	_update_roofs(root, infos, _update_signs(root, infos))
+static func _stage_signs_roofs(root: Node3D, job: Dictionary) -> void:
+	_update_roofs(root, job.infos, _update_signs(root, job.infos))
 
-	# gap walls (stage A) -- close the open lots between buildings along the
-	# building-front line. Visual only: out-of-bounds collision is issue #28,
-	# which is being worked on separately, so it is deliberately not done here.
+## gap walls (stage A) -- close the open lots between buildings along the
+## building-front line. Visual only: out-of-bounds collision is issue #28,
+## which is being worked on separately, so it is deliberately not done here.
+static func _stage_walls(root: Node3D, job: Dictionary) -> void:
+	var L: Dictionary = job.layout
+	var spans: Dictionary = job.spans
 	var walls: MultiMesh = (root.get_node(^"GapWalls") as MultiMeshInstance3D).multimesh
 	var n_walls := 0
 	for side in [1, -1]:
-		var walk0: float = start_own_walk if side == 1 else start_onc_walk
-		var walk1: float = end_own_walk if side == 1 else end_onc_walk
+		var walk0: float = L.start_own_walk if side == 1 else L.start_onc_walk
+		var walk1: float = L.end_own_walk if side == 1 else L.end_onc_walk
 		var z_from := 0.0
 		var edges: Array = spans[side].duplicate()
-		if Junction.touches(chunk_index):
+		if Junction.touches(L.index):
 			# the crossing's mouth is an opening like a building's frontage
-			var jc := Junction.local_centre(chunk_index)
+			var jc := Junction.local_centre(L.index)
 			edges.append([jc + Junction.MOUTH_HALF, jc - Junction.MOUTH_HALF])
 			edges.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
 		edges.append([-CHUNK_LEN, -CHUNK_LEN])
@@ -1307,24 +1403,25 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			var length := z_from - z_to
 			if length > 0.3:
 				var zc := (z_from + z_to) / 2.0
-				var x: float = lerp(walk0, walk1, -zc / CHUNK_LEN) + BUILDING_GAP + setback + WALL_T / 2.0
+				var x: float = lerp(walk0, walk1, -zc / CHUNK_LEN) + BUILDING_GAP + L.setback + WALL_T / 2.0
 				var f := _foundation()
 				var basis := Basis.from_scale(Vector3(WALL_T, WALL_H + f, length))
 				walls.set_instance_transform(n_walls, _xf_up(x * float(side), (WALL_H - f) / 2.0, zc, basis))
 				n_walls += 1
-			z_from = minf(z_from, e[1]) if Junction.touches(chunk_index) else e[1]
+			z_from = minf(z_from, e[1]) if Junction.touches(L.index) else e[1]
 		# the district step: a visible wall across the lot edge, where the
 		# invisible cross wall stands
-		var step: Vector2 = step_own if side == 1 else step_onc
-		if absf(setback - prev_setback) > 0.01:
+		var step: Vector2 = L.step_own if side == 1 else L.step_onc
+		if L.step_on:
 			var sx := absf(step.x - step.y)
 			var basis2 := Basis.from_scale(Vector3(sx, WALL_H, WALL_T))
 			walls.set_instance_transform(n_walls, Transform3D(basis2, Vector3((step.x + step.y) / 2.0 * float(side), WALL_H / 2.0, -WALL_T / 2.0)))
 			n_walls += 1
 	walls.visible_instance_count = n_walls
 
-	# street lamps + their light pools (stage A). Pole just outside the curb,
-	# arm over the road; the oncoming side is the same mesh turned 180 deg.
+## street lamps + their light pools (stage A). Pole just outside the curb,
+## arm over the road; the oncoming side is the same mesh turned 180 deg.
+static func _stage_lamps(root: Node3D, L: Dictionary) -> void:
 	var lamps: MultiMesh = (root.get_node(^"Lamps") as MultiMeshInstance3D).multimesh
 	var pools: MultiMesh = (root.get_node(^"LampPools") as MultiMeshInstance3D).multimesh
 	var n_lamps := 0
@@ -1332,10 +1429,10 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		for side in [1, -1]:
 			# own side at 6.25, 31.25 m; oncoming at 18.75, 43.75 m into the chunk
 			var lz := -float(i) * LAMP_SPACING - (LAMP_SPACING * 0.25 if side == 1 else LAMP_SPACING * 0.75)
-			if Junction.in_mouth(chunk_index, lz):
+			if Junction.in_mouth(L.index, lz):
 				continue  # the signal masts stand there
 			var lt: float = -lz / CHUNK_LEN
-			var curb: float = lerp(start_own_curb, end_own_curb, lt) if side == 1 else lerp(start_onc_curb, end_onc_curb, lt)
+			var curb: float = lerp(L.start_own_curb, L.end_own_curb, lt) if side == 1 else lerp(L.start_onc_curb, L.end_onc_curb, lt)
 			var pole_x := (curb + LAMP_SETBACK) * float(side)
 			var turn := Basis() if side == 1 else Basis(Vector3.UP, PI)
 			lamps.set_instance_transform(n_lamps, _xf_up(pole_x, 0.0, lz, turn))
@@ -1345,12 +1442,16 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	lamps.visible_instance_count = n_lamps
 	pools.visible_instance_count = n_lamps
 
-	# center line / barrier -- snapped to this chunk's own end-of-chunk
-	# config, not tapered (see file header). Both the wall and the dash
-	# buffer always exist; only one of them is shown.
+## center line / barrier -- snapped to this chunk's own end-of-chunk config,
+## not tapered (see file header). Both the wall and the dash buffer always
+## exist; only one of them is shown. Then the interior lane dividers, both
+## directions packed into one instance buffer; unused capacity is simply left
+## outside visible_instance_count.
+static func _stage_dashes(root: Node3D, L: Dictionary) -> void:
+	var barrier_mmi := root.get_node(^"Barrier") as MultiMeshInstance3D
+	barrier_mmi.visible = L.barrier
 	var slots := _dash_slots()
 	var center: MultiMesh = (root.get_node(^"CenterDashes") as MultiMeshInstance3D).multimesh
-	var barrier_mmi := root.get_node(^"Barrier") as MultiMeshInstance3D
 	var refl_mm: MultiMesh = (barrier_mmi.get_node(^"Reflectors") as MultiMeshInstance3D).multimesh
 	var seg := CHUNK_LEN / STATIONS
 	for k in STATIONS:
@@ -1359,40 +1460,102 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		refl_mm.set_instance_transform(k, bxf)
 	barrier_mmi.multimesh.visible_instance_count = STATIONS
 	refl_mm.visible_instance_count = STATIONS
-	barrier_mmi.visible = barrier
-	if barrier:
+	if L.barrier:
 		center.visible_instance_count = 0
 	else:
 		var n_center := 0
 		for i in range(slots):
 			var dz := -float(i) * DASH_SPACING - DASH_SPACING / 2.0
-			if Junction.in_box(chunk_index, dz):
+			if Junction.in_box(L.index, dz):
 				continue  # no markings inside the crossing
 			center.set_instance_transform(n_center, _xf(0.0, DASH_Y, dz))
 			n_center += 1
 		center.visible_instance_count = n_center
 
-	# interior lane dividers, both directions packed into one instance
-	# buffer; unused capacity is simply left outside visible_instance_count
 	var lane: MultiMesh = (root.get_node(^"LaneDashes") as MultiMeshInstance3D).multimesh
 	var written := 0
-	for lane_i in range(1, own_lanes):
+	for lane_i in range(1, int(L.own_lanes)):
 		var x: float = MEDIAN_GAP + lane_i * LANE_W
 		for i in range(slots):
 			var dz2 := -float(i) * DASH_SPACING - DASH_SPACING / 2.0
-			if Junction.in_box(chunk_index, dz2):
+			if Junction.in_box(L.index, dz2):
 				continue
 			lane.set_instance_transform(written, _xf(x, DASH_Y, dz2))
 			written += 1
-	for lane_i in range(1, onc_lanes):
+	for lane_i in range(1, int(L.onc_lanes)):
 		var x2: float = -(MEDIAN_GAP + lane_i * LANE_W)
 		for i in range(slots):
 			var dz3 := -float(i) * DASH_SPACING - DASH_SPACING / 2.0
-			if Junction.in_box(chunk_index, dz3):
+			if Junction.in_box(L.index, dz3):
 				continue
 			lane.set_instance_transform(written, _xf(x2, DASH_Y, dz3))
 			written += 1
 	lane.visible_instance_count = written
+
+static func _stage_finish(root: Node3D, job: Dictionary) -> void:
+	var L: Dictionary = job.layout
+	root.set_meta("rebuilding", false)
+	# Into place. job.origin_index is kept current by game.gd across a
+	# floating-origin shift that lands mid-job.
+	root.transform = RoadFrame.chunk_xf(L.index, job.origin_index)
+	_set_solid(root, true)
+	root.reset_physics_interpolation()
+	sync_collision(root)
+
+## Starts a rebuild of a pooled chunk and returns its job; rebuild_step()
+## runs it a stage at a time. Until the job finishes the chunk is hidden and
+## its collision is off, so nothing meets a half-rewritten chunk: game.gd
+## recycles a chunk to the far end of the pool, 250-350 m ahead, and the job
+## is done a few frames later, long before anything gets there. The
+## buildings' random draws are taken now (see _layout), so the global
+## sequence is unchanged by the spreading.
+static func rebuild_begin(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary, origin_index: int = 0) -> Dictionary:
+	if not root.has_meta("nodes_built"):
+		_create_nodes(root)
+	_set_solid(root, false)
+	return {"root": root, "layout": _layout(chunk_index, prev_cfg, cfg), "origin_index": origin_index, "stage": 0, "strip_n": 1}
+
+## How far under its place a chunk is parked while its rebuild is in flight.
+const PARK_BELOW := -1000.0
+
+## True while a staged rebuild of this chunk is in flight.
+static func is_rebuilding(root: Node3D) -> bool:
+	return root.get_meta("rebuilding", false)
+
+## Runs the job's next stage. Returns true when the job is done (and the
+## chunk is visible and solid again). A chunk freed under the job (scene
+## restart) ends it.
+static func rebuild_step(job: Dictionary) -> bool:
+	var root: Node3D = job.root
+	if not is_instance_valid(root):
+		return true
+	var s: int = job.stage
+	if s >= STAGES.size():
+		return true
+	var L: Dictionary = job.layout
+	var t0 := Time.get_ticks_usec()
+	if s > 0:
+		_prime(root, job)
+	match STAGES[s]:
+		"setup": _stage_setup(root, job)
+		"collision": _stage_collision(root, L)
+		"strips": _stage_strips(root, L)
+		"pylons": _stage_pylons(root, L)
+		"buildings": _stage_buildings(root, job)
+		"signs_roofs": _stage_signs_roofs(root, job)
+		"walls": _stage_walls(root, job)
+		"lamps": _stage_lamps(root, L)
+		"dashes": _stage_dashes(root, L)
+		"finish": _stage_finish(root, job)
+	_stage("chunk/" + STAGES[s], t0)
+	job.stage = s + 1
+	return job.stage >= STAGES.size()
+
+## The whole rewrite in one go: every stage, back to back.
+static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary, origin_index: int = 0) -> void:
+	var job := rebuild_begin(root, chunk_index, prev_cfg, cfg, origin_index)
+	while not rebuild_step(job):
+		pass
 
 ## Builds a fresh chunk root positioned at world Z = -(chunk_index - origin_index) * CHUNK_LEN,
 ## spanning from z=0 to z=-CHUNK_LEN locally.
@@ -1406,12 +1569,10 @@ static func build_chunk(chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary,
 ## rebuilt them from scratch, which at 55 m/s over a 50 m chunk meant a full
 ## teardown-and-reallocate roughly every 0.9 seconds -- a periodic stutter on
 ## a 15 W CPU. Now it only rewrites vertex data, transforms and shape sizes
-## into nodes that already exist.
+## into nodes that already exist (and game.gd spreads that over frames with
+## rebuild_begin / rebuild_step; this is the atomic form the tests use).
 static func rebuild_chunk(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary, origin_index: int = 0) -> void:
-	if not root.has_meta("nodes_built"):
-		_create_nodes(root)
 	_apply(root, chunk_index, prev_cfg, cfg, origin_index)
-	sync_collision(root)
 
 ## Hands a moved chunk's collision to the physics server now. Moving the
 ## chunk root only tells its bodies they moved when Godot next flushes

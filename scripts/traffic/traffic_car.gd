@@ -667,8 +667,10 @@ func set_detailed(on: bool) -> void:
 		return
 	detailed = on
 	if on:
+		var t0 := Time.get_ticks_usec()
 		freeze = false
 		set_moving(self, _cruise_speed)
+		SpikeLog.mark("traffic_detail_on", SpikeLog.since(t0))
 	else:
 		_cruise_speed = maxf(current_speed(), 0.0)
 		freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC

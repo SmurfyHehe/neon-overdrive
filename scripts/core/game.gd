@@ -94,6 +94,9 @@ func _ready() -> void:
 	# NEON_TRAFFIC=<n> overrides the saved car count, like NEON_TICKS/NEON_MUTE:
 	# tests/run_tests.bat sets 0 so the older drive-bot tests, which steer
 	# across lanes blind, do not hit traffic (tests/traffic_*.gd clear it).
+	var stages_env := OS.get_environment("NEON_REBUILD_STAGES")
+	if stages_env.is_valid_int():
+		rebuild_stages_per_frame = maxi(1, int(stages_env))
 	var traffic_env := OS.get_environment("NEON_TRAFFIC")
 	if traffic_env.is_valid_int():
 		TrafficSettings.set_car_count(int(traffic_env))
@@ -288,7 +291,8 @@ func _setup_road_shape() -> void:
 		curviness = Benchmark.opt_float("curves", 0.0)
 		hilliness = Benchmark.opt_float("hills", 0.0)
 	var seed_env := OS.get_environment("NEON_ROAD_SEED")
-	var road_seed := int(seed_env) if seed_env.is_valid_int() else randi()
+	# A benchmark run with --curves or --hills gets a fixed road, so runs compare.
+	var road_seed := int(seed_env) if seed_env.is_valid_int() else (Benchmark.SEED if Benchmark.requested() else randi())
 	RoadFrame.origin_index = origin_index
 	RoadFrame.align = RoadAlignment.new(road_seed, curviness, hilliness, kicker_chance) if curviness > 0.0 or hilliness > 0.0 else null
 	# Lane adds and drops, median splits and exits (road lane proposal): a
@@ -339,6 +343,19 @@ func _setup_chunk_pool() -> void:
 ## Tests: called as (chunk_root, gap) just before a chunk is rebuilt (it vanishes
 ## from where it stands); gap is how many chunks behind the player it is.
 var chunk_event_hook: Callable = Callable()
+## Chunk rebuilds in flight (RoadChunkBuilder.rebuild_begin), oldest first.
+## A recycled chunk used to be rewritten whole in the frame it fell behind,
+## ~3 ms (tests/world/chunk_rebuild_perf.gd) landing in one frame every 50 m of
+## road: a visible hitch at speed. Now each frame runs rebuild_stages_per_frame
+## stages (about 1 ms; a count, not a wall-clock budget, so a run is the same
+## on a loaded machine and the physics tests stay reproducible), and a job
+## takes three or four frames. The chunk is parked out of the way and not solid until it
+## is done; it is 250-350 m ahead, in the fog, where it appeared from nothing
+## before too.
+var _rebuild_jobs: Array = []
+## NEON_REBUILD_STAGES=<n> overrides it (a huge value rebuilds a chunk whole
+## in one frame again, to bisect a test against the spreading).
+var rebuild_stages_per_frame := 3
 
 func _update_chunk_pool(ref_z: float) -> void:
 	var current_idx := int(floor(-ref_z / RoadChunkBuilder.CHUNK_LEN)) + origin_index
@@ -353,12 +370,26 @@ func _update_chunk_pool(ref_z: float) -> void:
 			max_idx += 1
 			var prev_cfg := _section_at(max_idx - 1)
 			var cfg := _section_at(max_idx)
-			RoadChunkBuilder.rebuild_chunk(c.root, max_idx, prev_cfg, cfg, origin_index)
-			# Physics interpolation is on (ISSUES B7): without this reset the
-			# recycled chunk would slide from its old spot to the new one
-			# over a frame instead of jumping there.
-			c.root.reset_physics_interpolation()
+			_rebuild_jobs.append(RoadChunkBuilder.rebuild_begin(c.root, max_idx, prev_cfg, cfg, origin_index))
 			c.index = max_idx
+	_run_rebuild_jobs()
+
+func _run_rebuild_jobs() -> void:
+	if _rebuild_jobs.is_empty():
+		return
+	var t0 := Time.get_ticks_usec()
+	for i in rebuild_stages_per_frame:
+		if _rebuild_jobs.is_empty():
+			break
+		if RoadChunkBuilder.rebuild_step(_rebuild_jobs[0]):
+			_rebuild_jobs.pop_front()
+	SpikeLog.mark("chunk_rebuild", SpikeLog.since(t0))
+
+## Finishes every rebuild in flight now (tests that walk the pool by hand).
+func flush_rebuilds() -> void:
+	while not _rebuild_jobs.is_empty():
+		if RoadChunkBuilder.rebuild_step(_rebuild_jobs[0]):
+			_rebuild_jobs.pop_front()
 
 # ---------- floating origin (issue #26) ----------
 func _physics_process(_delta: float) -> void:
@@ -390,6 +421,7 @@ func request_next_station() -> void:
 func _shift_origin(shift_chunks: int) -> void:
 	if shift_chunks == 0:
 		return
+	var t0 := Time.get_ticks_usec()
 	# The world moves so the new origin chunk's start lands on (0, 0, 0): on a
 	# straight road that is +shift_chunks * 50 along z; on a curved one
 	# (RoadFrame, #37) x moves too. Nothing is rotated.
@@ -411,7 +443,13 @@ func _shift_origin(shift_chunks: int) -> void:
 	# be drawn sliding 1 km across one tick.
 	player.reset_physics_interpolation()
 
+	# A chunk mid-rebuild stays parked out of the way; its finish stage places
+	# it from the job's origin, which moves with the shift here.
+	for j in _rebuild_jobs:
+		j.origin_index = origin_index
 	for c in chunk_pool:
+		if RoadChunkBuilder.is_rebuilding(c.root):
+			continue
 		# Re-derived from the index, not +=, so error can never accumulate.
 		c.root.transform = RoadFrame.chunk_xf(c.index, origin_index)
 		c.root.reset_physics_interpolation()
@@ -421,6 +459,7 @@ func _shift_origin(shift_chunks: int) -> void:
 	# Traffic (milestone 3): every car gets the same bookkeeping as the player.
 	traffic.shift_world(offset)
 	fx.shift_world(offset)  # skid marks are laid in world space
+	SpikeLog.mark("recenter", SpikeLog.since(t0))
 	# The ground plane stays put: it is infinite.
 	# The camera follows the car's interpolated position in _process, so it
 	# needs nothing here.

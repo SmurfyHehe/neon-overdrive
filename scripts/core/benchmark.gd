@@ -54,6 +54,15 @@ var cpu_ms := 0.0  # summed viewport render time, CPU side (render thread)
 var process_ms := 0.0  # summed main-thread _process time (scripts)
 var physics_ms := 0.0  # summed physics step time (all ticks in the frame)
 var max_speed := 0.0
+# Spike attribution (spike_log.gd): per measured frame, the engine's own
+# process / physics split, how many physics ticks it ran, and what the game's
+# hot spots logged. The report prints the slowest frames with all of it.
+const TOP_FRAMES := 12
+var proc_ms: PackedFloat32Array = []
+var phys_ms: PackedFloat32Array = []
+var ticks: PackedInt32Array = []
+var events: Array = []  # per measured frame: Array of [tag, ms]
+var _last_tick := 0
 
 static func requested() -> bool:
 	return FLAG in OS.get_cmdline_user_args()
@@ -75,6 +84,7 @@ static func run_secs() -> float:
 
 func _ready() -> void:
 	game = get_parent()
+	SpikeLog.enabled = true
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	Engine.max_fps = 0
 	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
@@ -131,8 +141,14 @@ func _process(delta: float) -> void:
 		_diagnose()
 		return
 	t += delta
+	var ev := SpikeLog.take()
+	var tick := Engine.get_physics_frames()
 	if t > WARMUP_SECS:
 		frames.append(delta * 1000.0)
+		proc_ms.append(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0)
+		phys_ms.append(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0)
+		ticks.append(tick - _last_tick)
+		events.append(ev)
 		# The monitor holds the last rendered frame's count, so sample it every
 		# frame: a single read at the end only sees whatever the quit frame drew.
 		draw_calls.append(int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)))
@@ -142,6 +158,7 @@ func _process(delta: float) -> void:
 		cpu_ms += RenderingServer.viewport_get_measured_render_time_cpu(vp)
 		process_ms += Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
 		physics_ms += Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
+	_last_tick = tick
 
 	var p: PlayerCar = game.get("player")
 	max_speed = max(max_speed, p.linear_velocity.length())
@@ -207,6 +224,7 @@ func _report() -> void:
 	line += "  gfx=%s scale_end=%.2f" % [GraphicsSettings.preset, get_viewport().scaling_3d_scale]
 	line += "  opts=[%s]" % " ".join(OS.get_cmdline_user_args())
 	print("BENCHMARK ", line)
+	_report_spikes()
 	# Next to the exe in an exported build, where Roy can find it; user:// when
 	# run from the editor, whose "exe" is Godot itself.
 	var path := "user://benchmark-results.txt"
@@ -240,3 +258,32 @@ func _diagnose() -> void:
 			if cls.to_lower() == o or String(n.name).to_lower() == o:
 				n.set_process(false)
 				n.set_physics_process(false)
+
+## The slowest frames, each with the engine's process/physics time, the
+## physics ticks it ran and what the hot spots logged (SpikeLog), then a
+## per-tag total so a cost spread over many frames shows up too.
+func _report_spikes() -> void:
+	var order := []
+	for i in frames.size():
+		order.append(i)
+	order.sort_custom(func(a: int, b: int) -> bool: return frames[a] > frames[b])
+	print("BENCHMARK slowest %d frames (of %d):" % [TOP_FRAMES, frames.size()])
+	for r in mini(TOP_FRAMES, order.size()):
+		var i: int = order[r]
+		var parts := PackedStringArray()
+		for e in events[i]:
+			parts.append("%s %.2f" % [e[0], e[1]])
+		print("  #%d frame=%.2fms process=%.2f physics=%.2f ticks=%d  %s" % [
+			i, frames[i], proc_ms[i], phys_ms[i], ticks[i], " ".join(parts)])
+	var totals := {}
+	var counts := {}
+	var worst := {}
+	for ev in events:
+		for e in ev:
+			totals[e[0]] = float(totals.get(e[0], 0.0)) + float(e[1])
+			counts[e[0]] = int(counts.get(e[0], 0)) + 1
+			worst[e[0]] = maxf(float(worst.get(e[0], 0.0)), float(e[1]))
+	var tags := totals.keys()
+	tags.sort()
+	for tag in tags:
+		print("  %-18s n=%-5d total=%.1fms avg=%.3fms max=%.2fms" % [tag, counts[tag], totals[tag], totals[tag] / counts[tag], worst[tag]])

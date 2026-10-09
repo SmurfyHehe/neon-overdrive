@@ -76,10 +76,10 @@ func _process(delta: float) -> void:
 		phys_ms.append(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0)
 		ticks.append(tick - _last_tick)
 		events.append(ev)
-	_last_tick = tick
 		# The monitor holds the last rendered frame's count, so sample it every
 		# frame: a single read at the end only sees whatever the quit frame drew.
 		draw_calls.append(int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)))
+	_last_tick = tick
 
 	var p: PlayerCar = game.get("player")
 	var speed := p.linear_velocity.length()

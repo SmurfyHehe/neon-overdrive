@@ -7,6 +7,9 @@ extends SceneTree
 # - the boost speeds the car up (0-100 faster on TuneTrack) and the default car is
 #   unchanged
 # - EngineSynth: the whistle and the blow-off add sound only when asked
+# - the vent lasts 0.3 to 1 s; the spool is more than one tone and stays above the mirror
+#   whistle (1.25 / 2.5 kHz)
+# - EngineAudio vents when the driver eases off the pedal (a ramp, not a one-tick cut)
 # Exit code 1 on failure. Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --fixed-fps 60 --path . -s res://tests/turbo.gd
 
@@ -88,6 +91,69 @@ func _synth() -> void:
 	print("synth rms: quiet %.4f whistle %.4f vent %.4f" % [quiet, whistle, vent])
 	_check(whistle > quiet * 1.02, "the whistle should add sound")
 	_check(vent > quiet * 1.02, "the blow-off should add sound")
+	for st in [0.3, 1.0]:
+		var v := EngineSynth.new()
+		v.blow_off(st)
+		var secs := 0.0
+		while v._bov_env > 0.01 and secs < 5.0:
+			v._bov_env *= v._bov_decay
+			secs += 1.0 / v.mix_rate
+		print("vent length at strength %.1f: %.2f s" % [st, secs])
+		_check(secs >= 0.3 and secs <= 1.0, "vent at strength %.1f should last 0.3-1 s, lasts %.2f" % [st, secs])
+	_spool()
+	_lift_ramp()
+
+## Spool at full boost: energy near the 1.37x partial, none at the mirror-whistle tones.
+func _spool() -> void:
+	var s := EngineSynth.new()
+	s.tune = ExhaustTune.new(0.5, 0.3, 0.0, 0.0)
+	s.volume = 1.0
+	s.boost = 1.0
+	var buf := PackedFloat32Array()
+	for i in 8:
+		for f in s.render(512, 1000.0, 0.0, false):
+			buf.append(f.x)
+	var f0: float = EngineSynth.SPOOL_HZ_LOW + EngineSynth.SPOOL_HZ_SPAN
+	var main := _tone(buf, f0, s.mix_rate)
+	var partial := _tone(buf, f0 * 1.37, s.mix_rate)
+	var mirror := maxf(_tone(buf, 1250.0, s.mix_rate), _tone(buf, 2480.0, s.mix_rate))
+	var gap := _tone(buf, f0 * 1.2, s.mix_rate)
+	print("spool: main %.4f partial %.4f gap %.4f mirror tones %.4f" % [main, partial, gap, mirror])
+	_check(partial > gap * 3.0, "spool should carry a second partial")
+	_check(main > mirror * 3.0, "spool should sit above the mirror whistle tones")
+
+## Goertzel magnitude of one frequency.
+func _tone(buf: PackedFloat32Array, hz: float, rate: float) -> float:
+	var w := TAU * hz / rate
+	var c := 2.0 * cos(w)
+	var s1 := 0.0
+	var s2 := 0.0
+	for x in buf:
+		var s0 := x + c * s1 - s2
+		s2 = s1
+		s1 = s0
+	return sqrt(s1 * s1 + s2 * s2 - c * s1 * s2) / buf.size()
+
+## A driver easing off the pedal (0.15 s ramp) must vent once; GEVP's one-tick check cannot.
+func _lift_ramp() -> void:
+	var ea := EngineAudio.new()
+	ea._vehicle = PlayerCar.new()
+	ea.synth.boost = 0.8
+	var vents := 0
+	var thr := 1.0
+	for i in 60:
+		ea._vehicle.throttle_input = thr
+		if ea.lift_off_vent(1.0 / 60.0):
+			vents += 1
+		thr = maxf(thr - 1.0 / 9.0, 0.0) if i >= 20 else 1.0
+	_check(vents == 1, "an eased lift should vent once, vented %d" % vents)
+	ea.synth.boost = 0.1
+	ea._lift_vented = false
+	ea._since_hot = 0.0
+	ea._vehicle.throttle_input = 0.0
+	_check(not ea.lift_off_vent(1.0 / 60.0), "a cold boost should not vent")
+	ea._vehicle.free()
+	ea.free()
 	_end("")
 
 func _render(boost: float, vent: bool) -> float:

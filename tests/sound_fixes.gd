@@ -277,10 +277,10 @@ func _check_variants() -> void:
 		var pl := drive.get_node_or_null(n) as AudioStreamPlayer
 		var r := pl.stream as AudioStreamRandomizer if pl != null else null
 		_check(r != null and r.streams_count == DrivelineAudio.VARIANTS, "%s should hold %d random variants" % [n, DrivelineAudio.VARIANTS])
-	for tier in ["tap", "thud", "crunch", "glass"]:
-		var pl := crash.get_node_or_null(tier.capitalize() + "Audio") as AudioStreamPlayer
-		var r := pl.stream as AudioStreamRandomizer if pl != null else null
-		_check(r != null and r.streams_count == CrashAudio.VARIANTS, "%s should hold %d variants" % [tier, CrashAudio.VARIANTS])
+	# crash pools: tests/crash_variety.gd checks them take by take
+	for pool in CrashAudio.POOLS:
+		var pl: CrashAudio.Pool = crash._pools.get(pool)
+		_check(pl != null and pl.streams.size() == CrashAudio.VARIANTS, "%s should hold %d variants" % [pool, CrashAudio.VARIANTS])
 	var chirp := car.get_node("ChirpAudio").stream as AudioStreamRandomizer
 	_check(chirp != null and chirp.streams_count == CarAudio.CHIRP_VARIANTS, "the chirp should hold %d variants" % CarAudio.CHIRP_VARIANTS)
 	for layer in CarAudio.PAIRED:
@@ -289,7 +289,7 @@ func _check_variants() -> void:
 		var la := (a.stream as AudioStreamWAV).loop_end
 		var lb := (b.stream as AudioStreamWAV).loop_end
 		_check(la != lb, "%s: the two takes should differ in length (%d, %d)" % [layer, la, lb])
-	_check(crash.get_node_or_null("ScrapeBAudio") != null, "the scrape should have a second take")
+	_check(crash.get_node_or_null("ScrapeConcreteBAudio") != null, "the scrape should have a second player to crossfade takes")
 
 func _finish() -> void:
 	if quit_in > 0 or game == null:

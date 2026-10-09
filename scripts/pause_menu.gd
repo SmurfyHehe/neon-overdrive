@@ -40,6 +40,19 @@ var controls_page: VBoxContainer
 var controls_scroll: ScrollContainer
 var controls_back_button: Button
 var cars_page: VBoxContainer
+var graphics_page: VBoxContainer
+var graphics_back_button: Button
+var gfx_preset: OptionButton
+var gfx_aa: OptionButton
+var gfx_scale: HSlider
+var gfx_scale_label: Label
+var gfx_mirrors: OptionButton
+var gfx_dynres: OptionButton
+var gfx_cap: OptionButton
+var gfx_auto_label: Label
+var traffic_cars_slider: HSlider
+var traffic_dist_slider: HSlider
+var _gfx_refreshing := false
 
 func _init(state: GameState) -> void:
 	game_state = state
@@ -100,17 +113,21 @@ func _ready() -> void:
 	traffic_title.text = "Traffic"
 	traffic_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(traffic_title)
-	_add_slider(box, "Cars", 0.0, TrafficSettings.CAR_COUNT_MAX, 5.0, TrafficSettings.car_count,
+	# A graphics tier sets these two as well (GraphicsSettings): moving one by
+	# hand makes the Graphics preset read "Custom".
+	traffic_cars_slider = _add_slider(box, "Cars", 0.0, TrafficSettings.CAR_COUNT_MAX, 5.0, TrafficSettings.car_count,
 		func(v: float) -> void:
 			TrafficSettings.set_car_count(int(v))
 			TrafficSettings.save_settings()
+			GraphicsSettings.refresh_preset()
 			var traffic: Variant = get_parent().get("traffic")
 			if traffic != null:
 				traffic.set_car_count(TrafficSettings.car_count))
-	_add_slider(box, "Draw dist", TrafficSettings.DETAIL_MIN, TrafficSettings.DETAIL_MAX, 10.0, TrafficSettings.detail_distance,
+	traffic_dist_slider = _add_slider(box, "Draw dist", TrafficSettings.DETAIL_MIN, TrafficSettings.DETAIL_MAX, 10.0, TrafficSettings.detail_distance,
 		func(v: float) -> void:
 			TrafficSettings.set_detail_distance(v)
 			TrafficSettings.save_settings()
+			GraphicsSettings.refresh_preset()
 			var traffic: Variant = get_parent().get("traffic")
 			if traffic != null:
 				traffic.detail_distance = TrafficSettings.detail_distance)
@@ -162,6 +179,7 @@ func _ready() -> void:
 
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	_add_button(box, "Car: " + PlayerCars.title(PlayerCar.chassis_kind()), show_cars)
+	_add_button(box, "Graphics", show_graphics)
 	_add_button(box, "Controls", show_controls)
 	_add_button(box, "Service car (reset wear)", _service_car)
 	_add_button(box, "Open log folder", LogFolder.open)
@@ -178,6 +196,7 @@ func _ready() -> void:
 
 	_build_controls_page(center)
 	_build_cars_page(center)
+	_build_graphics_page(center)
 	game_state.state_changed.connect(_on_state_changed)
 
 ## Resets temperatures, tyre, clutch and brake wear (the garage will own this later).
@@ -217,20 +236,113 @@ func _on_state_changed(new_state: GameState.State, _old_state: GameState.State) 
 	if visible:
 		show_main()  # always reopen on the main page
 
+# ---------- Graphics page (polish pass, 2026-10-08) ----------
+# A preset picker plus each setting on its own (GraphicsSettings). Every change
+# applies at once and is saved; changing one setting makes the preset "Custom".
+func show_graphics() -> void:
+	_refresh_graphics()
+	main_page.visible = false
+	controls_page.visible = false
+	graphics_page.visible = true
+	gfx_preset.grab_focus()
+
+func _build_graphics_page(center: CenterContainer) -> void:
+	graphics_page = VBoxContainer.new()
+	graphics_page.add_theme_constant_override("separation", 8)
+	graphics_page.visible = false
+	center.add_child(graphics_page)
+	var title := Label.new()
+	title.text = "GRAPHICS"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	graphics_page.add_child(title)
+	gfx_preset = _add_option(graphics_page, "Preset", ["Low", "Medium", "High", "Custom"], func(i: int) -> void:
+		if i < GraphicsSettings.PRESETS.size():
+			GraphicsSettings.set_preset(GraphicsSettings.PRESETS[i])
+		_graphics_changed())
+	gfx_aa = _add_option(graphics_page, "Edge smoothing", GraphicsSettings.AA_NAMES, func(i: int) -> void:
+		GraphicsSettings.set_aa(GraphicsSettings.AA_MODES[i])
+		_graphics_changed())
+	gfx_scale = _add_slider(graphics_page, "Resolution", GraphicsSettings.SCALE_MIN, GraphicsSettings.SCALE_MAX, 0.05, GraphicsSettings.render_scale,
+		func(v: float) -> void:
+			GraphicsSettings.set_render_scale(v)
+			_graphics_changed())
+	gfx_scale_label = Label.new()
+	gfx_scale.get_parent().add_child(gfx_scale_label)
+	# Tiers (2026-10-09): the CPU side of a preset is the traffic sliders on
+	# the main page plus the mirror render size here.
+	gfx_mirrors = _add_option(graphics_page, "Mirrors", ["Low", "Medium", "High"], func(i: int) -> void:
+		FxSettings.set_mirror_quality(i)
+		GraphicsSettings.refresh_preset()
+		_graphics_changed())
+	gfx_dynres = _add_option(graphics_page, "Dynamic resolution", ["On", "Off"], func(i: int) -> void:
+		GraphicsSettings.set_dynamic_res(i == 0)
+		_graphics_changed())
+	gfx_cap = _add_option(graphics_page, "Frame cap", ["V-sync", "30 fps"], func(i: int) -> void:
+		GraphicsSettings.set_fps_cap(GraphicsSettings.FPS_CAPS[i])
+		_graphics_changed())
+	gfx_auto_label = Label.new()
+	gfx_auto_label.text = "Preset picked automatically on first launch"
+	gfx_auto_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	gfx_auto_label.add_theme_color_override("font_color", Color(1.0, 0.75, 0.4))  # amber #FFC066
+	graphics_page.add_child(gfx_auto_label)
+	graphics_back_button = _add_button(graphics_page, "Back", show_main)
+
+func _add_option(parent: Control, text: String, items: Array, on_select: Callable) -> OptionButton:
+	var row := HBoxContainer.new()
+	parent.add_child(row)
+	var name_label := Label.new()
+	name_label.text = text
+	name_label.custom_minimum_size = Vector2(140, 0)
+	row.add_child(name_label)
+	var o := OptionButton.new()
+	for item in items:
+		o.add_item(item)
+	o.custom_minimum_size = Vector2(180, 0)
+	o.item_selected.connect(on_select)
+	row.add_child(o)
+	return o
+
+func _graphics_changed() -> void:
+	if _gfx_refreshing:
+		return
+	GraphicsSettings.auto_picked = false   # a hand choice replaces the automatic one
+	GraphicsSettings.apply(get_tree())
+	GraphicsSettings.save_settings()
+	_refresh_graphics()
+
+## Shows the current values; the guard stops the widgets' own signals re-applying them.
+func _refresh_graphics() -> void:
+	_gfx_refreshing = true
+	var idx := GraphicsSettings.PRESETS.find(GraphicsSettings.preset)
+	gfx_preset.select(idx if idx >= 0 else GraphicsSettings.PRESETS.size())
+	gfx_aa.select(maxi(GraphicsSettings.AA_MODES.find(GraphicsSettings.aa), 0))
+	gfx_scale.value = GraphicsSettings.render_scale
+	gfx_scale_label.text = "%d%%" % roundi(GraphicsSettings.render_scale * 100.0)
+	gfx_mirrors.select(FxSettings.mirror_quality)
+	gfx_dynres.select(0 if GraphicsSettings.dynamic_res else 1)
+	gfx_cap.select(maxi(GraphicsSettings.FPS_CAPS.find(GraphicsSettings.fps_cap), 0))
+	gfx_auto_label.visible = GraphicsSettings.auto_picked
+	_gfx_refreshing = false
+
 # ---------- Controls page ----------
 func show_controls() -> void:
 	_refresh_controls()
 	main_page.visible = false
 	cars_page.visible = false
+	graphics_page.visible = false
 	controls_page.visible = true
 	# Cap the list to the window so it scrolls instead of running off-screen.
 	controls_scroll.custom_minimum_size = Vector2(640, maxf(get_viewport().get_visible_rect().size.y * 0.7, 160.0))
 	controls_scroll.grab_focus()  # arrows / page keys scroll it
 
 func show_main() -> void:
+	# A graphics tier (menu or first-launch pick) may have moved the traffic values.
+	traffic_cars_slider.set_value_no_signal(TrafficSettings.car_count)
+	traffic_dist_slider.set_value_no_signal(TrafficSettings.detail_distance)
 	main_page.visible = true
 	controls_page.visible = false
 	cars_page.visible = false
+	graphics_page.visible = false
 	resume_button.grab_focus()  # keyboard/controller can navigate the menu
 
 func _build_controls_page(center: CenterContainer) -> void:

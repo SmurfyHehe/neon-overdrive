@@ -545,6 +545,13 @@ func shift_world(offset: Vector3) -> void:
 	for car in cars:
 		car.shift_world(offset)
 
+## A graphics tier was picked (GraphicsSettings.apply): its car count and
+## sim/draw distance, live. Only the game's own manager is in the group.
+func apply_graphics() -> void:
+	if cars.size() != TrafficSettings.car_count:
+		set_car_count(TrafficSettings.car_count)
+	detail_distance = TrafficSettings.detail_distance
+
 ## Live count change from the Settings sliders. Removes the cars furthest from
 ## the player first; new cars spawn like any recycled one.
 func set_car_count(n: int) -> void:

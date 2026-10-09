@@ -33,6 +33,46 @@ const KINDS := [
 
 static var selected := DEFAULT
 
+## TEMPORARY default look per car (Roy, 2026-10-09: "all the body modifications
+## equipped on the user cars to look as bad ass as possible until we set up the
+## mod tree"). Looks only: the sheet build the body wears and the CarParts rim
+## set. Nothing here touches CarSpec.player_spec (mass, drag, downforce, grip,
+## springs stay the stock numbers; the kit is a mesh swap). The mod tree /
+## body shop (Stage E, PR #197 / #267) replaces this table with the garage
+## save; delete it then.
+##
+## "build" is a key of the car's data BUILDS (tools/fleet_design/options.py
+## BUILDS bakes them: "full" = race bumper, diffuser, vented hood, widebody,
+## wing, slammed stance for the hatch/tuner/kei; chin, drag wing, skirts, quad
+## tips for the muscle; rally pod, big roof wing, mud flaps for the crossover).
+## A build the data does not have falls back to "stock" (look_for). The beater
+## and the coupe have no baked kit yet (the coupe is P1CoupeBuilder's own
+## mesh), so they get the rim set only.
+## "rim" is a CarParts.RIM_STYLES name, "rim_color" the rim tint: the library
+## wheel of each full build mapped onto the four built rims (the hatch's dark
+## split 5-spoke -> mesh in rim_dark, the tuner's own mesh gold, the kei's deep
+## dish, the muscle's black monoblock -> five in rim_dark, the crossover's
+## rally gold -> mesh in rim_gold). The beater sits on steelies, like a beater
+## should.
+const LOOK := {
+	"p0_beater": {"build": "stock", "rim": "steel", "rim_color": Color("#8D939C")},
+	"p1_coupe": {"build": "stock", "rim": "five", "rim_color": Color("#C9CED6")},
+	"p2_hothatch": {"build": "full", "rim": "mesh", "rim_color": Color("#22252C")},
+	"p3_tuner": {"build": "full", "rim": "mesh", "rim_color": Color("#C8A04A")},
+	"p4_kei": {"build": "full", "rim": "dish", "rim_color": Color("#C9CED6")},
+	"p5_muscle": {"build": "full", "rim": "five", "rim_color": Color("#22252C")},
+	"p6_crossover": {"build": "full", "rim": "mesh", "rim_color": Color("#C8A04A")},
+}
+
+## The default look for a kind: LOOK's entry with its build checked against
+## the car's data (a sheet without that build, e.g. after a car is re-exported
+## with other build names, wears "stock" instead of failing to build).
+static func look_for(kind: String) -> Dictionary:
+	var l: Dictionary = LOOK.get(kind, {"build": "stock", "rim": "five"}).duplicate()
+	if NpcCarBuilder.is_npc(kind) and not NpcCarBuilder.builds(kind).has(l.build):
+		l.build = "stock"
+	return l
+
 ## Where the P1's cabin (CockpitFrame, the cockpit eye, the mirrors) sits in
 ## each other car, as an offset in car space: no scaling (scaled parents break
 ## the mirror cameras), just moved to the car's own windshield base (fleet.json

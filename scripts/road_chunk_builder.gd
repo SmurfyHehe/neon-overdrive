@@ -1035,6 +1035,20 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 	info["side"] = side
 	return info
 
+## City lights (Junction, J0): a building whose frontage overlaps the
+## crossing's corner is turned into an empty lot (no mesh, no collision, no
+## sign). _update_building has already taken its random draws, so the road
+## layout is the same with the switch on or off.
+static func _clear_at_junction(root: Node3D, index: int, info: Dictionary, chunk_index: int) -> Dictionary:
+	if info.empty or not Junction.cleared(chunk_index, float(info.z) + float(info.d) / 2.0, float(info.z) - float(info.d) / 2.0):
+		return info
+	var mi: MeshInstance3D = root.get_node(NodePath("BuildingMesh%d" % index))
+	var body: StaticBody3D = root.get_node(NodePath("BuildingBody%d" % index))
+	mi.visible = false
+	(body.get_node(^"Shape") as CollisionShape3D).disabled = true
+	mi.set_meta("building_type", "lot")
+	return {"empty": true, "d": 0.0, "z": info.z, "side": info.side}
+
 ## Shop and garage signs (buildings step 2): one lightbox per signed
 ## building, on its front just above the ground floor, from one MultiMesh.
 static func _update_signs(root: Node3D, infos: Array) -> int:
@@ -1127,8 +1141,10 @@ static func _create_nodes(root: Node3D) -> void:
 	# allocated once, like the dashes and pylons above.
 	root.add_child(_new_multimesh("Lamps", _get_lamp_mesh(), null, _lamp_slots() * 2))
 	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2))
-	# +1 per side for the district step wall
-	root.add_child(_new_multimesh("GapWalls", _get_wall_mesh(), _get_wall_mat(), (_building_slots() + 2) * 2))
+	# Per side: a gap either side of each building, +1 for the district step
+	# wall, +1 more
+	# where a crossing's mouth (Junction) splits a gap in two
+	root.add_child(_new_multimesh("GapWalls", _get_wall_mesh(), _get_wall_mat(), (_building_slots() + 3) * 2))
 
 	# The centre barrier, one piece per station so it can follow a bend (#37).
 	# Its reflectors are a child with one piece per station too, placed with
@@ -1169,7 +1185,10 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 
 	var own_lanes: int = clampi(int(cfg.own_lanes), 1, MAX_OWN_LANES)
 	var onc_lanes: int = clampi(int(cfg.onc_lanes), 1, MAX_ONC_LANES)
-	var barrier: bool = cfg.barrier
+	# City lights (Junction, J0): no centre barrier on a chunk the crossing
+	# touches. Read here, not rolled in game.gd's _section_at, so the road
+	# layout's random sequence is the same with the switch on or off.
+	var barrier: bool = cfg.barrier and not Junction.touches(chunk_index)
 	var start_own_w := _lane_w(prev_cfg.own_lanes)
 	var end_own_w := _lane_w(own_lanes)
 	var start_onc_w := _lane_w(prev_cfg.onc_lanes)
@@ -1233,15 +1252,19 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var pylons_own: MultiMesh = (root.get_node(^"PylonsOwn") as MultiMeshInstance3D).multimesh
 	var pylons_onc: MultiMesh = (root.get_node(^"PylonsOnc") as MultiMeshInstance3D).multimesh
 	var n_pylons := _pylon_slots()
+	var n_posts := 0
 	for i in range(n_pylons):
 		var pz := -float(i) * PYLON_SPACING - PYLON_SPACING / 2.0
+		if Junction.in_mouth(chunk_index, pz):
+			continue  # none across the crossing's mouth
 		var pt: float = -pz / CHUNK_LEN
 		var own_edge: float = lerp(start_own_shoulder, end_own_shoulder, pt)
 		var onc_edge: float = lerp(start_onc_shoulder, end_onc_shoulder, pt)
-		pylons_own.set_instance_transform(i, _xf_up(own_edge, PYLON_HEIGHT / 2.0, pz))
-		pylons_onc.set_instance_transform(i, _xf_up(-onc_edge, PYLON_HEIGHT / 2.0, pz))
-	pylons_own.visible_instance_count = n_pylons
-	pylons_onc.visible_instance_count = n_pylons
+		pylons_own.set_instance_transform(n_posts, _xf_up(own_edge, PYLON_HEIGHT / 2.0, pz))
+		pylons_onc.set_instance_transform(n_posts, _xf_up(-onc_edge, PYLON_HEIGHT / 2.0, pz))
+		n_posts += 1
+	pylons_own.visible_instance_count = n_posts
+	pylons_onc.visible_instance_count = n_posts
 
 	# roadside buildings -- real collision, the world's actual hard boundary
 	var n_buildings := _building_slots()
@@ -1252,8 +1275,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var bt: float = -bz / CHUNK_LEN
 		var own_edge_b: float = lerp(start_own_walk, end_own_walk, bt)
 		var onc_edge_b: float = lerp(start_onc_walk, end_onc_walk, bt)
-		var own_info := _update_building(root, i * 2, own_edge_b, bz, 1, chunk_index)
-		var onc_info := _update_building(root, i * 2 + 1, onc_edge_b, bz, -1, chunk_index)
+		var own_info := _clear_at_junction(root, i * 2, _update_building(root, i * 2, own_edge_b, bz, 1, chunk_index), chunk_index)
+		var onc_info := _clear_at_junction(root, i * 2 + 1, _update_building(root, i * 2 + 1, onc_edge_b, bz, -1, chunk_index), chunk_index)
 		infos.append(own_info)
 		infos.append(onc_info)
 		var d_own: float = own_info.d
@@ -1273,6 +1296,11 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var walk1: float = end_own_walk if side == 1 else end_onc_walk
 		var z_from := 0.0
 		var edges: Array = spans[side].duplicate()
+		if Junction.touches(chunk_index):
+			# the crossing's mouth is an opening like a building's frontage
+			var jc := Junction.local_centre(chunk_index)
+			edges.append([jc + Junction.MOUTH_HALF, jc - Junction.MOUTH_HALF])
+			edges.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
 		edges.append([-CHUNK_LEN, -CHUNK_LEN])
 		for e in edges:
 			var z_to: float = e[0]
@@ -1284,7 +1312,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 				var basis := Basis.from_scale(Vector3(WALL_T, WALL_H + f, length))
 				walls.set_instance_transform(n_walls, _xf_up(x * float(side), (WALL_H - f) / 2.0, zc, basis))
 				n_walls += 1
-			z_from = e[1]
+			z_from = minf(z_from, e[1]) if Junction.touches(chunk_index) else e[1]
 		# the district step: a visible wall across the lot edge, where the
 		# invisible cross wall stands
 		var step: Vector2 = step_own if side == 1 else step_onc
@@ -1304,6 +1332,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		for side in [1, -1]:
 			# own side at 6.25, 31.25 m; oncoming at 18.75, 43.75 m into the chunk
 			var lz := -float(i) * LAMP_SPACING - (LAMP_SPACING * 0.25 if side == 1 else LAMP_SPACING * 0.75)
+			if Junction.in_mouth(chunk_index, lz):
+				continue  # the signal masts stand there
 			var lt: float = -lz / CHUNK_LEN
 			var curb: float = lerp(start_own_curb, end_own_curb, lt) if side == 1 else lerp(start_onc_curb, end_onc_curb, lt)
 			var pole_x := (curb + LAMP_SETBACK) * float(side)
@@ -1333,10 +1363,14 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	if barrier:
 		center.visible_instance_count = 0
 	else:
+		var n_center := 0
 		for i in range(slots):
 			var dz := -float(i) * DASH_SPACING - DASH_SPACING / 2.0
-			center.set_instance_transform(i, _xf(0.0, DASH_Y, dz))
-		center.visible_instance_count = slots
+			if Junction.in_box(chunk_index, dz):
+				continue  # no markings inside the crossing
+			center.set_instance_transform(n_center, _xf(0.0, DASH_Y, dz))
+			n_center += 1
+		center.visible_instance_count = n_center
 
 	# interior lane dividers, both directions packed into one instance
 	# buffer; unused capacity is simply left outside visible_instance_count
@@ -1346,12 +1380,16 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var x: float = MEDIAN_GAP + lane_i * LANE_W
 		for i in range(slots):
 			var dz2 := -float(i) * DASH_SPACING - DASH_SPACING / 2.0
+			if Junction.in_box(chunk_index, dz2):
+				continue
 			lane.set_instance_transform(written, _xf(x, DASH_Y, dz2))
 			written += 1
 	for lane_i in range(1, onc_lanes):
 		var x2: float = -(MEDIAN_GAP + lane_i * LANE_W)
 		for i in range(slots):
 			var dz3 := -float(i) * DASH_SPACING - DASH_SPACING / 2.0
+			if Junction.in_box(chunk_index, dz3):
+				continue
 			lane.set_instance_transform(written, _xf(x2, DASH_Y, dz3))
 			written += 1
 	lane.visible_instance_count = written

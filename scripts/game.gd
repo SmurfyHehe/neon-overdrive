@@ -45,6 +45,9 @@ var recenter_count := 0
 
 var player: PlayerCar
 var traffic: TrafficManager
+## City lights (junction.gd): the one signalised crossing, or null when the
+## switch is off.
+var junction: Junction
 var game_state: GameState
 
 # Chase camera, its three smoothing modes (#31, C to cycle) and the stage A
@@ -87,6 +90,9 @@ func _ready() -> void:
 	if benchmark:
 		night_clock.fixed_minutes = NightClock.BENCHMARK_MINUTES  # same windows every run
 	add_child(night_clock)
+	# City lights: before the first chunk, which leaves the crossing's mouth
+	# open. Never in a benchmark run (same road every time).
+	Junction.enabled = TrafficSettings.city_lights and not benchmark
 	_setup_road_shape()
 	_setup_world()
 	_setup_ground_collision()
@@ -387,6 +393,13 @@ func _setup_traffic() -> void:
 	traffic.car_count = TrafficSettings.car_count
 	traffic.detail_distance = TrafficSettings.detail_distance
 	add_child(traffic)
+	if Junction.enabled:
+		junction = Junction.new()
+		junction.night_clock = night_clock
+		# A random point in the cycle, so the first arrival is not always green.
+		junction.t = randf() * Junction.CYCLE
+		add_child(junction)
+		traffic.junction = junction
 
 # ---------- camera ----------
 func _setup_camera() -> void:

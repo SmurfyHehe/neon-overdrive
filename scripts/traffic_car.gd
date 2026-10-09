@@ -120,6 +120,12 @@ var _scan_in := 0
 var lead_gap := INF
 var lead_speed := 0.0
 var lead_is_player := false
+## True while a red (or amber) light ahead holds this car: it is stopping or
+## queueing for the stop line (Junction.stop_gap). The stuck-car check and
+## obstacle lane changes are off meanwhile: the head of a red queue has
+## nothing ahead of it and would otherwise be flagged stuck after
+## STUCK_SECONDS (12 s) of a 22 s red.
+var signal_held := false
 
 ## Lane change in progress (lane_x / lane_i already name the new lane).
 var changing := false
@@ -334,7 +340,17 @@ func _accel_command(v: float) -> float:
 			lead_gap = traffic.entry_gap(_lead_k, p.z, direction, half_l)
 			lead_speed = traffic.entry_speed(_lead_k, direction)
 			lead_is_player = _lead_k == 0
-	return follow_accel(v, minf(target_speed, bend_speed()), lead_gap, lead_speed)
+	var v0 := minf(target_speed, bend_speed())
+	var a := follow_accel(v, v0, lead_gap, lead_speed)
+	signal_held = false
+	if traffic != null and traffic.junction != null:
+		# The red light is an invisible stopped car at the stop line (see
+		# junction.gd): follow it like any other, stopping STOP_SHORT short.
+		var sg := traffic.junction.stop_gap(RoadFrame.unroll(global_position).z, direction, half_l, v)
+		if sg < INF:
+			signal_held = true
+			a = minf(a, follow_accel(v, v0, sg + S0 - Junction.STOP_SHORT, 0.0))
+	return a
 
 ## Fastest this car takes the road from here to BEND_LOOK m ahead: no more
 ## than BEND_LAT_ACCEL of cornering on the tightest bend in that stretch (#37).
@@ -392,7 +408,8 @@ func _potential(v: float, gap: float, vl: float) -> float:
 func _consider_lane_change(v: float) -> void:
 	if changing or _lc_cooldown > 0.0:
 		return
-	var obstacle := lead_gap < OBSTACLE_RANGE and lead_speed < OBSTACLE_SPEED and target_speed > OBSTACLE_SPEED
+	# Not while queueing at a red light: the car ahead is waiting, not broken down.
+	var obstacle := lead_gap < OBSTACLE_RANGE and lead_speed < OBSTACLE_SPEED and target_speed > OBSTACLE_SPEED and not signal_held
 	if v < MIN_LC_SPEED and not obstacle:
 		return
 	var u := RoadFrame.unroll(global_position)
@@ -493,7 +510,7 @@ func _check_wreck(delta: float, v: float) -> bool:
 	# wrecked whatever the slope.
 	var bad := global_transform.basis.y.y < WRECK_UP or ((heading < WRECK_HEADING or off > WRECK_OFF_PATH) and absf(v) < WRECK_MAX_SPEED)
 	_wreck_t = _wreck_t + delta if bad else 0.0
-	var stuck := absf(v) < 0.5 and lead_gap > 30.0 and target_speed > 1.0
+	var stuck := absf(v) < 0.5 and lead_gap > 30.0 and target_speed > 1.0 and not signal_held
 	_stuck_t = _stuck_t + delta if stuck else 0.0
 	if _wreck_t > WRECK_SECONDS or _stuck_t > STUCK_SECONDS:
 		wrecked = true

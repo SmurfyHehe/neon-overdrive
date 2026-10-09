@@ -61,6 +61,9 @@ var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust fl
 const SaveDirector := preload("res://scripts/save/save_director.gd")
 const UserDirMigration := preload("res://scripts/save/user_dir_migration.gd")
 var saver: SaveDirector
+## Tonight's cash and the bank (F0, scripts/wallet.gd).
+var wallet: Node
+const Wallet := preload("res://scripts/wallet.gd")
 var road_seed := 0
 var run := {}
 
@@ -104,6 +107,9 @@ func _ready() -> void:
 	add_child(night_clock)
 	if run.get("clock") is Dictionary:
 		night_clock.set_time(run.clock.get("minutes", 0.0), run.clock.get("night", 1))
+	wallet = Wallet.new()
+	wallet.name = "Wallet"
+	add_child(wallet)
 	_setup_road_shape()
 	_setup_world()
 	_setup_ground_collision()
@@ -444,13 +450,16 @@ func toggle_mute() -> void:
 func _setup_hud() -> void:
 	var hud := Hud.new(player, camera, traffic)
 	hud.night_clock = night_clock
+	hud.wallet = wallet
 	add_child(hud)
 
 # ---------- game state (pause / restart / quit, issue #27) ----------
 func _setup_game_state() -> void:
 	game_state = GameState.new()
 	add_child(game_state)
-	add_child(PauseMenu.new(game_state))
+	var pause := PauseMenu.new(game_state)
+	pause.wallet = wallet
+	add_child(pause)
 	add_child(TunerScreen.new(player, game_state))
 	add_child(WarningLights.new(player))
 	add_child(PhotoMode.new(game_state, camera))
@@ -461,6 +470,8 @@ func _setup_game_state() -> void:
 	game_state.state_changed.connect(saver.on_state_changed)
 	game_state.restarting.connect(saver.on_restart)
 	game_state.quitting.connect(saver.save_now)
+	# 6 a.m.: tonight's cash goes into the bank (F0).
+	night_clock.night_ended.connect(func(_n: int) -> void: wallet.bank_night())
 	night_clock.night_ended.connect(func(_n: int) -> void: saver.save_now.call_deferred())
 	night_clock.hour_changed.connect(_on_hour)
 	night_clock.night_ended.connect(func(_n: int) -> void: radio.announce_hour(NightClock.END_HOUR))

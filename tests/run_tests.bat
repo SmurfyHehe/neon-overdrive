@@ -90,6 +90,8 @@ call :run settings_safety --headless
 call :run setting_danger --headless
 rem Save system: atomic files, 3 slots, chases, rename migration (scripts/save/).
 call :run save_system --headless
+rem F0: cash and bank through reloads, chases and 6 a.m. (and the HUD and pause screen).
+call :run wallet --headless
 call :run traffic_spawn "--headless --fixed-fps 60"
 rem ~40 s: the traffic cars (stage B step 5) against their sheets, then a drive each at the game's 120 Hz.
 call :run npc_cars "--headless --fixed-fps 120"

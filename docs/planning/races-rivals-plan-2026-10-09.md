@@ -1,6 +1,6 @@
 # Races and rival drivers (plan, 2026-10-09)
 
-Status: PLAN, docs only. Nothing here is built. Roy answered the 8 questions on 2026-10-09 (his 84-91, see section 9); the doc below follows his answers.
+Status: PLAN, docs only. Nothing here is built. All questions answered by Roy on 2026-10-09 (section 9). Plan complete; build waits for Roy's go.
 
 Read for this: notes `balance-plan-2026-10-09`, `police-build-plan-2026-10-09`
 (3b headlights), `run-structure-2026-10-09`, `income-ideas-2026-10-09`,
@@ -154,7 +154,7 @@ off-palette; police blue is the one allowed exception):
 | Honest cops | Police blue `#2E4FD8` | The one off-palette colour, already theirs |
 | Corrupt cops | **No halo until you find out who they are**, then a dim, dirty amber that flickers | Story: they look like honest cops at first; a halo would give it away |
 
-**Recommendation:** the halo **sits beside the sticker**, it does not replace
+**DECIDED (Roy 2026-10-09):** the halo **sits beside the sticker**, it does not replace
 it. Sticker is always on (in-world, part of the car); the halo is an
 optional help, **default "Close only"**, so a new player can find racers and
 a purist can turn it off. Cops' halo is the same setting.
@@ -187,7 +187,7 @@ From knowledge of the games, not a fresh web check:
 | Tokyo Xtreme Racer | A crash drains that car's bar hard; the bar decides, not a line |
 
 Options for us:
-- **A. Recover for real (recommended).** The rival backs out, turns, rejoins
+- **A. Recover for real (DECIDED, Roy 2026-10-09).** The rival backs out, turns, rejoins
   traffic and races on. No teleport, fits the "same physics" rule. If it is
   flipped or stuck for good, it is out and you just drive to the line.
 - B. Reset behind you out of sight (NFS style). Keeps races close, but it is
@@ -337,9 +337,9 @@ core is untestable without a driver, then RC3 as the prologue race.
 1. Gap number on screen during a race: **yes**.
 2. Rival blinks hazards back, rolling start: **yes**.
 3. Cop shows up mid-race, race goes on: **yes**.
-4. Rival wrecks: **you must still cross the line**; rival recovers for real (3b). Roy: ok.
+4. Rival wrecks: **you must still cross the line**; the rival backs out and rejoins for real (3b).
 5. Giving up: **pause menu "Give up"** (3c).
-6. No icon over racer cars: **yes**. Marker: **crew sticker** (2d). Roy suggested a role-coloured halo; design in 2e, his call.
+6. No icon over racer cars: **yes**. Marker: **crew sticker** (2d). Plus the role-coloured halo beside it, Off / Close only / Always, default Close only (2e, decided).
 7. Rival traffic risk: **depends on the crew**.
 8. Next race type after the sprint: **rolling challenge** (RC4, as planned).
 

@@ -171,6 +171,11 @@ func set_view(v: View) -> void:
 		target.chassis_visual.visible = not cockpit   # no cockpit built: the Phase C behaviour
 	perspective.set_cockpit(cockpit)
 
+## The driver's side window, 0 closed .. 1 fully down: the one value the glass,
+## the driver's hand and the cabin sound all follow (PerspectiveAudio owns it).
+func window_openness() -> float:
+	return perspective.window
+
 func mode_name() -> String:
 	return "COCKPIT" if view == View.COCKPIT else MODE_NAMES[mode]
 
@@ -187,6 +192,8 @@ func _physics_process(delta: float) -> void:
 		set_view(View.CHASE if view == View.COCKPIT else View.COCKPIT)
 	look_back = Input.is_action_pressed("look_back")
 	perspective.window_key(Input.is_action_pressed("window"), delta)
+	if frame != null:
+		frame.set_window(perspective.window, perspective.window_direction())
 	if perspective.car_audio == null:
 		for c in target.get_children():
 			if c is CarAudio:

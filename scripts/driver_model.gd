@@ -35,6 +35,12 @@ extends Node3D
 #   - handbrake: while the handbrake is pulled the hand holds the lever and
 #     rides it up and down, then returns to the rim;
 #   - steering: a small head yaw into the turn and a body lean from lateral g;
+#   - window (2026-10-09, the left hand's one job): while the window is being
+#     worked (CockpitFrame.window_direction, from the Z key) the left hand
+#     leaves the rim for the door: on a crank car it holds the crank's knob
+#     and rides it round as the glass moves, on a switch car it rests on the
+#     armrest with the thumb on the rocker; back to the rim once the window
+#     has stopped;
 #   - idle: breathing, and a head bob from the road.
 # Hand contact: one mechanism for every reach. The moment the hand arrives (the
 # knob, the handbrake grip) or the finger lands (the screen, the radio knob),
@@ -103,6 +109,8 @@ const RETURN_SECS := 0.22
 const PRESS_SECS := 0.12
 const PADDLE_SECS := 0.25
 const BRAKE_REACH_SECS := 0.20
+const WINDOW_REACH_SECS := 0.25
+const WINDOW_LINGER_SECS := 0.3   # the hand stays this long after the window stops
 const HEAD_YAW_RAD := 0.20       # at full steer fraction
 const LEAN_RAD_PER_G := 0.08
 const HIP_HALF := 0.09
@@ -132,6 +140,12 @@ var legs := {}               # side -> {thigh, shin, foot}
 var glove_style := DEFAULT_GLOVE
 var act := Act.GRIP
 var act_t := 0.0
+enum LeftAct { GRIP, WINDOW_REACH, WINDOW_HOLD, WINDOW_RETURN }
+var left_act := LeftAct.GRIP
+var left_t := 0.0
+var _left_from := Transform3D()
+var _left_xf := Transform3D()
+var _window_idle := 0.0          # seconds since the window last moved
 var radio_requests := 0          # next-station presses waiting for the hand
 var contact_count := 0
 var last_contact := &""
@@ -177,6 +191,7 @@ func _ready() -> void:
 			(n as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF   # visual only, no shadows on the car
 	_last_gear = player.gear
 	_hand_xf = _grip_transform(1)
+	_left_xf = _grip_transform(-1)
 	_foot_target = _pedal_ankle("throttle")
 
 ## Cockpit view: the camera is the head, so head and torso go.
@@ -386,6 +401,36 @@ func _radio_hand_transform(pressed: float) -> Transform3D:
 	var b := Basis(Vector3.BACK, deg_to_rad(-90.0)) * Basis(Vector3.RIGHT, deg_to_rad(15.0))   # palm down, fingers at the buttons
 	return Transform3D(b, p)
 
+## A hand basis from where the palm faces and where the wrist points (car
+## space), a proper rotation so the mirrored left mesh stays a left hand: the
+## palm is on local sx*x, the wrist runs along local +z.
+static func _hand_basis(side: int, palm: Vector3, wrist: Vector3) -> Basis:
+	var x := (palm * float(side)).normalized()
+	var z := (wrist - x * wrist.dot(x)).normalized()
+	return Basis(x, z.cross(x), z)
+
+## The left hand on the crank's peg knob, car space: fingers round the peg
+## (which runs along x, into the cabin), the wrist up and back toward the
+## shoulder. The knob orbits the hub as the crank turns; the hand goes with it.
+func _crank_hand_transform() -> Transform3D:
+	return Transform3D(_peg_basis(), frame.crank_knob_position())
+
+## Basis for a hand round a peg along +x: local y along the peg, the wrist
+## (local +z) up and back, the palm (local -x for the left hand) facing up and
+## forward so the fingers curl under the peg.
+static func _peg_basis() -> Basis:
+	var y := Vector3.RIGHT
+	var z := Vector3(0.0, 0.43, 0.90).normalized()
+	return Basis(y.cross(z), y, z)
+
+## The left hand resting palm down on the armrest with the thumb on the
+## rocker, car space; at pressed = 1 the thumb's underside is on the switch.
+func _switch_hand_transform(pressed: float) -> Transform3D:
+	var b := _hand_basis(-1, Vector3.DOWN, Vector3(0.45, 0.0, 0.85))
+	var thumb := Vector3(-0.033, 0.03, 0.036)   # the thumb's underside, hand space (left hand)
+	var p := frame.switch_press_position() - b * thumb + Vector3(0.0, 0.012 * (1.0 - pressed), 0.0)
+	return Transform3D(b, p)
+
 ## Ankle position for a pedal, car space: behind and a little below the pad.
 func _pedal_ankle(pedal: String) -> Vector3:
 	var pivot: Node3D = frame.pedals[pedal]
@@ -417,6 +462,7 @@ func _process(delta: float) -> void:
 
 	_update_events()
 	_step_act(delta)
+	_step_left(delta)
 	_place_hands()
 	_place_legs(delta)
 
@@ -545,9 +591,47 @@ func _step_act(delta: float) -> void:
 			if t >= 1.0:
 				_start(Act.GRIP)
 
+## The left hand: on the rim, except while the window is being worked.
+func _step_left(delta: float) -> void:
+	left_t += delta
+	var grip := _grip_transform(-1)
+	var working := frame.window_direction != 0
+	_window_idle = 0.0 if working else _window_idle + delta
+	var crank := frame.window_control == "crank"
+	match left_act:
+		LeftAct.GRIP:
+			_left_xf = grip
+			if working:
+				_start_left(LeftAct.WINDOW_REACH)
+		LeftAct.WINDOW_REACH:
+			var t := clampf(left_t / WINDOW_REACH_SECS, 0.0, 1.0)
+			var to := _crank_hand_transform() if crank else _switch_hand_transform(0.0)
+			_left_xf = _left_from.interpolate_with(to, _ease(t))
+			if t >= 1.0:
+				_start_left(LeftAct.WINDOW_HOLD)
+		LeftAct.WINDOW_HOLD:
+			if crank:
+				_left_xf = _crank_hand_transform()
+			else:
+				_left_xf = _switch_hand_transform(1.0 if working else 0.0)
+			if _window_idle > WINDOW_LINGER_SECS:
+				_start_left(LeftAct.WINDOW_RETURN)
+		LeftAct.WINDOW_RETURN:
+			var t := clampf(left_t / RETURN_SECS, 0.0, 1.0)
+			_left_xf = _left_from.interpolate_with(grip, _ease(t))
+			if working:
+				_start_left(LeftAct.WINDOW_REACH)   # the key again on the way back
+			elif t >= 1.0:
+				_start_left(LeftAct.GRIP)
+
+func _start_left(a: LeftAct) -> void:
+	left_act = a
+	left_t = 0.0
+	_left_from = _left_xf
+
 func _place_hands() -> void:
 	for side in [-1, 1]:
-		var hand_xf: Transform3D = _hand_xf if side > 0 else _grip_transform(-1)
+		var hand_xf: Transform3D = _hand_xf if side > 0 else _left_xf
 		(hands[side] as Node3D).transform = hand_xf
 
 func _place_legs(delta: float) -> void:
@@ -586,3 +670,7 @@ func leg_gap(side: int) -> float:
 
 func is_busy() -> bool:
 	return act != Act.GRIP
+
+## The left hand is off the rim, at the window (tests).
+func left_at_window() -> bool:
+	return left_act == LeftAct.WINDOW_HOLD

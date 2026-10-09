@@ -32,11 +32,17 @@ const WINDOW_MUSIC_DB := -2.0     # the radio against the wind, window fully dow
 
 var blend := 0.0
 var target := 0.0
+## THE window openness, 0 closed .. 1 fully down. One value, three readers:
+## CarAudio (the wind and the seal whistle, via _process), the CockpitFrame
+## (the glass slides, the crank or switch moves, the driver's left hand works
+## it; ChaseCamera hands it over every physics tick) and the pause-menu
+## slider. ChaseCamera.window_openness() is the public read of it.
 var window := 0.0
 ## The car's CarAudio: gets `cabin` and `window` every frame (set by the camera).
 var car_audio: CarAudio
 var _window_held := 0.0
 var _window_closing := false
+var _window_pressed := false
 var _filters := {}   # bus name -> AudioEffectLowPassFilter
 
 func _ready() -> void:
@@ -66,6 +72,7 @@ func set_cockpit(on: bool) -> void:
 ## The window key, once per physics tick: held rolls it down; a short tap rolls
 ## it all the way back up.
 func window_key(pressed: bool, delta: float) -> void:
+	_window_pressed = pressed
 	if pressed:
 		_window_held += delta
 		_window_closing = false
@@ -77,6 +84,15 @@ func window_key(pressed: bool, delta: float) -> void:
 	if _window_closing:
 		window = maxf(0.0, window - delta / WINDOW_UP_SECS)
 		_window_closing = window > 0.0
+
+## Which way the window is being worked this tick, for the cockpit animation:
+## +1 rolling down (the key is held, even at the stop), -1 rolling up after a
+## tap, 0 at rest. The driver's hand stays on the crank or switch while this
+## is non-zero.
+func window_direction() -> int:
+	if _window_pressed:
+		return 1
+	return -1 if _window_closing else 0
 
 ## How far each bus is towards its cockpit filter: the view, less what the
 ## open window lets back in.

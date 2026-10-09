@@ -29,6 +29,8 @@ static func apply(v: Vehicle, spec: Dictionary) -> void:
 			continue  # cosmetic: EngineAudio reads it from the spec, the Vehicle has no such property
 		elif key == "engine_voice":
 			continue  # sound only (#80): EngineAudio hands it to EngineSynth
+		elif key == "window_control":
+			continue  # cosmetic: how the cockpit's side window is worked (CockpitFrame)
 		else:
 			v.set(key, _own(spec[key]))
 
@@ -245,6 +247,12 @@ static func coupe_default() -> Dictionary:
 		"exhaust": ExhaustTune.for_car("p1_coupe").to_dict(),
 		# What the engine itself sounds like (#80): a straight six. Not tunable.
 		"engine_voice": EngineVoice.for_car("p1_coupe"),
+		# How the driver works the side window in the cockpit (2026-10-09, Roy:
+		# "Z to roll up and roll down needs an animation"): "switch" is a rocker
+		# on the door armrest pressed with the thumb (modern cars, this coupe);
+		# "crank" is a hand crank on the door card the hand turns (old cars, the
+		# beater starter). Visual only; the window itself is PerspectiveAudio's.
+		"window_control": "switch",
 	}
 
 ## Traffic tune (milestone 3, 2026-10-05): coupe_default() with commuter-car

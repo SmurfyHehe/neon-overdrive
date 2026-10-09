@@ -51,6 +51,8 @@ call :run camera_feel --headless
 call :run car_audio --headless
 call :run fleet_design_check --headless
 call :run exhaust_tune --headless
+call :run exhaust_pops --headless
+call :run anti_lag_turbo --headless
 call :run audio_master --headless
 call :run phase_a_engine --headless
 call :run tick_rate_120 "--headless --fixed-fps 120"
@@ -62,6 +64,9 @@ call :run hud_rear_strip --headless
 call :run look_back --headless
 call :run mirror_glance --headless
 call :run cockpit_driver --headless
+call :run cockpit_shifter --headless
+call :run cockpit_shifter_rnd --headless
+call :run touch_radio --headless
 call :run tyres "--headless --fixed-fps 60"
 call :run clutch_model --headless
 call :run driveline_audio --headless
@@ -69,6 +74,7 @@ call :run sound_fixes --headless
 call :run radio --headless
 call :run night_clock --headless
 call :run view_settings --headless
+call :run camera_smoothing_setting --headless
 call :run powertrain_health "--headless --fixed-fps 60"
 call :run turbo "--headless --fixed-fps 60"
 call :run chassis_targets "--headless --fixed-fps 60"
@@ -78,14 +84,21 @@ call :run auto_tune_worker_mode --headless
 call :run tune_params --headless
 call :run auto_tune_rules --headless
 call :run tune_slots --headless
+rem The player's tune survives a reset and a relaunch (PlayerTune).
+call :run tune_persist --headless
 call :run settings_safety --headless
 call :run setting_danger --headless
 call :run traffic_spawn "--headless --fixed-fps 60"
+rem ~40 s: the traffic cars (stage B step 5) against their sheets, then a drive each at the game's 120 Hz.
+call :run npc_cars "--headless --fixed-fps 120"
 rem ~17 s: full throttle at ~245 km/h across floating-origin recenters (the old ground-slab kick), at the game's 120 Hz.
 call :run recenter_kick "--headless --fixed-fps 120"
 call :run fx_pack --headless
+call :run tyre_smoke --headless
 call :run exhaust_flames --headless
 call :run boundary_walls --headless
+rem ~1 min: the player into the out-of-bounds wall at 16 speeds and angles, at the game's 120 Hz.
+call :run wall_hit "--headless --fixed-fps 120"
 call :run road_space --headless
 call :run road_frame --headless
 call :run road_centerline --headless
@@ -114,6 +127,8 @@ if /i not "%~1"=="quick" (
 	rem Key-press tests run headless: a windowed run loses its held keys the moment the window loses focus (found 2026-10-05, it made chunk_drive and feel_pass_1 flaky).
 	rem These need a real window: headless drops MultiMesh data.
 	call :run chunk_drive
+	rem Tyre smoke draw cost: a burnout in front of the chase camera, smoke on vs off (budget 0.5 ms).
+	call :run tyre_smoke_perf
 	rem Also a real window (it reads the interpolated camera); ~45 s of driving 500 km down the road.
 	call :run floating_origin_drive
 	call :run game_state --headless
@@ -122,11 +137,12 @@ if /i not "%~1"=="quick" (
 	call :run tuner_screen --headless
 	call :run tuner_typing --headless
 	call :run roadside_detail
+	rem ~10 s, real window (shaders): traffic tail lamps, brake lamps, distance flares, barrier reflectors.
+	call :run night_lights
 	call :run fleet_silhouette_sweep
 	call :run fleet_budget_scene
 	rem Real window: reads rendered sky and moon pixels.
 	call :run sky_probe
-	call :run exhaust_keys --headless
 	call :run mute --headless
 	call :run feel_pass_1 --headless
 )

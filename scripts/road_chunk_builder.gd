@@ -189,6 +189,9 @@ static var _lamp_mesh: ArrayMesh
 static var _pool_mesh: PlaneMesh
 static var _pool_mat: StandardMaterial3D
 static var _wall_mesh: BoxMesh
+static var _reflector_mesh: ArrayMesh
+static var _reflector_mat: ShaderMaterial
+static var _reflector_glow := 1.0
 static var _wall_mat: StandardMaterial3D
 
 static func _flat_mat(color: Color, emissive: bool = false, energy: float = 1.0) -> StandardMaterial3D:
@@ -362,6 +365,81 @@ static func _get_pylon_mesh() -> BoxMesh:
 	if _pylon_mesh == null:
 		_pylon_mesh = _box_mesh(Vector3(PYLON_W, PYLON_HEIGHT, PYLON_W))
 	return _pylon_mesh
+
+## Median barrier reflectors (2026-10-07): amber dots on top of the barrier
+## every REFLECTOR_SPACING, so the wall's line reads at night before you are
+## on it. Each dot is a camera-facing quad that never drops below
+## REFLECTOR_MIN_SCREEN of the screen height and fades out past headlight reach
+## (REFLECTOR_FADE), like a retroreflector the car's lamps stop catching.
+## One dot per barrier piece, a MultiMesh child of the Barrier so it shows
+## and bends with it: one draw call per barrier chunk. TrafficSettings.light_glow scales it.
+const REFLECTOR_SPACING := 5.0
+const REFLECTOR_NEAR_R := 0.06
+const REFLECTOR_MIN_SCREEN := 0.004
+const REFLECTOR_FADE := Vector2(60.0, 200.0)
+const REFLECTOR_SHADER := """
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, skip_vertex_transform, fog_disabled, shadows_disabled;
+uniform vec3 tint = vec3(1.0, 0.53, 0.13);
+uniform float energy = 1.3;
+uniform float gain = 1.0;
+uniform float near_r = 0.06;
+uniform float min_screen = 0.004;
+uniform vec2 fade = vec2(60.0, 200.0);
+varying float v_k;
+void vertex() {
+	vec3 c = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	float d = max(-c.z, 0.05);
+	v_k = 1.0 - smoothstep(fade.x, fade.y, d);
+	float far_r = min_screen * 2.0 * d / abs(PROJECTION_MATRIX[1][1]);
+	c *= max(d - 0.1, 0.05) / d;
+	c.xy += UV * max(near_r, far_r) * step(0.001, gain * v_k);
+	VERTEX = c;
+}
+void fragment() {
+	float f = 1.0 - smoothstep(0.45, 1.0, length(UV));
+	ALBEDO = tint * energy * gain * f * v_k;
+}
+"""
+
+static func set_reflector_glow(g: float) -> void:
+	_reflector_glow = g
+	if _reflector_mat != null:
+		_reflector_mat.set_shader_parameter("gain", g)
+
+static func _get_reflector_mat() -> ShaderMaterial:
+	if _reflector_mat == null:
+		var sh := Shader.new()
+		sh.code = REFLECTOR_SHADER
+		_reflector_mat = ShaderMaterial.new()
+		_reflector_mat.shader = sh
+		_reflector_mat.set_shader_parameter("near_r", REFLECTOR_NEAR_R)
+		_reflector_mat.set_shader_parameter("min_screen", REFLECTOR_MIN_SCREEN)
+		_reflector_mat.set_shader_parameter("fade", REFLECTOR_FADE)
+		_reflector_mat.set_shader_parameter("gain", _reflector_glow)
+	return _reflector_mat
+
+## In one barrier piece's local space (a box centred on the origin, one station long).
+static func _get_reflector_mesh() -> ArrayMesh:
+	if _reflector_mesh == null:
+		var verts := PackedVector3Array()
+		var uvs := PackedVector2Array()
+		var corners := [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, -1), Vector2(1, 1), Vector2(-1, 1)]
+		var seg := CHUNK_LEN / STATIONS
+		var n := maxi(1, int(seg / REFLECTOR_SPACING))
+		for i in n:
+			var p := Vector3(0.0, BARRIER_H / 2.0 + 0.03, -seg / 2.0 + (float(i) + 0.5) * seg / n)
+			for uv in corners:
+				verts.append(p)
+				uvs.append(uv)
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = verts
+		arrays[Mesh.ARRAY_TEX_UV] = uvs
+		_reflector_mesh = ArrayMesh.new()
+		_reflector_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		_reflector_mesh.surface_set_material(0, _get_reflector_mat())
+	return _reflector_mesh
 
 static func _get_barrier_mesh() -> BoxMesh:
 	if _barrier_mesh == null:
@@ -731,6 +809,7 @@ static func _new_sidewalk_collision(body_name: String) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = body_name
 	body.add_to_group("Dirt")
+	body.collision_layer = 1 << (CarSpec.KERB_LAYER - 1)  # wheels only, see CarSpec
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
 	var tri := ConcavePolygonShape3D.new()
@@ -789,6 +868,7 @@ static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: 
 static func _new_boundary(body_name: String) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = body_name
+	CarSpec.make_wall(body)
 	# One box per station (#37) so the wall can follow a bend.
 	for k in STATIONS:
 		var col := CollisionShape3D.new()
@@ -875,6 +955,7 @@ static func _new_building(index: int) -> Array:
 	mi.mesh = _box_mesh(Vector3.ONE)
 	var body := StaticBody3D.new()
 	body.name = "BuildingBody%d" % index
+	CarSpec.make_wall(body)
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
 	col.shape = BoxShape3D.new()
@@ -953,7 +1034,14 @@ static func _create_nodes(root: Node3D) -> void:
 	root.add_child(_new_multimesh("GapWalls", _get_wall_mesh(), _get_wall_mat(), (_building_slots() + 1) * 2))
 
 	# The centre barrier, one piece per station so it can follow a bend (#37).
-	root.add_child(_new_multimesh("Barrier", _get_barrier_mesh(), _get_barrier_mat(), STATIONS))
+	# Its reflectors are a child with one piece per station too, placed with
+	# the same transforms, so they show and bend with it.
+	var barrier_mmi := _new_multimesh("Barrier", _get_barrier_mesh(), _get_barrier_mat(), STATIONS)
+	var refl := _new_multimesh("Reflectors", _get_reflector_mesh(), null, STATIONS)
+	refl.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	refl.extra_cull_margin = 1.0
+	barrier_mmi.add_child(refl)
+	root.add_child(barrier_mmi)
 
 	for i in range(_building_slots() * 2):
 		for n in _new_building(i):
@@ -1106,13 +1194,17 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var slots := _dash_slots()
 	var center: MultiMesh = (root.get_node(^"CenterDashes") as MultiMeshInstance3D).multimesh
 	var barrier_mmi := root.get_node(^"Barrier") as MultiMeshInstance3D
+	var refl_mm: MultiMesh = (barrier_mmi.get_node(^"Reflectors") as MultiMeshInstance3D).multimesh
+	var seg := CHUNK_LEN / STATIONS
+	for k in STATIONS:
+		var bxf := _xf(0.0, BARRIER_Y, -seg * (float(k) + 0.5))
+		barrier_mmi.multimesh.set_instance_transform(k, bxf)
+		refl_mm.set_instance_transform(k, bxf)
+	barrier_mmi.multimesh.visible_instance_count = STATIONS
+	refl_mm.visible_instance_count = STATIONS
 	barrier_mmi.visible = barrier
 	if barrier:
 		center.visible_instance_count = 0
-		var seg := CHUNK_LEN / STATIONS
-		for k in STATIONS:
-			barrier_mmi.multimesh.set_instance_transform(k, _xf(0.0, BARRIER_Y, -seg * (float(k) + 0.5)))
-		barrier_mmi.multimesh.visible_instance_count = STATIONS
 	else:
 		for i in range(slots):
 			var dz := -float(i) * DASH_SPACING - DASH_SPACING / 2.0

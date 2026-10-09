@@ -13,10 +13,6 @@ const ENGINE_VOLUME := 0.5  # EngineSynth's own default level
 ## Which car's exhaust preset the player car starts with (exhaust_tune.gd).
 ## Placeholder until the cars are built from fleet.json (stage B step 5).
 const START_PRESET := "p1_coupe"
-## How fast a held exhaust key moves its knob, per second (0..1 scale).
-const KNOB_RATE := 0.4
-## Seconds the exhaust readout stays on screen after a change.
-const READOUT_SECS := 2.5
 
 var synth := EngineSynth.new()
 ## The exhaust tune lives in the car's spec under "exhaust" (a dictionary, the
@@ -24,9 +20,8 @@ var synth := EngineSynth.new()
 ## into synth.tune every frame and keeps a saved copy on disk.
 var _spec: Dictionary
 var _saved := {}
-var _label: Label
 var _seen_blow_offs := 0
-var _readout_left := 0.0
+var _was_up_shifting := false
 var _vehicle: Vehicle
 var _playback: AudioStreamGeneratorPlayback
 ## The block being rendered on a worker thread (WorkerThreadPool task id), or
@@ -37,14 +32,12 @@ var _task_start_usec := 0
 var _flames := 0.0
 ## How long ago (s) the block those flames came from was handed to the synth.
 var flames_late := 0.0
-var _shown := ExhaustTune.new()  # the readout's copy of the tune
 
 func _ready() -> void:
 	_vehicle = get_parent() as Vehicle
 	synth.tune = ExhaustTune.for_car(START_PRESET)
 	_load_tune()
 	synth.apply_voice(_spec.get("engine_voice", {}))  # per-car engine (#80)
-	_setup_readout()
 	synth.mix_rate = AudioServer.get_mix_rate()
 	synth.idle_rpm = _vehicle.idle_rpm
 	synth.max_rpm = _vehicle.max_rpm
@@ -79,6 +72,12 @@ func _process(_delta: float) -> void:
 			synth.blow_off(synth.boost + 0.3)
 	else:
 		synth.boost = 0.0
+	# Flat-out upshift: the ignition cut bangs (the synth only does it on
+	# high-flame cars). Same edge and law as the upshift flame.
+	var up := _vehicle.is_up_shifting
+	if up and not _was_up_shifting and ExhaustFlames.upshift_spits(_vehicle):
+		synth.shift_cut(0.8 + 0.2 * clampf(_vehicle.throttle_input, 0.0, 1.0))
+	_was_up_shifting = up
 	var n := _playback.get_frames_available()
 	if n > 0:
 		_task_start_usec = Time.get_ticks_usec()
@@ -112,34 +111,13 @@ func take_flames() -> float:
 func _exit_tree() -> void:
 	_join()
 
-# Exhaust playtest keys: U/J loudness, I/K raspiness, O/L pops, held, while
-# driving. The same knobs are sliders on the Tuner screen (T), together with a
-# flame slider. Cosmetic only. Polled from _physics_process like the rest of the
-# game's input (#30). Every change goes through CarSpec.set_param(), the single
-# write path, so the spec stays the one copy of the tune.
-func _physics_process(delta: float) -> void:
-	var moved := false
-	moved = _nudge("exhaust/loudness", Input.get_axis("exhaust_loud_down", "exhaust_loud_up"), delta) or moved
-	moved = _nudge("exhaust/raspiness", Input.get_axis("exhaust_rasp_down", "exhaust_rasp_up"), delta) or moved
-	moved = _nudge("exhaust/pops", Input.get_axis("exhaust_pops_down", "exhaust_pops_up"), delta) or moved
-	if moved:
-		_readout_left = READOUT_SECS
-	elif _spec.get("exhaust", {}) != _saved:
-		# Keys let go (or the Tuner screen changed it): keep the tune for next run.
+# The exhaust tune is edited on the Tuner screen (Exhaust page) through
+# CarSpec.set_param(), the single write path, so the spec stays the one copy.
+# _process mirrors it into the synth; here it is saved: a change made while the
+# game was paused is written to disk on the first tick after it resumes.
+func _physics_process(_delta: float) -> void:
+	if _spec.get("exhaust", {}) != _saved:
 		_save_tune()
-	_readout_left = maxf(_readout_left - delta, 0.0)
-	_label.visible = _readout_left > 0.0
-	if _label.visible:
-		# From the spec, not synth.tune: the synth may be rendering right now.
-		var t := _shown
-		t.apply_dict(_spec.get("exhaust", {}))
-		_label.text = "EXHAUST  loudness %.2f (U/J)  raspiness %.2f (I/K)  pops %.2f (O/L)" % [t.loudness, t.raspiness, t.pops]
-
-func _nudge(path: String, dir: float, delta: float) -> bool:
-	if dir == 0.0:
-		return false
-	CarSpec.set_param(_vehicle, _spec, path, TuneParams.get_value(_spec, path) + dir * KNOB_RATE * delta)
-	return true
 
 ## Spec -> synth. The spec is the single copy; this is the only reader. Runs every
 ## frame while driving; the Tuner screen calls it too, because this node does not
@@ -147,6 +125,9 @@ func _nudge(path: String, dir: float, delta: float) -> bool:
 func sync_tune() -> void:
 	_join()
 	synth.tune.apply_dict(_spec.get("exhaust", {}))
+	# Anti-lag is turbo-only: the synth sees it off on a car with no boost.
+	if not ExhaustTune.anti_lag_live(_spec):
+		synth.tune.anti_lag = 0.0
 
 func _load_tune() -> void:
 	var s: Variant = _vehicle.get("spec")
@@ -163,12 +144,3 @@ func _load_tune() -> void:
 func _save_tune() -> void:
 	_saved = _spec.exhaust.duplicate()
 	ExhaustTune.save_car(START_PRESET, _saved)
-
-func _setup_readout() -> void:
-	var layer := CanvasLayer.new()
-	add_child(layer)
-	_label = Label.new()
-	_label.position = Vector2(16, 80)
-	_label.add_theme_color_override("font_color", Color(1.0, 0.54, 0.12))
-	_label.visible = false
-	layer.add_child(_label)

@@ -46,7 +46,7 @@ func _init(target: Vehicle, target_spec: Dictionary, stock_spec: Dictionary) -> 
 ##              with invert). lo_word / hi_word are the words at the ends.
 ##   "choice" : named options, each a function of the stock spec giving
 ##              {path: value}. Shown as one word; Left/Right step through them.
-## Pages without settings (Setup, Mechanic, Sound, Advanced) are drawn by the screen.
+## Pages without settings (Setup, Mechanic, Exhaust, Advanced) are drawn by the screen.
 static func pages() -> Array:
 	return [
 		{"id": "setup", "title": "Setup", "settings": []},
@@ -95,7 +95,7 @@ static func pages() -> Array:
 			_range("max_steering_angle", "Steering lock", ["max_steering_angle"], deg_to_rad(30.0), deg_to_rad(50.0), "Less", "More", "More lock turns tighter and catches bigger slides, but makes the car twitchy.", "rad_deg"),
 		]},
 		{"id": "mechanic", "title": "Mechanic", "settings": []},
-		{"id": "sound", "title": "Sound", "settings": []},
+		{"id": "exhaust", "title": "Exhaust", "settings": []},
 		{"id": "advanced", "title": "Advanced", "settings": []},
 	]
 
@@ -243,7 +243,7 @@ func _on_notch(s: Dictionary) -> bool:
 func apply_preset(name: String) -> void:
 	for e in TuneParams.all():
 		if e.path.begins_with("exhaust/"):
-			continue  # sound is cosmetic and has its own page
+			continue  # exhaust is cosmetic and has its own page
 		_write(e.path, TuneParams.get_value(stock, e.path))
 	var vals := _preset_values(name)
 	for p in vals:

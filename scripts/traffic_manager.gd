@@ -85,10 +85,12 @@ const SPEED_JITTER := 2.5
 ## Spawns, merges and moving over take the player into account as a car that
 ## may not brake. Tests turn it off to force rear-end crashes.
 var react_to_player := true
-## Spec every car is cloned from; empty = CarSpec.traffic_default(). Swap it
-## (or hand each car its own in _make_car) for the three NPC cars later.
+## Spec every car is cloned from; empty = each car's own CarSpec.npc_spec().
 var spec_template := {}
-var kind := "coupe"
+## One car for every slot (tests); empty = the traffic mix below.
+var kind := ""
+## Share of each traffic car in the pool (stage B step 5), NpcCarBuilder kinds.
+const MIX := {"n1_commuter": 45, "n2_cityhatch": 35, "n3_pickup": 20}
 var sim_only := false
 
 var cars: Array[TrafficCar] = []
@@ -111,7 +113,8 @@ const PARK_BEHIND := 10000.0
 ## Chassis origin height of a car settled on its springs on the flat road
 ## (origin is at y=0 with the springs fully extended, so it is negative).
 ## Measured by tests/traffic_spawn.gd, which prints the mean; cars are placed
-## here so a spawn has no settling hop.
+## here so a spawn has no settling hop. This is the old box car's; the NPC cars
+## carry their own (TrafficCar.rest_y, NpcCarBuilder.KINDS).
 const REST_Y := -0.124
 
 const PALETTE := [
@@ -147,10 +150,14 @@ func _ready() -> void:
 
 func _make_car() -> TrafficCar:
 	var car := TrafficCar.new()
-	car.kind = kind
+	car.kind = kind if kind != "" else _pick_kind()
 	car.sim_only = sim_only
 	car.traffic = self
-	car.color = PALETTE[randi() % PALETTE.size()]
+	if NpcCarBuilder.is_npc(car.kind):
+		car.build = NpcCarBuilder.pick_build(car.kind)
+		car.color = NpcCarBuilder.pick_paint(car.kind, car.build)
+	else:
+		car.color = PALETTE[randi() % PALETTE.size()]
 	if not spec_template.is_empty():
 		car.spec = CarSpec.clone_spec(spec_template)
 	# Off the road and far behind until _respawn places it, so a car never
@@ -159,6 +166,17 @@ func _make_car() -> TrafficCar:
 	add_child(car)
 	cars.append(car)
 	return car
+
+func _pick_kind() -> String:
+	var total := 0
+	for k in MIX:
+		total += int(MIX[k])
+	var r := randi() % total
+	for k in MIX:
+		r -= int(MIX[k])
+		if r < 0:
+			return k
+	return MIX.keys()[0]
 
 func _physics_process(_delta: float) -> void:
 	_build_index()
@@ -219,14 +237,14 @@ func _respawn(car: TrafficCar) -> void:
 	if slot.is_empty():
 		deferred_count += 1
 		car.set_detailed(false)
-		car.place(car.lane_x, car.direction, pz + PARK_BEHIND, REST_Y, 0.0)
+		car.place(car.lane_x, car.direction, pz + PARK_BEHIND, car.rest_y, 0.0)
 		car.retry_frame = Engine.get_physics_frames() + DEFER_TICKS
 		_put(car)
 		return
 	spawn_count += 1
 	car.target_speed = slot.speed
 	car.set_detailed(absf(slot.dist) <= detail_distance)
-	car.place(slot.lane_x, slot.direction, slot.z, REST_Y, slot.speed)
+	car.place(slot.lane_x, slot.direction, slot.z, car.rest_y, slot.speed)
 	_put(car)
 	if log_spawns:
 		slot["player_z"] = pz

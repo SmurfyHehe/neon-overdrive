@@ -270,6 +270,74 @@ static func traffic_default() -> Dictionary:
 	s["exhaust"] = ExhaustTune.for_car("n1_commuter").to_dict()
 	return s
 
+## The traffic cars (stage B step 5, NpcCarBuilder.KINDS): traffic_default()
+## with each car's own numbers, picked to feel like its class rather than
+## measured from a real car. Same sim as the player, different data. Unknown
+## kinds (the old box traffic car) get traffic_default().
+static func npc_spec(kind: String) -> Dictionary:
+	var s := traffic_default()
+	match kind:
+		"n1_commuter":
+			# Commuter sedan, ~2.5 l four, front drive: 1450 kg, 60% on the
+			# nose, soft and quiet. Gearing for ~110 km/h at 3000 rpm in 5th.
+			var gears: Array[float] = [3.30, 1.95, 1.35, 1.00, 0.78]
+			s["vehicle_mass"] = 1450.0
+			s["front_weight_distribution"] = 0.60
+			s["front_torque_split"] = 1.0
+			s["max_torque"] = 270.0
+			s["max_rpm"] = 6200.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.9
+			s["coefficient_of_drag"] = 0.30
+			s["frontal_area"] = 2.25
+			s["front_tire_width"] = 205.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 205.0
+			s["front_damping_ratio"] = 0.42
+			s["rear_damping_ratio"] = 0.42
+			s["front_arb_ratio"] = 0.15
+			s["rear_arb_ratio"] = 0.10
+		"n2_cityhatch":
+			# City hatchback, ~1.5 l four, front drive: light (1100 kg), short
+			# gearing that revs high, upright and draggy, narrow tyres.
+			var gears: Array[float] = [3.50, 2.05, 1.42, 1.06, 0.84]
+			s["vehicle_mass"] = 1100.0
+			s["front_weight_distribution"] = 0.62
+			s["front_torque_split"] = 1.0
+			s["max_torque"] = 215.0
+			s["max_rpm"] = 6600.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.1
+			s["coefficient_of_drag"] = 0.33
+			s["frontal_area"] = 2.15
+			s["front_tire_width"] = 185.0
+			s["rear_tire_width"] = 185.0
+			s["front_damping_ratio"] = 0.45
+			s["rear_damping_ratio"] = 0.45
+			s["front_arb_ratio"] = 0.18
+			s["rear_arb_ratio"] = 0.12
+		"n3_pickup":
+			# Double-cab pickup, gas V6, rear drive: heavy (2100 kg), torquey and
+			# low-revving, a barn door for drag, wide tyres, soft and floaty,
+			# with a higher centre of gravity than the cars.
+			var gears: Array[float] = [3.60, 2.20, 1.50, 1.12, 0.85]
+			s["vehicle_mass"] = 2100.0
+			s["front_weight_distribution"] = 0.56
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 380.0
+			s["max_rpm"] = 5600.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.7
+			s["coefficient_of_drag"] = 0.42
+			s["frontal_area"] = 3.1
+			s["front_tire_width"] = 265.0
+			s["rear_tire_width"] = 265.0
+			s["front_damping_ratio"] = 0.38
+			s["rear_damping_ratio"] = 0.38
+			s["front_arb_ratio"] = 0.20
+			s["rear_arb_ratio"] = 0.10
+			s["center_of_gravity_height_offset"] = 0.0
+	return s
+
 ## Physics layers (milestone 3). Every car sits on CAR_LAYER and collides with
 ## the world (WORLD_LAYER: ground slab, sidewalks, buildings) and with other
 ## cars. A Wheel is a RayCast3D on the default mask, layer 1 only, so a wheel
@@ -277,12 +345,44 @@ static func traffic_default() -> Dictionary:
 ## its tyre numbers from the FIRST group of whatever it hits (gevp_wheel.gd
 ## process_forces), a car's first group is "aero_vehicles", and
 ## coefficient_of_friction["aero_vehicles"] does not exist.
+##
+## Walls (WALL_LAYER: the out-of-bounds walls and the buildings) are off layer
+## 1 for the same reason (2026-10-07). A car pressed against a wall leans into
+## it, its wheel rays tip with it and land on the wall face, and the springs
+## then push the car up the wall: Roy's "the car bugs out on the walls", up to
+## 4 m in the air and on its roof at 200 km/h (tests/wall_hit.gd). Car bodies
+## still collide with walls; wheels only ever see the ground and sidewalks.
+##
+## The sidewalks (KERB_LAYER) are the opposite: wheels see them, car bodies do
+## not. The chassis box rides ~4 cm off the road, so crossing the 15 cm kerb
+## ramp at speed used to drive the box up it like a ski jump (4 m/s straight
+## up at 126 km/h, tests/wall_hit.gd) and the car reached the wall airborne and
+## tumbled. Now the wheels climb the kerb through the suspension, as on a real
+## car, and the box can only touch the road, walls and other cars.
 const WORLD_LAYER := 1
 const CAR_LAYER := 2
+const WALL_LAYER := 3
+const KERB_LAYER := 4
 
 static func set_collision_layers(v: Vehicle) -> void:
 	v.collision_layer = 1 << (CAR_LAYER - 1)
-	v.collision_mask = (1 << (WORLD_LAYER - 1)) | (1 << (CAR_LAYER - 1))
+	v.collision_mask = (1 << (WORLD_LAYER - 1)) | (1 << (CAR_LAYER - 1)) | (1 << (WALL_LAYER - 1))
+
+## Puts a wall body on WALL_LAYER with a frictionless surface, so a car that
+## hits it slides along or bounces off instead of being grabbed and rolled.
+static func make_wall(body: StaticBody3D) -> void:
+	body.collision_layer = 1 << (WALL_LAYER - 1)
+	body.collision_mask = 0
+	body.physics_material_override = _wall_material()
+
+static var _wall_mat: PhysicsMaterial
+
+static func _wall_material() -> PhysicsMaterial:
+	if _wall_mat == null:
+		_wall_mat = PhysicsMaterial.new()
+		_wall_mat.friction = 0.0
+		_wall_mat.bounce = 0.1
+	return _wall_mat
 
 ## Rise-then-taper torque curve, loosely modeled on a real gasoline engine's
 ## band, not measured from anything specific -- same shape every car uses for
@@ -352,12 +452,16 @@ static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
 	# no sim reading them: half the wheel raycasts were wasted (frame-rate
 	# pass, 2026-10-08). is_colliding() and friends still read the last cast.
 	w.enabled = false
+	w.collision_mask = (1 << (WORLD_LAYER - 1)) | (1 << (KERB_LAYER - 1))
 	v.add_child(w)
 	var visual: Node3D
 	if kind == TestCarBuilder.KIND:
 		visual = TestCarBuilder.build_wheel_visual(v.front_tire_radius)
 	elif kind == P1CoupeBuilder.KIND:
 		visual = P1CoupeBuilder.build_wheel_visual(v.front_tire_radius, pos)
+	elif NpcCarBuilder.is_npc(kind):
+		# Traffic cars (TrafficCar.build names the sheet variant).
+		visual = NpcCarBuilder.wheel_visual(kind, String(v.get("build")), pos)
 	else:
 		# CarBuilder kinds (traffic) share one merged, cached wheel mesh per
 		# kind (traffic milestone 4, draw calls).

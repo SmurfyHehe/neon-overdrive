@@ -27,10 +27,10 @@ class_name RoadChunkBuilder
 # - roadside buildings beyond the sidewalks: real collision (StaticBody3D +
 #   BoxShape3D) so the player can't drive through them -- this is now the
 #   actual hard boundary of the drivable world, since the curb no longer is
-#   one. A random ~12% are tagged building_type="garage" (wider/shorter,
-#   warm-lit) -- purely a reserved visual variant for now, not wired to
-#   anything; milestone 8's stop-places can reuse the tag later instead of
-#   needing new building art.
+#   one. A random ~12% are tagged building_type="garage" (low sheds) --
+#   purely a reserved variant for now, not wired to anything; milestone 8's
+#   stop-places can reuse the tag later. Their look comes from
+#   scripts/building_kit.gd (buildings step 1, 2026-10-07).
 # - brighter/wider lane markings (the old dash/center-line material wasn't
 #   even emissive, just flat albedo -- part of why markings read as
 #   invisible) + a new solid (non-dashed) edge line along each lane's outer
@@ -73,6 +73,7 @@ class_name RoadChunkBuilder
 #   colour, which lit every face at 1.4x -- the solid white blocks in every
 #   screenshot. Now MULTIPLY (only the windows glow), world-space triplanar so
 #   windows are the same size on every building, and longer frontages.
+#   (Superseded 2026-10-07 by the facade kit, scripts/building_kit.gd.)
 
 # Curves + elevation (#37, docs/planning/curves-elevation-proposal-2026-10-07.md):
 # every chunk carries its centreline as a Path3D ("Centerline"), and
@@ -95,6 +96,11 @@ class_name RoadChunkBuilder
 # the sense of speed and leaves ~1.1 m between bodies in adjacent lanes.
 # Everything else across the road (shoulder, curb, sidewalk, buildings,
 # lamps, lane dashes, traffic lane centres) is laid out from this constant.
+const BuildingKit := preload("res://scripts/building_kit.gd")
+const BuildingSigns := preload("res://scripts/building_signs.gd")
+const RoofProps := preload("res://scripts/roof_props.gd")
+const Districts := preload("res://scripts/districts.gd")
+
 const LANE_W := 3.2
 const CHUNK_LEN := 50.0
 const DASH_SPACING := 4.0
@@ -162,8 +168,6 @@ const MAX_ONC_LANES := 4
 const CENTER_COLOR := Color(0.86, 0.62, 0.12)
 const LANE_DASH_COLOR := Color(0.82, 0.82, 0.78)
 const PAINT_ENERGY := 0.28
-const BUILDING_COLOR_GARAGE := Color(0.09, 0.08, 0.065)
-const BUILDING_COLOR_TOWER := Color(0.065, 0.062, 0.068)
 
 static var _own_mat: StandardMaterial3D
 static var _onc_mat: StandardMaterial3D
@@ -176,8 +180,6 @@ static var _pylon_mat_onc: StandardMaterial3D
 static var _barrier_mat: StandardMaterial3D
 static var _center_dash_mat: StandardMaterial3D
 static var _lane_dash_mat: StandardMaterial3D
-static var _building_mat_garage: StandardMaterial3D
-static var _building_mat_tower: StandardMaterial3D
 
 # Shared geometry, built once and reused by every chunk in the pool -- see the
 # "shared geometry" section below.
@@ -189,6 +191,9 @@ static var _lamp_mesh: ArrayMesh
 static var _pool_mesh: PlaneMesh
 static var _pool_mat: StandardMaterial3D
 static var _wall_mesh: BoxMesh
+static var _reflector_mesh: ArrayMesh
+static var _reflector_mat: ShaderMaterial
+static var _reflector_glow := 1.0
 static var _wall_mat: StandardMaterial3D
 
 static func _flat_mat(color: Color, emissive: bool = false, energy: float = 1.0) -> StandardMaterial3D:
@@ -273,48 +278,6 @@ static func _get_pylon_mat_onc() -> StandardMaterial3D:
 		_pylon_mat_onc = _flat_mat(Color(0.72, 0.62, 0.45), true, 0.35)
 	return _pylon_mat_onc
 
-## Window-grid texture for buildings: one small texture shared by every
-## building material as its emission mask, instead of spawning window meshes
-## per building. Living world step 1 (2026-10-08): WindowLights owns it and
-## switches windows on and off with the night clock.
-static func _get_window_tex() -> ImageTexture:
-	return WindowLights.texture()
-
-## Cached building materials. Only two variants exist (garage / tower), but
-## _building_mat() used to be called per building -- 4 fresh
-## StandardMaterial3D per chunk, 32 across the pool, every one a duplicate of
-## one of these two. Cached like every other material in this file so the
-## renderer can batch them.
-static func _building_mat(base_color: Color) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
-	m.albedo_color = base_color
-	m.emission_enabled = true
-	m.emission_texture = _get_window_tex()
-	m.emission = Color(1, 1, 1)
-	# BUG FIX (stage A): the default operator is ADD, i.e. emission colour PLUS
-	# texture, so white + texture lit every face at >= 1.4 -- the solid white
-	# blocks. MULTIPLY makes the texture the mask: only windows emit.
-	m.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
-	m.emission_energy_multiplier = 1.25
-	# World-space mapping: windows are the same size on every building
-	# whatever its dimensions, and the 25 m tile divides the 1 km floating-
-	# origin shift exactly, so the pattern never jumps on a recenter.
-	m.uv1_triplanar = true
-	m.uv1_world_triplanar = true
-	m.uv1_scale = Vector3.ONE / 25.0
-	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	m.roughness = 0.85
-	return m
-
-static func _get_building_mat(is_garage: bool) -> StandardMaterial3D:
-	if is_garage:
-		if _building_mat_garage == null:
-			_building_mat_garage = _building_mat(BUILDING_COLOR_GARAGE)
-		return _building_mat_garage
-	if _building_mat_tower == null:
-		_building_mat_tower = _building_mat(BUILDING_COLOR_TOWER)
-	return _building_mat_tower
-
 ## The center barrier and the two dash colors were the three materials in this
 ## file that bypassed the static-var cache above, constructed fresh inside
 ## _populate() on every chunk build. A new material per chunk defeats the
@@ -362,6 +325,81 @@ static func _get_pylon_mesh() -> BoxMesh:
 	if _pylon_mesh == null:
 		_pylon_mesh = _box_mesh(Vector3(PYLON_W, PYLON_HEIGHT, PYLON_W))
 	return _pylon_mesh
+
+## Median barrier reflectors (2026-10-07): amber dots on top of the barrier
+## every REFLECTOR_SPACING, so the wall's line reads at night before you are
+## on it. Each dot is a camera-facing quad that never drops below
+## REFLECTOR_MIN_SCREEN of the screen height and fades out past headlight reach
+## (REFLECTOR_FADE), like a retroreflector the car's lamps stop catching.
+## One dot per barrier piece, a MultiMesh child of the Barrier so it shows
+## and bends with it: one draw call per barrier chunk. TrafficSettings.light_glow scales it.
+const REFLECTOR_SPACING := 5.0
+const REFLECTOR_NEAR_R := 0.06
+const REFLECTOR_MIN_SCREEN := 0.004
+const REFLECTOR_FADE := Vector2(60.0, 200.0)
+const REFLECTOR_SHADER := """
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, skip_vertex_transform, fog_disabled, shadows_disabled;
+uniform vec3 tint = vec3(1.0, 0.53, 0.13);
+uniform float energy = 1.3;
+uniform float gain = 1.0;
+uniform float near_r = 0.06;
+uniform float min_screen = 0.004;
+uniform vec2 fade = vec2(60.0, 200.0);
+varying float v_k;
+void vertex() {
+	vec3 c = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	float d = max(-c.z, 0.05);
+	v_k = 1.0 - smoothstep(fade.x, fade.y, d);
+	float far_r = min_screen * 2.0 * d / abs(PROJECTION_MATRIX[1][1]);
+	c *= max(d - 0.1, 0.05) / d;
+	c.xy += UV * max(near_r, far_r) * step(0.001, gain * v_k);
+	VERTEX = c;
+}
+void fragment() {
+	float f = 1.0 - smoothstep(0.45, 1.0, length(UV));
+	ALBEDO = tint * energy * gain * f * v_k;
+}
+"""
+
+static func set_reflector_glow(g: float) -> void:
+	_reflector_glow = g
+	if _reflector_mat != null:
+		_reflector_mat.set_shader_parameter("gain", g)
+
+static func _get_reflector_mat() -> ShaderMaterial:
+	if _reflector_mat == null:
+		var sh := Shader.new()
+		sh.code = REFLECTOR_SHADER
+		_reflector_mat = ShaderMaterial.new()
+		_reflector_mat.shader = sh
+		_reflector_mat.set_shader_parameter("near_r", REFLECTOR_NEAR_R)
+		_reflector_mat.set_shader_parameter("min_screen", REFLECTOR_MIN_SCREEN)
+		_reflector_mat.set_shader_parameter("fade", REFLECTOR_FADE)
+		_reflector_mat.set_shader_parameter("gain", _reflector_glow)
+	return _reflector_mat
+
+## In one barrier piece's local space (a box centred on the origin, one station long).
+static func _get_reflector_mesh() -> ArrayMesh:
+	if _reflector_mesh == null:
+		var verts := PackedVector3Array()
+		var uvs := PackedVector2Array()
+		var corners := [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, -1), Vector2(1, 1), Vector2(-1, 1)]
+		var seg := CHUNK_LEN / STATIONS
+		var n := maxi(1, int(seg / REFLECTOR_SPACING))
+		for i in n:
+			var p := Vector3(0.0, BARRIER_H / 2.0 + 0.03, -seg / 2.0 + (float(i) + 0.5) * seg / n)
+			for uv in corners:
+				verts.append(p)
+				uvs.append(uv)
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = verts
+		arrays[Mesh.ARRAY_TEX_UV] = uvs
+		_reflector_mesh = ArrayMesh.new()
+		_reflector_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		_reflector_mesh.surface_set_material(0, _get_reflector_mat())
+	return _reflector_mesh
 
 static func _get_barrier_mesh() -> BoxMesh:
 	if _barrier_mesh == null:
@@ -731,6 +769,7 @@ static func _new_sidewalk_collision(body_name: String) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = body_name
 	body.add_to_group("Dirt")
+	body.collision_layer = 1 << (CarSpec.KERB_LAYER - 1)  # wheels only, see CarSpec
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
 	var tri := ConcavePolygonShape3D.new()
@@ -752,6 +791,11 @@ static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: 
 	# dead (tests/car_audio.gd's kerb phase, once the ground became a plane in
 	# PR #129). A sloped face pushes the box up instead.
 	#
+	# The back edge is a ramp too (2026-10-09): a district setback (buildings
+	# step 4) leaves a drivable lot behind the sidewalk, and a car scraping the
+	# set-back wall at speed ran its inside wheels into the bare 0.15 m back
+	# lip where it shifts between chunks and rolled over (tests/wall_hit.gd).
+	#
 	# STATIONS pieces along the chunk, each corner through the centreline
 	# frame (#37); on a straight centreline the ramp and top are exactly the
 	# old prism's.
@@ -766,16 +810,19 @@ static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: 
 		var i1 := lerpf(inner0, inner1, t1)
 		var o0 := lerpf(outer0, outer1, t0)
 		var o1 := lerpf(outer0, outer1, t1)
-		var ramp0 := minf(SIDEWALK_RAMP, absf(o0 - i0))
-		var ramp1 := minf(SIDEWALK_RAMP, absf(o1 - i1))
+		var ramp0 := minf(SIDEWALK_RAMP, absf(o0 - i0) / 2.0)
+		var ramp1 := minf(SIDEWALK_RAMP, absf(o1 - i1) / 2.0)
 		var foot0 := _at(i0 * sx, 0.0, z0)
 		var foot1 := _at(i1 * sx, 0.0, z1)
 		var lip0 := _at((i0 + ramp0) * sx, 0.15, z0)
 		var lip1 := _at((i1 + ramp1) * sx, 0.15, z1)
-		var top0 := _at(o0 * sx, 0.15, z0)
-		var top1 := _at(o1 * sx, 0.15, z1)
+		var top0 := _at((o0 - ramp0) * sx, 0.15, z0)
+		var top1 := _at((o1 - ramp1) * sx, 0.15, z1)
+		var back0 := _at(o0 * sx, 0.0, z0)
+		var back1 := _at(o1 * sx, 0.0, z1)
 		faces.append_array([foot0, foot1, lip0, lip0, foot1, lip1])  # the ramp
 		faces.append_array([lip0, lip1, top0, top0, lip1, top1])     # the top
+		faces.append_array([top0, top1, back0, back0, top1, back1])  # the back ramp
 	((body.get_node(^"Shape") as CollisionShape3D).shape as ConcavePolygonShape3D).set_faces(faces)
 	body.position = Vector3.ZERO
 
@@ -789,6 +836,7 @@ static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: 
 static func _new_boundary(body_name: String) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = body_name
+	CarSpec.make_wall(body)
 	# One box per station (#37) so the wall can follow a bend.
 	for k in STATIONS:
 		var col := CollisionShape3D.new()
@@ -852,6 +900,31 @@ static func _update_road_collision(root: Node3D, half_w: float) -> void:
 	tri.set_faces(faces)
 	col.disabled = false
 
+## The district cross wall: spans x between the two boundary lines (xs.x and
+## xs.y, both |x|) at the chunk's start, z = 0. Disabled when there is no step.
+## A setback step wall: one box across the lot at the chunk start. Not
+## _new_boundary(): that makes one box per station (#37), and _update_step
+## sizes only "Shape", so the spare unit boxes would stick out of the wall.
+static func _new_step(body_name: String) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.name = body_name
+	CarSpec.make_wall(body)
+	var col := CollisionShape3D.new()
+	col.name = "Shape"
+	col.shape = BoxShape3D.new()
+	body.add_child(col)
+	return body
+
+static func _update_step(root: Node3D, body_name: String, xs: Vector2, side: int, on: bool) -> void:
+	var body: StaticBody3D = root.get_node(NodePath(body_name))
+	var col: CollisionShape3D = body.get_node(^"Shape")
+	col.disabled = not on
+	var x0 := minf(xs.x, xs.y)
+	var x1 := maxf(xs.x, xs.y) + BOUNDARY_T
+	(col.shape as BoxShape3D).size = Vector3(maxf(x1 - x0, 0.1), BOUNDARY_H, BOUNDARY_T)
+	body.transform = _xf_up((x0 + x1) / 2.0 * float(side), BOUNDARY_H / 2.0, -BOUNDARY_T / 2.0)
+	body.set_meta("step", on)
+
 # ---------- buildings (reused nodes) ----------
 #
 # Buildings keep one MeshInstance3D + one StaticBody3D each rather than
@@ -860,30 +933,38 @@ static func _update_road_collision(root: Node3D, half_w: float) -> void:
 # per-node building_type="garage" meta that milestone 8 is meant to reuse
 # cannot live on a MultiMesh instance.
 #
-# They are also the one case that does NOT share a mesh. Godot's BoxMesh lays
-# out UVs proportional to the box dimensions, so the window-grid emission
-# texture stretches with a building's height -- sharing one unit cube and
-# scaling the node would flatten that into a uniform grid, which is a real
-# visual change. Instead each slot keeps its own BoxMesh for the life of the
-# pool and has its size rewritten on rebuild: identical UVs to before, and
-# still nothing allocated per rebuild. They do now share the two cached
-# materials instead of one fresh material each.
+# Buildings step 1 (2026-10-07): every building now shares one unit cube and
+# one facade ShaderMaterial (scripts/building_kit.gd). The facade is mapped
+# from the building's own size in the shader, not from BoxMesh UVs, so the
+# node is simply scaled; tile, tint, floor count and lit-window density are
+# per-instance shader parameters.
+#
+# The look is drawn from a per-building RNG seeded by chunk index, slot and
+# the building's footprint, NOT from the global random sequence: the global
+# calls below are kept exactly as before (4 per building, in the same
+# order), so the road layout game.gd
+# rolls after each chunk is unchanged for any seed, and a chunk rebuilt from
+# the pool looks the same as one built fresh.
+
+static var _bld_rng := RandomNumberGenerator.new()
 
 static func _new_building(index: int) -> Array:
 	var mi := MeshInstance3D.new()
 	mi.name = "BuildingMesh%d" % index
-	mi.mesh = _box_mesh(Vector3.ONE)
+	mi.mesh = BuildingKit.unit_box()
 	var body := StaticBody3D.new()
 	body.name = "BuildingBody%d" % index
+	CarSpec.make_wall(body)
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
 	col.shape = BoxShape3D.new()
 	body.add_child(col)
 	return [mi, body]
 
-## Returns the building's length along the road (its z size), so the gap
-## walls can fill what is left between buildings.
-static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: float, side: int) -> float:
+## Returns the building's length along the road (its z size, so the gap
+## walls can fill what is left between buildings), its type and sign, and
+## where its front face is.
+static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: float, side: int, chunk_index: int = 0) -> Dictionary:
 	var mi: MeshInstance3D = root.get_node(NodePath("BuildingMesh%d" % index))
 	var body: StaticBody3D = root.get_node(NodePath("BuildingBody%d" % index))
 	var col: CollisionShape3D = body.get_node(^"Shape")
@@ -891,25 +972,119 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 
 	# Stage A: longer frontages (d, along the road) so the street reads as a
 	# continuous built-up corridor; w is how deep the block goes.
+	# Keep these four global calls exactly as they are (see the section
+	# comment; randf_range() takes more draws than randf(), so even swapping
+	# one for the other shifts the road layout).
 	var is_garage: bool = randf() < 0.12
-	var w: float = randf_range(4.0, 10.0)
-	var d: float = randf_range(9.0, 18.0)
-	var h: float = randf_range(3.0, 4.5) if is_garage else randf_range(6.0, 22.0)
+	var w_draw: float = randf_range(4.0, 10.0)
+	var d_draw: float = randf_range(9.0, 18.0)
+	var h_old: float = randf_range(3.0, 4.5) if is_garage else randf_range(6.0, 22.0)
+	var h_roll := inverse_lerp(3.0, 4.5, h_old) if is_garage else inverse_lerp(6.0, 22.0, h_old)
+
+	# w and d come from the global sequence, so the look changes from run to
+	# run with the road while a rebuild of the same chunk still matches
+	_bld_rng.seed = hash([chunk_index, index, w_draw, d_draw])
+	# Districts (step 4) remap the same draws onto their own footprint
+	# ranges, push the fronts back by the chunk's setback, and leave some
+	# slots as empty lots (the gap walls close them).
+	var spec := Districts.spec(Districts.name_for_building(chunk_index, _bld_rng.randf()))
+	var w: float = lerpf(spec.w[0], spec.w[1], inverse_lerp(4.0, 10.0, w_draw))
+	var d: float = lerpf(spec.d[0], spec.d[1], inverse_lerp(9.0, 18.0, d_draw))
+	var front := edge_x_abs + BUILDING_GAP + Districts.setback_at(chunk_index)
+	if _bld_rng.randf() < float(spec.gap):
+		mi.visible = false
+		col.disabled = true
+		box.size = Vector3(w, 1.0, d)
+		mi.transform = _xf_up((front + w / 2.0) * float(side), 0.5, z, Basis.from_scale(box.size))
+		body.transform = _xf_up((front + w / 2.0) * float(side), 0.5, z)
+		mi.set_meta("building_type", "lot")
+		for k in ["sign_word", "facade_tile"]:
+			if mi.has_meta(k):
+				mi.remove_meta(k)
+		return {"empty": true, "d": 0.0, "z": z, "side": side}
+	mi.visible = true
+	col.disabled = false
+	var info := BuildingKit.dress(mi, _bld_rng, is_garage, h_roll, w, d, spec)
+	var h: float = info.h
+	# Special buildings (step 5) stand at the back of their lot: a gas
+	# station's kiosk behind its canopy, a diner behind its pole sign. The
+	# forecourt is behind the out-of-bounds wall like any building's
+	# footprint, so it is scenery, not a place to drive (yet).
+	var lot_front := front
+	if info.type == "gas" or info.type == "diner":
+		var lot := 16.0 if info.type == "gas" else 11.0
+		var body_w := 7.0
+		front = lot_front + lot - body_w
+		w = body_w
+	# Through the centreline frame (#37); on a hilly road the block reaches
+	# FOUNDATION below the road so its downhill end never floats. The facade
+	# counts floors up from the road ("base"), not from the block's bottom.
 	var f := _foundation()
-	var xf := _xf_up((edge_x_abs + w / 2.0 + BUILDING_GAP) * float(side), (h - f) / 2.0, z)
-	h += f
+	var size := Vector3(w, h + f, d)
+	mi.set_instance_shader_parameter("size", size)
+	mi.set_instance_shader_parameter("base", f)
+	mi.transform = _xf_up((front + w / 2.0) * float(side), (h - f) / 2.0, z, Basis.from_scale(size))
+	box.size = size
+	body.transform = _xf_up((front + w / 2.0) * float(side), (h - f) / 2.0, z)
+	info["empty"] = false
+	info["d"] = d
+	info["w"] = w
+	info["front_x_abs"] = front
+	info["lot_front_x_abs"] = lot_front
+	info["z"] = z
+	info["side"] = side
+	return info
 
-	(mi.mesh as BoxMesh).size = Vector3(w, h, d)
-	mi.transform = xf
-	mi.material_override = _get_building_mat(is_garage)
-	if is_garage:
-		mi.set_meta("building_type", "garage")
-	elif mi.has_meta("building_type"):
-		mi.remove_meta("building_type")
+## Shop and garage signs (buildings step 2): one lightbox per signed
+## building, on its front just above the ground floor, from one MultiMesh.
+static func _update_signs(root: Node3D, infos: Array) -> int:
+	var mm: MultiMesh = (root.get_node(^"Signs") as MultiMeshInstance3D).multimesh
+	var n := 0
+	for info in infos:
+		if info.empty or info.sign == "":
+			continue
+		var fh: float = info.floor_h
+		var garage: bool = info.type == "garage"
+		var x: float = float(info.front_x_abs) * float(info.side)
+		var lot_x: float = float(info.lot_front_x_abs) * float(info.side)
+		if info.type == "gas":
+			# fascia along the front edge of the canopy
+			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(lot_x + 0.4 * float(info.side), 5.0, info.z), info.side, 0.6, 6.0)
+		elif info.type == "diner":
+			# high on its pole, square-on to the oncoming traffic
+			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(lot_x + 1.2 * float(info.side), 7.8, float(info.z) + float(info.d) * 0.35), info.side, 1.6, 4.5, false, PI / 2.0)
+		elif info.blade:
+			# over the sidewalk, clear of a car roof, one floor up
+			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(x, fh + 0.9, info.z), info.side, 0.8, 2.0, true)
+		else:
+			# shop: the dark band at the top of the shopfront glass; garage:
+			# over the roller doors
+			var sh := 0.6 if garage else 0.75
+			var y: float = fh - (0.45 if garage else 0.42)
+			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(x, y, info.z), info.side, sh, float(info.d) * 0.8)
+		n += 1
+	mm.visible_instance_count = n
+	_bend_instances(mm, 0, n)
+	return n
 
-	box.size = Vector3(w, h, d)
-	body.transform = xf
-	return d
+## Rooftop props and billboards (buildings step 3); billboard faces take
+## the sign slots after the shop signs.
+static func _update_roofs(root: Node3D, infos: Array, signs_used: int) -> void:
+	var props: MultiMesh = (root.get_node(^"RoofProps") as MultiMeshInstance3D).multimesh
+	var signs: MultiMesh = (root.get_node(^"Signs") as MultiMeshInstance3D).multimesh
+	var counts := RoofProps.update(props, infos, signs, signs_used)
+	signs.visible_instance_count = counts[1]
+	_bend_instances(props, 0, counts[0])
+	_bend_instances(signs, signs_used, counts[1])
+	root.set_meta("roof_props", counts[0])
+
+## Signs and roof props are laid out on the straight road description; this
+## carries instances [from, to) through the centreline frame (#37), the same
+## mapping _xf_up gives everything else. A no-op on a straight, flat road.
+static func _bend_instances(mm: MultiMesh, from: int, to: int) -> void:
+	for i in range(from, to):
+		var t := mm.get_instance_transform(i)
+		mm.set_instance_transform(i, _xf_up(t.origin.x, t.origin.y, t.origin.z, t.basis))
 
 # ---------- build / rebuild ----------
 
@@ -936,6 +1111,8 @@ static func _create_nodes(root: Node3D) -> void:
 	root.add_child(_new_sidewalk_collision("SidewalkColOnc"))
 	root.add_child(_new_boundary("BoundaryOwn"))
 	root.add_child(_new_boundary("BoundaryOnc"))
+	root.add_child(_new_step("BoundaryStepOwn"))
+	root.add_child(_new_step("BoundaryStepOnc"))
 
 	var slots := _dash_slots()
 	root.add_child(_new_multimesh("PylonsOwn", _get_pylon_mesh(), _get_pylon_mat_own(), _pylon_slots()))
@@ -950,14 +1127,25 @@ static func _create_nodes(root: Node3D) -> void:
 	# allocated once, like the dashes and pylons above.
 	root.add_child(_new_multimesh("Lamps", _get_lamp_mesh(), null, _lamp_slots() * 2))
 	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2))
-	root.add_child(_new_multimesh("GapWalls", _get_wall_mesh(), _get_wall_mat(), (_building_slots() + 1) * 2))
+	# +1 per side for the district step wall
+	root.add_child(_new_multimesh("GapWalls", _get_wall_mesh(), _get_wall_mat(), (_building_slots() + 2) * 2))
 
 	# The centre barrier, one piece per station so it can follow a bend (#37).
-	root.add_child(_new_multimesh("Barrier", _get_barrier_mesh(), _get_barrier_mat(), STATIONS))
+	# Its reflectors are a child with one piece per station too, placed with
+	# the same transforms, so they show and bend with it.
+	var barrier_mmi := _new_multimesh("Barrier", _get_barrier_mesh(), _get_barrier_mat(), STATIONS)
+	var refl := _new_multimesh("Reflectors", _get_reflector_mesh(), null, STATIONS)
+	refl.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	refl.extra_cull_margin = 1.0
+	barrier_mmi.add_child(refl)
+	root.add_child(barrier_mmi)
 
 	for i in range(_building_slots() * 2):
 		for n in _new_building(i):
 			root.add_child(n)
+	# shop signs plus rooftop billboards: at most two per building
+	root.add_child(BuildingSigns.new_multimesh(_building_slots() * 4))
+	root.add_child(RoofProps.new_multimesh())
 
 	root.set_meta("nodes_built", true)
 
@@ -1024,9 +1212,21 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	_update_sidewalk_collision(root, "SidewalkColOnc", start_onc_curb, end_onc_curb, start_onc_walk, end_onc_walk, -1)
 
 	# out-of-bounds walls, at the same set-back _update_building() uses
-	_update_boundary(root, "BoundaryOwn", maxf(start_own_walk, end_own_walk) + BUILDING_GAP, 1)
-	_update_boundary(root, "BoundaryOnc", maxf(start_onc_walk, end_onc_walk) + BUILDING_GAP, -1)
-	_update_road_collision(root, maxf(maxf(start_own_walk, end_own_walk), maxf(start_onc_walk, end_onc_walk)) + BUILDING_GAP + BOUNDARY_T + ROAD_COL_MARGIN)
+	# (plus the district's setback: strip malls sit behind a drivable lot)
+	var setback := Districts.setback_at(chunk_index)
+	var bound_own := maxf(start_own_walk, end_own_walk) + BUILDING_GAP + setback
+	var bound_onc := maxf(start_onc_walk, end_onc_walk) + BUILDING_GAP + setback
+	_update_boundary(root, "BoundaryOwn", bound_own, 1)
+	_update_boundary(root, "BoundaryOnc", bound_onc, -1)
+	# Where the setback changes from the previous chunk, a cross wall at this
+	# chunk's start closes the step between the two boundary lines, so the
+	# deeper lot does not open behind the shallower chunk's wall.
+	var prev_setback := Districts.setback_at(chunk_index - 1)
+	var step_own := Vector2(bound_own, start_own_walk + BUILDING_GAP + prev_setback)
+	var step_onc := Vector2(bound_onc, start_onc_walk + BUILDING_GAP + prev_setback)
+	_update_step(root, "BoundaryStepOwn", step_own, 1, absf(setback - prev_setback) > 0.01)
+	_update_step(root, "BoundaryStepOnc", step_onc, -1, absf(setback - prev_setback) > 0.01)
+	_update_road_collision(root, maxf(bound_own, bound_onc) + BOUNDARY_T + ROAD_COL_MARGIN)
 
 	# edge pylons -- cosmetic rhythm/speed cues, interpolated along each
 	# shoulder's outer edge between this chunk's start and end width
@@ -1046,15 +1246,22 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# roadside buildings -- real collision, the world's actual hard boundary
 	var n_buildings := _building_slots()
 	var spans := {1: [], -1: []}  # per side: [z_front, z_back] of each building
+	var infos := []
 	for i in range(n_buildings):
 		var bz := -float(i) * BUILDING_SPACING - BUILDING_SPACING / 2.0
 		var bt: float = -bz / CHUNK_LEN
 		var own_edge_b: float = lerp(start_own_walk, end_own_walk, bt)
 		var onc_edge_b: float = lerp(start_onc_walk, end_onc_walk, bt)
-		var d_own := _update_building(root, i * 2, own_edge_b, bz, 1)
-		var d_onc := _update_building(root, i * 2 + 1, onc_edge_b, bz, -1)
+		var own_info := _update_building(root, i * 2, own_edge_b, bz, 1, chunk_index)
+		var onc_info := _update_building(root, i * 2 + 1, onc_edge_b, bz, -1, chunk_index)
+		infos.append(own_info)
+		infos.append(onc_info)
+		var d_own: float = own_info.d
+		var d_onc: float = onc_info.d
 		spans[1].append([bz + d_own / 2.0, bz - d_own / 2.0])
 		spans[-1].append([bz + d_onc / 2.0, bz - d_onc / 2.0])
+
+	_update_roofs(root, infos, _update_signs(root, infos))
 
 	# gap walls (stage A) -- close the open lots between buildings along the
 	# building-front line. Visual only: out-of-bounds collision is issue #28,
@@ -1072,12 +1279,20 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			var length := z_from - z_to
 			if length > 0.3:
 				var zc := (z_from + z_to) / 2.0
-				var x: float = lerp(walk0, walk1, -zc / CHUNK_LEN) + BUILDING_GAP + WALL_T / 2.0
+				var x: float = lerp(walk0, walk1, -zc / CHUNK_LEN) + BUILDING_GAP + setback + WALL_T / 2.0
 				var f := _foundation()
 				var basis := Basis.from_scale(Vector3(WALL_T, WALL_H + f, length))
 				walls.set_instance_transform(n_walls, _xf_up(x * float(side), (WALL_H - f) / 2.0, zc, basis))
 				n_walls += 1
 			z_from = e[1]
+		# the district step: a visible wall across the lot edge, where the
+		# invisible cross wall stands
+		var step: Vector2 = step_own if side == 1 else step_onc
+		if absf(setback - prev_setback) > 0.01:
+			var sx := absf(step.x - step.y)
+			var basis2 := Basis.from_scale(Vector3(sx, WALL_H, WALL_T))
+			walls.set_instance_transform(n_walls, Transform3D(basis2, Vector3((step.x + step.y) / 2.0 * float(side), WALL_H / 2.0, -WALL_T / 2.0)))
+			n_walls += 1
 	walls.visible_instance_count = n_walls
 
 	# street lamps + their light pools (stage A). Pole just outside the curb,
@@ -1106,13 +1321,17 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var slots := _dash_slots()
 	var center: MultiMesh = (root.get_node(^"CenterDashes") as MultiMeshInstance3D).multimesh
 	var barrier_mmi := root.get_node(^"Barrier") as MultiMeshInstance3D
+	var refl_mm: MultiMesh = (barrier_mmi.get_node(^"Reflectors") as MultiMeshInstance3D).multimesh
+	var seg := CHUNK_LEN / STATIONS
+	for k in STATIONS:
+		var bxf := _xf(0.0, BARRIER_Y, -seg * (float(k) + 0.5))
+		barrier_mmi.multimesh.set_instance_transform(k, bxf)
+		refl_mm.set_instance_transform(k, bxf)
+	barrier_mmi.multimesh.visible_instance_count = STATIONS
+	refl_mm.visible_instance_count = STATIONS
 	barrier_mmi.visible = barrier
 	if barrier:
 		center.visible_instance_count = 0
-		var seg := CHUNK_LEN / STATIONS
-		for k in STATIONS:
-			barrier_mmi.multimesh.set_instance_transform(k, _xf(0.0, BARRIER_Y, -seg * (float(k) + 0.5)))
-		barrier_mmi.multimesh.visible_instance_count = STATIONS
 	else:
 		for i in range(slots):
 			var dz := -float(i) * DASH_SPACING - DASH_SPACING / 2.0

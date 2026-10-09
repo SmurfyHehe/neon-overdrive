@@ -18,10 +18,8 @@ const GROUPS := [
 		["clutch", "Clutch (hold, manual)"], ["starter", "Starter (hold, manual)"]]],
 	["Camera", [["camera_cycle", "Camera smoothing"], ["camera_view", "Chase / cockpit view"], ["look_back", "Look back (hold)"], ["look_glance", "Mirror glance (tap; steer picks side)"], ["window", "Side window (hold: down, tap: up)"]]],
 	["Audio & Radio", [["mute", "Mute"], ["radio_next", "Next radio station"]]],
+	["Photo mode", [["photo_mode", "Photo mode"], ["photo_forward", "Forward"], ["photo_back", "Back"], ["photo_left", "Left"], ["photo_right", "Right"], ["photo_down", "Down"], ["photo_up", "Up"], ["photo_fast", "Faster (hold)"], ["photo_look_left", "Look left"], ["photo_look_right", "Look right"], ["photo_look_up", "Look up"], ["photo_look_down", "Look down"], ["photo_fov_narrow", "Zoom in"], ["photo_fov_wide", "Zoom out"], ["photo_shot", "Save photo"]]],
 	["Menus", [["pause", "Pause / back"], ["tuning_panel", "Tuning panel"], ["autotune_panel", "Auto-Tune panel"]]],
-	["Exhaust", [
-		["exhaust_loud_up", "Louder"], ["exhaust_loud_down", "Quieter"], ["exhaust_rasp_up", "More rasp"],
-		["exhaust_rasp_down", "Less rasp"], ["exhaust_pops_up", "More pops"], ["exhaust_pops_down", "Fewer pops"]]],
 ]
 
 const SILVER := Color("#C9CED6")
@@ -31,6 +29,9 @@ var game_state: GameState
 var resume_button: Button
 var volume_sliders := {}   # channel -> HSlider
 var fov_slider: HSlider
+var smoothing_slider: HSlider
+var smoke_burnout_slider: HSlider
+var smoke_drift_slider: HSlider
 var main_page: VBoxContainer
 var controls_page: VBoxContainer
 var controls_scroll: ScrollContainer
@@ -89,7 +90,8 @@ func _ready() -> void:
 		volume_sliders[channel] = s
 
 	# Traffic sliders (stage B step 3): car count and draw distance, applied to
-	# the running TrafficManager at once and saved with the volumes.
+	# the running TrafficManager at once and saved with the volumes. Night
+	# lights (2026-10-07): tail lamps, flares and barrier reflectors.
 	var traffic_title := Label.new()
 	traffic_title.text = "Traffic"
 	traffic_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -108,6 +110,10 @@ func _ready() -> void:
 			var traffic: Variant = get_parent().get("traffic")
 			if traffic != null:
 				traffic.detail_distance = TrafficSettings.detail_distance)
+	_add_slider(box, "Night lights", TrafficSettings.LIGHT_GLOW_MIN, TrafficSettings.LIGHT_GLOW_MAX, 0.1, TrafficSettings.light_glow,
+		func(v: float) -> void:
+			TrafficSettings.set_light_glow(v)
+			TrafficSettings.save_settings())
 
 	# View slider (2026-10-06): the cockpit FOV, 55-78, default 62; the speed
 	# widening (up to +6) rides on top of it. Applies at once, saved with the rest.
@@ -119,6 +125,26 @@ func _ready() -> void:
 		func(v: float) -> void:
 			ViewSettings.set_cockpit_fov(v)
 			ViewSettings.save_settings())
+
+	smoothing_slider = _add_slider(box, "Camera", 0.0, float(ViewSettings.CAMERA_SMOOTHING_MAX), 1.0, float(ViewSettings.camera_smoothing),
+		func(v: float) -> void:
+			ViewSettings.set_camera_smoothing(int(v))
+			ViewSettings.save_settings())
+
+	# Tyre smoke amounts (2026-10-07): 0 = none, 1 = default, 2 = double.
+	# Read live by TyreSmoke each tick, saved with the rest.
+	var smoke_title := Label.new()
+	smoke_title.text = "Tyre smoke"
+	smoke_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(smoke_title)
+	smoke_burnout_slider = _add_slider(box, "Burnout", 0.0, FxSettings.SMOKE_MAX, 0.1, FxSettings.smoke_burnout,
+		func(v: float) -> void:
+			FxSettings.set_smoke(v, FxSettings.smoke_drift)
+			FxSettings.save_settings())
+	smoke_drift_slider = _add_slider(box, "Drift", 0.0, FxSettings.SMOKE_MAX, 0.1, FxSettings.smoke_drift,
+		func(v: float) -> void:
+			FxSettings.set_smoke(FxSettings.smoke_burnout, v)
+			FxSettings.save_settings())
 
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	_add_button(box, "Controls", show_controls)

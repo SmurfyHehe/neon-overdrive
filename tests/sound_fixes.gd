@@ -21,7 +21,7 @@ extends SceneTree
 # Exit code 1 on failure. Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/sound_fixes.gd
 
-const TIMEOUT := 60.0
+const TIMEOUT := 120.0  # a cold user://audio_cache rebuilds the car sounds at boot (~10 s)
 
 var fails := 0
 var game: Node
@@ -199,13 +199,15 @@ func _process(delta: float) -> bool:
 				_go("reset_in_air")
 		"reset_in_air":
 			# A respawn-style reset in the air: velocity zeroed, nothing touched.
-			if step_t < 0.05:
+			# by frames, not time: a long frame must not skip a stage
+			samples.air_frames = samples.get("air_frames", 0) + 1
+			if samples.air_frames == 1:
 				samples.hits0 = crash.impact_count
 				p.global_position.y += 3.0
 				p.linear_velocity = Vector3(0.0, 0.0, -25.0)
-			elif step_t < 0.1:
+			elif samples.air_frames == 3:
 				p.linear_velocity = Vector3.ZERO
-			elif step_t > 0.15:
+			elif samples.air_frames >= 6:
 				_check(crash.impact_count == samples.hits0, "zeroing the velocity in the air should not be a crash")
 				_go("settle")
 		"settle":

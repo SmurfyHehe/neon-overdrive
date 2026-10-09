@@ -56,6 +56,53 @@ P1 = {
     'options': {},
 }
 
+P0 = {
+    'id': 'p0_beater', 'role': 'player', 'label': 'Rear-engine beater',
+    'refs': 'the rear-engine, air-cooled economy cars of the 1960s (category only; no brand)',
+    'rule': 'One dome from nose to tail, pontoon fenders bulging at each wheel, round lamps up on the front fenders, louvred engine lid at the back; tall narrow tyres in sagging arches.',
+    'tier': 'T0 beater: the prologue car, 2026-10-09',
+    'L': 4.05, 'WB': 2.40, 'OHf': 0.80, 'W': 1.58,
+    'wheel': {'r': 0.30, 'w': 0.155, 'w_rear': 0.165, 'track': 1.30, 'arch_gap': 0.07, 'rim': 'steel', 'rim_ratio': 0.56},
+    'top': [(0.0, 0.60), (0.05, 0.74), (0.30, 0.86), (0.85, 0.99), (1.30, 1.06), (1.62, 1.44), (1.85, 1.50), (2.10, 1.50),
+            (2.40, 1.46), (2.70, 1.36), (3.00, 1.22), (3.30, 1.06), (3.60, 0.92), (3.85, 0.78), (4.02, 0.68), (4.05, 0.58)],
+    'floor': [(0, 0.30), (0.22, 0.17), (3.85, 0.17), (4.05, 0.30)],
+    'hw': [(0, 0.40), (0.10, 0.56), (0.40, 0.72), (0.80, 0.80), (1.25, 0.74), (1.55, 0.69), (2.45, 0.69), (2.80, 0.74),
+           (3.20, 0.80), (3.60, 0.74), (3.92, 0.60), (4.05, 0.46)],
+    'waist': [(0, 0.46), (0.80, 0.56), (1.60, 0.60), (2.40, 0.60), (3.20, 0.56), (4.05, 0.48)],
+    'belt': [(0, 0.60), (0.35, 0.80), (1.30, 0.92), (2.20, 0.93), (3.00, 0.92), (3.60, 0.84), (4.05, 0.70)],
+    'tumble': 0.10, 'sill_in': 0.03, 'rocker_h': 0.36, 'rocker_trim': True,
+    'cabin': {'A': 1.30, 'W': 1.62, 'R': 2.30, 'C': 3.00, 'D': 2.75,
+              'roof_w': [(1.62, 0.52), (2.30, 0.52), (3.00, 0.44)], 'roof_drop': 0.05, 'pillars': [(2.00, 2.07)]},
+    'decals': [
+        # round lamps standing on the fender crowns, a tiny trunk-lid vent and a thin chrome blade bumper
+        {'view': 'front', 'circle': (0.50, 0.84, 0.095, 14), 'mat': 'head', 'mirror': True},
+        {'view': 'front', 'rect': (-0.16, 0.62, 0.16, 0.66), 'mat': 'trim'},
+        {'view': 'front', 'rect': (-0.62, 0.30, 0.62, 0.36), 'mat': 'chrome', 'tag': 'fbumper'},
+        # the primer front lid: one panel that never got painted (paint2)
+        {'view': 'top', 'rect': (-0.34, 0.30, 0.34, 1.15), 'mat': 'paint2', 'tag': 'hood'},
+        # engine lid: four louvre slots, small tail lamps, licence recess, blade bumper, one tailpipe
+        {'view': 'rear', 'rect': (-0.26, 0.86, 0.26, 0.885), 'mat': 'grille'},
+        {'view': 'rear', 'rect': (-0.26, 0.81, 0.26, 0.835), 'mat': 'grille'},
+        {'view': 'rear', 'rect': (-0.26, 0.76, 0.26, 0.785), 'mat': 'grille'},
+        {'view': 'rear', 'rect': (-0.26, 0.71, 0.26, 0.735), 'mat': 'grille'},
+        {'view': 'rear', 'ellipse': (0.52, 0.80, 0.065, 0.085, 12), 'mat': 'tail', 'mirror': True},
+        {'view': 'rear', 'rect': (-0.16, 0.46, 0.16, 0.56), 'mat': 'trim'},
+        {'view': 'rear', 'rect': (-0.62, 0.30, 0.62, 0.36), 'mat': 'chrome', 'tag': 'rbumper'},
+    ],
+    'parts': [
+        {'type': 'mirrors', 's': 1.34},
+    ],
+    'exhaust': [{'x': 0.30, 'y': 0.24, 'r': 0.03}],
+    'stickers': [
+        {'id': 'door', 'view': 'left', 'rect': (1.38, 0.48, 1.96, 0.72), 'mirror': True},
+        {'id': 'hood', 'view': 'top', 'rect': (-0.26, 0.40, 0.26, 1.00)},
+        {'id': 'rear', 'view': 'rear', 'rect': (-0.26, 0.58, 0.26, 0.69), 'note': 'engine lid'},
+    ],
+    'paint': {'hero': ('Faded sage', '#8C9B88'), 'alts': [('Primer grey', '#6E6B68'), ('Dust beige', '#B9AE98'), ('Faded red', '#8E2A28'), ('Oxide brown', '#6B4A33')],
+              'trim': '#2A2C30', 'rim': '#8D939C', 'extra': {'paint2': '#5F5B58', 'chrome': '#9FA4AA'}},
+    'options': {},
+}
+
 P2 = {
     'id': 'p2_hothatch', 'role': 'player', 'label': 'Hot hatch',
     'refs': 'Civic Si/EK, Golf GTI Mk2, 205 GTI',
@@ -497,7 +544,7 @@ C3 = {
     'options': {},
 }
 
-FLEET = [P1, P2, P3, P4, P5, P6, N1, N2, N3, C1, C2, C3]
+FLEET = [P0, P1, P2, P3, P4, P5, P6, N1, N2, N3, C1, C2, C3]
 
 
 def _add_sun_strips():
@@ -536,4 +583,5 @@ def colors_for(defn, paint_hex=None):
     out = {'paint': paint_hex or p['hero'][1], 'trim': p.get('trim', '#1A1D24'), 'rim': p.get('rim', '#C9CED6')}
     if p.get('rim'):
         out['rim_bronze'] = p['rim']
+    out.update(p.get('extra', {}))  # e.g. the beater's primer lid (paint2)
     return out

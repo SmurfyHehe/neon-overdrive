@@ -80,6 +80,21 @@ const KINDS := {
 	# the cops C1-C3, as AI-driven cars on the same sim. "sheet_paint": every
 	# build wears the sheet's own paint (C1 navy and white, C3 plain dark, the
 	# player cars' sheet colours) instead of a random traffic neutral.
+	# The beater starter car (stage D, 2026-10-09): one build, the sheet's
+	# faded paint. In KINDS so the player and (later) a rival or a parked
+	# prologue car share one mesh path.
+	"p0_beater": {
+		"data": preload("res://scripts/p0_beater_data.gd"),
+		"length": 4.05, "width": 1.58, "height": 1.50, "clearance": 0.17,
+		"front_overhang": 0.80, "rear_overhang": 0.85,
+		"wheel_r": 0.30, "wheel_x": 0.65, "axle_z": 1.20,
+		## Measured by tests/player_cars.gd and tests/npc_cars.gd: the soft,
+		## long springs of CarSpec.player_spec sit it 1.6 cm lower than the others.
+		"rest_y": -0.136,
+		"builds": {"stock": 100},
+		"build_paint": {},
+		"sheet_paint": true,
+	},
 	"p2_hothatch": {
 		"data": preload("res://scripts/p2_hothatch_data.gd"),
 		"length": 4.05, "width": 1.83, "height": 1.4, "clearance": 0.12,

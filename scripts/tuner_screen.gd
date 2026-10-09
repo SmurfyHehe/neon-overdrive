@@ -86,7 +86,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	layer = 10  # same layer as the pause menu; they are never open together
 	visible = false
-	model = TunerModel.new(player, player.spec, CarSpec.coupe_default())
+	model = TunerModel.new(player, player.spec, CarSpec.player_spec(PlayerCar.chassis_kind()))
 	# A tune restored from the last run (PlayerTune) shows its preset's name.
 	var restored := preload("res://scripts/player_tune.gd").preset_of(player.spec, model.stock)
 	model.preset = restored[0]

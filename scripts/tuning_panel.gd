@@ -81,7 +81,7 @@ var start_values := {}
 var sliders := {}
 var value_labels := {}
 var line_labels := {}  # key -> consequence Label (settings safety part 3)
-var stock := CarSpec.coupe_default()  # what "Stock" means, as on the Tuner screen
+var stock := CarSpec.player_spec(PlayerCar.chassis_kind())  # what "Stock" means for this car, as on the Tuner screen
 var readout: Label
 var copy_button: Button
 

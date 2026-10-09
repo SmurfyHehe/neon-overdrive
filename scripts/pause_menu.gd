@@ -36,6 +36,7 @@ var main_page: VBoxContainer
 var controls_page: VBoxContainer
 var controls_scroll: ScrollContainer
 var controls_back_button: Button
+var cars_page: VBoxContainer
 
 func _init(state: GameState) -> void:
 	game_state = state
@@ -147,12 +148,14 @@ func _ready() -> void:
 			FxSettings.save_settings())
 
 	resume_button = _add_button(box, "Resume", game_state.resume)
+	_add_button(box, "Car: " + PlayerCars.title(PlayerCar.chassis_kind()), show_cars)
 	_add_button(box, "Controls", show_controls)
 	_add_button(box, "Service car (reset wear)", _service_car)
 	_add_button(box, "Restart", game_state.restart)
 	_add_button(box, "Quit", game_state.quit)
 
 	_build_controls_page(center)
+	_build_cars_page(center)
 	game_state.state_changed.connect(_on_state_changed)
 
 ## Resets temperatures, tyre, clutch and brake wear (the garage will own this later).
@@ -196,6 +199,7 @@ func _on_state_changed(new_state: GameState.State, _old_state: GameState.State) 
 func show_controls() -> void:
 	_refresh_controls()
 	main_page.visible = false
+	cars_page.visible = false
 	controls_page.visible = true
 	# Cap the list to the window so it scrolls instead of running off-screen.
 	controls_scroll.custom_minimum_size = Vector2(640, maxf(get_viewport().get_visible_rect().size.y * 0.7, 160.0))
@@ -204,6 +208,7 @@ func show_controls() -> void:
 func show_main() -> void:
 	main_page.visible = true
 	controls_page.visible = false
+	cars_page.visible = false
 	resume_button.grab_focus()  # keyboard/controller can navigate the menu
 
 func _build_controls_page(center: CenterContainer) -> void:
@@ -305,3 +310,37 @@ static func _pad_axis_name(axis: int, value: float) -> String:
 		JOY_AXIS_TRIGGER_LEFT: return "LT"
 		JOY_AXIS_TRIGGER_RIGHT: return "RT"
 	return "Axis %d" % axis
+
+# ---------- Car page (stage D, Roy 2026-10-09) ----------
+## One button per player car (PlayerCars.KINDS). Picking one saves it and
+## restarts the run in that car; the garage replaces this page later.
+func show_cars() -> void:
+	main_page.visible = false
+	controls_page.visible = false
+	cars_page.visible = true
+	var first := cars_page.get_child(1)
+	if first is Button:
+		(first as Button).grab_focus()
+
+func _build_cars_page(center: CenterContainer) -> void:
+	cars_page = VBoxContainer.new()
+	cars_page.add_theme_constant_override("separation", 8)
+	cars_page.visible = false
+	center.add_child(cars_page)
+	var title := Label.new()
+	title.text = "CAR  (restarts the run)"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cars_page.add_child(title)
+	var now := PlayerCar.chassis_kind()
+	for k in PlayerCars.KINDS:
+		var text := "%s   %d Nm / %d kg" % [PlayerCars.title(k.id), int(k.nm), int(k.kg)]
+		if k.id == now:
+			text += "   (driving)"
+		var b := _add_button(cars_page, text, _pick_car.bind(String(k.id)))
+		b.custom_minimum_size = Vector2(420, 0)
+	_add_button(cars_page, "Back", show_main)
+
+func _pick_car(kind: String) -> void:
+	PlayerCars.select(kind)
+	PlayerCars.save_settings()
+	game_state.restart()

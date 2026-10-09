@@ -91,6 +91,8 @@ call :run setting_danger --headless
 call :run traffic_spawn "--headless --fixed-fps 60"
 rem ~40 s: the traffic cars (stage B step 5) against their sheets, then a drive each at the game's 120 Hz.
 call :run npc_cars "--headless --fixed-fps 120"
+rem Player cars (stage D): every PlayerCars.KINDS car boots as the player and gets a drive test.
+call :run player_cars "--headless --fixed-fps 120"
 rem ~17 s: full throttle at ~245 km/h across floating-origin recenters (the old ground-slab kick), at the game's 120 Hz.
 call :run recenter_kick "--headless --fixed-fps 120"
 call :run fx_pack --headless

@@ -23,6 +23,15 @@ const DEFAULT_PATH := "user://player_tune.json"
 const TestMode := preload("res://scripts/test_mode.gd")
 
 static var path := DEFAULT_PATH
+## The car the tune belongs to (PlayerCar sets it). The coupe keeps `path`
+## itself (Roy's existing tune file); every other car gets its own file next
+## to it, "<path>_<kind>.json", so a Marlowe tune never lands on the Kobo.
+static var kind := "p1_coupe"
+
+static func file() -> String:
+	if kind == "p1_coupe" or kind == "":
+		return path
+	return "%s_%s.%s" % [path.get_basename(), kind, path.get_extension()]
 static var enabled := not TestMode.active()
 
 ## The paths that are kept: every tunable one except the exhaust's.
@@ -56,10 +65,10 @@ static func apply_saved(spec: Dictionary) -> int:
 	return n
 
 static func load_values() -> Dictionary:
-	if not FileAccess.file_exists(path):
+	if not FileAccess.file_exists(file()):
 		return {}
 	var json := JSON.new()  # parse() reports an error code; parse_string() prints an engine error
-	if json.parse(FileAccess.get_file_as_string(path)) != OK:
+	if json.parse(FileAccess.get_file_as_string(file())) != OK:
 		return {}
 	var parsed: Variant = json.data
 	if not parsed is Dictionary or not parsed.get("values") is Dictionary:
@@ -69,9 +78,9 @@ static func load_values() -> Dictionary:
 static func save(spec: Dictionary) -> bool:
 	if not enabled:
 		return false
-	var f := FileAccess.open(path, FileAccess.WRITE)
+	var f := FileAccess.open(file(), FileAccess.WRITE)
 	if f == null:
-		push_error("PlayerTune: cannot write %s (%s)" % [path, error_string(FileAccess.get_open_error())])
+		push_error("PlayerTune: cannot write %s (%s)" % [file(), error_string(FileAccess.get_open_error())])
 		return false
 	f.store_string(JSON.stringify({"version": 1, "values": values_from(spec)}, "\t"))
 	return true

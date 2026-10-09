@@ -65,6 +65,7 @@ func _ready() -> void:
 	TrafficSettings.load_settings()
 	FxSettings.load_settings()   # cockpit mirrors on/off and quality ([fx] in settings.cfg)
 	ViewSettings.load_settings()
+	AssistSettings.load_settings()  # slide-catch help on/off ([assist])
 	# NEON_TRAFFIC=<n> overrides the saved car count, like NEON_TICKS/NEON_MUTE:
 	# tests/run_tests.bat sets 0 so the older drive-bot tests, which steer
 	# across lanes blind, do not hit traffic (tests/traffic_*.gd clear it).

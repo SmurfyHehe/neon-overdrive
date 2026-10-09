@@ -45,6 +45,11 @@ const MAX_SECONDS := 120
 func _sec(seconds: float) -> int:
 	return int(seconds * Engine.physics_ticks_per_second)
 
+## The outermost own lane: the handbrake slide drifts a few metres sideways, and
+## x = 0 is the median, a solid barrier since R1 (RoadBarriers). A slide into
+## it would be a real crash, which this test does not want.
+const SPAWN_LANE := 3
+
 var fails := 0
 var game: Node
 var audio: CarAudio
@@ -140,12 +145,16 @@ func _sidewalk_x(p: PlayerCar) -> float:
 	var cfg: Dictionary = game.call("_section_at", idx)
 	return RoadChunkBuilder._lane_w(cfg.own_lanes) + RoadChunkBuilder.SHOULDER_W + RoadChunkBuilder.CURB_W + RoadChunkBuilder.SIDEWALK_W / 2.0
 
+## World x of the lane the test drives in.
+func _lane_x() -> float:
+	return TrafficManager.lane_centre(SPAWN_LANE, false)
+
 ## The handbrake slide leaves the car spun round and nearly stopped, and how it
 ## ends differs run to run (it sometimes sits sideways at 0 m/s and never gets
 ## to the sidewalk). The kerb phase only tests the surface layer, so start it
 ## from a known state: lane centre, facing down the road, 12 m/s in 2nd.
 func _reset_for_kerb(p: PlayerCar) -> void:
-	p.global_transform = Transform3D(Basis.IDENTITY, Vector3(0.0, p.global_position.y, p.global_position.z))
+	p.global_transform = Transform3D(Basis.IDENTITY, Vector3(_lane_x(), p.global_position.y, p.global_position.z))
 	p.linear_velocity = Vector3(0.0, 0.0, -12.0)
 	p.angular_velocity = Vector3.ZERO
 	p.shift(2 - p.current_gear)
@@ -199,7 +208,7 @@ func _physics_process(_delta: float) -> bool:
 				_check_players()
 				_next("launch")
 				d_throttle = 1.0
-				d_lane_x = 0.0
+				d_lane_x = _lane_x()
 		"launch":
 			speeds.append(speed)
 			winds.append(audio.wind_level)

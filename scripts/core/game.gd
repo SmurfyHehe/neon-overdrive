@@ -76,6 +76,7 @@ func _ready() -> void:
 	TrafficSettings.load_settings()
 	FxSettings.load_settings()   # cockpit mirrors on/off and quality ([fx] in settings.cfg)
 	ViewSettings.load_settings()
+	CabinMods.load_settings()   # interior mods: trinket, shift knob, short shifter, strut bar ([interior])
 	GraphicsSettings.load_settings()   # preset, edge smoothing, render scale ([graphics])
 	# Benchmark mode (-- --benchmark, see benchmark.gd) drives a fixed road so
 	# runs are comparable; normal play gets a fresh one each time. It also runs
@@ -434,6 +435,10 @@ func _setup_player() -> void:
 	player = PlayerCar.new()
 	player.position = RoadFrame.roll(Vector3(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, 0))
 	add_child(player)
+	# Interior mods batch 1 (2026-10-09): the fitted parts' sim effects (short
+	# shifter, strut bar) held on the built car, and the bar itself under the hood.
+	CabinMods.attach(player)
+	StrutBar.sync(player)
 
 # ---------- traffic (milestone 3, stage B step 3) ----------
 # Lane-follow traffic: the same raycast Vehicle as the player, see

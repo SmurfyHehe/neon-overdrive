@@ -126,3 +126,19 @@ expected - do not retry it or work around it (issue #48).
   report it as "no queue found".
 - **After each PR, report the actual token and time cost** of the task, not
   just the estimate.
+
+## Searching: never scan the whole disk
+
+On 2026-10-09 eight orphaned `find / -name ...` processes ran for 3-5 hours
+each and used about a third of Roy's CPU, long after the sessions that
+started them had ended.
+
+Rules:
+
+- **Search the repo, not the drive.** Use the Glob and Grep tools, or
+  `git ls-files | grep <name>`. These finish in under a second.
+- **Never run `find /`, `find /c`, or search a drive root.** If a file may be
+  outside the repo, search one named folder (`C:/SmurfyHehe`,
+  `C:/Users/Roy/Documents`) and cap it: `timeout 20 find <folder> -name <x>`.
+- **Run any long search in the background with a timeout**, and kill it
+  yourself if you stop needing it.

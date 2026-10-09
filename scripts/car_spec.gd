@@ -108,6 +108,24 @@ static func _rederive(v: Vehicle, spec: Dictionary, kind: String) -> void:
 	if kind == TuneParams.SUSPENSION:
 		v.apply_suspension()
 		v.calculate_brake_force()
+		remount_wheels(v)
+
+## Puts each wheel's mount at its axle's spring_length + tire_radius above the
+## chassis origin, where build_wheels() puts it. apply_suspension() changes the
+## spring and ray length but not the mount, so a ride height set in the Tuner
+## mid-run dropped the body by the change (6-8 cm at the Tuner's minimum) to
+## 2 cm off the road, and it scraped (Roy 2026-10-09, tests/car_scrape.gd
+## sweep). A restart rebuilt it at the right height, so the same tune drove
+## differently before and after one. The wheel's sim history moves with it,
+## so the change is not read as wheel speed.
+static func remount_wheels(v: Vehicle) -> void:
+	for w in v.wheel_array:
+		var y := w.spring_length + w.tire_radius
+		var dy := y - w.position.y
+		if is_zero_approx(dy):
+			continue
+		w.position.y = y
+		w.previous_global_position += v.global_basis.y * dy
 
 ## Baseline tuning -- currently identical to what PlayerCar shipped with
 ## (2026-09-13 physics rewrite + power/top-speed passes), NOT yet meaningfully

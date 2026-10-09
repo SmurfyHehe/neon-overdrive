@@ -37,9 +37,27 @@ var _typed_into_text: Dictionary = {}
 static func is_tuner(s: State) -> bool:
 	return s == State.TUNING or s == State.AUTOTUNE
 
+## Opens the pause screen when fps stays under 30 for about a second or a frame
+## freezes for half a second (Roy 160). Off in headless runs and tests.
+var auto_pause_on_low_fps := true
+var _fps_watch := LowFpsWatch.new()
+var _last_frame_usec := 0
+
 func _ready() -> void:
 	PhotoMode.ensure_actions()
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	auto_pause_on_low_fps = auto_pause_on_low_fps and DisplayServer.get_name() != "headless"
+	state_changed.connect(func(_n, _o): _fps_watch.reset())
+
+func _process(_delta: float) -> void:
+	# Wall-clock frame time: unaffected by time scale and by get_tree().paused.
+	var now := Time.get_ticks_usec()
+	var frame_seconds := (now - _last_frame_usec) / 1000000.0 if _last_frame_usec > 0 else 0.0
+	_last_frame_usec = now
+	if not auto_pause_on_low_fps or state != State.PLAYING:
+		return
+	if _fps_watch.feed(frame_seconds):
+		pause()
 
 ## True while a text control (LineEdit, TextEdit) has keyboard focus.
 func typing_in_text() -> bool:

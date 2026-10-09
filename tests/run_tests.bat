@@ -76,6 +76,7 @@ call :run night_clock --headless
 call :run view_settings --headless
 call :run camera_smoothing_setting --headless
 call :run powertrain_health "--headless --fixed-fps 60"
+call :run car_parts --headless
 call :run turbo "--headless --fixed-fps 60"
 call :run chassis_targets "--headless --fixed-fps 60"
 call :run reverse_and_tabs --headless

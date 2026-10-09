@@ -255,6 +255,10 @@ func _ready() -> void:
 	# Drafting (aero.gd) finds other cars through this group.
 	add_to_group("aero_vehicles")
 	if not sim_only:
+		# Cop, ally and rival specs ask for the parts set with parts = "full"
+		# (CarParts.wants_parts); traffic never does and pays nothing.
+		if CarParts.wants_parts(spec):
+			CarParts.attach(self, {"lod": true, "rim": CarParts.rim_for_style(String(spec.get("rim", "")))})
 		# Blob shadow only: 80 spotlights would be a rendering bill of their own.
 		CarFx.attach(self, half_l, false)
 		# Data-driven flames: only a car whose exhaust has a flame value gets

@@ -1068,8 +1068,9 @@ static func _update_signs(root: Node3D, infos: Array) -> int:
 			# high on its pole, square-on to the oncoming traffic
 			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(lot_x + 1.2 * float(info.side), 7.8, float(info.z) + float(info.d) * 0.35), info.side, 1.6, 4.5, false, PI / 2.0)
 		elif info.blade:
-			# over the sidewalk, clear of a car roof, one floor up
-			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(x, fh + 0.9, info.z), info.side, 0.8, 2.0, true)
+			# over the sidewalk, clear of a car roof, one floor up; on a one-floor
+			# shop that would be above the roof, so it hangs under the roofline
+			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(x, minf(fh + 0.9, float(info.h) - 0.45), info.z), info.side, 0.8, 2.0, true)
 		else:
 			# shop: the dark band at the top of the shopfront glass; garage:
 			# over the roller doors
@@ -1284,7 +1285,9 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		spans[1].append([bz + d_own / 2.0, bz - d_own / 2.0])
 		spans[-1].append([bz + d_onc / 2.0, bz - d_onc / 2.0])
 
-	_update_roofs(root, infos, _update_signs(root, infos))
+	var signs_used := _update_signs(root, infos)
+	root.set_meta("signs_used", signs_used)
+	_update_roofs(root, infos, signs_used)
 
 	# gap walls (stage A) -- close the open lots between buildings along the
 	# building-front line. Visual only: out-of-bounds collision is issue #28,

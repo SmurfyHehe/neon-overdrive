@@ -136,7 +136,7 @@ static func update(mm: MultiMesh, infos: Array, signs: MultiMesh, first_sign: in
 			props.append_array(_gas_station(info))
 		elif kind == "diner":
 			# the sign pole, at the front of the lot (absolute position)
-			props.append([SHAPE_BOX, Vector3(0.3, 7.0, 0.3), _abs(info, 1.2, float(info.d) * 0.35, 0.0), 0.35])
+			props.append([SHAPE_BOX, Vector3(0.3, 7.4, 0.3), _abs(info, 1.2, float(info.d) * 0.35, 0.0), 0.35])
 		elif kind == "warehouse" and rng.randf() < 0.7:
 			# yard floodlight on the front edge of the roof
 			props.append([SHAPE_FLOOD, Vector3.ONE, Vector2(-w * 0.45, rng.randf_range(-0.4, 0.4) * d), 1.0])

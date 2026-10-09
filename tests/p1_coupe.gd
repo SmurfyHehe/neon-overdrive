@@ -129,7 +129,16 @@ func _initialize() -> void:
 		var hub_x: float = w.position.x + m.position.x
 		_check(absf(absf(hub_x) - P1CoupeBuilder.DESIGN_WHEEL_X) < 1e-4, "%s wheel drawn at x %.3f, want the design track %.3f" % [wname, hub_x, P1CoupeBuilder.DESIGN_WHEEL_X])
 	var cols := player.find_children("*", "CollisionShape3D", true, false)
-	_check(cols.size() == 1 and (cols[0] as CollisionShape3D).shape is BoxShape3D and ((cols[0] as CollisionShape3D).shape as BoxShape3D).size == COLLISION, "the player's collision box should still be %s" % COLLISION)
+	# The chassis is CarSpec.chassis_hull now (a box with its underside lifted
+	# at the ends, #281): its bounding box is still exactly COLLISION.
+	var hull_ok := false
+	if cols.size() == 1 and (cols[0] as CollisionShape3D).shape is ConvexPolygonShape3D:
+		var pts := ((cols[0] as CollisionShape3D).shape as ConvexPolygonShape3D).points
+		var span := AABB(pts[0], Vector3.ZERO)
+		for pt in pts:
+			span = span.expand(pt)
+		hull_ok = span.size.is_equal_approx(COLLISION)
+	_check(hull_ok, "the player's collision hull should still span %s" % COLLISION)
 	_check(player.chassis_visual.find_children("*", "CollisionObject3D", true, false).is_empty() and player.chassis_visual.find_children("*", "CollisionShape3D", true, false).is_empty(), "the body is visual only, no collision")
 	print("wheelbase %.2f m, track %.2f m, tyre %.2f m, mass %.0f kg" % [CFG.axle_z * 2.0, CFG.wheel_x * 2.0, CFG.wheel_r, player.mass])
 	player.free()

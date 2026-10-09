@@ -1,6 +1,6 @@
 # Races and rival drivers (plan, 2026-10-09)
 
-Status: PLAN, docs only. Nothing here is built. Roy signs off before any build.
+Status: PLAN, docs only. Nothing here is built. Roy answered the 8 questions on 2026-10-09 (his 84-91, see section 9); the doc below follows his answers.
 
 Read for this: notes `balance-plan-2026-10-09`, `police-build-plan-2026-10-09`
 (3b headlights), `run-structure-2026-10-09`, `income-ideas-2026-10-09`,
@@ -54,8 +54,7 @@ build and its driver, never from where you are.**
      same grip and curvature limit for both cars (rival uses a share of the
      car's real limit), measured on the tune track before races ship.
   3. **No rubber-banding made blowouts boring**: 400 m ahead after 20 s, then
-     nothing. Fix: short races (60-120 s), a "gap too big" early finish, and
-     the act ladder (rival a step ahead, then a step behind), not catch-up.
+     nothing. Fix: short races (60-120 s), and the act ladder (rival a step ahead, then a step behind), not catch-up.
   4. **Races and cops fought each other**: a cop arrived and the race became
      meaningless. Fix: clear rules for what a chase does to a race (section 5).
   5. **Far-away rivals teleported**: `traffic_car.gd` freezes cars past the
@@ -98,9 +97,10 @@ then duel. Drag and boss races after the rival roster exists.
 
 ### b. Headlight flash (rolling challenge, duel)
 - Pull up behind a **marked racer** within ~30 m and flash (the T1 key).
-- Marked racers are told apart **in the world**, not by an icon: crew paint
+- Marked racers are told apart **in the world**, no icon (Roy 89): crew paint
   and stickers, aftermarket wheels, a loud exhaust you hear before you see
-  them. Plain traffic just moves over (T1 rule).
+  them. Plain traffic just moves over (T1 rule). Research and subtle marker
+  ideas in 2d.
 - **Accept:** the racer flashes its hazards twice and pulls level with you.
   **Rolling start:** both cars side by side, three honks, go. **Decline:** it
   ignores you (it has raced you tonight, or it is a Pike setup not ready yet).
@@ -110,16 +110,75 @@ then duel. Drag and boss races after the rival roster exists.
 - Triggered by story beats on their night (first race of the prologue, crew
   bosses, finale). Same sprint core, staged start.
 
+### d. Recognising racers without an icon (research, Roy 89)
+
+How others do it (from knowledge of the games): NFS, Midnight Club and Tokyo
+Xtreme Racer all put a name tag or map icon on racers, so there is no
+example to copy; real street racers are spotted by sound, stance, wheels and
+plates. Subtle in-world marker ideas, none of them a HUD icon:
+
+1. **Reflective crew sticker (recommended).** A sticker on the rear window
+   that glints when your headlights hit it within ~40 m. You only see it when
+   you are close behind, which is exactly when you can flash.
+2. **Throttle blip.** When you sit close behind a racer it blips its throttle
+   (an exhaust pop and a burble). Sound only, works in cockpit view.
+3. **Smoked or custom tail lights.** Racer cars have darker or different
+   tail lights from plain traffic, readable from far away at night.
+
+Recommended: 1 + 2 together, 3 as part of each crew's look.
+
 ## 3. How a race ends
 
 | Ending | Rule |
 |---|---|
 | **Win** | Cross the finish first. Duel: their bar empties first |
 | **Lose** | They cross first, or your bar empties |
-| **Gap too big** | One car leads by over ~400 m for 5 s: race called early for the leader. Stops a blowout dragging on |
-| **Wreck** | A car flipped, stopped or facing the wrong way for 8 s is out; the other wins |
-| **Give up** | Stop the car for 3 s (no key needed, fits "no key hints") |
+| **Wreck** | **You must still cross the line** (Roy 87). A wrecked rival tries to recover and rejoin; if it cannot (flipped), you still drive to the line. See 3b |
+| **Give up** | Pause menu "Give up" (Roy 88, recommendation in 3c). Or just let the rival cross the line: that ends it as a loss |
 | **Busted** | Busted mid-race = loss, plus the normal bust rules |
+
+No early finish for a big gap: races are short (60-120 s), and a rival that
+finished ends the race anyway. (Replaces the earlier "gap too big" rule, to
+match Roy 87.)
+
+### 3b. A rival that wrecks or stops (research, Roy 87)
+
+From knowledge of the games, not a fresh web check:
+
+| Game | What happens when an AI racer crashes |
+|---|---|
+| NFS (Underground to Unbound) | AI is reset back onto the road a few seconds later, often out of sight; you still have to finish |
+| Forza Horizon | AI recovers by itself or is quietly reset; you finish the route |
+| Midnight Club | AI drives out of the crash and carries on; you finish |
+| GTA street races | A wrecked opponent just falls behind or drops out; you still cross the line |
+| Tokyo Xtreme Racer | A crash drains that car's bar hard; the bar decides, not a line |
+
+Options for us:
+- **A. Recover for real (recommended).** The rival backs out, turns, rejoins
+  traffic and races on. No teleport, fits the "same physics" rule. If it is
+  flipped or stuck for good, it is out and you just drive to the line.
+- B. Reset behind you out of sight (NFS style). Keeps races close, but it is
+  a hidden teleport, which breaks "no catch-up cheating".
+- C. Race ends the moment the rival wrecks. Rejected by Roy 87.
+
+Duels are the exception: a crash drains the crashed car's bar (TXR rule).
+
+### 3c. Giving up (research, Roy 88)
+
+| Game | How you quit |
+|---|---|
+| NFS / Forza | Pause menu: Restart or Quit race |
+| GTA | Drive away from the route: "You left the race" |
+| Tokyo Xtreme Racer | Drop back; your bar drains and you lose |
+
+Options for us:
+- **A. Pause menu "Give up", plus "the rival finishing ends it" (recommended).**
+  Clear, no accidental quits, and the menu already exists. Retry sits next
+  to it (+15 min).
+- B. Stop the car for 3 s. Risky: a traffic jam or a cop stop would quit
+  the race by accident.
+- C. Drive the other way. Our road is one endless road, so "leaving the
+  route" means a U-turn, which is slow and odd.
 
 After the finish:
 - A short caption (rival's line, the pay), money into **cash on you**,
@@ -240,7 +299,18 @@ Difficulty: pay x1.25 / x1.0 / x0.85 (decided).
 Suggested first slice: **RC1 + RC2 together in one session (Opus)**, since the
 core is untestable without a driver, then RC3 as the prologue race.
 
-## 9. Questions for Roy (one word each, my pick first)
+## 9. Roy's answers (2026-10-09, his 84-91)
+
+1. Gap number on screen during a race: **yes**.
+2. Rival blinks hazards back, rolling start: **yes**.
+3. Cop shows up mid-race, race goes on: **yes**.
+4. Rival wrecks: **you must still cross the line**; research in 3b.
+5. Giving up: **research options**; recommendation in 3c (pause menu).
+6. No marker over racer cars: **yes**; research and marker ideas in 2d.
+7. Rival traffic risk: **depends on the crew**.
+8. Next race type after the sprint: **rolling challenge** (RC4, as planned).
+
+### Original questions (kept for the record)
 
 1. During a race, a small number on screen showing the gap to the rival? **Yes** / No
 2. A rival you flash answers by blinking its hazards, then you both go from a rolling start? **Yes** / Instant start

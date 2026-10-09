@@ -190,8 +190,12 @@ func _set_state(new_state: State) -> void:
 	# The engine sound is a generator pushed from _process, which stops while the
 	# tree is paused; the buffer then underruns and clicks. Mute its bus for the
 	# pause, unmute on the way back (Phase A, 2026-10-05).
-	for bus_name in [&"Engine", &"Music"]:
-		var bus := AudioServer.get_bus_index(bus_name)
-		if bus >= 0:
-			AudioServer.set_bus_mute(bus, new_state != State.PLAYING)
+	# The radio plays on, muffled, in the pause menu and on the title (PauseLook,
+	# menus A-list 2026-10-08); only the Tuner screens still mute it.
+	var engine_bus := AudioServer.get_bus_index(&"Engine")
+	if engine_bus >= 0:
+		AudioServer.set_bus_mute(engine_bus, new_state != State.PLAYING)
+	var music_bus := AudioServer.get_bus_index(&"Music")
+	if music_bus >= 0:
+		AudioServer.set_bus_mute(music_bus, is_tuner(new_state))
 	state_changed.emit(new_state, old)

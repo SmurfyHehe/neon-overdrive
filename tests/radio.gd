@@ -10,7 +10,8 @@ extends SceneTree
 #   tuning in starts the track the clock says, partway through, the next track
 #   starts when one ends, Dave has no music but captions + a chime (and nothing to
 #   duck; the duck target is unit-tested), the
-#   Music bus has the speaker low-pass, and pausing mutes the Music bus
+#   Music bus has the speaker low-pass, and pausing muffles the radio (not mute;
+#   menus A-list 2026-10-08) while the Tuner still mutes it
 # Exit code 1 on failure. Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/radio.gd
 
@@ -172,8 +173,18 @@ func _physics_process(_delta: float) -> bool:
 				game.game_state.pause()
 		Step.PAUSE:
 			if waited >= 3:
-				_check(AudioServer.is_bus_mute(AudioServer.get_bus_index(&"Music")), "pausing should mute the Music bus")
+				var mb := AudioServer.get_bus_index(&"Music")
+				_check(not AudioServer.is_bus_mute(mb), "pausing should keep the radio playing")
+				var look: PauseLook = null
+				for c in game.get_children():
+					if c is PauseLook:
+						look = c
+				_check(look != null and look.muffled(), "pausing should muffle the radio")
 				game.game_state.resume()
+				_check(look == null or not look.muffled(), "resuming should take the muffle off")
+				game.game_state.toggle_tuning()
+				_check(AudioServer.is_bus_mute(mb), "the Tuner should still mute the radio")
+				game.game_state.close_tuning()
 				return _end("")
 	return false
 

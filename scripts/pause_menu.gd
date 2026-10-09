@@ -65,8 +65,9 @@ func _ready() -> void:
 	layer = 10  # above the debug HUD
 	visible = false
 
+	# A light extra dim under the text; PauseLook does the main dim and blur.
 	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.6)
+	dim.color = Color(0, 0, 0, 0.2)
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(dim)
 

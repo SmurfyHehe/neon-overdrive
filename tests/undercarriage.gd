@@ -59,7 +59,10 @@ func _initialize() -> void:
 	car.free()
 
 	# ---- the sheet traffic cars: no underside, and the builder's count agrees
+	# (KINDS also holds the player cars P0-P6 since #274; those keep their underside.)
 	for kind in NpcCarBuilder.KINDS:
+		if Undercarriage.role_for_kind(kind) != Undercarriage.ROLE_TRAFFIC:
+			continue
 		var vis := NpcCarBuilder.chassis_visual(kind, "stock", Color.GRAY)
 		_check(vis.get_node_or_null(Undercarriage.NODE_NAME) == null, "%s traffic should get no underside" % kind)
 		_check(NpcCarBuilder.draw_call_count(kind, "stock") == NpcCarBuilder.body_mesh(kind, "stock").get_surface_count() + 4, "%s traffic draw calls unchanged" % kind)

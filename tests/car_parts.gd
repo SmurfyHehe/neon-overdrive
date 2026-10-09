@@ -168,7 +168,7 @@ func _player() -> void:
 	var draws := P1CoupeBuilder.draw_call_count() + CarParts.extra_draw_calls()
 	print("car_parts: player %d triangles as drawn (parts %d), %d draw calls" % [tris, parts.triangle_count(), draws])
 	_check(tris <= 10000, "the player with parts should stay inside the 10,000 triangle budget, got %d" % tris)
-	_check(draws == 10, "the player should be 10 draw calls (8 + calipers + shocks), got %d" % draws)
+	_check(draws == 11, "the player should be 11 draw calls (8 + underside + calipers + shocks), got %d" % draws)
 
 	# Settle on the floor, then the shock follows the spring and the caliper the hub.
 	for i in 180:

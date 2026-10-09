@@ -11,15 +11,17 @@ extends RefCounted
 # rearview mirror render).
 # Tyre smoke (2026-10-07) adds the tyre_smoke flag and two amounts, burnout
 # and drift (0..2, 1 = TyreSmoke's default rates), pause-menu sliders.
+# Dashboard animations (2026-10-09, DashAnim): needle_shake, idle_shake,
+# startup_sweep and coldstart_puff, one switch each (pause menu, Dashboard).
 
-const EFFECTS := ["vignette", "speed_lines", "skid_marks", "exhaust_flames", "mirrors", "head_motion", "rear_strip", "tyre_smoke"]
+const EFFECTS := ["vignette", "speed_lines", "skid_marks", "exhaust_flames", "mirrors", "head_motion", "rear_strip", "tyre_smoke", "needle_shake", "idle_shake", "startup_sweep", "coldstart_puff"]
 ## Mirror render size as a share of CockpitMirrors' base sizes: 0 = low (half),
 ## 1 = medium (base), 2 = high (double). Default medium.
 const MIRROR_QUALITIES := ["low", "medium", "high"]
 const MIRROR_QUALITY_DEFAULT := 1
 const SMOKE_MAX := 2.0
 
-static var enabled := {"vignette": true, "speed_lines": true, "skid_marks": true, "exhaust_flames": true, "mirrors": true, "head_motion": true, "rear_strip": true, "tyre_smoke": true}
+static var enabled := {"vignette": true, "speed_lines": true, "skid_marks": true, "exhaust_flames": true, "mirrors": true, "head_motion": true, "rear_strip": true, "tyre_smoke": true, "needle_shake": true, "idle_shake": true, "startup_sweep": true, "coldstart_puff": true}
 static var mirror_quality := MIRROR_QUALITY_DEFAULT
 ## Tyre smoke amounts, 0 (none) .. SMOKE_MAX; 1 is the default.
 static var smoke_burnout := 1.0

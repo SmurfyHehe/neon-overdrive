@@ -32,6 +32,7 @@ var fov_slider: HSlider
 var smoothing_slider: HSlider
 var smoke_burnout_slider: HSlider
 var smoke_drift_slider: HSlider
+var dash_toggles := {}   # FxSettings effect -> CheckBox (Dashboard)
 var main_page: VBoxContainer
 var controls_page: VBoxContainer
 var controls_scroll: ScrollContainer
@@ -145,6 +146,23 @@ func _ready() -> void:
 		func(v: float) -> void:
 			FxSettings.set_smoke(FxSettings.smoke_burnout, v)
 			FxSettings.save_settings())
+
+	# Dashboard animations (2026-10-09, DashAnim): one switch each.
+	var dash_title := Label.new()
+	dash_title.text = "Dashboard"
+	dash_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(dash_title)
+	for entry in [["needle_shake", "Redline needle shake"], ["idle_shake", "Idle engine shake"],
+			["startup_sweep", "Start-up needle sweep"], ["coldstart_puff", "Cold-start exhaust puff"]]:
+		var effect: String = entry[0]
+		var cb := CheckBox.new()
+		cb.text = entry[1]
+		cb.button_pressed = FxSettings.is_on(effect)
+		cb.toggled.connect(func(on: bool) -> void:
+			FxSettings.set_on(effect, on)
+			FxSettings.save_settings())
+		box.add_child(cb)
+		dash_toggles[effect] = cb
 
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	_add_button(box, "Controls", show_controls)

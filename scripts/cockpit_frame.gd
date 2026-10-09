@@ -96,6 +96,7 @@ var radio: RadioManager          # found lazily; the game adds it after the came
 var wheel: SteeringWheel
 var wheel_mount: Node3D          # tilt and place; the wheel turns inside it
 var mirrors: CockpitMirrors
+var dash_anim := DashAnim.new()   # start-up sweep clock and redline shake (FxSettings flags)
 var tach_needle: Node3D
 var speedo_needle: Node3D
 var lamps: MultiMeshInstance3D
@@ -570,6 +571,8 @@ func _build_light() -> void:
 # ---------- per frame ----------
 
 func _process(delta: float) -> void:
+	if player != null:
+		dash_anim.update(player.engine_running, delta)   # even while hidden, so a start is never missed
 	if not visible:
 		return
 	var p := player
@@ -579,9 +582,11 @@ func _process(delta: float) -> void:
 	var blink := Hud.blink()
 	wheel.set_angle(steering * WHEEL_LOCK_RAD)
 	wheel.update(frac, cue, blink, p.motor_rpm, Hud.kmh(p.current_speed()), Hud.gear_text(p.gear))
-	tach_needle.rotation = Vector3(0.0, 0.0, deg_to_rad(135.0 - DIAL_SWEEP * frac))
+	var tach := dash_anim.needle(frac)
+	var shake := DashAnim.needle_shake_deg(tach, Time.get_ticks_msec() * 0.001) if FxSettings.is_on("needle_shake") else 0.0
+	tach_needle.rotation = Vector3(0.0, 0.0, deg_to_rad(135.0 - DIAL_SWEEP * tach + shake))
 	var kmh := clampf(absf(p.current_speed()) * Hud.KMH_PER_MS / SPEEDO_MAX_KMH, 0.0, 1.0)
-	speedo_needle.rotation = Vector3(0.0, 0.0, deg_to_rad(135.0 - DIAL_SWEEP * kmh))
+	speedo_needle.rotation = Vector3(0.0, 0.0, deg_to_rad(135.0 - DIAL_SWEEP * dash_anim.needle(kmh)))
 	_update_lamps()
 	var inputs := pedal_inputs()
 	for key in pedals:

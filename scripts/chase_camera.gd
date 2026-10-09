@@ -79,6 +79,8 @@ const HEAD_G_FULL := 0.8
 const HEAD_RATE := 6.0
 var head_offset := Vector3.ZERO   # car-local, metres, current
 var head_tilt := Vector2.ZERO     # (pitch, roll) degrees, current
+var idle_shake := Vector3.ZERO    # car-local metres, DashAnim idle vibration (kept apart from head_offset)
+var idle_roll := 0.0              # degrees
 var view := View.CHASE
 ## Look back (hold the look_back key, B): the chase cam swings to the front
 ## of the car and looks back at it, the same move as reversing; the cockpit
@@ -268,9 +270,20 @@ func _place_cockpit(delta: float) -> void:
 	_update_head(delta)
 	_update_glance(delta)
 	var turn := Basis.from_euler(Vector3(deg_to_rad(glance_pitch), deg_to_rad(glance_yaw), 0.0))
-	var tilt := Basis.from_euler(Vector3(deg_to_rad(head_tilt.x), 0.0, deg_to_rad(head_tilt.y)))
-	global_transform = Transform3D(xf.basis * turn * tilt, xf * (COCKPIT_EYE + head_offset + glance_lean))
+	_update_idle_shake()
+	var tilt := Basis.from_euler(Vector3(deg_to_rad(head_tilt.x), 0.0, deg_to_rad(head_tilt.y + idle_roll)))
+	global_transform = Transform3D(xf.basis * turn * tilt, xf * (COCKPIT_EYE + head_offset + glance_lean + idle_shake))
 	fov = ViewSettings.cockpit_fov + COCKPIT_FOV_SPEED_GAIN * speed_t
+
+## Engine idle vibration (DashAnim, FxSettings "idle_shake"): a hair of eye
+## wobble while the engine idles and the car is nearly still.
+func _update_idle_shake() -> void:
+	var amount := 0.0
+	if FxSettings.is_on("idle_shake"):
+		amount = DashAnim.idle_amount(target.engine_running, target.motor_rpm, target.idle_rpm, target.current_speed())
+	var s := DashAnim.idle_shake(amount, target.motor_rpm, Time.get_ticks_msec() * 0.001)
+	idle_shake = s.pos
+	idle_roll = s.roll
 
 ## Eases the head toward the glance target (or back to straight ahead).
 func _update_glance(delta: float) -> void:

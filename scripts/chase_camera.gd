@@ -226,12 +226,12 @@ func road_bump(strength: float) -> void:
 func _process(delta: float) -> void:
 	_update_feel(delta)
 	bump *= exp(-BUMP_DECAY * delta)
+	if frame != null:
+		frame.steering = target.steer_fraction()  # the wheel turns the way the car does, in every view
 	if view == View.COCKPIT:
 		_place_cockpit(delta)
 		if look_back:
 			global_transform.basis = global_transform.basis * Basis(Vector3.UP, PI)
-		if frame != null:
-			frame.steering = target.steer_fraction()  # the wheel turns the way the car does
 		if shake_enabled:
 			_shake(delta)
 			global_position += global_basis.y * BUMP_POS * bump

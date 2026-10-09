@@ -31,6 +31,8 @@ static func apply(v: Vehicle, spec: Dictionary) -> void:
 			continue  # sound only (#80): EngineAudio hands it to EngineSynth
 		elif key == "window_control":
 			continue  # cosmetic: how the cockpit's side window is worked (CockpitFrame)
+		elif key == "driver_grip_deg":
+			continue  # cosmetic: where the driver's hands rest on the rim (DriverModel)
 		else:
 			v.set(key, _own(spec[key]))
 
@@ -253,6 +255,11 @@ static func coupe_default() -> Dictionary:
 		# "crank" is a hand crank on the door card the hand turns (old cars, the
 		# beater starter). Visual only; the window itself is PerspectiveAudio's.
 		"window_control": "switch",
+		# Where the driver's hands rest on the wheel, degrees up from 3 o'clock
+		# for the right hand (DriverModel, 2026-10-09): nine and three on the
+		# coupe's flat-bottom wheel. Per car so each interior keeps its own
+		# driver; the sightline cap (DriverModel.GRIP_HIGH_DEG) bounds it.
+		"driver_grip_deg": 0.0,
 	}
 
 ## The starter car (balance slice 1, 2026-10-09): the P1 coupe "as found" under

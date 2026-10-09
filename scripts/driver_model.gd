@@ -12,9 +12,16 @@ extends Node3D
 # Cuban-link bracelet (Roy, same day), modelled as a ring of flat interlocking
 # links over the cuff.
 #
-# Hands grip the wheel rim low, at about 8 and 4 (GRIP_DEG), and turn with it;
-# once a hand would leave GRIP_LOW_DEG..GRIP_HIGH_DEG the rim slides through
-# it. Legs: analytic two-bone IK
+# Hands grip the wheel rim at the car's grip height (the spec's driver_grip_deg,
+# nine and three by default) and steer it push-pull like a driving-school
+# driver (2026-10-09, Roy: "hands higher, continuous rolling"): a gripping hand
+# rides the rim; when it runs out of room (the top of its range is the
+# sightline cap, the bottom is the flat of the wheel) it lets go, slides back
+# along the rim to the far end of its range while the other hand keeps pulling,
+# and grips again. With the wheel still the free hands settle where they are,
+# and once the wheel is near straight both drift back to their grip points.
+# The wheel itself rolls through CockpitFrame's spring (never snaps to lock).
+# Legs: analytic two-bone IK
 # from the hips to the pedals (right foot throttle or brake, whichever is
 # pressed; left foot on the clutch with the clutch model on, else on the dead
 # pedal).
@@ -87,19 +94,31 @@ const LINK_BAR := 0.0045
 const LINK_TILT_DEG := 35.0
 const THIGH := 0.47
 const SHIN := 0.45
-## Where the hands hold the rim, in degrees round the rim for the right hand
-## (0 = 3 o'clock, up is positive; the left hand mirrors it). At 9 and 3 the
-## knuckles and cuffs rose into the road view (2026-10-07), so the hands sit
-## low, at about 8 and 4. They turn with the wheel between GRIP_LOW_DEG (just
-## above the flat bottom) and GRIP_HIGH_DEG; past those the rim slides through
-## them, so a hand never climbs toward the top of the rim (a real driver
-## shuffles past that much lock anyway). HAND_TOP_MIN_DEG is the sightline
-## budget from docs/planning/cockpit-interior-research-2026-10-06.md: no part
-## of a gripping hand above this many degrees below the eye.
-const GRIP_DEG := -30.0
-const GRIP_LOW_DEG := -42.0
-const GRIP_HIGH_DEG := 15.0
+## Where the hands hold the rim at rest, in degrees round the rim for the right
+## hand (0 = 3 o'clock, up is positive; the left hand mirrors it about 12
+## o'clock). Per car: the spec's "driver_grip_deg" (CarSpec), DEFAULT_GRIP_DEG
+## when a car has none. A hand rides the rim between GRIP_LOW_DEG (onto the
+## flat bottom) and GRIP_HIGH_DEG, the sightline cap: HAND_TOP_MIN_DEG is the
+## budget from docs/planning/cockpit-interior-research-2026-10-06.md, no part
+## of a hand above this many degrees below the eye, and GRIP_HIGH_DEG is as
+## high as the gloves and cuffs allow under it (tests/cockpit_driver.gd and
+## tests/cockpit_steering_hands.gd measure it). Past either end the hand lets
+## go and shuffles (see _step_rim).
+const DEFAULT_GRIP_DEG := 0.0
+const GRIP_LOW_DEG := -55.0
+const GRIP_HIGH_DEG := 21.0
 const HAND_TOP_MIN_DEG := 18.0
+## Shuffling: a free hand slides along the rim at least SLIDE_MIN_RATE deg/s
+## and SLIDE_RATE_MULT times the rim's own speed, lifted SLIDE_LIFT off it
+## toward the driver. Once the wheel has been still for REST_SECS and sits
+## within HOME_WHEEL_DEG of straight, the hands drift home at HOME_RATE.
+const SLIDE_MIN_RATE := 120.0
+const SLIDE_RATE_MULT := 1.4
+const SLIDE_LIFT := 0.008
+const REST_SECS := 0.5
+const HOME_WHEEL_DEG := 35.0
+const HOME_RATE := 70.0
+const STILL_RATE := 6.0          # deg/s: below this the wheel counts as still
 ## Seated geometry, car space: the pelvis pivot and the head on the torso.
 const PELVIS := Vector3(CockpitFrame.SEAT_X, 0.50, 0.34)
 const RECLINE_DEG := 12.0
@@ -138,6 +157,19 @@ var hands := {}              # side (-1 left, +1 right) -> MeshInstance3D
 var bracelet: MeshInstance3D # on the right hand
 var legs := {}               # side -> {thigh, shin, foot}
 var glove_style := DEFAULT_GLOVE
+var grip_deg := DEFAULT_GRIP_DEG   # this car's rest grip, right hand
+## Per hand (side -> {}): "w" the hand's angle round the rim in car space
+## (degrees, 0 = 3 o'clock, up positive, unwrapped), "rim" its angle on the
+## rim itself (turns with the wheel), "grip" true while it holds the rim,
+## "lift" 0..1 how far it is lifted off the rim while sliding, "home" true
+## while it is only drifting back to its grip point (it grabs the moment the
+## wheel moves again).
+var _rim := {}
+var _prev_wheel_deg := 0.0
+var _wheel_dir := 0              # -1 / +1 the way the wheel last turned, 0 still
+var _wheel_rate_deg := 0.0       # the rim's speed this frame, deg/s, as the hands saw it
+var _still := 0.0                # seconds the wheel has been still
+var shuffle_count := 0           # hands that let go to shuffle (tests)
 var act := Act.GRIP
 var act_t := 0.0
 enum LeftAct { GRIP, WINDOW_REACH, WINDOW_HOLD, WINDOW_RETURN }
@@ -179,6 +211,8 @@ func _ready() -> void:
 	_mat = CockpitKit.material(0.9, 0.0, 0.05)
 	var kind := PlayerCar.chassis_kind()
 	glove_style = kind if GLOVE_STYLES.has(kind) else DEFAULT_GLOVE
+	grip_deg = float(player.spec.get("driver_grip_deg", DEFAULT_GRIP_DEG))
+	_reset_rim()
 	_build_torso()
 	_build_head()
 	for side in [-1, 1]:
@@ -355,27 +389,112 @@ func _aim(node: Node3D, from: Vector3, to: Vector3, hint: Vector3) -> void:
 func _hip(side: int) -> Vector3:
 	return torso.transform * Vector3(float(side) * HIP_HALF, 0.02, 0.0)
 
-## Where a hand grips the rim, car space: the rim point at GRIP_DEG turning
-## with the wheel, held between GRIP_LOW_DEG and GRIP_HIGH_DEG. Hand space
-## as in _hand_mesh (x outward, y up the rim, z toward the driver).
+## Where a hand is on the rim this frame, car space: the rim point at its
+## car-space angle (see _rim), lifted a little while it slides. Hand space as
+## in _hand_mesh (x outward, y up the rim, z toward the driver).
 func _grip_transform(side: int) -> Transform3D:
 	var wheel := frame.wheel
-	var wheel_deg := rad_to_deg(wheel.angle)
+	var h: Dictionary = _rim[side]
 	# the wheel turns the rim by -angle about its z, so on the rim the hand is
 	# at its car-space angle plus the wheel angle
-	var local_deg := grip_rim_deg(side, wheel_deg) + wheel_deg
-	var p := wheel.rim_point(local_deg)
+	var local_deg: float = h.w + rad_to_deg(wheel.angle)
+	var p := wheel.rim_point(local_deg) + Vector3(0.0, 0.0, SLIDE_LIFT * h.lift)
 	# the mesh is already mirrored for the left hand, so both hands use the
 	# wheel's axes at 3 or 9 o'clock, turned round the rim to the grip
 	var base := 0.0 if side > 0 else 180.0
 	var local_xf := Transform3D(Basis(Vector3.BACK, deg_to_rad(local_deg - base)), p)
 	return _wheel_to_car(local_xf)
 
-## Where a hand sits round the rim for a wheel angle, car space (the wheel's
-## own rotation left out): degrees, 0 = 3 o'clock, up is positive.
-static func grip_rim_deg(side: int, wheel_deg: float) -> float:
-	var m := clampf(GRIP_DEG - float(side) * wheel_deg, GRIP_LOW_DEG, GRIP_HIGH_DEG)
-	return m if side > 0 else 180.0 - m
+## A hand's rest angle round the rim, car space (the left mirrors the right).
+func home_deg(side: int) -> float:
+	return grip_deg if side > 0 else 180.0 - grip_deg
+
+## The angles a hand may hold the rim at, car space: [low, high] in the
+## direction of its own w (the right hand's low end is the flat bottom, the
+## left hand's low end is its sightline cap, since its w runs the other way).
+static func rim_range(side: int) -> Array:
+	if side > 0:
+		return [GRIP_LOW_DEG, GRIP_HIGH_DEG]
+	return [180.0 - GRIP_HIGH_DEG, 180.0 - GRIP_LOW_DEG]
+
+## Both hands home on the rim, gripping.
+func _reset_rim() -> void:
+	for side in [-1, 1]:
+		_rim[side] = {"w": home_deg(side), "rim": home_deg(side) + rad_to_deg(frame.wheel.angle), "grip": true, "lift": 0.0, "home": false}
+	_prev_wheel_deg = rad_to_deg(frame.wheel.angle)
+
+## Push-pull steering, one step. The wheel angle is read, never set: the hands
+## follow it. A gripping hand rides the rim (its w = rim - wheel). Turning:
+## a gripping hand that reaches the end of its range lets go, if the other hand
+## is holding on, and slides to the far end of its range (its ready point); a
+## sliding hand grips as it gets there, or at once if the wheel reverses. If
+## the other hand is not holding on, the rim slips through this one instead
+## (it stays clamped at the end of its range) so a hand is always on the
+## wheel. Still: sliding hands settle where they are; after REST_SECS near
+## straight both drift back to their grip points. Angles in degrees.
+func _step_rim(delta: float) -> void:
+	var wheel_deg := rad_to_deg(frame.wheel.angle)
+	var rate := (wheel_deg - _prev_wheel_deg) / maxf(delta, 1e-4)
+	_prev_wheel_deg = wheel_deg
+	_wheel_rate_deg = rate
+	var moving := absf(rate) > STILL_RATE
+	var dir := int(signf(rate)) if moving else 0
+	var reversed := moving and _wheel_dir != 0 and dir != _wheel_dir
+	if moving:
+		_wheel_dir = dir
+	_still = 0.0 if moving else _still + delta
+	# gripping hands ride the rim
+	for side in [-1, 1]:
+		var h: Dictionary = _rim[side]
+		if h.grip:
+			h.w = h.rim - wheel_deg
+	if moving:
+		# the wheel turning right (dir +1) carries every gripping hand toward
+		# lower w; the ready point for a free hand is the end it is carried from
+		for side in [-1, 1]:
+			var h: Dictionary = _rim[side]
+			var other: Dictionary = _rim[-side]
+			var span := rim_range(side)
+			var run_out: float = span[0] if dir > 0 else span[1]
+			var ready: float = span[1] if dir > 0 else span[0]
+			if h.grip:
+				var past: bool = (h.w < run_out) if dir > 0 else (h.w > run_out)
+				if past:
+					if other.grip:
+						h.grip = false       # let go and shuffle
+						shuffle_count += 1
+					h.w = run_out            # slip: the rim slides through
+					h.rim = h.w + wheel_deg
+			if not h.grip:
+				if reversed or h.home:
+					_grab(h, wheel_deg)      # the wheel came back, or moved while the hand was drifting home: hold it here
+					continue
+				var slide := maxf(absf(rate) * SLIDE_RATE_MULT, SLIDE_MIN_RATE)
+				h.w = move_toward(h.w, ready, slide * delta)
+				if absf(h.w - ready) < 1e-3:
+					_grab(h, wheel_deg)
+	else:
+		var go_home := _still > REST_SECS and absf(wheel_deg) < HOME_WHEEL_DEG
+		for side in [-1, 1]:
+			var h: Dictionary = _rim[side]
+			var home := home_deg(side)
+			if go_home and absf(h.w - home) > 1e-3:
+				h.grip = false
+				h.home = true
+				h.w = move_toward(h.w, home, HOME_RATE * delta)
+				h.rim = h.w + wheel_deg
+				if absf(h.w - home) < 1e-3:
+					_grab(h, wheel_deg)
+			elif not h.grip:
+				_grab(h, wheel_deg)          # the wheel stopped: hold it here
+	for side in [-1, 1]:
+		var h: Dictionary = _rim[side]
+		h.lift = lerpf(h.lift, 0.0 if h.grip else 1.0, 1.0 - exp(-18.0 * delta))
+
+static func _grab(h: Dictionary, wheel_deg: float) -> void:
+	h.grip = true
+	h.home = false
+	h.rim = h.w + wheel_deg
 
 ## Wheel space -> car space (the frame is at the car's origin).
 func _wheel_to_car(local_xf: Transform3D) -> Transform3D:
@@ -461,6 +580,7 @@ func _process(delta: float) -> void:
 	head.position = Vector3(0.0, HEAD_Y + _head_bob, 0.0)
 
 	_update_events()
+	_step_rim(delta)
 	_step_act(delta)
 	_step_left(delta)
 	_place_hands()
@@ -664,6 +784,18 @@ func wrist_position(side: int) -> Vector3:
 
 func grip_position(side: int) -> Vector3:
 	return _grip_transform(side).origin
+
+## A hand's angle round the rim, car space (degrees, 0 = 3 o'clock, up
+## positive, unwrapped), and whether it holds the rim (tests).
+func rim_deg(side: int) -> float:
+	return _rim[side].w
+
+func is_gripping(side: int) -> bool:
+	return _rim[side].grip
+
+## How fast the rim turned in the last frame the hands were placed, deg/s (tests).
+func wheel_rate_deg() -> float:
+	return _wheel_rate_deg
 
 func leg_gap(side: int) -> float:
 	return _leg_gap[side]

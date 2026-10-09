@@ -5,7 +5,7 @@ extends SceneTree
 #   hands (no arms), a gold bracelet on the right wrist, legs, within the
 #   triangle budget; the glove style matches the car
 # - the hands stay on the rim grips (within 2 cm) across a steering sweep,
-#   legs reach the pedals
+#   the wheel rolls to the car's steering, legs reach the pedals
 # - a manual shift moves the lever and sends the right hand to the knob, then
 #   back on the rim within 1 s
 # - a next-station request sends the right hand to the touch screen, which taps
@@ -133,8 +133,9 @@ func _physics_process(_delta: float) -> bool:
 			steer = sweep[0]
 			_go(Step.SWEEP)
 		Step.SWEEP:
-			if waited == ticks(0.35):
+			if waited == ticks(0.9):
 				_check(absf(frame.steering - p.steer_fraction()) < 1e-4, "the frame reads the steering")
+				_check(absf(frame.wheel_angle - p.steer_fraction() * CockpitFrame.WHEEL_LOCK_RAD) < deg_to_rad(1.5), "the wheel has rolled to the car's steering (%.0f deg)" % rad_to_deg(frame.wheel_angle))
 				for side in [-1, 1]:
 					var gap: float = d.hand_position(side).distance_to(d.grip_position(side))
 					_check(gap <= GRIP_TOL, "hand %d is %.3f m off its rim grip at steer %.1f (wheel %.0f deg)" % [side, gap, steer, rad_to_deg(frame.wheel.angle)])
@@ -149,12 +150,13 @@ func _physics_process(_delta: float) -> bool:
 					var ang := rad_to_deg(atan2(local.y, local.x))
 					var nearest := frame.wheel.rim_point(ang)
 					_check(local.distance_to(nearest) <= GRIP_TOL, "hand %d is %.3f m off the rim centreline at wheel %.0f deg" % [side, local.distance_to(nearest), deg])
-					var world_ang := wrapf(ang - deg, -180.0, 180.0)
-					# right hand: GRIP_DEG turning with the wheel, held in the grip
-					# range; the left mirrors it about 12 o'clock
-					var held := clampf(DriverModel.GRIP_DEG - side * deg, DriverModel.GRIP_LOW_DEG, DriverModel.GRIP_HIGH_DEG)
-					var want := wrapf(held if side > 0 else 180.0 - held, -180.0, 180.0)
-					_check(absf(wrapf(world_ang - want, -180.0, 180.0)) < 8.0, "hand %d sits at %.0f deg of the rim, want %.0f (wheel %.0f)" % [side, world_ang, want, deg])
+					# the hand holds the rim somewhere in its range (the top end is
+					# the sightline cap); tests/cockpit_steering_hands.gd covers the
+					# shuffle itself
+					var world_ang: float = d.rim_deg(side)
+					var span := DriverModel.rim_range(side)
+					_check(world_ang >= span[0] - 0.5 and world_ang <= span[1] + 0.5, "hand %d sits at %.0f deg of the rim, outside %s (wheel %.0f)" % [side, world_ang, span, deg])
+					_check(absf(wrapf(world_ang - (ang - deg), -180.0, 180.0)) < 8.0, "hand %d is drawn at %.0f deg of the rim but holds %.0f" % [side, ang - deg, world_ang])
 				sweep_i += 1
 				if sweep_i < sweep.size():
 					steer = sweep[sweep_i]

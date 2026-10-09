@@ -93,10 +93,11 @@ func _physics_process(_delta: float) -> bool:
 				_check(frame.body_hidden_from_camera(), "the body moves to the mirror-only layer in the cockpit")
 				_go(Step.WHEEL)
 		Step.WHEEL:
-			if waited == 30:
+			if waited == 60:
 				var w := frame.wheel
 				_check(absf(frame.steering - p.steer_fraction()) < 1e-4, "the frame reads the car's steer fraction")
-				_check(absf(w.angle - frame.steering * CockpitFrame.WHEEL_LOCK_RAD) < 1e-4, "the wheel angle is steering x lock (%.3f vs %.3f)" % [w.angle, frame.steering * CockpitFrame.WHEEL_LOCK_RAD])
+				# the drawn wheel rolls to steering x lock through CockpitFrame's spring (2026-10-09)
+				_check(absf(w.angle - frame.steering * CockpitFrame.WHEEL_LOCK_RAD) < deg_to_rad(1.5), "the wheel has rolled to steering x lock (%.3f vs %.3f)" % [w.angle, frame.steering * CockpitFrame.WHEEL_LOCK_RAD])
 				_check(absf(w.angle) > 0.5, "the wheel should be turned well off centre (%.2f rad)" % w.angle)
 				_check(signf(w.angle) == signf(frame.steering) and absf(w.rotation.z + w.angle) < 1e-4, "right steering turns the wheel clockwise (rotation.z = -angle)")
 				var frac := clampf(p.motor_rpm / p.max_rpm, 0.0, 1.0)

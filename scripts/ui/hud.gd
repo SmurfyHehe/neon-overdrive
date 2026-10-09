@@ -16,6 +16,7 @@ extends CanvasLayer
 # runs green -> amber -> red toward redline because Roy asked for it.
 # It reads the car and owns no state.
 
+const GasStation := preload("res://scripts/world/gas_station.gd")
 const SILVER := Color("#C9CED6")
 const AMBER := Color("#FFC066")
 const SODIUM := Color("#FF8A1F")
@@ -51,6 +52,8 @@ var camera: ChaseCamera
 var traffic: TrafficManager
 ## The night clock (living world step 1); null in tests that build a bare HUD.
 var night_clock: NightClock
+## Tonight's cash (F0, scripts/core/wallet.gd); null in tests that build a bare HUD.
+var wallet: Node
 
 var lbl_gear: Label
 var lbl_mode: Label
@@ -62,6 +65,7 @@ var lbl_rpm: Label
 var lbl_fuel: Label
 var lbl_info: Label
 var lbl_clock: Label
+var lbl_cash: Label
 var lbl_hint: Label
 var rpm_bar: RpmBar
 var cluster: VBoxContainer   # the gear / speed / RPM block; hidden in the cockpit view
@@ -119,6 +123,18 @@ static func gear_text(g: int) -> String:
 static func fuel_text(f: FuelTank) -> String:
 	var bars := clampi(ceili(f.fraction() * 8.0 - 0.001), 0, 8)
 	return "FUEL " + "▮".repeat(bars) + "▯".repeat(8 - bars)
+
+## Low or dry tank: where the next gas station is, "  GAS 1.4 km" (stops,
+## first slice: scripts/world/gas_station.gd). Nothing while the tank is fine.
+static func station_hint(car: Node3D) -> String:
+	var f: FuelTank = car.get("fuel")
+	if f == null or not f.is_low() or not GasStation.enabled:
+		return ""
+	var s := GasStation.road_pos(car).y
+	var d := maxf(GasStation.next_after(s) - s, 0.0)
+	if d < 100.0:
+		return "  GAS HERE"
+	return "  GAS %.1f km" % (d / 1000.0)
 
 static func kmh(speed_ms: float) -> int:
 	# Magnitude, not signed: reversing reads the same km/h as driving forward
@@ -212,6 +228,10 @@ func _ready() -> void:
 	lbl_clock = _label(cluster, 18, AMBER)
 	lbl_clock.name = "Clock"
 	lbl_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	# Tonight's cash, under the clock (F0); the bank is on the pause screen.
+	lbl_cash = _label(cluster, 18, AMBER)
+	lbl_cash.name = "Cash"
+	lbl_cash.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	# Row: gear (+ A/M) on the left, speed on the right.
 	var row := HBoxContainer.new()
@@ -355,6 +375,7 @@ func _refresh() -> void:
 	var engine_off: bool = player.realistic_clutch and not player.engine_running
 
 	lbl_clock.text = night_clock.text() if night_clock != null else ""
+	lbl_cash.text = wallet.money(wallet.cash) if wallet != null else ""
 	lbl_gear.text = gear_text(gear)
 	lbl_mode.text = PlayerCar.TRANSMISSION_LETTERS[player.transmission_mode()]
 	lbl_speed.text = str(kmh(player.current_speed()))
@@ -384,7 +405,7 @@ func _refresh() -> void:
 	else:
 		lbl_status.text = ""
 
-	lbl_fuel.text = fuel_text(player.fuel) if player.fuel.enabled else ""
+	lbl_fuel.text = fuel_text(player.fuel) + station_hint(player) if player.fuel.enabled else ""
 	lbl_fuel.add_theme_color_override("font_color", RED if player.fuel.is_low() else AMBER)
 	lbl_fuel.modulate.a = 1.0 if not player.fuel.is_low() or blink or player.fuel.is_empty() else 0.25
 

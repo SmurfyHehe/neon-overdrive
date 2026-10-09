@@ -39,6 +39,9 @@ var main_page: VBoxContainer
 var controls_page: VBoxContainer
 var controls_scroll: ScrollContainer
 var controls_back_button: Button
+## The bank (F0, scripts/core/wallet.gd), shown under the title; null in bare tests.
+var wallet: Node
+var bank_label: Label
 var cars_page: VBoxContainer
 var graphics_page: VBoxContainer
 var graphics_back_button: Button
@@ -80,6 +83,11 @@ func _ready() -> void:
 	title.text = "PAUSED"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
+	bank_label = Label.new()
+	bank_label.name = "Bank"
+	bank_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(bank_label)
+	_refresh_bank()
 
 	# Volume sliders (Phase B). Keyboard: Tab or arrows to move, Left/Right to change.
 	var vol_title := Label.new()
@@ -235,6 +243,13 @@ func _on_state_changed(new_state: GameState.State, _old_state: GameState.State) 
 	visible = new_state == GameState.State.PAUSED
 	if visible:
 		show_main()  # always reopen on the main page
+		_refresh_bank()
+
+## "Bank $4,200 · tonight $350"
+func _refresh_bank() -> void:
+	bank_label.visible = wallet != null
+	if wallet != null:
+		bank_label.text = "Bank %s  ·  tonight %s" % [wallet.money(wallet.bank), wallet.money(wallet.cash)]
 
 # ---------- Graphics page (polish pass, 2026-10-08) ----------
 # A preset picker plus each setting on its own (GraphicsSettings). Every change

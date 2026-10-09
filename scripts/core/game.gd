@@ -64,6 +64,23 @@ var world_mood: WorldMood  # tonight's events: rule-breaker share, bar close, me
 const TestMode := preload("res://scripts/core/test_mode.gd")
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
+# Save system (run structure, 2026-10-09): auto-save into one of 3 slots, and a
+# resume puts the run back where it was (scripts/save/). road_seed is kept so a
+# saved run rebuilds the same road; run is what read_run() gave back ({} =
+# a fresh start at the beginning of the road).
+const SaveDirector := preload("res://scripts/save/save_director.gd")
+const UserDirMigration := preload("res://scripts/save/user_dir_migration.gd")
+var saver: SaveDirector
+## Tonight's cash and the bank (F0, scripts/core/wallet.gd).
+var wallet: Node
+const Wallet := preload("res://scripts/core/wallet.gd")
+## Gas stations on the road and the pump menu (stops, first slice).
+var gas_station: Node3D
+const GasStation := preload("res://scripts/world/gas_station.gd")
+const PumpPanel := preload("res://scripts/ui/pump_panel.gd")
+var road_seed := 0
+var run := {}
+
 func _ready() -> void:
 	# Auto-Tune worker mode (exported game): no world, just the search.
 	var worker_dir := AutoTuneJob.worker_dir_from_args()
@@ -72,6 +89,8 @@ func _ready() -> void:
 		set_physics_process(false)
 		AutoTuneJob.run_worker(get_tree(), worker_dir)
 		return
+	# Before anything reads user://: a renamed build copies the old folder in.
+	UserDirMigration.run()
 	AudioSettings.load_settings()
 	TrafficSettings.load_settings()
 	FxSettings.load_settings()   # cockpit mirrors on/off and quality ([fx] in settings.cfg)
@@ -103,15 +122,26 @@ func _ready() -> void:
 		seed(Benchmark.SEED)
 	else:
 		randomize()
+	saver = SaveDirector.new(self)
+	if not benchmark:
+		run = saver.read_run()
 	# The clock first: the building window texture is painted for its time
 	# when the first chunk is built.
 	night_clock = NightClock.new()
 	if benchmark:
 		night_clock.fixed_minutes = NightClock.BENCHMARK_MINUTES  # same windows every run
 	add_child(night_clock)
+	if run.get("clock") is Dictionary:
+		night_clock.set_time(run.clock.get("minutes", 0.0), run.clock.get("night", 1))
+	wallet = Wallet.new()
+	wallet.name = "Wallet"
+	add_child(wallet)
 	# City lights: before the first chunk, which leaves the crossing's mouth
 	# open. Never in a benchmark run (same road every time).
 	Junction.enabled = TrafficSettings.city_lights and not benchmark
+	# Gas stations (stops, first slice): also before the first chunk, which
+	# clears their lots. Not in a benchmark run either.
+	GasStation.enabled = not benchmark
 	_setup_road_shape()
 	_setup_world()
 	_setup_ground_collision()
@@ -132,6 +162,7 @@ func _ready() -> void:
 	GraphicsSettings.apply(get_tree())
 	if benchmark:
 		add_child(Benchmark.new())
+	add_child(saver)
 
 func _setup_world() -> void:
 	var env := Environment.new()
@@ -288,7 +319,20 @@ func _setup_road_shape() -> void:
 		curviness = Benchmark.opt_float("curves", 0.0)
 		hilliness = Benchmark.opt_float("hills", 0.0)
 	var seed_env := OS.get_environment("NEON_ROAD_SEED")
-	var road_seed := int(seed_env) if seed_env.is_valid_int() else randi()
+	road_seed = int(seed_env) if seed_env.is_valid_int() else randi()
+	if not run.is_empty():
+		# A resumed run: its own road, and the floating origin where it was.
+		road_seed = int(run.road.seed)
+		curviness = float(run.road.curviness)
+		hilliness = float(run.road.hilliness)
+		kicker_chance = float(run.road.kicker_chance)
+		origin_index = int(run.origin_index)
+		recenter_count = int(run.get("recenter_count", 0))
+		if run.get("sections") is Dictionary:
+			for k in run.sections:
+				if run.sections[k] is Dictionary and str(k).is_valid_int():
+					section_cache[str(k)] = {"own_lanes": OWN_LANES, "onc_lanes": ONC_LANES,
+						"barrier": run.sections[k].get("barrier", false) == true}
 	RoadFrame.origin_index = origin_index
 	RoadFrame.align = RoadAlignment.new(road_seed, curviness, hilliness, kicker_chance) if curviness > 0.0 or hilliness > 0.0 else null
 	# Lane adds and drops, median splits and exits (road lane proposal): a
@@ -328,8 +372,14 @@ func _section_at(idx: int) -> Dictionary:
 
 # ---------- chunk pool ----------
 func _setup_chunk_pool() -> void:
+	# The chunk the car starts on: 0 for a fresh run, the saved car's for a
+	# resumed one (its index counts from origin_index, like _update_chunk_pool).
+	var start := 0
+	if not run.is_empty():
+		var z := RoadFrame.unroll(SaveDirector.v3(run.car.xform.slice(9, 12))).z
+		start = int(floor(-z / RoadChunkBuilder.CHUNK_LEN)) + origin_index
 	for i in range(CHUNKS_AHEAD + _chunks_behind() + CHUNKS_SPARE + 1):
-		var idx := i - _chunks_behind() - CHUNKS_SPARE
+		var idx := start + i - _chunks_behind() - CHUNKS_SPARE
 		var prev_cfg := _section_at(idx - 1)
 		var cfg := _section_at(idx)
 		var root := RoadChunkBuilder.build_chunk(idx, prev_cfg, cfg, origin_index)
@@ -433,7 +483,11 @@ const PLAYER_SPAWN_LANE := 1
 func _setup_player() -> void:
 	player = PlayerCar.new()
 	player.position = RoadFrame.roll(Vector3(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, 0))
+	if not run.is_empty():
+		player.transform = SaveDirector.array_to_xform(run.car.xform)
 	add_child(player)
+	if not run.is_empty():
+		saver.restore_car(player, run.car)
 
 # ---------- traffic (milestone 3, stage B step 3) ----------
 # Lane-follow traffic: the same raycast Vehicle as the player, see
@@ -472,19 +526,35 @@ func toggle_mute() -> void:
 func _setup_hud() -> void:
 	var hud := Hud.new(player, camera, traffic)
 	hud.night_clock = night_clock
+	hud.wallet = wallet
 	add_child(hud)
 
 # ---------- game state (pause / restart / quit, issue #27) ----------
 func _setup_game_state() -> void:
 	game_state = GameState.new()
 	add_child(game_state)
-	add_child(PauseMenu.new(game_state))
+	var pause := PauseMenu.new(game_state)
+	pause.wallet = wallet
+	add_child(pause)
 	add_child(TunerScreen.new(player, game_state))
 	add_child(WarningLights.new(player))
 	add_child(PhotoMode.new(game_state, camera))
+	gas_station = GasStation.new()
+	gas_station.player = player
+	add_child(gas_station)
+	add_child(PumpPanel.new(game_state, player, wallet, night_clock))
+	gas_station.pulled_up.connect(func(_s: float) -> void: game_state.open_station())
 	radio = RadioManager.new()
 	radio.listener = player  # reception follows the car (tunnels, bridges)
 	add_child(radio)
+	if run.get("radio") is float or run.get("radio") is int:
+		radio.tune_to(int(run.radio))
+	game_state.state_changed.connect(saver.on_state_changed)
+	game_state.restarting.connect(saver.on_restart)
+	game_state.quitting.connect(saver.save_now)
+	# 6 a.m.: tonight's cash goes into the bank (F0).
+	night_clock.night_ended.connect(func(_n: int) -> void: wallet.bank_night())
+	night_clock.night_ended.connect(func(_n: int) -> void: saver.save_now.call_deferred())
 	world_mood = WorldMood.new()
 	add_child(world_mood)
 	world_mood.event_started.connect(_on_event)

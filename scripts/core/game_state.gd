@@ -20,9 +20,15 @@ extends Node
 # AUTOTUNE with it expanded (Y). The Auto-Tune search runs in a
 # separate headless Godot process (scripts/tuning/auto_tune_job.gd), because the game's
 # physics can neither run faster than real time nor be stepped by hand.
-enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO }
+# STATION: stopped at a gas station pump (scripts/world/gas_station.gd); paused
+# while the pump menu (scripts/ui/pump_panel.gd) is up, Esc drives off.
+enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO, STATION }
 
 signal state_changed(new_state: State, old_state: State)
+## Just before a restart reloads the scene / before the game quits (the save
+## system: a restart starts a fresh run, a quit saves it).
+signal restarting
+signal quitting
 
 var state: State = State.PLAYING
 
@@ -85,6 +91,8 @@ func toggle_pause() -> void:
 		close_autotune()  # Esc backs out of Auto-Tune too
 	elif state == State.PHOTO:
 		close_photo()  # Esc leaves photo mode
+	elif state == State.STATION:
+		close_station()  # Esc drives off from the pump
 	elif state == State.PAUSED:
 		resume()
 	elif state == State.PLAYING:
@@ -101,6 +109,18 @@ func resume() -> void:
 		return
 	get_tree().paused = false
 	_set_state(State.PLAYING)
+
+## The car stopped at a pump: the pump menu opens, the game pauses.
+func open_station() -> void:
+	if state != State.PLAYING:
+		return
+	get_tree().paused = true
+	_set_state(State.STATION)
+
+func close_station() -> void:
+	if state == State.STATION:
+		get_tree().paused = false
+		_set_state(State.PLAYING)
 
 ## One tuner menu with two tabs (manual T, Auto-Tune Y): switching tab keeps the
 ## game paused. Does nothing outside the tuner.
@@ -140,10 +160,12 @@ func close_autotune() -> void:
 # Fresh run: reload the whole scene. Cheapest correct reset -- no per-system
 # reset code to keep in sync as systems are added.
 func restart() -> void:
+	restarting.emit()
 	get_tree().paused = false
 	get_tree().reload_current_scene()
 
 func quit() -> void:
+	quitting.emit()
 	get_tree().quit()
 
 func _set_state(new_state: State) -> void:

@@ -28,6 +28,7 @@ const SAVE_EVERY_MINUTES := 15.0
 const DEFAULT_PATH := "user://night_clock.cfg"
 const BENCHMARK_MINUTES := 240.0      # midnight
 const TestMode := preload("res://scripts/core/test_mode.gd")
+const SaveStore := preload("res://scripts/save/save_store.gd")
 
 static var path := TestMode.path(DEFAULT_PATH)
 
@@ -89,6 +90,18 @@ func _exit_tree() -> void:
 	if fixed_minutes < 0.0:
 		save_clock()
 
+## A resumed run's time (save system). Bad values keep the current ones.
+func set_time(m: Variant, n: Variant) -> void:
+	if fixed_minutes >= 0.0:
+		return
+	if (m is float or m is int) and is_finite(float(m)):
+		minutes = clampf(float(m), 0.0, NIGHT_MINUTES - 0.001)
+	if n is int or n is float:
+		night = maxi(int(n), 1)
+	_last_hour = hour24(minutes)
+	_last_save = minutes
+	WindowLights.set_minutes(minutes)
+
 ## Missing or damaged file: a fresh night 1 at 8 p.m.
 func load_clock() -> void:
 	var cfg := ConfigFile.new()
@@ -102,6 +115,8 @@ func load_clock() -> void:
 		night = maxi(int(n), 1)
 
 func save_clock() -> bool:
+	if SaveStore.chase_active:
+		return false  # never save during a chase (run structure, 2026-10-09)
 	var cfg := ConfigFile.new()
 	cfg.set_value("clock", "minutes", minutes)
 	cfg.set_value("clock", "night", night)

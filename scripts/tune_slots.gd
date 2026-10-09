@@ -2,9 +2,13 @@ class_name TuneSlots
 extends RefCounted
 
 # Auto-Tune step 7: named tune slots. A slot is a name and the value of every
-# tunable path (TuneParams.all(): the Auto-Tune ones and the raw-only engine
-# ones), so loading one gives back the whole tune, not just what Auto-Tune
-# touches. Stored as JSON in one file; slots are plain {path: float}, the same
+# tunable path (TuneParams.all()) except the engine ones, so loading one gives
+# back the whole setup, not just what Auto-Tune touches.
+#
+# No engine values (run structure, 2026-10-09): torque, redline, boost and the
+# torque shape come from the engine parts fitted (the mod tree), so a slot must
+# not carry them from one engine to another. They are left out when a slot is
+# saved and skipped when one is applied (slots saved by older builds have them). Stored as JSON in one file; slots are plain {path: float}, the same
 # form AutoTuneJob sends to its worker.
 #
 #   var slots := TuneSlots.new()
@@ -52,7 +56,10 @@ func save(slot_name: String, spec: Dictionary) -> bool:
 	var n := clean_name(slot_name)
 	if n == "":
 		return false
-	_slots[n] = AutoTuneJob.values_from_spec(spec)
+	var v := AutoTuneJob.values_from_spec(spec)
+	for p in engine_paths():
+		v.erase(p)
+	_slots[n] = v
 	return _write_file()
 
 ## The slot's {path: float}, or {} if there is none.
@@ -75,6 +82,8 @@ func apply(slot_name: String, car: PlayerCar) -> bool:
 	if v.is_empty():
 		return false
 	for e in TuneParams.all():
+		if e.rederive == TuneParams.ENGINE:
+			continue
 		if v.has(e.path) and _is_number(v[e.path]):
 			CarSpec.set_param(car, car.spec, e.path, float(v[e.path]))
 	return true
@@ -88,6 +97,14 @@ func bad_path() -> String:
 		p = path.get_basename() + ".bad-%d.json" % i
 		i += 1
 	return p
+
+## The paths a slot never holds: the engine's (TuneParams.ENGINE).
+static func engine_paths() -> Array[String]:
+	var out: Array[String] = []
+	for e in TuneParams.all():
+		if e.rederive == TuneParams.ENGINE:
+			out.append(e.path)
+	return out
 
 static func _is_number(x: Variant) -> bool:
 	return (x is float or x is int) and is_finite(float(x))

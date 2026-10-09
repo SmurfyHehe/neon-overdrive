@@ -88,6 +88,8 @@ rem The player's tune survives a reset and a relaunch (PlayerTune).
 call :run tune_persist --headless
 call :run settings_safety --headless
 call :run setting_danger --headless
+rem Save system: atomic files, 3 slots, chases, rename migration (scripts/save/).
+call :run save_system --headless
 call :run traffic_spawn "--headless --fixed-fps 60"
 rem ~40 s: the traffic cars (stage B step 5) against their sheets, then a drive each at the game's 120 Hz.
 call :run npc_cars "--headless --fixed-fps 120"
@@ -133,6 +135,8 @@ if /i not "%~1"=="quick" (
 	rem Also a real window (it reads the interpolated camera); ~45 s of driving 500 km down the road.
 	call :run floating_origin_drive
 	call :run game_state --headless
+	rem Save system in the game: resume exactly after a quit, quit mid-chase busts.
+	call :run save_resume --headless
 	call :run tuning_panel --headless
 	call :run auto_tune_panel --headless
 	call :run tuner_screen --headless

@@ -23,6 +23,10 @@ extends Node
 enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO }
 
 signal state_changed(new_state: State, old_state: State)
+## Just before a restart reloads the scene / before the game quits (the save
+## system: a restart starts a fresh run, a quit saves it).
+signal restarting
+signal quitting
 
 var state: State = State.PLAYING
 
@@ -140,10 +144,12 @@ func close_autotune() -> void:
 # Fresh run: reload the whole scene. Cheapest correct reset -- no per-system
 # reset code to keep in sync as systems are added.
 func restart() -> void:
+	restarting.emit()
 	get_tree().paused = false
 	get_tree().reload_current_scene()
 
 func quit() -> void:
+	quitting.emit()
 	get_tree().quit()
 
 func _set_state(new_state: State) -> void:

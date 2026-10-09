@@ -148,6 +148,13 @@ if /i not "%~1"=="quick" (
 	call :run burnout_line_lock "--headless --fixed-fps 120"
 	rem ~3 min: fuel burn calibration, a dry tank in every gearbox, limp causes (slowest wins), refuel from the bank.
 	call :run fuel_limp "--headless --fixed-fps 60"
+	rem No car or road chunk pops in or out where a camera can see it (Roy, 2026-10-09): flat road, then the hilly one.
+	call :run no_visible_spawn "--headless --fixed-fps 60"
+	set "NEON_HILLS=1"
+	set "NEON_CURVES=1"
+	call :run no_visible_spawn "--headless --fixed-fps 60"
+	set "NEON_HILLS=0"
+	set "NEON_CURVES=0"
 	call :run auto_tune_search "--headless --fixed-fps 60"
 	call :run auto_tune_job "--headless --fixed-fps 60"
 	rem Key-press tests run headless: a windowed run loses its held keys the moment the window loses focus (found 2026-10-05, it made chunk_drive and feel_pass_1 flaky).

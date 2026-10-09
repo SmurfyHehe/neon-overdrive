@@ -100,7 +100,8 @@ func _physics_process(delta: float) -> bool:
 		shifts += 1
 		last_origin = origin
 
-	_check(traffic.cars.size() == CARS, "car count changed to %d at tick %d" % [traffic.cars.size(), tick])
+	if not live_checked:
+		_check(traffic.cars.size() == CARS, "car count changed to %d at tick %d" % [traffic.cars.size(), tick])
 	for car in traffic.cars:
 		if not Harness.finite(car):
 			return _end("non-finite state in a traffic car at tick %d" % tick)
@@ -162,13 +163,18 @@ func _physics_process(delta: float) -> bool:
 
 ## The pause-menu slider path: fewer cars, then back up, all placed clear.
 func _live_count_change(p: PlayerCar) -> void:
+	# Cars come off only once no camera can see them (no visible vanish), so
+	# the count falls to the target as they leave view, not on the spot.
 	traffic.set_car_count(25)
-	_check(traffic.cars.size() == 25, "set_car_count(25) left %d cars" % traffic.cars.size())
+	_check(traffic.target_count == 25 and traffic.cars.size() <= CARS, "set_car_count(25): target %d, %d cars" % [traffic.target_count, traffic.cars.size()])
+	var before := traffic.cars.duplicate()
 	traffic.set_car_count(CARS)
-	_check(traffic.cars.size() == CARS, "set_car_count(%d) left %d cars" % [CARS, traffic.cars.size()])
+	_check(traffic.cars.size() >= CARS - 15, "set_car_count(%d) left %d cars" % [CARS, traffic.cars.size()])
 	# Only the cars just added are new placements; the others may legitimately
 	# be beside or just behind the player.
-	for car in traffic.cars.slice(25):
+	for car in traffic.cars:
+		if car in before:
+			continue
 		var d: float = p.global_position.z - car.global_position.z
 		_check(absf(d) >= traffic.spawn_min, "a re-added car is only %.1f m from the player" % d)
 

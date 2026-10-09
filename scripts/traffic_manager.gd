@@ -29,8 +29,16 @@ class_name TrafficManager
 # player only) it is placed where the camera cannot see it.
 #
 # Draw distance: cars further than `detail_distance` from the player run the
-# frozen lane cruise (TrafficCar.set_detailed(false)) and are hidden; the pause
-# menu's Traffic sliders set this and the car count live (TrafficSettings).
+# frozen lane cruise (TrafficCar.set_detailed(false)); the pause menu's Traffic
+# sliders set this and the car count live (TrafficSettings).
+#
+# Never visibly pop (Roy, 2026-10-09): a car is placed, recycled or removed only
+# where no live camera can see it (ViewGuard: the current camera whichever view
+# it is in, the mirrors while they draw, anything in the view_cameras group,
+# with sight lines blocked by crests, buildings and walls counted), and it is
+# drawn only inside reveal_distance(), where the world itself ends in fog. The
+# one transition left is a car crossing that distance: it is ~93 % fogged there
+# (exp fog, density 0.009, at 300 m) and the road chunks end at the same place.
 
 const LANE_W := RoadChunkBuilder.LANE_W
 
@@ -38,8 +46,17 @@ var player: Node3D
 var own_lanes := 4
 var onc_lanes := 4
 var car_count := 16
-## Beyond this many metres from the player a car is hidden and frozen.
+## Beyond this many metres from the player a car runs the frozen lane cruise.
 var detail_distance := 300.0
+## Cars are drawn out to at least this far whatever the slider says: the road
+## chunks end here (Game.CHUNKS_AHEAD * CHUNK_LEN), so a car hidden any nearer
+## would blink out in plain view. Spawns happen beyond it.
+const REVEAL_MIN := 300.0
+## A shown car is hidden again only this much further out (no flicker for a car
+## pacing the player at the edge).
+const HIDE_HYSTERESIS := 15.0
+## A car found in sight is not looked at again for this many physics ticks.
+const SEEN_RECHECK_TICKS := 6
 ## Spawn band ahead of the player, metres along the road: never nearer than
 ## spawn_min and never inside the draw distance, so the band actually used is
 ## [max(spawn_min, detail + SPAWN_HIDE_MARGIN), max(spawn_max, that + SPAWN_BAND)].
@@ -129,6 +146,12 @@ var deferred_count := 0
 ## (negative behind).
 var spawn_log: Array[Dictionary] = []
 var log_spawns := false
+## Tests: called as (kind, car, world_pos) at the moment a car is "spawn"ed (just
+## placed), "despawn"ed (about to be moved or freed while drawn), "show"n or
+## "hide"n at the reveal distance. Null in the game.
+var event_hook: Callable = Callable()
+## Slider target; set_car_count() trims down to it as cars leave the cameras' view.
+var target_count := 16
 
 ## Where a car with no free slot waits, frozen and hidden, behind the player.
 const PARK_BEHIND := 10000.0
@@ -165,6 +188,7 @@ var q_player := false
 var q_idx := -1
 
 func _ready() -> void:
+	target_count = car_count
 	for i in car_count:
 		_make_car()
 	_build_index()
@@ -186,6 +210,7 @@ func _make_car() -> TrafficCar:
 	# Off the road and far behind until _respawn places it, so a car never
 	# starts on the player.
 	car.position = Vector3(0.0, REST_Y, 10000.0)
+	car.set_shown(false)
 	add_child(car)
 	cars.append(car)
 	return car
@@ -210,6 +235,15 @@ func _physics_process(_delta: float) -> void:
 	var target := active_target()
 	var active := active_count()
 	var brought_back := false
+	var reveal := reveal_distance()
+	for car in cars:
+		var d := absf(RoadFrame.unroll(car.global_position).z - pz)
+		car.set_detailed(d <= detail_distance)
+		var want := d <= reveal or (car.visible and d <= reveal + HIDE_HYSTERESIS)
+		if want != car.visible and not car.sim_only:
+			if event_hook.is_valid():
+				event_hook.call("show" if want else "hide", car, car.global_position)
+			car.set_shown(want)
 	for car in cars:
 		if car.benched:
 			if active < target and not brought_back:
@@ -224,8 +258,11 @@ func _physics_process(_delta: float) -> void:
 		if behind > PARK_BEHIND * 0.5 and frame < car.retry_frame:
 			continue  # parked after a deferred spawn, waiting to retry
 		var receding := car.direction > 0.0 or car.lane_speed() < pv
-		var recycle := behind > recycle_behind or (behind > RECYCLE_RECEDING and receding) or -behind > band_hi + RoadChunkBuilder.CHUNK_LEN
-		var wreck := not recycle and car.wrecked and not in_view(car.global_position)
+		var due := behind > recycle_behind or (behind > RECYCLE_RECEDING and receding) or -behind > band_hi + RoadChunkBuilder.CHUNK_LEN
+		# Due is not enough: the move waits until no camera can see the car.
+		# It keeps driving meanwhile and leaves view (or the reveal distance) soon.
+		var recycle := due and not _car_seen(car)
+		var wreck := not recycle and car.wrecked and not _car_seen(car)
 		if not (recycle or wreck):
 			continue
 		recycle_count += 1
@@ -236,8 +273,25 @@ func _physics_process(_delta: float) -> void:
 			active -= 1
 		else:
 			_respawn(car)
-	for car in cars:
-		car.set_detailed(absf(RoadFrame.unroll(car.global_position).z - pz) <= detail_distance)
+	if cars.size() > target_count:
+		_trim_cars()
+
+## Metres from the player out to which cars are drawn.
+func reveal_distance() -> float:
+	return maxf(detail_distance, REVEAL_MIN)
+
+## Whether a drawn car is in sight of any camera right now. A car that is not
+## drawn cannot be seen.
+func _car_seen(car: TrafficCar) -> bool:
+	if not (car.visible or car.sim_only):
+		return false
+	var frame := Engine.get_physics_frames()
+	if frame < car.seen_recheck_frame:
+		return true  # looked a moment ago: still counts as seen
+	var seen := in_view(car.global_position)
+	# Only "seen" is cached; "unseen" is always judged fresh, at the moment of the move.
+	car.seen_recheck_frame = frame + SEEN_RECHECK_TICKS if seen else 0
+	return seen
 
 ## The player's road-space z (RoadFrame): metres along the road.
 func _player_z() -> float:
@@ -250,23 +304,19 @@ func _player_speed() -> float:
 
 ## [nearest, furthest] metres ahead of the player a car may be placed.
 func _spawn_band() -> Vector2:
-	var lo := maxf(spawn_min, detail_distance + SPAWN_HIDE_MARGIN)
+	var lo := maxf(spawn_min, reveal_distance() + SPAWN_HIDE_MARGIN)
 	return Vector2(lo, maxf(spawn_max, lo + SPAWN_BAND))
 
-## Whether the player can see this world point: inside the draw distance and
-## inside the active camera's view (a few points along the car, so a car
-## straddling the frustum edge counts as seen). Occlusion is not considered.
+## Whether anyone can see a car standing at this world point: inside the reveal
+## distance, and seen by a live camera (ViewGuard: current camera, mirrors,
+## view_cameras group; sight lines blocked by hills, buildings and walls do not
+## count as seen).
 func in_view(pos: Vector3) -> bool:
 	var u := RoadFrame.unroll(pos)
-	if absf(u.z - _player_z()) > detail_distance:
+	if absf(u.z - _player_z()) > reveal_distance() + HIDE_HYSTERESIS:
 		return false
-	var cam := get_viewport().get_camera_3d()
-	if cam == null:
-		return true
-	for dz in [-2.0, 0.0, 2.0]:
-		if cam.is_position_in_frustum(RoadFrame.roll(u + Vector3(0.0, 0.6, dz))):
-			return true
-	return false
+	u.y = maxf(u.y, 0.0)
+	return ViewGuard.car_seen(get_tree(), get_world_3d().direct_space_state, u)
 
 ## How many cars the hour band wants on the road (active_share of the pool).
 func active_target() -> int:
@@ -311,6 +361,8 @@ func _bench(car: TrafficCar, pz: float) -> void:
 ## behind (hidden, frozen) and tries again next tick.
 func _respawn(car: TrafficCar) -> void:
 	var pz := _player_z()
+	if car.visible and event_hook.is_valid():
+		event_hook.call("despawn", car, car.global_position)
 	# Rule breakers (living world step 3): the event share, picked per spawn.
 	# No random draw at a 0 share: the benchmark and the traffic tests keep the
 	# exact random sequence they had before rule breakers existed.
@@ -319,6 +371,7 @@ func _respawn(car: TrafficCar) -> void:
 	if slot.is_empty():
 		deferred_count += 1
 		car.set_detailed(false)
+		car.set_shown(false)
 		car.place(car.lane_x, car.direction, pz + PARK_BEHIND, car.rest_y, 0.0)
 		car.retry_frame = Engine.get_physics_frames() + DEFER_TICKS
 		_put(car)
@@ -330,7 +383,10 @@ func _respawn(car: TrafficCar) -> void:
 		rule_breaker_spawns += 1
 	car.set_detailed(absf(slot.dist) <= detail_distance)
 	car.place(slot.lane_x, slot.direction, slot.z, car.rest_y, slot.speed)
+	car.set_shown(absf(slot.dist) <= reveal_distance())
 	_put(car)
+	if car.visible and event_hook.is_valid():
+		event_hook.call("spawn", car, car.global_position)
 	if log_spawns:
 		slot["player_z"] = pz
 		slot["player_speed"] = _player_speed()
@@ -350,7 +406,7 @@ func _find_slot(car: TrafficCar, pz: float, extra_speed := 0.0) -> Dictionary:
 		var speed := lane_speed(lane_i, oncoming) + randf_range(-SPEED_JITTER, SPEED_JITTER) + extra_speed
 		var behind := not oncoming and speed > pv + BEHIND_DV and randf() < BEHIND_SHARE
 		var z := pz + randf_range(spawn_behind_min, spawn_behind_max) if behind else pz - randf_range(band.x, band.y)
-		var seen := in_view(RoadFrame.roll(Vector3(lane_x, 0.0, z)))
+		var seen := in_view(RoadFrame.roll(Vector3(lane_x, car.rest_y, z)))
 		if seen:
 			continue
 		var check := _slot_check(car, lane_x, z, dir, speed)
@@ -553,23 +609,12 @@ func apply_graphics() -> void:
 	detail_distance = TrafficSettings.detail_distance
 
 ## Live count change from the Settings sliders. Removes the cars furthest from
-## the player first; new cars spawn like any recycled one.
+## the player first, but only ones no camera can see; the rest go as they leave
+## view (_trim_cars, every tick). New cars spawn like any recycled one.
 func set_car_count(n: int) -> void:
 	n = maxi(n, 0)
-	while cars.size() > n:
-		var far: TrafficCar = cars[0]
-		var pz := _player_z()
-		for car in cars:
-			if absf(RoadFrame.unroll(car.global_position).z - pz) > absf(RoadFrame.unroll(far.global_position).z - pz):
-				far = car
-		cars.erase(far)
-		# queue_free() runs at the end of the frame, and a car added below could
-		# be placed on top of this one in the meantime: park it out of the way
-		# first (frozen, 50 km behind), out of the draft lookup too.
-		far.set_detailed(false)
-		far.remove_from_group("aero_vehicles")
-		far.global_position.z += 50000.0
-		far.queue_free()
+	target_count = n
+	_trim_cars()
 	while cars.size() < n:
 		_make_car()
 	_build_index()
@@ -577,6 +622,31 @@ func set_car_count(n: int) -> void:
 		if not car.benched and RoadFrame.unroll(car.global_position).z > _player_z() + PARK_BEHIND * 0.5:
 			_respawn(car)
 	car_count = n
+
+## Frees surplus cars (furthest first) that are out of every camera's sight.
+func _trim_cars() -> void:
+	var pz := _player_z()
+	while cars.size() > target_count:
+		var far: TrafficCar = null
+		var far_d := -1.0
+		for car in cars:
+			var d := absf(RoadFrame.unroll(car.global_position).z - pz)
+			if d > far_d and not _car_seen(car):
+				far = car
+				far_d = d
+		if far == null:
+			return  # every surplus candidate is in view; try again next tick
+		if far.visible and event_hook.is_valid():
+			event_hook.call("despawn", far, far.global_position)
+		cars.erase(far)
+		# queue_free() runs at the end of the frame, and a car added meanwhile
+		# could be placed on top of this one: park it out of the way first
+		# (frozen, 50 km behind), out of the draft lookup too.
+		far.set_detailed(false)
+		far.set_shown(false)
+		far.remove_from_group("aero_vehicles")
+		far.global_position.z += 50000.0
+		far.queue_free()
 
 func detailed_count() -> int:
 	var n := 0

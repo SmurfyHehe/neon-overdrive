@@ -9,13 +9,17 @@ extends Node3D
 # and the player instance.
 
 const CHUNKS_AHEAD := 6
-const CHUNKS_BEHIND := 1
-const POOL_SIZE := CHUNKS_AHEAD + CHUNKS_BEHIND + 1
+const CHUNKS_BEHIND := 4
+## Road behind the player is rebuilt (it vanishes) only once no camera can see
+## it (ViewGuard.chunk_seen: the rear mirror, the look-back and glance views),
+## and by force CHUNKS_SPARE chunks later, 300 m back, where the fog has it.
+const CHUNKS_SPARE := 2
+const POOL_SIZE := CHUNKS_AHEAD + CHUNKS_BEHIND + CHUNKS_SPARE + 1
 ## On a hilly road (#37) there is no ground plane under the world, only the
 ## chunks' own road: traffic lives and spawns up to 100 m behind the player
 ## (TrafficManager.recycle_behind, spawn_behind_max), so keep 150 m of road
 ## behind it, not 50.
-const CHUNKS_BEHIND_HILLS := 3
+const CHUNKS_BEHIND_HILLS := 4
 
 # Stage B step 3 (2026-10-05): a highway with 4 lanes per direction (ROADMAP
 # stage B: "4 lanes per direction is now the spec"; stage A had capped it at 3
@@ -324,13 +328,17 @@ func _section_at(idx: int) -> Dictionary:
 
 # ---------- chunk pool ----------
 func _setup_chunk_pool() -> void:
-	for i in range(CHUNKS_AHEAD + _chunks_behind() + 1):
-		var idx := i - _chunks_behind()
+	for i in range(CHUNKS_AHEAD + _chunks_behind() + CHUNKS_SPARE + 1):
+		var idx := i - _chunks_behind() - CHUNKS_SPARE
 		var prev_cfg := _section_at(idx - 1)
 		var cfg := _section_at(idx)
 		var root := RoadChunkBuilder.build_chunk(idx, prev_cfg, cfg, origin_index)
 		add_child(root)
 		chunk_pool.append({"root": root, "index": idx})
+
+## Tests: called as (chunk_root, gap) just before a chunk is rebuilt (it vanishes
+## from where it stands); gap is how many chunks behind the player it is.
+var chunk_event_hook: Callable = Callable()
 
 func _update_chunk_pool(ref_z: float) -> void:
 	var current_idx := int(floor(-ref_z / RoadChunkBuilder.CHUNK_LEN)) + origin_index
@@ -338,7 +346,10 @@ func _update_chunk_pool(ref_z: float) -> void:
 	for c in chunk_pool:
 		max_idx = max(max_idx, c.index)
 	for c in chunk_pool:
-		if c.index < current_idx - _chunks_behind():
+		var gap: int = current_idx - c.index
+		if gap > _chunks_behind() and (gap > _chunks_behind() + CHUNKS_SPARE or not ViewGuard.chunk_seen(get_tree(), c.root)):
+			if chunk_event_hook.is_valid():
+				chunk_event_hook.call(c.root, gap)
 			max_idx += 1
 			var prev_cfg := _section_at(max_idx - 1)
 			var cfg := _section_at(max_idx)

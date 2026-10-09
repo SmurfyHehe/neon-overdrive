@@ -124,6 +124,8 @@ var rule_breaker := false
 ## Drifts this many metres either side of its lane (bar close); 0 = holds it.
 var weave := 0.0
 var _weave_t := 0.0
+## TrafficManager: a car found in sight is not looked at again until this tick.
+var seen_recheck_frame := 0
 ## Index entry of the car ahead found by the last full scan; between scans
 ## its gap and speed are read straight from the index (see _accel_command).
 var _lead_k := -1
@@ -653,12 +655,17 @@ func place(lane: float, dir: float, z: float, y: float, speed: float) -> void:
 	reset_physics_interpolation()
 	_cruise_speed = speed
 
+## Drawn or not. TrafficManager owns this (the reveal distance and ViewGuard):
+## a car is shown only inside the distance where the world itself ends in fog,
+## and never flips for any other reason.
+func set_shown(on: bool) -> void:
+	visible = on and not sim_only
+
 ## Full sim on (inside the draw distance) or the frozen lane cruise (outside).
 func set_detailed(on: bool) -> void:
 	if on == detailed:
 		return
 	detailed = on
-	visible = on and not sim_only
 	if on:
 		freeze = false
 		set_moving(self, _cruise_speed)

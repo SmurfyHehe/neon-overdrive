@@ -215,6 +215,9 @@ func _ready() -> void:
 		# on purpose now (Look Board B). After the body and wheels exist, because
 		# it moves their meshes to the car's own render layer.
 		CarFx.attach(self, chassis_visual.get_meta("half_l", 2.2))
+		# Glowing brake discs (2026-10-09): the P1 wheels' spoke gaps glow when the brakes are hot.
+		if kind == P1CoupeBuilder.KIND:
+			add_child(BrakeGlow.new(self))
 
 func _physics_process(delta: float) -> void:
 	if driver.is_valid():

@@ -69,6 +69,11 @@ uniform float paint_roughness = 0.24;
 uniform float clearcoat = 1.0;
 // Fake city reflections, 0 = off (GraphicsSettings "reflections", set by WorldLook).
 global uniform float city_reflections;
+// Hot brakes (2026-10-09, BrakeGlow): on a wheel, the dark gaps between the
+// spokes (the "rim_gap" faces, where you would see the disc: the darkest
+// colour on the wheel, linear sum ~0.015 against the tyre's ~0.027) glow
+// red-orange with brake_heat 0..1. 0 on everything else.
+uniform float brake_heat = 0.0;
 const vec3 SODIUM = vec3(1.0, 0.55, 0.2);
 const vec3 WINDOW = vec3(1.0, 0.75, 0.40);
 const float LAMP_H = 7.4;        // lamp head height, m (RoadChunkBuilder.LAMP_POLE_H - 0.1)
@@ -123,6 +128,11 @@ void fragment() {
 	SPECULAR = 0.5;
 	CLEARCOAT = clearcoat * p;
 	CLEARCOAT_ROUGHNESS = 0.08;
+	if (brake_heat > 0.0 && p == 0.0 && COLOR.r + COLOR.g + COLOR.b < 0.02) {
+		// Dull cherry red first, toward orange only near the top.
+		vec3 glow = mix(vec3(0.5, 0.02, 0.0), vec3(0.95, 0.25, 0.02), brake_heat * brake_heat);
+		EMISSION += glow * brake_heat * brake_heat * 1.1;
+	}
 	if (city_reflections > 0.0 && p > 0.0) {
 		vec3 wp = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
 		vec3 n = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);

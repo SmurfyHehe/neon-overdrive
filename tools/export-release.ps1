@@ -4,7 +4,7 @@
 #   powershell -File tools/export-release.ps1
 #
 # Output in build/: the exe (product name and version come from project.godot,
-# see scripts/game_info.gd) and THIRD_PARTY_NOTICES.txt, which Godot's and
+# see scripts/core/game_info.gd) and THIRD_PARTY_NOTICES.txt, which Godot's and
 # GEVP's MIT licences ask to ship with every copy. Zip or upload the two
 # together. Needs the Godot 4.7.2 export templates (Editor > Manage Export
 # Templates). Godot is looked up in $env:GODOT, then in Documents.

@@ -41,13 +41,13 @@ a build order. Nothing in them beyond what is listed as merged has been built.
 | **P1 sports coupe game model** | **Merged** (#123). Player drives the B1 sheet design | #123 |
 | **Radio** (4 file stations, #125: drift phonk, dark phonk, talk-only, synthwave) | **Merged** (#125). Talk station renamed to Dave ("The Dave Show"); the "Neon FM" name is open. #115 closed as superseded | #125 |
 | Keyboard steering ramp and cap reach the wheels | **Merged** (#126) | #126 |
-| Test hygiene (flaky `car_audio`, `traffic_stability`, `traffic_perf`, timeouts, tests no longer overwrite the user-folder saves) | **Merged** (#128) | `tests/run_one.ps1`, `scripts/test_mode.gd` |
-| **Traffic, stage B step 3** (lane-follow cars on a fixed 4+4-lane road, same raycast sim as the player, car-count and draw-distance sliders in the pause menu) | **Merged** (#113, `a9af0ea`). Full sim inside the draw distance; beyond it (150 m default) cars are frozen kinematic and cruise | `scripts/traffic_car.gd`, `traffic_manager.gd`, `traffic_settings.gd`; `traffic_spawn`, `traffic_stability`, `traffic_perf` |
+| Test hygiene (flaky `car_audio`, `traffic_stability`, `traffic_perf`, timeouts, tests no longer overwrite the user-folder saves) | **Merged** (#128) | `tests/run_one.ps1`, `scripts/core/test_mode.gd` |
+| **Traffic, stage B step 3** (lane-follow cars on a fixed 4+4-lane road, same raycast sim as the player, car-count and draw-distance sliders in the pause menu) | **Merged** (#113, `a9af0ea`). Full sim inside the draw distance; beyond it (150 m default) cars are frozen kinematic and cruise | `scripts/traffic/traffic_car.gd`, `traffic_manager.gd`, `traffic_settings.gd`; `traffic_spawn`, `traffic_stability`, `traffic_perf` |
 | Traffic milestone 4 (brake, change lane, react to the player; 3.2 m lanes, 16-car default) | **In open PR #127**, not merged | `traffic_car.gd` on main is still throttle-only speed hold plus lane keeping |
-| Out-of-bounds walls (#28) | **In open PR #114**, not merged | `tests/boundary_walls.gd` |
+| Out-of-bounds walls (#28) | **In open PR #114**, not merged | `tests/world/boundary_walls.gd` |
 | Cockpit interior with live mirrors, LED wheel, cluster, centre stack, shifter lever, handbrake | **In open PR #130**, not merged. Needs the sightline rework below | |
 | Seated driver with forearm IK | **In open PR #131**, stacked on #130. Roy dropped forearms (see "Not started, sorted") | |
-| NPC traffic cars (stage B step 5): N1 commuter sedan, N2 city hatch, N3 pickup | **In open PRs** #153 (N1 + plumbing), #154 (N2) and the N3 PR, stacked in that order (sheet models, 3 variants each, own CarSpecs; mix N1 45 / N2 35 / N3 20) | `scripts/npc_car_builder.gd`; `npc_cars` test |
+| NPC traffic cars (stage B step 5): N1 commuter sedan, N2 city hatch, N3 pickup | **In open PRs** #153 (N1 + plumbing), #154 (N2) and the N3 PR, stacked in that order (sheet models, 3 variants each, own CarSpecs; mix N1 45 / N2 35 / N3 20) | `scripts/traffic/npc_car_builder.gd`; `npc_cars` test |
 | Cop cars (3) | **NOT started** (designs only) | |
 | Other 11 fleet cars (5 more player cars) | **NOT started** (`CarSpec` has the coupe only) | |
 | Garage + per-car mod trees | **NOT started** | |
@@ -190,7 +190,7 @@ mod-tree questions, police blue, the 3 day-one features, districts, story.
 - **GEVP is open for editing** (Roy, 2026-10-05). Every edit is marked `DEVIATION`
   in `scripts/vendor/gevp/gevp_vehicle.gd` (list under "Rules carried forward").
   Physics runs at **120 Hz**; tests run
-  at 60 via `NEON_TICKS=60`, plus `tests/tick_rate_120.gd` at the real rate.
+  at 60 via `NEON_TICKS=60`, plus `tests/core/tick_rate_120.gd` at the real rate.
 - **Top speed ~300 km/h through tuning stays** (Roy). `chassis_targets` asserts the
   stock coupe at 235–250 km/h.
 - **Mod trees:** each player car gets its own branching tree, 8–15+ nodes,
@@ -260,7 +260,7 @@ marker of their own; the header comment above them covers them. A grep for
 `DEVIATION` finds 8 lines in `scripts/vendor/gevp/`.
 
 **Tests and runs.** Physics runs at 120 Hz; tests run at 60 via `NEON_TICKS=60`
-(set by `tests/run_tests.bat`), plus `tests/tick_rate_120.gd`, `traffic_stability`
+(set by `tests/run_tests.bat`), plus `tests/core/tick_rate_120.gd`, `traffic_stability`
 and `traffic_perf` at the real rate. All test runs use `--audio-driver Dummy`.
 Windowed key tests lose held keys when the window loses focus; write new key tests
 headless. Git rules (stage by path, own worktree, PR only) are in `CLAUDE.md`.
@@ -274,7 +274,7 @@ open:
 - **Rivals, crew and cops.** The game-concept line above says "rivals and crew cars
   are scripted; only the player runs full GEVP". Roy's 2026-10-06 answer covers
   traffic only (cars past the draw distance run the kinematic lane cruise,
-  `scripts/traffic_car.gd:22-23,184-205`, and that counts as full sim). Do rivals,
+  `scripts/traffic/traffic_car.gd:22-23,184-205`, and that counts as full sim). Do rivals,
   crew and cops run full GEVP near the player too, or stay scripted?
 - **Dale to Dave.** Roy renamed the DJ to Dave ("The Dave Show"). Code and assets
   now say Dave too ("The Dave Show").

@@ -7,9 +7,9 @@
     powershell -File tools/bench-sweep.ps1 -Set custom -Custom "--traffic=80 --hills=1","--scale=0.75"
 
 Real renderer, a window opens per run. Same seed and road every run. Options
-are listed at the top of `scripts/benchmark.gd`. Tables land in `bench-results/`.
+are listed at the top of `scripts/core/benchmark.gd`. Tables land in `bench-results/`.
 Run it with nothing else busy: other Godot/agent processes on the laptop swing
-fps by 2-3x (see below). `tests/synth_perf.gd` times the engine synth and
+fps by 2-3x (see below). `tests/audio/synth_perf.gd` times the engine synth and
 prints a fingerprint that must not change when the loop is optimised.
 
 Not covered yet: cops (Stage F not built) and quality presets (#232 not on this

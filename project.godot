@@ -21,7 +21,7 @@ config/features=PackedStringArray("4.7", "Mobile")
 
 [autoload]
 
-TickRate="*res://scripts/tick_rate.gd"
+TickRate="*res://scripts/core/tick_rate.gd"
 
 [display]
 

@@ -7,7 +7,7 @@ extends SceneTree
 #
 #   <godot> --path . -s res://tools/npc_shots.gd [-- kind]
 
-const Harness := preload("res://tests/traffic_harness.gd")
+const Harness := preload("res://tests/traffic/traffic_harness.gd")
 
 var game: Node
 

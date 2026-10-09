@@ -13,7 +13,7 @@ tools\balance_sweep.bat quick    Stock / pro / assists on, about 20 seconds
 ```
 
 `tools/balance_sweep.gd` explains every column. Numbers come from
-`TuneTrack` at 60 Hz, the same runs `tests/chassis_targets.gd` guards.
+`TuneTrack` at 60 Hz, the same runs `tests/car/chassis_targets.gd` guards.
 
 ## What exists to balance
 
@@ -96,7 +96,7 @@ its "before" row is the first draft of the data.
 5. The novice driver (shift at 80 %, 85 % throttle) is 3 to 5 s slower to
    100 than the pro on every car, and 30 % longer stopping. That is the room a
    "rivals do not rubber-band" ladder has to fit inside.
-6. `tests/tuner_test_run.gd` fails on main 282343f as well as on this branch
+6. `tests/tuning/tuner_test_run.gd` fails on main 282343f as well as on this branch
    ("the second test run should show the pit-wall result"), run alone on a
    clean checkout. Pre-existing, not from this change.
 

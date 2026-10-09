@@ -2,8 +2,8 @@ extends SceneTree
 
 # Renders every crash and scrape take (CrashSfx recipes) into assets/sfx/crash
 # as 16-bit mono WAVs, plus recipe_hash.txt naming the recipe version they came
-# from (tests/crash_variety.gd fails when it is stale). Run after editing
-# scripts/crash_sfx.gd, then let the editor import the files (or run
+# from (tests/audio/crash_variety.gd fails when it is stale). Run after editing
+# scripts/audio/crash_sfx.gd, then let the editor import the files (or run
 # tools/refresh-godot-cache.ps1). Takes about a minute.
 #   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tools/render_crash_sfx.gd
 

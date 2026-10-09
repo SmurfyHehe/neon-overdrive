@@ -11,7 +11,7 @@ extends SceneTree
 #   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tools/write_licence_notices.gd
 # Writes res://THIRD_PARTY_NOTICES.txt, or the path given after "--".
 
-const GameInfo := preload("res://scripts/game_info.gd")
+const GameInfo := preload("res://scripts/core/game_info.gd")
 const GEVP_LICENCE := "res://scripts/vendor/gevp/LICENSE.txt"
 
 func _initialize() -> void:

@@ -9,7 +9,7 @@ slots and named empties, exported as glTF for Godot.
 
     python tools/car_pipeline/build_car.py p1_coupe        # -> assets/cars/p1_coupe/body.glb + body.json
     python tools/car_pipeline/panel_sheet.py p1_coupe      # -> docs/design/pipeline/p1_coupe_panels.png
-    godot --headless --path . -s res://tests/car_pipeline_p1.gd
+    godot --headless --path . -s res://tests/fleet/car_pipeline_p1.gd
 
 Python 3 with numpy, scipy and Pillow (the same as `tools/fleet_design/`).
 No GPU, no Godot needed to build; Godot only to check.
@@ -45,7 +45,7 @@ the axles, metres. Names are what Godot and the later steps key on.
 
 `body.json` beside it lists every node, the triangles per mesh, the hinges
 (position, axis, open sign and angle), the slots, tips, hubs, dims, the
-material colours and the backend that wrote the file. `tests/car_pipeline_p1.gd`
+material colours and the backend that wrote the file. `tests/fleet/car_pipeline_p1.gd`
 reads both and checks they agree.
 
 Materials: one glTF material per fleet material name (`paint`, `roof`,
@@ -102,5 +102,5 @@ Nothing paid, nothing with a credit requirement; Blender's output is ours.
 
 UVs and the wear-mask channel (step 2), the car shader (3), body-shop parts
 as separate pieces per option (4), rims and brakes (5), `CarAssembler` and
-the game using this file (6). `scripts/p1_coupe_builder.gd` still builds the
+the game using this file (6). `scripts/car/p1_coupe_builder.gd` still builds the
 car the player drives; this glb is not loaded by the game yet.

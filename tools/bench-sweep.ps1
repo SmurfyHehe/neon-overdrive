@@ -1,4 +1,4 @@
-﻿# Stress-test sweep: runs the in-game benchmark (scripts/benchmark.gd) once per
+﻿# Stress-test sweep: runs the in-game benchmark (scripts/core/benchmark.gd) once per
 # configuration with the real renderer (a window opens for each run; do not
 # touch the machine while it runs) and prints one table of fps, 1% lows and
 # frame-time spikes. Re-run it at the end of the project and compare.

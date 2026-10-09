@@ -1,6 +1,6 @@
 # Run structure, nights and progression (proposal, 2026-10-09)
 
-Status: PROPOSAL, docs only. Nothing here is built. Roy signs off, then the first slice goes to a laptop session.
+Status: PROPOSAL, docs only. Nothing here is built. Roy answered 7 of the 8 questions on 2026-10-09 07:47Z (see "Decided" at the end); new season after the story is still open. The first slice goes to a laptop session when Roy says build.
 
 Roy (2026-10-09): use all the usage today, make a gameplan. This is the "repeatability" part of Stage C: what one night is, what a whole story run is, what you keep and what you lose, and how the game saves.
 
@@ -26,7 +26,7 @@ Read for this: notes `living-world-time-and-people-2026-10-08`, `rival-and-car-l
 | Step | What you see | Rules (decided unless marked) |
 |---|---|---|
 | **Leave the garage** | The garage door opens at 8 p.m., the car is off, X starts it | Tonight's cash is $0. Car is in whatever state the garage left it |
-| **Drive** | Clock on the dash, Dave says the hour | 1 real minute = 10 game minutes (living world). **Flag: code today runs 1 game hour per 2 real minutes, so a night is 20 minutes, not ~60.** See question 8 |
+| **Drive** | Clock on the dash, Dave says the hour | **A night is about 40 minutes of driving** (Roy, 2026-10-09), so 1 real minute = 15 game minutes. **Code change needed:** `night_clock.gd` has `REAL_SECONDS_PER_HOUR = 120.0` (a 20-minute night); it becomes `240.0`. Part of R2 |
 | **Earn** | Races, rolling challenges, side jobs | Money goes into **tonight's cash** (at risk) |
 | **Stop** | Gas station: fuel, quick fix, heat drains, autosave | Fuel and fixes are paid from the **bank** (stops decision) |
 | **Get busted** | Honest cop: ticket + tow, towed home, clock +1 h. Bad cop: all tonight's cash taken, you keep driving | Decided (corrupt police, balance) |
@@ -60,7 +60,26 @@ Quitting mid-night saves the clock, place, fuel, damage and **tonight's cash**, 
 
 Numbers are the balance plan's targets, not measured. Acts on Weekend Warrior: Act 1 nights 1-10, Act 2 nights 11-22, Act 3 nights 23-30.
 
-**What "nights to finish" means.** The story does not end on a fixed night. Story beats unlock by **progress** (races won, crews beaten, money banked), and the night count is the pace the economy is tuned for. A player who struggles takes longer; nobody is thrown out at night 30. The only hard date is the debt's due date in the story, which Roy writes; if it passes, the story takes its "lose" branch (shop sold, crew survives, from the rival doc), the save carries on into free roam, and a new season can be started (question 6).
+**What "nights to finish" means.** The story does not end on a fixed night. Story beats unlock by **progress** (races won, crews beaten, money banked), and the night count is the pace the economy is tuned for. A player who struggles takes longer; nobody is thrown out at night 30. The hard dates are the story's debt deadlines, which Roy writes. **Missing one means retrying the act** (Roy, 2026-10-09); see "Failed deadline" below for how.
+
+### Failed deadline: how similar games do it (research, from knowledge of the games, not a fresh web check)
+
+| Game | Deadline | What happens when you miss it | Kept on retry |
+|---|---|---|---|
+| Recettear | Weekly debt payment to a loan shark | Short "game over" scene, then back to day 1 | Shop level, items and adventurer levels (it's the game's intended loop) |
+| Persona 5 | Each palace has a calendar due date | Bad ending scene, then "return to a day about a week before the deadline" | Everything up to that day |
+| Dead Rising | Story cases on a 72-hour clock | Story ends; restart from the start or the last save | Player level and skills carry into a restart |
+| Majora's Mask | 3 days before the moon falls | Time resets to day 1 | Key items, songs, masks; money only if banked |
+| Pikmin | 30 days to find ship parts | Bad ending; start the whole game again | Nothing |
+
+What works: the games players remember kindly (Recettear, Majora's Mask, Dead Rising) **keep what you built** and send you back in time, so the retry is faster and feels like progress, not punishment. Pikmin's "start over from nothing" is the one most often called harsh.
+
+**Recommendation: retry the act from its first night, keeping what you built.**
+- Before each act's first night the game makes a hidden act checkpoint.
+- Miss the deadline: Pike's scene plays (the shop's lights go off, Walt hands over the keys), then a short "not like this" beat from Dave, and you are back at the act's first night.
+- **Kept:** cars, mods, parts, tunes, rep. **Reset to the checkpoint:** bank, story flags and rival progress for that act, calendar date.
+- Why: you lose the nights and the money, so missing still hurts, but you are never back in a weaker car, and the second try is quicker because your build is ahead of the rivals.
+- Daily Driver and Weekend Warrior work this way. Racer could reset everything to the checkpoint (a harder option), decided later.
 
 ### The car ladder over a season
 
@@ -95,7 +114,7 @@ Bank can drop to zero but never below, and you always keep a car (stops doc: dea
 
 Two different things, kept apart so retrying never undoes a bust:
 
-- **Race retry:** after losing a race, "Retry" puts you back on the start line right away. No entry fee (decided), but each retry costs **15 minutes of the night**, so retrying all night is a choice with a price (question 1).
+- **Race retry:** after losing a race, "Retry" puts you back on the start line right away. No entry fee (decided), and each retry costs **15 minutes of the night** (Roy, 2026-10-09), so retrying all night is a choice with a price.
 - **Night restart:** there is none. A bad night is a bad night; the next one starts at 8 p.m.
 - **Crash or sandbox mode and free roam** (chosen extras) have instant reset with R and no stakes, using the existing `restart()` in `game_state.gd`.
 
@@ -104,7 +123,7 @@ Two different things, kept apart so retrying never undoes a bust:
 | What | How it unlocks | Why |
 |---|---|---|
 | Mod tree | Whole tree visible from day one (decided); you buy nodes with bank money | No hidden walls |
-| Districts | Open by act: Act 1 two districts, Act 2 all four crew districts, Act 3 the kings' roads (question 7) | Gives each act a new place to see |
+| Districts | Open by act: Act 1 two districts, Act 2 all four crew districts, Act 3 the kings' roads (Roy: yes) | Gives each act a new place to see |
 | Cars | Story: crew cars, scrapyard rebuilds, cars won from crews (rival doc). No dealership | Every car has a reason |
 | Gas station shop items | Scanner etc. bought once from the bank | Stops doc |
 | Free roam with time frozen | After night 1 | Living world: setting to stop the clock |
@@ -114,7 +133,7 @@ Two different things, kept apart so retrying never undoes a bust:
 ## 6. After the story
 
 - **Free roam in the finished save:** nights keep coming, the city keeps its events, you keep everything. Races pay as in Act 3.
-- **New season (question 3):** start again at night 1 with your garage of cars and mods, bank reset, rivals and cops one tier up, story beats replayed short (Dave reads a one-line recap instead of cutscenes). This is the roguelite "one more run".
+- **New season (OPEN, Roy undecided):** start again at night 1 with your garage of cars and mods, bank reset, rivals and cops one tier up, story beats replayed short (Dave reads a one-line recap instead of cutscenes). This is the roguelite "one more run".
 - Later, from the ideas doc (not in this plan): ghost of your best run (D13), "tonight's city" shared daily seed with a leaderboard (L8). Both reuse the per-night seed from section 1.
 
 ## 7. Saving (crash-safe)
@@ -127,7 +146,7 @@ Proposal:
 - **Every file has a version number** and a small upgrade step per version, so old saves load after updates.
 - **Crash-safe writes:** write `name.json.tmp`, flush, then rename over the old file. Keep the last 3 good copies (`.1`, `.2`, `.3`). On load, a file that fails to parse falls back to the newest good copy and tells you once ("Last save was damaged, loaded the one before"), never silently starts a new game.
 - **When it saves:** arriving at a station (decided), landmarks, every 15 game minutes (as today), the end of a night, every garage purchase, and on quit. **Never during a chase** (heat above 0), so quitting can't skip a bust.
-- **Autosave only** in story mode (question 4). Free roam and sandbox don't touch the story save.
+- **Autosave only**, three slots (Roy: yes). Free roam and sandbox don't touch the story save.
 - **Migration:** on first launch after this ships, the existing `night_clock.cfg` and `tune_slots.json` move into slot 1, so nobody loses their clock or tunes.
 - Tests: headless Godot, kill the process mid-write in a loop (a test hook that stops after the temp write) and check the save always loads; load each old file version; sweep all three difficulties.
 
@@ -148,24 +167,28 @@ Proposal:
 | PR | Contents | Size | Needs | Model, why |
 |---|---|---|---|---|
 | **R1 (first slice)** | Save core: slot folders, versioned JSON, temp-then-rename, 3 backups, migration of the two existing files. Tonight's cash and bank counter (stops S0). Headless crash-write test | S-M | nothing | Opus: the save format is the one thing hard to change later |
-| **R2 (first slice)** | Night loop: leave garage at 8 p.m. (placeholder garage screen), "head home" action, 6 a.m. end with a placeholder tired-drive shot, banking, night summary card, clock rate per question 8 | M | R1 | Sonnet: mechanical, built on the existing clock |
+| **R2 (first slice)** | Night loop: leave garage at 8 p.m. (placeholder garage screen), "head home" action, 6 a.m. end with a placeholder tired-drive shot, banking, night summary card, clock slowed to a 40-minute night (`REAL_SECONDS_PER_HOUR` 120 → 240) | M | R1 | Sonnet: mechanical, built on the existing clock |
 | R3 | Season: story progress record (act, night, flags, date/weekday), difficulty picked at new game, Continue / New / slots on the title screen | M | R1, menus title screen | Sonnet |
 | R4 | Per-night variety: new road seed each night, fixed named district order, tonight's event table driving traffic mood | M | R2 | Opus for the district map, Sonnet for the table |
 | R5 | Bust hooks: honest (bank charge, tow home, +1 h) and bad cop (cash wiped), callable from a test console until police exist | S | R1, R2 | Sonnet |
-| R6 | Race retry (+15 min), once racing exists | S | racing | Sonnet |
+| R6 | Race retry (+15 min) and the act checkpoint retry for a missed deadline, once racing and story beats exist | M | racing, R3 | Sonnet |
 | R7 | After the story: free roam continue, New season with tier-up | M | story content | Opus |
 
 **First slice = R1 + R2.** After it, you can quit mid-night and come back to the same night, see a night end and the money land in the bank, and the save survives being killed mid-write. Both can start now without police, racing or the garage scene. Then R3-R5 in that order; R6-R7 wait for racing and story.
 
-## 10. Questions for Roy (one word each, recommended first)
+## 10. Decided (Roy, 2026-10-09 07:47Z, his numbers 33-40)
 
-Numbered on from the last batch where the coordinator relays them.
+1. Race retry right away: **yes, costs 15 minutes of the night.**
+2. Keep driving the city after the story: **yes.**
+3. New season after the story: **open** (Roy: "don't know yet"). See below.
+4. Autosave only, three slots: **yes.**
+5. Quit during a chase, bust still happens: **yes.**
+6. Missed story deadline: **retry the act** (research above; recommendation: back to the act's first night, keeping cars, mods and rep).
+7. City opens by act: **yes.**
+8. One night of driving: **about 40 minutes.**
 
-1. **After losing a race, can you try it again right away?** **Yes, but it costs 15 minutes of the night** / Yes, free / No.
-2. **After the story ends, can you keep driving the same city with everything you own?** **Yes** / No.
-3. **After the story, can you start a new season keeping your cars and mods, with tougher rivals and an empty bank?** **Yes** / No, start fresh.
-4. **Saving: does the game only save by itself, so a bad bust can't be undone by loading?** **Yes, three save slots** / No, let me load older saves.
-5. **If you quit during a police chase, does the bust still happen when you come back?** **Yes** / No.
-6. **If you miss the story's last deadline, does the story end on the "lose" branch while you keep playing?** **Yes** / No, retry the act.
-7. **Do new parts of the city open as the story goes on?** **Yes, by act** / No, whole city from night 1.
-8. **How long is one night of driving?** **About 40 minutes** / 20 minutes (today) / 60 minutes.
+### Still open: new season after the story
+
+**Yes:** when the story ends you can start it again from night 1 with all your cars and mods, an empty bank and rivals and cops one step tougher, so a second playthrough is about racing your best builds against harder crews. **No:** a new story always starts from scratch with the Bug, so every playthrough has the full climb from beater to finale car, but your finished garage only lives on in free roam.
+
+Plain-word question when the coordinator relays it: **After the story ends, start it again keeping your cars and mods, against tougher rivals?** Yes (recommended) / No, always start fresh with the Bug.

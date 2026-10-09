@@ -10,6 +10,9 @@ extends RefCounted
 #   Wheel*  4 MeshInstance3Ds, one surface each, at the hubs
 # so draw calls per car = body surfaces + 4.
 #
+# A library, not a test: do not run it with `godot -s` (Godot answers "doesn't
+# inherit from SceneTree or MainLoop"). Run one of the three below instead.
+#
 # Used by tests/fleet/fleet_design_check.gd, fleet_silhouette_sweep.gd and
 # fleet_budget_scene.gd. Not a class_name on purpose: preload it, so the
 # global class cache (#42) is not involved.

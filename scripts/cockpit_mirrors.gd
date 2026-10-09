@@ -14,8 +14,8 @@ extends Node3D
 # FxSettings "mirrors" off leaves dark glass and never renders.
 # A mirror whose glass is outside the cockpit camera's view is not rendered
 # at all (2026-10-07: on the P1 the right door mirror sits 58 degrees right of
-# the eye, off screen at every FOV unless the driver glances at it). The
-# mirror the driver glances at (ChaseCamera.glance) renders every frame at
+# the eye, off screen at every FOV unless the driver looks round to it). The
+# mirror the driver has turned to (ChaseCamera look around) renders every frame at
 # twice the resolution.
 # Blind-spot dots (2026-10-07): each door mirror has a small amber dot in its
 # outer top corner that lights while a same-direction car is alongside or
@@ -64,7 +64,7 @@ var strip := false         # the HUD rear strip wants the rear render (chase vie
 var enabled := true        # FxSettings "mirrors"
 var views := []            # [{vp, cam, quad, mat}] rear, left, right
 var _frame := 0
-var focus := 0             # -1 left door mirror, +1 right, 0 none (ChaseCamera.glance)
+var focus := 0             # -1 left door mirror, +1 right, 0 none (ChaseCamera look around)
 var dots := []             # [left, right] MeshInstance3D
 var cull_mask := 0
 
@@ -174,8 +174,8 @@ func set_strip(on: bool) -> void:
 	if not on and not active:
 		views[0].vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 
-## The door mirror the driver glances at (-1 left, +1 right, 0 none): it
-## renders every frame at twice the resolution until the glance ends.
+## The door mirror the driver has turned to (-1 left, +1 right, 0 none): it
+## renders every frame at twice the resolution until the head turns back.
 func set_focus(side: int) -> void:
 	if side == focus:
 		return
@@ -184,11 +184,6 @@ func set_focus(side: int) -> void:
 		var v: Dictionary = views[i + 1]
 		var k := 2 if focus == (-1 if i == 0 else 1) else 1
 		v.vp.size = _scaled(SIDE_SIZE) * k
-
-## Car-space centre of a door mirror's glass (-1 left, +1 right), which the
-## head glance aims at.
-func glass_position(side: int) -> Vector3:
-	return views[1 if side < 0 else 2].quad.position
 
 ## Lights a door mirror's blind-spot dot: side 0 left, 1 right, level 0..1.
 func set_side_cue(side: int, level: float) -> void:
@@ -252,7 +247,7 @@ func _process(_delta: float) -> void:
 		v.cam.global_transform = xf * v.local
 	_frame += 1
 	# UPDATE_ONCE draws on the next frame and drops back to DISABLED by itself.
-	# In the cockpit, a mirror off screen is skipped; the glanced-at door
+	# In the cockpit, a mirror off screen is skipped; the door mirror looked at
 	# mirror renders every frame.
 	var cam := get_viewport().get_camera_3d() if active else null
 	if _frame % 2 == 0 and (not active or glass_on_screen(cam, views[0].quad)):

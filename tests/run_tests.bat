@@ -117,6 +117,7 @@ call :run world/boundary_walls --headless
 rem ~1 min: the player into the out-of-bounds wall at 16 speeds and angles, at the game's 120 Hz.
 call :run car/wall_hit "--headless --fixed-fps 120"
 call :run car/car_scrape "--headless --fixed-fps 120"
+call :run car/car_scrape_tunes "--headless --fixed-fps 120"
 call :run world/road_space --headless
 call :run world/chunk_builder_equivalence --headless
 call :run world/road_frame --headless

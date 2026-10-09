@@ -32,6 +32,10 @@ func _check(ok: bool, msg: String) -> void:
 
 func _initialize() -> void:
 	OS.add_logger(logger)
+	# A straight, flat road: the car and reflector spots below are worked out
+	# on x and z, and on a bend the 0.8 m median barrier (R1) hides lane 0.
+	OS.set_environment("NEON_CURVES", "0")
+	OS.set_environment("NEON_HILLS", "0")
 	game = Harness.boot(self, 0, 300.0, 11)
 	_run.call_deferred()
 
@@ -96,7 +100,9 @@ func _run() -> void:
 	# A reflector 60 m out: the dot nearest that distance on the barrier.
 	var z := p.global_position.z - 60.0
 	var zr := floorf(z / RoadChunkBuilder.REFLECTOR_SPACING) * RoadChunkBuilder.REFLECTOR_SPACING + RoadChunkBuilder.REFLECTOR_SPACING / 2.0
-	var rp := Vector3(0.0, RoadChunkBuilder.BARRIER_Y + RoadChunkBuilder.BARRIER_H / 2.0 + 0.03, zr)
+	# The dots sit 0.03 m over the top of that chunk's barrier type (R1).
+	var chunk_i := int(floor(-zr / RoadChunkBuilder.CHUNK_LEN)) + int(game.get("origin_index"))
+	var rp := Vector3(0.0, RoadBarriers.top(RoadBarriers.kind_at(chunk_i)) + 0.03, zr)
 	var best := Vector2(-1, -1)
 	var amber_on := 0.0
 	var amber_off := 0.0

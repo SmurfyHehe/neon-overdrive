@@ -91,7 +91,8 @@ func _check_chunk(chunk: Node3D, prev: Dictionary, cfg: Dictionary, label: Strin
 			var dz := mm.get_instance_transform(i).origin.z - mm.get_instance_transform(i + 1).origin.z
 			if absf(dz - B.PYLON_SPACING) > EPS:
 				_fail("%s %s: posts %d->%d are %.2f m apart" % [label, node_name, i, i + 1, dz])
-	# centre barrier: one piece per centreline station (#37), end to end on the centre line
+	# centre barrier: one piece per centreline station (#37), end to end on the
+	# centre line, its base on the road (R1: each type's mesh starts at y = 0)
 	var bar := chunk.get_node(^"Barrier") as MultiMeshInstance3D
 	if bool(cfg.barrier) != bar.visible:
 		_fail("%s: barrier shown %s" % [label, bar.visible])
@@ -99,7 +100,7 @@ func _check_chunk(chunk: Node3D, prev: Dictionary, cfg: Dictionary, label: Strin
 		var seg := B.CHUNK_LEN / B.STATIONS
 		for k in B.STATIONS:
 			var o := bar.multimesh.get_instance_transform(k).origin
-			if absf(o.x) > EPS or absf(o.y - B.BARRIER_Y) > EPS or absf(o.z + seg * (k + 0.5)) > EPS:
+			if absf(o.x) > EPS or absf(o.y) > EPS or absf(o.z + seg * (k + 0.5)) > EPS:
 				_fail("%s: barrier piece %d at %s" % [label, k, o])
 	_check_frontage(chunk, label)
 
@@ -172,7 +173,9 @@ func _check_materials() -> void:
 	var dim := {
 		"lane dash": B._get_lane_dash_mat(), "centre dash": B._get_center_dash_mat(),
 		"edge line": B._get_edge_line_mat(), "curb": B._get_curb_mat(),
-		"barrier": B._get_barrier_mat(), "post (own)": B._get_pylon_mat_own(),
+		"barrier (concrete)": RoadBarriers._mat("concrete"), "barrier (guardrail)": RoadBarriers._mat("guardrail"),
+		"barrier (cable)": RoadBarriers._mat("cable"), "crash cushion": RoadBarriers._mat("cushion"),
+		"post (own)": B._get_pylon_mat_own(),
 		"post (oncoming)": B._get_pylon_mat_onc(),
 	}
 	for k in dim:

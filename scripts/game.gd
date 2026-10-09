@@ -28,7 +28,7 @@ const ONC_LANES := 4
 
 # RoadChunkBuilder, CarBuilder, PlayerCar, TrafficManager are all global via class_name.
 
-var section_cache: Dictionary = {"-1": {"own_lanes": OWN_LANES, "onc_lanes": ONC_LANES, "barrier": false}}
+var section_cache: Dictionary = {"-1": {"own_lanes": OWN_LANES, "onc_lanes": ONC_LANES, "barrier": RoadBarriers.kind_at(-1)}}
 var chunk_pool: Array = []  # Array of {root: Node3D, index: int}
 
 # Floating origin (issue #26). Float32 positions lose precision far from
@@ -267,6 +267,7 @@ func _setup_road_shape() -> void:
 	if Benchmark.requested():
 		busy = 0.0
 	RoadFrame.layout = RoadLayout.new(road_seed, RoadFrame.align, busy)
+	RoadBarriers.reset()  # dents and crumples last one run
 
 # ---------- section math (reused from old main.gd, keyed by chunk index instead of distance) ----------
 func _section_at(idx: int) -> Dictionary:
@@ -275,22 +276,16 @@ func _section_at(idx: int) -> Dictionary:
 		return section_cache[key]
 	# Fixed lane counts since stage B step 3 (see OWN_LANES) until the road
 	# layout's lane changes go live (road lane proposal step 3); only the
-	# centre barrier rolls per chunk, from the road seed when there is a layout.
+	# centre barrier follows the district, with one crossover gap per district
+	# (RoadBarriers, R1).
 	var own := OWN_LANES
 	var onc := ONC_LANES
-	var barrier: bool
 	var lay := RoadFrame.layout
-	if lay != null:
-		if lay.lanes_live:
-			var p := lay.lanes_pair(float(idx) * RoadChunkBuilder.CHUNK_LEN)
-			own = p.x
-			onc = p.y
-		var rng := RandomNumberGenerator.new()
-		rng.seed = hash([lay.road_seed, idx, "barrier"])
-		barrier = rng.randf() < 0.3
-	else:
-		barrier = randf() < 0.3
-	var cfg := {"own_lanes": own, "onc_lanes": onc, "barrier": barrier}
+	if lay != null and lay.lanes_live:
+		var p := lay.lanes_pair(float(idx) * RoadChunkBuilder.CHUNK_LEN)
+		own = p.x
+		onc = p.y
+	var cfg := {"own_lanes": own, "onc_lanes": onc, "barrier": RoadBarriers.kind_at(idx), "gap": RoadBarriers.has_gap(idx)}
 	section_cache[key] = cfg
 	return cfg
 

@@ -107,6 +107,10 @@ var chirp_count := 0
 # Set by PerspectiveAudio every frame: 0 chase .. 1 cockpit, and the window.
 var cabin := 0.0
 var window := 0.0
+## Set by Slipstream (2026-10-08): 0 clean air .. 1 tucked in behind a car.
+## The wind drops by up to SLIP_WIND_DROP in the other car's wake.
+var slipstream := 0.0
+const SLIP_WIND_DROP := 0.6
 
 ## Listen pack and tests: keys here replace what the car reports
 ## ("speed", "on_road", "on_rough", and per kind "<kind>_l" / "<kind>_r").
@@ -239,6 +243,7 @@ func _process(delta: float) -> void:
 	_update_gust(speed, delta)
 	var opening := pow(window, 0.7)
 	var inside := lerpf(1.0, SEALED_WIND + (1.0 - SEALED_WIND) * opening, cabin)  # how much outside wind reaches you
+	inside *= 1.0 - SLIP_WIND_DROP * clampf(slipstream, 0.0, 1.0)  # in a wake, less wind hits the car
 	var buffet_boost := lerpf(1.0, lerpf(1.0, OPEN_BUFFET, opening), cabin)
 	var rush_mix := smoothstep(6.0, 55.0, speed)  # the filter opening: rush takes over with speed
 	var outside_whistle := smoothstep(WHISTLE_FROM, WHISTLE_FULL, speed)

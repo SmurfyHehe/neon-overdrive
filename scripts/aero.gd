@@ -107,12 +107,17 @@ static func _rebuild_draft_grid(tree: SceneTree) -> void:
 static func invalidate_draft_grid() -> void:
 	_draft_grid_frame = -1
 
+## The car each vehicle drafted last (instance id -> Node3D, null when none),
+## for the slipstream visuals and sound (Slipstream, 2026-10-08).
+static var draft_leader := {}
+
 static func _draft_factor(v: Node3D) -> float:
 	var frame := Engine.get_physics_frames()
 	if frame != _draft_grid_frame:
 		_rebuild_draft_grid(v.get_tree())
 		_draft_grid_frame = frame
 	var best := 0.0
+	var leader: Node3D = null
 	var pos := v.global_position
 	var forward := (-v.global_transform.basis.z).normalized()
 	var x0 := floori((pos.x - DRAFT_MAX_DISTANCE) / _DRAFT_CELL)
@@ -135,5 +140,8 @@ static func _draft_factor(v: Node3D) -> float:
 				if alignment < DRAFT_MIN_ALIGNMENT:
 					continue
 				var closeness := 1.0 - clampf((dist - DRAFT_MIN_DISTANCE) / (DRAFT_MAX_DISTANCE - DRAFT_MIN_DISTANCE), 0.0, 1.0)
-				best = maxf(best, closeness * MAX_DRAFT_REDUCTION)
+				if closeness * MAX_DRAFT_REDUCTION > best:
+					best = closeness * MAX_DRAFT_REDUCTION
+					leader = other
+	draft_leader[v.get_instance_id()] = leader
 	return best

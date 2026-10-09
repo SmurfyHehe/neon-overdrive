@@ -233,7 +233,36 @@ reflects the actual road, sub-surface anything, more than ~6k triangles per
 player car. Rule of thumb for every item here: it should look like a
 screenshot someone could have taken in 2004 and still think was beautiful.
 
-## 10. Sorted by workload, with build order and model
+## 10. Game-wide overhaul: what would have to change, and is it worth it
+
+Roy (2026-10-09): "if you need an overhaul for the entire game I'm not
+against it." Honest view per area, with cost in laptop sessions and the risk
+of making things worse.
+
+| Area | Overhaul option | What it would buy for the cars | Cost | Risk | Verdict |
+|---|---|---|---|---|---|
+| Renderer | Switch Mobile to Forward+: real screen-space reflections, real shadows, SDFGI | True reflections of the street in the paint, contact shadows under the car | 2-3 sessions to switch, then every effect retuned | High: Forward+ costs 1.5-2x on Iris Xe at 1080p; the game already fights for 60 fps with traffic. Reflections on this GPU would need low resolution and look smeary | **No.** Fake reflections plus lamp lights (A1, A2) give 80% of the look at near-zero cost, which is also how PS2 games did it. Re-ask after the stress-test session reports headroom |
+| Car pipeline | Replace the box and loft generators with an authored-mesh pipeline: a script turns `fleet.json` into a Blender model with bevels, UVs, material slots, named attachment points for parts, exported as glb | Every item in sections 2-7 becomes easier: bevels, decals that fit, parts that bolt on, wear masks, interiors sharing one UV scheme | 3-4 sessions for the pipeline and P1, then 1 per car | Medium: Blender is free and scriptable (GPL tool, output is ours), but the pipeline must run on Roy's laptop or in a cloud session; if it drifts from `fleet.json` the audit checks stop meaning anything | **Yes, this is the one overhaul worth doing.** It is the difference between adding detail per car by hand forever and adding it once. Keep the generator for traffic and police |
+| Materials | One car shader for every car (paint, trim, glass, lamp, tyre channels) instead of the P1 shader plus `car_builder._mat` | Paint finishes, Fresnel, wear and lamp lighting work on all cars at once, including rivals and crew cars | 1 session | Low | **Yes**, do it inside A1 |
+| Lighting | Real street lamps (omni lights that leapfrog), tonemapping, LUT, lamp glare, wet road | The car is lit like a car at night; paint finishes become visible | Already planned as graphics A1-A9 and B1-B2, 2-3 sessions | Low, measured budget ~1 ms | **Yes**, already decided; just order it before the car work |
+| Camera | Chase camera lower and closer with a longer lens, so the car fills more of the frame; cockpit as the default view with a one-key switch | The car is on screen bigger, in every shot | Half a session | Low, but it changes the driving feel Roy signed off in Stage A | **Try it** as a setting (Near / Classic), default Classic until Roy drives both |
+| World scale and dressing | Buildings closer to the kerb, parked cars, shop signs, wires, steam, so there is something for the paint to reflect and pass under | Context: a car looks best beside things at human scale | 2-3 sessions, overlaps the buildings and shop-signs work already running | Medium: draw calls on an integrated GPU | **Partly**, through the running buildings and signs sessions; no separate overhaul |
+| Art style | Drop "PS2 gritty" for a modern clean look | Nothing for the cars; it would cost the identity | Whole game | Very high | **No** |
+| Physics and spec | None needed | The shared sim already makes every car drive differently by data | 0 | 0 | **No change** |
+
+**Recommendation.** Not a whole-game overhaul. Two targeted overhauls, both
+under the hood of the art rather than the game: the **car authoring
+pipeline** (authored, bevelled, UV-mapped meshes from the same fleet
+numbers) and the **lighting pass** already decided. Everything else in this
+doc then becomes cheap. If Roy wants one big bet, it is the pipeline: about
+four sessions before the first car comes out the other end looking clearly
+better, and that is the risk to accept.
+
+Order if approved: lighting A1-A9 (Sonnet, one session) -> pipeline with P1
+as the proof (Fable, 3-4 sessions, Opus for the export script design) -> the
+A items in section 11 on top of the new P1 -> beater and the rest.
+
+## 11. Sorted by workload, with build order and model
 
 **A: small (build next, each one laptop session)**
 
@@ -276,7 +305,7 @@ wheel. A1-A6 touch materials, lights and wheels, so they can run beside
 those without file clashes except `p1_coupe_builder.gd`, which the player-cars
 session owns until it lands.
 
-## 11. Contradictions found
+## 12. Contradictions found
 
 - The fleet sheet lists ride height under swappable body parts; the garage
   note moved it to the Tuner. This doc follows the garage note.
@@ -285,7 +314,7 @@ session owns until it lands.
 - Graphics note calls the paint item "A4" and this doc reuses the number for
   wheels; the tables above are this doc's own numbering.
 
-## 12. Questions for Roy (one word each, my pick first)
+## 13. Questions for Roy (one word each, my pick first)
 
 1. Default paint finish on your car at the start: **gloss**, satin or matte?
 2. Should your car flash orange every time it passes under a street lamp? **Yes** / no.
@@ -295,3 +324,4 @@ session owns until it lands.
 6. A few seconds of your car rolling to the start line before each race: **yes** / no.
 7. Rust and primer patches on the starter beater: **yes** / clean.
 8. Wheel rims: **four** designs to start, or two?
+9. Rebuild the cars through a proper modelling pipeline (about four sessions before the first better-looking car): **yes** / no.

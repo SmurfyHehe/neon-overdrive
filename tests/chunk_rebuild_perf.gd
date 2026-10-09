@@ -31,8 +31,8 @@ func _cfg(o: int, n: int, barrier: bool) -> Dictionary:
 func _initialize() -> void:
 	_go.call_deferred()
 
-## After a frame: in _initialize the root is not yet inside the tree, and the
-## rebuild only records its skip keys for a chunk that is (see _stage_finish).
+## After a frame, so the chunks under test sit inside the tree as they do in
+## the game (in _initialize the root is not inside it yet).
 func _go() -> void:
 	await process_frame
 	_check_staged_equals_atomic()

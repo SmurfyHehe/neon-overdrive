@@ -69,6 +69,9 @@ func _ready() -> void:
 	# NEON_TRAFFIC=<n> overrides the saved car count, like NEON_TICKS/NEON_MUTE:
 	# tests/run_tests.bat sets 0 so the older drive-bot tests, which steer
 	# across lanes blind, do not hit traffic (tests/traffic_*.gd clear it).
+	var budget_env := OS.get_environment("NEON_REBUILD_BUDGET")
+	if budget_env.is_valid_float():
+		rebuild_budget_ms = float(budget_env)
 	var traffic_env := OS.get_environment("NEON_TRAFFIC")
 	if traffic_env.is_valid_int():
 		TrafficSettings.set_car_count(int(traffic_env))
@@ -290,12 +293,14 @@ func _setup_chunk_pool() -> void:
 ## A recycled chunk used to be rewritten whole in the frame it fell behind,
 ## ~3 ms (tests/chunk_rebuild_perf.gd) landing in one frame every 50 m of
 ## road: a visible hitch at speed. Now each frame runs stages until
-## REBUILD_BUDGET_MS is spent (always at least one, so a job cannot stall),
+## rebuild_budget_ms is spent (always at least one, so a job cannot stall),
 ## and a job takes a few frames. The chunk is hidden and not solid until it
 ## is done; it is 250-350 m ahead, in the fog, where it appeared from nothing
 ## before too.
 var _rebuild_jobs: Array = []
-const REBUILD_BUDGET_MS := 1.0
+## NEON_REBUILD_BUDGET=<ms> overrides it (a huge value rebuilds a chunk whole
+## in one frame again, to bisect a test against the spreading).
+var rebuild_budget_ms := 1.0
 
 func _update_chunk_pool(ref_z: float) -> void:
 	var current_idx := int(floor(-ref_z / RoadChunkBuilder.CHUNK_LEN)) + origin_index
@@ -318,7 +323,7 @@ func _run_rebuild_jobs() -> void:
 	while not _rebuild_jobs.is_empty():
 		if RoadChunkBuilder.rebuild_step(_rebuild_jobs[0]):
 			_rebuild_jobs.pop_front()
-		if SpikeLog.since(t0) >= REBUILD_BUDGET_MS:
+		if SpikeLog.since(t0) >= rebuild_budget_ms:
 			break
 	SpikeLog.mark("chunk_rebuild", SpikeLog.since(t0))
 

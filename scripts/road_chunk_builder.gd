@@ -1237,17 +1237,7 @@ static func _layout(chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary) -> 
 		var h_old: float = randf_range(3.0, 4.5) if is_garage else randf_range(6.0, 22.0)
 		draws.append([is_garage, w_draw, d_draw, h_old])
 	L["draws"] = draws
-	# The road geometry that does not depend on the buildings: a chunk whose
-	# key matches the one it was last laid out with (every chunk on a straight
-	# road with fixed lane counts) skips those stages on a rebuild.
-	L["geo_key"] = [L.start_own_w, L.end_own_w, L.start_onc_w, L.end_onc_w, L.k, L.g, L.vc, RoadFrame.has_hills(), L.setback, L.prev_setback]
-	L["dash_key"] = L.geo_key + [L.barrier]
 	return L
-
-## True when the chunk's road geometry already matches this layout (see
-## _layout's geo_key); set once the rebuild has finished.
-static func _geo_same(root: Node3D, L: Dictionary) -> bool:
-	return root.has_meta("geo_key") and root.get_meta("geo_key") == L.geo_key
 
 ## The chunk's collision bodies: on, or off (layer 0) while a staged rebuild
 ## is in flight, so a half-rewritten sidewalk or wall never meets a wheel.
@@ -1297,8 +1287,6 @@ static func _stage_setup(root: Node3D, job: Dictionary) -> void:
 	root.reset_physics_interpolation()
 
 static func _stage_collision(root: Node3D, L: Dictionary) -> void:
-	if _geo_same(root, L):
-		return
 	_update_sidewalk_collision(root, "SidewalkColOwn", L.start_own_curb, L.end_own_curb, L.start_own_walk, L.end_own_walk, 1)
 	_update_sidewalk_collision(root, "SidewalkColOnc", L.start_onc_curb, L.end_onc_curb, L.start_onc_walk, L.end_onc_walk, -1)
 	_update_boundary(root, "BoundaryOwn", L.bound_own, 1)
@@ -1308,8 +1296,6 @@ static func _stage_collision(root: Node3D, L: Dictionary) -> void:
 	_update_road_collision(root, maxf(L.bound_own, L.bound_onc) + BOUNDARY_T + ROAD_COL_MARGIN)
 
 static func _stage_strips(root: Node3D, L: Dictionary) -> void:
-	if _geo_same(root, L):
-		return
 	# road surfaces (tapered)
 	_update_strip(root, "RoadOwn", 0.0, 0.0, L.start_own_w, L.end_own_w)
 	_update_strip(root, "RoadOnc", 0.0, 0.0, -L.start_onc_w, -L.end_onc_w)
@@ -1330,8 +1316,6 @@ static func _stage_strips(root: Node3D, L: Dictionary) -> void:
 ## edge pylons -- cosmetic rhythm/speed cues, interpolated along each
 ## shoulder's outer edge between this chunk's start and end width
 static func _stage_pylons(root: Node3D, L: Dictionary) -> void:
-	if _geo_same(root, L):
-		return
 	var pylons_own: MultiMesh = (root.get_node(^"PylonsOwn") as MultiMeshInstance3D).multimesh
 	var pylons_onc: MultiMesh = (root.get_node(^"PylonsOnc") as MultiMeshInstance3D).multimesh
 	var n_pylons := _pylon_slots()
@@ -1410,8 +1394,6 @@ static func _stage_walls(root: Node3D, job: Dictionary) -> void:
 ## street lamps + their light pools (stage A). Pole just outside the curb,
 ## arm over the road; the oncoming side is the same mesh turned 180 deg.
 static func _stage_lamps(root: Node3D, L: Dictionary) -> void:
-	if _geo_same(root, L):
-		return
 	var lamps: MultiMesh = (root.get_node(^"Lamps") as MultiMeshInstance3D).multimesh
 	var pools: MultiMesh = (root.get_node(^"LampPools") as MultiMeshInstance3D).multimesh
 	var n_lamps := 0
@@ -1438,8 +1420,6 @@ static func _stage_lamps(root: Node3D, L: Dictionary) -> void:
 static func _stage_dashes(root: Node3D, L: Dictionary) -> void:
 	var barrier_mmi := root.get_node(^"Barrier") as MultiMeshInstance3D
 	barrier_mmi.visible = L.barrier
-	if root.has_meta("dash_key") and root.get_meta("dash_key") == L.dash_key:
-		return
 	var slots := _dash_slots()
 	var center: MultiMesh = (root.get_node(^"CenterDashes") as MultiMeshInstance3D).multimesh
 	var refl_mm: MultiMesh = (barrier_mmi.get_node(^"Reflectors") as MultiMeshInstance3D).multimesh
@@ -1476,14 +1456,6 @@ static func _stage_dashes(root: Node3D, L: Dictionary) -> void:
 
 static func _stage_finish(root: Node3D, job: Dictionary) -> void:
 	var L: Dictionary = job.layout
-	# The keys that let the next rebuild skip unchanged geometry are only
-	# recorded for a chunk in the tree: the dummy renderer of a headless run
-	# drops the MultiMesh instance data a chunk was given before it entered
-	# the tree (tests/roadside_detail.gd builds, adds, then rebuilds), and a
-	# skip would leave such a chunk empty.
-	if root.is_inside_tree():
-		root.set_meta("geo_key", L.geo_key)
-		root.set_meta("dash_key", L.dash_key)
 	root.set_meta("rebuilding", false)
 	# Into place. job.origin_index is kept current by game.gd across a
 	# floating-origin shift that lands mid-job.

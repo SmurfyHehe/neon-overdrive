@@ -90,6 +90,7 @@ call :run core/log_folder --headless
 call :run car/powertrain_health "--headless --fixed-fps 60"
 call :run car/car_parts --headless
 call :run car/turbo "--headless --fixed-fps 60"
+call :run car/forced_induction "--headless --fixed-fps 60"
 call :run car/chassis_targets "--headless --fixed-fps 60"
 call :run car/reverse_and_tabs --headless
 call :run car/transmission_modes "--headless --fixed-fps 60"

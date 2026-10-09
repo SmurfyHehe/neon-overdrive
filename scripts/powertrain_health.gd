@@ -71,6 +71,8 @@ var brake_temp := AMBIENT_C
 var torque_mult := 1.0
 var brake_mult := 1.0
 var warnings := 0
+## Engine load 0..1 from the last step(), for FuelTank.
+var engine_load := 0.0
 var tyre_temp: Array[float] = [AMBIENT_C, AMBIENT_C, AMBIENT_C, AMBIENT_C]
 var tyre_wear: Array[float] = [0.0, 0.0, 0.0, 0.0]
 var tyre_grip: Array[float] = [1.0, 1.0, 1.0, 1.0]
@@ -159,9 +161,9 @@ func step(v: Vehicle, dt: float) -> void:
 		return
 	var peak_power := v.max_torque * v.max_rpm / 9.5488 * 0.7  # rough W at the power peak
 	var power := maxf(v.torque_output, 0.0) * v.motor_rpm / 9.5488
-	var load := clampf(power / maxf(peak_power, 1.0), 0.0, 1.0)
+	engine_load = clampf(power / maxf(peak_power, 1.0), 0.0, 1.0)
 	var brake_power := v.brake_force * v.speed
-	step_values(dt, load, v.limiter_cut, v.speed, brake_power)
+	step_values(dt, engine_load, v.limiter_cut, v.speed, brake_power)
 	v.torque_mult = torque_mult
 	v.brake_mult = brake_mult
 	# tyres: the wheels are FL, FR, RL, RR

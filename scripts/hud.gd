@@ -59,6 +59,7 @@ var lbl_unit: Label
 var lbl_status: Label
 var lbl_boost: Label
 var lbl_rpm: Label
+var lbl_fuel: Label
 var lbl_info: Label
 var lbl_clock: Label
 var lbl_hint: Label
@@ -113,6 +114,11 @@ static func gear_text(g: int) -> String:
 	if g == 0:
 		return "N"
 	return str(g)
+
+## "FUEL ▮▮▮▯▯▯▯▯" with eight bars, rounded up so a drop left shows one bar.
+static func fuel_text(f: FuelTank) -> String:
+	var bars := clampi(ceili(f.fraction() * 8.0 - 0.001), 0, 8)
+	return "FUEL " + "▮".repeat(bars) + "▯".repeat(8 - bars)
 
 static func kmh(speed_ms: float) -> int:
 	return int(round(maxf(speed_ms, 0.0) * KMH_PER_MS))
@@ -242,6 +248,11 @@ func _ready() -> void:
 	lbl_rpm = _label(under, 14, SILVER)
 	lbl_rpm.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
+	# Fuel gauge (Stage C): eight bars, amber, red and blinking when low.
+	lbl_fuel = _label(cluster, 14, AMBER)
+	lbl_fuel.name = "Fuel"
+	lbl_fuel.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
 ## The rear strip shows in the chase view when the flag is on and the cockpit
 ## has mirrors to render; the cockpit view has the rearview mirror itself.
 func _refresh_rear_strip() -> void:
@@ -354,11 +365,18 @@ func _refresh() -> void:
 	if engine_off:
 		lbl_status.text = "ENGINE OFF · hold X to start"
 		lbl_status.add_theme_color_override("font_color", RED)
+	elif player.limp.is_limping():
+		lbl_status.text = "LIMP · " + LimpMode.cause_name(player.limp.cause)
+		lbl_status.add_theme_color_override("font_color", RED)
 	elif cue:
 		lbl_status.text = "SHIFT" if blink else ""
 		lbl_status.add_theme_color_override("font_color", AMBER)
 	else:
 		lbl_status.text = ""
+
+	lbl_fuel.text = fuel_text(player.fuel) if player.fuel.enabled else ""
+	lbl_fuel.add_theme_color_override("font_color", RED if player.fuel.is_low() else AMBER)
+	lbl_fuel.modulate.a = 1.0 if not player.fuel.is_low() or blink or player.fuel.is_empty() else 0.25
 
 	if player.turbo_boost_max > 0.0:
 		lbl_boost.text = "BOOST %.2f / %.2f bar" % [player.boost, player.turbo_boost_max]

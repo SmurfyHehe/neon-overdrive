@@ -73,7 +73,7 @@ class_name RoadChunkBuilder
 #   colour, which lit every face at 1.4x -- the solid white blocks in every
 #   screenshot. Now MULTIPLY (only the windows glow), world-space triplanar so
 #   windows are the same size on every building, and longer frontages.
-#   (Superseded 2026-10-07 by the facade kit, scripts/building_kit.gd.)
+#   (Superseded 2026-10-07 by the facade kit, scripts/world/building_kit.gd.)
 
 # Curves + elevation (#37, docs/planning/curves-elevation-proposal-2026-10-07.md):
 # every chunk carries its centreline as a Path3D ("Centerline"), and

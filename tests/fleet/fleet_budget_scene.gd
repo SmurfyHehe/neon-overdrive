@@ -11,7 +11,7 @@ extends SceneTree
 #              at most 7 draw calls per car (Godot measured 5 on 2026-10-05:
 #              the Mobile renderer drew each body in one call)
 #   multimesh  the same cars drawn as one MultiMesh per design for the body
-#              and one for its wheels (RESEARCH-cheap-pretty.md proposal 3,
+#              and one for its wheels (docs/research/RESEARCH-cheap-pretty.md proposal 3,
 #              not approved yet)
 # then scales the triangle numbers up to the class budgets (traffic 4k,
 # police 6k, player 10k) to show the worst case.

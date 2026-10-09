@@ -163,7 +163,7 @@ func _setup_world() -> void:
 	env.fog_light_color = Color(0.1, 0.066, 0.042)
 	env.fog_density = 0.009
 	env.fog_sky_affect = 0.0
-	# NIGHT LIGHTING PASS (2026-09-29, RESEARCH-cheap-pretty.md item 1): the
+	# NIGHT LIGHTING PASS (2026-09-29, docs/research/RESEARCH-cheap-pretty.md item 1): the
 	# gradient sky is also the ambient source (Godot's default under BG_SKY),
 	# so its horizon glow fills the scene for free -- no extra light needed.
 	# Dialled down from the default 1.0 because at full energy a bright horizon
@@ -192,7 +192,7 @@ func _setup_world() -> void:
 	# over the 3D view, under the HUD.
 	add_child(FilmGrain.new())
 
-	# NIGHT LIGHTING PASS (2026-09-29, RESEARCH-cheap-pretty.md item 1): this
+	# NIGHT LIGHTING PASS (2026-09-29, docs/research/RESEARCH-cheap-pretty.md item 1): this
 	# was a warm white key at energy 1.1 -- i.e. a daylight sun sitting inside
 	# a purple night palette and fighting it. road_chunk_builder.gd already
 	# authors this world for night: near-black asphalt albedos, plus emissive

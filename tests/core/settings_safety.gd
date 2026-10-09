@@ -24,7 +24,7 @@ func _initialize() -> void:
 	# file gets a path of its own, so the shared test_settings.cfg that other
 	# tests load is never touched either.
 	if not AudioSettings.path.get_file().begins_with("test_"):
-		printerr("FAIL: not in test mode (settings path %s); run it as res://tests/settings_safety.gd. Nothing written." % AudioSettings.path)
+		printerr("FAIL: not in test mode (settings path %s); run it as res://tests/core/settings_safety.gd. Nothing written." % AudioSettings.path)
 		quit(1)
 		return
 	var real_path := AudioSettings.path

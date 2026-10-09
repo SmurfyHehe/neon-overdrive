@@ -4,7 +4,7 @@ class_name CarFx
 # Headlights and a blob shadow for a car (stage A, 2026-10-04). The world is
 # dark on purpose now (Look Board B), so the road ahead needs real light on
 # it to read, and the car needs something under it so it sits on the road
-# instead of floating -- the cheap version from RESEARCH-cheap-pretty.md
+# instead of floating -- the cheap version from docs/research/RESEARCH-cheap-pretty.md
 # item 5, not a shadow map. Written for any Vehicle, so traffic and police can
 # reuse it later (they may want headlights off for cost; see the flag).
 

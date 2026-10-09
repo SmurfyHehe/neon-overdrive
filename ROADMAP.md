@@ -229,7 +229,7 @@ mod-tree questions, police blue, the 3 day-one features, districts, story.
   stage B step 3.
 - **Chase cam only, no cockpit camera** (2026-09-12): a cockpit camera (F) shipped in Phase C.
 - **Physics at 60 Hz** and "do not raise the tick rate": 120 Hz since #110.
-- **MultiMesh traffic** (item 3 in `RESEARCH-cheap-pretty.md`'s numbered list;
+- **MultiMesh traffic** (item 3 in `docs/research/RESEARCH-cheap-pretty.md`'s numbered list;
   this file used to call items 2 and 3 "Proposals 2 and 3") is moot: traffic
   shipped in #113 as individual full-sim raycast cars, not instances.
   **Vertex-colour roads** (item 2) are still not approved. The dim cool key light

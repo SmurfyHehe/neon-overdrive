@@ -50,7 +50,7 @@ const KINDS := {
 		"wheel_r": 0.31, "wheel_x": 0.78, "axle_z": 1.40,
 		## Chassis origin height settled on the springs, flat road (negative:
 		## the origin is on the ground with the springs fully extended).
-		## Measured by tests/npc_cars.gd. The body is drawn -rest_y higher so
+		## Measured by tests/traffic/npc_cars.gd. The body is drawn -rest_y higher so
 		## the car stands at the sheet's ride height at rest (P1CoupeBuilder
 		## BODY_LIFT, same reason).
 		"drive": "fwd",

@@ -121,7 +121,7 @@ def remap_mats(b64, remap):
 
 def npc_main(car_id):
     """Every build of one traffic car into scripts/<id>_data.gd, for
-    scripts/npc_car_builder.gd. One NAMES list for all builds (material
+    scripts/traffic/npc_car_builder.gd. One NAMES list for all builds (material
     indices are remapped onto it), wheels as the right-hand wheel of each axle."""
     with open(SRC) as f:
         data = json.load(f)

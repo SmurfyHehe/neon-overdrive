@@ -255,7 +255,7 @@ func _ready() -> void:
 	health.enabled = not sim_only
 	fuel.enabled = not sim_only
 
-	# Engine sound (2026-09-29, prototype of PROPOSAL-audio.md option C): a
+	# Engine sound (2026-09-29, prototype of docs/research/PROPOSAL-audio.md option C): a
 	# synthesised engine driven by this car's motor_rpm/throttle. Added after
 	# CarSpec.apply() so it picks up the real idle/max rpm.
 	if not sim_only:

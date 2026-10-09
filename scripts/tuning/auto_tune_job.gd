@@ -10,7 +10,7 @@ extends RefCounted
 # exactly the numbers tests/tuning/tune_track.gd measures.
 #
 # The game side (panel) calls start(), then poll() every so often; cancel()
-# kills the worker. The worker side is scripts/auto_tune_worker.gd.
+# kills the worker. The worker side is scripts/tuning/auto_tune_worker.gd.
 #
 # Files, all in user://autotune/ and overwritten per job (never deleted):
 #   request.json   {values: {path: float}, request: {goals, locks}, budget,

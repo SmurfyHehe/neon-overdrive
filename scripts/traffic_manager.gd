@@ -360,12 +360,14 @@ func _put(car: TrafficCar) -> void:
 	var vz := car.direction * car._cruise_speed
 	if car.detailed:
 		# Footprint of the turned body: a car spun across the road blocks more.
-		var axis := RoadFrame.dir_to_road(o.z, car.global_transform.basis.z)
+		# RoadFrame.dir_to_road twice, with the road basis built once.
+		var to_road := RoadFrame.basis_at(o.z).transposed()
+		var axis := to_road * car.global_transform.basis.z
 		var fx := absf(axis.x)
 		var fz := absf(axis.z)
 		ex = car.half_w * fz + car.half_l * fx
 		ez = car.half_l * fz + car.half_w * fx
-		vz = RoadFrame.dir_to_road(o.z, car.linear_velocity).z
+		vz = (to_road * car.linear_velocity).z
 	var lo := o.x - ex
 	var hi := o.x + ex
 	if car.changing:

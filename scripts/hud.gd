@@ -127,6 +127,13 @@ static func shift_cue(p: PlayerCar, frac: float) -> bool:
 static func blink() -> bool:
 	return int(Time.get_ticks_msec() / 90) % 2 == 0
 
+## Sets a control's font colour only when it changes. add_theme_color_override()
+## re-themes the control every call, even with the same colour, and the HUD
+## refreshes every frame (frame-rate pass, 2026-10-08).
+static func set_font_color(c: Control, color: Color) -> void:
+	if not c.has_theme_color_override("font_color") or c.get_theme_color("font_color") != color:
+		c.add_theme_color_override("font_color", color)
+
 func _init(car: PlayerCar, cam: ChaseCamera, traffic_mgr: TrafficManager) -> void:
 	player = car
 	camera = cam
@@ -342,7 +349,7 @@ func _refresh() -> void:
 	# BUG FIX (2026-09-13): shift_flash_t was tracked since milestone 2 but
 	# nothing read it, so shifting had no feedback. The gear now flashes.
 	var shifting: bool = player.shift_flash_t > 0.0
-	lbl_gear.add_theme_color_override("font_color", SILVER if shifting else AMBER)
+	Hud.set_font_color(lbl_gear, SILVER if shifting else AMBER)
 
 	var cue := shift_cue(player, frac)
 	var blink := Hud.blink()
@@ -353,10 +360,10 @@ func _refresh() -> void:
 
 	if engine_off:
 		lbl_status.text = "ENGINE OFF · hold X to start"
-		lbl_status.add_theme_color_override("font_color", RED)
+		Hud.set_font_color(lbl_status, RED)
 	elif cue:
 		lbl_status.text = "SHIFT" if blink else ""
-		lbl_status.add_theme_color_override("font_color", AMBER)
+		Hud.set_font_color(lbl_status, AMBER)
 	else:
 		lbl_status.text = ""
 

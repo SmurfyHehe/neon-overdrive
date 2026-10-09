@@ -66,6 +66,14 @@ func _ready() -> void:
 	TrafficSettings.load_settings()
 	FxSettings.load_settings()   # cockpit mirrors on/off and quality ([fx] in settings.cfg)
 	ViewSettings.load_settings()
+	# Benchmark mode (-- --benchmark, see benchmark.gd) drives a fixed road so
+	# runs are comparable; normal play gets a fresh one each time. It also runs
+	# the default traffic (car count and draw distance), not whatever the
+	# pause menu last saved, so two machines or two days compare like for like.
+	var benchmark := Benchmark.requested()
+	if benchmark:
+		TrafficSettings.set_car_count(TrafficSettings.CAR_COUNT_DEFAULT)
+		TrafficSettings.set_detail_distance(TrafficSettings.DETAIL_DEFAULT)
 	# NEON_TRAFFIC=<n> overrides the saved car count, like NEON_TICKS/NEON_MUTE:
 	# tests/run_tests.bat sets 0 so the older drive-bot tests, which steer
 	# across lanes blind, do not hit traffic (tests/traffic_*.gd clear it).
@@ -74,9 +82,6 @@ func _ready() -> void:
 		TrafficSettings.set_car_count(int(traffic_env))
 	if OS.get_environment("NEON_MUTE") == "1":
 		AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), true)
-	# Benchmark mode (-- --benchmark, see benchmark.gd) drives a fixed road so
-	# runs are comparable; normal play gets a fresh one each time.
-	var benchmark := Benchmark.requested()
 	if benchmark:
 		seed(Benchmark.SEED)
 	else:

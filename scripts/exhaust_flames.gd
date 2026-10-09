@@ -366,9 +366,11 @@ func _process(delta: float) -> void:
 	_follow_throttle(delta)
 	var flame := flame_setting()
 	if _audio != null:
-		var f: float = _audio.synth.take_flames()
+		var f: float = _audio.take_flames()
 		if f > 0.0:
-			queue_burst(f)
+			# The block was rendered flames_late ago (EngineAudio renders on a
+			# worker and hands its flames out a frame later), so wait that much less.
+			queue_burst(f, Kind.POP, maxf(VISUAL_DELAY - _audio.flames_late, 0.0))
 	elif flame > 0.0:
 		_simulate_pops(delta, flame)
 	_watch_upshift(flame)

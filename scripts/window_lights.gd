@@ -31,6 +31,10 @@ static var _img: Image
 static var _slots: Array = []   # [{x, y, colour, bed, rise}]
 static var _lit_mask := PackedByteArray()
 static var _minutes := 240.0    # midnight until a clock says otherwise
+# The curve values the windows were last painted for: a window's state only
+# depends on them, and the clock holds them flat most of the night.
+static var _painted_eve := NAN
+static var _painted_morn := NAN
 ## How many texture uploads happened (tests read it).
 static var uploads := 0
 
@@ -41,6 +45,7 @@ static func texture() -> ImageTexture:
 		_img = Image.create(SIZE, SIZE, false, Image.FORMAT_RGB8)
 		_lit_mask.resize(_slots.size())
 		_lit_mask.fill(2)   # neither lit nor dark: forces the first paint
+		_painted_eve = NAN
 		_paint()
 		_tex = ImageTexture.create_from_image(_img)
 	return _tex
@@ -97,6 +102,10 @@ static func _build_slots() -> void:
 static func _paint() -> bool:
 	var eve := _curve(EVENING, _minutes)
 	var morn := _curve(MORNING, _minutes)
+	if eve == _painted_eve and morn == _painted_morn:
+		return false  # same curve values, same windows: skip the scan
+	_painted_eve = eve
+	_painted_morn = morn
 	var changed := false
 	for i in _slots.size():
 		var s: Dictionary = _slots[i]

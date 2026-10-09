@@ -39,6 +39,7 @@ echo Started %DATE% %TIME:~0,8%
 set "FAILED="
 set "CRASHED="
 call :run smoke --headless
+call :run game_info --headless
 call :run palette --headless
 call :run hud --headless
 call :run car_loft_normals --headless

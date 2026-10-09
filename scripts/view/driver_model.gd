@@ -120,7 +120,9 @@ const HOME_WHEEL_DEG := 35.0
 const HOME_RATE := 70.0
 const STILL_RATE := 6.0          # deg/s: below this the wheel counts as still
 ## Seated geometry, car space: the pelvis pivot and the head on the torso.
+## The coupe's pelvis point (tests); the instance reads its car's seat from the cabin.
 const PELVIS := Vector3(CockpitFrame.SEAT_X, 0.50, 0.34)
+var pelvis := PELVIS
 const RECLINE_DEG := 12.0
 const HEAD_Y := 0.49
 const REACH_SECS := 0.22
@@ -206,6 +208,8 @@ func _init(cockpit: CockpitFrame) -> void:
 	frame = cockpit
 	player = cockpit.player
 	name = "Driver"
+	# the seat: pelvis 2 cm over the cushion, 2 cm ahead of its centre (the coupe's 0.50, 0.34)
+	pelvis = Vector3(float(cockpit.cab.seat_x), float(cockpit.cab.seat_h) + 0.02, float(cockpit.cab.seat_z) - 0.02)
 
 func _ready() -> void:
 	_mat = CockpitKit.material(0.9, 0.0, 0.05)
@@ -251,7 +255,7 @@ static func _segment(kit: CockpitKit, len: float, r0: float, r1: float, col: Col
 func _build_torso() -> void:
 	torso = Node3D.new()
 	torso.name = "Torso"
-	torso.position = PELVIS
+	torso.position = pelvis
 	torso.rotation_degrees = Vector3(RECLINE_DEG, 0.0, 0.0)   # reclined with the seat
 	add_child(torso)
 	var k := CockpitKit.new()
@@ -557,7 +561,7 @@ func _pedal_ankle(pedal: String) -> Vector3:
 	return pad + Vector3(0.0, -0.03, 0.11)
 
 func _dead_pedal_ankle() -> Vector3:
-	return Vector3(-0.52, 0.33, -0.33)
+	return (frame.cab.pedals as Vector3) + Vector3(-0.27, -0.21, 0.17)   # left of the clutch, on the floor
 
 # ---------- per frame ----------
 
@@ -573,7 +577,7 @@ func _process(delta: float) -> void:
 	_head_bob = lerpf(_head_bob, bob, 1.0 - exp(-14.0 * delta))
 	# torso: recline, lean with lateral g, breathe
 	torso.rotation = Vector3(deg_to_rad(RECLINE_DEG), 0.0, -_lat_g * LEAN_RAD_PER_G)
-	torso.position = PELVIS + Vector3(0.0, 0.004 * sin(_breath * TAU * 0.25), 0.0)
+	torso.position = pelvis + Vector3(0.0, 0.004 * sin(_breath * TAU * 0.25), 0.0)
 	# head: yaw into the turn, bob
 	var steer := frame.steering
 	head.rotation = Vector3(0.0, lerp_angle(head.rotation.y, -steer * HEAD_YAW_RAD, 1.0 - exp(-5.0 * delta)), 0.0)

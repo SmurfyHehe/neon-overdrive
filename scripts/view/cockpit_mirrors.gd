@@ -59,6 +59,7 @@ const SIDE_SIZE_M := Vector2(0.175, 0.098)
 ## The glass sits this far inside the housing's open face.
 const SIDE_INSET := 0.02
 
+var cab := {}              # the car's cabin (CabinSpec); empty = the coupe's constants
 var active := false        # the cockpit view is on
 var strip := false         # the HUD rear strip wants the rear render (chase view)
 var enabled := true        # FxSettings "mirrors"
@@ -76,13 +77,18 @@ func _ready() -> void:
 	if world != null and world.environment != null:
 		env = world.environment.duplicate()
 		env.glow_enabled = false
-	_add_mirror("Rear", REAR_POS, REAR_SIZE_M, REAR_YAW, REAR_PITCH, REAR_SIZE, REAR_FOV, 0.0, env)
+	var rear_pos: Vector3 = cab.rear_mirror if cab.has("rear_mirror") else REAR_POS
+	_add_mirror("Rear", rear_pos, REAR_SIZE_M, REAR_YAW, REAR_PITCH, REAR_SIZE, REAR_FOV, 0.0, env)
 	for i in 2:
 		var h: Dictionary = P1CoupeBuilder.MIRRORS[i]
 		var pos: Vector3 = h.pos + Vector3(0.0, P1CoupeBuilder.BODY_LIFT, 0.0)
+		var out := -1.0 if i == 0 else 1.0
+		if cab.has("door_mirror"):
+			# the car's own door mirror point (right side in the data; mirrored for the left)
+			var dm: Vector3 = cab.door_mirror
+			pos = Vector3(out * absf(dm.x), dm.y, dm.z)
 		var hb := Basis(Vector3.UP, deg_to_rad(float(h.yaw)))
 		var glass_pos := pos + hb * Vector3(0.0, 0.0, P1CoupeBuilder.MIRROR_SIZE.z * 0.5 - SIDE_INSET)
-		var out := -1.0 if i == 0 else 1.0
 		_add_mirror("Left" if i == 0 else "Right", glass_pos, SIDE_SIZE_M, float(SIDE_GLASS_YAW[i]), 0.0,
 			SIDE_SIZE, SIDE_FOV, out * SIDE_YAW, env)
 		_add_dot(views[i + 1].quad, out)

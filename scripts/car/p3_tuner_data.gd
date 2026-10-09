@@ -14,6 +14,29 @@ const NAMES := ["chrome", "exh_hole", "glass", "grille", "head", "paint", "pilla
 const COLORS := {"chrome": "#C9CED6", "exh_hole": "#050608", "glass": "#151D2E", "grille": "#0D1017", "head": "#FFE7BD", "paint": "#E9E6DF", "pillar": "#10141C", "rim": "#9C6B3A", "rim_bronze": "#9C6B3A", "rim_gap": "#0B0E14", "rim_gold": "#C8A04A", "roof": "#E9E6DF", "tail": "#E5262B", "tire": "#15171C", "tire_side": "#1C1F26", "trim": "#1A1D24", "under": "#0B0E14"}
 const EMISSIVE := ["head", "pol_b", "pol_r", "tail", "turn"]
 const GLASS := ["glass"]
+## The cabin, car space (the car at rest, lift included), measured from this
+## body by tools/fleet_design/cabin_measure.gd (2026-10-09) and hand-tuned.
+## CockpitFrame builds the interior from these; nothing in it is the coupe's.
+const CABIN := {
+	"seat_x": -0.351, "seat_h": 0.476, "seat_z": 0.180,
+	"eye": Vector3(-0.311, 1.096, 0.120),
+	"floor_y": 0.256, "belt_y": 0.972,
+	"cowl": Vector2(0.844, -0.820), "dash_face_z": -0.510,
+	"header": Vector2(1.455, -0.230), "roof_y": 1.450, "roof_z1": 0.680, "open_top": false,
+	"door_x": 0.740, "door_x_rear": 0.742, "door_x_front": 0.737, "glass_x": 0.711, "glass_top": 1.425,
+	"a_pillar": [Vector3(0.798, 0.844, -0.820), Vector3(0.540, 1.455, -0.230)],
+	"b_pillar_z": 0.280, "rear_z": 0.740,
+	"shelf": {"y": 0.987, "z0": 0.740, "z1": 1.520, "half_w": 0.752},
+	"wheel": Vector3(-0.351, 0.766, -0.360), "wheel_tilt_deg": -25.0,
+	"cluster": Vector2(0.926, -0.529), "cluster_style": "triple", "speedo_max_kmh": 280.0,
+	"head_unit": Vector3(0.0, 0.828, -0.434),
+	"lever": Vector3(0.0, 0.611, -0.200), "handbrake": Vector3(0.0, 0.611, 0.260),
+	"pedals": Vector3(-0.251, 0.526, -0.680),
+	"crank": Vector3(-0.736, 0.646, -0.360), "switch": Vector3(-0.710, 0.783, -0.160),
+	"rear_mirror": Vector3(0.0, 1.300, -0.300),
+	"door_mirror": Vector3(0.919, 1.022, -0.680),
+	"console": "tunnel", "seats": "bucket",
+}
 ## Build name -> body_tris, tris_total, body_pos (chunks), body_mat, wheels
 ## (front and rear right-hand wheel, hub-relative), slots, tips. Car space.
 const BUILDS := {

@@ -70,7 +70,7 @@ const BUMP_DECAY := 30.0         # 1/s
 enum View { CHASE, COCKPIT }
 const COCKPIT_EYE := Vector3(-0.32, 1.10, 0.30)  # car-local, -x is the driver's side (left-hand drive)
 ## The eye in this car: COCKPIT_EYE moved by the car's cabin offset
-## (PlayerCars.cabin_offset; zero for the P1). Set in _init with the frame.
+## (CabinSpec.for_kind(kind).eye, from the CABIN in that car's data file).
 var eye := COCKPIT_EYE
 const COCKPIT_FOV_SPEED_GAIN := 6.0  # degrees added at top speed; the base is ViewSettings.cockpit_fov (default 62)
 ## Head movement in the cockpit (Roy, 2026-10-06): the eye sways with the
@@ -153,10 +153,9 @@ func _ready() -> void:
 	# The interior lives on the car (car space), not on the camera, so the
 	# mirrors and (next PR) the driver sit where they are from any view. This
 	# camera never draws the mirror-only layer the body moves to in the cockpit.
-	eye = COCKPIT_EYE + PlayerCars.cabin_offset(PlayerCar.chassis_kind())
+	eye = CabinSpec.for_kind(PlayerCar.chassis_kind()).eye   # the car's own eye (CABIN in its data file)
 	if CockpitFrame.enabled and OS.get_environment("NEON_COCKPIT") != "0":
 		frame = CockpitFrame.new(target)
-		frame.position = PlayerCars.cabin_offset(PlayerCar.chassis_kind())
 		target.add_child(frame)
 	cull_mask &= ~CockpitFrame.MIRROR_ONLY_BIT
 	perspective = PerspectiveAudio.new()

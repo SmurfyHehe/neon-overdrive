@@ -97,6 +97,7 @@ var speedo_needle: Node3D
 var lamps: MultiMeshInstance3D
 var lamp_text: Label3D
 var radio_label: Label3D
+var clock_label: Label3D   # the car clock on the head unit (NightClock)
 var lever: Node3D
 var lever_knob: Node3D
 var handbrake: Node3D
@@ -372,6 +373,8 @@ func _build_radio() -> void:
 	add_child(k.instance(CockpitKit.material(0.6, 0.2), "Radio"))
 	radio_label = _label("RADIO OFF", 30, Vector3(0.0, 0.808, -0.257), AMBER, 0.00045)
 	radio_label.name = "RadioLabel"
+	clock_label = _label("", 22, Vector3(0.0, 0.826, -0.257), AMBER, 0.00042)
+	clock_label.name = "ClockLabel"
 
 ## Where a reaching hand presses (next PR), car space.
 func radio_button_position() -> Vector3:
@@ -538,8 +541,10 @@ func _update_lamps() -> void:
 		lamps.multimesh.set_instance_color(i, Color(c, 1.0 if lit else 0.0))
 
 func _update_radio() -> void:
+	var scene := get_tree().current_scene
+	if scene != null and scene.get("night_clock") is NightClock:
+		clock_label.text = scene.night_clock.text()
 	if radio == null:
-		var scene := get_tree().current_scene
 		if scene != null and scene.get("radio") is RadioManager:
 			radio = scene.radio
 		else:

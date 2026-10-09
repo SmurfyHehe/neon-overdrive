@@ -8,4 +8,4 @@ All 21 tracks are original, procedurally synthesized by Claude (no samples, no t
 | (none) | 3 Dave (talk only) | empty |
 | s4_synthwave | 4 Synthwave | Harlow Drive, Night Overpass, Sodium Skyline, Last Exit, Dusk Pursuit, Canyon Lights, Midnight Garage |
 
-Ogg Vorbis, 44.1 kHz stereo, ~-16 LUFS, 1:00-1:36. Source: tools/radio_synth/.
+Ogg Vorbis q3, 32 kHz stereo, ~-16 LUFS, 1:00-1:36. Source: tools/radio_synth/.

@@ -14,6 +14,18 @@ param(
 	[string] $Log = ""
 )
 
+# Helper libraries live next to the tests (fleet/fleet_proxies.gd, traffic/traffic_harness.gd)
+# and extend RefCounted. Godot refuses them with "doesn't inherit from SceneTree or MainLoop",
+# which reads like a broken test. Say what it is instead (exit 2 = not a runnable test).
+$src = Join-Path $PSScriptRoot "$Name.gd"
+if (Test-Path $src) {
+	$ext = Select-String -Path $src -Pattern '^extends\s+(\S+)' -List
+	if ($ext -and $ext.Matches[0].Groups[1].Value -in @("RefCounted", "Object", "Resource", "Node")) {
+		Write-Host ("{0} is a helper library (extends {1}), not a test: preload it from a test instead of running it." -f $Name, $ext.Matches[0].Groups[1].Value)
+		exit 2
+	}
+}
+
 $all = @()
 foreach ($part in ($Audio + " " + $Flags).Split(" ", [StringSplitOptions]::RemoveEmptyEntries)) { $all += $part }
 $all += @("--path", ".", "-s", "res://tests/$Name.gd")

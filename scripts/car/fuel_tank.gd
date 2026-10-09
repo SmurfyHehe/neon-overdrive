@@ -3,7 +3,8 @@ extends RefCounted
 
 # Fuel, v1 (Stage C, 2026-10-09). Roy's decisions (damage/fuel design notes):
 # - the tank starts about a third full, so the first stop for fuel comes early
-# - one fill-up lasts most of a night (a night is 20 real minutes, NightClock)
+# - one fill-up lasts most of a night (sized when a night was 20 real minutes; it is 40 since
+#   2026-10-09, so a tank now covers under half: recalibrate if wanted)
 # - a dry tank never ends the run: the car limps at LimpMode.FUEL_KMH
 # - fuel is paid from the BANK, never the night's pot
 #
@@ -23,7 +24,7 @@ const CAPACITY_L := 50.0
 const START_FRACTION := 1.0 / 3.0
 ## Seconds a full tank lasts at full engine load (8 min flat out). The rest is
 ## idle burn, so the tank is part clock: ~27 min idling, ~16.6 min in a city
-## cycle with stops (tests/car/fuel_limp.gd: most of the 20-minute night).
+## cycle with stops (tests/car/fuel_limp.gd: most of the old 20-minute night).
 const FULL_LOAD_SECONDS := 480.0
 ## Fraction of the full-load burn the engine uses at idle.
 const IDLE_SHARE := 0.3

@@ -315,9 +315,10 @@ static func coupe_worn() -> Dictionary:
 ## PR #197 car table (torque and mass are starting values for the D data pass,
 ## not measured) and fleet.json's tyre widths. The same sim, different data;
 ## the mod trees (stage E) override these the same way.
-## Turbo cars: the table's torque is the peak ON boost. GEVP's turbo multiplies
-## engine torque by 1 + turbo_gain (0.45) at full boost, whatever
-## turbo_boost_max is, so their max_torque is the table value / TURBO_PEAK.
+## Turbo (a tree node or the Tuner; no player car has one from the factory,
+## Roy 2026-10-09): GEVP's turbo multiplies engine torque by 1 + turbo_gain
+## (0.45) at full boost, so a turbo'd car's peak is max_torque * TURBO_PEAK
+## (PlayerCars.peak_torque).
 const TURBO_PEAK := 1.45
 
 static func player_spec(kind: String) -> Dictionary:
@@ -362,12 +363,15 @@ static func player_spec(kind: String) -> Dictionary:
 			s["shift_time"] = 0.35
 			s["automatic_time_between_shifts"] = 1200.0
 		"p2_hothatch":
-			# Kobo, T1: 2.0 turbo four, front drive, light, short gears. Launches.
+			# Kobo, T1: 2.0 four, front drive, light, short gears. Launches. No
+				# turbo from the factory (Roy, 2026-10-09): the 340 Nm table peak was
+				# on boost; the unboosted 235 made it slower than the beater (10.8 s
+				# to 100), so stock is 270 NA (a bigger-bore four); turbo is a tree node.
 			var gears: Array[float] = [3.25, 2.00, 1.45, 1.12, 0.90]
 			s["vehicle_mass"] = 1080.0
 			s["front_weight_distribution"] = 0.62
 			s["front_torque_split"] = 1.0
-			s["max_torque"] = 340.0 / TURBO_PEAK
+			s["max_torque"] = 270.0
 			s["max_rpm"] = 7200.0
 			s["gear_ratios"] = gears
 			s["final_drive"] = 4.2
@@ -377,14 +381,14 @@ static func player_spec(kind: String) -> Dictionary:
 			s["rear_tire_width"] = 225.0
 			s["front_arb_ratio"] = 0.25
 			s["rear_arb_ratio"] = 0.32   # a stiff rear bar: lift-off tuck, not plough
-			s["turbo_boost_max"] = 0.5
 		"p3_tuner":
 			# Ronin, T2: 2.6 straight six, rear drive (the tree adds AWD). Revs.
+			# No factory turbo: stock is the unboosted 360 Nm (520 was on boost).
 			var gears: Array[float] = [3.20, 1.95, 1.40, 1.07, 0.85]
 			s["vehicle_mass"] = 1300.0
 			s["front_weight_distribution"] = 0.54
 			s["front_torque_split"] = 0.0
-			s["max_torque"] = 520.0 / TURBO_PEAK
+			s["max_torque"] = 360.0
 			s["max_rpm"] = 7800.0
 			s["gear_ratios"] = gears
 			s["final_drive"] = 4.1
@@ -392,7 +396,6 @@ static func player_spec(kind: String) -> Dictionary:
 			s["frontal_area"] = 2.1
 			s["front_tire_width"] = 245.0
 			s["rear_tire_width"] = 245.0
-			s["turbo_boost_max"] = 0.7
 		"p4_kei":
 			# Mite, T1: 0.66 triple behind the seats, rear drive, 760 kg, 9500
 			# redline. Corners; slow on the straights. No turbo stock: "Small
@@ -442,12 +445,13 @@ static func player_spec(kind: String) -> Dictionary:
 			s["rear_arb_ratio"] = 0.10
 			s["shift_time"] = 0.3
 		"p6_crossover":
-			# Cairn, T2: 2.0 turbo flat four, AWD 40:60, tall, lifted. Grips.
+			# Cairn, T2: 2.0 flat four, AWD 40:60, tall, lifted. Grips. No factory
+			# turbo: stock is the unboosted 400 Nm (580 was on boost).
 			var gears: Array[float] = [3.30, 2.00, 1.40, 1.07, 0.85]
 			s["vehicle_mass"] = 1450.0
 			s["front_weight_distribution"] = 0.58
 			s["front_torque_split"] = 0.4
-			s["max_torque"] = 580.0 / TURBO_PEAK
+			s["max_torque"] = 400.0
 			s["max_rpm"] = 6800.0
 			s["gear_ratios"] = gears
 			s["final_drive"] = 4.0
@@ -457,7 +461,6 @@ static func player_spec(kind: String) -> Dictionary:
 			s["rear_tire_width"] = 235.0
 			s["coefficient_of_friction"] = {"Road": 1.2, "Dirt": 1.05}
 			s["center_of_gravity_height_offset"] = 0.05
-			s["turbo_boost_max"] = 0.7
 		_:
 			return s  # p1_coupe, or an unknown kind: the coupe
 	s["exhaust"] = ExhaustTune.for_car(kind).to_dict()

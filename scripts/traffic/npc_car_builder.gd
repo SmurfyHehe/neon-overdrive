@@ -403,7 +403,9 @@ static func chassis_visual(kind: String, build: String, paint: Color, role := ""
 	root.set_meta("sticker_slots", slots)
 	root.set_meta("half_w", float(k.width) / 2.0)
 	root.set_meta("half_l", float(k.length) / 2.0)
-	Undercarriage.attach(root, undercarriage_params(kind, build), role)
+	var under := undercarriage_params(kind, build)
+	root.set_meta("under_params", under)   # CarPanels cuts the hood and doors from these
+	Undercarriage.attach(root, under, role)
 	return root
 
 ## What the underside is built from (Undercarriage.params), car space: the

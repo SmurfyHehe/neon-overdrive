@@ -46,6 +46,7 @@ call :run fleet/car_loft_normals --headless
 call :run fleet/test_car --headless
 call :run fleet/p1_coupe --headless
 call :run car/undercarriage --headless
+call :run car/car_panels --headless
 call :run world/road_strip_winding --headless
 call :run world/sidewalk_collision_taper --headless
 call :run car/aero_draft_equivalence --headless

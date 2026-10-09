@@ -92,6 +92,8 @@ const STEER_GRIP_FULL := 8.0     # m/s: it applies in full from here up
 const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Vehicle's own shift_time below
 
 var chassis_visual: Node3D
+## The opening panels on the body (null for the test car).
+var panels: CarPanels
 var _steer_smooth := 0.0
 ## Heat and wear (Phase B). Off for sim_only cars so TuneTrack stays clean.
 var health := PowertrainHealth.new()
@@ -161,6 +163,9 @@ func _ready() -> void:
 		else:
 			chassis_visual = P1CoupeBuilder.build_chassis_visual()
 		add_child(chassis_visual)
+		# Opening hood, doors and trunk (car-parts plan item 4). Hidden and free
+		# until something opens; only the player's own car gets them.
+		panels = CarPanels.attach(chassis_visual, self)
 
 	# BUG FIX (2026-09-13, verified headless): RigidBody3D falls asleep after
 	# ~0.5s of low apparent velocity (standard Godot sleep threshold), and

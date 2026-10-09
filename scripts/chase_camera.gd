@@ -194,6 +194,8 @@ func _physics_process(delta: float) -> void:
 	perspective.window_key(Input.is_action_pressed("window"), delta)
 	if frame != null:
 		frame.set_window(perspective.window, perspective.window_direction())
+	# where the driver's head points, for the radio and the window's wind
+	perspective.head_yaw_deg = look_yaw + (180.0 if look_back else 0.0) if view == View.COCKPIT else 0.0
 	if perspective.car_audio == null:
 		for c in target.get_children():
 			if c is CarAudio:

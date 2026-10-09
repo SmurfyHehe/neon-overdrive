@@ -29,6 +29,11 @@ class_name CarAudio
 #   sealed hush plus a seal whistle at speed; cracked open, the low "throb" a
 #   real car makes; fully open, the full buffet. The chase view is always
 #   outside sound.
+# - buffeting (2026-10-09, Roy: "wind buffeting that grows as the window opens
+#   at speed"): a low pressure flutter in the cabin, louder the further the
+#   window is down and the faster you go, pulsing quicker with speed. Gone with
+#   the window up and in the chase view. The cracked-window throb now keeps
+#   growing up to motorway speed too.
 # - no audible repeat (Roy, 2026-10-08: "multiple sounds for things that are
 #   repetitive"): every continuous layer (wind buffet, rush, whistle, both
 #   road loops) plays as two takes of different lengths and seeds, a hair
@@ -71,7 +76,7 @@ const LOCK_START := 0.2
 const LOCK_FULL := 0.6
 const KINDS := ["scrub", "squeal", "spin", "lock"]
 ## Continuous layers played as two takes (A, and "_b" of TAKE_B_SECS).
-const PAIRED := ["buffet", "rush", "whistle", "road_dark", "road_bright"]
+const PAIRED := ["buffet", "rush", "whistle", "road_dark", "road_bright", "flutter"]
 const CHIRP_VARIANTS := 5
 
 # Road features.
@@ -98,6 +103,7 @@ const BUFFET_GAIN := 1.0
 const RUSH_GAIN := 0.8
 const WHISTLE_GAIN := 0.16
 const THROB_GAIN := 0.4
+const FLUTTER_GAIN := 0.55
 const ROAD_GAIN := 0.45
 const SURFACE_GAIN := 0.6
 
@@ -105,6 +111,9 @@ const SURFACE_GAIN := 0.6
 # louder the buffet is with it fully down (the opening is next to your ear).
 const SEALED_WIND := 0.18
 const OPEN_BUFFET := 2.6
+# Buffeting and throb grow with speed between these (m/s).
+const BUFFETING_FROM := 8.0
+const BUFFETING_FULL := 55.0
 
 const ATTACK := 18.0  # 1/s, how fast a layer rises
 const RELEASE := 7.0  # 1/s, how fast it falls
@@ -117,6 +126,7 @@ var squeal_level := 0.0  # all tyre noise together: the loudest kind on either s
 var surface_level := 0.0
 var whistle_level := 0.0
 var throb_level := 0.0
+var buffeting_level := 0.0
 var gust := 1.0
 var tyre := {}           # kind -> [left, right] level, 0..1
 var chirp_count := 0
@@ -290,12 +300,17 @@ func _process(delta: float) -> void:
 	whistle_level = maxf(outside_whistle * inside, seal_whistle)
 	# Throb: loudest with the window just cracked, gone when closed or fully down.
 	var crack := smoothstep(0.02, 0.12, window) * (1.0 - smoothstep(0.3, 0.65, window))
-	throb_level = _approach(throb_level, cabin * crack * smoothstep(10.0, 30.0, speed), delta)
+	var at_speed := smoothstep(BUFFETING_FROM, BUFFETING_FULL, speed)
+	throb_level = _approach(throb_level, cabin * crack * at_speed, delta)
+	# Buffeting: grows with how far down the window is, times speed.
+	buffeting_level = _approach(buffeting_level, cabin * pow(window, 0.8) * at_speed, delta)
 	var wind_pitch := 0.96 + 0.08 * clampf(speed / WIND_FULL, 0.0, 1.2)
 	_drive_pair("buffet", pow(wind_level, 0.8) * gust * inside * buffet_boost * BUFFET_GAIN * (1.0 - 0.35 * rush_mix), wind_pitch)
 	_drive_pair("rush", wind_level * (0.6 + 0.4 * gust) * inside * lerpf(1.0, buffet_boost, 0.6) * RUSH_GAIN * (0.35 + 0.65 * rush_mix), wind_pitch)
 	_drive_pair("whistle", whistle_level * gust * WHISTLE_GAIN, 0.97 + 0.12 * clampf((speed - WHISTLE_FROM) / 30.0, 0.0, 1.0))
 	_drive_layer(_players.throb, throb_level * THROB_GAIN, 0.9 + 0.2 * clampf(speed / 50.0, 0.0, 1.0))
+	# the flutter pulses faster as the air speeds up past the opening
+	_drive_pair("flutter", buffeting_level * gust * FLUTTER_GAIN, 0.75 + 0.55 * clampf(speed / BUFFETING_FULL, 0.0, 1.0))
 
 ## Joints, bridge-deck hum.
 func _road_features(st: Dictionary, speed: float, delta: float) -> void:
@@ -515,6 +530,17 @@ static func _loop(layer: String, seed: int, secs: float, tune: float) -> PackedF
 				ph = fmod(ph + TAU * f0 / r, TAU)
 				var tone := sin(ph) + 0.6 * sin(2.0 * ph) + 0.4 * sin(3.0 * ph) + 0.25 * sin(5.0 * ph)
 				s[i] = tone * (0.7 + 0.3 * absf(w)) * 0.5 + res.step(w) * 1.5 * (0.8 + 0.2 * sin(TAU * 3.0 * t))
+		"flutter":
+			# air pumping in and out of an open window: dark noise in uneven
+			# pressure pulses, about 4 a second at pitch 1
+			var f1 := AudioDsp.lp(r, 110.0, 1.1)
+			var f2 := AudioDsp.bp(r, 240.0, 1.5)
+			var ph := rng.randf() * TAU
+			for i in total:
+				var t := float(i) / r
+				var w := rng.randf_range(-1.0, 1.0)
+				var pulse := pow(0.5 + 0.5 * sin(TAU * 4.0 * t + ph + 0.8 * sin(TAU * 1.5 * t)), 1.6)
+				s[i] = (2.2 * f1.step(w) + 0.5 * f2.step(w)) * (0.25 + 0.75 * pulse)
 		"throb":
 			# a cracked window: low pressure pulsing about 7 times a second
 			var f1 := AudioDsp.lp(r, 90.0, 1.0)

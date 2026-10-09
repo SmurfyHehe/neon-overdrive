@@ -2,7 +2,8 @@ class_name AudioSettings
 extends RefCounted
 
 # Volume settings (Phase B, 2026-10-05; stage B step 4's "Settings tab" starts
-# here): one slider each for Master, Engine, Effects (tyres, wind, UI) and Music,
+# here): one slider each for Master, Engine, Effects (tyres, wind, UI, traffic,
+# sirens) and Music (the radio and the scanner),
 # applied to the audio buses and saved in user://settings.cfg. The pause menu
 # shows the sliders; Game applies the saved values at start. 1.0 is the buses'
 # own level, so the defaults change nothing.
@@ -16,8 +17,8 @@ static func default_path() -> String:
 const CHANNELS := {
 	"Master": [&"Master"],
 	"Engine": [&"Engine"],
-	"Effects": [&"Tires", &"World", &"UI"],
-	"Music": [&"Music"],
+	"Effects": [&"Tires", &"World", &"UI", &"Traffic", &"Sirens"],
+	"Music": [&"Music", &"Scanner"],
 }
 
 ## Tests point this at a scratch file.
@@ -37,7 +38,16 @@ static func apply_all() -> void:
 ## The dB a channel's slider asks for (-80 for silence), for code that adds an
 ## offset on top (PerspectiveAudio on the Music bus).
 static func volume_db_for(channel: String) -> float:
+	if not volumes.has(channel):
+		return 0.0
 	return linear_to_db(volumes[channel]) if volumes[channel] > 0.0001 else -80.0
+
+## The slider that sets a bus ("Master" for a bus no slider owns).
+static func channel_of(bus_name: StringName) -> String:
+	for channel in CHANNELS:
+		if bus_name in CHANNELS[channel]:
+			return channel
+	return "Master" if bus_name == &"Master" else ""
 
 static func _apply(channel: String) -> void:
 	var db := volume_db_for(channel)

@@ -76,6 +76,7 @@ call :run driveline_audio --headless
 call :run sound_fixes --headless
 call :run road_sounds --headless
 call :run crash_variety --headless
+call :run audio_mix --headless
 call :run radio --headless
 call :run night_clock --headless
 call :run night_bands "--headless --fixed-fps 60"

@@ -11,6 +11,7 @@ var screen: ScreenFx
 var skids: SkidMarks
 var flames: ExhaustFlames
 var smoke: TyreSmoke
+var dirt: CarDirt  # road grime on the player body (2026-10-09), washed in WashScreen
 
 var _player: PlayerCar
 var _camera: ChaseCamera
@@ -31,6 +32,8 @@ func _ready() -> void:
 	# On the car, so it rides along (and is interpolated) with the body.
 	flames = ExhaustFlames.new(_player)
 	_player.add_child(flames)
+	dirt = CarDirt.new(_player)
+	add_child(dirt)
 	apply_settings()
 
 ## Push the FxSettings flags to the nodes.
@@ -40,6 +43,7 @@ func apply_settings() -> void:
 	skids.enabled = FxSettings.is_on("skid_marks")
 	flames.enabled = FxSettings.is_on("exhaust_flames")
 	smoke.enabled = FxSettings.is_on("tyre_smoke")
+	dirt.enabled = FxSettings.is_on("dirt")
 
 ## Flip one effect (FxSettings.EFFECTS) live, and remember it.
 func set_effect(effect: String, on: bool) -> void:

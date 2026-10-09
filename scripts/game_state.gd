@@ -20,7 +20,9 @@ extends Node
 # AUTOTUNE with it expanded (Y). The Auto-Tune search runs in a
 # separate headless Godot process (scripts/auto_tune_job.gd), because the game's
 # physics can neither run faster than real time nor be stepped by hand.
-enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO }
+# WASH (2026-10-09): the garage wash mini-game (scripts/wash_screen.gd), opened
+# from the pause menu; paused like the rest, Esc leaves it.
+enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO, WASH }
 
 signal state_changed(new_state: State, old_state: State)
 
@@ -78,8 +80,21 @@ func close_photo() -> void:
 		get_tree().paused = false
 		_set_state(State.PLAYING)
 
+## Garage wash: from the pause menu (stays paused) or straight from the road.
+func open_wash() -> void:
+	if state == State.PAUSED or state == State.PLAYING:
+		get_tree().paused = true
+		_set_state(State.WASH)
+
+func close_wash() -> void:
+	if state == State.WASH:
+		get_tree().paused = false
+		_set_state(State.PLAYING)
+
 func toggle_pause() -> void:
-	if state == State.TUNING:
+	if state == State.WASH:
+		close_wash()  # Esc leaves the wash
+	elif state == State.TUNING:
 		close_tuning()  # Esc backs out of the tuning panel
 	elif state == State.AUTOTUNE:
 		close_autotune()  # Esc backs out of Auto-Tune too

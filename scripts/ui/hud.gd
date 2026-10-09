@@ -352,7 +352,8 @@ func _refresh() -> void:
 	var rpm := player.motor_rpm
 	var frac := clampf(rpm / max_rpm, 0.0, 1.0)
 	var gear := player.gear
-	var engine_off: bool = player.realistic_clutch and not player.engine_running
+	var engine_off: bool = not player.engine_running
+	var cranking: bool = player.ignition.is_cranking()
 
 	lbl_clock.text = night_clock.text() if night_clock != null else ""
 	lbl_gear.text = gear_text(gear)
@@ -372,8 +373,11 @@ func _refresh() -> void:
 	rpm_bar.blink = blink
 	rpm_bar.queue_redraw()
 
-	if engine_off:
-		lbl_status.text = "ENGINE OFF · hold X to start"
+	if cranking:
+		lbl_status.text = "STARTING"
+		Hud.set_font_color(lbl_status, AMBER)
+	elif engine_off:
+		lbl_status.text = "ENGINE OFF · X to start"
 		Hud.set_font_color(lbl_status, RED)
 	elif player.limp.is_limping():
 		lbl_status.text = "LIMP · " + LimpMode.cause_name(player.limp.cause)

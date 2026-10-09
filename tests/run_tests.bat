@@ -58,6 +58,7 @@ call :run audio/exhaust_tune --headless
 call :run audio/exhaust_pops --headless
 call :run car/anti_lag_turbo --headless
 call :run audio/audio_master --headless
+call :run audio/engine_start_stop --headless
 call :run car/phase_a_engine --headless
 call :run core/tick_rate_120 "--headless --fixed-fps 120"
 call :run view/cockpit --headless

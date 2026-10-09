@@ -39,6 +39,10 @@ static func is_tuner(s: State) -> bool:
 
 func _ready() -> void:
 	PhotoMode.ensure_actions()
+	# The buses are global and outlive the scene: a restart from the pause menu
+	# reloads the scene with Engine and Music still muted by that pause, so the
+	# new run started silent until you paused and resumed (Roy, 2026-10-09).
+	sync_audio_buses()
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 ## True while a text control (LineEdit, TextEdit) has keyboard focus.
@@ -149,11 +153,15 @@ func quit() -> void:
 func _set_state(new_state: State) -> void:
 	var old := state
 	state = new_state
-	# The engine sound is a generator pushed from _process, which stops while the
-	# tree is paused; the buffer then underruns and clicks. Mute its bus for the
-	# pause, unmute on the way back (Phase A, 2026-10-05).
+	sync_audio_buses()
+	state_changed.emit(new_state, old)
+
+## The engine sound is a generator pushed from _process, which stops while the
+## tree is paused; the buffer then underruns and clicks. Mute its bus for the
+## pause, unmute on the way back (Phase A, 2026-10-05). Also run at scene start
+## so the buses follow the state, not whatever the last scene left them at.
+func sync_audio_buses() -> void:
 	for bus_name in [&"Engine", &"Music"]:
 		var bus := AudioServer.get_bus_index(bus_name)
 		if bus >= 0:
-			AudioServer.set_bus_mute(bus, new_state != State.PLAYING)
-	state_changed.emit(new_state, old)
+			AudioServer.set_bus_mute(bus, state != State.PLAYING)

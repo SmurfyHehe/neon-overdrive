@@ -1,0 +1,27 @@
+{
+	"version": 1,
+	"_note": "Parts ladder, the same on every car (garage proposal 2b). Each part has 3 steps (stock, 1, 2). A step sets how far the Tuner sliders it covers may move from the car's base build: 'notches' per step is the half-width in Tuner notches (a notch is a tenth of the slider's safe range), -1 is the whole safe range. 'deltas' per step move the base a little (same ops as the tree). Presets ignore the windows. Paths no part covers (aero, assists, steering lock, brake bias) stay fully open; boost is set by the engine node.",
+	"notches": [1, 3, -1],
+	"parts": {
+		"tyres": {"label": "Tyres", "steps": ["Street", "Sport", "Semi-slick"], "nights": [0.0, 1.0, 3.0],
+			"paths": ["front_tyre_pressure", "rear_tyre_pressure", "front_static_camber", "rear_static_camber", "front_toe", "rear_toe",
+				"coefficient_of_friction/Road", "tire_stiffnesses/Road", "longitudinal_grip_ratio/Road"],
+			"deltas": [{}, {"coefficient_of_friction/Road": ["mul", 1.03]}, {"coefficient_of_friction/Road": ["mul", 1.06]}]},
+		"suspension": {"label": "Suspension", "steps": ["Stock", "Coilovers", "Adjustable coilovers"], "nights": [0.0, 1.0, 3.0],
+			"paths": ["front_spring_length", "rear_spring_length", "front_resting_ratio", "rear_resting_ratio",
+				"front_damping_ratio", "rear_damping_ratio", "front_arb_ratio", "rear_arb_ratio"],
+			"deltas": [{}, {}, {}]},
+		"diff": {"label": "Differential", "steps": ["Open", "LSD", "Plate LSD"], "nights": [0.0, 1.0, 3.0],
+			"paths": ["front_locking_differential_engage_torque", "rear_locking_differential_engage_torque"],
+			"deltas": [{}, {}, {}]},
+		"brakes": {"label": "Brakes", "steps": ["Stock", "Pads and lines", "Big brake kit"], "nights": [0.0, 1.0, 3.0],
+			"paths": ["brake_force_multiplier"],
+			"deltas": [{}, {"brake_force_multiplier": ["add", 0.1]}, {"brake_force_multiplier": ["add", 0.25]}]},
+		"gearbox": {"label": "Gearbox", "steps": ["Stock", "Close-ratio", "Sequential"], "nights": [0.0, 1.0, 3.0],
+			"paths": ["final_drive", "gear_ratios/0", "gear_ratios/1", "gear_ratios/2", "gear_ratios/3", "gear_ratios/4"],
+			"deltas": [{}, {}, {}]},
+		"weight": {"label": "Weight", "steps": ["Stock", "Strip interior", "Carbon panels"], "nights": [0.0, 1.0, 3.0],
+			"paths": [],
+			"deltas": [{}, {"vehicle_mass": ["mul", 0.95]}, {"vehicle_mass": ["mul", 0.9]}]}
+	}
+}

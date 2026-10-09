@@ -31,6 +31,10 @@ var stock: Dictionary
 ## The preset last picked, and whether anything changed since.
 var preset := "Stock"
 var modified := false
+## How far each slider may move ({path: [lo, hi]}, ModTree.windows(): the parts
+## ladder). Empty = no limits, as before the garage. Only the sliders obey it;
+## presets ignore it (Roy, 2026-10-09).
+var windows := {}
 
 static var _calib := {}
 
@@ -137,8 +141,9 @@ func nudge(s: Dictionary, step: int) -> bool:
 	var to := clampi(cur + step, 0, NOTCHES - 1)
 	if to == cur and _on_notch(s):
 		return false
+	var before := _range_value(s)
 	set_notch(s, to)
-	return true
+	return windows.is_empty() or _range_value(s) != before  # false at the window's edge
 
 func set_notch(s: Dictionary, n: int) -> void:
 	var t := float(n) / float(NOTCHES - 1)
@@ -146,7 +151,7 @@ func set_notch(s: Dictionary, n: int) -> void:
 		t = 1.0 - t
 	var v := lerpf(s.lo, s.hi, t)
 	for p in s.paths:
-		_write(p, v)
+		_write(p, ModTree.clamp_to(windows, p, v))
 	if s.id.begins_with("aero_downforce"):
 		_drag_follows_downforce()
 	_touched()

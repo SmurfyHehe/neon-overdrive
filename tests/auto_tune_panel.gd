@@ -143,22 +143,25 @@ func _run() -> void:
 	panel.save_button.pressed.emit()
 	_check(panel.slot_list.item_count == 0 and panel.status_label.text.contains("name"), "Save with no name should ask for one")
 	CarSpec.set_param(player, player.spec, "final_drive", 3.3)
-	CarSpec.set_param(player, player.spec, "max_torque", 420.0)   # raw-only knob: a slot keeps it too
+	CarSpec.set_param(player, player.spec, "turbo_boost_max", 0.4)   # raw-only knob: a slot keeps it too
+	CarSpec.set_param(player, player.spec, "max_torque", 420.0)   # node-owned: a slot never keeps it
 	panel.slot_name_edit.text = "Test A"
 	panel.save_button.pressed.emit()
 	_check(panel.slot_list.item_count == 1 and panel.slot_list.get_item_text(0) == "Test A", "slot not listed after Save")
 	_check(panel.status_label.text.begins_with("Saved"), "status after Save: %s" % panel.status_label.text)
 	CarSpec.set_param(player, player.spec, "final_drive", 4.4)
+	CarSpec.set_param(player, player.spec, "turbo_boost_max", 0.9)
 	CarSpec.set_param(player, player.spec, "max_torque", 300.0)
 	panel.slot_list.select(0)
 	panel.slot_list.item_selected.emit(0)
 	_check(panel.slot_name_edit.text == "Test A" and not panel.load_button.disabled, "picking a slot should fill the name and enable Load")
 	panel.load_button.pressed.emit()
-	_check(is_equal_approx(player.spec.final_drive, 3.3) and is_equal_approx(player.spec.max_torque, 420.0), "Load did not restore the saved tune: %f %f" % [player.spec.final_drive, player.spec.max_torque])
-	_check(is_equal_approx(player.final_drive, 3.3) and is_equal_approx(player.max_torque, 420.0), "Load did not reach the live car")
+	_check(is_equal_approx(player.spec.final_drive, 3.3) and is_equal_approx(player.spec.turbo_boost_max, 0.4), "Load did not restore the saved tune: %f %f" % [player.spec.final_drive, player.spec.turbo_boost_max])
+	_check(is_equal_approx(player.final_drive, 3.3) and is_equal_approx(player.turbo_boost_max, 0.4), "Load did not reach the live car")
+	_check(is_equal_approx(player.spec.max_torque, 300.0), "Load changed peak torque, which the mod tree owns")
 	_check(not panel.undo_button.disabled, "Undo should be on after Load")
 	panel.undo_button.pressed.emit()
-	_check(is_equal_approx(player.spec.final_drive, 4.4) and is_equal_approx(player.spec.max_torque, 300.0), "Undo did not revert the Load")
+	_check(is_equal_approx(player.spec.final_drive, 4.4) and is_equal_approx(player.spec.turbo_boost_max, 0.9), "Undo did not revert the Load")
 	panel.save_button.pressed.emit()  # same name in the box: replaces
 	_check(panel.status_label.text.begins_with("Replaced") and panel.slot_list.item_count == 1, "same name should replace: %s" % panel.status_label.text)
 	_check(is_equal_approx(panel.slots.values("Test A").final_drive, 4.4), "replaced slot holds the old value")
@@ -167,6 +170,7 @@ func _run() -> void:
 	_check(panel.slot_list.item_count == 0 and not panel.slots.has("Test A"), "Delete did not remove the slot")
 	CarSpec.set_param(player, player.spec, "final_drive", start_spec.final_drive)
 	CarSpec.set_param(player, player.spec, "max_torque", start_spec.max_torque)
+	CarSpec.set_param(player, player.spec, "turbo_boost_max", start_spec.turbo_boost_max)
 
 	# --- cancel by closing mid-search ---
 	panel.goal_sliders.accel.value = 1

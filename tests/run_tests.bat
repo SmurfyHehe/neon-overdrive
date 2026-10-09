@@ -84,6 +84,7 @@ call :run auto_tune_worker_mode --headless
 call :run tune_params --headless
 call :run auto_tune_rules --headless
 call :run tune_slots --headless
+call :run mod_tree --headless
 rem The player's tune survives a reset and a relaunch (PlayerTune).
 call :run tune_persist --headless
 call :run settings_safety --headless
@@ -112,6 +113,7 @@ if /i not "%~1"=="quick" (
 	call :run tuner_settings "--headless --fixed-fps 60"
 	rem ~30 s: the new Tuner's presets on the track, every notch, the estimates (Tuner PR 3).
 	call :run tuner_presets "--headless --fixed-fps 60"
+	call :run mod_tree_track "--headless --fixed-fps 60"
 	rem ~15 s: the stat panel's Test run through a worker process, the Mechanic's plain words (Tuner PR 4).
 	call :run tuner_test_run "--headless --fixed-fps 60"
 	call :run tuner_safety_net "--headless --fixed-fps 60"

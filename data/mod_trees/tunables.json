@@ -1,0 +1,5 @@
+{
+	"version": 1,
+	"_note": "Garage prices are written in nights of play; this turns them into Cred. A v1 guess, rescaled once Stage C payouts are measured (garage proposal 2e).",
+	"cred_per_night": 1000
+}

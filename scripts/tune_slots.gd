@@ -3,7 +3,7 @@ extends RefCounted
 
 # Auto-Tune step 7: named tune slots. A slot is a name and the value of every
 # tunable path (TuneParams.all(): the Auto-Tune ones and the raw-only engine
-# ones), so loading one gives back the whole tune, not just what Auto-Tune
+# ones) except the node-owned ones (below), so loading one gives back the whole tune, not just what Auto-Tune
 # touches. Stored as JSON in one file; slots are plain {path: float}, the same
 # form AutoTuneJob sends to its worker.
 #
@@ -17,6 +17,10 @@ extends RefCounted
 # Values that are not finite numbers (JSON writes NaN as null) are dropped on
 # load, so a slot applies whole or keeps the current value for that path
 # (settings safety, 2026-10-07).
+#
+# A slot never holds the paths a fitted mod tree node owns (ModTree.OWNED_PATHS:
+# peak torque, redline), and apply() ignores them in slots saved before that, so
+# loading a tune can never undo a node (Stage E foundation, 2026-10-09).
 
 const DEFAULT_PATH := "user://tune_slots.json"
 const TestMode := preload("res://scripts/test_mode.gd")
@@ -52,7 +56,10 @@ func save(slot_name: String, spec: Dictionary) -> bool:
 	var n := clean_name(slot_name)
 	if n == "":
 		return false
-	_slots[n] = AutoTuneJob.values_from_spec(spec)
+	var vals := AutoTuneJob.values_from_spec(spec)
+	for p in ModTree.OWNED_PATHS:
+		vals.erase(p)
+	_slots[n] = vals
 	return _write_file()
 
 ## The slot's {path: float}, or {} if there is none.
@@ -75,7 +82,7 @@ func apply(slot_name: String, car: PlayerCar) -> bool:
 	if v.is_empty():
 		return false
 	for e in TuneParams.all():
-		if v.has(e.path) and _is_number(v[e.path]):
+		if v.has(e.path) and _is_number(v[e.path]) and not ModTree.owns(e.path):
 			CarSpec.set_param(car, car.spec, e.path, float(v[e.path]))
 	return true
 

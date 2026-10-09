@@ -52,6 +52,8 @@ call :run aero_draft_equivalence --headless
 call :run camera_feel --headless
 call :run car_audio --headless
 call :run fleet_design_check --headless
+rem Car pipeline step 1: the P1 body.glb from tools/car_pipeline/build_car.py loads, splits into panels, sits on the sheet's numbers.
+call :run car_pipeline_p1 --headless
 call :run exhaust_tune --headless
 call :run exhaust_pops --headless
 call :run anti_lag_turbo --headless

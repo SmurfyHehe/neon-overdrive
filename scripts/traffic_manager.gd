@@ -92,6 +92,9 @@ var kind := ""
 ## Share of each traffic car in the pool (stage B step 5), NpcCarBuilder kinds.
 const MIX := {"n1_commuter": 45, "n2_cityhatch": 35, "n3_pickup": 20}
 var sim_only := false
+## City lights (junction.gd): the signalised crossing whose red lights cars
+## stop for. Null = none.
+var junction: Junction
 
 ## Share of the cars that are on the road (living world step 2): the night
 ## clock's hour band sets it through game.gd (NightBands.traffic_share). Cars

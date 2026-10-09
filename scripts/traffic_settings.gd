@@ -33,7 +33,13 @@ const LIGHT_GLOW_DEFAULT := 1.0
 const LIGHT_GLOW_MIN := 0.0
 const LIGHT_GLOW_MAX := 2.0
 
+## City lights (2026-10-09, Junction J0/J1a): one signalised crossing on the
+## road, traffic stopping at red. Off by default; takes effect on Restart (the
+## crossing is part of the road layout, built before the first chunk).
+const CITY_LIGHTS_DEFAULT := false
+
 static var car_count := CAR_COUNT_DEFAULT
+static var city_lights := CITY_LIGHTS_DEFAULT
 static var detail_distance := DETAIL_DEFAULT
 static var light_glow := LIGHT_GLOW_DEFAULT
 
@@ -59,6 +65,11 @@ static func load_settings() -> void:
 	set_car_count(int(n) if is_finite(float(n)) else CAR_COUNT_DEFAULT)  # int(NaN) is a huge negative
 	set_detail_distance(float(cfg.get_value("traffic", "detail_distance", DETAIL_DEFAULT)) if ok else DETAIL_DEFAULT)
 	set_light_glow(float(cfg.get_value("traffic", "light_glow", LIGHT_GLOW_DEFAULT)) if ok else LIGHT_GLOW_DEFAULT)
+	city_lights = (cfg.get_value("traffic", "city_lights", CITY_LIGHTS_DEFAULT) == true) if ok else CITY_LIGHTS_DEFAULT
+	# NEON_CITY_LIGHTS=1/0 overrides it for one run (tests, screenshots).
+	var lights_env := OS.get_environment("NEON_CITY_LIGHTS")
+	if lights_env == "1" or lights_env == "0":
+		city_lights = lights_env == "1"
 	# NEON_NIGHT_LIGHTS=<0-2> overrides it for one run (frame-cost A/B), like NEON_FX.
 	var env := OS.get_environment("NEON_NIGHT_LIGHTS")
 	if env.is_valid_float():
@@ -71,4 +82,5 @@ static func save_settings() -> bool:
 	cfg.set_value("traffic", "car_count", car_count)
 	cfg.set_value("traffic", "detail_distance", detail_distance)
 	cfg.set_value("traffic", "light_glow", light_glow)
+	cfg.set_value("traffic", "city_lights", city_lights)
 	return cfg.save(AudioSettings.path) == OK

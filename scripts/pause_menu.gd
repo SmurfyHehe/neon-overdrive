@@ -118,6 +118,16 @@ func _ready() -> void:
 		func(v: float) -> void:
 			TrafficSettings.set_light_glow(v)
 			TrafficSettings.save_settings())
+	# City lights (2026-10-09, junction.gd): the signalised crossing and red
+	# lights for traffic. Off by default; the crossing is part of the road
+	# layout, so it appears (or goes) on Restart.
+	var lights := CheckButton.new()
+	lights.text = "City lights (on restart)"
+	lights.button_pressed = TrafficSettings.city_lights
+	lights.toggled.connect(func(on: bool) -> void:
+		TrafficSettings.city_lights = on
+		TrafficSettings.save_settings())
+	box.add_child(lights)
 
 	# View slider (2026-10-06): the cockpit FOV, 55-78, default 62; the speed
 	# widening (up to +6) rides on top of it. Applies at once, saved with the rest.

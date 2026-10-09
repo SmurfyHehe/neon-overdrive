@@ -14,7 +14,9 @@ extends Node3D
 # sodium frame on the playing tile only. Navy, sodium, amber and silver; no
 # scanlines (it reads newer than the car). Drawn by a Control in a SubViewport,
 # redrawn only when something on it changes (the meter at METER_HZ). Radio off:
-# the screen dims.
+# the screen dims. The car clock (NightClock) is the exception: it sits on its
+# own layer, big, top right, and stays lit with the radio off like a real head
+# unit's clock (Roy, 2026-10-09: he had not noticed it was there).
 #
 # Per car (STYLES): an older car gets an aftermarket tablet in a printed bezel,
 # a little too bright, with a physical volume knob beside it (pressing the knob
@@ -58,7 +60,7 @@ const TILE_Y := 112.0
 const TILE_H := 180.0
 const TILE_GAP := 14.0
 const MARGIN := 18.0
-const POWER_SPOT := Vector2(470, 40)   # touch-only units: tap here for off
+const POWER_SPOT := Vector2(322, 40)   # touch-only units: tap here for off (left of the clock)
 
 var style: Dictionary
 var has_knob := false
@@ -70,6 +72,7 @@ var taps := 0
 var knob_presses := 0
 var viewport: SubViewport
 var canvas: ScreenCanvas
+var clock_canvas: ClockCanvas   # the clock, over the dimming
 var screen: MeshInstance3D
 var knob: Node3D
 var _tick: AudioStreamPlayer
@@ -122,6 +125,10 @@ func _build_screen() -> void:
 	canvas.unit = self
 	canvas.size = Vector2(PX)
 	viewport.add_child(canvas)
+	clock_canvas = ClockCanvas.new()
+	clock_canvas.unit = self
+	clock_canvas.size = Vector2(PX)
+	viewport.add_child(clock_canvas)
 	add_child(viewport)
 	var quad := QuadMesh.new()
 	quad.size = Vector2(SCREEN_W, SCREEN_H)
@@ -221,7 +228,9 @@ func show_state(s: int, track: String, lvl: float, delta: float) -> void:
 func show_clock(t: String) -> void:
 	if t != clock_text:
 		clock_text = t
-		_redraw()
+		if clock_canvas != null:
+			clock_canvas.queue_redraw()
+			viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 ## The finger touched the unit: tick, and push the knob in for an off press.
 func tap(on_knob: bool) -> void:
@@ -241,6 +250,19 @@ func _redraw() -> void:
 	canvas.modulate = OFF_DIM if station < 0 else Color.WHITE
 	canvas.queue_redraw()
 	viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+
+## The clock, on its own layer so the radio-off dimming (ScreenCanvas.modulate)
+## leaves it lit. Big enough to read from the seat: 32 px on a 512 px screen
+## is 13 mm tall on the 216 mm glass.
+class ClockCanvas extends Control:
+	var unit: HeadUnit
+
+	func _draw() -> void:
+		if unit.clock_text == "":
+			return
+		var font := ThemeDB.fallback_font
+		draw_rect(Rect2(340, 6, 164, 46), HeadUnit.NAVY_DEEP)
+		draw_string(font, Vector2(350, 41), unit.clock_text, HORIZONTAL_ALIGNMENT_RIGHT, 150, 32, HeadUnit.AMBER)
 
 ## The screen's contents.
 class ScreenCanvas extends Control:
@@ -263,14 +285,13 @@ class ScreenCanvas extends Control:
 		if not on:
 			sub = ""
 		draw_string(font, Vector2(HeadUnit.MARGIN, 92), sub, HORIZONTAL_ALIGNMENT_LEFT, 330, 15, HeadUnit.SILVER)
-		if unit.clock_text != "":
-			draw_string(font, Vector2(372, 34), unit.clock_text, HORIZONTAL_ALIGNMENT_RIGHT, 116, 18, HeadUnit.AMBER)
+		# the clock is drawn by ClockCanvas, over this; the meter sits under it
 		var bars := 10
 		for i in bars:
 			var x := 372.0 + i * 12.0
 			var lit := on and float(i) / bars < unit.level
 			var col := (HeadUnit.SODIUM if i >= 7 else HeadUnit.AMBER) if lit else HeadUnit.NAVY
-			draw_rect(Rect2(x, 46, 8, 40), col)
+			draw_rect(Rect2(x, 64, 8, 30), col)
 		if not unit.has_knob:
 			draw_circle(HeadUnit.POWER_SPOT, 14.0, HeadUnit.NAVY)
 			draw_arc(HeadUnit.POWER_SPOT, 8.0, -PI * 0.35, PI * 1.35, 16, HeadUnit.SILVER, 2.0)

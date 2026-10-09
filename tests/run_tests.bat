@@ -69,6 +69,8 @@ call :run view/look_back --headless
 call :run view/look_around --headless
 call :run view/cockpit_driver --headless
 call :run view/cockpit_window --headless
+call :run view/gauge_pod --headless
+call :run view/gauge_layout --headless
 call :run view/cockpit_steering_hands --headless
 call :run view/cockpit_shifter --headless
 call :run view/cockpit_shifter_rnd --headless

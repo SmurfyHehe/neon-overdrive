@@ -9,6 +9,7 @@ class_name EngineAudio
 ## throttle, higher = more tolerant of frame hitches.
 const BUFFER_SECS := 0.06
 const ENGINE_VOLUME := 0.5  # EngineSynth's own default level
+const TURBO_VOLUME := 0.5   # TurboSynth's; the Turbo bus slider sits on top
 
 ## Which car's exhaust preset the player car starts with (exhaust_tune.gd).
 ## Placeholder until the cars are built from fleet.json (stage B step 5).
@@ -24,6 +25,12 @@ const LIFT_WINDOW := 0.6
 const LIFT_BOOST := 0.3
 
 var synth := EngineSynth.new()
+## The turbo voice (B1): its own synth and its own stream on the Turbo bus, so
+## the Turbo slider is a bus fader. Rendered by the same worker task as the engine.
+var turbo := TurboSynth.new()
+var _turbo_player: AudioStreamPlayer
+var _turbo_playback: AudioStreamGeneratorPlayback
+var _was_shifting := false
 ## The exhaust tune lives in the car's spec under "exhaust" (a dictionary, the
 ## same one the Tuner screen's sliders and tune slots write); this node copies it
 ## into synth.tune every frame and keeps a saved copy on disk.
@@ -59,6 +66,21 @@ func _ready() -> void:
 	bus = &"Engine"
 	play()
 	_playback = get_stream_playback()
+	turbo.mix_rate = synth.mix_rate
+	# Per-part turbo voice (B1) under the car's boost setup: C1's ForcedInduction
+	# keeps the kind in the boost_kind meta ("single" when unset or before C1).
+	turbo.apply_voice(TurboVoice.for_setup(_spec.get("turbo_voice", {}),
+			String(_vehicle.get_meta(&"boost_kind", "single"))))
+	_turbo_player = AudioStreamPlayer.new()
+	_turbo_player.name = "Turbo"
+	var tgen := AudioStreamGenerator.new()
+	tgen.mix_rate = synth.mix_rate
+	tgen.buffer_length = BUFFER_SECS
+	_turbo_player.stream = tgen
+	_turbo_player.bus = &"Turbo"
+	add_child(_turbo_player)
+	_turbo_player.play()
+	_turbo_playback = _turbo_player.get_stream_playback()
 
 # Rendering runs on a worker thread (frame-rate pass, 2026-10-08). The synth is
 # a per-sample GDScript loop, about 0.5 us a sample on the i5-1235U: 0.4 ms of
@@ -76,15 +98,26 @@ func _process(delta: float) -> void:
 	_join()
 	sync_tune()
 	synth.volume = ENGINE_VOLUME if _vehicle.engine_running else 0.0  # a stalled engine is silent
+	turbo.volume = TURBO_VOLUME if _vehicle.engine_running else 0.0
+	var shifting := _vehicle.is_shifting
 	if _vehicle.turbo_boost_max > 0.0:
-		synth.boost = clampf(_vehicle.boost / _vehicle.turbo_boost_max, 0.0, 1.0)
+		turbo.boost = clampf(_vehicle.boost / _vehicle.turbo_boost_max, 0.0, 1.0)
+		turbo.boost_max_bar = _vehicle.turbo_boost_max
+		turbo.rpm_norm = clampf(_vehicle.motor_rpm / maxf(_vehicle.max_rpm, 1.0), 0.0, 1.0)
+		# Between gears on boost: the valve, short (the throttle is only off for
+		# the shift). GEVP's one-tick throttle cut counts the same shift a tick
+		# later; TurboSynth folds the two together (VENT_GAP).
+		if shifting and not _was_shifting and turbo.boost > LIFT_BOOST:
+			turbo.shift_vent(turbo.boost + 0.2)
 		if _vehicle.blow_off_count != _seen_blow_offs:
 			_seen_blow_offs = _vehicle.blow_off_count
-			synth.blow_off(synth.boost + 0.3)
+			turbo.vent(turbo.boost + 0.3)
 		if lift_off_vent(delta):
-			synth.blow_off(synth.boost + 0.3)
+			turbo.vent(turbo.boost + 0.3)
 	else:
-		synth.boost = 0.0
+		turbo.boost = 0.0
+		turbo.rpm_norm = 0.0
+	_was_shifting = shifting
 	# Flat-out upshift: the ignition cut bangs (the synth only does it on
 	# high-flame cars). Same edge and law as the upshift flame.
 	var up := _vehicle.is_up_shifting
@@ -92,14 +125,18 @@ func _process(delta: float) -> void:
 		synth.shift_cut(0.8 + 0.2 * clampf(_vehicle.throttle_input, 0.0, 1.0))
 	_was_up_shifting = up
 	var n := _playback.get_frames_available()
-	if n > 0:
+	var tn := _turbo_playback.get_frames_available()
+	if n > 0 or tn > 0:
 		_task_start_usec = Time.get_ticks_usec()
 		_task = WorkerThreadPool.add_task(_render.bind(n, _vehicle.motor_rpm,
-				_vehicle.throttle_amount, _vehicle.motor_is_redline), false, "engine audio")
+				_vehicle.throttle_amount, _vehicle.motor_is_redline, tn), false, "engine audio")
 
-## Worker thread: one block, straight into the stream.
-func _render(n: int, rpm: float, throttle: float, redline: bool) -> void:
-	_playback.push_buffer(synth.render(n, rpm, throttle, redline))
+## Worker thread: one block of each, straight into the streams.
+func _render(n: int, rpm: float, throttle: float, redline: bool, tn: int) -> void:
+	if n > 0:
+		_playback.push_buffer(synth.render(n, rpm, throttle, redline))
+	if tn > 0:
+		_turbo_playback.push_buffer(turbo.render(tn))
 
 ## Waits for the block in flight (if any) and collects its flame events.
 func _join() -> void:
@@ -134,7 +171,7 @@ func lift_off_vent(delta: float) -> bool:
 	else:
 		_since_hot += delta
 	if thr < LIFT_OFF and not _lift_vented and _since_hot <= LIFT_WINDOW \
-			and synth.boost > LIFT_BOOST:
+			and turbo.boost > LIFT_BOOST:
 		_lift_vented = true
 		return true
 	return false

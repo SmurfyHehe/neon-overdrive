@@ -113,23 +113,6 @@ var _boom_mix := 0.0
 var pop_clusters := 0
 var pop_bangs := 0
 var upshift_clusters := 0
-## Turbo (Phase B): boost 0..1 (fraction of max boost) set by EngineAudio; blow_off()
-## fires the vent. The spool is a rising whistle with a second inharmonic partial and
-## an airy noise band, kept above the mirror whistle's 1.25 / 2.5 kHz tones; the vent is
-## a 0.3 to 1 s "pssh" of high-passed noise (size follows the boost it dumps).
-const SPOOL_HZ_LOW := 3000.0
-const SPOOL_HZ_SPAN := 4000.0
-var boost := 0.0
-var _whistle_phase := 0.0
-var _whistle_phase2 := 0.0
-var _flutter_phase := 0.0
-var _spool_lp := 0.0
-var _bov_env := 0.0
-var _bov_att := 0.0
-var _bov_decay := 0.0   # per-sample decay of the vent envelope, set by blow_off()
-var _bov_lp := 0.0
-## Vents fired, for tests.
-var blow_offs := 0
 # wander: current drift (-1..1) of the resonances and of the level, the values
 # they glide toward, and seconds until new targets are picked
 var _wander_res := 0.0
@@ -176,19 +159,6 @@ func apply_voice(v: Dictionary) -> void:
 		firing = EngineVoice.even_firing(n)
 	_setup_cylinders(firing, v.get("cyl_amps", []), clampf(float(v.get("cyl_spread", 0.2)), 0.0, 0.6),
 			int(v.get("seed", 4)))
-
-## The blow-off valve vents: a "pssh" of 0.3 to 1 s whose size and length follow how
-## hot the boost was.
-func blow_off(strength: float) -> void:
-	var st := clampf(strength, 0.0, 1.0)
-	if st > _bov_env:
-		_bov_env = st
-		# Level falls below 0.01 after about 4.6 time constants: 0.3 s at the
-		# weakest vent, 0.9 s at the strongest.
-		var tau := 0.07 + 0.12 * st
-		_bov_decay = exp(-1.0 / (tau * mix_rate))
-		_bov_att = 0.0
-	blow_offs += 1
 
 ## The ignition cut of a flat-out upshift (EngineAudio calls it on GEVP's
 ## is_up_shifting edge, in every gearbox mode): one or two hard bangs with a
@@ -313,7 +283,6 @@ func render(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVe
 	var lp_c := _lp
 	var dc_x := _dc_x
 	var dc_y := _dc_y
-	var whistle_c := _whistle_phase
 	for i in frames:
 		rpm_c += rpm_step
 		thr_c += thr_step
@@ -396,26 +365,7 @@ func render(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVe
 				_r1p = 0.0
 				_r2 = 0.0
 				_r2p = 0.0
-		var turbo := 0.0
-		if boost > 0.02:
-			# spool: a whistle whose pitch and level climb with boost, plus a second
-			# inharmonic partial (compressor vs turbine blades), a slow flutter and a
-			# little air, so it is not one pure tone
-			_flutter_phase += TAU * 6.5 / mix_rate
-			var f0 := (SPOOL_HZ_LOW + SPOOL_HZ_SPAN * boost) * (1.0 + 0.012 * sin(_flutter_phase))
-			whistle_c += TAU * f0 / mix_rate
-			_whistle_phase2 += TAU * f0 * 1.37 / mix_rate
-			var an := _rand()
-			_spool_lp += 0.3 * (an - _spool_lp)
-			var air := (an - _spool_lp) * 0.5
-			turbo = (sin(whistle_c) + 0.45 * sin(_whistle_phase2) + air) * 0.2 * boost * boost
-		if _bov_env > 0.01:
-			var bn := _rand()
-			_bov_lp += (0.15 + 0.2 * _bov_env) * (bn - _bov_lp)
-			_bov_att = minf(_bov_att + 1.0 / (0.004 * mix_rate), 1.0)
-			turbo += (bn - _bov_lp) * 0.6 * _bov_env * _bov_att
-			_bov_env *= _bov_decay
-		var s := lp_c + body * 0.9 + rasp * rasp_gain * (0.3 + thr_c) + pop * loud_mix + turbo * loud_mix
+		var s := lp_c + body * 0.9 + rasp * rasp_gain * (0.3 + thr_c) + pop * loud_mix
 		s = tanh(s * (1.5 + 1.5 * thr_c))
 		# DC blocker: the pulses are all positive, so strip the offset.
 		var dc := s - dc_x + 0.995 * dc_y
@@ -440,7 +390,6 @@ func render(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVe
 	_lp = lp_c
 	_dc_x = dc_x
 	_dc_y = dc_y
-	_whistle_phase = whistle_c
 	return out
 
 ## Starts a cluster of bangs, or tops up the running one (never shortens it).

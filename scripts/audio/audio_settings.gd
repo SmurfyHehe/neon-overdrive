@@ -2,8 +2,8 @@ class_name AudioSettings
 extends RefCounted
 
 # Volume settings (Phase B, 2026-10-05; stage B step 4's "Settings tab" starts
-# here): one slider each for Master, Engine, Effects (tyres, wind, UI, traffic,
-# sirens) and Music (the radio and the scanner),
+# here): one slider each for Master, Engine, Turbo (the spool and the valve, B1),
+# Effects (tyres, wind, UI, traffic, sirens) and Music (the radio and the scanner),
 # applied to the audio buses and saved in user://settings.cfg. The pause menu
 # shows the sliders; Game applies the saved values at start. 1.0 is the buses'
 # own level, so the defaults change nothing.
@@ -17,13 +17,14 @@ static func default_path() -> String:
 const CHANNELS := {
 	"Master": [&"Master"],
 	"Engine": [&"Engine"],
+	"Turbo": [&"Turbo"],
 	"Effects": [&"Tires", &"World", &"UI", &"Traffic", &"Sirens"],
 	"Music": [&"Music", &"Scanner"],
 }
 
 ## Tests point this at a scratch file.
 static var path := default_path()
-static var volumes := {"Master": 1.0, "Engine": 1.0, "Effects": 1.0, "Music": 1.0}
+static var volumes := {"Master": 1.0, "Engine": 1.0, "Turbo": 1.0, "Effects": 1.0, "Music": 1.0}
 
 static func set_volume(channel: String, value: float) -> void:
 	if not CHANNELS.has(channel):

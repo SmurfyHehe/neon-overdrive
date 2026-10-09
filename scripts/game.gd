@@ -378,6 +378,8 @@ func _setup_traffic() -> void:
 func _setup_camera() -> void:
 	camera = ChaseCamera.new(player)
 	add_child(camera)
+	# Street lamps light the car (chase view) or the cabin (cockpit) as it passes under them.
+	add_child(PassingLampLight.new(player, camera, self))
 
 ## M mutes all game audio (master bus). Setting NEON_MUTE=1 starts muted, for
 ## test runs and late-night testing.

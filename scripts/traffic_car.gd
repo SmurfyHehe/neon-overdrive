@@ -48,15 +48,21 @@ class_name TrafficCar
 # path, for WRECK_SECONDS stops trying (hazard stop: brakes on), and the
 # TrafficManager recycles it once the player cannot see it.
 #
-# Far cars (TrafficManager.detail_distance): a car that is further from the
-# player than the draw distance is hidden and frozen as a kinematic body that
-# cruises along its lane, with the same follower law on its speed; the full
-# sim resumes, with position, speed and heading handed over, when it comes
-# back inside. Roy (2026-10-06): that counts as full sim. Why not "run the sim
-# every other tick" for far cars: the Wheel applies its spring and tyre forces
-# per physics step, so a car that skips a step gets gravity without
-# suspension on that step and sags; the honest cheap path is no sim at all
-# plus a clean handover.
+# Rails (near-band traffic, 2026-10-09; Roy: keep the full physics rate): only
+# a car within TrafficManager.physics_distance (about 60 m) of the player runs
+# the raycast sim and can crash. Further out it is frozen as a kinematic body
+# that drives its lane on rails with the same follower law on its speed and
+# the same lane-change decisions, steering the same half-cosine S. Inside the
+# draw distance (TrafficManager.detail_distance) a car on rails stays visible,
+# wheels turning and brake lamps working; beyond it it is hidden and only
+# moves over for a closing player, instantly. The sim resumes, with position,
+# speed, heading and any lane change handed over, when the car comes back
+# inside the band. Going the other way a car only leaves the sim once it is
+# upright and back on its path: a crashed or knocked car stays in the sim, so
+# nothing snaps upright in view. Why not "run the sim every other tick" for
+# far cars: the Wheel applies its spring and tyre forces per physics step, so
+# a car that skips a step gets gravity without suspension on that step and
+# sags; the honest cheap path is no sim at all plus a clean handover.
 
 ## Which car: an NpcCarBuilder.KINDS key (the stage B step 5 traffic cars,
 ## e.g. "n1_commuter") or a CarBuilder.KIND_CONFIGS key (the old box cars).
@@ -101,9 +107,16 @@ var wheelbase := 2.5
 ## bumper to the middle.
 var half_w := 1.03
 var half_l := 1.7
-## True while the full sim runs (inside the draw distance). See set_detailed().
+## True while the full sim runs (inside the physics band). See set_detailed().
 var detailed := true
+## True while the car is drawn (inside the draw distance). See set_shown().
+var shown := true
 var _cruise_speed := 0.0
+## On rails: what is left of the sideways and height offset the car had when
+## it left the sim, eased out over RAIL_EASE seconds so nothing snaps in view.
+var _rail_dx := 0.0
+var _rail_dy := 0.0
+var _rail_dyaw := 0.0
 ## Slot in the TrafficManager's occupancy index (set by it every tick).
 var _idx := -1
 ## Physics frame before which a car parked by a deferred spawn does not
@@ -220,6 +233,14 @@ const WRECK_OFF_PATH := 2.0    # m off the lane / lane-change path
 const WRECK_MAX_SPEED := 4.0
 const STUCK_SECONDS := 12.0    # stopped this long with nothing ahead
 
+## Leaving the sim for the rails (see the header): only this upright, this
+## close to its path and pointing this well down its lane.
+const RAIL_UP := 0.995         # road-space up, about 6 deg of roll or pitch
+const RAIL_OFF_PATH := 0.75    # m
+const RAIL_YAW := 0.1          # rad off the heading the rails would give
+## s: time constant the hand-over offset eases out with on rails.
+const RAIL_EASE := 0.6
+
 func _ready() -> void:
 	# Not super._ready(): Vehicle's _ready() is initialize(), which needs the
 	# wheels built first (same as PlayerCar).
@@ -267,6 +288,8 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if not detailed:
 		_cruise(delta)
+		if shown:
+			_update_lamps()
 		return
 	_drive(delta)
 	super._physics_process(delta)
@@ -594,13 +617,32 @@ func place(lane: float, dir: float, z: float, y: float, speed: float) -> void:
 	set_moving(self, speed)
 	reset_physics_interpolation()
 	_cruise_speed = speed
+	_rail_dx = 0.0
+	_rail_dy = 0.0
+	_rail_dyaw = 0.0
 
-## Full sim on (inside the draw distance) or the frozen lane cruise (outside).
+## Drawn (inside the draw distance) or hidden. Independent of the sim: a car
+## on rails inside the draw distance is still drawn.
+func set_shown(on: bool) -> void:
+	if on == shown:
+		return
+	shown = on
+	visible = on and not sim_only
+	if on:
+		# A hidden car may have jumped lanes (_hidden_yield): no smear into view.
+		reset_physics_interpolation()
+
+## Full sim on (inside the physics band) or the frozen car on rails (outside).
+## Set shown first: a car that leaves the sim in view keeps its lane change
+## and eases out of its offset; a hidden one snaps to its lane.
 func set_detailed(on: bool) -> void:
 	if on == detailed:
 		return
 	detailed = on
-	visible = on and not sim_only
+	# A frozen car's wheel rays are never read: stop the engine casting them
+	# every tick. GEVP force-updates them itself once the sim runs again.
+	for w in wheel_array:
+		w.enabled = on
 	if on:
 		freeze = false
 		set_moving(self, _cruise_speed)
@@ -608,26 +650,82 @@ func set_detailed(on: bool) -> void:
 		_cruise_speed = maxf(current_speed(), 0.0)
 		freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 		freeze = true
-		changing = false
-		# Snap to the lane, upright; nothing is drawn out here.
-		var yaw := 0.0 if direction < 0.0 else PI
 		var u := RoadFrame.unroll(global_position)
-		global_transform = RoadFrame.pose(lane_x, u.y, u.z, yaw)
-		reset_physics_interpolation()
+		if shown:
+			_rail_dx = u.x - path_x()
+			_rail_dy = u.y - rest_y
+			_rail_dyaw = _yaw_error(RoadFrame.basis_to_road(u.z, global_transform.basis))
+			for w in wheel_array:
+				w.rotation.y = 0.0
+		else:
+			changing = false
+			_rail_dx = 0.0
+			_rail_dy = 0.0
+			_rail_dyaw = 0.0
+		_rail_pose(u.z)
+		if not shown:
+			reset_physics_interpolation()
 
-## Frozen cruise: straight down the lane, with the follower law on its speed.
+## Whether the car can leave the sim for the rails without a visible snap:
+## driving normally, upright and on its path (see the header).
+func can_rail() -> bool:
+	if hazard or wrecked:
+		return false
+	var u := RoadFrame.unroll(global_position)
+	var b := RoadFrame.basis_to_road(u.z, global_transform.basis)
+	return b.y.y > RAIL_UP and absf(u.x - path_x()) < RAIL_OFF_PATH and absf(_yaw_error(b)) < RAIL_YAW
+
+## Yaw (road space) of the basis b against the heading the rails would give it.
+func _yaw_error(b: Basis) -> float:
+	return wrapf(atan2(b.z.x, b.z.z) - _rail_yaw(), -PI, PI)
+
+## Heading on rails relative to the road: down the lane, turned into the
+## lane-change S by the angle of its sideways speed.
+func _rail_yaw() -> float:
+	var yaw := 0.0 if direction < 0.0 else PI
+	if changing and _cruise_speed > 0.5:
+		var u := clampf(_lc_t / _lc_dur, 0.0, 1.0)
+		var dxdt := (lane_x - _lc_from) * 0.5 * PI / _lc_dur * sin(PI * u)
+		yaw += direction * atan2(dxdt, _cruise_speed)
+	return yaw
+
+func _rail_pose(z: float) -> void:
+	global_transform = RoadFrame.pose(path_x() + _rail_dx, rest_y + _rail_dy, z, _rail_yaw() + _rail_dyaw)
+	previous_global_position = global_position
+
+## On rails: down the lane path, with the follower law on its speed and, in
+## view, the same lane changes as the sim; hidden, only moving over for the
+## player.
 func _cruise(delta: float) -> void:
 	var a := clampf(_accel_command(_cruise_speed), -A_BRAKE_FULL, 2.0)
 	_cruise_speed = maxf(_cruise_speed + a * delta, 0.0)
-	var u := RoadFrame.unroll(global_position)
-	u.z += direction * _cruise_speed * delta
-	global_transform = RoadFrame.pose(u.x, u.y, u.z, 0.0 if direction < 0.0 else PI)
-	previous_global_position = global_position
-	if traffic != null and traffic.react_to_player:
+	if changing:
+		_lc_t += delta
+		if _lc_t >= _lc_dur:
+			changing = false
+	_lc_cooldown -= delta
+	var k := exp(-delta / RAIL_EASE)
+	_rail_dx *= k
+	_rail_dy *= k
+	_rail_dyaw *= k
+	_rail_pose(RoadFrame.unroll(global_position).z + direction * _cruise_speed * delta)
+	# Velocity as the sim would report it (current_speed(), drafting, anything
+	# that bumps into it); a frozen body does not integrate it.
+	linear_velocity = -global_transform.basis.z * _cruise_speed
+	local_velocity = Vector3(0.0, 0.0, -_cruise_speed)
+	if traffic != null:
 		_decide_t -= delta
 		if _decide_t <= 0.0:
 			_decide_t = DECIDE_PERIOD
-			_hidden_yield()
+			if shown:
+				_consider_lane_change(_cruise_speed)
+			elif traffic.react_to_player:
+				_hidden_yield()
+	if shown:
+		# Lamps and rolling wheels only; the pedals do nothing on rails.
+		brake_input = 1.0 if a < -A_COAST else 0.0
+		for w in wheel_array:
+			w.spin = _cruise_speed / w.tire_radius
 
 ## A hidden car with the player closing on it in its lane moves over at once
 ## (YIELD_TTC_HIDDEN), if a lane next to it is safe.

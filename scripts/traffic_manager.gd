@@ -28,9 +28,17 @@ class_name TrafficManager
 # of popping in close. Behind the player (own-direction lanes faster than the
 # player only) it is placed where the camera cannot see it.
 #
-# Draw distance: cars further than `detail_distance` from the player run the
-# frozen lane cruise (TrafficCar.set_detailed(false)) and are hidden; the pause
-# menu's Traffic sliders set this and the car count live (TrafficSettings).
+# Draw distance: cars further than `detail_distance` from the player are
+# hidden; the pause menu's Traffic sliders set this and the car count live
+# (TrafficSettings).
+#
+# Physics band (near-band traffic, 2026-10-09): only cars within
+# `physics_distance` of the player run the raycast sim and can crash; the rest
+# drive on rails (TrafficCar.set_detailed(false)), drawn if inside the draw
+# distance. A car joins the sim at physics_distance and leaves it only past
+# PHYSICS_HYSTERESIS more, and only once it is driving normally
+# (TrafficCar.can_rail), so a car on the edge does not flip every tick and a
+# crashed one stays crashed.
 
 const LANE_W := RoadChunkBuilder.LANE_W
 
@@ -40,6 +48,13 @@ var onc_lanes := 4
 var car_count := 16
 ## Beyond this many metres from the player a car is hidden and frozen.
 var detail_distance := 300.0
+## Within this many metres of the player (along the road) a car runs the full
+## sim. NEON_TRAFFIC_PHYSICS_M overrides it (perf comparisons; a value at or
+## past the draw distance is the old behaviour, every drawn car in the sim).
+var physics_distance := PHYSICS_DISTANCE_DEFAULT
+static var PHYSICS_DISTANCE_DEFAULT := float(OS.get_environment("NEON_TRAFFIC_PHYSICS_M")) if OS.get_environment("NEON_TRAFFIC_PHYSICS_M").is_valid_float() else 60.0
+## A car leaves the sim only this much further out than it joined it.
+const PHYSICS_HYSTERESIS := 10.0
 ## Spawn band ahead of the player, metres along the road: never nearer than
 ## spawn_min and never inside the draw distance, so the band actually used is
 ## [max(spawn_min, detail + SPAWN_HIDE_MARGIN), max(spawn_max, that + SPAWN_BAND)].
@@ -197,8 +212,16 @@ func _physics_process(_delta: float) -> void:
 			recycle_count += 1
 			wreck_recycle_count += 1
 			_respawn(car)
+	# A hidden car is never hit, so the band ends at the draw distance too.
+	var band := minf(physics_distance, detail_distance)
+	var band_out := band + PHYSICS_HYSTERESIS
 	for car in cars:
-		car.set_detailed(absf(RoadFrame.unroll(car.global_position).z - pz) <= detail_distance)
+		var d := absf(RoadFrame.unroll(car.global_position).z - pz)
+		car.set_shown(d <= detail_distance)
+		if d <= band:
+			car.set_detailed(true)
+		elif car.detailed and d > band_out and (not car.shown or car.can_rail()):
+			car.set_detailed(false)
 
 ## The player's road-space z (RoadFrame): metres along the road.
 func _player_z() -> float:
@@ -236,6 +259,7 @@ func _respawn(car: TrafficCar) -> void:
 	var slot := _find_slot(car, pz)
 	if slot.is_empty():
 		deferred_count += 1
+		car.set_shown(false)
 		car.set_detailed(false)
 		car.place(car.lane_x, car.direction, pz + PARK_BEHIND, car.rest_y, 0.0)
 		car.retry_frame = Engine.get_physics_frames() + DEFER_TICKS
@@ -243,7 +267,8 @@ func _respawn(car: TrafficCar) -> void:
 		return
 	spawn_count += 1
 	car.target_speed = slot.speed
-	car.set_detailed(absf(slot.dist) <= detail_distance)
+	car.set_shown(absf(slot.dist) <= detail_distance)
+	car.set_detailed(absf(slot.dist) <= minf(physics_distance, detail_distance))
 	car.place(slot.lane_x, slot.direction, slot.z, car.rest_y, slot.speed)
 	_put(car)
 	if log_spawns:
@@ -471,6 +496,7 @@ func set_car_count(n: int) -> void:
 		# queue_free() runs at the end of the frame, and a car added below could
 		# be placed on top of this one in the meantime: park it out of the way
 		# first (frozen, 50 km behind), out of the draft lookup too.
+		far.set_shown(false)
 		far.set_detailed(false)
 		far.remove_from_group("aero_vehicles")
 		far.global_position.z += 50000.0

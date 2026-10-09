@@ -65,11 +65,32 @@ render_mode cull_back;
 uniform vec3 paint : source_color = vec3(1.0, 0.54, 0.12);
 uniform float paint_metallic = 0.5;
 uniform float paint_roughness = 0.38;
+// Road grime (car_dirt.gd): 0 clean .. 1 a full night's dirt. Thick on the sills,
+// thin on the roof, blotchy from a hash of the object-space position, so it
+// costs a few ALU ops per pixel and no texture (integrated graphics).
+uniform float dirt : hint_range(0.0, 1.0) = 0.0;
+uniform vec3 dirt_color : source_color = vec3(0.40, 0.35, 0.28);
+varying vec3 obj_pos;
+varying vec3 obj_nrm;
+float grime_hash(vec3 q) {
+	return fract(sin(dot(q, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+}
+void vertex() {
+	obj_pos = VERTEX;
+	obj_nrm = NORMAL;
+}
 void fragment() {
 	float p = 1.0 - COLOR.a;
-	ALBEDO = mix(COLOR.rgb, paint, p);
-	METALLIC = mix(0.1, paint_metallic, p);
-	ROUGHNESS = mix(0.75, paint_roughness, p);
+	vec3 albedo = mix(COLOR.rgb, paint, p);
+	float metallic = mix(0.1, paint_metallic, p);
+	float roughness = mix(0.75, paint_roughness, p);
+	float low = 1.0 - smoothstep(0.08, 1.0, obj_pos.y);           // sills first, roof last
+	float side = 1.0 - 0.55 * max(obj_nrm.y, 0.0);                 // flat tops catch less
+	float blotch = mix(grime_hash(floor(obj_pos * 11.0)), grime_hash(floor(obj_pos * 3.5) + 7.0), 0.5);
+	float grime = clamp(dirt * (0.2 + 1.3 * low) * side * (0.35 + 0.65 * blotch), 0.0, 1.0);
+	ALBEDO = mix(albedo, dirt_color, grime * 0.95);
+	METALLIC = mix(metallic, 0.0, grime);
+	ROUGHNESS = mix(roughness, 0.92, grime);
 	SPECULAR = 0.5;
 }
 """

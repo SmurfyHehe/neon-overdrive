@@ -56,6 +56,8 @@ call :run anti_lag_turbo --headless
 call :run audio_master --headless
 call :run phase_a_engine --headless
 call :run tick_rate_120 "--headless --fixed-fps 120"
+call :run car_dirt --headless
+call :run car_wash_scene --headless
 call :run cockpit --headless
 call :run cockpit_interior --headless
 call :run cockpit_isolation "--headless --fixed-fps 120"

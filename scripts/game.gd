@@ -413,6 +413,7 @@ func _setup_game_state() -> void:
 	add_child(TunerScreen.new(player, game_state))
 	add_child(WarningLights.new(player))
 	add_child(PhotoMode.new(game_state, camera))
+	add_child(WashScreen.new(game_state))
 	radio = RadioManager.new()
 	add_child(radio)
 	night_clock.hour_changed.connect(_on_hour)

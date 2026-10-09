@@ -19,6 +19,7 @@ const GROUPS := [
 	["Camera", [["camera_cycle", "Camera smoothing"], ["camera_view", "Chase / cockpit view"], ["look_back", "Look back (hold)"], ["look_glance", "Mirror glance (tap; steer picks side)"], ["window", "Side window (hold: down, tap: up)"]]],
 	["Audio & Radio", [["mute", "Mute"], ["radio_next", "Next radio station"]]],
 	["Photo mode", [["photo_mode", "Photo mode"], ["photo_forward", "Forward"], ["photo_back", "Back"], ["photo_left", "Left"], ["photo_right", "Right"], ["photo_down", "Down"], ["photo_up", "Up"], ["photo_fast", "Faster (hold)"], ["photo_look_left", "Look left"], ["photo_look_right", "Look right"], ["photo_look_up", "Look up"], ["photo_look_down", "Look down"], ["photo_fov_narrow", "Zoom in"], ["photo_fov_wide", "Zoom out"], ["photo_shot", "Save photo"]]],
+	["Garage wash", [["wash_up", "Sponge up"], ["wash_down", "Sponge down"], ["wash_left", "Sponge left"], ["wash_right", "Sponge right"]]],
 	["Menus", [["pause", "Pause / back"], ["tuning_panel", "Tuning panel"], ["autotune_panel", "Auto-Tune panel"]]],
 ]
 
@@ -32,6 +33,7 @@ var fov_slider: HSlider
 var smoothing_slider: HSlider
 var smoke_burnout_slider: HSlider
 var smoke_drift_slider: HSlider
+var dirt_toggle: CheckButton
 var main_page: VBoxContainer
 var controls_page: VBoxContainer
 var controls_scroll: ScrollContainer
@@ -146,8 +148,20 @@ func _ready() -> void:
 			FxSettings.set_smoke(FxSettings.smoke_burnout, v)
 			FxSettings.save_settings())
 
+	# Dirt (2026-10-09): road grime on the car over the night; off = clean and no
+	# per-pixel grime work. The wash mini-game clears it (WashScreen).
+	dirt_toggle = _add_toggle(box, "Dirt on the car", FxSettings.is_on("dirt"),
+		func(on: bool) -> void:
+			var fx: Variant = get_parent().get("fx")
+			if fx != null:
+				fx.set_effect("dirt", on)
+			else:
+				FxSettings.set_on("dirt", on)
+			FxSettings.save_settings())
+
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	_add_button(box, "Controls", show_controls)
+	_add_button(box, "Wash car", game_state.open_wash)
 	_add_button(box, "Service car (reset wear)", _service_car)
 	_add_button(box, "Restart", game_state.restart)
 	_add_button(box, "Quit", game_state.quit)
@@ -178,6 +192,19 @@ func _add_slider(parent: Control, text: String, lo: float, hi: float, step: floa
 	s.value_changed.connect(on_change)
 	row.add_child(s)
 	return s
+
+func _add_toggle(parent: Control, text: String, on: bool, on_change: Callable) -> CheckButton:
+	var row := HBoxContainer.new()
+	parent.add_child(row)
+	var name_label := Label.new()
+	name_label.text = text
+	name_label.custom_minimum_size = Vector2(100, 0)
+	row.add_child(name_label)
+	var t := CheckButton.new()
+	t.button_pressed = on
+	t.toggled.connect(on_change)
+	row.add_child(t)
+	return t
 
 func _add_button(parent: Control, text: String, action: Callable) -> Button:
 	var b := Button.new()

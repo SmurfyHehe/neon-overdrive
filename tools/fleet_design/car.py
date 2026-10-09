@@ -840,7 +840,7 @@ def build(defn, build=None, stickers=False):
         for t in tips:
             t['pos'][1] = round(t['pos'][1] - drop, 3)
         # sticker slots ride with the body too (B1 left them at stock height,
-        # 3-5.5 cm above a lowered body; found by tests/fleet_design_check.gd)
+        # 3-5.5 cm above a lowered body; found by tests/fleet/fleet_design_check.gd)
         down = np.array([0, -drop, 0])
         for sl in slots:
             sl['tris'] = [[tuple(p + down for p in t) for t in placed] for placed in sl['tris']]

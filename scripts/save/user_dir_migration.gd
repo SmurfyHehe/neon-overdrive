@@ -16,7 +16,7 @@ extends RefCounted
 # comes along. Add every past name to LEGACY_NAMES when renaming.
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
-const TestMode := preload("res://scripts/test_mode.gd")
+const TestMode := preload("res://scripts/core/test_mode.gd")
 
 ## Every name the game has shipped under, newest first.
 const LEGACY_NAMES := ["Neon Overdrive"]

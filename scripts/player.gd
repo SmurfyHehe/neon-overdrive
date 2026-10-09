@@ -74,6 +74,7 @@ const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Veh
 
 var chassis_visual: Node3D
 var _steer_smooth := 0.0
+var slide_help := SlideHelp.new()
 ## Heat and wear (Phase B). Off for sim_only cars so TuneTrack stays clean.
 var health := PowertrainHealth.new()
 
@@ -269,11 +270,14 @@ func _read_keyboard() -> void:
 	var coming_in := target != 0.0 and (_steer_smooth == 0.0 or signf(target) == signf(_steer_smooth))
 	var rate := lerpf(STEER_ATTACK, STEER_ATTACK_FAST, speed_t) if coming_in else STEER_RELEASE
 	_steer_smooth = move_toward(_steer_smooth, target, rate * get_physics_process_delta_time())
+	# Slide-catch help (2026-10-08) adds countersteer on top; _steer_smooth
+	# stays what the keys ask for, so letting go of the slide hands straight back.
+	var asked := slide_help.steer(self, _steer_smooth, steer_lock_cap(), get_physics_process_delta_time())
 	# GEVP raises the input to steering_exponent (1.5) before it reaches the
 	# wheels, which would turn the speed-capped lock into a fraction of itself
 	# (25% at 50 m/s became 12.5%). Undo it so the wheels get the lock the ramp
 	# and cap above ask for, the same as traffic_car.gd's lane_steer does.
-	steering_input = -signf(_steer_smooth) * pow(absf(_steer_smooth), 1.0 / maxf(steering_exponent, 0.1))
+	steering_input = -signf(asked) * pow(absf(asked), 1.0 / maxf(steering_exponent, 0.1))
 
 ## Keyboard steering (steer-feel PR): make the ramp and caps above the only thing
 ## between the key and the wheels. GEVP turns the wheels toward the input at

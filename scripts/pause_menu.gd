@@ -33,6 +33,7 @@ var resume_button: Button
 var volume_sliders := {}   # channel -> HSlider
 var fov_slider: HSlider
 var shake_slider: HSlider
+var slide_help_toggle: CheckButton
 var main_page: VBoxContainer
 var controls_page: VBoxContainer
 var controls_scroll: ScrollContainer
@@ -126,6 +127,16 @@ func _ready() -> void:
 		func(v: float) -> void:
 			ViewSettings.set_shake(v)
 			ViewSettings.save_settings())
+
+	# Driving assist (2026-10-08): slide-catch help, on by default.
+	var assist := CheckButton.new()
+	assist.text = "Slide help"
+	assist.button_pressed = AssistSettings.slide_help
+	assist.toggled.connect(func(on: bool) -> void:
+		AssistSettings.slide_help = on
+		AssistSettings.save_settings())
+	box.add_child(assist)
+	slide_help_toggle = assist
 
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	_add_button(box, "Controls", show_controls)

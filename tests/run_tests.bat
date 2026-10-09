@@ -69,6 +69,7 @@ call :run sound_fixes --headless
 call :run driving_feel_impacts --headless
 call :run driving_feel_motion --headless
 call :run driving_feel_extras --headless
+call :run slide_help --headless
 call :run radio --headless
 call :run view_settings --headless
 call :run powertrain_health "--headless --fixed-fps 60"

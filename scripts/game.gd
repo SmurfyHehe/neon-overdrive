@@ -76,7 +76,8 @@ func _ready() -> void:
 	var benchmark := Benchmark.requested()
 	if benchmark:
 		TrafficSettings.set_car_count(TrafficSettings.CAR_COUNT_DEFAULT)
-		TrafficSettings.set_detail_distance(TrafficSettings.DETAIL_DEFAULT)
+		TrafficSettings.set_detail_distance(Benchmark.opt_float("detail", TrafficSettings.DETAIL_DEFAULT))
+		TrafficSettings.set_car_count(int(Benchmark.opt_float("traffic", TrafficSettings.CAR_COUNT_DEFAULT)))
 	# NEON_TRAFFIC=<n> overrides the saved car count, like NEON_TICKS/NEON_MUTE:
 	# tests/run_tests.bat sets 0 so the older drive-bot tests, which steer
 	# across lanes blind, do not hit traffic (tests/traffic_*.gd clear it).
@@ -261,8 +262,8 @@ func _setup_road_shape() -> void:
 	if kick_env.is_valid_float():
 		kicker_chance = float(kick_env)
 	if Benchmark.requested():
-		curviness = 0.0
-		hilliness = 0.0
+		curviness = Benchmark.opt_float("curves", 0.0)
+		hilliness = Benchmark.opt_float("hills", 0.0)
 	var seed_env := OS.get_environment("NEON_ROAD_SEED")
 	var road_seed := int(seed_env) if seed_env.is_valid_int() else randi()
 	RoadFrame.origin_index = origin_index

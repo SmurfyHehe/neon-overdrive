@@ -94,7 +94,7 @@ func _offset_left(cam: ChaseCamera) -> float:
 func _drive_menu(game: Node) -> void:
 	var menu := _menu(game)
 	_check(menu.visible, "pause menu should be visible while paused")
-	var s: HSlider = menu.smoothing_slider
+	var s: HSlider = menu.settings.smoothing_slider
 	_check(s != null, "pause menu has no camera smoothing selector")
 	if s == null:
 		return

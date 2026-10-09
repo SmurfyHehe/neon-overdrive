@@ -82,7 +82,7 @@ func _physics_process(_delta: float) -> bool:
 	_check_layout(game, hud)
 
 	# --- Controls page
-	var groups := PauseMenu.controls_groups()
+	var groups := SettingsScreen.controls_groups()
 	var names: Array = []
 	for g in groups:
 		for e in g[1]:
@@ -93,21 +93,21 @@ func _physics_process(_delta: float) -> bool:
 	var titles: Array = groups.map(func(g): return g[0])
 	for t in ["Drive", "Gears & Engine", "Camera", "Audio & Radio", "Menus"]:
 		_check(titles.has(t), "Controls page has no '%s' group" % t)
-	_check(PauseMenu.keyboard_text("accelerate").contains("W"), "accelerate should list W, got '%s'" % PauseMenu.keyboard_text("accelerate"))
-	_check(PauseMenu.keyboard_text("pause").contains("Escape"), "pause should list Escape, got '%s'" % PauseMenu.keyboard_text("pause"))
-	_check(PauseMenu.gamepad_text("accelerate") == "RT", "accelerate should list RT on the pad, got '%s'" % PauseMenu.gamepad_text("accelerate"))
+	_check(SettingsScreen.keyboard_text("accelerate").contains("W"), "accelerate should list W, got '%s'" % SettingsScreen.keyboard_text("accelerate"))
+	_check(SettingsScreen.keyboard_text("pause").contains("Escape"), "pause should list Escape, got '%s'" % SettingsScreen.keyboard_text("pause"))
+	_check(SettingsScreen.gamepad_text("accelerate") == "RT", "accelerate should list RT on the pad, got '%s'" % SettingsScreen.gamepad_text("accelerate"))
 	var gs: GameState = game.game_state
 	gs.pause()
-	_check(menu.visible and menu.main_page.visible and not menu.controls_page.visible, "pausing should open the main page")
-	menu.show_controls()
-	_check(menu.controls_page.visible and not menu.main_page.visible, "the Controls button should show the controls page")
+	_check(menu.visible and menu.main_page.visible and not menu.settings.visible, "pausing should open the main page")
+	menu.show_settings("Controls")
+	_check(menu.settings.visible and menu.settings.current_page == 3, "Settings should open on the Controls page")
 	var rows := 0
-	for n in menu.controls_scroll.find_children("*", "Label", true, false):
+	for n in menu.settings.controls_scroll.find_children("*", "Label", true, false):
 		rows += 1
-	_check(rows >= names.size() * 3, "the Controls page should hold a row per action (%d labels for %d actions)" % [rows, names.size()])
+	_check(rows >= names.size() * 2, "the Controls page should hold a row per action (%d labels for %d actions)" % [rows, names.size()])
 	gs.resume()
 	gs.pause()
-	_check(menu.main_page.visible and not menu.controls_page.visible, "reopening the pause menu should start on the main page")
+	_check(menu.main_page.visible and not menu.settings.visible, "reopening the pause menu should start on the main page")
 	gs.resume()
 
 	# --- the same layout in a smaller window

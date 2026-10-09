@@ -336,6 +336,164 @@ static func npc_spec(kind: String) -> Dictionary:
 			s["front_arb_ratio"] = 0.20
 			s["rear_arb_ratio"] = 0.10
 			s["center_of_gravity_height_offset"] = 0.0
+		# The rest of the B1 sheet as AI cars (NpcCarBuilder.KINDS, not in the
+		# traffic MIX). Class numbers, not the player tune: when a player car
+		# becomes drivable (stage D) it gets its own spec like coupe_default().
+		"p2_hothatch":
+			# Hot hatch (Golf GTI / Civic Si class), 2.0 l four, front drive: light
+			# and short-geared, a stiffer rear bar so it rotates rather than ploughs.
+			var gears: Array[float] = [3.25, 2.00, 1.45, 1.12, 0.90]
+			s["vehicle_mass"] = 1200.0
+			s["front_weight_distribution"] = 0.62
+			s["front_torque_split"] = 1.0
+			s["max_torque"] = 300.0
+			s["max_rpm"] = 7200.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.2
+			s["coefficient_of_drag"] = 0.34
+			s["frontal_area"] = 2.05
+			s["front_tire_width"] = 225.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 225.0
+			s["front_damping_ratio"] = 0.50
+			s["rear_damping_ratio"] = 0.50
+			s["front_arb_ratio"] = 0.25
+			s["rear_arb_ratio"] = 0.30
+		"p3_tuner":
+			# Tuner sedan (Skyline / Evo class), turbo six, four-wheel drive
+			# with a rear bias, revs high.
+			var gears: Array[float] = [3.20, 1.95, 1.40, 1.07, 0.85]
+			s["vehicle_mass"] = 1400.0
+			s["front_weight_distribution"] = 0.56
+			s["front_torque_split"] = 0.4
+			s["max_torque"] = 420.0
+			s["max_rpm"] = 7500.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.1
+			s["coefficient_of_drag"] = 0.33
+			s["frontal_area"] = 2.1
+			s["front_tire_width"] = 245.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 245.0
+			s["front_damping_ratio"] = 0.50
+			s["rear_damping_ratio"] = 0.50
+			s["front_arb_ratio"] = 0.25
+			s["rear_arb_ratio"] = 0.22
+		"p4_kei":
+			# Kei roadster (Beat / Cappuccino class), tiny mid-mounted three,
+			# rear drive: 750 kg, little torque, very short gearing. 8000 rpm, not
+			# a real Beat's 9000: with this little torque the engine never reached
+			# 9000 and the automatic never left 1st (tests/npc_cars.gd).
+			var gears: Array[float] = [3.40, 2.20, 1.60, 1.20, 0.95]
+			s["vehicle_mass"] = 750.0
+			s["front_weight_distribution"] = 0.42
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 200.0
+			s["max_rpm"] = 8000.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.4
+			s["coefficient_of_drag"] = 0.36
+			s["frontal_area"] = 1.6
+			s["front_tire_width"] = 175.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 185.0
+			s["front_damping_ratio"] = 0.50
+			s["rear_damping_ratio"] = 0.50
+			s["front_arb_ratio"] = 0.20
+			s["rear_arb_ratio"] = 0.15
+		"p5_muscle":
+			# Muscle sedan (Impala SS class), big V8, rear drive: heavy and
+			# torquey, long gears, fat rear tyres, soft.
+			var gears: Array[float] = [2.60, 1.60, 1.15, 0.90, 0.70]
+			s["vehicle_mass"] = 1750.0
+			s["front_weight_distribution"] = 0.55
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 560.0
+			s["max_rpm"] = 5800.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.4
+			s["coefficient_of_drag"] = 0.36
+			s["frontal_area"] = 2.35
+			s["front_tire_width"] = 255.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 320.0
+			s["front_damping_ratio"] = 0.40
+			s["rear_damping_ratio"] = 0.40
+			s["front_arb_ratio"] = 0.15
+			s["rear_arb_ratio"] = 0.10
+		"p6_crossover":
+			# Performance crossover (Allroad / Integrale class), turbo four,
+			# four-wheel drive, tall and a little draggy.
+			var gears: Array[float] = [3.30, 2.00, 1.40, 1.07, 0.85]
+			s["vehicle_mass"] = 1500.0
+			s["front_weight_distribution"] = 0.58
+			s["front_torque_split"] = 0.5
+			s["max_torque"] = 400.0
+			s["max_rpm"] = 6800.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.0
+			s["coefficient_of_drag"] = 0.36
+			s["frontal_area"] = 2.45
+			s["front_tire_width"] = 235.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 235.0
+			s["front_damping_ratio"] = 0.45
+			s["rear_damping_ratio"] = 0.45
+			s["front_arb_ratio"] = 0.20
+			s["rear_arb_ratio"] = 0.18
+		"c1_patrol":
+			# Patrol sedan (Crown Vic / Charger Pursuit class), V8, rear drive:
+			# heavy, police-spec damping, long gears.
+			var gears: Array[float] = [2.80, 1.70, 1.20, 0.95, 0.75]
+			s["vehicle_mass"] = 1900.0
+			s["front_weight_distribution"] = 0.55
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 430.0
+			s["max_rpm"] = 6000.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.55
+			s["coefficient_of_drag"] = 0.34
+			s["frontal_area"] = 2.4
+			s["front_tire_width"] = 235.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 235.0
+			s["front_damping_ratio"] = 0.45
+			s["rear_damping_ratio"] = 0.45
+			s["front_arb_ratio"] = 0.20
+			s["rear_arb_ratio"] = 0.12
+		"c2_patrolsuv":
+			# Patrol SUV (Interceptor Utility / Tahoe class), twin-turbo V6,
+			# four-wheel drive: the heaviest car, tall, a barn door for drag.
+			var gears: Array[float] = [3.40, 2.10, 1.45, 1.10, 0.85]
+			s["vehicle_mass"] = 2300.0
+			s["front_weight_distribution"] = 0.54
+			s["front_torque_split"] = 0.4
+			s["max_torque"] = 520.0
+			s["max_rpm"] = 6000.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.7
+			s["coefficient_of_drag"] = 0.40
+			s["frontal_area"] = 3.0
+			s["front_tire_width"] = 255.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 255.0
+			s["front_damping_ratio"] = 0.40
+			s["rear_damping_ratio"] = 0.40
+			s["front_arb_ratio"] = 0.22
+			s["rear_arb_ratio"] = 0.12
+			s["center_of_gravity_height_offset"] = 0.0
+		"c3_interceptor":
+			# Unmarked interceptor (Charger / Mustang pursuit class),
+			# supercharged V8, rear drive: the fastest cop, firm and wide-tyred.
+			var gears: Array[float] = [2.90, 1.90, 1.35, 1.05, 0.82]
+			s["vehicle_mass"] = 1950.0
+			s["front_weight_distribution"] = 0.54
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 650.0
+			s["max_rpm"] = 6200.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.3
+			s["coefficient_of_drag"] = 0.33
+			s["frontal_area"] = 2.25
+			s["front_tire_width"] = 255.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 275.0
+			s["front_damping_ratio"] = 0.50
+			s["rear_damping_ratio"] = 0.50
+			s["front_arb_ratio"] = 0.22
+			s["rear_arb_ratio"] = 0.16
 	return s
 
 ## Physics layers (milestone 3). Every car sits on CAR_LAYER and collides with

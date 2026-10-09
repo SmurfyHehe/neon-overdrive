@@ -2,7 +2,8 @@ extends RefCounted
 class_name NpcCarBuilder
 
 # The traffic cars (stage B step 5): N1 commuter sedan, N2 city hatchback,
-# N3 pickup. Like P1CoupeBuilder, each body is the design proxy from
+# N3 pickup, plus every other B1 sheet car as an AI car (player cars P2-P6,
+# cops C1-C3; see the end of KINDS). Like P1CoupeBuilder, each body is the design proxy from
 # docs/design/fleet/sheets/<id>.png, exported by tools/fleet_design/game_export.py
 # into scripts/<id>_data.gd, so what drives in traffic is exactly what the sheet
 # shows, from every angle. Unlike the player's car, each one ships all of its
@@ -35,7 +36,10 @@ class_name NpcCarBuilder
 # differs (CarSpec.npc_spec).
 #
 # Adding a car: export its data file, add a KINDS entry and a CarSpec.npc_spec
-# branch. Nothing else in traffic changes.
+# branch. Nothing else in traffic changes: traffic only spawns the kinds in
+# TrafficManager.MIX, so the other sheet cars here (player cars P2-P6, cops
+# C1-C3) are built and driven on demand (rivals, police, photo and sandbox
+# modes later) without joining the traffic pool.
 
 const KINDS := {
 	"n1_commuter": {
@@ -71,6 +75,90 @@ const KINDS := {
 		"rest_y": -0.12,
 		"builds": {"stock": 50, "covered": 30, "sportsbar": 20},
 		"build_paint": {},
+	},
+	# The rest of the B1 sheet (not in the traffic MIX): player cars P2-P6 and
+	# the cops C1-C3, as AI-driven cars on the same sim. "sheet_paint": every
+	# build wears the sheet's own paint (C1 navy and white, C3 plain dark, the
+	# player cars' sheet colours) instead of a random traffic neutral.
+	"p2_hothatch": {
+		"data": preload("res://scripts/p2_hothatch_data.gd"),
+		"length": 4.05, "width": 1.83, "height": 1.4, "clearance": 0.12,
+		"front_overhang": 0.82, "rear_overhang": 0.67,
+		"wheel_r": 0.315, "wheel_x": 0.79, "axle_z": 1.28,
+		"rest_y": -0.12,
+		"builds": {"stock": 50, "street": 30, "full": 20},
+		"build_paint": {},
+		"sheet_paint": true,
+	},
+	"p3_tuner": {
+		"data": preload("res://scripts/p3_tuner_data.gd"),
+		"length": 4.48, "width": 1.78, "height": 1.36, "clearance": 0.12,
+		"front_overhang": 0.95, "rear_overhang": 0.91,
+		"wheel_r": 0.32, "wheel_x": 0.76, "axle_z": 1.31,
+		"rest_y": -0.12,
+		"builds": {"stock": 50, "street": 30, "full": 20},
+		"build_paint": {},
+		"sheet_paint": true,
+	},
+	"p4_kei": {
+		"data": preload("res://scripts/p4_kei_data.gd"),
+		"length": 3.30, "width": 1.40, "height": 1.13, "clearance": 0.12,
+		"front_overhang": 0.55, "rear_overhang": 0.48,
+		"wheel_r": 0.28, "wheel_x": 0.615, "axle_z": 1.135,
+		"rest_y": -0.12,
+		"builds": {"stock": 50, "street": 30, "full": 20},
+		"build_paint": {},
+		"sheet_paint": true,
+	},
+	"p5_muscle": {
+		"data": preload("res://scripts/p5_muscle_data.gd"),
+		"length": 5.35, "width": 2.02, "height": 1.3, "clearance": 0.15,
+		"front_overhang": 1.12, "rear_overhang": 1.28,
+		"wheel_r": 0.345, "wheel_x": 0.83, "axle_z": 1.475,
+		"rest_y": -0.12,
+		"builds": {"stock": 50, "street": 30, "full": 20},
+		"build_paint": {},
+		"sheet_paint": true,
+	},
+	"p6_crossover": {
+		"data": preload("res://scripts/p6_crossover_data.gd"),
+		"length": 4.35, "width": 1.84, "height": 1.61, "clearance": 0.22,
+		"front_overhang": 0.92, "rear_overhang": 0.81,
+		"wheel_r": 0.345, "wheel_x": 0.78, "axle_z": 1.31,
+		"rest_y": -0.12,
+		"builds": {"stock": 50, "street": 30, "full": 20},
+		"build_paint": {},
+		"sheet_paint": true,
+	},
+	"c1_patrol": {
+		"data": preload("res://scripts/c1_patrol_data.gd"),
+		"length": 5.30, "width": 1.96, "height": 1.6, "clearance": 0.16,
+		"front_overhang": 1.08, "rear_overhang": 1.30,
+		"wheel_r": 0.335, "wheel_x": 0.81, "axle_z": 1.46,
+		"rest_y": -0.12,
+		"builds": {"stock": 60, "lowpro": 25, "nobar": 15},
+		"build_paint": {},
+		"sheet_paint": true,
+	},
+	"c2_patrolsuv": {
+		"data": preload("res://scripts/c2_patrolsuv_data.gd"),
+		"length": 5.10, "width": 2.00, "height": 2.09, "clearance": 0.23,
+		"front_overhang": 0.98, "rear_overhang": 1.09,
+		"wheel_r": 0.37, "wheel_x": 0.85, "axle_z": 1.515,
+		"rest_y": -0.12,
+		"builds": {"stock": 70, "nobar": 30},
+		"build_paint": {},
+		"sheet_paint": true,
+	},
+	"c3_interceptor": {
+		"data": preload("res://scripts/c3_interceptor_data.gd"),
+		"length": 4.82, "width": 1.92, "height": 1.38, "clearance": 0.13,
+		"front_overhang": 1.02, "rear_overhang": 1.08,
+		"wheel_r": 0.34, "wheel_x": 0.8, "axle_z": 1.36,
+		"rest_y": -0.12,
+		"builds": {"stock": 60, "pursuit": 40},
+		"build_paint": {},
+		"sheet_paint": true,
 	},
 }
 
@@ -239,11 +327,18 @@ static func pick_build(kind: String) -> String:
 			return b
 	return "stock"
 
-## Paint for a car of this build: the build's own colour, or a weighted neutral.
+## The design sheet's paint colour for this car (its data COLORS "paint").
+static func sheet_paint(kind: String) -> Color:
+	return Color(KINDS[kind].data.COLORS["paint"])
+
+## Paint for a car of this build: the build's own colour, the sheet's paint
+## (sheet_paint kinds), or a weighted traffic neutral.
 static func pick_paint(kind: String, build: String) -> Color:
 	var fixed: Dictionary = KINDS[kind].build_paint
 	if fixed.has(build):
 		return fixed[build]
+	if KINDS[kind].get("sheet_paint", false):
+		return sheet_paint(kind)
 	var total := 0
 	for p in PAINTS:
 		total += int(p[1])

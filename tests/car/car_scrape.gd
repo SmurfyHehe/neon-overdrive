@@ -143,12 +143,15 @@ func _sample(v: Vehicle, label: String) -> void:
 		contact_ticks[label] = int(contact_ticks.get(label, 0)) + 1
 	min_clear[label] = minf(min_clear.get(label, INF), _clearance(v))
 
-## Body contact with anything but the chunks' walls and buildings (a full-lock
-## swerve on a tuned car can slide into those; that is a crash, not a scrape).
+## Body contact with anything but the chunks' walls, buildings and median
+## barriers (a full-lock swerve on a tuned car can slide into those; that is a
+## crash, not a scrape). The barriers (R1, #303) stand 1 m left of the inner
+## lane's edge; a swerve from lane 1 drifts onto them (car centre at x 1.0,
+## barrier face at 0.17, measured 2026-10-09).
 func _touches_road(v: Vehicle) -> bool:
 	for b in v.get_colliding_bodies():
 		var n := String(b.name)
-		if not (n.begins_with("Boundary") or n.begins_with("Building")):
+		if not (n.begins_with("Boundary") or n.begins_with("Building") or n == "BarrierCol"):
 			return true
 	return false
 
@@ -266,6 +269,15 @@ const SWEEP := {
 		"front_resting_ratio": 0.7, "rear_resting_ratio": 0.55,
 		"front_damping_ratio": 0.9, "rear_damping_ratio": 0.9,
 		"max_torque": 900.0, "turbo_boost_max": 1.5, "brake_force_multiplier": 3.0},
+	# Each car's own engine, brakes and grip; only the suspension at the
+	# Tuner's corners (tests/car/car_scrape_cars.gd runs these on every car).
+	"stock": {},
+	"springs_low_soft": {"front_spring_length": 0.16, "rear_spring_length": 0.18,
+		"front_resting_ratio": 0.3, "rear_resting_ratio": 0.3,
+		"front_damping_ratio": 0.25, "rear_damping_ratio": 0.25},
+	"springs_low_stiff": {"front_spring_length": 0.16, "rear_spring_length": 0.18,
+		"front_resting_ratio": 0.7, "rear_resting_ratio": 0.55,
+		"front_damping_ratio": 0.9, "rear_damping_ratio": 0.9},
 	# Tallest and softest: prints only (see PRINT_ONLY).
 	"high_soft": {"front_spring_length": 0.28, "rear_spring_length": 0.27,
 		"front_resting_ratio": 0.3, "rear_resting_ratio": 0.3,
@@ -279,9 +291,14 @@ const SWEEP := {
 ## out of travel and the body lands on the road (contacts with 0-7 cm of
 ## spring left, 2026-10-09). That is the suspension bottoming out, which a
 ## bump stop would fix (GEVP has none), not the body shape.
-const PRINT_ONLY := ["high_soft"]
+var print_only: Array = ["high_soft"]
 ## Tunes also run "live". Live and built match since CarSpec.remount_wheels.
 const LIVE := ["roy_oct9"]
+## Which player cars and tunes the sweep runs; tests/car/car_scrape_cars.gd
+## runs the other PlayerCars.KINDS (same Tuner range for every car).
+var sweep_kinds: Array = ["p1_coupe"]
+var sweep_tunes: Array = ["roy_oct9", "low_soft", "low_stiff", "high_soft"]
+var live_tunes: Array = LIVE
 
 ## Each tune two ways: "built" = the car is built from the tuned spec (a saved
 ## tune at launch, or after a restart), "live" = a stock car changed through
@@ -291,37 +308,44 @@ func _sweep(p: PlayerCar) -> void:
 	swerve_s = 4
 	p.freeze = true
 	p.process_mode = Node.PROCESS_MODE_DISABLED
-	for tune_name in SWEEP:
-		for mode in (["built", "live"] if tune_name in LIVE else ["built"]):
-			var car := PlayerCar.new()
-			car.sim_only = true
-			var spec := CarSpec.coupe_default()
-			if mode == "built":
-				for path in SWEEP[tune_name]:
-					TuneParams.set_value(spec, path, SWEEP[tune_name][path])
-			car.spec = spec
-			car.position = Vector3(Harness.lane_x(1), p.global_position.y, p.global_position.z - 40.0)
-			game.add_child(car)
-			# Wheels start with their last position at the origin; make the sim
-			# history match where the car is, or the first tick launches it.
-			Harness.launch_player(car, 0.0)
-			# The road streams around game.player: hand it the tuned car.
-			game.set("player", car)
-			if mode == "live":
-				for path in SWEEP[tune_name]:
-					CarSpec.set_param(car, car.spec, path, SWEEP[tune_name][path])
-			var prefix := "%s/%s" % [tune_name, mode]
-			strict = not tune_name in PRINT_ONLY
-			# Settle unmeasured: the drop from the spawn height, or from the
-			# old ride height when the tune lands on a built car.
-			for i in RATE * 3:
+	var was_selected := PlayerCars.selected
+	for kind in sweep_kinds:
+		# PlayerCar takes its body (and collision hull) from PlayerCars.selected.
+		PlayerCars.selected = kind
+		for tune_name in sweep_tunes:
+			for mode in (["built", "live"] if tune_name in live_tunes else ["built"]):
+				var car := PlayerCar.new()
+				car.sim_only = true
+				var spec := CarSpec.player_spec(kind)
+				if mode == "built":
+					for path in SWEEP[tune_name]:
+						TuneParams.set_value(spec, path, SWEEP[tune_name][path])
+				car.spec = spec
+				car.position = Vector3(Harness.lane_x(1), p.global_position.y, p.global_position.z - 40.0)
+				game.add_child(car)
+				# Wheels start with their last position at the origin; make the sim
+				# history match where the car is, or the first tick launches it.
+				Harness.launch_player(car, 0.0)
+				# The road streams around game.player: hand it the tuned car.
+				game.set("player", car)
+				if mode == "live":
+					for path in SWEEP[tune_name]:
+						CarSpec.set_param(car, car.spec, path, SWEEP[tune_name][path])
+				var prefix := "%s/%s" % [tune_name, mode]
+				if sweep_kinds.size() > 1 or kind != "p1_coupe":
+					prefix = "%s/%s" % [kind, prefix]
+				strict = not tune_name in print_only
+				# Settle unmeasured: the drop from the spawn height, or from the
+				# old ride height when the tune lands on a built car.
+				for i in RATE * 3:
+					await physics_frame
+				_watch(car, prefix)
+				await _drive_player(car, prefix)
+				_unwatch(car)
+				game.set("player", p)
+				car.queue_free()
 				await physics_frame
-			_watch(car, prefix)
-			await _drive_player(car, prefix)
-			_unwatch(car)
-			game.set("player", p)
-			car.queue_free()
-			await physics_frame
+	PlayerCars.selected = was_selected
 
 # --- traffic cars ----------------------------------------------------------
 

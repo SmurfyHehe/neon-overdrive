@@ -126,6 +126,39 @@ plates. Subtle in-world marker ideas, none of them a HUD icon:
    tail lights from plain traffic, readable from far away at night.
 
 Recommended: 1 + 2 together, 3 as part of each crew's look.
+**Roy (2026-10-09): crew sticker yes.**
+
+### e. Halo option (Roy's idea, 2026-10-09)
+
+Roy: a halo showing who is not plain traffic, colour by role (rival, ally,
+cops, corrupt cops). Colours are only an idea.
+
+How it could look at night, in the gritty PS2 look:
+- **Not a bright outline or underglow** (that reads as neon, which the look
+  bans). Instead a **thin, soft rim light** on the car's silhouette edges,
+  like a lamp catching the paint, plus a faint matching glint on the
+  sticker. Dim, flat colour, no bloom, no pulsing.
+- **When it shows:** only within ~60 m and only for cars in front of you or
+  in the mirrors. Fades in over half a second, so it never pops. Far cars
+  stay plain, so the road still feels like traffic, not a game board.
+- **Setting:** "Racer halo": Off / Close only / Always. Lives in the view
+  settings next to the other visual options.
+
+Colours that fit the palette (red, green and plain cop red/blue are
+off-palette; police blue is the one allowed exception):
+
+| Who | Halo | Why |
+|---|---|---|
+| Rival (enemy crew) | Sodium orange `#FF8A1F` | Warm, "danger" in our palette |
+| Ally | Silver / pale amber `#FFC066` | Friendly, quieter than the rival |
+| Honest cops | Police blue `#2E4FD8` | The one off-palette colour, already theirs |
+| Corrupt cops | **No halo until you find out who they are**, then a dim, dirty amber that flickers | Story: they look like honest cops at first; a halo would give it away |
+
+**Recommendation:** the halo **sits beside the sticker**, it does not replace
+it. Sticker is always on (in-world, part of the car); the halo is an
+optional help, **default "Close only"**, so a new player can find racers and
+a purist can turn it off. Cops' halo is the same setting.
+Size: A (one shader rim pass and a role tag on cars), after RC4.
 
 ## 3. How a race ends
 
@@ -134,7 +167,7 @@ Recommended: 1 + 2 together, 3 as part of each crew's look.
 | **Win** | Cross the finish first. Duel: their bar empties first |
 | **Lose** | They cross first, or your bar empties |
 | **Wreck** | **You must still cross the line** (Roy 87). A wrecked rival tries to recover and rejoin; if it cannot (flipped), you still drive to the line. See 3b |
-| **Give up** | Pause menu "Give up" (Roy 88, recommendation in 3c). Or just let the rival cross the line: that ends it as a loss |
+| **Give up** | Pause menu "Give up" (Roy 88, decided). Or just let the rival cross the line: that ends it as a loss |
 | **Busted** | Busted mid-race = loss, plus the normal bust rules |
 
 No early finish for a big gap: races are short (60-120 s), and a rival that
@@ -304,9 +337,9 @@ core is untestable without a driver, then RC3 as the prologue race.
 1. Gap number on screen during a race: **yes**.
 2. Rival blinks hazards back, rolling start: **yes**.
 3. Cop shows up mid-race, race goes on: **yes**.
-4. Rival wrecks: **you must still cross the line**; research in 3b.
-5. Giving up: **research options**; recommendation in 3c (pause menu).
-6. No marker over racer cars: **yes**; research and marker ideas in 2d.
+4. Rival wrecks: **you must still cross the line**; rival recovers for real (3b). Roy: ok.
+5. Giving up: **pause menu "Give up"** (3c).
+6. No icon over racer cars: **yes**. Marker: **crew sticker** (2d). Roy suggested a role-coloured halo; design in 2e, his call.
 7. Rival traffic risk: **depends on the crew**.
 8. Next race type after the sprint: **rolling challenge** (RC4, as planned).
 

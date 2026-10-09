@@ -1,6 +1,8 @@
 class_name AudioSettings
 extends RefCounted
 
+const SafeSave := preload("res://scripts/safe_save.gd")
+
 # Volume settings (Phase B, 2026-10-05; stage B step 4's "Settings tab" starts
 # here): one slider each for Master, Engine, Effects (tyres, wind, UI) and Music,
 # applied to the audio buses and saved in user://settings.cfg. The pause menu
@@ -49,7 +51,7 @@ static func _apply(channel: String) -> void:
 ## Reads the file (missing or damaged means defaults) and applies it.
 static func load_settings() -> void:
 	var cfg := ConfigFile.new()
-	var ok := cfg.load(path) == OK
+	var ok := SafeSave.load_config(cfg, path) == OK
 	for channel in CHANNELS:
 		var v := float(cfg.get_value("audio", channel.to_lower(), 1.0)) if ok else 1.0
 		volumes[channel] = clampf(v, 0.0, 1.0) if is_finite(v) else 1.0  # a hand-edited "nan" loads as NaN
@@ -57,7 +59,7 @@ static func load_settings() -> void:
 
 static func save_settings() -> bool:
 	var cfg := ConfigFile.new()
-	cfg.load(path)  # keep the other sections (TrafficSettings); a missing file is fine
+	SafeSave.load_config(cfg, path)  # keep the other sections (TrafficSettings); a missing file is fine
 	for channel in CHANNELS:
 		cfg.set_value("audio", channel.to_lower(), volumes[channel])
-	return cfg.save(path) == OK
+	return SafeSave.save_config(cfg, path)

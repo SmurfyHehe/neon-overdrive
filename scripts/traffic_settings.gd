@@ -1,6 +1,8 @@
 class_name TrafficSettings
 extends RefCounted
 
+const SafeSave := preload("res://scripts/safe_save.gd")
+
 # Traffic settings (stage B step 3, 2026-10-05): how many cars are on the road
 # and the traffic draw distance, in the same user://settings.cfg AudioSettings
 # uses (its own [traffic] section). The pause menu shows two sliders; Game
@@ -39,7 +41,7 @@ static func set_detail_distance(d: float) -> void:
 ## so tests that redirect one redirect both.
 static func load_settings() -> void:
 	var cfg := ConfigFile.new()
-	var ok := cfg.load(AudioSettings.path) == OK
+	var ok := SafeSave.load_config(cfg, AudioSettings.path) == OK
 	var n: Variant = cfg.get_value("traffic", "car_count", CAR_COUNT_DEFAULT) if ok else CAR_COUNT_DEFAULT
 	set_car_count(int(n) if is_finite(float(n)) else CAR_COUNT_DEFAULT)  # int(NaN) is a huge negative
 	set_detail_distance(float(cfg.get_value("traffic", "detail_distance", DETAIL_DEFAULT)) if ok else DETAIL_DEFAULT)
@@ -47,7 +49,7 @@ static func load_settings() -> void:
 ## Rewrites only the [traffic] section; the audio values stay.
 static func save_settings() -> bool:
 	var cfg := ConfigFile.new()
-	cfg.load(AudioSettings.path)
+	SafeSave.load_config(cfg, AudioSettings.path)
 	cfg.set_value("traffic", "car_count", car_count)
 	cfg.set_value("traffic", "detail_distance", detail_distance)
-	return cfg.save(AudioSettings.path) == OK
+	return SafeSave.save_config(cfg, AudioSettings.path)

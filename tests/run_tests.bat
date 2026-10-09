@@ -45,6 +45,7 @@ call :run hud --headless
 call :run car_loft_normals --headless
 call :run test_car --headless
 call :run p1_coupe --headless
+call :run undercarriage --headless
 call :run road_strip_winding --headless
 call :run sidewalk_collision_taper --headless
 call :run aero_draft_equivalence --headless
@@ -160,6 +161,8 @@ if /i not "%~1"=="quick" (
 	call :run night_lights
 	call :run fleet_silhouette_sweep
 	call :run fleet_budget_scene
+	rem The underside's worst-case chase (you + 3 rivals + 4 cops): draw calls per car, real renderer.
+	call :run chase_undercarriage
 	rem Real window: reads rendered sky and moon pixels.
 	call :run sky_probe
 	call :run mute --headless

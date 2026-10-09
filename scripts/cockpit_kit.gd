@@ -129,6 +129,12 @@ func offset(by: Vector3) -> void:
 	for i in _v.size():
 		_v[i] += by
 
+## Raises every vertex below `min_y` to it (the underside's ground clearance).
+func clamp_above(min_y: float) -> void:
+	for i in _v.size():
+		if _v[i].y < min_y:
+			_v[i].y = min_y
+
 func merge(other: CockpitKit) -> void:
 	_v.append_array(other._v)
 	_n.append_array(other._n)

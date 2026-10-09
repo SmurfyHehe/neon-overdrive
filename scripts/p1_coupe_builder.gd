@@ -147,7 +147,20 @@ static func build_chassis_visual(paint: Color = PAINT) -> Node3D:
 	root.set_meta("body_mat", paint_mat)
 	root.set_meta("half_w", WIDTH / 2.0)
 	root.set_meta("half_l", LENGTH / 2.0)
+	# The real underside (car-parts plan, section 5b): one more draw call.
+	Undercarriage.attach(root, undercarriage_params(), Undercarriage.ROLE_PLAYER)
 	return root
+
+## What the underside is built from, in car space (lift included). The
+## ground at rest is BODY_LIFT above the chassis origin (see BODY_LIFT), the
+## floor is the body's lowest point, the wheels are the sheet's.
+static func undercarriage_params() -> Dictionary:
+	var floor_y: float = _get_body_mesh().get_aabb().position.y + BODY_LIFT
+	var tips := []
+	for t in Data.EXHAUST_TIPS:
+		tips.append({"pos": t.pos + Vector3(0.0, BODY_LIFT, 0.0), "dir": t.dir, "r": t.r})
+	return Undercarriage.params(WIDTH / 2.0, LENGTH / 2.0, floor_y, BODY_LIFT,
+		DESIGN_WHEEL_R, DESIGN_WHEEL_X, absf(Data.WHEELS[0].hub.z), tips, "rwd")
 
 static func recolor(car: Node3D, color: Color) -> void:
 	var m: ShaderMaterial = car.get_meta("body_mat")
@@ -194,9 +207,14 @@ static func triangle_count() -> int:
 		n += 2 * _get_wheel_mesh(rear).surface_get_array_len(0) / 3
 	return n
 
-## Draw calls of one car: body surfaces, the door mirrors, plus one per wheel.
+## Draw calls of one car: body surfaces, the door mirrors, the underside,
+## plus one per wheel.
 static func draw_call_count() -> int:
-	return _get_body_mesh().get_surface_count() + 1 + 4
+	return _get_body_mesh().get_surface_count() + 1 + 1 + 4
+
+## Triangles in the underside (on top of triangle_count()).
+static func undercarriage_triangle_count() -> int:
+	return Undercarriage.triangle_count(undercarriage_params(), Undercarriage.ROLE_PLAYER)
 
 ## Triangles in the two door mirror cups (on top of triangle_count()).
 static func mirror_triangle_count() -> int:

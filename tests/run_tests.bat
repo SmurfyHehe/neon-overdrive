@@ -44,6 +44,7 @@ call :run hud --headless
 call :run car_loft_normals --headless
 call :run test_car --headless
 call :run p1_coupe --headless
+call :run engine_bay --headless
 call :run road_strip_winding --headless
 call :run sidewalk_collision_taper --headless
 call :run aero_draft_equivalence --headless

@@ -12,12 +12,14 @@
 # running before it starts. Run it when the machine is otherwise quiet.
 param(
 	[int] $Runs = 3,
-	[string] $Godot = "$env:USERPROFILE\Documents\Godot_v4.7.2-stable_win64_console.exe"
+	[string] $Godot = "$env:USERPROFILE\Documents\Godot_v4.7.2-stable_win64.exe"  # the windowed exe: the _console one is a wrapper whose CPU time is not the game's
 )
 Set-Location (Join-Path $PSScriptRoot "..")
 $others = @(Get-Process -Name "Godot*" -ErrorAction SilentlyContinue).Count
 Write-Host ("other Godot processes running: {0}" -f $others)
 $env:NEON_TRAFFIC = "0"
+$env:NEON_CURVES = "0"
+$env:NEON_HILLS = "0"
 $result = @{}
 foreach ($mode in @("on", "off")) {
 	$cpu = @()

@@ -27,7 +27,7 @@ const Harness := preload("res://tests/traffic_harness.gd")
 
 const SYNTH_SECS := 20.0
 const BLOCK := 735  # one 60 fps frame of 44.1 kHz audio
-const RUN_SECS := 20.0
+const RUN_SECS := 30.0
 const WARMUP_SECS := 3.0
 
 var logger := Harness.ErrorCounter.new()
@@ -40,6 +40,8 @@ var fails := 0
 
 func _initialize() -> void:
 	OS.set_environment("NEON_TRAFFIC", "0")
+	OS.set_environment("NEON_CURVES", "0")  # the bot steers blind down a straight road
+	OS.set_environment("NEON_HILLS", "0")
 	OS.add_logger(logger)
 	mode = OS.get_environment("AUDIO_COST")
 	if mode == "":
@@ -113,8 +115,8 @@ func _process(delta: float) -> bool:
 		var travel := p.global_position.distance_to(start_pos)
 		print("game: frames=%d process mean=%.3f ms p95=%.3f ms max=%.3f ms travel=%.0f m"
 				% [samples.size(), s.mean, s.p95, s.max, travel])
-		if travel < 5.0:
-			_fail("car only moved %.1f m" % travel)
+		if travel < 300.0:  # a car that did not drive is a cheaper run, not a comparable one
+			_fail("car only moved %.0f m" % travel)
 		_finish("")
 		return true
 	return false

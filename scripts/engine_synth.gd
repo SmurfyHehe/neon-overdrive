@@ -271,60 +271,119 @@ func render(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVe
 	var crack_k := exp(-1.0 / (CRACK_DECAY * mix_rate))
 	var boom_k := exp(-1.0 / (BOOM_DECAY * mix_rate))
 
+	# The per-sample loop (2026-10-09, audio CPU pass): every value it touches is
+	# a local. In GDScript a member read is several times the cost of a local
+	# read and a function call costs more still, so the hot state is copied into
+	# locals before the loop and written back after it, and the noise generator
+	# is written out inline instead of calling _rand(). The arithmetic is the
+	# one the old loop did, in the same order: the output is sample-for-sample
+	# identical (tests/audio_cost.gd checks a hash of a fixed sweep).
+	var loudness := tune.loudness
+	var pops := tune.pops
+	var flame := tune.flame
+	var vol := volume
+	var rpm_gain := 0.55 + 0.45 * rpm_norm
+	var pop_gain := 0.5 + 0.5 * loudness
+	var cut := limiter_cut
+	var boost_on := boost > 0.02
+	var whistle_step := TAU * (1800.0 + 5200.0 * boost) / mix_rate
+	var boost_now := boost
+	var noise := _noise
+	var rpm_now := _rpm
+	var thr_now := _thr
+	var since := _since
+	var to_next := _to_next
+	var fire_amp := _fire_amp
+	var next_fire := _next_fire
+	var bx1 := _bx1
+	var bx2 := _bx2
+	var by1 := _by1
+	var by2 := _by2
+	var rx1 := _rx1
+	var rx2 := _rx2
+	var ry1 := _ry1
+	var ry2 := _ry2
+	var lp := _lp
+	var dc_x := _dc_x
+	var dc_y := _dc_y
+	var pop_env := _pop_env
+	var pop_wait := _pop_wait
+	var flame_peak := _flame_peak
+	var whistle_phase := _whistle_phase
+	var bov_env := _bov_env
+	var bov_lp := _bov_lp
+	var fire_at := _fire_at
+	var cyl_amp := _cyl_amp
+	var rate := mix_rate
+
 	for i in frames:
-		_rpm += rpm_step
-		_thr += thr_step
-		var dph := _rpm / 120.0 / mix_rate  # cycle fraction this sample
-		_since += dph
+		rpm_now += rpm_step
+		thr_now += thr_step
+		var dph := rpm_now / 120.0 / rate  # cycle fraction this sample
+		since += dph
 		# Count down to the next cylinder's slot. The table can be uneven (V8
 		# banks, boxer headers); the pulse is timed from the last firing, so its
 		# shape doesn't depend on the gap.
-		_to_next -= dph
-		if _to_next <= 0.0:
-			_since = 0.0
-			_fire_amp = _cyl_amp[_next_fire] * (1.0 + (_rand() * jitter)) * amp_mul
-			var nxt := (_next_fire + 1) % n_cyl
-			_to_next += _fire_at[nxt] - _fire_at[_next_fire] + (1.0 if nxt == 0 else 0.0)
-			_next_fire = nxt
-			if redline and absf(_rand()) < limiter_cut:
-				_fire_amp = 0.0
-				# an unburnt charge going out the pipe: a bang at the limiter
-				if tune.pops > 0.0 and absf(_rand()) < tune.pops:
-					_pop_env = maxf(_pop_env, 0.6 + 0.4 * absf(_rand()))
-					_flame_peak = maxf(_flame_peak, tune.flame * (0.5 + 0.5 * absf(_rand())))
+		to_next -= dph
+		if to_next <= 0.0:
+			since = 0.0
+			noise = (noise * 1103515245 + 12345) & 0x7fffffff
+			fire_amp = cyl_amp[next_fire] * (1.0 + ((noise / 1073741823.5 - 1.0) * jitter)) * amp_mul
+			var nxt := (next_fire + 1) % n_cyl
+			to_next += fire_at[nxt] - fire_at[next_fire] + (1.0 if nxt == 0 else 0.0)
+			next_fire = nxt
+			if redline:
+				noise = (noise * 1103515245 + 12345) & 0x7fffffff
+				if absf(noise / 1073741823.5 - 1.0) < cut:
+					fire_amp = 0.0
+					# an unburnt charge going out the pipe: a bang at the limiter
+					if pops > 0.0:
+						noise = (noise * 1103515245 + 12345) & 0x7fffffff
+						if absf(noise / 1073741823.5 - 1.0) < pops:
+							noise = (noise * 1103515245 + 12345) & 0x7fffffff
+							pop_env = maxf(pop_env, 0.6 + 0.4 * absf(noise / 1073741823.5 - 1.0))
+							noise = (noise * 1103515245 + 12345) & 0x7fffffff
+							flame_peak = maxf(flame_peak, flame * (0.5 + 0.5 * absf(noise / 1073741823.5 - 1.0)))
 
-		var p := _since * n_cyl
+		var p := since * n_cyl
 		var pulse := 0.0
 		if p < width:
-			pulse = sin(PI * p / width) * _fire_amp
-		var load := 0.6 + 0.4 * _thr
-		var e := pulse * load + _rand() * (0.08 + 0.25 * _thr) * noise_gain * (pulse * 0.8 + 0.2)
+			pulse = sin(PI * p / width) * fire_amp
+		var load := 0.6 + 0.4 * thr_now
+		noise = (noise * 1103515245 + 12345) & 0x7fffffff
+		var e := pulse * load + (noise / 1073741823.5 - 1.0) * (0.08 + 0.25 * thr_now) * noise_gain * (pulse * 0.8 + 0.2)
 
-		var body := b_b0 * e - b_b0 * _bx2 - b_a1 * _by1 - b_a2 * _by2
-		_bx2 = _bx1
-		_bx1 = e
-		_by2 = _by1
-		_by1 = body
-		var rasp := r_b0 * e - r_b0 * _rx2 - r_a1 * _ry1 - r_a2 * _ry2
-		_rx2 = _rx1
-		_rx1 = e
-		_ry2 = _ry1
-		_ry1 = rasp
-		_lp += lp_k * (e - _lp)
+		var body := b_b0 * e - b_b0 * bx2 - b_a1 * by1 - b_a2 * by2
+		bx2 = bx1
+		bx1 = e
+		by2 = by1
+		by1 = body
+		var rasp := r_b0 * e - r_b0 * rx2 - r_a1 * ry1 - r_a2 * ry2
+		rx2 = rx1
+		rx1 = e
+		ry2 = ry1
+		ry1 = rasp
+		lp += lp_k * (e - lp)
 
 		if pop_p > 0.0:
 			# count down to the next pop instead of rolling dice every sample
-			_pop_wait -= 1
-			if _pop_wait <= 0:
-				var amp := 0.4 + 0.6 * absf(_rand())
-				_pop_env = maxf(_pop_env, amp)
-				_flame_peak = maxf(_flame_peak, tune.flame * amp)
-				_pop_wait = int((0.3 + 1.4 * absf(_rand())) / pop_p)
-		if _pop_env > 0.0:
-			_start_cluster(pop_kind, _pop_env)
-			_pop_env = 0.0
+			pop_wait -= 1
+			if pop_wait <= 0:
+				noise = (noise * 1103515245 + 12345) & 0x7fffffff
+				var amp := 0.4 + 0.6 * absf(noise / 1073741823.5 - 1.0)
+				pop_env = maxf(pop_env, amp)
+				flame_peak = maxf(flame_peak, flame * amp)
+				noise = (noise * 1103515245 + 12345) & 0x7fffffff
+				pop_wait = int((0.3 + 1.4 * absf(noise / 1073741823.5 - 1.0)) / pop_p)
+		if pop_env > 0.0:
+			_noise = noise
+			_start_cluster(pop_kind, pop_env)
+			noise = _noise
+			pop_env = 0.0
 		if _shift_req > 0.0:
+			_noise = noise
 			_start_cluster(PopKind.UPSHIFT, _shift_req)
+			noise = _noise
 			_shift_req = 0.0
 		var pop := 0.0
 		if _cl_left > 0 or _ring_live > 0:
@@ -332,8 +391,11 @@ func render(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVe
 			if _cl_left > 0:
 				_cl_wait -= 1
 				if _cl_wait <= 0:
+					_noise = noise
 					_fire_bang()
-			var pn := _rand()
+					noise = _noise
+			noise = (noise * 1103515245 + 12345) & 0x7fffffff
+			var pn := noise / 1073741823.5 - 1.0
 			# crack: high-passed noise (noise minus its own low-pass), 4 ms envelope
 			_crack_lp += 0.2 * (pn - _crack_lp)
 			# boom: low-passed noise under a slower envelope, the thump of the bang
@@ -354,23 +416,49 @@ func render(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVe
 				_r2 = 0.0
 				_r2p = 0.0
 		var turbo := 0.0
-		if boost > 0.02:
+		if boost_on:
 			# whistle: pitch and level rise with boost
-			_whistle_phase += TAU * (1800.0 + 5200.0 * boost) / mix_rate
-			turbo = sin(_whistle_phase) * 0.2 * boost * boost
-		if _bov_env > 0.01:
-			var bn := _rand()
-			_bov_lp += 0.25 * (bn - _bov_lp)
-			turbo += (bn - _bov_lp) * 0.8 * _bov_env
-			_bov_env *= pop_decay
-		var s := _lp + body * 0.9 + rasp * rasp_gain * (0.3 + _thr) + pop * (0.5 + 0.5 * tune.loudness) + turbo * (0.5 + 0.5 * tune.loudness)
-		s = tanh(s * (1.5 + 1.5 * _thr))
+			whistle_phase += whistle_step
+			turbo = sin(whistle_phase) * 0.2 * boost_now * boost_now
+		if bov_env > 0.01:
+			noise = (noise * 1103515245 + 12345) & 0x7fffffff
+			var bn := noise / 1073741823.5 - 1.0
+			bov_lp += 0.25 * (bn - bov_lp)
+			turbo += (bn - bov_lp) * 0.8 * bov_env
+			bov_env *= pop_decay
+		var s := lp + body * 0.9 + rasp * rasp_gain * (0.3 + thr_now) + pop * pop_gain + turbo * pop_gain
+		s = tanh(s * (1.5 + 1.5 * thr_now))
 		# DC blocker: the pulses are all positive, so strip the offset.
-		var dc := s - _dc_x + 0.995 * _dc_y
-		_dc_x = s
-		_dc_y = dc
-		var v := dc * volume * gain * (0.55 + 0.45 * rpm_norm)
+		var dc := s - dc_x + 0.995 * dc_y
+		dc_x = s
+		dc_y = dc
+		var v := dc * vol * gain * rpm_gain
 		out[i] = Vector2(v, v)
+
+	_noise = noise
+	_rpm = rpm_now
+	_thr = thr_now
+	_since = since
+	_to_next = to_next
+	_fire_amp = fire_amp
+	_next_fire = next_fire
+	_bx1 = bx1
+	_bx2 = bx2
+	_by1 = by1
+	_by2 = by2
+	_rx1 = rx1
+	_rx2 = rx2
+	_ry1 = ry1
+	_ry2 = ry2
+	_lp = lp
+	_dc_x = dc_x
+	_dc_y = dc_y
+	_pop_env = pop_env
+	_pop_wait = pop_wait
+	_flame_peak = flame_peak
+	_whistle_phase = whistle_phase
+	_bov_env = bov_env
+	_bov_lp = bov_lp
 	return out
 
 ## Starts a cluster of bangs, or tops up the running one (never shortens it).

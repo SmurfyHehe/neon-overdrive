@@ -279,6 +279,10 @@ func _ready() -> void:
 		if kind == P1CoupeBuilder.KIND:
 			CarParts.attach(self, {"hub_x": P1CoupeBuilder.DESIGN_WHEEL_X})
 		CarFx.attach(self, chassis_visual.get_meta("half_l", 2.2))
+		# Detail parts policy (shocks, later the engine bay and panel contents)
+		# and the undercarriage's Low-preset switch. After CarFx, so the node
+		# finds the underside on its layer.
+		CarDetail.of(self)
 
 func _physics_process(delta: float) -> void:
 	if driver.is_valid():

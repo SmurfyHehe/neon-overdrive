@@ -526,6 +526,7 @@ func _setup_hud() -> void:
 func _setup_game_state() -> void:
 	game_state = GameState.new()
 	add_child(game_state)
+	CarDetail.bind_state(game_state)  # photo mode shows the cars' detail parts
 	var pause := PauseMenu.new(game_state)
 	pause.wallet = wallet
 	add_child(pause)

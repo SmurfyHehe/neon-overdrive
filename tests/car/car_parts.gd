@@ -3,8 +3,10 @@ extends SceneTree
 # Real wheels and brakes (car parts plan 2026-10-09, session 1), headless.
 # Checks that
 # - the player gets a CarParts node: a new wheel mesh per corner (the design's
-#   closed wheel kept as child 0, hidden), 4 calipers and 4 shocks as two
-#   MultiMeshes, so the car pays +2 draw calls and stays inside the P1 budgets
+#   closed wheel kept as child 0, hidden), 4 calipers as one MultiMesh while
+#   driving (+1 draw call) and the 4 shocks as a second one only once the
+#   car's CarDetail turns detail on (forced here), so the car pays +1 driving
+#   and +2 in detail and stays inside the P1 budgets
 # - meshes face the right way: tyre tread normals point out, the damper rod's
 #   point out, a bar's faces point away from its middle
 # - at rest on a floor the shock is scaled to the live spring length and the
@@ -157,18 +159,34 @@ func _player() -> void:
 		_check(ours.position.x == design.position.x, "our wheel sits at the design track like the design's (x %.3f vs %.3f)" % [ours.position.x, design.position.x])
 		_check((absf(ours.rotation.y - PI) < 1e-4) == (fl.position.x < 0.0), "the left wheel is the right one turned round (rotation.y %.3f)" % ours.rotation.y)
 	var calipers := player.get_node_or_null("Calipers") as MultiMeshInstance3D
-	var shocks := player.get_node_or_null("Shocks") as MultiMeshInstance3D
 	_check(calipers != null and calipers.multimesh.instance_count == 4, "4 calipers in one MultiMesh")
-	_check(shocks != null and shocks.multimesh.instance_count == 4, "4 shocks in one MultiMesh")
+	_check(player.get_node_or_null("Shocks") == null, "no shocks exist while driving (a detail part, CarDetail)")
 	_check(calipers != null and calipers.visibility_range_end == 0.0, "the player's parts have no distance cut-off")
 	_check(calipers != null and calipers.layers == 1 << (CarFx.CAR_LAYER - 1), "the calipers are on the car layer")
+	var draws_driving := P1CoupeBuilder.draw_call_count() + CarParts.extra_draw_calls()
+	_check(draws_driving == 10, "the player driving should be 10 draw calls (8 + underside + calipers), got %d" % draws_driving)
 
-	# Budgets: the P1 test's numbers plus what we add.
+	# Detail on (photo mode, the garage, stopped with a panel open): the
+	# shocks appear, on the car layer, and go when detail turns off.
+	var detail := CarDetail.of(player)
+	detail.force = true
+	detail.refresh()
+	var shocks := player.get_node_or_null("Shocks") as MultiMeshInstance3D
+	_check(shocks != null and shocks.multimesh.instance_count == 4, "detail on builds the 4 shocks in one MultiMesh")
+	_check(shocks != null and shocks.visible and shocks.layers == calipers.layers, "the shocks are shown on the car layer")
+	detail.force = false
+	detail.refresh()
+	_check(shocks != null and not shocks.visible and shocks.get_parent() == player, "detail off hides the shocks and keeps the node")
+	detail.force = true
+	detail.refresh()
+	_check(shocks != null and shocks.visible and player.get_node_or_null("Shocks") == shocks, "detail on again shows the same node, no rebuild")
+
+	# Budgets: the P1 test's numbers plus what we add, in detail (the most).
 	var tris := P1CoupeBuilder.triangle_count() + P1CoupeBuilder.mirror_triangle_count() + parts.triangle_count()
-	var draws := P1CoupeBuilder.draw_call_count() + CarParts.extra_draw_calls()
-	print("car_parts: player %d triangles as drawn (parts %d), %d draw calls" % [tris, parts.triangle_count(), draws])
+	var draws := P1CoupeBuilder.draw_call_count() + CarParts.extra_draw_calls(true)
+	print("car_parts: player %d triangles as drawn (parts %d), %d draw calls in detail" % [tris, parts.triangle_count(), draws])
 	_check(tris <= 10000, "the player with parts should stay inside the 10,000 triangle budget, got %d" % tris)
-	_check(draws == 11, "the player should be 11 draw calls (8 + underside + calipers + shocks), got %d" % draws)
+	_check(draws == 11, "the player in detail should be 11 draw calls (8 + underside + calipers + shocks), got %d" % draws)
 
 	# Settle on the floor, then the shock follows the spring and the caliper the hub.
 	for i in 180:

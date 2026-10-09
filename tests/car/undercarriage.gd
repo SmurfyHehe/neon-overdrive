@@ -50,8 +50,9 @@ func _initialize() -> void:
 		_check(box.end.y <= p.ground_y + 2.0 * p.wheel_r, "the underside should stay below the wheel tops (%.3f vs %.3f)" % [box.end.y, p.ground_y + 2.0 * p.wheel_r])
 		_check(box.position.x >= -p.half_w and box.end.x <= p.half_w, "inside the body's width (%s)" % box)
 		_check(box.position.z >= -p.half_l and box.end.z <= p.half_l, "inside the body's length (%s)" % box)
-		_check(under.visibility_range_end == 0.0, "the player's underside is always drawn")
-		_check(car.get_node_or_null(Undercarriage.PLATE_NAME) == null, "the player gets no distance plate")
+		_check(is_equal_approx(under.visibility_range_end, Undercarriage.LOD0_END), "the player's underside has the LOD too (ends at %.0f m)" % Undercarriage.LOD0_END)
+		var pplate := car.get_node_or_null(Undercarriage.PLATE_NAME) as MeshInstance3D
+		_check(pplate != null and is_equal_approx(pplate.visibility_range_begin, Undercarriage.LOD0_END) and is_equal_approx(pplate.visibility_range_end, Undercarriage.LOD1_END), "the player gets the distance plate from %.0f to %.0f m" % [Undercarriage.LOD0_END, Undercarriage.LOD1_END])
 		_check(P1CoupeBuilder.draw_call_count() == (P1CoupeBuilder._get_body_mesh().get_surface_count() + 6), "draw_call_count counts the underside")
 		# The tail pipes reach the tips.
 		var tip: Vector3 = p.tips[0].pos

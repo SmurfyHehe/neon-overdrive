@@ -791,6 +791,11 @@ static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: 
 	# dead (tests/car_audio.gd's kerb phase, once the ground became a plane in
 	# PR #129). A sloped face pushes the box up instead.
 	#
+	# The back edge is a ramp too (2026-10-09): a district setback (buildings
+	# step 4) leaves a drivable lot behind the sidewalk, and a car scraping the
+	# set-back wall at speed ran its inside wheels into the bare 0.15 m back
+	# lip where it shifts between chunks and rolled over (tests/wall_hit.gd).
+	#
 	# STATIONS pieces along the chunk, each corner through the centreline
 	# frame (#37); on a straight centreline the ramp and top are exactly the
 	# old prism's.
@@ -805,16 +810,19 @@ static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: 
 		var i1 := lerpf(inner0, inner1, t1)
 		var o0 := lerpf(outer0, outer1, t0)
 		var o1 := lerpf(outer0, outer1, t1)
-		var ramp0 := minf(SIDEWALK_RAMP, absf(o0 - i0))
-		var ramp1 := minf(SIDEWALK_RAMP, absf(o1 - i1))
+		var ramp0 := minf(SIDEWALK_RAMP, absf(o0 - i0) / 2.0)
+		var ramp1 := minf(SIDEWALK_RAMP, absf(o1 - i1) / 2.0)
 		var foot0 := _at(i0 * sx, 0.0, z0)
 		var foot1 := _at(i1 * sx, 0.0, z1)
 		var lip0 := _at((i0 + ramp0) * sx, 0.15, z0)
 		var lip1 := _at((i1 + ramp1) * sx, 0.15, z1)
-		var top0 := _at(o0 * sx, 0.15, z0)
-		var top1 := _at(o1 * sx, 0.15, z1)
+		var top0 := _at((o0 - ramp0) * sx, 0.15, z0)
+		var top1 := _at((o1 - ramp1) * sx, 0.15, z1)
+		var back0 := _at(o0 * sx, 0.0, z0)
+		var back1 := _at(o1 * sx, 0.0, z1)
 		faces.append_array([foot0, foot1, lip0, lip0, foot1, lip1])  # the ramp
 		faces.append_array([lip0, lip1, top0, top0, lip1, top1])     # the top
+		faces.append_array([top0, top1, back0, back0, top1, back1])  # the back ramp
 	((body.get_node(^"Shape") as CollisionShape3D).shape as ConcavePolygonShape3D).set_faces(faces)
 	body.position = Vector3.ZERO
 
@@ -894,6 +902,19 @@ static func _update_road_collision(root: Node3D, half_w: float) -> void:
 
 ## The district cross wall: spans x between the two boundary lines (xs.x and
 ## xs.y, both |x|) at the chunk's start, z = 0. Disabled when there is no step.
+## A setback step wall: one box across the lot at the chunk start. Not
+## _new_boundary(): that makes one box per station (#37), and _update_step
+## sizes only "Shape", so the spare unit boxes would stick out of the wall.
+static func _new_step(body_name: String) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.name = body_name
+	CarSpec.make_wall(body)
+	var col := CollisionShape3D.new()
+	col.name = "Shape"
+	col.shape = BoxShape3D.new()
+	body.add_child(col)
+	return body
+
 static func _update_step(root: Node3D, body_name: String, xs: Vector2, side: int, on: bool) -> void:
 	var body: StaticBody3D = root.get_node(NodePath(body_name))
 	var col: CollisionShape3D = body.get_node(^"Shape")
@@ -1090,8 +1111,8 @@ static func _create_nodes(root: Node3D) -> void:
 	root.add_child(_new_sidewalk_collision("SidewalkColOnc"))
 	root.add_child(_new_boundary("BoundaryOwn"))
 	root.add_child(_new_boundary("BoundaryOnc"))
-	root.add_child(_new_boundary("BoundaryStepOwn"))
-	root.add_child(_new_boundary("BoundaryStepOnc"))
+	root.add_child(_new_step("BoundaryStepOwn"))
+	root.add_child(_new_step("BoundaryStepOnc"))
 
 	var slots := _dash_slots()
 	root.add_child(_new_multimesh("PylonsOwn", _get_pylon_mesh(), _get_pylon_mat_own(), _pylon_slots()))

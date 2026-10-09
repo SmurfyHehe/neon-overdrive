@@ -52,6 +52,16 @@ var max_steps := ceili(MAX_SECONDS * Engine.physics_ticks_per_second)
 enum Kind { ACCEL, BRAKE, CORNER }
 const ALL_KINDS := [Kind.ACCEL, Kind.BRAKE, Kind.CORNER]
 
+## How the scripted driver drives (balance sweep, 2026-10-09). The default is
+## exactly the driver the track always had, so every existing measurement and
+## test is unchanged; tools/balance_sweep.gd swaps in weaker drivers to see how
+## much of a car's pace a novice can reach.
+##   shift_frac    : upshift at this fraction of max_rpm
+##   throttle_max  : the most throttle the driver uses on a straight
+##   throttle_ramp : seconds to squeeze from 0 to throttle_max at launch (0 = instant)
+##   brake_max     : the most brake pedal the driver uses
+const DEFAULT_PROFILE := {"shift_frac": SHIFT_RPM_FRACTION, "throttle_max": 1.0, "throttle_ramp": 0.0, "brake_max": 1.0}
+
 ## One scripted run on one car.
 class Run extends RefCounted:
 	var kind: int
@@ -73,6 +83,13 @@ class Run extends RefCounted:
 	# trace (brake run with record_trace only): {step, speed, throttle, brake}
 	var trace := {}
 	var trace_ticks := 0
+	var profile: Dictionary = DEFAULT_PROFILE
+	# heat telemetry (record_heat only): one [speed m/s, engine load 0..1, on limiter, brake power W]
+	# per tick, replayed through PowertrainHealth offline by the balance sweep
+	var record_heat := false
+	var heat_log: Array = []
+	var start_pos := Vector3.ZERO
+	var has_start := false
 
 	func drive(c: PlayerCar) -> void:
 		if done:
@@ -97,6 +114,23 @@ class Run extends RefCounted:
 			Kind.CORNER: _corner(c)
 		if not trace.is_empty():
 			_sample(c)
+		if record_heat:
+			_log_heat(c)
+
+	## Same load and brake power PowertrainHealth.step() reads from the car.
+	func _log_heat(c: PlayerCar) -> void:
+		var peak_power := c.max_torque * c.max_rpm / 9.5488 * 0.7
+		var power := maxf(c.torque_output, 0.0) * c.motor_rpm / 9.5488
+		var load := clampf(power / maxf(peak_power, 1.0), 0.0, 1.0)
+		heat_log.append([c.speed, load, c.limiter_cut, c.brake_force * c.speed])
+
+	## Full throttle for the stock driver; a novice squeezes it on and never floors it.
+	func _throttle(c: PlayerCar) -> void:
+		var cap: float = profile.throttle_max
+		var ramp: float = profile.throttle_ramp
+		if ramp > 0.0 and t < ramp:
+			cap *= clampf(t / ramp, 0.0, 1.0)
+		c.throttle_input = cap
 
 	func _sample(c: PlayerCar) -> void:
 		if trace_ticks % maxi(1, roundi(TRACE_STEP / dt)) == 0:
@@ -107,7 +141,7 @@ class Run extends RefCounted:
 
 	func _shift(c: PlayerCar) -> void:
 		if c.current_gear >= 1 and c.current_gear < c.gear_ratios.size() and not c.is_shifting \
-				and c.motor_rpm >= c.max_rpm * SHIFT_RPM_FRACTION:
+				and c.motor_rpm >= c.max_rpm * float(profile.shift_frac):
 			c.manual_shift(1)
 
 	func _finish(why := "") -> void:
@@ -116,20 +150,26 @@ class Run extends RefCounted:
 			failed = why
 
 	func _accel(c: PlayerCar) -> void:
-		c.throttle_input = 1.0
+		_throttle(c)
 		_shift(c)
 		var v := c.current_speed()
 		var kmh := v * 3.6
 		m.top_speed_kmh = maxf(m.get("top_speed_kmh", 0.0), kmh)
 		if not m.has("t_0_100") and v >= 100.0 * KMH:
 			m.t_0_100 = t
+		if not has_start:
+			start_pos = c.global_position
+			has_start = true
+		# Standing 400 m (balance sweep): the "lap" is built from this.
+		if not m.has("t_400") and c.global_position.distance_to(start_pos) >= 400.0:
+			m.t_400 = t
 		if t >= ACCEL_TIME:
 			_finish()
 
 	func _brake(c: PlayerCar) -> void:
 		var v := c.current_speed()
 		if not brake_phase:
-			c.throttle_input = 1.0
+			_throttle(c)
 			_shift(c)
 			if v >= 100.0 * KMH:
 				brake_phase = true
@@ -140,7 +180,7 @@ class Run extends RefCounted:
 				_finish("never reached 100 km/h")
 			return
 		c.throttle_input = 0.0
-		c.brake_input = 1.0
+		c.brake_input = profile.brake_max
 		if v < 0.3 or t - brake_t0 > 20.0:
 			var d := c.global_position.distance_to(brake_start)
 			# Braking starts a hair above 100 km/h (one tick of overshoot);
@@ -176,6 +216,12 @@ class Run extends RefCounted:
 var linear_damp_override := -1.0
 ## Keep the brake run's telemetry trace (see the top of the file).
 var record_trace := false
+## The scripted driver's limits (DEFAULT_PROFILE = the track's usual driver).
+var driver_profile: Dictionary = DEFAULT_PROFILE
+## Keep per-tick heat telemetry of the accel and brake runs as metrics.heat_accel
+## and metrics.heat_brake (see Run.heat_log), for the balance sweep's offline
+## PowertrainHealth replay. Off by default.
+var record_heat := false
 
 var steps_taken := 0  # physics steps the last evaluate() ran, all specs together
 var cars_simulated := 0  # cars in flight at any one step (3)
@@ -221,6 +267,10 @@ func _evaluate_one(spec: Dictionary, kinds: Array) -> Dictionary:
 		out.merge(r.m)
 		if not r.trace.is_empty():
 			out.trace = r.trace
+		if r.record_heat and r.kind == Kind.ACCEL:
+			out.heat_accel = r.heat_log
+		if r.record_heat and r.kind == Kind.BRAKE:
+			out.heat_brake = r.heat_log
 	for key in out:
 		if out[key] is float and not is_finite(out[key]):
 			out.ok = false
@@ -252,6 +302,8 @@ func _spawn(spec: Dictionary, lane: int, kind: int) -> Run:
 	r.kind = kind
 	r.dt = 1.0 / Engine.physics_ticks_per_second
 	r.t = -SETTLE_TIME
+	r.profile = driver_profile
+	r.record_heat = record_heat and kind != Kind.CORNER
 	if record_trace and kind == Kind.BRAKE:
 		r.trace = {"step": TRACE_STEP, "speed": [], "throttle": [], "brake": []}
 	var car := PlayerCar.new()

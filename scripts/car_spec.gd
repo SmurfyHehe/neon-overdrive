@@ -247,6 +247,32 @@ static func coupe_default() -> Dictionary:
 		"engine_voice": EngineVoice.for_car("p1_coupe"),
 	}
 
+## The starter car (balance slice 1, 2026-10-09): the P1 coupe "as found" under
+## the tarp, from docs/planning/rival-and-car-ladder-proposal (option A, which
+## Roy has not yet signed off; the data is here so the ladder can be measured).
+## Same body, same sim, tired numbers: a worn engine that is down on torque and
+## will not rev, a lazy throttle, hard old tyres, glazed brakes, one pop-up stuck
+## open (drag). Everything the Act 1 restoration wins back is a stock coupe
+## value, so "restored" simply means coupe_default().
+static func coupe_worn() -> Dictionary:
+	var s := coupe_default()
+	s["max_torque"] = 290.0
+	s["max_rpm"] = 5800.0
+	s["torque_shape"] = {"low_end": 0.45, "peak_pos": 0.45, "plateau": 0.0, "falloff": 0.75}
+	s["throttle_speed"] = 5.0
+	s["motor_brake"] = 26.0
+	s["coefficient_of_drag"] = 0.33
+	s["coefficient_of_friction"] = {"Road": 1.0, "Dirt": 0.8}
+	s["tire_stiffnesses"] = {"Road": 7.0, "Dirt": 3.0}
+	s["lateral_grip_assist"] = {"Road": 0.03, "Dirt": 0.0}
+	s["brake_force_multiplier"] = 2.1
+	s["front_damping_ratio"] = 0.38
+	s["rear_damping_ratio"] = 0.38
+	s["aero_downforce_coefficient_front"] = 0.15
+	s["aero_downforce_coefficient_rear"] = 0.25
+	s["turbo_boost_max"] = 0.0
+	return s
+
 ## Traffic tune (milestone 3, 2026-10-05): coupe_default() with commuter-car
 ## numbers -- a smaller engine, more drag, street tyres, hardly any downforce.
 ## Same simulation, different data; the three NPC cars (stage B step 5) replace
@@ -335,7 +361,16 @@ static func npc_spec(kind: String) -> Dictionary:
 			s["rear_damping_ratio"] = 0.38
 			s["front_arb_ratio"] = 0.20
 			s["rear_arb_ratio"] = 0.10
-			s["center_of_gravity_height_offset"] = 0.0
+			# Balance slice 1 (2026-10-09, tools/balance_sweep.gd): with the coupe's
+			# road grip the pickup cornered at 1.20 g, harder than the coupe. Truck
+			# tyres and a high body bring it to about 0.9 g and 100-0 near 60 m.
+			# Lower grip (0.66) read 0.71 g but 75 m braking, so this is the
+			# compromise; the sedans understeer at 0.75 g. On the track's corner run
+			# (held steering, speed ramping under power) the truck's rear lets go
+			# at about 55 degrees of slide; it did that before this pass too (43
+			# degrees), and a stiff front bar plus rear toe-in did not cure it.
+			s["coefficient_of_friction"] = {"Road": 0.78, "Dirt": 0.72}
+			s["center_of_gravity_height_offset"] = 0.15
 	return s
 
 ## Physics layers (milestone 3). Every car sits on CAR_LAYER and collides with

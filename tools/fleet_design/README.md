@@ -11,5 +11,5 @@ numpy, scipy and Pillow, and needs no GPU or Godot.
     python palette_check.py   # no magenta or cyan
     python -c "import sheets, json; sheets.overview(); sheets.outline_check(json.load(open('../../docs/design/fleet/verify.json')))"
 
-The game cars are not built from these meshes. Stage B step 5 and stage D
-model them in Godot from the same numbers in `fleet.json`.
+The game cars are these meshes: `python game_export.py` packs the P1 coupe and
+`python game_export.py <id>` a traffic car (every build) into `scripts/`.

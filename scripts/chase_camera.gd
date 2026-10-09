@@ -108,7 +108,8 @@ var _clock := 0.0                  # physics seconds, for the double tap
 var frame: CockpitFrame
 var perspective: PerspectiveAudio
 var target: PlayerCar
-var mode := 1  # B: light smoothing (A, the hard snap, is still on the C key cycle)
+var mode := ViewSettings.camera_smoothing  # follows the saved setting (pause menu, C key); tests may override
+var _seen_smoothing := ViewSettings.camera_smoothing
 ## Tests turn this off to compare the drawn position against the chase offset.
 var shake_enabled := true
 
@@ -178,10 +179,19 @@ func mode_name() -> String:
 # needs exactly one velocity sample per tick.
 func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("camera_cycle"):
-		mode = (mode + 1) % MODE_NAMES.size()
+		ViewSettings.set_camera_smoothing((ViewSettings.camera_smoothing + 1) % MODE_NAMES.size())
+		ViewSettings.save_settings()
+	if ViewSettings.camera_smoothing != _seen_smoothing:   # menu or C key changed it
+		_seen_smoothing = ViewSettings.camera_smoothing
+		mode = _seen_smoothing
 	if Input.is_action_just_pressed("camera_view"):
 		set_view(View.CHASE if view == View.COCKPIT else View.COCKPIT)
 	look_back = Input.is_action_pressed("look_back")
+	perspective.window_key(Input.is_action_pressed("window"), delta)
+	if perspective.car_audio == null:
+		for c in target.get_children():
+			if c is CarAudio:
+				perspective.car_audio = c
 	_clock += delta
 	if view == View.COCKPIT and Input.is_action_just_pressed("look_glance"):
 		glance_tap(Input.get_axis("steer_left", "steer_right"))

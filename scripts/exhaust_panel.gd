@@ -5,8 +5,7 @@ extends VBoxContainer
 # pops, flame), cosmetic only. They write into the player's spec under
 # "exhaust" through CarSpec.set_param(), the same path as the gearing sliders;
 # EngineAudio copies the spec into the live synth every frame, so changes are
-# heard at once, and saves the tune to disk once it settles. The held keys
-# U/J, I/K and O/L still work while driving and move the same values.
+# heard at once, and saves the tune to disk once it settles.
 #
 # These paths are in TuneParams.all() (so tune slots store them) but never in
 # TuneParams.auto_paths(): Auto-Tune does not touch them.
@@ -71,6 +70,10 @@ func refresh() -> void:
 		sliders[key].set_value_no_signal(v)
 		value_labels[key].text = "%.2f" % v
 	anti_lag_check.set_pressed_no_signal(TuneParams.get_value(player.spec, "exhaust/anti_lag") >= 0.5)
+	# Turbo cars only: the switch keeps its value but greys out with no boost.
+	var turbo := float(player.spec.get("turbo_boost_max", 0.0)) > 0.0
+	anti_lag_check.disabled = not turbo
+	anti_lag_check.text = "Anti-lag crackle" if turbo else "Anti-lag crackle (needs a turbo)"
 	_push_to_synth()
 
 func _on_slider(value: float, key: String) -> void:

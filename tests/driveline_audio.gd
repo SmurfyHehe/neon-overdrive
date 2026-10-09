@@ -80,6 +80,7 @@ func _physics_process(_delta: float) -> bool:
 			if p.current_speed() > 30.0 and p.current_gear >= 3:
 				_check(whine_peak > 0.3, "the gear whine should be audible at speed under load (peak %.2f)" % whine_peak)
 				_check(d.thump_count >= 2, "upshifts should thump (%d)" % d.thump_count)
+				_check(d.upshift_count >= 2 and d.downshift_count == 0, "accelerating should only upshift (up %d, down %d)" % [d.upshift_count, d.downshift_count])
 				throttle = 0.0
 				_go(Step.LIFT)
 			elif waited > TIMEOUT_TICKS / 2:

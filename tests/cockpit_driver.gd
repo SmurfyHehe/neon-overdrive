@@ -8,11 +8,15 @@ extends SceneTree
 #   legs reach the pedals
 # - a manual shift moves the lever and sends the right hand to the knob, then
 #   back on the rim within 1 s
-# - a radio station change sends the right hand to the head unit and back
+# - a next-station request sends the right hand to the touch screen, which taps
+#   the next tile (the station changes on the tap), and back (tests/touch_radio.gd
+#   covers the timing)
 # - pulling the handbrake sends the right hand to the lever, which it holds
 #   until the handbrake is released, then back on the rim
-# - the hands and wrists never rise above the rim top from the eye (at least
-#   CockpitFrame.WHEEL_TOP_MIN_DEG below it) in any of the above
+# - priority: a shift takes the hand off a radio reach, the handbrake takes it
+#   off a shift
+# - the hands and wrists never rise above DriverModel.HAND_TOP_MIN_DEG below the
+#   eye in any of the above (the sightline spec)
 # - in the cockpit view the head and torso are hidden, in the chase view shown
 # - no engine errors during any of it
 # Exit code 1 on failure. Run:
@@ -36,7 +40,7 @@ class ErrorCounter extends Logger:
 	func _log_message(_message: String, _error: bool) -> void:
 		pass
 
-enum Step { BOOT, SWEEP, SHIFT, RADIO, BRAKE, VIEWS, DONE }
+enum Step { BOOT, SWEEP, SHIFT, RADIO, BRAKE, PRIORITY, VIEWS, DONE }
 
 ## Physics ticks for a number of seconds (the suite runs at 60, the game at 120).
 static func ticks(secs: float) -> int:
@@ -55,6 +59,7 @@ var shift_tick := -1
 var hand_at_knob := false
 var hand_back_tick := -1
 var hand_at_radio := false
+var radio_touch := Vector3.ZERO
 var lever_moved := false
 var handbrake := 0.0
 var hand_at_brake := false
@@ -73,12 +78,19 @@ func _drive(c: PlayerCar) -> void:
 	c.handbrake_input = handbrake
 	c.steering_input = steer
 
-## Lowest angle below the eye's horizontal of the hands' grip and wrist points
-## (car space), kept as a running minimum with where it happened.
+## Lowest angle below the eye's horizontal of any corner of the hands' (and
+## the bracelet's) mesh bounds, car space, kept as a running minimum with where
+## it happened.
 func _track_view(d: DriverModel, where: String) -> void:
 	var eye := ChaseCamera.COCKPIT_EYE
 	for side in [-1, 1]:
-		for pt in [d.hand_position(side), d.wrist_position(side)]:
+		var hand: MeshInstance3D = d.hands[side]
+		var pts: Array[Vector3] = []
+		for c in 8:
+			pts.append(hand.transform * hand.get_aabb().get_endpoint(c))
+			if side > 0:
+				pts.append(hand.transform * d.bracelet.transform * d.bracelet.get_aabb().get_endpoint(c))
+		for pt in pts:
 			var v: Vector3 = eye - pt
 			var below := rad_to_deg(atan2(v.y, Vector2(v.x, v.z).length()))
 			if below < min_below_eye:
@@ -128,10 +140,9 @@ func _physics_process(_delta: float) -> bool:
 					_check(gap <= GRIP_TOL, "hand %d is %.3f m off its rim grip at steer %.1f (wheel %.0f deg)" % [side, gap, steer, rad_to_deg(frame.wheel.angle)])
 					_check(d.leg_gap(side) < 0.03, "leg %d cannot reach its pedal (short by %.3f m)" % [side, d.leg_gap(side)])
 				# the grip really is on the rim centreline: the hand turns with the
-				# wheel up to the slide angle and stays there past it (car space,
+				# wheel inside the grip range and stays at its edge past it (car space,
 				# the wheel's own rotation left out)
 				var deg := rad_to_deg(frame.wheel.angle)
-				var held := -clampf(deg, -DriverModel.HAND_SLIDE_DEG, DriverModel.HAND_SLIDE_DEG)
 				var to_wheel := (frame.wheel_mount.transform * frame.wheel.transform).affine_inverse()
 				for side in [-1, 1]:
 					var local: Vector3 = to_wheel * d.hand_position(side)
@@ -139,7 +150,10 @@ func _physics_process(_delta: float) -> bool:
 					var nearest := frame.wheel.rim_point(ang)
 					_check(local.distance_to(nearest) <= GRIP_TOL, "hand %d is %.3f m off the rim centreline at wheel %.0f deg" % [side, local.distance_to(nearest), deg])
 					var world_ang := wrapf(ang - deg, -180.0, 180.0)
-					var want := wrapf((0.0 if side > 0 else 180.0) + held, -180.0, 180.0)
+					# right hand: GRIP_DEG turning with the wheel, held in the grip
+					# range; the left mirrors it about 12 o'clock
+					var held := clampf(DriverModel.GRIP_DEG - side * deg, DriverModel.GRIP_LOW_DEG, DriverModel.GRIP_HIGH_DEG)
+					var want := wrapf(held if side > 0 else 180.0 - held, -180.0, 180.0)
 					_check(absf(wrapf(world_ang - want, -180.0, 180.0)) < 8.0, "hand %d sits at %.0f deg of the rim, want %.0f (wheel %.0f)" % [side, world_ang, want, deg])
 				sweep_i += 1
 				if sweep_i < sweep.size():
@@ -169,17 +183,17 @@ func _physics_process(_delta: float) -> bool:
 				_check(hand_back_tick > 0 and hand_back_tick - shift_tick <= ticks(1.0), "the hand should be back on the rim within 1 s (%d ticks)" % (hand_back_tick - shift_tick))
 				_check(not d.is_busy(), "the driver is idle again after the shift")
 				throttle = 0.3
-				game.radio.next_station()
+				radio_touch = frame.radio_touch().pos
+				frame.request_radio()
 				shift_tick = tick
 				_go(Step.RADIO)
 		Step.RADIO:
-			var btn: Vector3 = frame.radio_button_position()
-			if d.hand_position(1).distance_to(btn) < 0.10:
+			if d.hand_position(1).distance_to(radio_touch) < 0.10:
 				hand_at_radio = true
 			if waited == ticks(1.2):
 				_check(hand_at_radio, "a station change should send the right hand to the head unit")
 				_check(not d.is_busy() and d.hand_position(1).distance_to(d.grip_position(1)) <= GRIP_TOL, "the hand returns to the rim after the radio press")
-				_check(frame.radio_label.text != "RADIO OFF", "the head unit shows the station (%s)" % frame.radio_label.text)
+				_check(game.radio.station == 0 and frame.head_unit.station == 0, "the tap tuned the first station and the screen shows it (%d)" % frame.head_unit.station)
 				throttle = 0.0
 				handbrake = 1.0
 				_go(Step.BRAKE)
@@ -197,13 +211,28 @@ func _physics_process(_delta: float) -> bool:
 			if waited == ticks(0.6) + ticks(0.5):
 				_check(not d.is_busy() and d.hand_position(1).distance_to(d.grip_position(1)) <= GRIP_TOL, "the hand returns to the rim after the handbrake is released")
 				throttle = 0.3
+				frame.request_radio()
+				_go(Step.PRIORITY)
+		Step.PRIORITY:
+			# radio reach under way, then a shift, then the handbrake
+			if waited == ticks(0.1):
+				_check(d.act == DriverModel.Act.RADIO_REACH, "the radio reach has started (%s)" % DriverModel.Act.keys()[d.act])
+				p.shift(1 if p.gear < 3 else -1)
+			if waited == ticks(0.2):
+				_check(d.act == DriverModel.Act.SHIFT_REACH or d.act == DriverModel.Act.SHIFT_HOLD, "a shift takes the hand off the radio (%s)" % DriverModel.Act.keys()[d.act])
+				handbrake = 1.0
+			if waited == ticks(0.3):
+				_check(d.act == DriverModel.Act.BRAKE_REACH or d.act == DriverModel.Act.BRAKE_HOLD, "the handbrake takes the hand off the shift (%s)" % DriverModel.Act.keys()[d.act])
+				handbrake = 0.0
+			if waited == ticks(1.3):
+				_check(not d.is_busy() and d.hand_position(1).distance_to(d.grip_position(1)) <= GRIP_TOL, "the hand is back on the rim after the pile-up")
 				_go(Step.VIEWS)
 		Step.VIEWS:
 			if waited == ticks(0.1):
 				_check(not d.head.visible and not d.torso_mesh.visible, "in the cockpit view the head and torso are hidden")
 				_check((d.get_node("HandR") as Node3D).visible and (d.get_node("HandL") as Node3D).visible and d.bracelet.visible, "hands and bracelet stay visible in the cockpit")
 				print("hands: highest point seen %.1f deg below the eye (%s)" % [min_below_eye, min_below_where])
-				_check(min_below_eye >= CockpitFrame.WHEEL_TOP_MIN_DEG, "a hand rose to %.1f deg below the eye (%s); the road band must stay clear" % [min_below_eye, min_below_where])
+				_check(min_below_eye >= DriverModel.HAND_TOP_MIN_DEG, "a hand rose to %.1f deg below the eye (%s); the road band must stay clear" % [min_below_eye, min_below_where])
 				cam.set_view(ChaseCamera.View.CHASE)
 			if waited == ticks(0.2):
 				_check(d.head.visible and d.torso_mesh.visible, "in the chase view the whole driver shows")

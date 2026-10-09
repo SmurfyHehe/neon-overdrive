@@ -24,6 +24,24 @@ const STATIONS := [
 const DAVE_PERIOD := 30.0   # seconds from one Dave line to the next
 const BREAK_SECS := 8.0     # how long a line's caption stays up (and the music, if any, ducks)
 
+## Dave's time checks, read out on the hour (NightClock -> RadioManager.announce_hour).
+## Placeholders like his other lines: the story is Roy's to write.
+const TIME_LINES := {
+	21: "Dave: Nine o'clock. The day crowd is home. The road is ours now.",
+	22: "Dave: Ten p.m. Coffee number two. Lights on, eyes open.",
+	23: "Dave: Eleven. The city's thinning out. Window by window.",
+	0: "Dave: Midnight, driver. Officially tomorrow. Nobody tell the boss.",
+	1: "Dave: One a.m. Just us and the sodium lamps.",
+	2: "Dave: Two o'clock. Even the vending machines are asleep.",
+	3: "Dave: Three a.m. The dead hour. Keep it between the lines.",
+	4: "Dave: Four. Bakers are up. So are you, apparently.",
+	5: "Dave: Five a.m. One hour of dark left. Make it count.",
+	6: "Dave: Six. Sun's coming. That's the night, driver. Go home.",
+}
+
+static func time_line(hour24: int) -> String:
+	return TIME_LINES.get(hour24, "Dave: Top of the hour. Still here, still awake.")
+
 static func station_count() -> int:
 	return STATIONS.size()
 

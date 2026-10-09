@@ -20,7 +20,7 @@ extends Node
 # AUTOTUNE with it expanded (Y). The Auto-Tune search runs in a
 # separate headless Godot process (scripts/auto_tune_job.gd), because the game's
 # physics can neither run faster than real time nor be stepped by hand.
-enum State { PLAYING, PAUSED, TUNING, AUTOTUNE }
+enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO }
 
 signal state_changed(new_state: State, old_state: State)
 
@@ -30,7 +30,7 @@ var state: State = State.PLAYING
 # name) would also switch tabs or close the tuner. _input() runs before the GUI
 # sees the key, so it can tell whether a text control had focus when the key went
 # down; the poll then skips that press.
-const TEXT_GUARDED := [&"pause", &"tuning_panel", &"autotune_panel"]
+const TEXT_GUARDED := [&"pause", &"tuning_panel", &"autotune_panel", &"photo_mode"]
 var _typed_into_text: Dictionary = {}
 
 ## True for the two states that show the Tuner screen.
@@ -38,6 +38,7 @@ static func is_tuner(s: State) -> bool:
 	return s == State.TUNING or s == State.AUTOTUNE
 
 func _ready() -> void:
+	PhotoMode.ensure_actions()
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 ## True while a text control (LineEdit, TextEdit) has keyboard focus.
@@ -59,14 +60,31 @@ func _physics_process(_delta: float) -> void:
 		toggle_pause()
 	elif Input.is_action_just_pressed("tuning_panel") and not blocked.has(&"tuning_panel"):
 		toggle_tuning()
+	elif Input.is_action_just_pressed("photo_mode") and not blocked.has(&"photo_mode"):
+		toggle_photo()
 	elif Input.is_action_just_pressed("autotune_panel") and not blocked.has(&"autotune_panel"):
 		toggle_autotune()
+
+## P: free-camera photo mode (scripts/photo_mode.gd). Paused like the other screens.
+func toggle_photo() -> void:
+	if state == State.PHOTO:
+		close_photo()
+	elif state == State.PLAYING:
+		get_tree().paused = true
+		_set_state(State.PHOTO)
+
+func close_photo() -> void:
+	if state == State.PHOTO:
+		get_tree().paused = false
+		_set_state(State.PLAYING)
 
 func toggle_pause() -> void:
 	if state == State.TUNING:
 		close_tuning()  # Esc backs out of the tuning panel
 	elif state == State.AUTOTUNE:
 		close_autotune()  # Esc backs out of Auto-Tune too
+	elif state == State.PHOTO:
+		close_photo()  # Esc leaves photo mode
 	elif state == State.PAUSED:
 		resume()
 	elif state == State.PLAYING:

@@ -48,8 +48,8 @@ func _physics_process(_delta: float) -> bool:
 		Step.BOOT:
 			_check(frame != null and frame.get_parent() == p, "the cockpit frame should be a child of the player car")
 			for n in ["Cabin", "Backlight", "WheelMount", "WheelMount/Wheel", "WheelMount/Wheel/Leds", "WheelMount/Wheel/Lcd",
-					"WheelMount/Wheel/PaddleL", "WheelMount/Wheel/PaddleR", "TachNeedle", "SpeedoNeedle", "Lamps", "Radio",
-					"RadioLabel", "Lever", "Lever/Knob", "Handbrake", "ThrottlePedal", "BrakePedal", "ClutchPedal", "CabinLight",
+					"WheelMount/Wheel/PaddleL", "WheelMount/Wheel/PaddleR", "TachNeedle", "SpeedoNeedle", "Lamps", "Radio", "Radio/Screen", "Radio/Bezel",
+					"Lever", "Lever/Knob", "Handbrake", "ThrottlePedal", "BrakePedal", "ClutchPedal", "CabinLight",
 					"Mirrors", "Mirrors/RearView", "Mirrors/LeftView", "Mirrors/RightView", "Mirrors/RearGlass", "Shelf"]:
 				_check(frame.get_node_or_null(n) != null, "the cockpit should have a node %s" % n)
 			_check(frame.mirrors.views.size() == 3, "three mirrors")

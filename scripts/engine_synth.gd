@@ -67,12 +67,52 @@ var _ry2 := 0.0
 var _lp := 0.0
 var _dc_x := 0.0
 var _dc_y := 0.0
-# overrun pops: a decaying noise burst plus a low thump, and the flame it spits
+# overrun pops and limiter bangs. _pop_env is a pop REQUEST (its strength
+# 0..1); the pop voice turns each request into a cluster of bangs and clears it.
 var _pop_env := 0.0
-var _pop_thump := 0.0
-var _pop_hp := 0.0
 var _pop_wait := 0  # samples until the next overrun pop
 var _flame_peak := 0.0
+# The pop voice (2026-10-07, exhaust-sound-research-2026-10-07 option A). Real
+# overrun pops come in clusters, not single clicks: a burble of a few bangs a
+# few tens of ms apart, and each bang rings the tailpipe for a moment after the
+# crack. One bang = a sharp noise crack, a low boom, and a kick into two decaying
+# resonators (the pipe's ring), tuned off body_hz so each car's pipe rings in
+# its own key. Nothing here runs per sample between bangs.
+enum PopKind { BURBLE, LIMITER, ANTI_LAG, UPSHIFT }
+## Per kind: bangs min, bangs max, gap min s, gap max s, ring level, boom level.
+const POP_CLUSTERS := {
+	PopKind.BURBLE: [2, 4, 0.025, 0.07, 0.7, 1.0],    # lift-off burble: loose, uneven
+	PopKind.LIMITER: [1, 2, 0.015, 0.03, 0.6, 0.8],   # a cut firing or two on the limiter
+	PopKind.ANTI_LAG: [3, 6, 0.012, 0.035, 0.5, 0.7], # anti-lag: a tight machine-gun crackle
+	PopKind.UPSHIFT: [1, 2, 0.02, 0.04, 1.0, 1.4],    # ignition cut on a flat-out upshift
+}
+const RING_RATIO := 2.1        # first pipe mode = body_hz x this
+const RING2_RATIO := 2.76      # second, tinnier mode = first x this
+const RING_DECAY := 0.07       # s, the ring's time constant
+const CRACK_DECAY := 0.004     # s
+const BOOM_DECAY := 0.025      # s
+var _shift_req := 0.0          # upshift-cut request (shift_cut()), 0..1
+var _cl_left := 0              # bangs still to come in the current cluster
+var _cl_wait := 0              # samples to the next one
+var _cl_kind := PopKind.BURBLE
+var _cl_amp := 0.0
+var _crack_env := 0.0
+var _crack_lp := 0.0
+var _boom_env := 0.0
+var _boom_lp := 0.0
+var _ring_live := 0            # samples of ring tail left to render
+var _r1 := 0.0                 # pipe resonators: current and previous sample
+var _r1p := 0.0
+var _r2 := 0.0
+var _r2p := 0.0
+var _ring_kick1 := 0.0         # resonator kick per unit bang, set per block
+var _ring_kick2 := 0.0
+var _ring_mix := 0.0
+var _boom_mix := 0.0
+## Pop-voice counters for tests: clusters started, bangs fired, upshift clusters.
+var pop_clusters := 0
+var pop_bangs := 0
+var upshift_clusters := 0
 ## Turbo (Phase B): boost 0..1 (fraction of max boost) set by EngineAudio; blow_off()
 ## fires the vent. The whistle is a rising sine, the vent a short filtered noise burst.
 var boost := 0.0
@@ -129,6 +169,15 @@ func apply_voice(v: Dictionary) -> void:
 ## The blow-off valve vents: a short "pssh" whose size follows how hot the boost was.
 func blow_off(strength: float) -> void:
 	_bov_env = maxf(_bov_env, clampf(strength, 0.0, 1.0))
+
+## The ignition cut of a flat-out upshift (EngineAudio calls it on GEVP's
+## is_up_shifting edge, in every gearbox mode): one or two hard bangs with a
+## long pipe ring. Only on high-flame cars, the same rule as the upshift flame
+## (ExhaustFlames.UPSHIFT_FLAME_MIN). No flame event: ExhaustFlames queues its
+## own upshift burst with the same delay, so the two land together.
+func shift_cut(strength := 1.0) -> void:
+	if tune.flame >= ExhaustFlames.UPSHIFT_FLAME_MIN:
+		_shift_req = maxf(_shift_req, clampf(strength, 0.0, 1.0))
 
 ## Largest flame (0..1) the exhaust has spat since the last call, then resets.
 ## Pops on overrun and rev-limiter cuts make flames, scaled by tune.flame.
@@ -201,6 +250,26 @@ func render(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVe
 		pop_rate = maxf(pop_rate, ANTI_LAG_RATE)
 	var pop_p := pop_rate / mix_rate
 	var pop_decay := exp(-1.0 / (0.02 * mix_rate))
+	# A pop request this block becomes this kind of cluster.
+	var pop_kind := PopKind.BURBLE
+	if redline:
+		pop_kind = PopKind.LIMITER
+	elif overrun and tune.anti_lag >= 0.5:
+		pop_kind = PopKind.ANTI_LAG
+	# Pipe resonators: y = 2r cos(w) y1 - r^2 y2, so a kick of a*sin(w) rings
+	# at about amplitude a and dies away with RING_DECAY.
+	var ring_r := exp(-1.0 / (RING_DECAY * mix_rate))
+	var w1 := TAU * clampf(body_hz * RING_RATIO, 60.0, 4000.0) / mix_rate
+	var w2 := minf(w1 * RING2_RATIO, PI * 0.5)
+	var ring_r2 := exp(-1.0 / (0.7 * RING_DECAY * mix_rate))  # the higher mode dies sooner
+	var k1 := 2.0 * ring_r * cos(w1)
+	var k2 := 2.0 * ring_r2 * cos(w2)
+	var k1b := ring_r * ring_r
+	var k2b := ring_r2 * ring_r2
+	_ring_kick1 = sin(w1)
+	_ring_kick2 = sin(w2)
+	var crack_k := exp(-1.0 / (CRACK_DECAY * mix_rate))
+	var boom_k := exp(-1.0 / (BOOM_DECAY * mix_rate))
 
 	for i in frames:
 		_rpm += rpm_step
@@ -251,15 +320,39 @@ func render(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVe
 				_pop_env = maxf(_pop_env, amp)
 				_flame_peak = maxf(_flame_peak, tune.flame * amp)
 				_pop_wait = int((0.3 + 1.4 * absf(_rand())) / pop_p)
+		if _pop_env > 0.0:
+			_start_cluster(pop_kind, _pop_env)
+			_pop_env = 0.0
+		if _shift_req > 0.0:
+			_start_cluster(PopKind.UPSHIFT, _shift_req)
+			_shift_req = 0.0
 		var pop := 0.0
-		if _pop_env > 0.02:
-			# crackle: high-passed noise, plus a low thump (low-passed noise,
-			# no per-sample sin: this runs inside the hot loop)
-			var n := _rand()
-			_pop_thump += 0.03 * (n - _pop_thump)
-			_pop_hp = n - _pop_thump
-			pop = (_pop_hp * 0.8 + _pop_thump * 12.0) * _pop_env
-			_pop_env *= pop_decay
+		if _cl_left > 0 or _ring_live > 0:
+			# The pop voice, inline (a function call per sample is slow in GDScript).
+			if _cl_left > 0:
+				_cl_wait -= 1
+				if _cl_wait <= 0:
+					_fire_bang()
+			var pn := _rand()
+			# crack: high-passed noise (noise minus its own low-pass), 4 ms envelope
+			_crack_lp += 0.2 * (pn - _crack_lp)
+			# boom: low-passed noise under a slower envelope, the thump of the bang
+			_boom_lp += 0.03 * (pn - _boom_lp)
+			var r1 := k1 * _r1 - k1b * _r1p
+			_r1p = _r1
+			_r1 = r1
+			var r2 := k2 * _r2 - k2b * _r2p
+			_r2p = _r2
+			_r2 = r2
+			pop = (pn - _crack_lp) * _crack_env * 0.9 + _boom_lp * 10.0 * _boom_env * _boom_mix + (r1 * 0.8 + r2 * 0.45) * _ring_mix
+			_crack_env *= crack_k
+			_boom_env *= boom_k
+			_ring_live -= 1
+			if _ring_live <= 0 and _cl_left <= 0:
+				_r1 = 0.0
+				_r1p = 0.0
+				_r2 = 0.0
+				_r2p = 0.0
 		var turbo := 0.0
 		if boost > 0.02:
 			# whistle: pitch and level rise with boost
@@ -279,6 +372,40 @@ func render(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVe
 		var v := dc * volume * gain * (0.55 + 0.45 * rpm_norm)
 		out[i] = Vector2(v, v)
 	return out
+
+## Starts a cluster of bangs, or tops up the running one (never shortens it).
+func _start_cluster(kind: int, strength: float) -> void:
+	var c: Array = POP_CLUSTERS[kind]
+	var n := mini(int(c[0]) + int(absf(_rand()) * (int(c[1]) - int(c[0]) + 1)), int(c[1]))
+	if _cl_left <= 0 or kind == PopKind.UPSHIFT:
+		# first bang on the next sample; an upshift cuts in at once, even into a
+		# running limiter cluster, so it lands with its flame
+		_cl_wait = 0
+		pop_clusters += 1
+		if kind == PopKind.UPSHIFT:
+			upshift_clusters += 1
+	if _cl_left <= 0 or kind == PopKind.UPSHIFT or strength >= _cl_amp:
+		_cl_kind = kind
+		_cl_amp = clampf(strength, 0.0, 1.0)
+	_cl_left = maxi(_cl_left, n)
+
+## The cluster's next bang: crack, boom and a kick into the two pipe modes.
+func _fire_bang() -> void:
+	var c: Array = POP_CLUSTERS[_cl_kind]
+	var a := _cl_amp * (0.6 + 0.4 * absf(_rand()))
+	_crack_env = maxf(_crack_env, a)
+	_boom_env = maxf(_boom_env, a)
+	_ring_mix = float(c[4])
+	_boom_mix = float(c[5])
+	# a random split between the modes keeps repeats from sounding stamped out
+	var split := 0.5 + 0.25 * _rand()
+	_r1 += a * _ring_kick1 * split
+	_r2 += a * _ring_kick2 * (1.0 - split)
+	_ring_live = int(5.0 * RING_DECAY * mix_rate)
+	_cl_left -= 1
+	pop_bangs += 1
+	_cl_amp *= 0.85  # each bang of a burble a little softer than the last
+	_cl_wait = maxi(int(lerpf(float(c[2]), float(c[3]), absf(_rand())) * mix_rate), 1)
 
 ## White noise in [-1, 1]. Inline LCG: a RandomNumberGenerator call per
 ## sample is noticeably slower in GDScript.

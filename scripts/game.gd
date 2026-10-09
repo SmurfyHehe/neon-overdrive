@@ -51,6 +51,7 @@ var game_state: GameState
 # speed feel (FOV, dolly, shake) all live in chase_camera.gd.
 var camera: ChaseCamera
 var radio: RadioManager
+var night_clock: NightClock  # 8 p.m. to 6 a.m., saved (night_clock.gd); windows follow it
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
 func _ready() -> void:
@@ -80,6 +81,12 @@ func _ready() -> void:
 		seed(Benchmark.SEED)
 	else:
 		randomize()
+	# The clock first: the building window texture is painted for its time
+	# when the first chunk is built.
+	night_clock = NightClock.new()
+	if benchmark:
+		night_clock.fixed_minutes = NightClock.BENCHMARK_MINUTES  # same windows every run
+	add_child(night_clock)
 	_setup_road_shape()
 	_setup_world()
 	_setup_ground_collision()
@@ -327,6 +334,16 @@ func _physics_process(_delta: float) -> void:
 	if Input.is_action_just_pressed("mute"):
 		toggle_mute()
 	if Input.is_action_just_pressed("radio_next") and radio != null:
+		request_next_station()
+
+## Next station (N): with the cockpit built the driver's hand reaches the touch
+## screen and the station changes on the tap (CockpitFrame.request_radio), in
+## every view; with no cockpit (NEON_COCKPIT=0) it changes at once.
+func request_next_station() -> void:
+	var f: CockpitFrame = camera.frame if camera != null else null
+	if f != null and f.driver != null:
+		f.request_radio()
+	else:
 		radio.next_station()
 
 ## Moves the world back by shift_chunks whole chunks (positive = the car had
@@ -406,7 +423,9 @@ func toggle_mute() -> void:
 
 # ---------- HUD (scripts/hud.gd) ----------
 func _setup_hud() -> void:
-	add_child(Hud.new(player, camera, traffic))
+	var hud := Hud.new(player, camera, traffic)
+	hud.night_clock = night_clock
+	add_child(hud)
 
 # ---------- game state (pause / restart / quit, issue #27) ----------
 func _setup_game_state() -> void:
@@ -415,8 +434,17 @@ func _setup_game_state() -> void:
 	add_child(PauseMenu.new(game_state))
 	add_child(TunerScreen.new(player, game_state))
 	add_child(WarningLights.new(player))
+	add_child(PhotoMode.new(game_state, camera))
 	radio = RadioManager.new()
 	add_child(radio)
+	night_clock.hour_changed.connect(_on_hour)
+	night_clock.night_ended.connect(func(_n: int) -> void: radio.announce_hour(NightClock.END_HOUR))
+
+## Dave reads the hour out. 8 p.m. only ever comes from the roll into the next
+## night, right after his 6 a.m. sign-off, so it is skipped.
+func _on_hour(hour24: int) -> void:
+	if hour24 != NightClock.START_HOUR:
+		radio.announce_hour(hour24)
 
 func _process(_delta: float) -> void:
 	_update_chunk_pool(RoadFrame.unroll(player.position).z)

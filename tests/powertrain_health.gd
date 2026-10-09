@@ -11,6 +11,7 @@ extends SceneTree
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --fixed-fps 60 --path . -s res://tests/powertrain_health.gd
 
 const TIMEOUT_TICKS := 60 * 240
+const HEAT_BRAKE := 0.5
 
 enum Step { BOOT, HEAT, COOL, DONE }
 
@@ -19,6 +20,11 @@ var step_start := 0
 var tick := 0
 var failures: Array[String] = []
 var throttle := 0.0
+# Dragging the brakes in the HEAT step keeps the engine on the limiter at low
+# airspeed. Before 2026-10-07 the car drifted across the road in 1st and got
+# stuck on a wall, which did the same by accident; walls now let it slide off
+# (tests/wall_hit.gd), and at a free 24 m/s airflow holds it near 105 C.
+var brake := 0.0
 var eng_light_seen := false
 var peak_temp := 0.0
 
@@ -61,7 +67,7 @@ func _pure() -> void:
 
 func _drive(c: PlayerCar) -> void:
 	c.throttle_input = throttle
-	c.brake_input = 0.0
+	c.brake_input = brake
 	c.steering_input = 0.0
 
 func _physics_process(_delta: float) -> bool:
@@ -78,6 +84,7 @@ func _physics_process(_delta: float) -> bool:
 			p.automatic_transmission = false  # hold 1st: the engine sits on the limiter
 			p.current_gear = 1
 			throttle = 1.0
+			brake = HEAT_BRAKE
 			_go(Step.HEAT)
 		Step.HEAT:
 			p.current_gear = 1
@@ -88,6 +95,7 @@ func _physics_process(_delta: float) -> bool:
 				_check(p.torque_mult < 1.0, "the derate should reach the vehicle")
 				_check(p.torque_mult >= PowertrainHealth.TORQUE_FLOOR - 1e-6, "the derate must keep its floor (the car never dies)")
 				throttle = 0.0
+				brake = 0.0
 				p.automatic_transmission = true
 				_go(Step.COOL)
 			elif waited > TIMEOUT_TICKS - 600:

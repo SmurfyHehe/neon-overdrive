@@ -249,6 +249,9 @@ var _queue: Array = []         # [[show_at_s, size, kind]]
 var _clock := 0.0
 var _rng := RandomNumberGenerator.new()
 var _was_up_shifting := false
+var _was_running := false      # cold-start puff: the engine catching (DashAnim, FxSettings "coldstart_puff")
+var _puff_at := -1.0           # _clock time of the pending puff
+var puffs := 0                 # puffs shown so far (tests)
 var _pop_wait := 0.0           # carless-synth pop timer (traffic)
 
 func _init(car: Vehicle) -> void:
@@ -372,10 +375,36 @@ func _process(delta: float) -> void:
 	elif flame > 0.0:
 		_simulate_pops(delta, flame)
 	_watch_upshift(flame)
+	_watch_start()
 	while not _queue.is_empty() and _queue[0][0] <= _clock:
 		var q: Array = _queue.pop_front()
 		flash(q[1], q[2])
 	_animate(delta)
+
+## Cold-start puff: when the engine catches (the first frame counts, so it also
+## puffs on spawn) the pipe breathes out a small cloud of smoke, no fire. Only
+## the player's car (the one with EngineAudio); traffic cars never start.
+func _watch_start() -> void:
+	var running: bool = _car.engine_running
+	if running and not _was_running and _audio != null and FxSettings.is_on("coldstart_puff"):
+		_puff_at = _clock + DashAnim.PUFF_DELAY
+	_was_running = running
+	if _puff_at >= 0.0 and _clock >= _puff_at:
+		_puff_at = -1.0
+		puff(DashAnim.PUFF_SIZE)
+
+## One smoke puff per tip, no jet, ball or light.
+func puff(size: float) -> void:
+	size = clampf(size, 0.0, 1.0)
+	if size <= 0.0:
+		return
+	puffs += 1
+	var g: Transform3D = _car.global_transform
+	for tip in _tips:
+		var at: Vector3 = g * (tip.pos + tip.dir * 0.2)
+		var out: Vector3 = g.basis * tip.dir
+		_spawn(_smokes[_next_smoke], at, _car.linear_velocity * 0.2 + out * 1.0 + Vector3.UP * SMOKE_RISE, SMOKE_LIFE * 1.3, lerpf(SMOKE_RADIUS.x, SMOKE_RADIUS.y, size), size)
+		_next_smoke = (_next_smoke + 1) % POOL
 
 ## An upshift with the foot down, on a high-flame car: the ignition cut spits
 ## fire. GEVP raises is_up_shifting for the shift's length.

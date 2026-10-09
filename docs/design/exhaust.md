@@ -10,9 +10,9 @@ physics effect (Roy's stage B decision).
 | pops | overrun pops and crackles when the throttle is lifted at rpm; also bangs when the rev limiter cuts a firing |
 | flame | sizes the flame events pops and limiter bangs produce; 0 = no flames |
 
-- Code: `scripts/exhaust_tune.gd` (knobs and the 12 per-car presets),
-  `scripts/engine_synth.gd` (sound; `take_flames()` hands out flame events).
-- Test: `tests/exhaust_tune.gd` (each knob moves what it should, presets in
+- Code: `scripts/tuning/exhaust_tune.gd` (knobs and the 12 per-car presets),
+  `scripts/audio/engine_synth.gd` (sound; `take_flames()` hands out flame events).
+- Test: `tests/audio/exhaust_tune.gd` (each knob moves what it should, presets in
   range, WAVs written to `user://exhaust_*.wav` for listening; silent).
 - **Flame visuals are not built.** `take_flames()` returns the biggest flame
   (0..1) since the last call. Drawing flames at the exhaust tips waits for
@@ -42,4 +42,4 @@ tailpipe ringing, tuned off `body_hz`, so each car's pipe rings in its own key).
 - Flames still come from the pop requests with the 60 ms visual delay, so fire
   and sound stay in sync. Traffic has no engine audio; the C3 interceptor's
   traffic flames are unchanged.
-- Test: `tests/exhaust_pops.gd` (WAVs to `user://exhaust_pop_*.wav`).
+- Test: `tests/audio/exhaust_pops.gd` (WAVs to `user://exhaust_pop_*.wav`).

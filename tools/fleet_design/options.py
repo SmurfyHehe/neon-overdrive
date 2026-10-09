@@ -117,7 +117,7 @@ P6['options'] = {
             'rally': {'label': 'Rally lamp pod', 'ops': [
                 {'op': 'add', 'part': {'type': 'lightpod', 's': -0.03, 'y': 0.62, 'w': 0.96, 'n': 4}}]},
             # keeps low rails: with the whole rack off and lowered, P6 read as
-            # the hot hatch from 7 angles (B1 audit, tests/fleet_silhouette_sweep.gd)
+            # the hot hatch from 7 angles (B1 audit, tests/fleet/fleet_silhouette_sweep.gd)
             'street': {'label': 'Street (crossbars off)', 'ops': [
                 {'op': 'remove', 'tag': 'rack'},
                 {'op': 'add', 'part': {'type': 'roof_rails', 'tag': 'rack', 's0': 2.05, 's1': 3.75, 'x': 0.60, 'h': 0.07, 'bars': []}}]}},

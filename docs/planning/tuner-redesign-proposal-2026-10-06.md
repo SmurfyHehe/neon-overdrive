@@ -4,7 +4,7 @@ Status: **approved by Roy 2026-10-06 15:48, revised same day. Nothing built yet.
 Roy's answers: proposal yes; tyre settings "do all 4" (camber, tyre pressure,
 compound and toe all in, so the sim must model camber and pressure, see section 9);
 peak torque and redline go to Advanced now and leave when the garage arrives.
-Source read: `origin/main` at `bd7957c` (#126). Files: `scripts/tuner_screen.gd`,
+Source read: `origin/main` at `bd7957c` (#126). Files: `scripts/ui/tuner_screen.gd`,
 `tuner_tabs.gd`, `tuning_panel.gd`, `auto_tune_panel.gd`, `auto_tune_rules.gd`,
 `exhaust_panel.gd`, `exhaust_tune.gd`, `tune_params.gd`, `tune_slots.gd`,
 `car_spec.gd`, `vendor/gevp/gevp_vehicle.gd`.

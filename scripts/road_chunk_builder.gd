@@ -193,9 +193,9 @@ static var _pylon_mesh: BoxMesh
 static var _barrier_mesh: BoxMesh
 static var _lamp_mesh: ArrayMesh
 static var _pool_mesh: PlaneMesh
-static var _pool_mat: StandardMaterial3D
+static var _pool_mat: ShaderMaterial
 static var _halo_mesh: QuadMesh
-static var _halo_mat: StandardMaterial3D
+static var _halo_mat: ShaderMaterial
 static var _wall_mesh: BoxMesh
 static var _wall_mat: StandardMaterial3D
 
@@ -398,6 +398,95 @@ static func _get_barrier_mesh() -> BoxMesh:
 		_barrier_mesh = _box_mesh(Vector3(BARRIER_W, BARRIER_H, CHUNK_LEN / STATIONS))
 	return _barrier_mesh
 
+const LAMP_HEAD_SHADER := """
+shader_type spatial;
+render_mode cull_back;
+uniform vec3 color : source_color;
+uniform float energy = 4.0;
+varying float lit;
+// Lamp state per instance (INSTANCE_CUSTOM): r = 0 working, 0.5 failing
+// (flickers), 1 dead; g = a per-lamp seed so failing lamps fall out of step.
+float lamp_level(vec4 c, float t) {
+	if (c.r > 0.75) {
+		return 0.0;
+	}
+	if (c.r > 0.25) {
+		float s = c.g * 97.0;
+		// A failing sodium lamp: steady mostly, then a burst of stutter,
+		// then a few seconds out while it tries to restrike.
+		float cycle = fract(t / 9.0 + c.g);
+		float stutter = step(0.3, fract(sin(floor(t * 14.0 + s) * 12.9898) * 43758.5453));
+		float hum = 0.85 + 0.15 * sin(t * 100.0 + s);
+		float out_ = step(0.82, cycle);
+		float burst = step(0.62, cycle) * (1.0 - out_);
+		return hum * mix(1.0, stutter, burst) * (1.0 - out_) + out_ * 0.04 * stutter;
+	}
+	return 1.0;
+}
+
+void vertex() {
+	lit = lamp_level(INSTANCE_CUSTOM, TIME);
+}
+void fragment() {
+	ALBEDO = color * mix(0.12, 1.0, lit);
+	EMISSION = color * energy * lit;
+}
+"""
+
+## Light pools and halos as one shader: an additive, unshaded quad whose
+## texture alpha is the falloff, dimmed with its lamp (lamp_level) and faded
+## out with distance (fade_far .. fade_near, metres; fog would add colour to
+## an additive surface instead of removing light). billboard turns the quad
+## to face the camera (halos).
+const LAMP_GLOW_SHADER := """
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, fog_disabled, cull_disabled;
+uniform vec3 color : source_color;
+uniform sampler2D falloff : source_color, filter_linear, repeat_disable;
+uniform float fade_near = 110.0;
+uniform float fade_far = 170.0;
+uniform bool billboard = false;
+varying float lit;
+// Lamp state per instance (INSTANCE_CUSTOM): r = 0 working, 0.5 failing
+// (flickers), 1 dead; g = a per-lamp seed so failing lamps fall out of step.
+float lamp_level(vec4 c, float t) {
+	if (c.r > 0.75) {
+		return 0.0;
+	}
+	if (c.r > 0.25) {
+		float s = c.g * 97.0;
+		// A failing sodium lamp: steady mostly, then a burst of stutter,
+		// then a few seconds out while it tries to restrike.
+		float cycle = fract(t / 9.0 + c.g);
+		float stutter = step(0.3, fract(sin(floor(t * 14.0 + s) * 12.9898) * 43758.5453));
+		float hum = 0.85 + 0.15 * sin(t * 100.0 + s);
+		float out_ = step(0.82, cycle);
+		float burst = step(0.62, cycle) * (1.0 - out_);
+		return hum * mix(1.0, stutter, burst) * (1.0 - out_) + out_ * 0.04 * stutter;
+	}
+	return 1.0;
+}
+
+void vertex() {
+	lit = lamp_level(INSTANCE_CUSTOM, TIME);
+	if (billboard) {
+		MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
+		MODELVIEW_MATRIX = MODELVIEW_MATRIX * mat4(vec4(length(MODEL_MATRIX[0].xyz), 0.0, 0.0, 0.0), vec4(0.0, length(MODEL_MATRIX[1].xyz), 0.0, 0.0), vec4(0.0, 0.0, length(MODEL_MATRIX[2].xyz), 0.0), vec4(0.0, 0.0, 0.0, 1.0));
+		MODELVIEW_NORMAL_MATRIX = mat3(MODELVIEW_MATRIX);
+	}
+}
+void fragment() {
+	float fade = clamp((fade_far - length(VERTEX)) / (fade_far - fade_near), 0.0, 1.0);
+	ALBEDO = color * texture(falloff, UV).a * lit * fade;
+}
+"""
+
+## Share of street lamps that are failing (flicker) and dead (Roy, 2026-10-08:
+## "a few"). Picked per lamp from its chunk and slot, so a lamp keeps its state
+## when the road comes round again and a chunk rebuild gives the same street.
+const LAMP_FLICKER_CHANCE := 0.06
+const LAMP_DEAD_CHANCE := 0.04
+
 ## Street lamp, built once and shared by every chunk's lamp MultiMesh: a pole
 ## and arm (dark metal) and a sodium head (emissive, above the glow threshold
 ## so it blooms). Two surfaces, so materials live on the mesh, not on the
@@ -408,7 +497,10 @@ static func _get_lamp_mesh() -> ArrayMesh:
 	if _lamp_mesh == null:
 		var metal := _flat_mat(Color(0.2, 0.2, 0.21))
 		metal.roughness = 0.6
-		var head := _flat_mat(SODIUM, true, 4.0)
+		var head := ShaderMaterial.new()
+		head.shader = _lamp_shader(LAMP_HEAD_SHADER)
+		head.set_shader_parameter("color", SODIUM)
+		head.set_shader_parameter("energy", 4.0)
 		var st := SurfaceTool.new()
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
 		_add_box(st, Vector3(0.0, LAMP_POLE_H / 2.0, 0.0), Vector3(0.16, LAMP_POLE_H, 0.16))
@@ -448,7 +540,7 @@ static func _get_pool_mesh() -> PlaneMesh:
 		_pool_mesh.size = Vector2.ONE
 	return _pool_mesh
 
-static func _get_pool_mat() -> StandardMaterial3D:
+static func _get_pool_mat() -> ShaderMaterial:
 	if _pool_mat == null:
 		var grad := Gradient.new()
 		# Polish pass (2026-10-08): a smooth, roughly Gaussian falloff
@@ -458,25 +550,36 @@ static func _get_pool_mat() -> StandardMaterial3D:
 		grad.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.82), Color(1, 1, 1, 0.52),
 			Color(1, 1, 1, 0.25), Color(1, 1, 1, 0.09), Color(1, 1, 1, 0.025), Color(1, 1, 1, 0)])
 		grad.interpolation_mode = Gradient.GRADIENT_INTERPOLATE_CUBIC
-		var tex := GradientTexture2D.new()
-		tex.gradient = grad
-		tex.fill = GradientTexture2D.FILL_RADIAL
-		tex.fill_from = Vector2(0.5, 0.5)
-		tex.fill_to = Vector2(1.0, 0.5)
-		tex.width = 128
-		tex.height = 128
-		var m := StandardMaterial3D.new()
-		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-		m.albedo_texture = tex
-		m.albedo_color = Color(SODIUM.r * 0.42, SODIUM.g * 0.42, SODIUM.b * 0.42, 1.0)
-		m.disable_fog = true
-		m.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
-		m.distance_fade_min_distance = 170.0  # min > max: fade OUT with distance
-		m.distance_fade_max_distance = 110.0
-		_pool_mat = m
+		_pool_mat = _glow_mat(grad, 128, SODIUM * 0.42, 110.0, 170.0, false)
 	return _pool_mat
+
+## A LAMP_GLOW_SHADER material: radial falloff texture from `grad`, colour,
+## fade-out distances, billboard or not.
+static func _glow_mat(grad: Gradient, size: int, color: Color, near: float, far: float, billboard: bool) -> ShaderMaterial:
+	var tex := GradientTexture2D.new()
+	tex.gradient = grad
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(1.0, 0.5)
+	tex.width = size
+	tex.height = size
+	var m := ShaderMaterial.new()
+	m.shader = _lamp_shader(LAMP_GLOW_SHADER)
+	m.set_shader_parameter("falloff", tex)
+	m.set_shader_parameter("color", Color(color, 1.0))
+	m.set_shader_parameter("fade_near", near)
+	m.set_shader_parameter("fade_far", far)
+	m.set_shader_parameter("billboard", billboard)
+	return m
+
+static var _lamp_shaders := {}
+
+static func _lamp_shader(code: String) -> Shader:
+	if not _lamp_shaders.has(code):
+		var sh := Shader.new()
+		sh.code = code
+		_lamp_shaders[code] = sh
+	return _lamp_shaders[code]
 
 ## Lamp halo: a camera-facing quad with a soft radial glow, added on top
 ## (unshaded, BLEND_MODE_ADD), so the head reads as a light in haze, not a
@@ -488,34 +591,29 @@ static func _get_halo_mesh() -> QuadMesh:
 		_halo_mesh.size = Vector2.ONE
 	return _halo_mesh
 
-static func _get_halo_mat() -> StandardMaterial3D:
+static func _get_halo_mat() -> ShaderMaterial:
 	if _halo_mat == null:
 		var grad := Gradient.new()
 		grad.offsets = PackedFloat32Array([0.0, 0.08, 0.3, 0.6, 1.0])
 		grad.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.7), Color(1, 1, 1, 0.2),
 			Color(1, 1, 1, 0.05), Color(1, 1, 1, 0)])
 		grad.interpolation_mode = Gradient.GRADIENT_INTERPOLATE_CUBIC
-		var tex := GradientTexture2D.new()
-		tex.gradient = grad
-		tex.fill = GradientTexture2D.FILL_RADIAL
-		tex.fill_from = Vector2(0.5, 0.5)
-		tex.fill_to = Vector2(1.0, 0.5)
-		tex.width = 64
-		tex.height = 64
-		var m := StandardMaterial3D.new()
-		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-		m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-		m.billboard_keep_scale = true
-		m.albedo_texture = tex
-		m.albedo_color = Color(SODIUM.r * 0.9, SODIUM.g * 0.9, SODIUM.b * 0.9, 1.0)
-		m.disable_fog = true
-		m.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
-		m.distance_fade_min_distance = 220.0  # min > max: fade OUT with distance
-		m.distance_fade_max_distance = 140.0
-		_halo_mat = m
+		_halo_mat = _glow_mat(grad, 64, SODIUM * 0.9, 140.0, 220.0, true)
 	return _halo_mat
+
+## One lamp's state as MultiMesh custom data (see LAMP_HEAD_SHADER): r = 0
+## working, 0.5 failing, 1 dead; g = its flicker seed. Deterministic from the
+## chunk index and the lamp's slot.
+static func lamp_state(chunk_index: int, slot: int) -> Color:
+	var h := absi(hash(Vector2i(chunk_index, slot)))
+	var roll := float(h % 10007) / 10007.0
+	var seed_ := float((h / 10007) % 997) / 997.0
+	var mode := 0.0
+	if roll < LAMP_DEAD_CHANCE:
+		mode = 1.0
+	elif roll < LAMP_DEAD_CHANCE + LAMP_FLICKER_CHANCE:
+		mode = 0.5
+	return Color(mode, seed_, 0.0, 0.0)
 
 static func _get_wall_mesh() -> BoxMesh:
 	if _wall_mesh == null:
@@ -763,9 +861,10 @@ static func _update_strip(root: Node3D, strip_name: String, x_inner0: float, x_i
 # count) and never reallocated; a rebuild only writes transforms and moves
 # visible_instance_count. That is what makes the recycle path cheap.
 
-static func _new_multimesh(mm_name: String, mesh: Mesh, mat: Material, capacity: int) -> MultiMeshInstance3D:
+static func _new_multimesh(mm_name: String, mesh: Mesh, mat: Material, capacity: int, custom_data: bool = false) -> MultiMeshInstance3D:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_custom_data = custom_data   # before instance_count, which sizes the buffer
 	mm.mesh = mesh
 	mm.instance_count = capacity
 	mm.visible_instance_count = 0
@@ -1022,9 +1121,11 @@ static func _create_nodes(root: Node3D) -> void:
 	# Stage A roadside detail: street lamps (both sides in one buffer), their
 	# light pools, and the walls between buildings. Capacity is the worst case,
 	# allocated once, like the dashes and pylons above.
-	root.add_child(_new_multimesh("Lamps", _get_lamp_mesh(), null, _lamp_slots() * 2))
-	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2))
-	var halos := _new_multimesh("LampHalos", _get_halo_mesh(), _get_halo_mat(), _lamp_slots() * 2)
+	# Lamps, pools and halos carry each lamp's state (working / failing /
+	# dead) in their custom data, so all three flicker and die together.
+	root.add_child(_new_multimesh("Lamps", _get_lamp_mesh(), null, _lamp_slots() * 2, true))
+	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2, true))
+	var halos := _new_multimesh("LampHalos", _get_halo_mesh(), _get_halo_mat(), _lamp_slots() * 2, true)
 	halos.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	halos.visible = GraphicsSettings.is_on("lamp_halos")
 	halos.add_to_group(HALO_GROUP)
@@ -1177,6 +1278,10 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			var head_x := pole_x - (LAMP_ARM - 0.2) * float(side)
 			pools.set_instance_transform(n_lamps, _xf(head_x, POOL_Y, lz, Basis.from_scale(Vector3(POOL_ACROSS, 1.0, POOL_ALONG))))
 			halos.set_instance_transform(n_lamps, _xf_up(head_x, LAMP_POLE_H - HALO_DROP, lz, Basis.from_scale(Vector3.ONE * HALO_SIZE)))
+			var state := lamp_state(chunk_index, n_lamps)
+			lamps.set_instance_custom_data(n_lamps, state)
+			pools.set_instance_custom_data(n_lamps, state)
+			halos.set_instance_custom_data(n_lamps, state)
 			n_lamps += 1
 	lamps.visible_instance_count = n_lamps
 	pools.visible_instance_count = n_lamps

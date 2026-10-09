@@ -128,6 +128,7 @@ var player: PlayerCar
 var radio: RadioManager          # found lazily; the game adds it after the camera
 var wheel: SteeringWheel
 var wheel_mount: Node3D          # tilt and place; the wheel turns inside it
+var pod: GaugePod                # the bolt-on AFR/PSI pod; fitted with the first boost setup, see _update_pod
 var mirrors: CockpitMirrors
 var tach_needle: Node3D
 var speedo_needle: Node3D
@@ -754,6 +755,7 @@ func _process(delta: float) -> void:
 	var kmh := clampf(absf(p.current_speed()) * Hud.KMH_PER_MS / SPEEDO_MAX_KMH, 0.0, 1.0)
 	speedo_needle.rotation = Vector3(0.0, 0.0, deg_to_rad(135.0 - DIAL_SWEEP * kmh))
 	_update_lamps()
+	_update_pod(delta)
 	var inputs := pedal_inputs()
 	for key in pedals:
 		(pedals[key] as Node3D).rotation_degrees = Vector3(PEDAL_TRAVEL_DEG * float(inputs[key]), 0.0, 0.0)
@@ -800,6 +802,20 @@ func _update_lamps() -> void:
 		var lit: bool = on[i][0] and (not on[i][1] or slow_blink)
 		var c: Color = RED if on[i][1] else AMBER
 		lamps.multimesh.set_instance_color(i, Color(c, 1.0 if lit else 0.0))
+
+## The AFR/PSI gauge pod (GaugePod) comes free with the car's first boost
+## setup (Roy, 2026-10-09): it is fitted the moment the car has one, stock or
+## from the Tuner, and stays bolted on after. The PSI face is scaled to the
+## setup, so a bigger turbo later swaps the pod for one with the right range.
+func _update_pod(delta: float) -> void:
+	var p := player
+	if GaugeReadouts.has_pod(p) and (pod == null or p.turbo_boost_max > pod.boost_max):
+		if pod != null:
+			pod.queue_free()
+		pod = GaugePod.new(PlayerCar.chassis_kind(), p.turbo_boost_max)
+		add_child(pod)
+	if pod != null:
+		pod.update(p, delta)
 
 func _find_radio() -> RadioManager:
 	if radio == null and is_inside_tree():

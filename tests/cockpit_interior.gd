@@ -168,8 +168,8 @@ func _check_sightline(p: PlayerCar, frame: CockpitFrame) -> void:
 			var dir := Vector3(0, 0, -1).rotated(Vector3.RIGHT, deg_to_rad(pitch)).rotated(Vector3.UP, yaw)
 			for m in meshes:
 				var mi := m as MeshInstance3D
-				if not mi.mesh is ArrayMesh or not mi.is_visible_in_tree():
-					continue   # the driver's head and torso are hidden in the cockpit view
+				if not mi.mesh is ArrayMesh or not mi.is_visible_in_tree() or _see_through(mi):
+					continue   # the driver's head and torso are hidden in the cockpit view; glass is clear
 				var xf: Transform3D = to_car * mi.global_transform
 				var mesh := mi.mesh as ArrayMesh
 				for si in mesh.get_surface_count():
@@ -214,6 +214,14 @@ static func _side_rendering(frame: CockpitFrame) -> bool:
 	return false
 
 ## Roy (2026-10-06): the dash top at least CockpitFrame.DASH_TOP_MIN_DEG below
+## A mesh drawn with alpha transparency (the side window pane) is glass: the
+## sightline rays pass through it.
+static func _see_through(mi: MeshInstance3D) -> bool:
+	var m := mi.material_override
+	if m == null and mi.mesh.get_surface_count() > 0:
+		m = mi.mesh.surface_get_material(0)
+	return m is StandardMaterial3D and (m as StandardMaterial3D).transparency == BaseMaterial3D.TRANSPARENCY_ALPHA
+
 ## the eye, and at least CockpitFrame.GLASS_MIN_FRACTION of the cockpit view
 ## clear glass. Both measured with rays from the eye in car space:
 ## - the dash top: at yaws between the binnacle and the A-pillar, the first
@@ -228,8 +236,8 @@ func _check_view(p: PlayerCar, frame: CockpitFrame, cam: ChaseCamera) -> void:
 	var meshes := []
 	for m in frame.find_children("*", "MeshInstance3D", true, false):
 		var mi := m as MeshInstance3D
-		if not mi.mesh is ArrayMesh or not mi.is_visible_in_tree():
-			continue
+		if not mi.mesh is ArrayMesh or not mi.is_visible_in_tree() or _see_through(mi):
+			continue   # the door glass pane (window animation) is glass, not an obstruction
 		var xf: Transform3D = to_car * mi.global_transform
 		var tris: PackedVector3Array = []
 		var mesh := mi.mesh as ArrayMesh

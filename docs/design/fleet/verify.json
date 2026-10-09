@@ -61,7 +61,7 @@
  },
  "audit": {
   "date": "2026-10-05",
-  "method": "One fresh agent, never shown the designs, matched shuffled outlines rendered by Godot (tests/fleet_silhouette_sweep.gd --save-views) to the 12 class names, 9 cameras: B1's 6 plus 3 high angles B1 never tested, picked where the 360 sweep found the closest outlines. Each outline scaled to fit its tile, so size is no cue. The high rear view had a 13th outline (the muscle sedan's street build) and the tester was told one class appeared twice. Revised designs (P2, P5, N1, P6 changed).",
+  "method": "One fresh agent, never shown the designs, matched shuffled outlines rendered by Godot (tests/fleet/fleet_silhouette_sweep.gd --save-views) to the 12 class names, 9 cameras: B1's 6 plus 3 high angles B1 never tested, picked where the 360 sweep found the closest outlines. Each outline scaled to fit its tile, so size is no cue. The high rear view had a 13th outline (the muscle sedan's street build) and the tester was told one class appeared twice. Revised designs (P2, P5, N1, P6 changed).",
   "per_view": {
    "y270_p02": {
     "view": "side (2 deg)",

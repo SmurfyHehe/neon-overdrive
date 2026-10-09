@@ -21,6 +21,16 @@ class_name CrashAudio
 # match. While the body touches a wall or a car and is moving, a metal scrape
 # loops, louder and higher with speed.
 # impact_count / last_tier / last_dv / scrape_level are for tests (silent driver).
+#
+# The driving-feel pass (2026-10-08) hangs the hit-stop and the sparks off the
+# same measure, so sound, freeze and sparks always agree on what a hit is:
+# hit_building fires every tick of an open hit window with the size so far
+# (the freeze needs the hit as it happens, not 0.12 s later), and
+# scraping_contact tells the sparks the body is rubbing something.
+
+## Every tick of an open hit window: the horizontal velocity change so far
+## (m/s); first is true on the tick that opens the window.
+signal hit_building(dv_so_far: float, first: bool)
 
 const MIX_RATE := 32000
 const VARIANTS := 5
@@ -104,12 +114,18 @@ func _physics_process(delta: float) -> void:
 	if _hit_left >= 0.0:
 		_hit_dv += dvh
 		_hit_left -= delta
+		hit_building.emit(_hit_dv, false)
 		if _hit_left < 0.0:
 			impact(_hit_dv)
 			_hit_dv = 0.0
 	elif dvh / delta > IMPACT_ACCEL and _contact > 0:
 		_hit_dv = dvh
 		_hit_left = HIT_WINDOW
+		hit_building.emit(_hit_dv, true)
+
+## True while the body touches something (with the short grace after it lets go).
+func scraping_contact() -> bool:
+	return _contact > 0
 
 func _process(delta: float) -> void:
 	var speed := _vehicle.speed

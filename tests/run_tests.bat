@@ -29,6 +29,8 @@ if "%NEON_TRAFFIC%"=="" set "NEON_TRAFFIC=0"
 rem Straight road for the older drive tests (they steer blind down -Z); the curve tests set their own.
 if "%NEON_CURVES%"=="" set "NEON_CURVES=0"
 if "%NEON_HILLS%"=="" set "NEON_HILLS=0"
+rem Dry road for every test (wet nights change the road look); tests\wet_road.gd sets its own.
+if "%NEON_WET%"=="" set "NEON_WET=0"
 
 rem Per-test timeout in seconds. The slowest tests take about 2 minutes, so 10 is generous.
 if "%TEST_TIMEOUT%"=="" set "TEST_TIMEOUT=600"
@@ -85,6 +87,7 @@ call :run fx_pack --headless
 call :run graphics_settings --headless
 call :run lamp_states --headless
 call :run brake_glow "--headless --fixed-fps 60"
+call :run wet_road --headless
 call :run exhaust_flames --headless
 call :run boundary_walls --headless
 call :run road_space --headless

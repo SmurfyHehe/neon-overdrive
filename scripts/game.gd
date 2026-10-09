@@ -99,7 +99,21 @@ func _ready() -> void:
 	if benchmark:
 		add_child(Benchmark.new())
 
+## Share of nights the road is wet (Roy 2026-10-09: "wet road some nights").
+## NEON_WET=0/1 forces it for a run; benchmark runs stay dry so they compare.
+const WET_CHANCE := 0.3
+
+## Rolls tonight's weather before any chunk is built (they read it).
+func _roll_wet() -> bool:
+	var forced := OS.get_environment("NEON_WET")
+	if forced == "0" or forced == "1":
+		return forced == "1"
+	if Benchmark.requested():
+		return false
+	return randf() < WET_CHANCE
+
 func _setup_world() -> void:
+	RoadChunkBuilder.set_wet(_roll_wet())
 	var env := Environment.new()
 	# BUG FIX (2026-09-13, road environment pass #2): a flat BG_COLOR behind
 	# fog meant the road visually hit a hard, flat-colored wall at the fog

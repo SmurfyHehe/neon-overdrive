@@ -4,8 +4,10 @@ extends SceneTree
 # - "look_back" is bound (B) and listed on the Controls page
 # - chase view: holding it puts the camera in front of the car looking back
 #   (the same swing as reversing); releasing it returns the camera behind
-# - cockpit view: holding it turns the eye to face the car's rear, still at
-#   the eye; releasing it faces forward again
+# - cockpit view: holding it turns the eye to face the car's rear and lifts
+#   it to the cabin's centreline above the headrests (ChaseCamera.LOOK_BACK_EYE),
+#   so the rear glass is clear of the driver's own headrest; releasing it
+#   returns to the eye facing forward
 # - proximity cue: a traffic car placed 6 m behind in the lane raises
 #   Hud.rear_threat toward 1, warms the strip frame to sodium and thickens
 #   it, and warms the cockpit rearview glass; a car 40 m back, or an oncoming
@@ -117,14 +119,19 @@ func _physics_process(_delta: float) -> bool:
 				_go(Step.COCKPIT_BACK)
 		Step.COCKPIT_BACK:
 			if waited == 6:
+				_check(_facing(p, cam) > -0.95 and _facing(p, cam) < 0.95, "the head turns through the look-back, not a snap (facing %.2f at 0.1 s)" % _facing(p, cam))
+			if waited == 40:
 				var rel := p.global_transform.affine_inverse() * cam.global_position
-				_check(rel.distance_to(ChaseCamera.COCKPIT_EYE) < 0.02, "in the cockpit the eye stays put while looking back (%s)" % rel)
+				_check(rel.distance_to(ChaseCamera.LOOK_BACK_EYE) < 0.02, "in the cockpit the eye rises to the look-back spot (%s)" % rel)
+				_check(rel.y > 1.15 and absf(rel.x) < 0.11, "the look-back eye is above the headrests (top 1.15) and between them (%s)" % rel)
 				_check(_facing(p, cam) < -0.9, "the cockpit eye faces the rear (facing %.2f)" % _facing(p, cam))
 				Input.action_release("look_back")
 				_go(Step.COCKPIT_FWD)
 		Step.COCKPIT_FWD:
-			if waited == 6:
+			if waited == 40:
+				var rel := p.global_transform.affine_inverse() * cam.global_position
 				_check(_facing(p, cam) > 0.9, "released, the cockpit eye faces forward (facing %.2f)" % _facing(p, cam))
+				_check(rel.distance_to(ChaseCamera.COCKPIT_EYE) < 0.05, "released, the eye is back in the seat (%s)" % rel)
 				_check(hud.rear_threat < 0.02, "no cue with nothing behind (%.2f)" % hud.rear_threat)
 				cam.set_view(ChaseCamera.View.CHASE)
 				_put_car_behind(p, 6.0, false)

@@ -1,6 +1,6 @@
 # Police build plan (Stage F), 2026-10-09
 
-Status: PLAN, rev 2 (Roy answered the 8 questions 2026-10-09 07:47; F0 and F1 are starting on the laptop). Nothing else is built. Turns the decided police design into
+Status: PLAN, rev 3 (all decided) (Roy answered the 8 questions 2026-10-09 07:47; F0 and F1 are starting on the laptop). Nothing else is built. Turns the decided police design into
 a PR-by-PR build order the laptop sessions can start on. Every rule marked
 "decided" comes from Roy's earlier answers; nothing here re-opens them.
 
@@ -31,9 +31,9 @@ c2 patrol SUV, c3 interceptor) exist only as design sheets
 2. **A stand-in police car** until the real one is made: yes.
 3. **After an honest bust**, you restart at the start of the road an hour later until the garage exists: yes.
 4. **Headlights off to hide:** yes. **Also, flashing your headlights** gets traffic out of your way and **starts a race on the spot** with an enemy or ally driver. Design in section 3b.
-5. **Spike strips:** research first. Done in section 3c. **Recommendation: tyres go down slowly and stay soft until a station fix.**
+5. **Spike strips:** research done (section 3c). **DECIDED (Roy, 07:53): slow leak, soft until a station fix.**
 6. **Escaping a chase pays cash** (tonight's cash, so the bad cops can take it).
-7. **Cops cross the middle through gaps:** yes, **but the barrier has to be real, and the road needs more barriers than one wall in the middle.** Research in section 3d. This adds a road PR, **R1 Barriers**.
+7. **Cops cross the middle through gaps:** yes, **but the barrier has to be real, and the road needs more barriers than one wall in the middle.** Research in section 3d. **DECIDED (Roy, 07:53): barriers by area as their own road PR, R1 Barriers.**
 8. **Start the patrol car and the money counter now:** yes.
 
 Also from the same message (Roy's answer 44): **on night one the cops go easy.** Your first bust is a warning, not a ticket, and the officer makes fun of how slow your car is. That goes into F3.
@@ -270,7 +270,7 @@ before it, because each one is tuned on top of the last.
 - **Games:** Need for Speed Most Wanted pops your tyres instantly and you
   limp on (from memory, not re-checked). That reads as arcade.
 
-**Recommendation: slow leak, soft until a station fix.**
+**Decided (Roy, 07:53): slow leak, soft until a station fix.**
 1. Hit the strip: one or both front tyres start leaking. Over about 20-30 s
    grip drops and the car pulls toward the flat side. You stay in control.
 2. Fully flat: you drive on the rim at reduced speed with scrape sparks
@@ -405,7 +405,7 @@ stands on.
 ## 7. Questions for Roy
 
 All 8 answered 2026-10-09 07:47 (see "Decided" at the top). Nothing new to
-ask. The spike strip recommendation (3c) stands unless Roy says otherwise.
+ask. Spike strips (3c) and barriers (3d, R1) confirmed 07:53.
 
 ## Sources (rev 2)
 

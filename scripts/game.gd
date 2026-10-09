@@ -53,6 +53,7 @@ var camera: ChaseCamera
 var radio: RadioManager
 var night_clock: NightClock  # 8 p.m. to 6 a.m., saved (night_clock.gd); windows follow it
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
+var race: RaceSession  # race core, RC1 (race_session.gd): the referee for one race at a time
 
 func _ready() -> void:
 	# Auto-Tune worker mode (exported game): no world, just the search.
@@ -97,6 +98,7 @@ func _ready() -> void:
 	fx = FxPack.new(player, camera)
 	add_child(fx)
 	_setup_hud()
+	_setup_race()
 	_setup_game_state()
 	if benchmark:
 		add_child(Benchmark.new())
@@ -359,6 +361,7 @@ func _shift_origin(shift_chunks: int) -> void:
 		RoadChunkBuilder.sync_collision(c.root)
 	# Traffic (milestone 3): every car gets the same bookkeeping as the player.
 	traffic.shift_world(offset)
+	race.shift_world(offset)  # a dummy rival is not traffic
 	fx.shift_world(offset)  # skid marks are laid in world space
 	# The ground plane stays put: it is infinite.
 	# The camera follows the car's interpolated position in _process, so it
@@ -404,6 +407,22 @@ func _setup_hud() -> void:
 	var hud := Hud.new(player, camera, traffic)
 	hud.night_clock = night_clock
 	add_child(hud)
+
+# ---------- races (RC1, docs/planning/races-rivals-plan-2026-10-09.md) ----------
+## Before the game state, so the pause menu finds it. NEON_RACE=<metres> starts
+## a sprint against the scripted dummy rival at once (NEON_RACE_RIVAL=<km/h>,
+## default 140): RC1 has no meet spots yet (RC3). Best on an empty road
+## (NEON_TRAFFIC=0): the dummy does not see traffic.
+func _setup_race() -> void:
+	race = RaceSession.new()
+	race.night_clock = night_clock
+	add_child(race)
+	add_child(RaceHud.new(race))
+	var env := OS.get_environment("NEON_RACE")
+	if env.is_valid_float() and float(env) > 0.0:
+		var kmh_env := OS.get_environment("NEON_RACE_RIVAL")
+		var kmh := float(kmh_env) if kmh_env.is_valid_float() else 140.0
+		race.start_dummy(self, player, float(env), kmh / 3.6, 300)
 
 # ---------- game state (pause / restart / quit, issue #27) ----------
 func _setup_game_state() -> void:

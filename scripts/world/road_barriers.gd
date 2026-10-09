@@ -122,6 +122,9 @@ static var dents := {}
 static var crumpled := {}
 ## Tests: one type everywhere (tests/barrier_hit.gd).
 static var force_kind := NONE
+## Tests: false leaves the barriers visual only, so a test of another wall (the
+## out-of-bounds one, tests/car/wall_hit.gd) is not bounced into the median.
+static var collide := true
 
 static func reset() -> void:
 	dents.clear()
@@ -382,7 +385,7 @@ static func apply(root: Node3D, chunk_index: int, kind: String, gap: bool) -> vo
 		for k in RoadChunkBuilder.STATIONS:
 			var col := body.get_node(NodePath("Shape%d" % k)) as CollisionShape3D
 			var open := gap and is_open(k)
-			col.disabled = open or kind == NONE
+			col.disabled = open or kind == NONE or not collide
 			if open:
 				continue
 			var z := -seg * (float(k) + 0.5)
@@ -406,7 +409,7 @@ static func apply(root: Node3D, chunk_index: int, kind: String, gap: bool) -> vo
 	for i in 2:
 		var col := cbody.get_node(NodePath("Shape%d" % i)) as CollisionShape3D
 		var on := gap and kind != NONE
-		col.disabled = not on
+		col.disabled = not on or not collide
 		if not on:
 			continue
 		var len := CUSHION_LEN * (CUSHION_CRUMPLED if chunk_crumpled.get(i, false) else 1.0)

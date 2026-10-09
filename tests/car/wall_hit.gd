@@ -68,6 +68,9 @@ func _initialize() -> void:
 		for a in ANGLES:
 			if only == "" or only == "%d,%d" % [v, a]:
 				scenarios.append([v, a])
+	# The out-of-bounds wall is the subject; after the rebound the car must not
+	# land in the median barrier (R1), whose hits tests/world/barrier_hit.gd covers.
+	RoadBarriers.collide = false
 	game = Harness.boot(self, 0, 300.0, 4242)
 
 func _find(n: Node, name: String, out: Array) -> void:

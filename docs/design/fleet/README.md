@@ -2,8 +2,8 @@
 
 These are the designs of all 12 cars, as audited in Godot on 2026-10-05.
 The game models are these proxies, exported by `tools/fleet_design/game_export.py`:
-the P1 coupe (`scripts/p1_coupe_builder.gd`) and the traffic cars, every
-variant (`scripts/npc_car_builder.gd`, stage B step 5). The other player cars
+the P1 coupe (`scripts/car/p1_coupe_builder.gd`) and the traffic cars, every
+variant (`scripts/traffic/npc_car_builder.gd`, stage B step 5). The other player cars
 come in stage D and the police cars in stage F.
 
 | File | What it is |
@@ -80,7 +80,7 @@ patrol SUV.
     both see it (moved there in the audit from rear windows and trunk lids;
     the hot hatch's old one sat under its spoiler).
 
-  Checked in Godot (`tests/fleet_design_check.gd`): every slot lies on the body
+  Checked in Godot (`tests/fleet/fleet_design_check.gd`): every slot lies on the body
   in every build, nothing hovers over it, the chase cam sees the rear one, and
   every orbit camera sees at least one, all 96 of them (the sun strip is what
   covers the 3 ground-level views of the nose that the hood slot missed). Each slot's 3D centre,
@@ -116,7 +116,7 @@ patrol SUV.
 - **Proxy size:** 2.2k–3.0k triangles per car without the light and grille
   decals, 2.4k–3.3k with them (what Godot draws), against targets of 10k
   (player), 6k (police) and 4k (traffic).
-- **Measured in Godot** (`tests/fleet_budget_scene.gd`, the stage A scene from
+- **Measured in Godot** (`tests/fleet/fleet_budget_scene.gd`, the stage A scene from
   the chase cam): 30 traffic cars as separate meshes add 150 draw calls
   (176 → 326, 5 per car); drawn as one MultiMesh per design they add 6.
   At full budget (30 traffic, 3 police, the player) a frame has about 157k
@@ -136,7 +136,7 @@ patrol SUV.
 ## Verification
 
 - **Audit (2026-10-05), in Godot 4.7.2:**
-  - `tests/fleet_silhouette_sweep.gd` renders each car's outline from 96 orbit
+  - `tests/fleet/fleet_silhouette_sweep.gd` renders each car's outline from 96 orbit
     cameras (every 15°, at 2°, 15°, 35° and 60° up) plus the chase view, and
     flags "outline twins": two cars whose outlines nowhere differ by more than
     1% of their size. B1 had 9 such view-pairs; 2 remain, each at one high

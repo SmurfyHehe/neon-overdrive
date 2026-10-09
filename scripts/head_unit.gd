@@ -65,6 +65,7 @@ var has_knob := false
 var station := -1
 var now_playing := ""
 var level := 0.0
+var clock_text := ""     # the car clock, drawn top right (NightClock)
 var taps := 0
 var knob_presses := 0
 var viewport: SubViewport
@@ -216,6 +217,12 @@ func show_state(s: int, track: String, lvl: float, delta: float) -> void:
 		_knob_t = maxf(_knob_t - delta, 0.0)
 		knob.position = _knob_base() - Vector3(0.0, 0.0, KNOB_PRESS * sin(_knob_t / 0.15 * PI))
 
+## The car clock (NightClock text), top right of the screen; redraws on change.
+func show_clock(t: String) -> void:
+	if t != clock_text:
+		clock_text = t
+		_redraw()
+
 ## The finger touched the unit: tick, and push the knob in for an off press.
 func tap(on_knob: bool) -> void:
 	taps += 1
@@ -256,6 +263,8 @@ class ScreenCanvas extends Control:
 		if not on:
 			sub = ""
 		draw_string(font, Vector2(HeadUnit.MARGIN, 92), sub, HORIZONTAL_ALIGNMENT_LEFT, 330, 15, HeadUnit.SILVER)
+		if unit.clock_text != "":
+			draw_string(font, Vector2(372, 34), unit.clock_text, HORIZONTAL_ALIGNMENT_RIGHT, 116, 18, HeadUnit.AMBER)
 		var bars := 10
 		for i in bars:
 			var x := 372.0 + i * 12.0

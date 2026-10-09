@@ -187,6 +187,11 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("camera_view"):
 		set_view(View.CHASE if view == View.COCKPIT else View.COCKPIT)
 	look_back = Input.is_action_pressed("look_back")
+	perspective.window_key(Input.is_action_pressed("window"), delta)
+	if perspective.car_audio == null:
+		for c in target.get_children():
+			if c is CarAudio:
+				perspective.car_audio = c
 	_clock += delta
 	if view == View.COCKPIT and Input.is_action_just_pressed("look_glance"):
 		glance_tap(Input.get_axis("steer_left", "steer_right"))

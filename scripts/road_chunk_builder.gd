@@ -173,7 +173,6 @@ static var _sidewalk_mat: StandardMaterial3D
 static var _edge_line_mat: StandardMaterial3D
 static var _pylon_mat_own: StandardMaterial3D
 static var _pylon_mat_onc: StandardMaterial3D
-static var _window_tex: ImageTexture
 static var _barrier_mat: StandardMaterial3D
 static var _center_dash_mat: StandardMaterial3D
 static var _lane_dash_mat: StandardMaterial3D
@@ -277,34 +276,12 @@ static func _get_pylon_mat_onc() -> StandardMaterial3D:
 		_pylon_mat_onc = _flat_mat(Color(0.72, 0.62, 0.45), true, 0.35)
 	return _pylon_mat_onc
 
-## Procedural window-grid texture for buildings -- built once (a punched dot
-## grid of lit "windows" over a dark base) and shared across every building
-## material instance as an emission_texture, instead of spawning extra window
-## meshes per building.
-##
-## Stage A: a minority of windows lit (a city at 2 a.m., not an office at
-## noon), mostly warm incandescent with some cool fluorescent ones. Uses its
-## own seeded RNG so the pattern doesn't consume (or depend on) the global
-## random sequence the road layout uses.
+## Window-grid texture for buildings: one small texture shared by every
+## building material as its emission mask, instead of spawning window meshes
+## per building. Living world step 1 (2026-10-08): WindowLights owns it and
+## switches windows on and off with the night clock.
 static func _get_window_tex() -> ImageTexture:
-	if _window_tex == null:
-		var rng := RandomNumberGenerator.new()
-		rng.seed = 2004
-		var img := Image.create(32, 32, false, Image.FORMAT_RGB8)
-		img.fill(Color(0.0, 0.0, 0.0))
-		var gy := 2
-		while gy < 30:
-			var gx := 1
-			while gx < 30:
-				if rng.randf() < 0.32:
-					var lit := Color(1.0, 0.78, 0.45) if rng.randf() < 0.7 else Color(0.62, 0.8, 1.0)
-					lit = lit * rng.randf_range(0.55, 1.0)
-					img.set_pixel(gx, gy, lit)
-					img.set_pixel(gx + 1, gy, lit)
-				gx += 4
-			gy += 4
-		_window_tex = ImageTexture.create_from_image(img)
-	return _window_tex
+	return WindowLights.texture()
 
 ## Cached building materials. Only two variants exist (garage / tower), but
 ## _building_mat() used to be called per building -- 4 fresh

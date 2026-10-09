@@ -23,9 +23,11 @@ extends SceneTree
 # - it stays near upright (tilt under MAX_TILT; main reached 120 deg)
 # - it gains no speed from the wall: after contact |v| never jumps by more
 #   than MAX_KICK in one tick (full throttle is ~0.05 m/s per tick)
-# - it ends the run back on its wheels: upright, at least three wheels on the
-#   ground (parked against the wall, one wheel can hang over the 0.5 m gap
-#   between the sidewalk and the wall), so the player drives off without a reset
+# - it ends the run back on its wheels: over the last END_SECS it stays under
+#   END_TILT and has at least three wheels on the ground at some tick (parked
+#   against the wall, one wheel can hang over the 0.5 m gap between the
+#   sidewalk and the wall; still at full throttle it can be hopping the curb on
+#   any single tick), so the player drives off without a reset
 # - every number stays finite
 # NEON_WALL_ONLY="55,30" runs one scenario; NEON_WALL_LOG=1 prints each tick.
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --fixed-fps 120 --path . -s res://tests/wall_hit.gd
@@ -39,6 +41,7 @@ const START_GAP := 4.6  # m from the wall: on the shoulder, clear of the curb an
 const MAX_TILT := 30.0  # degrees from upright (all scenarios peak under 13 now)
 const MAX_KICK := 1.5  # m/s in one tick
 const END_TILT := 15.0  # degrees: back on its wheels at the end
+const END_SECS := 0.5  # the end check covers this last stretch of the run
 
 var rate := 120
 var logger := Harness.ErrorCounter.new()
@@ -110,6 +113,7 @@ func _start(p: PlayerCar) -> void:
 	prev_speed = v
 	s = {"speed": v, "angle": a, "hit": false, "through": false, "tilt": 0.0, "kick": 0.0,
 		"end_tilt": 0.0, "end_wheels": 0, "finite": true}
+	# end_tilt is the worst and end_wheels the most over the last END_SECS
 
 func _physics_process(_delta: float) -> bool:
 	var p: PlayerCar = game.get("player")
@@ -146,12 +150,14 @@ func _physics_process(_delta: float) -> bool:
 			s.through = true
 		if log_ticks:
 			print("  %s t=%.2f x=%.2f wall=%.2f y=%.2f tilt=%.0f v=%.1f vx=%.1f vy=%.1f w=(%.1f %.1f %.1f)" % ["H" if s.hit else "-", run_tick / float(rate), p.global_position.x, wall_x, p.global_position.y, tilt, speed, p.linear_velocity.x, p.linear_velocity.y, p.angular_velocity.x, p.angular_velocity.y, p.angular_velocity.z])
-	if run_tick >= int(RUN_SECS * rate) or not s.finite:
-		s.end_tilt = rad_to_deg(p.global_transform.basis.y.angle_to(Vector3.UP))
-		s.end_wheels = 0
+	if s.finite and run_tick > int((RUN_SECS - END_SECS) * rate):
+		s.end_tilt = maxf(s.end_tilt, rad_to_deg(p.global_transform.basis.y.angle_to(Vector3.UP)))
+		var down := 0
 		for w in p.wheel_array:
 			if (w as Wheel).is_colliding():
-				s.end_wheels += 1
+				down += 1
+		s.end_wheels = maxi(s.end_wheels, down)
+	if run_tick >= int(RUN_SECS * rate) or not s.finite:
 		_report()
 		index += 1
 		if index >= scenarios.size():

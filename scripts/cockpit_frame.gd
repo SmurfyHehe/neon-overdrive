@@ -638,6 +638,10 @@ func _find_radio() -> RadioManager:
 	return radio
 
 func _update_radio(delta: float) -> void:
+	# The car clock (NightClock) is drawn on the head unit's screen.
+	var scene := get_tree().current_scene if is_inside_tree() else null
+	if scene != null and scene.get("night_clock") is NightClock:
+		head_unit.show_clock(scene.night_clock.text())
 	var r := _find_radio()
 	if r == null:
 		return

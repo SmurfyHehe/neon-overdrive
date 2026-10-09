@@ -51,6 +51,7 @@ var game_state: GameState
 # speed feel (FOV, dolly, shake) all live in chase_camera.gd.
 var camera: ChaseCamera
 var radio: RadioManager
+var night_clock: NightClock  # 8 p.m. to 6 a.m., saved (night_clock.gd); windows follow it
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
 func _ready() -> void:
@@ -80,6 +81,12 @@ func _ready() -> void:
 		seed(Benchmark.SEED)
 	else:
 		randomize()
+	# The clock first: the building window texture is painted for its time
+	# when the first chunk is built.
+	night_clock = NightClock.new()
+	if benchmark:
+		night_clock.fixed_minutes = NightClock.BENCHMARK_MINUTES  # same windows every run
+	add_child(night_clock)
 	_setup_road_shape()
 	_setup_world()
 	_setup_ground_collision()
@@ -394,7 +401,9 @@ func toggle_mute() -> void:
 
 # ---------- HUD (scripts/hud.gd) ----------
 func _setup_hud() -> void:
-	add_child(Hud.new(player, camera, traffic))
+	var hud := Hud.new(player, camera, traffic)
+	hud.night_clock = night_clock
+	add_child(hud)
 
 # ---------- game state (pause / restart / quit, issue #27) ----------
 func _setup_game_state() -> void:
@@ -406,6 +415,14 @@ func _setup_game_state() -> void:
 	add_child(PhotoMode.new(game_state, camera))
 	radio = RadioManager.new()
 	add_child(radio)
+	night_clock.hour_changed.connect(_on_hour)
+	night_clock.night_ended.connect(func(_n: int) -> void: radio.announce_hour(NightClock.END_HOUR))
+
+## Dave reads the hour out. 8 p.m. only ever comes from the roll into the next
+## night, right after his 6 a.m. sign-off, so it is skipped.
+func _on_hour(hour24: int) -> void:
+	if hour24 != NightClock.START_HOUR:
+		radio.announce_hour(hour24)
 
 func _process(_delta: float) -> void:
 	_update_chunk_pool(RoadFrame.unroll(player.position).z)

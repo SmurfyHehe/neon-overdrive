@@ -210,6 +210,7 @@ func _physics_process(delta: float) -> void:
 	var dv := (v - _prev_vel).length()
 	_prev_vel = v
 	register_impact(dv)
+	trauma = maxf(trauma, target.ignition.take_shake())   # starter and catch (X)
 	var speed := target.current_speed()
 	_accel = (speed - _prev_speed) / delta
 	_prev_speed = speed

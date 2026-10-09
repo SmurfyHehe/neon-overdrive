@@ -281,11 +281,13 @@ func _physics_process(delta: float) -> void:
 	else:
 		_read_keyboard()
 	_update_line_lock()
+	_ignition_before_step()
 	# Limp mode: the slowest active cause caps the speed by fading the throttle.
 	limp.update(fuel.is_empty(), health.engine_temp if health.enabled else 0.0)
 	if limp.is_limping():
 		throttle_input *= limp.throttle_scale(current_speed() * 3.6)
 	super._physics_process(delta)
+	_ignition_after_step(delta)
 
 	# Aero (2026-09-13): applied AFTER the vendor's own _physics_process so
 	# drafting can recompute and partially cancel the drag force it just
@@ -339,6 +341,52 @@ func _update_line_lock() -> void:
 		front_axle.brake_bias = _line_lock_bias.x
 		rear_axle.brake_bias = _line_lock_bias.y
 
+# X (2026-10-09, Roy): starts the engine and switches it off. The state machine is
+# Ignition; this applies it to the vehicle. The vendored engine only models a
+# dead engine with realistic_clutch on, so a player shutdown also zeroes
+# idle_rpm: with no throttle and no idle controller the engine runs down on its
+# own drag, in every gearbox mode, and comes back to the saved idle on firing.
+var ignition := Ignition.new()
+var _idle_zeroed := false
+var _idle_saved := 0.0
+
+## X pressed. A press while the starter is turning does nothing.
+func toggle_ignition() -> void:
+	if ignition.is_cranking():
+		return
+	if engine_running:
+		ignition.state = Ignition.State.RUN
+	elif ignition.is_running():
+		ignition.state = Ignition.State.OFF  # a stall the sync has not seen yet
+	var to := ignition.toggle()
+	if to == Ignition.State.OFF:
+		engine_running = false
+		if not _idle_zeroed:
+			_idle_saved = idle_rpm
+			idle_rpm = 0.0
+			_idle_zeroed = true
+
+func _ignition_before_step() -> void:
+	ignition.sync_running(engine_running and not _idle_zeroed)
+	if not ignition.is_running():
+		throttle_input = 0.0   # a dead engine ignores the pedal
+
+func _ignition_after_step(delta: float) -> void:
+	if not ignition.is_cranking():
+		return
+	var idle := _idle_saved if _idle_zeroed else idle_rpm
+	if ignition.step(delta, not (fuel.enabled and fuel.is_empty())):
+		_idle_zeroed = false
+		idle_rpm = idle
+		engine_running = true
+		if current_speed() < 3.0:
+			motor_rpm = idle + (max_rpm - idle) * Ignition.FLARE   # the catch: the needle flares
+		return
+	if not ignition.is_cranking():
+		return   # gave up: no fuel
+	if current_speed() < 3.0:
+		motor_rpm = idle * Ignition.CRANK_RPM_FRAC * ignition.crank_frac()
+
 func _read_keyboard() -> void:
 	# Input (#29, #30): named InputMap actions (project.godot), all polled
 	# here -- no _input handlers. Shifts are one-shot, hence just_pressed.
@@ -351,7 +399,8 @@ func _read_keyboard() -> void:
 	if Input.is_action_just_pressed("reverse"):
 		toggle_reverse()
 	clutch_input = 1.0 if Input.is_action_pressed("clutch") else 0.0
-	starter_input = Input.is_action_pressed("starter")
+	if Input.is_action_just_pressed("starter"):
+		toggle_ignition()
 	var throttle := Input.is_action_pressed("accelerate")
 	var braking := Input.is_action_pressed("brake")
 	var handbrake := Input.is_action_pressed("handbrake")
@@ -454,8 +503,10 @@ func set_transmission_mode(mode: int) -> void:
 	automatic_transmission = mode == Transmission.AUTO
 	realistic_clutch = mode == Transmission.MANUAL
 	# Same reset the old V toggle did: never hand over a stalled engine or a
-	# half-pressed pedal from the other model.
-	engine_running = true
+	# half-pressed pedal from the other model. An engine the player switched off
+	# with X stays off.
+	if not _idle_zeroed and not ignition.is_cranking():
+		engine_running = true
 	clutch_pedal = 0.0
 
 ## In MANUAL a gear change needs the clutch in; in the other modes it always may.

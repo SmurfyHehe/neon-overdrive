@@ -9,6 +9,8 @@ class_name EngineAudio
 ## throttle, higher = more tolerant of frame hitches.
 const BUFFER_SECS := 0.06
 const ENGINE_VOLUME := 0.5  # EngineSynth's own default level
+## While the starter turns the engine over (X) it is heard at this fraction.
+const CRANK_VOLUME := 0.45
 
 ## Which car's exhaust preset the player car starts with (exhaust_tune.gd).
 ## Placeholder until the cars are built from fleet.json (stage B step 5).
@@ -64,7 +66,10 @@ func _process(_delta: float) -> void:
 		return
 	_join()
 	sync_tune()
-	synth.volume = ENGINE_VOLUME if _vehicle.engine_running else 0.0  # a stalled engine is silent
+	# A stalled or switched-off engine is silent; the starter turning it over is quiet.
+	synth.volume = ENGINE_VOLUME if _vehicle.engine_running else 0.0
+	if not _vehicle.engine_running and _is_cranking():
+		synth.volume = ENGINE_VOLUME * CRANK_VOLUME
 	if _vehicle.turbo_boost_max > 0.0:
 		synth.boost = clampf(_vehicle.boost / _vehicle.turbo_boost_max, 0.0, 1.0)
 		if _vehicle.blow_off_count != _seen_blow_offs:
@@ -83,6 +88,10 @@ func _process(_delta: float) -> void:
 		_task_start_usec = Time.get_ticks_usec()
 		_task = WorkerThreadPool.add_task(_render.bind(n, _vehicle.motor_rpm,
 				_vehicle.throttle_amount, _vehicle.motor_is_redline), false, "engine audio")
+
+func _is_cranking() -> bool:
+	var ig: Variant = _vehicle.get("ignition")
+	return ig != null and ig.is_cranking()
 
 ## Worker thread: one block, straight into the stream.
 func _render(n: int, rpm: float, throttle: float, redline: bool) -> void:

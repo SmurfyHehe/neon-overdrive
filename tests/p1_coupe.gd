@@ -3,8 +3,9 @@ extends SceneTree
 # P1 sports coupe, the player's car (stage D step 1, Roy 2026-10-06):
 #   - the model builds from the design data and is the sheet's size
 #     (4.42 x 1.80 x 1.24 m, mirrors excluded)
-#   - budget: at most 10,000 triangles and 8 draw calls (body surfaces + door
-#     mirrors + 4 wheels); the mirror cups are a few dozen triangles on top
+#   - budget: at most 10,000 triangles and 9 draw calls (body surfaces + door
+#     mirrors + underside + 4 wheels); the mirror cups are a few dozen
+#     triangles on top, the underside (car-parts plan 5b) under 1,000
 #   - exactly the 4 sticker slots (door, hood, sun strip, rear), each lying on
 #     the body, the door one mirrored
 #   - head lamps at the nose, tail lamps at the tail, both on the glow surface;
@@ -19,7 +20,7 @@ extends SceneTree
 
 const TOL := 0.05
 const TRI_BUDGET := 10000
-const DRAW_CALL_BUDGET := 8
+const DRAW_CALL_BUDGET := 9
 ## Phase B hardpoints (player.gd CFG) and the collision box from player._ready.
 const CFG := {"wheel_r": 0.34, "axle_z": 1.25, "wheel_x": 0.88}
 const COLLISION := Vector3(1.6, 1.0, 3.4)
@@ -67,6 +68,9 @@ func _initialize() -> void:
 	_check(mirrors != null and mirrors.mesh is ArrayMesh, "the body should carry a Mirrors mesh (door mirror cups)")
 	var mtris := P1CoupeBuilder.mirror_triangle_count()
 	_check(mtris > 0 and mtris <= 200 and tris + mtris <= TRI_BUDGET, "door mirrors are %d triangles" % mtris)
+	var utris := P1CoupeBuilder.undercarriage_triangle_count()
+	_check(utris > 0 and utris <= 1000 and tris + mtris + utris <= TRI_BUDGET, "underside is %d triangles" % utris)
+	_check(car.get_node_or_null(Undercarriage.NODE_NAME) is MeshInstance3D, "the player's body should carry an Undercarriage mesh")
 	if mirrors != null:
 		var mb := (mirrors.mesh as ArrayMesh).get_aabb()
 		_check(mb.position.x < -P1CoupeBuilder.WIDTH / 2.0 and mb.end.x > P1CoupeBuilder.WIDTH / 2.0, "the door mirrors should stand out past the body sides (%s)" % mb)

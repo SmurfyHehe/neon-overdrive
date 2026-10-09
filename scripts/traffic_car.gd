@@ -63,6 +63,10 @@ class_name TrafficCar
 var kind := "coupe"
 ## The sheet variant of an NPC car (NpcCarBuilder.builds), e.g. "taxi".
 var build := "stock"
+## Undercarriage role: "" = from the kind (n* traffic, c* cop, else player
+## class). A spawner that puts a player-class body on the road as an ally or
+## rival sets Undercarriage.ROLE_CREW; a cop spawner sets ROLE_COP.
+var role := ""
 ## Vehicle tune (CarSpec dict). Empty = CarSpec.npc_spec(kind). Set before
 ## add_child(), like PlayerCar.spec.
 var spec := {}
@@ -234,7 +238,7 @@ func _ready() -> void:
 		rest_y = float(cfg.rest_y)
 
 	if not sim_only:
-		chassis_visual = NpcCarBuilder.chassis_visual(kind, build, color) if npc else CarBuilder.shared_chassis_visual(kind, color)
+		chassis_visual = NpcCarBuilder.chassis_visual(kind, build, color, role) if npc else CarBuilder.shared_chassis_visual(kind, color)
 		add_child(chassis_visual)
 
 	can_sleep = false

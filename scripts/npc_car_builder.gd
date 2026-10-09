@@ -49,6 +49,7 @@ const KINDS := {
 		## Measured by tests/npc_cars.gd. The body is drawn -rest_y higher so
 		## the car stands at the sheet's ride height at rest (P1CoupeBuilder
 		## BODY_LIFT, same reason).
+		"drive": "fwd",
 		"rest_y": -0.121,
 		"builds": {"stock": 60, "sport": 25, "taxi": 15},
 		## Builds with a fixed paint instead of a random traffic neutral.
@@ -59,6 +60,7 @@ const KINDS := {
 		"length": 3.95, "width": 1.69, "height": 1.53, "clearance": 0.15,
 		"front_overhang": 0.80, "rear_overhang": 0.62,
 		"wheel_r": 0.295, "wheel_x": 0.73, "axle_z": 1.265,
+		"drive": "fwd",
 		"rest_y": -0.12,
 		"builds": {"stock": 55, "sport": 25, "rack": 20},
 		"build_paint": {},
@@ -68,6 +70,7 @@ const KINDS := {
 		"length": 5.30, "width": 1.86, "height": 1.86, "clearance": 0.30,
 		"front_overhang": 0.92, "rear_overhang": 1.30,
 		"wheel_r": 0.39, "wheel_x": 0.79, "axle_z": 1.54,
+		"drive": "rwd",
 		"rest_y": -0.12,
 		"builds": {"stock": 50, "covered": 30, "sportsbar": 20},
 		"build_paint": {},
@@ -258,10 +261,15 @@ static func pick_paint(kind: String, build: String) -> Color:
 ## Metas as P1CoupeBuilder's: "kind", "build", "half_w", "half_l",
 ## "exhaust_tips", "sticker_slots" (centre and normal; no markers, traffic
 ## has no stickers yet).
-static func chassis_visual(kind: String, build: String, paint: Color) -> Node3D:
+## `role` is an Undercarriage role (player, crew, cop, traffic); "" picks
+## it from the kind's prefix. Traffic gets no underside: the sheet's own
+## dark tray is in the body mesh. The others get the real set, one draw call.
+static func chassis_visual(kind: String, build: String, paint: Color, role := "") -> Node3D:
 	var k: Dictionary = KINDS[kind]
 	var b: Dictionary = k.data.BUILDS[build]
 	var lift := Vector3(0.0, -float(k.rest_y), 0.0)
+	if role == "":
+		role = Undercarriage.role_for_kind(kind)
 	var root := Node3D.new()
 	root.name = "NpcBody"
 	root.set_meta("kind", kind)
@@ -285,7 +293,24 @@ static func chassis_visual(kind: String, build: String, paint: Color) -> Node3D:
 	root.set_meta("sticker_slots", slots)
 	root.set_meta("half_w", float(k.width) / 2.0)
 	root.set_meta("half_l", float(k.length) / 2.0)
+	Undercarriage.attach(root, undercarriage_params(kind, build), role)
 	return root
+
+## What the underside is built from (Undercarriage.params), car space: the
+## ground at rest is -rest_y above the origin, the floor the body's lowest
+## point, the wheels the KINDS entry's. "drive" in KINDS, rwd when unset;
+## the C3 interceptor is the straight-pipe cop variant.
+static func undercarriage_params(kind: String, build: String) -> Dictionary:
+	var k: Dictionary = KINDS[kind]
+	var b: Dictionary = k.data.BUILDS[build]
+	var lift := Vector3(0.0, -float(k.rest_y), 0.0)
+	var floor_y: float = body_mesh(kind, build).get_aabb().position.y + lift.y
+	var tips := []
+	for t in b.tips:
+		tips.append({"pos": t.pos + lift, "dir": t.dir, "r": t.r})
+	var variant := "interceptor" if kind.contains("interceptor") else ""
+	return Undercarriage.params(float(k.width) / 2.0, float(k.length) / 2.0, floor_y, lift.y,
+		float(k.wheel_r), float(k.wheel_x), float(k.axle_z), tips, String(k.get("drive", "rwd")), variant)
 
 ## Tyre and rim for one corner, to parent under its physics Wheel (the pivot
 ## is what the wheel moves and spins). `hub` is the wheel's position in car
@@ -311,8 +336,12 @@ static func triangle_count(kind: String, build: String) -> int:
 		n += 2 * wheel_mesh(kind, build, rear).surface_get_array_len(0) / 3
 	return n
 
-static func draw_call_count(kind: String, build: String) -> int:
-	return body_mesh(kind, build).get_surface_count() + 4
+## Body surfaces, 4 wheels, plus the underside where the class has one
+## (Undercarriage.draw_calls; traffic +0).
+static func draw_call_count(kind: String, build: String, role := "") -> int:
+	if role == "":
+		role = Undercarriage.role_for_kind(kind)
+	return body_mesh(kind, build).get_surface_count() + 4 + Undercarriage.draw_calls(role)
 
 # ---------- meshes ----------
 

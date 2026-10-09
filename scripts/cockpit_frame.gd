@@ -100,6 +100,7 @@ var tach_needle: Node3D
 var speedo_needle: Node3D
 var lamps: MultiMeshInstance3D
 var lamp_text: Label3D
+var trinket: DashTrinket        # the charm on the rear-view mirror (ViewSettings.dash_trinket)
 var head_unit: HeadUnit         # the touch-screen radio on the centre stack
 var lever: Node3D
 var lever_knob: Node3D
@@ -135,6 +136,8 @@ func _ready() -> void:
 	_build_handbrake()
 	_build_pedals()
 	_build_light()
+	trinket = DashTrinket.new(player)
+	add_child(trinket)
 	mirrors = CockpitMirrors.new()
 	mirrors.name = "Mirrors"
 	mirrors.cull_mask = MIRROR_CULL

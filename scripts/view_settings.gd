@@ -13,11 +13,20 @@ const COCKPIT_FOV_MAX := 78.0
 const CAMERA_SMOOTHING_DEFAULT := 1   # chase-cam smoothing (#31): 0 A hard snap, 1 B light (default, #119), 2 C smoothing + swing
 const CAMERA_SMOOTHING_MAX := 2
 
+## The charm hanging from the rear-view mirror (DashTrinket.IDS; "none" hides
+## it). The pause menu sets it now, the garage later. Stored by id so the list
+## can grow or reorder without breaking saves.
+const DASH_TRINKET_DEFAULT := "dice"
+
+static var dash_trinket := DASH_TRINKET_DEFAULT
 static var cockpit_fov := COCKPIT_FOV_DEFAULT
 static var camera_smoothing := CAMERA_SMOOTHING_DEFAULT
 
 static func set_camera_smoothing(v: int) -> void:
 	camera_smoothing = clampi(v, 0, CAMERA_SMOOTHING_MAX)
+
+static func set_dash_trinket(id: String) -> void:
+	dash_trinket = id if DashTrinket.IDS.has(id) else DASH_TRINKET_DEFAULT
 
 static func set_cockpit_fov(v: float) -> void:
 	cockpit_fov = clampf(v, COCKPIT_FOV_MIN, COCKPIT_FOV_MAX) if is_finite(v) else COCKPIT_FOV_DEFAULT  # clampf passes NaN through
@@ -29,6 +38,7 @@ static func load_settings() -> void:
 	var ok := cfg.load(AudioSettings.path) == OK
 	set_cockpit_fov(float(cfg.get_value("view", "cockpit_fov", COCKPIT_FOV_DEFAULT)) if ok else COCKPIT_FOV_DEFAULT)
 	set_camera_smoothing(int(cfg.get_value("view", "camera_smoothing", CAMERA_SMOOTHING_DEFAULT)) if ok else CAMERA_SMOOTHING_DEFAULT)
+	set_dash_trinket(str(cfg.get_value("view", "dash_trinket", DASH_TRINKET_DEFAULT)) if ok else DASH_TRINKET_DEFAULT)
 
 ## Rewrites only the [view] section; the other sections stay.
 static func save_settings() -> bool:
@@ -36,4 +46,5 @@ static func save_settings() -> bool:
 	cfg.load(AudioSettings.path)
 	cfg.set_value("view", "cockpit_fov", cockpit_fov)
 	cfg.set_value("view", "camera_smoothing", camera_smoothing)
+	cfg.set_value("view", "dash_trinket", dash_trinket)
 	return cfg.save(AudioSettings.path) == OK

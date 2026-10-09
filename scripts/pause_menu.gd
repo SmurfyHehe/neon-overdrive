@@ -30,6 +30,8 @@ var resume_button: Button
 var volume_sliders := {}   # channel -> HSlider
 var fov_slider: HSlider
 var smoothing_slider: HSlider
+var trinket_slider: HSlider
+var trinket_label: Label
 var smoke_burnout_slider: HSlider
 var smoke_drift_slider: HSlider
 var main_page: VBoxContainer
@@ -130,6 +132,20 @@ func _ready() -> void:
 		func(v: float) -> void:
 			ViewSettings.set_camera_smoothing(int(v))
 			ViewSettings.save_settings())
+
+	# Dash trinket (2026-10-09): the charm on the rear-view mirror. The cockpit
+	# polls ViewSettings, so the pick shows at once; the garage will own this later.
+	var trinket_row := _add_slider(box, "Trinket", 0.0, float(DashTrinket.IDS.size() - 1), 1.0,
+		float(DashTrinket.index_of(ViewSettings.dash_trinket)),
+		func(v: float) -> void:
+			ViewSettings.set_dash_trinket(DashTrinket.IDS[clampi(int(v), 0, DashTrinket.IDS.size() - 1)])
+			ViewSettings.save_settings()
+			trinket_label.text = DashTrinket.NAMES[ViewSettings.dash_trinket])
+	trinket_slider = trinket_row
+	trinket_label = Label.new()
+	trinket_label.text = DashTrinket.NAMES[ViewSettings.dash_trinket]
+	trinket_label.custom_minimum_size = Vector2(90, 0)
+	trinket_row.get_parent().add_child(trinket_label)
 
 	# Tyre smoke amounts (2026-10-07): 0 = none, 1 = default, 2 = double.
 	# Read live by TyreSmoke each tick, saved with the rest.

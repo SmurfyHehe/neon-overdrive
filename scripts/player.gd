@@ -70,6 +70,8 @@ const STEER_LOCK_GRIP := 0.27
 const STEER_GRIP_FROM := 3.0     # m/s: below this the grip limit does not apply (parking)
 const STEER_GRIP_FULL := 8.0     # m/s: it applies in full from here up
 
+const LAMP_BRAKE_MIN := 0.05   # pedal travel that lights the brake lamps
+var _lamp_key := -1
 const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Vehicle's own shift_time below
 
 var chassis_visual: Node3D
@@ -245,11 +247,24 @@ func _physics_process(delta: float) -> void:
 	# applied this frame. See aero.gd for the actual force math.
 	AeroModel.apply(self)
 	health.step(self, delta)
+	_update_lamps()
 	if _keeps_tune:
 		_tune_check_left -= delta
 		if _tune_check_left <= 0.0:
 			_tune_check_left = TUNE_CHECK_SECS
 			_save_tune_if_changed()
+
+## Brake lamps on the foot brake or the handbrake; the tail lens goes white in
+## reverse until the brake is on. Only the P1 body has them (test car: none).
+## Pushes to the shader only when the state changes.
+func _update_lamps() -> void:
+	if chassis_visual == null or chassis_visual.get_meta("kind", "") != P1CoupeBuilder.KIND:
+		return
+	var braking := brake_input > LAMP_BRAKE_MIN or handbrake_input > LAMP_BRAKE_MIN
+	var key := (1 if braking else 0) + (2 if current_gear == -1 else 0)
+	if key != _lamp_key:
+		_lamp_key = key
+		P1CoupeBuilder.set_lamps(chassis_visual, 1.0 if braking else 0.0, current_gear == -1)
 
 func _exit_tree() -> void:
 	if _keeps_tune:

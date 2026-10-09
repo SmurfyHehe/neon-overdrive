@@ -1054,32 +1054,35 @@ static func _clear_at_junction(root: Node3D, index: int, info: Dictionary, chunk
 static func _update_signs(root: Node3D, infos: Array) -> int:
 	var mm: MultiMesh = (root.get_node(^"Signs") as MultiMeshInstance3D).multimesh
 	var n := 0
+	var xfs := []
+	var anchors := PackedFloat32Array()
 	for info in infos:
 		if info.empty or info.sign == "":
 			continue
+		anchors.append(float(info.z))
 		var fh: float = info.floor_h
 		var garage: bool = info.type == "garage"
 		var x: float = float(info.front_x_abs) * float(info.side)
 		var lot_x: float = float(info.lot_front_x_abs) * float(info.side)
 		if info.type == "gas":
 			# fascia along the front edge of the canopy
-			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(lot_x + 0.4 * float(info.side), 5.0, info.z), info.side, 0.6, 6.0)
+			xfs.append(BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(lot_x + 0.4 * float(info.side), 5.0, info.z), info.side, 0.6, 6.0))
 		elif info.type == "diner":
 			# high on its pole, square-on to the oncoming traffic
-			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(lot_x + 1.2 * float(info.side), 7.8, float(info.z) + float(info.d) * 0.35), info.side, 1.6, 4.5, false, PI / 2.0)
+			xfs.append(BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(lot_x + 1.2 * float(info.side), 7.8, float(info.z) + float(info.d) * 0.35), info.side, 1.6, 4.5, false, PI / 2.0))
 		elif info.blade:
 			# over the sidewalk, clear of a car roof, one floor up; on a one-floor
 			# shop that would be above the roof, so it hangs under the roofline
-			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(x, minf(fh + 0.9, float(info.h) - 0.45), info.z), info.side, 0.8, 2.0, true)
+			xfs.append(BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(x, minf(fh + 0.9, float(info.h) - 0.45), info.z), info.side, 0.8, 2.0, true))
 		else:
 			# shop: the dark band at the top of the shopfront glass; garage:
 			# over the roller doors
 			var sh := 0.6 if garage else 0.75
 			var y: float = fh - (0.45 if garage else 0.42)
-			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(x, y, info.z), info.side, sh, float(info.d) * 0.8)
+			xfs.append(BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(x, y, info.z), info.side, sh, float(info.d) * 0.8))
 		n += 1
 	mm.visible_instance_count = n
-	_bend_instances(mm, 0, n)
+	_bend_instances(mm, 0, xfs, anchors)
 	return n
 
 ## Rooftop props and billboards (buildings step 3); billboard faces take
@@ -1087,19 +1090,32 @@ static func _update_signs(root: Node3D, infos: Array) -> int:
 static func _update_roofs(root: Node3D, infos: Array, signs_used: int) -> void:
 	var props: MultiMesh = (root.get_node(^"RoofProps") as MultiMeshInstance3D).multimesh
 	var signs: MultiMesh = (root.get_node(^"Signs") as MultiMeshInstance3D).multimesh
-	var counts := RoofProps.update(props, infos, signs, signs_used)
-	signs.visible_instance_count = counts[1]
-	_bend_instances(props, 0, counts[0])
-	_bend_instances(signs, signs_used, counts[1])
-	root.set_meta("roof_props", counts[0])
+	var r := RoofProps.update(props, infos, signs, signs_used, _foundation())
+	signs.visible_instance_count = r.signs
+	_bend_instances(props, 0, r.prop_xfs, r.prop_anchor)
+	_bend_instances(signs, signs_used, r.sign_xfs, r.sign_anchor)
+	root.set_meta("roof_props", r.props)
 
 ## Signs and roof props are laid out on the straight road description; this
-## carries instances [from, to) through the centreline frame (#37), the same
-## mapping _xf_up gives everything else. A no-op on a straight, flat road.
-static func _bend_instances(mm: MultiMesh, from: int, to: int) -> void:
-	for i in range(from, to):
-		var t := mm.get_instance_transform(i)
-		mm.set_instance_transform(i, _xf_up(t.origin.x, t.origin.y, t.origin.z, t.basis))
+## writes instances from slot `from` on through the centreline frame (#37),
+## each one rigid with the building it belongs to: `anchors[k]` is that
+## building's road z, and the piece keeps its offset from there in the
+## building's own frame (heading and height at the anchor), so a roof prop
+## sits exactly on its flat roof on a slope instead of following the road
+## grade at its own spot (up to 0.45 m off on a 5% grade, the residue PR
+## #318 noted). On a straight, flat road this is the plain transform.
+##
+## The straight transforms come from the callers' arrays, never from
+## mm.get_instance_transform(): with physics interpolation on (project
+## setting, ISSUES B7) that getter returns the data last drawn, which on a
+## pooled chunk rebuilt in the game is the previous occupant's. The old
+## read-modify-write here put those stale props back, so office roof tanks
+## hung 40 m over a one-floor lot (floating structures, 2026-10-09).
+static func _bend_instances(mm: MultiMesh, from: int, xfs: Array, anchors: PackedFloat32Array) -> void:
+	for k in xfs.size():
+		var t: Transform3D = xfs[k]
+		var a := float(anchors[k])
+		mm.set_instance_transform(from + k, _xf_up(0.0, 0.0, a) * Transform3D(t.basis, Vector3(t.origin.x, t.origin.y, t.origin.z - a)))
 
 # ---------- build / rebuild ----------
 

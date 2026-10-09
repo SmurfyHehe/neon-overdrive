@@ -83,11 +83,22 @@ static func new_multimesh() -> MultiMeshInstance3D:
 
 ## Fills the chunk's prop buffer from the dressed buildings (infos from
 ## RoadChunkBuilder._update_building). Billboard faces go to the sign
-## buffer from slot first_sign on. Returns [props drawn, signs in use].
-static func update(mm: MultiMesh, infos: Array, signs: MultiMesh, first_sign: int) -> Array:
+## buffer from slot first_sign on. `foundation` is how far ground-standing
+## pieces (forecourt columns, pump islands, the diner pole) reach below the
+## road on a hilly road, like the buildings, so none hangs over the slope.
+##
+## Returns {props, signs, prop_xfs, prop_anchor, sign_xfs, sign_anchor}:
+## the counts, every transform written (straight road description) and the
+## road z each piece belongs to (its building's centre). The builder bends
+## them through the road's curve from these arrays, never from the
+## MultiMesh: with physics interpolation on, get_instance_transform() hands
+## back the data last drawn, so a pooled chunk rebuilt in the game kept its
+## old occupant's props floating in the sky (2026-10-09).
+static func update(mm: MultiMesh, infos: Array, signs: MultiMesh, first_sign: int, foundation: float = 0.0) -> Dictionary:
 	var n := 0
 	var n_signs := first_sign
 	var rng := RandomNumberGenerator.new()
+	var out := {"prop_xfs": [], "prop_anchor": PackedFloat32Array(), "sign_xfs": [], "sign_anchor": PackedFloat32Array()}
 	for info in infos:
 		if info.empty:
 			continue
@@ -149,18 +160,26 @@ static func update(mm: MultiMesh, infos: Array, signs: MultiMesh, first_sign: in
 			if n >= CAPACITY:
 				break
 			var pos: Vector3
+			var scale: Vector3 = p[1]
 			if p[2] is Vector3:
 				pos = p[2]  # already placed on the ground (gas station, diner pole)
+				if pos.y == 0.0 and foundation > 0.0:
+					# stands on the ground: reach below it, like a building
+					pos.y = -foundation
+					scale.y += foundation
 			else:
 				var off: Vector2 = p[2]
 				pos = Vector3(cx + off.x * float(side), h, cz + off.y)
-			_put(mm, n, p[0], Basis.from_scale(p[1]), pos, float(p[3]))
+			out.prop_xfs.append(_put(mm, n, p[0], Basis.from_scale(scale), pos, float(p[3])))
+			out.prop_anchor.append(cz)
 			n += 1
 		if wants_billboard and n + 2 <= CAPACITY and n_signs < signs.instance_count:
-			n = _billboard(mm, n, signs, n_signs, rng, info)
+			n = _billboard(mm, n, signs, n_signs, rng, info, out)
 			n_signs += 1
 	mm.visible_instance_count = n
-	return [n, n_signs]
+	out["props"] = n
+	out["signs"] = n_signs
+	return out
 
 ## A point on the ground (or at height y) `x_in` metres into the building's
 ## lot from its front line and `dz` along the road from its centre.
@@ -184,13 +203,15 @@ static func _gas_station(info: Dictionary) -> Array:
 static func _spot(rng: RandomNumberGenerator, w: float, d: float, keep: float) -> Vector2:
 	return Vector2(rng.randf_range(-0.5, 0.5) * w * keep, rng.randf_range(-0.5, 0.5) * d * keep)
 
-static func _put(mm: MultiMesh, i: int, shape: int, basis: Basis, pos: Vector3, tint: float) -> void:
-	mm.set_instance_transform(i, Transform3D(basis, pos))
+static func _put(mm: MultiMesh, i: int, shape: int, basis: Basis, pos: Vector3, tint: float) -> Transform3D:
+	var xf := Transform3D(basis, pos)
+	mm.set_instance_transform(i, xf)
 	mm.set_instance_custom_data(i, Color(float(shape), tint, tint * 0.97, tint * 0.92))
+	return xf
 
 ## A billboard on two poles near the roof's front edge, angled toward the
 ## traffic coming down the road. Uses 2 prop slots and 1 sign slot.
-static func _billboard(mm: MultiMesh, n: int, signs: MultiMesh, sign_i: int, rng: RandomNumberGenerator, info: Dictionary) -> int:
+static func _billboard(mm: MultiMesh, n: int, signs: MultiMesh, sign_i: int, rng: RandomNumberGenerator, info: Dictionary, out: Dictionary) -> int:
 	var side := int(info.side)
 	var h: float = info.h
 	var panel_h := 2.0
@@ -198,16 +219,22 @@ static func _billboard(mm: MultiMesh, n: int, signs: MultiMesh, sign_i: int, rng
 	var angle := 0.45
 	var word: String = BuildingSigns.BILLBOARD_WORDS[rng.randi() % BuildingSigns.BILLBOARD_WORDS.size()]
 	var color := 0 if rng.randf() < 0.7 else 3  # mostly amber, some dusk blue
-	var front_x := (float(info.front_x_abs) + 1.4) * float(side)
+	# 1.9 m in from the front edge: the panel swings `angle` toward the
+	# traffic, which carries its near pole 0.35 x 9 m x sin(angle) = 1.37 m
+	# back toward the edge; at the old 1.4 m that pole stood 0.2 m past the
+	# roof, in the air (floating structures scan, 2026-10-09).
+	var front_x := (float(info.front_x_abs) + 1.9) * float(side)
 	var center := Vector3(front_x, h + lift + panel_h / 2.0, info.z)
-	BuildingSigns.place(signs, sign_i, word, color, 2, center, side, panel_h, minf(float(info.d) * 0.9, 9.0), false, angle)
+	var panel := BuildingSigns.place(signs, sign_i, word, color, 2, center, side, panel_h, minf(float(info.d) * 0.9, 9.0), false, angle)
+	out.sign_xfs.append(panel)
+	out.sign_anchor.append(float(info.z))
 	# poles under the panel's two ends, along the panel's own length axis
-	var panel := signs.get_instance_transform(sign_i)
 	var along := panel.basis.z
 	var pole_h := lift + panel_h * 0.5
 	for k in [-0.35, 0.35]:
 		var p := panel.origin + along * float(k)
-		_put(mm, n, SHAPE_BOX, Basis.from_scale(Vector3(0.22, pole_h, 0.22)), Vector3(p.x, h, p.z), 0.4)
+		out.prop_xfs.append(_put(mm, n, SHAPE_BOX, Basis.from_scale(Vector3(0.22, pole_h, 0.22)), Vector3(p.x, h, p.z), 0.4))
+		out.prop_anchor.append(float(info.z))
 		n += 1
 	return n
 

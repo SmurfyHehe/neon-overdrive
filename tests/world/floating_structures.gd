@@ -1,146 +1,230 @@
 extends SceneTree
 
-# Floating-structures scan (2026-10-09): builds chunks across the districts, on
-# a flat road and on a curvy hilly one, and checks nothing on a building hangs
-# in the air. Roy saw roadside structures that belong to a building floating
-# in the sky.
+# Floating-structures scan (2026-10-09): nothing a chunk draws may hang in
+# the air. Roy saw roadside structures floating in the sky in his play build.
 #
-# Asserts (exit code 1 on failure):
-# - every wall sign (band, blade, gas fascia, diner sign) lies within the
-#   height of a building beside it, or rests on a roof prop (canopy, pole)
-# - every roof prop / billboard pole stands on a building's top face, or on the
-#   road (gas station columns, diner pole)
+# The scan runs the way the game does: a pool of chunks lives in the tree,
+# and every frame some are rebuilt in place as the next chunk index
+# (RoadChunkBuilder.rebuild_chunk, the recycle path), on a flat road, a curvy
+# hilly one and a kicker-crest one, through every district. A chunk is
+# checked a few frames after its rebuild, reading the MultiMesh buffers the
+# renderer actually draws: with physics interpolation on (project setting)
+# those lag the writes, which is how the first fix's in-frame scan missed
+# the real bug (a rebuilt chunk kept its previous occupant's roof props,
+# office water tanks 40 m over a one-floor lot).
+#
+# Every piece -- building, gap wall, lamp, pylon, barrier piece, reflector,
+# dash, light pool, sign, billboard, roof prop -- must have its lowest point
+# on a support, within TOL:
+# - the road surface at that spot (ground; reaching below it is fine), or
+# - the top face of a building it stands on, or
+# - another piece of the chunk it rests on or is threaded through (a canopy
+#   on its columns, a billboard panel on its poles, the diner sign on its
+#   pole), or, for wall signs only,
+# - a building wall: the sign is against the building and within its height.
+#
+# Asserts (exit code 1 on failure): no unsupported piece, and all four
+# districts were seen on every road.
 #
 # Needs a real window: headless drops MultiMesh instance data.
 # Run:
 #   Godot_v4.7.2-stable_win64_console.exe --path . -s res://tests/world/floating_structures.gd
 
 const B := preload("res://scripts/world/road_chunk_builder.gd")
-const TOL := 0.15
-const CHUNKS := 400
-## On a hilly road a roof prop follows the road grade at its own spot while the
-## roof is flat, so a prop can stand off its roof by up to grade x half the
-## building depth (5% x 9 m, about 0.45 m). Anything bigger is a real bug.
-const HILL_SLACK := 0.5
+const RoofProps := preload("res://scripts/world/roof_props.gd")
+const Districts := preload("res://scripts/world/districts.gd")
+
+const TOL := 0.05
+## A wall sign hangs off a bracket: how far from the wall it may sit.
+const MOUNT := 0.25
+## Chunks per road: 12 district runs of 16.
+const CHUNKS := 192
+const POOL := 8
+## Frames between a rebuild and its check, so the drawn buffers have caught up.
+const SETTLE := 4
+const REBUILDS_PER_FRAME := 4
+const ROADS := [
+	["flat", null],
+	["curvy+hilly", [7, 1.0, 1.0, 0.0]],
+	["kickers", [5, 0.5, 1.0, 1.0]],
+]
+## Local AABB of each roof prop shape (RoofProps.mesh), before the instance scale.
+const SHAPE_AABB := {
+	RoofProps.SHAPE_BOX: [Vector3(-0.5, 0.0, -0.5), Vector3(1.0, 1.0, 1.0)],
+	RoofProps.SHAPE_TANK: [Vector3(-0.75, 0.0, -0.75), Vector3(1.5, 3.6, 1.5)],
+	RoofProps.SHAPE_ANTENNA: [Vector3(-0.8, 0.0, -0.6), Vector3(1.6, 6.14, 1.2)],
+	RoofProps.SHAPE_CANOPY: [Vector3(-0.5, 0.0, -0.5), Vector3(1.0, 1.0, 1.0)],
+	RoofProps.SHAPE_FLOOD: [Vector3(-0.25, 0.0, -0.35), Vector3(0.5, 5.15, 0.7)],
+}
+const GROUND_NAMES := ["RoadOwn", "RoadOnc", "EdgeLineOwn", "EdgeLineOnc", "ShoulderOwn", "ShoulderOnc", "CurbOwn", "CurbOnc", "SidewalkOwn", "SidewalkOnc"]
 
 var fails := 0
 var checked := 0
+var road_i := -1
+var next_index := 0
+var pool: Array = []  # {root, index, built_frame, checked}
+var frame := 0
+var districts_seen := {}
+var prev := {"own_lanes": 2, "onc_lanes": 1, "barrier": false}
+var cfg := {"own_lanes": 2, "onc_lanes": 1, "barrier": false}
 
 func _fail(msg: String) -> void:
 	fails += 1
-	if fails <= 400:
+	if fails <= 300:
 		print("FAIL ", msg)
 
 func _initialize() -> void:
 	seed(9)
-	var prev := {"own_lanes": 2, "onc_lanes": 1, "barrier": false}
-	var cfg := {"own_lanes": 2, "onc_lanes": 1, "barrier": false}
-	for road in ["flat", "curvy+hilly"]:
-		RoadFrame.align = null if road == "flat" else RoadAlignment.new(7, 1.0, 1.0)
-		for ci in range(0, CHUNKS):
-			var chunk: Node3D = B.build_chunk(ci, prev, cfg)
-			root.add_child(chunk)
-			_check_chunk(chunk, "%s chunk %d" % [road, ci])
-			# a pooled chunk is rebuilt in place for a new index: same rules
-			B.rebuild_chunk(chunk, ci + 1000, cfg, prev)
-			_check_chunk(chunk, "%s chunk %d rebuilt as %d" % [road, ci, ci + 1000])
-			chunk.free()
-	RoadFrame.align = null
-	print("floating_structures: %d chunks x2, %d pieces, %s" % [CHUNKS, checked, "PASS" if fails == 0 else "%d failure(s)" % fails])
-	quit(0 if fails == 0 else 1)
+	_next_road()
 
-## Horizontal distance (ignoring height) from p to a building's footprint.
-func _flat_dist(mi: MeshInstance3D, p: Vector3) -> float:
-	var t := mi.transform
-	var s := t.basis.get_scale().abs()
-	var q := (t.affine_inverse() * p).abs() - Vector3(0.5, 0.5, 0.5)
-	return Vector2(maxf(q.x, 0.0) * s.x, maxf(q.z, 0.0) * s.z).length()
+func _next_road() -> void:
+	for c in pool:
+		c.root.free()
+	pool.clear()
+	road_i += 1
+	if road_i >= ROADS.size():
+		RoadFrame.align = null
+		print("floating_structures: %d chunks x %d roads, %d pieces, %s" % [CHUNKS, ROADS.size(), checked, "PASS" if fails == 0 else "%d failure(s)" % fails])
+		quit(0 if fails == 0 else 1)
+		return
+	var spec: Variant = ROADS[road_i][1]
+	RoadFrame.align = null if spec == null else RoadAlignment.new(int(spec[0]), float(spec[1]), float(spec[2]), float(spec[3]))
+	RoadFrame.origin_index = 0
+	districts_seen = {}
+	next_index = 0
+	for k in POOL:
+		var chunk: Node3D = B.build_chunk(next_index, prev, cfg)
+		root.add_child(chunk)
+		pool.append({"root": chunk, "index": next_index, "built_frame": frame, "checked": false})
+		next_index += 1
 
-func _top(mi: MeshInstance3D) -> float:
-	return mi.transform.origin.y + mi.transform.basis.get_scale().y * 0.5
+func _process(_delta: float) -> bool:
+	frame += 1
+	if road_i >= ROADS.size():
+		return true
+	var road_name: String = ROADS[road_i][0]
+	var all_done := true
+	var rebuilt := 0
+	for c in pool:
+		if not c.checked:
+			if frame - c.built_frame < SETTLE:
+				all_done = false
+				continue
+			_check_chunk(c.root, int(c.index), "%s chunk %d" % [road_name, c.index])
+			c.checked = true
+			districts_seen[Districts.name_at(int(c.index))] = true
+		if next_index < CHUNKS and rebuilt < REBUILDS_PER_FRAME:
+			# the recycle path, in the tree, like game.gd's chunk pool
+			B.rebuild_chunk(c.root, next_index, prev, cfg)
+			c.index = next_index
+			c.built_frame = frame
+			c.checked = false
+			next_index += 1
+			rebuilt += 1
+			all_done = false
+	if all_done:
+		for d in ["downtown", "residential", "strip", "industrial"]:
+			if not districts_seen.has(d):
+				_fail("%s: district %s never came up in %d chunks" % [road_name, d, CHUNKS])
+		print("%s: %d chunks, districts %s" % [road_name, CHUNKS, districts_seen.keys()])
+		_next_road()
+	return false
 
-func _bottom(mi: MeshInstance3D) -> float:
-	return mi.transform.origin.y - mi.transform.basis.get_scale().y * 0.5
+## Height of the road surface under world point p (no camber, so the same
+## across the road); 0 on a flat road.
+func _surface_y(p: Vector3) -> float:
+	var u := RoadFrame.unroll(p)
+	return RoadFrame.roll(Vector3(0.0, 0.0, u.z)).y
 
-func _check_chunk(chunk: Node3D, label: String) -> void:
-	var boxes := []
+## World AABB of a local box (origin `lo`, size `size`) under transform xf.
+func _world_box(xf: Transform3D, lo: Vector3, size: Vector3) -> AABB:
+	var out := AABB(xf * lo, Vector3.ZERO)
+	for i in 8:
+		var corner := lo + Vector3(size.x if i & 1 else 0.0, size.y if i & 2 else 0.0, size.z if i & 4 else 0.0)
+		out = out.expand(xf * corner)
+	return out
+
+func _check_chunk(chunk: Node3D, idx: int, label: String) -> void:
+	var W := chunk.transform
+	var buildings := []  # [world xf of the unit box, world AABB, type]
+	var pieces := []     # [name, instance, world AABB]
 	for c in chunk.get_children():
-		if c is MeshInstance3D and (c as MeshInstance3D).visible and c.name.begins_with("BuildingMesh"):
-			boxes.append(c)
-	var signs: MultiMesh = (chunk.get_node(^"Signs") as MultiMeshInstance3D).multimesh
-	var props: MultiMesh = (chunk.get_node(^"RoofProps") as MultiMeshInstance3D).multimesh
-	var prop_t: Array = []
-	for i in props.visible_instance_count:
-		prop_t.append(props.get_instance_transform(i))
-
-	# roof props: base on a roof, or on the road (within the foundation depth)
-	for i in prop_t.size():
-		var o: Vector3 = prop_t[i].origin
+		if c is MeshInstance3D:
+			if c.name in GROUND_NAMES or not c.visible:
+				continue
+			var xf: Transform3D = W * c.transform
+			var box := _world_box(xf, Vector3(-0.5, -0.5, -0.5), Vector3.ONE)
+			buildings.append([xf, box, String(c.get_meta("building_type", "?"))])
+			pieces.append([String(c.name), 0, box])
+		elif c is MultiMeshInstance3D and c.visible:
+			_collect(W, c, pieces)
+			for g in c.get_children():
+				if g is MultiMeshInstance3D and g.visible:
+					_collect(W, g, pieces)
+	var signs_used: int = chunk.get_meta("signs_used", 0)
+	for p in pieces:
+		var name: String = p[0]
+		var i: int = p[1]
+		var box: AABB = p[2]
 		checked += 1
+		var foot := Vector3(box.position.x + box.size.x / 2.0, box.position.y, box.position.z + box.size.z / 2.0)
+		# 1. on (or into) the ground
+		var sy := _surface_y(foot)
+		if box.position.y <= sy + TOL and box.end.y >= sy - TOL:
+			continue
 		var ok := false
-		for mi in boxes:
-			if _flat_dist(mi, o) <= TOL and absf(o.y - _top(mi)) <= (HILL_SLACK if RoadFrame.align != null else TOL):
+		# 2. on a building's top face, inside its footprint
+		for b in buildings:
+			var top: float = b[1].end.y
+			if absf(box.position.y - top) > TOL:
+				continue
+			var q: Vector3 = (b[0].affine_inverse() * foot).abs()
+			if q.x <= 0.5 + TOL / b[0].basis.get_scale().x and q.z <= 0.5 + TOL / b[0].basis.get_scale().z:
 				ok = true
 				break
-		if not ok and _on_road(o):
-			ok = true
+		# 3. on, or threaded on, another piece (not a building, not itself)
 		if not ok:
-			# a canopy rests on the tops of its columns
-			var half: Vector3 = prop_t[i].basis.get_scale() * 0.5
-			for j in prop_t.size():
-				var c: Transform3D = prop_t[j]
-				if j != i and absf(c.origin.y + c.basis.get_scale().y - o.y) <= (HILL_SLACK if RoadFrame.align != null else TOL) and absf(c.origin.x - o.x) <= half.x and absf(c.origin.z - o.z) <= half.z:
+			var margin := MOUNT if name == "Signs" else TOL
+			for o in pieces:
+				if o == p or o[0].begins_with("BuildingMesh"):
+					continue
+				var ob: AABB = o[2]
+				# the other piece reaches up to (or through) this one's bottom
+				var inside := ob.end.y >= box.position.y - TOL and ob.position.y <= box.end.y + TOL
+				var overlap := ob.end.x >= box.position.x - margin and ob.position.x <= box.end.x + margin \
+						and ob.end.z >= box.position.z - margin and ob.position.z <= box.end.z + margin
+				if inside and overlap:
+					ok = true
+					break
+		# 4. a wall sign: against a building and within its height
+		if not ok and name == "Signs" and i < signs_used:
+			for b in buildings:
+				var bb: AABB = b[1]
+				var near := bb.end.x >= box.position.x - MOUNT and bb.position.x <= box.end.x + MOUNT \
+						and bb.end.z >= box.position.z - MOUNT and bb.position.z <= box.end.z + MOUNT
+				if near and box.position.y >= bb.position.y - TOL and box.end.y <= bb.end.y + TOL:
 					ok = true
 					break
 		if not ok:
 			var near := ""
-			for mi in boxes:
-				if _flat_dist(mi, o) < 1.0:
-					near += " [%s over by %.2f m]" % [mi.get_meta("building_type"), o.y - _top(mi)]
-			_fail("%s: roof prop %d at %s has nothing under it:%s" % [label, i, o, near])
+			for b in buildings:
+				var bb: AABB = b[1]
+				if bb.grow(3.0).intersects(box):
+					near += " [%s top %.2f]" % [b[2], bb.end.y]
+			_fail("%s: %s %d bottom %.2f at (%.1f, %.1f) over nothing (ground %.2f):%s" % [label, name, i, box.position.y, foot.x, foot.z, sy, near])
 
-	# wall signs: the first `signs_used`; billboard panels after that stand on
-	# the poles checked above
-	var used: int = chunk.get_meta("signs_used", signs.visible_instance_count)
-	for i in used:
-		var t := signs.get_instance_transform(i)
-		var half_h := t.basis.get_scale().y * 0.5
-		var half_l := t.basis.get_scale().z * 0.5
-		checked += 1
-		var ok := false
-		for mi in boxes:
-			# the sign's wall end is near the building and its whole height is
-			# inside the building's
-			if _flat_dist(mi, t.origin) <= half_l + 0.25 and t.origin.y + half_h <= _top(mi) + TOL and t.origin.y - half_h >= _bottom(mi) - TOL:
-				ok = true
-				break
-		if not ok:
-			# pole- or canopy-mounted: resting on / touching a prop
-			for pt in prop_t:
-				var ps: Vector3 = pt.basis.get_scale()
-				if absf(pt.origin.x - t.origin.x) <= half_l + ps.x * 0.5 + 0.3 and absf(pt.origin.z - t.origin.z) <= half_l + ps.z * 0.5 + 0.3 \
-						and t.origin.y - half_h <= pt.origin.y + ps.y + TOL and t.origin.y + half_h >= pt.origin.y - TOL:
-					ok = true
-					break
-		if not ok:
-			var near := ""
-			for mi in boxes:
-				if _flat_dist(mi, t.origin) < 4.0:
-					near += " [%s dist %.2f top %.2f]" % [mi.get_meta("building_type"), _flat_dist(mi, t.origin), _top(mi)]
-			_fail("%s: sign %d at %s (h %.1f, half_l %.2f) hangs clear of every building:%s" % [label, i, t.origin, half_h * 2.0, half_l, near])
-
-## A prop standing on the road: its base is at the road surface height at
-## its spot. The road height only depends on how far along it is, so find the
-## along-road position whose bent point is closest and read the height there.
-func _on_road(o: Vector3) -> bool:
-	var best := 1e9
-	var road_y := 0.0
-	var z := o.z - 6.0
-	while z <= o.z + 6.0:
-		var p := B._xf_up(o.x, 0.0, z).origin
-		var d := Vector2(p.x - o.x, p.z - o.z).length()
-		if d < best:
-			best = d
-			road_y = p.y
-		z += 0.1
-	return absf(o.y - road_y) <= (HILL_SLACK if RoadFrame.align != null else 0.3)
+func _collect(W: Transform3D, mmi: MultiMeshInstance3D, pieces: Array) -> void:
+	var mm := mmi.multimesh
+	var parent_xf := W
+	if mmi.get_parent() is MultiMeshInstance3D:
+		parent_xf = W * (mmi.get_parent() as Node3D).transform
+	var mesh_box: AABB = mm.mesh.get_aabb()
+	for i in mm.visible_instance_count:
+		var lo := mesh_box.position
+		var size := mesh_box.size
+		if mmi.name == "RoofProps":
+			var shape := int(mm.get_instance_custom_data(i).r)
+			lo = SHAPE_AABB[shape][0]
+			size = SHAPE_AABB[shape][1]
+		var box := _world_box(parent_xf * mmi.transform * mm.get_instance_transform(i), lo, size)
+		pieces.append([String(mmi.name), i, box])

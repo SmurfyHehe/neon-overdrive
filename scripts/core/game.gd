@@ -99,8 +99,13 @@ func _ready() -> void:
 		TrafficSettings.set_car_count(int(traffic_env))
 	if OS.get_environment("NEON_MUTE") == "1":
 		AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), true)
+	# NEON_SEED=<n> pins the global RNG too (tools/look_shot.gd: the same
+	# frame twice, for before/after look checks).
+	var seed_env := OS.get_environment("NEON_SEED")
 	if benchmark:
 		seed(Benchmark.SEED)
+	elif seed_env.is_valid_int():
+		seed(int(seed_env))
 	else:
 		randomize()
 	# The clock first: the building window texture is painted for its time

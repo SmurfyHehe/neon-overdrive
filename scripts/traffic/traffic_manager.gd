@@ -28,8 +28,8 @@ class_name TrafficManager
 # of popping in close. Behind the player (own-direction lanes faster than the
 # player only) it is placed where the camera cannot see it.
 #
-# Draw distance: cars further than `detail_distance` from the player run the
-# frozen lane cruise (TrafficCar.set_detailed(false)); the pause menu's Traffic
+# Draw distance: `detail_distance` (at least REVEAL_MIN) is how far out cars are
+# drawn, and the physics band never reaches past it; the pause menu's Traffic
 # sliders set this and the car count live (TrafficSettings).
 #
 # Never visibly pop (Roy, 2026-10-09): a car is placed, recycled or removed only
@@ -39,6 +39,14 @@ class_name TrafficManager
 # drawn only inside reveal_distance(), where the world itself ends in fog. The
 # one transition left is a car crossing that distance: it is ~93 % fogged there
 # (exp fog, density 0.009, at 300 m) and the road chunks end at the same place.
+#
+# Physics band (near-band traffic, 2026-10-09): only cars within
+# `physics_distance` of the player run the raycast sim and can crash; the rest
+# drive on rails (TrafficCar.set_detailed(false)), drawn if inside the reveal
+# distance. A car joins the sim at physics_distance and leaves it only past
+# PHYSICS_HYSTERESIS more, and only once it is driving normally
+# (TrafficCar.can_rail), so a car on the edge does not flip every tick and a
+# crashed one stays crashed.
 
 const LANE_W := RoadChunkBuilder.LANE_W
 
@@ -48,6 +56,13 @@ var onc_lanes := 4
 var car_count := 16
 ## Beyond this many metres from the player a car runs the frozen lane cruise.
 var detail_distance := 300.0
+## Within this many metres of the player (along the road) a car runs the full
+## sim. NEON_TRAFFIC_PHYSICS_M overrides it (perf comparisons; a value at or
+## past the draw distance is the old behaviour, every drawn car in the sim).
+var physics_distance := PHYSICS_DISTANCE_DEFAULT
+static var PHYSICS_DISTANCE_DEFAULT := float(OS.get_environment("NEON_TRAFFIC_PHYSICS_M")) if OS.get_environment("NEON_TRAFFIC_PHYSICS_M").is_valid_float() else 60.0
+## A car leaves the sim only this much further out than it joined it.
+const PHYSICS_HYSTERESIS := 10.0
 ## Cars are drawn out to at least this far whatever the slider says: the road
 ## chunks end here (Game.CHUNKS_AHEAD * CHUNK_LEN), so a car hidden any nearer
 ## would blink out in plain view. Spawns happen beyond it.
@@ -236,14 +251,21 @@ func _physics_process(_delta: float) -> void:
 	var active := active_count()
 	var brought_back := false
 	var reveal := reveal_distance()
+	# Physics band: a hidden car is never hit, so it ends at the draw distance too.
+	var band := minf(physics_distance, detail_distance)
+	var band_out := band + PHYSICS_HYSTERESIS
 	for car in cars:
 		var d := absf(RoadFrame.unroll(car.global_position).z - pz)
-		car.set_detailed(d <= detail_distance)
 		var want := d <= reveal or (car.visible and d <= reveal + HIDE_HYSTERESIS)
 		if want != car.visible and not car.sim_only:
 			if event_hook.is_valid():
 				event_hook.call("show" if want else "hide", car, car.global_position)
 			car.set_shown(want)
+		# Shown first (set_detailed reads it): a car leaving the sim in view eases onto its rails.
+		if d <= band:
+			car.set_detailed(true)
+		elif car.detailed and d > band_out and (not car.shown or car.can_rail()):
+			car.set_detailed(false)
 	for car in cars:
 		if car.benched:
 			if active < target and not brought_back:
@@ -370,6 +392,7 @@ func _respawn(car: TrafficCar) -> void:
 	var slot := _find_slot(car, pz, TrafficCar.RB_SPEED if breaker else 0.0)
 	if slot.is_empty():
 		deferred_count += 1
+		car.set_shown(false)
 		car.set_detailed(false)
 		car.set_shown(false)
 		car.place(car.lane_x, car.direction, pz + PARK_BEHIND, car.rest_y, 0.0)
@@ -381,7 +404,7 @@ func _respawn(car: TrafficCar) -> void:
 	car.set_rule_breaker(breaker, weave_m if breaker and weave_share > 0.0 and randf() < weave_share else 0.0)
 	if breaker:
 		rule_breaker_spawns += 1
-	car.set_detailed(absf(slot.dist) <= detail_distance)
+	car.set_detailed(absf(slot.dist) <= minf(physics_distance, detail_distance))
 	car.place(slot.lane_x, slot.direction, slot.z, car.rest_y, slot.speed)
 	car.set_shown(absf(slot.dist) <= reveal_distance())
 	_put(car)

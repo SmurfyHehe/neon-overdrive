@@ -88,6 +88,10 @@ var tow_button: Button
 ## Garage stand-ins the pause menu hands over (they act on the running game).
 var service_action: Callable
 var tow_action: Callable
+var race_action: Callable   # start (or give up) a race against a test rival, until meet spots exist
+var wash_action: Callable   # the garage wash mini-game
+var race_button: Button
+var wash_button: Button
 var keys_dirty := false   # rebinds not saved yet
 
 var _capture := {}        # {action, slot, button} while waiting for a key
@@ -535,6 +539,15 @@ func _build_game_page(parent: Control) -> Control:
 	tow_button = _add_button(page, "Call a tow (engine dead)", func() -> void:
 		if tow_action.is_valid():
 			tow_action.call())
+	race_button = _add_button(page, "Race a test rival", func() -> void:
+		if race_action.is_valid():
+			close()
+			race_action.call())
+	wash_button = _add_button(page, "Wash car", func() -> void:
+		if wash_action.is_valid():
+			close()
+			wash_action.call())
+
 	return _page_of(page)
 
 ## Selects the running car in the Car dropdown and enables the stand-ins only on
@@ -550,6 +563,8 @@ func _refresh_game_page() -> void:
 	car_restart_button.disabled = not paused
 	service_button.disabled = not paused or not service_action.is_valid()
 	tow_button.disabled = not paused or not tow_action.is_valid()
+	race_button.disabled = not paused or not race_action.is_valid()
+	wash_button.disabled = not paused or not wash_action.is_valid()
 
 func _pick_car() -> void:
 	if car_option.selected < 0 or game_state == null:

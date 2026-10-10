@@ -94,11 +94,12 @@ func _ready() -> void:
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	restart_button = _add_button(box, "Restart night", _ask_restart)
 	settings_button = _add_button(box, "Settings", show_settings)
-	# Until meet spots exist (RC3) a race starts from here; mid-race the row above reads "Quit race".
+	# TEST BUILD: "Race a test rival" and "Wash car" are on Settings > Game (stand-ins),
+	# not here: the pause screen keeps to its spec rows. The hidden button stays for
+	# tests/core/race_core.gd, which presses it.
 	race_button = _add_button(box, "Race a test rival", _race_pressed)
+	race_button.visible = false
 	photo_button = _add_button(box, "Photo mode", game_state.open_photo_from_pause)
-	# Garage wash mini-game (dirt-and-wash, #294); its Dirt on/off switch has no row on the new Settings screen yet.
-	_add_button(box, "Wash car", game_state.open_wash)
 	title_button = _add_button(box, "Quit to title", _ask_quit_to_title)
 
 	# Version line (release readiness, 2026-10-08), so a bug report can name the build.
@@ -115,6 +116,8 @@ func _ready() -> void:
 	settings = SettingsScreen.new(game_state)
 	settings.service_action = _service_car
 	settings.tow_action = _call_tow
+	settings.race_action = _race_pressed
+	settings.wash_action = game_state.open_wash
 	add_child(settings)
 	settings.closed.connect(_on_settings_closed)
 	game_state.state_changed.connect(_on_state_changed)
@@ -169,7 +172,6 @@ func _race_pressed() -> void:
 
 func _refresh_race_button() -> void:
 	var race: Variant = get_parent().get("race")
-	race_button.visible = race != null and not race.is_racing()
 	if race != null:
 		race_button.text = "Give up race" if race.is_racing() else "Race a test rival"
 

@@ -1,0 +1,833 @@
+﻿SOURCE: https://treblo.com/tos
+FETCHED: 2026-10-10 via built-in browser (page text)
+PAGE DATE: Dated September 22nd, 2026.
+=====
+Title: Terms of Service | Treblo
+URL: https://treblo.com/tos
+Source element: <main>
+---
+Other Policies
+Privacy Policy
+DMCA
+API Terms
+Open Source Licenses
+Terms of Service
+
+Dated September 22nd, 2026.
+
+AGREEMENT TO OUR LEGAL TERMS
+We are Sonauto, Inc. ("Company," "we," "us," "our").
+We operate the website https://treblo.com (the "Site"), the mobile
+application Treblo (the "App"), as well as any other related products and
+services that refer or link to these legal terms (the "Legal Terms")
+(collectively, the "Services").
+You can contact us by email at support@treblo.com or by mail to 246 28th Street, Apartment 1, San Francisco, CA 94131, United States.
+These Legal Terms constitute a legally binding agreement made between
+you, whether personally or on behalf of an entity ("you"), and Sonauto,
+Inc., concerning your access to and use of the Services. If you access the
+Services through our published application programming interface (the
+"API"), the Treblo API Terms available at https://treblo.com/api-terms
+(the "API Terms") also apply to that access and are incorporated into
+these Legal Terms by reference. In the event of a conflict between these
+Legal Terms and the API Terms with respect to your use of the API, the
+API Terms control. You agree that by
+accessing the Services, you have read, understood, and agreed to be
+bound by all of these Legal Terms. IF YOU DO NOT AGREE WITH ALL OF
+THESE LEGAL TERMS, THEN YOU ARE EXPRESSLY PROHIBITED
+FROM USING THE SERVICES AND YOU MUST DISCONTINUE USE
+IMMEDIATELY.
+We will provide you with prior notice of any scheduled changes to these
+Legal Terms. Changes to Legal Terms will become effective
+seven (7) days after the notice is given, except if the changes apply to new
+functionality, security updates, bug fixes, and a court order, in which case
+the changes will be effective immediately. By continuing to use the
+Services after the effective date of any changes, you agree to be bound by
+the modified terms. If you disagree with such changes, you may terminate
+Services as per the section "TERM AND TERMINATION."
+IMPORTANT: THESE LEGAL TERMS CONTAIN A BINDING ARBITRATION PROVISION
+AND A CLASS ACTION WAIVER IN SECTION 18. THEY AFFECT HOW DISPUTES
+BETWEEN YOU AND US ARE RESOLVED. YOU MAY OPT OUT OF ARBITRATION WITHIN
+30 DAYS AS DESCRIBED IN SECTION 18.8.
+Age and regional eligibility
+You must be at least 13 years old to use or register for the Services and
+meet any higher minimum age required by applicable law. We may also
+restrict access to the Services or particular features based on age and
+country, state, or other region for legal compliance or safety reasons,
+including limiting access to adults in some regions. Meeting the minimum
+age of 13 does not guarantee that the Services are available to you.
+If you meet the applicable age requirements but have not reached the age
+of legal majority where you live, your parent or legal guardian must
+review and agree to these Legal Terms on your behalf before you use the
+Services. Parental or guardian permission does not override an applicable
+minimum age or regional access restriction.
+We may ask for your date of birth and use approximate location information
+to assess eligibility and apply age-appropriate settings. You must provide
+accurate information and must not misrepresent your age or location or
+circumvent age or regional restrictions. We may deny registration or
+restrict or suspend access if you do not meet the applicable requirements
+or do not provide information needed to assess your eligibility. Contact
+support@treblo.com if you believe an eligibility decision is incorrect or
+need information about the requirements that apply to you.
+Features and default privacy and interaction settings may differ based on
+your age and region, including certain default privacy settings for 
+some users under 18. We may update regional restrictions
+and settings to address changes in law or safety needs, subject to
+applicable law.
+We recommend that you print a copy of these Legal Terms for your
+records.
+TABLE OF CONTENTS
+1. OUR SERVICES
+2. INTELLECTUAL PROPERTY RIGHTS
+3. USER REPRESENTATIONS
+4. USER REGISTRATION
+5. SUBSCRIPTIONS
+6. PROHIBITED ACTIVITIES
+7. USER GENERATED CONTRIBUTIONS
+8. OUTPUTS
+9. CONTRIBUTION LICENSE
+10. MOBILE APPLICATION LICENSE
+11. SOCIAL MEDIA
+12. SERVICES MANAGEMENT
+13. PRIVACY POLICY
+14. DIGITAL MILLENNIUM COPYRIGHT ACT (DMCA) NOTICE AND
+POLICY
+14A. REPEAT INFRINGER POLICY
+15. TERM AND TERMINATION
+16. MODIFICATIONS AND INTERRUPTIONS
+17. GOVERNING LAW
+18. DISPUTE RESOLUTION; BINDING ARBITRATION
+19. CORRECTIONS
+20. DISCLAIMER
+21. LIMITATIONS OF LIABILITY
+22. INDEMNIFICATION
+23. USER DATA
+24. ELECTRONIC COMMUNICATIONS, TRANSACTIONS, AND
+SIGNATURES
+25. CALIFORNIA USERS AND RESIDENTS
+26. MISCELLANEOUS
+27. CONTACT US
+1. OUR SERVICES
+The information provided when using the Services is not intended for
+distribution to or use by any person or entity in any jurisdiction or country
+where such distribution or use would be contrary to law or regulation or
+which would subject us to any registration requirement within such
+jurisdiction or country. Accordingly, those persons who choose to access
+the Services from other locations do so on their own initiative and are
+solely responsible for compliance with local laws, if and to the extent local
+laws are applicable.
+The Services are not tailored to comply with industry-specific regulations
+(Health Insurance Portability and Accountability Act (HIPAA), Federal
+Information Security Management Act (FISMA), etc.), so if your interactions
+would be subjected to such laws, you may not use the Services. You may
+not use the Services in a way that would violate the Gramm-Leach-Bliley
+Act (GLBA).
+2. INTELLECTUAL PROPERTY RIGHTS
+Our intellectual property
+We are the owner or the licensee of all intellectual property rights in our
+Services, including all source code, databases, functionality, software,
+website designs, audio, video, text, photographs, and graphics in the
+Services (collectively, the "Content"), as well as the trademarks, service
+marks, and logos contained therein (the "Marks").
+Our Content and Marks are protected by copyright and trademark laws
+(and various other intellectual property rights and unfair competition laws)
+and treaties in the United States and around the world.
+The Content and Marks are provided in or through the Services "AS IS" for
+your personal, non-commercial use or internal business purpose only,
+except as otherwise permitted in Section 8 (OUTPUT) or the API Terms.
+Your use of our Services
+Subject to your compliance with these Legal Terms, including the
+"PROHIBITED ACTIVITIES" section below, we grant you a non-exclusive,
+non-transferable, revocable license to:
+access the Services; and
+download or print a copy of any portion of the Content to which you
+have properly gained access.
+solely for your personal, non-commercial use or internal business purpose,
+except as otherwise permitted in Section 8 (OUTPUT) or the API Terms.
+Except as set out in this section or elsewhere in our Legal Terms, no part of
+the Services and no Content or Marks may be copied, reproduced,
+aggregated, republished, uploaded, posted, publicly displayed, encoded,
+translated, transmitted, distributed, sold, licensed, or otherwise exploited
+for any commercial purpose whatsoever, without our express prior written
+permission.
+If you wish to make any use of the Services, Content, or Marks other than
+as set out in this section or elsewhere in our Legal Terms, please address
+your request to: support@treblo.com. If we ever grant you the permission to
+post, reproduce, or publicly display any part of our Services or Content, you
+must identify us as the owners or licensors of the Services, Content, or
+Marks and ensure that any copyright or proprietary notice appears or is
+visible on posting, reproducing, or displaying our Content.
+We reserve all rights not expressly granted to you in and to the Services,
+Content, and Marks. The Services include open source software components
+licensed under their own terms, which govern your use of those
+components; a list is available at https://treblo.com/licenses.
+Any breach of these Intellectual Property Rights will constitute a material
+breach of our Legal Terms and your right to use our Services will terminate
+immediately.
+Your submissions and contributions
+Please review this section and the "PROHIBITED ACTIVITIES" section
+carefully prior to using our Services to understand the (a) rights you give us
+and (b) obligations you have when you post or upload any content through
+the Services.
+Submissions: By directly sending us any question, comment, suggestion,
+idea, feedback, or other information about the Services ("Submissions"),
+you grant to us a non-exclusive, perpetual, irrevocable, royalty-free,
+worldwide license to use and disseminate such Submission for any lawful
+purpose, commercial or otherwise, without acknowledgment or compensation
+to you. Nothing in these Legal Terms limits your ability to review or
+provide feedback regarding the Services or our conduct.
+Contributions: The Services may invite you to chat, contribute to, or
+participate in blogs, message boards, online forums, and other functionality
+during which you may create, submit, post, display, transmit, publish,
+distribute, or broadcast content and materials to us or through the Services,
+including but not limited to text, writings, video, audio, photographs, music,
+graphics, comments, reviews, rating suggestions, personal information, or
+other material ("Contributions"). Any Submission that is publicly posted
+shall also be treated as a Contribution.
+You understand that Contributions may be viewable by other users of the
+Services.
+When you post Contributions, you grant us a license (including use of
+your name, trademarks, and logos): By posting any Contributions, you
+grant us an unrestricted, unlimited, irrevocable, perpetual, non-exclusive,
+transferable, royalty-free, fully-paid, worldwide right, and license to: use,
+copy, reproduce, distribute, sell, resell, publish, broadcast, retitle, store,
+publicly perform, publicly display, reformat, translate, excerpt (in whole or in
+part), and exploit your Contributions (including, without limitation, your
+image, name, and voice) for any purpose, commercial, advertising, or
+otherwise, to prepare derivative works of, or incorporate into other works,
+your Contributions, and to sublicense the licenses granted in this section.
+Our use and distribution may occur in any media formats and through any
+media channels.
+This license includes our use of your name, company name, and franchise
+name, as applicable, and any of the trademarks, service marks, trade
+names, logos, and personal and commercial images you provide.
+You are responsible for what you post or upload: By sending us
+Submissions and/or posting Contributions through any part of the Services
+or making Contributions accessible through the Services by linking your
+account through the Services to any of your social networking accounts,
+you:
+confirm that you have read and agree with our "PROHIBITED
+ACTIVITIES" and will not post, send, publish, upload, or transmit
+through the Services any Submission nor post any Contribution that
+is illegal, harassing, hateful, harmful, defamatory, obscene, bullying,
+abusive, discriminatory, threatening to any person or group, sexually
+explicit, false, inaccurate, deceitful, or misleading;
+to the extent permissible by applicable law, waive any and all moral
+rights to any such Submission and/or Contribution;
+warrant that any such Submission and/or Contributions are original
+to you or that you have the necessary rights and licenses to submit
+such Submissions and/or Contributions and that you have full
+authority to grant us the above-mentioned rights in relation to your
+Submissions and/or Contributions; and
+warrant and represent that your Submissions and/or Contributions
+do not constitute confidential information.
+You are solely responsible for your Submissions and/or Contributions and
+you expressly agree to reimburse us for any and all losses that we may
+suffer because of your breach of (a) this section, (b) any third party’s
+intellectual property rights, or (c) applicable law.
+We may remove or edit your Content: Although we have no obligation to
+monitor any Contributions, we shall have the right to remove or edit any
+Contributions at any time without notice if in our reasonable opinion we
+consider such Contributions harmful or in breach of these Legal Terms. If
+we remove or edit any such Contributions, we may also suspend or disable
+your account and report you to the authorities.
+Copyright infringement
+We respect the intellectual property rights of others. If you believe that any
+material available on or through the Services infringes upon any copyright
+you own or control, please immediately refer to the "DIGITAL MILLENNIUM
+COPYRIGHT ACT (DMCA) NOTICE AND POLICY" section below.
+3. USER REPRESENTATIONS
+By using the Services, you represent and warrant that: (1) all registration
+information you submit will be true, accurate, current, and complete; (2)
+you will maintain the accuracy of such information and promptly update
+such registration information as necessary; (3) you have the legal capacity
+to enter into these Legal Terms or your parent or legal guardian has
+agreed to them on your behalf as described above, and you agree to comply
+with these Legal Terms; (4) you meet the age and regional eligibility
+requirements described above; (5) you will not access the Services
+through automated or non-human means, whether through a bot, script or
+otherwise, except through the API in accordance with the API Terms or as
+we otherwise expressly authorize; (6) you will not use the Services for any illegal or unauthorized
+purpose; and (7) your use of the Services will not violate any applicable law
+or regulation.
+If you provide any information that is untrue, inaccurate, not current, or
+incomplete, we have the right to suspend or terminate your account and
+refuse any and all current or future use of the Services (or any portion
+thereof).
+4. USER REGISTRATION
+You may be required to register to use the Services. You agree to keep
+your password confidential and will be responsible for all use of your
+account and password. We reserve the right to remove, reclaim, or change
+a username you select if we determine, in our sole discretion, that such
+username is inappropriate, obscene, or otherwise objectionable.
+5. SUBSCRIPTIONS
+Billing and Renewal
+Your subscription will continue and automatically renew unless canceled.
+You consent to our charging your payment method on a recurring basis
+without requiring your prior approval for each recurring charge, until such
+time as you cancel the applicable order. The length of your billing cycle will
+depend on the type of subscription plan you choose when you subscribed
+to the Services.
+Cancellation
+You can cancel your subscription at any time by logging into your account.
+Your cancellation will take effect at the end of the current paid term. If you
+have any questions or are unsatisfied with our Services, please email us at
+support@treblo.com.
+Fee Changes
+We may, from time to time, make changes to the subscription fee and will
+communicate any price changes to you in accordance with applicable law.
+6. PROHIBITED ACTIVITIES
+You may not access or use the Services for any purpose other than that for
+which we make the Services available. The Services may not be used in
+connection with any commercial endeavors except those that are
+specifically endorsed or approved by us. The restrictions in this
+paragraph do not apply to Your use of Your Outputs as described in
+Section 8 (OUTPUT) or to use of the API in accordance with the API
+Terms.
+You must not post or upload to the Service any content that includes
+third-party intellectual property (such as copyrighted material) unless you
+have permission from that party or are otherwise legally entitled to do so.
+You are legally responsible for the Content you submit to the Service.
+As a user of the Services, you agree not to:
+Systematically retrieve data or other content from the Services to
+create or compile, directly or indirectly, a collection, compilation,
+database, or directory without written permission from us.
+Trick, defraud, or mislead us and other users, especially in any
+attempt to learn sensitive account information such as user
+passwords.
+Circumvent, disable, or otherwise interfere with security-related
+features of the Services, including features that prevent or restrict
+the use or copying of any Content or enforce limitations on the use
+of the Services and/or the Content contained therein.
+Use any information obtained from the Services in order to harass,
+abuse, or harm another person.
+Make improper use of our support services or submit false reports of
+abuse or misconduct.
+Use the Services in a manner inconsistent with any applicable laws
+or regulations.
+Engage in unauthorized framing of or linking to the Services.
+Upload or transmit (or attempt to upload or to transmit) viruses,
+Trojan horses, or other material, including excessive use of capital
+letters and spamming (continuous posting of repetitive text), that
+interferes with any party’s uninterrupted use and enjoyment of the
+Services or modifies, impairs, disrupts, alters, or interferes with the
+use, features, functions, operation, or maintenance of the Services.
+Engage in any automated use of the system, other than authorized
+use of the API in accordance with the API Terms, such as using scripts to
+send comments or messages, or using any data mining, robots, or
+similar data gathering and extraction tools.
+Delete the copyright or other proprietary rights notice from any
+Content.
+Attempt to impersonate another user or person or use the username
+of another user.
+Upload or submit any recording of an identifiable individual's voice,
+or any other content containing an identifiable individual's voice,
+image, or likeness, unless you are that individual or have that
+individual's consent.
+Claim, state, or suggest that content generated using the Services
+was created, performed, or endorsed by an identifiable individual
+(including any artist or other public figure) when it was not, or use
+an identifiable individual's name or identity to publicly title,
+describe, advertise, or promote generated content — for example, presenting
+content as a song "by," "inspired by," or "sounding like" a named
+artist — without that individual's consent.
+Upload or transmit (or attempt to upload or to transmit) any material
+that acts as a passive or active information collection or transmission
+mechanism, including without limitation, clear graphics interchange
+formats ("gifs"), 1×1 pixels, web bugs, cookies, or other similar
+devices (sometimes referred to as "spyware" or "passive collection
+mechanisms" or "pcms").
+Interfere with, disrupt, or create an undue burden on the Services or
+the networks or services connected to the Services.
+Harass, annoy, intimidate, or threaten any of our employees or
+agents engaged in providing any portion of the Services to you.
+Attempt to bypass any measures of the Services designed to
+prevent or restrict access to the Services, or any portion of the
+Services.
+Copy or adapt the Services' software, including but not limited to
+Flash, PHP, HTML, JavaScript, or other code.
+Except as permitted by applicable law, decipher, decompile,
+disassemble, or reverse engineer any of the software comprising or
+in any way making up a part of the Services.
+Except as may be the result of standard search engine or Internet
+browser usage or authorized use of the API in accordance with the
+API Terms, use, launch, develop, or distribute any automated
+system, including without limitation, any spider, robot, cheat utility,
+scraper, or offline reader that accesses the Services, or use or
+launch any unauthorized script or other software.
+Use a buying agent or purchasing agent to make purchases on the
+Services.
+Make any unauthorized use of the Services, including collecting
+usernames and/or email addresses of users by electronic or other
+means for the purpose of sending unsolicited email, or creating user
+accounts by automated means or under false pretenses.
+Use the Services as part of any effort to compete with us or
+otherwise use the Services and/or the Content for any revenue-generating endeavor or commercial enterprise, except as permitted
+under Section 8 (OUTPUT) or the API Terms.
+7. USER GENERATED CONTRIBUTIONS
+The Services may invite you to chat, contribute to, or participate in blogs,
+message boards, online forums, and other functionality, and may provide
+you with the opportunity to create, submit, post, display, transmit, perform,
+publish, distribute, or broadcast content and materials to us or on the
+Services, including but not limited to text, writings, video, audio,
+photographs, graphics, comments, suggestions, or personal information or
+other material (collectively, "Contributions"). Contributions may be viewable
+by other users of the Services and through third-party websites. As such,
+any Contributions you transmit may be treated as non-confidential and non-proprietary. When you create or make available any Contributions, you
+thereby represent and warrant that:
+The creation, distribution, transmission, public display, or
+performance, and the accessing, downloading, or copying of your
+Contributions do not and will not infringe the proprietary rights,
+including but not limited to the copyright, patent, trademark, trade
+secret, or moral rights of any third party.
+You are the creator and owner of or have the necessary licenses,
+rights, consents, releases, and permissions to use and to authorize
+us, the Services, and other users of the Services to use your
+Contributions in any manner contemplated by the Services and
+these Legal Terms.
+You have the written consent, release, and/or permission of each
+and every identifiable individual person in your Contributions to use
+the name or likeness of each and every such identifiable individual
+person to enable inclusion and use of your Contributions in any
+manner contemplated by the Services and these Legal Terms.
+Your Contributions are not false, inaccurate, or misleading.
+Your Contributions are not unsolicited or unauthorized advertising,
+promotional materials, pyramid schemes, chain letters, spam, mass
+mailings, or other forms of solicitation.
+Your Contributions are not obscene, lewd, lascivious, filthy, violent,
+harassing, libelous, slanderous, or otherwise objectionable (as
+determined by us).
+Your Contributions do not ridicule, mock, intimidate, or abuse
+anyone.
+Your Contributions are not used to harass or threaten (in the legal
+sense of those terms) any other person and to promote violence
+against a specific person or class of people.
+Your Contributions do not violate any applicable law, regulation, or
+rule.
+Your Contributions do not violate the privacy or publicity rights of any
+third party.
+Your Contributions do not violate any applicable law concerning child
+pornography, or otherwise intended to protect the health or well-being of minors.
+Your Contributions do not include any offensive comments that are
+connected to race, national origin, gender, sexual preference, or
+physical handicap.
+Your Contributions do not otherwise violate, or link to material that
+violates, any provision of these Legal Terms, or any applicable law or
+regulation.
+Any use of the Services in violation of the foregoing violates these Legal
+Terms and may result in, among other things, termination or suspension of
+your rights to use the Services.
+8. OUTPUT
+As between You and the Services, and to the extent permitted by applicable law, 
+You own any right, title, or interest that may exist in the musical and/or audio 
+content that You generate using the Services ("Outputs"). We hereby assign to 
+You all our right, title, and interest, if any, in and to Your Outputs. 
+Due to the nature of machine learning, Outputs may not be unique, and the
+Services may generate the same or similar output for different users.
+This assignment does not extend to other users' Outputs, regardless of similarity
+between Your Outputs and their Outputs. The restrictions on commercial use of the Services
+elsewhere in these Legal Terms do not limit Your use of Your Outputs.
+You grant to us an unrestricted, unlimited, irrevocable, perpetual, non-exclusive,
+transferable, royalty-free, fully-paid, worldwide license to use Your Outputs,
+and the prompts, lyrics, and other content You submit to generate them, to
+provide, maintain, develop, and improve the Services and our artificial
+intelligence and machine learning models, to comply with applicable
+law, and/or to enforce our terms and policies.
+If You access the Services through the API, our use of Your API inputs and
+Outputs is further limited as described in the API Terms, and in the event of
+a conflict between this Section and the API Terms, the API Terms control with
+respect to content submitted to or generated through the API.
+You are solely responsible for Outputs and Your use of Outputs, including ensuring 
+that Outputs and Your use thereof do not violate any applicable law or these terms 
+of service. We make no warranties or representations regarding the Outputs, 
+including as to their copyrightability or legality. By using the Services, 
+You warrant that You will use Outputs only for legal purposes.
+9. CONTRIBUTION LICENSE
+By posting your Contributions to any part of the Services or making
+Contributions accessible to the Services by linking your account from the
+Services to any of your social networking accounts, you automatically
+grant, and you represent and warrant that you have the right to grant, to us
+an unrestricted, unlimited, irrevocable, perpetual, non-exclusive,
+transferable, royalty-free, fully-paid, worldwide right, and license to host,
+use, copy, reproduce, disclose, sell, resell, publish, broadcast, retitle,
+archive, store, cache, publicly perform, publicly display, reformat, translate,
+transmit, excerpt (in whole or in part), and distribute such Contributions
+(including, without limitation, your image and voice) for any purpose,
+commercial, advertising, or otherwise, and to prepare derivative works of,
+or incorporate into other works, such Contributions, and grant and
+authorize sublicenses of the foregoing. The use and distribution may occur
+in any media formats and through any media channels.
+This license will apply to any form, media, or technology now known or
+hereafter developed, and includes our use of your name, company name,
+and franchise name, as applicable, and any of the trademarks, service
+marks, trade names, logos, and personal and commercial images you
+provide. You waive all moral rights in your Contributions, and you warrant
+that moral rights have not otherwise been asserted in your Contributions.
+We do not assert any ownership over your Contributions. You retain full
+ownership of all of your Contributions and any intellectual property rights or
+other proprietary rights associated with your Contributions. We are not
+liable for any statements or representations in your Contributions provided
+by you in any area on the Services. You are solely responsible for your
+Contributions to the Services and you expressly agree to exonerate us
+from any and all responsibility and to refrain from any legal action against
+us regarding your Contributions.
+We have the right, in our sole and absolute discretion, (1) to edit, redact, or
+otherwise change any Contributions; (2) to re-categorize any Contributions
+to place them in more appropriate locations on the Services; and (3) to pre-screen or delete any Contributions at any time and for any reason, without
+notice. We have no obligation to monitor your Contributions.
+10. MOBILE APPLICATION LICENSE
+Use License
+If you access the Services via the App, then we grant you a revocable, non-exclusive, non-transferable, limited right to install and use the App on
+wireless electronic devices owned or controlled by you, and to access and
+use the App on such devices strictly in accordance with the terms and
+conditions of this mobile application license contained in these Legal
+Terms. You shall not: (1) except as permitted by applicable law, decompile,
+reverse engineer, disassemble, attempt to derive the source code of, or
+decrypt the App; (2) make any modification, adaptation, improvement,
+enhancement, translation, or derivative work from the App; (3) violate any
+applicable laws, rules, or regulations in connection with your access or use
+of the App; (4) remove, alter, or obscure any proprietary notice (including
+any notice of copyright or trademark) posted by us or the licensors of the
+App; (5) use the App for any revenue-generating endeavor, commercial
+enterprise, or other purpose for which it is not designed or intended; (6)
+make the App available over a network or other environment permitting
+access or use by multiple devices or users at the same time; (7) use the
+App for creating a product, service, or software that is, directly or indirectly,
+competitive with or in any way a substitute for the App; (8) use the App to
+send automated queries to any website or to send any unsolicited
+commercial email; or (9) use any proprietary information or any of our
+interfaces or our other intellectual property in the design, development,
+manufacture, licensing, or distribution of any applications, accessories, or
+devices for use with the App.
+Apple and Android Devices
+The following terms apply when you use the App obtained from either the
+Apple Store or Google Play (each an "App Distributor") to access the
+Services: (1) the license granted to you for our App is limited to a non-transferable license to use the application on a device that utilizes the
+Apple iOS or Android operating systems, as applicable, and in accordance
+with the usage rules set forth in the applicable App Distributor’s terms of
+service; (2) we are responsible for providing any maintenance and support
+services with respect to the App as specified in the terms and conditions of
+this mobile application license contained in these Legal Terms or as
+otherwise required under applicable law, and you acknowledge that each
+App Distributor has no obligation whatsoever to furnish any maintenance
+and support services with respect to the App; (3) in the event of any failure
+of the App to conform to any applicable warranty, you may notify the
+applicable App Distributor, and the App Distributor, in accordance with its
+terms and policies, may refund the purchase price, if any, paid for the App,
+and to the maximum extent permitted by applicable law, the App Distributor
+will have no other warranty obligation whatsoever with respect to the App;
+(4) you represent and warrant that (i) you are not located in a country that
+is subject to a US government embargo, or that has been designated by
+the US government as a "terrorist supporting" country and (ii) you are not
+listed on any US government list of prohibited or restricted parties; (5) you
+must comply with applicable third-party terms of agreement when using the
+App, e.g., if you have a VoIP application, then you must not be in violation
+of their wireless data service agreement when using the App; and (6) you
+acknowledge and agree that the App Distributors are third-party
+beneficiaries of the terms and conditions in this mobile application license
+contained in these Legal Terms, and that each App Distributor will have the
+right (and will be deemed to have accepted the right) to enforce the terms
+and conditions in this mobile application license contained in these Legal
+Terms against you as a third-party beneficiary thereof.
+11. SOCIAL MEDIA
+As part of the functionality of the Services, you may register or log in
+using an account you have with a third-party service provider, such as
+Google, Discord, or Apple (each, a "Third-Party Account"), through that
+provider's login service. When you do, we receive certain profile
+information from that provider, which typically includes your name,
+email address, profile picture, and the provider's account identifier,
+as described in our Privacy Policy, and we use it to create and operate
+your account. We do not receive or store your Third-Party Account
+password. PLEASE NOTE THAT YOUR RELATIONSHIP WITH
+THE THIRD-PARTY SERVICE PROVIDERS ASSOCIATED WITH YOUR
+THIRD-PARTY ACCOUNTS IS GOVERNED SOLELY BY YOUR
+AGREEMENT(S) WITH SUCH THIRD-PARTY SERVICE PROVIDERS, and we
+are not responsible for those providers' services or policies. You can
+manage or revoke our access through your Third-Party Account
+provider's settings; information we have already received remains
+associated with your account and is handled as described in our
+Privacy Policy.
+12. SERVICES MANAGEMENT
+We reserve the right, but not the obligation, to: (1) monitor the Services for
+violations of these Legal Terms; (2) take appropriate legal action against
+anyone who, in our sole discretion, violates the law or these Legal Terms,
+including without limitation, reporting such user to law enforcement
+authorities; (3) in our sole discretion and without limitation, refuse, restrict
+access to, limit the availability of, or disable (to the extent technologically
+feasible) any of your Contributions or any portion thereof; (4) in our sole
+discretion and without limitation, notice, or liability, to remove from the
+Services or otherwise disable all files and content that are excessive in size
+or are in any way burdensome to our systems; and (5) otherwise manage
+the Services in a manner designed to protect our rights and property and to
+facilitate the proper functioning of the Services.
+If you have a dispute with one or more other users of the Services, you
+release us and our officers, directors, employees, and agents from any
+and all claims, demands, and damages, actual and consequential, of every
+kind and nature, known and unknown, arising out of or in any way
+connected with such disputes. In entering into this release, you
+expressly waive any protections, whether statutory or otherwise, that
+would otherwise limit the coverage of this release to include only those
+claims which you may know or suspect to exist in your favor at the time
+of agreeing to this release, including California Civil Code Section
+1542, which states: "A general release does not extend to claims that
+the creditor or releasing party does not know or suspect to exist in his
+or her favor at the time of executing the release and that, if known by
+him or her, would have materially affected his or her settlement with
+the debtor or released party."
+13. PRIVACY POLICY
+We care about data privacy and security. By using the Services, you agree
+to be bound by our Privacy Policy posted on the Services, which is
+incorporated into these Legal Terms. Please be advised the Services are
+hosted in the United States. If you access the Services from any other
+region of the world with laws or other requirements governing personal
+data collection, use, or disclosure that differ from applicable laws in the
+United States, then through your continued use of the Services, you are
+transferring your data to the United States, and you expressly consent to
+have your data transferred to and processed in the United States.
+14. DIGITAL MILLENNIUM COPYRIGHT ACT
+(DMCA) NOTICE AND POLICY
+Notifications
+We respect the intellectual property rights of others. If you believe that any
+material available on or through the Services infringes upon any copyright
+you own or control, please immediately notify our Designated Copyright
+Agent using the contact information provided below (a "Notification"). A
+copy of your Notification will be sent to the person who posted or stored the
+material addressed in the Notification. Please be advised that pursuant to
+federal law you may be held liable for damages if you make material
+misrepresentations in a Notification. Thus, if you are not sure that material
+located on or linked to by the Services infringes your copyright, you should
+consider first contacting an attorney.
+All Notifications should meet the requirements of DMCA 17 U.S.C. § 512(c)
+(3) and include the following information: (1) A physical or electronic
+signature of a person authorized to act on behalf of the owner of an
+exclusive right that is allegedly infringed; (2) identification of the
+copyrighted work claimed to have been infringed, or, if multiple copyrighted
+works on the Services are covered by the Notification, a representative list
+of such works on the Services; (3) identification of the material that is
+claimed to be infringing or to be the subject of infringing activity and that is
+to be removed or access to which is to be disabled, and information
+reasonably sufficient to permit us to locate the material; (4) information
+reasonably sufficient to permit us to contact the complaining party, such as
+an address, telephone number, and, if available, an email address at which
+the complaining party may be contacted; (5) a statement that the
+complaining party has a good faith belief that use of the material in the
+manner complained of is not authorized by the copyright owner, its agent,
+or the law; and (6) a statement that the information in the notification is
+accurate, and under penalty of perjury, that the complaining party is
+authorized to act on behalf of the owner of an exclusive right that is
+allegedly infringed upon.
+Counter Notification
+If you believe your own copyrighted material has been removed from the
+Services as a result of a mistake or misidentification, you may submit a
+written counter notification to our Designated Copyright Agent using
+the contact information provided below (a "Counter Notification"). To be an
+effective Counter Notification under the DMCA, your Counter Notification
+must include substantially the following: (1) identification of the material
+that has been removed or disabled and the location at which the material
+appeared before it was removed or disabled; (2) a statement that you
+consent to the jurisdiction of the Federal District Court in which your
+address is located, or if your address is outside the United States, for any
+judicial district in which we are located; (3) a statement that you will accept
+service of process from the party that filed the Notification or the party's
+agent; (4) your name, address, and telephone number; (5) a statement
+under penalty of perjury that you have a good faith belief that the material
+in question was removed or disabled as a result of a mistake or
+misidentification of the material to be removed or disabled; and (6) your
+physical or electronic signature.
+If you send us a valid, written Counter Notification meeting the
+requirements described above, we will provide a copy of it to the party
+that filed the original Notification and will restore your removed or
+disabled material not less than ten (10) and not more than fourteen (14)
+business days after our receipt of the Counter Notification, unless we
+first receive notice from the party filing the Notification
+informing us that such party has filed a court action to restrain you from
+engaging in infringing activity related to the material in question. Please
+note that if you materially misrepresent that the disabled or removed
+content was removed by mistake or misidentification, you may be liable for
+damages, including costs and attorney's fees. Filing a false Counter
+Notification constitutes perjury.
+We accommodate and do not interfere with standard technical measures
+used by copyright owners to identify or protect copyrighted works.
+Designated Copyright Agent
+Ryan Tremblay
+Attn: Copyright Agent
+246 28th Street, Apartment 1
+San Francisco, CA 94131
+United States
+dmca@treblo.com
+14A. REPEAT INFRINGER POLICY
+Sonauto, Inc. maintains a policy for terminating users who repeatedly infringe the
+intellectual property rights of others.
+Repeat Infringers. The Company’s policy is: (a) to remove or disable access to
+material that we believe in good faith, upon notice from an intellectual
+property rights owner or authorized agent, is infringing the intellectual
+property rights of a third party by being made available through the Service;
+and (b) in appropriate circumstances, to terminate the accounts of and block
+access to the Service by any user who repeatedly or egregiously infringes other
+people’s copyright or other intellectual property rights. In appropriate
+circumstances, we will terminate the accounts of users that are
+determined by us to be repeat infringers.
+Sonauto, Inc. reserves the right, however, to suspend or terminate accounts of users
+in our sole discretion.
+15. TERM AND TERMINATION
+These Legal Terms shall remain in full force and effect while you use the
+Services. WITHOUT LIMITING ANY OTHER PROVISION OF THESE
+LEGAL TERMS, WE RESERVE THE RIGHT TO, IN OUR SOLE
+DISCRETION AND WITHOUT NOTICE OR LIABILITY, DENY ACCESS TO
+AND USE OF THE SERVICES (INCLUDING BLOCKING CERTAIN IP
+ADDRESSES), TO ANY PERSON FOR ANY REASON OR FOR NO
+REASON, INCLUDING WITHOUT LIMITATION FOR BREACH OF ANY
+REPRESENTATION, WARRANTY, OR COVENANT CONTAINED IN
+THESE LEGAL TERMS OR OF ANY APPLICABLE LAW OR
+REGULATION. WE MAY TERMINATE YOUR USE OR PARTICIPATION IN
+THE SERVICES OR DELETE YOUR ACCOUNT AND ANY CONTENT OR
+INFORMATION THAT YOU POSTED AT ANY TIME, WITHOUT
+WARNING, IN OUR SOLE DISCRETION.
+If we terminate or suspend your account for any reason, you are prohibited
+from registering and creating a new account under your name, a fake or
+borrowed name, or the name of any third party, even if you may be acting
+on behalf of the third party. In addition to terminating or suspending your
+account, we reserve the right to take appropriate legal action, including
+without limitation pursuing civil, criminal, and injunctive redress.
+Provisions of these Legal Terms that by their nature should survive
+termination — including Sections 5, 7, 8, 9, 17, 18, and 20 through 26, and
+all licenses granted to us that are designated perpetual or
+irrevocable — survive any termination or expiration of these Legal
+Terms and any deletion of your account or content.
+16. MODIFICATIONS AND INTERRUPTIONS
+We reserve the right to change, modify, or remove the contents of the
+Services at any time or for any reason at our sole discretion without notice.
+However, we have no obligation to update any information on our Services.
+We will not be liable to you or any third party for any modification, price
+change, suspension, or discontinuance of the Services.
+We cannot guarantee the Services will be available at all times. We may
+experience hardware, software, or other problems or need to perform
+maintenance related to the Services, resulting in interruptions, delays, or
+errors. We reserve the right to change, revise, update, suspend,
+discontinue, or otherwise modify the Services at any time or for any reason
+without notice to you. You agree that we have no liability whatsoever for
+any loss, damage, or inconvenience caused by your inability to access or
+use the Services during any downtime or discontinuance of the Services.
+Nothing in these Legal Terms will be construed to obligate us to maintain
+and support the Services or to supply any corrections, updates, or releases
+in connection therewith.
+17. GOVERNING LAW
+These Legal Terms and your use of the Services are governed by and
+construed in accordance with the laws of the State of California applicable
+to agreements made and to be entirely performed within the State of
+California, without regard to its conflict of law principles.
+18. DISPUTE RESOLUTION; BINDING ARBITRATION
+PLEASE READ THIS SECTION CAREFULLY. IT REQUIRES YOU AND US TO RESOLVE
+MOST DISPUTES THROUGH BINDING INDIVIDUAL ARBITRATION INSTEAD OF IN
+COURT, AND IT INCLUDES A CLASS ACTION WAIVER AND A JURY TRIAL WAIVER.
+YOU MAY OPT OUT OF ARBITRATION WITHIN 30 DAYS AS DESCRIBED IN SECTION
+18.8.
+18.1 Informal Resolution First. Before either you or we may commence an
+arbitration or any permitted court proceeding, the party with the
+dispute must send the other an individualized written notice describing
+the dispute and the relief sought. Notices to us go to
+support@treblo.com (subject line "Dispute Notice") or our mailing
+address in Section 27; notices to you go to the email address on your
+account. For 60 days after the notice is received, you and we agree to
+attempt in good faith to resolve the dispute informally, and any
+applicable statute of limitations will be tolled during that period.
+Completion of this process is a condition precedent to commencing any
+arbitration or permitted court proceeding. An arbitration demand by
+either party must include a description of the claim, the specific
+relief sought, a good-faith estimate of the amount in controversy, and a
+certification that the informal resolution process described in this
+Section 18.1 has been completed.
+18.2 Agreement to Arbitrate. Except as provided in Section 18.3, any
+dispute, claim, or controversy between you and us arising out of or
+relating to these Legal Terms (including the API Terms), the Services,
+Contributions, or Outputs shall be resolved exclusively by final and
+binding arbitration before a single arbitrator, administered by JAMS
+under its applicable rules — including, where they apply, the JAMS
+Consumer Arbitration Minimum Standards — as modified by this Section.
+This agreement to arbitrate is governed by the Federal Arbitration Act.
+The arbitration will be conducted in English and may proceed by
+videoconference or on written submissions; any in-person hearing will
+take place in the county where you reside if you reside in the United
+States, and otherwise in San Francisco, California, unless you and we
+agree on another location. The arbitrator shall issue a reasoned written award and may
+award the same individual relief that a court could award. The
+arbitrator shall decide all issues, including the scope and
+enforceability of this arbitration agreement, except that only a court
+may decide (a) the enforceability of the class action waiver in Section
+18.5, (b) the batching procedures in Section 18.6, (c) whether a
+condition precedent to arbitration has been satisfied, and (d) which
+version of these Legal Terms applies.
+18.3 Exceptions. Either party may (a) bring an individual claim in
+small claims court if it qualifies there; and (b) seek injunctive or
+other equitable relief in a court described in Section 18.10 for actual
+or threatened infringement or misuse of intellectual property or for
+unauthorized access to or abuse of the Services. If applicable law
+provides a non-waivable right to seek public injunctive relief, any
+such request shall be decided by a court after the arbitrator has
+resolved all arbitrable claims.
+18.4 Fees. Payment of JAMS filing, administrative, and arbitrator fees
+will be governed by JAMS's rules and, for consumers, the JAMS Consumer
+Arbitration Minimum Standards, under which your filing fee is capped
+and we pay the remaining JAMS fees. If the arbitrator finds that a
+claim was frivolous or brought for an improper purpose, fees may be
+reallocated in accordance with JAMS's rules.
+18.5 Class Action and Jury Waiver. You and we may bring claims against
+the other only in an individual capacity, and not as a plaintiff or
+member of a class, consolidated, or representative proceeding, and the
+arbitrator may not consolidate or join claims of other persons without
+the consent of all parties. TO THE EXTENT PERMITTED BY LAW, YOU AND WE
+EACH WAIVE THE RIGHT TO A TRIAL BY JURY AND THE RIGHT TO PARTICIPATE IN
+A CLASS ACTION. If the prohibition on class or representative
+proceedings in this Section 18.5 is held unenforceable as to a
+particular claim, then this entire arbitration agreement shall be null
+and void as to that claim, which shall proceed in the courts described
+in Section 18.10; in no event shall any arbitration proceed on a class
+or representative basis.
+18.6 Mass Filings. If 25 or more arbitration demands that raise similar
+claims and are brought by the same or coordinated counsel are filed
+against us within a 90-day period, you and we agree that the JAMS Mass
+Arbitration Procedures and Guidelines and the JAMS Mass Arbitration Fee
+Schedule shall apply, and that the demands may be administered in
+batches of up to 100 demands per batch. Applicable statutes of
+limitations shall be tolled for demands in batches that have not yet
+commenced.
+18.7 Fallback Administrator. If JAMS is unavailable, declines to
+administer a dispute, or ceases operations, the parties shall agree on
+a comparable arbitration administrator (such as the American
+Arbitration Association) and, failing agreement, a court described in
+Section 18.10 shall appoint an administrator or arbitrator pursuant to
+9 U.S.C. § 5. If any JAMS rules or procedures referenced in this
+Section are unavailable, the administrator's closest equivalent rules
+shall apply.
+18.8 Opt-Out. You may opt out of this arbitration agreement by emailing
+arbitration-opt-out@treblo.com with the subject line "Arbitration Opt-Out," your
+name, and the email address associated with your account, within 30
+days after you first accept a version of these Legal Terms containing
+this arbitration agreement. Opting out does not affect any other
+provision of these Legal Terms. If we materially change this Section 18
+in the future, you may reject the change by the same method within 30
+days of its effective date, in which case the most recent version of
+this Section that you accepted will continue to apply.
+18.9 Severability; Survival. Except as provided in Section 18.5, if any
+part of this Section 18 is held unenforceable, the remainder shall
+remain in effect. This Section 18 survives termination of these Legal
+Terms or your account.
+18.10 Residual Court Proceedings. Any dispute that is not subject to
+arbitration under this Section (including small claims matters elevated
+out of small claims court, claims for which you have opted out, and
+claims described in Section 18.3) shall be commenced or prosecuted in
+the state and federal courts located in
+
+[truncated to 50000 chars]
+
+=====
+[TAIL OF PAGE: the first capture was cut at 50000 chars; this is the remainder, captured separately from the same page the same day, starting at 18.10]
+18.10 Residual Court Proceedings. Any dispute that is not subject to arbitration under this Section (including small claims matters elevated out of small claims court, claims for which you have opted out, and claims described in Section 18.3) shall be commenced or prosecuted in the state and federal courts located in San Francisco, California, and you and we (collectively, the "Parties" and individually, a "Party") consent to, and waive all defenses of lack of personal jurisdiction and forum non conveniens with respect to, venue and jurisdiction in such courts. Application of the United Nations Convention on Contracts for the International Sale of Goods and the Uniform Computer Information Transaction Act (UCITA) is excluded from these Legal Terms. To the extent permitted by applicable law, no claim, action, or proceeding brought by either Party related in any way to the Services may be commenced more than one (1) year after the cause of action arose.
+19. CORRECTIONS
+There may be information on the Services that contains typographical errors, inaccuracies, or omissions, including descriptions, pricing, availability, and various other information. We reserve the right to correct any errors, inaccuracies, or omissions and to change or update the information on the Services at any time, without prior notice.
+20. DISCLAIMER
+THE SERVICES ARE PROVIDED ON AN AS-IS AND AS-AVAILABLE BASIS. YOU AGREE THAT YOUR USE OF THE SERVICES WILL BE AT YOUR SOLE RISK. TO THE FULLEST EXTENT PERMITTED BY LAW, WE DISCLAIM ALL WARRANTIES, EXPRESS OR IMPLIED, IN CONNECTION WITH THE SERVICES AND YOUR USE THEREOF, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. [... remainder of the standard disclaimer paragraph omitted from this copy, same wording as captured on the page ...]
+21. LIMITATIONS OF LIABILITY
+IN NO EVENT WILL WE OR OUR DIRECTORS, EMPLOYEES, OR AGENTS BE LIABLE TO YOU OR ANY THIRD PARTY FOR ANY INDIRECT, CONSEQUENTIAL, EXEMPLARY, INCIDENTAL, SPECIAL, OR PUNITIVE DAMAGES, INCLUDING LOST PROFIT, LOST REVENUE, LOSS OF DATA, OR OTHER DAMAGES ARISING FROM YOUR USE OF THE SERVICES, EVEN IF WE HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. NOTWITHSTANDING ANYTHING TO THE CONTRARY CONTAINED HEREIN, OUR LIABILITY TO YOU FOR ANY CAUSE WHATSOEVER AND REGARDLESS OF THE FORM OF THE ACTION, WILL AT ALL TIMES BE LIMITED TO THE AMOUNT PAID, IF ANY, BY YOU TO US DURING THE SIX (6) MONTH PERIOD PRIOR TO ANY CAUSE OF ACTION ARISING. [...]
+22. INDEMNIFICATION
+You agree to defend, indemnify, and hold us harmless, including our subsidiaries, affiliates, and all of our respective officers, agents, partners, and employees, from and against any loss, damage, liability, claim, or demand, including reasonable attorneys' fees and expenses, made by any third party due to or arising out of: (1) your Contributions; (2) use of the Services; (3) breach of these Legal Terms; (4) any breach of your representations and warranties set forth in these Legal Terms; (5) your violation of the rights of a third party, including but not limited to intellectual property rights; or (6) any overt harmful act toward any other user of the Services with whom you connected via the Services. Notwithstanding the foregoing, we reserve the right, at your expense, to assume the exclusive defense and control of any matter for which you are required to indemnify us, and you agree to cooperate, at your expense, with our defense of such claims. We will use reasonable efforts to notify you of any such claim, action, or proceeding which is subject to this indemnification upon becoming aware of it.
+23-27: User data, electronic communications, California users, miscellaneous (assignment: "We may assign any or all of our rights and obligations to others at any time."), contact: Sonauto, Inc., 246 28th Street, Apartment 1, San Francisco, CA 94131, support@treblo.com. [boilerplate, not copied in full]

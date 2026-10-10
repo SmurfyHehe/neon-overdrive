@@ -1,0 +1,7 @@
+{
+  "_note": "Tempo targets (BPM) per station, set by Roy 2026-10-10. A tempo outside the range is a WARNING only (halved/doubled tempo is accepted); pass --strict-tempo to make it a reject. Set both to null to skip the check.",
+  "afterglow": {"label": "Afterglow", "bpm_min": 98, "bpm_max": 120},
+  "undertow": {"label": "Undertow", "bpm_min": 108, "bpm_max": 128},
+  "slipstream": {"label": "Slipstream", "bpm_min": 125, "bpm_max": 145},
+  "greyhour": {"label": "Grey Hour", "bpm_min": 70, "bpm_max": 90}
+}

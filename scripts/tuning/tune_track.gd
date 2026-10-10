@@ -6,7 +6,7 @@ extends Node3D
 # the game uses (a PlayerCar built from the spec, driven by a scripted driver
 # instead of the keyboard).
 #
-#   accel  : full throttle, auto-shifting      -> t_0_100, top_speed_kmh
+#   accel  : full throttle, auto-shifting      -> t_0_100, top_speed_kmh (and t_400, t_0_200, t_100_200)
 #   brake  : accelerate to 100 km/h, full brake -> brake_dist_100 (m)
 #   corner : fixed steering, rising speed       -> peak_lat_g, max_slip_deg
 #
@@ -161,6 +161,10 @@ class Run extends RefCounted:
 		m.top_speed_kmh = maxf(m.get("top_speed_kmh", 0.0), kmh)
 		if not m.has("t_0_100") and v >= 100.0 * KMH:
 			m.t_0_100 = t
+		# 0-200 and the 100-200 pull (mod tree measure rules). Absent if the car never gets there.
+		if not m.has("t_0_200") and v >= 200.0 * KMH:
+			m.t_0_200 = t
+			m.t_100_200 = t - float(m.t_0_100)
 		if not has_start:
 			start_pos = c.global_position
 			has_start = true
@@ -211,6 +215,11 @@ class Run extends RefCounted:
 			max_slip = maxf(max_slip, slip_deg)
 			if not m.has("v_slide_ms") and slip_deg >= SLIDE_ONSET_DEG:
 				m.v_slide_ms = sp
+		# Tightest circle held in the first seconds, before grip is the limit: what
+		# the steering lock gives (mod tree measure rules).
+		var yaw := absf(c.angular_velocity.y)
+		if t > 2.0 and t < 6.0 and sp > 3.0 and yaw > 0.05:
+			m.turn_radius_m = minf(float(m.get("turn_radius_m", INF)), sp / yaw)
 		m.peak_lat_g = peak_lat_g
 		m.max_slip_deg = max_slip
 		# Past the limit the car just plows out; stop once the grip has clearly gone.

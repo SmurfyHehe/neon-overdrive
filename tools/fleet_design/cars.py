@@ -19,6 +19,8 @@ MIRRORS = {'type': 'mirrors'}
 # ----------------------------------------------------------------------------
 P1 = {
     'id': 'p1_coupe', 'role': 'player', 'label': 'Sports coupe',
+    'tree': 'p1_coupe',
+    'tree_parts': {'grip': ['spoiler.gt', 'front_bumper.lip'], 'slide': ['spoiler.ducktail'], 'lamps_fixed': ['lamps.fixed']},
     'refs': 'Supra A80, Silvia S13, RX-7 FD3S',
     'rule': 'Long hood, cabin pushed back, fastback roof, hoop wing; pop-up lamps stand up at night.',
     'L': 4.42, 'WB': 2.52, 'OHf': 0.98, 'W': 1.80,

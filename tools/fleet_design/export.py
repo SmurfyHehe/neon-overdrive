@@ -80,6 +80,11 @@ def car_entry(D):
     entry['exhaust_tips'] = _r(tips)
     for name, b in options.BUILDS.get(D['id'], {}).items():
         entry['proxy_tris'][name] = tri_count(car.build(D, b))
+    # mod tree (step T1): the car's tree file in data/mod_trees and the look parts
+    # (slot.option) each tree node gives for free. Looks only; ModTree never reads this.
+    if D.get('tree'):
+        entry['tree'] = D['tree']
+        entry['tree_parts'] = D.get('tree_parts', {})
     return entry
 
 

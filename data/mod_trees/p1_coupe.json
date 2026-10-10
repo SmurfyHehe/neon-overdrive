@@ -1,0 +1,48 @@
+{
+	"version": 1,
+	"car_id": "p1_coupe",
+	"_note": "P1 sports coupe mod tree (step T1, 2026-10-10). Shared spine: Service, then a fork of engine identities (A stays naturally aspirated, B takes boost), one deeper step under each (L2), then a Grip or Slide capstone that fits any L2: 8 finished builds. Templates are in _templates.json; ops here replace the template's op on the same path. Numbers are starting values for the feel test. Prices are guesses in nights, times the car's tier factor (_shared.json).",
+
+	"tier": "T3",
+	"ceiling": "T4",
+	"home": ["service", "B", "B1", "grip"],
+	"showcase": ["service", "B", "B1", "slide"],
+	"builds": {
+		"_note": "The tier each L2 build reaches with everything fitted (capstone, side nodes, every bolt-on, top parts). Checked by the test from the build's own Nm per kg. Only B1, the big single, may pass the T4 ceiling (_shared.json t5_builds).",
+		"A1": "T3", "A2": "T4", "B1": "T5", "B2": "T4"
+	},
+
+	"nodes": [
+		{"id": "service", "level": 0, "parent": "", "template": "service", "name": "Service",
+			"feel": "Fresh plugs, no leaks. It pulls clean again.", "cost_nights": 0.5, "band_min": "T0"},
+
+		{"id": "A", "level": 1, "parent": "service", "template": "na_breathe", "name": "Stay NA",
+			"feel": "Cams and an open intake. Sharper, and 500 more revs.", "cost_nights": 1.0, "band_min": "T1"},
+		{"id": "B", "level": 1, "parent": "service", "template": "turbo_small", "name": "Small turbo",
+			"feel": "Soft below 2,800, then a clean shove.", "cost_nights": 1.5, "band_min": "T1"},
+
+		{"id": "A1", "level": 2, "parent": "A", "template": "na_screamer", "name": "Screamer",
+			"feel": "Revs to 9,000 and wants to live there.", "cost_nights": 3.5, "band_min": "T2"},
+		{"id": "A2", "level": 2, "parent": "A", "template": "na_stroker", "name": "Stroker",
+			"feel": "Big torque low down. Lazy near the top.", "cost_nights": 3.5, "band_min": "T2"},
+		{"id": "B1", "level": 2, "parent": "B", "template": "turbo_big_single", "name": "Big single turbo",
+			"feel": "Nothing till 4,000, then a wall of it.", "cost_nights": 3.5, "band_min": "T2",
+			"ops": [{"path": "turbo_rpm_thresh", "set": 4000}, {"path": "max_torque", "set": 480}],
+			"measure": {"test": "pull_100_200", "better_by_s": 0.5}},
+		{"id": "B2", "level": 2, "parent": "B", "template": "turbo_twin", "name": "Twin-scroll pair",
+			"feel": "Boost from low revs. A flat, wide pull.", "cost_nights": 3.5, "band_min": "T2"},
+
+		{"id": "grip", "level": 3, "parent": ["A1", "A2", "B1", "B2"], "template": "capstone_grip", "name": "Grip",
+			"feel": "Planted. A wing that works; it goes where you point it.", "cost_nights": 6.0, "band_min": "T3"},
+		{"id": "slide", "level": 3, "parent": ["A1", "A2", "B1", "B2"], "template": "capstone_slide", "name": "Slide",
+			"feel": "Loose on purpose. The back steps out and stays out.", "cost_nights": 6.0, "band_min": "T3"}
+	],
+
+	"side": [
+		{"id": "lamps_fixed", "level": "side", "template": "side_drag_trim", "name": "Fixed lamps",
+			"feel": "The pop-ups go. Less to push through the air.", "cost_nights": 0.5, "band_min": "T1"},
+		{"id": "trumpets", "level": "side", "template": "side_voice", "requires": "A", "name": "Intake trumpets",
+			"feel": "Six open throats. You hear every one.", "cost_nights": 0.5, "band_min": "T1",
+			"sound": {"intake": "trumpets"}}
+	]
+}

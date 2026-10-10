@@ -1652,6 +1652,19 @@
       "r": 0.038
      }
     ]
+   },
+   "tree": "p1_coupe",
+   "tree_parts": {
+    "grip": [
+     "spoiler.gt",
+     "front_bumper.lip"
+    ],
+    "slide": [
+     "spoiler.ducktail"
+    ],
+    "lamps_fixed": [
+     "lamps.fixed"
+    ]
    }
   },
   {

@@ -160,6 +160,8 @@ rem Test build sandbox: free money and fuel, no run-ending, parked start, X star
 call :run core/test_build_sandbox "--headless --fixed-fps 120"
 rem Delete a save: the store, and the title's Load > Delete a save with its question.
 call :run core/save_delete --headless
+rem Test build: every player car with everything its mod tree offers fitted.
+call :run car/test_build_mods --headless
 call :run world/gas_station --headless
 call :run traffic/traffic_spawn "--headless --fixed-fps 60"
 rem Near-band traffic: hand-overs between the 60 m physics band and the rails, both ways, no visible jump.

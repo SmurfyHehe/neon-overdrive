@@ -106,6 +106,7 @@ var limp := LimpMode.new()
 var wet := WetGrip.new()
 const WetGrip := preload("res://scripts/car/wet_grip.gd")
 const StarterAudio := preload("res://scripts/audio/starter_audio.gd")
+const TestBuild := preload("res://scripts/core/test_build.gd")
 ## Broken parts (Stage C damage, slice 1). Off for sim_only cars, like health.
 var damage := CarDamage.new()
 var _head_share := 1.0
@@ -237,6 +238,15 @@ func _ready() -> void:
 		# per car). A car built from a given spec (test track, Auto-Tune
 		# worker) keeps it as is.
 		PlayerTune.kind = kind
+		# TEST BUILD (TestBuild): the car comes with everything its mod tree
+		# offers already fitted (ModTree.everything_fit), as if bought. The
+		# tune made on the modded car is kept in its own file, so it never
+		# lands on the stock car when the switch goes off.
+		if TestBuild.on():
+			TuneParams.set_gear_count((spec.gear_ratios as Array).size())  # the build reads the Tuner's windows
+			mod_build = ModTree.build(spec, ModTree.everything_fit(kind))
+			spec = mod_build.spec
+			PlayerTune.kind = kind + "_modded"
 		TuneParams.set_gear_count((spec.gear_ratios as Array).size())  # before the saved tune is read: it walks the registry
 		PlayerTune.apply_saved(spec)
 		_keeps_tune = true
@@ -622,6 +632,8 @@ func set_transmission_mode(mode: int) -> void:
 ## tick the engine runs. A tap of X is enough: the starter stays in for
 ## CRANK_LATCH_S or until it fires.
 const CRANK_LATCH_S := 2.5
+## Test build: what ModTree.build fitted to this car ({} when nothing was).
+var mod_build := {}
 var _ignition_mode := -1
 var _crank_left := 0.0
 

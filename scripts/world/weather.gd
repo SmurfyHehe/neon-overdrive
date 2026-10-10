@@ -18,11 +18,19 @@ extends RefCounted
 # (dry / rain / downpour), so earlier runs keep matching.
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
-enum Level { DRY, RAIN, DOWNPOUR }
+## DOWNPOUR is the storm (weather_plan.gd). DAMP is the road after rain: wet
+## and holding, no rain falling, grip nearly dry, shallow puddles.
+enum Level { DRY, RAIN, DOWNPOUR, DAMP }
 
 ## Wetness each level settles at. Rain grip falls linearly with wetness, so
 ## these give exactly 0.85 and 0.80 grip once settled.
-const LEVEL_WETNESS := [0.0, 0.75, 1.0]
+const LEVEL_WETNESS := [0.0, 0.75, 1.0, 0.3]
+## What the level does to the night's numbers (W1, decided by Roy): fewer cars
+## and cops on the road in bad weather, better pay for racing in it. One
+## entry per Level, dry = 1.0 so a dry night is exactly as before.
+const TRAFFIC_SHARE := [1.0, 0.9, 0.65, 1.0]
+const COP_SHARE := [1.0, 0.9, 0.5, 1.0]
+const PAY_FACTOR := [1.0, 1.15, 1.35, 1.0]
 ## Grip lost at full wetness (downpour): 1 - 0.20 = 0.80.
 const GRIP_LOSS := 0.20
 ## Wetness change per second: about 25 s from dry to steady rain. Drying is
@@ -43,9 +51,12 @@ static var wetness := 0.0
 ## Bumped whenever wetness changes: a car whose tyres have settled on the
 ## rain's grip skips all its water work until this moves (wet_grip.gd).
 static var version := 0
+## Tonight's plan entry (weather_plan.gd); {} when no plan is running (tests,
+## benchmark, pinned NEON_WEATHER).
+static var tonight := {}
 
 static func set_level(l: int, instant: bool = false) -> void:
-	level = clampi(l, Level.DRY, Level.DOWNPOUR) as Level
+	level = clampi(l, Level.DRY, Level.DAMP) as Level
 	if instant:
 		wetness = LEVEL_WETNESS[level]
 		version += 1
@@ -80,6 +91,19 @@ static func ai_speed_factor() -> float:
 static func ai_bend_factor() -> float:
 	return sqrt(rain_grip())
 
+## Share of the hour band's traffic left on the road now (1.0 dry).
+static func traffic_factor() -> float:
+	return TRAFFIC_SHARE[level]
+
+## Share of cops on the road now (1.0 dry). No cops on main yet; the police
+## spawner reads this when it lands.
+static func cop_factor() -> float:
+	return COP_SHARE[level]
+
+## Race pay multiplier now (1.0 dry). The race payout reads this when it lands.
+static func pay_factor() -> float:
+	return PAY_FACTOR[level]
+
 static func is_dry() -> bool:
 	return wetness <= 0.0
 
@@ -103,6 +127,7 @@ static func env_level() -> int:
 	return -1
 
 static func reset() -> void:
+	tonight = {}
 	level = Level.DRY
 	wetness = 0.0
 	version += 1

@@ -91,10 +91,11 @@ var gas_station: Node3D
 const GasStation := preload("res://scripts/world/gas_station.gd")
 const PumpPanel := preload("res://scripts/ui/pump_panel.gd")
 const WetReflections := preload("res://scripts/world/wet_reflections.gd")
-# The rain branch's weather (scripts/world/weather.gd, PR #341) when it is
-# checked out: its wetness drives the wet-road reflections. Loaded by path so
-# this branch runs with or without it.
-var _weather: GDScript
+const WeatherPlan := preload("res://scripts/world/weather_plan.gd")
+## Real seconds into a night before Dave reads the forecast.
+const FORECAST_DELAY := 8.0
+# Weather's wetness drives the wet-road reflections; this is the `version` of
+# Weather last pushed to them.
 var _weather_seen := -1
 var _wet_pinned := false
 var road_seed := 0
@@ -210,9 +211,8 @@ func _ready() -> void:
 	add_child(saver)
 
 ## Wet-road reflections (wet_reflections.gd). How wet the road is drawn:
-## --wet=<0..1> (benchmark args) or NEON_WET=<0..1> pins it; otherwise the
-## rain branch's weather drives it when its script is present, and without
-## that the road is drawn wet so the look can be judged.
+## --wet=<0..1> (benchmark args) or NEON_WET=<0..1> pins it; otherwise
+## Weather's wetness drives it (dry = nothing drawn).
 func _setup_wet_reflections(benchmark: bool) -> void:
 	var pin := Benchmark.opt("wet") if benchmark else ""
 	if pin == "":
@@ -221,20 +221,15 @@ func _setup_wet_reflections(benchmark: bool) -> void:
 		_wet_pinned = true
 		WetReflections.set_wetness(float(pin))
 		return
-	if ResourceLoader.exists("res://scripts/world/weather.gd"):
-		_weather = load("res://scripts/world/weather.gd")
-		_sync_wetness()
-	else:
-		WetReflections.set_wetness(1.0)
+	_sync_wetness()
 
-## Follows the rain branch's wetness, only when it has moved (its `version`).
+## Follows Weather's wetness, only when it has moved (its `version`).
 func _sync_wetness() -> void:
-	if _weather == null or _wet_pinned:
+	if _wet_pinned:
 		return
-	var v := int(_weather.get("version"))
-	if v != _weather_seen:
-		_weather_seen = v
-		WetReflections.set_wetness(float(_weather.get("wetness")))
+	if Weather.version != _weather_seen:
+		_weather_seen = Weather.version
+		WetReflections.set_wetness(Weather.wetness)
 
 func _setup_world() -> void:
 	var env := Environment.new()
@@ -573,8 +568,7 @@ func _physics_process(_delta: float) -> void:
 		_shift_origin(int(floor(-z / RoadChunkBuilder.CHUNK_LEN)))
 		recenter_us_max = maxi(recenter_us_max, Time.get_ticks_usec() - t0)
 	Weather.step(_delta)  # before the cars: they read this tick's wetness
-	if _weather != null:
-		_sync_wetness()
+	_sync_wetness()
 	if Input.is_action_just_pressed("mute"):
 		toggle_mute()
 	if Input.is_action_just_pressed("radio_next") and radio != null:
@@ -760,7 +754,6 @@ func _setup_game_state() -> void:
 	world_mood = WorldMood.new()
 	add_child(world_mood)
 	_start_weather()
-	night_clock.night_ended.connect(func(_n: int) -> void: _roll_weather())
 	world_mood.event_started.connect(_on_event)
 	if OS.get_environment("NEON_CRACKDOWN") == "1":
 		world_mood.start_crackdown(night_clock.minutes)
@@ -795,6 +788,10 @@ func _setup_police(benchmark: bool) -> void:
 ## Dave reads the hour out. 8 p.m. only ever comes from the roll into the next
 ## night, right after his 6 a.m. sign-off, so it is skipped.
 func _on_hour(hour24: int) -> void:
+	if hour24 == NightClock.START_HOUR:
+		_begin_night(false)  # the night has already counted up (night_clock.gd)
+	else:
+		_weather_change(hour24)
 	if hour24 != NightClock.START_HOUR:
 		if hour24 == 2 and world_mood.crackdown_until < 0.0:
 			radio.announce(WorldMood.BAR_CLOSE_LINE)  # bar close starts on the hour
@@ -810,23 +807,54 @@ func wrecks_on() -> bool:
 		return false
 	return not TestMode.active() or env == "1"
 
-## Tonight's weather (weather.gd): NEON_WEATHER pins it; otherwise the
-## benchmark and tests stay dry, so their numbers keep matching earlier runs,
-## and a real run rolls it (Weather.ROLL_ON) and starts already wet (it was
-## raining before you got in the car).
+## Tonight's weather (weather.gd, planned by weather_plan.gd): NEON_WEATHER
+## pins it; otherwise the benchmark and tests stay dry, so their numbers keep
+## matching earlier runs, and a real run follows the act's weather deck
+## (Weather.ROLL_ON) and starts already wet if it was raining before you got
+## in the car.
 func _start_weather() -> void:
 	var pinned := Weather.env_level()
 	if pinned >= 0:
 		Weather.set_level(pinned, true)
-	elif Benchmark.requested() or TestMode.active() or not Weather.ROLL_ON:
-		Weather.reset()
+	elif _plan_active():
+		_begin_night(true)
 	else:
-		Weather.set_level(Weather.roll(randf()), true)
+		Weather.reset()
 
-## A new night may bring different weather; the road wets or dries gradually.
-func _roll_weather() -> void:
-	if Weather.ROLL_ON and Weather.env_level() < 0 and not Benchmark.requested() and not TestMode.active():
-		Weather.set_level(Weather.roll(randf()))
+## The deck runs when rolling is on, or NEON_WEATHER=plan asks for it (the
+## tests, a look at the plan with rain still off). Pinned weather, the
+## benchmark and plain tests never run it.
+func _plan_active() -> bool:
+	var forced := OS.get_environment("NEON_WEATHER").to_lower() == "plan"
+	if Weather.env_level() >= 0 or Benchmark.requested():
+		return false
+	return forced or (Weather.ROLL_ON and not TestMode.active())
+
+## A night starts (8 p.m., or the game booting into one): take tonight's entry
+## from the deck. The road wets or dries gradually, except on boot.
+func _begin_night(boot: bool) -> void:
+	if not _plan_active():
+		return
+	var e := WeatherPlan.entry(night_clock.night, road_seed)
+	Weather.tonight = e
+	Weather.set_level(WeatherPlan.level_at(e, night_clock.minutes), boot)
+	# Dave gives the forecast a few seconds into the night (not over his own
+	# 6 a.m. sign-off), only when the night is just beginning.
+	if night_clock.minutes < 30.0:
+		var night := night_clock.night
+		get_tree().create_timer(FORECAST_DELAY, false).timeout.connect(func() -> void:
+			if night_clock.night == night and radio != null:
+				radio.announce(WeatherPlan.forecast_line(e)))
+
+## The hour struck: the night's one mid-night change lands on its hour.
+func _weather_change(hour24: int) -> void:
+	var e: Dictionary = Weather.tonight
+	if e.is_empty() or not _plan_active() or int(e.change_hour) != hour24:
+		return
+	Weather.set_level(int(e.change_to))
+	var line := WeatherPlan.change_line(e)
+	if line != "" and radio != null:
+		radio.announce(line)
 
 ## Hour bands (living world step 2, night_bands.gd): the clock sets how much
 ## of the Traffic slider is on the road and which lines Dave adds. Off in the
@@ -844,7 +872,7 @@ func _update_bands() -> void:
 	var m := night_clock.minutes
 	world_mood.update(m)
 	var crackdown := world_mood.crackdown_until >= 0.0
-	traffic.active_share = minf(NightBands.traffic_share(m) + WorldMood.traffic_bonus(m), 1.0)
+	traffic.active_share = minf(NightBands.traffic_share(m) + WorldMood.traffic_bonus(m), 1.0) * Weather.traffic_factor()
 	traffic.rule_breaker_share = WorldMood.rule_breaker_share(m, world_mood.meet_night, crackdown)
 	traffic.weave_share = WorldMood.weave_share(m, crackdown)
 	radio.band = NightBands.band_of(m)

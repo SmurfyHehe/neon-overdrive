@@ -11,11 +11,9 @@ extends RefCounted
 # set_wetness() (two shader uniforms) and set_tail_brake() (one instance
 # colour, only when a car's brake state flips).
 #
-# Everything scales with `wetness`, 0 (dry road: nothing drawn) to 1. The
-# rain branch (scripts/world/weather.gd, PR #341) owns the weather; game.gd
-# feeds its wetness in when that script is present, and NEON_WET=<0..1> or
-# --wet=<0..1> (benchmark args) pins it either way. Without the rain branch
-# the road is drawn wet (1.0) so the look can be judged.
+# Everything scales with `wetness`, 0 (dry road: nothing drawn) to 1. Weather
+# (scripts/world/weather.gd) owns the weather; game.gd feeds its wetness in,
+# and NEON_WET=<0..1> or --wet=<0..1> (benchmark args) pins it either way.
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
 ## Lamp smear quad, m: across the road, then along it.

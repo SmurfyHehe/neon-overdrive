@@ -29,8 +29,8 @@ const SUSPENSION := "suspension"  # spring/damper/ARB rates, toe, steering geome
 # it lives only in the spec and CarSpec turns it into the Vehicle's torque_curve.
 static var _entries: Array[Dictionary] = []
 
-## Most forward gears a car can have (the Advanced ranges above stop here).
-const MAX_GEARS := 8
+## Most forward gears a car can have (Roy, transmissions notes section 9: cap 6).
+const MAX_GEARS := 6
 ## Forward gears of the car being tuned. The registry lists one "gear_ratios/N"
 ## entry per gear, so it follows this: set it when the player's car is built
 ## (PlayerCar._ready) and every consumer of all() sees the right number.
@@ -63,8 +63,6 @@ const ADVANCED := {
 	"gear_ratios/3": [0.5, 5.0],
 	"gear_ratios/4": [0.5, 5.0],
 	"gear_ratios/5": [0.5, 5.0],
-	"gear_ratios/6": [0.5, 5.0],
-	"gear_ratios/7": [0.5, 5.0],
 	"max_torque": [150.0, 1500.0],  # 120 never reaches 100 km/h
 	"max_rpm": [3500.0, 13000.0],  # 2500 never reaches 100 km/h
 	"turbo_boost_max": [0.0, 3.0],

@@ -10,6 +10,8 @@ extends SceneTree
 # - the H-gate pattern: 6 gears "1 3 5 / 2 4 6 R", 5 gears a blank under 5 with
 #   R still last, 4 gears two columns; the same on a real cockpit label
 # - the lever slot of reverse sits right of the last column for each count
+# - every player car (PlayerCars.KINDS): its own count in registry, label, panel
+# - the cap is six forward gears; the raw panel has one slider per gear
 #
 # Exit code 1 on failure. Run (headless):
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/tuning/gear_count.gd
@@ -60,6 +62,7 @@ func _initialize() -> void:
 	var hi := CarSpec.set_param(six, six.spec, "gear_ratios/5", 99.0)
 	_check(is_equal_approx(hi, 5.0), "gear 6 should clamp to 5.0, got %f" % hi)
 	_check_cockpit(six, 6)
+	_check_raw_panel(six, 6)
 	six.queue_free()
 	await process_frame
 
@@ -69,8 +72,31 @@ func _initialize() -> void:
 	_check(_gear_paths().size() == 4, "registry should list 4 gears, lists %d" % _gear_paths().size())
 	_check(TuneParams.find("gear_ratios/4").is_empty(), "four-speed registry should not know gear 5")
 	_check_cockpit(four, 4)
+	_check_raw_panel(four, 4)
 	four.queue_free()
 	await process_frame
+
+	# Every player car: registry, console label and raw panel match its own box.
+	for k in PlayerCars.KINDS:
+		var spec := CarSpec.player_spec(k.id)
+		var n: int = (spec.gear_ratios as Array).size()
+		_check(n >= 1 and n <= TuneParams.MAX_GEARS, "%s has %d gears, the cap is %d" % [k.id, n, TuneParams.MAX_GEARS])
+		var car := PlayerCar.new()
+		car.spec = spec
+		root.add_child(car)
+		await process_frame
+		_check(car.gear_ratios.size() == n and _gear_paths().size() == n, "%s: %d gears on the car, %d in the registry, spec has %d" % [k.id, car.gear_ratios.size(), _gear_paths().size(), n])
+		_check_cockpit(car, n)
+		_check_raw_panel(car, n)
+		print("  %s: %d gears, gate %s" % [k.id, n, CockpitFrame.gate_pattern(n).replace("
+", " / ")])
+		car.queue_free()
+		await process_frame
+
+	# The cap is six forward gears (Roy, transmissions notes section 9).
+	TuneParams.set_gear_count(8)
+	_check(TuneParams.MAX_GEARS == 6 and _gear_paths().size() == 6, "registry should cap at 6 gears, lists %d" % _gear_paths().size())
+	_check(TuneParams.find("gear_ratios/6").is_empty(), "registry should not know gear 7")
 
 	TuneParams.set_gear_count(5)
 	_check(_gear_paths().size() == 5, "registry did not return to 5 gears")
@@ -78,6 +104,8 @@ func _initialize() -> void:
 	for f in failures:
 		printerr("FAIL: ", f)
 	print("gear_count: ", "PASS" if failures.is_empty() else "FAIL")
+	await process_frame  # let the freed cars and panels go before quitting
+	await process_frame
 	quit(0 if failures.is_empty() else 1)
 
 func _check_patterns() -> void:
@@ -104,6 +132,24 @@ func _check_cockpit(car: PlayerCar, gears: int) -> void:
 	var last := frame._slot_of(gears)
 	_check(last.x < rev.x, "%d gears: top gear not left of reverse (%s vs %s)" % [gears, str(last), str(rev)])
 	frame.queue_free()
+
+## The raw Tuner panel shows one gear slider per gear and reads the top speed
+## in the car's own top gear.
+func _check_raw_panel(car: PlayerCar, gears: int) -> void:
+	var state := GameState.new()
+	root.add_child(state)
+	var panel := TuningPanel.new(car, state)
+	root.add_child(panel)
+	var rows := 0
+	for key in panel.sliders:
+		if (key as String).begins_with("gear_"):
+			rows += 1
+	_check(rows == gears, "%d gears: raw panel has %d gear sliders" % [gears, rows])
+	_check(panel.readout.text.contains("in %d)" % gears), "%d gears: raw panel top speed is not in top gear" % gears)
+	var top := "gear_%d" % gears
+	_check(is_equal_approx(TuningPanel.gear_in_order(top, 0.1, panel.values), 0.1), "%d gears: top gear has no shorter neighbour to stop it" % gears)
+	panel.queue_free()
+	state.queue_free()
 
 func _check(ok: bool, msg: String) -> void:
 	if not ok:

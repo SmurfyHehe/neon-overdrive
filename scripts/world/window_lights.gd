@@ -59,9 +59,11 @@ static func set_minutes(m: float) -> void:
 	BuildingKit.set_minutes(m)  # shop shutters (world step 3)
 	if _tex == null:
 		return
+	var t0 := Time.get_ticks_usec()
 	if _paint():
 		_tex.update(_img)
 		uploads += 1
+		SpikeLog.mark("window_upload", SpikeLog.since(t0))
 
 static func lit_fraction_target(m: float) -> float:
 	return clampf(_curve(EVENING, m) + _curve(MORNING, m), 0.0, 1.0)

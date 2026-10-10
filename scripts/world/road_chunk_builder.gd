@@ -1883,11 +1883,19 @@ static func _create_nodes(root: Node3D) -> void:
 ## that currently sits at world z=0. The subtraction is done in ints BEFORE
 ## converting to float, so a chunk millions of indices out still lands on an
 ## exact, small coordinate instead of a rounded huge one.
-static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary, origin_index: int = 0) -> void:
+static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary, origin_index: int = 0, job: RebuildJob = null) -> void:
 	root.name = "Chunk_%d" % chunk_index
 	# Where the road's shape (RoadFrame / RoadAlignment, #37) puts this chunk;
 	# on a straight road that is (0, 0, -(chunk_index - origin_index) * 50).
 	root.transform = RoadFrame.chunk_xf(chunk_index, origin_index)
+	if job != null:
+		# Parked PARK_BELOW under its place until the last stage: out of every
+		# camera and the fog, with its collision off, while the stages rewrite
+		# it. (Not visible = false: the dummy renderer of a headless run drops
+		# the instance data of a hidden MultiMesh.)
+		root.transform = root.transform.translated(Vector3(0.0, PARK_BELOW, 0.0))
+		root.set_meta("rebuilding", true)
+		root.reset_physics_interpolation()
 	root.set_meta("chunk_index", chunk_index)
 	_curve_k = RoadFrame.curvature(chunk_index)
 	_vert[0] = RoadFrame.start_grade(chunk_index)
@@ -1980,6 +1988,10 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	_update_step(root, "BoundaryStepOnc", step_onc, -1, absf(setback - prev_setback) > 0.01)
 	_update_road_collision(root, maxf(bound_own, bound_onc) + BOUNDARY_T + ROAD_COL_MARGIN)
 
+	if job != null:
+		job.keep(_curve_k, _vert, _strip_n)
+		await job.go
+		_prime(root, job)
 	# edge pylons -- cosmetic rhythm/speed cues, interpolated along each
 	# shoulder's outer edge between this chunk's start and end width
 	var pylons_own: MultiMesh = (root.get_node(^"PylonsOwn") as MultiMeshInstance3D).multimesh
@@ -2002,6 +2014,10 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	pylons_own.visible_instance_count = n_posts
 	pylons_onc.visible_instance_count = n_posts
 
+	if job != null:
+		job.keep(_curve_k, _vert, _strip_n)
+		await job.go
+		_prime(root, job)
 	# roadside buildings -- real collision, the world's actual hard boundary
 	var n_buildings := _building_slots()
 	var spans := {1: [], -1: []}  # per side: [z_front, z_back] of each building
@@ -2026,6 +2042,10 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	_update_names(root, chunk_index, start_own_walk, end_own_walk)
 	_update_paint(root, chunk_index, int(prev_cfg.own_lanes) != own_lanes, own_lanes)
 
+	if job != null:
+		job.keep(_curve_k, _vert, _strip_n)
+		await job.go
+		_prime(root, job)
 	# kerb, pavement, their collision and the hydrants (pavements step 1).
 	# Dropped kerbs: a DROP_HALF opening centred on each building front the
 	# district lists as a car-park entrance (Districts.drops), and the whole
@@ -2117,6 +2137,10 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	hydrants.visible_instance_count = n_hydrants
 	drains.visible_instance_count = n_drains
 
+	if job != null:
+		job.keep(_curve_k, _vert, _strip_n)
+		await job.go
+		_prime(root, job)
 	# gap walls (stage A) -- close the open lots between buildings along the
 	# building-front line. Visual only: out-of-bounds collision is issue #28,
 	# which is being worked on separately, so it is deliberately not done here.
@@ -2154,6 +2178,10 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			n_walls += 1
 	walls.visible_instance_count = n_walls
 
+	if job != null:
+		job.keep(_curve_k, _vert, _strip_n)
+		await job.go
+		_prime(root, job)
 	# street lamps + their light pools (stage A). Pole just outside the curb,
 	# arm over the road; the oncoming side is the same mesh turned 180 deg.
 	var lamps: MultiMesh = (root.get_node(^"Lamps") as MultiMeshInstance3D).multimesh
@@ -2188,6 +2216,10 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	LampLife.apply(root, chunk_index, Districts.name_at(chunk_index), lamp_xfs, _xf(0.0, 0.0, -CHUNK_LEN * 0.5),
 		-(start_onc_w + end_onc_w) * 0.5, (start_own_w + end_own_w) * 0.5)
 
+	if job != null:
+		job.keep(_curve_k, _vert, _strip_n)
+		await job.go
+		_prime(root, job)
 	# roadside kit: laid out from the edges above (so a width change moves
 	# it), the lamps (bins stand at their feet) and the lots a car can drive
 	# into (dumpsters at their back wall).
@@ -2216,6 +2248,10 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		pi += 5  # Puddles.STRIDE
 	puddles.visible_instance_count = n_puddles
 
+	if job != null:
+		job.keep(_curve_k, _vert, _strip_n)
+		await job.go
+		_prime(root, job)
 	# center line / barrier -- snapped to this chunk's own end-of-chunk
 	# config, not tapered (see file header). Both the wall and the dash
 	# buffer always exist; only one of them is shown.
@@ -2255,6 +2291,115 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			lane.set_instance_transform(written, _xf(x2, DASH_Y, dz3))
 			written += 1
 	lane.visible_instance_count = written
+	if job != null:
+		# Into place. job.origin_index is kept current by game.gd across a
+		# floating-origin shift that lands mid-job.
+		root.set_meta("rebuilding", false)
+		root.transform = RoadFrame.chunk_xf(chunk_index, job.origin_index)
+		_set_solid(root, true)
+		root.reset_physics_interpolation()
+		sync_collision(root)
+		job.done = true
+
+# ---------- staged rebuild (chunk rebuild budget, #314) ----------
+# TEST BUILD port: #314 cut _apply() into stage functions; every world branch
+# has since rewritten that body, so here the same body pauses between its
+# sections instead (a coroutine: its locals carry over), which keeps the
+# intent (a recycled chunk costs a slice per frame, not ~3 ms in one frame;
+# parked below and not solid until done) without a second copy of the body.
+# Not carried over: #314 took the global random draws of the buildings up
+# front; here they are still drawn in the buildings stage.
+
+## The stages of a rebuild, in order; one rebuild_step() call runs one.
+const STAGES: Array[String] = ["strips", "pylons", "buildings", "kerbs", "walls", "lamps", "kit", "dashes"]
+
+## How far under its place a chunk is parked while its rebuild is in flight.
+const PARK_BELOW := -1000.0
+
+class RebuildJob extends RefCounted:
+	signal go
+	var root: Node3D
+	var index := 0
+	var prev_cfg: Dictionary
+	var cfg: Dictionary
+	var origin_index := 0
+	var stage := 0
+	var done := false
+	# the per-chunk statics of the builder, kept across the frames between stages
+	var curve_k := 0.0
+	var vert := [0.0, 0.0, 0.0, 0.0]
+	var strip_n := 1
+
+	func keep(k: float, v: Array, n: int) -> void:
+		curve_k = k
+		vert = v.duplicate()
+		strip_n = n
+
+## Spike attribution (spike_log.gd): logs the stage that ended now. Free unless the benchmark is running.
+static func _stage(tag: String, since_usec: int) -> void:
+	if SpikeLog.enabled:
+		SpikeLog.mark(tag, SpikeLog.since(since_usec))
+
+## The collision bodies of the chunk: on, or off (layer 0) while a staged
+## rebuild is in flight, so a half-rewritten sidewalk or wall never meets a
+## wheel. The real layer of each body is kept in meta the first time it is
+## switched off.
+static func _set_solid(root: Node3D, on: bool) -> void:
+	for c in root.get_children():
+		if c is CollisionObject3D:
+			var body := c as CollisionObject3D
+			if on:
+				if body.has_meta("layer"):
+					body.collision_layer = body.get_meta("layer")
+			else:
+				if not body.has_meta("layer"):
+					body.set_meta("layer", body.collision_layer)
+				body.collision_layer = 0
+
+## Primes the static centreline/frame cache and shape for this chunk: the
+## stages run on different frames, and another chunk (or a test) may have
+## been built in between.
+static func _prime(root: Node3D, job: RebuildJob) -> void:
+	_curve = (root.get_node(^"Centerline") as Path3D).curve
+	_cache_frames(_curve)
+	_curve_k = job.curve_k
+	for i in 4:
+		_vert[i] = job.vert[i]
+	_strip_n = job.strip_n
+
+## Starts a rebuild of a pooled chunk and returns its job; rebuild_step()
+## runs it a stage at a time. Until the job finishes the chunk is parked and
+## its collision is off, so nothing meets a half-rewritten chunk.
+static func rebuild_begin(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary, origin_index: int = 0) -> RebuildJob:
+	if not root.has_meta("nodes_built"):
+		_create_nodes(root)
+	_set_solid(root, false)
+	var job := RebuildJob.new()
+	job.root = root
+	job.index = chunk_index
+	job.prev_cfg = prev_cfg
+	job.cfg = cfg
+	job.origin_index = origin_index
+	return job
+
+## True while a staged rebuild of this chunk is in flight.
+static func is_rebuilding(root: Node3D) -> bool:
+	return root.get_meta("rebuilding", false)
+
+## Runs the next stage of the job. Returns true when the job is done (and
+## the chunk is in place and solid again). A chunk freed under the job
+## (scene restart) ends it.
+static func rebuild_step(job: RebuildJob) -> bool:
+	if job.done or not is_instance_valid(job.root):
+		return true
+	var t0 := Time.get_ticks_usec()
+	if job.stage == 0:
+		_apply(job.root, job.index, job.prev_cfg, job.cfg, job.origin_index, job)
+	else:
+		job.go.emit()
+	_stage("chunk/" + STAGES[mini(job.stage, STAGES.size() - 1)], t0)
+	job.stage += 1
+	return job.done
 
 ## Builds a fresh chunk root positioned at world Z = -(chunk_index - origin_index) * CHUNK_LEN,
 ## spanning from z=0 to z=-CHUNK_LEN locally.

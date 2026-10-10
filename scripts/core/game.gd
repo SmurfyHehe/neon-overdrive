@@ -147,6 +147,9 @@ func _ready() -> void:
 	# NEON_TRAFFIC=<n> overrides the saved car count, like NEON_TICKS/NEON_MUTE:
 	# tests/run_tests.bat sets 0 so the older drive-bot tests, which steer
 	# across lanes blind, do not hit traffic (tests/traffic_*.gd clear it).
+	var stages_env := OS.get_environment("NEON_REBUILD_STAGES")
+	if stages_env.is_valid_int():
+		rebuild_stages_per_frame = maxi(1, int(stages_env))
 	var traffic_env := OS.get_environment("NEON_TRAFFIC")
 	if traffic_env.is_valid_int():
 		TrafficSettings.set_car_count(int(traffic_env))
@@ -416,7 +419,8 @@ func _setup_road_shape() -> void:
 		curviness = Benchmark.opt_float("curves", 0.0)
 		hilliness = Benchmark.opt_float("hills", 0.0)
 	var seed_env := OS.get_environment("NEON_ROAD_SEED")
-	road_seed = int(seed_env) if seed_env.is_valid_int() else randi()
+	# A benchmark run with --curves or --hills gets a fixed road, so runs compare.
+	road_seed = int(seed_env) if seed_env.is_valid_int() else (Benchmark.SEED if Benchmark.requested() else randi())
 	RoadMap.use(_pick_road())
 	if RoadMap.is_loop() and not seed_env.is_valid_int():
 		road_seed = RoadMap.seed_of(RoadMap.road_id)
@@ -496,6 +500,19 @@ func _setup_chunk_pool() -> void:
 ## Tests: called as (chunk_root, gap) just before a chunk is rebuilt (it vanishes
 ## from where it stands); gap is how many chunks behind the player it is.
 var chunk_event_hook: Callable = Callable()
+## Chunk rebuilds in flight (RoadChunkBuilder.rebuild_begin), oldest first.
+## A recycled chunk used to be rewritten whole in the frame it fell behind,
+## ~3 ms (tests/world/chunk_rebuild_perf.gd) landing in one frame every 50 m of
+## road: a visible hitch at speed. Now each frame runs rebuild_stages_per_frame
+## stages (about 1 ms; a count, not a wall-clock budget, so a run is the same
+## on a loaded machine and the physics tests stay reproducible), and a job
+## takes three or four frames. The chunk is parked out of the way and not solid until it
+## is done; it is 250-350 m ahead, in the fog, where it appeared from nothing
+## before too.
+var _rebuild_jobs: Array = []
+## NEON_REBUILD_STAGES=<n> overrides it (a huge value rebuilds a chunk whole
+## in one frame again, to bisect a test against the spreading).
+var rebuild_stages_per_frame := 3
 
 ## The chunk the pool is centred on: the player's, held until the car is
 ## POOL_HYSTERESIS metres into the next one, so a car sitting on a join does
@@ -545,6 +562,7 @@ func _update_chunk_pool(ref_z: float) -> void:
 		else:
 			have[c.index] = true
 	if spare.is_empty():
+		_run_rebuild_jobs()
 		return
 	var rebuilt_now := 0
 	for idx in range(lo, lo + chunk_pool.size()):
@@ -555,21 +573,43 @@ func _update_chunk_pool(ref_z: float) -> void:
 			chunk_event_hook.call(c.root, absi(c.index - _pool_centre))
 		var prev_cfg := _section_at(idx - 1)
 		var cfg := _section_at(idx)
-		var t0 := Time.get_ticks_usec()
-		RoadChunkBuilder.rebuild_chunk(c.root, idx, prev_cfg, cfg, origin_index)
-		rebuild_us_last = Time.get_ticks_usec() - t0
-		rebuild_us_max = maxi(rebuild_us_max, rebuild_us_last)
-		rebuild_us_total += rebuild_us_last
-		rebuild_count += 1
+		# A chunk recycled again before its last rebuild finished: that job is dropped.
+		for j in _rebuild_jobs:
+			if j.root == c.root:
+				_rebuild_jobs.erase(j)
+				break
+		# Staged (chunk rebuild budget, #314): begun here, run a few stages a
+		# frame by _run_rebuild_jobs; the finish stage resets its interpolation.
+		_rebuild_jobs.append(RoadChunkBuilder.rebuild_begin(c.root, idx, prev_cfg, cfg, origin_index))
 		rebuilt_now += 1
 		rebuilds_in_frame_max = maxi(rebuilds_in_frame_max, rebuilt_now)
-		# Physics interpolation is on (ISSUES B7): without this reset the
-		# recycled chunk would slide from its old spot to the new one
-		# over a frame instead of jumping there.
-		c.root.reset_physics_interpolation()
 		c.index = idx
 		if moments != null:
 			moments.dress_chunk(c.root, idx)
+	_run_rebuild_jobs()
+
+func _run_rebuild_jobs() -> void:
+	if _rebuild_jobs.is_empty():
+		return
+	var t0 := Time.get_ticks_usec()
+	for i in rebuild_stages_per_frame:
+		if _rebuild_jobs.is_empty():
+			break
+		if RoadChunkBuilder.rebuild_step(_rebuild_jobs[0]):
+			_rebuild_jobs.pop_front()
+			rebuild_count += 1
+	# Skeleton-car spike counters: the cost of this frame's slice of rebuild work.
+	rebuild_us_last = Time.get_ticks_usec() - t0
+	rebuild_us_max = maxi(rebuild_us_max, rebuild_us_last)
+	rebuild_us_total += rebuild_us_last
+	SpikeLog.mark("chunk_rebuild", SpikeLog.since(t0))
+
+## Finishes every rebuild in flight now (tests that walk the pool by hand).
+func flush_rebuilds() -> void:
+	while not _rebuild_jobs.is_empty():
+		if RoadChunkBuilder.rebuild_step(_rebuild_jobs[0]):
+			_rebuild_jobs.pop_front()
+			rebuild_count += 1
 
 # ---------- floating origin (issue #26) ----------
 func _physics_process(_delta: float) -> void:
@@ -605,6 +645,7 @@ func request_next_station() -> void:
 func _shift_origin(shift_chunks: int) -> void:
 	if shift_chunks == 0:
 		return
+	var t0 := Time.get_ticks_usec()
 	# The world moves so the new origin chunk's start lands on (0, 0, 0): on a
 	# straight road that is +shift_chunks * 50 along z; on a curved one
 	# (RoadFrame, #37) x moves too. Nothing is rotated.
@@ -626,7 +667,13 @@ func _shift_origin(shift_chunks: int) -> void:
 	# be drawn sliding 1 km across one tick.
 	player.reset_physics_interpolation()
 
+	# A chunk mid-rebuild stays parked out of the way; its finish stage places
+	# it from the job's origin, which moves with the shift here.
+	for j in _rebuild_jobs:
+		j.origin_index = origin_index
 	for c in chunk_pool:
+		if RoadChunkBuilder.is_rebuilding(c.root):
+			continue
 		# Re-derived from the index, not +=, so error can never accumulate.
 		c.root.transform = RoadFrame.chunk_xf(c.index, origin_index)
 		c.root.reset_physics_interpolation()
@@ -638,6 +685,7 @@ func _shift_origin(shift_chunks: int) -> void:
 	if police != null:
 		police.shift_world(offset)
 	fx.shift_world(offset)  # skid marks are laid in world space
+	SpikeLog.mark("recenter", SpikeLog.since(t0))
 	# The ground plane stays put: it is infinite.
 	# The camera follows the car's interpolated position in _process, so it
 	# needs nothing here.

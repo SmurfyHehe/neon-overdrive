@@ -190,6 +190,7 @@ rem World step 1: roof shapes, facade wear, one skyline landmark per district ru
 call :run world/building_tops --headless
 call :run world/shop_fronts --headless
 call :run world/district_kinds --headless
+call :run world/chunk_rebuild_perf --headless
 call :run world/road_frame --headless
 call :run world/road_centerline --headless
 call :run world/road_alignment --headless

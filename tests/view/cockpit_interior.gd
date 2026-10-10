@@ -25,8 +25,15 @@ var steer := 0.0
 var throttle := 0.0
 var lever_moved := false
 
+## The most of the view the dash trinket may cover (it is measured apart from the cabin).
+const CHARM_MAX_VIEW_SHARE := 0.015
+## Interior mods batch 1 (2026-10-09): the view is checked with every part
+## fitted (the charm, a knob, the short stick) and the strut bar on.
+const MODS := "trinket=dice;knob=ball;short=1;strut=1"
+
 func _initialize() -> void:
 	ExhaustTune.save_path = "user://autotune/test_cockpit_interior_exhaust.json"
+	OS.set_environment("NEON_CABIN_MODS", MODS)
 	change_scene_to_file("res://Game.tscn")
 
 func _drive(c: PlayerCar) -> void:
@@ -52,6 +59,8 @@ func _physics_process(_delta: float) -> bool:
 					"Lever", "Lever/Knob", "Handbrake", "ThrottlePedal", "BrakePedal", "ClutchPedal", "CabinLight",
 					"Mirrors", "Mirrors/RearView", "Mirrors/LeftView", "Mirrors/RightView", "Mirrors/RearGlass", "Shelf"]:
 				_check(frame.get_node_or_null(n) != null, "the cockpit should have a node %s" % n)
+			for n in ["Trinket", "Trinket/Pivot/Charm", "ShifterMods", "Lever/Knob/KnobH"]:
+				_check(frame.get_node_or_null(n) != null, "the cockpit should have a node %s (interior mods)" % n)
 			_check(frame.mirrors.views.size() == 3, "three mirrors")
 			for v in frame.mirrors.views:
 				var c: Camera3D = v.cam
@@ -79,6 +88,7 @@ func _physics_process(_delta: float) -> bool:
 			_go(Step.CHASE)
 		Step.CHASE:
 			if waited == 30:
+				_check_mods(p, frame)   # after a few ticks: the CabinMods node holds the sim values each tick
 				_check(not frame.cockpit and frame.visible, "the interior is drawn in the chase view too (through the glass), cockpit mode off")
 				# the HUD rear strip may queue the rearview in the chase view; the door mirrors never render there
 				_check(not frame.mirrors.active and not _side_rendering(frame), "door mirrors must not render in the chase view")
@@ -235,6 +245,7 @@ func _check_view(p: PlayerCar, frame: CockpitFrame, cam: ChaseCamera) -> void:
 	var to_car := p.global_transform.affine_inverse()
 	# gather every interior triangle in car space, with a bounding box per mesh
 	var meshes := []
+	var charm := []   # the dash trinket's mesh: swings, optional, measured on its own below
 	for m in frame.find_children("*", "MeshInstance3D", true, false):
 		var mi := m as MeshInstance3D
 		if not mi.mesh is ArrayMesh or not mi.is_visible_in_tree() or _see_through(mi):
@@ -253,7 +264,11 @@ func _check_view(p: PlayerCar, frame: CockpitFrame, cam: ChaseCamera) -> void:
 		for v in tris:
 			lo = lo.min(v)
 			hi = hi.max(v)
-		meshes.append({"name": mi.name, "tris": tris, "aabb": AABB(lo, hi - lo).grow(0.001)})
+		var entry := {"name": mi.name, "tris": tris, "aabb": AABB(lo, hi - lo).grow(0.001)}
+		if mi.name == &"Charm":
+			charm.append(entry)
+		else:
+			meshes.append(entry)
 	# dash top: scan down from the horizon across the driver's view (+-20 deg,
 	# +yaw is left), skipping yaws where the first thing hit is the binnacle
 	# (near, in front of the driver) or an A-pillar (far out to the side)
@@ -290,12 +305,50 @@ func _check_view(p: PlayerCar, frame: CockpitFrame, cam: ChaseCamera) -> void:
 				if _first_hit(meshes, eye, Vector3(u, v, -1.0).normalized()).is_empty():
 					clear += 1
 		results[test_fov] = float(clear) / float(total)
+		if test_fov == 62.0:
+			# the trinket is a small hanging accessory the player can turn off,
+			# so Roy's 55% is the cabin without it; the charm itself may take at
+			# most CHARM_MAX_VIEW_SHARE of the view on top
+			_check(not charm.is_empty(), "the charm should be built (NEON_CABIN_MODS trinket=dice)")
+			var with_charm := 0
+			for j in 18:
+				var v2 := (0.5 - (float(j) + 0.5) / 18.0) * 2.0 * half_v
+				for i in 32:
+					var u2 := ((float(i) + 0.5) / 32.0 - 0.5) * 2.0 * half_h
+					if _first_hit(charm, eye, Vector3(u2, v2, -1.0).normalized()).is_empty():
+						with_charm += 1
+			var blocked := float(total - with_charm) / float(total)
+			print("trinket: blocks %.1f%% of the view" % (blocked * 100.0))
+			_check(blocked <= CHARM_MAX_VIEW_SHARE, "the dash trinket blocks %.1f%% of the view, want at most %.1f%%" % [blocked * 100.0, CHARM_MAX_VIEW_SHARE * 100.0])
 	print("view: dash top %.1f deg below the eye (%s); clear glass %.1f%% at FOV %.0f, %.1f%% at FOV 62" % [dash_top, dash_where, results[fov] * 100.0, fov, results[62.0] * 100.0])
 	_check(dash_top >= CockpitFrame.DASH_TOP_MIN_DEG, "the dash top is only %.1f deg below the eye (%s), want %.0f" % [dash_top, dash_where, CockpitFrame.DASH_TOP_MIN_DEG])
 	# The share is asserted at FOV 62, the cockpit default PR #135 sets (this
 	# branch's rest FOV is printed too); the eye is 0.34 m from the glass top,
 	# so a wider view fills with header and pillars whatever the dash does.
 	_check(results[62.0] >= CockpitFrame.GLASS_MIN_FRACTION, "only %.1f%% of the view is clear glass at FOV 62, want %.0f%%" % [results[62.0] * 100.0, CockpitFrame.GLASS_MIN_FRACTION * 100.0])
+
+## Interior mods batch 1: the fitted parts on the built car. The short stick
+## puts the knob at SHORT_LEVER_SCALE of the stock height, the shift time is
+## scaled, the strut bar sits under the hood on the body's layer and the
+## front bar is stiffer than the spec's by STRUT_BAR_ARB.
+func _check_mods(p: PlayerCar, frame: CockpitFrame) -> void:
+	var want_len := CockpitFrame.LEVER_LEN * CabinMods.SHORT_LEVER_SCALE
+	_check(is_equal_approx(frame.lever_knob.position.y, want_len), "short shifter: the knob should sit at %.3f, got %.3f" % [want_len, frame.lever_knob.position.y])
+	var head := frame.get_node_or_null(^"Lever/Knob/KnobH") as MeshInstance3D
+	_check(head != null and head.mesh.get_aabb().size.y > 0.03, "the alloy ball knob should be built on the manual head")
+	_check(is_equal_approx(p.shift_time, float(p.spec.shift_time) * CabinMods.SHORT_SHIFT_TIME), "short shifter: shift_time should be %.3f, got %.3f" % [float(p.spec.shift_time) * CabinMods.SHORT_SHIFT_TIME, p.shift_time])
+	_check(is_equal_approx(p.front_arb_ratio, float(p.spec.front_arb_ratio) + CabinMods.STRUT_BAR_ARB), "strut bar: front_arb_ratio should be %.3f, got %.3f" % [float(p.spec.front_arb_ratio) + CabinMods.STRUT_BAR_ARB, p.front_arb_ratio])
+	var bar := p.chassis_visual.get_node_or_null(StrutBar.NODE) as MeshInstance3D
+	_check(bar != null, "the strut bar should be under the player's body")
+	if bar != null:
+		var body := p.chassis_visual.get_node_or_null(^"Body") as VisualInstance3D
+		_check(body == null or bar.layers == body.layers, "the strut bar should be on the body's render layer")
+		var box := bar.get_aabb()
+		var half_l: float = p.chassis_visual.get_meta("half_l", 2.2)
+		_check(box.position.z > -half_l and box.end.z < 0.0, "the strut bar should be inside the car, ahead of the cabin: z %s" % box)
+	# the saved tune never absorbs the mods: the spec stays stock
+	_check(not is_equal_approx(float(p.spec.shift_time), p.shift_time), "the spec's shift_time should stay stock")
+	_check(p.get_node_or_null("CabinMods") != null, "the CabinMods node should be on the player car")
 
 ## The first mesh a ray from `from` along `dir` hits, as {name, point}; empty for none.
 static func _first_hit(meshes: Array, from: Vector3, dir: Vector3) -> Dictionary:

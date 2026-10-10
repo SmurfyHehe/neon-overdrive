@@ -110,6 +110,7 @@ func _ready() -> void:
 	TrafficSettings.load_settings()
 	FxSettings.load_settings()   # cockpit mirrors on/off and quality ([fx] in settings.cfg)
 	ViewSettings.load_settings()
+	CabinMods.load_settings()   # interior mods: trinket, shift knob, short shifter, strut bar ([interior])
 	GraphicsSettings.load_settings()   # preset, edge smoothing, render scale ([graphics])
 	DisplaySettings.load_settings()    # fullscreen, window size ([display]); applied below in a play session
 	KeyBindings.load_settings()        # the player's rebound keys ([keys])
@@ -576,6 +577,10 @@ func _setup_player() -> void:
 	add_child(player)
 	if resume_place:
 		saver.restore_car(player, run.car)
+	# Interior mods batch 1 (2026-10-09): the fitted parts' sim effects (short
+	# shifter, strut bar) held on the built car, and the bar itself under the hood.
+	CabinMods.attach(player)
+	StrutBar.sync(player)
 
 # ---------- traffic (milestone 3, stage B step 3) ----------
 # Lane-follow traffic: the same raycast Vehicle as the player, see

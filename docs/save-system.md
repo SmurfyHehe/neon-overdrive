@@ -11,7 +11,7 @@ Built from the run-structure decisions of 2026-10-09. Code in `scripts/save/`.
 | Backups, crash-safe writes | `atomic_json.gd`: write `.tmp`, verify, rotate `.bak1..3`, rename in; SHA-256 header on every file |
 | Never save during a chase | `SaveStore.begin_chase()` / `end_chase()`; every write refuses while `chase_active` (night clock too) |
 | Quit mid-chase still busts you | `begin_chase()` marks the chase open on disk first; the next load turns it into a bust (`pending_busts`, run not resumed) |
-| Resume exactly where you left | run save: road seed and shape, floating-origin index, nearby barrier rolls, car transform / velocity / spin / gear / rpm, clock, radio |
+| Resume exactly where you left | run save: which road (its id, the place on the lap, the heading: `scripts/world/road_map.gd`; a save from a road this build does not have starts at the top of the default road), road seed and shape, floating-origin index, nearby barrier rolls, car transform / velocity / spin / gear / rpm, clock, radio |
 | Rename keeps the old saves | `user_dir_migration.gd`: copies (never moves) the old user folder on first launch under a new name |
 | Tune slots carry no torque / redline | `tune_slots.gd`: engine paths (torque, redline, boost, torque shape) are not saved and not applied |
 | Damaged mod tree keeps parts and money | separate files; bought parts live in `garage.json`, the tree only lists fitted ones |

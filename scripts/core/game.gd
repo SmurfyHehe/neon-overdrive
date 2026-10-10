@@ -85,6 +85,15 @@ var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust fl
 const SaveDirector := preload("res://scripts/save/save_director.gd")
 const UserDirMigration := preload("res://scripts/save/user_dir_migration.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
+# The shared test driver and the F9 drive recorder (2026-10-10). `bot` is the
+# driver when the game was started with -- --bot=<mode> / NEON_BOT (watching
+# the bot in a window uses the same switch the headless tests do), with
+# --replay=<file>, or by the benchmark; null in normal play.
+const TestDriver := preload("res://scripts/core/test_driver.gd")
+const DriveRecorder := preload("res://scripts/core/drive_recorder.gd")
+var bot: TestDriver
+var recorder: DriveRecorder
+var _replay := {}
 var saver: SaveDirector
 ## Tonight's cash and the bank (F0, scripts/core/wallet.gd).
 var wallet: Node
@@ -174,7 +183,20 @@ func _ready() -> void:
 	else:
 		randomize()
 	saver = SaveDirector.new(self)
-	if not benchmark:
+	# A bot or a replayed drive never resumes or overwrites Roy's saved run.
+	var bot_mode := TestDriver.requested_mode()
+	if TestDriver.requested_replay() != "":
+		_replay = DriveRecorder.load_file(TestDriver.requested_replay())
+		bot_mode = "replay"
+	if bot_mode != "":
+		SaveDirector.enabled = false
+	if not _replay.is_empty():
+		# The recording's road, car, tick rate and traffic count.
+		run = _replay.run
+		OS.set_environment("NEON_CAR", str(_replay.get("car", "")))
+		Engine.physics_ticks_per_second = int(_replay.get("ticks_per_second", Engine.physics_ticks_per_second))
+		TrafficSettings.set_car_count(int(_replay.get("traffic", TrafficSettings.car_count)))
+	elif not benchmark:
 		run = saver.read_run()
 	# The clock first: the building window texture is painted for its time
 	# when the first chunk is built.
@@ -218,6 +240,11 @@ func _ready() -> void:
 	DisplaySettings.apply(get_window())   # only touches the window in a real play session
 	if benchmark:
 		add_child(Benchmark.new())
+	elif bot_mode != "":
+		_start_bot(bot_mode)
+	if not benchmark:
+		recorder = DriveRecorder.new(self)
+		add_child(recorder)
 	add_child(saver)
 
 ## Wet-road reflections (wet_reflections.gd). How wet the road is drawn:
@@ -240,6 +267,21 @@ func _sync_wetness() -> void:
 	if Weather.version != _weather_seen:
 		_weather_seen = Weather.version
 		WetReflections.set_wetness(Weather.wetness)
+func _start_bot(bot_mode: String) -> void:
+	var opts := {"speed": TestDriver.requested_speed(150.0 * TestDriver.KMH) / TestDriver.KMH}
+	if Benchmark.opt("seed").is_valid_int():
+		opts.seed = int(Benchmark.opt("seed"))
+	if not _replay.is_empty():
+		opts.keys = PackedInt32Array(_replay.keys)
+		player._steer_smooth = float(_replay.get("steer", 0.0))
+	bot = TestDriver.start(self, bot_mode, opts)
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	var lbl := Label.new()
+	lbl.position = Vector2(16, 56)
+	lbl.add_theme_color_override("font_color", Color(1.0, 0.54, 0.12))  # sodium #FF8A1F
+	lbl.text = "BOT: %s" % bot_mode + ("" if bot_mode in ["replay", "fuzz", "hold"] else " at %d km/h" % roundi(bot.target_speed / TestDriver.KMH))
+	layer.add_child(lbl)
 
 func _setup_world() -> void:
 	var env := Environment.new()

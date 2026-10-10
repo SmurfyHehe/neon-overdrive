@@ -338,6 +338,7 @@ func beam_mode() -> int:
 func _physics_process(delta: float) -> void:
 	beams.step(delta)
 	if driver.is_valid():
+		last_keys = -1
 		driver.call(self)
 	else:
 		_read_keyboard()
@@ -434,30 +435,78 @@ func _update_line_lock() -> void:
 		front_axle.brake_bias = _line_lock_bias.x
 		rear_axle.brake_bias = _line_lock_bias.y
 
+## The driving keys as one number, a bit per key (shared test driver, 2026-10-10).
+## _read_keyboard() packs what is held this tick and apply_keys() drives the car
+## from it, so a recorded drive (DriveRecorder, F9) and the test driver's random
+## keys go through exactly the code a real key press does.
+const KEY_ACCEL := 1
+const KEY_BRAKE := 2
+const KEY_LEFT := 4
+const KEY_RIGHT := 8
+const KEY_HANDBRAKE := 16
+const KEY_CLUTCH := 32
+const KEY_STARTER := 64
+const KEY_SHIFT_UP := 128      # one-shot keys: set only on the tick they go down
+const KEY_SHIFT_DOWN := 256
+const KEY_GEARBOX := 512
+const KEY_REVERSE := 1024
+## The keys applied on the last tick; -1 when a driver set the pedals itself.
+var last_keys := 0
+
+static func read_keys() -> int:
+	var k := 0
+	if Input.is_action_just_pressed("shift_down"):
+		k |= KEY_SHIFT_DOWN
+	if Input.is_action_just_pressed("shift_up"):
+		k |= KEY_SHIFT_UP
+	if Input.is_action_just_pressed("toggle_gearbox"):
+		k |= KEY_GEARBOX
+	if Input.is_action_just_pressed("reverse"):
+		k |= KEY_REVERSE
+	if Input.is_action_pressed("clutch"):
+		k |= KEY_CLUTCH
+	if Input.is_action_pressed("starter"):
+		k |= KEY_STARTER
+	if Input.is_action_pressed("accelerate"):
+		k |= KEY_ACCEL
+	if Input.is_action_pressed("brake"):
+		k |= KEY_BRAKE
+	if Input.is_action_pressed("handbrake"):
+		k |= KEY_HANDBRAKE
+	if Input.is_action_pressed("steer_left"):
+		k |= KEY_LEFT
+	if Input.is_action_pressed("steer_right"):
+		k |= KEY_RIGHT
+	return k
+
 func _read_keyboard() -> void:
 	# Input (#29, #30): named InputMap actions (project.godot), all polled
-	# here -- no _input handlers. Shifts are one-shot, hence just_pressed.
-	if Input.is_action_just_pressed("shift_down"):
+	# in read_keys() -- no _input handlers. Shifts are one-shot, hence just_pressed.
+	apply_keys(read_keys())
+
+func apply_keys(k: int) -> void:
+	last_keys = k
+	if k & KEY_SHIFT_DOWN:
 		manual_shift(-1)
-	if Input.is_action_just_pressed("shift_up"):
+	if k & KEY_SHIFT_UP:
 		manual_shift(1)
-	if Input.is_action_just_pressed("toggle_gearbox"):
+	if k & KEY_GEARBOX:
 		set_transmission_mode((transmission_mode() + 1) % Transmission.size())
-	if Input.is_action_just_pressed("reverse"):
+	if k & KEY_REVERSE:
 		toggle_reverse()
 	if Input.is_action_just_pressed("headlights"):
 		set_headlights(not headlights_on)
 	if Input.is_action_just_pressed("high_beam"):
 		toggle_high_beam()
-	clutch_input = 1.0 if Input.is_action_pressed("clutch") else 0.0
-	starter_input = Input.is_action_pressed("starter")
-	var throttle := Input.is_action_pressed("accelerate")
-	var braking := Input.is_action_pressed("brake")
-	var handbrake := Input.is_action_pressed("handbrake")
+	clutch_input = 1.0 if k & KEY_CLUTCH else 0.0
+	starter_input = k & KEY_STARTER != 0
+	var throttle := k & KEY_ACCEL != 0
+	var braking := k & KEY_BRAKE != 0
+	var handbrake := k & KEY_HANDBRAKE != 0
 	var steer_in := 0.0
-	if Input.is_action_pressed("steer_left"):
+	if k & KEY_LEFT:
 		steer_in -= 1.0
-	if Input.is_action_pressed("steer_right"):
+	if k & KEY_RIGHT:
 		steer_in += 1.0
 
 	throttle_input = 1.0 if throttle else 0.0

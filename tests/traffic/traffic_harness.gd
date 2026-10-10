@@ -24,6 +24,7 @@ class ErrorCounter extends Logger:
 	func _log_message(_message: String, _error: bool) -> void:
 		pass
 
+const TestDriver := preload("res://scripts/core/test_driver.gd")
 const SETTINGS_PATH := "user://traffic_test_settings.cfg"
 
 ## Boots Game.tscn with `car_count` traffic cars and the given draw distance.
@@ -69,14 +70,11 @@ const LAT_DAMP_T := 3.0
 ## 1245 m one (tests/world/curve_drive.gd, 2026-10-07).
 const PLAYER_UNDERSTEER_FF := 0.0008
 
+## The code lives in the shared test driver now (scripts/core/test_driver.gd,
+## mode "legacy_lane"); the behaviour is unchanged: fixed throttle under
+## max_speed, never brakes, never looks at traffic.
 static func lane_driver(lane_x: float, throttle: float, max_speed: float = INF) -> Callable:
-	return func(c: Vehicle) -> void:
-		# Sideways velocity across the road (RoadFrame, #37), not world x.
-		var side_v := RoadFrame.dir_to_road(RoadFrame.unroll(c.global_position).z, c.linear_velocity).x
-		c.steering_input = TrafficCar.lane_steer(c, lane_x - side_v * LAT_DAMP_T, -1.0, 2.5, PLAYER_UNDERSTEER_FF)
-		c.throttle_input = throttle if c.current_speed() < max_speed else 0.0
-		c.brake_input = 0.0
-		c.handbrake_input = 0.0
+	return TestDriver.legacy_lane(lane_x, throttle, max_speed)
 
 ## Own-direction lane centre, lane 0 nearest the centre line (the fast lane).
 static func lane_x(i: int) -> float:

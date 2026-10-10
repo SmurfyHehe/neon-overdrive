@@ -44,6 +44,13 @@ const WARMUP_SECS := 2.0  # skip shader-compile hitches at startup
 ##          attribute the frame per subsystem; NEON_BENCH_SKIP does the same
 ##          and tests/core/perf_probe.gd honours it too. Diagnostic only.
 ## shimmer  0/1 heat shimmer behind the tailpipes (the saved switch)
+## speed    km/h: the shared test driver (scripts/core/test_driver.gd) drives
+##          clean at that speed: lane centre, brakes for traffic, slows for
+##          bends, touches nothing. With weave=1 it changes lane into real gaps.
+## bot      a test driver mode by name (clean, weave, grip, fuzz, legacy_bench).
+##          Default: legacy_bench (full throttle, never brakes), or weave when
+##          weave=1. bot=legacy_bench with weave=1 is the old blind lane swap.
+## seed     the fuzz mode's key seed.
 ## Defaults reproduce the old benchmark exactly, so earlier lines still compare.
 ## The radio always plays (it is part of the game), so every run has it on.
 const DEFAULT_SECS := 45.0
@@ -172,8 +179,7 @@ func _setup_view() -> void:
 func _process(delta: float) -> void:
 	if not started:
 		started = true
-		var car: PlayerCar = game.get("player")
-		car.driver = _drive
+		_start_driver()
 		_setup_view()
 		_diagnose()
 		return
@@ -208,23 +214,24 @@ func _process(delta: float) -> void:
 		_report()
 		get_tree().quit()
 
-# Called by PlayerCar every physics tick. Heading hold: steer only when yaw
-# (relative to the road, RoadFrame) drifts, nudged back toward the lane.
-func _drive(c: PlayerCar) -> void:
-	var u := RoadFrame.unroll(c.global_position)
-	var lane := 1
-	if _weave:
-		lane = 0 if int(t / 4.0) % 2 == 0 else 1   # a lane change every 4 s
-	var err: float = (c.global_rotation.y - RoadFrame.heading_at(u.z)) + clampf((TrafficManager.lane_centre(lane, false) - u.x) * 0.02, -0.05, 0.05)
-	var steer := 0.0
-	if err < -0.02:
-		steer = -1.0  # left (A)
-	elif err > 0.02:
-		steer = 1.0   # right (D)
-	c.throttle_input = 1.0
-	c.brake_input = 0.0
-	c.handbrake_input = 0.0
-	c.steering_input = -steer  # same sign flip as PlayerCar._read_keyboard
+# The driver is the shared test driver (scripts/core/test_driver.gd). With no
+# options it is legacy_bench: the heading hold at full throttle this benchmark
+# has always used, so old result lines still compare. --speed, --weave and
+# --bot pick the modes that look where they are going.
+const TestDriver := preload("res://scripts/core/test_driver.gd")
+const FLAT_OUT := 999.0  # km/h: a target no car reaches = full throttle
+var bot: TestDriver
+
+func _start_driver() -> void:
+	var mode := opt("bot")
+	var has_speed := opt("speed").is_valid_float()
+	if mode == "":
+		mode = "weave" if _weave else ("clean" if has_speed else "legacy_bench")
+	var opts := {"speed": opt_float("speed", FLAT_OUT), "legacy_weave": _weave}
+	if opt("seed").is_valid_int():
+		opts.seed = int(opt("seed"))
+	bot = TestDriver.start(game, mode, opts)
+	game.set("bot", bot)
 
 func _report() -> void:
 	var s: Array = Array(frames)
@@ -267,6 +274,8 @@ func _report() -> void:
 		objects_sum / n, prims_sum / n / 1000, int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)), max_speed, spikes33, spikes50]
 	line += "  gfx=%s scale_end=%.2f shimmer=%d" % [GraphicsSettings.preset, get_viewport().scaling_3d_scale, 1 if FxSettings.is_on("heat_shimmer") else 0]
 	line += "  opts=[%s]" % " ".join(OS.get_cmdline_user_args())
+	if bot != null and bot.mode != "legacy_bench":
+		line += "  bot=[%s]" % bot.summary()
 	print("BENCHMARK ", line)
 	_report_spikes()
 	# Next to the exe in an exported build, where Roy can find it; user:// when

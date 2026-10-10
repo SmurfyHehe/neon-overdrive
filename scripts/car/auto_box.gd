@@ -214,6 +214,11 @@ func tick(v: Vehicle, delta: float) -> void:
 		v.current_gear = 1
 		v.requested_gear = 1
 		gear = 1
+	if not v.engine_running:
+		# engine off (a stall carried over, a dead engine): nothing to transmit, no creep
+		reset()
+		clutch_amount = 1.0
+		return
 	var fwd := -v.local_velocity.z
 	var kmh := fwd * 3.6
 	var thr := clampf(v.throttle_input, 0.0, 1.0)

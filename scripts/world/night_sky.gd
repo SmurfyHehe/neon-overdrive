@@ -31,6 +31,17 @@ class_name NightSky
 # the glow dome swells, and stars and moon wash out. Nothing is lit by it: the
 # ambient pin stays, so asphalt keeps its colour.
 #
+# Clouds and skyline (2026-10-10, sky PR 3), all in the same shader, no new
+# draw calls and no scripted per-frame work:
+# - Clouds: one flattened-plane noise layer, a different sky each night
+#   (CLOUD_TYPES: clear / scattered / broken / overcast, picked from the night
+#   number). Dark navy bodies, underlit by the city glow near the horizon,
+#   silvered near the moon, amber at dawn; they dim the stars and veil the
+#   moon. Drift is a global offset the director steps with the clock.
+# - Skyline: a far silhouette strip on the horizon (0.3 to 2.5 degrees tall,
+#   a different outline each night) with red aviation blinkers on the tallest
+#   towers; the blink phase is a global the director steps.
+#
 # Ambient light is no longer taken from the sky (game.gd pins it to a fixed
 # colour), so repainting the sky never lifts the asphalt.
 
@@ -65,6 +76,10 @@ const MOON_EL_CLIMB := Vector2(4.0, 6.0)    # degrees gained by 6 a.m.
 const MOON_AZ := Vector2(16.0, 30.0)        # degrees off straight ahead
 const MOON_AZ_DRIFT := 4.0                  # degrees it slides outward by 6 a.m.
 
+## Cloud cover per night type, 0 (none) to 1 (solid).
+const CLOUD_TYPES := ["clear", "scattered", "broken", "overcast"]
+const CLOUD_COVER := {"clear": 0.0, "scattered": 0.38, "broken": 0.6, "overcast": 1.0}
+
 ## Dawn runs from 5 a.m. to 6 a.m. (game minutes since 8 p.m.).
 const DAWN_START_MINUTES := 540.0
 
@@ -94,6 +109,8 @@ global uniform vec4 sky_glow_color : source_color;
 global uniform float sky_glow_height;
 global uniform vec3 sky_moon_dir;
 global uniform float sky_dawn;
+global uniform float sky_cloud_offset;  // cloud drift, plane units
+global uniform float sky_blink;         // seconds, stepped by SkyDirector
 
 // Stars: seed per night; density is the share of grid cells holding one.
 uniform float star_seed = 1.0;
@@ -112,6 +129,11 @@ uniform float earthshine = 0.01;
 uniform vec3 halo_color : source_color = vec3(0.85, 0.82, 0.76);  // silver, a touch warm
 uniform float halo_energy = 0.03;
 
+// Per night: cloud cover and noise offset, skyline outline seed.
+uniform float cloud_cover = 0.0;
+uniform vec2 cloud_seed = vec2(0.0);
+uniform float skyline_seed = 1.0;
+
 // Dawn: horizontal direction the first light comes from (set per night).
 uniform vec3 dawn_dir = vec3(0.0, 0.0, -1.0);
 
@@ -125,6 +147,44 @@ vec3 hash3(vec3 p) {
 	p = fract(p * vec3(0.1031, 0.1030, 0.0973));
 	p += dot(p, p.yxz + 33.33);
 	return fract((p.xxy + p.yzz) * p.zyx);
+}
+
+float vnoise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	float a = hash1(vec3(i, cloud_seed.x));
+	float b = hash1(vec3(i + vec2(1.0, 0.0), cloud_seed.x));
+	float c = hash1(vec3(i + vec2(0.0, 1.0), cloud_seed.x));
+	float d = hash1(vec3(i + vec2(1.0, 1.0), cloud_seed.x));
+	return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+// Cloud density 0..1 on a flattened plane (3 octaves).
+float cloud_density(vec3 d) {
+	if (cloud_cover < 0.01 || d.y < 0.01) {
+		return 0.0;
+	}
+	vec2 p = d.xz / (d.y + 0.14) * 1.4 + vec2(sky_cloud_offset, 0.0) + cloud_seed.yy * 17.0;
+	float n = vnoise(p) * 0.55 + vnoise(p * 2.1 + 7.3) * 0.3 + vnoise(p * 4.3 + 19.1) * 0.15;
+	float thresh = mix(0.78, 0.30, cloud_cover);
+	float c = smoothstep(thresh, thresh + 0.16, n);
+	return c * smoothstep(0.01, 0.12, d.y);  // thins out toward the horizon
+}
+
+// Far skyline: building top (radians above the horizon) for an azimuth, plus
+// the column cell so blinkers can sit on the tall ones.
+float skyline_height(float az, out float col_id) {
+	float w1 = 0.021;
+	float w2 = 0.0063;
+	float c1 = floor(az / w1);
+	float c2 = floor(az / w2);
+	float h1 = hash1(vec3(c1, skyline_seed, 1.0));
+	float h2 = hash1(vec3(c2, skyline_seed, 2.0));
+	float a = 0.004 + pow(h1, 2.4) * 0.040;
+	float b = 0.003 + pow(h2, 3.0) * 0.022;
+	col_id = a >= b ? c1 : c2 + 4096.0;
+	return max(a, b);
 }
 
 vec3 gradient(vec3 d) {
@@ -209,6 +269,43 @@ void sky() {
 			// gradient, not from the starry sky.
 			col = mix(col, max(base, face), edge);
 		}
+		// Skyline: a silhouette strip lit from below by the city glow, red
+		// blinkers on the tall towers. Distant, so it covers sky and the
+		// first sliver of ground only.
+		if (elev > -0.004 && elev < 0.05) {
+			float az2 = atan(EYEDIR.x, -EYEDIR.z) + PI;
+			float id;
+			float top = skyline_height(az2, id);
+			float body = 1.0 - smoothstep(top - 0.0007, top, elev);
+			float up = clamp(elev / top, 0.0, 1.0);
+			vec3 sil = mix(sky_glow_color.rgb * 0.55, vec3(0.012, 0.016, 0.03), smoothstep(0.0, 0.8, up));
+			col = mix(col, sil, body * smoothstep(-0.004, 0.0, elev));
+			// Blinkers on the tallest columns: red, ~0.5 Hz, own phase each.
+			if (top > 0.026) {
+				float hb = hash1(vec3(id, skyline_seed, 3.0));
+				if (hb > 0.35) {
+					float w = id >= 4096.0 ? 0.0063 : 0.021;
+					float cid = id >= 4096.0 ? id - 4096.0 : id;
+					float cx = (cid + 0.5) * w;
+					float dx = (az2 - cx) * cos(elev);
+					float dy = elev - (top + 0.0012);
+					float r = sqrt(dx * dx + dy * dy);
+					float on = step(0.62, fract(sky_blink * 0.5 + hb * 7.0));
+					col += vec3(1.0, 0.08, 0.04) * on * exp(-r * 600.0) * 1.2;
+				}
+			}
+		}
+		// Clouds: over stars, halo and moon, under the dither.
+		float cl = cloud_density(EYEDIR);
+		if (cl > 0.0) {
+			float underlit = 1.0 - smoothstep(0.0, 0.55, EYEDIR.y);
+			float mang = acos(clamp(dot(EYEDIR, normalize(sky_moon_dir)), -1.0, 1.0));
+			vec3 body_c = vec3(0.0035, 0.0045, 0.009);
+			body_c += sky_glow_color.rgb * 1.0 * underlit * cl;
+			body_c += moon_color * 0.16 * lit_frac * exp(-mang * 6.0);
+			body_c += vec3(0.30, 0.15, 0.05) * sky_dawn * underlit;
+			col = mix(col, body_c, cl * (0.55 + 0.4 * cloud_cover));
+		}
 		// Dither: one 8-bit sRGB step of interleaved gradient noise, sized
 		// for the local brightness so dark navy gets it too.
 		float n = fract(52.9829189 * fract(dot(FRAGCOORD.xy, vec2(0.06711056, 0.00583715))));
@@ -245,11 +342,24 @@ static func build(night: int, district: String = DEFAULT_DISTRICT) -> Sky:
 static func phase_for_night(night: int) -> float:
 	return fposmod(PHASE_NIGHT_1 + float(night - 1) / PHASE_CYCLE_NIGHTS, 1.0)
 
+## Cloud type tonight, from the night number.
+static func cloud_type(night: int) -> String:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([night, "clouds"])
+	return CLOUD_TYPES[rng.randi() % CLOUD_TYPES.size()]
+
+## Cloud offset for a clock time: the layer drifts slowly all night.
+static func cloud_offset_for_minutes(minutes: float) -> float:
+	return minutes * 0.004
+
 ## Phase, star seed and moon path for a night.
 static func set_night(sky: Sky, night: int) -> void:
 	var mat := sky.sky_material as ShaderMaterial
 	mat.set_shader_parameter("phase", phase_for_night(night))
 	mat.set_shader_parameter("star_seed", float(posmod(night, 1000)))
+	mat.set_shader_parameter("cloud_cover", float(CLOUD_COVER[cloud_type(night)]))
+	mat.set_shader_parameter("cloud_seed", Vector2(float(posmod(hash([night, "cloud_noise"]), 997)), float(posmod(hash([night, "cloud_pos"]), 53))))
+	mat.set_shader_parameter("skyline_seed", float(posmod(hash([night, "skyline"]), 9973)))
 	# First light comes from the side the moon is not on, 35-65 degrees off the road.
 	var off := 35.0 + 30.0 * float(posmod(hash([night, "dawn"]), 100)) / 100.0
 	var a := deg_to_rad(-float(moon_path(night).side) * off)
@@ -295,6 +405,13 @@ static var dawn := 0.0
 static func set_dawn(value: float) -> void:
 	dawn = clampf(value, 0.0, 1.0)
 	RenderingServer.global_shader_parameter_set("sky_dawn", dawn)
+
+## Cloud drift and blinker clock: global shader parameters, set from SkyDirector.
+static func set_cloud_offset(value: float) -> void:
+	RenderingServer.global_shader_parameter_set("sky_cloud_offset", value)
+
+static func set_blink(seconds: float) -> void:
+	RenderingServer.global_shader_parameter_set("sky_blink", seconds)
 
 static func set_phase(sky: Sky, phase: float) -> void:
 	(sky.sky_material as ShaderMaterial).set_shader_parameter("phase", fposmod(phase, 1.0))

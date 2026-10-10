@@ -196,6 +196,7 @@ if /i not "%~1"=="quick" (
 	rem Real window: reads rendered sky and moon pixels.
 	call :run world/sky_probe
 	call :run world/sky_dawn
+	call :run world/sky_clouds --headless
 	call :run audio/mute --headless
 	call :run car/feel_pass_1 --headless
 )

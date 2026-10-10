@@ -18,6 +18,7 @@ const MOON_STEP_SECS := 2.0
 const BLEND_SECS := 4.0
 const BLEND_STEP_SECS := 0.1
 const DISTRICT_CHECK_SECS := 0.25
+const BLINK_STEP_SECS := 0.2
 
 var sky: Sky
 var night_clock: NightClock
@@ -32,6 +33,8 @@ var _blend := 1.0
 var _blend_acc := 0.0
 var _moon_acc := 0.0
 var _district_acc := 0.0
+var _blink_acc := 0.0
+var _blink_time := 0.0
 var _night := 0
 
 func _ready() -> void:
@@ -45,6 +48,7 @@ func _ready() -> void:
 	night_clock.night_ended.connect(_on_night_ended)
 	_apply_moon()
 	NightSky.set_dawn(NightSky.dawn_for_minutes(night_clock.minutes))
+	NightSky.set_cloud_offset(NightSky.cloud_offset_for_minutes(night_clock.minutes))
 
 func _process(delta: float) -> void:
 	_moon_acc += delta
@@ -52,6 +56,12 @@ func _process(delta: float) -> void:
 		_moon_acc = 0.0
 		_apply_moon()
 		_apply_dawn()
+		NightSky.set_cloud_offset(NightSky.cloud_offset_for_minutes(night_clock.minutes))
+	_blink_acc += delta
+	if _blink_acc >= BLINK_STEP_SECS:
+		_blink_time += _blink_acc
+		_blink_acc = 0.0
+		NightSky.set_blink(_blink_time)
 	if _blend < 1.0:
 		_blend_acc += delta
 		if _blend_acc >= BLEND_STEP_SECS:
@@ -98,3 +108,4 @@ func _on_night_ended(n: int) -> void:
 	NightSky.set_night(sky, _night)
 	_apply_moon()
 	NightSky.set_dawn(0.0)
+	NightSky.set_cloud_offset(0.0)

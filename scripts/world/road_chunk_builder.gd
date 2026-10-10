@@ -243,6 +243,7 @@ static var _lane_dash_mesh: BoxMesh
 static var _pylon_mesh: BoxMesh
 static var _barrier_mesh: ArrayMesh
 static var _lamp_mesh: ArrayMesh
+static var _lamp_mesh_dark: ArrayMesh
 static var _pool_mesh: PlaneMesh
 static var _pool_mat: StandardMaterial3D
 static var _wall_mesh: BoxMesh
@@ -638,6 +639,16 @@ static func _get_lamp_mesh() -> ArrayMesh:
 		_lamp_mesh = st.commit(_lamp_mesh)
 		_lamp_mesh.surface_set_material(1, head)
 	return _lamp_mesh
+
+## The lamp mesh, or its twin with the head switched off (MomentSpots' power
+## cut swaps a chunk's "Lamps" to it: no per-instance data needed).
+static func lamp_mesh(dark := false) -> ArrayMesh:
+	if not dark:
+		return _get_lamp_mesh()
+	if _lamp_mesh_dark == null:
+		_lamp_mesh_dark = _get_lamp_mesh().duplicate()
+		_lamp_mesh_dark.surface_set_material(1, _flat_mat(Color(0.09, 0.08, 0.07)))
+	return _lamp_mesh_dark
 
 ## Axis-aligned box into a SurfaceTool, flat-shaded (one normal per face) and
 ## wound clockwise from outside, matching Godot's front faces.

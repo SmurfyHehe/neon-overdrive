@@ -104,6 +104,7 @@ call :run world/person_body --headless
 call :run world/night_clock --headless
 call :run world/night_bands "--headless --fixed-fps 60"
 call :run world/world_mood "--headless --fixed-fps 60"
+call :run world/moment_spots "--headless --fixed-fps 60"
 call :run core/view_settings --headless
 call :run view/camera_smoothing_setting --headless
 call :run core/log_folder --headless

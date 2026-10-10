@@ -18,6 +18,7 @@ static func make() -> PatrolCar:
 	c.spec = CarSpec.clone_spec(CarSpec.npc_spec(KIND))
 	c.spec["parts"] = "full"   # real wheels and brakes, like the fleet's cops
 	c.color = NpcCarBuilder.sheet_paint(KIND)
+	c.add_to_group("patrol_cars")   # the near-miss log looks at it (near_miss_log.gd)
 	return c
 
 func _consider_lane_change(_v: float) -> void:

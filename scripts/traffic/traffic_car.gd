@@ -221,6 +221,33 @@ var _decide_t := 0.0
 var _m_gap := INF
 var _m_speed := 0.0
 
+## What this car is doing, for the near-miss log (near_miss_log.gd). Set where
+## each behaviour starts (_start_lane_change, _hidden_yield, _decide_doing) and
+## replaced by the next decision when it ends. The DO_ names that no behaviour
+## sets yet are for the work that adds them (blinkers, swerving, sirens).
+const DO_CRUISING := "cruising"
+const DO_FOLLOWING := "following"
+const DO_MOVING_OVER_UNFLASHED := "moving_over_unflashed"  # the old yield: no blinker
+const DO_MOVING_OVER_FLASHED := "moving_over_flashed"      # not set yet
+const DO_PASSING := "passing"
+const DO_OBSTACLE := "obstacle"
+const DO_KEEP_RIGHT := "keep_right"
+const DO_ABORT := "abort"                                  # not set yet
+const DO_SWERVE := "swerve"                                # not set yet
+const DO_PULL_OVER_SIREN := "pull_over_siren"              # not set yet
+const DO_WEAVING := "weaving"
+const DO_RB_CUT_IN := "rule_breaker_cut_in"
+const DO_SPAWNED_BEHIND := "spawned_behind"   # derived: under 5 s since the spawn
+const DO_SPAWNED_AHEAD := "spawned_ahead"     # derived
+const DO_RED_LIGHT_STOP := "red_light_stop"
+var doing := DO_CRUISING
+## Physics frame of the last spawn and whether it was behind the player
+## (TrafficManager._respawn); the near-miss log tags a car for 5 s after it.
+var spawn_frame := -1000000
+var spawned_behind := false
+## A gap to the car ahead under this many seconds of own speed is "following".
+const FOLLOW_T := 2.5
+
 var wrecked := false
 ## True while the hazard brake holds (crashed, stuck or wrecked).
 var hazard := false
@@ -584,7 +611,10 @@ func _potential(v: float, gap: float, vl: float) -> float:
 	return clampf(vl + K_GAP * (gap - (S0 + _t_gap() * v)), 0.0, target_speed)
 
 func _consider_lane_change(v: float) -> void:
-	if changing or _lc_cooldown > 0.0:
+	if changing:
+		return
+	_decide_doing(v)
+	if _lc_cooldown > 0.0:
 		return
 	# Not while queueing at a red light: the car ahead is waiting, not broken down.
 	var obstacle := lead_gap < OBSTACLE_RANGE and lead_speed < OBSTACLE_SPEED and target_speed > OBSTACLE_SPEED and not signal_held
@@ -629,7 +659,26 @@ func _consider_lane_change(v: float) -> void:
 			best = lane
 			best_score = score
 	if best >= 0:
-		_start_lane_change(best, obstacle or yielding)
+		var why := DO_KEEP_RIGHT
+		if obstacle:
+			why = DO_OBSTACLE
+		elif yielding:
+			why = DO_MOVING_OVER_UNFLASHED
+		elif constrained:
+			why = DO_PASSING
+		_start_lane_change(best, obstacle or yielding, why)
+
+## The label for a car that is not changing lane: runs at the decision rate,
+## which also ends the label of a lane change that has just finished.
+func _decide_doing(v: float) -> void:
+	if signal_held:
+		doing = DO_RED_LIGHT_STOP
+	elif weave > 0.0:
+		doing = DO_WEAVING
+	elif lead_gap < INF and lead_gap < S0 + FOLLOW_T * maxf(v, 0.0):
+		doing = DO_FOLLOWING
+	else:
+		doing = DO_CRUISING
 
 ## Whether a move into the lane centred at lx is safe right now. Leaves the
 ## new leader's gap and speed in _m_gap / _m_speed.
@@ -656,7 +705,8 @@ func _merge_safe(lx: float, v: float) -> bool:
 		return false
 	return fs <= v or (fs - v) * (fs - v) / (2.0 * maxf(fg - S_STOP, 0.3)) <= B_SAFE
 
-func _start_lane_change(lane: int, urgent: bool) -> void:
+func _start_lane_change(lane: int, urgent: bool, why := DO_PASSING) -> void:
+	doing = DO_RB_CUT_IN if rule_breaker else why
 	_lc_from = path_x()
 	lane_i = lane
 	lane_x = TrafficManager.lane_centre(lane, direction > 0.0)

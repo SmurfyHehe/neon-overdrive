@@ -50,6 +50,7 @@ class_name TrafficManager
 
 const LANE_W := RoadChunkBuilder.LANE_W
 const Weather := preload("res://scripts/world/weather.gd")
+const NearMissLog := preload("res://scripts/traffic/near_miss_log.gd")
 
 var player: Node3D
 var own_lanes := 4
@@ -170,6 +171,16 @@ var weave_share := 0.0
 var weave_m := 0.5
 var rule_breaker_spawns := 0
 
+## Near-miss log (near_miss_log.gd): counters and the last 200 records, so tests
+## read them without parsing the file. by cause: "traffic:<doing>", "you",
+## "both" or "neither". Not kept with NEON_NEAR_MISS_LOG=0.
+var near_miss_count := 0
+var near_miss_by_cause := {}
+var near_miss_records: Array[Dictionary] = []
+var near_miss  # the log (RefCounted); null when switched off
+## The night clock, for the log's in-game time (game.gd sets it).
+var night_clock: Node
+
 var cars: Array[TrafficCar] = []
 var spawn_count := 0
 var recycle_count := 0
@@ -225,6 +236,8 @@ var q_player := false
 var q_idx := -1
 
 func _ready() -> void:
+	if NearMissLog.enabled():
+		near_miss = NearMissLog.new(self)
 	target_count = car_count
 	for i in car_count:
 		_make_car()
@@ -275,6 +288,8 @@ func _physics_process(_delta: float) -> void:
 	_tick += 1
 	if _tick % maxi(1, roundi(Engine.physics_ticks_per_second / BOOKKEEP_HZ)) != 0 and _index_cars == cars.size():
 		_refresh_index()
+		if near_miss != null:
+			near_miss.step(_delta)
 		return
 	_build_index()
 	var pz := _player_z()
@@ -347,6 +362,16 @@ func _physics_process(_delta: float) -> void:
 		_build_index()
 	if _pool_size() > target_count:
 		_trim_cars()
+	if near_miss != null:
+		near_miss.step(_delta)
+
+func _exit_tree() -> void:
+	if near_miss != null:
+		near_miss.finish()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and near_miss != null:
+		near_miss.finish()
 
 ## Races (RC1): one extra full-sim car, in the index like any other car so
 ## traffic sees it and it sees traffic. Pinned: never recycled, never frozen,
@@ -520,6 +545,9 @@ func _respawn(car: TrafficCar) -> void:
 	# In the wet a car arrives already at its wet speed, on wet tyres
 	# (weather.gd, wet_grip.gd): spawning is not a change anyone feels.
 	car.place(slot.lane_x, slot.direction, slot.z, car.rest_y, slot.speed * Weather.ai_speed_factor())
+	car.doing = TrafficCar.DO_CRUISING
+	car.spawn_frame = Engine.get_physics_frames()
+	car.spawned_behind = bool(slot.behind)
 	car.wet.settle()
 	car.set_shown(absf(slot.dist) <= reveal_distance())
 	_put(car)

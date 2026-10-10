@@ -104,6 +104,7 @@ const FORECAST_DELAY := 8.0
 # Weather last pushed to them.
 var _weather_seen := -1
 var _wet_pinned := false
+const StreetAnimals := preload("res://scripts/world/street_animals.gd")
 var road_seed := 0
 var run := {}
 ## Whether `run` puts the car back where it was: false for a fresh run, and for
@@ -954,8 +955,11 @@ func _on_event(e: int) -> void:
 	if WorldMood.EVENT_LINES.has(e):
 		radio.announce(WorldMood.EVENT_LINES[e])
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_update_bands()
 	var pz := RoadFrame.unroll(player.position).z
 	Junction.focus_z = pz
 	_update_chunk_pool(pz)
+	# eyes in the headlights (world step 6, A1): one angle check per animal
+	# on the chunks round the car
+	StreetAnimals.step(chunk_pool, player, delta)

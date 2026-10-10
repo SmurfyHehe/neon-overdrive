@@ -23,6 +23,7 @@ extends SceneTree
 
 const B := preload("res://scripts/world/road_chunk_builder.gd")
 const Districts := preload("res://scripts/world/districts.gd")
+const SideStreets := preload("res://scripts/world/side_streets.gd")
 const EPS := 0.001
 
 var fails := 0
@@ -65,8 +66,11 @@ func _edges(prev: Dictionary, cfg: Dictionary, key: String, t: float, index: int
 func _check_chunk(chunk: Node3D, prev: Dictionary, cfg: Dictionary, label: String) -> void:
 	var lamps: MultiMesh = (chunk.get_node(^"Lamps") as MultiMeshInstance3D).multimesh
 	var pools: MultiMesh = (chunk.get_node(^"LampPools") as MultiMeshInstance3D).multimesh
-	if lamps.visible_instance_count != 4 or pools.visible_instance_count != 4:
-		_fail("%s: %d lamps / %d pools, expected 4 / 4" % [label, lamps.visible_instance_count, pools.visible_instance_count])
+	# World step 6 (W7): a side-street mouth adds one lamp and pool of its own
+	# after the street's four; those stand on the side street, not the pavement
+	var n_mouths: int = (chunk.get_meta("side_streets") as Array).size()
+	if lamps.visible_instance_count != 4 + n_mouths or pools.visible_instance_count != 4 + n_mouths:
+		_fail("%s: %d lamps / %d pools, expected %d / %d" % [label, lamps.visible_instance_count, pools.visible_instance_count, 4 + n_mouths, 4 + n_mouths])
 		return
 	for i in 4:
 		var lamp := lamps.get_instance_transform(i)
@@ -121,6 +125,10 @@ func _check_frontage(chunk: Node3D, label: String) -> void:
 				continue  # other side, or an empty lot the gap walls close
 			var d: float = ((body.get_node(^"Shape") as CollisionShape3D).shape as BoxShape3D).size.z
 			spans.append([body.position.z + d / 2.0, body.position.z - d / 2.0, "building"])
+		# a side-street mouth (W7) is an opening in the frontage like a crossing's
+		for m in chunk.get_meta("side_streets"):
+			if float(m.side) == side:
+				spans.append([float(m.z) + SideStreets.MOUTH_HALF, float(m.z) - SideStreets.MOUTH_HALF, "mouth"])
 		for i in walls.visible_instance_count:
 			var t := walls.get_instance_transform(i)
 			if signf(t.origin.x) != side:

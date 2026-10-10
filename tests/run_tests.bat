@@ -61,6 +61,7 @@ call :run world/road_strip_winding --headless
 call :run world/sidewalk_collision_taper --headless
 call :run world/kerb_profile --headless
 call :run world/cross_section --headless
+call :run world/side_streets --headless
 call :run car/kerb_strike --headless
 call :run car/aero_draft_equivalence --headless
 call :run view/camera_feel --headless

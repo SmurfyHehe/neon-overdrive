@@ -109,6 +109,8 @@ const RoadSigns := preload("res://scripts/world/road_signs.gd")
 const RoadPaint := preload("res://scripts/world/road_paint.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
 const GasStation := preload("res://scripts/world/gas_station.gd")
+const SideStreets := preload("res://scripts/world/side_streets.gd")
+const StreetAnimals := preload("res://scripts/world/street_animals.gd")
 
 const LANE_W := 3.2
 const CHUNK_LEN := 50.0
@@ -1656,6 +1658,20 @@ static func _clear_at_junction(root: Node3D, index: int, info: Dictionary, chunk
 	mi.set_meta("building_type", "lot")
 	return {"empty": true, "d": 0.0, "z": info.z, "side": info.side}
 
+## World step 6 (W7): a building slot that opens onto a side street is an
+## empty lot MOUTH_HALF * 2 wide, so the gap walls leave the mouth open the
+## way they leave a crossing's. The draws were taken by _update_building,
+## so the road layout is the same with the mouths on or off.
+static func _clear_for_mouth(root: Node3D, index: int, info: Dictionary, mouth: Dictionary) -> Dictionary:
+	if mouth.is_empty():
+		return info
+	var mi: MeshInstance3D = root.get_node(NodePath("BuildingMesh%d" % index))
+	var body: StaticBody3D = root.get_node(NodePath("BuildingBody%d" % index))
+	mi.visible = false
+	(body.get_node(^"Shape") as CollisionShape3D).disabled = true
+	mi.set_meta("building_type", "mouth")
+	return {"empty": true, "d": SideStreets.MOUTH_HALF * 2.0, "z": info.z, "side": info.side, "mouth": true}
+
 ## Shop and garage signs (buildings step 2): one lightbox per signed
 ## building, on its front just above the ground floor, from one MultiMesh.
 static func _update_signs(root: Node3D, infos: Array) -> int:
@@ -1845,11 +1861,12 @@ static func _create_nodes(root: Node3D) -> void:
 	# Stage A roadside detail: street lamps (both sides in one buffer), their
 	# light pools, and the walls between buildings. Capacity is the worst case,
 	# allocated once, like the dashes and pylons above.
-	root.add_child(_new_multimesh("Lamps", _get_lamp_mesh(), null, _lamp_slots() * 2))
+	# World step 6 (W7): plus one lamp and pool per side-street mouth.
+	root.add_child(_new_multimesh("Lamps", _get_lamp_mesh(), null, _lamp_slots() * 2 + SideStreets.CAPACITY))
 	# Pavements step 1: at most one hydrant per side, on the pavement by the kerb.
 	root.add_child(_new_multimesh("Hydrants", _get_hydrant_mesh(), _get_hydrant_mat(), 2))
 	root.add_child(_new_multimesh("Drains", _get_drain_mesh(), _get_drain_mat(), DRAIN_MAX * 2))
-	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2))
+	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2 + SideStreets.CAPACITY))
 	# living world step 2: moths, banners, steam and litter (lamp_life.gd)
 	LampLife.create_nodes(root, _lamp_slots() * 2)
 	# Fake wet-road reflections (RESEARCH-cheap-pretty item 7): one additive
@@ -1861,6 +1878,10 @@ static func _create_nodes(root: Node3D) -> void:
 	# (scripts/world/puddles.gd), placed in _apply from the same seeded list
 	# the tyres read, so the water the eye sees is the water the car feels.
 	root.add_child(RoadWet.new_puddle_multimesh(_puddles().MAX_PER_CHUNK))
+	# World step 6: side-street mouths (W7) and the animals' eyes (A1).
+	for n in SideStreets.new_nodes():
+		root.add_child(n)
+	root.add_child(StreetAnimals.new_multimesh())
 	# Per side: a gap either side of each building, +1 for the district step
 	# wall, +1 more
 	# where a crossing's mouth (Junction) splits a gap in two
@@ -2046,6 +2067,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var n_buildings := _building_slots()
 	var spans := {1: [], -1: []}  # per side: [z_front, z_back] of each building
 	var infos := []
+	# World step 6 (W7): the slots that open onto a side street this chunk
+	var mouths: Array = SideStreets.mouths_at(chunk_index)
 	for i in range(n_buildings):
 		var bz := -float(i) * BUILDING_SPACING - BUILDING_SPACING / 2.0
 		var bt: float = -bz / CHUNK_LEN
@@ -2053,6 +2076,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var onc_edge_b: float = lerp(start_onc_walk, end_onc_walk, bt)
 		var own_info := _clear_at_junction(root, i * 2, _update_building(root, i * 2, own_edge_b, bz, 1, chunk_index, job.draws[i * 2] if job != null and not job.draws.is_empty() else []), chunk_index)
 		var onc_info := _clear_at_junction(root, i * 2 + 1, _update_building(root, i * 2 + 1, onc_edge_b, bz, -1, chunk_index, job.draws[i * 2 + 1] if job != null and not job.draws.is_empty() else []), chunk_index)
+		own_info = _clear_for_mouth(root, i * 2, own_info, SideStreets.mouth_for(mouths, 1, i))
+		onc_info = _clear_for_mouth(root, i * 2 + 1, onc_info, SideStreets.mouth_for(mouths, -1, i))
 		infos.append(own_info)
 		infos.append(onc_info)
 		var d_own: float = own_info.d
@@ -2094,6 +2119,9 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 				continue
 			if all_types or drop_types.has(String(info.type)):
 				drops.append([float(info.z), DROP_HALF])
+		for m in mouths:  # a side street's mouth drops the kerb like a crossing's (W7)
+			if int(m.side) == side:
+				drops.append([float(m.z), SideStreets.MOUTH_HALF])
 		if Junction.touches(chunk_index):
 			var jc := Junction.local_centre(chunk_index)
 			drops.append([jc, Junction.MOUTH_HALF])
@@ -2232,6 +2260,12 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			pools.set_instance_transform(n_lamps, _xf(head_x, POOL_Y, lz, Basis.from_scale(Vector3(POOL_ACROSS, 1.0, POOL_ALONG))))
 			smears.set_instance_transform(n_lamps, _xf(head_x, WetReflections.SMEAR_Y, lz, WetReflections.lamp_smear_basis()))
 			n_lamps += 1
+	# side-street mouths (W7): the kit, its props, and one more lamp and pool each
+	var mouth_edges := PackedFloat32Array()
+	for m in mouths:
+		var mt: float = -float(m.z) / CHUNK_LEN
+		mouth_edges.append(lerpf(start_own_walk, end_own_walk, mt) if int(m.side) == 1 else lerpf(start_onc_walk, end_onc_walk, mt))
+	n_lamps += SideStreets.update(root, mouths, mouth_edges, lamps, pools, n_lamps)
 	lamps.visible_instance_count = n_lamps
 	pools.visible_instance_count = n_lamps
 	smears.visible_instance_count = n_lamps
@@ -2240,6 +2274,9 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		lamp_xfs.append(lamps.get_instance_transform(k))
 	LampLife.apply(root, chunk_index, Districts.name_at(chunk_index), lamp_xfs, _xf(0.0, 0.0, -CHUNK_LEN * 0.5),
 		-(start_onc_w + end_onc_w) * 0.5, (start_own_w + end_own_w) * 0.5)
+	# animals at shop fronts and alley mouths (A1): placed now, their eyes
+	# shine per frame from StreetAnimals.step (game.gd)
+	StreetAnimals.update(root, chunk_index, infos, mouths, [start_own_walk, end_own_walk, start_onc_walk, end_onc_walk], setback)
 
 	if job != null:
 		job.keep(_curve_k, _vert, _strip_n)

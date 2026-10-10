@@ -22,6 +22,7 @@ extends SceneTree
 #   Godot_v4.7.2-stable_win64_console.exe --path . -s res://tests/world/roadside_detail.gd
 
 const B := preload("res://scripts/world/road_chunk_builder.gd")
+const Districts := preload("res://scripts/world/districts.gd")
 const EPS := 0.001
 
 var fails := 0
@@ -52,10 +53,14 @@ func _initialize() -> void:
 	print("roadside_detail: %d cases, %s" % [cases, "PASS" if fails == 0 else "%d failure(s)" % fails])
 	quit(0 if fails == 0 else 1)
 
-func _edges(prev: Dictionary, cfg: Dictionary, key: String, t: float) -> Dictionary:
+## Edges at fraction t of chunk `index`: the cross-section table's shoulder
+## and pavement taper from the previous chunk's value to this one's.
+func _edges(prev: Dictionary, cfg: Dictionary, key: String, t: float, index: int) -> Dictionary:
 	var road: float = lerpf(B._lane_w(prev[key]), B._lane_w(cfg[key]), t)
-	var curb := road + B.SHOULDER_W + B.CURB_W
-	return {"road": road, "curb": curb, "walk": curb + B.SIDEWALK_W}
+	var shoulder: float = lerpf(Districts.shoulder_at(index - 1), Districts.shoulder_at(index), t)
+	var walk: float = lerpf(Districts.walk_at(index - 1), Districts.walk_at(index), t)
+	var curb := road + shoulder + B.CURB_W
+	return {"road": road, "curb": curb, "walk": curb + walk}
 
 func _check_chunk(chunk: Node3D, prev: Dictionary, cfg: Dictionary, label: String) -> void:
 	var lamps: MultiMesh = (chunk.get_node(^"Lamps") as MultiMeshInstance3D).multimesh
@@ -68,7 +73,7 @@ func _check_chunk(chunk: Node3D, prev: Dictionary, cfg: Dictionary, label: Strin
 		var pool := pools.get_instance_transform(i)
 		var side := 1.0 if lamp.origin.x > 0.0 else -1.0
 		var key := "own_lanes" if side > 0.0 else "onc_lanes"
-		var e := _edges(prev, cfg, key, -lamp.origin.z / B.CHUNK_LEN)
+		var e := _edges(prev, cfg, key, -lamp.origin.z / B.CHUNK_LEN, int(chunk.get_meta("chunk_index")))
 		var x := absf(lamp.origin.x)
 		if x < e.curb - EPS or x > e.walk + EPS:
 			_fail("%s lamp %d: pole at |x| %.2f, outside sidewalk %.2f..%.2f" % [label, i, x, e.curb, e.walk])
@@ -119,8 +124,8 @@ func _check_frontage(chunk: Node3D, label: String) -> void:
 			var t := walls.get_instance_transform(i)
 			if signf(t.origin.x) != side:
 				continue
-			if t.basis.get_scale().x > 1.0:
-				continue  # a district step wall runs across the lot, not along it
+			if t.basis.get_scale().z <= B.WALL_T + EPS and absf(t.origin.z + B.WALL_T / 2.0) < EPS:
+				continue  # a district step wall runs across the lot, not along it (its length can be under 1 m now the pavement widths differ)
 			var length := t.basis.get_scale().z
 			spans.append([t.origin.z + length / 2.0, t.origin.z - length / 2.0, "wall"])
 		spans.sort_custom(func(a, b): return a[0] > b[0])

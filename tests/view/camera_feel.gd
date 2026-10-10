@@ -10,7 +10,7 @@ extends SceneTree
 #               camera at the current tick rate; peak trauma must not depend on it
 #   launch   -- full throttle with upshifts; FOV and dolly follow speed
 #   brake    -- hard braking from speed must NOT read as an impact
-#   kerb     -- steer onto the sidewalk ("Dirt"); surface rumble turns on
+#   kerb     -- steer onto the sidewalk ("Kerb"); surface rumble turns on
 #   wall     -- fresh game, a wall dropped across the road; impact shake fires
 #
 # Asserts (exit code 1 on failure):
@@ -42,6 +42,7 @@ class ErrorCounter extends Logger:
 	func _log_message(_message: String, _error: bool) -> void:
 		pass
 
+const Districts := preload("res://scripts/world/districts.gd")
 const C := preload("res://scripts/view/chase_camera.gd")
 const MAX_TICKS := 60 * 90
 
@@ -109,7 +110,7 @@ func _cam() -> ChaseCamera:
 func _sidewalk_x(p: PlayerCar) -> float:
 	var idx := int(floor(-p.global_position.z / RoadChunkBuilder.CHUNK_LEN)) + int(game.get("origin_index"))
 	var cfg: Dictionary = game.call("_section_at", idx)
-	return RoadChunkBuilder._lane_w(cfg.own_lanes) + RoadChunkBuilder.SHOULDER_W + RoadChunkBuilder.CURB_W + RoadChunkBuilder.SIDEWALK_W / 2.0
+	return RoadChunkBuilder._lane_w(cfg.own_lanes) + Districts.shoulder_at(1) + RoadChunkBuilder.CURB_W + Districts.walk_at(1) / 2.0
 
 ## Holds the heading down the road toward lateral position aim_x, like
 ## chunk_drive.gd's bot (which is aim_x = 0, max_term = 0.05).
@@ -212,7 +213,7 @@ func _physics_process(_delta: float) -> bool:
 			kerb_trauma = maxf(kerb_trauma, cam.trauma)
 			var on_dirt := false
 			for w in p.wheel_array:
-				if w.is_colliding() and w.surface_type == "Dirt":
+				if w.is_colliding() and w.surface_type == "Kerb":
 					on_dirt = true
 			if on_dirt and cam.surface_t > 0.25:
 				shake_seen = cam.global_position.distance_to(cam.anchor) > 0.0

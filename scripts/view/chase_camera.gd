@@ -42,7 +42,7 @@ const DOLLY := 0.7
 # Shake. Rotation in radians, position in metres, at full strength.
 const SPEED_SHAKE_ROT := 0.008   # ~0.45 deg buzz at FOV_SPEED_HI (top speed)
 const SPEED_SHAKE_POS := 0.015
-const SURFACE_SHAKE_ROT := 0.008 # kerb/sidewalk rumble ("Dirt" surface)
+const SURFACE_SHAKE_ROT := 0.008 # kerb/sidewalk rumble ("Kerb" surface)
 const SURFACE_SHAKE_POS := 0.02
 const IMPACT_SHAKE_ROT := 0.035  # ~2 deg at full trauma
 const IMPACT_SHAKE_POS := 0.12

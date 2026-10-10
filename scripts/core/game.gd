@@ -14,6 +14,11 @@ const CHUNKS_BEHIND := 4
 ## it (ViewGuard.chunk_seen: the rear mirror, the look-back and glance views),
 ## and by force CHUNKS_SPARE chunks later, 300 m back, where the fog has it.
 const CHUNKS_SPARE := 2
+## Fixed ambient light (night pass, 2026-10-10): what the Stage A gradient sky
+## gave at ambient_light_energy 0.3, measured on the asphalt, so the asphalt
+## stays dark whatever the sky does.
+const AMBIENT_COLOR := Color(0.075, 0.048, 0.03)
+const AMBIENT_ENERGY := 1.0
 const POOL_SIZE := CHUNKS_AHEAD + CHUNKS_BEHIND + CHUNKS_SPARE + 1
 ## On a hilly road (#37) there is no ground plane under the world, only the
 ## chunks' own road: traffic lives and spawns up to 100 m behind the player
@@ -58,6 +63,7 @@ var game_state: GameState
 # speed feel (FOV, dolly, shake) all live in chase_camera.gd.
 var camera: ChaseCamera
 var radio: RadioManager
+var sky: Sky  # tonight's sky (NightSky), driven by SkyDirector
 var night_clock: NightClock  # 8 p.m. to 6 a.m., saved (night_clock.gd); windows follow it
 var _bands := false  # hour bands drive traffic and Dave (bands_on)
 var world_mood: WorldMood  # tonight's events: rule-breaker share, bar close, meets, crackdowns
@@ -180,9 +186,13 @@ func _setup_world() -> void:
 	# the fog colour, so they read as dark silhouettes against the horizon
 	# glow. fog_aerial_perspective would blend them into the sky exactly but
 	# cost ~0.16 ms on the i5-1235U (tests/world/sky_perf.gd), so it stays off.
-	var rng := RandomNumberGenerator.new()
+	# NIGHT PASS (2026-10-10): the sky follows the clock's night number (moon
+	# phase on a 29.5-night cycle, per-night stars and moon path) and the
+	# district's glow dome; SkyDirector keeps it moving (added in _setup_nodes
+	# once the player exists).
 	env.background_mode = Environment.BG_SKY
-	env.sky = NightSky.build(NightSky.random_phase(rng))
+	env.sky = NightSky.build(night_clock.night)
+	sky = env.sky
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.1, 0.066, 0.042)
 	env.fog_density = 0.009
@@ -193,7 +203,13 @@ func _setup_world() -> void:
 	# Dialled down from the default 1.0 because at full energy a bright horizon
 	# lifts the near-black asphalt back toward grey and flattens the emissive
 	# markings it is supposed to sit behind.
-	env.ambient_light_energy = 0.3
+	# NIGHT PASS (2026-10-10): pinned to a fixed colour instead of the sky, so
+	# the brighter navy top and the per-district glow dome never lift the
+	# asphalt. The colour and energy were matched to what the old sky gave
+	# (road region in tests/world/sky_shots.gd, before and after).
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = AMBIENT_COLOR
+	env.ambient_light_energy = AMBIENT_ENERGY
 	# GLOW (#25): a short, tight halo on the emissive markings -- Roy's pick
 	# ("A - Tight") of four options compared in an exported benchmark. Only the
 	# three smallest blur levels, so the halo hugs the lines instead of washing
@@ -519,6 +535,11 @@ func toggle_mute() -> void:
 func _setup_hud() -> void:
 	var hud := Hud.new(player, camera, traffic)
 	hud.night_clock = night_clock
+	var sky_director := SkyDirector.new()
+	sky_director.sky = sky
+	sky_director.night_clock = night_clock
+	sky_director.game = self
+	add_child(sky_director)
 	hud.wallet = wallet
 	add_child(hud)
 

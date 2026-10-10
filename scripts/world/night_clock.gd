@@ -53,6 +53,11 @@ func _ready() -> void:
 		WindowLights.set_minutes(minutes)
 		return
 	load_clock()
+	# NEON_NIGHT=N starts on that night (tests, screenshots: the sky's stars,
+	# moon phase and moon path follow the night number).
+	var night_env := OS.get_environment("NEON_NIGHT")
+	if night_env.is_valid_int():
+		night = maxi(int(night_env), 1)
 	# NEON_CLOCK=HH:MM starts the night at that time (tests, screenshots).
 	var env := OS.get_environment("NEON_CLOCK")
 	if env != "":

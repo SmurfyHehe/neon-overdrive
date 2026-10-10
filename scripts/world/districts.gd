@@ -34,10 +34,17 @@ const PICK := [["downtown", 25], ["residential", 35], ["strip", 25], ["industria
 #   shapes that suit it, so a car park stays flat whatever the table says.
 # landmark: the one skyline landmark per run (RoofProps.LANDMARKS: tower,
 #   water_tower, stacks, screen), on the building landmark_at() names.
+#
+# World step 3 (2026-10-10, shop fronts) adds one more:
+# fronts: weights for what is behind a shop's ground-floor glass
+#   (BuildingKit.ROOMS: store, laundromat, bar, vacant, shuttered). A gas
+#   station's kiosk is always a store and a diner always a bar room; the
+#   table only decides plain shops.
 const DEFAULTS := {
 	"wear": [0.3, 0.7],
 	"tops": [["flat", 50], ["cornice", 25], ["gable", 25]],
 	"landmark": "",
+	"fronts": [["store", 35], ["bar", 20], ["laundromat", 15], ["vacant", 15], ["shuttered", 15]],
 }
 const SPECS := {
 	"downtown": {
@@ -47,6 +54,7 @@ const SPECS := {
 		"low": "shop", "billboard": 1.0,
 		"wear": [0.1, 0.45], "tops": [["crown", 35], ["setback", 25], ["cornice", 20], ["flat", 20]],
 		"landmark": "tower",
+		"fronts": [["store", 35], ["bar", 30], ["laundromat", 5], ["vacant", 10], ["shuttered", 20]],
 	},
 	"residential": {
 		"mix": [["apartment", 63], ["shop", 29], ["parking", 4], ["diner", 4]],
@@ -55,6 +63,7 @@ const SPECS := {
 		"low": "garage", "billboard": 0.5,
 		"wear": [0.3, 0.7], "tops": [["gable", 30], ["hip", 20], ["cornice", 25], ["flat", 25]],
 		"landmark": "water_tower",
+		"fronts": [["store", 30], ["laundromat", 30], ["bar", 15], ["vacant", 10], ["shuttered", 15]],
 	},
 	"strip": {
 		"mix": [["shop", 45], ["garage", 25], ["gas", 15], ["diner", 15]],
@@ -63,6 +72,7 @@ const SPECS := {
 		"low": "garage", "billboard": 1.0,
 		"wear": [0.4, 0.85], "tops": [["parapet", 40], ["gable", 20], ["hip", 10], ["flat", 30]],
 		"landmark": "screen",
+		"fronts": [["store", 35], ["bar", 20], ["laundromat", 20], ["vacant", 15], ["shuttered", 10]],
 	},
 	"industrial": {
 		"mix": [["warehouse", 75], ["garage", 25]],
@@ -71,6 +81,7 @@ const SPECS := {
 		"wear": [0.6, 1.0], "tops": [["gable", 45], ["flat", 55]],
 		"landmark": "stacks",
 		"low": "garage", "billboard": 0.5,
+		"fronts": [["shuttered", 50], ["vacant", 30], ["store", 20]],
 	},
 }
 

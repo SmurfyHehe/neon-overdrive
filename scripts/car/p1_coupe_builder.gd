@@ -24,6 +24,15 @@ class_name P1CoupeBuilder
 #
 # The neutral #63 test box is still there for comparison: run with
 # NEON_TEST_CAR=1 (see PlayerCar.chassis_kind).
+#
+# Cars from parts (pilot, 2026-10-10): when assets/cars/p1_coupe/body.glb is
+# there the body is no longer the one-piece sheet proxy above but the same
+# shape cut into real parts (hood, doors, fenders, bumpers, glass, lamps,
+# mirrors...), merged by CarAssembler into one mesh with 4 surfaces (body,
+# trim, glass, glow), so the draw calls stay at 9: the door mirrors are parts
+# of that mesh now instead of a mesh of their own. NEON_COUPE_LEGACY=1 keeps
+# the old proxy (before-shots, comparisons); NEON_CAR_PANELS=open builds it
+# with the hood, doors and trunk open (+4 draw calls, for pictures).
 
 const Data := preload("res://scripts/car/p1_coupe_data.gd")
 
@@ -126,20 +135,34 @@ static func build_chassis_visual(paint: Color = PAINT) -> Node3D:
 	root.set_meta("kind", KIND)
 
 	var lift := Vector3(0.0, BODY_LIFT, 0.0)
-	var body := MeshInstance3D.new()
-	body.name = "Body"
-	body.position = lift
-	var mesh := _get_body_mesh()
-	body.mesh = mesh
-	var paint_mat := _new_paint_material(paint)
-	for i in mesh.get_surface_count():
-		if mesh.surface_get_name(i) == "body":
-			body.set_surface_override_material(i, paint_mat)
-	root.add_child(body)
-	var mirrors := _build_mirrors()
-	mirrors.position = lift
-	mirrors.set_surface_override_material(0, paint_mat)   # same paint, recolours with the body
-	root.add_child(mirrors)
+	var paint_mat: ShaderMaterial
+	var lamps: Dictionary
+	if uses_parts():
+		# the body from its parts: one mesh, 4 surfaces, door mirrors included
+		paint_mat = _new_parts_paint_material(paint)
+		var body := CarAssembler.build(KIND, parts_config(), paint_mat)
+		body.position = lift
+		var gi := CarAssembler.surface_index(body.mesh, "glass")
+		if gi >= 0:
+			body.set_surface_override_material(gi, _get_glass_material())
+		root.add_child(body)
+		lamps = CarAssembler.lamp_centres(KIND)
+	else:
+		var body := MeshInstance3D.new()
+		body.name = "Body"
+		body.position = lift
+		var mesh := _get_body_mesh()
+		body.mesh = mesh
+		paint_mat = _new_paint_material(paint)
+		for i in mesh.get_surface_count():
+			if mesh.surface_get_name(i) == "body":
+				body.set_surface_override_material(i, paint_mat)
+		root.add_child(body)
+		var mirrors := _build_mirrors()
+		mirrors.position = lift
+		mirrors.set_surface_override_material(0, paint_mat)   # same paint, recolours with the body
+		root.add_child(mirrors)
+		lamps = _lamp_centres()
 
 	var slots := []
 	for s in Data.STICKER_SLOTS:
@@ -161,7 +184,6 @@ static func build_chassis_visual(paint: Color = PAINT) -> Node3D:
 	for t in Data.EXHAUST_TIPS:
 		tips.append({"pos": t.pos + lift, "dir": t.dir, "r": t.r})
 	root.set_meta("exhaust_tips", tips)
-	var lamps := _lamp_centres()
 	root.set_meta("headlights", [lamps.head[0] + lift, lamps.head[1] + lift])
 	root.set_meta("tail_lights", [lamps.tail[0] + lift, lamps.tail[1] + lift])
 
@@ -182,6 +204,16 @@ static func undercarriage_params() -> Dictionary:
 		tips.append({"pos": t.pos + Vector3(0.0, BODY_LIFT, 0.0), "dir": t.dir, "r": t.r})
 	return Undercarriage.params(WIDTH / 2.0, LENGTH / 2.0, floor_y, BODY_LIFT,
 		DESIGN_WHEEL_R, DESIGN_WHEEL_X, absf(Data.WHEELS[0].hub.z), tips, "rwd")
+
+## True when the body is assembled from the parts glb (the default once the
+## glb is in the project); NEON_COUPE_LEGACY=1 keeps the one-piece sheet proxy.
+static func uses_parts() -> bool:
+	return OS.get_environment("NEON_COUPE_LEGACY") != "1" and CarAssembler.has_car(KIND)
+
+## What CarAssembler builds: the stock parts, panels closed. NEON_CAR_PANELS=open
+## opens the hood, doors and trunk (pictures; nothing in the game opens them yet).
+static func parts_config() -> Dictionary:
+	return {"panels": "open"} if OS.get_environment("NEON_CAR_PANELS") == "open" else {}
 
 static func recolor(car: Node3D, color: Color) -> void:
 	var m: ShaderMaterial = car.get_meta("body_mat")
@@ -221,16 +253,22 @@ static func build_wheel_visual(radius: float, hub: Vector3) -> Node3D:
 ## Triangle count of one car as drawn: body plus 4 wheels.
 static func triangle_count() -> int:
 	var n := 0
-	var b := _get_body_mesh()
-	for i in b.get_surface_count():
-		n += b.surface_get_array_len(i) / 3
+	if uses_parts():
+		n = CarAssembler.triangle_count(KIND)
+	else:
+		var b := _get_body_mesh()
+		for i in b.get_surface_count():
+			n += b.surface_get_array_len(i) / 3
 	for rear in [false, true]:
 		n += 2 * _get_wheel_mesh(rear).surface_get_array_len(0) / 3
 	return n
 
 ## Draw calls of one car: body surfaces, the door mirrors, the underside,
-## plus one per wheel.
+## plus one per wheel. From parts the mirrors are in the body mesh (its trim
+## surface is the call they used to cost).
 static func draw_call_count() -> int:
+	if uses_parts():
+		return CarAssembler.draw_call_count(KIND) + 1 + 4
 	return _get_body_mesh().get_surface_count() + 1 + 1 + 4
 
 ## Triangles in the underside (on top of triangle_count()).
@@ -239,6 +277,8 @@ static func undercarriage_triangle_count() -> int:
 
 ## Triangles in the two door mirror cups (on top of triangle_count()).
 static func mirror_triangle_count() -> int:
+	if uses_parts():
+		return CarAssembler.triangle_count(KIND) - CarAssembler.triangle_count(KIND, {"mirror_l": false, "mirror_r": false})
 	var mi := _build_mirrors()
 	var n := (mi.mesh as ArrayMesh).surface_get_array_len(0) / 3
 	mi.free()
@@ -365,6 +405,15 @@ static func _new_paint_material(paint: Color) -> ShaderMaterial:
 		_body_shader.code = BODY_SHADER
 	var m := ShaderMaterial.new()
 	m.shader = _body_shader
+	m.set_shader_parameter("paint", paint)
+	return m
+
+## The paint material for a body assembled from parts: the same shader and
+## uniforms (paint, dirt, ...) with CarAssembler's two-line hook that darkens
+## by the baked ambient occlusion and along the shut lines.
+static func _new_parts_paint_material(paint: Color) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = CarAssembler.paint_shader(BODY_SHADER)
 	m.set_shader_parameter("paint", paint)
 	return m
 

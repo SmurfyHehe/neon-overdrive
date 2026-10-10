@@ -103,6 +103,7 @@ call :run car/reverse_and_tabs --headless
 call :run car/transmission_modes "--headless --fixed-fps 60"
 call :run tuning/auto_tune_worker_mode --headless
 call :run tuning/tune_params --headless
+call :run tuning/gear_count --headless
 call :run tuning/auto_tune_rules --headless
 call :run tuning/tune_slots --headless
 rem The player's tune survives a reset and a relaunch (PlayerTune).

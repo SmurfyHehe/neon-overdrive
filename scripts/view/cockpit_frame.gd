@@ -278,9 +278,11 @@ func _build_static() -> void:
 	k.box(Vector3(0.26, 0.20, 0.82), Vector3(0.0, 0.52, 0.11), PLASTIC)
 	k.box(Vector3(0.30, 0.18, 1.20), Vector3(0.0, 0.33, 0.10), CARPET)             # tunnel
 	k.box(Vector3(0.13, 0.012, 0.15), Vector3(0.0, 0.626, -0.02), TRIM)
-	for sx in [-0.035, 0.0, 0.035]:
-		k.box(Vector3(0.012, 0.004, 0.11), Vector3(sx, 0.633, -0.02), DIAL_FACE)
-	k.box(Vector3(0.082, 0.004, 0.012), Vector3(0.0, 0.633, -0.02), DIAL_FACE)
+	# one H column per pair of forward gears (3 for a six-speed, 2 for a four)
+	var gate_cols := gate_columns(player.gear_ratios.size())
+	for c in gate_cols:
+		k.box(Vector3(0.012, 0.004, 0.11), Vector3((c - (gate_cols - 1) / 2.0) * 0.035, 0.633, -0.02), DIAL_FACE)
+	k.box(Vector3((gate_cols - 1) * 0.035 + 0.012, 0.004, 0.012), Vector3(0.0, 0.633, -0.02), DIAL_FACE)
 	k.box(Vector3(0.20, 0.05, 0.22), Vector3(0.0, 0.645, 0.38), LEATHER)           # armrest
 	lit.box(Vector3(0.006, 0.004, 0.60), Vector3(-0.133, 0.622, 0.05), Color(AMBER, 0.3))
 	lit.box(Vector3(0.006, 0.004, 0.60), Vector3(0.133, 0.622, 0.05), Color(AMBER, 0.3))
@@ -581,7 +583,7 @@ func _build_lever() -> void:
 	a.box(Vector3(0.066, 0.030, 0.034), Vector3(0.0, 0.004, 0.0), LEATHER)
 	a.box(Vector3(0.012, 0.006, 0.014), Vector3(-0.02, 0.021, 0.0), SILVER)
 	var heads := {
-		PlayerCar.Transmission.MANUAL: [h, "KnobH", "1 3 5\n2 4 6 R"],
+		PlayerCar.Transmission.MANUAL: [h, "KnobH", gate_pattern(player.gear_ratios.size())],
 		PlayerCar.Transmission.SEMI: [s, "KnobSeq", "−\n+"],
 		PlayerCar.Transmission.AUTO: [a, "KnobAuto", "R\nN\nD"],
 	}
@@ -619,6 +621,22 @@ func set_lever_mode(mode: int) -> void:
 	_lever_pos = _slot_of(player.gear)
 	_apply_lever(_lever_pos)
 
+## H-gate columns for a gearbox with this many forward gears: two gears each.
+static func gate_columns(forward_gears: int) -> int:
+	return maxi((forward_gears + 1) / 2, 1)
+
+## The pattern printed on the console for the MANUAL H-gate: odd gears on the
+## top line, even gears and R below, R right of the last column. An odd gear
+## count leaves the last bottom slot blank, so R still sits where the lever goes.
+static func gate_pattern(forward_gears: int) -> String:
+	var top: PackedStringArray = []
+	var bottom: PackedStringArray = []
+	for c in gate_columns(forward_gears):
+		top.append(str(2 * c + 1))
+		bottom.append(str(2 * c + 2) if 2 * c + 2 <= forward_gears else "  ")
+	bottom.append("R")
+	return " ".join(top) + "\n" + " ".join(bottom)
+
 ## The slot of a gear as (column, row), row -1 forward and +1 back, in the
 ## current lever mode. MANUAL, the H-gate: odd gears forward, even gears and
 ## reverse back, 0 the neutral gate, reverse right of the last column. SEMI:
@@ -631,7 +649,7 @@ func _slot_of(g: int) -> Vector2:
 		return Vector2(0.0, signf(float(g)))
 	if g == 0:
 		return Vector2.ZERO
-	var n_cols := int(ceil(float(player.gear_ratios.size()) / 2.0))
+	var n_cols := gate_columns(player.gear_ratios.size())
 	if g < 0:
 		return Vector2(float(n_cols) - float(n_cols - 1) / 2.0, 1.0)
 	var col := float((g - 1) / 2) - float(n_cols - 1) / 2.0

@@ -132,7 +132,8 @@ func _check_sightline(pod: GaugePod) -> void:
 	var pos := pod.position
 	_check(absf(pos.x) > 0.55 and pos.x > -0.80, "the pod is on the driver's pillar, inside the cabin (x %.2f)" % pos.x)
 	_check(pos.y + GaugePod.GAUGE_R + GaugePod.PITCH * 0.5 < 1.30, "the pod stays under the roof (y %.2f)" % pos.y)
-	_check(pos.z < ChaseCamera.COCKPIT_EYE.z - 0.5, "the pod is well ahead of the eye (z %.2f)" % pos.z)
+	# 0.4 m: a raked pillar's pod stands off it toward the eye, or its faces would be behind the pillar trim
+	_check(pos.z < ChaseCamera.COCKPIT_EYE.z - 0.4, "the pod is well ahead of the eye (z %.2f)" % pos.z)
 	var to_eye: Vector3 = (ChaseCamera.COCKPIT_EYE - pos).normalized()
 	var facing: float = (pod.basis * Vector3.BACK).dot(to_eye)
 	_check(facing > 0.97, "the faces point at the eye (cos %.3f)" % facing)

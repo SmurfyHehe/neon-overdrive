@@ -92,10 +92,8 @@ const SPEEDO_MAX_KMH := 300.0
 ## The muscle sedan's ribbon speedo: a shallow arc of a big circle whose pivot
 ## is far down inside the dash, so the band sits in the binnacle, not on it.
 const STRIP_R := 0.30
-const STRIP_INNER := 0.82     # the band's inner edge, as a share of STRIP_R
+const STRIP_INNER := 0.86     # the band's inner edge, as a share of STRIP_R
 const STRIP_SWEEP := 70.0
-## The beater's speedo pod sits this far below its CABIN cluster height.
-const POD_SINK := 0.043
 ## The open footwell in front of the driver: this far either side of the seat's
 ## centre line the dash face stops above the legs and there is no knee panel.
 const WELL_HALF := 0.27
@@ -540,8 +538,8 @@ func _build_static() -> void:
 ## The binnacle and the dial faces for this car's cluster style, in car space.
 ## Every player car has its own (tests/fleet/interior_unique.gd):
 ##   dials   a tach left and a speedo right in one hooded binnacle (the coupe)
-##   pod     one big speedo pod in front of the driver with a small tach inset
-##           low left (the beater's single round binnacle)
+##   pod     one round speedo pod in front of the driver with a small
+##           accessory tach beside it, each in its own can (the beater)
 ##   tacho   a big tach in the middle and a smaller speedo to its right (the
 ##           hot hatch)
 ##   triple  the pair, plus three small aux gauges in the middle of the dash
@@ -562,12 +560,14 @@ func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vec
 	match style:
 		"pod":
 			var pc: Vector3 = centres[1]
-			k.cylinder(0.090, -depth, 0.0, Vector3(pc.x, pc.y, cl.y - 0.052), PLASTIC, 16, flat)
-			k.cylinder(0.096, -0.03, 0.0, Vector3(pc.x, pc.y, cl.y - 0.05), TRIM, 16, flat)
+			k.cylinder(float(radii[1]) + 0.006, -depth, -0.003, pc, PLASTIC, 16, flat)
+			k.cylinder(float(radii[1]) + 0.012, -0.03, -0.003, pc, TRIM, 16, flat)
+			var tc: Vector3 = centres[0]
+			k.cylinder(float(radii[0]) + 0.006, -minf(depth, 0.05), -0.003, tc, TRIM, 12, flat)
 		"strip":
-			_binnacle(k, seat_x + 0.08, 0.62, cl)
+			_binnacle(k, seat_x + 0.08, 0.62, cl, 0.054, 0.09)
 		"tacho":
-			_binnacle(k, seat_x + 0.02, 0.36, cl)
+			_binnacle(k, seat_x + 0.02, 0.36, cl, 0.061, 0.09)
 		"cans":
 			for i in 2:
 				var cc: Vector3 = centres[i]
@@ -653,40 +653,60 @@ func console_width() -> float:
 func trim_colours() -> Dictionary:
 	return TRIMS.get(String(cab.get("trim", "stock")), TRIMS["stock"])
 
-## A hooded binnacle `w` wide about x. Its top and the hood stay under the
-## sight line: from the eye the hood's far edge is the highest thing in it, so
-## the hood tapers to nothing there and falls away from the driver.
-func _binnacle(k: CockpitKit, x: float, w: float, cl: Vector2) -> void:
+## A hooded binnacle `w` wide about x, its hood's underside `top` over the
+## cluster height and `depth` long. The box and the hood stay under the sight
+## line: from the eye the hood's far edge is the highest thing in it, so the
+## hood tapers to nothing there and falls away from the driver; a taller
+## binnacle (bigger dials) gets a shorter hood. The dials' centres sit at the
+## cluster height or above: below it the dash face is in front of them.
+func _binnacle(k: CockpitKit, x: float, w: float, cl: Vector2, top: float = 0.048, depth: float = 0.16) -> void:
 	var t := trim_colours()
-	k.box(Vector3(w, 0.11, 0.10), Vector3(x, cl.x - 0.007, cl.y - 0.05), t.plastic)
-	k.wedge(Vector3(w + 0.04, 0.012, 0.16), Vector3(x, cl.x + 0.054, cl.y - 0.07), t.plastic_light, -0.012, 0.0)
+	var box_depth := minf(0.10, depth)
+	k.box(Vector3(w, top + 0.062, box_depth), Vector3(x, cl.x + (top - 0.062) * 0.5, cl.y - box_depth * 0.5), t.plastic)
+	k.wedge(Vector3(w + 0.04, 0.012, depth), Vector3(x, cl.x + top + 0.006, cl.y + 0.01 - depth * 0.5), t.plastic_light, -0.012, 0.0)
 
 ## The tach (0) and speedo (1) centres for this car's cluster style, car space.
 func dial_centres() -> Array:
 	var seat_x := float(cab.seat_x)
 	var cl: Vector2 = cab.cluster
 	match String(cab.cluster_style):
-		"pod":   # sunk POD_SINK into the dash: the pod's top stays under the sight line
-			return [Vector3(seat_x - 0.066, cl.x - POD_SINK - 0.038, cl.y + 0.002), Vector3(seat_x, cl.x - POD_SINK, cl.y)]
+		"pod":
+			return [Vector3(seat_x - 0.090, cl.x, cl.y), Vector3(seat_x + 0.018, cl.x, cl.y)]
 		"strip":   # the ribbon's pivot: its arc tops out just under the binnacle's hood
-			return [Vector3(seat_x - 0.20, cl.x - 0.005, cl.y), Vector3(seat_x + 0.11, cl.x + 0.046 - STRIP_R, cl.y)]
+			return [Vector3(seat_x - 0.20, cl.x, cl.y), Vector3(seat_x + 0.11, cl.x + 0.049 - STRIP_R, cl.y)]
 		"tacho":
-			return [Vector3(seat_x - 0.045, cl.x - 0.012, cl.y), Vector3(seat_x + 0.095, cl.x - 0.022, cl.y)]
+			return [Vector3(seat_x - 0.040, cl.x, cl.y), Vector3(seat_x + 0.094, cl.x, cl.y)]
 		"cans":
-			return [Vector3(seat_x - 0.062, cl.x - 0.004, cl.y), Vector3(seat_x + 0.062, cl.x - 0.004, cl.y)]
+			return [Vector3(seat_x - 0.062, cl.x, cl.y), Vector3(seat_x + 0.062, cl.x, cl.y)]
 		"wide":
 			return [Vector3(seat_x - 0.125, cl.x, cl.y), Vector3(seat_x + 0.125, cl.x, cl.y)]
 		_:
 			return [Vector3(seat_x - 0.085, cl.x, cl.y), Vector3(seat_x + 0.085, cl.x, cl.y)]
 
+## The two dial faces as the driver reads them, [{centre, r}] (tach, speedo):
+## the dial itself, or for the ribbon speedo the middle of its band (its
+## pivot is hidden in the dash).
+func dial_faces() -> Array:
+	var centres := dial_centres()
+	var radii := dial_radii()
+	var out := []
+	for i in 2:
+		var c: Vector3 = centres[i]
+		var r: float = radii[i]
+		if i == 1 and String(cab.cluster_style) == "strip":
+			out.append({"centre": c + Vector3(0.0, r * (1.0 + STRIP_INNER) * 0.5, 0.0), "r": r * (1.0 - STRIP_INNER) * 0.5})
+		else:
+			out.append({"centre": c, "r": r})
+	return out
+
 func dial_radii() -> Array:
 	match String(cab.cluster_style):
 		"pod":
-			return [0.027, 0.075]
+			return [0.028, 0.054]
 		"strip":
 			return [0.045, STRIP_R]
 		"tacho":
-			return [0.060, 0.044]
+			return [0.052, 0.040]
 		"cans":
 			return [0.046, 0.046]
 		_:
@@ -844,12 +864,12 @@ func _build_cluster() -> void:
 	speedo_needle = _needle(speedo_c + Vector3(0.0, 0.0, 0.004), "SpeedoNeedle", float(radii[1]), float(radii[1]) * STRIP_INNER if strip else 0.0)
 	# The warning lamps sit between the dials (under the speedo pod's tach on the beater).
 	var lamp_c := (tach_c + speedo_c) * 0.5 + Vector3(0.0, 0.03, 0.0)
-	if cab.cluster_style == "pod":
-		lamp_c = speedo_c + Vector3(0.0, -0.045, 0.0)
+	if cab.cluster_style == "pod":   # in the speedo's face, over its hub
+		lamp_c = speedo_c + Vector3(0.0, 0.018, 0.0)
 	elif strip:   # between the tach and the ribbon's left end
 		lamp_c = Vector3(tach_c.x + 0.092, tach_c.y + 0.012, tach_c.z)
-	elif cab.cluster_style == "tacho":   # under the small speedo
-		lamp_c = speedo_c + Vector3(0.0, -float(radii[1]) - 0.004, 0.0)
+	elif cab.cluster_style == "tacho":   # in the tach's face, over its hub
+		lamp_c = tach_c + Vector3(0.0, 0.022, 0.0)
 	elif cab.cluster_style == "wide":   # in the info panel
 		lamp_c = (tach_c + speedo_c) * 0.5 + Vector3(0.0, 0.012, 0.0)
 	var mm := MultiMesh.new()

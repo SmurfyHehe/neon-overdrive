@@ -2,7 +2,8 @@
 rem Run every test in tests\ and print one pass/fail summary (GitHub #39).
 rem
 rem   tests\run_tests.bat          all tests; a game window opens for ~1 min
-rem   tests\run_tests.bat quick    headless tests only, ~15 s, no window
+rem   tests\run_tests.bat quick    headless tests only, no window: about 15 min of test
+rem                                time over 85 tests (CI wall clock about 23 of its 30)
 rem
 rem Godot is looked up in %GODOT%, then in Documents. Exit code 0 = all passed.
 rem

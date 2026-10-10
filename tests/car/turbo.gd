@@ -81,6 +81,15 @@ func _physics_process(_delta: float) -> bool:
 				vents_before = audio.turbo.vents
 				shift_vents_before = audio.turbo.shift_vents
 				print("vents during the spool: shift %d, lift %d" % [audio.turbo.shift_vents, audio.turbo.vents])
+				# TurboSynth folds a vent seen within VENT_GAP of the last one into
+				# it, and measures that gap in rendered audio (its _since_vent grows
+				# with the samples pulled), which the Dummy driver consumes in real
+				# time. This run is faster than real time (--fixed-fps), so the 4 s
+				# spool can pass in well under 0.15 s of audio and the lift below was
+				# taken for a repeat of the vent the turbo's first frame made
+				# ("vented 0", seen on CI). The spool's vent is not what this step
+				# tests: start the lift with the gap long past, as it is at 60 fps.
+				audio.turbo._since_vent = 9.0
 				throttle = 0.0
 				_go(Step.LIFT)
 		Step.LIFT:

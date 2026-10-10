@@ -73,8 +73,19 @@ var max_wheel_step := 0.0
 var max_hand_step := 0.0
 var rest_tick := -1
 var warm := 0                  # ticks since the cockpit view came up
-var frame_no := 0              # render frames seen (the wheel and hands move per render frame)
-var since_frame := 0.0         # seconds of ticks since the last render frame
+var steer_changes := 0         # times a pattern moved the input (counted per tick)
+var snap_changes := 0          # the car as the render frame being judged saw it:
+var snap_hold := 0             #   steer_changes, hold_ticks and the steering target,
+var snap_target := 0.0         #   taken at the start of that frame (physics runs first)
+var seen_changes := 0          # steer_changes as the last judged frame saw them
+var held_secs := 0.0           # render-frame seconds the input has been constant
+var hold_judged := false       # the held-input check ran for this hold
+var rest_secs := 0.0           # render-frame seconds since the pattern run ended
+var last_dt := 0.0             # delta of the render frame the nodes last ran with
+var cur_frame: CockpitFrame
+var cur_d: DriverModel
+var cur_p: PlayerCar
+var cur_where := ""            # where the physics tick says we are; "" = not judging
 
 func _initialize() -> void:
 	ExhaustTune.save_path = "user://autotune/test_cockpit_steering_hands_exhaust.json"
@@ -119,6 +130,8 @@ func _play_pattern() -> bool:
 	else:
 		secs = seg[1]
 		want = seg[0]
+	if not is_equal_approx(want, steer):
+		steer_changes += 1
 	hold_ticks = hold_ticks + 1 if is_equal_approx(want, steer) else 0
 	steer = want
 	if t >= secs:
@@ -126,24 +139,39 @@ func _play_pattern() -> bool:
 		seg_start = tick
 	return false
 
-## Per physics tick. The wheel and the hands move in _process, once per render
-## frame, so a step is judged against the real time since the last render
-## frame (the ticks in between, at least one), with slack for the clock.
-func _checks(frame: CockpitFrame, d: DriverModel, p: PlayerCar, where: String) -> void:
-	var dt := 1.0 / Engine.physics_ticks_per_second
-	since_frame += dt
+## The wheel and the hands move in the nodes' _process by that render frame's
+## delta, which is wall-clock time: on a loaded machine a frame can be 50 or
+## 500 ms long while the physics ticks around it still count 1/60 s each (the
+## old per-tick judging saw "hand 1 moved 6.0 deg of rim in 0.017 s" when the
+## frame was really 50 ms). So they are judged per render frame, against the
+## delta the nodes got. The SceneTree's _process runs before the nodes' in a
+## frame, so what it sees is the state after the previous frame, made with the
+## previous frame's delta (last_dt).
+func _process(delta: float) -> bool:
+	if cur_frame != null and last_dt > 0.0:
+		if cur_where == "":
+			# not judging (warming up, waiting for speed): just keep the baseline
+			prev_wheel = cur_frame.wheel_angle
+			for side in [-1, 1]:
+				prev_w[side] = cur_d.rim_deg(side)
+		else:
+			_checks(cur_frame, cur_d, cur_p, cur_where, last_dt)
+	last_dt = delta
+	# What this frame's nodes are about to see of the car: the ticks that ran
+	# before this frame, not the ones that run before the next.
+	snap_changes = steer_changes
+	snap_hold = hold_ticks
+	if cur_p != null:
+		snap_target = cur_p.steer_fraction() * CockpitFrame.WHEEL_LOCK_RAD
+	return false
+
+## One render frame's worth of judging: `elapsed` is the frame's delta.
+func _checks(frame: CockpitFrame, d: DriverModel, p: PlayerCar, where: String, elapsed: float) -> void:
 	var wheel := frame.wheel_angle
 	var step := absf(wheel - prev_wheel)
-	if step < 1e-6 and Engine.get_process_frames() == frame_no:
-		_track_view(d, where)
-		return   # no render frame since the last tick: nothing moved
-	var elapsed := maxf(since_frame, dt)
-	frame_no = Engine.get_process_frames()
-	since_frame = 0.0
-	# the wheel: bounded, never faster than the cap (render frames are not
-	# aligned to ticks, so a step may span one tick more than counted)
+	# the wheel: bounded, never faster than the cap
 	max_wheel_step = maxf(max_wheel_step, step / elapsed)
-	var slack := elapsed + dt
+	var slack := elapsed
 	var cap := deg_to_rad(CockpitFrame.WHEEL_RATE_DEG) * slack * 1.2 + deg_to_rad(0.5)
 	if step > cap:
 		_fail("%s: the wheel jumped %.1f deg in %.3f s (cap %.1f)" % [where, rad_to_deg(step), elapsed, rad_to_deg(cap)])
@@ -151,11 +179,19 @@ func _checks(frame: CockpitFrame, d: DriverModel, p: PlayerCar, where: String) -
 		_fail("%s: the wheel passed lock (%.1f deg)" % [where, rad_to_deg(wheel)])
 	if absf(absf(wheel) - CockpitFrame.WHEEL_LOCK_RAD) < deg_to_rad(1.0):
 		lock_seen = true
-	# held input: the wheel settles on what the car steers
-	if hold_ticks == ticks(0.8):
-		var target := p.steer_fraction() * CockpitFrame.WHEEL_LOCK_RAD
-		if absf(wheel - target) > deg_to_rad(1.5):
-			_fail("%s: after 0.8 s of held input the wheel sits at %.1f deg, the car steers %.1f" % [where, rad_to_deg(wheel), rad_to_deg(target)])
+	# held input: the wheel settles on what the car steers, once the input has
+	# held for 0.8 s of both ticks (the car's steering) and render time (the wheel)
+	if snap_changes != seen_changes:
+		seen_changes = snap_changes
+		held_secs = 0.0
+		hold_judged = false
+	held_secs += elapsed
+	if rest_tick > 0:
+		rest_secs += elapsed
+	if not hold_judged and snap_hold >= ticks(0.8) and held_secs >= 0.8:
+		hold_judged = true
+		if absf(wheel - snap_target) > deg_to_rad(1.5):
+			_fail("%s: after 0.8 s of held input the wheel sits at %.1f deg, the car steers %.1f" % [where, rad_to_deg(wheel), rad_to_deg(snap_target)])
 	prev_wheel = wheel
 	# the hands: on the rim, in range, continuous, at least one holding on
 	var to_wheel := (frame.wheel_mount.transform * frame.wheel.transform).affine_inverse()
@@ -193,10 +229,14 @@ func _physics_process(_delta: float) -> bool:
 	var cam: ChaseCamera = game.camera
 	var frame: CockpitFrame = cam.frame
 	var d: DriverModel = frame.driver
+	cur_where = ""
 	if not started:
 		p.driver = _drive
 		cam.set_view(ChaseCamera.View.COCKPIT)
 		started = true
+		cur_frame = frame
+		cur_d = d
+		cur_p = p
 		seg_start = tick
 		for side in [-1, 1]:
 			prev_w[side] = d.rim_deg(side)
@@ -217,16 +257,17 @@ func _physics_process(_delta: float) -> bool:
 	if rest_tick > 0:
 		# back to straight: after the rest both hands are home, the wheel straight
 		steer = 0.0
-		if tick - rest_tick == ticks(2.5):
+		if tick - rest_tick >= ticks(2.5) and rest_secs >= 2.5:
 			for side in [-1, 1]:
 				var off := absf(d.rim_deg(side) - d.home_deg(side))
 				_check(off < 1.0 and d.is_gripping(side), "%s: at rest hand %d sits %.1f deg from its grip point" % [PHASES[phase], side, off])
 			_check(absf(frame.wheel_angle) < deg_to_rad(1.0), "%s: at rest the wheel is straight (%.1f deg)" % [PHASES[phase], rad_to_deg(frame.wheel_angle)])
 			print("%s rest done at tick %d" % [PHASES[phase], tick])
 			rest_tick = -1
+			rest_secs = 0.0
 			_next_phase(p)
 			return false
-		_checks(frame, d, p, where)
+		cur_where = where
 		return false
 	if _play_pattern():
 		print("%s done at tick %d (wheel %.0f deg, hands L %.0f R %.0f, %d shuffles)" % [where, tick, rad_to_deg(frame.wheel_angle), d.rim_deg(-1), d.rim_deg(1), d.shuffle_count])
@@ -240,7 +281,7 @@ func _physics_process(_delta: float) -> bool:
 			rest_tick = tick
 			pattern_i = 0
 		return false
-	_checks(frame, d, p, where)
+	cur_where = where
 	return false
 
 func _next_phase(p: PlayerCar) -> void:
@@ -283,6 +324,11 @@ func _reverse(p: PlayerCar) -> void:
 	while p.current_speed() > PlayerCar.REVERSE_MAX_SPEED * 0.5 and tick - t0 < ticks(10.0):
 		await physics_frame
 	for i in 20:
+		await physics_frame
+	# an auto box is still shifting down to first for a moment after the stop,
+	# and toggle_reverse refuses while is_shifting
+	t0 = tick
+	while p.is_shifting and tick - t0 < ticks(3.0):
 		await physics_frame
 	_check(p.toggle_reverse(), "the car goes into reverse once stopped (%.1f m/s)" % p.current_speed())
 	t0 = tick

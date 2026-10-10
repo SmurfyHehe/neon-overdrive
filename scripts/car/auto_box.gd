@@ -7,7 +7,7 @@ extends RefCounted
 # keep GEVP's simple automatic untouched).
 #
 # Two halves, both run from tick(), once per physics step, before GEVP's motor
-# and clutch (gevp_vehicle.gd DEVIATION 14 has the six places that read the
+# and clutch (gevp_vehicle.gd DEVIATION 14 lists the places that read the
 # numbers this leaves behind):
 #
 #  - the shift brain: when to change gear. A smoothed demand instead of the raw
@@ -18,8 +18,8 @@ extends RefCounted
 #    follows engine rpm (a little at idle = creep, all of it by stall rpm, so a
 #    launch flares to about stall rpm and holds there), torque is multiplied
 #    while it slips, a few percent of slip is left in at speed unless the car
-#    has a lock-up clutch, and a gear change is a slide under power instead of
-#    GEVP's throttle-off gap.
+#    has a lock-up clutch, and a gear change keeps driving the car while the
+#    revs slide to the next gear's speed, instead of GEVP's throttle-off gap.
 #
 # Cost per tick: float arithmetic and one small loop over the drive wheels
 # (get_drivetrain_spin). No nodes, no allocations.
@@ -310,9 +310,12 @@ func tick(v: Vehicle, delta: float) -> void:
 	# pace. So the creep is a set pull instead, fed in next to it: CREEP_ACCEL
 	# from rest, fading to none at CREEP_TOP, off with the brake on.
 	feed_torque = shift_feed
-	if (gear == 1 or gear == -1) and v.brake_input <= 0.1 and x < 0.2 and not sliding_up:
+	if (gear == 1 or gear == -1) and v.brake_input <= 0.1 and x < 0.2 and not sliding_up and not v.is_shifting:
 		var along := fwd if gear > 0 else -fwd
-		feed_torque = CREEP_ACCEL * v.mass * v.average_drive_wheel_radius / (absf(ratio) * gain) 				* clampf(1.0 - along / CREEP_TOP, 0.0, 1.0) 				* clampf((v.motor_rpm - 0.6 * v.idle_rpm) / (0.3 * v.idle_rpm), 0.0, 1.0) 				* (1.0 - maxf(x, 0.0) * 5.0)
+		var creep := CREEP_ACCEL * v.mass * v.average_drive_wheel_radius / (absf(ratio) * gain)
+		creep *= clampf(1.0 - along / CREEP_TOP, 0.0, 1.0)
+		creep *= clampf((v.motor_rpm - 0.6 * v.idle_rpm) / (0.3 * v.idle_rpm), 0.0, 1.0)
+		feed_torque = creep * (1.0 - maxf(x, 0.0) * 5.0)  # hands over to the converter as the revs rise
 	drag_scale = lerpf(OVERRUN_BRAKING, 1.0, maxf(lock, v.throttle_amount))
 
 	# hill hold after the brake comes off (modern boxes)

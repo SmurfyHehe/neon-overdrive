@@ -32,9 +32,9 @@ const KINDS := [
 	{"id": "p4_kei", "label": "Kei roadster", "name": "Mite", "tier": "T1", "nm": 180, "kg": 760},
 	{"id": "p5_muscle", "label": "Muscle sedan", "name": "Marlowe", "tier": "T3", "nm": 820, "kg": 1800},
 	{"id": "p6_crossover", "label": "Perf. crossover", "name": "Cairn", "tier": "T2", "nm": 580, "kg": 1450},
-	# Special vehicles (S0): story-end unlocks, not sprint-race cars. nm / kg are
-	# the coupe's, which they borrow until their body steps (see their data files).
-	{"id": "m1_monster", "label": "Monster truck", "name": "Brute", "tier": "S", "nm": 460, "kg": 1300},
+	# Special vehicles (S0): story-end unlocks, not sprint-race cars. The truck's
+	# numbers are its own (S1); the lowrider borrows the coupe's until its body step.
+	{"id": "m1_monster", "label": "Monster truck", "name": "Brute", "tier": "S", "nm": 750, "kg": 3500},
 	{"id": "l1_lowrider", "label": "Lowrider", "name": "Slab", "tier": "S", "nm": 460, "kg": 1300},
 ]
 
@@ -61,8 +61,9 @@ const CABIN_OFFSET := {
 	"p4_kei": Vector3(0.0, -0.066, -0.075),
 	"p5_muscle": Vector3(0.0, 0.036, -0.025),
 	"p6_crossover": Vector3(0.0, 0.22, -0.29),
-	# Specials wear the P1's cabin until their body steps.
-	"m1_monster": Vector3.ZERO,
+	# The truck's driver sits high in the lifted cab; the lowrider wears the
+	# P1's cabin until its body step.
+	"m1_monster": Vector3(0.0, 1.55, 0.35),
 	"l1_lowrider": Vector3.ZERO,
 }
 

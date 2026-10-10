@@ -4,8 +4,8 @@ extends SceneTree
 # the chase camera's place towards the sky on a grid of elevations and
 # azimuths (degrees off world -Z, both sides). Prints, per district, the share
 # of stops where nothing solid is in the way, then for tonight's real moon
-# path (NEON_NIGHT, at 8 p.m., 1 a.m. and 6 a.m., measured from the road's
-# axes as SkyDirector does): sky open, inside the parked chase frame, both.
+# path (NEON_NIGHT, at 8 p.m., 1 a.m. and 6 a.m.): sky open, inside the parked
+# chase frame, both.
 # Measurement only: it always exits 0.
 # Run (headless is fine, the rays only need the collision bodies):
 #   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/world/moon_sightline.gd
@@ -96,7 +96,7 @@ func _sample(car: RigidBody3D, district: String) -> void:
 	headings.append(rad_to_deg(atan2(-fwd.x, -fwd.z)))
 	grades.append(rad_to_deg(asin(clampf(fwd.y, -1.0, 1.0))))
 	for t in PATH_T:
-		var d := RoadFrame.basis_at(RoadFrame.unroll(car.global_position).z) * NightSky.moon_direction(night, t)
+		var d := NightSky.moon_direction(night, t)
 		var open := _is_clear(car, from, d)
 		# In the parked chase frame? Its top edge is ~23.8 degrees above the
 		# car's own level and it is ~45 degrees wide each side (58 degree

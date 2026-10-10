@@ -12,7 +12,7 @@ extends CanvasLayer
 const GROUPS := [
 	["Drive", [
 		["accelerate", "Throttle"], ["brake", "Brake / reverse"], ["handbrake", "Handbrake"],
-		["steer_left", "Steer left"], ["steer_right", "Steer right"], ["reverse", "Reverse gear (when stopped)"], ["headlights", "Headlights on / off"]]],
+		["steer_left", "Steer left"], ["steer_right", "Steer right"], ["reverse", "Reverse gear (when stopped)"], ["headlights", "Headlights on / off"], ["high_beam", "High beam (twice: flash)"]]],
 	["Gears & Engine", [
 		["shift_up", "Shift up (manual)"], ["shift_down", "Shift down (manual)"], ["toggle_gearbox", "Gearbox: auto / semi / manual"],
 		["clutch", "Clutch (hold, manual)"], ["starter", "Starter (hold, manual)"]]],

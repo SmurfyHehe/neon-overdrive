@@ -94,6 +94,8 @@ const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Veh
 var chassis_visual: Node3D
 ## H toggles them (set_headlights); police heat reads this.
 var headlights_on := true
+## Low / high beam, flash and auto-dip (J; scripts/car/headlight_beams.gd).
+var beams := HeadlightBeams.new()
 var _steer_smooth := 0.0
 ## Heat and wear (Phase B). Off for sim_only cars so TuneTrack stays clean.
 var health := PowertrainHealth.new()
@@ -276,16 +278,25 @@ func _ready() -> void:
 		if kind == P1CoupeBuilder.KIND:
 			CarParts.attach(self, {"hub_x": P1CoupeBuilder.DESIGN_WHEEL_X})
 		CarFx.attach(self, chassis_visual.get_meta("half_l", 2.2))
+		beams.attach(get_node_or_null("Headlights") as SpotLight3D)
 
 ## Headlights on or off (H, police F1): off, cops only see the car close up
 ## (PoliceHeat.SEE_RANGE_DARK). The lamp is CarFx's "Headlights" spot.
 func set_headlights(on: bool) -> void:
 	headlights_on = on
-	var lamp := get_node_or_null("Headlights") as Node3D
-	if lamp != null:
-		lamp.visible = on
+	beams.set_lights(on)
+
+## J: high beam on / off; twice quickly is a flash (HeadlightBeams).
+func toggle_high_beam() -> void:
+	beams.press_high()
+	headlights_on = beams.lights_on()
+
+## The beam cops and the HUD see: HeadlightBeams.Mode OFF / LOW / HIGH.
+func beam_mode() -> int:
+	return beams.current()
 
 func _physics_process(delta: float) -> void:
+	beams.step(delta)
 	if driver.is_valid():
 		driver.call(self)
 	else:
@@ -362,6 +373,8 @@ func _read_keyboard() -> void:
 		toggle_reverse()
 	if Input.is_action_just_pressed("headlights"):
 		set_headlights(not headlights_on)
+	if Input.is_action_just_pressed("high_beam"):
+		toggle_high_beam()
 	clutch_input = 1.0 if Input.is_action_pressed("clutch") else 0.0
 	starter_input = Input.is_action_pressed("starter")
 	var throttle := Input.is_action_pressed("accelerate")

@@ -17,13 +17,16 @@ extends Node
 # car's transform, velocity, spin, gear and rpm, the night clock and the radio.
 # Traffic is not saved; it respawns around the car as on a fresh start.
 #
-# Which road (the map, 2026-10-10): road.id names the road the car is on
-# (road_map.gd), with road.s, the metres round it, and road.dir, which way the
-# car was heading (1 = the way the chunks count, -1 = the other way). Game puts
-# the car back only on a road it knows by that id; a save with another id, or
-# none (saves from before the map), starts at the top of the default road and
-# keeps the clock and the radio. So a later loop is a new id, and old saves
-# keep opening. No version bump: the fields are optional.
+# Which road (the map, 2026-10-10): road.id is the number of the road the car
+# is on (road_map.gd; 0 while there is one loop, -1 the endless road from
+# before the map), with road.s, the metres round it, road.dir, which way the
+# car was heading (1 = the way the chunks count, -1 = the other way), and
+# road.act, the act the loop was in (it grows by act). These are
+# RoadMap.where()'s values. Game puts the car back only on a road it knows by
+# that id; a save with another id, or none (saves from before the map), starts
+# at the top of the default road and keeps the clock and the radio. So a later
+# loop is a new id, and old saves keep opening. No version bump: the fields
+# are optional.
 #
 # Off in test mode unless a test sets `enabled` (like PlayerTune), so tests that
 # boot Game.tscn never resume each other's runs.
@@ -113,14 +116,12 @@ func capture() -> Dictionary:
 		for i in [RoadMap.lap_chunk(c.index - 1), RoadMap.lap_chunk(c.index)]:
 			if game.section_cache.has(str(i)):
 				sections[str(i)] = game.section_cache[str(i)]
-	var along := RoadFrame.unroll(p.global_position).z
+	var at := RoadMap.where(RoadFrame.unroll(p.global_position).z, -p.global_transform.basis.z)
 	var run := {
 		"version": RUN_VERSION,
 		"road": {"seed": game.road_seed, "curviness": game.curviness, "hilliness": game.hilliness,
 			"kicker_chance": game.kicker_chance,
-			"id": RoadMap.road_id if RoadMap.road_id != "" else RoadMap.ENDLESS,
-			"s": RoadMap.wrap_s(RoadFrame.s_at(along)),
-			"dir": 1 if RoadFrame.dir_to_road(along, -p.global_transform.basis.z).z <= 0.0 else -1},
+			"id": at.road, "s": at.s, "dir": at.dir, "act": RoadMap.act},
 		"origin_index": game.origin_index,
 		"recenter_count": game.recenter_count,
 		"sections": sections,

@@ -136,7 +136,36 @@ call :run world/road_frame --headless
 call :run world/road_centerline --headless
 call :run world/road_alignment --headless
 call :run world/road_layout --headless
+rem The quick driving set (shared test driver, scripts/core/test_driver.gd; docs/TEST_DRIVER.md),
+rem at the game's 120 Hz: a clean run at 150 and 300 km/h in traffic plus spin recovery, crashes
+rem on purpose, seeded random keys, spawning at 0 to 400 km/h, and record-then-replay.
+call :run core/drive_clean "--headless --fixed-fps 120"
+call :run core/drive_crash "--headless --fixed-fps 120"
+call :run core/drive_fuzz "--headless --fixed-fps 120"
+call :run core/drive_spawn "--headless --fixed-fps 120"
+call :run core/drive_replay "--headless --fixed-fps 120"
 if /i not "%~1"=="quick" (
+	rem The long driving set, for before a big merge: the same tests with more of everything.
+	set "DRIVE_SECS=90"
+	set "DRIVE_CARS=40"
+	call :run core/drive_clean "--headless --fixed-fps 120"
+	rem The clean run on bends and hills: the bot has to slow for the bends.
+	call :run core/drive_bends "--headless --fixed-fps 120"
+	set "DRIVE_SECS=30"
+	set "DRIVE_CARS=24"
+	set "DRIVE_FUZZ_SEEDS=1,2,3,4,5,6,7,8"
+	call :run core/drive_fuzz "--headless --fixed-fps 120"
+	set "DRIVE_SECS="
+	set "DRIVE_CARS="
+	set "DRIVE_FUZZ_SEEDS="
+	set "DRIVE_CRASH_SPEEDS=60,150,250,350"
+	call :run core/drive_crash "--headless --fixed-fps 120"
+	set "DRIVE_CRASH_SPEEDS="
+	set "DRIVE_CURVES=1"
+	set "DRIVE_HILLS=1"
+	call :run core/drive_spawn "--headless --fixed-fps 120"
+	set "DRIVE_CURVES="
+	set "DRIVE_HILLS="
 	rem Headless, but ~2 min of simulated driving; --fixed-fps lets physics run faster than the clock.
 	call :run tuning/tune_track "--headless --fixed-fps 60"
 	rem ~40 s: tyre pressure and camber sweep on the same track (Tuner PR 1).

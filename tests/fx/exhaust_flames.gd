@@ -1,13 +1,22 @@
 extends SceneTree
 
-# Exhaust flames v2 (2026-10-07, Option A shader quads). Boots the real
-# Game.tscn with no traffic and checks that
+# Exhaust flames v3, look A "shed fire" (2026-10-10; v2 was 2026-10-07).
+# Boots the real Game.tscn with no traffic and checks that
 # - the flame colours are warm only: white-hot, amber, orange (r >= g >= b,
-#   so no blue core, no magenta, no cyan)
+#   so no blue core, no magenta, no cyan); the ghost set is green (g >= r >= b)
 # - queue_burst() waits VISUAL_DELAY before showing (the sound sync), flash()
-#   shows at once, and a burst lights the jets, a fireball and the light
-# - the fireball stays in world space (the car drives away from it) and
-#   shift_world() moves it with the floating origin
+#   shows at once, and a burst lights the jets (two crossed strips per tip),
+#   the lobes and the light
+# - the Flame knob sets the lobe count: one lobe per tip at 0.1, three at 1.0
+# - the lobes are SHED: at speed a lobe stays within a metre of where it was
+#   spat while the car drives on, and shift_world() moves it with the
+#   floating origin
+# - the jets and lobes animate in steps of about STEP (24 fps)
+# - the ghost style (bone car) burns a steady jet while the throttle is down,
+#   bands it with shock diamonds on the afterburner, and goes out on FIRE
+# - the heat shimmer: the player's heat climbs under throttle and cools after
+#   a lift; the manager hands the player a quad on a layer the mirrors skip;
+#   the Low preset and the heat_shimmer switch both take every quad away
 # - an upshift at full throttle flames only when the car's flame setting is at
 #   least UPSHIFT_FLAME_MIN: none at 0.2 (P1's preset), at least one at 0.6
 # - at flame 0.6 the upshift also bangs (EngineSynth.shift_cut, the pop voice)
@@ -69,30 +78,57 @@ func _run() -> void:
 	await _frames(5)
 
 	# --- colours
-	for c in [ExhaustFlames.HOT, ExhaustFlames.AMBER, ExhaustFlames.ORANGE, ExhaustFlames.LIGHT_COLOR]:
+	for c in [ExhaustFlames.HOT, ExhaustFlames.AMBER, ExhaustFlames.ORANGE, ExhaustFlames.LIGHT_COLOR, ExhaustFlames.SOOT]:
 		_check(c.r >= c.g and c.g >= c.b, "flame colour %s is not warm (r >= g >= b)" % c)
+	for c in [ExhaustFlames.GHOST_HOT, ExhaustFlames.GHOST_MID, ExhaustFlames.GHOST_EDGE, ExhaustFlames.GHOST_LIGHT]:
+		_check(c.g >= c.r and c.r >= c.b, "ghost colour %s is not green (g >= r >= b)" % c)
+	_check(ExhaustFlames.LOBE_CARRY <= 0.1, "lobes must be shed, not carried (LOBE_CARRY %.2f)" % ExhaustFlames.LOBE_CARRY)
 
 	# --- delay queue and one burst
-	_check(fl.jets.size() == 2, "the test car has two exhaust tips (%d jets)" % fl.jets.size())
+	_check(fl.jets.size() == 4, "the test car has two exhaust tips, two crossed strips each (%d jets)" % fl.jets.size())
+	_check(fl._jet_mats[1].get_shader_parameter("cross_strip") == 1.0, "the second strip is the cross strip")
 	var b0 := fl.bursts
 	fl.queue_burst(0.8)
 	_check(fl.bursts == b0 and not fl.is_showing(), "queue_burst() should not show at once")
 	await create_timer(ExhaustFlames.VISUAL_DELAY + 0.06).timeout
 	_check(fl.bursts == b0 + 1, "queue_burst() should show after VISUAL_DELAY (bursts %d -> %d)" % [b0, fl.bursts])
+	var l0 := fl.lobes_spawned
 	fl.flash(1.0)
-	_check(fl.is_showing() and fl.jets[0].visible and fl._light.visible, "flash() should show jets and light at once")
-	var ball: MeshInstance3D = fl._balls[(fl._next_ball - 1 + ExhaustFlames.POOL) % ExhaustFlames.POOL].mi
-	_check(ball.visible and ball.top_level, "a burst should leave a top-level fireball")
+	_check(fl.is_showing() and fl.jets[0].visible and fl.jets[1].visible and fl._light.visible, "flash() should show both strips and the light at once")
+	var lobe: MeshInstance3D = fl._lobes[(fl._next_lobe - 1 + ExhaustFlames.POOL) % ExhaustFlames.POOL].mi
+	_check(lobe.visible and lobe.top_level, "a burst should leave top-level lobes")
+	_check(fl.lobes_spawned - l0 == 2 * ExhaustFlames.LOBES_MAX, "flame 1.0: three lobes per tip (%d)" % (fl.lobes_spawned - l0))
+	l0 = fl.lobes_spawned
+	await create_timer(ExhaustFlames.LOBE_LIFE + 0.1).timeout
+	fl.flash(0.1)
+	_check(fl.lobes_spawned - l0 == 2, "flame 0.1: one small spit per tip (%d)" % (fl.lobes_spawned - l0))
+	_check(ExhaustFlames.lobes_for(0.1) == 1 and ExhaustFlames.lobes_for(0.5) == 2 and ExhaustFlames.lobes_for(1.0) == 3, "lobes_for: 1 at 0.1, 2 at 0.5, 3 at 1.0")
 	if DisplayServer.get_name() != "headless":
 		await _shots(fl)
 
-	# --- world-space fireball + floating origin
+	# --- shed lobes + floating origin
 	fl.flash(1.0)
-	ball = fl._balls[(fl._next_ball - 1 + ExhaustFlames.POOL) % ExhaustFlames.POOL].mi
-	var before := ball.global_position
+	lobe = fl._lobes[(fl._next_lobe - 1 + ExhaustFlames.POOL) % ExhaustFlames.POOL].mi
+	var before := lobe.global_position
 	fl.shift_world(Vector3(0.0, 0.0, 150.0))
-	_check(ball.global_position.distance_to(before + Vector3(0.0, 0.0, 150.0)) < 0.5, "shift_world should move a live fireball")
+	_check(lobe.global_position.distance_to(before + Vector3(0.0, 0.0, 150.0)) < 0.5, "shift_world should move a live lobe")
 	fl.shift_world(Vector3(0.0, 0.0, -150.0))
+
+	# --- the animation steps: tick only ever advances by whole STEPs
+	var ticks: Array[float] = []
+	for i in 12:
+		await process_frame
+		ticks.append(fl.tick)
+	var steps_ok := true
+	var step_min := 1.0
+	for i in range(1, ticks.size()):
+		var dt: float = ticks[i] - ticks[i - 1]
+		if dt > 0.0:
+			step_min = minf(step_min, dt)
+			if dt < ExhaustFlames.STEP * 0.98:
+				steps_ok = false
+	print("animation step: smallest advance %.4f s (STEP %.4f)" % [step_min, ExhaustFlames.STEP])
+	_check(steps_ok, "jets and lobes should advance in steps of STEP (smallest %.4f)" % step_min)
 
 	# --- upshift gate: launch in first, then shift by hand at high rpm
 	p.set_transmission_mode(PlayerCar.Transmission.SEMI)
@@ -166,7 +202,7 @@ func _run() -> void:
 	if not await _until(func(): return fl.drive >= 1.0, 2.0):
 		_check(false, "drive should reach 1 at full throttle (%.2f)" % fl.drive)
 	fl.flash(0.8)
-	var e_full: float = fl._jet_mat.get_shader_parameter("energy")
+	var e_full: float = fl._jet_mats[0].get_shader_parameter("energy")
 	_check(is_equal_approx(e_full, ExhaustFlames.JET_ENERGY), "full throttle: full jet energy (%.2f)" % e_full)
 	throttle = 0.0
 	# game time (summed process deltas), from the lift until the glow is at the floor
@@ -177,10 +213,92 @@ func _run() -> void:
 	_check(fl.drive <= 0.0, "drive should fall to 0 after a lift (%.2f)" % fl.drive)
 	fl.flash(0.8)
 	await _frames(1)
-	var e_off: float = fl._jet_mat.get_shader_parameter("energy")
+	var e_off: float = fl._jet_mats[0].get_shader_parameter("energy")
 	print("jet energy: full throttle %.2f, coasting %.2f; fade %.2f s" % [e_full, e_off, fade])
 	_check(is_equal_approx(e_off, ExhaustFlames.JET_ENERGY * ExhaustFlames.GLOW_FLOOR), "coasting: jet dims to GLOW_FLOOR (%.2f)" % e_off)
 	_check(fade >= 0.2 and fade <= 0.4, "the fade after a lift should take about THROTTLE_RELEASE (%.2f s)" % fade)
+
+	# --- shed at speed: the car is rolling; a lobe stays put while the car goes on
+	throttle = 1.0
+	if not await _until(func(): return p.linear_velocity.length() > 8.0, 8.0):
+		_check(false, "the car never got rolling for the shed check (%.1f m/s)" % p.linear_velocity.length())
+	fl.flash(1.0)
+	lobe = fl._lobes[(fl._next_lobe - 1 + ExhaustFlames.POOL) % ExhaustFlames.POOL].mi
+	var spat := lobe.global_position
+	var car_was := p.global_position
+	await create_timer(0.4).timeout
+	var lobe_moved := lobe.global_position.distance_to(spat)
+	var car_moved := p.global_position.distance_to(car_was)
+	print("shed lobe: lobe moved %.2f m, car moved %.2f m in 0.4 s" % [lobe_moved, car_moved])
+	_check(lobe.visible, "the lobe should still be alive after 0.4 s (life %.1f s)" % ExhaustFlames.LOBE_LIFE)
+	_check(car_moved > 3.0 and lobe_moved < 1.5, "the lobe stays on the road while the car pulls away")
+	_check(float(lobe.material_override.get_shader_parameter("stretch")) > 0.1, "a lobe spat at speed stretches into a streak")
+	if DisplayServer.get_name() != "headless":
+		# the shed look from the chase camera: a burst at speed, three frames of it
+		fl.flash(1.0, ExhaustFlames.Kind.UPSHIFT)
+		for i in 3:
+			await _frames(2 if i == 0 else 4)
+			var img := root.get_viewport().get_texture().get_image()
+			img.save_png("user://exhaust_flames/drive_%d.png" % (i + 1))
+	throttle = 0.0
+
+	# --- ghost style (bone car): steady green jet, afterburner diamonds
+	fl.set_style(ExhaustFlames.Style.GHOST)
+	var jc: Color = fl._jet_mats[0].get_shader_parameter("amber")
+	_check(jc.g >= jc.r and jc.r >= jc.b, "ghost style turns the jet green (%s)" % jc)
+	_check(fl._light.light_color.g >= fl._light.light_color.r, "ghost style turns the flash green")
+	throttle = 1.0
+	if not await _until(func(): return fl.drive > 0.5, 2.0):
+		_check(false, "drive never rose for the ghost jet")
+	await create_timer(ExhaustFlames.STEP * 3.0).timeout
+	_check(fl.is_showing() and fl.jets[0].visible, "ghost: a steady jet while the throttle is down")
+	fl.set_afterburner(1.0)
+	await create_timer(ExhaustFlames.STEP * 3.0).timeout
+	_check(float(fl._jet_mats[0].get_shader_parameter("diamonds")) == 1.0, "afterburner: shock diamonds in the jet")
+	_check(float(fl._jet_mats[0].get_shader_parameter("jet_len")) > ExhaustFlames.JET_LEN.y, "afterburner: a longer flame than any burst")
+	if DisplayServer.get_name() != "headless":
+		await _ghost_shot(fl)
+	fl.set_afterburner(0.0)
+	fl.set_style(ExhaustFlames.Style.FIRE)
+	await create_timer(ExhaustFlames.JET_LIFE * 1.5).timeout
+	_check(not fl.is_showing(), "back on FIRE the steady jet goes out")
+	jc = fl._jet_mats[0].get_shader_parameter("amber")
+	_check(jc.r >= jc.g, "FIRE restores the warm set")
+
+	# --- heat shimmer
+	var sh: HeatShimmer = game.fx.shimmer
+	_check(sh != null and sh._pool.size() == HeatShimmer.POOL, "the fx pack builds a shimmer manager with %d quads" % HeatShimmer.POOL)
+	_check((HeatShimmer.SHIMMER_BIT & CockpitFrame.MIRROR_CULL) == 0, "the shimmer layer must not be in the mirror cull mask")
+	_check((HeatShimmer.SHIMMER_BIT & game.camera.cull_mask) != 0, "the chase camera draws the shimmer layer")
+	GraphicsSettings.preset = "medium"
+	game.fx.set_effect("heat_shimmer", true)
+	throttle = 1.0
+	if not await _until(func(): return p.heat > 0.2, 6.0):
+		_check(false, "the player's heat should climb under throttle (%.2f)" % p.heat)
+	await create_timer(HeatShimmer.PICK_PERIOD * 2.5).timeout
+	var mine: Variant = sh._slot_of(p)
+	_check(mine != null and (mine.mi as MeshInstance3D).visible, "a hot player always gets a shimmer quad")
+	if mine != null:
+		_check((mine.mi as MeshInstance3D).layers == HeatShimmer.SHIMMER_BIT, "the quad is on the shimmer layer")
+		_check(float((mine.mat as ShaderMaterial).get_shader_parameter("heat")) > 0.2, "the quad is told the car's heat")
+	if DisplayServer.get_name() != "headless":
+		await _shimmer_shot(fl)
+	throttle = 0.0
+	var h_hot: float = p.heat
+	await create_timer(1.0).timeout
+	print("heat: %.2f under throttle, %.2f one second after the lift" % [h_hot, p.heat])
+	_check(p.heat < h_hot and p.heat > h_hot * 0.6, "heat cools slowly after a lift (COOL_TAU)")
+	GraphicsSettings.preset = "low"
+	await create_timer(HeatShimmer.PICK_PERIOD * 2.5).timeout
+	_check(sh.slots.is_empty(), "the Low preset takes the quads away (%d)" % sh.slots.size())
+	GraphicsSettings.preset = "medium"
+	throttle = 1.0
+	await create_timer(HeatShimmer.PICK_PERIOD * 2.5).timeout
+	_check(not sh.slots.is_empty(), "back on medium the player gets one again")
+	game.fx.set_effect("heat_shimmer", false)
+	_check(sh.slots.is_empty() and not (sh._pool[0].mi as MeshInstance3D).visible, "the heat_shimmer switch clears every quad")
+	game.fx.set_effect("heat_shimmer", true)
+	throttle = 0.0
 
 	# --- off clears
 	fl.flash(1.0)
@@ -236,6 +354,29 @@ func _shots(fl: ExhaustFlames) -> void:
 		prev.make_current()
 	side.queue_free()
 	print("screenshots: ", ProjectSettings.globalize_path("user://exhaust_flames"))
+
+## The ghost jet with the afterburner, from the side camera.
+func _ghost_shot(fl: ExhaustFlames) -> void:
+	var prev := root.get_viewport().get_camera_3d()
+	var side := Camera3D.new()
+	var car: Node3D = fl.get_parent()
+	car.add_child(side)
+	side.position = Vector3(-3.2, 0.9, 3.2)
+	side.look_at(car.to_global(Vector3(0.0, 0.3, 2.6)))
+	side.fov = 50.0
+	side.make_current()
+	await _frames(6)
+	var img := root.get_viewport().get_texture().get_image()
+	img.save_png("user://exhaust_flames/ghost_1.png")
+	if prev != null:
+		prev.make_current()
+	side.queue_free()
+
+## The shimmer behind a hot player from the chase camera, no fire.
+func _shimmer_shot(_fl: ExhaustFlames) -> void:
+	await _frames(4)
+	var img := root.get_viewport().get_texture().get_image()
+	img.save_png("user://exhaust_flames/shimmer_1.png")
 
 func _frames(n: int) -> void:
 	for i in n:

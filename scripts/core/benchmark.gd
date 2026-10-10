@@ -43,6 +43,7 @@ const WARMUP_SECS := 2.0  # skip shader-compile hitches at startup
 ##          those script classes (EngineAudio, Hud, TrafficManager...), to
 ##          attribute the frame per subsystem; NEON_BENCH_SKIP does the same
 ##          and tests/core/perf_probe.gd honours it too. Diagnostic only.
+## shimmer  0/1 heat shimmer behind the tailpipes (the saved switch)
 ## Defaults reproduce the old benchmark exactly, so earlier lines still compare.
 ## The radio always plays (it is part of the game), so every run has it on.
 const DEFAULT_SECS := 45.0
@@ -142,6 +143,9 @@ func _apply_options() -> void:
 	var mq := opt("mirror_q")
 	if mq.is_valid_int():
 		FxSettings.set_mirror_quality(int(mq))
+	var sh := opt("shimmer")
+	if sh != "":
+		FxSettings.set_on("heat_shimmer", sh == "1")
 	_weave = opt("weave") == "1"
 
 var _weave := false
@@ -244,7 +248,7 @@ func _report() -> void:
 		n, avg, int(1000.0 / avg), low1, int(1000.0 / low1), s[n / 2], p99, s[n - 1],
 		gpu_ms / n, cpu_ms / n, setup_ms / n, process_ms / n, physics_ms / n, TrafficSettings.car_count, roundi(TrafficSettings.detail_distance), roundi(dc_avg), dc_max,
 		objects_sum / n, prims_sum / n / 1000, int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)), max_speed, spikes33, spikes50]
-	line += "  gfx=%s scale_end=%.2f" % [GraphicsSettings.preset, get_viewport().scaling_3d_scale]
+	line += "  gfx=%s scale_end=%.2f shimmer=%d" % [GraphicsSettings.preset, get_viewport().scaling_3d_scale, 1 if FxSettings.is_on("heat_shimmer") else 0]
 	line += "  opts=[%s]" % " ".join(OS.get_cmdline_user_args())
 	print("BENCHMARK ", line)
 	# Next to the exe in an exported build, where Roy can find it; user:// when

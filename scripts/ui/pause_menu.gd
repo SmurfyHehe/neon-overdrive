@@ -86,6 +86,16 @@ func _ready() -> void:
 	notice_label.visible = false
 	box.add_child(notice_label)
 
+	# Heat shimmer (2026-10-10, HeatShimmer): the air behind the pipes. Read
+	# live by the manager; the Low preset keeps it off whatever this says.
+	var shimmer := CheckButton.new()
+	shimmer.text = "Heat shimmer (not on Low)"
+	shimmer.button_pressed = FxSettings.is_on("heat_shimmer")
+	shimmer.toggled.connect(func(on: bool) -> void:
+		FxSettings.set_on("heat_shimmer", on)
+		FxSettings.save_settings())
+	box.add_child(shimmer)
+
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	restart_button = _add_button(box, "Restart night", _ask_restart)
 	settings_button = _add_button(box, "Settings", show_settings)

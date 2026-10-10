@@ -109,15 +109,16 @@ func _ready() -> void:
 	auto_pause_on_low_fps = auto_pause_on_low_fps and DisplayServer.get_name() != "headless"
 	state_changed.connect(func(_n, _o): _fps_watch.reset())
 
-func _process(_delta: float) -> void:
-	# Wall-clock frame time: unaffected by time scale and by get_tree().paused.
+## Low fps watch (#309): sustained slow frames on the wall clock, which is
+## unaffected by time scale and by get_tree().paused. Called from _process.
+func _watch_low_fps() -> void:
 	var now := Time.get_ticks_usec()
 	var frame_seconds := (now - _last_frame_usec) / 1000000.0 if _last_frame_usec > 0 else 0.0
 	_last_frame_usec = now
 	if not auto_pause_on_low_fps or state != State.PLAYING:
 		return
 	if _fps_watch.feed(frame_seconds):
-		pause()
+		pause(REASON_STALL)
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and pause_on_focus_loss and state == State.PLAYING:
@@ -130,6 +131,7 @@ const STALL_GRACE := 2.0
 var _grace := STALL_GRACE
 
 func _process(delta: float) -> void:
+	_watch_low_fps()
 	if stall_secs <= 0.0 or state != State.PLAYING:
 		return
 	if _grace > 0.0:

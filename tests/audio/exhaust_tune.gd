@@ -28,7 +28,7 @@ func _initialize() -> void:
 	_check(pops.bursts > nopops.bursts, "pops 1 should add overrun bursts (%d vs %d)" % [pops.bursts, nopops.bursts])
 	var noflame := _drive(ExhaustTune.new(0.5, 0.3, 1.0, 0.0), "noflame")
 	_check(noflame.flames == 0, "flame 0 should never make a flame event (%d)" % noflame.flames)
-	for id in ["p1_coupe", "p2_hothatch", "p3_tuner", "p4_kei", "p5_muscle", "p6_crossover", "n1_commuter",
+	for id in ["p1_coupe", "p2_hothatch", "p3_tuner", "p4_kei", "p5_muscle", "p6_crossover", "p17_work_pickup", "n1_commuter",
 			"n2_cityhatch", "n3_pickup", "c1_patrol", "c2_patrolsuv", "c3_interceptor"]:
 		var t := ExhaustTune.for_car(id)
 		for v in [t.loudness, t.raspiness, t.pops, t.flame]:

@@ -134,7 +134,7 @@ func _check_voices() -> void:
 		print("%-14s peak %.3f cost %4.1f%%  rms %.3f bright %.3f low %.2f zc %5.0f" % [id, peak, cost * 100.0, f[0], f[1], f[2], f[3]])
 	print("wrote WAVs to ", ProjectSettings.globalize_path(dir))
 
-	var players := ["p1_coupe", "p2_hothatch", "p3_tuner", "p4_kei", "p5_muscle", "p6_crossover"]
+	var players := ["p1_coupe", "p2_hothatch", "p3_tuner", "p4_kei", "p5_muscle", "p6_crossover", "p17_work_pickup"]
 	for i in players.size():
 		for j in range(i + 1, players.size()):
 			var a: PackedFloat32Array = prints[players[i]]

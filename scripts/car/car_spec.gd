@@ -462,11 +462,49 @@ static func player_spec(kind: String) -> Dictionary:
 			s["coefficient_of_friction"] = {"Road": 1.2, "Dirt": 1.05}
 			s["center_of_gravity_height_offset"] = 0.05
 			s["turbo_boost_max"] = 0.7
+		"p17_work_pickup":
+			# Camel, T2 (Roy, 2026-10-10, notes/car-sheets/p17_work_pickup): a
+			# 4.0 V6 work pickup, rear drive, 5-speed manual, 1780 kg. 640 Nm
+			# on the game's torque scale (the muscle sedan's 5.7 V8 is 820)
+			# puts it at 0.36 Nm/kg, the bottom of the T2 band: torque low
+			# down, done by 5800, long truck gears on a short final drive,
+			# a barn door for drag, truck tyres with less grip than the cars,
+			# a high centre of gravity on soft springs. Buyable 4x4:
+			# pickup_four_wheel_drive(). The auto swap is the player's
+			# transmission mode (PlayerCar.Transmission), nothing in the spec.
+			var gears: Array[float] = [3.83, 2.06, 1.38, 1.00, 0.78]
+			s["vehicle_mass"] = 1780.0
+			s["front_weight_distribution"] = 0.57
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 640.0
+			s["max_rpm"] = 5800.0
+			s["idle_rpm"] = 750.0
+			s["torque_shape"] = {"low_end": 0.72, "peak_pos": 0.52, "plateau": 0.15, "falloff": 0.55}
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.9
+			s["coefficient_of_drag"] = 0.42
+			s["frontal_area"] = 2.9
+			s["front_tire_width"] = 245.0
+			s["rear_tire_width"] = 245.0
+			s["coefficient_of_friction"] = {"Road": 1.05, "Dirt": 0.95}
+			s["center_of_gravity_height_offset"] = 0.10
+			s["front_damping_ratio"] = 0.35
+			s["rear_damping_ratio"] = 0.35
+			s["front_arb_ratio"] = 0.18
+			s["rear_arb_ratio"] = 0.08
+			s["turbo_boost_max"] = 0.0
 		_:
 			return s  # p1_coupe, or an unknown kind: the coupe
 	s["exhaust"] = ExhaustTune.for_car(kind).to_dict()
 	s["engine_voice"] = EngineVoice.for_car(kind)
 	s["turbo_voice"] = TurboVoice.for_car(kind)
+	return s
+
+## The work pickup's buyable 4x4 (Roy, 2026-10-10): the garage flips it on
+## (stage E's mod tree), the spec just carries the result. A 40:60 split, the
+## crossover's old one, so the rear still leads.
+static func pickup_four_wheel_drive(s: Dictionary) -> Dictionary:
+	s["front_torque_split"] = 0.4
 	return s
 
 static func traffic_default() -> Dictionary:
@@ -673,6 +711,27 @@ static func npc_spec(kind: String) -> Dictionary:
 			s["rear_damping_ratio"] = 0.45
 			s["front_arb_ratio"] = 0.20
 			s["rear_arb_ratio"] = 0.18
+		"p17_work_pickup":
+			# Work pickup (Camel): the player_spec numbers, so a rival or a
+			# parked one drives like the player's.
+			var gears: Array[float] = [3.83, 2.06, 1.38, 1.00, 0.78]
+			s["vehicle_mass"] = 1780.0
+			s["front_weight_distribution"] = 0.57
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 640.0
+			s["max_rpm"] = 5800.0
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.9
+			s["coefficient_of_drag"] = 0.42
+			s["frontal_area"] = 2.9
+			s["front_tire_width"] = 245.0   # fleet.json physics_hint
+			s["rear_tire_width"] = 245.0
+			s["coefficient_of_friction"] = {"Road": 1.05, "Dirt": 0.95}
+			s["center_of_gravity_height_offset"] = 0.10
+			s["front_damping_ratio"] = 0.35
+			s["rear_damping_ratio"] = 0.35
+			s["front_arb_ratio"] = 0.18
+			s["rear_arb_ratio"] = 0.08
 		"c1_patrol":
 			# Patrol sedan (Crown Vic / Charger Pursuit class), V8, rear drive:
 			# heavy, police-spec damping, long gears.

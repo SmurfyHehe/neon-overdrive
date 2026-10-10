@@ -56,6 +56,7 @@ Sizes are in metres. H is the overall height, including roof gear.
 | P4 Kei roadster | 3.30 × 1.40 × 1.13 | 2.27 | tiny, open, twin headrest humps |
 | P5 Muscle sedan | 5.35 × 2.02 × 1.30 | 2.95 | land yacht, tall cowl scoop, chopped cabin, hourglass hips, ducktail, full-width tail bar |
 | P6 Perf. crossover | 4.35 × 1.84 × 1.61 | 2.62 | lifted rally hatch, black-clad box flares, roof rack with crossbars past the roof edge |
+| P17 Work pickup | 5.25 × 1.80 × 1.74 | 3.18 | low flat hood, tall double cab, long open bed on flared box sides, side stripe, one tailpipe out the rear corner (added 2026-10-10) |
 | N1 Commuter sedan | 4.80 × 1.82 × 1.51 | 2.80 | soft tall cabin, tall nose, short high deck |
 | N2 City hatchback | 3.95 × 1.69 × 1.53 | 2.53 | tall cab-forward egg, lamps up the pillars |
 | N3 Pickup | 5.30 × 1.86 × 1.86 | 3.08 | double cab plus open bed |
@@ -110,6 +111,7 @@ patrol SUV.
   - P4 Signal yellow `#F2B53A`
   - P5 Cherry `#6A1620`
   - P6 Sand `#B8A27A`
+  - P17 Camel `#C4A264` (stripe sodium `#FF8A1F`)
 
   Each car also has four alternates.
 - **Traffic:** 9 weighted neutrals, listed in `fleet.json`.

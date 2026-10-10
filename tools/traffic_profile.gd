@@ -1,3 +1,4 @@
+class_name TrafficProfile
 extends SceneTree
 
 # Traffic frame-time profile (2026-10-10): where one frame goes with N traffic
@@ -75,8 +76,14 @@ var monitor_process := 0.0
 var monitor_physics := 0.0
 
 func _initialize() -> void:
-	game = (load("res://Game.tscn") as PackedScene).instantiate()
-	root.add_child(game)
+	# As the project's main loop type (release build, see gevp_tick_breakdown.gd)
+	# the game scene is already up.
+	for c in root.get_children():
+		if c.scene_file_path == "res://Game.tscn":
+			game = c
+	if game == null:
+		game = (load("res://Game.tscn") as PackedScene).instantiate()
+		root.add_child(game)
 	var m := Mark.new()
 	m.tool = self
 	m.name = "TrafficProfileMark"

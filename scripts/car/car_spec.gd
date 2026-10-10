@@ -839,7 +839,7 @@ static func build_wheels(v: Vehicle, kind: String, wheel_cfg: Dictionary, front_
 	v.rear_right_wheel = _build_wheel(v, kind, Vector3(wheel_x, rear_mount_y, axle_z))
 
 static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
-	var w := Wheel.new()
+	var w := NativeTyres.new_wheel()
 	w.position = pos
 	# GEVP casts each wheel itself (force_raycast_update() in process_forces)
 	# every tick. Left enabled, RayCast3D also casts on its own right after,

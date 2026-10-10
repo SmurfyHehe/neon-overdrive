@@ -7,13 +7,14 @@ extends SceneTree
 # run per district on a straight flat road, and for each district shoots
 # street / steam / moths / banner / litter. Needs the real renderer.
 #
-#   <godot> --path . --audio-driver Dummy -s res://tools/lamp_life_shots.gd -- <tag> [before]
+#   <godot> --path . --audio-driver Dummy -s res://tools/lamp_life_shots.gd -- <tag>
 #
-# <tag> names the output folder user://lamp_life_shots/<tag>/. With "before"
-# the five lamp-life nodes are hidden, so the same views show the street as
-# it was. The bat and the litter gust are time-driven in the shader; the tool
-# waits for the shader clock to reach one (it predicts it from the same
-# per-instance numbers the shader reads).
+# <tag> names the output folder user://lamp_life_shots/<tag>/. The street view
+# is shot twice from the same chunks in the same process, first with the five
+# lamp-life nodes hidden (_street_before) and then shown (_street_after), so
+# the two differ only by this step. The bat and the litter gust are held at
+# mid-run through LampLife.freeze_for_shots, so the shots do not depend on
+# when they are taken.
 
 const Harness := preload("res://tests/traffic/traffic_harness.gd")
 const B := preload("res://scripts/world/road_chunk_builder.gd")
@@ -53,12 +54,8 @@ func _run() -> void:
 	for i in 30:
 		await process_frame
 	var tag := "shots"
-	var before := false
 	for a in OS.get_cmdline_user_args():
-		if a == "before":
-			before = true
-		else:
-			tag = a
+		tag = a
 	dir = "user://lamp_life_shots/%s" % tag
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
 	for c in game.get("chunk_pool"):
@@ -89,21 +86,17 @@ func _run() -> void:
 		var first := r * RUN
 		var origin := first + 1
 		var chunks := []
+		seed(4242 + r)  # the buildings roll the global sequence: same street before and after
 		for idx in range(first, first + RUN):
 			var chunk := B.build_chunk(idx, game._section_at(idx - 1), game._section_at(idx), origin)
 			game.add_child(chunk)
 			chunks.append(chunk)
-		if before:
-			for ch in chunks:
-				for nn in NODES:
-					(ch.get_node(NodePath(nn)) as Node3D).visible = false
 		for i in 3:
 			await process_frame
 		# litter and bat first, picked from the chunks whose gust / flight is
 		# on right now (the shader clock is not ours to set): no waiting, so
 		# the shot is taken within a frame or two of the prediction
-		if not before:
-			await _time_driven_shots(n, chunks, lane_x_default)
+		await _time_driven_shots(n, chunks, lane_x_default)
 		# a chunk with a vent, one with a banner, one with a moth swarm
 		var vent := _first(chunks, "SteamVents")
 		var banner := _first(chunks, "LampBanners")
@@ -115,7 +108,7 @@ func _run() -> void:
 		var vmm: MultiMesh = (vch.get_node(^"SteamVents") as MultiMeshInstance3D).multimesh
 		var vp: Vector3 = vch.global_transform * vmm.get_instance_transform(0).origin
 		var lane_x := 2.0  # the middle of the player's first lane
-		await _street_and_steam(n, vp, lane_x)
+		await _street_and_steam(n, vp, lane_x, chunks)
 		var bch: Node3D = banner[0]
 		var bmm: MultiMesh = (bch.get_node(^"LampBanners") as MultiMeshInstance3D).multimesh
 		var bxf: Transform3D = bch.global_transform * bmm.get_instance_transform(0)
@@ -132,9 +125,19 @@ func _run() -> void:
 		await process_frame
 	quit(0)
 
-func _street_and_steam(n: String, vp: Vector3, lane_x: float) -> void:
+func _set_life(chunks: Array, on: bool) -> void:
+	for ch in chunks:
+		for nn in NODES:
+			(ch.get_node(NodePath(nn)) as Node3D).visible = on
+
+func _street_and_steam(n: String, vp: Vector3, lane_x: float, chunks: Array) -> void:
 	# the driver's chase view: low and behind, looking down the street
-	await _shoot("%s_street" % n, Vector3(lane_x, 2.2, vp.z + 16.0), Vector3(0.0, 1.8, vp.z - 40.0), 70.0)
+	var pos := Vector3(lane_x, 2.2, vp.z + 16.0)
+	var aim := Vector3(0.0, 1.8, vp.z - 40.0)
+	_set_life(chunks, false)
+	await _shoot("%s_street_before" % n, pos, aim, 70.0)
+	_set_life(chunks, true)
+	await _shoot("%s_street_after" % n, pos, aim, 70.0)
 	await _shoot("%s_steam" % n, Vector3(lane_x, 1.5, vp.z + 6.5), vp + Vector3(0.0, 1.0, 0.0), 60.0, 40)
 
 func _time_driven_shots(n: String, chunks: Array, lane_x: float) -> void:

@@ -100,6 +100,7 @@ const BuildingKit := preload("res://scripts/world/building_kit.gd")
 const BuildingSigns := preload("res://scripts/world/building_signs.gd")
 const RoofProps := preload("res://scripts/world/roof_props.gd")
 const Districts := preload("res://scripts/world/districts.gd")
+const Kit := preload("res://scripts/world/roadside_kit.gd")
 
 const LANE_W := 3.2
 const CHUNK_LEN := 50.0
@@ -1060,31 +1061,35 @@ static func _clear_at_junction(root: Node3D, index: int, info: Dictionary, chunk
 static func _update_signs(root: Node3D, infos: Array) -> int:
 	var mm: MultiMesh = (root.get_node(^"Signs") as MultiMeshInstance3D).multimesh
 	var n := 0
+	var xfs := []
+	var anchors := PackedFloat32Array()
 	for info in infos:
 		if info.empty or info.sign == "":
 			continue
+		anchors.append(float(info.z))
 		var fh: float = info.floor_h
 		var garage: bool = info.type == "garage"
 		var x: float = float(info.front_x_abs) * float(info.side)
 		var lot_x: float = float(info.lot_front_x_abs) * float(info.side)
 		if info.type == "gas":
 			# fascia along the front edge of the canopy
-			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(lot_x + 0.4 * float(info.side), 5.0, info.z), info.side, 0.6, 6.0)
+			xfs.append(BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(lot_x + 0.4 * float(info.side), 5.0, info.z), info.side, 0.6, 6.0))
 		elif info.type == "diner":
 			# high on its pole, square-on to the oncoming traffic
-			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(lot_x + 1.2 * float(info.side), 7.8, float(info.z) + float(info.d) * 0.35), info.side, 1.6, 4.5, false, PI / 2.0)
+			xfs.append(BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(lot_x + 1.2 * float(info.side), 7.8, float(info.z) + float(info.d) * 0.35), info.side, 1.6, 4.5, false, PI / 2.0))
 		elif info.blade:
-			# over the sidewalk, clear of a car roof, one floor up
-			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(x, fh + 0.9, info.z), info.side, 0.8, 2.0, true)
+			# over the sidewalk, clear of a car roof, one floor up; on a one-floor
+			# shop that would be above the roof, so it hangs under the roofline
+			xfs.append(BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(x, minf(fh + 0.9, float(info.h) - 0.45), info.z), info.side, 0.8, 2.0, true))
 		else:
 			# shop: the dark band at the top of the shopfront glass; garage:
 			# over the roller doors
 			var sh := 0.6 if garage else 0.75
 			var y: float = fh - (0.45 if garage else 0.42)
-			BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(x, y, info.z), info.side, sh, float(info.d) * 0.8)
+			xfs.append(BuildingSigns.place(mm, n, info.sign, info.sign_color, info.sign_style, Vector3(x, y, info.z), info.side, sh, float(info.d) * 0.8))
 		n += 1
 	mm.visible_instance_count = n
-	_bend_instances(mm, 0, n)
+	_bend_instances(mm, 0, xfs, anchors)
 	return n
 
 ## Rooftop props and billboards (buildings step 3); billboard faces take
@@ -1092,19 +1097,32 @@ static func _update_signs(root: Node3D, infos: Array) -> int:
 static func _update_roofs(root: Node3D, infos: Array, signs_used: int) -> void:
 	var props: MultiMesh = (root.get_node(^"RoofProps") as MultiMeshInstance3D).multimesh
 	var signs: MultiMesh = (root.get_node(^"Signs") as MultiMeshInstance3D).multimesh
-	var counts := RoofProps.update(props, infos, signs, signs_used)
-	signs.visible_instance_count = counts[1]
-	_bend_instances(props, 0, counts[0])
-	_bend_instances(signs, signs_used, counts[1])
-	root.set_meta("roof_props", counts[0])
+	var r := RoofProps.update(props, infos, signs, signs_used, _foundation())
+	signs.visible_instance_count = r.signs
+	_bend_instances(props, 0, r.prop_xfs, r.prop_anchor)
+	_bend_instances(signs, signs_used, r.sign_xfs, r.sign_anchor)
+	root.set_meta("roof_props", r.props)
 
 ## Signs and roof props are laid out on the straight road description; this
-## carries instances [from, to) through the centreline frame (#37), the same
-## mapping _xf_up gives everything else. A no-op on a straight, flat road.
-static func _bend_instances(mm: MultiMesh, from: int, to: int) -> void:
-	for i in range(from, to):
-		var t := mm.get_instance_transform(i)
-		mm.set_instance_transform(i, _xf_up(t.origin.x, t.origin.y, t.origin.z, t.basis))
+## writes instances from slot `from` on through the centreline frame (#37),
+## each one rigid with the building it belongs to: `anchors[k]` is that
+## building's road z, and the piece keeps its offset from there in the
+## building's own frame (heading and height at the anchor), so a roof prop
+## sits exactly on its flat roof on a slope instead of following the road
+## grade at its own spot (up to 0.45 m off on a 5% grade, the residue PR
+## #318 noted). On a straight, flat road this is the plain transform.
+##
+## The straight transforms come from the callers' arrays, never from
+## mm.get_instance_transform(): with physics interpolation on (project
+## setting, ISSUES B7) that getter returns the data last drawn, which on a
+## pooled chunk rebuilt in the game is the previous occupant's. The old
+## read-modify-write here put those stale props back, so office roof tanks
+## hung 40 m over a one-floor lot (floating structures, 2026-10-09).
+static func _bend_instances(mm: MultiMesh, from: int, xfs: Array, anchors: PackedFloat32Array) -> void:
+	for k in xfs.size():
+		var t: Transform3D = xfs[k]
+		var a := float(anchors[k])
+		mm.set_instance_transform(from + k, _xf_up(0.0, 0.0, a) * Transform3D(t.basis, Vector3(t.origin.x, t.origin.y, t.origin.z - a)))
 
 # ---------- build / rebuild ----------
 
@@ -1173,6 +1191,10 @@ static func _create_nodes(root: Node3D) -> void:
 	# shop signs plus rooftop billboards: at most two per building
 	root.add_child(BuildingSigns.new_multimesh(_building_slots() * 4))
 	root.add_child(RoofProps.new_multimesh())
+	# Roadside kit (hydrants, bins, dumpsters, cones, work-zone jersey
+	# barriers, kerb guardrail): one MultiMesh per kind and two collision
+	# bodies, see roadside_kit.gd.
+	Kit.new_nodes(root)
 
 	root.set_meta("nodes_built", true)
 
@@ -1300,7 +1322,9 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		spans[1].append([bz + d_own / 2.0, bz - d_own / 2.0])
 		spans[-1].append([bz + d_onc / 2.0, bz - d_onc / 2.0])
 
-	_update_roofs(root, infos, _update_signs(root, infos))
+	var signs_used := _update_signs(root, infos)
+	root.set_meta("signs_used", signs_used)
+	_update_roofs(root, infos, signs_used)
 
 	# gap walls (stage A) -- close the open lots between buildings along the
 	# building-front line. Visual only: out-of-bounds collision is issue #28,
@@ -1344,12 +1368,14 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var lamps: MultiMesh = (root.get_node(^"Lamps") as MultiMeshInstance3D).multimesh
 	var pools: MultiMesh = (root.get_node(^"LampPools") as MultiMeshInstance3D).multimesh
 	var n_lamps := 0
+	var lamp_zs := {1: [], -1: []}  # pole z per side, for the roadside kit's bins
 	for i in range(_lamp_slots()):
 		for side in [1, -1]:
 			# own side at 6.25, 31.25 m; oncoming at 18.75, 43.75 m into the chunk
 			var lz := -float(i) * LAMP_SPACING - (LAMP_SPACING * 0.25 if side == 1 else LAMP_SPACING * 0.75)
 			if Junction.in_mouth(chunk_index, lz):
 				continue  # the signal masts stand there
+			lamp_zs[side].append(lz)
 			var lt: float = -lz / CHUNK_LEN
 			var curb: float = lerp(start_own_curb, end_own_curb, lt) if side == 1 else lerp(start_onc_curb, end_onc_curb, lt)
 			var pole_x := (curb + LAMP_SETBACK) * float(side)
@@ -1360,6 +1386,20 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			n_lamps += 1
 	lamps.visible_instance_count = n_lamps
 	pools.visible_instance_count = n_lamps
+
+	# roadside kit: laid out from the edges above (so a width change moves
+	# it), the lamps (bins stand at their feet) and the lots a car can drive
+	# into (dumpsters at their back wall).
+	var kit_edges := {
+		1: {"road": [start_own_w, end_own_w], "curb_in": [start_own_shoulder, end_own_shoulder],
+			"curb_out": [start_own_curb, end_own_curb], "walk": [start_own_walk, end_own_walk]},
+		-1: {"road": [start_onc_w, end_onc_w], "curb_in": [start_onc_shoulder, end_onc_shoulder],
+			"curb_out": [start_onc_curb, end_onc_curb], "walk": [start_onc_walk, end_onc_walk]},
+	}
+	var lots := {1: [], -1: []}
+	for info in infos:
+		lots[int(info.side)].append([float(info.z), (BUILDING_SPACING * 0.6) if info.empty else float(info.d)])
+	Kit.apply(root, chunk_index, kit_edges, setback, lamp_zs, lots)
 
 	# center line / barrier -- snapped to this chunk's own end-of-chunk
 	# config, not tapered (see file header). Both the wall and the dash

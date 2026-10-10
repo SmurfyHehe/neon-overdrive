@@ -133,6 +133,12 @@ func _ensure_speaker_filter() -> void:
 	lp.cutoff_hz = SPEAKER_CUTOFF_HZ
 	AudioServer.add_bus_effect(bus, lp)
 
+## Straight to station s (-1 = off), quietly: a resumed run's radio.
+func tune_to(s: int) -> void:
+	station = s if s >= 0 and s < RadioStations.station_count() else -1
+	if station >= 0:
+		_request_load(station)
+
 ## N: next station, with off after the last one.
 func next_station() -> void:
 	var count := RadioStations.station_count()

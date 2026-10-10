@@ -27,7 +27,7 @@ const WINDOWS := [0.0, 0.25, 0.5, 1.0]
 const RADIO := ["off", "on", "quiet", "scanner"]
 const YAWS := [0.0, 90.0, -90.0, 180.0]
 const SETTLE := 3   # ticks per combination
-const ALL_BUSES: Array[StringName] = [&"Engine", &"Tires", &"World", &"Traffic", &"Sirens", &"Music", &"Scanner"]
+const ALL_BUSES: Array[StringName] = [&"Engine", &"Turbo", &"Tires", &"World", &"Traffic", &"Sirens", &"Music", &"Scanner"]
 
 var tick := 0
 var failures: Array[String] = []

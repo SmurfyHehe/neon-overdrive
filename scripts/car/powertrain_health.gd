@@ -71,6 +71,8 @@ var brake_temp := AMBIENT_C
 var torque_mult := 1.0
 var brake_mult := 1.0
 var warnings := 0
+## Engine cooling multiplier, set by CarDamage (a broken radiator cools worse).
+var cooling_mult := 1.0
 ## Engine load 0..1 from the last step(), for FuelTank.
 var engine_load := 0.0
 var tyre_temp: Array[float] = [AMBIENT_C, AMBIENT_C, AMBIENT_C, AMBIENT_C]
@@ -84,7 +86,7 @@ var clutch_cap := 1.0
 func step_values(dt: float, load: float, on_limiter: bool, speed: float, brake_power: float) -> void:
 	# engine: relax toward the balance of heat in and cooling out
 	var heat := Q_IDLE + Q_LOAD * load * load + (Q_LIMITER if on_limiter else 0.0)
-	var cool := (K_STILL + K_SPEED * speed) * (1.0 + THERMOSTAT_GAIN * maxf(engine_temp - THERMOSTAT_C, 0.0))
+	var cool := (K_STILL + K_SPEED * speed) * (1.0 + THERMOSTAT_GAIN * maxf(engine_temp - THERMOSTAT_C, 0.0)) * cooling_mult
 	var balance := AMBIENT_C + heat / cool
 	engine_temp += (balance - engine_temp) * (1.0 - exp(-dt / ENGINE_TAU))
 	engine_temp = clampf(engine_temp, AMBIENT_C, 200.0)

@@ -43,3 +43,40 @@ tailpipe ringing, tuned off `body_hz`, so each car's pipe rings in its own key).
   and sound stay in sync. Traffic has no engine audio; the C3 interceptor's
   traffic flames are unchanged.
 - Test: `tests/audio/exhaust_pops.gd` (WAVs to `user://exhaust_pop_*.wav`).
+
+## Turbo voice (B1, 2026-10-09)
+
+The turbo has its own synth (`scripts/audio/turbo_synth.gd`) on its own stream
+and bus (**Turbo**, with a slider next to Engine in the volume settings:
+`AudioSettings.CHANNELS` is the hook the Sound page iterates). Until B1 the
+whistle was a term inside the engine mix on the Engine bus. All of it is code,
+no recordings.
+
+A car's voice is `spec["turbo_voice"]` (`scripts/audio/turbo_voice.gd`, like
+`engine_voice`): a **part** and a **valve**, cosmetic only.
+
+| Part | Whistle | Where |
+|---|---|---|
+| small | 4.2-8.6 kHz, clean, quick flutter | p2 hot hatch |
+| medium | 3.0-7.0 kHz, a second partial, some air | p3 tuner, p6 crossover, any Tuner-added turbo |
+| big | 2.8-5.4 kHz, airy, a slow heavy flutter | nobody yet |
+
+The whistle climbs with boost (the Tuner's bar slider stretches how far) and
+stays above the cockpit mirror whistle's 1.25 / 2.5 kHz tones.
+
+| Valve | Sound | Where |
+|---|---|---|
+| recirc | a short muffled puff back into the intake (stock) | p2, Tuner-added turbos |
+| atmo | the loud bright "pssh", a thin ring off the valve body | p3 |
+| flutter | no valve: the compressor surges, a chopped "stu-tu-tu" that drags the whistle down | p6 |
+
+| Trigger | Vent |
+|---|---|
+| throttle lift on boost (GEVP's one-tick cut, or the eased-off ramp) | 0.3-0.9 s, size and length from the boost dumped |
+| between gears on boost (`is_shifting` edge) | the same voice at a bit over half the length |
+| both in one 150 ms window | one event: a lift wins over a shift |
+
+- The Turbo bus gets the cockpit low-pass and dB offset like the Engine bus
+  (`PerspectiveAudio`) and is muted with it on pause (generator underruns click).
+- Test: `tests/car/turbo.gd` (parts whistle at their own pitch, valves differ,
+  vent lengths, the fold, the bus and its channel, live lift on the player car).

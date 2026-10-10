@@ -113,12 +113,6 @@ var _boom_mix := 0.0
 var pop_clusters := 0
 var pop_bangs := 0
 var upshift_clusters := 0
-## Turbo (Phase B): boost 0..1 (fraction of max boost) set by EngineAudio; blow_off()
-## fires the vent. The whistle is a rising sine, the vent a short filtered noise burst.
-var boost := 0.0
-var _whistle_phase := 0.0
-var _bov_env := 0.0
-var _bov_lp := 0.0
 # wander: current drift (-1..1) of the resonances and of the level, the values
 # they glide toward, and seconds until new targets are picked
 var _wander_res := 0.0
@@ -165,10 +159,6 @@ func apply_voice(v: Dictionary) -> void:
 		firing = EngineVoice.even_firing(n)
 	_setup_cylinders(firing, v.get("cyl_amps", []), clampf(float(v.get("cyl_spread", 0.2)), 0.0, 0.6),
 			int(v.get("seed", 4)))
-
-## The blow-off valve vents: a short "pssh" whose size follows how hot the boost was.
-func blow_off(strength: float) -> void:
-	_bov_env = maxf(_bov_env, clampf(strength, 0.0, 1.0))
 
 ## The ignition cut of a flat-out upshift (EngineAudio calls it on GEVP's
 ## is_up_shifting edge, in every gearbox mode): one or two hard bangs with a
@@ -293,7 +283,6 @@ func render(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVe
 	var lp_c := _lp
 	var dc_x := _dc_x
 	var dc_y := _dc_y
-	var whistle_c := _whistle_phase
 	for i in frames:
 		rpm_c += rpm_step
 		thr_c += thr_step
@@ -376,17 +365,7 @@ func render(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVe
 				_r1p = 0.0
 				_r2 = 0.0
 				_r2p = 0.0
-		var turbo := 0.0
-		if boost > 0.02:
-			# whistle: pitch and level rise with boost
-			whistle_c += TAU * (1800.0 + 5200.0 * boost) / mix_rate
-			turbo = sin(whistle_c) * 0.2 * boost * boost
-		if _bov_env > 0.01:
-			var bn := _rand()
-			_bov_lp += 0.25 * (bn - _bov_lp)
-			turbo += (bn - _bov_lp) * 0.8 * _bov_env
-			_bov_env *= pop_decay
-		var s := lp_c + body * 0.9 + rasp * rasp_gain * (0.3 + thr_c) + pop * loud_mix + turbo * loud_mix
+		var s := lp_c + body * 0.9 + rasp * rasp_gain * (0.3 + thr_c) + pop * loud_mix
 		s = tanh(s * (1.5 + 1.5 * thr_c))
 		# DC blocker: the pulses are all positive, so strip the offset.
 		var dc := s - dc_x + 0.995 * dc_y
@@ -411,7 +390,6 @@ func render(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVe
 	_lp = lp_c
 	_dc_x = dc_x
 	_dc_y = dc_y
-	_whistle_phase = whistle_c
 	return out
 
 ## Starts a cluster of bangs, or tops up the running one (never shortens it).

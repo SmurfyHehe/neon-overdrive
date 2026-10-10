@@ -51,10 +51,15 @@ const SPECS := {
 	},
 }
 
+## Tools: one district everywhere (tools/roadside_kit_shots.gd).
+static var force := ""
+
 static func run_of(chunk_index: int) -> int:
 	return floori(float(chunk_index) / float(RUN))
 
 static func name_of_run(run: int) -> String:
+	if force != "":
+		return force
 	if run == 0:
 		return "downtown"
 	var total := 0

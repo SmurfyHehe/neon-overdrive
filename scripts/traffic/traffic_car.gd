@@ -110,6 +110,18 @@ var detailed := true
 var _cruise_speed := 0.0
 ## Slot in the TrafficManager's occupancy index (set by it every tick).
 var _idx := -1
+## Staggered controller: _drive() runs once every AI_STRIDE physics ticks per
+## car, odd and even cars on alternate ticks so the work spreads instead of
+## landing on one tick (2026-10-10; at 120 Hz that is a 60 Hz lane controller,
+## the pedals and steering hold between runs). The run is handed the time since
+## the previous one, so every timer in it counts the same seconds. The GEVP
+## sim itself is NOT skipped: a Wheel needs its spring and tyre forces every
+## step (see "Far cars" in the header). 1 = every tick, the old behaviour; NEON_AI_STRIDE
+## overrides it for before/after profiling.
+static var AI_STRIDE := int(OS.get_environment("NEON_AI_STRIDE")) if OS.get_environment("NEON_AI_STRIDE").is_valid_int() and int(OS.get_environment("NEON_AI_STRIDE")) >= 1 else 2
+var _wheels_posed := true
+var _ai_owed := 0.0
+var _ai_last := -1000000
 ## Physics frame before which a car parked by a deferred spawn does not
 ## retry (TrafficManager).
 var retry_frame := 0
@@ -281,6 +293,9 @@ func _ready() -> void:
 	CarSpec.apply(self, spec)
 	CarSpec.build_wheels(self, kind, cfg, front_spring_length, rear_spring_length)
 	initialize()
+	# New wheels process; visibility may have changed before they existed.
+	_wheels_posed = true
+	_wheel_visuals(visible)
 	current_gear = 1
 	# Drafting (aero.gd) finds other cars through this group.
 	add_to_group("aero_vehicles")
@@ -317,8 +332,33 @@ func _update_lamps() -> void:
 		_lamp_key = key
 		NpcCarBuilder.set_lamps(chassis_visual, float(key & 1), hazard)
 
+## Wheel._process only poses the wheel meshes (hub height, roll, spin): a car
+## nobody can see skips it (vendored GEVP is left as it is; the node's own
+## process switch does the job). The sim reads none of it. Follows `visible`
+## whoever sets it (TrafficManager through set_shown()).
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_VISIBILITY_CHANGED:
+		_wheel_visuals(visible)
+
+func _wheel_visuals(on: bool) -> void:
+	if on == _wheels_posed:
+		return
+	_wheels_posed = on
+	for w in wheel_array:
+		w.set_process(on)
+
 ## The controller. Sets steering_input, throttle_input and brake_input.
 func _drive(delta: float) -> void:
+	var frame := Engine.get_physics_frames()
+	if frame - _ai_last > AI_STRIDE:
+		_ai_owed = 0.0  # not driven for a while (just entered the sim): run now
+		_ai_last = frame - AI_STRIDE
+	_ai_owed += delta
+	if (frame + maxi(_idx, 0)) % AI_STRIDE != 0 and frame - _ai_last < AI_STRIDE:
+		return
+	delta = _ai_owed
+	_ai_owed = 0.0
+	_ai_last = frame
 	var v := current_speed()
 	if changing:
 		_lc_t += delta

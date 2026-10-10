@@ -217,6 +217,17 @@ func reset() -> void:
 	hill_hold_left = 0.0
 	_ref_age = REF_REFRESH
 
+## A saved run is put back (SaveDirector.restore_car): the car is already
+## moving, in gear, and was being asked for this much.
+func resume(v: Vehicle, was_demand: float) -> void:
+	reset()
+	demand = clampf(was_demand, 0.0, 1.0)
+	_duty = demand
+	_pedal_ref = demand
+	_steady_t = 0.0
+	_prev_fwd = -v.global_transform.basis.z.dot(v.linear_velocity)
+	_accel = 0.0
+
 func tick(v: Vehicle, delta: float) -> void:
 	var gear := v.current_gear
 	if gear == 0:

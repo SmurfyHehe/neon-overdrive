@@ -151,6 +151,8 @@ call :run core/settings_safety --headless
 call :run core/setting_danger --headless
 rem Save system: atomic files, 3 slots, chases, rename migration (scripts/save/).
 call :run core/save_system --headless
+rem ~15 s: a saved run brings back the gearbox mode, the gear, and the automatic as it was.
+call :run core/save_gearbox "--headless --fixed-fps 120"
 rem F0: cash and bank through reloads, chases and 6 a.m. (and the HUD and pause screen).
 call :run core/wallet --headless
 rem Police F0/F1: heat levels and icons, cop_can_see_player, headlights off hides, night one lines.

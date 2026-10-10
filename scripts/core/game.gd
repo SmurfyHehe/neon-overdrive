@@ -64,6 +64,8 @@ var world_mood: WorldMood  # tonight's events: rule-breaker share, bar close, me
 const TestMode := preload("res://scripts/core/test_mode.gd")
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
+const DiscordPresence := preload("res://scripts/core/discord_presence.gd")
+
 # Save system (run structure, 2026-10-09): auto-save into one of 3 slots, and a
 # resume puts the run back where it was (scripts/save/). road_seed is kept so a
 # saved run rebuilds the same road; run is what read_run() gave back ({} =
@@ -91,6 +93,7 @@ func _ready() -> void:
 	TrafficSettings.load_settings()
 	FxSettings.load_settings()   # cockpit mirrors on/off and quality ([fx] in settings.cfg)
 	ViewSettings.load_settings()
+	DiscordPresence.load_settings()   # Rich Presence on/off ([discord] in settings.cfg)
 	GraphicsSettings.load_settings()   # preset, edge smoothing, render scale ([graphics])
 	# Benchmark mode (-- --benchmark, see benchmark.gd) drives a fixed road so
 	# runs are comparable; normal play gets a fresh one each time. It also runs
@@ -156,6 +159,7 @@ func _ready() -> void:
 	if benchmark:
 		add_child(Benchmark.new())
 	add_child(saver)
+	add_child(DiscordPresence.new(self))   # dormant until the app id is set, never in tests
 
 func _setup_world() -> void:
 	var env := Environment.new()

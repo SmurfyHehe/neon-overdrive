@@ -24,6 +24,7 @@ const GROUPS := [
 
 const GameInfo := preload("res://scripts/core/game_info.gd")
 const LogFolder := preload("res://scripts/core/log_folder.gd")
+const DiscordPresence := preload("res://scripts/core/discord_presence.gd")
 
 const SILVER := Color("#C9CED6")
 const AMBER := Color("#FFC066")
@@ -153,6 +154,16 @@ func _ready() -> void:
 		TrafficSettings.city_lights = on
 		TrafficSettings.save_settings())
 	box.add_child(lights)
+
+	# Discord Rich Presence (2026-10-10): the status line on the player's own
+	# Discord profile. On by default; this is its off switch.
+	var discord := CheckButton.new()
+	discord.text = "Show on Discord"
+	discord.button_pressed = DiscordPresence.enabled
+	discord.toggled.connect(func(on: bool) -> void:
+		DiscordPresence.set_enabled(on)
+		DiscordPresence.save_settings())
+	box.add_child(discord)
 
 	# View slider (2026-10-06): the cockpit FOV, 55-78, default 62; the speed
 	# widening (up to +6) rides on top of it. Applies at once, saved with the rest.

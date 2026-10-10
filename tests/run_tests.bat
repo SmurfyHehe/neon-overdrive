@@ -98,6 +98,8 @@ call :run car/powertrain_health "--headless --fixed-fps 60"
 call :run car/car_parts --headless
 call :run car/turbo "--headless --fixed-fps 60"
 call :run car/forced_induction "--headless --fixed-fps 60"
+call :run car/bolt_ons --headless
+call :run car/bolt_on_worth "--headless --fixed-fps 60"
 call :run car/chassis_targets "--headless --fixed-fps 60"
 call :run car/gearbox_per_car "--headless --fixed-fps 60"
 call :run car/reverse_and_tabs --headless

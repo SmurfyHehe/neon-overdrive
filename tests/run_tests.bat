@@ -58,6 +58,9 @@ rem Car pipeline step 1: the P1 body.glb from tools/car_pipeline/build_car.py lo
 call :run fleet/car_pipeline_p1 --headless
 call :run audio/exhaust_tune --headless
 call :run audio/exhaust_pops --headless
+rem Engine loops: baked rpm x load bank is seamless, the player stays under its voice cap and never swaps a stream under a sounding voice, events stay live, in-game hand-over.
+call :run audio/engine_loops --headless
+call :run audio/engine_loops_live --headless
 call :run car/anti_lag_turbo --headless
 call :run audio/audio_master --headless
 call :run car/phase_a_engine --headless

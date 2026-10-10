@@ -431,3 +431,104 @@ func _fire_bang() -> void:
 func _rand() -> float:
 	_noise = (_noise * 1103515245 + 12345) & 0x7fffffff
 	return _noise / 1073741823.5 - 1.0
+
+# --- Events only (engine loops, 2026-10-10) ---------------------------------
+
+## Limiter firings accumulated since the last cut roll (render_events).
+var _cut_acc := 0.0
+
+## The pop voice alone: overrun pops, limiter bangs, upshift cut, anti-lag, with
+## the same clusters, pipe ring and flame events as render(), but no steady tone.
+## EngineLoopPlayer carries the tone as baked loops; this is what stays live.
+## Costs nothing while no bang is sounding (the common case). Requests are
+## rolled once per block instead of per sample, so a bang can land up to one
+## block (about 10 ms) later than in render().
+func render_events(frames: int, rpm: float, throttle: float, redline: bool) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	out.resize(frames)
+	if frames <= 0:
+		return out
+	# keep render()'s state current, so a switch back to the full voice glides from here
+	_rpm = rpm
+	_thr = throttle
+	var rpm_norm := clampf((rpm - idle_rpm) / (max_rpm - idle_rpm), 0.0, 1.0)
+	var overrun := throttle < 0.08 and rpm_norm > 0.3
+	var pop_rate := 0.0
+	if overrun and tune.pops > 0.0:
+		pop_rate = tune.pops * (3.0 + 22.0 * rpm_norm)
+	if overrun and tune.anti_lag >= 0.5:
+		pop_rate = maxf(pop_rate, ANTI_LAG_RATE)
+	var pop_kind := PopKind.BURBLE
+	if redline:
+		pop_kind = PopKind.LIMITER
+	elif overrun and tune.anti_lag >= 0.5:
+		pop_kind = PopKind.ANTI_LAG
+	if redline and tune.pops > 0.0:
+		# the limiter cuts a share of the firings; an unburnt charge goes out as a bang
+		_cut_acc += rpm / 120.0 * _fire_at.size() * frames / mix_rate
+		while _cut_acc >= 1.0:
+			_cut_acc -= 1.0
+			if absf(_rand()) < limiter_cut and absf(_rand()) < tune.pops:
+				_pop_env = maxf(_pop_env, 0.6 + 0.4 * absf(_rand()))
+				_flame_peak = maxf(_flame_peak, tune.flame * (0.5 + 0.5 * absf(_rand())))
+	else:
+		_cut_acc = 0.0
+	if pop_rate > 0.0:
+		_pop_wait -= frames
+		if _pop_wait <= 0:
+			var amp := 0.4 + 0.6 * absf(_rand())
+			_pop_env = maxf(_pop_env, amp)
+			_flame_peak = maxf(_flame_peak, tune.flame * amp)
+			_pop_wait = int((0.3 + 1.4 * absf(_rand())) / (pop_rate / mix_rate))
+	if _pop_env > 0.0:
+		_start_cluster(pop_kind, _pop_env)
+		_pop_env = 0.0
+	if _shift_req > 0.0:
+		_start_cluster(PopKind.UPSHIFT, _shift_req)
+		_shift_req = 0.0
+	if _cl_left <= 0 and _ring_live <= 0:
+		return out
+	var ring_r := exp(-1.0 / (RING_DECAY * mix_rate))
+	var w1 := TAU * clampf(body_hz * RING_RATIO, 60.0, 4000.0) / mix_rate
+	var w2 := minf(w1 * RING2_RATIO, PI * 0.5)
+	var ring_r2 := exp(-1.0 / (0.7 * RING_DECAY * mix_rate))
+	var k1 := 2.0 * ring_r * cos(w1)
+	var k2 := 2.0 * ring_r2 * cos(w2)
+	var k1b := ring_r * ring_r
+	var k2b := ring_r2 * ring_r2
+	_ring_kick1 = sin(w1)
+	_ring_kick2 = sin(w2)
+	var crack_k := exp(-1.0 / (CRACK_DECAY * mix_rate))
+	var boom_k := exp(-1.0 / (BOOM_DECAY * mix_rate))
+	var loud_mix := 0.5 + 0.5 * tune.loudness
+	var drive := 1.5 + 1.5 * throttle
+	var out_gain := volume * (0.35 + 1.3 * tune.loudness) * (0.55 + 0.45 * rpm_norm)
+	for i in frames:
+		if _cl_left <= 0 and _ring_live <= 0:
+			break
+		if _cl_left > 0:
+			_cl_wait -= 1
+			if _cl_wait <= 0:
+				_fire_bang()
+		var pn := _rand()
+		_crack_lp += 0.2 * (pn - _crack_lp)
+		_boom_lp += 0.03 * (pn - _boom_lp)
+		var r1 := k1 * _r1 - k1b * _r1p
+		_r1p = _r1
+		_r1 = r1
+		var r2 := k2 * _r2 - k2b * _r2p
+		_r2p = _r2
+		_r2 = r2
+		var pop := (pn - _crack_lp) * _crack_env * 0.9 + _boom_lp * 10.0 * _boom_env * _boom_mix \
+				+ (r1 * 0.8 + r2 * 0.45) * _ring_mix
+		_crack_env *= crack_k
+		_boom_env *= boom_k
+		_ring_live -= 1
+		if _ring_live <= 0 and _cl_left <= 0:
+			_r1 = 0.0
+			_r1p = 0.0
+			_r2 = 0.0
+			_r2p = 0.0
+		var v := tanh(pop * loud_mix * drive) * out_gain
+		out[i] = Vector2(v, v)
+	return out

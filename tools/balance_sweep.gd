@@ -64,6 +64,8 @@ static func _spec_for(car: String) -> Dictionary:
 		"coupe": return CarSpec.coupe_default()
 		"coupe_worn": return CarSpec.coupe_worn()
 		"traffic": return CarSpec.traffic_default()
+	if PlayerCars.is_player_kind(car):
+		return CarSpec.player_spec(car)  # SWEEP_CARS=p0_beater,p2_hothatch,... (not in the default grid)
 	return CarSpec.npc_spec(car)
 
 static func _list(env: String, fallback: Array) -> Array:

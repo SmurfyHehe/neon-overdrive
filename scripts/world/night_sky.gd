@@ -25,6 +25,12 @@ class_name NightSky
 # dome) are global shader parameters, so the radiance map is only re-rendered
 # when the night changes (phase and star seed are ordinary uniforms).
 #
+# Dawn (2026-10-10, sky PR 2): from 5 a.m. (DAWN_START_MINUTES) to 6 a.m. the
+# clock drives a global `sky_dawn` 0..1. The navy top lifts toward #1B2A4A, a
+# dim amber band grows on one side of the horizon (dawn_dir, picked per night),
+# the glow dome swells, and stars and moon wash out. Nothing is lit by it: the
+# ambient pin stays, so asphalt keeps its colour.
+#
 # Ambient light is no longer taken from the sky (game.gd pins it to a fixed
 # colour), so repainting the sky never lifts the asphalt.
 
@@ -59,6 +65,13 @@ const MOON_EL_CLIMB := Vector2(4.0, 6.0)    # degrees gained by 6 a.m.
 const MOON_AZ := Vector2(16.0, 30.0)        # degrees off straight ahead
 const MOON_AZ_DRIFT := 4.0                  # degrees it slides outward by 6 a.m.
 
+## Dawn runs from 5 a.m. to 6 a.m. (game minutes since 8 p.m.).
+const DAWN_START_MINUTES := 540.0
+
+## 0 until 5 a.m., 1 at 6 a.m., eased.
+static func dawn_for_minutes(minutes: float) -> float:
+	return smoothstep(DAWN_START_MINUTES, 600.0, minutes)
+
 const SHADER := """
 shader_type sky;
 
@@ -80,6 +93,7 @@ uniform float ground_curve = 0.02;
 global uniform vec4 sky_glow_color : source_color;
 global uniform float sky_glow_height;
 global uniform vec3 sky_moon_dir;
+global uniform float sky_dawn;
 
 // Stars: seed per night; density is the share of grid cells holding one.
 uniform float star_seed = 1.0;
@@ -98,6 +112,9 @@ uniform float earthshine = 0.01;
 uniform vec3 halo_color : source_color = vec3(0.85, 0.82, 0.76);  // silver, a touch warm
 uniform float halo_energy = 0.03;
 
+// Dawn: horizontal direction the first light comes from (set per night).
+uniform vec3 dawn_dir = vec3(0.0, 0.0, -1.0);
+
 float hash1(vec3 p) {
 	p = fract(p * vec3(0.1031, 0.1030, 0.0973));
 	p += dot(p, p.yzx + 33.33);
@@ -114,12 +131,19 @@ vec3 gradient(vec3 d) {
 	float v_angle = acos(clamp(d.y, -1.0, 1.0));
 	if (d.y >= 0.0) {
 		float c = 1.0 - v_angle / (PI * 0.5);
-		vec3 col = mix(sky_horizon_color, sky_top_color, clamp(1.0 - pow(1.0 - c, 1.0 / sky_curve), 0.0, 1.0));
+		// Dawn lifts the top toward #1B2A4A and the horizon toward a dusky navy.
+		vec3 top = mix(sky_top_color, vec3(0.011, 0.023, 0.069), sky_dawn);
+		vec3 hor = mix(sky_horizon_color, vec3(0.030, 0.045, 0.100), sky_dawn);
+		vec3 col = mix(hor, top, clamp(1.0 - pow(1.0 - c, 1.0 / sky_curve), 0.0, 1.0));
 		float elev = PI * 0.5 - v_angle;
 		// The dome replaces the navy rather than adding to it: navy plus
 		// sodium reads mauve, and the palette has no magenta.
-		float g = 1.0 - clamp(elev / sky_glow_height, 0.0, 1.0);
-		return mix(col, sky_glow_color.rgb, (g * g * (3.0 - 2.0 * g)) * g);
+		float g = 1.0 - clamp(elev / (sky_glow_height * (1.0 + 0.7 * sky_dawn)), 0.0, 1.0);
+		col = mix(col, sky_glow_color.rgb, (g * g * (3.0 - 2.0 * g)) * g);
+		// First light: a dim amber band on the dawn side, 25 degrees high.
+		float side = 0.3 + 0.7 * pow(max(dot(normalize(d.xz + vec2(1e-5)), dawn_dir.xz), 0.0), 2.0);
+		float band = 1.0 - smoothstep(0.0, 0.44, elev);
+		return mix(col, vec3(0.34, 0.17, 0.05), sky_dawn * side * band * band);
 	}
 	float c = (v_angle - PI * 0.5) / (PI * 0.5);
 	return mix(ground_horizon_color, ground_bottom_color, clamp(1.0 - pow(1.0 - c, 1.0 / ground_curve), 0.0, 1.0));
@@ -159,12 +183,13 @@ void sky() {
 		float lit_frac = 0.5 - 0.5 * cos(phase * TAU);
 		// Stars: hidden inside the glow dome, dimmer under a bright moon.
 		float clear = smoothstep(sky_glow_height * 0.5, sky_glow_height * 1.6, elev);
-		col += stars(EYEDIR, elev) * clear * (1.0 - 0.45 * lit_frac);
+		col += stars(EYEDIR, elev) * clear * (1.0 - 0.45 * lit_frac) * (1.0 - smoothstep(0.1, 0.75, sky_dawn));
 		vec3 m = normalize(sky_moon_dir);
 		float ang = acos(clamp(dot(EYEDIR, m), -1.0, 1.0));
 		// A tight silver halo, two moon-widths wide, scaled by the lit face.
 		float h = ang / moon_radius;
-		col += halo_color * halo_energy * lit_frac * exp(-h * 0.9);
+		float wash = 1.0 - 0.6 * sky_dawn;  // the moon fades as the sky lifts
+			col += halo_color * halo_energy * lit_frac * exp(-h * 0.9) * wash;
 		if (ang < moon_radius * 1.05) {
 			// Disc coordinates: right/up across the face, -1..1.
 			vec3 right = normalize(cross(m, vec3(0.0, 1.0, 0.0)));
@@ -179,7 +204,7 @@ void sky() {
 			vec3 l = vec3(sin(a) * cos(tilt), sin(a) * sin(tilt), -cos(a));
 			float lit = smoothstep(-0.06, 0.06, dot(n, l));
 			float albedo = texture(moon_tex, uv * vec2(0.5, -0.5) + 0.5).r;
-			vec3 face = moon_color * albedo * moon_energy * mix(earthshine, 1.0, lit);
+			vec3 face = moon_color * albedo * moon_energy * wash * mix(earthshine, 1.0, lit);
 			// The disc covers the stars behind it: blend from the plain
 			// gradient, not from the starry sky.
 			col = mix(col, max(base, face), edge);
@@ -225,6 +250,10 @@ static func set_night(sky: Sky, night: int) -> void:
 	var mat := sky.sky_material as ShaderMaterial
 	mat.set_shader_parameter("phase", phase_for_night(night))
 	mat.set_shader_parameter("star_seed", float(posmod(night, 1000)))
+	# First light comes from the side the moon is not on, 35-65 degrees off the road.
+	var off := 35.0 + 30.0 * float(posmod(hash([night, "dawn"]), 100)) / 100.0
+	var a := deg_to_rad(-float(moon_path(night).side) * off)
+	mat.set_shader_parameter("dawn_dir", Vector3(-sin(a), 0.0, -cos(a)))
 
 ## The moon's path tonight: {side, el0, el1, az0, az1} in degrees, from a
 ## hash of the night number. side is -1 (right of the road) or +1 (left).
@@ -259,6 +288,13 @@ static func set_moon_time(_sky: Sky, night: int, t: float) -> void:
 static func set_glow(_sky: Sky, color: Color, height_deg: float) -> void:
 	RenderingServer.global_shader_parameter_set("sky_glow_color", color)
 	RenderingServer.global_shader_parameter_set("sky_glow_height", deg_to_rad(height_deg))
+
+## The dawn factor is a global shader parameter too (see the shader header).
+static var dawn := 0.0
+
+static func set_dawn(value: float) -> void:
+	dawn = clampf(value, 0.0, 1.0)
+	RenderingServer.global_shader_parameter_set("sky_dawn", dawn)
 
 static func set_phase(sky: Sky, phase: float) -> void:
 	(sky.sky_material as ShaderMaterial).set_shader_parameter("phase", fposmod(phase, 1.0))

@@ -10,8 +10,10 @@ class_name CockpitFrame
 #   PowertrainHealth), the SteeringWheel (LED strip, LCD, paddles) on a column,
 #   a centre stack with the touch-screen HeadUnit (station tiles; the driver's
 #   hand taps them, the station changes on the tap), a console with a gear
-#   lever that follows the gearbox mode (H-gate in MANUAL, sequential stick in
-#   SEMI, R-N-D selector in AUTO) and a handbrake that lifts,
+#   lever that follows the gearbox mode (the car's own H-gate in MANUAL, a
+#   sequential stick or paddles in SEMI, R-N-D selector in AUTO; the lever
+#   travels the gate on the shift's clock with the driver's hand on the knob)
+#   and a handbrake that lifts,
 #   two seats, door cards, sills, A- and B-pillars, roof liner, sun visors,
 #   floor and footwell, three pedals that follow the inputs, and the three
 #   CockpitMirrors. Dark materials, one dim amber cabin light, backlit trim.
@@ -79,12 +81,20 @@ const DIAL_R := 0.05
 static var enabled := true
 const DIAL_SWEEP := 270.0   # degrees from empty (lower left) to full (lower right)
 const SPEEDO_MAX_KMH := 300.0
+## The lever's defaults, overridden per car by the spec's "shifter"
+## (CarSpec.shifter: the gate, the length and the throw).
 const LEVER_LEN := 0.23
 const LEVER_ROW_TILT := 16.0   # degrees fore/aft for a gear slot
 const LEVER_COL_TILT := 11.0   # degrees left/right per column
-const LEVER_SPEED := 12.0      # slot units per second along the gate path
-## SEMI: the tap waits this long, so the driver's hand (DriverModel.REACH_SECS) is on it first.
+## A lever move waits this long at most for the driver's hand to arrive on
+## the knob (DriverModel reaches in less), then goes on its own.
 const SEQ_WAIT := 0.22
+## The shortest lever travel, and the selector's own travel in AUTO (no hand).
+const LEVER_MIN_SECS := 0.08
+const LEVER_ALONE_SECS := 0.25
+## The round knob's radius: it fills the hollow of the driver's mitten
+## (DriverModel.hand_boxes, 3.3 cm palm to fingertips) with a little air.
+const KNOB_R := 0.015
 const PEDAL_TRAVEL_DEG := 22.0
 
 ## The driver's side window (2026-10-09, Roy: "the Z to roll up and roll down
@@ -151,14 +161,24 @@ var _window_parts: Node3D        # whatever set_window_control() built
 var wheel_angle := 0.0           # the drawn wheel, radians, + = right (chases steering)
 var _wheel_vel := 0.0            # rad/s
 var cockpit := false
-var lever_moving := false
+var shifter := {}                # this car's lever (CarSpec.shifter)
+var lever_len := LEVER_LEN
+var row_tilt := LEVER_ROW_TILT
+var col_tilt := LEVER_COL_TILT
+var lever_moving := false        # a move is pending or under way
+var lever_started := false       # the lever itself is travelling (the hand has it)
 var _lever_gear := 0
 var _lever_pos := Vector2.ZERO   # (col, row) in slot units, row -1 forward, +1 back
-var _lever_path: Array[Vector2] = []
+var _lever_path: Array[Vector2] = []   # waypoints after _lever_from
+var _lever_from := Vector2.ZERO
+var _lever_t := 0.0              # time into the travel
+var _lever_dur := 0.0            # the travel's length
+var _lever_deadline := 0.0       # when the move should land, from the request
+var _lever_wait := 0.0           # time spent waiting for the hand
+var _lever_rail_passed := false  # the move crossed the neutral rail (tests)
 var lever_mode := -1             # PlayerCar.Transmission the lever shows
 var _lever_heads := {}           # mode -> knob mesh
 var _gate_labels := {}           # mode -> pattern label on the console
-var _lever_wait := 0.0
 var _last_gear := 0
 var _static_tris := 0
 
@@ -554,34 +574,68 @@ func _on_hand_contact(target: StringName) -> void:
 
 # ---------- gear lever and handbrake ----------
 
+## The lever's gate: gear -> (col, row) from the spec, neutral on the rail.
+func _gate() -> Dictionary:
+	return shifter.get("gate", {})
+
+## Where a gear sits in the H gate, or null when the gate has no slot for it.
+func gate_slot(g: int) -> Variant:
+	var gate := _gate()
+	var v: Variant = gate.get(g, gate.get(str(g)))
+	if v == null:
+		return null
+	return Vector2(float(v[0]), float(v[1]))
+
+## SEMI mode on this car taps the stick ("lever") or flicks the paddle ("paddle").
+func paddle_semi() -> bool:
+	return str(shifter.get("sequential", "lever")) == "paddle"
+
+## The driver's hand rides the lever in this mode: MANUAL always, SEMI with a
+## stick. AUTO's selector and a paddle car's SEMI move without it.
+func lever_needs_hand() -> bool:
+	if player.automatic_transmission:
+		return false
+	return lever_mode != PlayerCar.Transmission.SEMI or not paddle_semi()
+
 func _build_lever() -> void:
+	shifter = player.spec.get("shifter", CarSpec.shifter("h5"))
+	lever_len = float(shifter.get("lever_len", LEVER_LEN))
+	row_tilt = float(shifter.get("row_tilt_deg", LEVER_ROW_TILT))
+	col_tilt = float(shifter.get("col_tilt_deg", LEVER_COL_TILT))
 	lever = Node3D.new()
 	lever.name = "Lever"
 	lever.position = Vector3(0.0, 0.615, -0.02)
 	var k := CockpitKit.new()
-	k.cylinder(0.008, 0.0, LEVER_LEN - 0.02, Vector3.ZERO, SILVER, 8)
+	k.cylinder(0.008, 0.0, lever_len - 0.02, Vector3.ZERO, SILVER, 8)
 	k.cylinder(0.02, 0.0, 0.02, Vector3.ZERO, LEATHER, 8)   # boot collar
 	lever.add_child(k.instance(CockpitKit.material(0.35, 0.7)))
 	lever_knob = Node3D.new()
 	lever_knob.name = "Knob"
-	lever_knob.position = Vector3(0.0, LEVER_LEN, 0.0)
+	lever_knob.position = Vector3(0.0, lever_len, 0.0)
 	lever.add_child(lever_knob)
 	add_child(lever)
 	# one head per gearbox mode on the same knob point (the hand's target), and
 	# the pattern printed on the console behind the boot; set_lever_mode shows one
 	var mat := CockpitKit.material(0.6, 0.2)
-	var h := CockpitKit.new()   # MANUAL: leather knob, silver top
-	h.box(Vector3(0.040, 0.046, 0.040), Vector3.ZERO, LEATHER)
-	h.box(Vector3(0.028, 0.004, 0.028), Vector3(0.0, 0.025, 0.0), SILVER)
-	var s := CockpitKit.new()   # SEMI: taller sequential grip, silver collar
-	s.cylinder(0.019, -0.03, 0.035, Vector3.ZERO, LEATHER, 10)
-	s.cylinder(0.021, -0.034, -0.026, Vector3.ZERO, SILVER, 10)
+	var h := CockpitKit.new()   # MANUAL: a leather ball the hand wraps, silver top
+	if str(shifter.get("knob", "ball")) == "tee":
+		h.box(Vector3(0.062, 0.030, 0.036), Vector3(0.0, 0.004, 0.0), LEATHER)
+		h.box(Vector3(0.028, 0.004, 0.028), Vector3(0.0, 0.021, 0.0), SILVER)
+	else:
+		var along_x := Basis(Vector3.BACK, PI / 2.0)
+		h.cylinder(KNOB_R, -0.014, 0.014, Vector3.ZERO, LEATHER, 12, along_x)
+		h.cylinder(KNOB_R - 0.004, -0.018, -0.014, Vector3.ZERO, LEATHER, 12, along_x)
+		h.cylinder(KNOB_R - 0.004, 0.014, 0.018, Vector3.ZERO, LEATHER, 12, along_x)
+		h.box(Vector3(0.014, 0.003, 0.014), Vector3(0.0, KNOB_R - 0.0015, 0.0), SILVER)   # top flush with the ball
+	var sq := CockpitKit.new()   # SEMI: taller sequential grip, silver collar
+	sq.cylinder(0.019, -0.03, 0.035, Vector3.ZERO, LEATHER, 10)
+	sq.cylinder(0.021, -0.034, -0.026, Vector3.ZERO, SILVER, 10)
 	var a := CockpitKit.new()   # AUTO: T-handle with the lock button
 	a.box(Vector3(0.066, 0.030, 0.034), Vector3(0.0, 0.004, 0.0), LEATHER)
 	a.box(Vector3(0.012, 0.006, 0.014), Vector3(-0.02, 0.021, 0.0), SILVER)
 	var heads := {
-		PlayerCar.Transmission.MANUAL: [h, "KnobH", "1 3 5\n2 4 6 R"],
-		PlayerCar.Transmission.SEMI: [s, "KnobSeq", "−\n+"],
+		PlayerCar.Transmission.MANUAL: [h, "KnobH", gate_text()],
+		PlayerCar.Transmission.SEMI: [sq, "KnobSeq", "−\n+"],
 		PlayerCar.Transmission.AUTO: [a, "KnobAuto", "R\nN\nD"],
 	}
 	for m in heads:
@@ -592,6 +646,27 @@ func _build_lever() -> void:
 		l.name = "Gate" + (heads[m][1] as String).trim_prefix("Knob")
 		l.rotation_degrees = Vector3(-90.0, 0.0, 0.0)   # flat on the console, top line forward
 		_gate_labels[m] = l
+
+## The H pattern printed on the console, from the gate: the forward row over
+## the back row, one column per gate column.
+func gate_text() -> String:
+	var gate := _gate()
+	var cols := {}
+	for g in gate:
+		cols[int(gate[g][0])] = true
+	var order := cols.keys()
+	order.sort()
+	var lines := []
+	for row in [-1, 1]:
+		var cells := []
+		for c in order:
+			var cell := " "
+			for g in gate:
+				if int(gate[g][0]) == c and int(gate[g][1]) == row:
+					cell = "R" if int(g) < 0 else str(int(g))
+			cells.append(cell)
+		lines.append(" ".join(cells))
+	return "\n".join(lines)
 
 func _build_handbrake() -> void:
 	handbrake = Node3D.new()
@@ -614,14 +689,15 @@ func set_lever_mode(mode: int) -> void:
 	_lever_path.clear()
 	_lever_wait = 0.0
 	lever_moving = false
+	lever_started = false
 	_lever_gear = player.gear
 	_lever_pos = _slot_of(player.gear)
 	_apply_lever(_lever_pos)
 
 ## The slot of a gear as (column, row), row -1 forward and +1 back, in the
-## current lever mode. MANUAL, the H-gate: odd gears forward, even gears and
-## reverse back, 0 the neutral gate, reverse right of the last column. SEMI:
-## the sequential stick rests in the centre in every gear. AUTO: one column,
+## current lever mode. MANUAL: the car's H gate (CarSpec.shifter), 0 the
+## neutral rail; a gear the gate leaves out sits on the rail. SEMI: the
+## sequential stick rests in the centre in every gear. AUTO: one column,
 ## R forward, N, D back.
 func _slot_of(g: int) -> Vector2:
 	if lever_mode == PlayerCar.Transmission.SEMI:
@@ -630,52 +706,123 @@ func _slot_of(g: int) -> Vector2:
 		return Vector2(0.0, signf(float(g)))
 	if g == 0:
 		return Vector2.ZERO
-	var n_cols := int(ceil(float(player.gear_ratios.size()) / 2.0))
-	if g < 0:
-		return Vector2(float(n_cols) - float(n_cols - 1) / 2.0, 1.0)
-	var col := float((g - 1) / 2) - float(n_cols - 1) / 2.0
-	return Vector2(col, -1.0 if g % 2 == 1 else 1.0)
+	var slot: Variant = gate_slot(g)
+	if slot == null:
+		return Vector2.ZERO
+	return slot
 
 ## Lever tilt from a slot position (slot units -> degrees).
 func _apply_lever(p: Vector2) -> void:
-	lever.rotation_degrees = Vector3(p.y * LEVER_ROW_TILT, 0.0, -p.x * LEVER_COL_TILT)
+	lever.rotation_degrees = Vector3(p.y * row_tilt, 0.0, -p.x * col_tilt)
 
-## Start moving the lever to a gear, through the neutral gate like a hand would.
-## SEMI: a tap instead, back for an upshift and forward for a downshift, then
-## back to the centre, after SEQ_WAIT so the driver's hand is on it first.
-func move_lever_to(g: int) -> void:
+## The knob's centre with the lever in a gear's slot, car space (where the
+## lever tip lands for that gear; tests compare it with lever_tip()).
+func gate_tip(g: int) -> Vector3:
+	var p := _slot_of(g)
+	var b := Basis.from_euler(Vector3(deg_to_rad(p.y * row_tilt), 0.0, deg_to_rad(-p.x * col_tilt)))
+	return lever.position + b * Vector3(0.0, lever_len, 0.0)
+
+## The knob's centre now, car space.
+func lever_tip() -> Vector3:
+	return lever.transform * lever_knob.position
+
+## Start a lever move to a gear, landing in secs (the physics shift_time, so
+## the lever drops into gear as the box does and the gear sound plays). The
+## path runs through the neutral rail like a hand would: out of the slot,
+## along the rail, into the new slot. The lever waits for the driver's hand
+## to take the knob (DriverModel, at most SEQ_WAIT) and then travels with an
+## ease over what is left of secs. SEMI with a stick: a tap instead, back
+## for an upshift and forward for a downshift, then the centre.
+func move_lever_to(g: int, secs: float = LEVER_ALONE_SECS) -> void:
 	var to := _slot_of(g)
 	_lever_path.clear()
+	_lever_from = _lever_pos
+	_lever_rail_passed = false
 	if lever_mode == PlayerCar.Transmission.SEMI:
 		_lever_path.append(Vector2(0.0, 1.0 if g > _lever_gear else -1.0))
 		_lever_path.append(Vector2.ZERO)
-		_lever_wait = SEQ_WAIT
-		_lever_gear = g
-		lever_moving = true
-		return
-	if _lever_pos.y != 0.0:
-		_lever_path.append(Vector2(_lever_pos.x, 0.0))
-	if to.x != _lever_pos.x:
-		_lever_path.append(Vector2(to.x, 0.0))
-	_lever_path.append(to)
+	else:
+		if _lever_pos.y != 0.0:
+			_lever_path.append(Vector2(_lever_pos.x, 0.0))
+		if to.x != _lever_pos.x:
+			_lever_path.append(Vector2(to.x, 0.0))
+		if _lever_path.is_empty() or _lever_path[-1] != to:
+			_lever_path.append(to)
 	_lever_gear = g
+	_lever_deadline = maxf(secs, LEVER_MIN_SECS)
+	_lever_wait = 0.0
+	_lever_t = 0.0
+	_lever_dur = 0.0
 	lever_moving = true
+	lever_started = false
 
 func lever_knob_position() -> Vector3:
 	return lever_knob.global_position
 
+## How far along its path the lever is, 0..1 (tests).
+func lever_progress() -> float:
+	if not lever_moving:
+		return 1.0
+	if not lever_started or _lever_dur <= 0.0:
+		return 0.0
+	return clampf(_lever_t / _lever_dur, 0.0, 1.0)
+
+## The move crossed the neutral rail (tests).
+func lever_passed_rail() -> bool:
+	return _lever_rail_passed
+
+## The point a fraction u along the path (piecewise linear by distance).
+func _path_point(u: float) -> Vector2:
+	if _lever_path.is_empty():
+		return _lever_from
+	var total := 0.0
+	var prev := _lever_from
+	for w in _lever_path:
+		total += prev.distance_to(w)
+		prev = w
+	if total <= 0.0:
+		return _lever_path[-1]
+	var want := u * total
+	prev = _lever_from
+	for i in _lever_path.size():
+		var w := _lever_path[i]
+		var seg := prev.distance_to(w)
+		if want <= seg or i == _lever_path.size() - 1:
+			return prev.lerp(w, clampf(want / maxf(seg, 1e-6), 0.0, 1.0))
+		want -= seg
+		prev = w
+	return _lever_path[-1]
+
 func _step_lever(delta: float) -> void:
+	if not lever_moving:
+		return
 	if _lever_path.is_empty():
 		lever_moving = false
+		lever_started = false
 		return
-	if _lever_wait > 0.0:
-		_lever_wait -= delta
-		return
-	var next := _lever_path[0]
-	_lever_pos = _lever_pos.move_toward(next, LEVER_SPEED * delta)
-	if _lever_pos.is_equal_approx(next):
-		_lever_path.remove_at(0)
+	if not lever_started:
+		# wait for the hand to take the knob, up to SEQ_WAIT, unless no hand comes
+		var hand_there := driver != null and driver.hand_on_knob()
+		if lever_needs_hand() and not hand_there and _lever_wait < SEQ_WAIT:
+			_lever_wait += delta
+			return
+		lever_started = true
+		_lever_t = 0.0
+		_lever_dur = maxf(_lever_deadline - _lever_wait, LEVER_MIN_SECS)
+	_lever_t += delta
+	var u := clampf(_lever_t / _lever_dur, 0.0, 1.0)
+	var e := u * u * (3.0 - 2.0 * u)
+	var prev_row := _lever_pos.y
+	_lever_pos = _path_point(e)
+	if _lever_pos.y == 0.0 or prev_row * _lever_pos.y < 0.0:
+		_lever_rail_passed = true   # on the rail, or crossed it between frames
 	_apply_lever(_lever_pos)
+	if u >= 1.0:
+		_lever_pos = _lever_path[-1]
+		_apply_lever(_lever_pos)
+		_lever_path.clear()
+		lever_moving = false
+		lever_started = false
 
 # ---------- pedals ----------
 
@@ -774,16 +921,17 @@ func _process(delta: float) -> void:
 				_lever_gear = p.gear
 	else:
 		# Manual and semi: the lever starts for the requested gear the moment
-		# the shift starts (the driver's hand rides it through the shift_time),
-		# and is set straight on gear changes that skip is_shifting (out of neutral).
+		# the shift starts and lands as the box engages (shift_time), the
+		# driver's hand on it; gear changes that skip is_shifting (out of
+		# neutral, the reverse toggle) get the same travel after the fact.
 		if p.is_shifting and _lever_gear != p.requested_gear:
-			move_lever_to(p.requested_gear)
+			move_lever_to(p.requested_gear, p.shift_time)
 		if p.gear != _last_gear:
 			if _lever_gear != p.gear:
-				move_lever_to(p.gear)
+				move_lever_to(p.gear, p.shift_time)
 			_last_gear = p.gear
 		if _lever_gear != p.gear and not lever_moving and not p.is_shifting:
-			move_lever_to(p.gear)
+			move_lever_to(p.gear, p.shift_time)
 	_step_lever(delta)
 	_update_radio(delta)
 

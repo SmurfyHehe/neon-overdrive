@@ -28,11 +28,17 @@ extends Node3D
 #
 # Animations are a small state machine on the right hand, all procedural and
 # interruptible, driven by what the car and radio actually do (not by keys):
-#   - manual gear change: when the lever starts moving (CockpitFrame follows
-#     the vehicle's requested gear) the hand reaches the knob, rides it through
-#     the gate and returns to the rim;
-#   - automatic: a finger flick on the paddle (right on an upshift, left on a
-#     downshift), hands stay on the rim;
+#   - manual gear change (2026-10-09, Roy: the lever must travel the gate and
+#     the hand must not pass through the knob): the shift starts the lever's
+#     move (CockpitFrame, on the car's shift_time), the hand reaches the knob
+#     in a share of that time, wraps it (palm over the ball, fingers down the
+#     front, thumb inboard: the hand's grip tube is the knob, so nothing of
+#     the hand is inside it) and the lever only travels once the hand holds
+#     it; the hand is locked to the knob through the move, so it tilts with
+#     the lever and lands in gear as the box engages, then returns to the rim;
+#   - sequential stick (SEMI on a car with one): the same, a tap fore or aft;
+#   - automatic, and SEMI on a car with paddles: a finger flick on the paddle
+#     (right on an upshift, left on a downshift), hands stay on the rim;
 #   - radio (touch screen, 2026-10-07): the next-station key only asks
 #     (request_radio); the hand reaches the HeadUnit, taps the next tile (past
 #     the last one it presses the knob: off) and returns. The station changes
@@ -125,6 +131,26 @@ const RECLINE_DEG := 12.0
 const HEAD_Y := 0.49
 const REACH_SECS := 0.22
 const RETURN_SECS := 0.22
+## A manual shift's reach is this share of the car's shift_time, between
+## REACH_MIN_SECS and REACH_SECS, so the lever has the rest of the shift to
+## travel and lands as the box engages.
+const REACH_SHARE := 0.45
+const REACH_MIN_SECS := 0.08
+const KNOB_LINGER_SECS := 0.08   # the hand stays on the knob this long after it lands
+const SHIFT_HOLD_MAX_SECS := 1.2 # and never longer than this in all
+## The hand on the knob: its grip tube (local y, see _hand_mesh) runs across
+## the car through the ball, the back of the hand up and a little back so
+## the fingers drape forward and down over the ball and the cuff stays low
+## (KNOB_BACK, car space for an upright lever: the sightline cap), the wrist
+## back and out toward the shoulder (KNOB_WRIST); the mitten's hollow is
+## not centred on its grip axis (the fingertips curl in under it), so the
+## ball sits KNOB_LIFT (negative: above) from the axis to clear the palm and
+## the fingertips alike. Leans with the lever by KNOB_TILT_FOLLOW.
+const KNOB_BACK := Vector3(-0.10, 0.92, 0.22)
+const KNOB_WRIST := Vector3(0.40, 0.0, 0.85)
+const KNOB_LIFT := -0.0035
+## How much of the lever's tilt the hand takes (1 = it leans with the lever).
+const KNOB_TILT_FOLLOW := 1.0
 const PRESS_SECS := 0.12
 const PADDLE_SECS := 0.25
 const BRAKE_REACH_SECS := 0.20
@@ -196,6 +222,9 @@ var _head_bob := 0.0
 var _prev_vy := 0.0
 var _breath := 0.0
 var _foot_target := Vector3.ZERO
+var _left_foot := Vector3.ZERO
+var _reach_secs := REACH_SECS      # this shift's reach
+var _linger := 0.0                 # time on the knob since the lever landed
 var _mat: StandardMaterial3D
 var tri_count := 0
 ## How far the shin ends fall short of the ankle targets (0 when the leg can
@@ -227,6 +256,7 @@ func _ready() -> void:
 	_hand_xf = _grip_transform(1)
 	_left_xf = _grip_transform(-1)
 	_foot_target = _pedal_ankle("throttle")
+	_left_foot = _pedal_ankle("clutch") if player.realistic_clutch else _dead_pedal_ankle()
 
 ## Cockpit view: the camera is the head, so head and torso go.
 func set_cockpit(on: bool) -> void:
@@ -298,12 +328,8 @@ func _build_hand(side: int) -> MeshInstance3D:
 ## cuff band. Hand space: x outward from the hub, y up the rim, z toward the driver.
 static func _hand_mesh(k: CockpitKit, side: int, glove: Color, cuff: Color) -> void:
 	var sx := float(side)
-	k.box(Vector3(0.035, 0.085, 0.075), Vector3(sx * 0.038, 0.0, 0.01), glove)                 # palm
-	k.box(Vector3(0.06, 0.08, 0.03), Vector3(sx * 0.012, 0.0, -0.038), glove)                  # fingers over the far side
-	k.box(Vector3(0.03, 0.075, 0.03), Vector3(-sx * 0.028, 0.0, -0.030), glove)                # fingertips curling in
-	k.box(Vector3(0.05, 0.028, 0.028), Vector3(sx * 0.008, 0.03, 0.036), glove)                # thumb
-	k.box(Vector3(0.025, 0.028, 0.025), Vector3(-sx * 0.02, 0.03, 0.03), glove)                # thumb tip
-	k.box(Vector3(0.05, 0.03, 0.07), Vector3(sx * WRIST_X, 0.0, 0.06), glove)                  # wrist, toward the driver
+	for b in hand_boxes(side):
+		k.box(b[0], b[1], glove)
 	# the closed cuff: a capped cylinder along +z around the wrist, nothing past
 	# it, in the glove colour, with a thin accent band round it
 	k.cylinder(CUFF_R, CUFF_Z0, CUFF_Z1, Vector3(sx * WRIST_X, 0.0, 0.0), glove, 10, Basis(Vector3.RIGHT, PI / 2.0))
@@ -311,6 +337,20 @@ static func _hand_mesh(k: CockpitKit, side: int, glove: Color, cuff: Color) -> v
 	band.ring_sector(CUFF_R, CUFF_R + 0.003, 0.0, TAU, BAND_Z0, BAND_Z1, cuff, 10)
 	band.offset(Vector3(sx * WRIST_X, 0.0, 0.0))
 	k.merge(band)
+
+## The solid parts of a hand as [size, centre] boxes in hand space (the mesh
+## is built from these; tests check nothing it holds is inside one). The
+## grip tube along local y through the origin is the hollow between them.
+static func hand_boxes(side: int) -> Array:
+	var sx := float(side)
+	return [
+		[Vector3(0.035, 0.085, 0.075), Vector3(sx * 0.038, 0.0, 0.01)],     # palm
+		[Vector3(0.06, 0.08, 0.03), Vector3(sx * 0.012, 0.0, -0.038)],      # fingers over the far side
+		[Vector3(0.03, 0.075, 0.03), Vector3(-sx * 0.028, 0.0, -0.030)],    # fingertips curling in
+		[Vector3(0.05, 0.028, 0.028), Vector3(sx * 0.008, 0.03, 0.036)],    # thumb
+		[Vector3(0.025, 0.028, 0.025), Vector3(-sx * 0.02, 0.03, 0.03)],    # thumb tip
+		[Vector3(0.05, 0.03, 0.07), Vector3(sx * WRIST_X, 0.0, 0.06)],      # wrist, toward the driver
+	]
 
 ## Gold Cuban-link bracelet round the right wrist (Roy, 2026-10-06): LINKS flat
 ## oblong links lying on the cuff, long side along the chain, each tilted the
@@ -500,11 +540,27 @@ static func _grab(h: Dictionary, wheel_deg: float) -> void:
 func _wheel_to_car(local_xf: Transform3D) -> Transform3D:
 	return frame.wheel_mount.transform * frame.wheel.transform * local_xf
 
-## The right hand on the gear knob, car space.
+## The right hand wrapped round the gear knob, car space, riding the lever:
+## the grip tube through the ball (KNOB_LIFT up), the pose turned with the
+## lever's tilt so the wrist follows the knob through the gate.
 func _lever_hand_transform() -> Transform3D:
-	var knob := frame.lever.transform * frame.lever_knob.position
-	var b := Basis(Vector3.BACK, deg_to_rad(-90.0))   # palm down over the knob, fingers forward
-	return Transform3D(b, knob + Vector3(0.0, 0.035, 0.0))
+	var lever: Node3D = frame.lever
+	var b := Basis.IDENTITY.slerp(lever.basis, KNOB_TILT_FOLLOW) * _hand_basis(1, KNOB_BACK, KNOB_WRIST)
+	var p := lever.transform * (frame.lever_knob.position + Vector3(0.0, KNOB_LIFT, 0.0))
+	return Transform3D(b, p)
+
+## The hand holds the knob right now (CockpitFrame starts the lever on this).
+func hand_on_knob() -> bool:
+	return act == Act.SHIFT_HOLD
+
+## How far the hand's grip is from where it should sit on the knob, metres
+## (0 while it holds it; tests).
+func knob_grip_error() -> float:
+	return (hands[1] as Node3D).position.distance_to(_lever_hand_transform().origin)
+
+## The hand's grip pose on the knob for an upright lever (tests).
+static func knob_hand_basis() -> Basis:
+	return _hand_basis(1, KNOB_BACK, KNOB_WRIST)
 
 ## The right hand on the handbrake grip, car space: palm down over the lever,
 ## thumb inboard, riding the lever's lift.
@@ -590,7 +646,7 @@ func _process(delta: float) -> void:
 func _update_events() -> void:
 	var p := player
 	if p.gear != _last_gear:
-		if p.automatic_transmission:
+		if not frame.lever_needs_hand():
 			paddle_side = 1 if p.gear > _last_gear else -1
 			paddle_t = PADDLE_SECS
 		_last_gear = p.gear
@@ -599,8 +655,9 @@ func _update_events() -> void:
 	# on its way back goes straight back to the knob; the radio press is
 	# dropped (the station already changed), a shift under a held handbrake
 	# moves the lever on its own.
-	var moving := frame.lever_moving and not p.automatic_transmission
+	var moving := frame.lever_moving and frame.lever_needs_hand()
 	if moving and not _lever_was_moving and not _is_brake() and act != Act.SHIFT_REACH and act != Act.SHIFT_HOLD:
+		_reach_secs = clampf(REACH_SHARE * p.shift_time, REACH_MIN_SECS, REACH_SECS)
 		_start(Act.SHIFT_REACH)
 	_lever_was_moving = moving
 	var brake_on := p.handbrake_input > 0.5
@@ -660,14 +717,19 @@ func _step_act(delta: float) -> void:
 			elif player.handbrake_input > 0.5:
 				_start(Act.BRAKE_REACH)   # pulled while the hand was busy, still held
 		Act.SHIFT_REACH:
-			var t := clampf(act_t / REACH_SECS, 0.0, 1.0)
+			var t := clampf(act_t / _reach_secs, 0.0, 1.0)
 			_hand_xf = _hand_from.interpolate_with(_lever_hand_transform(), _ease(t))
 			if t >= 1.0:
 				_contact(CONTACT_GEAR)
 				_start(Act.SHIFT_HOLD)
 		Act.SHIFT_HOLD:
+			# locked to the knob: the lever moves under the hand (CockpitFrame
+			# waits for hand_on_knob, then travels), the hand goes with it
 			_hand_xf = _lever_hand_transform()
-			if (not frame.lever_moving) or act_t > 0.8:
+			if not frame.lever_moving:
+				_linger += delta
+			if (_linger >= KNOB_LINGER_SECS and not frame.lever_moving) or act_t > SHIFT_HOLD_MAX_SECS:
+				_linger = 0.0
 				_start(Act.SHIFT_RETURN)
 		Act.SHIFT_RETURN:
 			var t := clampf(act_t / RETURN_SECS, 0.0, 1.0)
@@ -686,7 +748,7 @@ func _step_act(delta: float) -> void:
 				_pressed = true
 				_contact(_radio_contact)   # the station changes here
 			if t >= 1.0:
-				if radio_requests > 0 and not (frame.lever_moving and not player.automatic_transmission):
+				if radio_requests > 0 and not (frame.lever_moving and frame.lever_needs_hand()):
 					_begin_radio()   # another press waiting: on to the next tile
 				else:
 					_start(Act.RADIO_RETURN)
@@ -758,7 +820,11 @@ func _place_legs(delta: float) -> void:
 	var p := player
 	var want := _pedal_ankle("brake") if p.brake_amount > 0.05 else _pedal_ankle("throttle")
 	_foot_target = _foot_target.move_toward(want, 1.6 * delta)
-	var targets := {1: _foot_target, -1: _pedal_ankle("clutch") if p.realistic_clutch else _dead_pedal_ankle()}
+	# the left foot: on the clutch with the clutch model on, and for a shift on
+	# a stick car (the box opens its own clutch, the foot shows it), else the dead pedal
+	var clutching := p.realistic_clutch or (frame.lever_needs_hand() and (p.clutch_amount > 0.05 or frame.lever_moving))
+	_left_foot = _left_foot.move_toward(_pedal_ankle("clutch") if clutching else _dead_pedal_ankle(), 2.0 * delta)
+	var targets := {1: _foot_target, -1: _left_foot}
 	for side in [-1, 1]:
 		var l: Dictionary = legs[side]
 		var hip := _hip(side)

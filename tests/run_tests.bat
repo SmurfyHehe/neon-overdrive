@@ -81,6 +81,7 @@ call :run audio/road_sounds --headless
 call :run audio/crash_variety --headless
 call :run audio/audio_mix --headless
 call :run audio/radio --headless
+call :run world/person_body --headless
 call :run world/night_clock --headless
 call :run world/night_bands "--headless --fixed-fps 60"
 call :run world/world_mood "--headless --fixed-fps 60"

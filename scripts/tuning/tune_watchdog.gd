@@ -59,6 +59,7 @@ func _ready() -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 10)
 	dialog.add_child(box)
+	dialog.theme = UiTheme.font_theme()
 	message = Label.new()
 	message.add_theme_color_override("font_color", TunerScreen.SILVER)
 	box.add_child(message)

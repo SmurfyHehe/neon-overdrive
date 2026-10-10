@@ -48,6 +48,7 @@ call :run fleet/p1_coupe --headless
 call :run car/undercarriage --headless
 call :run world/road_strip_winding --headless
 call :run world/sidewalk_collision_taper --headless
+call :run world/kerb_profile --headless
 call :run car/aero_draft_equivalence --headless
 call :run view/camera_feel --headless
 call :run audio/car_audio --headless

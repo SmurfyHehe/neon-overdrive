@@ -14,7 +14,17 @@ extends SceneTree
 # - the band is respected: no car on rails inside it (one tick of slack), no
 #   car in the sim beyond its outer edge unless it is not fit for the rails
 #   (crashed or knocked off its path: TrafficCar.can_rail)
-# - a drawn car on rails moves every tick (it thinks less often than that)
+# - a drawn car on rails nearer than TrafficManager.RAIL_FAR_M moves every
+#   tick (it thinks less often than that) and stays on its lane path between
+#   thinks (it is carried straight on, not placed on the curve: NEAR_OFF_PATH)
+# - the far tier (off in the game, turned on here at FAR_M): a drawn car on
+#   rails further out moves once per think. It still covers the ground its
+#   speed says (FAR_PACE), it is never nearer than the far distance allows, and
+#   no step it takes shifts it by more than FAR_STEP_RAD as seen from the
+#   player (about 2 pixels at 1080p, which is why it is off by default)
+# - only plain traffic is slowed: a race rival 250 m ahead, on rails, keeps the
+#   every-tick tier and moves every tick; cop, ally and crew cars and the
+#   patrol car never get another tier
 # - hidden cars, which move once per think, still cover the ground their speed
 #   says: the metres they travel along the road against speed x time, summed
 #   over every hidden car-tick, within HIDDEN_PACE
@@ -40,6 +50,15 @@ const JUMP_M := 0.25
 const TURN_RAD := 0.03
 ## Hidden cars' distance covered against speed x time, as a share.
 const HIDDEN_PACE := 0.03
+## The same for drawn rail cars in the far tier.
+const FAR_PACE := 0.03
+## A near-tier rail car may be this far off its lane path between thinks, m.
+const NEAR_OFF_PATH := 0.1
+## A far-tier step, as an angle seen from the player: 0.0006 rad is one pixel
+## at 1080p with a 62 degree view.
+const FAR_STEP_RAD := 0.0015
+const FAR_M := 150.0
+const RIVAL_AHEAD := 250.0
 
 var logger := Harness.ErrorCounter.new()
 var game: Node
@@ -68,10 +87,26 @@ var last_shown := {}
 var hidden_moved := 0.0
 var hidden_want := 0.0
 var rail_still := 0
+var last_far := {}
+var far_moved := 0.0
+var far_want := 0.0
+var far_ticks := 0
+var near_ticks := 0
+var worst_far_step := 0.0
+var worst_far_note := ""
+var worst_near_off := 0.0
+var nearest_far := INF
+var rival: TrafficCar
+var rival_last := Vector3.ZERO
+var rival_rail_ticks := 0
+var rival_still := 0
+var rival_tiered := 0
 
 func _initialize() -> void:
 	OS.add_logger(logger)
 	Engine.physics_ticks_per_second = RATE
+	TrafficManager.rail_tiers = true
+	TrafficManager.RAIL_FAR_M = FAR_M
 	game = Harness.boot(self, TrafficSettings.CAR_COUNT_DEFAULT, TrafficSettings.DETAIL_DEFAULT, 9191, 8000.0)
 
 func _physics_process(_delta: float) -> bool:
@@ -85,6 +120,7 @@ func _physics_process(_delta: float) -> bool:
 		Harness.move_player_to_lane(p, Harness.lane_x(PLAYER_LANE))
 		Harness.launch_player(p, PLAYER_KMH * KMH)
 		p.driver = Harness.lane_driver(Harness.lane_x(PLAYER_LANE), 1.0, PLAYER_KMH * KMH)
+		_special_cars()
 		return false
 	tick += 1
 	if not Harness.finite(p):
@@ -103,14 +139,33 @@ func _physics_process(_delta: float) -> bool:
 		var d := absf(cz - pz)
 		if car.detailed:
 			n_sim += 1
+		var far: bool = car.rail_tier == TrafficCar.RAIL_FAR and not car.detailed
+		if car == rival:
+			_watch_rival()
 		if last_z.has(car) and not respawned and not car.benched and car.global_position.z < 5000.0:
 			var hidden: bool = not car.shown and not car.detailed and not last_shown[car] and not last_detailed[car]
+			var on_rails_drawn: bool = car.shown and last_shown[car] and not car.detailed and not last_detailed[car]
 			if hidden:
 				hidden_moved += (cz - float(last_z[car])) * car.direction
 				hidden_want += car.lane_speed() * dt
-			elif car.shown and last_shown[car] and not car.detailed and not last_detailed[car] and car.lane_speed() > 5.0:
+			elif on_rails_drawn and far and last_far[car]:
+				far_ticks += 1
+				far_moved += (cz - float(last_z[car])) * car.direction
+				far_want += car.lane_speed() * dt
+				nearest_far = minf(nearest_far, d)
+				# What the step looks like from the player: its part across the line of sight.
+				var eye := p.global_position + Vector3.UP * 1.2
+				var to_car: Vector3 = last_pos[car] - eye
+				var seen: float = (car.global_position - (last_pos[car] as Vector3)).cross(to_car).length() / to_car.length_squared()
+				if seen > worst_far_step:
+					worst_far_step = seen
+					worst_far_note = "tick %d, %.0f m from the player, step %.2f m" % [tick, d, (car.global_position - last_pos[car]).length()]
+			elif on_rails_drawn and not far and not last_far[car] and car.lane_speed() > 5.0:
 				if (car.global_position - last_pos[car]).length() < 0.5 * car.lane_speed() * dt:
 					rail_still += 1
+				if car.rail_tier == TrafficCar.RAIL_NEAR:
+					near_ticks += 1
+					worst_near_off = maxf(worst_near_off, absf(RoadFrame.unroll(car.global_position).x - (car.path_x() + car._rail_dx)))
 		# A car coming into view at the fog line takes the travel it was owed
 		# while hidden in one step (TrafficCar.set_shown): not a jump anyone sees.
 		var came_into_view: bool = car.shown and last_shown.has(car) and not last_shown[car]
@@ -122,7 +177,7 @@ func _physics_process(_delta: float) -> bool:
 				into_sim += 1
 			elif was and not car.detailed:
 				onto_rails += 1
-			if car.shown and not came_into_view and not respawned and tick > 1:
+			if car.shown and not came_into_view and not respawned and tick > 1 and not far and not last_far.get(car, false):
 				var step: float = (car.global_position - last_pos[car]).length()
 				var err := absf(step - absf(car.lane_speed()) * dt)
 				if err > worst_jump:
@@ -133,12 +188,13 @@ func _physics_process(_delta: float) -> bool:
 					var turn: float = (last_basis[car] as Basis).get_rotation_quaternion().angle_to(car.global_transform.basis.get_rotation_quaternion())
 					worst_turn = maxf(worst_turn, turn)
 		last_pos[car] = car.global_position
+		last_far[car] = far
 		last_basis[car] = car.global_transform.basis
 		last_detailed[car] = car.detailed
 		if tick > WARMUP_TICKS:
 			if not car.detailed and d < traffic.physics_distance - 5.0 and car.global_position.z < 5000.0:
 				_check(false, "a car on rails %.1f m from the player at tick %d" % [d, tick])
-			if car.detailed and d > traffic.physics_distance + TrafficManager.PHYSICS_HYSTERESIS + 5.0:
+			if car.detailed and not car.race_pinned and d > traffic.physics_distance + TrafficManager.PHYSICS_HYSTERESIS + 5.0:
 				if car.can_rail():
 					_check(false, "a railable car still in the sim %.1f m from the player at tick %d" % [d, tick])
 				else:
@@ -161,6 +217,37 @@ func _physics_process(_delta: float) -> bool:
 		return _end("")
 	return false
 
+## A race rival well ahead (on rails past TrafficManager.pinned_distance), and
+## the tier of the cars that are not plain traffic.
+func _special_cars() -> void:
+	var u := RoadFrame.unroll(p.global_position)
+	rival = traffic.add_rival(RaceController.DUMMY_KIND, Harness.lane_x(3), u.z - RIVAL_AHEAD, PLAYER_KMH * KMH, Color(0.7, 0.1, 0.1))
+	rival_last = rival.global_position
+	for role in [Undercarriage.ROLE_COP, Undercarriage.ROLE_CREW, Undercarriage.ROLE_PLAYER]:
+		var c := TrafficCar.new()
+		c.kind = "n1_commuter"
+		c.role = role
+		_check(traffic._rail_tier(c, 250.0) == TrafficCar.RAIL_EVERY_TICK, "a %s car 250 m away is put in a slower rail tier" % role)
+		c.free()
+	var plain := TrafficCar.new()
+	plain.kind = "n1_commuter"
+	_check(traffic._rail_tier(plain, 250.0) == TrafficCar.RAIL_FAR and traffic._rail_tier(plain, 100.0) == TrafficCar.RAIL_NEAR, "plain traffic does not get the near and far rail tiers")
+	plain.race_released = true
+	_check(traffic._rail_tier(plain, 250.0) == TrafficCar.RAIL_EVERY_TICK, "a released rival is put in a slower rail tier")
+	plain.free()
+	var cop := PatrolCar.make()
+	_check(cop.rail_tier == TrafficCar.RAIL_EVERY_TICK and traffic._rail_tier(cop, 250.0) == TrafficCar.RAIL_EVERY_TICK, "the patrol car is put in a slower rail tier")
+	cop.free()
+
+func _watch_rival() -> void:
+	if rival.rail_tier != TrafficCar.RAIL_EVERY_TICK:
+		rival_tiered += 1
+	if not rival.detailed and rival.shown and rival.lane_speed() > 5.0 and tick > 2:
+		rival_rail_ticks += 1
+		if (rival.global_position - rival_last).length() < 0.5 * rival.lane_speed() / RATE:
+			rival_still += 1
+	rival_last = rival.global_position
+
 func _check(ok: bool, msg: String) -> void:
 	if not ok and fails.size() < 30:
 		fails.append(msg)
@@ -182,7 +269,17 @@ func _end(msg: String) -> bool:
 	print("traffic_near_band: hidden cars covered %.0f m against %.0f m by their speed; drawn rail car-ticks without a move %d" % [hidden_moved, hidden_want, rail_still])
 	_check(hidden_want > 1000.0, "too few hidden car-ticks to judge their pace (%.0f m)" % hidden_want)
 	_check(absf(hidden_moved - hidden_want) < HIDDEN_PACE * hidden_want, "hidden cars covered %.0f m, their speed says %.0f m" % [hidden_moved, hidden_want])
-	_check(rail_still == 0, "%d car-ticks where a drawn car on rails did not move" % rail_still)
+	_check(rail_still == 0, "%d car-ticks where a drawn car on rails nearer than the far tier did not move" % rail_still)
+	print("traffic_near_band: near tier %d car-ticks, worst %.3f m off the lane path; far tier %d car-ticks from %.0f m out, covered %.0f m against %.0f m, worst step seen from the player %.5f rad (%s)" % [
+		near_ticks, worst_near_off, far_ticks, nearest_far, far_moved, far_want, worst_far_step, worst_far_note])
+	_check(near_ticks > 1000 and far_ticks > 1000, "too few rail car-ticks to judge the tiers (near %d, far %d)" % [near_ticks, far_ticks])
+	_check(worst_near_off < NEAR_OFF_PATH, "a near-tier rail car was %.3f m off its lane path" % worst_near_off)
+	_check(absf(far_moved - far_want) < FAR_PACE * far_want, "far-tier cars covered %.0f m, their speed says %.0f m" % [far_moved, far_want])
+	_check(nearest_far > TrafficManager.RAIL_FAR_M - TrafficManager.RAIL_FAR_HYSTERESIS - 5.0, "a far-tier car was only %.0f m from the player" % nearest_far)
+	_check(worst_far_step < FAR_STEP_RAD, "a far-tier step was %.5f rad seen from the player (%s)" % [worst_far_step, worst_far_note])
+	print("traffic_near_band: rival on rails for %d ticks, %d without a move, %d ticks in a slower tier" % [rival_rail_ticks, rival_still, rival_tiered])
+	_check(rival_rail_ticks > 100, "the rival was on rails for only %d ticks" % rival_rail_ticks)
+	_check(rival_still == 0 and rival_tiered == 0, "the rival was slowed (%d ticks without a move, %d in a slower tier)" % [rival_still, rival_tiered])
 	_check(player_contacts == 0, "%d ticks with traffic touching the player" % player_contacts)
 	_check(pair_contacts == 0, "two sim cars touched (%d samples)" % pair_contacts)
 	_check(mean_kmh > PLAYER_KMH - 15.0, "the player averaged %.0f km/h, under %.0f" % [mean_kmh, PLAYER_KMH - 15.0])

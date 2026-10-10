@@ -69,6 +69,20 @@ const PINNED_DISTANCE_DEFAULT := 150.0
 var pinned_distance := PINNED_DISTANCE_DEFAULT
 ## A car leaves the sim only this much further out than it joined it.
 const PHYSICS_HYSTERESIS := 10.0
+## Rail cars at 30 Hz (2026-10-10): a drawn car on rails is put on the road's
+## curve at each think (30 Hz) and carried straight on at its speed on the
+## ticks between, so it still moves every tick (TrafficCar.rail_tier,
+## RAIL_NEAR). Plain traffic only. NEON_RAIL_TIERS=0 turns it off (perf
+## comparisons: every rail car is placed on the curve every tick, as before).
+static var rail_tiers := OS.get_environment("NEON_RAIL_TIERS") != "0"
+## Off by default (INF). A drawn rail car further than this from the player
+## moves only once per think (RAIL_FAR): measured at 80 cars it saves about a
+## tenth more than the near tier alone, and on a bend a 1 m step 150-270 m out
+## is 1-2 pixels at 1080p, a distant car moving at 30 frames a second. Kept
+## for a slow PC (a PerfLadder step) and for measuring: NEON_RAIL_FAR_M=<m>.
+static var RAIL_FAR_M := float(OS.get_environment("NEON_RAIL_FAR_M")) if OS.get_environment("NEON_RAIL_FAR_M").is_valid_float() else INF
+## A car drops back to the every-tick tier only this much nearer.
+const RAIL_FAR_HYSTERESIS := 10.0
 ## Cars are drawn out to at least this far whatever the slider says: the road
 ## chunks end here (Game.CHUNKS_AHEAD * CHUNK_LEN), so a car hidden any nearer
 ## would blink out in plain view. Spawns happen beyond it.
@@ -306,6 +320,7 @@ func _physics_process(_delta: float) -> void:
 			car.set_detailed(true)
 		elif car.detailed and d > band_out + far and (not car.shown or car.can_rail()):
 			car.set_detailed(false)
+		car.rail_tier = _rail_tier(car, d)
 	var gone: Array[TrafficCar] = []
 	for car in cars:
 		if car.race_pinned:
@@ -374,6 +389,19 @@ func release_rival(car: TrafficCar) -> void:
 	if car != null and is_instance_valid(car):
 		car.race_pinned = false
 		car.race_released = true
+
+## How a rail car this far from the player is moved between thinks. Only plain
+## traffic leaves the every-tick tier: never a rival (live or released), a cop,
+## or an ally or crew car.
+func _rail_tier(car: TrafficCar, d: float) -> int:
+	if not rail_tiers or car.race_pinned or car.race_released:
+		return TrafficCar.RAIL_EVERY_TICK
+	var role := car.role if car.role != "" else Undercarriage.role_for_kind(car.kind)
+	if role != Undercarriage.ROLE_TRAFFIC:
+		return TrafficCar.RAIL_EVERY_TICK
+	if d > RAIL_FAR_M or (car.rail_tier == TrafficCar.RAIL_FAR and d > RAIL_FAR_M - RAIL_FAR_HYSTERESIS):
+		return TrafficCar.RAIL_FAR
+	return TrafficCar.RAIL_NEAR
 
 ## The same show/hide and physics band for a car that is not in the pool (the
 ## patrol car): d is its distance from the player along the road.

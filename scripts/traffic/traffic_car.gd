@@ -152,9 +152,26 @@ var _rail_z := NAN
 ## On rails: ticks until the next think, and the acceleration held meanwhile.
 var _think_in := 0
 var _rail_a := 0.0
-## Hidden on rails: ticks of travel not yet applied to the car (it moves once
-## per think). rail_z_now() counts them in; being shown pays them at once.
+## Hidden on rails, or shown in the far tier: ticks of travel not yet applied
+## to the car (it moves once per think). rail_z_now() counts them in; being
+## shown pays them at once.
 var _owed := 0
+## How a drawn car on rails is moved between thinks (rail cars at 30 Hz,
+## 2026-10-10). TrafficManager sets it, for plain traffic in its pool only; a
+## rival, a patrol car, an ally or crew car keeps RAIL_EVERY_TICK.
+##   RAIL_EVERY_TICK  placed on the road's curve every tick (as before)
+##   RAIL_NEAR        placed on the curve at each think, carried straight on at
+##                    its speed on the ticks between (under 1 mm off the curve
+##                    in a 25 ms step, and it still moves every tick)
+##   RAIL_FAR         moved at each think only, by the whole step. Off by
+##                    default: see TrafficManager.RAIL_FAR_M.
+## Thinks are already spread over the cars (_think_phase), so the moves are too.
+const RAIL_EVERY_TICK := 0
+const RAIL_NEAR := 1
+const RAIL_FAR := 2
+var rail_tier := RAIL_EVERY_TICK
+## On rails: the way the car points, world space, as of its last placement.
+var _rail_fwd := Vector3.ZERO
 ## On rails across a floating-origin shift: the physics tick of the shift and
 ## the collision layer and mask put away for it (see shift_world). -1 = none.
 var _ghost_frame := -1
@@ -815,6 +832,7 @@ func place(lane: float, dir: float, z: float, y: float, speed: float) -> void:
 	_think_in = _think_phase()
 	_rail_a = 0.0
 	_owed = 0
+	_rail_fwd = Vector3.ZERO
 
 ## Drawn or not. TrafficManager owns this (the reveal distance and ViewGuard):
 ## a car is shown only inside the distance where the world itself ends in fog,
@@ -863,6 +881,7 @@ func set_detailed(on: bool) -> void:
 		_cruise_speed = maxf(current_speed(), 0.0)
 		_rail_a = 0.0
 		_owed = 0
+		_rail_fwd = Vector3.ZERO  # first rail tick places it on the curve
 		_think_in = _think_phase()
 		freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 		freeze = true
@@ -909,6 +928,7 @@ func _rail_yaw() -> float:
 func _rail_pose(z: float) -> void:
 	global_transform = RoadFrame.pose(path_x() + _rail_dx, rest_y + _rail_dy, z, _rail_yaw() + _rail_dyaw)
 	previous_global_position = global_position
+	_rail_fwd = -global_transform.basis.z
 
 ## Road-space position (y unused on rails) and z of the car: the rails' own
 ## coordinates, else looked up from the world position.
@@ -938,7 +958,7 @@ func _think_phase() -> int:
 func _cruise(delta: float) -> void:
 	_think_in -= 1
 	var think := _think_in <= 0
-	if not (think or shown):
+	if not (think or (shown and rail_tier != RAIL_FAR)):
 		_owed += 1
 		return
 	if is_nan(_rail_z):
@@ -962,9 +982,18 @@ func _cruise(delta: float) -> void:
 		_rail_dy *= k
 		_rail_dyaw *= k
 	_rail_z += direction * _cruise_speed * dt
+	if not think and rail_tier == RAIL_NEAR and _rail_fwd != Vector3.ZERO:
+		# Between thinks: straight on from the last placement, no road maths.
+		var o := global_position + _rail_fwd * (_cruise_speed * dt)
+		global_position = o
+		previous_global_position = o
+		linear_velocity = _rail_fwd * _cruise_speed
+		local_velocity = Vector3(0.0, 0.0, -_cruise_speed)
+		return
 	var xf := RoadFrame.pose(path_x() + _rail_dx, rest_y + _rail_dy, _rail_z, _rail_yaw() + _rail_dyaw)
 	global_transform = xf
 	previous_global_position = xf.origin
+	_rail_fwd = -xf.basis.z
 	# Velocity as the sim would report it (current_speed(), drafting, anything
 	# that bumps into it); a frozen body does not integrate it.
 	linear_velocity = -xf.basis.z * _cruise_speed

@@ -2265,12 +2265,13 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	for m in mouths:
 		var mt: float = -float(m.z) / CHUNK_LEN
 		mouth_edges.append(lerpf(start_own_walk, end_own_walk, mt) if int(m.side) == 1 else lerpf(start_onc_walk, end_onc_walk, mt))
+	var n_road_lamps := n_lamps   # side-street lamps (below) have no smear and no lamp-post life
 	n_lamps += SideStreets.update(root, mouths, mouth_edges, lamps, pools, n_lamps)
 	lamps.visible_instance_count = n_lamps
 	pools.visible_instance_count = n_lamps
-	smears.visible_instance_count = n_lamps
+	smears.visible_instance_count = n_road_lamps
 	var lamp_xfs := []
-	for k in range(n_lamps):
+	for k in range(n_road_lamps):
 		lamp_xfs.append(lamps.get_instance_transform(k))
 	LampLife.apply(root, chunk_index, Districts.name_at(chunk_index), lamp_xfs, _xf(0.0, 0.0, -CHUNK_LEN * 0.5),
 		-(start_onc_w + end_onc_w) * 0.5, (start_own_w + end_own_w) * 0.5)

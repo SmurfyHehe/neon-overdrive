@@ -86,6 +86,11 @@ func _run() -> void:
 			cam.look_at(views[v][1])
 			for i in 12:
 				await process_frame
+			# what the view costs to draw, for comparing two branches
+			print("cost %-12s %-4s draw calls %d, objects %d, primitives %d" % [n, v,
+				RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
+				RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME),
+				RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME)])
 			var img := root.get_viewport().get_texture().get_image()
 			var path := "%s/%s_%s.png" % [dir, n, v]
 			img.save_png(path)

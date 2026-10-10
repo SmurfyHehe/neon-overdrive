@@ -122,6 +122,9 @@ static func apply(tree: SceneTree) -> void:
 	# Wet-road mirrors (road_wet.gd) are off on Low; a hand-tuned "custom"
 	# set keeps them, like every other Medium default.
 	RoadWet.set_reflections(preset != "low")
+	# Car paint (car_paint.gd): Low plain, Medium mirrors the city, High adds
+	# the street lamps.
+	CarPaint.set_preset(preset)
 	tree.call_group(GROUP, "apply_graphics")
 
 static func apply_viewport(vp: Viewport) -> void:

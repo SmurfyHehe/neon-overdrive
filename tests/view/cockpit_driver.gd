@@ -240,7 +240,7 @@ func _physics_process(_delta: float) -> bool:
 				_check(d.head.visible and d.torso_mesh.visible, "in the chase view the whole driver shows")
 				_check(frame.visible, "the interior is drawn in the chase view (through the glass)")
 				var glass := P1CoupeBuilder._get_glass_material()
-				_check(glass.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA and glass.albedo_color.a < 0.9, "the P1 glass is see-through")
+				_check(float(glass.get_shader_parameter("see")) < 0.9, "the P1 glass is see-through")
 				_check(logger.errors.is_empty(), "engine errors: %s" % [logger.errors.slice(0, 5)])
 				return _end("")
 	return false

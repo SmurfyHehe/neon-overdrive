@@ -16,7 +16,12 @@ const HEADLIGHT_DIP := 5.0      # degrees down from level
 ## projects onto layer 1) darkens the road under the car but not the car.
 const CAR_LAYER := 2
 
-static var _blob_tex: GradientTexture2D
+## Contact shadow picture: one shared texture, so a preset change redraws it
+## for every car at once (set_soft_shadow).
+const BLOB_W := 64
+const BLOB_H := 128
+static var _blob_tex: ImageTexture
+static var _soft := true
 
 static func attach(v: Vehicle, half_length: float, headlights: bool = true) -> void:
 	for n in v.find_children("*", "VisualInstance3D", true, false):
@@ -40,23 +45,47 @@ static func attach(v: Vehicle, half_length: float, headlights: bool = true) -> v
 	blob.name = "BlobShadow"
 	# Box the decal projects through: a bit wider and longer than the body,
 	# deep enough to reach the road through suspension travel and body roll.
-	blob.size = Vector3(2.3, 1.4, half_length * 2.0 + 0.5)
+	var half_w := 0.9
+	for n in v.get_children():
+		if n.has_meta("half_w"):
+			half_w = float(n.get_meta("half_w"))
+	blob.size = Vector3(half_w * 2.0 + 0.6, 1.4, half_length * 2.0 + 0.6)
 	blob.position = Vector3(0.0, 0.25, 0.0)
 	blob.texture_albedo = _get_blob_tex()
-	blob.modulate = Color(0.0, 0.0, 0.0, 0.8)
+	blob.modulate = Color(0.0, 0.0, 0.0, 0.9)
 	blob.cull_mask = 1
 	v.add_child(blob)
 
-static func _get_blob_tex() -> GradientTexture2D:
+## Medium and High (CarPaint.set_preset): the shadow takes the car's
+## footprint, darkest under the floor, so the car sits on the road. Low
+## keeps the plain round blob.
+static func set_soft_shadow(on: bool) -> void:
+	if on == _soft:
+		return
+	_soft = on
+	if _blob_tex != null:
+		_blob_tex.update(_blob_image())
+
+static func _get_blob_tex() -> ImageTexture:
 	if _blob_tex == null:
-		var grad := Gradient.new()
-		grad.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
-		grad.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.7), Color(1, 1, 1, 0)])
-		_blob_tex = GradientTexture2D.new()
-		_blob_tex.gradient = grad
-		_blob_tex.fill = GradientTexture2D.FILL_RADIAL
-		_blob_tex.fill_from = Vector2(0.5, 0.5)
-		_blob_tex.fill_to = Vector2(1.0, 0.5)
-		_blob_tex.width = 64
-		_blob_tex.height = 64
+		_soft = CarPaint.tier() >= CarPaint.TIER_MEDIUM
+		_blob_tex = ImageTexture.create_from_image(_blob_image())
 	return _blob_tex
+
+static func _blob_image() -> Image:
+	var img := Image.create(BLOB_W, BLOB_H, false, Image.FORMAT_RGBA8)
+	for y in BLOB_H:
+		for x in BLOB_W:
+			var u := (float(x) + 0.5) / BLOB_W * 2.0 - 1.0
+			var w := (float(y) + 0.5) / BLOB_H * 2.0 - 1.0
+			var a: float
+			if _soft:
+				# A rounded box: full under the floor, gone at the decal's edge.
+				var q := Vector2(maxf(absf(u) - 0.5, 0.0) / 0.5, maxf(absf(w) - 0.66, 0.0) / 0.34)
+				a = 1.0 - smoothstep(0.0, 1.0, q.length())
+				a *= a
+			else:
+				var d := Vector2(u, w).length()
+				a = 1.0 if d <= 0.0 else clampf(lerpf(1.0, 0.7, d / 0.55) if d < 0.55 else lerpf(0.7, 0.0, (d - 0.55) / 0.45), 0.0, 1.0)
+			img.set_pixel(x, y, Color(1.0, 1.0, 1.0, a))
+	return img

@@ -68,13 +68,20 @@ const MOON_SIZE_DEG := 2.5
 const PHASE_CYCLE_NIGHTS := 29.53
 const PHASE_NIGHT_1 := 0.18
 
-## Where the moon can hang: up and to one side of the road ahead. Elevation
-## stays under ~20 degrees so it is on screen from the chase camera (which
-## pitches ~10 degrees down with a 70 degree vertical FOV).
-const MOON_EL_RISE := Vector2(12.0, 15.0)   # degrees at 8 p.m., min/max
-const MOON_EL_CLIMB := Vector2(4.0, 6.0)    # degrees gained by 6 a.m.
-const MOON_AZ := Vector2(16.0, 30.0)        # degrees off straight ahead
-const MOON_AZ_DRIFT := 4.0                  # degrees it slides outward by 6 a.m.
+## Where the moon can hang: about 22 degrees up and 25 degrees to one side of
+## the road ahead, drifting up and outward with the clock. The road wanders up
+## to 30 degrees either way and climbs or drops up to 3, so the path is
+## measured from the road's own axes where the player is (SkyDirector passes
+## them in): a moon fixed in the world spent a third to a half of the road
+## outside the frame. The parked chase
+## camera's frame tops out near 25 degrees (it is wider at speed), so the
+## path ends under 22.5; from 17 degrees aside the moon is clear of the
+## mirror at the top of the screen. tests/world/moon_sightline.gd measures
+## how often buildings leave that spot of sky open, per district.
+const MOON_EL_RISE := Vector2(20.5, 21.0)   # degrees at 8 p.m., min/max
+const MOON_EL_CLIMB := Vector2(1.0, 1.5)    # degrees gained by 6 a.m.
+const MOON_AZ := Vector2(22.0, 26.0)        # degrees off straight ahead
+const MOON_AZ_DRIFT := 3.0                  # degrees it slides outward by 6 a.m.
 
 ## Cloud cover per night type, 0 (none) to 1 (solid).
 const CLOUD_TYPES := ["clear", "scattered", "broken", "overcast"]
@@ -391,8 +398,9 @@ static func moon_direction(night: int, t: float) -> Vector3:
 ## header): there is one sky, and changing them must not dirty its material.
 static var moon_dir := Vector3(0.0, 0.3, -0.95)  # last value set, world space
 
-static func set_moon_time(_sky: Sky, night: int, t: float) -> void:
-	moon_dir = moon_direction(night, t)
+## road: the road's axes (RoadFrame.basis_at) the path is measured from.
+static func set_moon_time(_sky: Sky, night: int, t: float, road: Basis = Basis.IDENTITY) -> void:
+	moon_dir = road * moon_direction(night, t)
 	RenderingServer.global_shader_parameter_set("sky_moon_dir", moon_dir)
 
 static func set_glow(_sky: Sky, color: Color, height_deg: float) -> void:

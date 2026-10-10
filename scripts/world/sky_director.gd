@@ -3,6 +3,9 @@ extends Node
 
 # Drives the night sky from the game (night pass, 2026-10-10):
 # - the moon climbs along tonight's path as the clock runs (NightSky.moon_path),
+#   and the path turns with the road so the moon stays up and to one side of
+#   the way ahead (the road's axes are eased, so a bend or a crest still
+#   swings the moon a little before it settles back),
 # - the glow dome follows the district the player is in, blending over a few
 #   seconds when the road changes district,
 # - a new night (6 a.m. rollover) re-seeds the stars, phase and moon path.
@@ -15,6 +18,8 @@ extends Node
 const Districts := preload("res://scripts/world/districts.gd")
 
 const MOON_STEP_SECS := 2.0
+const MOON_ROAD_RATE := 0.6     # 1/s the moon's path eases after the road's axes
+const MOON_ROAD_EPS := 0.0005   # radians: below this the moon is left alone
 const BLEND_SECS := 4.0
 const BLEND_STEP_SECS := 0.1
 const DISTRICT_CHECK_SECS := 0.25
@@ -36,6 +41,8 @@ var _district_acc := 0.0
 var _blink_acc := 0.0
 var _blink_time := 0.0
 var _night := 0
+var _road := Quaternion.IDENTITY     # eased road axes the moon path is measured from
+var _road_applied := Quaternion.IDENTITY
 
 func _ready() -> void:
 	name = "SkyDirector"
@@ -46,11 +53,15 @@ func _ready() -> void:
 	_from_height = g.height_deg
 	_to_height = g.height_deg
 	night_clock.night_ended.connect(_on_night_ended)
+	_road = road_axes()
 	_apply_moon()
 	NightSky.set_dawn(NightSky.dawn_for_minutes(night_clock.minutes))
 	NightSky.set_cloud_offset(NightSky.cloud_offset_for_minutes(night_clock.minutes))
 
 func _process(delta: float) -> void:
+	_road = _road.slerp(road_axes(), 1.0 - exp(-MOON_ROAD_RATE * delta))
+	if _road_applied.angle_to(_road) > MOON_ROAD_EPS:
+		_apply_moon()
 	_moon_acc += delta
 	if _moon_acc >= MOON_STEP_SECS and night_clock.speed > 0.0:
 		_moon_acc = 0.0
@@ -93,8 +104,15 @@ func current_district() -> String:
 	var idx := int(floor(-z / RoadChunkBuilder.CHUNK_LEN)) + int(game.origin_index)
 	return Districts.name_at(idx)
 
+## The road's axes where the player is (heading and slope).
+func road_axes() -> Quaternion:
+	if game == null or game.get("player") == null:
+		return _road
+	return RoadFrame.basis_at(RoadFrame.unroll(game.player.position).z).get_rotation_quaternion()
+
 func _apply_moon() -> void:
-	NightSky.set_moon_time(sky, _night, night_clock.minutes / NightClock.NIGHT_MINUTES)
+	_road_applied = _road
+	NightSky.set_moon_time(sky, _night, night_clock.minutes / NightClock.NIGHT_MINUTES, Basis(_road))
 
 ## Dawn follows the clock (5 a.m. to 6 a.m.); only set when the value moves.
 func _apply_dawn() -> void:

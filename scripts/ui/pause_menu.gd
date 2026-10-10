@@ -31,10 +31,6 @@ var title_button: Button
 var settings: SettingsScreen
 var confirm: ConfirmBox
 var race_button: Button
-var trinket_option: OptionButton
-var knob_option: OptionButton
-var short_option: OptionButton
-var strut_option: OptionButton
 var main_page: VBoxContainer
 var slide_root: MarginContainer   # what MenuMotion slides in
 ## The bank (F0, scripts/core/wallet.gd) and the clock, shown on the plate; null in bare tests.
@@ -91,48 +87,6 @@ func _ready() -> void:
 	notice_label.visible = false
 	box.add_child(notice_label)
 
-	# Heat shimmer (2026-10-10, HeatShimmer): the air behind the pipes. Read
-	# live by the manager; the Low preset keeps it off whatever this says.
-	var shimmer := CheckButton.new()
-	shimmer.text = "Heat shimmer (not on Low)"
-	shimmer.button_pressed = FxSettings.is_on("heat_shimmer")
-	shimmer.toggled.connect(func(on: bool) -> void:
-		FxSettings.set_on("heat_shimmer", on)
-		FxSettings.save_settings())
-	box.add_child(shimmer)
-	# Interior mods batch 1 (2026-10-09): the parts fitted in the cabin and
-	# under the hood (CabinMods; the garage will own these later). The trinket
-	# and the knob show at once (the cockpit polls); the short shifter and the
-	# strut bar change the running car here too (_apply_cabin_mods).
-	var mods_title := Label.new()
-	mods_title.text = "Interior"
-	mods_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(mods_title)
-	var trinket_names := []
-	for id in DashTrinket.IDS:
-		trinket_names.append(DashTrinket.NAMES[id])
-	trinket_option = _add_option(box, "Trinket", trinket_names, func(i: int) -> void:
-		CabinMods.set_trinket(DashTrinket.IDS[clampi(i, 0, DashTrinket.IDS.size() - 1)])
-		CabinMods.save_settings())
-	trinket_option.selected = DashTrinket.index_of(CabinMods.trinket)
-	var knob_names := []
-	for id in CabinMods.KNOB_IDS:
-		knob_names.append(CabinMods.KNOB_NAMES[id])
-	knob_option = _add_option(box, "Shift knob", knob_names, func(i: int) -> void:
-		CabinMods.set_shift_knob(CabinMods.KNOB_IDS[clampi(i, 0, CabinMods.KNOB_IDS.size() - 1)])
-		CabinMods.save_settings())
-	knob_option.selected = CabinMods.knob_index()
-	short_option = _add_option(box, "Short shifter", ["Off", "On"], func(i: int) -> void:
-		CabinMods.set_short_shifter(i == 1)
-		CabinMods.save_settings()
-		_apply_cabin_mods())
-	short_option.selected = 1 if CabinMods.short_shifter else 0
-	strut_option = _add_option(box, "Strut bar", ["Off", "On"], func(i: int) -> void:
-		CabinMods.set_strut_bar(i == 1)
-		CabinMods.save_settings()
-		_apply_cabin_mods())
-	strut_option.selected = 1 if CabinMods.strut_bar else 0
-
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	restart_button = _add_button(box, "Restart night", _ask_restart)
 	settings_button = _add_button(box, "Settings", show_settings)
@@ -186,29 +140,6 @@ func _build_plate() -> void:
 	plate_bank = _plate_label(col, "numbers", 14, UiTheme.DIM)
 	plate_bank.name = "Bank"
 	_refresh_plate()
-
-## The strut bar on or off the running car (StrutBar.sync); the sim effects
-## follow on their own (the CabinMods node on the car reads the picks each tick).
-func _apply_cabin_mods() -> void:
-	var player: Variant = get_parent().get("player")
-	if player != null:
-		StrutBar.sync(player)
-
-## A labelled drop-down row (the old pause menu's helper; the Settings screen has its own).
-func _add_option(parent: Control, text: String, items: Array, on_select: Callable) -> OptionButton:
-	var row := HBoxContainer.new()
-	parent.add_child(row)
-	var name_label := Label.new()
-	name_label.text = text
-	name_label.custom_minimum_size = Vector2(140, 0)
-	row.add_child(name_label)
-	var o := OptionButton.new()
-	for item in items:
-		o.add_item(item)
-	o.custom_minimum_size = Vector2(180, 0)
-	o.item_selected.connect(on_select)
-	row.add_child(o)
-	return o
 
 
 func _plate_label(parent: Control, role: String, size_px: int, colour: Color) -> Label:

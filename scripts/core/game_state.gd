@@ -125,6 +125,7 @@ static func is_tuner(s: State) -> bool:
 ## freezes for half a second (Roy 160). Off in headless runs and tests.
 var auto_pause_on_low_fps := true
 var _fps_watch := LowFpsWatch.new()
+static var _low_fps_paused_once := false
 var _last_frame_usec := 0
 
 func _ready() -> void:
@@ -134,7 +135,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	# Not in test mode either: windowed tests and shot tools on a busy machine
 	# were being paused mid-run (the stall guard next to it is play-only too).
-	auto_pause_on_low_fps = auto_pause_on_low_fps and DisplayServer.get_name() != "headless" and not TestMode.active()
+	auto_pause_on_low_fps = auto_pause_on_low_fps and DisplayServer.get_name() != "headless" and not TestMode.active() and not Benchmark.requested()
 	state_changed.connect(func(_n, _o): _fps_watch.reset())
 
 ## Low fps watch (#309): sustained slow frames on the wall clock, which is
@@ -146,7 +147,12 @@ func _watch_low_fps() -> void:
 	if not auto_pause_on_low_fps or state != State.PLAYING:
 		return
 	if _fps_watch.feed(frame_seconds):
-		pause(REASON_STALL)
+		# TEST BUILD: once per session. Under 30 fps for a second on a busy
+		# laptop paused the game again and again, which made it unplayable;
+		# the 0.75 s stall guard below still catches a real freeze.
+		if not _low_fps_paused_once:
+			_low_fps_paused_once = true
+			pause(REASON_STALL)
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and pause_on_focus_loss and state == State.PLAYING:

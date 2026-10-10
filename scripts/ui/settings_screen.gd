@@ -259,6 +259,14 @@ func _add_slider(parent: Control, text: String, lo: float, hi: float, step: floa
 	row.add_child(s)
 	return s
 
+## The strut bar on or off the running car (StrutBar.sync); the sim effects
+## follow on their own (the CabinMods node on the car reads the picks each tick).
+func _sync_strut_bar() -> void:
+	var game := get_tree().current_scene
+	var player: Variant = game.get("player") if game != null else null
+	if player != null:
+		StrutBar.sync(player)
+
 func _add_option(parent: Control, text: String, items: Array, on_select: Callable) -> OptionButton:
 	var row := HBoxContainer.new()
 	parent.add_child(row)
@@ -479,6 +487,39 @@ func _build_game_page(parent: Control) -> Control:
 	build.text = "Build  %s" % GameInfo.title()
 	build.add_theme_color_override("font_color", SILVER)
 	page.add_child(build)
+
+	# Heat shimmer (HeatShimmer): the air behind the pipes; the Low preset keeps it off whatever this says.
+	_add_check(page, "Heat shimmer (not on Low)", FxSettings.is_on("heat_shimmer"), func(on: bool) -> void:
+		FxSettings.set_on("heat_shimmer", on)
+		FxSettings.save_settings())
+
+	# Interior mods batch 1 (CabinMods; the garage will own these later). They
+	# sat on the pause menu, where they covered its five rows (TEST BUILD move).
+	_heading(page, "Interior")
+	var trinket_names := []
+	for id in DashTrinket.IDS:
+		trinket_names.append(DashTrinket.NAMES[id])
+	var trinket := _add_option(page, "Trinket", trinket_names, func(i: int) -> void:
+		CabinMods.set_trinket(DashTrinket.IDS[clampi(i, 0, DashTrinket.IDS.size() - 1)])
+		CabinMods.save_settings())
+	trinket.selected = DashTrinket.index_of(CabinMods.trinket)
+	var knob_names := []
+	for id in CabinMods.KNOB_IDS:
+		knob_names.append(CabinMods.KNOB_NAMES[id])
+	var knob := _add_option(page, "Shift knob", knob_names, func(i: int) -> void:
+		CabinMods.set_shift_knob(CabinMods.KNOB_IDS[clampi(i, 0, CabinMods.KNOB_IDS.size() - 1)])
+		CabinMods.save_settings())
+	knob.selected = CabinMods.knob_index()
+	var short := _add_option(page, "Short shifter", ["Off", "On"], func(i: int) -> void:
+		CabinMods.set_short_shifter(i == 1)
+		CabinMods.save_settings()
+		_sync_strut_bar())
+	short.selected = 1 if CabinMods.short_shifter else 0
+	var strut := _add_option(page, "Strut bar", ["Off", "On"], func(i: int) -> void:
+		CabinMods.set_strut_bar(i == 1)
+		CabinMods.save_settings()
+		_sync_strut_bar())
+	strut.selected = 1 if CabinMods.strut_bar else 0
 
 	# Stand-ins until the garage exists; only usable from the pause screen.
 	_heading(page, "Garage stand-ins")

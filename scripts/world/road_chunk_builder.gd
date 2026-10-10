@@ -103,7 +103,12 @@ const Districts := preload("res://scripts/world/districts.gd")
 
 const LANE_W := 3.2
 const CHUNK_LEN := 50.0
-const DASH_SPACING := 4.0
+# Lane dashes at real highway spacing (speed feel, 2026-10-10): a 3 m line
+# every 12.5 m, i.e. the common 3 m line / 9 m gap rule stretched by half a
+# metre so four periods fill one chunk exactly and the rhythm never skips at a
+# chunk seam. The old 2.4 m line every 4 m read three times too slow: at
+# 100 km/h the road looked like 33.
+const DASH_SPACING := 12.5
 # Road space (2026-10-06, Roy: "I want more space"): the shoulder went 0.9 ->
 # 1.4 m, and the lanes moved MEDIAN_GAP away from the centre line / barrier on
 # each side (the gap is plain paved road). Lanes stay LANE_W wide. Everything
@@ -117,9 +122,10 @@ const CURB_W := 0.3
 const SIDEWALK_RAMP := 0.3  # width of the sloped road-side edge of the sidewalk collision
 const SIDEWALK_W := 2.2  # kept: the sidewalk is a drivable shortcut by design,
                          # and 1.8 m would barely fit the car's 1.76 m track
-# "Pylons" are delineator posts since stage A (node names kept). Denser
-# spacing on purpose: near-road objects whipping past are the main speed cue.
-const PYLON_SPACING := 5.0
+# "Pylons" are delineator posts since stage A (node names kept). One every
+# 10 m (speed feel, 2026-10-10): near-road objects whipping past are the main
+# speed cue, and at 5 m they strobed into a fence above ~250 km/h.
+const PYLON_SPACING := 10.0
 const PYLON_HEIGHT := 1.0
 const BUILDING_SPACING := 25.0
 const BUILDING_GAP := 0.5  # m between the sidewalk's outer edge and a building front
@@ -143,7 +149,7 @@ const BOUNDARY_T := 1.0
 # Dash / pylon / barrier dimensions, previously inline magic numbers repeated
 # at each construction site. They are constants now because the shared meshes
 # further down are built from them exactly once.
-const DASH_LEN := 2.4
+const DASH_LEN := 3.0
 const DASH_H := 0.05
 const DASH_Y := 0.01
 const CENTER_DASH_W := 0.22

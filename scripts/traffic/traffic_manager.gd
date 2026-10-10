@@ -80,6 +80,17 @@ var lane_gap := 10.0
 ## with the player (who may not).
 const SPAWN_TTC := 5.0
 const SPAWN_TTC_PLAYER := 10.0
+## Speed feel (2026-10-10). A car placed ahead of the player, with the flow and
+## beyond the reveal distance, is not held to SPAWN_TTC_PLAYER: the player
+## meets it the way they meet any car that drives into view, when it is
+## drawn at the reveal distance, wherever it was put down. Holding it to 10 s
+## emptied the player's own lane above ~250 km/h (10 s of closing speed is
+## longer than the whole spawn band), which is exactly when it should be busy.
+## Past THIN_FROM the road carries fewer cars, down to THIN_SHARE of the
+## hour's count at THIN_FULL: at 400 km/h a full road cannot be driven.
+const THIN_FROM := 83.3   # m/s, 300 km/h
+const THIN_FULL := 111.1  # m/s, 400 km/h
+const THIN_SHARE := 0.5
 ## Random slot tries per placement before deferring; a deferred car waits
 ## DEFER_TICKS before it tries again (80 cars with the player's lane kept
 ## clear filled every slot, and retrying each tick cost 24 scans a car).
@@ -320,7 +331,19 @@ func in_view(pos: Vector3) -> bool:
 
 ## How many cars the hour band wants on the road (active_share of the pool).
 func active_target() -> int:
-	return clampi(roundi(float(cars.size()) * clampf(active_share, 0.0, 1.0)), 0, cars.size())
+	return clampi(roundi(float(cars.size()) * clampf(active_share, 0.0, 1.0) * speed_share(_player_speed())), 0, cars.size())
+
+## Share of the hour's cars left on the road at this player speed (m/s): all of
+## them up to THIN_FROM, THIN_SHARE from THIN_FULL.
+static func speed_share(player_speed: float) -> float:
+	return lerpf(1.0, THIN_SHARE, clampf((player_speed - THIN_FROM) / (THIN_FULL - THIN_FROM), 0.0, 1.0))
+
+## Seconds to contact with the player a car placed at road z must have. None
+## for a car going the player's way that is still hidden ahead (see THIN_FROM).
+func _player_ttc(z: float, dir: float) -> float:
+	if dir < 0.0 and _player_z() - z >= reveal_distance():
+		return 0.0
+	return SPAWN_TTC_PLAYER
 
 ## Cars not benched (on the road, or waiting for a free slot).
 func active_count() -> int:
@@ -423,6 +446,7 @@ func _slot_check(car: TrafficCar, lane_x: float, z: float, dir: float, speed: fl
 	var hi := lane_x + car.half_w + TrafficCar.CORRIDOR_MARGIN
 	var skip_player := not react_to_player
 	var ttc := INF
+	var ttc_player := _player_ttc(z, dir)
 	var gap_a := scan(z, dir, lo, hi, true, car._idx, car.half_l, INF, skip_player)
 	if gap_a < lane_gap:
 		return {}
@@ -431,16 +455,18 @@ func _slot_check(car: TrafficCar, lane_x: float, z: float, dir: float, speed: fl
 		if t < (SPAWN_TTC_PLAYER if q_player else SPAWN_TTC):
 			return {}
 		ttc = minf(ttc, t)
-	if player_behind_blocks(z, dir, lo, hi, speed, car.half_l, SPAWN_TTC_PLAYER, lane_gap):
+	if player_behind_blocks(z, dir, lo, hi, speed, car.half_l, ttc_player, lane_gap):
 		return {}
 	var gap_b := scan(z, dir, lo, hi, false, car._idx, car.half_l, INF, skip_player)
 	if gap_b < lane_gap:
 		return {}
 	if gap_b < INF and q_speed > speed:
 		var t := gap_b / (q_speed - speed)
-		if t < (SPAWN_TTC_PLAYER if q_player else SPAWN_TTC):
+		if t < (ttc_player if q_player else SPAWN_TTC):
 			return {}
-		ttc = minf(ttc, t)
+		# the player closing on a hidden car is not a spawn-time contact
+		if not (q_player and ttc_player <= 0.0):
+			ttc = minf(ttc, t)
 	return {"gap": minf(gap_a, gap_b), "ttc": ttc}
 
 func lane_speed(lane_i: int, oncoming: bool) -> float:

@@ -78,7 +78,7 @@ const DIAL_R := 0.05
 ## leaves it out, for the isolation test and for A/B frame-cost runs.
 static var enabled := true
 const DIAL_SWEEP := 270.0   # degrees from empty (lower left) to full (lower right)
-const SPEEDO_MAX_KMH := 300.0
+const SPEEDO_MAX_KMH := 300.0  # only the fallback now: each car gets its own dial (SpeedFeel)
 const LEVER_LEN := 0.23
 const LEVER_ROW_TILT := 16.0   # degrees fore/aft for a gear slot
 const LEVER_COL_TILT := 11.0   # degrees left/right per column
@@ -256,7 +256,7 @@ func _build_static() -> void:
 		var c := Vector3(SEAT_X + dx, CLUSTER_Y, CLUSTER_Z)
 		lit.cylinder(DIAL_R, -0.004, 0.0, c, Color(DIAL_FACE, 0.15), 16, Basis(Vector3.RIGHT, PI / 2.0))
 		k.cylinder(DIAL_R + 0.008, -0.008, -0.002, c + Vector3(0, 0, -0.001), TRIM, 16, Basis(Vector3.RIGHT, PI / 2.0))
-		var ticks := 9 if dx < 0.0 else 7
+		var ticks := 9 if dx < 0.0 else speedo_ticks()
 		for i in ticks:
 			var a := deg_to_rad(225.0 - DIAL_SWEEP * float(i) / (ticks - 1))
 			var p := c + Vector3(cos(a), sin(a), 0.0) * (DIAL_R - 0.012) + Vector3(0, 0, 0.001)
@@ -465,6 +465,17 @@ func _build_wheel() -> void:
 	wheel_mount.add_child(k.instance(CockpitKit.material(), "Column"))
 
 # ---------- instrument cluster ----------
+
+## Where this car's speedometer ends: the first dial about 10% past its own top
+## speed (SpeedFeel). Follows the tune, so a mod that outruns the dial moves the
+## needle to the next one up; the tick marks are built once and catch up the
+## next time the cabin is built.
+func speedo_max_kmh() -> float:
+	return SpeedFeel.car_dial_kmh(player) if player != null else SPEEDO_MAX_KMH
+
+## One tick every SpeedFeel.DIAL_TICK km/h, zero included.
+func speedo_ticks() -> int:
+	return int(round(speedo_max_kmh() / SpeedFeel.DIAL_TICK)) + 1
 
 func _build_cluster() -> void:
 	tach_needle = _needle(Vector3(SEAT_X - 0.085, CLUSTER_Y, CLUSTER_Z + 0.004), "TachNeedle")
@@ -751,7 +762,7 @@ func _process(delta: float) -> void:
 	_step_wheel(delta)
 	wheel.update(frac, cue, blink, p.motor_rpm, Hud.kmh(p.current_speed()), Hud.gear_text(p.gear))
 	tach_needle.rotation = Vector3(0.0, 0.0, deg_to_rad(135.0 - DIAL_SWEEP * frac))
-	var kmh := clampf(absf(p.current_speed()) * Hud.KMH_PER_MS / SPEEDO_MAX_KMH, 0.0, 1.0)
+	var kmh := clampf(absf(p.current_speed()) * Hud.KMH_PER_MS / speedo_max_kmh(), 0.0, 1.0)
 	speedo_needle.rotation = Vector3(0.0, 0.0, deg_to_rad(135.0 - DIAL_SWEEP * kmh))
 	_update_lamps()
 	var inputs := pedal_inputs()

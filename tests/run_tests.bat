@@ -74,6 +74,7 @@ call :run view/cockpit_shifter --headless
 call :run view/cockpit_shifter_rnd --headless
 call :run ui/touch_radio --headless
 call :run car/tyres "--headless --fixed-fps 60"
+call :run car/speed_feel "--headless"
 call :run car/clutch_model --headless
 call :run audio/driveline_audio --headless
 call :run audio/sound_fixes --headless
@@ -107,6 +108,7 @@ call :run core/save_system --headless
 rem F0: cash and bank through reloads, chases and 6 a.m. (and the HUD and pause screen).
 call :run core/wallet --headless
 call :run traffic/traffic_spawn "--headless --fixed-fps 60"
+call :run traffic/speed_lane_busy "--headless --fixed-fps 60"
 rem ~40 s: the traffic cars (stage B step 5) against their sheets, then a drive each at the game's 120 Hz.
 rem npc_cars drives every kind (13 since the player and cop cars joined), about 15 min: give it 20.
 set "TT_SAVED=%TEST_TIMEOUT%"

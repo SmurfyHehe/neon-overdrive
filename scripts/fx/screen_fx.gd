@@ -9,16 +9,21 @@ class_name ScreenFx
 #   little more the faster the car goes.
 # - Speed lines: thin streaks racing outward from the centre, only outside the
 #   middle of the frame, from SPEED_LINES_FROM (150 km/h) up to full strength at
-#   SPEED_LINES_FULL (245 km/h, top speed). Tinted silver warmed toward amber --
+#   SPEED_LINES_FULL (400 km/h), racing outward faster the faster the car goes. Tinted silver warmed toward amber --
 #   no neon. Kept on in the cockpit (they read like the pillars rushing past),
 #   dialled down a bit so the dash stays clean; COCKPIT_LINES = 0 turns them off there.
 
 const VIGNETTE_REST := 0.32   # corner darkening at a standstill
-const VIGNETTE_SPEED := 0.18  # extra at top speed
-const VIGNETTE_FULL := 68.0   # m/s where the extra is all there (~245 km/h)
+const VIGNETTE_SPEED := 0.28  # extra at VIGNETTE_FULL (0.17 at 245 km/h, about as before)
+const VIGNETTE_FULL := SpeedFeel.EFFECTS_FULL  # m/s where the extra is all there (400 km/h)
 const SPEED_LINES_FROM := 41.7  # m/s, 150 km/h
-const SPEED_LINES_FULL := 68.0  # m/s, 245 km/h
-const SPEED_LINES_MAX := 0.34   # peak streak opacity
+const SPEED_LINES_FULL := SpeedFeel.EFFECTS_FULL  # m/s, 400 km/h
+const SPEED_LINES_MAX := 0.5    # peak streak opacity (0.31 at 245 km/h, about as before)
+## How fast the streaks race outward, in screen-radius cycles per second. Was a
+## fixed 6; now it follows the car's speed.
+const FLOW_SLOW := 9.0          # at SPEED_LINES_FROM
+const FLOW_FAST := 24.0         # at SPEED_LINES_FULL
+const FLOW_WRAP := 3600.0
 const COCKPIT_LINES := 0.6      # streak strength multiplier in the cockpit view
 const RATE := 6.0               # 1/s smoothing so neither effect pops
 
@@ -28,6 +33,7 @@ render_mode blend_mix, unshaded;
 
 uniform float vignette = 0.0;
 uniform float lines = 0.0;
+uniform float flow = 0.0;
 uniform vec3 vignette_color : source_color = vec3(0.055, 0.078, 0.141);
 uniform vec3 line_color : source_color = vec3(0.86, 0.80, 0.66);
 
@@ -51,7 +57,7 @@ void fragment() {
 		float w = abs(fract(seg) - 0.5);
 		float streak = 1.0 - smoothstep(0.0, 0.04 + 0.06 * h, w);
 		// short dashes racing outward
-		float dash = fract(r * 4.5 - TIME * (6.0 + 4.0 * h) + h * 7.0);
+		float dash = fract(r * 4.5 - flow * (1.0 + 0.66 * h) + h * 7.0);
 		float along = smoothstep(0.0, 0.25, dash) * smoothstep(0.7, 0.45, dash);
 		// only the outer part of the frame; the car and the road ahead stay clean
 		float edge = smoothstep(0.42, 0.85, r);
@@ -76,6 +82,7 @@ var speed_lines_on := true:
 
 var vignette := 0.0  # current, readable by tests
 var lines := 0.0
+var flow := 0.0      # streak phase, advanced by speed
 
 var _player: PlayerCar
 var _camera: ChaseCamera
@@ -111,10 +118,14 @@ func _process(delta: float) -> void:
 	var want_v := VIGNETTE_REST + VIGNETTE_SPEED * clampf(speed / VIGNETTE_FULL, 0.0, 1.0) if vignette_on else 0.0
 	var want_l := 0.0
 	if speed_lines_on:
-		want_l = SPEED_LINES_MAX * smoothstep(SPEED_LINES_FROM, SPEED_LINES_FULL, speed)
+		# ease-out: most of the rise comes early, but it never stops growing
+		var over := clampf((speed - SPEED_LINES_FROM) / (SPEED_LINES_FULL - SPEED_LINES_FROM), 0.0, 1.0)
+		want_l = SPEED_LINES_MAX * (1.0 - (1.0 - over) * (1.0 - over))
+		flow = fmod(flow + lerpf(FLOW_SLOW, FLOW_FAST, over) * delta, FLOW_WRAP)
 		if _camera != null and _camera.view == ChaseCamera.View.COCKPIT:
 			want_l *= COCKPIT_LINES
 	vignette = lerpf(vignette, want_v, k)
 	lines = lerpf(lines, want_l, k)
 	_mat.set_shader_parameter("vignette", vignette)
 	_mat.set_shader_parameter("lines", lines)
+	_mat.set_shader_parameter("flow", flow)

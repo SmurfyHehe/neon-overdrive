@@ -217,6 +217,11 @@ const OBSTACLE_SPEED := 3.0    # m/s: anything slower ahead is an obstacle to ge
 const OBSTACLE_RANGE := 100.0
 const YIELD_DV := 3.0          # m/s closing from behind ...
 const YIELD_TTC := 5.0         # ... with this little time to contact: move over
+## ... and no further back than this. A driver notices a fast car in the mirror,
+## not half a kilometre away (speed feel, 2026-10-10): on time alone, a player at
+## 300 km/h cleared their own lane from 290 m out and never met a car in it.
+## Below ~170 km/h against 100 km/h traffic the time rule is still the tighter one.
+const YIELD_RANGE := 100.0
 ## A hidden car (beyond the draw distance) moves over for a closing player
 ## this early, instantly: nobody sees it, and the player's lane is clear by
 ## the time the car comes into view.
@@ -461,7 +466,7 @@ func _consider_lane_change(v: float) -> void:
 	var f_gap := traffic.scan(u.z, direction, x - half_w - CORRIDOR_MARGIN, x + half_w + CORRIDOR_MARGIN,
 		false, _idx, half_l, LOOK_BEHIND, skip_player)
 	var f_speed := traffic.q_speed
-	var yielding := f_gap < INF and f_speed - v > YIELD_DV and f_gap / (f_speed - v) < YIELD_TTC
+	var yielding := f_gap < YIELD_RANGE and f_speed - v > YIELD_DV and f_gap / (f_speed - v) < YIELD_TTC
 	var cur_pot := _potential(v, lead_gap, lead_speed)
 	var constrained := lead_gap < INF and cur_pot < target_speed - (RB_PASS_DV if rule_breaker else PASS_DV)
 	var keep_right := not (obstacle or yielding or constrained) and _lc_cooldown < -KEEP_RIGHT_AFTER
@@ -700,7 +705,10 @@ func _hidden_yield() -> void:
 	var v := _cruise_speed
 	var fg := traffic.scan(RoadFrame.unroll(global_position).z, direction, lane_x - half_w - CORRIDOR_MARGIN, lane_x + half_w + CORRIDOR_MARGIN,
 		false, _idx, half_l, LOOK_BEHIND, false)
-	if fg == INF or not traffic.q_player:
+	# YIELD_RANGE here too: without it every car between the draw distance and
+	# the reveal distance (drawn, but still on this cheap path) jumped sideways
+	# out of a fast player's lane in plain sight.
+	if fg >= YIELD_RANGE or not traffic.q_player:
 		return
 	var closing := traffic.q_speed - v
 	if closing <= YIELD_DV or fg / closing >= YIELD_TTC_HIDDEN:

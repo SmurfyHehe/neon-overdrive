@@ -32,7 +32,10 @@ const GLOW_SCREEN := 4.0
 # Skyline landmarks (world step 1), one per district run on the building
 # Districts.landmark_at() names, built from the shapes above at a size that
 # reads from the far end of the chunk window.
-const LANDMARKS := ["tower", "water_tower", "stacks", "screen"]
+# World step 3 (W6) adds six for the new district kinds, all from the shapes
+# already in the mesh: steeple (old town), marquee (lofts), control_tower
+# (airport edge), crane (docks), high_sign (freeway), mast (canyon).
+const LANDMARKS := ["tower", "water_tower", "stacks", "screen", "steeple", "marquee", "control_tower", "crane", "high_sign", "mast"]
 
 # Glow kinds (UV2.y): which light a face gives off.
 const GLOW_RED := 1.0    # aviation light
@@ -128,7 +131,7 @@ static func update(mm: MultiMesh, infos: Array, signs: MultiMesh, first_sign: in
 		var top: String = info.get("top", "flat")
 		var props := []  # [shape, scale, offset (x across from road, z along), tint]
 		match kind:
-			"apartment":
+			"apartment", "tenement":
 				if rng.randf() < 0.7:
 					props.append([SHAPE_BOX, Vector3(2.2, 2.6, 2.6), _spot(rng, w, d, 0.5), 0.55])  # stair bulkhead
 				if rng.randf() < 0.55:
@@ -152,7 +155,12 @@ static func update(mm: MultiMesh, infos: Array, signs: MultiMesh, first_sign: in
 					props.append([SHAPE_BOX, Vector3(1.1, 0.9, 1.3), _spot(rng, w, d, 0.8), 0.75])
 			"parking":
 				props.append([SHAPE_BOX, Vector3(3.0, 3.0, 3.2), _spot(rng, w, d, 0.6), 0.5])  # stair and lift core
-			"warehouse":
+			"loft":
+				# the mill's water tank and a stair bulkhead
+				props.append([SHAPE_TANK, Vector3.ONE * rng.randf_range(1.0, 1.4), _spot(rng, w, d, 0.6), 1.0])
+				if rng.randf() < 0.6:
+					props.append([SHAPE_BOX, Vector3(2.4, 2.8, 3.0), _spot(rng, w, d, 0.5), 0.55])
+			"warehouse", "hangar":
 				# roof vents and a fan housing on the long low roof
 				for k in 1 + rng.randi() % 3:
 					props.append([SHAPE_BOX, Vector3(1.6, 1.0, 1.6), _spot(rng, w, d, 0.8), 0.6])
@@ -170,7 +178,7 @@ static func update(mm: MultiMesh, infos: Array, signs: MultiMesh, first_sign: in
 		elif kind == "diner":
 			# the sign pole, at the front of the lot (absolute position)
 			props.append([SHAPE_BOX, Vector3(0.3, 7.4, 0.3), _abs(info, 1.2, float(info.d) * 0.35, 0.0), 0.35])
-		elif kind == "warehouse" and rng.randf() < 0.7:
+		elif (kind == "warehouse" or kind == "hangar") and rng.randf() < 0.7:
 			# yard floodlight on the front edge of the roof
 			props.append([SHAPE_FLOOD, Vector3.ONE, Vector2(-w * 0.45, rng.randf_range(-0.4, 0.4) * d), 1.0])
 		elif kind == "parking":
@@ -479,4 +487,43 @@ static func _landmark(kind: String, info: Dictionary, cx: float, cz: float) -> A
 			out.append([SHAPE_SCREEN, Vector3(0.5, 12.0, 22.0), Vector3(sx, 14.0, cz), 1.4])
 			out.append([SHAPE_FLOOD, Vector3(1.0, 0.9, 1.0), Vector3(cx + (w * 0.5 - 1.0) * float(side), h, cz), 1.0])
 			return out
+		"steeple":
+			# a church tower up through the tenement roof, 30 m, under a
+			# steep spire to 43 m
+			return [[SHAPE_BOX, Vector3(5.0, 30.0 - h, 5.0), Vector3(cx, h, cz), 0.5],
+				[SHAPE_HIP, Vector3(5.8, 13.0, 5.8), Vector3(cx, 30.0, cz), 0.75]]
+		"marquee":
+			# a lit rooftop sign square-on to the traffic: a tall blade on a
+			# plinth at the street edge of the roof
+			var fx := cx - (w * 0.5 - 2.6) * float(side)
+			return [[SHAPE_BOX, Vector3(4.4, 1.6, 1.2), Vector3(fx, h, cz), 0.4],
+				[SHAPE_SCREEN, Vector3(4.0, 14.0, 0.5), Vector3(fx, h + 1.6, cz), 1.5]]
+		"control_tower":
+			# a concrete shaft on the hangar, a wider cab with its glass
+			# faintly lit, a roof slab and a short mast with the red light
+			return [[SHAPE_BOX, Vector3(4.0, 22.0, 4.0), Vector3(cx, h, cz), 0.6],
+				[SHAPE_SCREEN, Vector3(7.5, 3.6, 7.5), Vector3(cx, h + 22.0, cz), 1.1],
+				[SHAPE_BOX, Vector3(8.4, 0.6, 8.4), Vector3(cx, h + 25.6, cz), 0.5],
+				[SHAPE_ANTENNA, Vector3(1.5, 1.2, 1.5), Vector3(cx, h + 26.2, cz), 0.6]]
+		"crane":
+			# a gantry crane behind the stack: two legs, a cross beam, the
+			# boom reaching over the boxes toward the road, the machinery
+			# house on its back end, 42 m to the red light
+			var bx := cx + (w * 0.5 + 2.5) * float(side)
+			return [[SHAPE_BOX, Vector3(1.4, 34.0, 1.4), Vector3(bx, 0.0, cz - 7.0), 0.5],
+				[SHAPE_BOX, Vector3(1.4, 34.0, 1.4), Vector3(bx, 0.0, cz + 7.0), 0.5],
+				[SHAPE_BOX, Vector3(2.2, 2.2, 16.0), Vector3(bx, 34.0, cz), 0.5],
+				[SHAPE_BOX, Vector3(30.0, 2.4, 2.4), Vector3(bx - 8.0 * float(side), 36.2, cz), 0.55],
+				[SHAPE_BOX, Vector3(5.0, 3.5, 4.0), Vector3(bx + 3.0 * float(side), 38.6, cz), 0.45],
+				[SHAPE_ANTENNA, Vector3(1.0, 0.5, 1.0), Vector3(bx + 3.0 * float(side), 42.1, cz), 0.6]]
+		"high_sign":
+			# the sign a freeway exit is found by: a 30 m pole at the front
+			# of the lot, a lit slab square-on to the traffic, a red light
+			var px := (float(info.lot_front_x_abs) + 1.5) * float(side)
+			return [[SHAPE_BOX, Vector3(1.1, 30.0, 1.1), Vector3(px, 0.0, cz), 0.45],
+				[SHAPE_SCREEN, Vector3(11.0, 6.0, 0.6), Vector3(px, 30.0, cz), 1.5],
+				[SHAPE_ANTENNA, Vector3(1.0, 0.4, 1.0), Vector3(px, 36.0, cz), 0.6]]
+		"mast":
+			# a radio mast on the ground behind the cabin, 39 m, red on top
+			return [[SHAPE_ANTENNA, Vector3(2.5, 6.5, 2.5), Vector3(cx + (w * 0.5 + 4.0) * float(side), 0.0, cz), 0.55]]
 	return []

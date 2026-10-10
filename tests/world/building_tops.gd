@@ -54,9 +54,9 @@ func _initialize() -> void:
 		t_build += float(t1 - t0) / 1000.0
 		t_rebuild += float(t2 - t1) / 1000.0
 		var run := D.run_of(idx)
-		# a building in the run's last blend chunks may follow the next district
+		# a building near a run boundary may follow the neighbouring district
 		var wa: Array = D.spec(D.name_of_run(run)).get("wear", D.DEFAULTS.wear)
-		var wb: Array = D.spec(D.name_of_run(run + 1)).get("wear", D.DEFAULTS.wear)
+		var wb: Array = D.spec(D.name_of_run(int(D.blend_at(idx)[0]))).get("wear", D.DEFAULTS.wear)
 		var lo := minf(float(wa[0]), float(wb[0]))
 		var hi := maxf(float(wa[1]), float(wb[1]))
 		for i in B._building_slots() * 2:

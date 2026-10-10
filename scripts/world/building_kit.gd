@@ -26,6 +26,12 @@ extends RefCounted
 # one floor tall: RGB is albedo detail (multiplied by the tint), alpha marks
 # glass that may light up.
 #
+# World step 3 (W6, 2026-10-10) grows the atlas from 8 to 12 tiles for the
+# new district kinds: loft (factory windows in brick), clapboard (timber
+# house siding), hangar (pale metal panels, a sliding door) and container
+# (a stack of shipping containers, each one its own colour). It also adds
+# district palettes: a Districts spec may weight the TINTS it draws from.
+#
 # Step 2 adds building types on top (see TYPES) and shop / garage signs
 # (scripts/world/building_signs.gd). Which windows are lit is decided per window in the
 # shader from a hash, so it never repeats from one building to the next.
@@ -45,7 +51,7 @@ const BuildingSigns := preload("res://scripts/world/building_signs.gd")
 const Districts := preload("res://scripts/world/districts.gd")
 
 const TILE_PX := 32
-const TILES := 8
+const TILES := 12
 
 # Tile ids (atlas columns).
 const T_APARTMENT := 0
@@ -56,20 +62,29 @@ const T_PARKING := 4
 const T_BRICK := 5
 const T_CONCRETE := 6
 const T_CORRUGATED := 7
+const T_LOFT := 8
+const T_CLAPBOARD := 9
+const T_HANGAR := 10
+const T_CONTAINER := 11
 
 # Floor-to-floor height per tile, m (approximate real values: offices are
-# taller than flats; warehouses are one tall storey).
-const FLOOR_H := [3.0, 3.4, 3.6, 4.5, 3.0, 3.1, 3.2, 4.2]
+# taller than flats; warehouses are one tall storey; a mill floor is 4 m, a
+# hangar bay 6 m, a shipping container 2.6 m).
+const FLOOR_H := [3.0, 3.4, 3.6, 4.5, 3.0, 3.1, 3.2, 4.2, 4.0, 2.8, 6.0, 2.6]
 # Nominal bay width per tile, m. The shader rounds each face to a whole
-# number of bays so windows are never cut at a corner.
-const BAY_W := [3.0, 4.5, 3.0, 5.0, 6.0, 2.6, 3.4, 4.0]
+# number of bays so windows are never cut at a corner. A container bay is
+# one 20 ft box, long side out.
+const BAY_W := [3.0, 4.5, 3.0, 5.0, 6.0, 2.6, 3.4, 4.0, 4.0, 3.4, 8.0, 6.1]
 # Share of lit windows that are cold fluorescent rather than warm
 # incandescent: homes are warm, offices and car parks are cold.
-const COOL_BIAS := [0.2, 0.7, 0.85, 0.6, 1.0, 0.25, 0.35, 0.6]
+const COOL_BIAS := [0.2, 0.7, 0.85, 0.6, 1.0, 0.25, 0.35, 0.6, 0.12, 0.08, 0.9, 0.8]
 # Emission scale per tile: a lit office ribbon or open car-park deck is a
 # whole bay of glass, so it is dimmed to sit beside a single lit flat
 # window instead of glowing as a white panel.
-const GLOW := [1.0, 0.75, 0.3, 0.8, 0.22, 1.0, 1.0, 1.0]
+const GLOW := [1.0, 0.75, 0.3, 0.8, 0.22, 1.0, 1.0, 1.0, 0.6, 1.0, 0.8, 1.0]
+# How much each bay-and-floor cell takes its own colour (0 none, 1 full): a
+# container stack is boxes from different lines, not one painted wall.
+const CELL_VARY := [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
 
 # Base tints, linear-ish albedo. Dark on purpose: this is a city at 2 a.m.,
 # the facades are read by their windows and the sodium haze, not by colour.
@@ -83,7 +98,15 @@ const TINTS := [
 	Color(0.17, 0.16, 0.16),  # soot
 	Color(0.30, 0.18, 0.11),  # rust
 	Color(0.23, 0.24, 0.28),  # slate
+	# World step 3: district palette colours. Only a district's "tints"
+	# table reaches these; the even draw stops at DEFAULT_TINTS.
+	Color(0.42, 0.17, 0.10),  # old red brick
+	Color(0.47, 0.43, 0.35),  # cream clapboard
+	Color(0.43, 0.44, 0.45),  # pale hangar metal
+	Color(0.46, 0.21, 0.08),  # container orange (#FF8A1F family, dulled)
+	Color(0.40, 0.30, 0.13),  # ochre
 ]
+const DEFAULT_TINTS := 8
 
 # Shop rooms (world step 3). id is the shader's room kind; close is game
 # minutes since 8 p.m. when the shutter comes down ([min, max], jittered per
@@ -122,10 +145,11 @@ render_mode diffuse_lambert, specular_schlick_ggx;
 
 uniform sampler2D atlas : source_color, filter_nearest_mipmap, repeat_disable;
 uniform float emission_energy = 1.25;
-uniform int tiles = 8;
-uniform float bay_w[8];
-uniform float cool_bias[8];
-uniform float glow[8];
+uniform int tiles = 12;
+uniform float bay_w[12];
+uniform float cool_bias[12];
+uniform float glow[12];
+uniform float cell_vary[12];
 // Night clock (living world step 1): scales every building's lit density, so
 // the same windows go dark in the same order through the night (WindowLights).
 uniform float lit_scale = 1.0;
@@ -378,6 +402,14 @@ void fragment() {
 		float face = on_x ? (lnrm.x > 0.0 ? 1.0 : 2.0) : (lnrm.z > 0.0 ? 3.0 : 4.0);
 		vec3 key = vec3(floor(u), fl, seed * 7.13 + face * 31.7);
 		float h = hash3(key);
+		// world step 3: a container stack's cells each lean rust, navy or
+		// stay the building's colour, lighter or darker
+		float cv = cell_vary[tile];
+		if (cv > 0.0) {
+			float hc = hash3(key + 53.1);
+			vec3 lean = hc < 0.34 ? vec3(1.25, 0.72, 0.5) : (hc < 0.62 ? vec3(0.5, 0.68, 1.15) : vec3(1.0));
+			ALBEDO *= mix(vec3(1.0), lean * (0.6 + 0.7 * hash3(key + 91.7)), cv);
+		}
 		// threshold the glass mask: a blurred far mip must not let wall emit
 		float lit = step(h, lit_density * lit_scale) * step(0.5, t.a);
 		float h2 = hash3(key + 19.19);
@@ -439,6 +471,7 @@ static func material() -> ShaderMaterial:
 		_material.set_shader_parameter("bay_w", PackedFloat32Array(BAY_W))
 		_material.set_shader_parameter("cool_bias", PackedFloat32Array(COOL_BIAS))
 		_material.set_shader_parameter("glow", PackedFloat32Array(GLOW))
+		_material.set_shader_parameter("cell_vary", PackedFloat32Array(CELL_VARY))
 		_material.set_shader_parameter("lit_scale", _lit_scale)
 		_material.set_shader_parameter("minutes", _minutes)
 		_material.set_shader_parameter("room_depth", ROOM_DEPTH)
@@ -492,6 +525,12 @@ const TYPES := {
 	# lot under a lit canopy; a diner is a glass box behind a tall pole sign.
 	"gas": {"tiles": [[T_SHOP, 100]], "h": [3.4, 3.4], "sign": 1.0, "word": "GAS"},
 	"diner": {"tiles": [[T_SHOP, 100]], "h": [4.4, 4.4], "sign": 1.0, "word": "DINER"},
+	# World step 3 (W6): the new district kinds' own buildings.
+	"tenement": {"tiles": [[T_BRICK, 100]], "h": [9.0, 16.0], "sign": 0.0},
+	"loft": {"tiles": [[T_LOFT, 80], [T_BRICK, 20]], "h": [14.0, 26.0], "sign": 0.5},
+	"house": {"tiles": [[T_CLAPBOARD, 100]], "h": [5.6, 8.4], "sign": 0.0},
+	"hangar": {"tiles": [[T_HANGAR, 100]], "h": [12.0, 18.0], "sign": 0.0},
+	"containers": {"tiles": [[T_CONTAINER, 100]], "h": [5.2, 13.0], "sign": 0.0},
 }
 # Mix for an ordinary street until districts (step 4) set their own.
 const STREET_MIX := [["apartment", 40], ["shop", 30], ["office", 18], ["parking", 12]]
@@ -518,9 +557,18 @@ const TOPS_FOR := {
 	"warehouse": ["flat", "gable"],
 	"gas": ["flat"],
 	"diner": ["flat"],
+	"tenement": ["flat", "cornice", "gable", "hip"],
+	"loft": ["flat", "cornice", "parapet", "setback"],
+	"house": ["gable", "hip"],
+	"hangar": ["flat", "gable"],
+	"containers": ["flat"],
 }
 # The top a landmark's own building wears (RoofProps adds the landmark).
-const LANDMARK_TOP := {"tower": "crown", "water_tower": "flat", "stacks": "flat", "screen": "flat"}
+const LANDMARK_TOP := {
+	"tower": "crown", "water_tower": "flat", "stacks": "flat", "screen": "flat",
+	"steeple": "flat", "marquee": "flat", "control_tower": "flat", "crane": "flat",
+	"high_sign": "flat", "mast": "gable",
+}
 
 ## Picks a building's type and look from its own RNG and writes the look onto
 ## the mesh instance. is_low is the old "garage" roll (a low, wide shed);
@@ -546,10 +594,14 @@ static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, 
 		if type != "shop" and type != "gas" and type != "diner":
 			floors = maxi(2, floors)
 	var h := float(floors) * fh
-	var tint: Color = TINTS[rng.randi() % TINTS.size()]
+	# One draw whether or not the district has a palette, so a building's
+	# other rolls do not move when a district gains one.
+	var tint_roll := rng.randi()
+	var palette: Array = district.get("tints", [])
+	var tint: Color = TINTS[tint_roll % DEFAULT_TINTS] if palette.is_empty() else TINTS[_weighted_at(tint_roll, palette)]
 	tint = tint * rng.randf_range(0.65, 0.85)
 	var density := rng.randf_range(0.12, 0.42)
-	if tile == T_WAREHOUSE or tile == T_CORRUGATED:
+	if tile == T_WAREHOUSE or tile == T_CORRUGATED or tile == T_HANGAR:
 		density *= 0.4
 	elif tile == T_OFFICE:
 		density *= 0.6  # offices at 2 a.m. are mostly dark
@@ -685,10 +737,14 @@ static func _weighted_s(rng: RandomNumberGenerator, table: Array) -> String:
 	return String(table[0][0])
 
 static func _weighted(rng: RandomNumberGenerator, table: Array) -> int:
+	return _weighted_at(rng.randi(), table)
+
+## The table entry a draw already taken lands on.
+static func _weighted_at(roll: int, table: Array) -> int:
 	var total := 0
 	for e in table:
 		total += int(e[1])
-	var r := rng.randi() % total
+	var r := roll % total
 	for e in table:
 		r -= int(e[1])
 		if r < 0:
@@ -697,7 +753,7 @@ static func _weighted(rng: RandomNumberGenerator, table: Array) -> int:
 
 # ---------- atlas ----------
 
-## 8 tiles x 2 rows (upper floors on top, ground floor below), 32 px each.
+## TILES tiles x 2 rows (upper floors on top, ground floor below), 32 px each.
 static func atlas() -> ImageTexture:
 	if _atlas == null:
 		var img := Image.create(TILE_PX * TILES, TILE_PX * 2, false, Image.FORMAT_RGBA8)
@@ -804,6 +860,83 @@ static func _draw_tile(img: Image, t: int, ground: bool, ox: int, oy: int) -> vo
 				_rect(img, ox, oy, 20, 12, 27, 18, _glass(0.18))
 			else:
 				_rect(img, ox, oy, 20, 10, 27, 16, _glass(0.18))
+		T_LOFT:
+			_brick(img, ox, oy, 0.56)
+			if ground:
+				# a bar front: a painted base, a steel door, a low lit strip
+				# of glass block and a pale lintel over both
+				_rect(img, ox, oy, 0, 9, n, n, _wall(0.34))
+				_rect(img, ox, oy, 0, 7, n, 9, _wall(0.85))
+				_rect(img, ox, oy, 4, 12, 13, n, _wall(0.2))
+				_rect(img, ox, oy, 11, 21, 12, 23, _wall(0.8))
+				_rect(img, ox, oy, 17, 13, 29, 20, _glass(0.3))
+				for x in [20, 23, 26]:
+					_rect(img, ox, oy, x, 13, x + 1, 20, _wall(0.3))
+			else:
+				# the mill window: nearly the whole bay, small panes in a
+				# steel grid, shallow arch (clipped corners), stone sill
+				_rect(img, ox, oy, 4, 4, 28, 26, _glass(0.16))
+				for x in [9, 15, 16, 22]:
+					_rect(img, ox, oy, x, 4, x + 1, 26, _wall(0.3))
+				for y in [10, 15, 21]:
+					_rect(img, ox, oy, 4, y, 28, y + 1, _wall(0.3))
+				for c in [[4, 4], [5, 4], [4, 5], [27, 4], [26, 4], [27, 5]]:
+					img.set_pixel(ox + c[0], oy + c[1], _wall(0.5))
+				_rect(img, ox, oy, 3, 26, 29, 28, _wall(0.85))
+		T_CLAPBOARD:
+			# horizontal boards, a shadow line under each
+			for y in n:
+				for x in n:
+					img.set_pixel(ox + x, oy + y, _wall(0.52 if y % 4 == 3 else 0.72 - 0.03 * float((x / 9 + y / 4) % 2)))
+			if ground:
+				# front door with a porch light pane over it, one window,
+				# a dark foundation
+				_rect(img, ox, oy, 4, 11, 12, 29, _wall(0.9))
+				_rect(img, ox, oy, 5, 12, 11, 29, _wall(0.3))
+				_rect(img, ox, oy, 6, 13, 10, 16, _glass(0.3))
+				_rect(img, ox, oy, 16, 9, 28, 23, _wall(0.9))
+				_rect(img, ox, oy, 17, 10, 27, 22, _glass(0.16))
+				_rect(img, ox, oy, 17, 15, 27, 16, _wall(0.9))
+				_rect(img, ox, oy, 0, 29, n, n, _wall(0.38))
+			else:
+				# a sash window in a pale frame between dark shutters
+				_rect(img, ox, oy, 10, 6, 22, 24, _wall(0.9))
+				_rect(img, ox, oy, 11, 7, 21, 23, _glass(0.15))
+				_rect(img, ox, oy, 11, 14, 21, 15, _wall(0.9))
+				_rect(img, ox, oy, 15, 7, 17, 23, _wall(0.9))
+				_rect(img, ox, oy, 6, 6, 9, 24, _wall(0.32))
+				_rect(img, ox, oy, 23, 6, 26, 24, _wall(0.32))
+		T_HANGAR:
+			# big flat sheet panels, a joint every half bay
+			for y in n:
+				for x in n:
+					img.set_pixel(ox + x, oy + y, _wall(0.58 if x % 16 == 0 else 0.76 + rng.randf_range(-0.03, 0.03)))
+			if ground:
+				# the sliding door: nearly the whole bay, leaves in darker
+				# sheet, a row of small panes, a rail over the top
+				_rect(img, ox, oy, 1, 3, 31, n, _wall(0.6))
+				for x in [1, 8, 16, 23, 30]:
+					_rect(img, ox, oy, x, 3, x + 1, n, _wall(0.42))
+				for x in [3, 10, 18, 25]:
+					_rect(img, ox, oy, x, 12, x + 4, 14, _glass(0.2))
+				_rect(img, ox, oy, 0, 2, n, 3, _wall(0.34))
+			else:
+				# a painted band and a thin strip of roof-light glazing
+				_rect(img, ox, oy, 0, 21, n, 25, _wall(0.4))
+				_rect(img, ox, oy, 2, 3, 30, 5, _glass(0.2))
+		T_CONTAINER:
+			# one shipping container per cell, long side out: close ribs, a
+			# dark frame top and bottom, the gap to the next box, a stencil
+			# block where the line's name would be. No glass: nothing lit.
+			for y in n:
+				for x in n:
+					img.set_pixel(ox + x, oy + y, _wall(0.7 if x % 2 == 0 else 0.56))
+			_rect(img, ox, oy, 0, 0, n, 2, _wall(0.3))
+			_rect(img, ox, oy, 0, 30, n, n, _wall(0.24))
+			_rect(img, ox, oy, 0, 0, 1, n, _wall(0.18))
+			_rect(img, ox, oy, 31, 0, n, n, _wall(0.3))
+			_rect(img, ox, oy, 11, 9, 22, 14, _wall(0.92))
+			_rect(img, ox, oy, 11, 16, 17, 18, _wall(0.92))
 
 static func _brick(img: Image, ox: int, oy: int, v: float) -> void:
 	for y in TILE_PX:

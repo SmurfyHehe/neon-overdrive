@@ -160,6 +160,7 @@ call :run world/chunk_builder_equivalence --headless
 rem World step 1: roof shapes, facade wear, one skyline landmark per district run.
 call :run world/building_tops --headless
 call :run world/shop_fronts --headless
+call :run world/district_kinds --headless
 call :run world/road_frame --headless
 call :run world/road_centerline --headless
 call :run world/road_alignment --headless

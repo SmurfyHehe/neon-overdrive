@@ -116,6 +116,7 @@ func _physics_process(_delta: float) -> bool:
 	match step:
 		Step.BOOT:
 			cam.set_view(ChaseCamera.View.COCKPIT)
+			p.auto_box.box = AutoBox.BOX_AUTO   # a car built with an automatic: the selector (a manual car's stick stays put in AUTO)
 			p.set_transmission_mode(PlayerCar.Transmission.AUTO)
 			_go(Step.AUTO_STOP)
 		Step.AUTO_STOP:
@@ -148,6 +149,7 @@ func _physics_process(_delta: float) -> bool:
 					_go(Step.AUTO_D)
 				else:
 					clutch = 1.0
+					p.auto_box.box = AutoBox.BOX_MANUAL
 					p.set_transmission_mode(PlayerCar.Transmission.MANUAL)
 					_go(Step.MANUAL)
 		Step.MANUAL, Step.SEMI:

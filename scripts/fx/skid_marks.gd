@@ -121,6 +121,8 @@ func _physics_process(delta: float) -> void:
 		if w.is_colliding() and w.surface_type == "Road":
 			var lat := smoothstep(CarAudio.LAT_START, CarAudio.LAT_FULL, absf(w.slip_vector.x))
 			var lon := smoothstep(CarAudio.LON_START, CarAudio.LON_FULL, absf(w.slip_vector.y))
+			if w.slip_vector.y < 0.0:
+				lon *= CarAudio.spin_slide(w, _player.speed)  # wheelspin: only if the tread really slides
 			var load := clampf(w.spring_force / static_load, 0.0, 1.0)
 			strength = maxf(lat, lon) * load
 		if strength < MIN_STRENGTH:

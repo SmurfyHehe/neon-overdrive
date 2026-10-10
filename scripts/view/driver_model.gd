@@ -594,7 +594,7 @@ func _process(delta: float) -> void:
 func _update_events() -> void:
 	var p := player
 	if p.gear != _last_gear:
-		if p.automatic_transmission:
+		if p.automatic_transmission and p.has_paddles():
 			paddle_side = 1 if p.gear > _last_gear else -1
 			paddle_t = PADDLE_SECS
 		_last_gear = p.gear

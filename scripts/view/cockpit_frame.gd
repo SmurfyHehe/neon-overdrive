@@ -172,6 +172,7 @@ var _lever_gear := 0
 var _lever_pos := Vector2.ZERO   # (col, row) in slot units, row -1 forward, +1 back
 var _lever_path: Array[Vector2] = []
 var lever_mode := -1             # PlayerCar.Transmission the lever shows
+var _stick_fixed := false        # AUTO in a manual-box car: the H-gate stick, not moving
 var _lever_heads := {}           # mode -> knob mesh
 var _gate_labels := {}           # mode -> pattern label on the console
 var _lever_wait := 0.0
@@ -812,7 +813,7 @@ func _build_lever() -> void:
 	var heads := {
 		PlayerCar.Transmission.MANUAL: [h, "KnobH", gate_pattern(player.gear_ratios.size())],
 		PlayerCar.Transmission.SEMI: [s, "KnobSeq", "−\n+"],
-		PlayerCar.Transmission.AUTO: [a, "KnobAuto", "R\nN\nD"],
+		PlayerCar.Transmission.AUTO: [a, "KnobAuto", selector_pattern(player)],
 	}
 	for m in heads:
 		var mi: MeshInstance3D = (heads[m][0] as CockpitKit).instance(mat, heads[m][1])
@@ -838,15 +839,26 @@ func _build_handbrake() -> void:
 ## that mode's slot for the current gear, with no move.
 func set_lever_mode(mode: int) -> void:
 	lever_mode = mode
+	# AUTO in a car built with a manual box: its own stick stays in the cabin
+	# (the H-gate knob), parked in the neutral gate, and never moves.
+	_stick_fixed = player.auto_stick_fixed()
+	var shown: int = PlayerCar.Transmission.MANUAL if _stick_fixed else mode
 	for m in _lever_heads:
-		(_lever_heads[m] as Node3D).visible = m == mode
-		(_gate_labels[m] as Node3D).visible = m == mode
+		(_lever_heads[m] as Node3D).visible = m == shown
+		(_gate_labels[m] as Node3D).visible = m == shown
 	_lever_path.clear()
 	_lever_wait = 0.0
 	lever_moving = false
 	_lever_gear = player.gear
 	_lever_pos = _slot_of(player.gear)
 	_apply_lever(_lever_pos)
+
+## The pattern printed next to an automatic's selector: P R N D, with 2 and 1
+## under it on the old and 90s boxes. (The lever itself only moves between R,
+## N and D: the game has no park, and the box picks its own gears.)
+static func selector_pattern(p: PlayerCar) -> String:
+	var modern := p.auto_box != null and p.auto_box.family == "modern"
+	return "P\nR\nN\nD" if modern else "P\nR\nN\nD\n2\n1"
 
 ## H-gate columns for a gearbox with this many forward gears: two gears each.
 static func gate_columns(forward_gears: int) -> int:
@@ -873,7 +885,7 @@ func _slot_of(g: int) -> Vector2:
 	if lever_mode == PlayerCar.Transmission.SEMI:
 		return Vector2.ZERO
 	if lever_mode == PlayerCar.Transmission.AUTO:
-		return Vector2(0.0, signf(float(g)))
+		return Vector2.ZERO if _stick_fixed else Vector2(0.0, signf(float(g)))
 	if g == 0:
 		return Vector2.ZERO
 	var n_cols := gate_columns(player.gear_ratios.size())
@@ -996,7 +1008,7 @@ func _process(delta: float) -> void:
 	var cue := Hud.shift_cue(p, frac)
 	var blink := Hud.blink()
 	_step_wheel(delta)
-	wheel.update(frac, cue, blink, p.motor_rpm, Hud.kmh(p.current_speed()), Hud.gear_text(p.gear))
+	wheel.update(frac, cue, blink, p.motor_rpm, Hud.kmh(p.current_speed()), Hud.cluster_gear(p))
 	var rest := dial_sweep * 0.5   # the needle points at the first tick (lower left, or the band's left end)
 	tach_needle.rotation = Vector3(0.0, 0.0, deg_to_rad(rest - dial_sweep * frac))
 	var kmh := clampf(absf(p.current_speed()) * Hud.KMH_PER_MS / float(cab.speedo_max_kmh), 0.0, 1.0)
@@ -1008,15 +1020,19 @@ func _process(delta: float) -> void:
 		(pedals[key] as Node3D).rotation_degrees = Vector3(PEDAL_TRAVEL_DEG * float(inputs[key]), 0.0, 0.0)
 	handbrake.rotation_degrees = Vector3(28.0 * clampf(p.handbrake_input, 0.0, 1.0), 0.0, 0.0)
 	# The lever follows the gearbox mode (G cycles it in the game).
-	if p.transmission_mode() != lever_mode:
+	if p.transmission_mode() != lever_mode or p.auto_stick_fixed() != _stick_fixed:
 		set_lever_mode(p.transmission_mode())
 	if p.automatic_transmission:
-		# the box shifts itself: paddle flicks on the wheel, the selector only
-		# moves between R, N and D
+		# the box shifts itself: the paddles flick only on a car that has them,
+		# the selector only moves between R, N and D, and a manual car's stick
+		# does not move at all
 		if p.gear != _last_gear:
-			wheel.flick(1 if p.gear > _last_gear else -1)
+			if p.has_paddles():
+				wheel.flick(1 if p.gear > _last_gear else -1)
 			_last_gear = p.gear
-		if not lever_moving and _lever_gear != p.gear:
+		if _stick_fixed:
+			_lever_gear = p.gear
+		elif not lever_moving and _lever_gear != p.gear:
 			if _slot_of(p.gear) != _slot_of(_lever_gear):
 				move_lever_to(p.gear)
 			else:

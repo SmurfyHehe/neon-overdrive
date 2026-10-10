@@ -89,7 +89,7 @@ func _fail(msg: String) -> void:
 
 func _drive(c: PlayerCar) -> void:
 	c.throttle_input = d_throttle
-	c.brake_input = 0.0
+	c.brake_input = 1.0 if phase == "idle" else 0.0  # standing still: an automatic in D creeps unless the brake is on
 	c.handbrake_input = d_handbrake
 	if is_nan(d_lane_x):
 		c.steering_input = d_steer
@@ -219,7 +219,7 @@ func _physics_process(_delta: float) -> bool:
 			if speed >= 30.0:
 				var sq := PackedFloat32Array()
 				for v in speeds:
-					sq.append(pow(v, CarAudio.WIND_EXP))
+					sq.append(pow(maxf(v, 0.0), CarAudio.WIND_EXP))  # a held car reads a hair under zero: pow() of that is NaN
 				var rw := _corr(sq, winds)
 				var rr := _corr(speeds, roads)
 				print("launch: 30 m/s after %.1f s: wind %.2f (r=%.3f vs speed^1.5), road %.2f (r=%.3f vs speed), cruise squeal max %.3f" % [phase_ticks / float(Engine.physics_ticks_per_second), audio.wind_level, rw, audio.road_level, rr, cruise_squeal])

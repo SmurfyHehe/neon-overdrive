@@ -119,6 +119,30 @@ static func gear_text(g: int) -> String:
 		return "N"
 	return str(g)
 
+## What the gear readout shows for this car. With the realistic automatic in
+## AUTO a forward gear reads "D3" (D and the gear); the oldest boxes never said
+## which gear, so they read "D". Everything else is gear_text().
+static func gear_label(p: PlayerCar) -> String:
+	if p.gear <= 0 or p.auto_box == null or not p.automatic_transmission:
+		return gear_text(p.gear)
+	return "D" if p.auto_box.family == "old" else "D%d" % p.gear
+
+const SELECTOR := ["P", "R", "N", "D", "2", "1"]
+## The old automatics' selector strip with the lit position in brackets:
+## "P R N[D]2 1". The box works through its gears inside D.
+static func selector_strip(gear: int) -> String:
+	var lit := 1 if gear < 0 else (2 if gear == 0 else 3)
+	var out := ""
+	for i in SELECTOR.size():
+		out += ("[" if i == lit else ("" if i == lit + 1 else " ")) + SELECTOR[i] + ("]" if i == lit else "")
+	return out.strip_edges()
+
+## The cockpit's readout: the strip on an old automatic in AUTO, else gear_label().
+static func cluster_gear(p: PlayerCar) -> String:
+	if p.auto_box != null and p.automatic_transmission and p.auto_box.family == "old":
+		return selector_strip(p.gear)
+	return gear_label(p)
+
 ## "FUEL ▮▮▮▯▯▯▯▯" with eight bars, rounded up so a drop left shows one bar.
 static func fuel_text(f: FuelTank) -> String:
 	var bars := clampi(ceili(f.fraction() * 8.0 - 0.001), 0, 8)
@@ -389,7 +413,7 @@ func _refresh() -> void:
 
 	lbl_clock.text = night_clock.text() if night_clock != null else ""
 	lbl_cash.text = wallet.money(wallet.cash) if wallet != null else ""
-	lbl_gear.text = gear_text(gear)
+	lbl_gear.text = gear_label(player)
 	lbl_mode.text = PlayerCar.TRANSMISSION_LETTERS[player.transmission_mode()]
 	lbl_speed.text = str(kmh(player.current_speed()))
 	lbl_rpm.text = "%d rpm" % int(rpm)

@@ -54,7 +54,25 @@ func _physics_process(_delta: float) -> bool:
 	hud._refresh()
 	_check(hud.lbl_speed.text == str(Hud.kmh(p.current_speed())), "speed label '%s' does not match the car (%d km/h)" % [hud.lbl_speed.text, Hud.kmh(p.current_speed())])
 	_check(hud.lbl_unit.text == "km/h", "the unit should be km/h")
-	_check(hud.lbl_gear.text == Hud.gear_text(p.gear), "gear label '%s' does not match gear %d" % [hud.lbl_gear.text, p.gear])
+	_check(hud.lbl_gear.text == Hud.gear_label(p), "gear label '%s' does not match gear %d" % [hud.lbl_gear.text, p.gear])
+	# realistic automatic: "D3" in AUTO, the bare gear otherwise; old boxes show D and a selector strip
+	var real_gear := p.current_gear
+	p.current_gear = 3
+	_check(Hud.gear_label(p) == "D3", "AUTO in third should read D3, got '%s'" % Hud.gear_label(p))
+	p.current_gear = -1
+	_check(Hud.gear_label(p) == "R", "AUTO in reverse should read R, got '%s'" % Hud.gear_label(p))
+	p.current_gear = 3
+	p.automatic_transmission = false
+	_check(Hud.gear_label(p) == "3", "SEMI in third should read 3, got '%s'" % Hud.gear_label(p))
+	p.automatic_transmission = true
+	var real_family: String = p.auto_box.family
+	p.auto_box.family = "old"
+	_check(Hud.gear_label(p) == "D", "an old automatic should read D, got '%s'" % Hud.gear_label(p))
+	_check(Hud.cluster_gear(p) == "P R N[D]2 1", "an old automatic's cluster should light D on the strip, got '%s'" % Hud.cluster_gear(p))
+	_check(Hud.selector_strip(-1) == "P[R]N D 2 1" and Hud.selector_strip(0) == "P R[N]D 2 1", "the strip should light R and N: '%s' '%s'" % [Hud.selector_strip(-1), Hud.selector_strip(0)])
+	p.auto_box.family = real_family
+	_check(Hud.cluster_gear(p) == "D3", "a 90s automatic's cluster should read D3, got '%s'" % Hud.cluster_gear(p))
+	p.current_gear = real_gear
 	_check(hud.lbl_mode.text == PlayerCar.TRANSMISSION_LETTERS[p.transmission_mode()], "the A/S/M label should follow the gearbox")
 	p.automatic_transmission = false
 	hud._refresh()

@@ -184,3 +184,22 @@ common/physics_interpolation=true
 [rendering]
 
 renderer/rendering_method="mobile"
+
+[shader_globals]
+
+sky_glow_color={
+"type": "color",
+"value": Color(0.21, 0.11, 0.05, 1)
+}
+sky_glow_height={
+"type": "float",
+"value": 0.2618
+}
+sky_dawn={
+"type": "float",
+"value": 0.0
+}
+sky_moon_dir={
+"type": "vec3",
+"value": Vector3(-0.3, 0.25, -0.92)
+}

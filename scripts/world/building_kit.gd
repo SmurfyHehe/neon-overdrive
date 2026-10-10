@@ -99,6 +99,15 @@ const ROOMS := {
 	"shuttered": {"id": 3, "close": -2, "close_chance": 1.0},
 }
 const ROOM_NAMES := ["store", "laundromat", "bar", "vacant"]
+# Sign words that fit each room (all from BuildingSigns' word atlas), so a
+# laundromat is not signed BAR. A vacant or shuttered unit keeps an old sign.
+const SIGN_WORDS := {
+	"store": ["LIQUOR", "PAWN", "VIDEO", "OPEN", "24 HR", "KEYS", "NOODLES"],
+	"laundromat": ["LAUNDRY", "OPEN"],
+	"bar": ["BAR", "CAFE", "NOODLES", "OPEN"],
+	"vacant": ["LIQUOR", "PAWN", "VIDEO", "KEYS", "NOODLES", "LAUNDRY"],
+	"shuttered": ["LIQUOR", "PAWN", "VIDEO", "KEYS", "NOODLES", "LAUNDRY"],
+}
 # Shader values for "never" and "all night" closing times.
 const NEVER := 1.0e9
 const ALWAYS := -1.0e9
@@ -584,6 +593,8 @@ static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, 
 	var word := ""
 	if rng.randf() < float(spec.sign):
 		var pool: Array = BuildingSigns.GARAGE_WORDS if type == "garage" else BuildingSigns.SHOP_WORDS
+		if type == "shop" and SIGN_WORDS.has(front.kind):
+			pool = SIGN_WORDS[front.kind]
 		word = pool[rng.randi() % pool.size()]
 		if spec.has("word"):
 			word = spec.word

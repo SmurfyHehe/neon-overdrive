@@ -276,6 +276,16 @@ func _physics_process(_delta: float) -> void:
 	if cars.size() > target_count:
 		_trim_cars()
 
+## Whether a car in the full sim has its road-space z in [z_lo, z_hi].
+func has_full_sim_car_between(z_lo: float, z_hi: float) -> bool:
+	for car in cars:
+		if not car.detailed:
+			continue
+		var z := RoadFrame.unroll(car.global_position).z
+		if z >= z_lo and z <= z_hi:
+			return true
+	return false
+
 ## Metres from the player out to which cars are drawn.
 func reveal_distance() -> float:
 	return maxf(detail_distance, REVEAL_MIN)

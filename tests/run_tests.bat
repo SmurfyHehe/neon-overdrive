@@ -192,6 +192,8 @@ if /i not "%~1"=="quick" (
 	call :run tuning/tuner_typing --headless
 	call :run world/roadside_detail
 	call :run world/wet_reflections
+	rem Wet asphalt shader + visible puddles (S1a): placement needs a window.
+	call :run world/road_wet
 	rem ~10 s, real window (shaders): traffic tail lamps, brake lamps, distance flares, barrier reflectors.
 	call :run traffic/night_lights
 	call :run fleet/fleet_silhouette_sweep

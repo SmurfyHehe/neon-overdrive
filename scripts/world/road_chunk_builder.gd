@@ -100,6 +100,7 @@ const BuildingKit := preload("res://scripts/world/building_kit.gd")
 const BuildingSigns := preload("res://scripts/world/building_signs.gd")
 const RoofProps := preload("res://scripts/world/roof_props.gd")
 const WetReflections := preload("res://scripts/world/wet_reflections.gd")
+const RoadWet := preload("res://scripts/world/road_wet.gd")
 const Districts := preload("res://scripts/world/districts.gd")
 
 const LANE_W := 3.2
@@ -170,11 +171,11 @@ const CENTER_COLOR := Color(0.86, 0.62, 0.12)
 const LANE_DASH_COLOR := Color(0.82, 0.82, 0.78)
 const PAINT_ENERGY := 0.28
 
-static var _own_mat: StandardMaterial3D
-static var _onc_mat: StandardMaterial3D
-static var _shoulder_mat: StandardMaterial3D
+static var _own_mat: ShaderMaterial
+static var _onc_mat: ShaderMaterial
+static var _shoulder_mat: ShaderMaterial
 static var _curb_mat: StandardMaterial3D
-static var _sidewalk_mat: StandardMaterial3D
+static var _sidewalk_mat: ShaderMaterial
 static var _edge_line_mat: StandardMaterial3D
 static var _pylon_mat_own: StandardMaterial3D
 static var _pylon_mat_onc: StandardMaterial3D
@@ -206,40 +207,24 @@ static func _flat_mat(color: Color, emissive: bool = false, energy: float = 1.0)
 		m.emission_energy_multiplier = energy
 	return m
 
-## Procedural asphalt-grain material: a small seamless noise texture mapped
-## through a 2-color gradient, tiled via uv1_scale so it repeats along the
-## chunk instead of stretching. Back faces are culled (the default), so the
-## tapered strips below must wind their triangles to face up.
-static func _asphalt_mat(color: Color) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
-	var noise := FastNoiseLite.new()
-	noise.seed = 1337
-	noise.frequency = 0.6
-	var tex := NoiseTexture2D.new()
-	tex.width = 64
-	tex.height = 64
-	tex.seamless = true
-	tex.noise = noise
-	var grad := Gradient.new()
-	grad.colors = PackedColorArray([color.darkened(0.2), color.lightened(0.1)])
-	tex.color_ramp = grad
-	m.albedo_texture = tex
-	m.uv1_scale = Vector3(2.0, 6.0, 1.0)
-	m.roughness = 0.9
-	m.metallic = 0.0
-	return m
+## Asphalt-grain material (scripts/world/road_wet.gd): a small seamless noise
+## texture through a 2-colour gradient, tiled so it repeats along the chunk,
+## plus the wet-road look driven by one `wetness` uniform. Back faces are
+## culled, so the tapered strips below must wind their triangles to face up.
+static func _asphalt_mat(color: Color) -> ShaderMaterial:
+	return RoadWet.asphalt_mat(color)
 
-static func _get_own_mat() -> StandardMaterial3D:
+static func _get_own_mat() -> ShaderMaterial:
 	if _own_mat == null:
 		_own_mat = _asphalt_mat(Color(0.085, 0.085, 0.09))
 	return _own_mat
 
-static func _get_onc_mat() -> StandardMaterial3D:
+static func _get_onc_mat() -> ShaderMaterial:
 	if _onc_mat == null:
 		_onc_mat = _asphalt_mat(Color(0.08, 0.08, 0.085))
 	return _onc_mat
 
-static func _get_shoulder_mat() -> StandardMaterial3D:
+static func _get_shoulder_mat() -> ShaderMaterial:
 	if _shoulder_mat == null:
 		_shoulder_mat = _asphalt_mat(Color(0.055, 0.055, 0.058))
 	return _shoulder_mat
@@ -254,7 +239,7 @@ static func _get_curb_mat() -> StandardMaterial3D:
 
 ## Sidewalk: flat, non-emissive concrete tone -- calm and neutral so it reads
 ## as a different surface without competing with the road.
-static func _get_sidewalk_mat() -> StandardMaterial3D:
+static func _get_sidewalk_mat() -> ShaderMaterial:
 	if _sidewalk_mat == null:
 		_sidewalk_mat = _asphalt_mat(Color(0.12, 0.115, 0.11))
 	return _sidewalk_mat
@@ -728,6 +713,15 @@ static func _update_strip(root: Node3D, strip_name: String, x_inner0: float, x_i
 # count) and never reallocated; a rebuild only writes transforms and moves
 # visible_instance_count. That is what makes the recycle path cheap.
 
+## puddles.gd reads this class's constants, so it is loaded on first use
+## rather than preloaded (no cycle at parse time).
+static var _puddles_script: GDScript
+
+static func _puddles() -> GDScript:
+	if _puddles_script == null:
+		_puddles_script = load("res://scripts/world/puddles.gd")
+	return _puddles_script
+
 static func _new_multimesh(mm_name: String, mesh: Mesh, mat: Material, capacity: int) -> MultiMeshInstance3D:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -1147,6 +1141,10 @@ static func _create_nodes(root: Node3D) -> void:
 	var smears := _new_multimesh("LampSmears", WetReflections.quad_mesh(), WetReflections.lamp_mat(), _lamp_slots() * 2)
 	smears.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(smears)
+	# Visible puddles (S1a): one flat quad per grip puddle of this chunk
+	# (scripts/world/puddles.gd), placed in _apply from the same seeded list
+	# the tyres read, so the water the eye sees is the water the car feels.
+	root.add_child(RoadWet.new_puddle_multimesh(_puddles().MAX_PER_CHUNK))
 	# Per side: a gap either side of each building, +1 for the district step
 	# wall, +1 more
 	# where a crossing's mouth (Junction) splits a gap in two
@@ -1353,6 +1351,20 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	lamps.visible_instance_count = n_lamps
 	pools.visible_instance_count = n_lamps
 	smears.visible_instance_count = n_lamps
+
+	# puddles: road-space s along the road (chunk c covers [c * L, (c + 1) * L))
+	# becomes chunk-local z = -(s - c * L); x is already across the road.
+	var puddles: MultiMesh = (root.get_node(^"Puddles") as MultiMeshInstance3D).multimesh
+	var plist: PackedFloat32Array = _puddles().of_chunk(chunk_index)
+	var n_puddles := 0
+	var pi := 0
+	while pi < plist.size():
+		var pz := -(plist[pi] - float(chunk_index) * CHUNK_LEN)
+		puddles.set_instance_transform(n_puddles, _xf(plist[pi + 1], RoadWet.PUDDLE_Y, pz, RoadWet.puddle_basis(plist[pi + 2], plist[pi + 3])))
+		puddles.set_instance_color(n_puddles, RoadWet.puddle_colour(int(plist[pi + 4])))
+		n_puddles += 1
+		pi += 5  # Puddles.STRIDE
+	puddles.visible_instance_count = n_puddles
 
 	# center line / barrier -- snapped to this chunk's own end-of-chunk
 	# config, not tapered (see file header). Both the wall and the dash

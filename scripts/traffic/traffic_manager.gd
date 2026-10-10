@@ -596,6 +596,25 @@ func scan(z: float, dir: float, lo: float, hi: float, ahead: bool, skip: int, se
 		q_player = false
 	return best
 
+## Whether a car is in the player's high beam's way (auto-dip, HeadlightBeams):
+## one coming at you inside `oncoming` m, or one you are following inside
+## `ahead` m. Reads the position list built this tick; no rays, no nodes.
+func beam_blocked(oncoming := 150.0, ahead := 80.0) -> bool:
+	if _z.size() < 2:
+		return false
+	var fwd := 1.0
+	if player != null:
+		fwd = signf(RoadFrame.dir_to_road(_z[0], -player.global_transform.basis.z).z)
+		if fwd == 0.0:
+			fwd = 1.0
+	for k in range(1, _z.size()):
+		var d: float = (_z[k] - _z[0]) * fwd
+		if d <= 0.0 or d > oncoming:
+			continue
+		if _vz[k] * fwd < 0.0 or d <= ahead:
+			return true
+	return false
+
 ## Floating origin (game.gd): move every car with the world.
 func shift_world(offset: Vector3) -> void:
 	for car in cars:

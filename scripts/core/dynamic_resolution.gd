@@ -47,7 +47,9 @@ static func floor_for(b: float) -> float:
 	return clampf(b - 0.34, FLOOR_MIN, FLOOR)
 
 static func budget_for(cap: int, refresh_hz: float) -> float:
-	var fps := float(cap) if cap > 0 else clampf(refresh_hz if refresh_hz > 1.0 else 60.0, 30.0, 60.0)
+	# A cap above 60 is a ceiling, not a target: the scale is never dropped to
+	# chase 120 or 144 fps.
+	var fps := float(cap) if cap > 0 and cap <= 60 else clampf(refresh_hz if refresh_hz > 1.0 else 60.0, 30.0, 60.0)
 	return 1000.0 / fps
 
 func _ready() -> void:

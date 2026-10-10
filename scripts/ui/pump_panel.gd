@@ -198,7 +198,7 @@ func _finish_fill() -> void:
 	_fill_t = -1.0
 
 ## Ferris tows you in: the night ends (tonight's cash is banked by game.gd's
-## 6 a.m. hook) and the tank is left at the starting third. First press arms.
+## 6 a.m. hook) and the tank is left at FuelTank.START_FRACTION. First press arms.
 func tow() -> void:
 	if _fill_t >= 0.0 or locked():
 		return
@@ -212,7 +212,8 @@ func tow() -> void:
 		night_clock.advance((NightClock.NIGHT_MINUTES - night_clock.minutes) * NightClock.REAL_SECONDS_PER_HOUR / 60.0 + 0.01)
 	var start := FuelTank.CAPACITY_L * FuelTank.START_FRACTION
 	player.fuel.litres = maxf(player.fuel.litres, start)
-	message.text = "Ferris towed you in. Night over, %s banked. He left you a third of a tank." % Wallet.money(cash)
+	var left := "a full tank" if FuelTank.START_FULL_TANK else "a third of a tank"
+	message.text = "Ferris towed you in. Night over, %s banked. He left you %s." % [Wallet.money(cash), left]
 	message.add_theme_color_override("font_color", AMBER)
 	refresh()
 	leave_button.grab_focus()

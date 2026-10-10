@@ -67,8 +67,8 @@ func _initialize() -> void:
 
 func _unit_tests() -> void:
 	var f := FuelTank.new()
-	_check(is_equal_approx(f.litres, FuelTank.CAPACITY_L), "tests start with a full tank")
-	_check(is_equal_approx(FuelTank.START_FRACTION, 1.0 / 3.0), "the real start is a third of a tank")
+	_check(is_equal_approx(f.litres, FuelTank.CAPACITY_L * FuelTank.START_FRACTION), "tests start where a new game starts")
+	_check(is_equal_approx(FuelTank.START_FRACTION, 1.0 if FuelTank.START_FULL_TANK else 1.0 / 3.0), "the start follows START_FULL_TANK")
 	var idle_min := FuelTank.CAPACITY_L / FuelTank.burn_rate(0.0) / 60.0
 	var full_min := FuelTank.CAPACITY_L / FuelTank.burn_rate(1.0) / 60.0
 	print("fuel: full tank lasts %.1f min idling, %.1f min flat out" % [idle_min, full_min])

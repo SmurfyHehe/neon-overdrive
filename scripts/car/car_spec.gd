@@ -520,6 +520,45 @@ static func player_spec(kind: String) -> Dictionary:
 			s["front_arb_ratio"] = 0.18
 			s["rear_arb_ratio"] = 0.08
 			s["turbo_boost_max"] = 0.0
+		"m1_monster":
+			# Special vehicle S1 (Roy 2026-10-10): lifted 4WD truck, 3.5 t, big
+			# low-revving V8, long soft suspension, high centre of gravity,
+			# 0.85 m wheels (M1MonsterBuilder.CFG). Heavy, slow, bouncy; not a
+			# sprint car. Crab steer (rear wheels follow the front) is the
+			# Ctrl move, SpecialMoves.
+			var gears: Array[float] = [3.0, 2.0, 1.45, 1.15, 0.95]
+			s["vehicle_mass"] = 3500.0
+			s["front_weight_distribution"] = 0.52
+			s["front_torque_split"] = 0.5
+			s["max_torque"] = 750.0
+			s["max_rpm"] = 5000.0
+			s["idle_rpm"] = 700.0
+			s["torque_shape"] = {"low_end": 0.7, "peak_pos": 0.4, "plateau": 0.2, "falloff": 0.6}
+			s["gear_ratios"] = gears
+			s["final_drive"] = 12.0
+			s["coefficient_of_drag"] = 0.9
+			s["frontal_area"] = 5.0
+			s["front_tire_width"] = 600.0
+			s["rear_tire_width"] = 600.0
+			s["front_damping_ratio"] = 0.45
+			s["rear_damping_ratio"] = 0.45
+			s["front_arb_ratio"] = 0.2
+			s["rear_arb_ratio"] = 0.2
+			s["front_spring_length"] = 0.45
+			s["rear_spring_length"] = 0.45
+			s["center_of_gravity_height_offset"] = 0.6
+			s["max_steering_angle"] = deg_to_rad(30.0)
+			s["brake_force_multiplier"] = 2.0
+			s["shift_time"] = 0.35
+			s["motor_brake"] = 30.0
+			s["aero_downforce_coefficient_front"] = 0.0
+			s["aero_downforce_coefficient_rear"] = 0.0
+			s["coefficient_of_friction"] = {"Road": 1.1, "Dirt": 1.0}
+			s["stability_yaw_strength"] = 3.0
+			s["exhaust"] = ExhaustTune.for_car("p5_muscle").to_dict()
+			s["engine_voice"] = EngineVoice.for_car("p5_muscle")
+			s["turbo_voice"] = TurboVoice.for_car("p5_muscle")
+			return s
 		_:
 			return s  # p1_coupe, or an unknown kind: the coupe
 	s["exhaust"] = ExhaustTune.for_car(kind).to_dict()
@@ -943,6 +982,8 @@ static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
 		visual = TestCarBuilder.build_wheel_visual(v.front_tire_radius)
 	elif kind == P1CoupeBuilder.KIND:
 		visual = P1CoupeBuilder.build_wheel_visual(v.front_tire_radius, pos)
+	elif kind == M1MonsterBuilder.KIND:
+		visual = M1MonsterBuilder.build_wheel_visual(v.front_tire_radius, pos)
 	elif NpcCarBuilder.is_npc(kind):
 		# Traffic cars (TrafficCar.build names the sheet variant).
 		visual = NpcCarBuilder.wheel_visual(kind, String(v.get("build")), pos)

@@ -55,6 +55,8 @@ var build := "stock"
 ## Wheel hardpoints for this car: the P1's CFG, or the sheet car's
 ## NpcCarBuilder.config (wheel_r, axle_z, wheel_x, plus its collision box).
 static func wheel_config(kind: String) -> Dictionary:
+	if kind == M1MonsterBuilder.KIND:
+		return M1MonsterBuilder.CFG
 	if NpcCarBuilder.is_npc(kind):
 		return NpcCarBuilder.config(kind)
 	return CFG
@@ -170,6 +172,8 @@ func _ready() -> void:
 			# A sheet car (P0, P2-P6): the same mesh path as the AI cars, in
 			# the sheet's own paint.
 			chassis_visual = NpcCarBuilder.chassis_visual(kind, build, NpcCarBuilder.sheet_paint(kind))
+		elif kind == M1MonsterBuilder.KIND:
+			chassis_visual = M1MonsterBuilder.build_chassis_visual()
 		else:
 			chassis_visual = P1CoupeBuilder.build_chassis_visual()
 		add_child(chassis_visual)
@@ -218,6 +222,8 @@ func _ready() -> void:
 	if NpcCarBuilder.is_npc(kind):
 		# The sheet body's own box (NpcCarBuilder.config), as TrafficCar.
 		CarSpec.build_collision(self, cfg.col_size, cfg.col_y)
+	elif kind == M1MonsterBuilder.KIND:
+		CarSpec.build_collision(self, cfg.col_size, cfg.col_y)
 	else:
 		CarSpec.build_collision(self, Vector3(1.6, 1.0, 3.4), 0.7)
 
@@ -259,6 +265,8 @@ func _ready() -> void:
 	CarSpec.build_wheels(self, kind, cfg, front_spring_length, rear_spring_length)
 
 	initialize()
+	if PlayerCars.is_special(kind):
+		add_child(SpecialMoves.new(self, kind))  # Ctrl: crab steer / dance
 
 	# BUG FIX (2026-09-13, Roy: "you messed up the controls"): Vehicle's
 	# gearbox starts in Neutral (current_gear = 0) by default -- that's correct

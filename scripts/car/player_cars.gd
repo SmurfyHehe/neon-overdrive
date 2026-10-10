@@ -34,9 +34,9 @@ const KINDS := [
 	{"id": "p6_crossover", "label": "Perf. crossover", "name": "Cairn", "tier": "T2", "nm": 400, "kg": 1450},
 	# The 4-door work pickup Walt sells after act 1 (Roy, 2026-10-10).
 	{"id": "p17_work_pickup", "label": "Work pickup", "name": "Camel", "tier": "T2", "nm": 640, "kg": 1780},
-	# Special vehicles (S0): story-end unlocks, not sprint-race cars. nm / kg are
-	# the coupe's, which they borrow until their body steps (see their data files).
-	{"id": "m1_monster", "label": "Monster truck", "name": "Brute", "tier": "S", "nm": 460, "kg": 1300},
+	# Special vehicles (S0): story-end unlocks, not sprint-race cars. The truck's
+	# numbers are its own (S1); the lowrider borrows the coupe's until its body step.
+	{"id": "m1_monster", "label": "Monster truck", "name": "Brute", "tier": "S", "nm": 750, "kg": 3500},
 	{"id": "l1_lowrider", "label": "Lowrider", "name": "Slab", "tier": "S", "nm": 460, "kg": 1300},
 ]
 

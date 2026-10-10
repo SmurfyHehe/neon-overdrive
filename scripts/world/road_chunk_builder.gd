@@ -126,6 +126,39 @@ const PYLON_HEIGHT := 1.0
 const BUILDING_SPACING := 25.0
 const BUILDING_GAP := 0.5  # m between the sidewalk's outer edge and a building front
 
+# Pavements step 1 (2026-10-10): the kerb is a real raised edge, not a flat
+# lighter strip. Its cross-section (KERB_PROFILE, fractions of CURB_W across
+# and of KERB_H up, the z flag = scaled by the drop factor) is a vertical face
+# from the gutter, a rounded top edge and a flat top flush with the pavement.
+# The gutter is the shoulder's last GUTTER_W, dipping GUTTER_DIP to the kerb
+# foot. Kerb and pavement are cut into rows only where something changes
+# (_kerb_rows: the bend's pieces, the edges of a dropped kerb's ramps, the
+# edges of a painted stretch), so a dropped kerb (a car-park entrance, the
+# crossing's mouth) sinks to DROP_MIN of its height over DROP_RAMP m either
+# side of a DROP_HALF m opening, and the kerb near a crossing or a hydrant is
+# painted yellow (vertex colour) with a PAINT_EDGE m edge. A straight chunk
+# with nothing on it is one piece, like the flat strips.
+const KERB_H := 0.1
+const KERB_PROFILE: Array[Vector3] = [
+	Vector3(0.0, -0.15, 0.0),   # foot, in the gutter (not scaled by the drop)
+	Vector3(0.0, 0.7, 1.0),     # face
+	Vector3(0.1, 0.93, 1.0),    # rounded edge
+	Vector3(0.27, 1.0, 1.0),
+	Vector3(1.0, 1.0, 1.0),     # top, meets the pavement
+]
+const GUTTER_W := 0.3
+const GUTTER_DIP := 0.015
+const DROP_HALF := 2.5
+const DROP_RAMP := 1.0
+const DROP_MIN := 0.15
+const PAINT_REACH := 6.0     # yellow kerb this far back from a crossing's mouth
+const PAINT_HALF := 2.5      # and this far either side of a hydrant
+const PAINT_EDGE := 0.05     # the paint's edge blends over this much kerb
+const HYDRANT_SETBACK := 0.45  # hydrant centre behind the kerb's outer edge
+const HYDRANT_CHANCE := 55   # per cent of chunk sides with a hydrant
+const KERB_COLOR := Color(0.42, 0.41, 0.39)
+const KERB_PAINT := Color(0.86, 0.62, 0.12)  # the road paint yellow
+
 # Street lamps (stage A). Each side gets one every LAMP_SPACING m, the two
 # sides staggered by half that, so a lamp passes every 12.5 m.
 const LAMP_SPACING := 25.0
@@ -245,20 +278,85 @@ static func _get_shoulder_mat() -> StandardMaterial3D:
 		_shoulder_mat = _asphalt_mat(Color(0.055, 0.055, 0.058))
 	return _shoulder_mat
 
-## Curb: crossable rumble cue, not a wall (see file header). Light concrete
-## (stage A: was a bright emissive strip, part of the neon look) so it still
-## reads as the road's edge against the darker shoulder.
+## Curb: crossable, not a wall (see file header). Light concrete (stage A:
+## was a bright emissive strip, part of the neon look) so it still reads as
+## the road's edge against the darker shoulder. The colour comes from the
+## vertex colours since pavements step 1, so the rows near a crossing or a
+## hydrant can be painted yellow in the same mesh.
 static func _get_curb_mat() -> StandardMaterial3D:
 	if _curb_mat == null:
-		_curb_mat = _flat_mat(Color(0.42, 0.41, 0.39), true, 0.12)
+		_curb_mat = _flat_mat(Color.WHITE, true, 0.12)
+		_curb_mat.vertex_color_use_as_albedo = true
+		_curb_mat.emission = KERB_COLOR
+		_curb_mat.roughness = 0.85
 	return _curb_mat
 
-## Sidewalk: flat, non-emissive concrete tone -- calm and neutral so it reads
-## as a different surface without competing with the road.
+static var _gutter_mat: StandardMaterial3D
+static var _hydrant_mat: StandardMaterial3D
+static var _hydrant_mesh: ArrayMesh
+
+## Gutter: the shoulder's edge, a shade darker and smoother (it holds the
+## water), dipping to the kerb foot.
+static func _get_gutter_mat() -> StandardMaterial3D:
+	if _gutter_mat == null:
+		_gutter_mat = _asphalt_mat(Color(0.045, 0.045, 0.05))
+		_gutter_mat.roughness = 0.7
+	return _gutter_mat
+
+## Sidewalk: concrete slabs. A seamless 64 px tile of concrete grain with a
+## dark groove along two edges, tiled 1.1 x 1 m (uv1_scale on the strip's
+## 0..1 UVs: 2 across the 2.2 m pavement, 50 along the 50 m chunk), so the
+## slab lines run with the kerb and across it.
 static func _get_sidewalk_mat() -> StandardMaterial3D:
 	if _sidewalk_mat == null:
-		_sidewalk_mat = _asphalt_mat(Color(0.12, 0.115, 0.11))
+		var m := StandardMaterial3D.new()
+		var size := 64
+		var noise := FastNoiseLite.new()
+		noise.seed = 4242
+		noise.frequency = 0.11
+		var img := Image.create(size, size, false, Image.FORMAT_RGB8)
+		var base := Color(0.125, 0.12, 0.115)
+		for y in size:
+			for x in size:
+				var g := noise.get_noise_2d(float(x), float(y)) * 0.5 + 0.5  # 0..1
+				var c := base.darkened(0.25).lerp(base.lightened(0.12), g)
+				# the groove: two texels along the tile's low edges, the texel
+				# next to it a touch darker (a chamfered slab edge)
+				if x < 2 or y < 2:
+					c = c.darkened(0.55)
+				elif x == 2 or y == 2:
+					c = c.darkened(0.2)
+				img.set_pixel(x, y, c)
+		m.albedo_texture = ImageTexture.create_from_image(img)
+		m.uv1_scale = Vector3(2.0, CHUNK_LEN, 1.0)
+		m.roughness = 0.92
+		m.metallic = 0.0
+		_sidewalk_mat = m
 	return _sidewalk_mat
+
+## Hydrant: a dull painted red-orange (the palette's sodium side, no neon),
+## with the faint reflector-grade emission the posts use so it reads at night.
+static func _get_hydrant_mat() -> StandardMaterial3D:
+	if _hydrant_mat == null:
+		_hydrant_mat = _flat_mat(Color(0.72, 0.28, 0.08), true, 0.15)
+		_hydrant_mat.roughness = 0.6
+	return _hydrant_mat
+
+## A boxy fire hydrant, origin at its base: barrel, cap, bonnet and two
+## side outlets. ~70 triangles, one MultiMesh slot per chunk side.
+static func _get_hydrant_mesh() -> ArrayMesh:
+	if _hydrant_mesh == null:
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		Junction._box(st, Transform3D(Basis(), Vector3(0.0, 0.3, 0.0)), Vector3(0.22, 0.6, 0.22))   # barrel
+		Junction._box(st, Transform3D(Basis(), Vector3(0.0, 0.08, 0.0)), Vector3(0.3, 0.06, 0.3))    # base flange
+		Junction._box(st, Transform3D(Basis(), Vector3(0.0, 0.64, 0.0)), Vector3(0.28, 0.08, 0.28))  # cap flange
+		Junction._box(st, Transform3D(Basis(), Vector3(0.0, 0.74, 0.0)), Vector3(0.18, 0.12, 0.18))  # bonnet
+		Junction._box(st, Transform3D(Basis(), Vector3(0.16, 0.4, 0.0)), Vector3(0.14, 0.11, 0.11))  # outlets
+		Junction._box(st, Transform3D(Basis(), Vector3(-0.16, 0.4, 0.0)), Vector3(0.14, 0.11, 0.11))
+		st.generate_normals()
+		_hydrant_mesh = st.commit()
+	return _hydrant_mesh
 
 ## Solid (non-dashed) lane-edge line -- real roads mark the outer edge
 ## differently from interior lane splits; ours didn't distinguish them at all.
@@ -745,6 +843,216 @@ static func _update_strip(root: Node3D, strip_name: String, x_inner0: float, x_i
 	am.clear_surfaces()
 	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _strip_arrays(x_inner0, x_inner1, x_outer0, x_outer1, CHUNK_LEN, y))
 
+# ---------- profile strips (pavements step 1) ----------
+#
+# A strip with a cross-section: `profile` points are (fraction across the
+# band from its inner to its outer edge, height in m, 1 = height scaled by
+# the row's drop factor). The band's edges taper like the flat strips. Rows
+# sit at `ts` (fractions along the chunk, ascending, 0 and 1 included),
+# every corner through the centreline frame. `hs` is the drop factor per row
+# (one per t, or empty for 1 everywhere) and `cols` the vertex colour per
+# row (or empty for none).
+#
+# Winding follows _strip_arrays: per side, so every face is a front face
+# seen from the road or above. Normals are per profile segment (flat shaded
+# faces, like the rest of the PS2-era road).
+
+static func _profile_arrays(x_inner0: float, x_inner1: float, x_outer0: float, x_outer1: float, profile: Array[Vector3], ts: PackedFloat32Array, hs: PackedFloat32Array, cols: PackedColorArray) -> Array:
+	var np := profile.size()
+	var pieces := ts.size() - 1
+	var mirrored := x_outer0 < x_inner0
+	var sgn := -1.0 if mirrored else 1.0
+	var nq := (np - 1) * pieces
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var colors := PackedColorArray()
+	verts.resize(6 * nq)
+	normals.resize(6 * nq)
+	uvs.resize(6 * nq)
+	var coloured := cols.size() == ts.size()
+	if coloured:
+		colors.resize(6 * nq)
+	# u across the profile: cumulative length over the section's total
+	var us := PackedFloat32Array()
+	us.resize(np)
+	var total := 0.0
+	for i in range(1, np):
+		var w := absf(x_outer0 - x_inner0)
+		total += Vector2((profile[i].x - profile[i - 1].x) * w, profile[i].y - profile[i - 1].y).length()
+		us[i] = total
+	if total > 0.0:
+		for i in np:
+			us[i] /= total
+	# row 0
+	var prev := PackedVector3Array()
+	prev.resize(np)
+	var prev_f := _frame(0.0)
+	var h0 := hs[0] if hs.size() > 0 else 1.0
+	for i in np:
+		var p := profile[i]
+		prev[i] = prev_f * Vector3(lerpf(x_inner0, x_outer0, p.x), p.y * (h0 if p.z > 0.5 else 1.0), 0.0)
+	var t0 := 0.0
+	var cur := PackedVector3Array()
+	cur.resize(np)
+	for k in pieces:
+		var t1 := ts[k + 1]
+		var f1 := _frame(CHUNK_LEN * t1)
+		var h1 := hs[k + 1] if hs.size() > 0 else 1.0
+		var xi := lerpf(x_inner0, x_inner1, t1)
+		var xo := lerpf(x_outer0, x_outer1, t1)
+		for i in np:
+			var p := profile[i]
+			cur[i] = f1 * Vector3(lerpf(xi, xo, p.x), p.y * (h1 if p.z > 0.5 else 1.0), 0.0)
+		for i in range(np - 1):
+			var a := prev[i]
+			var b := prev[i + 1]
+			var c := cur[i]
+			var d := cur[i + 1]
+			# segment normal in the row's frame: perpendicular to the section
+			# segment, pointing up / toward the road
+			var dx := (profile[i + 1].x - profile[i].x) * absf(xo - xi) * sgn
+			var dy := profile[i + 1].y * (h1 if profile[i + 1].z > 0.5 else 1.0) - profile[i].y * (h1 if profile[i].z > 0.5 else 1.0)
+			var nl := Vector3(-dy, dx, 0.0) * sgn
+			if nl.length_squared() < 1e-12:
+				nl = Vector3.UP
+			var n0 := (prev_f.basis * nl).normalized()
+			var n1 := (f1.basis * nl).normalized()
+			var j := 6 * ((np - 1) * k + i)
+			var u0 := us[i]
+			var u1 := us[i + 1]
+			if mirrored:
+				verts[j] = a; verts[j + 1] = b; verts[j + 2] = c; verts[j + 3] = b; verts[j + 4] = d; verts[j + 5] = c
+				uvs[j] = Vector2(u0, t0); uvs[j + 1] = Vector2(u1, t0); uvs[j + 2] = Vector2(u0, t1)
+				uvs[j + 3] = Vector2(u1, t0); uvs[j + 4] = Vector2(u1, t1); uvs[j + 5] = Vector2(u0, t1)
+				normals[j] = n0; normals[j + 1] = n0; normals[j + 2] = n1; normals[j + 3] = n0; normals[j + 4] = n1; normals[j + 5] = n1
+				if coloured:
+					colors[j] = cols[k]; colors[j + 1] = cols[k]; colors[j + 2] = cols[k + 1]
+					colors[j + 3] = cols[k]; colors[j + 4] = cols[k + 1]; colors[j + 5] = cols[k + 1]
+			else:
+				verts[j] = a; verts[j + 1] = c; verts[j + 2] = b; verts[j + 3] = b; verts[j + 4] = c; verts[j + 5] = d
+				uvs[j] = Vector2(u0, t0); uvs[j + 1] = Vector2(u0, t1); uvs[j + 2] = Vector2(u1, t0)
+				uvs[j + 3] = Vector2(u1, t0); uvs[j + 4] = Vector2(u0, t1); uvs[j + 5] = Vector2(u1, t1)
+				normals[j] = n0; normals[j + 1] = n1; normals[j + 2] = n0; normals[j + 3] = n0; normals[j + 4] = n1; normals[j + 5] = n1
+				if coloured:
+					colors[j] = cols[k]; colors[j + 1] = cols[k + 1]; colors[j + 2] = cols[k]
+					colors[j + 3] = cols[k]; colors[j + 4] = cols[k + 1]; colors[j + 5] = cols[k + 1]
+		var swap := prev
+		prev = cur
+		cur = swap
+		prev_f = f1
+		t0 = t1
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	if coloured:
+		arrays[Mesh.ARRAY_COLOR] = colors
+	return arrays
+
+static func _update_profile_strip(root: Node3D, strip_name: String, x_inner0: float, x_inner1: float, x_outer0: float, x_outer1: float, profile: Array[Vector3], ts: PackedFloat32Array, hs: PackedFloat32Array = PackedFloat32Array(), cols: PackedColorArray = PackedColorArray()) -> void:
+	var mi: MeshInstance3D = root.get_node(NodePath(strip_name))
+	var am: ArrayMesh = mi.mesh
+	am.clear_surfaces()
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _profile_arrays(x_inner0, x_inner1, x_outer0, x_outer1, profile, ts, hs, cols))
+
+## Row positions for a strip cut into `n` equal pieces.
+static func _uniform_rows(n: int) -> PackedFloat32Array:
+	var ts := PackedFloat32Array()
+	ts.resize(n + 1)
+	for i in n + 1:
+		ts[i] = float(i) / float(n)
+	return ts
+
+## Row positions for this chunk side's kerb and pavement: the bend's
+## _strip_n pieces, plus a row at each edge of every drop's opening and
+## ramps, and a pair of rows PAINT_EDGE apart at each edge of every painted
+## stretch (so the colour steps there instead of blending over a piece).
+## Sorted, unique, clamped to the chunk.
+static func _kerb_rows(drops: Array, paint: Array) -> PackedFloat32Array:
+	var zs := PackedFloat32Array()
+	for i in _strip_n + 1:
+		zs.append(-CHUNK_LEN * float(i) / float(_strip_n))
+	for d in drops:
+		var zc := float(d[0])
+		var half := float(d[1])
+		for e in [zc - half - DROP_RAMP, zc - half, zc + half, zc + half + DROP_RAMP]:
+			zs.append(e)
+	for p in paint:
+		var zc := float(p[0])
+		var half := float(p[1])
+		for e in [zc - half - PAINT_EDGE, zc - half, zc + half, zc + half + PAINT_EDGE]:
+			zs.append(e)
+	var ts := PackedFloat32Array()
+	for z in zs:
+		ts.append(clampf(-z / CHUNK_LEN, 0.0, 1.0))
+	ts.sort()
+	var out := PackedFloat32Array()
+	for t in ts:
+		if out.is_empty() or t - out[out.size() - 1] > 1e-4:
+			out.append(t)
+	return out
+
+## The kerb section in metres: KERB_PROFILE's fractions times KERB_H.
+static func _kerb_profile() -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for p in KERB_PROFILE:
+		out.append(Vector3(p.x, p.y * KERB_H, p.z))
+	return out
+
+## The pavement section: flat at kerb height, dropping with the kerb.
+static func _walk_profile() -> Array[Vector3]:
+	return [Vector3(0.0, KERB_H, 1.0), Vector3(1.0, KERB_H, 1.0)]
+
+## The gutter section: from the shoulder's level down GUTTER_DIP at the kerb.
+static func _gutter_profile() -> Array[Vector3]:
+	return [Vector3(0.0, 0.0, 0.0), Vector3(1.0, -GUTTER_DIP, 0.0)]
+
+## Drop factor per kerb row (`ts`) for this chunk side: 1 = full height,
+## down to DROP_MIN across each opening in `drops` ([z_centre, half_width]
+## pairs, chunk-local z), easing over DROP_RAMP outside the opening.
+static func _kerb_heights(drops: Array, ts: PackedFloat32Array) -> PackedFloat32Array:
+	var hs := PackedFloat32Array()
+	hs.resize(ts.size())
+	for r in ts.size():
+		var z := -CHUNK_LEN * ts[r]
+		var h := 1.0
+		for d in drops:
+			var dist: float = absf(z - float(d[0])) - float(d[1])
+			h = minf(h, clampf(dist / DROP_RAMP, 0.0, 1.0))
+		hs[r] = maxf(h, DROP_MIN)
+	return hs
+
+## Vertex colour per kerb row (`ts`): concrete, or the paint yellow within
+## `paint` ([z_centre, half_width] pairs). The rows _kerb_rows puts on a
+## band's edges make the paint start and end there.
+static func _kerb_colours(paint: Array, ts: PackedFloat32Array) -> PackedColorArray:
+	var cols := PackedColorArray()
+	cols.resize(ts.size())
+	for r in ts.size():
+		var z := -CHUNK_LEN * ts[r]
+		var c := KERB_COLOR
+		for p in paint:
+			if absf(z - float(p[0])) <= float(p[1]) + 1e-4:
+				c = KERB_PAINT
+				break
+		cols[r] = c
+	return cols
+
+## The drop factor at chunk-local z, interpolated between the rows at `ts`
+## (for the collision and for things standing on the pavement).
+static func _drop_at(hs: PackedFloat32Array, ts: PackedFloat32Array, z: float) -> float:
+	if hs.size() == 0 or ts.size() < 2:
+		return 1.0
+	var t := clampf(-z / CHUNK_LEN, 0.0, 1.0)
+	var i := ts.bsearch(t, false) - 1  # last row at or before t
+	i = clampi(i, 0, ts.size() - 2)
+	var span := ts[i + 1] - ts[i]
+	if span <= 1e-6:
+		return hs[i]
+	return lerpf(hs[i], hs[i + 1], clampf((t - ts[i]) / span, 0.0, 1.0))
+
 # ---------- multimesh helpers ----------
 #
 # Lane dashes and pylons are the textbook MultiMesh case: identical mesh,
@@ -807,7 +1115,7 @@ static func _new_sidewalk_collision(body_name: String) -> StaticBody3D:
 	body.add_child(col)
 	return body
 
-static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: float, inner1: float, outer0: float, outer1: float, side: int) -> void:
+static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: float, inner1: float, outer0: float, outer1: float, side: int, ts: PackedFloat32Array = PackedFloat32Array(), hs: PackedFloat32Array = PackedFloat32Array()) -> void:
 	var body: StaticBody3D = root.get_node(NodePath(body_name))
 	# chunk start is z=0, end is z=-CHUNK_LEN; top at 0.15 like the old box.
 	# Points are in chunk-local space, so the body sits at origin.
@@ -827,14 +1135,23 @@ static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: 
 	#
 	# STATIONS pieces along the chunk, each corner through the centreline
 	# frame (#37); on a straight centreline the ramp and top are exactly the
-	# old prism's.
+	# old prism's. Plus the kerb's own rows (`ts`, pavements step 1) where a
+	# dropped kerb lowers the top with the drawn pavement by `hs`.
 	var sx := float(side)
 	var faces := PackedVector3Array()
-	for k in STATIONS:
-		var t0 := float(k) / STATIONS
-		var t1 := float(k + 1) / STATIONS
+	var rows := _uniform_rows(STATIONS)
+	if ts.size() > 2:
+		rows.append_array(ts)
+		rows.sort()
+	for k in rows.size() - 1:
+		var t0 := rows[k]
+		var t1 := rows[k + 1]
+		if t1 - t0 < 1e-4:
+			continue
 		var z0 := -CHUNK_LEN * t0
 		var z1 := -CHUNK_LEN * t1
+		var h0 := 0.15 * _drop_at(hs, ts, z0)
+		var h1 := 0.15 * _drop_at(hs, ts, z1)
 		var i0 := lerpf(inner0, inner1, t0)
 		var i1 := lerpf(inner0, inner1, t1)
 		var o0 := lerpf(outer0, outer1, t0)
@@ -843,10 +1160,10 @@ static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: 
 		var ramp1 := minf(SIDEWALK_RAMP, absf(o1 - i1) / 2.0)
 		var foot0 := _at(i0 * sx, 0.0, z0)
 		var foot1 := _at(i1 * sx, 0.0, z1)
-		var lip0 := _at((i0 + ramp0) * sx, 0.15, z0)
-		var lip1 := _at((i1 + ramp1) * sx, 0.15, z1)
-		var top0 := _at((o0 - ramp0) * sx, 0.15, z0)
-		var top1 := _at((o1 - ramp1) * sx, 0.15, z1)
+		var lip0 := _at((i0 + ramp0) * sx, h0, z0)
+		var lip1 := _at((i1 + ramp1) * sx, h1, z1)
+		var top0 := _at((o0 - ramp0) * sx, h0, z0)
+		var top1 := _at((o1 - ramp1) * sx, h1, z1)
 		var back0 := _at(o0 * sx, 0.0, z0)
 		var back1 := _at(o1 * sx, 0.0, z1)
 		faces.append_array([foot0, foot1, lip0, lip0, foot1, lip1])  # the ramp
@@ -1258,6 +1575,8 @@ static func _create_nodes(root: Node3D) -> void:
 	root.add_child(_new_strip("EdgeLineOnc", _get_edge_line_mat()))
 	root.add_child(_new_strip("ShoulderOwn", _get_shoulder_mat()))
 	root.add_child(_new_strip("ShoulderOnc", _get_shoulder_mat()))
+	root.add_child(_new_strip("GutterOwn", _get_gutter_mat()))
+	root.add_child(_new_strip("GutterOnc", _get_gutter_mat()))
 	root.add_child(_new_strip("CurbOwn", _get_curb_mat()))
 	root.add_child(_new_strip("CurbOnc", _get_curb_mat()))
 	root.add_child(_new_strip("SidewalkOwn", _get_sidewalk_mat()))
@@ -1283,6 +1602,8 @@ static func _create_nodes(root: Node3D) -> void:
 	# light pools, and the walls between buildings. Capacity is the worst case,
 	# allocated once, like the dashes and pylons above.
 	root.add_child(_new_multimesh("Lamps", _get_lamp_mesh(), null, _lamp_slots() * 2))
+	# Pavements step 1: at most one hydrant per side, on the pavement by the kerb.
+	root.add_child(_new_multimesh("Hydrants", _get_hydrant_mesh(), _get_hydrant_mat(), 2))
 	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2))
 	# living world step 2: moths, banners, steam and litter (lamp_life.gd)
 	LampLife.create_nodes(root, _lamp_slots() * 2)
@@ -1374,27 +1695,30 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var end_own_shoulder := end_own_w + SHOULDER_W
 	var start_onc_shoulder := start_onc_w + SHOULDER_W
 	var end_onc_shoulder := end_onc_w + SHOULDER_W
-	_update_strip(root, "ShoulderOwn", start_own_w, end_own_w, start_own_shoulder, end_own_shoulder)
-	_update_strip(root, "ShoulderOnc", -start_onc_w, -end_onc_w, -start_onc_shoulder, -end_onc_shoulder)
+	# The shoulder's last GUTTER_W is the gutter, a separate strip dipping
+	# to the kerb foot (pavements step 1).
+	_update_strip(root, "ShoulderOwn", start_own_w, end_own_w, start_own_shoulder - GUTTER_W, end_own_shoulder - GUTTER_W)
+	_update_strip(root, "ShoulderOnc", -start_onc_w, -end_onc_w, -(start_onc_shoulder - GUTTER_W), -(end_onc_shoulder - GUTTER_W))
+	var gutter_rows := _uniform_rows(_strip_n)
+	_update_profile_strip(root, "GutterOwn", start_own_shoulder - GUTTER_W, end_own_shoulder - GUTTER_W, start_own_shoulder, end_own_shoulder, _gutter_profile(), gutter_rows)
+	_update_profile_strip(root, "GutterOnc", -(start_onc_shoulder - GUTTER_W), -(end_onc_shoulder - GUTTER_W), -start_onc_shoulder, -end_onc_shoulder, _gutter_profile(), gutter_rows)
 
-	# curb -- crossable rumble strip, NOT a collision wall (see file header)
+	# curb -- a raised edge, crossable, NOT a collision wall (see file
+	# header). Drawn further down, once the buildings say where it drops.
 	var start_own_curb := start_own_shoulder + CURB_W
 	var end_own_curb := end_own_shoulder + CURB_W
 	var start_onc_curb := start_onc_shoulder + CURB_W
 	var end_onc_curb := end_onc_shoulder + CURB_W
-	_update_strip(root, "CurbOwn", start_own_shoulder, end_own_shoulder, start_own_curb, end_own_curb, 0.1)
-	_update_strip(root, "CurbOnc", -start_onc_shoulder, -end_onc_shoulder, -start_onc_curb, -end_onc_curb, 0.1)
 
-	# sidewalk -- drivable, lower grip (comes from the Dirt collision below)
-	var start_own_walk := start_own_curb + SIDEWALK_W
-	var end_own_walk := end_own_curb + SIDEWALK_W
-	var start_onc_walk := start_onc_curb + SIDEWALK_W
-	var end_onc_walk := end_onc_curb + SIDEWALK_W
-	_update_strip(root, "SidewalkOwn", start_own_curb, end_own_curb, start_own_walk, end_own_walk, 0.1)
-	_update_strip(root, "SidewalkOnc", -start_onc_curb, -end_onc_curb, -start_onc_walk, -end_onc_walk, 0.1)
-
-	_update_sidewalk_collision(root, "SidewalkColOwn", start_own_curb, end_own_curb, start_own_walk, end_own_walk, 1)
-	_update_sidewalk_collision(root, "SidewalkColOnc", start_onc_curb, end_onc_curb, start_onc_walk, end_onc_walk, -1)
+	# sidewalk -- drivable, lower grip (comes from the Dirt collision below).
+	# Its width is district data (Districts.walk_at; all 2.2 m until
+	# pavements step 2), tapered from the previous chunk's like the lanes.
+	var start_walk_w := Districts.walk_at(chunk_index - 1)
+	var end_walk_w := Districts.walk_at(chunk_index)
+	var start_own_walk := start_own_curb + start_walk_w
+	var end_own_walk := end_own_curb + end_walk_w
+	var start_onc_walk := start_onc_curb + start_walk_w
+	var end_onc_walk := end_onc_curb + end_walk_w
 
 	# out-of-bounds walls, at the same set-back _update_building() uses
 	# (plus the district's setback: strip malls sit behind a drivable lot)
@@ -1453,6 +1777,60 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var signs_used := _update_signs(root, infos)
 	root.set_meta("signs_used", signs_used)
 	_update_roofs(root, infos, signs_used)
+
+	# kerb, pavement, their collision and the hydrants (pavements step 1).
+	# Dropped kerbs: a DROP_HALF opening centred on each building front the
+	# district lists as a car-park entrance (Districts.drops), and the whole
+	# of the crossing's mouth. Yellow paint: PAINT_REACH back from the mouth
+	# on both sides of the crossing, and PAINT_HALF either side of a hydrant.
+	var hydrants: MultiMesh = (root.get_node(^"Hydrants") as MultiMeshInstance3D).multimesh
+	var n_hydrants := 0
+	var drop_types: Array = Districts.drops_for(Districts.name_at(chunk_index))
+	var all_types := drop_types.has("*")
+	for side in [1, -1]:
+		var drops: Array = []
+		var paint: Array = []
+		for info in infos:
+			if int(info.side) != side or bool(info.empty):
+				continue
+			if all_types or drop_types.has(String(info.type)):
+				drops.append([float(info.z), DROP_HALF])
+		if Junction.touches(chunk_index):
+			var jc := Junction.local_centre(chunk_index)
+			drops.append([jc, Junction.MOUTH_HALF])
+			var reach := PAINT_REACH / 2.0
+			paint.append([jc + Junction.MOUTH_HALF + reach, reach])
+			paint.append([jc - Junction.MOUTH_HALF - reach, reach])
+		# one hydrant on HYDRANT_CHANCE % of chunk sides, 8..42 m in, hashed
+		# so a recycled chunk matches a fresh one and the road's RNG is untouched
+		var hroll := posmod(hash([chunk_index, side, "hydrant"]), 100)
+		var hz := -8.0 - float(posmod(hash([chunk_index, side, "hydrant_z"]), 35))
+		var hydrant_ok := hroll < HYDRANT_CHANCE and not Junction.near(chunk_index, hz, Junction.CLEAR_HALF + PAINT_HALF)
+		for d in drops:
+			if absf(hz - float(d[0])) < float(d[1]) + DROP_RAMP + PAINT_HALF:
+				hydrant_ok = false
+		if hydrant_ok:
+			paint.append([hz, PAINT_HALF])
+		var ts := _kerb_rows(drops, paint)
+		var hs := _kerb_heights(drops, ts)
+		var cols := _kerb_colours(paint, ts)
+		var sh0: float = start_own_shoulder if side == 1 else start_onc_shoulder
+		var sh1: float = end_own_shoulder if side == 1 else end_onc_shoulder
+		var cb0: float = start_own_curb if side == 1 else start_onc_curb
+		var cb1: float = end_own_curb if side == 1 else end_onc_curb
+		var wk0: float = start_own_walk if side == 1 else start_onc_walk
+		var wk1: float = end_own_walk if side == 1 else end_onc_walk
+		var sx := float(side)
+		var suffix := "Own" if side == 1 else "Onc"
+		_update_profile_strip(root, "Curb" + suffix, sh0 * sx, sh1 * sx, cb0 * sx, cb1 * sx, _kerb_profile(), ts, hs, cols)
+		_update_profile_strip(root, "Sidewalk" + suffix, cb0 * sx, cb1 * sx, wk0 * sx, wk1 * sx, _walk_profile(), ts, hs)
+		_update_sidewalk_collision(root, "SidewalkCol" + suffix, cb0, cb1, wk0, wk1, side, ts, hs)
+		if hydrant_ok:
+			var ht: float = -hz / CHUNK_LEN
+			var hx: float = lerpf(cb0, cb1, ht) + HYDRANT_SETBACK
+			hydrants.set_instance_transform(n_hydrants, _xf_up(hx * sx, KERB_H * _drop_at(hs, ts, hz), hz))
+			n_hydrants += 1
+	hydrants.visible_instance_count = n_hydrants
 
 	# gap walls (stage A) -- close the open lots between buildings along the
 	# building-front line. Visual only: out-of-bounds collision is issue #28,

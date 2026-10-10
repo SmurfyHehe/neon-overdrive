@@ -16,8 +16,14 @@ extends SceneTree
 const AREA_EPS := 1e-6
 const STRIPS := [
 	"RoadOwn", "RoadOnc", "EdgeLineOwn", "EdgeLineOnc", "ShoulderOwn",
-	"ShoulderOnc", "CurbOwn", "CurbOnc", "SidewalkOwn", "SidewalkOnc",
+	"ShoulderOnc", "GutterOwn", "GutterOnc", "CurbOwn", "CurbOnc", "SidewalkOwn", "SidewalkOnc",
 ]
+# The kerb has a cross-section since pavements step 1: a vertical face toward
+# the road and a rounded edge. Its front faces must point up or toward the
+# road's centre, never down or away. The gutter dips 1.5 cm over 30 cm and the
+# pavement ramps down at a dropped kerb, so "up" allows a few degrees.
+const UP_MIN := 0.99
+const UP_MIN_SLOPED := 0.98
 
 func _initialize() -> void:
 	var fails := 0
@@ -46,6 +52,9 @@ func _check_strip(mi: MeshInstance3D, label: String) -> int:
 		print("FAIL %s: material cull_mode is %d, expected CULL_BACK" % [label, mat.cull_mode])
 		fails += 1
 	var verts: PackedVector3Array = (mi.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var kerb := mi.name.begins_with("Curb")
+	var side := 1.0 if mi.name.ends_with("Own") else -1.0
+	var up_min := UP_MIN_SLOPED if (mi.name.begins_with("Gutter") or mi.name.begins_with("Sidewalk")) else UP_MIN
 	for t in verts.size() / 3:
 		var a := verts[t * 3]
 		var b := verts[t * 3 + 1]
@@ -55,7 +64,12 @@ func _check_strip(mi: MeshInstance3D, label: String) -> int:
 		if face.length() < AREA_EPS:
 			print("FAIL %s tri %d: zero area" % [label, t])
 			fails += 1
-		elif face.normalized().y < 0.99:
+		elif kerb:
+			var n := face.normalized()
+			if n.y < -0.01 or n.x * side > 0.01:
+				print("FAIL %s tri %d: kerb front face %s points down or away from the road" % [label, t, n])
+				fails += 1
+		elif face.normalized().y < up_min:
 			print("FAIL %s tri %d: front face %s does not point up" % [label, t, face.normalized()])
 			fails += 1
 	return fails

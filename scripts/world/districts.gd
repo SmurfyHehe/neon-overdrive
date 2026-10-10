@@ -285,3 +285,22 @@ static func setback_at(chunk_index: int) -> float:
 	if float(b[1]) <= 0.0:
 		return own
 	return lerpf(own, float(SPECS[name_of_run(int(b[0]))].setback), float(b[1]))
+
+# Pavements (step 1, 2026-10-10). walk: pavement width, m, per district; the
+# road builder tapers it between chunks like the lanes. All 2.2 (the
+# drivable-shortcut width) until step 2 sets widths by area. drops: the
+# building types whose frontage gets a dropped kerb (a car-park entrance);
+# "*" = every building (strip malls all sit behind a lot).
+const WALK := {"downtown": 2.2, "residential": 2.2, "strip": 2.2, "industrial": 2.2}
+const DROPS := {
+	"downtown": ["parking"],
+	"residential": ["parking", "garage"],
+	"strip": ["*"],
+	"industrial": ["warehouse", "garage", "parking"],
+}
+
+static func walk_at(chunk_index: int) -> float:
+	return float(WALK.get(name_at(chunk_index), 2.2))   # the newer district kinds have no row yet
+
+static func drops_for(name: String) -> Array:
+	return DROPS.get(name, [])

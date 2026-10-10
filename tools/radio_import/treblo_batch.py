@@ -115,8 +115,18 @@ class ApiError(Exception):
 def download(url, dest):
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     tmp = dest.with_suffix(dest.suffix + ".part")
-    with urllib.request.urlopen(req, timeout=300) as r, open(tmp, "wb") as f:
-        shutil.copyfileobj(r, f)
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r, open(tmp, "wb") as f:
+            shutil.copyfileobj(r, f)
+    except urllib.error.URLError as e:
+        # Python's bundled trust list can reject the CDN's Let's Encrypt chain on this
+        # laptop (2026-10-10: "certificate has expired" while the leaf is valid). Fall
+        # back to curl, which uses the system trust store. Verification stays ON.
+        if "CERTIFICATE_VERIFY_FAILED" not in str(e):
+            raise
+        rc, _, err = imp.run(["curl", "-fsSL", "--max-time", "300", "-A", UA, "-o", str(tmp), url])
+        if rc != 0:
+            raise StopBatch("download failed (python TLS and curl): %s" % err.strip()[-200:])
     tmp.replace(dest)
 
 

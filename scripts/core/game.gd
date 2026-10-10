@@ -564,6 +564,8 @@ func _setup_traffic() -> void:
 	traffic.detail_distance = TrafficSettings.detail_distance
 	traffic.add_to_group(GraphicsSettings.GROUP)   # a graphics tier sets count and distance
 	add_child(traffic)
+	# Auto-dip: the high beam drops to low when a car is in its way.
+	player.beams.dip_probe = traffic.beam_blocked
 	if Junction.enabled:
 		junction = Junction.new()
 		junction.night_clock = night_clock

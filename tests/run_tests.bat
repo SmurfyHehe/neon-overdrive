@@ -242,6 +242,8 @@ if /i not "%~1"=="quick" (
 	call :run world/lamp_life
 	rem ~10 s, real window (shaders): traffic tail lamps, brake lamps, distance flares, barrier reflectors.
 	call :run traffic/night_lights
+	rem ~25 s, real window: low/high beam, flash, auto-dip, cut-off on a wall, cops see by beam.
+	call :run car/headlight_beams
 	call :run fleet/fleet_silhouette_sweep
 	call :run fleet/fleet_budget_scene
 	rem The underside's worst-case chase (you + 3 rivals + 4 cops): draw calls per car, real renderer.

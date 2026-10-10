@@ -39,7 +39,8 @@ const ICONS := ["", "car", "two_cars", "sawhorse", "spikes", "helicopter"]
 ## only close up. Inside SEE_NEAR a cop notices you whichever way it faces;
 ## further out it looks through its windscreen (SEE_HALF_ANGLE) or, closer,
 ## its mirrors (MIRROR_RANGE behind).
-const SEE_RANGE_LIT := 140.0
+const SEE_RANGE_LIT := 140.0    # low beam
+const SEE_RANGE_HIGH := 200.0   # high beam or a flash (lights decision list)
 const SEE_RANGE_DARK := 18.0
 const SEE_NEAR := 12.0
 const SEE_HALF_ANGLE := 60.0   # degrees either side of straight ahead
@@ -53,6 +54,9 @@ const SPEED_LIMIT_KMH := 70.0
 const RISE_PER_SEC := 0.1
 const COOL_DELAY := 10.0
 const COOL_PER_SEC := 0.05
+## A driver with the lights off who is seen (up close, SEE_RANGE_DARK) is
+## breaking a rule on its own: a little heat per second, speeding or not.
+const DARK_HEAT_PER_SEC := 0.05
 const CHECK_EVERY := 0.1       # s between looks (rays are cheap, but not free)
 
 ## Night one.
@@ -98,6 +102,18 @@ func reset() -> void:
 static func icon_for(lvl: int) -> String:
 	return ICONS[clampi(lvl, 0, MAX_LEVEL)]
 
+## How far a cop sees this car by its lamps: dark, low beam or high beam.
+static func see_reach_for(car: Node) -> float:
+	if car != null and car.has_method("beam_mode"):
+		match int(car.call("beam_mode")):
+			HeadlightBeams.Mode.HIGH:
+				return SEE_RANGE_HIGH
+			HeadlightBeams.Mode.LOW:
+				return SEE_RANGE_LIT
+			_:
+				return SEE_RANGE_DARK
+	return SEE_RANGE_LIT if headlights_on(car) else SEE_RANGE_DARK
+
 static func headlights_on(car: Node) -> bool:
 	if car == null:
 		return false
@@ -109,9 +125,12 @@ static func headlights_on(car: Node) -> bool:
 ## Geometry only (no walls): whether a cop at `cop_xf` (facing its -Z) can
 ## see a car at `target`, lit or not.
 static func can_see(cop_xf: Transform3D, target: Vector3, lights_on: bool) -> bool:
+	return can_see_within(cop_xf, target, SEE_RANGE_LIT if lights_on else SEE_RANGE_DARK)
+
+## Same, with the reach given (see_reach_for).
+static func can_see_within(cop_xf: Transform3D, target: Vector3, reach: float) -> bool:
 	var to := target - cop_xf.origin
 	var d := to.length()
-	var reach := SEE_RANGE_LIT if lights_on else SEE_RANGE_DARK
 	if d > reach:
 		return false
 	if d <= SEE_NEAR:
@@ -127,7 +146,7 @@ static func can_see(cop_xf: Transform3D, target: Vector3, lights_on: bool) -> bo
 func cop_can_see_player(cop: Node3D) -> bool:
 	if player == null or cop == null or not is_instance_valid(cop) or not cop.is_inside_tree():
 		return false
-	if not can_see(cop.global_transform, player.global_position, headlights_on(player)):
+	if not can_see_within(cop.global_transform, player.global_position, see_reach_for(player)):
 		return false
 	return _line_of_sight(cop)
 
@@ -183,6 +202,9 @@ func _update_heat(delta: float) -> void:
 		if before < 1.0 and _night_one() and not mocked:
 			mocked = true
 			line_said.emit(MOCK_LINE)
+	elif seen and see_reach_for(player) <= SEE_RANGE_DARK:
+		_unseen_t = 0.0   # lights off and seen: a little heat, speeding or not
+		heat = minf(heat + DARK_HEAT_PER_SEC * delta, float(MAX_LEVEL) + 0.999)
 	elif seen and heat > 0.0:
 		_unseen_t = 0.0   # in sight at the limit: holds, no worse
 	else:

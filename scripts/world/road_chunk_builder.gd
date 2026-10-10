@@ -100,6 +100,7 @@ const BuildingKit := preload("res://scripts/world/building_kit.gd")
 const BuildingSigns := preload("res://scripts/world/building_signs.gd")
 const RoofProps := preload("res://scripts/world/roof_props.gd")
 const Districts := preload("res://scripts/world/districts.gd")
+const GasStation := preload("res://scripts/world/gas_station.gd")
 
 const LANE_W := 3.2
 const CHUNK_LEN := 50.0
@@ -1040,7 +1041,12 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 ## sign). _update_building has already taken its random draws, so the road
 ## layout is the same with the switch on or off.
 static func _clear_at_junction(root: Node3D, index: int, info: Dictionary, chunk_index: int) -> Dictionary:
-	if info.empty or not Junction.cleared(chunk_index, float(info.z) + float(info.d) / 2.0, float(info.z) - float(info.d) / 2.0):
+	if info.empty:
+		return info
+	var z0 := float(info.z) + float(info.d) / 2.0
+	var z1 := float(info.z) - float(info.d) / 2.0
+	# a gas station (own side only) clears its lot the same way
+	if not Junction.cleared(chunk_index, z0, z1) and not (int(info.side) == 1 and GasStation.cleared(chunk_index, z0, z1)):
 		return info
 	var mi: MeshInstance3D = root.get_node(NodePath("BuildingMesh%d" % index))
 	var body: StaticBody3D = root.get_node(NodePath("BuildingBody%d" % index))
@@ -1260,7 +1266,10 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var pt: float = -pz / CHUNK_LEN
 		var own_edge: float = lerp(start_own_shoulder, end_own_shoulder, pt)
 		var onc_edge: float = lerp(start_onc_shoulder, end_onc_shoulder, pt)
-		pylons_own.set_instance_transform(n_posts, _xf_up(own_edge, PYLON_HEIGHT / 2.0, pz))
+		# a gas station bay: the own post is parked out of sight (the two sides
+		# share one instance count)
+		var own_y := -50.0 if GasStation.in_bay(chunk_index, pz) else PYLON_HEIGHT / 2.0
+		pylons_own.set_instance_transform(n_posts, _xf_up(own_edge, own_y, pz))
 		pylons_onc.set_instance_transform(n_posts, _xf_up(-onc_edge, PYLON_HEIGHT / 2.0, pz))
 		n_posts += 1
 	pylons_own.visible_instance_count = n_posts
@@ -1334,6 +1343,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			var lz := -float(i) * LAMP_SPACING - (LAMP_SPACING * 0.25 if side == 1 else LAMP_SPACING * 0.75)
 			if Junction.in_mouth(chunk_index, lz):
 				continue  # the signal masts stand there
+			if side == 1 and GasStation.in_bay(chunk_index, lz):
+				continue  # the gas station canopy lights the bay
 			var lt: float = -lz / CHUNK_LEN
 			var curb: float = lerp(start_own_curb, end_own_curb, lt) if side == 1 else lerp(start_onc_curb, end_onc_curb, lt)
 			var pole_x := (curb + LAMP_SETBACK) * float(side)

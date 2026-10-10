@@ -70,6 +70,14 @@ func take_bank(amount: int) -> int:
 	_changed()
 	return t
 
+## Pays `amount` from the bank, all or nothing (the pump: FuelTank.refuel).
+func spend_bank(amount: int) -> bool:
+	if amount < 0 or amount > bank:
+		return false
+	bank -= amount
+	_changed()
+	return true
+
 ## The night is over (6 a.m., or heading home): tonight's cash goes into the bank.
 func bank_night() -> void:
 	var amount := cash

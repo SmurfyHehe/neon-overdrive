@@ -29,6 +29,7 @@ func _init(car: PlayerCar) -> void:
 	player = car
 
 func _ready() -> void:
+	theme = UiTheme.font_theme()
 	var grid := GridContainer.new()
 	grid.columns = 6  # two knobs per row: keeps the screen short enough to fit 648 px
 	grid.add_theme_constant_override("h_separation", 10)
@@ -48,6 +49,7 @@ func _ready() -> void:
 		sliders[k[0]] = s
 		var v := Label.new()
 		v.custom_minimum_size = Vector2(60, 0)
+		UiTheme.apply(v, "numbers")
 		grid.add_child(v)
 		value_labels[k[0]] = v
 	# Anti-lag crackle: a switch, not a knob (Roy, 2026-10-07). Cosmetic only.

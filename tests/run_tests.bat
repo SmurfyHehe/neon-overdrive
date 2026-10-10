@@ -138,6 +138,8 @@ rem the converter: creep, flare, power-on shift, lock-up, hill (~3 min); the shi
 call :run car/auto_ignores_shift_keys "--headless --fixed-fps 120"
 call :run car/auto_converter "--headless --fixed-fps 120"
 call :run car/auto_shift_brain "--headless --fixed-fps 120"
+rem ~1 min: a speed held by tapping the throttle key does not make the box hunt.
+call :run car/auto_key_hold "--headless --fixed-fps 120"
 call :run tuning/auto_tune_worker_mode --headless
 call :run tuning/tune_params --headless
 call :run tuning/gear_count --headless

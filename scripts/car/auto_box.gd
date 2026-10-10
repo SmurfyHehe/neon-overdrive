@@ -55,11 +55,21 @@ const MANUAL_BOX_EXTRA_TIME := 0.1
 # --- shift brain ---
 const DEMAND_RISE := 0.4         # s for the smoothed demand to go 0 -> 1
 const DEMAND_FALL := 0.8         # s for it to go 1 -> 0
+# A keyboard driver holds a speed by tapping the throttle key, so the pedal the
+# box sees is floored, lifted, floored, several times a second. Followed as it
+# is, the demand swung 0 <-> 0.7 at a steady 90 km/h and the map went 5-4-3-4-5
+# every five seconds (tools/auto_box_trace.gd). So the demand follows the pedal
+# itself only once it has stayed put for STEADY_TIME (a real press, a real
+# lift, a held part throttle); while it is being tapped it follows the share of
+# the time the key was down.
+const STEADY_TIME := 0.6         # s the pedal has to stay put to be taken at its word
+const STEADY_BAND := 0.2         # it "stays put" within this much
+const DUTY_TAU := 1.5            # s the tapped share is averaged over
 const UP_LIGHT := 0.45           # upshift at this share of max rpm on no demand ...
 const UP_FULL := 0.92            # ... and at this share flat out (road-speed rpm: the engine is a few percent above it through the converter)
 const DOWN_LIGHT := 0.30         # downshift once the lower gear would sit under this share (no demand) ...
 const DOWN_FULL := 0.75          # ... or this share (flat out)
-const REVERSAL_GAP := 1.2        # s before the map may undo its last shift (no up-down-up)
+const REVERSAL_GAP := 2.5        # s before the map may undo its last shift (no up-down-up)
 const KICK_PRESS := 0.9          # throttle that counts as floored
 const KICK_PRESS_TIME := 0.3     # it has to get there this fast to be a kickdown
 const KICK_MAX_RPM := 0.75       # the kickdown gear stays under this share of max rpm (at 0.9 it could land a fraction of a second from the next upshift)
@@ -139,6 +149,9 @@ var _catch_left := 0.0
 var _since_shift := 10.0
 var _last_dir := 0
 var _rise_t := 0.0
+var _duty := 0.0
+var _pedal_ref := 0.0
+var _steady_t := 0.0
 var _was_floored := false
 var _kick_armed := false
 var _kick_left := 0.0
@@ -222,7 +235,14 @@ func tick(v: Vehicle, delta: float) -> void:
 	var fwd := -v.local_velocity.z
 	var kmh := fwd * 3.6
 	var thr := clampf(v.throttle_input, 0.0, 1.0)
-	demand = move_toward(demand, thr, delta / (DEMAND_RISE if thr > demand else DEMAND_FALL))
+	_duty += (thr - _duty) * minf(1.0, delta / DUTY_TAU)
+	if absf(thr - _pedal_ref) > STEADY_BAND:
+		_pedal_ref = thr
+		_steady_t = 0.0
+	else:
+		_steady_t += delta
+	var want := thr if _steady_t >= STEADY_TIME else _duty
+	demand = move_toward(demand, want, delta / (DEMAND_RISE if want > demand else DEMAND_FALL))
 	_since_shift += delta
 	_accel += ((fwd - _prev_fwd) / delta - _accel) * minf(1.0, delta / ACCEL_TAU)
 	_prev_fwd = fwd

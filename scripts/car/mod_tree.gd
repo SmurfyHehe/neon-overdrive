@@ -375,10 +375,15 @@ static func _windows(spec: Dictionary, rungs: Dictionary, node_windows: Dictiona
 	return out
 
 static var _tune_entries: Dictionary = {}
+static var _tune_entries_gears := 0
 
-## TuneParams.find() without the walk down the list.
+## TuneParams.find() without the walk down the list. Read again when the gear
+## count changes: kept from a five-speed, it handed a four-speed car a fifth
+## gear's entry and _windows() read past the end of its gear_ratios.
 static func _tune_entry(path: String) -> Dictionary:
-	if _tune_entries.is_empty():
+	if _tune_entries.is_empty() or _tune_entries_gears != TuneParams.gear_count():
+		_tune_entries.clear()
+		_tune_entries_gears = TuneParams.gear_count()
 		for e in TuneParams.all():
 			_tune_entries[e.path] = e
 	return _tune_entries.get(path, {})

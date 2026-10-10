@@ -1,6 +1,6 @@
 extends SceneTree
 
-# Kerb and pavement shots (pavements step 1, 2026-10-10): builds a few road
+# Kerb and pavement shots (pavements steps 1-5, 2026-10-10): builds a few road
 # chunks beside the game's night scene and photographs the kerb line up
 # close, so the raised kerb, gutter, slab lines, yellow paint and dropped
 # kerbs can be judged by eye. Needs the real renderer (no --headless).
@@ -34,7 +34,15 @@ func _run() -> void:
 	var strip_run := 1
 	while Districts.name_of_run(strip_run) != "strip" and strip_run < 40:
 		strip_run += 1
+	# plus, since step 5, a freeway stretch (the layout's outskirts)
+	var fc := -1
+	for c in range(4, 4000):
+		if Districts.is_freeway(c - 1) and Districts.is_freeway(c) and Districts.is_freeway(c + 1):
+			fc = c
+			break
 	var chunks := {"downtown": [1], "strip": [strip_run * 16 + 1], "junction": [11, 12]}
+	if fc > 0:
+		chunks["freeway"] = [fc]
 	var x_off := 0.0
 	var roots := {}
 	for key in chunks:
@@ -54,11 +62,15 @@ func _run() -> void:
 	var cam := Camera3D.new()
 	cam.fov = 55.0
 	root.add_child(cam)
-	var kerb_x := B._lane_w(2) + B.SHOULDER_W + B.CURB_W  # kerb's outer edge
+	# each chunk's kerb outer edge from the cross-section table
+	var kerb_x := B._lane_w(2) + Districts.shoulder_at(1) + B.CURB_W
+	var skx := B._lane_w(2) + Districts.shoulder_at(strip_run * 16 + 1) + B.CURB_W
+	var jkx := B._lane_w(2) + Districts.shoulder_at(12) + B.CURB_W
+	var downtown_walk := Districts.walk_at(1)
 	var views := []
 	var o: Vector3 = (roots["downtown"][0] as Node3D).global_position
 	views.append(["kerb_close", o + Vector3(kerb_x - 1.6, 0.9, -8.0), o + Vector3(kerb_x, 0.1, -16.0)])
-	views.append(["pavement_along", o + Vector3(kerb_x + 1.1, 1.5, -2.0), o + Vector3(kerb_x + 0.6, 0.1, -30.0)])
+	views.append(["pavement_along", o + Vector3(kerb_x + downtown_walk / 2.0, 1.5, -2.0), o + Vector3(kerb_x + downtown_walk / 2.0 - 0.5, 0.1, -30.0)])
 	views.append(["road_wide", o + Vector3(2.0, 1.4, 2.0), o + Vector3(kerb_x, 0.2, -30.0)])
 	var s: Vector3 = (roots["strip"][0] as Node3D).global_position
 	# the strip chunk's dropped kerbs sit on the building centres; find the
@@ -80,12 +92,30 @@ func _run() -> void:
 			low = hgt
 			drop_z = -float(r) * 2.0
 	print("kerb_shots: strip drop at z=%.1f (kerb top %.3f)" % [drop_z, low])
-	views.append(["strip_drop", s + Vector3(kerb_x - 2.5, 1.3, drop_z + 11.0), s + Vector3(kerb_x, 0.1, drop_z)])
-	views.append(["strip_drop_low", s + Vector3(kerb_x - 0.8, 0.5, drop_z + 7.0), s + Vector3(kerb_x, 0.05, drop_z)])
+	views.append(["strip_drop", s + Vector3(skx - 2.5, 1.3, drop_z + 11.0), s + Vector3(skx, 0.1, drop_z)])
+	views.append(["strip_drop_low", s + Vector3(skx - 0.8, 0.5, drop_z + 7.0), s + Vector3(skx, 0.05, drop_z)])
 	var j: Vector3 = (roots["junction"][1] as Node3D).global_position
-	views.append(["junction_kerb", j + Vector3(kerb_x - 2.0, 1.4, 16.0), j + Vector3(kerb_x, 0.1, 0.0)])
-	views.append(["junction_paint", j + Vector3(kerb_x - 3.0, 1.2, -4.0), j + Vector3(kerb_x, 0.1, -12.0)])
-	views.append(["junction_far", j + Vector3(-kerb_x + 2.0, 2.0, 20.0), j + Vector3(kerb_x, 0.1, -4.0)])
+	views.append(["junction_kerb", j + Vector3(jkx - 2.0, 1.4, 16.0), j + Vector3(jkx, 0.1, 0.0)])
+	views.append(["junction_paint", j + Vector3(jkx - 3.0, 1.2, -4.0), j + Vector3(jkx, 0.1, -12.0)])
+	views.append(["junction_far", j + Vector3(-jkx + 2.0, 2.0, 20.0), j + Vector3(jkx, 0.1, -4.0)])
+	if roots.has("freeway"):
+		var f: Vector3 = (roots["freeway"][0] as Node3D).global_position
+		var fkx := B._lane_w(2) + Districts.shoulder_at(fc) + B.CURB_W
+		views.append(["freeway_verge", f + Vector3(fkx - 4.0, 1.4, -2.0), f + Vector3(fkx + 0.6, 0.1, -30.0)])
+		views.append(["freeway_wide", f + Vector3(2.0, 1.6, 2.0), f + Vector3(fkx, 0.2, -30.0)])
+	# a drain grate, close, if a built chunk has one
+	for key in roots:
+		var found := false
+		for c in roots[key]:
+			var dm: MultiMesh = ((c as Node3D).get_node(^"Drains") as MultiMeshInstance3D).multimesh
+			if dm.visible_instance_count > 0:
+				var dp: Vector3 = (c as Node3D).to_global(dm.get_instance_transform(0).origin)
+				var toward := -1.0 if dp.x > (c as Node3D).global_position.x else 1.0
+				views.append(["drain_" + key, dp + Vector3(toward * 1.8, 1.0, 3.0), dp])
+				found = true
+				break
+		if found:
+			break
 	# a hydrant, if one of the built chunks has one (real renderer, so the
 	# MultiMesh transforms are readable)
 	for key in roots:

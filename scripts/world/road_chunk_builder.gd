@@ -154,6 +154,17 @@ const PAINT_HALF := 2.5      # and this far either side of a hydrant
 const PAINT_EDGE := 0.05     # the paint's edge blends over this much kerb
 const HYDRANT_SETBACK := 0.45  # hydrant centre behind the kerb's outer edge
 const HYDRANT_CHANCE := 55   # per cent of chunk sides with a hydrant
+# Pavements step 2 (cross-section table, Districts.CROSS): the drawn kerb
+# height is per district and tapers between chunks. The wheels' collision top
+# stays COL_EXTRA above the drawn pavement, as it always was (0.15 on 0.1),
+# except where the kerb is flat (a freeway verge, below FLAT_BELOW).
+const COL_EXTRA := 0.05
+const FLAT_BELOW := 0.02
+# Drains (K4): a grate in the gutter, hashed 0..1 per chunk side, at most
+# DRAIN_MAX per side, never in a crossing's mouth or on a dropped kerb.
+const DRAIN_MAX := 2
+const DRAIN_CHANCE := 70     # per cent, per slot
+const DRAIN_LEN := 0.9
 const KERB_COLOR := Color(0.42, 0.41, 0.39)
 const KERB_PAINT := Color(0.86, 0.62, 0.12)  # the road paint yellow
 
@@ -355,6 +366,35 @@ static func _get_hydrant_mesh() -> ArrayMesh:
 		st.generate_normals()
 		_hydrant_mesh = st.commit()
 	return _hydrant_mesh
+
+static var _drain_mat: StandardMaterial3D
+static var _drain_mesh: ArrayMesh
+
+## Drain grate (K4): lighter cast-iron frame, dark slots; vertex colours.
+static func _get_drain_mat() -> StandardMaterial3D:
+	if _drain_mat == null:
+		_drain_mat = _flat_mat(Color.WHITE, true, 0.1)
+		_drain_mat.vertex_color_use_as_albedo = true
+		_drain_mat.emission = Color(0.3, 0.3, 0.3)
+		_drain_mat.roughness = 0.5
+	return _drain_mat
+
+## A flat grate across the gutter, origin at its centre on the gutter's
+## surface: frame plus five slots. 6 boxes, 72 triangles, one MultiMesh slot
+## per drain.
+static func _get_drain_mesh() -> ArrayMesh:
+	if _drain_mesh == null:
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		st.set_color(Color(0.17, 0.165, 0.16))
+		Junction._box(st, Transform3D(Basis(), Vector3(0.0, 0.004, 0.0)), Vector3(GUTTER_W + 0.04, 0.008, DRAIN_LEN))
+		st.set_color(Color(0.02, 0.02, 0.022))
+		for k in 5:
+			var z := (float(k) - 2.0) * DRAIN_LEN / 5.5
+			Junction._box(st, Transform3D(Basis(), Vector3(0.0, 0.0085, z)), Vector3(GUTTER_W - 0.04, 0.003, DRAIN_LEN / 11.0))
+		st.generate_normals()
+		_drain_mesh = st.commit()
+	return _drain_mesh
 
 ## Solid (non-dashed) lane-edge line -- real roads mark the outer edge
 ## differently from interior lane splits; ours didn't distinguish them at all.
@@ -1011,6 +1051,13 @@ static func _kerb_colours(paint: Array, ts: PackedFloat32Array) -> PackedColorAr
 		cols[r] = c
 	return cols
 
+## The collision's top at chunk-local z: `ch` holds it in metres per row of
+## `ts` (the builder's per-district, drop-aware heights); empty = the old 0.15.
+static func _col_h(ch: PackedFloat32Array, ts: PackedFloat32Array, z: float) -> float:
+	if ch.size() == 0 or ts.size() < 2:
+		return KERB_H + COL_EXTRA
+	return _drop_at(ch, ts, z)
+
 ## The drop factor at chunk-local z, interpolated between the rows at `ts`
 ## (for the collision and for things standing on the pavement).
 static func _drop_at(hs: PackedFloat32Array, ts: PackedFloat32Array, z: float) -> float:
@@ -1076,7 +1123,7 @@ static func _lamp_slots() -> int:
 static func _new_sidewalk_collision(body_name: String) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = body_name
-	body.add_to_group("Dirt")
+	body.add_to_group("Kerb")  # CarSpec gives the "Kerb" surface its own grip numbers
 	body.collision_layer = 1 << (CarSpec.KERB_LAYER - 1)  # wheels only, see CarSpec
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
@@ -1086,8 +1133,15 @@ static func _new_sidewalk_collision(body_name: String) -> StaticBody3D:
 	body.add_child(col)
 	return body
 
-static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: float, inner1: float, outer0: float, outer1: float, side: int, ts: PackedFloat32Array = PackedFloat32Array(), hs: PackedFloat32Array = PackedFloat32Array()) -> void:
+static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: float, inner1: float, outer0: float, outer1: float, side: int, ts: PackedFloat32Array = PackedFloat32Array(), hs: PackedFloat32Array = PackedFloat32Array(), group: StringName = &"Kerb") -> void:
 	var body: StaticBody3D = root.get_node(NodePath(body_name))
+	# The surface is the body's FIRST group (GEVP): "Kerb" for a pavement,
+	# "Grass" for a freeway's verge. Only one is ever on the body.
+	for g in [&"Kerb", &"Grass"]:
+		if g != group and body.is_in_group(g):
+			body.remove_from_group(g)
+	if not body.is_in_group(group):
+		body.add_to_group(group)
 	# chunk start is z=0, end is z=-CHUNK_LEN; top at 0.15 like the old box.
 	# Points are in chunk-local space, so the body sits at origin.
 	#
@@ -1121,8 +1175,8 @@ static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: 
 			continue
 		var z0 := -CHUNK_LEN * t0
 		var z1 := -CHUNK_LEN * t1
-		var h0 := 0.15 * _drop_at(hs, ts, z0)
-		var h1 := 0.15 * _drop_at(hs, ts, z1)
+		var h0 := _col_h(hs, ts, z0)
+		var h1 := _col_h(hs, ts, z1)
 		var i0 := lerpf(inner0, inner1, t0)
 		var i1 := lerpf(inner0, inner1, t1)
 		var o0 := lerpf(outer0, outer1, t0)
@@ -1461,6 +1515,7 @@ static func _create_nodes(root: Node3D) -> void:
 	root.add_child(_new_multimesh("Lamps", _get_lamp_mesh(), null, _lamp_slots() * 2))
 	# Pavements step 1: at most one hydrant per side, on the pavement by the kerb.
 	root.add_child(_new_multimesh("Hydrants", _get_hydrant_mesh(), _get_hydrant_mat(), 2))
+	root.add_child(_new_multimesh("Drains", _get_drain_mesh(), _get_drain_mat(), DRAIN_MAX * 2))
 	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2))
 	# Per side: a gap either side of each building, +1 for the district step
 	# wall, +1 more
@@ -1525,10 +1580,17 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	_update_strip(root, "EdgeLineOnc", -(start_onc_w - 0.12), -(end_onc_w - 0.12), -(start_onc_w + 0.03), -(end_onc_w + 0.03), 0.012)
 
 	# shoulders (tapered, flush with the road edge)
-	var start_own_shoulder := start_own_w + SHOULDER_W
-	var end_own_shoulder := end_own_w + SHOULDER_W
-	var start_onc_shoulder := start_onc_w + SHOULDER_W
-	var end_onc_shoulder := end_onc_w + SHOULDER_W
+	# The cross-section table (Districts.cross_at, pavements step 2) sets the
+	# shoulder, pavement and kerb height; each tapers from the previous
+	# chunk's value to this one's.
+	var sec0 := Districts.cross_at(chunk_index - 1)
+	var sec1 := Districts.cross_at(chunk_index)
+	var start_shoulder_w := float(sec0.shoulder)
+	var end_shoulder_w := float(sec1.shoulder)
+	var start_own_shoulder := start_own_w + start_shoulder_w
+	var end_own_shoulder := end_own_w + end_shoulder_w
+	var start_onc_shoulder := start_onc_w + start_shoulder_w
+	var end_onc_shoulder := end_onc_w + end_shoulder_w
 	# The shoulder's last GUTTER_W is the gutter, a separate strip dipping
 	# to the kerb foot (pavements step 1).
 	_update_strip(root, "ShoulderOwn", start_own_w, end_own_w, start_own_shoulder - GUTTER_W, end_own_shoulder - GUTTER_W)
@@ -1547,8 +1609,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# sidewalk -- drivable, lower grip (comes from the Dirt collision below).
 	# Its width is district data (Districts.walk_at; all 2.2 m until
 	# pavements step 2), tapered from the previous chunk's like the lanes.
-	var start_walk_w := Districts.walk_at(chunk_index - 1)
-	var end_walk_w := Districts.walk_at(chunk_index)
+	var start_walk_w := float(sec0.walk)
+	var end_walk_w := float(sec1.walk)
 	var start_own_walk := start_own_curb + start_walk_w
 	var end_own_walk := end_own_curb + end_walk_w
 	var start_onc_walk := start_onc_curb + start_walk_w
@@ -1617,7 +1679,13 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# on both sides of the crossing, and PAINT_HALF either side of a hydrant.
 	var hydrants: MultiMesh = (root.get_node(^"Hydrants") as MultiMeshInstance3D).multimesh
 	var n_hydrants := 0
-	var drop_types: Array = Districts.drops_for(Districts.name_at(chunk_index))
+	var drains: MultiMesh = (root.get_node(^"Drains") as MultiMeshInstance3D).multimesh
+	var n_drains := 0
+	var drop_types: Array = sec1.drops
+	var kh0 := float(sec0.kerb_h)
+	var kh1 := float(sec1.kerb_h)
+	var flat := maxf(kh0, kh1) < FLAT_BELOW  # a freeway's verge: no hydrants, paint or drains
+	var verge := not bool(sec1.kerb)
 	var all_types := drop_types.has("*")
 	for side in [1, -1]:
 		var drops: Array = []
@@ -1637,15 +1705,26 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		# so a recycled chunk matches a fresh one and the road's RNG is untouched
 		var hroll := posmod(hash([chunk_index, side, "hydrant"]), 100)
 		var hz := -8.0 - float(posmod(hash([chunk_index, side, "hydrant_z"]), 35))
-		var hydrant_ok := hroll < HYDRANT_CHANCE and not Junction.near(chunk_index, hz, Junction.CLEAR_HALF + PAINT_HALF)
+		var hydrant_ok := not flat and hroll < HYDRANT_CHANCE and not Junction.near(chunk_index, hz, Junction.CLEAR_HALF + PAINT_HALF)
 		for d in drops:
 			if absf(hz - float(d[0])) < float(d[1]) + DROP_RAMP + PAINT_HALF:
 				hydrant_ok = false
 		if hydrant_ok:
 			paint.append([hz, PAINT_HALF])
 		var ts := _kerb_rows(drops, paint)
-		var hs := _kerb_heights(drops, ts)
+		var ds := _kerb_heights(drops, ts)
 		var cols := _kerb_colours(paint, ts)
+		# The district's kerb height, tapered from the previous chunk's: `hs`
+		# scales the drawn kerb (1 = KERB_H), `ch` is the collision top in
+		# metres: the drawn pavement plus COL_EXTRA (less on a low kerb).
+		var hs := PackedFloat32Array()
+		var ch := PackedFloat32Array()
+		hs.resize(ts.size())
+		ch.resize(ts.size())
+		for r in ts.size():
+			var kh := lerpf(kh0, kh1, ts[r])
+			hs[r] = ds[r] * kh / KERB_H
+			ch[r] = ds[r] * (kh + COL_EXTRA * clampf(kh / KERB_H, 0.0, 1.0))
 		var sh0: float = start_own_shoulder if side == 1 else start_onc_shoulder
 		var sh1: float = end_own_shoulder if side == 1 else end_onc_shoulder
 		var cb0: float = start_own_curb if side == 1 else start_onc_curb
@@ -1656,13 +1735,33 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var suffix := "Own" if side == 1 else "Onc"
 		_update_profile_strip(root, "Curb" + suffix, sh0 * sx, sh1 * sx, cb0 * sx, cb1 * sx, _kerb_profile(), ts, hs, cols)
 		_update_profile_strip(root, "Sidewalk" + suffix, cb0 * sx, cb1 * sx, wk0 * sx, wk1 * sx, _walk_profile(), ts, hs)
-		_update_sidewalk_collision(root, "SidewalkCol" + suffix, cb0, cb1, wk0, wk1, side, ts, hs)
+		_update_sidewalk_collision(root, "SidewalkCol" + suffix, cb0, cb1, wk0, wk1, side, ts, ch, &"Grass" if verge else &"Kerb")
 		if hydrant_ok:
 			var ht: float = -hz / CHUNK_LEN
 			var hx: float = lerpf(cb0, cb1, ht) + HYDRANT_SETBACK
 			hydrants.set_instance_transform(n_hydrants, _xf_up(hx * sx, KERB_H * _drop_at(hs, ts, hz), hz))
 			n_hydrants += 1
+		# Drains (K4): a grate in the gutter, hashed per chunk side and slot,
+		# clear of the crossing, every dropped kerb and the hydrant's paint.
+		if not flat:
+			for k in DRAIN_MAX:
+				if posmod(hash([chunk_index, side, "drain", k]), 100) >= DRAIN_CHANCE:
+					continue
+				var dz := -4.0 - 22.0 * float(k) - float(posmod(hash([chunk_index, side, "drain_z", k]), 18))
+				var clear := not Junction.near(chunk_index, dz, Junction.MOUTH_HALF + 1.0)
+				for d in drops:
+					if absf(dz - float(d[0])) < float(d[1]) + DROP_RAMP + DRAIN_LEN:
+						clear = false
+				if hydrant_ok and absf(dz - hz) < PAINT_HALF + DRAIN_LEN:
+					clear = false
+				if not clear:
+					continue
+				var dt: float = -dz / CHUNK_LEN
+				var dx: float = lerpf(sh0, sh1, dt) - GUTTER_W / 2.0
+				drains.set_instance_transform(n_drains, _xf_up(dx * sx, -GUTTER_DIP / 2.0, dz))
+				n_drains += 1
 	hydrants.visible_instance_count = n_hydrants
+	drains.visible_instance_count = n_drains
 
 	# gap walls (stage A) -- close the open lots between buildings along the
 	# building-front line. Visual only: out-of-bounds collision is issue #28,

@@ -178,6 +178,10 @@ sky_glow_height={
 "type": "float",
 "value": 0.2618
 }
+sky_dawn={
+"type": "float",
+"value": 0.0
+}
 sky_moon_dir={
 "type": "vec3",
 "value": Vector3(-0.3, 0.25, -0.92)

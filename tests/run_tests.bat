@@ -195,6 +195,7 @@ if /i not "%~1"=="quick" (
 	call :run view/chase_undercarriage
 	rem Real window: reads rendered sky and moon pixels.
 	call :run world/sky_probe
+	call :run world/sky_dawn
 	call :run audio/mute --headless
 	call :run car/feel_pass_1 --headless
 )

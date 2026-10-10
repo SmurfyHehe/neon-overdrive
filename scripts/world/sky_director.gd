@@ -44,12 +44,14 @@ func _ready() -> void:
 	_to_height = g.height_deg
 	night_clock.night_ended.connect(_on_night_ended)
 	_apply_moon()
+	NightSky.set_dawn(NightSky.dawn_for_minutes(night_clock.minutes))
 
 func _process(delta: float) -> void:
 	_moon_acc += delta
 	if _moon_acc >= MOON_STEP_SECS and night_clock.speed > 0.0:
 		_moon_acc = 0.0
 		_apply_moon()
+		_apply_dawn()
 	if _blend < 1.0:
 		_blend_acc += delta
 		if _blend_acc >= BLEND_STEP_SECS:
@@ -84,8 +86,15 @@ func current_district() -> String:
 func _apply_moon() -> void:
 	NightSky.set_moon_time(sky, _night, night_clock.minutes / NightClock.NIGHT_MINUTES)
 
+## Dawn follows the clock (5 a.m. to 6 a.m.); only set when the value moves.
+func _apply_dawn() -> void:
+	var d := NightSky.dawn_for_minutes(night_clock.minutes)
+	if not is_equal_approx(d, NightSky.dawn):
+		NightSky.set_dawn(d)
+
 func _on_night_ended(n: int) -> void:
 	# Emitted just before the clock steps on, so the new night is n + 1.
 	_night = n + 1
 	NightSky.set_night(sky, _night)
 	_apply_moon()
+	NightSky.set_dawn(0.0)

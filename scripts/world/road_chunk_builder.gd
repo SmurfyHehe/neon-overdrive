@@ -1108,6 +1108,12 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 	# ranges, push the fronts back by the chunk's setback, and leave some
 	# slots as empty lots (the gap walls close them).
 	var spec := Districts.spec(Districts.name_for_building(chunk_index, _bld_rng.randf()))
+	# World step 1: one skyline landmark per district run, on a fixed slot of
+	# a fixed chunk. Its building is pinned (type, height, biggest footprint,
+	# never an empty lot); RoofProps puts the landmark itself on top.
+	var landmark := Districts.landmark_at(chunk_index, index)
+	if landmark != "":
+		spec = Districts.landmark_spec(spec, landmark)
 	var w: float = lerpf(spec.w[0], spec.w[1], inverse_lerp(4.0, 10.0, w_draw))
 	var d: float = lerpf(spec.d[0], spec.d[1], inverse_lerp(9.0, 18.0, d_draw))
 	var front := edge_x_abs + BUILDING_GAP + Districts.setback_at(chunk_index)
@@ -1118,7 +1124,7 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 		mi.transform = _xf_up((front + w / 2.0) * float(side), 0.5, z, Basis.from_scale(box.size))
 		body.transform = _xf_up((front + w / 2.0) * float(side), 0.5, z)
 		mi.set_meta("building_type", "lot")
-		for k in ["sign_word", "facade_tile"]:
+		for k in ["sign_word", "facade_tile", "roof_top", "landmark"]:
 			if mi.has_meta(k):
 				mi.remove_meta(k)
 		return {"empty": true, "d": 0.0, "z": z, "side": side}

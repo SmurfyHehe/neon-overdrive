@@ -157,6 +157,8 @@ call :run car/car_scrape_cars "--headless --fixed-fps 120"
 call :run car/car_scrape_cars_b "--headless --fixed-fps 120"
 call :run world/road_space --headless
 call :run world/chunk_builder_equivalence --headless
+rem World step 1: roof shapes, facade wear, one skyline landmark per district run.
+call :run world/building_tops --headless
 call :run world/road_frame --headless
 call :run world/road_centerline --headless
 call :run world/road_alignment --headless

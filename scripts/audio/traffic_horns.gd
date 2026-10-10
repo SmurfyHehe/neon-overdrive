@@ -66,10 +66,17 @@ static func warm() -> void:
 		return
 	_task = WorkerThreadPool.add_task(_build_all, false, "traffic horns")
 
-## Waits for the build if it is still running (the manager is leaving the tree).
+## The manager is leaving the tree: waits for the build if it is still running
+## and lets the takes go (nothing static holds a resource at exit). The next
+## warm() builds them again.
 static func finish() -> void:
-	if _task >= 0 and not WorkerThreadPool.is_task_completed(_task):
-		WorkerThreadPool.wait_for_task_completion(_task)
+	if _task < 0:
+		return
+	WorkerThreadPool.wait_for_task_completion(_task)
+	_task = -1
+	_lock.lock()
+	_streams.clear()
+	_lock.unlock()
 
 static func ready() -> bool:
 	_lock.lock()

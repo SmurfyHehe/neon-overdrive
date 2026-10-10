@@ -30,7 +30,7 @@ extends SceneTree
 
 const B := preload("res://scripts/world/road_chunk_builder.gd")
 const TRI_BUDGET := 5000
-const PARAMS := ["tile", "tint", "size", "floor_h", "lit_density", "seed", "wear"]
+const PARAMS := ["tile", "tint", "size", "floor_h", "lit_density", "seed", "wear", "room", "close_at"]
 
 var fails := 0
 

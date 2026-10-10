@@ -1004,7 +1004,7 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 		mi.transform = _xf_up((front + w / 2.0) * float(side), 0.5, z, Basis.from_scale(box.size))
 		body.transform = _xf_up((front + w / 2.0) * float(side), 0.5, z)
 		mi.set_meta("building_type", "lot")
-		for k in ["sign_word", "facade_tile", "roof_top", "landmark"]:
+		for k in ["sign_word", "facade_tile", "roof_top", "landmark", "shop_front"]:
 			if mi.has_meta(k):
 				mi.remove_meta(k)
 		return {"empty": true, "d": 0.0, "z": z, "side": side}

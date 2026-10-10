@@ -99,6 +99,7 @@ class_name RoadChunkBuilder
 const BuildingKit := preload("res://scripts/world/building_kit.gd")
 const BuildingSigns := preload("res://scripts/world/building_signs.gd")
 const RoofProps := preload("res://scripts/world/roof_props.gd")
+const WetReflections := preload("res://scripts/world/wet_reflections.gd")
 const Districts := preload("res://scripts/world/districts.gd")
 const Kit := preload("res://scripts/world/roadside_kit.gd")
 const LampLife := preload("res://scripts/world/lamp_life.gd")
@@ -1833,6 +1834,11 @@ static func _create_nodes(root: Node3D) -> void:
 	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2))
 	# living world step 2: moths, banners, steam and litter (lamp_life.gd)
 	LampLife.create_nodes(root, _lamp_slots() * 2)
+	# Fake wet-road reflections (RESEARCH-cheap-pretty item 7): one additive
+	# streak on the tarmac under each lamp head, placed with the pools.
+	var smears := _new_multimesh("LampSmears", WetReflections.quad_mesh(), WetReflections.lamp_mat(), _lamp_slots() * 2)
+	smears.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(smears)
 	# Per side: a gap either side of each building, +1 for the district step
 	# wall, +1 more
 	# where a crossing's mouth (Junction) splits a gap in two
@@ -2153,6 +2159,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# arm over the road; the oncoming side is the same mesh turned 180 deg.
 	var lamps: MultiMesh = (root.get_node(^"Lamps") as MultiMeshInstance3D).multimesh
 	var pools: MultiMesh = (root.get_node(^"LampPools") as MultiMeshInstance3D).multimesh
+	var smears: MultiMesh = (root.get_node(^"LampSmears") as MultiMeshInstance3D).multimesh
 	var n_lamps := 0
 	var lamp_zs := {1: [], -1: []}  # pole z per side, for the roadside kit's bins
 	for i in range(_lamp_slots()):
@@ -2171,9 +2178,11 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			lamps.set_instance_transform(n_lamps, _xf_up(pole_x, 0.0, lz, turn))
 			var head_x := pole_x - (LAMP_ARM - 0.2) * float(side)
 			pools.set_instance_transform(n_lamps, _xf(head_x, POOL_Y, lz, Basis.from_scale(Vector3(POOL_ACROSS, 1.0, POOL_ALONG))))
+			smears.set_instance_transform(n_lamps, _xf(head_x, WetReflections.SMEAR_Y, lz, WetReflections.lamp_smear_basis()))
 			n_lamps += 1
 	lamps.visible_instance_count = n_lamps
 	pools.visible_instance_count = n_lamps
+	smears.visible_instance_count = n_lamps
 	var lamp_xfs := []
 	for k in range(n_lamps):
 		lamp_xfs.append(lamps.get_instance_transform(k))

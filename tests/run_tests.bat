@@ -259,6 +259,7 @@ if /i not "%~1"=="quick" (
 	call :run world/sign_audit
 	rem Same file as the headless run above, with a window: the chunk instances (moths, banners, vents, litter) and the recycle path.
 	call :run world/lamp_life
+	call :run world/wet_reflections
 	rem ~10 s, real window (shaders): traffic tail lamps, brake lamps, distance flares, barrier reflectors.
 	call :run traffic/night_lights
 	rem ~25 s, real window: low/high beam, flash, auto-dip, cut-off on a wall, cops see by beam.

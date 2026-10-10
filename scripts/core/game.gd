@@ -90,6 +90,13 @@ const RunEnd := preload("res://scripts/core/run_end.gd")
 var gas_station: Node3D
 const GasStation := preload("res://scripts/world/gas_station.gd")
 const PumpPanel := preload("res://scripts/ui/pump_panel.gd")
+const WetReflections := preload("res://scripts/world/wet_reflections.gd")
+# The rain branch's weather (scripts/world/weather.gd, PR #341) when it is
+# checked out: its wetness drives the wet-road reflections. Loaded by path so
+# this branch runs with or without it.
+var _weather: GDScript
+var _weather_seen := -1
+var _wet_pinned := false
 var road_seed := 0
 var run := {}
 ## Whether `run` puts the car back where it was: false for a fresh run, and for
@@ -146,6 +153,7 @@ func _ready() -> void:
 	# frame twice, for before/after look checks).
 	var rng_env := OS.get_environment("NEON_RNG_SEED")
 	var seed_env := OS.get_environment("NEON_SEED")
+	_setup_wet_reflections(benchmark)
 	if benchmark:
 		seed(Benchmark.SEED)
 	elif rng_env.is_valid_int():
@@ -200,6 +208,33 @@ func _ready() -> void:
 	if benchmark:
 		add_child(Benchmark.new())
 	add_child(saver)
+
+## Wet-road reflections (wet_reflections.gd). How wet the road is drawn:
+## --wet=<0..1> (benchmark args) or NEON_WET=<0..1> pins it; otherwise the
+## rain branch's weather drives it when its script is present, and without
+## that the road is drawn wet so the look can be judged.
+func _setup_wet_reflections(benchmark: bool) -> void:
+	var pin := Benchmark.opt("wet") if benchmark else ""
+	if pin == "":
+		pin = OS.get_environment("NEON_WET")
+	if pin.is_valid_float():
+		_wet_pinned = true
+		WetReflections.set_wetness(float(pin))
+		return
+	if ResourceLoader.exists("res://scripts/world/weather.gd"):
+		_weather = load("res://scripts/world/weather.gd")
+		_sync_wetness()
+	else:
+		WetReflections.set_wetness(1.0)
+
+## Follows the rain branch's wetness, only when it has moved (its `version`).
+func _sync_wetness() -> void:
+	if _weather == null or _wet_pinned:
+		return
+	var v := int(_weather.get("version"))
+	if v != _weather_seen:
+		_weather_seen = v
+		WetReflections.set_wetness(float(_weather.get("wetness")))
 
 func _setup_world() -> void:
 	var env := Environment.new()
@@ -538,6 +573,8 @@ func _physics_process(_delta: float) -> void:
 		_shift_origin(int(floor(-z / RoadChunkBuilder.CHUNK_LEN)))
 		recenter_us_max = maxi(recenter_us_max, Time.get_ticks_usec() - t0)
 	Weather.step(_delta)  # before the cars: they read this tick's wetness
+	if _weather != null:
+		_sync_wetness()
 	if Input.is_action_just_pressed("mute"):
 		toggle_mute()
 	if Input.is_action_just_pressed("radio_next") and radio != null:

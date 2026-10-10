@@ -38,6 +38,13 @@ extends RefCounted
 #   lamps are tracked for the lamps the redesign will give each side.
 # - body: only the repair price.
 #
+# Kerb strikes (pavements step 4, 2026-10-10; Roy: "kerb strike bends wheel"):
+# a wheel that comes onto the pavement (the "Kerb" surface) with more than
+# KERB_FREE_MS of speed across the road, toward the kerb, bends that
+# corner: a front corner's steering arm (the same toe pull as a wall hit),
+# a rear corner's spring. The body takes a quarter of it as cost. A
+# shallow, slow mount - a normal drive up a dropped kerb - does nothing.
+#
 # The state is plain numbers (to_dict / from_dict) so the save system and the
 # garage can keep it. Until the save system lands it lives as long as the car,
 # like FuelTank: Restart starts a fresh, undamaged car.
@@ -68,6 +75,15 @@ const COOLING_LOSS := 0.7
 ## Toe (rad) a fully bent front arm adds. The Tuner's toe range is +-0.02;
 ## "slightly" (Roy) keeps this inside it.
 const MAX_TOE_BEND := 0.004
+## A wheel's speed into the kerb (m/s, horizontal, across the kerb face)
+## below which nothing bends; 5 m/s is 18 km/h straight at it, or about 14
+## degrees at 100 km/h.
+const KERB_FREE_MS := 5.0
+## Damage per m/s above KERB_FREE_MS: 100 km/h at 30 degrees (13.9 m/s) puts
+## about 0.4 on the corner, 100 km/h square on bends it fully.
+const KERB_DAMAGE_PER_MS := 0.045
+## A strike's cost to the body, as a share of the corner's.
+const KERB_BODY_SHARE := 0.25
 ## Spring rate lost on a fully broken rear corner.
 const SPRING_LOSS := 0.35
 ## A lamp breaks when its corner takes this much in one hit.
@@ -94,6 +110,11 @@ var hits := 0
 var last_hit_dv := 0.0
 var last_hit_dir := Vector2.ZERO   # car-local (x, z) of the velocity change
 
+## Kerb strikes this car has taken, and the speed into the kerb of the last.
+var kerb_strikes := 0
+var last_kerb_strike := 0.0
+
+var _on_kerb: Array[bool] = [false, false, false, false]
 var _prev_vel := Vector3.ZERO
 var _hit_dv := Vector3.ZERO
 var _hit_left := -1.0
@@ -204,6 +225,32 @@ func apply_hit(dv_local: Vector3) -> void:
 		if amount * share[i] >= LAMP_BREAK:
 			lamps[[Lamp.HEAD_L, Lamp.HEAD_R, Lamp.TAIL_L, Lamp.TAIL_R][i]] = true
 
+## One kerb strike from raw numbers (testable without a car): wheel i (FL,
+## FR, RL, RR) met the kerb at `approach` m/s across the kerb face.
+func apply_kerb_strike(i: int, approach: float) -> void:
+	if not enabled or approach <= KERB_FREE_MS:
+		return
+	var amount := (approach - KERB_FREE_MS) * KERB_DAMAGE_PER_MS
+	kerb_strikes += 1
+	last_kerb_strike = approach
+	_add([Part.STEER_FL, Part.STEER_FR, Part.SUSP_RL, Part.SUSP_RR][clampi(i, 0, 3)], amount)
+	_add(Part.BODY, amount * KERB_BODY_SHARE)
+
+## Looks for a wheel that has just come onto the "Kerb" surface and, if it
+## came hard, strikes. The speed into the kerb is the car's sideways speed in
+## road space (across the road, toward the wheel's side), not the ramp's
+## contact normal: at 45 degrees and highway speed a wheel clears the 0.3 m
+## ramp in one tick and its first contact is the flat top.
+func _kerb_step(v: Vehicle) -> void:
+	for i in mini(4, v.wheel_array.size()):
+		var w: Wheel = v.wheel_array[i]
+		var on: bool = w.is_colliding() and w.surface_type == "Kerb"
+		if on and not _on_kerb[i]:
+			var pos := RoadFrame.unroll(w.global_position)
+			var across := RoadFrame.dir_to_road(pos.z, v.linear_velocity).x
+			apply_kerb_strike(i, across if pos.x > 0.0 else -across)
+		_on_kerb[i] = on
+
 func _add(p: Part, a: float) -> void:
 	parts[p] = clampf(parts[p] + a, 0.0, 1.0)
 
@@ -231,6 +278,7 @@ func step(v: Vehicle, dt: float, health: PowertrainHealth, limp: LimpMode) -> vo
 	if not enabled:
 		return
 	step_values(dt, v.linear_velocity, v.global_transform.basis, _touching(v))
+	_kerb_step(v)
 	health.cooling_mult = cooling_mult()
 	limp.engine_damage_kmh = engine_cap_kmh()
 	_apply_wheels(v)

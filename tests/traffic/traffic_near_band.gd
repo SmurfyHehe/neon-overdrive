@@ -9,10 +9,15 @@ extends SceneTree
 # all the time. Asserts:
 # - cars do cross the band both ways (into the sim and back onto rails)
 # - no drawn car jumps at a hand-over: its step over the tick stays within
-#   JUMP_M of what its speed says, and it turns no more than TURN_RAD
+#   JUMP_M of what its speed says, and it turns no more than TURN_RAD (the
+#   tick a car comes into view at the fog line is not counted: see the loop)
 # - the band is respected: no car on rails inside it (one tick of slack), no
 #   car in the sim beyond its outer edge unless it is not fit for the rails
 #   (crashed or knocked off its path: TrafficCar.can_rail)
+# - a drawn car on rails moves every tick (it thinks less often than that)
+# - hidden cars, which move once per think, still cover the ground their speed
+#   says: the metres they travel along the road against speed x time, summed
+#   over every hidden car-tick, within HIDDEN_PACE
 # - nothing touches the player, no two sim cars touch
 # - no NaN, no engine or script errors
 # Reports the average number of cars in the sim against the car count.
@@ -33,6 +38,8 @@ const PLAYER_KMH := 160.0
 const JUMP_M := 0.25
 ## ... and turn this much in one tick (a car on a lane-change S turns ~0.002).
 const TURN_RAD := 0.03
+## Hidden cars' distance covered against speed x time, as a share.
+const HIDDEN_PACE := 0.03
 
 var logger := Harness.ErrorCounter.new()
 var game: Node
@@ -56,6 +63,11 @@ var sim_n := 0
 var player_contacts := 0
 var pair_contacts := 0
 var speed_sum := 0.0
+var last_z := {}
+var last_shown := {}
+var hidden_moved := 0.0
+var hidden_want := 0.0
+var rail_still := 0
 
 func _initialize() -> void:
 	OS.add_logger(logger)
@@ -87,16 +99,30 @@ func _physics_process(_delta: float) -> bool:
 	for car in traffic.cars:
 		if not Harness.finite(car):
 			return _end("non-finite traffic state at tick %d" % tick)
-		var d := absf(RoadFrame.unroll(car.global_position).z - pz)
+		var cz := RoadFrame.unroll(car.global_position).z
+		var d := absf(cz - pz)
 		if car.detailed:
 			n_sim += 1
+		if last_z.has(car) and not respawned and not car.benched and car.global_position.z < 5000.0:
+			var hidden: bool = not car.shown and not car.detailed and not last_shown[car] and not last_detailed[car]
+			if hidden:
+				hidden_moved += (cz - float(last_z[car])) * car.direction
+				hidden_want += car.lane_speed() * dt
+			elif car.shown and last_shown[car] and not car.detailed and not last_detailed[car] and car.lane_speed() > 5.0:
+				if (car.global_position - last_pos[car]).length() < 0.5 * car.lane_speed() * dt:
+					rail_still += 1
+		# A car coming into view at the fog line takes the travel it was owed
+		# while hidden in one step (TrafficCar.set_shown): not a jump anyone sees.
+		var came_into_view: bool = car.shown and last_shown.has(car) and not last_shown[car]
+		last_z[car] = cz
+		last_shown[car] = car.shown
 		if last_detailed.has(car):
 			var was: bool = last_detailed[car]
 			if car.detailed and not was:
 				into_sim += 1
 			elif was and not car.detailed:
 				onto_rails += 1
-			if car.shown and not respawned and tick > 1:
+			if car.shown and not came_into_view and not respawned and tick > 1:
 				var step: float = (car.global_position - last_pos[car]).length()
 				var err := absf(step - absf(car.lane_speed()) * dt)
 				if err > worst_jump:
@@ -153,6 +179,10 @@ func _end(msg: String) -> bool:
 	_check(into_sim > 0 and onto_rails > 0, "no hand-overs both ways (into the sim %d, onto rails %d)" % [into_sim, onto_rails])
 	_check(worst_jump < JUMP_M, "a drawn car jumped %.3f m in one tick (%s)" % [worst_jump, worst_jump_note])
 	_check(worst_turn < TURN_RAD, "a drawn car turned %.4f rad in one tick at a hand-over" % worst_turn)
+	print("traffic_near_band: hidden cars covered %.0f m against %.0f m by their speed; drawn rail car-ticks without a move %d" % [hidden_moved, hidden_want, rail_still])
+	_check(hidden_want > 1000.0, "too few hidden car-ticks to judge their pace (%.0f m)" % hidden_want)
+	_check(absf(hidden_moved - hidden_want) < HIDDEN_PACE * hidden_want, "hidden cars covered %.0f m, their speed says %.0f m" % [hidden_moved, hidden_want])
+	_check(rail_still == 0, "%d car-ticks where a drawn car on rails did not move" % rail_still)
 	_check(player_contacts == 0, "%d ticks with traffic touching the player" % player_contacts)
 	_check(pair_contacts == 0, "two sim cars touched (%d samples)" % pair_contacts)
 	_check(mean_kmh > PLAYER_KMH - 15.0, "the player averaged %.0f km/h, under %.0f" % [mean_kmh, PLAYER_KMH - 15.0])

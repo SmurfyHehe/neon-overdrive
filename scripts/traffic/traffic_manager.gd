@@ -72,6 +72,11 @@ const REVEAL_MIN := 300.0
 const HIDE_HYSTERESIS := 15.0
 ## A car found in sight is not looked at again for this many physics ticks.
 const SEEN_RECHECK_TICKS := 6
+## Show/hide, the physics band, recycling and the full occupancy index run
+## this many times a second (see _physics_process).
+const BOOKKEEP_HZ := 60.0
+var _tick := 0
+var _index_cars := -1
 ## Spawn band ahead of the player, metres along the road: never nearer than
 ## spawn_min and never inside the draw distance, so the band actually used is
 ## [max(spawn_min, detail + SPAWN_HIDE_MARGIN), max(spawn_max, that + SPAWN_BAND)].
@@ -242,6 +247,18 @@ func _pick_kind() -> String:
 	return MIX.keys()[0]
 
 func _physics_process(_delta: float) -> void:
+	# The bookkeeping below (who is drawn, who is in the sim, who is recycled)
+	# and the full index rebuild run BOOKKEEP_HZ times a second (every other
+	# tick at the game's 120 Hz); the ticks between only refresh the index
+	# entries that matter tick to tick: the player and the cars in the sim
+	# (80-car pass 2026-10-10: at 80 cars this function was 8 ms of a 60 fps
+	# frame, most of it re-deriving things that had not moved a lane's width
+	# since the tick before).
+	TrafficCar.update_think_ticks()
+	_tick += 1
+	if _tick % maxi(1, roundi(Engine.physics_ticks_per_second / BOOKKEEP_HZ)) != 0 and _index_cars == cars.size():
+		_refresh_index()
+		return
 	_build_index()
 	var pz := _player_z()
 	var pv := _player_speed()
@@ -255,7 +272,8 @@ func _physics_process(_delta: float) -> void:
 	var band := minf(physics_distance, detail_distance)
 	var band_out := band + PHYSICS_HYSTERESIS
 	for car in cars:
-		var d := absf(RoadFrame.unroll(car.global_position).z - pz)
+		# Road-space z straight from the index just built (no second lookup).
+		var d := absf(_z[car._idx] - pz)
 		var want := d <= reveal or (car.visible and d <= reveal + HIDE_HYSTERESIS)
 		if want != car.visible and not car.sim_only:
 			if event_hook.is_valid():
@@ -275,8 +293,7 @@ func _physics_process(_delta: float) -> void:
 				unbench_count += 1
 				_respawn(car)
 			continue
-		var z := RoadFrame.unroll(car.global_position).z
-		var behind := z - pz
+		var behind := _z[car._idx] - pz
 		if behind > PARK_BEHIND * 0.5 and frame < car.retry_frame:
 			continue  # parked after a deferred spawn, waiting to retry
 		var receding := car.direction > 0.0 or car.lane_speed() < pv
@@ -484,7 +501,27 @@ static func lane_centre(lane_i: int, oncoming: bool) -> float:
 
 # ---------- occupancy index ----------
 
+## Between full rebuilds: the player's entry and the sim cars' entries, in
+## place. Lane slots keep what the last rebuild gave them (a car that crosses a
+## lane line registers there one tick late; a lane change start already
+## registers at once, see note_lane_change), and a rail car's entry is at most
+## one tick old at 120 Hz (0.25 m at 110 km/h).
+func _refresh_index() -> void:
+	_write_player()
+	for car in cars:
+		if car.detailed and car._idx > 0:
+			_write(car)
+
+func _write_player() -> void:
+	var p := RoadFrame.unroll(player.global_position)
+	_lo[0] = p.x - PLAYER_HALF_W
+	_hi[0] = p.x + PLAYER_HALF_W
+	_z[0] = p.z
+	_vz[0] = RoadFrame.dir_to_road(p.z, player.linear_velocity).z if player is RigidBody3D else 0.0
+	_hl[0] = PLAYER_HALF_L
+
 func _build_index() -> void:
+	_index_cars = cars.size()
 	var n := cars.size() + 1
 	if _lo.size() != n:
 		_lo.resize(n)
@@ -499,12 +536,7 @@ func _build_index() -> void:
 			_slots.append([])
 	for s in _slots:
 		s.clear()
-	var p := RoadFrame.unroll(player.global_position)
-	_lo[0] = p.x - PLAYER_HALF_W
-	_hi[0] = p.x + PLAYER_HALF_W
-	_z[0] = p.z
-	_vz[0] = RoadFrame.dir_to_road(p.z, player.linear_velocity).z if player is RigidBody3D else 0.0
-	_hl[0] = PLAYER_HALF_L
+	_write_player()
 	_register(0)
 	for i in cars.size():
 		cars[i]._idx = i + 1
@@ -519,7 +551,15 @@ func _put(car: TrafficCar) -> void:
 	var k := car._idx
 	if k < 0 or k >= _lo.size():
 		return
-	var o := RoadFrame.unroll(car.global_position)
+	_write(car)
+	_register(k)
+
+## The entry alone, without the lane slots.
+func _write(car: TrafficCar) -> void:
+	var k := car._idx
+	# A car on rails is driven in road space and knows where it is; only a sim
+	# car has to be looked up from its world position.
+	var o := RoadFrame.unroll(car.global_position) if car.detailed or is_nan(car._rail_z) else Vector3(car.path_x() + car._rail_dx, 0.0, car.rail_z_now())
 	var ex := car.half_w
 	var ez := car.half_l
 	var vz := car.direction * car._cruise_speed
@@ -543,7 +583,6 @@ func _put(car: TrafficCar) -> void:
 	_z[k] = o.z
 	_vz[k] = vz
 	_hl[k] = ez
-	_register(k)
 
 func _register(k: int) -> void:
 	for s in range(_slot_of(_lo[k]), _slot_of(_hi[k]) + 1):

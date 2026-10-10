@@ -26,6 +26,8 @@ var game: Node
 var frame := 0
 var last_us := 0
 var samples := PackedFloat64Array()
+var sim_sum := 0
+var wreck_max := 0
 
 func _initialize() -> void:
 	var cars := int(_env("PROBE_CARS", str(TrafficSettings.CAR_COUNT_DEFAULT)))
@@ -65,6 +67,14 @@ func _tick() -> void:
 	var now := Time.get_ticks_usec()
 	if frame > WARMUP_FRAMES:
 		samples.append((now - last_us) / 1000.0)
+		var tm: TrafficManager = game.get("traffic")
+		if tm != null:
+			sim_sum += tm.detailed_count()
+			var w := 0
+			for c in tm.cars:
+				if c.wrecked or c.hazard:
+					w += 1
+			wreck_max = maxi(wreck_max, w)
 	last_us = now
 	if samples.size() >= measure_frames:
 		_report()
@@ -78,8 +88,8 @@ func _report() -> void:
 	for x in s:
 		sum += x
 	var p: Vehicle = game.get("player")
-	print("PROBE cars=%d detail=%d ticks=%d  cpu ms/frame mean=%.2f p50=%.2f p95=%.2f p99=%.2f  speed=%.0f km/h  bodies=%d pairs=%d islands=%d" % [
+	print("PROBE cars=%d detail=%d ticks=%d  cpu ms/frame mean=%.2f p50=%.2f p95=%.2f p99=%.2f  speed=%.0f km/h  bodies=%d pairs=%d islands=%d  sim cars avg=%.1f  stopped/wrecked max=%d" % [
 		TrafficSettings.car_count, roundi(TrafficSettings.detail_distance), Engine.physics_ticks_per_second,
 		sum / n, s[n / 2], s[int(n * 0.95)], s[int(n * 0.99)], p.linear_velocity.length() * 3.6,
 		Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS), Performance.get_monitor(Performance.PHYSICS_3D_COLLISION_PAIRS),
-		Performance.get_monitor(Performance.PHYSICS_3D_ISLAND_COUNT)])
+		Performance.get_monitor(Performance.PHYSICS_3D_ISLAND_COUNT), float(sim_sum) / n, wreck_max])

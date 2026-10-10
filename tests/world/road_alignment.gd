@@ -176,6 +176,35 @@ func _hills() -> void:
 		if flat.start_height(i) != 0.0 or flat.vcurve(i) != 0.0:
 			_check(false, "hilliness 0 left y = 0 at chunk %d" % i)
 			break
+	# Eased vertical curves (road bumps, 2026-10-10): height, grade and the
+	# bend rate itself all carry on unbroken across every join, the grade stays
+	# inside its limit along the whole chunk, and mid-chunk the plain parabola
+	# still holds.
+	var e := RoadAlignment.new(77, 1.0, 1.0)
+	var worst_h := 0.0
+	var worst_g := 0.0
+	var worst_bend := 0.0
+	var worst_mid := 0.0
+	var steepest_in := 0.0
+	var d := 0.01
+	for i in CHUNKS:
+		worst_h = maxf(worst_h, absf(e.height_at(i, B.CHUNK_LEN) - e.start_height(i + 1)))
+		worst_g = maxf(worst_g, absf(e.grade_at(i, B.CHUNK_LEN) - e.start_grade(i + 1)))
+		var before := (e.grade_at(i, B.CHUNK_LEN) - e.grade_at(i, B.CHUNK_LEN - d)) / d
+		var after := (e.grade_at(i + 1, d) - e.grade_at(i + 1, 0.0)) / d
+		worst_bend = maxf(worst_bend, absf(after - before))
+		for s_m in range(0, 51):
+			steepest_in = maxf(steepest_in, absf(e.grade_at(i, float(s_m))))
+		var mid := B.CHUNK_LEN * 0.5
+		worst_mid = maxf(worst_mid, absf((e.grade_at(i, mid + 5.0) - e.grade_at(i, mid - 5.0)) / 10.0 - e.vcurve(i)))
+	_check(worst_h < 1e-6, "eased hills: height steps %.6f m at a join" % worst_h)
+	_check(worst_g < 1e-9, "eased hills: grade steps %.9f at a join" % worst_g)
+	# Unbroken: over 1 cm either side the bend rate moves only by its ramp
+	# (a full step would be up to 1/400 + 1/600 = 0.0042).
+	_check(worst_bend < 2e-5, "eased hills: the bend rate steps %.6f 1/m at a join" % worst_bend)
+	_check(worst_mid < 1e-9, "eased hills: mid-chunk bend rate is %.9f 1/m off vcurve" % worst_mid)
+	_check(steepest_in <= RoadAlignment.MAX_GRADE + 1e-9, "eased hills: a grade of %.3f%% inside a chunk" % (steepest_in * 100.0))
+	print("eased hills: join height %.9f m, grade %.12f, bend rate %.9f 1/m; steepest inside a chunk %.2f%%" % [worst_h, worst_g, worst_bend, steepest_in * 100.0])
 	# Joins and the round trip, with heights.
 	RoadFrame.align = RoadAlignment.new(77, 1.0, 1.0)
 	var worst_join := 0.0
@@ -220,7 +249,8 @@ func _hills() -> void:
 				worst_seam = maxf(worst_seam, best)
 		prev_end = end
 		var road_col := chunk.get_node(^"RoadCol/Shape") as CollisionShape3D
-		_check(not road_col.disabled and (road_col.shape as ConcavePolygonShape3D).get_faces().size() == 6 * B.STATIONS, "chunk %d: no road collision on a hilly road" % i)
+		var grid := B.road_collision_grid(RoadFrame.curvature(i), RoadFrame.start_grade(i), RoadFrame.vcurve(i), RoadFrame.vstep(i), RoadFrame.vstep(i + 1))
+		_check(not road_col.disabled and (road_col.shape as ConcavePolygonShape3D).get_faces().size() == 6 * grid.x * grid.y, "chunk %d: no road collision on a hilly road" % i)
 		chunk.free()
 	_check(worst_fit < 0.02, "hills: the centreline strays %.4f m from the road's height" % worst_fit)
 	_check(worst_seam < EPS, "hills: road strips open a %.4f m gap between chunks" % worst_seam)

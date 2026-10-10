@@ -34,6 +34,7 @@ var throttle := 0.0
 var early := -1.0
 var blow_offs_before := 0
 var vents_before := 0
+var spool_ms := 0  # wall clock when the turbo came on (see Step.SPOOL)
 var shift_vents_before := 0
 var audio: EngineAudio
 
@@ -70,11 +71,19 @@ func _physics_process(_delta: float) -> bool:
 				_check(is_zero_approx(p.boost), "boost should stay 0 without a turbo, is %.2f" % p.boost)
 				p.turbo_boost_max = 1.0
 				p.boost = 0.0
+				spool_ms = Time.get_ticks_msec()
 				_go(Step.SPOOL)
 		Step.SPOOL:
 			if waited == 6:
 				early = p.boost
-			if waited >= 240:
+			# TurboSynth folds a vent seen within VENT_GAP of the last one into it,
+			# and measures that gap in rendered audio (its _since_vent grows with
+			# the samples pulled), which the Dummy driver consumes in real time.
+			# This run is faster than real time (--fixed-fps), so 240 ticks can
+			# pass in well under 0.15 s of audio and the lift below was taken for
+			# a repeat of the vent the turbo's first frame made ("vented 0",
+			# seen on CI). Hold the lift until the audio clock has moved on.
+			if waited >= 240 and Time.get_ticks_msec() - spool_ms >= 600:
 				_check(early < 0.3, "boost should lag: %.2f after 0.1 s" % early)
 				_check(p.boost > 0.5, "boost should have spooled after 4 s at full throttle, is %.2f" % p.boost)
 				blow_offs_before = p.blow_off_count

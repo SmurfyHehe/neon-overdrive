@@ -770,13 +770,16 @@ static func make_wall(body: StaticBody3D) -> void:
 	body.collision_mask = 0
 	body.physics_material_override = _wall_material()
 
+## Restitution of the out-of-bounds walls (tests/car/wall_hit.gd reads it).
+const WALL_BOUNCE := 0.1
+
 static var _wall_mat: PhysicsMaterial
 
 static func _wall_material() -> PhysicsMaterial:
 	if _wall_mat == null:
 		_wall_mat = PhysicsMaterial.new()
 		_wall_mat.friction = 0.0
-		_wall_mat.bounce = 0.1
+		_wall_mat.bounce = WALL_BOUNCE
 	return _wall_mat
 
 ## Rise-then-taper torque curve, loosely modeled on a real gasoline engine's

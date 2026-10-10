@@ -40,7 +40,7 @@ const SHIMMER_BIT := 1 << (SHIMMER_LAYER - 1)
 ## Quad size, m, for a normal tail and the ghost jet's cone.
 const SIZE := Vector2(0.7, 0.55)
 const GHOST_SIZE := Vector2(2.4, 1.5)
-const STRENGTH := 0.012    # screen-UV offset at full heat
+const STRENGTH := 0.016    # screen-UV offset at full heat
 const GHOST_STRENGTH := 0.028
 
 const SHADER := """
@@ -52,7 +52,7 @@ uniform float tick = 0.0;
 uniform float seed = 0.0;
 uniform float width = 0.7;
 uniform float height = 0.55;
-uniform float strength = 0.012;
+uniform float strength = 0.016;
 varying vec2 sv;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }

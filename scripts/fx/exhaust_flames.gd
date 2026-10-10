@@ -82,8 +82,8 @@ const JET_LEN := Vector2(0.3, 0.9)     # m at flame size 0 / 1
 const JET_WIDTH := Vector2(0.12, 0.26) # m
 const LOBE_LIFE := 0.9      # s, hot core then soot then wisp
 const LOBE_HOT := 0.35      # share of LOBE_LIFE the core burns
-const LOBE_RADIUS := Vector2(0.07, 0.2)  # m at birth, size 0 / 1
-const LOBE_GROW := 2.2      # radius multiplier by the end of its life
+const LOBE_RADIUS := Vector2(0.06, 0.15)  # m at birth, size 0 / 1
+const LOBE_GROW := 1.9      # radius multiplier by the end of its life
 const LOBE_SPIT := 2.5      # m/s out of the pipe, on top of the car's velocity x LOBE_CARRY
 const LOBE_CARRY := 0.05    # the lobe keeps almost none of the car's speed: it is shed
 const LOBE_RISE := 0.35     # m/s, hot air
@@ -96,7 +96,7 @@ const LIGHT_ENERGY := 2.0
 const LIGHT_RANGE := 4.0
 const LIGHT_COLOR := Color(1.0, 0.68, 0.32)
 const JET_ENERGY := 1.7
-const LOBE_ENERGY := 1.3
+const LOBE_ENERGY := 0.9
 ## Brightness at zero throttle, as a share of full (see the header).
 const GLOW_FLOOR := 0.4
 ## Seconds for `drive` to fall from 1 to 0 after the throttle lifts.
@@ -228,14 +228,15 @@ void fragment() {
 	float d = length(p) + 0.45 * (n - 0.5) + 0.15 * (n2 - 0.5);
 	float hot_t = clamp(age / hot_share, 0.0, 1.0);
 	float cool_t = clamp((age - hot_share) / (1.0 - hot_share), 0.0, 1.0);
-	// hot core: shrinks and dims through the hot phase
-	float core = (1.0 - smoothstep(0.2, 0.8 - 0.35 * hot_t, d)) * (1.0 - hot_t);
-	float heat = clamp((1.0 - d) * 1.3 * (1.0 - hot_t) + 0.2 * (n - 0.5), 0.0, 1.0);
-	vec3 c = mix(orange, amber, smoothstep(0.2, 0.55, heat));
-	c = mix(c, hot, smoothstep(0.75, 0.98, heat));
-	// soot rim: around the core while it burns, the whole lobe once it is out
-	float rim = (1.0 - smoothstep(0.6, 1.0, d)) * smoothstep(0.05, 0.4, d + 0.4 * hot_t);
-	float soot_a = rim * mix(0.3, 0.55, hot_t) * (1.0 - cool_t);
+	// hot core: shrinks and dims through the hot phase; mostly orange, amber
+	// toward the middle, white only at the very centre of a fresh lobe
+	float core = (1.0 - smoothstep(0.15, 0.65 - 0.3 * hot_t, d)) * (1.0 - hot_t);
+	float heat = clamp((1.0 - d) * (1.0 - hot_t) + 0.15 * (n - 0.5), 0.0, 1.0);
+	vec3 c = mix(orange, amber, smoothstep(0.45, 0.8, heat));
+	c = mix(c, hot, smoothstep(0.88, 1.0, heat));
+	// soot rim: a dark ring around the core from birth, the whole lobe once it is out
+	float rim = (1.0 - smoothstep(0.65, 1.0, d)) * smoothstep(0.1, 0.5, d + 0.45 * hot_t);
+	float soot_a = rim * mix(0.5, 0.65, hot_t) * (1.0 - cool_t);
 	// then a thin grey wisp that thins out
 	float wisp_a = (1.0 - smoothstep(0.1, 0.9, d)) * 0.28 * smoothstep(0.0, 0.25, cool_t) * (1.0 - cool_t);
 	float a = clamp(soot_a + wisp_a, 0.0, 1.0);

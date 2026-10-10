@@ -233,6 +233,13 @@ func _run() -> void:
 	_check(lobe.visible, "the lobe should still be alive after 0.4 s (life %.1f s)" % ExhaustFlames.LOBE_LIFE)
 	_check(car_moved > 3.0 and lobe_moved < 1.5, "the lobe stays on the road while the car pulls away")
 	_check(float(lobe.material_override.get_shader_parameter("stretch")) > 0.1, "a lobe spat at speed stretches into a streak")
+	if DisplayServer.get_name() != "headless":
+		# the shed look from the chase camera: a burst at speed, three frames of it
+		fl.flash(1.0, ExhaustFlames.Kind.UPSHIFT)
+		for i in 3:
+			await _frames(2 if i == 0 else 4)
+			var img := root.get_viewport().get_texture().get_image()
+			img.save_png("user://exhaust_flames/drive_%d.png" % (i + 1))
 	throttle = 0.0
 
 	# --- ghost style (bone car): steady green jet, afterburner diamonds

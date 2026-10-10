@@ -24,7 +24,29 @@ const LIFT_OFF := 0.2
 const LIFT_WINDOW := 0.6
 const LIFT_BOOST := 0.3
 
+## Baked loops (EngineLoops) carry the steady engine note once they are ready;
+## NEON_ENGINE_LOOPS=0 keeps the per-sample live synth for everything (A/B, fallback).
+static var loops_enabled := OS.get_environment("NEON_ENGINE_LOOPS") != "0"
+## Seconds the live note fades out while the loops fade in.
+const HANDOFF_SECS := 0.12
+## A tone change (Tuner sliders) re-bakes after the value has held this long.
+const REBAKE_DELAY := 0.8
+enum LoopMode { LIVE, HANDOFF, LOOPS }
+
 var synth := EngineSynth.new()
+## The bank player and the state of the hand-over; see _update_loops.
+var bank: EngineLoopPlayer
+var loop_mode := LoopMode.LIVE
+## Blocks handed to the worker as the full live voice / as events only (tests).
+var blocks_full := 0
+var blocks_events := 0
+var _handoff_t := 0.0
+var _bake_task := -1
+var _bake_cancel := {"stop": false}
+var _bake_out := {}
+var _baked_sig := Vector2i(-1, -1)
+var _want_sig := Vector2i(-1, -1)
+var _want_for := 0.0
 ## The turbo voice (B1): its own synth and its own stream on the Turbo bus, so
 ## the Turbo slider is a bus fader. Rendered by the same worker task as the engine.
 var turbo := TurboSynth.new()
@@ -81,6 +103,10 @@ func _ready() -> void:
 	add_child(_turbo_player)
 	_turbo_player.play()
 	_turbo_playback = _turbo_player.get_stream_playback()
+	bank = EngineLoopPlayer.new()
+	bank.name = "Loops"
+	bank.wander = float(_spec.get("engine_voice", {}).get("wander", 0.6))
+	add_child(bank)
 
 # Rendering runs on a worker thread (frame-rate pass, 2026-10-08). The synth is
 # a per-sample GDScript loop, about 0.5 us a sample on the i5-1235U: 0.4 ms of
@@ -99,6 +125,7 @@ func _process(delta: float) -> void:
 	sync_tune()
 	synth.volume = ENGINE_VOLUME if _vehicle.engine_running else 0.0  # a stalled engine is silent
 	turbo.volume = TURBO_VOLUME if _vehicle.engine_running else 0.0
+	_update_loops(delta)
 	var shifting := _vehicle.is_shifting
 	if _vehicle.turbo_boost_max > 0.0:
 		turbo.boost = clampf(_vehicle.boost / _vehicle.turbo_boost_max, 0.0, 1.0)
@@ -127,14 +154,32 @@ func _process(delta: float) -> void:
 	var n := _playback.get_frames_available()
 	var tn := _turbo_playback.get_frames_available()
 	if n > 0 or tn > 0:
+		# The live note's level: full on its own, fading out through the hand-over,
+		# and only the pops and bangs once the loops carry the tone.
+		var f0 := 1.0
+		var f1 := 1.0
+		if loop_mode == LoopMode.HANDOFF:
+			f0 = cos(clampf(_handoff_t - delta, 0.0, 1.0) * PI * 0.5)
+			f1 = cos(clampf(_handoff_t, 0.0, 1.0) * PI * 0.5)
+		if loop_mode == LoopMode.LOOPS:
+			blocks_events += 1
+		else:
+			blocks_full += 1
 		_task_start_usec = Time.get_ticks_usec()
 		_task = WorkerThreadPool.add_task(_render.bind(n, _vehicle.motor_rpm,
-				_vehicle.throttle_amount, _vehicle.motor_is_redline, tn), false, "engine audio")
+				_vehicle.throttle_amount, _vehicle.motor_is_redline, tn,
+				loop_mode == LoopMode.LOOPS, f0, f1), false, "engine audio")
 
 ## Worker thread: one block of each, straight into the streams.
-func _render(n: int, rpm: float, throttle: float, redline: bool, tn: int) -> void:
+func _render(n: int, rpm: float, throttle: float, redline: bool, tn: int,
+		events_only := false, f0 := 1.0, f1 := 1.0) -> void:
 	if n > 0:
-		_playback.push_buffer(synth.render(n, rpm, throttle, redline))
+		var block := synth.render_events(n, rpm, throttle, redline) if events_only 				else synth.render(n, rpm, throttle, redline)
+		if f0 != 1.0 or f1 != 1.0:
+			for i in n:
+				var g := lerpf(f0, f1, float(i) / n)
+				block[i] = block[i] * g
+		_playback.push_buffer(block)
 	if tn > 0:
 		_turbo_playback.push_buffer(turbo.render(tn))
 
@@ -160,6 +205,10 @@ func take_flames() -> float:
 
 func _exit_tree() -> void:
 	_join()
+	if _bake_task >= 0:
+		_bake_cancel["stop"] = true
+		WorkerThreadPool.wait_for_task_completion(_bake_task)
+		_bake_task = -1
 
 ## True on the frame the driver lifts off a hot boost. Needs the throttle to have been
 ## on within LIFT_WINDOW and the boost above LIFT_BOOST; one vent per lift.
@@ -209,3 +258,56 @@ func _load_tune() -> void:
 func _save_tune() -> void:
 	_saved = _spec.exhaust.duplicate()
 	ExhaustTune.save_car(START_PRESET, _saved)
+
+# --- Baked loops ---------------------------------------------------------------
+# The live synth plays from the first frame. A worker bakes (or loads from the
+# cache) the loop bank for this car's voice; when it is ready the live note fades
+# out over HANDOFF_SECS while the loops fade in, and from then on the synth only
+# renders events (pops, limiter bangs, upshift cuts). A change to the two tune
+# values that colour the note re-bakes in the background and swaps the bank in
+# without dropping back to the live synth.
+
+func _tone_sig() -> Vector2i:
+	var t := synth.tune
+	return Vector2i(roundi(t.loudness * 100.0), roundi(t.raspiness * 100.0))
+
+func _update_loops(delta: float) -> void:
+	if not loops_enabled:
+		return
+	if _bake_task >= 0:
+		if not WorkerThreadPool.is_task_completed(_bake_task):
+			return
+		WorkerThreadPool.wait_for_task_completion(_bake_task)
+		_bake_task = -1
+		if not _bake_out.is_empty():
+			bank.set_loops(EngineLoops.from_baked(_bake_out))
+			if loop_mode == LoopMode.LIVE:
+				loop_mode = LoopMode.HANDOFF
+				_handoff_t = 0.0
+		_bake_out = {}
+	var sig := _tone_sig()
+	if sig != _want_sig:
+		_want_sig = sig
+		_want_for = 0.0
+	_want_for += delta
+	if _baked_sig != _want_sig and (_baked_sig.x < 0 or _want_for >= REBAKE_DELAY):
+		_baked_sig = _want_sig
+		_bake_cancel = {"stop": false}
+		var voice: Dictionary = (_spec.get("engine_voice", {}) as Dictionary).duplicate(true)
+		_bake_task = WorkerThreadPool.add_task(_bake_job.bind(voice, sig.x / 100.0, sig.y / 100.0,
+				_vehicle.idle_rpm, _vehicle.max_rpm, _bake_cancel), false, "engine loops")
+		return
+	if loop_mode == LoopMode.HANDOFF:
+		_handoff_t += delta / HANDOFF_SECS
+		bank.gain = sin(clampf(_handoff_t, 0.0, 1.0) * PI * 0.5)
+		if _handoff_t >= 1.0:
+			loop_mode = LoopMode.LOOPS
+			bank.gain = 1.0
+	if loop_mode != LoopMode.LIVE:
+		bank.update(delta, _vehicle.motor_rpm, _vehicle.throttle_amount, _vehicle.motor_is_redline,
+				_vehicle.engine_running)
+
+## Worker thread: the bank for one voice, from the cache when it was baked before.
+func _bake_job(voice: Dictionary, loudness: float, raspiness: float, idle: float, max_rpm: float,
+		cancel: Dictionary) -> void:
+	_bake_out = EngineLoops.bake_cached(voice, loudness, raspiness, idle, max_rpm, ENGINE_VOLUME, cancel)

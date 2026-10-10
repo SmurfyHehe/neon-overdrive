@@ -84,6 +84,8 @@ call :run audio/radio --headless
 call :run world/night_clock --headless
 call :run world/night_bands "--headless --fixed-fps 60"
 call :run world/world_mood "--headless --fixed-fps 60"
+rem Water (rain, puddles): the rules and their CPU cost, no game boot.
+call :run world/water_rules --headless
 call :run core/view_settings --headless
 call :run view/camera_smoothing_setting --headless
 call :run core/log_folder --headless
@@ -157,6 +159,8 @@ if /i not "%~1"=="quick" (
 	call :run world/curve_drive "--headless --fixed-fps 120"
 	call :run world/hill_drive "--headless --fixed-fps 120"
 	call :run world/hill_park "--headless --fixed-fps 60"
+	rem ~40 s: a downpour at 120 Hz: player and traffic tyres in the wet, NPC wet speed, step() cost.
+	call :run world/water_drive "--headless --fixed-fps 120"
 	rem ~8 s: brake + throttle from a stop holds the fronts only (line lock burnout).
 	call :run car/burnout_line_lock "--headless --fixed-fps 120"
 	rem ~3 min: fuel burn calibration, a dry tank in every gearbox, limp causes (slowest wins), refuel from the bank.
@@ -187,6 +191,9 @@ if /i not "%~1"=="quick" (
 	call :run tuning/tuner_screen --headless
 	call :run tuning/tuner_typing --headless
 	call :run world/roadside_detail
+	call :run world/wet_reflections
+	rem Wet asphalt shader + visible puddles (S1a): placement needs a window.
+	call :run world/road_wet
 	rem ~10 s, real window (shaders): traffic tail lamps, brake lamps, distance flares, barrier reflectors.
 	call :run traffic/night_lights
 	call :run fleet/fleet_silhouette_sweep

@@ -34,6 +34,8 @@ extends RefCounted
 # or 30 fps) and whether the preset was the first-launch automatic pick
 # (GraphicsAutoPick).
 
+const RoadWet := preload("res://scripts/world/road_wet.gd")
+
 const PRESETS := ["low", "medium", "high"]
 const PRESET_DEFAULT := "medium"
 
@@ -117,6 +119,9 @@ static func matching_preset() -> String:
 static func apply(tree: SceneTree) -> void:
 	apply_viewport(tree.root)
 	Engine.max_fps = fps_cap
+	# Wet-road mirrors (road_wet.gd) are off on Low; a hand-tuned "custom"
+	# set keeps them, like every other Medium default.
+	RoadWet.set_reflections(preset != "low")
 	tree.call_group(GROUP, "apply_graphics")
 
 static func apply_viewport(vp: Viewport) -> void:

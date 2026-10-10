@@ -58,6 +58,8 @@ class_name TrafficCar
 # suspension on that step and sags; the honest cheap path is no sim at all
 # plus a clean handover.
 
+const WetReflections := preload("res://scripts/world/wet_reflections.gd")
+
 ## Which car: an NpcCarBuilder.KINDS key (the stage B step 5 traffic cars,
 ## e.g. "n1_commuter") or a CarBuilder.KIND_CONFIGS key (the old box cars).
 var kind := "coupe"
@@ -107,6 +109,10 @@ var half_w := 1.03
 var half_l := 1.7
 ## True while the full sim runs (inside the draw distance). See set_detailed().
 var detailed := true
+## Rain and puddles on each tyre, the same rules as the player (wet_grip.gd).
+var wet := WetGrip.new()
+const WetGrip := preload("res://scripts/car/wet_grip.gd")
+const Weather := preload("res://scripts/world/weather.gd")
 var _cruise_speed := 0.0
 ## Slot in the TrafficManager's occupancy index (set by it every tick).
 var _idx := -1
@@ -266,6 +272,10 @@ func _ready() -> void:
 	if not sim_only:
 		chassis_visual = NpcCarBuilder.chassis_visual(kind, build, color, role) if npc else CarBuilder.shared_chassis_visual(kind, color)
 		add_child(chassis_visual)
+		# Wet-road tail smears (wet_reflections.gd): ride with the visual.
+		var tail: Dictionary = WetReflections.tail_info(chassis_visual)
+		if not tail.is_empty():
+			WetReflections.attach_tail(chassis_visual, tail.lamps, tail.ground_y)
 
 	can_sleep = false
 	linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
@@ -305,6 +315,13 @@ func _physics_process(delta: float) -> void:
 	_drive(delta)
 	super._physics_process(delta)
 	AeroModel.apply(self)
+	var wet_on := wet.step(self, delta)
+	# Written whenever it moved, even on the tick it settles back to dry (or a
+	# respawn's settle()); nothing else sets grip_mult on traffic.
+	if wet.dirty:
+		wet.write(self)
+	if wet_on:
+		wet.apply_drag(self)
 	_update_lamps()
 
 ## Brake lamps on any brake pedal (a held stop included), hazards while the
@@ -316,6 +333,7 @@ func _update_lamps() -> void:
 	if key != _lamp_key:
 		_lamp_key = key
 		NpcCarBuilder.set_lamps(chassis_visual, float(key & 1), hazard)
+		WetReflections.set_tail_brake(chassis_visual, float(key & 1))
 
 ## The controller. Sets steering_input, throttle_input and brake_input.
 func _drive(delta: float) -> void:
@@ -371,7 +389,8 @@ func _accel_command(v: float) -> float:
 			lead_gap = traffic.entry_gap(_lead_k, p.z, direction, half_l)
 			lead_speed = traffic.entry_speed(_lead_k, direction)
 			lead_is_player = _lead_k == 0
-	var v0 := minf(target_speed, bend_speed())
+	# Rain: drivers ease off, and take bends slower on wet tyres (weather.gd).
+	var v0 := minf(target_speed * Weather.ai_speed_factor(), bend_speed() * Weather.ai_bend_factor())
 	var a := follow_accel(v, v0, lead_gap, lead_speed, _t_gap())
 	signal_held = false
 	if traffic != null and traffic.junction != null:

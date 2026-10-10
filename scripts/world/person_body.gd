@@ -27,11 +27,16 @@ extends RefCounted
 # filter): grey features multiplied by the vertex colour, so one face works on
 # every skin tone. Clothes and hair are vertex colours chosen per outfit.
 
-const REF_S := 1.78
-const HEAD_H := 0.240          # chin joint to crown at REF_S (a touch big: reads at night)
-const HEAD_EXP := 0.5          # head size grows as sqrt(h)
-const HEIGHTS := [1.55, 1.62, 1.68, 1.75, 1.82, 1.88, 1.95]
-const BUILDS := ["slim", "average", "heavy"]
+## The one data file: the body kit numbers, the house style (every colour an
+## outfit may use) and the cast. tools/people_pipeline/ checks and draws it.
+const DATA_PATH := "res://assets/people/people.json"
+static var _data: Dictionary = _load_data()
+
+static var REF_S: float = _data["kit"]["ref_stature"]
+static var HEAD_H: float = _data["kit"]["head_height"]       # chin joint to crown at REF_S (a touch big: reads at night)
+static var HEAD_EXP: float = _data["kit"]["head_exponent"]   # 0.5: head size grows as sqrt(h)
+static var HEIGHTS: Array = _data["kit"]["heights"]
+static var BUILDS: Array = (_data["kit"]["builds"] as Dictionary).keys()
 const ARM_SPLAY_DEG := 8.0     # rest pose: arms hang 8 deg out from the body
 const FACE_COUNT := 8
 const ATLAS_W := 128
@@ -49,18 +54,17 @@ enum Region { SKIN, TOP, LEGS, SHOES, HAIR, SLEEVE }
 
 ## Girth per build. torso/belly are (x, z) widths; limb is the arm and leg girth;
 ## shoulder scales the shoulder joints' distance from the spine.
-const BUILD_GIRTH := {
-	"slim":    {"torso": Vector2(0.88, 0.86), "belly": Vector2(0.86, 0.82), "limb": 0.86, "neck": 0.92, "shoulder": 0.95},
-	"average": {"torso": Vector2(1.0, 1.0),   "belly": Vector2(1.0, 1.0),   "limb": 1.0,  "neck": 1.0,  "shoulder": 1.0},
-	"heavy":   {"torso": Vector2(1.13, 1.16), "belly": Vector2(1.2, 1.4),   "limb": 1.16, "neck": 1.14, "shoulder": 1.04},
-}
+static var BUILD_GIRTH: Dictionary = _girths(_data["kit"]["builds"])
 
-# Palette: Amber vs. Dusk plus plain street clothes (no magenta, no cyan).
-const SKIN_TONES := [Color("#F0C8A8"), Color("#DDA27E"), Color("#BE7F5C"), Color("#93603F"), Color("#6C432B"), Color("#4E3020")]
-const HAIR_COLOURS := [Color("#15110E"), Color("#3B2618"), Color("#6A4A2E"), Color("#8A8782"), Color("#B8955A")]
-const TOPS := [Color("#1B2A4A"), Color("#0E1424"), Color("#4A3326"), Color("#5A5F68"), Color("#C9CED6"), Color("#7A3A1E"), Color("#2C3A2A"), Color("#FFC066")]
-const BOTTOMS := [Color("#2E3A55"), Color("#1A1A1E"), Color("#6B5E45"), Color("#3E4048")]
-const SHOES := [Color("#141414"), Color("#3A2A1E"), Color("#C9CED6")]
+# House style (people.json "style"): Amber vs. Dusk plus plain street clothes
+# (no magenta, no cyan). Every outfit, random or cast, picks from these lists.
+static var SKIN_TONES: Array = _colours(_data["style"]["skin"])
+static var HAIR_COLOURS: Array = _colours(_data["style"]["hair"])
+static var TOPS: Array = _colours(_data["style"]["tops"])
+static var BOTTOMS: Array = _colours(_data["style"]["bottoms"])
+static var SHOES: Array = _colours(_data["style"]["shoes"])
+static var FACES: Array = _data["style"]["faces"]
+const SHAVED := 0.92           # a shaved head is the skin colour, this much darker
 
 class MeshBuf:
 	var pos := PackedVector3Array()
@@ -73,6 +77,111 @@ static var _base := {}            # the one mesh at REF_S: positions, regions, u
 static var _bake_cache := {}
 static var _material: StandardMaterial3D
 static var _atlas: ImageTexture
+
+# --- data (people.json) ------------------------------------------------------
+
+static func _load_data() -> Dictionary:
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(DATA_PATH))
+	if not (parsed is Dictionary):
+		push_error("PersonBody: cannot read %s" % DATA_PATH)
+		return {}
+	return parsed
+
+static func _colours(list: Array) -> Array:
+	return list.map(func(c): return Color(str(c)))
+
+static func _girths(builds: Dictionary) -> Dictionary:
+	var out := {}
+	for name in builds:
+		var b: Dictionary = builds[name]
+		out[name] = {"torso": Vector2(b["torso"][0], b["torso"][1]), "belly": Vector2(b["belly"][0], b["belly"][1]),
+			"limb": float(b["limb"]), "neck": float(b["neck"]), "shoulder": float(b["shoulder"])}
+	return out
+
+## The cast: ids of the people listed in people.json, in file order.
+static func cast_ids() -> Array:
+	return (_data["people"] as Array).map(func(p): return p["id"])
+
+## One cast member, ready to draw: {"id", "role", "variant", "outfit", "face",
+## "pose_name"}. Empty if the id is unknown or the row breaks the kit or the
+## house style (check_people.gd says why).
+static func person(id: String) -> Dictionary:
+	for row in _data["people"]:
+		if row["id"] == id and _row_problems(row).is_empty():
+			var skin := Color(str(row["skin"]))
+			var top := Color(str(row["top"]))
+			var o := {"skin": skin, "top": top,
+				"hair": skin * SHAVED if row["hair"] == "shaved" else Color(str(row["hair"])),
+				"sleeve": skin if row["sleeves"] == "short" else top,
+				"legs": Color(str(row["bottoms"])), "shoes": Color(str(row["shoes"]))}
+			return {"id": id, "role": row.get("role", ""), "outfit": o, "face": FACES.find(row["face"]),
+				"variant": variant(_height_index(row["height"]), BUILDS.find(row["build"])), "pose_name": row["pose"]}
+	return {}
+
+## The baked (static, cached) mesh of a cast member in their own pose.
+static func bake_person(id: String) -> ArrayMesh:
+	var p := person(id)
+	if p.is_empty():
+		return null
+	return bake(p["variant"], pose(p["pose_name"], p["variant"]), p["outfit"], p["face"], p["pose_name"])
+
+static func _height_index(metres) -> int:
+	for i in HEIGHTS.size():
+		if is_equal_approx(float(HEIGHTS[i]), float(metres)):
+			return i
+	return -1
+
+static func _in_style(list_name: String, value) -> bool:
+	return (_data["style"][list_name] as Array).any(func(c): return str(c).to_upper() == str(value).to_upper())
+
+static func _row_problems(row: Dictionary) -> PackedStringArray:
+	var bad := PackedStringArray()
+	var id := str(row.get("id", "?"))
+	for key in ["id", "height", "build", "face", "skin", "hair", "top", "sleeves", "bottoms", "shoes", "pose"]:
+		if not row.has(key):
+			bad.append("%s: no '%s'" % [id, key])
+	if not bad.is_empty():
+		return bad
+	if _height_index(row["height"]) < 0:
+		bad.append("%s: height %s is not one of the kit's %d heights" % [id, str(row["height"]), HEIGHTS.size()])
+	if not BUILDS.has(row["build"]):
+		bad.append("%s: build '%s' is not in the kit" % [id, row["build"]])
+	if not FACES.has(row["face"]):
+		bad.append("%s: face '%s' is not in the style" % [id, row["face"]])
+	if not (_data["style"]["poses"] as Array).has(row["pose"]):
+		bad.append("%s: pose '%s' is not in the style" % [id, row["pose"]])
+	if not ["short", "long"].has(row["sleeves"]):
+		bad.append("%s: sleeves must be short or long" % id)
+	for pair in [["skin", "skin"], ["top", "tops"], ["bottoms", "bottoms"], ["shoes", "shoes"]]:
+		if not _in_style(pair[1], row[pair[0]]):
+			bad.append("%s: %s %s is not a house-style colour" % [id, pair[0], row[pair[0]]])
+	if row["hair"] != "shaved" and not _in_style("hair", row["hair"]):
+		bad.append("%s: hair %s is not a house-style colour" % [id, row["hair"]])
+	return bad
+
+## Everything wrong with people.json (empty = good): the kit must give 7
+## heights x 3 builds, the style must name one face per atlas tile, and every
+## cast row must stay inside the kit and the style.
+static func data_problems() -> PackedStringArray:
+	if _data.is_empty():
+		return PackedStringArray(["cannot read %s" % DATA_PATH])
+	var bad := PackedStringArray()
+	if HEIGHTS.size() != 7:
+		bad.append("kit: %d heights, want 7" % HEIGHTS.size())
+	for i in range(1, HEIGHTS.size()):
+		if float(HEIGHTS[i]) <= float(HEIGHTS[i - 1]):
+			bad.append("kit: heights must rise")
+	if BUILDS != ["slim", "average", "heavy"]:
+		bad.append("kit: builds must be slim, average, heavy (got %s)" % str(BUILDS))
+	if FACES.size() != FACE_COUNT:
+		bad.append("style: %d face names, the atlas has %d" % [FACES.size(), FACE_COUNT])
+	var seen := {}
+	for row in _data["people"]:
+		bad.append_array(_row_problems(row))
+		if seen.has(row.get("id")):
+			bad.append("%s: id used twice" % str(row.get("id")))
+		seen[row.get("id")] = true
+	return bad
 
 # --- reference skeleton -----------------------------------------------------
 
@@ -290,7 +399,7 @@ static func outfit(seed_value: int) -> Dictionary:
 	var skin: Color = SKIN_TONES[rng.randi() % SKIN_TONES.size()]
 	var hair: Color = HAIR_COLOURS[rng.randi() % HAIR_COLOURS.size()]
 	if rng.randf() < 0.15:
-		hair = skin * 0.92   # shaved head
+		hair = skin * SHAVED
 	var top: Color = TOPS[rng.randi() % TOPS.size()]
 	return {"skin": skin, "hair": hair, "top": top,
 		"sleeve": skin if rng.randf() < 0.3 else top,   # short sleeves show forearms

@@ -7,6 +7,8 @@
 - **Arms:** in the seat by two-bone IK (`sit_pose`, `reach`), outside with `smoke` and `hands_on_hips`.
 - **CPU:** people are baked to static meshes (`bake`, about 8 ms each, cached), so a bystander costs nothing per frame. `make_rig` gives a live Skeleton3D rig for the few that must move (30 rigs: about 0.2 ms per frame on the laptop).
 
-Shots: `tools/people_shots.gd` (needs the real renderer). Test: `tests/world/person_body.gd`.
+- **Data:** the kit numbers, the house style (every colour and face a person may have) and the cast live in `assets/people/people.json`. `tools/people_pipeline/check_people.gd` checks it; see `tools/people_pipeline/README.md`.
+
+Shots: `tools/people_pipeline/people_shots.gd` (needs the real renderer); `cast.jpg` is the people.json cast. Test: `tests/world/person_body.gd`.
 
 Not in A1: wiring into DriverModel (the cockpit driver) or placing people in the world.

@@ -204,6 +204,31 @@ func _initialize() -> void:
 		for c in list:
 			_check(pal.is_bad(c) == "", "colour %s breaks the palette" % (c as Color).to_html(false))
 
+	# people.json: the kit, the house style and the cast all check out, and
+	# every cast member bakes to the one mesh at their own height
+	var problems := P.data_problems()
+	_check(problems.is_empty(), "people.json: %s" % str(problems))
+	_check(P.cast_ids().size() >= 1, "people.json lists no cast")
+	for id in P.cast_ids():
+		var who := P.person(id)
+		_check(not who.is_empty(), "cast member %s does not resolve" % id)
+		if who.is_empty():
+			continue
+		var cast_mesh := P.bake_person(id)
+		_check(cast_mesh != null and cast_mesh.surface_get_array_len(0) == tris * 3, "cast member %s is not the shared mesh" % id)
+		_check(cast_mesh == P.bake_person(id), "cast member %s is not cached" % id)
+		for c in (who["outfit"] as Dictionary).values():
+			_check(pal.is_bad(c) == "", "cast member %s wears %s, which breaks the palette" % [id, (c as Color).to_html(false)])
+		if who["pose_name"] == "stand":
+			var cast_box := _aabb(cast_mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX])
+			_check(absf(cast_box.end.y - float(who["variant"]["stature"])) < 0.012, "cast member %s is %.3f m tall, want %.2f" % [id, cast_box.end.y, who["variant"]["stature"]])
+	# a row outside the kit or the style is refused, not drawn
+	var off := {"id": "x", "height": 1.70, "build": "huge", "face": "plain", "skin": "#FF00FF", "hair": "shaved",
+		"top": "#1B2A4A", "sleeves": "long", "bottoms": "#1A1A1E", "shoes": "#141414", "pose": "stand"}
+	_check(P._row_problems(off).size() == 3, "an off-kit row should give 3 problems, got %s" % str(P._row_problems(off)))
+	_check(P.person("nobody").is_empty() and P.bake_person("nobody") == null, "an unknown id must give nothing")
+	print("  people.json: %d cast, all inside the kit and the house style" % P.cast_ids().size())
+
 	# CPU: cache hits, and 30 live rigs vs 30 baked people
 	var named := P.bake(v_avg, stand, o, 1, "stand")
 	var t1 := Time.get_ticks_usec()

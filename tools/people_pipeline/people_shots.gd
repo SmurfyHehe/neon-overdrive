@@ -1,10 +1,10 @@
 extends SceneTree
 
 # People A1 lineup shots (needs the real renderer, not --headless):
-#   Godot_v4.7.2-stable_win64_console.exe --path . -s res://tools/people_shots.gd
+#   Godot_v4.7.2-stable_win64_console.exe --path . -s res://tools/people_pipeline/people_shots.gd
 # Writes docs/design/people/a1/*.jpg: the 21 bodies (7 heights x 3 builds) from
 # the front and three-quarter, the 8 painted faces, and the seated / smoking /
-# hands-on-hips poses. Baked meshes only (the CPU path everyone uses).
+# hands-on-hips poses, and the cast listed in assets/people/people.json. Baked meshes only (the CPU path everyone uses).
 
 const OUT := "res://docs/design/people/a1"
 
@@ -103,6 +103,23 @@ func _initialize() -> void:
 	cam.size = px
 	cam.transform = Transform3D(Basis(), Vector3(pm, 1.0, -10.0)).looking_at(Vector3(pm, 1.0, 0))
 	await _shot("poses")
+	poses.queue_free()
+
+	# the cast from people.json, each in their own pose
+	var cast := Node3D.new()
+	root.add_child(cast)
+	var ids := P.cast_ids()
+	for i in ids.size():
+		var mi := MeshInstance3D.new()
+		mi.mesh = P.bake_person(ids[i])
+		mi.position = Vector3(i * 0.9, 0, 0)
+		mi.rotation_degrees.y = -20.0
+		cast.add_child(mi)
+	_vp.size = Vector2i(2400, 1000)
+	cam.size = ids.size() * 0.9 + 0.4
+	var cm := (ids.size() - 1) * 0.45
+	cam.transform = Transform3D(Basis(), Vector3(cm, 1.0, -10.0)).looking_at(Vector3(cm, 1.0, 0))
+	await _shot("cast")
 	quit(0)
 
 func _shot(name: String) -> void:

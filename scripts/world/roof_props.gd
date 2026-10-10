@@ -20,6 +20,19 @@ const SHAPE_TANK := 1
 const SHAPE_ANTENNA := 2
 const SHAPE_CANOPY := 3  # gas station canopy slab, lit underside
 const SHAPE_FLOOD := 4   # pole with a floodlight head (yards, car park roofs)
+# Roof shapes (world step 1): unit footprint, bottom at y = 0, rise 1, scaled
+# per instance to the roof. The gable's ridge runs along z (along the road).
+const SHAPE_GABLE := 5
+const SHAPE_HIP := 6
+const SHAPE_SCREEN := 7  # drive-in screen: a pale slab whose big faces keep a faint glow
+
+# Glow kinds (UV2.y), continued: a dim warm screen, an idling projector lamp.
+const GLOW_SCREEN := 4.0
+
+# Skyline landmarks (world step 1), one per district run on the building
+# Districts.landmark_at() names, built from the shapes above at a size that
+# reads from the far end of the chunk window.
+const LANDMARKS := ["tower", "water_tower", "stacks", "screen"]
 
 # Glow kinds (UV2.y): which light a face gives off.
 const GLOW_RED := 1.0    # aviation light
@@ -51,7 +64,9 @@ void fragment() {
 	vec3 e = vec3(0.0);
 	if (glow > 0.5 && glow < 1.5) { e = vec3(1.0, 0.12, 0.06) * 1.6; }
 	else if (glow > 1.5 && glow < 2.5) { e = vec3(0.8, 0.95, 0.76) * 1.3; }
-	else if (glow > 2.5) { e = vec3(1.0, 0.66, 0.3) * 2.2; }
+	else if (glow > 2.5 && glow < 3.5) { e = vec3(1.0, 0.66, 0.3) * 2.2; }
+	// 4: a drive-in screen, dim warm white, well under the bloom threshold
+	else if (glow > 3.5) { e = vec3(0.9, 0.8, 0.62) * 0.3; }
 	EMISSION = e;
 }
 """
@@ -99,6 +114,7 @@ static func update(mm: MultiMesh, infos: Array, signs: MultiMesh, first_sign: in
 		var cx: float = (float(info.front_x_abs) + w / 2.0) * float(side)
 		var cz: float = info.z
 		var kind: String = info.type
+		var top: String = info.get("top", "flat")
 		var props := []  # [shape, scale, offset (x across from road, z along), tint]
 		match kind:
 			"apartment":
@@ -113,7 +129,7 @@ static func update(mm: MultiMesh, infos: Array, signs: MultiMesh, first_sign: in
 				if rng.randf() < 0.25:
 					props.append([SHAPE_ANTENNA, Vector3(1, rng.randf_range(0.8, 1.3), 1), _spot(rng, w, d, 0.7), 0.6])
 			"office":
-				if rng.randf() < 0.75:
+				if rng.randf() < 0.75 and top == "flat":
 					# plant-room crown: the stepped top that ends an office tower
 					props.append([SHAPE_BOX, Vector3(w * 0.55, rng.randf_range(3.0, 4.5), d * 0.5), Vector2.ZERO, 0.45])
 				for k in 1 + rng.randi() % 3:
@@ -132,6 +148,12 @@ static func update(mm: MultiMesh, infos: Array, signs: MultiMesh, first_sign: in
 			"garage":
 				if rng.randf() < 0.5:
 					props.append([SHAPE_BOX, Vector3(1.1, 0.9, 1.3), _spot(rng, w, d, 0.8), 0.75])
+		# World step 1: the roof shape goes first (never dropped at CAPACITY),
+		# then the props above, moved onto it; the run's landmark before both.
+		props = _apply_top(top, props, info, rng, cx, cz)
+		var landmark: String = info.get("landmark", "")
+		if landmark != "":
+			props = _landmark(landmark, info, cx, cz) + props
 		if kind == "gas":
 			props.append_array(_gas_station(info))
 		elif kind == "diner":
@@ -237,8 +259,45 @@ static func mesh() -> ArrayMesh:
 		# floodlight: 5 m pole, a head leaning over the yard
 		_box(st, SHAPE_FLOOD, Vector3(0, 2.5, 0), Vector3(0.14, 5.0, 0.14), steel)
 		_box(st, SHAPE_FLOOD, Vector3(0, 5.0, 0), Vector3(0.5, 0.3, 0.7), Color(0.25, 0.2, 0.12), GLOW_FLOOD)
+		# roof shapes (world step 1): pitched and hipped, unit footprint, rise 1;
+		# 16 triangles between them, so the budget per instance barely moves
+		var roofing := Color(0.36, 0.33, 0.3)
+		_gable(st, SHAPE_GABLE, roofing)
+		_hip(st, SHAPE_HIP, roofing)
+		# drive-in screen (the strip landmark): a unit slab, faintly lit
+		_box(st, SHAPE_SCREEN, Vector3(0, 0.5, 0), Vector3.ONE, Color(0.62, 0.6, 0.56), GLOW_SCREEN)
 		_mesh = st.commit()
 	return _mesh
+
+## Pitched roof: eaves at y = 0 on x = +-0.5, ridge along z at y = 1. 6 tris.
+static func _gable(st: SurfaceTool, shape: int, col: Color) -> void:
+	var c := Vector3(0, 0.4, 0)
+	var a := Vector3(-0.5, 0, -0.5)
+	var b := Vector3(0.5, 0, -0.5)
+	var e := Vector3(0.5, 0, 0.5)
+	var f := Vector3(-0.5, 0, 0.5)
+	var r0 := Vector3(0, 1, -0.5)
+	var r1 := Vector3(0, 1, 0.5)
+	_quad(st, shape, a, r0, r1, f, c, col, 0.0)
+	_quad(st, shape, b, e, r1, r0, c, col.darkened(0.15), 0.0)
+	_tri(st, shape, a, b, r0, c, col.darkened(0.3), 0.0)
+	_tri(st, shape, f, r1, e, c, col.darkened(0.3), 0.0)
+
+## Hipped roof: a truncated pyramid, the flat top half the footprint. 10 tris.
+static func _hip(st: SurfaceTool, shape: int, col: Color) -> void:
+	var c := Vector3(0, 0.4, 0)
+	var b := []
+	var t := []
+	for i in 4:  # 0 (-x,-z)  1 (+x,-z)  2 (-x,+z)  3 (+x,+z)
+		var sx := 1.0 if i & 1 else -1.0
+		var sz := 1.0 if i & 2 else -1.0
+		b.append(Vector3(0.5 * sx, 0, 0.5 * sz))
+		t.append(Vector3(0.25 * sx, 1, 0.25 * sz))
+	_quad(st, shape, b[0], b[1], t[1], t[0], c, col, 0.0)
+	_quad(st, shape, b[1], b[3], t[3], t[1], c, col.darkened(0.15), 0.0)
+	_quad(st, shape, b[3], b[2], t[2], t[3], c, col, 0.0)
+	_quad(st, shape, b[2], b[0], t[0], t[2], c, col.darkened(0.15), 0.0)
+	_quad(st, shape, t[0], t[1], t[3], t[2], c, col.darkened(0.4), 0.0)
 
 # Triangles are wound clockwise seen from outside (Godot's front face), with
 # flat normals. Each part is convex, so a face is oriented by pointing its
@@ -285,3 +344,112 @@ static func _cylinder(st: SurfaceTool, shape: int, base: Vector3, r: float, h: f
 		var q1 := p1 + Vector3(0, h, 0)
 		_quad(st, shape, p0, p1, q1, q0, centre, col, 0.0)
 		_tri(st, shape, q0, q1, tip, centre, col.darkened(0.25), 0.0)
+
+# ---------- roof shapes and landmarks (world step 1, 2026-10-10) ----------
+
+## Puts the roof shape `top` (BuildingKit.TOPS) under the building's props.
+## Returns the new prop list: the shape first, then the props above it, moved
+## onto it: a pitched roof keeps only a chimney, a hip or setback lifts them
+## onto its flat top, a crown replaces them. Everything comes out at an
+## absolute position (Vector3) above the ground, so the main loop's
+## ground-standing rule (y = 0: forecourt columns) never applies to it.
+static func _apply_top(top: String, props: Array, info: Dictionary, rng: RandomNumberGenerator, cx: float, cz: float) -> Array:
+	var side := int(info.side)
+	var w: float = info.w
+	var d: float = info.d
+	var h: float = info.h
+	var out := []
+	var lift := 0.0  # how far up the props move
+	var keep := 1.0  # how much of the roof they may still use
+	match top:
+		"cornice":
+			out.append([SHAPE_BOX, Vector3(w + 0.7, 0.55, d + 0.7), Vector3(cx, h - 0.25, cz), 0.5])
+		"parapet":
+			# a raised false front along the street edge, stepped up in the middle
+			var fx := cx - (w * 0.5 - 0.2) * float(side)
+			out.append([SHAPE_BOX, Vector3(0.4, 1.0, d + 0.2), Vector3(fx, h, cz), 0.6])
+			out.append([SHAPE_BOX, Vector3(0.4, 1.7, d * 0.4), Vector3(fx, h, cz), 0.6])
+		"gable":
+			var low: bool = info.type == "warehouse" or info.type == "garage"
+			var rise := clampf(w * (0.14 if low else 0.3), 1.2 if low else 1.8, 2.6 if low else 4.5)
+			out.append([SHAPE_GABLE, Vector3(w + 0.5, rise, d + 0.5), Vector3(cx, h, cz), 0.9])
+			return out + _chimney(rng, info, cx, cz, rise)
+		"hip":
+			var rise := clampf(minf(w, d) * 0.28, 1.8, 4.0)
+			out.append([SHAPE_HIP, Vector3(w + 0.5, rise, d + 0.5), Vector3(cx, h, cz), 0.9])
+			lift = rise
+			keep = 0.4
+		"setback":
+			var rise := rng.randf_range(3.0, 3.6)
+			out.append([SHAPE_BOX, Vector3(w * 0.72, rise, d * 0.72), Vector3(cx, h, cz), 0.45])
+			lift = rise
+			keep = 0.65
+		"crown":
+			# stepped plant rooms, three on the tower landmark, and a short
+			# mast with its aviation light (the tower brings its own, taller)
+			var tower: bool = info.get("landmark", "") == "tower"
+			var y := h
+			var k := 0.7
+			for s in (3 if tower else 2):
+				var rise := 3.6 - 0.4 * float(s)
+				out.append([SHAPE_BOX, Vector3(w * k, rise, d * k), Vector3(cx, y, cz), 0.45])
+				y += rise
+				k *= 0.62
+			if not tower:
+				out.append([SHAPE_ANTENNA, Vector3(1.0, 1.3, 1.0), Vector3(cx, y, cz), 0.6])
+			return out
+	for p in props:
+		var off: Vector2 = p[2]
+		out.append([p[0], p[1], Vector3(cx + off.x * keep * float(side), h + lift, cz + off.y * keep), p[3]])
+	return out
+
+## A brick chimney through a pitched roof of `rise`, off the ridge near one
+## end; most pitched roofs get one.
+static func _chimney(rng: RandomNumberGenerator, info: Dictionary, cx: float, cz: float, rise: float) -> Array:
+	if rng.randf() < 0.35:
+		return []
+	var w: float = info.w
+	var d: float = info.d
+	var h: float = info.h
+	var across := rng.randf_range(-0.15, 0.15)  # of w, from the ridge
+	var along := rng.randf_range(0.25, 0.4) * d * (1.0 if rng.randf() < 0.5 else -1.0)
+	# the roof is rise * (1 - 2|across|) high there; poke 1.2 m above it
+	var top_h := rise * (1.0 - 2.0 * absf(across)) + 1.2
+	return [[SHAPE_BOX, Vector3(0.9, top_h, 0.9), Vector3(cx + across * w * float(info.side), h, cz + along), 0.5]]
+
+## The run's landmark (LANDMARKS) on its building, at absolute positions.
+## Sizes read from the far end of the chunk window (300 m); every lit piece
+## is a red aviation light or a sodium flood, nothing off the palette.
+static func _landmark(kind: String, info: Dictionary, cx: float, cz: float) -> Array:
+	var side := int(info.side)
+	var w: float = info.w
+	var d: float = info.d
+	var h: float = info.h
+	match kind:
+		"tower":
+			# the office tower's three-step crown comes from its top; this is
+			# the lattice mast on it, 27 m, red light on top
+			return [[SHAPE_ANTENNA, Vector3(3.0, 4.5, 3.0), Vector3(cx, h + 9.6, cz), 0.55]]
+		"water_tower":
+			# a municipal water tower: the rooftop tank on legs, six times the size
+			var k := 6.0
+			return [[SHAPE_TANK, Vector3(k, k, k), Vector3(cx, h, cz), 0.95],
+				[SHAPE_ANTENNA, Vector3(1.0, 0.45, 1.0), Vector3(cx, h + 3.6 * k, cz), 0.6]]
+		"stacks":
+			# two brick chimney stacks off the back of the shed, 46 and 34 m,
+			# the taller one lit
+			var bx := cx + w * 0.25 * float(side)
+			return [[SHAPE_BOX, Vector3(3.6, 46.0 - h, 3.6), Vector3(bx, h, cz - d * 0.25), 0.42],
+				[SHAPE_BOX, Vector3(2.8, 34.0 - h, 2.8), Vector3(bx, h, cz + d * 0.25), 0.42],
+				[SHAPE_ANTENNA, Vector3(1.0, 0.4, 1.0), Vector3(bx, 46.0, cz - d * 0.25), 0.6]]
+		"screen":
+			# a drive-in screen behind the lot: a pale slab on two legs, 26 m
+			# to the top, with a floodlight on the shop roof aimed at it
+			var sx := cx + (w * 0.5 + 6.0) * float(side)
+			var out := []
+			for dz in [-8.0, 8.0]:
+				out.append([SHAPE_BOX, Vector3(0.7, 14.0, 0.7), Vector3(sx, 0.0, cz + dz), 0.5])
+			out.append([SHAPE_SCREEN, Vector3(0.5, 12.0, 22.0), Vector3(sx, 14.0, cz), 1.4])
+			out.append([SHAPE_FLOOD, Vector3(1.0, 0.9, 1.0), Vector3(cx + (w * 0.5 - 1.0) * float(side), h, cz), 1.0])
+			return out
+	return []

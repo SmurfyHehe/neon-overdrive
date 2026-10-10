@@ -89,7 +89,7 @@ func _physics_process(_delta: float) -> bool:
 		Step.BOOT:
 			_check(not mood.meet_night, "no meet without NEON_MEET")
 			game.radio.station = TALK
-			clock.speed = 30.0   # 1:59 -> 2:00 in about 2 s
+			clock.speed = 60.0   # 1:59 -> 2:00 in about 2 s
 			_go(Step.BAR_CLOSE)
 		Step.BAR_CLOSE:
 			if clock.minutes >= 365.0:

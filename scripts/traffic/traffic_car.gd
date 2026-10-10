@@ -761,12 +761,14 @@ func set_detailed(on: bool) -> void:
 	for w in wheel_array:
 		w.enabled = on
 	if on:
+		var t0 := Time.get_ticks_usec()
 		_end_ghost()
 		freeze = false
 		# The body is where the node is, now: a frozen body's last move may
 		# still be waiting for the next physics step (see shift_world).
 		PhysicsServer3D.body_set_state(get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, global_transform)
 		set_moving(self, _cruise_speed)
+		SpikeLog.mark("traffic_detail_on", SpikeLog.since(t0))
 	else:
 		_cruise_speed = maxf(current_speed(), 0.0)
 		_rail_a = 0.0

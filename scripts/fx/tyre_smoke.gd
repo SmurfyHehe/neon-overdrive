@@ -227,7 +227,7 @@ func _physics_process(delta: float) -> void:
 			var spin := maxf(-w.slip_vector.y, 0.0)
 			var drag := maxf(w.slip_vector.y, 0.0)
 			lat = smoothstep(CarAudio.LAT_START, CarAudio.LAT_FULL, maxf(absf(w.slip_vector.x), drag)) * load
-			lon = smoothstep(CarAudio.LON_START, CarAudio.LON_FULL, spin) * load
+			lon = smoothstep(CarAudio.LON_START, CarAudio.LON_FULL, spin) * load * CarAudio.spin_slide(w, _player.speed)
 		var temp := health.tyre_temp[i] if i < health.tyre_temp.size() else PowertrainHealth.AMBIENT_C
 		var rate := puff_rate(lat, lon, step_scorch(i, maxf(lat, lon), delta), temp,
 			FxSettings.smoke_burnout, FxSettings.smoke_drift) * mods[0 if i < 2 else 1]

@@ -113,7 +113,10 @@ func _initialize() -> void:
 	await process_frame
 	_check(player.chassis_visual != null and player.chassis_visual.name == "P1Coupe", "the player should carry the P1 body")
 	_check(PlayerCar.CFG == CFG, "player CFG changed: %s" % [PlayerCar.CFG])
-	_check(player.spec == CarSpec.coupe_default(), "the player's spec should still be CarSpec.coupe_default()")
+	# coupe_default() plus the one block player_spec() adds: which automatic it drives like in AUTO
+	var want_spec := CarSpec.coupe_default()
+	want_spec["auto"] = CarSpec.PLAYER_AUTO["p1_coupe"]
+	_check(player.spec == want_spec, "the player's spec should still be CarSpec.coupe_default() (plus its auto block)")
 	var wheels := {
 		"FL": [player.front_left_wheel, Vector3(-CFG.wheel_x, 0, -CFG.axle_z)],
 		"FR": [player.front_right_wheel, Vector3(CFG.wheel_x, 0, -CFG.axle_z)],

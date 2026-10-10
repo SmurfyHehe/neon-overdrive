@@ -24,6 +24,7 @@ var demand := 0.0
 var idle_min := 1e9
 var idle_max := -1e9
 var prev_shifting := false
+var prev_gear := 0
 var last_rpm := 0.0
 var up_rpms: Array[float] = []   # rpm at each upshift, in order
 var shift_ticks: Array[int] = []
@@ -46,12 +47,19 @@ func _physics_process(_delta: float) -> bool:
 	var p: PlayerCar = game.player
 	p.driver = _drive
 	var waited := tick - step_start
-	# log the rpm at the start of every shift
-	if p.is_shifting and not prev_shifting:
+	# log the rpm at the start of every shift. The realistic automatic (AUTO)
+	# changes gear without GEVP's is_shifting, so there it is the gear itself.
+	if p.auto_box_on:
+		if prev_gear != 0 and p.current_gear != prev_gear:
+			shift_ticks.append(tick)
+			if p.current_gear > prev_gear:
+				up_rpms.append(last_rpm)
+	elif p.is_shifting and not prev_shifting:
 		shift_ticks.append(tick)
 		if p.requested_gear > p.current_gear:
 			up_rpms.append(last_rpm)
 	prev_shifting = p.is_shifting
+	prev_gear = p.current_gear
 	last_rpm = p.motor_rpm
 	match step:
 		Step.BOOT:

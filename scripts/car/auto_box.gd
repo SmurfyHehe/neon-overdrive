@@ -62,7 +62,7 @@ const DOWN_FULL := 0.75          # ... or this share (flat out)
 const REVERSAL_GAP := 1.2        # s before the map may undo its last shift (no up-down-up)
 const KICK_PRESS := 0.9          # throttle that counts as floored
 const KICK_PRESS_TIME := 0.3     # it has to get there this fast to be a kickdown
-const KICK_MAX_RPM := 0.9        # the kickdown gear stays under this share of max rpm
+const KICK_MAX_RPM := 0.75       # the kickdown gear stays under this share of max rpm (at 0.9 it could land a fraction of a second from the next upshift)
 const KICK_MAX_GEARS := 2
 const KICK_MIN_KMH := 15.0
 const CORNER_LAT_G := 0.35
@@ -380,9 +380,12 @@ func _brain(v: Vehicle, delta: float, gear: int, fwd: float, kmh: float, thr: fl
 
 	var gap := v.automatic_time_between_shifts * 0.001
 	var rpm_now: float = v.gear_ratios[gear - 1] * per_ratio
+	# Run out to the top of the revs: only the shift itself delays that upshift
+	# (after a kickdown the engine would otherwise sit on the limiter).
+	var revved_out := rpm_now > max_rpm * UP_FULL
 	if gear < n and not braking and _corner_left <= 0.0 and not (_accel < -CLIMB_DECEL and demand > CLIMB_DEMAND) \
-			and (_last_dir >= 0 or _since_shift >= REVERSAL_GAP):
-		if rpm_now > max_rpm * lerpf(UP_LIGHT, UP_FULL, demand) and _since_shift >= maxf(shift_time, gap):
+			and (_last_dir >= 0 or _since_shift >= REVERSAL_GAP or revved_out):
+		if rpm_now > max_rpm * lerpf(UP_LIGHT, UP_FULL, demand) and _since_shift >= (shift_time if revved_out else maxf(shift_time, gap)):
 			_begin(v, gear + 1, thr)
 			return
 		# wheelspin on the limiter (GEVP's own rule): road speed nearly there, wheels past max rpm

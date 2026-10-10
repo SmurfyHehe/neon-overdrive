@@ -135,6 +135,24 @@ func _ensure_speaker_filter() -> void:
 	AudioServer.add_bus_effect(bus, lp)
 
 ## Straight to station s (-1 = off), quietly: a resumed run's radio.
+## The title screen borrows the radio for its own station (borrow / give_back);
+## saves keep the station the player chose (player_station).
+var _lent_from := -2
+
+func borrow(s: int) -> void:
+	if _lent_from == -2:
+		_lent_from = station
+	tune_to(s)
+
+func give_back() -> void:
+	if _lent_from != -2:
+		var s := _lent_from
+		_lent_from = -2
+		tune_to(s)
+
+func player_station() -> int:
+	return station if _lent_from == -2 else _lent_from
+
 func tune_to(s: int) -> void:
 	station = s if s >= 0 and s < RadioStations.station_count() else -1
 	if station >= 0:

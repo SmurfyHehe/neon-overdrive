@@ -1,0 +1,3 @@
+These three files are placeholders drawn by tools/make_brand_art.py.
+Replace them with the real B4 logo files at the same paths:
+  logo_B4_combined_256.png, logo_B4_combined.ico, boot_splash.png

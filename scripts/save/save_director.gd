@@ -134,6 +134,12 @@ func capture() -> Dictionary:
 		run.clock = {"minutes": game.night_clock.minutes, "night": game.night_clock.night}
 	if game.radio != null:
 		run.radio = game.radio.player_station()
+	# Weather (WX0): the stage and its live values, so a resume at 1:30 a.m.
+	# on a night whose rain began at 1 is still raining, wipers and all.
+	# Tonight's plan is not saved: weather_seed (the profile) and the night
+	# give it back. Optional on read: older saves have no block.
+	if game.has_method("weather_save"):
+		run.weather = game.weather_save()
 	return run
 
 ## Puts the car's motion back once it is in the tree (Vehicle._ready has run).

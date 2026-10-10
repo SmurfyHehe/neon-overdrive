@@ -26,8 +26,18 @@ user://saves/
     garage.json    owned_parts: every part bought
     mod_tree.json  cars: {car_id: {installed: [owned part ids]}}
     run.json       the run to resume ({} = fresh start)
-    meta.json      chase_open, pending_busts, saved_at
+    meta.json      chase_open, pending_busts, saved_at, first_wreck_used, weather_seed
 ```
+
+Weather (WX0): `meta.json` `weather_seed` is picked once per new game (a fresh
+run with nothing to resume) and every night's weather is drawn from it plus the
+night number, so tonight's plan is never saved. `run.json` has an optional
+`weather` block: `stage` (an int, append-only: 0 dry, 1 rain, 2 storm, 3 damp,
+4 haze, 5 fog, 6 drizzle, 7 snow, 8 slush), `road_snow`, `wet`, `fog`, `rain`,
+`snow_fall`, `snow_cover`, `change_done`. A resume snaps the live values and
+skips the mid-night change if `change_done`; a stage this build does not know
+falls back to the plan's stage; a run with no block, or a profile with no seed,
+uses the run's road seed once and saves it.
 
 Each file also has `.bak1..3`, and a `.bad` copy if a broken main file was set aside.
 

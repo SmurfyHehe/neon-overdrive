@@ -58,6 +58,8 @@ class_name TrafficCar
 # suspension on that step and sags; the honest cheap path is no sim at all
 # plus a clean handover.
 
+const WetReflections := preload("res://scripts/world/wet_reflections.gd")
+
 ## Which car: an NpcCarBuilder.KINDS key (the stage B step 5 traffic cars,
 ## e.g. "n1_commuter") or a CarBuilder.KIND_CONFIGS key (the old box cars).
 var kind := "coupe"
@@ -270,6 +272,10 @@ func _ready() -> void:
 	if not sim_only:
 		chassis_visual = NpcCarBuilder.chassis_visual(kind, build, color, role) if npc else CarBuilder.shared_chassis_visual(kind, color)
 		add_child(chassis_visual)
+		# Wet-road tail smears (wet_reflections.gd): ride with the visual.
+		var tail: Dictionary = WetReflections.tail_info(chassis_visual)
+		if not tail.is_empty():
+			WetReflections.attach_tail(chassis_visual, tail.lamps, tail.ground_y)
 
 	can_sleep = false
 	linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
@@ -327,6 +333,7 @@ func _update_lamps() -> void:
 	if key != _lamp_key:
 		_lamp_key = key
 		NpcCarBuilder.set_lamps(chassis_visual, float(key & 1), hazard)
+		WetReflections.set_tail_brake(chassis_visual, float(key & 1))
 
 ## The controller. Sets steering_input, throttle_input and brake_input.
 func _drive(delta: float) -> void:

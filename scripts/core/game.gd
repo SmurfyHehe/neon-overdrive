@@ -75,6 +75,11 @@ var saver: SaveDirector
 ## Tonight's cash and the bank (F0, scripts/core/wallet.gd).
 var wallet: Node
 const Wallet := preload("res://scripts/core/wallet.gd")
+const WetReflections := preload("res://scripts/world/wet_reflections.gd")
+# Weather's wetness drives the wet-road reflections; this is the `version` of
+# Weather last pushed to them.
+var _weather_seen := -1
+var _wet_pinned := false
 var road_seed := 0
 var run := {}
 
@@ -115,6 +120,7 @@ func _ready() -> void:
 		TrafficSettings.set_car_count(int(traffic_env))
 	if OS.get_environment("NEON_MUTE") == "1":
 		AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), true)
+	_setup_wet_reflections(benchmark)
 	if benchmark:
 		seed(Benchmark.SEED)
 	else:
@@ -157,6 +163,27 @@ func _ready() -> void:
 	if benchmark:
 		add_child(Benchmark.new())
 	add_child(saver)
+
+## Wet-road reflections (wet_reflections.gd). How wet the road is drawn:
+## --wet=<0..1> (benchmark args) or NEON_WET=<0..1> pins it; otherwise
+## Weather's wetness drives it (dry = nothing drawn).
+func _setup_wet_reflections(benchmark: bool) -> void:
+	var pin := Benchmark.opt("wet") if benchmark else ""
+	if pin == "":
+		pin = OS.get_environment("NEON_WET")
+	if pin.is_valid_float():
+		_wet_pinned = true
+		WetReflections.set_wetness(float(pin))
+		return
+	_sync_wetness()
+
+## Follows Weather's wetness, only when it has moved (its `version`).
+func _sync_wetness() -> void:
+	if _wet_pinned:
+		return
+	if Weather.version != _weather_seen:
+		_weather_seen = Weather.version
+		WetReflections.set_wetness(Weather.wetness)
 
 func _setup_world() -> void:
 	var env := Environment.new()
@@ -415,6 +442,7 @@ func _physics_process(_delta: float) -> void:
 	if absf(z) >= recenter_dist:
 		_shift_origin(int(floor(-z / RoadChunkBuilder.CHUNK_LEN)))
 	Weather.step(_delta)  # before the cars: they read this tick's wetness
+	_sync_wetness()
 	if Input.is_action_just_pressed("mute"):
 		toggle_mute()
 	if Input.is_action_just_pressed("radio_next") and radio != null:

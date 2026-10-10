@@ -190,6 +190,41 @@ const POOL_ALONG := 17.0
 const POOL_Y := 0.045       # just above the lane dashes (top at 0.035)
 const SODIUM := Color(1.0, 0.55, 0.2)
 
+# World step 3b: the street kit a district picks from (Districts.street_at).
+# What tells two districts apart at night is light, so each kind of street
+# has its own lamp shape, light colour, lamp count and road surface. Every
+# entry is one shared mesh or material built on first use; a chunk only
+# points at them when it is (re)built.
+#
+# The light colours are Districts.LIGHTS (BuildingKit washes the building
+# fronts with the same ones).
+const LIGHTS := Districts.LIGHTS
+# Lamp shapes. h: pole height, m. reach: how far the light sits out over the
+# road from the pole. pool: the pool's size on the road (across, along), m.
+#   cobra  the city street lamp: a pole and one arm over the road
+#   post   an old lantern post, half the height, the lantern on top
+#   mast   a freeway mast: tall, an arm each way, a long pool
+#   flood  a yard mast: taller still, a bank of floodlights, a wide pool
+const LAMP_KINDS := {
+	"cobra": {"h": LAMP_POLE_H, "reach": LAMP_ARM - 0.2, "pool": Vector2(POOL_ACROSS, POOL_ALONG)},
+	"post": {"h": 4.2, "reach": 1.2, "pool": Vector2(8.0, 9.0)},
+	"mast": {"h": 12.0, "reach": 2.6, "pool": Vector2(17.0, 30.0)},
+	"flood": {"h": 15.0, "reach": 3.5, "pool": Vector2(24.0, 24.0)},
+}
+# Road surfaces: own lanes, oncoming lanes and shoulder colour, then the
+# noise frequency, tiling and contrast of the grain.
+#   asphalt   the city's dark blacktop
+#   concrete  pale slabs (freeway, airport, docks): the lamp pools and
+#             headlights show twice as bright on it
+#   setts     old town's stone setts: a warm dark brown, small grain
+#   worn      patched blacktop out of town: darker, in big uneven patches
+const ROADS := {
+	"asphalt": {"own": Color(0.085, 0.085, 0.09), "onc": Color(0.08, 0.08, 0.085), "shoulder": Color(0.055, 0.055, 0.058), "freq": 0.6, "uv": Vector2(2.0, 6.0), "spread": 1.0},
+	"concrete": {"own": Color(0.2, 0.195, 0.18), "onc": Color(0.19, 0.185, 0.17), "shoulder": Color(0.13, 0.125, 0.115), "freq": 0.5, "uv": Vector2(1.0, 10.0), "spread": 0.6},
+	"setts": {"own": Color(0.13, 0.092, 0.07), "onc": Color(0.125, 0.088, 0.067), "shoulder": Color(0.085, 0.062, 0.05), "freq": 0.9, "uv": Vector2(5.0, 16.0), "spread": 2.2},
+	"worn": {"own": Color(0.06, 0.06, 0.064), "onc": Color(0.057, 0.057, 0.06), "shoulder": Color(0.04, 0.04, 0.043), "freq": 0.12, "uv": Vector2(1.0, 2.0), "spread": 2.6},
+}
+
 const WALL_H := 2.2         # gap walls between buildings
 const WALL_T := 0.3
 # Invisible out-of-bounds wall (#28). Was 6 m high and 1 m thick; raised and
@@ -249,8 +284,10 @@ static var _pylon_mesh: BoxMesh
 static var _barrier_mesh: ArrayMesh
 static var _lamp_mesh: ArrayMesh
 static var _lamp_mesh_dark: ArrayMesh
+static var _lamp_meshes := {}  # "kind/light" -> ArrayMesh
 static var _pool_mesh: PlaneMesh
-static var _pool_mat: StandardMaterial3D
+static var _pool_mats := {}    # light -> StandardMaterial3D
+static var _road_mats := {}    # road -> [own, onc, shoulder]
 static var _wall_mesh: BoxMesh
 static var _reflector_mesh: ArrayMesh
 static var _reflector_mat: ShaderMaterial
@@ -273,6 +310,30 @@ static func _flat_mat(color: Color, emissive: bool = false, energy: float = 1.0)
 static func _asphalt_mat(color: Color) -> ShaderMaterial:
 	return RoadWet.asphalt_mat(color)
 
+## Plain asphalt-grain material for the road kinds of the night districts
+## (ROADS; TEST BUILD: these do not take the wet-road look yet): a small seamless noise texture mapped
+## through a 2-color gradient, tiled via uv1_scale so it repeats along the
+## chunk instead of stretching. Back faces are culled (the default), so the
+## tapered strips below must wind their triangles to face up.
+static func _plain_asphalt_mat(color: Color, freq: float = 0.6, uv: Vector2 = Vector2(2.0, 6.0), spread: float = 1.0) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	var noise := FastNoiseLite.new()
+	noise.seed = 1337
+	noise.frequency = freq
+	var tex := NoiseTexture2D.new()
+	tex.width = 64
+	tex.height = 64
+	tex.seamless = true
+	tex.noise = noise
+	var grad := Gradient.new()
+	grad.colors = PackedColorArray([color.darkened(minf(0.2 * spread, 0.6)), color.lightened(minf(0.1 * spread, 0.3))])
+	tex.color_ramp = grad
+	m.albedo_texture = tex
+	m.uv1_scale = Vector3(uv.x, uv.y, 1.0)
+	m.roughness = 0.9
+	m.metallic = 0.0
+	return m
+
 static func _get_own_mat() -> ShaderMaterial:
 	if _own_mat == null:
 		_own_mat = _asphalt_mat(Color(0.085, 0.085, 0.09))
@@ -287,6 +348,18 @@ static func _get_shoulder_mat() -> ShaderMaterial:
 	if _shoulder_mat == null:
 		_shoulder_mat = _asphalt_mat(Color(0.055, 0.055, 0.058))
 	return _shoulder_mat
+
+## The three surface materials of a road kind (ROADS): [own lanes, oncoming
+## lanes, shoulder]. "asphalt" is the three above; the others are built once
+## on first use and shared by every chunk of every district that names them.
+static func _get_road_mats(road: String) -> Array:
+	if not _road_mats.has(road):
+		if road == "asphalt":
+			_road_mats[road] = [_get_own_mat(), _get_onc_mat(), _get_shoulder_mat()]
+		else:
+			var r: Dictionary = ROADS[road]
+			_road_mats[road] = [_plain_asphalt_mat(r.own, r.freq, r.uv, r.spread), _plain_asphalt_mat(r.onc, r.freq, r.uv, r.spread), _plain_asphalt_mat(r.shoulder, r.freq, r.uv, r.spread)]
+	return _road_mats[road]
 
 ## Curb: crossable, not a wall (see file header). Light concrete (stage A:
 ## was a bright emissive strip, part of the neon look) so it still reads as
@@ -607,28 +680,61 @@ static func _get_barrier_mesh() -> ArrayMesh:
 		_barrier_mesh = st.commit()
 	return _barrier_mesh
 
-## Street lamp, built once and shared by every chunk's lamp MultiMesh: a pole
-## and arm (dark metal) and a sodium head (emissive, above the glow threshold
-## so it blooms). Two surfaces, so materials live on the mesh, not on the
-## MultiMeshInstance3D. Local space: pole at the origin, arm reaching toward
-## -X (over the road on the player's side; the other side is mirrored by the
-## instance transform).
-static func _get_lamp_mesh() -> ArrayMesh:
-	if _lamp_mesh == null:
-		var metal := _flat_mat(Color(0.2, 0.2, 0.21))
-		metal.roughness = 0.6
-		var head := _flat_mat(SODIUM, true, 4.0)
-		var st := SurfaceTool.new()
-		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		_add_box(st, Vector3(0.0, LAMP_POLE_H / 2.0, 0.0), Vector3(0.16, LAMP_POLE_H, 0.16))
-		_add_box(st, Vector3(-LAMP_ARM / 2.0, LAMP_POLE_H - 0.05, 0.0), Vector3(LAMP_ARM, 0.1, 0.12))
-		_lamp_mesh = st.commit()
-		_lamp_mesh.surface_set_material(0, metal)
-		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		_add_box(st, Vector3(-LAMP_ARM + 0.2, LAMP_POLE_H - 0.16, 0.0), Vector3(0.75, 0.14, 0.36))
-		_lamp_mesh = st.commit(_lamp_mesh)
-		_lamp_mesh.surface_set_material(1, head)
-	return _lamp_mesh
+## Street lamp, built once per shape and light colour and shared by every
+## chunk's lamp MultiMesh: a pole and arm (dark metal) and a lit head
+## (emissive, above the glow threshold so it blooms). Two surfaces, so
+## materials live on the mesh, not on the MultiMeshInstance3D. Local space:
+## pole at the origin, arm reaching toward -X (over the road on the player's
+## side; the other side is mirrored by the instance transform). The shapes
+## are LAMP_KINDS, the colours LIGHTS; the default is the city's sodium lamp.
+static func _get_lamp_mesh(kind: String = "cobra", light: String = "sodium") -> ArrayMesh:
+	var key := kind + "/" + light
+	if _lamp_meshes.has(key):
+		return _lamp_meshes[key]
+	var metal := _flat_mat(Color(0.2, 0.2, 0.21))
+	metal.roughness = 0.6
+	var head := _flat_mat(LIGHTS[light].color, true, 4.0)
+	var h: float = LAMP_KINDS[kind].h
+	var poles := []  # [centre, size]
+	var heads := []
+	match kind:
+		"post":
+			# a cast-iron post, a collar, the lantern on top under a cap
+			poles = [[Vector3(0.0, h / 2.0, 0.0), Vector3(0.14, h, 0.14)],
+				[Vector3(0.0, 0.5, 0.0), Vector3(0.26, 1.0, 0.26)],
+				[Vector3(0.0, h + 0.62, 0.0), Vector3(0.66, 0.1, 0.66)]]
+			heads = [[Vector3(0.0, h + 0.3, 0.0), Vector3(0.42, 0.55, 0.42)]]
+		"mast":
+			# a tall mast with an arm each way and a light on each end
+			poles = [[Vector3(0.0, h / 2.0, 0.0), Vector3(0.26, h, 0.26)],
+				[Vector3(0.0, h - 0.05, 0.0), Vector3(5.6, 0.14, 0.16)]]
+			heads = [[Vector3(-2.6, h - 0.2, 0.0), Vector3(1.0, 0.18, 0.44)],
+				[Vector3(2.6, h - 0.2, 0.0), Vector3(1.0, 0.18, 0.44)]]
+		"flood":
+			# a yard mast: a thick pole, a frame across the top, a bank of
+			# floodlights hung from it facing the road
+			poles = [[Vector3(0.0, h / 2.0, 0.0), Vector3(0.36, h, 0.36)],
+				[Vector3(0.0, h - 0.1, 0.0), Vector3(0.3, 0.3, 4.2)],
+				[Vector3(0.0, h + 0.75, 0.0), Vector3(0.14, 1.4, 0.14)]]
+			for dz in [-1.5, -0.5, 0.5, 1.5]:
+				heads.append([Vector3(-0.32, h - 0.55, dz), Vector3(0.3, 0.6, 0.7)])
+		_:
+			poles = [[Vector3(0.0, h / 2.0, 0.0), Vector3(0.16, h, 0.16)],
+				[Vector3(-LAMP_ARM / 2.0, h - 0.05, 0.0), Vector3(LAMP_ARM, 0.1, 0.12)]]
+			heads = [[Vector3(-LAMP_ARM + 0.2, h - 0.16, 0.0), Vector3(0.75, 0.14, 0.36)]]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for b in poles:
+		_add_box(st, b[0], b[1])
+	var mesh: ArrayMesh = st.commit()
+	mesh.surface_set_material(0, metal)
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for b in heads:
+		_add_box(st, b[0], b[1])
+	mesh = st.commit(mesh)
+	mesh.surface_set_material(1, head)
+	_lamp_meshes[key] = mesh
+	return mesh
 
 ## The lamp mesh, or its twin with the head switched off (MomentSpots' power
 ## cut swaps a chunk's "Lamps" to it: no per-instance data needed).
@@ -667,8 +773,8 @@ static func _get_pool_mesh() -> PlaneMesh:
 		_pool_mesh.size = Vector2.ONE
 	return _pool_mesh
 
-static func _get_pool_mat() -> StandardMaterial3D:
-	if _pool_mat == null:
+static func _get_pool_mat(light: String = "sodium") -> StandardMaterial3D:
+	if not _pool_mats.has(light):
 		var grad := Gradient.new()
 		grad.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
 		grad.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.42), Color(1, 1, 1, 0)])
@@ -684,13 +790,15 @@ static func _get_pool_mat() -> StandardMaterial3D:
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 		m.albedo_texture = tex
-		m.albedo_color = Color(SODIUM.r * 0.42, SODIUM.g * 0.42, SODIUM.b * 0.42, 1.0)
+		var lc: Color = LIGHTS[light].color
+		var k: float = LIGHTS[light].pool
+		m.albedo_color = Color(lc.r * k, lc.g * k, lc.b * k, 1.0)
 		m.disable_fog = true
 		m.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
 		m.distance_fade_min_distance = 170.0  # min > max: fade OUT with distance
 		m.distance_fade_max_distance = 110.0
-		_pool_mat = m
-	return _pool_mat
+		_pool_mats[light] = m
+	return _pool_mats[light]
 
 static func _get_wall_mesh() -> BoxMesh:
 	if _wall_mesh == null:
@@ -1969,6 +2077,22 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var start_onc_w := _lane_w(prev_cfg.onc_lanes)
 	var end_onc_w := _lane_w(onc_lanes)
 
+	# World step 3b: the district's street kit. The surface, the lamp shape
+	# and the light colour are shared materials and meshes this chunk points
+	# at; nothing is built here after the first chunk of each kind.
+	var street := Districts.street_at(chunk_index)
+	# Only a chunk recycled into another kind of street is touched: setting
+	# a MultiMesh's mesh or a material again is not free.
+	var kit_key: String = "%s/%s/%s" % [street.road, street.lamp, street.light]
+	var kit_changed: bool = root.get_meta("street_kit", "") != kit_key
+	if kit_changed:
+		root.set_meta("street_kit", kit_key)
+		var road_mats := _get_road_mats(street.road)
+		(root.get_node(^"RoadOwn") as MeshInstance3D).material_override = road_mats[0]
+		(root.get_node(^"RoadOnc") as MeshInstance3D).material_override = road_mats[1]
+		(root.get_node(^"ShoulderOwn") as MeshInstance3D).material_override = road_mats[2]
+		(root.get_node(^"ShoulderOnc") as MeshInstance3D).material_override = road_mats[2]
+
 	# road surfaces (tapered)
 	_update_strip(root, "RoadOwn", 0.0, 0.0, start_own_w, end_own_w)
 	_update_strip(root, "RoadOnc", 0.0, 0.0, -start_onc_w, -end_onc_w)
@@ -2237,13 +2361,30 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		_prime(root, job)
 	# street lamps + their light pools (stage A). Pole just outside the curb,
 	# arm over the road; the oncoming side is the same mesh turned 180 deg.
+	# Which lamp, what colour and how many is the district's (street kit):
+	# every 1 keeps all four, 2 keeps one a side, 4 keeps one a chunk on
+	# alternating sides, 0 leaves the road dark.
+	var pools_mmi := root.get_node(^"LampPools") as MultiMeshInstance3D
 	var lamps: MultiMesh = (root.get_node(^"Lamps") as MultiMeshInstance3D).multimesh
-	var pools: MultiMesh = (root.get_node(^"LampPools") as MultiMeshInstance3D).multimesh
+	var pools: MultiMesh = pools_mmi.multimesh
+	var lamp_kind: Dictionary = LAMP_KINDS[street.lamp]
+	if kit_changed:
+		lamps.mesh = _get_lamp_mesh(street.lamp, street.light)
+		pools_mmi.material_override = _get_pool_mat(street.light)
+	var every := int(street.every)
+	var reach: float = lamp_kind.reach
+	var pool_size: Vector2 = lamp_kind.pool
 	var smears: MultiMesh = (root.get_node(^"LampSmears") as MultiMeshInstance3D).multimesh
 	var n_lamps := 0
 	var lamp_zs := {1: [], -1: []}  # pole z per side, for the roadside kit's bins
 	for i in range(_lamp_slots()):
 		for side in [1, -1]:
+			if every == 0:
+				continue
+			if every == 2 and (i == 0) != (side == 1):
+				continue
+			if every == 4 and (i != 0 or (side == 1) != (posmod(chunk_index, 2) == 0)):
+				continue
 			# own side at 6.25, 31.25 m; oncoming at 18.75, 43.75 m into the chunk
 			var lz := -float(i) * LAMP_SPACING - (LAMP_SPACING * 0.25 if side == 1 else LAMP_SPACING * 0.75)
 			if Junction.in_mouth(chunk_index, lz):
@@ -2256,8 +2397,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			var pole_x := (curb + LAMP_SETBACK) * float(side)
 			var turn := Basis() if side == 1 else Basis(Vector3.UP, PI)
 			lamps.set_instance_transform(n_lamps, _xf_up(pole_x, 0.0, lz, turn))
-			var head_x := pole_x - (LAMP_ARM - 0.2) * float(side)
-			pools.set_instance_transform(n_lamps, _xf(head_x, POOL_Y, lz, Basis.from_scale(Vector3(POOL_ACROSS, 1.0, POOL_ALONG))))
+			var head_x := pole_x - reach * float(side)
+			pools.set_instance_transform(n_lamps, _xf(head_x, POOL_Y, lz, Basis.from_scale(Vector3(pool_size.x, 1.0, pool_size.y))))
 			smears.set_instance_transform(n_lamps, _xf(head_x, WetReflections.SMEAR_Y, lz, WetReflections.lamp_smear_basis()))
 			n_lamps += 1
 	# side-street mouths (W7): the kit, its props, and one more lamp and pool each

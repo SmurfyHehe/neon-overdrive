@@ -18,6 +18,14 @@ extends RefCounted
 # follows itself, the wrap from the last run back to the first included.
 # Each new kind is a SPECS row; what the road itself does in a freeway or a
 # canyon run is the road recipe's job (V1), not this table's.
+#
+# World step 3b (2026-10-10): at night the kinds were hard to tell apart,
+# because what a driver sees in the dark is light, and every kind had the same
+# sodium lamps over the same asphalt. Each kind now also names its street kit
+# ("street", "signs", "panel" below): the lamp's shape, its light colour and
+# how many stand in a chunk, the road surface, and the colours its signs burn
+# in. All of it is picked when a chunk is built from a handful of shared
+# meshes and materials; nothing is added to a frame.
 
 #
 # On a loop (road_map.gd) the districts are the map's, in its order and at its
@@ -71,13 +79,40 @@ const ORDER := [
 # World step 3 (district kinds) adds one more:
 # tints: weights over BuildingKit.TINTS indices, the district's palette. A
 #   district that leaves it out draws evenly from the first 8, as before.
+#
+# World step 3b adds the street kit:
+# street: {lamp, light, every, road}, any of them left out falls back to
+#   STREET. lamp: the pole's shape (RoadChunkBuilder.LAMP_KINDS). light: its
+#   colour (RoadChunkBuilder.LIGHTS). every: 1 = four lamps a chunk, 2 = two,
+#   4 = one, 0 = none (a dark road). road: the surface
+#   (RoadChunkBuilder.ROADS).
+# signs: weights over BuildingSigns.COLORS, the colours the district's signs
+#   burn in. Left out: an even draw, as before.
+# panel: share of signs that are a lit panel with dark letters rather than
+#   lit letters on a dark box.
 const DEFAULTS := {
 	"wear": [0.3, 0.7],
 	"tops": [["flat", 50], ["cornice", 25], ["gable", 25]],
 	"landmark": "",
 	"fronts": [["store", 35], ["bar", 20], ["laundromat", 15], ["vacant", 15], ["shuttered", 15]],
 	"tints": [],
+	"signs": [],
+	"panel": 0.3,
 }
+const STREET := {"lamp": "cobra", "light": "sodium", "every": 1, "road": "asphalt"}
+# Light colours, inside Amber vs. Dusk: deep sodium orange, a paler amber for
+# old lantern posts, and a silver-white for metal-halide yards and newer
+# streets. pool: how strongly the lamp's pool adds to the road.
+const LIGHTS := {
+	"sodium": {"color": Color(1.0, 0.55, 0.2), "pool": 0.42},
+	"amber": {"color": Color(1.0, 0.78, 0.45), "pool": 0.36},
+	"white": {"color": Color(0.8, 0.88, 1.0), "pool": 0.3},
+}
+# How high up a building front each lamp shape's light reaches, m, and how
+# much of it there is by lamp count (every): the wash BuildingKit paints on
+# the walls, so a whole street takes its lamps' colour.
+const WASH_REACH := {"cobra": 10.0, "post": 5.5, "mast": 14.0, "flood": 20.0}
+const WASH_BY_EVERY := {0: 0.0, 1: 1.0, 2: 0.7, 4: 0.4}
 const SPECS := {
 	"downtown": {
 		"mix": [["office", 35], ["parking", 15], ["apartment", 25], ["shop", 25]],
@@ -87,6 +122,7 @@ const SPECS := {
 		"wear": [0.1, 0.45], "tops": [["crown", 35], ["setback", 25], ["cornice", 20], ["flat", 20]],
 		"landmark": "tower",
 		"fronts": [["store", 35], ["bar", 30], ["laundromat", 5], ["vacant", 10], ["shuttered", 20]],
+		"street": {"lamp": "cobra", "light": "sodium", "every": 1, "road": "asphalt"},
 	},
 	"residential": {
 		"mix": [["apartment", 63], ["shop", 29], ["parking", 4], ["diner", 4]],
@@ -96,6 +132,8 @@ const SPECS := {
 		"wear": [0.3, 0.7], "tops": [["gable", 30], ["hip", 20], ["cornice", 25], ["flat", 25]],
 		"landmark": "water_tower",
 		"fronts": [["store", 30], ["laundromat", 30], ["bar", 15], ["vacant", 10], ["shuttered", 15]],
+		"street": {"lamp": "cobra", "light": "amber", "every": 2},
+		"signs": [[1, 70], [0, 30]],
 	},
 	"strip": {
 		"mix": [["shop", 45], ["garage", 25], ["gas", 15], ["diner", 15]],
@@ -105,6 +143,8 @@ const SPECS := {
 		"wear": [0.4, 0.85], "tops": [["parapet", 40], ["gable", 20], ["hip", 10], ["flat", 30]],
 		"landmark": "screen",
 		"fronts": [["store", 35], ["bar", 20], ["laundromat", 20], ["vacant", 15], ["shuttered", 10]],
+		"street": {"lamp": "flood", "light": "sodium", "every": 2},
+		"signs": [[0, 55], [1, 20], [2, 25]], "panel": 0.7,
 	},
 	"industrial": {
 		"mix": [["warehouse", 75], ["garage", 25]],
@@ -114,6 +154,8 @@ const SPECS := {
 		"landmark": "stacks",
 		"low": "garage", "billboard": 0.5,
 		"fronts": [["shuttered", 50], ["vacant", 30], ["store", 20]],
+		"street": {"lamp": "cobra", "light": "sodium", "every": 4, "road": "worn"},
+		"signs": [[1, 100]], "panel": 0.0,
 	},
 	# ---- world step 3 (W6) ----
 	# Old town: narrow brick tenements over shops, shoulder to shoulder at
@@ -126,6 +168,8 @@ const SPECS := {
 		"wear": [0.45, 0.85], "tops": [["cornice", 45], ["gable", 20], ["hip", 15], ["flat", 20]],
 		"landmark": "steeple",
 		"tints": [[8, 45], [2, 30], [6, 15], [5, 10]],
+		"street": {"lamp": "post", "light": "amber", "every": 1, "road": "setts"},
+		"signs": [[1, 60], [0, 40]], "panel": 0.1,
 	},
 	# Lofts and nightlife: converted mills with big factory windows, most of
 	# them lit, clubs and bars at street level, a lit rooftop sign.
@@ -137,6 +181,8 @@ const SPECS := {
 		"wear": [0.3, 0.65], "tops": [["flat", 30], ["cornice", 30], ["setback", 25], ["parapet", 15]],
 		"landmark": "marquee",
 		"tints": [[2, 30], [8, 20], [5, 25], [7, 15], [3, 10]],
+		"street": {"lamp": "cobra", "light": "white", "every": 1},
+		"signs": [[3, 70], [1, 30]], "panel": 0.15,
 	},
 	# Hillside houses: two-storey timber houses behind front yards, every
 	# roof pitched, warm windows, nothing taller than a chimney.
@@ -148,6 +194,8 @@ const SPECS := {
 		"wear": [0.15, 0.5], "tops": [["gable", 60], ["hip", 40]],
 		"landmark": "",
 		"tints": [[9, 35], [4, 25], [1, 20], [7, 10], [3, 10]],
+		"street": {"lamp": "post", "light": "white", "every": 4, "road": "worn"},
+		"signs": [[1, 100]],
 	},
 	# Airport edge: pale hangars and long-stay car parks far back from the
 	# road, wide dark gaps between them, a control tower with a lit cab.
@@ -159,6 +207,8 @@ const SPECS := {
 		"wear": [0.15, 0.45], "tops": [["flat", 70], ["gable", 30]],
 		"landmark": "control_tower",
 		"tints": [[10, 55], [0, 25], [7, 20]],
+		"street": {"lamp": "mast", "light": "white", "every": 2, "road": "concrete"},
+		"signs": [[2, 60], [1, 40]], "panel": 0.8,
 	},
 	# Docks: container stacks in mixed colours, rusted sheds, almost no lit
 	# windows, a gantry crane over the stacks.
@@ -170,6 +220,8 @@ const SPECS := {
 		"wear": [0.55, 0.95], "tops": [["flat", 80], ["gable", 20]],
 		"landmark": "crane",
 		"tints": [[11, 30], [3, 25], [6, 20], [12, 15], [5, 10]],
+		"street": {"lamp": "flood", "light": "sodium", "every": 2, "road": "concrete"},
+		"signs": [[0, 60], [1, 40]], "panel": 0.0,
 	},
 	# Route 9 freeway: more open verge than buildings; gas stations, diners,
 	# motels and sheds far apart, billboards on most of them, a high sign.
@@ -181,6 +233,8 @@ const SPECS := {
 		"wear": [0.3, 0.6], "tops": [["flat", 60], ["parapet", 40]],
 		"landmark": "high_sign",
 		"tints": [[0, 35], [7, 30], [4, 20], [1, 15]],
+		"street": {"lamp": "mast", "light": "sodium", "every": 2, "road": "concrete"},
+		"signs": [[2, 60], [0, 40]], "panel": 0.8,
 	},
 	# Canyon: almost nothing. A lone cabin, a shack garage or a roadhouse
 	# every few hundred metres, and a radio mast with its red light.
@@ -192,6 +246,8 @@ const SPECS := {
 		"wear": [0.5, 0.9], "tops": [["gable", 100]],
 		"landmark": "mast",
 		"tints": [[5, 35], [6, 30], [1, 35]],
+		"street": {"lamp": "cobra", "light": "sodium", "every": 0, "road": "worn"},
+		"signs": [[0, 100]], "panel": 0.0,
 	},
 }
 
@@ -246,6 +302,38 @@ static func name_for_building(chunk_index: int, roll: float) -> String:
 
 static func spec(name: String) -> Dictionary:
 	return SPECS[name]
+
+## A district's street kit, every key filled in (STREET where the row leaves
+## one out).
+static func street(name: String) -> Dictionary:
+	if not _streets.has(name):
+		var out := STREET.duplicate()
+		out.merge(SPECS[name].get("street", {}), true)
+		_streets[name] = out
+	return _streets[name]
+
+static var _streets := {}  # name -> filled-in kit, built once (read-only)
+static var _washes := {}   # "light/lamp/every" -> [colour * strength, reach]
+
+## The street kit of a chunk: its run's. The street does not blend the way
+## the buildings do; lamps and surface change at the run boundary, the way a
+## road changes hands at a city line.
+static func street_at(chunk_index: int) -> Dictionary:
+	return street(name_at(chunk_index))
+
+## The lamp light on a district's building fronts: [colour * strength, how
+## high it reaches in m]. Takes a spec (or a landmark's copy of one).
+static func wash_of(district: Dictionary) -> Array:
+	var st: Dictionary = district.get("street", STREET)
+	var light: String = st.get("light", STREET.light)
+	var lamp: String = st.get("lamp", STREET.lamp)
+	var every := int(st.get("every", STREET.every))
+	var key := "%s/%s/%d" % [light, lamp, every]
+	if not _washes.has(key):
+		var c: Color = LIGHTS[light].color
+		var k: float = WASH_BY_EVERY[every]
+		_washes[key] = [Vector3(c.r, c.g, c.b) * k, float(WASH_REACH[lamp])]
+	return _washes[key]
 
 # ---------- landmarks (world step 1) ----------
 

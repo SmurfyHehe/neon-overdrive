@@ -5,8 +5,9 @@ extends SceneTree
 # rules that are easy to break by accident.
 #
 # Asserts (exit code 1 on failure):
-# - lamps: 2 per side per chunk; each pole stands on the sidewalk just
-#   outside the curb, on its own side of the road
+# - lamps: as many per chunk as the district's street kit says (world step
+#   3b: 4, 2, 1 or none); each pole stands on the sidewalk just outside the
+#   curb, on its own side of the road
 # - light pools: one per lamp, centred over that side's road surface
 # - posts: every 5 m on both shoulders
 # - gap walls + buildings cover each side's 50 m frontage with no overlap,
@@ -69,10 +70,12 @@ func _check_chunk(chunk: Node3D, prev: Dictionary, cfg: Dictionary, label: Strin
 	# World step 6 (W7): a side-street mouth adds one lamp and pool of its own
 	# after the street's four; those stand on the side street, not the pavement
 	var n_mouths: int = (chunk.get_meta("side_streets") as Array).size()
-	if lamps.visible_instance_count != 4 + n_mouths or pools.visible_instance_count != 4 + n_mouths:
-		_fail("%s: %d lamps / %d pools, expected %d / %d" % [label, lamps.visible_instance_count, pools.visible_instance_count, 4 + n_mouths, 4 + n_mouths])
+	var every := int(B.Districts.street_at(int(chunk.get_meta("chunk_index"))).every)
+	var want_lamps: int = {0: 0, 1: 4, 2: 2, 4: 1}[every]
+	if lamps.visible_instance_count != want_lamps + n_mouths or pools.visible_instance_count != want_lamps + n_mouths:
+		_fail("%s: %d lamps / %d pools, expected %d of each" % [label, lamps.visible_instance_count, pools.visible_instance_count, want_lamps + n_mouths])
 		return
-	for i in 4:
+	for i in want_lamps:
 		var lamp := lamps.get_instance_transform(i)
 		var pool := pools.get_instance_transform(i)
 		var side := 1.0 if lamp.origin.x > 0.0 else -1.0

@@ -68,8 +68,9 @@ void fragment() {
 	if (glow > 0.5 && glow < 1.5) { e = vec3(1.0, 0.12, 0.06) * 1.6; }
 	else if (glow > 1.5 && glow < 2.5) { e = vec3(0.8, 0.95, 0.76) * 1.3; }
 	else if (glow > 2.5 && glow < 3.5) { e = vec3(1.0, 0.66, 0.3) * 2.2; }
-	// 4: a drive-in screen, dim warm white, well under the bloom threshold
-	else if (glow > 3.5) { e = vec3(0.9, 0.8, 0.62) * 0.3; }
+	// 4: a drive-in screen, dim warm white, under the bloom threshold
+	// (world step 3b: 0.3 -> 0.55, the lit landmarks did not carry at night)
+	else if (glow > 3.5) { e = vec3(0.9, 0.8, 0.62) * 0.55; }
 	EMISSION = e;
 }
 """
@@ -468,15 +469,19 @@ static func _landmark(kind: String, info: Dictionary, cx: float, cz: float) -> A
 		"water_tower":
 			# a municipal water tower: the rooftop tank on legs, six times the size
 			var k := 6.0
+			# (world step 3b) and a roof floodlight under it, so the tank
+			# shows at night
 			return [[SHAPE_TANK, Vector3(k, k, k), Vector3(cx, h, cz), 0.95],
-				[SHAPE_ANTENNA, Vector3(1.0, 0.45, 1.0), Vector3(cx, h + 3.6 * k, cz), 0.6]]
+				[SHAPE_ANTENNA, Vector3(1.0, 0.45, 1.0), Vector3(cx, h + 3.6 * k, cz), 0.6],
+				[SHAPE_FLOOD, Vector3(1.6, 0.7, 1.6), Vector3(cx, h, cz), 1.0]]
 		"stacks":
 			# two brick chimney stacks off the back of the shed, 46 and 34 m,
 			# the taller one lit
 			var bx := cx + w * 0.25 * float(side)
 			return [[SHAPE_BOX, Vector3(3.6, 46.0 - h, 3.6), Vector3(bx, h, cz - d * 0.25), 0.42],
 				[SHAPE_BOX, Vector3(2.8, 34.0 - h, 2.8), Vector3(bx, h, cz + d * 0.25), 0.42],
-				[SHAPE_ANTENNA, Vector3(1.0, 0.4, 1.0), Vector3(bx, 46.0, cz - d * 0.25), 0.6]]
+				[SHAPE_ANTENNA, Vector3(1.0, 0.4, 1.0), Vector3(bx, 46.0, cz - d * 0.25), 0.6],
+				[SHAPE_ANTENNA, Vector3(1.0, 0.4, 1.0), Vector3(bx, 34.0, cz + d * 0.25), 0.6]]
 		"screen":
 			# a drive-in screen behind the lot: a pale slab on two legs, 26 m
 			# to the top, with a floodlight on the shop roof aimed at it
@@ -490,7 +495,9 @@ static func _landmark(kind: String, info: Dictionary, cx: float, cz: float) -> A
 		"steeple":
 			# a church tower up through the tenement roof, 30 m, under a
 			# steep spire to 43 m
-			return [[SHAPE_BOX, Vector3(5.0, 30.0 - h, 5.0), Vector3(cx, h, cz), 0.5],
+			# (world step 3b) the belfry under the spire is a lit band
+			return [[SHAPE_BOX, Vector3(5.0, 26.0 - h, 5.0), Vector3(cx, h, cz), 0.5],
+				[SHAPE_SCREEN, Vector3(5.0, 4.0, 5.0), Vector3(cx, 26.0, cz), 1.3],
 				[SHAPE_HIP, Vector3(5.8, 13.0, 5.8), Vector3(cx, 30.0, cz), 0.75]]
 		"marquee":
 			# a lit rooftop sign square-on to the traffic: a tall blade on a
@@ -515,7 +522,10 @@ static func _landmark(kind: String, info: Dictionary, cx: float, cz: float) -> A
 				[SHAPE_BOX, Vector3(2.2, 2.2, 16.0), Vector3(bx, 34.0, cz), 0.5],
 				[SHAPE_BOX, Vector3(30.0, 2.4, 2.4), Vector3(bx - 8.0 * float(side), 36.2, cz), 0.55],
 				[SHAPE_BOX, Vector3(5.0, 3.5, 4.0), Vector3(bx + 3.0 * float(side), 38.6, cz), 0.45],
-				[SHAPE_ANTENNA, Vector3(1.0, 0.5, 1.0), Vector3(bx + 3.0 * float(side), 42.1, cz), 0.6]]
+				[SHAPE_ANTENNA, Vector3(1.0, 0.5, 1.0), Vector3(bx + 3.0 * float(side), 42.1, cz), 0.6],
+				# (world step 3b) two work floods on the boom
+				[SHAPE_FLOOD, Vector3(3.0, 0.5, 3.0), Vector3(bx - 6.0 * float(side), 38.6, cz), 1.0],
+				[SHAPE_FLOOD, Vector3(3.0, 0.5, 3.0), Vector3(bx - 20.0 * float(side), 38.6, cz), 1.0]]
 		"high_sign":
 			# the sign a freeway exit is found by: a 30 m pole at the front
 			# of the lot, a lit slab square-on to the traffic, a red light

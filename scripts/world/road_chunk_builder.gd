@@ -101,6 +101,7 @@ const BuildingSigns := preload("res://scripts/world/building_signs.gd")
 const RoofProps := preload("res://scripts/world/roof_props.gd")
 const Districts := preload("res://scripts/world/districts.gd")
 const Kit := preload("res://scripts/world/roadside_kit.gd")
+const LampLife := preload("res://scripts/world/lamp_life.gd")
 
 const LANE_W := 3.2
 const CHUNK_LEN := 50.0
@@ -1277,6 +1278,8 @@ static func _create_nodes(root: Node3D) -> void:
 	# allocated once, like the dashes and pylons above.
 	root.add_child(_new_multimesh("Lamps", _get_lamp_mesh(), null, _lamp_slots() * 2))
 	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2))
+	# living world step 2: moths, banners, steam and litter (lamp_life.gd)
+	LampLife.create_nodes(root, _lamp_slots() * 2)
 	# Per side: a gap either side of each building, +1 for the district step
 	# wall, +1 more
 	# where a crossing's mouth (Junction) splits a gap in two
@@ -1505,6 +1508,11 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			n_lamps += 1
 	lamps.visible_instance_count = n_lamps
 	pools.visible_instance_count = n_lamps
+	var lamp_xfs := []
+	for k in range(n_lamps):
+		lamp_xfs.append(lamps.get_instance_transform(k))
+	LampLife.apply(root, chunk_index, Districts.name_at(chunk_index), lamp_xfs, _xf(0.0, 0.0, -CHUNK_LEN * 0.5),
+		-(start_onc_w + end_onc_w) * 0.5, (start_own_w + end_own_w) * 0.5)
 
 	# roadside kit: laid out from the edges above (so a width change moves
 	# it), the lamps (bins stand at their feet) and the lots a car can drive

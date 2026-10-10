@@ -66,16 +66,6 @@ static func build_car(car_kind: String) -> Node3D:
 				wheel.position = hub
 				root.add_child(wheel)
 				hubs.append(hub)
-	elif car_kind == "m1_monster":
-		var cfg: Dictionary = M1MonsterBuilder.CFG
-		root.add_child(M1MonsterBuilder.build_chassis_visual())
-		for sx: float in [1.0, -1.0]:
-			for sz: float in [-1.0, 1.0]:
-				var hub := Vector3(float(cfg.wheel_x) * sx, float(cfg.wheel_r), float(cfg.axle_z) * sz)
-				var wheel := M1MonsterBuilder.build_wheel_visual(float(cfg.wheel_r), hub)
-				wheel.position = hub
-				root.add_child(wheel)
-				hubs.append(hub)
 	else:
 		# The coupe, and anything that wears the coupe's body.
 		var vis := P1CoupeBuilder.build_chassis_visual()

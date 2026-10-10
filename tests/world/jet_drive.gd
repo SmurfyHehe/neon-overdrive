@@ -81,6 +81,9 @@ var first_bottom_kmh := -1.0
 var first_hull_road_kmh := -1.0
 var first_hull_traffic_kmh := -1.0
 var recenter_frame_ms := 0.0
+var overlap_no_contact_ticks := 0
+var tunnel_ticks := 0
+var min_lane_gap := INF
 var last_recenters := 0
 
 # frame samples
@@ -119,8 +122,54 @@ func _initialize() -> void:
 		target_kmh, str(ccd), downforce, int(game.get("chunks_ahead_extra")), cars, TICK_HZ, run_secs])
 
 # ---- the jet ----
+## Own-direction lane the driver aims for. At 400 km/h a car that moves over
+## 200 m ahead is 1.8 s away, so the driver looks DODGE_LOOK m up the road and
+## moves to the own lane with the longest clear gap when its own drops under
+## DODGE_GAP m (a jet car that never steers hits traffic in every run).
+const DODGE_LOOK := 600.0
+const DODGE_GAP := 250.0
+const DODGE_HOLD_TICKS := 60
+var lane_target := 1
+var lane_hold := 0
+var lane_changes := 0
+
+func _lane_gaps(p: Vehicle) -> Array[float]:
+	var gaps: Array[float] = []
+	for i in 4:  # game.gd OWN_LANES
+		gaps.append(DODGE_LOOK)
+	var tm: TrafficManager = game.get("traffic")
+	if tm == null:
+		return gaps
+	var ps := _road_s_of(p.global_position)
+	for c in tm.cars:
+		var cs := _road_s_of(c.global_position)
+		var ahead := cs - ps
+		if ahead < -5.0 or ahead > DODGE_LOOK:
+			continue
+		var cx := RoadFrame.unroll(c.global_position).x
+		for i in 4:
+			if absf(cx - Harness.lane_x(i)) < 2.2:
+				gaps[i] = minf(gaps[i], maxf(ahead, 0.0))
+	return gaps
+
+func _pick_lane(p: Vehicle) -> void:
+	lane_hold -= 1
+	var gaps := _lane_gaps(p)
+	if gaps[lane_target] >= DODGE_GAP or lane_hold > 0:
+		return
+	var best := lane_target
+	for i in 4:
+		if gaps[i] > gaps[best] + 20.0:
+			best = i
+	if best != lane_target:
+		# One lane at a time towards the best one.
+		lane_target += signi(best - lane_target)
+		lane_hold = DODGE_HOLD_TICKS
+		lane_changes += 1
+
 func _jet_driver(c: Vehicle) -> void:
-	var lane_x := Harness.lane_x(1)
+	_pick_lane(c)
+	var lane_x := Harness.lane_x(lane_target)
 	var side_v := RoadFrame.dir_to_road(RoadFrame.unroll(c.global_position).z, c.linear_velocity).x
 	c.steering_input = TrafficCar.lane_steer(c, lane_x - side_v * Harness.LAT_DAMP_T, -1.0, 2.5, Harness.PLAYER_UNDERSTEER_FF)
 	c.brake_input = 0.0
@@ -259,9 +308,21 @@ func _physics_process(delta: float) -> bool:
 
 	var tm: TrafficManager = game.get("traffic")
 	if tm != null:
+		var touching := p.get_colliding_bodies().size() > 0
 		for c in tm.cars:
 			if not Harness.finite(c):
 				traffic_nonfinite += 1
+			if ticks <= SETTLE_SECS * TICK_HZ:
+				continue
+			# A traffic car's centre inside the player's box with no contact
+			# reported is the body passing through it (Harness.overlaps/tunnelled).
+			if Harness.overlaps(p, c, 1.5, 3.0) and not touching:
+				overlap_no_contact_ticks += 1
+			if Harness.tunnelled(p, c):
+				tunnel_ticks += 1
+			var l := p.to_local(c.global_position)
+			if absf(l.x) < 1.8 and l.z < 0.0:
+				min_lane_gap = minf(min_lane_gap, -l.z)
 	return false
 
 # ---- frames ----
@@ -359,6 +420,8 @@ func _report(p: PlayerCar) -> void:
 		print("traffic: cars=%d visible=%d ahead=%d spawns=%d recycles=%d deferred=%d wreck_recycles=%d nonfinite ticks=%d reveal=%.0f m (%.2f s at target)" % [
 			tm.cars.size(), visible, ahead, tm.spawn_count, tm.recycle_count, tm.deferred_count, tm.wreck_recycle_count,
 			traffic_nonfinite, tm.reveal_distance(), tm.reveal_distance() / target])
+		print("traffic vs player: lane changes by the driver=%d overlap-without-contact ticks=%d concentric (tunnelled) ticks=%d closest car ahead in own lane=%.1f m" % [
+			lane_changes, overlap_no_contact_ticks, tunnel_ticks, min_lane_gap])
 
 	# pass/fail
 	if reached_tick < 0:
@@ -369,6 +432,8 @@ func _report(p: PlayerCar) -> void:
 		_fail("ran off the end of the built road (min ahead %.0f m)" % min_ahead_m)
 	if min_wheels == 0:
 		_fail("all four wheels left the ground for %d ticks" % airborne_ticks)
+	if tunnel_ticks > 0:
+		_fail("the player passed through a traffic car (%d concentric ticks)" % tunnel_ticks)
 	if traffic_nonfinite > 0:
 		_fail("traffic cars went non-finite on %d car-ticks" % traffic_nonfinite)
 	if worst_travel_err > 0.05:

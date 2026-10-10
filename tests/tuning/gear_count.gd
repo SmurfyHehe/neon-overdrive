@@ -12,9 +12,12 @@ extends SceneTree
 # - the lever slot of reverse sits right of the last column for each count
 # - every player car (PlayerCars.KINDS): its own count in registry, label, panel
 # - the cap is six forward gears; the raw panel has one slider per gear
+# - a tune saved for a five-speed does not put its ratios in a four-speed
 #
 # Exit code 1 on failure. Run (headless):
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/tuning/gear_count.gd
+
+const PlayerTune := preload("res://scripts/car/player_tune.gd")
 
 var failures: Array[String] = []
 
@@ -93,6 +96,8 @@ func _initialize() -> void:
 		car.queue_free()
 		await process_frame
 
+	_check_saved_tune()
+
 	# The cap is six forward gears (Roy, transmissions notes section 9).
 	TuneParams.set_gear_count(8)
 	_check(TuneParams.MAX_GEARS == 6 and _gear_paths().size() == 6, "registry should cap at 6 gears, lists %d" % _gear_paths().size())
@@ -132,6 +137,35 @@ func _check_cockpit(car: PlayerCar, gears: int) -> void:
 	var last := frame._slot_of(gears)
 	_check(last.x < rev.x, "%d gears: top gear not left of reverse (%s vs %s)" % [gears, str(last), str(rev)])
 	frame.queue_free()
+
+## A tune saved when the car had five gears, loaded now that it has four: the
+## other values come back, the ratios stay the new box's (and nothing errors).
+func _check_saved_tune() -> void:
+	var was_path: String = PlayerTune.path
+	var was_enabled: bool = PlayerTune.enabled
+	PlayerTune.path = "user://autotune/test_gear_count_tune.json"
+	PlayerTune.enabled = true
+	TuneParams.set_gear_count(5)
+	var five := CarSpec.player_spec("p1_coupe")
+	five["final_drive"] = 3.33
+	(five.gear_ratios as Array)[1] = 2.5
+	_check(PlayerTune.save(five), "could not save the five-speed tune")
+	var four := CarSpec.player_spec("p1_coupe")
+	var box: Array[float] = [3.0, 1.9, 1.2, 0.8]
+	four["gear_ratios"] = box
+	TuneParams.set_gear_count(4)
+	PlayerTune.apply_saved(four)
+	_check(is_equal_approx(four.final_drive, 3.33), "saved final drive did not come back (%f)" % four.final_drive)
+	_check(is_equal_approx(four.gear_ratios[1], 1.9), "a five-speed's saved 2nd gear landed in the four-speed (%f)" % four.gear_ratios[1])
+	_check(PlayerTune.values_from(four).size() > 0, "values_from a four-speed")
+	# The same box: the ratios do come back.
+	TuneParams.set_gear_count(5)
+	var again := CarSpec.player_spec("p1_coupe")
+	PlayerTune.apply_saved(again)
+	_check(is_equal_approx(again.gear_ratios[1], 2.5), "same box: saved 2nd gear did not come back (%f)" % again.gear_ratios[1])
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(PlayerTune.file()))
+	PlayerTune.path = was_path
+	PlayerTune.enabled = was_enabled
 
 ## The raw Tuner panel shows one gear slider per gear and reads the top speed
 ## in the car's own top gear.

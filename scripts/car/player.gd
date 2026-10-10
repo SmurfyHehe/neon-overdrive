@@ -219,6 +219,7 @@ func _ready() -> void:
 		# per car). A car built from a given spec (test track, Auto-Tune
 		# worker) keeps it as is.
 		PlayerTune.kind = kind
+		TuneParams.set_gear_count((spec.gear_ratios as Array).size())  # before the saved tune is read: it walks the registry
 		PlayerTune.apply_saved(spec)
 		_keeps_tune = true
 		_saved_tune = PlayerTune.values_from(spec)

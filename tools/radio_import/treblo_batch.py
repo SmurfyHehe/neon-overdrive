@@ -39,6 +39,7 @@ import json
 import os
 import re
 import shutil
+import ssl
 import sys
 import time
 import urllib.error
@@ -97,7 +98,7 @@ def http_json(method, path, key, body=None, timeout=60):
         headers={"Authorization": "Bearer " + key, "Content-Type": "application/json",
                  "User-Agent": UA})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=timeout, context=tls_context()) as r:
             raw = r.read().decode("utf-8")
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", "replace")[:400]
@@ -112,21 +113,64 @@ class ApiError(Exception):
         self.detail = detail
 
 
+_CTX = None
+
+
+def tls_context():
+    """TLS context that skips EXPIRED roots in the Windows store.
+
+    Root cause of "certificate has expired" on Roy's laptop (2026-10-10): the CDN
+    (cdn.treblo.com, Let's Encrypt chain leaf > YE1 > Root YE > ISRG Root X2 > ISRG
+    Root X1) sends a cross-signed ISRG Root X2. The Windows store also holds the old
+    self-signed ISRG Root X2, which expired 2025-09-15. OpenSSL stops at that expired
+    anchor and never tries the valid path to ISRG Root X1. Verification stays ON; the
+    only change is that already-expired roots are not loaded as anchors. Off Windows,
+    or if the store cannot be read, the normal default context is used.
+    """
+    global _CTX
+    if _CTX is not None:
+        return _CTX
+    ctx = ssl.create_default_context()
+    if hasattr(ssl, "enum_certificates"):
+        try:
+            fresh = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            now, kept = time.time(), 0
+            for store in ("ROOT", "CA"):
+                for der, enc, _trust in ssl.enum_certificates(store):
+                    if enc != "x509_asn":
+                        continue
+                    pem = ssl.DER_cert_to_PEM_cert(der)
+                    probe = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                    try:
+                        probe.load_verify_locations(cadata=pem)
+                        info = probe.get_ca_certs()
+                        if info and ssl.cert_time_to_seconds(info[0]["notAfter"]) > now:
+                            fresh.load_verify_locations(cadata=pem)
+                            kept += 1
+                    except (ssl.SSLError, ValueError, KeyError):
+                        continue
+            if kept:
+                ctx = fresh
+        except OSError:
+            pass
+    _CTX = ctx
+    return ctx
+
+
 def download(url, dest):
+    """Fetch url to dest. Python TLS first; curl (system trust store) if that fails."""
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     tmp = dest.with_suffix(dest.suffix + ".part")
     try:
-        with urllib.request.urlopen(req, timeout=300) as r, open(tmp, "wb") as f:
+        with urllib.request.urlopen(req, timeout=300, context=tls_context()) as r, open(tmp, "wb") as f:
             shutil.copyfileobj(r, f)
     except urllib.error.URLError as e:
-        # Python's bundled trust list can reject the CDN's Let's Encrypt chain on this
-        # laptop (2026-10-10: "certificate has expired" while the leaf is valid). Fall
-        # back to curl, which uses the system trust store. Verification stays ON.
         if "CERTIFICATE_VERIFY_FAILED" not in str(e):
             raise
         rc, _, err = imp.run(["curl", "-fsSL", "--max-time", "300", "-A", UA, "-o", str(tmp), url])
         if rc != 0:
             raise StopBatch("download failed (python TLS and curl): %s" % err.strip()[-200:])
+        print("NOTE    python TLS rejected the CDN chain; downloaded with curl")
     tmp.replace(dest)
 
 

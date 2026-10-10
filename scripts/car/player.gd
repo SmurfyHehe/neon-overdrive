@@ -105,6 +105,7 @@ var limp := LimpMode.new()
 ## Rain and puddles on each tyre (wet_grip.gd), applied over health's grip.
 var wet := WetGrip.new()
 const WetGrip := preload("res://scripts/car/wet_grip.gd")
+const StarterAudio := preload("res://scripts/audio/starter_audio.gd")
 ## Broken parts (Stage C damage, slice 1). Off for sim_only cars, like health.
 var damage := CarDamage.new()
 var _head_share := 1.0
@@ -293,6 +294,7 @@ func _ready() -> void:
 		add_child(DrivelineAudio.new())
 		add_child(CrashAudio.new())  # crashes and scrapes (2026-10-08)
 		add_child(DamageAudio.new())  # rattle once parts are broken (damage slice 1)
+		add_child(StarterAudio.new())  # the starter motor while X cranks a stopped engine
 
 		# Stage A (2026-10-04): headlights + blob shadow, since the world is dark
 		# on purpose now (Look Board B). After the body and wheels exist, because
@@ -334,6 +336,7 @@ func _physics_process(delta: float) -> void:
 		driver.call(self)
 	else:
 		_read_keyboard()
+	_step_ignition(delta)
 	_update_line_lock()
 	# Tail smears brighten with the brakes; one instance-colour write per flip.
 	var braking := brake_input > 0.05
@@ -492,6 +495,8 @@ func apply_keys(k: int) -> void:
 		toggle_high_beam()
 	clutch_input = 1.0 if k & KEY_CLUTCH else 0.0
 	starter_input = k & KEY_STARTER != 0
+	if starter_input and not engine_running:
+		_crank_left = CRANK_LATCH_S
 	var throttle := k & KEY_ACCEL != 0
 	var braking := k & KEY_BRAKE != 0
 	var handbrake := k & KEY_HANDBRAKE != 0
@@ -586,11 +591,16 @@ const TRANSMISSION_LETTERS := ["A", "S", "M"]
 const SHIFT_CLUTCH_MIN := 0.6
 
 func transmission_mode() -> int:
+	if _ignition_mode >= 0:
+		return _ignition_mode
 	if automatic_transmission:
 		return Transmission.AUTO
 	return Transmission.MANUAL if realistic_clutch else Transmission.SEMI
 
 func set_transmission_mode(mode: int) -> void:
+	if _ignition_mode >= 0 and not engine_running:
+		_ignition_mode = mode  # switched off: the box is picked for when it starts
+		return
 	automatic_transmission = mode == Transmission.AUTO
 	realistic_clutch = mode == Transmission.MANUAL
 	# Same reset the old V toggle did: never hand over a stalled engine or a
@@ -599,6 +609,68 @@ func set_transmission_mode(mode: int) -> void:
 	clutch_pedal = 0.0
 	if auto_box != null:
 		auto_box.reset()
+
+## Ignition (2026-10-10, Roy: "i want you to need to actually start the car.
+## theres a reason why we made X. use it."). A run starts, and a put-back ends,
+## with the engine off; the starter key (X) cranks it.
+##
+## GEVP only knows a stopped engine in the realistic clutch model (MANUAL), so
+## while it is off the car is held in that model whatever box is picked: no
+## firing, the clutch open, the starter spinning the engine up to
+## Vehicle.STARTER_RPM where it catches. The box the player picked is kept in
+## _ignition_mode (transmission_mode() goes on reporting it) and put back the
+## tick the engine runs. A tap of X is enough: the starter stays in for
+## CRANK_LATCH_S or until it fires.
+const CRANK_LATCH_S := 2.5
+var _ignition_mode := -1
+var _crank_left := 0.0
+
+## True from ignition_off() until the engine runs again.
+func is_switched_off() -> bool:
+	return _ignition_mode >= 0
+
+## True while the starter is turning a stopped engine.
+func is_cranking() -> bool:
+	return not engine_running and starter_input
+
+func ignition_off() -> void:
+	if _ignition_mode < 0:
+		_ignition_mode = transmission_mode()
+	automatic_transmission = false
+	realistic_clutch = true
+	engine_running = false
+	motor_rpm = 0.0
+	throttle_amount = 0.0
+	clutch_pedal = 0.0
+	_crank_left = 0.0
+	if auto_box != null:
+		auto_box.reset()
+
+## Runs the engine at once, in the box that was picked (no cranking).
+func ignition_on() -> void:
+	var mode := _ignition_mode if _ignition_mode >= 0 else transmission_mode()
+	_ignition_mode = -1
+	_crank_left = 0.0
+	set_transmission_mode(mode)
+	motor_rpm = maxf(motor_rpm, idle_rpm)
+
+## Each tick, before the sim: holds the starter in after a tap, and hands the
+## car back to its own box once the engine has caught.
+func _step_ignition(delta: float) -> void:
+	if engine_running:
+		_crank_left = 0.0
+		if _ignition_mode >= 0:
+			var mode := _ignition_mode
+			_ignition_mode = -1
+			set_transmission_mode(mode)
+			if mode == Transmission.MANUAL:
+				current_gear = 0  # in gear with the pedal up it would stall at once
+		return
+	if _crank_left > 0.0:
+		_crank_left -= delta
+		starter_input = true
+	if _ignition_mode >= 0:
+		handbrake_input = 1.0  # parked: it does not roll off down a hill
 
 ## Shift paddles behind the wheel: only a car built with a paddle box has them
 ## (none yet; the mid-engine exotic will). They flick on the box's own shifts.

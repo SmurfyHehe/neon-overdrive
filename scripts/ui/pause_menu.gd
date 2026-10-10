@@ -17,6 +17,7 @@ extends CanvasLayer
 #     player (the pause is refused, the menu never opens).
 
 const GameInfo := preload("res://scripts/core/game_info.gd")
+const TestBuild := preload("res://scripts/core/test_build.gd")
 
 const SILVER := Color("#C9CED6")
 const AMBER := Color("#FFC066")
@@ -32,6 +33,7 @@ var title_button: Button
 var settings: SettingsScreen
 var confirm: ConfirmBox
 var race_button: Button
+var put_back_button: Button
 var main_page: VBoxContainer
 var slide_root: MarginContainer   # what MenuMotion slides in
 ## The bank (F0, scripts/core/wallet.gd) and the clock, shown on the plate; null in bare tests.
@@ -93,6 +95,10 @@ func _ready() -> void:
 	lower_look_button.visible = false
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	restart_button = _add_button(box, "Restart night", _ask_restart)
+	# TEST BUILD (TestBuild): the sandbox's way out of any stuck state. Hidden
+	# when the switch is off, so the release screen keeps its five rows.
+	put_back_button = _add_button(box, "Put me back on the road", _put_back)
+	put_back_button.visible = TestBuild.on()
 	settings_button = _add_button(box, "Settings", show_settings)
 	# TEST BUILD: "Race a test rival" and "Wash car" are on Settings > Game (stand-ins),
 	# not here: the pause screen keeps to its spec rows. The hidden button stays for
@@ -220,6 +226,11 @@ func _ask_restart() -> void:
 		confirm.ask("Quit this race?", "Quit race", _quit_race)
 	else:
 		confirm.ask("Restart this night? The run starts over.", "Restart", game_state.restart)
+
+## Back to the game, and the car is parked at the kerb beside where it was.
+func _put_back() -> void:
+	game_state.resume()
+	get_parent().call("put_back")
 
 func _quit_race() -> void:
 	game_state.race_quit_requested.emit()

@@ -21,6 +21,7 @@ extends CanvasLayer
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
+const TestBuild := preload("res://scripts/core/test_build.gd")
 const Wallet := preload("res://scripts/core/wallet.gd")
 
 const FILL_GAME_MINUTES := 10.0
@@ -129,6 +130,8 @@ func quote() -> Dictionary:
 	var want := int(ceil(_room() - 0.001))
 	var bank: int = wallet.bank
 	var can := mini(want, floori(float(bank) / FuelTank.PRICE_PER_LITRE))
+	if TestBuild.on():
+		return {"want": want, "can": want, "cost": 0}  # sandbox: free, always
 	return {"want": want, "can": can, "cost": can * FuelTank.PRICE_PER_LITRE}
 
 func refresh() -> void:

@@ -74,6 +74,7 @@ var police_heat: PoliceHeat  # heat level + cop_can_see_player (police F0/F1)
 var police: PolicePatrol     # the stand-in patrol car; null with NEON_POLICE=0 or a benchmark
 var heat_icons: HeatIcons
 const TestMode := preload("res://scripts/core/test_mode.gd")
+const TestBuild := preload("res://scripts/core/test_build.gd")
 var perf_ladder: PerfLadder  # lowers the load when the PC falls behind (perf_ladder.gd); real play only
 var rescue: OffMapRescue  # off-map rescue (off_map_rescue.gd)
 const Weather := preload("res://scripts/world/weather.gd")
@@ -231,6 +232,7 @@ func _ready() -> void:
 	# Off the map (fell off, outside the walls): fade and put the car back.
 	rescue = OffMapRescue.new(self, player)
 	add_child(rescue)
+	_park_at_start()
 	_setup_game_state()
 	_setup_police(benchmark)
 	# Dynamic resolution holds the frame rate inside the tier; benchmark runs
@@ -735,6 +737,8 @@ func _physics_process(_delta: float) -> void:
 		toggle_mute()
 	if Input.is_action_just_pressed("radio_next") and radio != null:
 		request_next_station()
+	if Input.is_action_just_pressed("put_back") and game_state.state == GameState.State.PLAYING:
+		put_back()
 
 ## Next station (N): with the cockpit built the driver's hand reaches the touch
 ## screen and the station changes on the tap (CockpitFrame.request_radio), in
@@ -813,6 +817,24 @@ func _setup_player() -> void:
 	# shifter, strut bar) held on the built car, and the bar itself under the hood.
 	CabinMods.attach(player)
 	StrutBar.sync(player)
+
+## A run starts parked at the kerb with the engine off; X starts it (Roy,
+## 2026-10-10). A saved run comes back the same way, beside where it was
+## saved. Not in automated tests or bot runs (OffMapRescue.parked_start).
+func _park_at_start() -> void:
+	if not OffMapRescue.parked_start():
+		return
+	var s := 0.0
+	if resume_place:
+		s = RoadFrame.s_at(RoadFrame.unroll(player.global_position).z)
+	rescue.park_at(s)
+
+## "Put me back on the road" (the pause menu row and the put_back key): the
+## test build's way out of any stuck state. False when it is not on offer.
+func put_back() -> bool:
+	if not TestBuild.on() or rescue == null:
+		return false
+	return rescue.request()
 
 # ---------- traffic (milestone 3, stage B step 3) ----------
 # Lane-follow traffic: the same raycast Vehicle as the player, see
@@ -894,7 +916,7 @@ func _setup_game_state() -> void:
 	# Special vehicles: a flip ends the run (SpecialRunEnd). A restart is the
 	# stand-in until the run loop (stage C) owns what "ends the night" means.
 	var kind := PlayerCar.chassis_kind()
-	if SpecialRunEnd.has_limit(kind):
+	if SpecialRunEnd.has_limit(kind) and not TestBuild.on():  # sandbox: a flip does not restart
 		var special_end := SpecialRunEnd.new(player, kind)
 		special_end.run_ended.connect(func(_why: String) -> void: game_state.restart())
 		add_child(special_end)
@@ -978,8 +1000,8 @@ func _on_hour(hour24: int) -> void:
 ## purpose and must not be restarted halfway. NEON_WRECK=0 turns it off in play.
 func wrecks_on() -> bool:
 	var env := OS.get_environment("NEON_WRECK")
-	if Benchmark.requested() or env == "0":
-		return false
+	if Benchmark.requested() or env == "0" or TestBuild.on():
+		return false  # the test build's sandbox: crashes just happen
 	return not TestMode.active() or env == "1"
 
 ## Tonight's weather (weather.gd, planned by weather_plan.gd): NEON_WEATHER

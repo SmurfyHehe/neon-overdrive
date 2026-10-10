@@ -43,6 +43,9 @@ const SHIFT_RPM_FRACTION := 0.97  # upshift at this fraction of the spec's max_r
 const ACCEL_TIME := 35.0
 const CORNER_TIME := 30.0
 const CORNER_STEER := 0.3
+## First slip this big (degrees) in the corner run is "the car has started to
+## slide": the speed it happened at is metrics.v_slide_ms (bolt-on worth sweep).
+const SLIDE_ONSET_DEG := 12.0
 const TRACE_STEP := 0.1        # seconds between trace samples (~100 per brake run)
 # Safety stop for a run that never finishes: 4000 steps was ~67 s at 60 Hz; scaled so the
 # budget stays ~67 s at the game's 120 Hz (4000 steps was 33 s there, under the 35 s accel run).
@@ -84,6 +87,7 @@ class Run extends RefCounted:
 	var trace := {}
 	var trace_ticks := 0
 	var profile: Dictionary = DEFAULT_PROFILE
+	var corner_steer := CORNER_STEER
 	# heat telemetry (record_heat only): one [speed m/s, engine load 0..1, on limiter, brake power W]
 	# per tick, replayed through PowertrainHealth offline by the balance sweep
 	var record_heat := false
@@ -190,7 +194,7 @@ class Run extends RefCounted:
 			_finish()
 
 	func _corner(c: PlayerCar) -> void:
-		c.steering_input = CORNER_STEER
+		c.steering_input = corner_steer
 		var target := 4.0 + 1.2 * t
 		c.throttle_input = clampf((target - c.current_speed()) * 0.5, 0.0, 1.0)
 		_shift(c)
@@ -203,7 +207,10 @@ class Run extends RefCounted:
 		if sp > 5.0:
 			var heading := -c.global_transform.basis.z
 			heading.y = 0.0
-			max_slip = maxf(max_slip, rad_to_deg(heading.normalized().angle_to(vel / sp)))
+			var slip_deg := rad_to_deg(heading.normalized().angle_to(vel / sp))
+			max_slip = maxf(max_slip, slip_deg)
+			if not m.has("v_slide_ms") and slip_deg >= SLIDE_ONSET_DEG:
+				m.v_slide_ms = sp
 		m.peak_lat_g = peak_lat_g
 		m.max_slip_deg = max_slip
 		# Past the limit the car just plows out; stop once the grip has clearly gone.
@@ -216,6 +223,8 @@ class Run extends RefCounted:
 var linear_damp_override := -1.0
 ## Keep the brake run's telemetry trace (see the top of the file).
 var record_trace := false
+## Steering input of the corner run (CORNER_STEER = the track's usual number).
+var corner_steer := CORNER_STEER
 ## The scripted driver's limits (DEFAULT_PROFILE = the track's usual driver).
 var driver_profile: Dictionary = DEFAULT_PROFILE
 ## Keep per-tick heat telemetry of the accel and brake runs as metrics.heat_accel
@@ -303,6 +312,7 @@ func _spawn(spec: Dictionary, lane: int, kind: int) -> Run:
 	r.dt = 1.0 / Engine.physics_ticks_per_second
 	r.t = -SETTLE_TIME
 	r.profile = driver_profile
+	r.corner_steer = corner_steer
 	r.record_heat = record_heat and kind != Kind.CORNER
 	if record_trace and kind == Kind.BRAKE:
 		r.trace = {"step": TRACE_STEP, "speed": [], "throttle": [], "brake": []}

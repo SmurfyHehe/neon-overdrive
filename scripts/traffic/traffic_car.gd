@@ -191,13 +191,20 @@ var retry_frame := 0
 ## hidden and frozen until the band wants more cars.
 var benched := false
 ## Rule breaker (living world step 3): picked at each spawn from the event
-## share (WorldMood). Speeds, tailgates, passes sooner and cuts in tighter, but
-## keeps the full margins to the player (PLAYER_TTC, PLAYER_MIN_GAP), so it
-## reads as a character, never as a car aimed at you.
+## share (WorldMood). Speeds, tailgates, passes sooner and cuts in tighter on
+## other traffic. Toward the PLAYER it behaves (TrafficSettings.cut_in_player
+## is off by default): normal gaps, never ends a change under PLAYER_MIN_GAP or
+## PLAYER_GAP_T in front of you, follows you no closer than RB_T_GAP_PLAYER,
+## and a weaver does not drift your way within WEAVE_CLEAR_M.
 var rule_breaker := false
 ## Drifts this many metres either side of its lane (bar close); 0 = holds it.
 var weave := 0.0
 var _weave_t := 0.0
+## A weaver's tell: its left tail lamp is out, and now and then it taps the
+## brake for nothing (the lamp only: the car does not slow).
+var tail_dark := false
+var _tap_in := 8.0
+var _tap_left := 0.0
 ## TrafficManager: a car found in sight is not looked at again until this tick.
 var seen_recheck_frame := 0
 ## Index entry of the car ahead found by the last full scan; between scans
@@ -360,6 +367,11 @@ const PLAYER_MIN_GAP := 15.0
 ## Rule breakers (see rule_breaker).
 const RB_SPEED := 6.9          # m/s over the lane speed (+25 km/h)
 const RB_T_GAP := 0.6          # s kept to the car ahead instead of T_GAP: tailgating
+const RB_T_GAP_PLAYER := 1.0   # ... but this much to the player (cut_in_player off)
+const PLAYER_GAP_T := 1.0      # s of the player's speed a change must leave in front of it (cut_in_player off)
+const WEAVE_CLEAR_M := 30.0    # a weaver does not drift toward a player this close (cut_in_player off)
+const WEAVE_TAP_EVERY := Vector2(6.0, 12.0)  # s between a weaver's brake taps
+const WEAVE_TAP_S := 0.3
 const RB_LC_MIN_GAP_T := 0.25  # s instead of LC_MIN_GAP_T: cuts in
 const RB_LC_COOLDOWN := 1.5
 const RB_PASS_DV := 0.5
@@ -510,7 +522,9 @@ func _update_lamps() -> void:
 	if chassis_visual == null or not NpcCarBuilder.is_npc(kind):
 		return
 	var sig := NpcCarBuilder.TURN_BOTH if hazard else turn
-	var key := (1 if brake_input > 0.05 else 0) + sig * 2
+	if tail_dark:
+		sig += NpcCarBuilder.TAIL_OUT
+	var key := (1 if brake_input > 0.05 or _tap_left > 0.0 else 0) + sig * 2
 	if key != _lamp_key:
 		_lamp_key = key
 		NpcCarBuilder.set_lamps(chassis_visual, float(key & 1), sig)
@@ -559,7 +573,13 @@ func _drive(delta: float) -> void:
 		steer_x = _lc_aim_x(look / maxf(absf(v), 1.0))
 	elif weave > 0.0:
 		_weave_t += delta
-		steer_x += weave * sin(TAU * _weave_t / WEAVE_PERIOD)
+		var drift := weave * sin(TAU * _weave_t / WEAVE_PERIOD)
+		if traffic != null and not TrafficSettings.cut_in_player and absf(traffic._z[0] - _my_z) < WEAVE_CLEAR_M \
+				and drift * ((traffic._lo[0] + traffic._hi[0]) * 0.5 - _my_x) > 0.0:
+			drift = 0.0   # not toward a player this close
+		steer_x += drift
+	if tail_dark:
+		_tap_step(delta)
 	steering_input = lane_steer(self, steer_x, direction, wheelbase)
 	handbrake_input = 0.0
 	if hazard:
@@ -661,7 +681,19 @@ func _apply_accel(v: float, a: float) -> void:
 ## How fast this car could go behind something `gap` ahead at vl (the
 ## follower's speed command), for comparing lanes.
 func _t_gap() -> float:
-	return RB_T_GAP if rule_breaker else T_GAP
+	if not rule_breaker:
+		return T_GAP
+	return RB_T_GAP_PLAYER if lead_is_player and not TrafficSettings.cut_in_player else RB_T_GAP
+
+## A weaver's brake tap: the lamp comes on for WEAVE_TAP_S every 6-12 s.
+func _tap_step(dt: float) -> void:
+	if _tap_left > 0.0:
+		_tap_left -= dt
+		return
+	_tap_in -= dt
+	if _tap_in <= 0.0:
+		_tap_left = WEAVE_TAP_S
+		_tap_in = traffic.own_randf_range(WEAVE_TAP_EVERY.x, WEAVE_TAP_EVERY.y) if traffic != null else WEAVE_TAP_EVERY.x
 
 func _lc_gap_t() -> float:
 	return RB_LC_MIN_GAP_T if rule_breaker else LC_MIN_GAP_T
@@ -671,6 +703,8 @@ func set_rule_breaker(on: bool, weave_m: float) -> void:
 	rule_breaker = on
 	weave = weave_m if on else 0.0
 	_weave_t = randf() * WEAVE_PERIOD if weave > 0.0 else 0.0
+	tail_dark = weave > 0.0
+	_tap_left = 0.0
 
 func _potential(v: float, gap: float, vl: float) -> float:
 	if gap == INF:
@@ -794,20 +828,27 @@ func _merge_safe(lx: float, v: float) -> bool:
 	var skip_player := not traffic.react_to_player
 	_m_gap = traffic.scan(z, direction, lo, hi, true, _idx, half_l, LOOK_AHEAD, skip_player)
 	_m_speed = traffic.q_speed
-	if _m_gap < S0 + _lc_gap_t() * v:
+	# Toward the player everyone keeps the normal gap and leaves it
+	# PLAYER_GAP_T of its own speed (cut_in_player on: the old rule-breaker
+	# numbers, and only the fixed PLAYER_MIN_GAP).
+	var polite := not TrafficSettings.cut_in_player
+	var player_gap := PLAYER_MIN_GAP
+	if polite:
+		player_gap = maxf(player_gap, PLAYER_GAP_T * traffic._vz[0] * direction)
+	if _m_gap < S0 + (LC_MIN_GAP_T if polite and traffic.q_player else _lc_gap_t()) * v:
 		return false
 	if v > _m_speed and (v - _m_speed) * (v - _m_speed) / (2.0 * maxf(_m_gap - S_STOP, 0.3)) > B_SAFE:
 		return false
 	# The player, by where it is heading: not into its blind spot, not in front
 	# of it while it is closing (nothing says it will brake).
-	if traffic.player_blocks(z, direction, lo, hi, v, half_l, PLAYER_TTC, PLAYER_MIN_GAP, BLIND_AHEAD_LENGTHS * 2.0 * half_l):
+	if traffic.player_blocks(z, direction, lo, hi, v, half_l, PLAYER_TTC, player_gap, BLIND_AHEAD_LENGTHS * 2.0 * half_l):
 		return false
 	var fg := traffic.scan(z, direction, lo, hi, false, _idx, half_l, LOOK_BEHIND, skip_player)
 	if fg == INF:
 		return true
 	var fs := traffic.q_speed
 	if traffic.q_player:
-		return fg >= PLAYER_MIN_GAP and (fs <= v or fg / (fs - v) >= PLAYER_TTC)
+		return fg >= player_gap and (fs <= v or fg / (fs - v) >= PLAYER_TTC)
 	if fg < S0 + _lc_gap_t() * fs:
 		return false
 	return fs <= v or (fs - v) * (fs - v) / (2.0 * maxf(fg - S_STOP, 0.3)) <= B_SAFE
@@ -1254,6 +1295,8 @@ func _cruise(delta: float) -> void:
 			# player; now nobody moves over unflashed).
 			if shown:
 				_consider_lane_change(_cruise_speed)
+	if tail_dark:
+		_tap_step(delta * float(every))
 	if shown:
 		# Lamps and rolling wheels only; the pedals do nothing on rails.
 		brake_input = 1.0 if _rail_a < -A_COAST else 0.0

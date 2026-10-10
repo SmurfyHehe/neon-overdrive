@@ -19,6 +19,10 @@ extends SceneTree
 #               it steers back, never closer than 0.5 m
 #   edge        you sit 1.2 m beside a car: it shifts up to 0.3 m away and
 #               stays in its lane
+#   rulebreak   rule breakers with cut-ins on the player OFF (the default) and
+#               ON (TrafficSettings.cut_in_player): the gap one keeps when it
+#               merges behind or in front of you, how close it follows you,
+#               and whether a weaver drifts toward you
 #   cutoff      you cut in 0.5 s ahead of a car: one honk, two headlight
 #               flashes, hard braking, no second honk within 5 s
 #   swerve      you brake to a stop in front of a car: it swerves into the
@@ -41,7 +45,7 @@ var game: Node
 var p: PlayerCar
 var traffic: TrafficManager
 var fails: Array[String] = []
-var cases: Array[String] = ["pullout", "noflash", "flash", "blindspot", "abort", "edge"]
+var cases: Array[String] = ["pullout", "noflash", "flash", "blindspot", "abort", "edge", "rulebreak"]
 var case_i := -1
 var name_now := ""
 var t := 0.0
@@ -195,6 +199,7 @@ func _clear() -> void:
 		car.queue_free()
 	traffic._build_index()
 	traffic.own_lanes_used = []
+	TrafficSettings.cut_in_player = false
 	a = null
 	b = null
 	c = null
@@ -440,6 +445,98 @@ func _tick_edge() -> bool:
 			_fail("it changed lane")
 		note = "shifted %.2f m away with you 1.2 m beside it, back to %.2f m off centre after you left" % [-float(f.held), absf(off)]
 		return true
+	return false
+
+# ---------- rulebreak ----------
+
+func _setup_rulebreak() -> void:
+	traffic.own_lanes_used = [1, 2]
+	_player(1, 100.0 * KMH)
+	# a: a rule breaker in the next lane, at your speed, for the merge checks,
+	# then put behind you to see how close it follows.
+	a = _car(2, 0.0, 100.0 * KMH)
+	a.set_rule_breaker(true, 0.0)
+	a._lc_cooldown = 1000.0
+	# b: a weaver two lanes over, level with you.
+	b = _car(3, 0.0, 100.0 * KMH)
+	b.set_rule_breaker(true, 0.5)
+	b._lc_cooldown = 1000.0
+	pace = b
+	pace_off = 0.0
+
+## Puts the rule breaker `ahead` m (bumper to bumper, + = in front of you) in lane 2.
+func _beside(ahead: float) -> void:
+	var d := ahead + signf(ahead) * (a.half_l + P_HL)
+	a.place(_lane(2), -1.0, _pz() - d, a.rest_y, p.current_speed())
+	traffic._build_index()
+	a._my_x = _lane(2)
+	a._my_z = _pz() - d
+
+func _merge_ok() -> bool:
+	return a._merge_safe(_lane(1), a.lane_speed())
+
+func _tick_rulebreak() -> bool:
+	var v := p.current_speed()
+	if phase == 0 and t >= 2.0:
+		# Merge gaps, asked directly: 16 m behind you, and 20 m in front of you.
+		var res := []
+		for on in [false, true]:
+			TrafficSettings.cut_in_player = on
+			_beside(-16.0)
+			res.append(_merge_ok())
+			_beside(20.0)
+			res.append(_merge_ok())
+		TrafficSettings.cut_in_player = false
+		if res[0]:
+			_fail("switch off: it would merge 16 m behind you (the normal gap at this speed is %.0f m)" % (TrafficCar.S0 + TrafficCar.LC_MIN_GAP_T * v))
+		if res[1]:
+			_fail("switch off: it would merge 20 m in front of you (1.0 s is %.0f m)" % v)
+		if not res[2]:
+			_fail("switch on: the old tight merge behind you (16 m) is refused")
+		if not res[3]:
+			_fail("switch on: the old merge 20 m in front of you is refused")
+		f["merge"] = "merge 16 m behind / 20 m ahead of you: off %s / %s, on %s / %s" % [
+			"yes" if res[0] else "no", "yes" if res[1] else "no", "yes" if res[2] else "no", "yes" if res[3] else "no"]
+		# Now behind you in your lane, with nowhere to go, wanting 25 km/h more.
+		traffic.own_lanes_used = [1, 3]
+		a.place(_lane(1), -1.0, _pz() + 60.0, a.rest_y, v)
+		a.target_speed = v + TrafficCar.RB_SPEED
+		phase = 1
+		mark = t
+	elif phase == 1:
+		f["b_lo"] = minf(float(f.get("b_lo", 0.0)), _x(b) - _lane(3))   # toward you
+		f["b_hi"] = maxf(float(f.get("b_hi", 0.0)), _x(b) - _lane(3))   # away
+		if t - mark >= 12.0:
+			f["follow_off"] = a.lead_gap / maxf(a.lane_speed(), 1.0)
+			if not a.lead_is_player:
+				_fail("it is not following you (gap %.1f)" % a.lead_gap)
+			if float(f.follow_off) < 0.95:
+				_fail("switch off: it follows you at %.2f s" % float(f.follow_off))
+			if float(f.b_lo) < -0.2:
+				_fail("switch off: the weaver drifted %.2f m toward you" % -float(f.b_lo))
+			if float(f.b_hi) < 0.25:
+				_fail("the weaver did not weave at all (%.2f m away)" % float(f.b_hi))
+			f["weave_off"] = -float(f.b_lo)
+			f.erase("b_lo")
+			TrafficSettings.cut_in_player = true
+			phase = 2
+			mark = t
+	elif phase == 2:
+		f["b_lo"] = minf(float(f.get("b_lo", 0.0)), _x(b) - _lane(3))
+		if t - mark >= 25.0:   # the follower closes up slowly (1/K_GAP is 7 s)
+			var follow_on := a.lead_gap / maxf(a.lane_speed(), 1.0)
+			TrafficSettings.cut_in_player = false
+			# Still closing up after 25 s (it settles at S0 + 0.6 s: 0.74 s at this
+			# speed); under the 1.0 s it keeps with the switch off is the point.
+			if follow_on > 0.93:
+				_fail("switch on: it follows you at %.2f s, not the old 0.6 s tailgate" % follow_on)
+			if float(f.b_lo) > -0.25:
+				_fail("switch on: the weaver no longer drifts toward you (%.2f m)" % -float(f.b_lo))
+			if touched:
+				_fail("you were touched")
+			note = "%s; follows you at %.2f s off, %.2f s on; weaver toward you %.2f m off, %.2f m on" % [
+				f.merge, f.follow_off, follow_on, f.weave_off, -float(f.b_lo)]
+			return true
 	return false
 
 # ---------- the end ----------

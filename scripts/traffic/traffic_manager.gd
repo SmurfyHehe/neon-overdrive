@@ -786,6 +786,10 @@ func flash_ahead() -> TrafficCar:
 		flashed_car = best
 	return best
 
+## A random number that does not move the game's own random sequence.
+func own_randf_range(from: float, to: float) -> float:
+	return _own_rng.randf_range(from, to)
+
 ## A lane change was steered back (TrafficCar._abort): its footprint changed.
 func note_abort(car: TrafficCar) -> void:
 	abort_count += 1

@@ -244,7 +244,8 @@ uniform float energy = 2.5;
 uniform float tail_gain = 1.0;
 uniform float brake_gain = 2.2;
 instance uniform float brake : instance_index(1) = 0.0;
-// Turn lamps: 0 off, 1 left, 2 right, 3 both (hazard).
+// Turn lamps: 0 off, 1 left, 2 right, 3 both (hazard). Plus 4: the left tail
+// lamp is out (a weaving driver's tell).
 instance uniform float turn : instance_index(2) = 0.0;
 varying float v_side;
 void vertex() {
@@ -258,7 +259,10 @@ void fragment() {
 	float amber = step(0.8, c.r) * step(0.3, c.g) * step(c.g, 0.7) * step(c.b, 0.2);
 	float k = mix(1.0, tail_gain * (1.0 + brake * brake_gain), tail);
 	float blink = step(0.5, fract(TIME * 1.4));
-	float lit = turn > 2.5 ? 1.0 : (turn > 1.5 ? step(0.0, v_side) : (turn > 0.5 ? step(v_side, 0.0) : 0.0));
+	float lamp_out = step(3.5, turn);
+	float sig = turn - 4.0 * lamp_out;
+	k *= mix(1.0, 0.03, tail * lamp_out * step(v_side, 0.0));
+	float lit = sig > 2.5 ? 1.0 : (sig > 1.5 ? step(0.0, v_side) : (sig > 0.5 ? step(v_side, 0.0) : 0.0));
 	k *= mix(1.0, mix(0.15, 2.5, blink), amber * lit);
 	ALBEDO = c;
 	EMISSION = c * energy * k;
@@ -280,8 +284,11 @@ uniform float gain = 1.0;
 uniform float near_r = 0.14;
 uniform float min_screen = 0.006;
 instance uniform float brake : instance_index(1) = 0.0;
+instance uniform float turn : instance_index(2) = 0.0;
 varying float v_face;
 void vertex() {
+	// The left tail lamp is out (turn carries + 4): no flare on that side.
+	float lamp_out = step(3.5, turn) * step(VERTEX.x, 0.0);
 	vec3 c = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	float d = max(-c.z, 0.05);
 	vec3 rear = normalize((MODELVIEW_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
@@ -289,7 +296,7 @@ void vertex() {
 	// The view's height at distance d is 2d / |P[1][1]| (negative under
 	// Vulkan's flipped Y, hence the abs).
 	float far_r = min_screen * 2.0 * d / abs(PROJECTION_MATRIX[1][1]);
-	float r = max(near_r, far_r) * (1.0 + 0.6 * brake) * v_face * step(0.001, gain);
+	float r = max(near_r, far_r) * (1.0 + 0.6 * brake) * v_face * step(0.001, gain) * (1.0 - lamp_out);
 	c *= max(d - 0.25, 0.05) / d;
 	c.xy += UV * r;
 	VERTEX = c;
@@ -325,9 +332,11 @@ const TURN_OFF := 0
 const TURN_LEFT := 1
 const TURN_RIGHT := 2
 const TURN_BOTH := 3
+## Added to a turn state: the left tail lamp is out.
+const TAIL_OUT := 4
 
-## Brake (0..1) and turn lamps (TURN_OFF / LEFT / RIGHT / BOTH = hazard) for one
-## car's lamps; `vis` is its chassis_visual. Two instance uniforms on the body,
+## Brake (0..1) and turn lamps (TURN_OFF / LEFT / RIGHT / BOTH = hazard,
+## + TAIL_OUT for a dead left tail lamp) for one car's lamps; `vis` is its chassis_visual. Two instance uniforms on the body,
 ## no material change.
 static func set_lamps(vis: Node3D, brake: float, turn: int) -> void:
 	var mi := vis.get_node_or_null(^"Body") as MeshInstance3D

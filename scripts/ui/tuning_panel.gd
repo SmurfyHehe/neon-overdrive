@@ -17,15 +17,10 @@ extends HBoxContainer
 # peak torque and redline; they are the same levers the planned upgrade tree
 # will move, so a tune found here maps straight onto upgrades later.
 
-const GEAR_COUNT := 5
-# [key, label, TuneParams path, step]; min and max come from TuneParams.
+# [key, label, TuneParams path, step]; min and max come from TuneParams. The
+# gear rows are not here: `knobs` adds one per forward gear of the player's car.
 const KNOBS := [
 	["final_drive", "Final drive", "final_drive", 0.01],
-	["gear_1", "Gear 1", "gear_ratios/0", 0.01],
-	["gear_2", "Gear 2", "gear_ratios/1", 0.01],
-	["gear_3", "Gear 3", "gear_ratios/2", 0.01],
-	["gear_4", "Gear 4", "gear_ratios/3", 0.01],
-	["gear_5", "Gear 5", "gear_ratios/4", 0.01],
 	["max_torque", "Peak torque Nm", "max_torque", 5.0],
 	["max_rpm", "Redline rpm", "max_rpm", 100.0],
 	["turbo", "Turbo boost bar", "turbo_boost_max", 0.05],
@@ -76,6 +71,8 @@ signal tune_changed
 
 var player: PlayerCar
 var game_state: GameState
+var gear_count := 5  # forward gears of the player's car
+var knobs: Array = []  # KNOBS with this car's gear rows after the final drive
 var values := {}
 var start_values := {}
 var sliders := {}
@@ -88,6 +85,11 @@ var copy_button: Button
 func _init(car: PlayerCar, state: GameState) -> void:
 	player = car
 	game_state = state
+	gear_count = player.gear_ratios.size()
+	knobs = [KNOBS[0]]
+	for g in gear_count:
+		knobs.append(["gear_%d" % (g + 1), "Gear %d" % (g + 1), "gear_ratios/%d" % g, 0.01])
+	knobs.append_array(KNOBS.slice(1))
 
 func _ready() -> void:
 	add_theme_constant_override("separation", 24)
@@ -100,7 +102,7 @@ func _ready() -> void:
 	var grid := GridContainer.new()
 	grid.columns = 4
 	left.add_child(grid)
-	for k in KNOBS:
+	for k in knobs:
 		var name_label := Label.new()
 		name_label.text = k[1]
 		grid.add_child(name_label)
@@ -169,12 +171,12 @@ static func gear_in_order(key: String, value: float, vals: Dictionary) -> float:
 	var g := int(key.get_slice("_", 1))
 	if g > 1:
 		value = minf(value, float(vals["gear_%d" % (g - 1)]) - GEAR_GAP)
-	if g < GEAR_COUNT:
+	if vals.has("gear_%d" % (g + 1)):
 		value = maxf(value, float(vals["gear_%d" % (g + 1)]) + GEAR_GAP)
 	return value
 
 func _path_of(key: String) -> String:
-	for k in KNOBS:
+	for k in knobs:
 		if k[0] == key:
 			return k[2]
 	return ""
@@ -187,24 +189,30 @@ func _write(key: String, value: float) -> void:
 ## Every knob back to the car's stock value (settings safety part 4; it used
 ## to go back to the values at game start, which could be a saved extreme).
 func _reset() -> void:
-	for k in KNOBS:
-		values[k[0]] = TuneParams.get_value(stock, k[2])
+	for k in knobs:
+		values[k[0]] = _stock_value(k[2], values[k[0]])
 		sliders[k[0]].set_value_no_signal(values[k[0]])
 	_apply()
 	tune_changed.emit()
 
 func _read_from_player() -> void:
-	for k in KNOBS:
+	for k in knobs:
 		values[k[0]] = TuneParams.get_value(player.spec, k[2])
 
 ## Writes every knob. Used on open and Reset; a single slider move uses _write().
 func _apply() -> void:
-	for k in KNOBS:
+	for k in knobs:
 		_write(k[0], values[k[0]])
 	_refresh()
 
+## The stock value of `path`; `now` for a gear the stock box does not have.
+func _stock_value(path: String, now: float) -> float:
+	if path.begins_with("gear_ratios/") and int(path.get_slice("/", 1)) >= (stock.gear_ratios as Array).size():
+		return now
+	return TuneParams.get_value(stock, path)
+
 func _refresh() -> void:
-	for k in KNOBS:
+	for k in knobs:
 		var step: float = k[3]
 		value_labels[k[0]].text = ("%d" % values[k[0]]) if step >= 1.0 else ("%.3f" % values[k[0]] if step < 0.01 else "%.2f" % values[k[0]])
 		# Danger colour and the consequence line (settings safety part 3).
@@ -212,7 +220,7 @@ func _refresh() -> void:
 		var level := SettingDanger.level(path, values[k[0]])
 		var c := SettingDanger.colour(level)
 		value_labels[k[0]].add_theme_color_override("font_color", c)
-		line_labels[k[0]].text = SettingDanger.consequence(path, values[k[0]], TuneParams.get_value(stock, path))
+		line_labels[k[0]].text = SettingDanger.consequence(path, values[k[0]], _stock_value(path, values[k[0]]))
 		line_labels[k[0]].add_theme_color_override("font_color", c if level != SettingDanger.Level.GREEN else Color(c, 0.6))
 	readout.text = _readout_text()
 
@@ -238,10 +246,10 @@ func _readout_text() -> String:
 	lines.append("Rev cut     %d rpm (engine pulls to 110%% of redline)" % roundi(cut))
 	lines.append("")
 	lines.append("Gear  km/h@cut  step  upshift->rpm  %power")
-	for g in GEAR_COUNT:
+	for g in gear_count:
 		var ratio: float = values["gear_%d" % (g + 1)]
 		var line := "%-4d  %8d" % [g + 1, roundi(_kmh_at(cut, ratio, fd, wheel_r))]
-		if g + 1 < GEAR_COUNT:
+		if g + 1 < gear_count:
 			var next: float = values["gear_%d" % (g + 2)]
 			var drop_rpm := cut * next / ratio
 			line += "  %4.2f  %12d    %3d%%" % [ratio / next, roundi(drop_rpm), roundi(100.0 * _power_kw(drop_rpm) / peak_kw)]
@@ -249,13 +257,13 @@ func _readout_text() -> String:
 				line += "  !! not shorter"
 		lines.append(line)
 	lines.append("")
-	var top_ratio: float = values["gear_%d" % GEAR_COUNT]
+	var top_ratio: float = values["gear_%d" % gear_count]
 	var gear_top := _kmh_at(cut, top_ratio, fd, wheel_r)
 	var drag_top := _drag_limited_kmh(top_ratio, fd, wheel_r)
 	if drag_top < gear_top:
-		lines.append("Top speed ~%d km/h (drag-limited in %d)" % [roundi(drag_top), GEAR_COUNT])
+		lines.append("Top speed ~%d km/h (drag-limited in %d)" % [roundi(drag_top), gear_count])
 	else:
-		lines.append("Top speed %d km/h (rev cut in %d)" % [roundi(gear_top), GEAR_COUNT])
+		lines.append("Top speed %d km/h (rev cut in %d)" % [roundi(gear_top), gear_count])
 	lines.append("  estimate: air drag only, no rolling resistance")
 	return "\n".join(lines)
 
@@ -286,7 +294,7 @@ func _gear_name() -> String:
 
 func _copy_values() -> void:
 	var ratios: Array[String] = []
-	for i in GEAR_COUNT:
+	for i in gear_count:
 		ratios.append("%.2f" % values["gear_%d" % (i + 1)])
 	var text := """# #62 tune from the tuning panel -- paste into scripts/car/car_spec.gd
 var gear_ratios_typed: Array[float] = [%s]

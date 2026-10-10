@@ -51,13 +51,23 @@ static func values_from(spec: Dictionary) -> Dictionary:
 
 ## Writes the saved tune over `spec` (clamped to each path's range). Paths the
 ## file does not have keep their value; paths it has that are no longer tunable
-## are ignored. Returns how many values were applied.
+## are ignored, and so are all gear ratios when the file has a different number
+## of gears than the car. Returns how many values were applied.
 static func apply_saved(spec: Dictionary) -> int:
 	if not enabled:
 		return 0
 	var saved := load_values()
+	# A tune saved for another gearbox (the car had a different number of gears
+	# then): its ratios belong to that box, so the gears keep the spec's.
+	var saved_gears := 0
+	for key in saved:
+		if String(key).begins_with("gear_ratios/"):
+			saved_gears += 1
+	var other_box := saved_gears != TuneParams.gear_count()
 	var n := 0
 	for p in paths():
+		if other_box and p.begins_with("gear_ratios/"):
+			continue
 		if saved.has(p) and (saved[p] is float or saved[p] is int):
 			var e := TuneParams.find(p)
 			TuneParams.set_value(spec, p, clampf(float(saved[p]), e.min, e.max))

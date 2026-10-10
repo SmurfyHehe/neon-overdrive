@@ -85,6 +85,10 @@ const Wallet := preload("res://scripts/core/wallet.gd")
 ## A hard hit ends the run: rules, crash screen, morning (scripts/core/run_end.gd).
 var run_end: Node
 const RunEnd := preload("res://scripts/core/run_end.gd")
+## Gas stations on the road and the pump menu (stops, first slice).
+var gas_station: Node3D
+const GasStation := preload("res://scripts/world/gas_station.gd")
+const PumpPanel := preload("res://scripts/ui/pump_panel.gd")
 var road_seed := 0
 var run := {}
 ## Whether `run` puts the car back where it was: false for a fresh run, and for
@@ -165,6 +169,9 @@ func _ready() -> void:
 	# City lights: before the first chunk, which leaves the crossing's mouth
 	# open. Never in a benchmark run (same road every time).
 	Junction.enabled = TrafficSettings.city_lights and not benchmark
+	# Gas stations (stops, first slice): also before the first chunk, which
+	# clears their lots. Not in a benchmark run either.
+	GasStation.enabled = not benchmark
 	_setup_road_shape()
 	_setup_world()
 	_setup_ground_collision()
@@ -636,6 +643,11 @@ func _setup_game_state() -> void:
 	add_child(TunerScreen.new(player, game_state))
 	add_child(WarningLights.new(player))
 	add_child(PhotoMode.new(game_state, camera))
+	gas_station = GasStation.new()
+	gas_station.player = player
+	add_child(gas_station)
+	add_child(PumpPanel.new(game_state, player, wallet, night_clock))
+	gas_station.pulled_up.connect(func(_s: float) -> void: game_state.open_station())
 	radio = RadioManager.new()
 	radio.listener = player  # reception follows the car (tunnels, bridges)
 	radio.process_mode = Node.PROCESS_MODE_ALWAYS   # plays on, muffled, while paused (PauseLook)

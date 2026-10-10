@@ -27,7 +27,9 @@ extends Node
 # screen is playing (scripts/core/run_end.gd). The tree is NOT paused, so the
 # car, the camera shake and the sounds carry on in real time; no menu opens
 # from it, and it only ends in a restart.
-enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO, TITLE, WRECKED }
+# STATION: stopped at a gas station pump (scripts/world/gas_station.gd); paused
+# while the pump menu (scripts/ui/pump_panel.gd) is up, Esc drives off.
+enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO, TITLE, WRECKED, STATION }
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
 
@@ -222,6 +224,8 @@ func toggle_pause() -> void:
 		close_autotune()  # Esc backs out of Auto-Tune too
 	elif state == State.PHOTO:
 		close_photo()  # Esc leaves photo mode
+	elif state == State.STATION:
+		close_station()  # Esc drives off from the pump
 	elif state == State.PAUSED:
 		resume()
 	elif state == State.PLAYING:
@@ -244,6 +248,18 @@ func resume() -> void:
 	pause_notice = ""
 	get_tree().paused = false
 	_set_state(State.PLAYING)
+
+## The car stopped at a pump: the pump menu opens, the game pauses.
+func open_station() -> void:
+	if state != State.PLAYING:
+		return
+	get_tree().paused = true
+	_set_state(State.STATION)
+
+func close_station() -> void:
+	if state == State.STATION:
+		get_tree().paused = false
+		_set_state(State.PLAYING)
 
 ## One tuner menu with two tabs (manual T, Auto-Tune Y): switching tab keeps the
 ## game paused. Does nothing outside the tuner.

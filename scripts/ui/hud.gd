@@ -16,6 +16,7 @@ extends CanvasLayer
 # runs green -> amber -> red toward redline because Roy asked for it.
 # It reads the car and owns no state.
 
+const GasStation := preload("res://scripts/world/gas_station.gd")
 const SILVER := Color("#C9CED6")
 const AMBER := Color("#FFC066")
 const SODIUM := Color("#FF8A1F")
@@ -122,6 +123,18 @@ static func gear_text(g: int) -> String:
 static func fuel_text(f: FuelTank) -> String:
 	var bars := clampi(ceili(f.fraction() * 8.0 - 0.001), 0, 8)
 	return "FUEL " + "▮".repeat(bars) + "▯".repeat(8 - bars)
+
+## Low or dry tank: where the next gas station is, "  GAS 1.4 km" (stops,
+## first slice: scripts/world/gas_station.gd). Nothing while the tank is fine.
+static func station_hint(car: Node3D) -> String:
+	var f: FuelTank = car.get("fuel")
+	if f == null or not f.is_low() or not GasStation.enabled:
+		return ""
+	var s := GasStation.road_pos(car).y
+	var d := maxf(GasStation.next_after(s) - s, 0.0)
+	if d < 100.0:
+		return "  GAS HERE"
+	return "  GAS %.1f km" % (d / 1000.0)
 
 static func kmh(speed_ms: float) -> int:
 	# Magnitude, not signed: reversing reads the same km/h as driving forward
@@ -396,7 +409,7 @@ func _refresh() -> void:
 	else:
 		lbl_status.text = ""
 
-	lbl_fuel.text = fuel_text(player.fuel) if player.fuel.enabled else ""
+	lbl_fuel.text = fuel_text(player.fuel) + station_hint(player) if player.fuel.enabled else ""
 	lbl_fuel.add_theme_color_override("font_color", RED if player.fuel.is_low() else AMBER)
 	lbl_fuel.modulate.a = 1.0 if not player.fuel.is_low() or blink or player.fuel.is_empty() else 0.25
 

@@ -55,8 +55,12 @@ const FADE_SECS := 0.15  # crossfade baked into each loop so the seam is silent
 const TAKE_B_SECS := 2.6 # the right-hand tyre take: a different length, so L and R drift apart
 
 # Speed curves, m/s.
-const WIND_FULL := 68.0   # wind reaches full level here (68 m/s = 245 km/h, top speed)
+const WIND_FULL := 68.0   # wind reaches its old full level here (68 m/s = 245 km/h)
 const WIND_EXP := 1.5     # level = (v / WIND_FULL)^WIND_EXP
+## Past WIND_FULL the wind keeps rising, more gently, to WIND_TOP at 400 km/h
+## (speed feel, 2026-10-10); it used to stop dead at 245.
+const WIND_TOP := 1.5
+const WIND_TOP_SPEED := SpeedFeel.EFFECTS_FULL
 const ROAD_FULL := 40.0
 const SURFACE_FULL := 20.0
 const WHISTLE_FROM := 38.0  # m/s (137 km/h): the mirror whistle starts
@@ -252,7 +256,10 @@ func _process(delta: float) -> void:
 		st[k] = forced[k]
 	var speed: float = st.speed
 
-	wind_level = _approach(wind_level, minf(1.0, pow(speed / WIND_FULL, WIND_EXP)), delta)
+	var want_wind := pow(speed / WIND_FULL, WIND_EXP)
+	if speed > WIND_FULL:
+		want_wind = lerpf(1.0, WIND_TOP, clampf((speed - WIND_FULL) / (WIND_TOP_SPEED - WIND_FULL), 0.0, 1.0))
+	wind_level = _approach(wind_level, want_wind, delta)
 	road_level = _approach(road_level, pow(clampf(speed / ROAD_FULL, 0.0, 1.0), 1.2) * st.on_road, delta)
 	surface_level = _approach(surface_level, st.on_rough * clampf(speed / SURFACE_FULL, 0.0, 1.0), delta)
 

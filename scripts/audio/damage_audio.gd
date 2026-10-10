@@ -22,6 +22,9 @@ const SPEED_FULL := 25.0
 const BUMP_FULL := 2.5      # m/s of summed suspension travel speed: a kerb
 const ATTACK := 12.0
 const RELEASE := 6.0
+## A healthy car's own rattle near its top speed (SpeedFeel, per car), as a
+## share of the full damaged rattle: trim buzzing, not parts hanging off.
+const SPEED_RATTLE := 0.45
 
 var level := 0.0
 var _player: PlayerCar
@@ -56,6 +59,7 @@ func _physics_process(delta: float) -> void:
 		var shake := maxf(smoothstep(SPEED_FROM, SPEED_FULL, _player.speed) * 0.7,
 			clampf(bump / BUMP_FULL, 0.0, 1.0))
 		target = loose * shake
+	target = maxf(target, SPEED_RATTLE * SpeedFeel.car_rattle(_player))
 	level = move_toward(level, target, delta * (ATTACK if target > level else RELEASE))
 	if level > 0.001:
 		_audio.volume_db = linear_to_db(level * GAIN)

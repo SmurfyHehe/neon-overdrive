@@ -26,11 +26,13 @@ const SQUAT := 0.2        # m the camera drops at full speed effect
 
 # Speed FOV (vertical degrees; Godot keeps height, so 16:9 is ~1.6x wider).
 const FOV_REST := 58.0
-const FOV_FAST := 74.0
+const FOV_FAST := 82.0
 const FOV_SPEED_LO := 5.0    # m/s (18 km/h): widening starts
-const FOV_SPEED_HI := 68.0   # m/s (245 km/h, about the car's top speed): fully wide.
-                             # Eased (see _speed_curve), so low speed still widens
-                             # noticeably instead of waiting for the top end
+const FOV_SPEED_HI := SpeedFeel.EFFECTS_FULL  # m/s (400 km/h): fully wide. Was 68
+                             # (245 km/h, the coupe's top speed), which left nothing
+                             # for a faster car. Eased (see _speed_curve), so low
+                             # speed still widens noticeably; FOV_FAST went 74 -> 82
+                             # so 100 km/h looks the same as before
 const FOV_ACCEL_GAIN := 0.25 # deg per m/s^2 of forward acceleration
 const FOV_ACCEL_MIN := -2.0  # braking narrows a little
 const FOV_ACCEL_MAX := 3.0   # hard acceleration widens a little more
@@ -40,8 +42,12 @@ const ACCEL_RATE := 4.0      # 1/s smoothing on the acceleration term
 const DOLLY := 0.7
 
 # Shake. Rotation in radians, position in metres, at full strength.
-const SPEED_SHAKE_ROT := 0.008   # ~0.45 deg buzz at FOV_SPEED_HI (top speed)
-const SPEED_SHAKE_POS := 0.015
+const SPEED_SHAKE_ROT := 0.011   # ~0.6 deg buzz at FOV_SPEED_HI (400 km/h); ~0.45 at 245
+const SPEED_SHAKE_POS := 0.02
+## Per-car rattle (SpeedFeel.car_rattle): a faster, finer shake as the car
+## nears its own top speed, at full strength for the loosest car.
+const RATTLE_SHAKE_ROT := 0.006
+const RATTLE_SHAKE_POS := 0.008
 const SURFACE_SHAKE_ROT := 0.008 # kerb/sidewalk rumble ("Dirt" surface)
 const SURFACE_SHAKE_POS := 0.02
 const IMPACT_SHAKE_ROT := 0.035  # ~2 deg at full trauma
@@ -72,7 +78,7 @@ const COCKPIT_EYE := Vector3(-0.32, 1.10, 0.30)  # car-local, -x is the driver's
 ## The eye in this car: COCKPIT_EYE moved by the car's cabin offset
 ## (PlayerCars.cabin_offset; zero for the P1). Set in _init with the frame.
 var eye := COCKPIT_EYE
-const COCKPIT_FOV_SPEED_GAIN := 6.0  # degrees added at top speed; the base is ViewSettings.cockpit_fov (default 62)
+const COCKPIT_FOV_SPEED_GAIN := 9.0  # degrees added at 400 km/h (3.5 at 100, as before); the base is ViewSettings.cockpit_fov (default 62)
 ## Head movement in the cockpit (Roy, 2026-10-06): the eye sways with the
 ## car's forces, capped at HEAD_MAX_M (4 cm) and HEAD_MAX_DEG (2 degrees).
 ## Lateral g pushes the head outward and rolls it with the body; braking
@@ -296,9 +302,9 @@ func _update_head(delta: float) -> void:
 	head_tilt = head_tilt.lerp(want_tilt, k)
 
 ## 0..1 speed factor for FOV, dolly, squat and shake. Ease-out (1 - (1-t)^2):
-## the range now runs to top speed (68 m/s), so a straight line would leave
-## everyday speeds with a third of the effect. This gives about 0.15 at 10 m/s,
-## 0.6 at 28 m/s, 0.85 at 45 m/s and 1.0 at 68 m/s.
+## the range runs to 400 km/h (111 m/s), so a straight line would leave
+## everyday speeds with a fifth of the effect. This gives about 0.39 at 100
+## km/h, 0.73 at 200, 0.93 at 300 and 1.0 at 400.
 static func _speed_curve(speed: float) -> float:
 	var t := clampf((speed - FOV_SPEED_LO) / (FOV_SPEED_HI - FOV_SPEED_LO), 0.0, 1.0)
 	return 1.0 - (1.0 - t) * (1.0 - t)
@@ -364,12 +370,13 @@ func _place(delta: float) -> void:
 ## the three sources; impact uses trauma^2 so small knocks stay small.
 func _shake(delta: float) -> void:
 	var buzz := pow(speed_t, 1.5)
-	var rot := SPEED_SHAKE_ROT * buzz + SURFACE_SHAKE_ROT * surface_t + IMPACT_SHAKE_ROT * trauma * trauma
-	var pos := SPEED_SHAKE_POS * buzz + SURFACE_SHAKE_POS * surface_t + IMPACT_SHAKE_POS * trauma * trauma
+	var rattle := SpeedFeel.car_rattle(target)
+	var rot := SPEED_SHAKE_ROT * buzz + RATTLE_SHAKE_ROT * rattle + SURFACE_SHAKE_ROT * surface_t + IMPACT_SHAKE_ROT * trauma * trauma
+	var pos := SPEED_SHAKE_POS * buzz + RATTLE_SHAKE_POS * rattle + SURFACE_SHAKE_POS * surface_t + IMPACT_SHAKE_POS * trauma * trauma
 	if rot <= 0.0 and pos <= 0.0:
 		return
 	# Faster wobble for rough surface and hits than for the speed buzz.
-	_t += delta * (6.0 + 10.0 * surface_t + 14.0 * trauma)
+	_t += delta * (6.0 + 10.0 * surface_t + 14.0 * trauma + 8.0 * rattle)
 	rotate_object_local(Vector3.RIGHT, rot * _noise.get_noise_2d(_t, 0.0))
 	rotate_object_local(Vector3.UP, rot * 0.6 * _noise.get_noise_2d(_t, 100.0))
 	rotate_object_local(Vector3.BACK, rot * 0.8 * _noise.get_noise_2d(_t, 200.0))

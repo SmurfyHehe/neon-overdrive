@@ -39,6 +39,9 @@ func _physics_process(delta: float) -> void:
 			spawn()
 		return
 	var d := absf(RoadFrame.unroll(car.global_position).z - _player_z())
+	# Full crash physics near the player only, the rails further out, like
+	# traffic (it used to run the full sim for its whole 300 m life).
+	traffic.tier(car, d)
 	if d > traffic.reveal_distance() + DROP_PAST_REVEAL and not traffic.in_view(car.global_position):
 		drop()
 

@@ -39,6 +39,16 @@ func _initialize() -> void:
 	w = _warm()
 	_check(not w.feed(0.4), "0.4 s hitch must not pause")
 	_check(w.feed(0.5), "0.5 s freeze must pause")
+	# Freeze only (the game: a low frame rate is PerfLadder's job).
+	w = _warm()
+	w.slow_pauses = false
+	w.freeze_seconds = 0.75
+	paused = false
+	for i in 100:
+		paused = paused or w.feed(0.04)
+	_check(not paused, "4 s at 25 fps must not pause when only a freeze does")
+	_check(not w.feed(0.6), "0.6 s hitch must not pause with a 0.75 s freeze length")
+	_check(w.feed(0.75), "0.75 s freeze must pause")
 	# Warm-up: a long load frame right after start is ignored.
 	w = LowFpsWatch.new()
 	_check(not w.feed(2.0), "load hitch inside warm-up must not pause")

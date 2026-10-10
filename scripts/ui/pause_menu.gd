@@ -24,6 +24,7 @@ const TOAST_SECS := 1.0
 
 var game_state: GameState
 var resume_button: Button
+var lower_look_button: Button
 var restart_button: Button
 var settings_button: Button
 var photo_button: Button
@@ -87,6 +88,9 @@ func _ready() -> void:
 	notice_label.visible = false
 	box.add_child(notice_label)
 
+	# Only after the game paused itself for falling behind (REASON_STALL).
+	lower_look_button = _add_button(box, "Lower the look", _lower_look)
+	lower_look_button.visible = false
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	restart_button = _add_button(box, "Restart night", _ask_restart)
 	settings_button = _add_button(box, "Settings", show_settings)
@@ -272,6 +276,31 @@ func _open_effects() -> void:
 func _refresh_notice() -> void:
 	notice_label.text = game_state.pause_notice
 	notice_label.visible = game_state.pause_notice != ""
+	if game_state.pause_notice == GameState.REASON_STALL and lower_look_target() == "":
+		notice_label.text = STALL_ON_LOW
+	lower_look_button.text = "Lower the look to %s" % lower_look_target().capitalize()
+	lower_look_button.visible = game_state.pause_notice == GameState.REASON_STALL and lower_look_target() != ""
+
+const STALL_ON_LOW := "Your PC fell behind, so the game paused. The look is already at its lowest."
+
+## The Quality preset one step under the current one ("" when already on Low;
+## a hand-tuned Custom set goes to Low).
+static func lower_look_target() -> String:
+	var i := GraphicsSettings.PRESETS.find(GraphicsSettings.preset)
+	if i == 0:
+		return ""
+	return GraphicsSettings.PRESETS[i - 1] if i > 0 else GraphicsSettings.PRESETS[0]
+
+## The stall line's offer: one Quality step down, saved, and back to the road.
+func _lower_look() -> void:
+	var target := lower_look_target()
+	if target == "":
+		return
+	GraphicsSettings.set_preset(target)
+	GraphicsSettings.auto_picked = false
+	GraphicsSettings.apply(get_tree())
+	GraphicsSettings.save_settings()
+	game_state.resume()
 
 ## "NIGHT 7 / 2:14 AM / $350 / Bank $4,200"
 func _refresh_plate() -> void:

@@ -13,6 +13,11 @@ const FREEZE_SECONDS := 0.5
 ## hitches are not the player's frame rate.
 const WARMUP_SECONDS := 3.0
 
+## False: only a freeze pauses; a low frame rate is PerfLadder's job (it
+## lowers the load instead of stopping the game).
+var slow_pauses := true
+var freeze_seconds := FREEZE_SECONDS
+
 var _age := 0.0
 var _slow_time := 0.0
 
@@ -21,8 +26,10 @@ func feed(frame_seconds: float) -> bool:
 	_age += frame_seconds
 	if _age < WARMUP_SECONDS:
 		return false
-	if frame_seconds >= FREEZE_SECONDS:
+	if frame_seconds >= freeze_seconds:
 		return true
+	if not slow_pauses:
+		return false
 	if frame_seconds > 1.0 / FLOOR_FPS:
 		_slow_time += frame_seconds
 	else:

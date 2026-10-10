@@ -56,7 +56,7 @@ const STALL_SECS := 0.75   # what Game sets it to
 
 ## Why the game paused itself ("" = the player did): shown as one amber line on
 ## the pause screen (pause_menu.gd), cleared on resume.
-const REASON_STALL := "The game paused itself because it fell behind. Try a lower Picture setting."
+const REASON_STALL := "Your PC fell behind, so the game paused. Lower the look to keep it smooth."
 const REASON_FOCUS := "The game paused because the window lost focus."
 var pause_notice := ""
 
@@ -121,11 +121,11 @@ func set_modal(on: bool) -> void:
 static func is_tuner(s: State) -> bool:
 	return s == State.TUNING or s == State.AUTOTUNE
 
-## Opens the pause screen when fps stays under 30 for about a second or a frame
-## freezes for half a second (Roy 160). Off in headless runs and tests.
+## Opens the pause screen when a frame freezes for STALL_SECS on the wall clock
+## (Roy 160). A frame rate that is only low no longer pauses: PerfLadder
+## lowers the load step by step instead. Off in headless runs and tests.
 var auto_pause_on_low_fps := true
 var _fps_watch := LowFpsWatch.new()
-static var _low_fps_paused_once := false
 var _last_frame_usec := 0
 
 func _ready() -> void:
@@ -136,6 +136,8 @@ func _ready() -> void:
 	# Not in test mode either: windowed tests and shot tools on a busy machine
 	# were being paused mid-run (the stall guard next to it is play-only too).
 	auto_pause_on_low_fps = auto_pause_on_low_fps and DisplayServer.get_name() != "headless" and not TestMode.active() and not Benchmark.requested()
+	_fps_watch.slow_pauses = false
+	_fps_watch.freeze_seconds = STALL_SECS
 	state_changed.connect(func(_n, _o): _fps_watch.reset())
 
 ## Low fps watch (#309): sustained slow frames on the wall clock, which is
@@ -147,12 +149,7 @@ func _watch_low_fps() -> void:
 	if not auto_pause_on_low_fps or state != State.PLAYING:
 		return
 	if _fps_watch.feed(frame_seconds):
-		# TEST BUILD: once per session. Under 30 fps for a second on a busy
-		# laptop paused the game again and again, which made it unplayable;
-		# the 0.75 s stall guard below still catches a real freeze.
-		if not _low_fps_paused_once:
-			_low_fps_paused_once = true
-			pause(REASON_STALL)
+		pause(REASON_STALL)
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and pause_on_focus_loss and state == State.PLAYING:

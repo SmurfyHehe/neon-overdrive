@@ -42,6 +42,7 @@ echo Started %DATE% %TIME:~0,8%
 set "FAILED="
 set "CRASHED="
 call :run low_fps_watch --headless
+call :run core/perf_ladder --headless
 call :run core/smoke --headless
 call :run core/game_info --headless
 call :run core/palette --headless

@@ -57,7 +57,7 @@ func _physics_process(_delta: float) -> bool:
 			(game.get("night_clock") as NightClock).night = 1
 			Harness.move_player_to_lane(player, Harness.lane_x(0))
 			_check(InputMap.has_action("headlights") and not InputMap.action_get_events("headlights").is_empty(), "no key for headlights")
-			_check(PauseMenu.GROUPS[0][1].any(func(a: Array) -> bool: return a[0] == "headlights"), "headlights missing from the Controls page")
+			_check(SettingsScreen.GROUPS.any(func(g: Array) -> bool: return g[1].any(func(a: Array) -> bool: return a[0] == "headlights")), "headlights missing from the Controls page")
 			step = 1
 			t = 0
 		1:
@@ -79,6 +79,7 @@ func _physics_process(_delta: float) -> bool:
 			if t < 180:
 				return false
 			var c := police.car
+			_check(not c.detailed, "patrol far from the player runs the full sim")
 			_check(c.current_speed() > 5.0, "patrol not driving: %.1f m/s after 3 s" % c.current_speed())
 			_check(absf(RoadFrame.unroll(c.global_position).x - c.lane_x) < 1.0, "patrol off its lane by %.2f m" % absf(RoadFrame.unroll(c.global_position).x - c.lane_x))
 			_pass_setup(90.0, false)
@@ -99,6 +100,7 @@ func _physics_process(_delta: float) -> bool:
 			if t < 48:
 				return false
 			var d := police.car.global_position.distance_to(player.global_position)
+			_check(police.car.detailed and police.car.visible, "patrol %.0f m away is not in the full sim and drawn" % d)
 			_check(heat.seen and heat.level >= PoliceHeat.ONE_CAR, "lit car not seen at %.0f m (level %d)" % [d, heat.level])
 			var icons: HeatIcons = game.get("heat_icons")
 			_check(icons.icon.visible and icons.icon.kind == "car", "icon %s / %s at level %d" % [icons.icon.visible, icons.icon.kind, heat.level])

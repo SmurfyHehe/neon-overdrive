@@ -91,8 +91,9 @@ func _run() -> void:
 		gs._process(1.0)   # the grace seconds, then one frame that fell behind
 	await _frames(2)
 	_check(gs.state == GameState.State.PAUSED, "a stalled frame should pause the game")
-	_check(menu.notice_label.visible and menu.notice_label.text == GameState.REASON_STALL, "the stall line shows")
-	_check(menu.notice_label.text.contains("lower Picture setting"), "the stall line points at the Picture settings")
+	_check(menu.notice_label.visible and menu.notice_label.text in [GameState.REASON_STALL, PauseMenu.STALL_ON_LOW], "the stall line shows")
+	_check(menu.notice_label.text.contains("Your PC fell behind"), "the stall line says the PC fell behind")
+	_check(menu.lower_look_button.visible == (PauseMenu.lower_look_target() != ""), "the stall line's offer to lower the look")
 	gs.stall_secs = 0.0
 	gs.resume()
 	_check(gs.pause_notice == "", "resume clears the pause reason")

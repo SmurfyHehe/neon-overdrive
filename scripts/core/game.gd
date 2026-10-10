@@ -74,6 +74,7 @@ var police_heat: PoliceHeat  # heat level + cop_can_see_player (police F0/F1)
 var police: PolicePatrol     # the stand-in patrol car; null with NEON_POLICE=0 or a benchmark
 var heat_icons: HeatIcons
 const TestMode := preload("res://scripts/core/test_mode.gd")
+var perf_ladder: PerfLadder  # lowers the load when the PC falls behind (perf_ladder.gd); real play only
 var rescue: OffMapRescue  # off-map rescue (off_map_rescue.gd)
 const Weather := preload("res://scripts/world/weather.gd")
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
@@ -232,8 +233,17 @@ func _ready() -> void:
 	_setup_police(benchmark)
 	# Dynamic resolution holds the frame rate inside the tier; benchmark runs
 	# keep a fixed scale (comparable numbers) unless --dynres=1.
+	var dynres: DynamicResolution = null
 	if not benchmark or Benchmark.opt("dynres") == "1":
-		add_child(DynamicResolution.new())
+		dynres = DynamicResolution.new()
+		add_child(dynres)
+	# The PC falls behind: lower the load rung by rung instead of pausing.
+	if PerfLadder.wanted():
+		perf_ladder = PerfLadder.new()
+		perf_ladder.game_state = game_state
+		perf_ladder.traffic = traffic
+		perf_ladder.dynres = dynres
+		add_child(perf_ladder)
 	if GraphicsAutoPick.wanted():
 		add_child(GraphicsAutoPick.new())   # first launch: time a few seconds, pick a tier
 	GraphicsSettings.apply(get_tree())

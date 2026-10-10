@@ -62,6 +62,11 @@ var detail_distance := 300.0
 ## past the draw distance is the old behaviour, every drawn car in the sim).
 var physics_distance := PHYSICS_DISTANCE_DEFAULT
 static var PHYSICS_DISTANCE_DEFAULT := float(OS.get_environment("NEON_TRAFFIC_PHYSICS_M")) if OS.get_environment("NEON_TRAFFIC_PHYSICS_M").is_valid_float() else 60.0
+## A race rival runs the full sim out to this far (never less than the traffic
+## band): further away it rides the rails like traffic, which is the same
+## controller on the same lane path without the tyres. PerfLadder lowers it.
+const PINNED_DISTANCE_DEFAULT := 150.0
+var pinned_distance := PINNED_DISTANCE_DEFAULT
 ## A car leaves the sim only this much further out than it joined it.
 const PHYSICS_HYSTERESIS := 10.0
 ## Cars are drawn out to at least this far whatever the slider says: the road
@@ -294,11 +299,11 @@ func _physics_process(_delta: float) -> void:
 				event_hook.call("show" if want else "hide", car, car.global_position)
 			car.set_shown(want)
 		# Shown first (set_detailed reads it): a car leaving the sim in view eases onto its rails.
-		# A race rival stays full sim however far away it is: the rails would
-		# carry it through bends and traffic (races plan, premortem 5).
-		if car.race_pinned or d <= band:
+		# A race rival keeps the full sim further out (pinned_distance).
+		var far := maxf(pinned_distance, band) - band if car.race_pinned else 0.0
+		if d <= band + far:
 			car.set_detailed(true)
-		elif car.detailed and d > band_out and (not car.shown or car.can_rail()):
+		elif car.detailed and d > band_out + far and (not car.shown or car.can_rail()):
 			car.set_detailed(false)
 	var gone: Array[TrafficCar] = []
 	for car in cars:
@@ -368,6 +373,19 @@ func release_rival(car: TrafficCar) -> void:
 	if car != null and is_instance_valid(car):
 		car.race_pinned = false
 		car.race_released = true
+
+## The same show/hide and physics band for a car that is not in the pool (the
+## patrol car): d is its distance from the player along the road.
+func tier(car: TrafficCar, d: float) -> void:
+	var reveal := reveal_distance()
+	var want := d <= reveal or (car.visible and d <= reveal + HIDE_HYSTERESIS)
+	if want != car.shown:
+		car.set_shown(want)
+	var band := minf(physics_distance, detail_distance)
+	if d <= band:
+		car.set_detailed(true)
+	elif car.detailed and d > band + PHYSICS_HYSTERESIS and (not car.shown or car.can_rail()):
+		car.set_detailed(false)
 
 ## Metres from the player out to which cars are drawn.
 func reveal_distance() -> float:

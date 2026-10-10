@@ -532,6 +532,13 @@ func _setup_game_state() -> void:
 	add_child(TunerScreen.new(player, game_state))
 	add_child(WarningLights.new(player))
 	add_child(PhotoMode.new(game_state, camera))
+	# Special vehicles: a flip ends the run (SpecialRunEnd). A restart is the
+	# stand-in until the run loop (stage C) owns what "ends the night" means.
+	var kind := PlayerCar.chassis_kind()
+	if SpecialRunEnd.has_limit(kind):
+		var run_end := SpecialRunEnd.new(player, kind)
+		run_end.run_ended.connect(func(_why: String) -> void: game_state.restart())
+		add_child(run_end)
 	radio = RadioManager.new()
 	radio.listener = player  # reception follows the car (tunnels, bridges)
 	add_child(radio)

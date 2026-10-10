@@ -20,6 +20,9 @@ extends Node
 # AUTOTUNE with it expanded (Y). The Auto-Tune search runs in a
 # separate headless Godot process (scripts/tuning/auto_tune_job.gd), because the game's
 # physics can neither run faster than real time nor be stepped by hand.
+const SaveStore := preload("res://scripts/save/save_store.gd")
+const TestMode := preload("res://scripts/core/test_mode.gd")
+
 enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO }
 
 signal state_changed(new_state: State, old_state: State)
@@ -29,6 +32,12 @@ signal restarting
 signal quitting
 
 var state: State = State.PLAYING
+
+## Special vehicles (S0): kind -> true once unlocked (the story ending sets it;
+## both start waiting in the garage). Saved in the slot's special.json.
+## Test mode (--test-mode / TestMode.active()) counts every special as unlocked.
+var special_unlocked: Dictionary = {}
+signal special_unlocked_changed
 
 # T, Y and Esc are polled, which means a key typed into a text field (a tune slot
 # name) would also switch tabs or close the tuner. _input() runs before the GUI
@@ -43,7 +52,27 @@ static func is_tuner(s: State) -> bool:
 
 func _ready() -> void:
 	PhotoMode.ensure_actions()
+	SpecialKeys.ensure_actions()
+	special_unlocked = SaveStore.load_special().unlocked
 	process_mode = Node.PROCESS_MODE_ALWAYS
+
+func is_special_unlocked(kind: String) -> bool:
+	return TestMode.active() or special_unlocked.get(kind, false) == true
+
+## Unlocks one special vehicle (or every one, with ""), and saves it.
+func unlock_special(kind: String = "") -> void:
+	for k in PlayerCars.SPECIAL_DATA:
+		if kind == "" or kind == k:
+			special_unlocked[k] = true
+	SaveStore.save_special(special_unlocked)
+	special_unlocked_changed.emit()
+
+## The cars the garage and free roam list right now.
+func garage_cars() -> Array[String]:
+	var all := {}
+	for k in PlayerCars.SPECIAL_DATA:
+		all[k] = is_special_unlocked(k)
+	return PlayerCars.garage_ids(all)
 
 ## True while a text control (LineEdit, TextEdit) has keyboard focus.
 func typing_in_text() -> bool:

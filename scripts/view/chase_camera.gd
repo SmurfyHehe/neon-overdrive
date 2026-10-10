@@ -22,6 +22,13 @@ const DIST := 5.2         # m behind the car at rest
 const HEIGHT := 1.85      # m above the car's origin at rest
 const LOOK_AHEAD := 12.0  # m ahead of the car the camera aims at
 const LOOK_HEIGHT := 0.95
+## Per-car framing (special vehicles, S0): kind -> [dist, height, look_ahead,
+## look_height], same four numbers as the constants above, which are the
+## default for every car not listed. Starting points; the body steps tune them.
+const FRAMING := {
+	"m1_monster": [10.0, 5.0, 16.0, 2.2],
+	"l1_lowrider": [6.2, 1.6, 12.0, 0.7],
+}
 const SQUAT := 0.2        # m the camera drops at full speed effect
 
 # Speed FOV (vertical degrees; Godot keeps height, so 16:9 is ~1.6x wider).
@@ -123,6 +130,11 @@ var bump := 0.0        # 0..1, the last road bump, decaying
 var surface_t := 0.0   # 0..1, share of wheels on a rough surface (scaled by speed)
 var dist_now := DIST
 var height_now := HEIGHT
+## This car's framing (FRAMING, or the constants): set in _init.
+var base_dist := DIST
+var base_height := HEIGHT
+var look_ahead := LOOK_AHEAD
+var look_height := LOOK_HEIGHT
 var anchor := Vector3.ZERO  # chase position before shake
 var aim := Vector3.ZERO     # point the rig looks at before shake
 
@@ -137,6 +149,13 @@ var _noise := FastNoiseLite.new()
 
 func _init(car: PlayerCar) -> void:
 	target = car
+	var fr: Array = FRAMING.get(PlayerCar.chassis_kind(), [DIST, HEIGHT, LOOK_AHEAD, LOOK_HEIGHT])
+	base_dist = fr[0]
+	base_height = fr[1]
+	look_ahead = fr[2]
+	look_height = fr[3]
+	dist_now = base_dist
+	height_now = base_height
 	fov = FOV_REST
 	far = 400.0
 	# Moved in _process every rendered frame, so it must not be
@@ -312,8 +331,8 @@ func _update_feel(delta: float) -> void:
 	fov = lerpf(FOV_REST, FOV_FAST, speed_t) + accel_fov
 	# Dolly: scale the distance by how much the frustum widened, part way.
 	var widen := tan(deg_to_rad(FOV_REST) * 0.5) / tan(deg_to_rad(fov) * 0.5)
-	dist_now = DIST * (DOLLY * widen + (1.0 - DOLLY))
-	height_now = HEIGHT - SQUAT * speed_t
+	dist_now = base_dist * (DOLLY * widen + (1.0 - DOLLY))
+	height_now = base_height - SQUAT * speed_t
 	trauma = maxf(0.0, trauma - TRAUMA_DECAY * delta)
 	var rough := 0
 	var grounded := 0
@@ -354,9 +373,9 @@ func _place(delta: float) -> void:
 	# Distance along the road stays locked to the car (only sideways and
 	# height motion is smoothed); the dolly shortens it with speed.
 	var back := Vector3(0, 0, dist_now).rotated(Vector3.UP, _yaw)
-	var ahead := Vector3(0, 0, -LOOK_AHEAD).rotated(Vector3.UP, _yaw)
+	var ahead := Vector3(0, 0, -look_ahead).rotated(Vector3.UP, _yaw)
 	anchor = RoadFrame.roll(Vector3(_follow.x + back.x, _follow.y + height_now, u.z + back.z))
-	aim = RoadFrame.roll(Vector3(_follow.x + ahead.x, _follow.y + LOOK_HEIGHT, u.z + ahead.z))
+	aim = RoadFrame.roll(Vector3(_follow.x + ahead.x, _follow.y + look_height, u.z + ahead.z))
 	global_position = anchor
 	look_at(aim, Vector3.UP)
 

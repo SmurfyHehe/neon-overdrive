@@ -25,7 +25,7 @@ var half := 0
 func _initialize() -> void:
 	sweep = true
 	var others: Array = []
-	for k in PlayerCars.ids():
+	for k in PlayerCars.sprint_ids():
 		if k != "p1_coupe":
 			others.append(k)
 	var mid := int(others.size() / 2.0)

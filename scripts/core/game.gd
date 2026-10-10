@@ -60,6 +60,7 @@ var camera: ChaseCamera
 var radio: RadioManager
 var night_clock: NightClock  # 8 p.m. to 6 a.m., saved (night_clock.gd); windows follow it
 var _bands := false  # hour bands drive traffic and Dave (bands_on)
+var moments: MomentSpots  # roadside moment spots, dealt nightly (moment_spots.gd); null when off
 var world_mood: WorldMood  # tonight's events: rule-breaker share, bar close, meets, crackdowns
 const TestMode := preload("res://scripts/core/test_mode.gd")
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
@@ -367,6 +368,13 @@ func _section_at(idx: int) -> Dictionary:
 func _setup_chunk_pool() -> void:
 	# The chunk the car starts on: 0 for a fresh run, the saved car's for a
 	# resumed one (its index counts from origin_index, like _update_chunk_pool).
+	if MomentSpots.enabled():
+		moments = MomentSpots.new()
+		moments.name = "MomentSpots"
+		moments.road_seed = road_seed
+		moments.night_clock = night_clock
+		moments.pool = chunk_pool
+		add_child(moments)
 	var start := 0
 	if not run.is_empty():
 		var z := RoadFrame.unroll(SaveDirector.v3(run.car.xform.slice(9, 12))).z
@@ -378,6 +386,8 @@ func _setup_chunk_pool() -> void:
 		var root := RoadChunkBuilder.build_chunk(idx, prev_cfg, cfg, origin_index)
 		add_child(root)
 		chunk_pool.append({"root": root, "index": idx})
+		if moments != null:
+			moments.dress_chunk(root, idx)
 
 ## Tests: called as (chunk_root, gap) just before a chunk is rebuilt (it vanishes
 ## from where it stands); gap is how many chunks behind the player it is.
@@ -402,6 +412,8 @@ func _update_chunk_pool(ref_z: float) -> void:
 			# over a frame instead of jumping there.
 			c.root.reset_physics_interpolation()
 			c.index = max_idx
+			if moments != null:
+				moments.dress_chunk(c.root, max_idx)
 
 # ---------- floating origin (issue #26) ----------
 func _physics_process(_delta: float) -> void:
@@ -488,6 +500,8 @@ func _setup_player() -> void:
 # pause menu's Traffic sliders (TrafficSettings). Added after the player, so
 # its cars' _physics_process runs after the player's.
 func _setup_traffic() -> void:
+	if moments != null:
+		moments.player = player
 	traffic = TrafficManager.new()
 	traffic.player = player
 	traffic.own_lanes = OWN_LANES
@@ -543,6 +557,8 @@ func _setup_game_state() -> void:
 	# 6 a.m.: tonight's cash goes into the bank (F0).
 	night_clock.night_ended.connect(func(_n: int) -> void: wallet.bank_night())
 	night_clock.night_ended.connect(func(_n: int) -> void: saver.save_now.call_deferred())
+	if moments != null:
+		moments.announce = radio.announce
 	world_mood = WorldMood.new()
 	add_child(world_mood)
 	world_mood.event_started.connect(_on_event)

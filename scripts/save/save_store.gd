@@ -62,6 +62,25 @@ static func select_slot(n: int) -> bool:
 	slot = n
 	return AtomicJson.write(root.path_join("active_slot.json"), {"slot": n})
 
+## Deletes slot n's save (the title's Load > Delete a save; Roy, 2026-10-10).
+## To the game the slot is empty afterwards. The folder is not destroyed: it is
+## moved whole, backups included, to <root>/deleted/slot_<n>_<unix time>, where
+## nothing reads it, so a save deleted by mistake can still be put back by
+## hand. Refused during a chase. True when the slot is empty afterwards.
+static func delete_slot(n: int) -> bool:
+	if chase_active or n < 1 or n > SLOTS:
+		return false
+	var dir := slot_dir(n)
+	if not DirAccess.dir_exists_absolute(dir):
+		return true
+	var bin := root.path_join("deleted")
+	DirAccess.make_dir_recursive_absolute(bin)
+	var to := bin.path_join("slot_%d_%d" % [n, int(Time.get_unix_time_from_system())])
+	var k := 1
+	while DirAccess.dir_exists_absolute(to if k == 1 else "%s_%d" % [to, k]):
+		k += 1
+	return DirAccess.rename_absolute(dir, to if k == 1 else "%s_%d" % [to, k]) == OK
+
 ## {"empty": bool, "saved_at": int, "cash": int} per slot, for a slot menu.
 static func summary(n: int) -> Dictionary:
 	var empty := true

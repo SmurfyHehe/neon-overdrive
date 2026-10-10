@@ -375,10 +375,15 @@ static func _windows(spec: Dictionary, rungs: Dictionary, node_windows: Dictiona
 	return out
 
 static var _tune_entries: Dictionary = {}
+static var _tune_entries_gears := -1
 
-## TuneParams.find() without the walk down the list.
+## TuneParams.find() without the walk down the list. Built again when the
+## number of gears changes (the list has one entry per gear: a five-gear car's
+## list asked a four-gear car for a fifth ratio).
 static func _tune_entry(path: String) -> Dictionary:
-	if _tune_entries.is_empty():
+	if _tune_entries.is_empty() or _tune_entries_gears != TuneParams.gear_count():
+		_tune_entries.clear()
+		_tune_entries_gears = TuneParams.gear_count()
 		for e in TuneParams.all():
 			_tune_entries[e.path] = e
 	return _tune_entries.get(path, {})
@@ -467,6 +472,14 @@ static func max_fit(car_id: String, path: Array) -> Dictionary:
 static func showcase_fit(car_id: String) -> Dictionary:
 	var t := tree(car_id)
 	return fitted(car_id, []) if t.is_empty() else max_fit(car_id, t.showcase)
+
+## Everything the car can carry at once (the test build's sandbox, Roy
+## 2026-10-10: "all the modifications equipped on all cars based off their mod
+## tree"). A tree is a fork, so "all" is one finished path, the car's showcase
+## one, plus its side nodes, every Workshop item and the top rung of every
+## part. A car with no tree file yet gets the Workshop items and the rungs.
+static func everything_fit(car_id: String) -> Dictionary:
+	return showcase_fit(car_id) if has_tree(car_id) else max_fit(car_id, [])
 
 # ---- Tiers and prices --------------------------------------------------------
 

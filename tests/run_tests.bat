@@ -178,6 +178,7 @@ call :run fx/fx_pack --headless
 call :run fx/tyre_smoke --headless
 call :run core/graphics_settings --headless
 call :run core/graphics_tiers --headless
+call :run core/shader_warmup --headless
 call :run fx/exhaust_flames --headless
 call :run world/boundary_walls --headless
 rem Roadside kit: where hydrants, bins, dumpsters, cones, jersey runs and kerb rails land, per district; collision; determinism.

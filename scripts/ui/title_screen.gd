@@ -28,6 +28,7 @@ const DIM := Color(0.79, 0.81, 0.84, 0.38)
 
 const MARK_BODY := "res://assets/brand/logo_B4_mark_body.svg"
 const MARK_WHEEL := "res://assets/brand/logo_B4_mark_wheel.svg"
+const ShaderWarmup := preload("res://scripts/core/shader_warmup.gd")
 const WHISTLE := "res://assets/ui/sfx/splash_whistle.wav"
 ## The wheel's centre inside the mark's 256 x 256 drawing (tools/build_brand.py).
 const WHEEL_AT := Vector2(105.0, 128.0)
@@ -595,6 +596,9 @@ func _start_splash() -> void:
 	splash.visible = true
 	splash.modulate.a = 1.0
 	panel.visible = false
+	# Shader warm-up (shader_warmup.gd): compiles what the drive will need
+	# while the splash covers the screen.
+	get_parent().add_child.call_deferred(ShaderWarmup.new())
 
 func _end_splash() -> void:
 	_splash_t = -1.0
@@ -629,6 +633,8 @@ func _run_splash(delta: float) -> void:
 		_wheel_speed = move_toward(_wheel_speed, 0.6, delta * 20.0)
 	splash_wheel.rotation += _wheel_speed * delta
 	var end := SPLASH_SOUND_AT + vent_at + SPLASH_FLUTTER + SPLASH_HOLD
+	if _splash_t > end and ShaderWarmup.busy():
+		_splash_t = end   # hold the last pose until the shaders are ready (bounded there)
 	if _splash_t > end:
 		splash.modulate.a = 1.0 - clampf((_splash_t - end) / SPLASH_FADE, 0.0, 1.0)
 		panel.visible = true
@@ -728,7 +734,7 @@ func _leave_title() -> void:
 	if radio != null:
 		radio.give_back()
 	if _caps_fps():
-		Engine.max_fps = GraphicsSettings.fps_cap
+		Engine.max_fps = GraphicsSettings.engine_fps()
 
 static func _synthwave_station() -> int:
 	for i in RadioStations.STATIONS.size():

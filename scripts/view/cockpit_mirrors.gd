@@ -27,6 +27,7 @@ extends Node3D
 # Car space, like the rest of the cockpit. The glass is angled so the camera's
 # straight-back view is what the driver's eye would see reflected.
 
+const ColorGrade := preload("res://scripts/world/color_grade.gd")
 const FAR := 250.0
 const NEAR := 0.25
 const REAR_SIZE := Vector2i(320, 96)
@@ -77,6 +78,9 @@ func _ready() -> void:
 	if world != null and world.environment != null:
 		env = world.environment.duplicate()
 		env.glow_enabled = false
+		# The mirror image is drawn inside the main view, which tone maps and
+		# grades it there: doing it here as well would grade the mirrors twice.
+		ColorGrade.clear(env)
 	var rear_pos: Vector3 = cab.rear_mirror if cab.has("rear_mirror") else REAR_POS
 	_add_mirror("Rear", rear_pos, REAR_SIZE_M, REAR_YAW, REAR_PITCH, REAR_SIZE, REAR_FOV, 0.0, env)
 	for i in 2:

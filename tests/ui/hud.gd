@@ -124,6 +124,10 @@ func _check_layout(game: Node, hud: Hud) -> void:
 	_check(hud.lbl_hint.text == "Esc: pause · controls", "the hint should be short, got '%s'" % hud.lbl_hint.text)
 	_check(hud.lbl_hint.get_global_rect().size.x < win.size.x * 0.3, "the controls hint should be a short line")
 	_check(hud.lbl_speed.get_global_rect().position.x > win.size.x * 0.5, "speed should sit on the right of the window")
+	# Gear and speed read as one line: same vertical centre (was ~4 px high).
+	var gc: float = hud.lbl_gear.get_global_rect().get_center().y
+	var sc: float = hud.lbl_speed.get_global_rect().get_center().y
+	_check(absf(gc - sc) < 1.0, "gear centre y %.1f differs from speed centre y %.1f" % [gc, sc])
 
 
 ## A headless window is 64x64, so size the layout through the content scale instead.

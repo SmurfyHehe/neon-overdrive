@@ -22,6 +22,9 @@ class_name CockpitFrame
 # cockpit camera skips it, the mirror cameras draw it) instead of being hidden,
 # so the door mirrors show the car's own flank. The driver (next PR) gets DRIVER.
 
+const PlaceNames := preload("res://scripts/world/place_names.gd")
+const Districts := preload("res://scripts/world/districts.gd")
+
 const INTERIOR_LAYER := 3
 const DRIVER_LAYER := 4
 const MIRROR_ONLY_LAYER := 5
@@ -148,6 +151,7 @@ var glass: MeshInstance3D        # the sliding pane
 var crank: Node3D                # the crank's hub pivot (crank cars), else null
 var window_switch: Node3D        # the rocker's pivot (switch cars), else null
 var _window_parts: Node3D        # whatever set_window_control() built
+var _area_run := -1              # the district run the car was last in (area name on the head unit)
 var wheel_angle := 0.0           # the drawn wheel, radians, + = right (chases steering)
 var _wheel_vel := 0.0            # rad/s
 var cockpit := false
@@ -809,7 +813,20 @@ func _find_radio() -> RadioManager:
 			radio = scene.radio
 	return radio
 
+## Crossing into a new district run puts its name on the head unit for a few
+## seconds (world step 4, "Names you can read"). The first run seen, at the
+## start of a drive or after a resume, shows nothing.
+func _update_area() -> void:
+	if player == null or head_unit == null or not is_instance_valid(player):
+		return
+	var s := RoadFrame.s_at(RoadFrame.unroll(player.global_position).z)
+	var run := Districts.run_of(maxi(floori(s / RoadChunkBuilder.CHUNK_LEN), 0))
+	if _area_run >= 0 and run != _area_run:
+		head_unit.show_area(PlaceNames.area_name(Districts.name_of_run(run)))
+	_area_run = run
+
 func _update_radio(delta: float) -> void:
+	_update_area()
 	# The car clock (NightClock) is drawn on the head unit's screen.
 	var scene := get_tree().current_scene if is_inside_tree() else null
 	if scene != null and scene.get("night_clock") is NightClock:

@@ -100,6 +100,9 @@ const BuildingKit := preload("res://scripts/world/building_kit.gd")
 const BuildingSigns := preload("res://scripts/world/building_signs.gd")
 const RoofProps := preload("res://scripts/world/roof_props.gd")
 const Districts := preload("res://scripts/world/districts.gd")
+const PlaceNames := preload("res://scripts/world/place_names.gd")
+const RoadSigns := preload("res://scripts/world/road_signs.gd")
+const RoadPaint := preload("res://scripts/world/road_paint.gd")
 
 const LANE_W := 3.2
 const CHUNK_LEN := 50.0
@@ -1096,6 +1099,69 @@ static func _update_roofs(root: Node3D, infos: Array, signs_used: int) -> void:
 	_bend_instances(signs, signs_used, r.sign_xfs, r.sign_anchor)
 	root.set_meta("roof_props", r.props)
 
+## Where an area sign's post stands, past the sidewalk's outer edge, m.
+const NAME_SIGN_SETBACK := 0.25
+## Where along its chunk (chunk-local z) the area gantry and the advance sign
+## stand: the gantry in the last chunk before an area, the advance sign a
+## whole number of chunks further back (PlaceNames.ADVANCE_M).
+const GANTRY_Z := -42.0
+const ADVANCE_Z := -2.0
+
+## Which area sign, if any, belongs to chunk `chunk_index`: "" (none), "gantry"
+## or "advance"; the area it announces is Districts.name_of_run(run + 1).
+static func name_sign_kind(chunk_index: int) -> String:
+	if chunk_index < 0:
+		return ""
+	var ahead := int(round(PlaceNames.ADVANCE_M / CHUNK_LEN))
+	if posmod(chunk_index + 1, Districts.RUN) == 0:
+		return "gantry"
+	if posmod(chunk_index + 1 + ahead, Districts.RUN) == 0:
+		return "advance"
+	return ""
+
+## Area signs (world step 4, "Names you can read"): the gantry in the last
+## chunk before an area and the advance sign 400 m earlier, drawn from this
+## chunk's one NameSigns MultiMesh. Zero instances on every other chunk.
+static func _update_names(root: Node3D, chunk_index: int, walk0: float, walk1: float) -> void:
+	var mm: MultiMesh = (root.get_node(^"NameSigns") as MultiMeshInstance3D).multimesh
+	var kind := name_sign_kind(chunk_index)
+	if kind == "":
+		mm.visible_instance_count = 0
+		return
+	var area := PlaceNames.area_name(Districts.name_of_run(Districts.run_of(chunk_index) + 1))
+	var z := GANTRY_Z if kind == "gantry" else ADVANCE_Z
+	var x := lerpf(walk0, walk1, -z / CHUNK_LEN) + NAME_SIGN_SETBACK
+	var foot := Vector3(x, 0.0, z)
+	var list: Array
+	if kind == "gantry":
+		var hb := posmod(hash([chunk_index, "floodlight"]), 6)
+		list = RoadSigns.gantry(area, foot, _foundation(), hb if hb < 3 else -1)
+	else:
+		list = RoadSigns.advance(area, foot, _foundation())
+	var n := mini(list.size(), mm.instance_count)
+	var xfs := []
+	var anchors := PackedFloat32Array()
+	for k in n:
+		xfs.append(list[k].xf)
+		anchors.append(z)
+		mm.set_instance_custom_data(k, list[k].cd)
+	mm.visible_instance_count = n
+	_bend_instances(mm, 0, xfs, anchors)
+
+## Painted road words and arrows (RoadPaint.marks decides which): flat decals
+## laid on the road surface through the centreline frame, so they follow a
+## bend or a hill. Zero instances on most chunks.
+static func _update_paint(root: Node3D, chunk_index: int, lanes_changed: bool, own_lanes: int) -> void:
+	var mm: MultiMesh = (root.get_node(^"RoadPaint") as MultiMeshInstance3D).multimesh
+	var crossing := Junction.local_centre(chunk_index) if Junction.enabled else INF
+	var marks := RoadPaint.marks(chunk_index, Districts.name_at(chunk_index), Districts.RUN, own_lanes, lanes_changed, crossing, MEDIAN_GAP, LANE_W, CHUNK_LEN)
+	var n := mini(marks.size(), mm.instance_count)
+	for k in n:
+		var m: Dictionary = marks[k]
+		mm.set_instance_transform(k, _xf(m.x, RoadPaint.PAINT_Y, m.z, m.basis))
+		mm.set_instance_custom_data(k, m.cd)
+	mm.visible_instance_count = n
+
 ## Signs and roof props are laid out on the straight road description; this
 ## writes instances from slot `from` on through the centreline frame (#37),
 ## each one rigid with the building it belongs to: `anchors[k]` is that
@@ -1179,6 +1245,10 @@ static func _create_nodes(root: Node3D) -> void:
 	# shop signs plus rooftop billboards: at most two per building
 	root.add_child(BuildingSigns.new_multimesh(_building_slots() * 4))
 	root.add_child(RoofProps.new_multimesh())
+	# area signs (names you can read) and painted road words: zero instances
+	# shown on most chunks
+	root.add_child(RoadSigns.new_multimesh())
+	root.add_child(RoadPaint.new_multimesh())
 
 	root.set_meta("nodes_built", true)
 
@@ -1304,6 +1374,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var signs_used := _update_signs(root, infos)
 	root.set_meta("signs_used", signs_used)
 	_update_roofs(root, infos, signs_used)
+	_update_names(root, chunk_index, start_own_walk, end_own_walk)
+	_update_paint(root, chunk_index, int(prev_cfg.own_lanes) != own_lanes, own_lanes)
 
 	# gap walls (stage A) -- close the open lots between buildings along the
 	# building-front line. Visual only: out-of-bounds collision is issue #28,

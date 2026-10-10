@@ -66,6 +66,7 @@ var station := -1
 var now_playing := ""
 var level := 0.0
 var clock_text := ""     # the car clock, drawn top right (NightClock)
+var weather_level := 0   # Weather.Level: 1 rain, 2 storm get an icon, else none
 var taps := 0
 var knob_presses := 0
 var viewport: SubViewport
@@ -223,6 +224,13 @@ func show_clock(t: String) -> void:
 		clock_text = t
 		_redraw()
 
+## Rain (1) or storm (2) icon beside the clock; anything else draws nothing.
+func show_weather(level: int) -> void:
+	var l := level if level == 1 or level == 2 else 0
+	if l != weather_level:
+		weather_level = l
+		_redraw()
+
 ## The finger touched the unit: tick, and push the knob in for an off press.
 func tap(on_knob: bool) -> void:
 	taps += 1
@@ -246,6 +254,21 @@ func _redraw() -> void:
 class ScreenCanvas extends Control:
 	var unit: HeadUnit
 
+	## A small cloud with falling drops (rain) or a bolt (storm), left of the
+	## clock, in the head unit's own silver and amber.
+	func _draw_weather(l: int) -> void:
+		var c := Vector2(352, 26)
+		var cloud := HeadUnit.SILVER
+		draw_circle(c + Vector2(-6, 2), 5.0, cloud)
+		draw_circle(c + Vector2(1, -2), 6.5, cloud)
+		draw_circle(c + Vector2(8, 2), 5.0, cloud)
+		draw_rect(Rect2(c + Vector2(-6, 2), Vector2(14, 5)), cloud)
+		if l == 2:
+			draw_polyline(PackedVector2Array([c + Vector2(3, 6), c + Vector2(-1, 12), c + Vector2(3, 12), c + Vector2(-1, 18)]), HeadUnit.AMBER, 2.0)
+		else:
+			for dx in [-4.0, 1.0, 6.0]:
+				draw_line(c + Vector2(dx, 9), c + Vector2(dx - 2, 15), HeadUnit.AMBER, 1.5)
+
 	func _draw() -> void:
 		var font := ThemeDB.fallback_font
 		var w := float(HeadUnit.PX.x)
@@ -265,6 +288,8 @@ class ScreenCanvas extends Control:
 		draw_string(font, Vector2(HeadUnit.MARGIN, 92), sub, HORIZONTAL_ALIGNMENT_LEFT, 330, 15, HeadUnit.SILVER)
 		if unit.clock_text != "":
 			draw_string(font, Vector2(372, 34), unit.clock_text, HORIZONTAL_ALIGNMENT_RIGHT, 116, 18, HeadUnit.AMBER)
+		if unit.weather_level > 0:
+			_draw_weather(unit.weather_level)
 		var bars := 10
 		for i in bars:
 			var x := 372.0 + i * 12.0

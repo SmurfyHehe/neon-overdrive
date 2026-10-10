@@ -86,6 +86,9 @@ call :run world/night_bands "--headless --fixed-fps 60"
 call :run world/world_mood "--headless --fixed-fps 60"
 rem Water (rain, puddles): the rules and their CPU cost, no game boot.
 call :run world/water_rules --headless
+rem Weather plan (W1): deck per act, storms, fronts, mid-night change, numbers.
+call :run world/weather_plan --headless
+call :run world/weather_plan_game "--headless --fixed-fps 60"
 call :run core/view_settings --headless
 call :run view/camera_smoothing_setting --headless
 call :run core/log_folder --headless

@@ -22,6 +22,7 @@ class_name CockpitFrame
 # cockpit camera skips it, the mirror cameras draw it) instead of being hidden,
 # so the door mirrors show the car's own flank. The driver (next PR) gets DRIVER.
 
+const Weather := preload("res://scripts/world/weather.gd")
 const INTERIOR_LAYER := 3
 const DRIVER_LAYER := 4
 const MIRROR_ONLY_LAYER := 5
@@ -813,6 +814,7 @@ func _update_radio(delta: float) -> void:
 	var scene := get_tree().current_scene if is_inside_tree() else null
 	if scene != null and scene.get("night_clock") is NightClock:
 		head_unit.show_clock(scene.night_clock.text())
+		head_unit.show_weather(Weather.level)
 	var r := _find_radio()
 	if r == null:
 		return

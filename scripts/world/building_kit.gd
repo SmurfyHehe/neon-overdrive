@@ -31,6 +31,7 @@ extends RefCounted
 # shader from a hash, so it never repeats from one building to the next.
 
 const BuildingSigns := preload("res://scripts/world/building_signs.gd")
+const Districts := preload("res://scripts/world/districts.gd")
 
 const TILE_PX := 32
 const TILES := 8
@@ -96,6 +97,10 @@ instance uniform float seed = 0.0;
 // How far the block reaches below the road (a hill's foundation): floors are
 // counted from the road, not from the block's bottom.
 instance uniform float base = 0.0;
+// Building wear (world step 1), 0 clean .. 1 derelict: ground grime, rain
+// streaks down some bays, dark stains, a soot line under the roof edge, and
+// a patchy roof. All of it is hashed per bay and floor, no texture.
+instance uniform float wear = 0.5;
 
 varying vec3 lpos;
 varying vec3 lnrm;
@@ -114,8 +119,12 @@ float hash3(vec3 p) {
 void fragment() {
 	vec3 an = abs(lnrm);
 	if (an.y > 0.5) {
-		// flat roof: dark tar, a touch of the tint
-		ALBEDO = tint * 0.3;
+		// flat roof: tar or pale gravel by building, gritty, with dark
+		// patches where water sat once it is worn
+		float gravel = step(0.5, fract(seed * 0.37));
+		float grit = hash3(floor(lpos.xzy * 1.3) + seed);
+		float patch = step(1.0 - 0.45 * wear, hash3(floor(lpos.xzy * 0.35) + seed + 3.0));
+		ALBEDO = tint * mix(0.3, 0.5, gravel) * (0.8 + 0.4 * grit) * (1.0 - 0.4 * patch);
 		ROUGHNESS = 1.0;
 	} else {
 		// horizontal coordinate along this face and the face's length
@@ -147,6 +156,17 @@ void fragment() {
 		vec3 c = h2 < cool_bias[tile] ? cool : warm;
 		if (h2 > 0.96) { c = tv; }
 		EMISSION = c * lit * mix(0.55, 1.0, hash3(key + 3.7)) * emission_energy * glow[tile];
+		// wear (world step 1): all on the wall, lit glass stays lit
+		float wall = 1.0 - t.a;
+		float hm = max(lpos.y + size.y * 0.5 - base, 0.0);  // metres above the road
+		float grime = wear * 0.5 * smoothstep(2.2, 0.0, hm) * (1.0 - 0.7 * t.a);
+		// a rain streak runs the height of some bays, broken on some floors
+		float sb = hash3(vec3(floor(u), -1.0, seed + 41.0));
+		float sx = 0.1 + 0.8 * fract(sb * 7.31);
+		float streak = step(sb, wear * 0.45) * step(hash3(key + 7.7), 0.75) * smoothstep(0.05, 0.015, abs(fract(u) - sx)) * wall;
+		float stain = step(hash3(vec3(floor(u * 0.5), floor(v * 0.5), seed + 11.0)), wear * 0.18) * wall;
+		float soot = wear * 0.3 * smoothstep(size.y - base - 0.8, size.y - base, hm);
+		ALBEDO *= 1.0 - clamp(grime + streak * 0.35 + stain * 0.22 + soot, 0.0, 0.6);
 	}
 }
 """
@@ -204,6 +224,32 @@ const TYPES := {
 # Mix for an ordinary street until districts (step 4) set their own.
 const STREET_MIX := [["apartment", 40], ["shop", 30], ["office", 18], ["parking", 12]]
 
+# Roof shapes (world step 1, 2026-10-10). The flat box top was what every
+# building still shared; RoofProps draws these from the same per-chunk
+# MultiMesh as the tanks and AC units, so they cost no draw call. A district
+# weights them (Districts SPECS "tops"); a type only takes the ones that suit
+# it, and a type with nothing in the district's table stays flat.
+#   flat     the box as it was
+#   cornice  a projecting cap all round the roof edge
+#   parapet  a raised false front along the street edge (shops)
+#   gable    a pitched roof, ridge along the road
+#   hip      a hipped (mansard) roof with a small flat top
+#   setback  a penthouse floor set in from the edges
+#   crown    stepped plant rooms and a short mast (offices)
+const TOPS := ["flat", "cornice", "parapet", "gable", "hip", "setback", "crown"]
+const TOPS_FOR := {
+	"apartment": ["flat", "cornice", "gable", "hip", "setback"],
+	"shop": ["flat", "cornice", "parapet", "gable", "hip"],
+	"office": ["flat", "cornice", "setback", "crown"],
+	"parking": ["flat"],
+	"garage": ["flat", "gable"],
+	"warehouse": ["flat", "gable"],
+	"gas": ["flat"],
+	"diner": ["flat"],
+}
+# The top a landmark's own building wears (RoofProps adds the landmark).
+const LANDMARK_TOP := {"tower": "crown", "water_tower": "flat", "stacks": "flat", "screen": "flat"}
+
 ## Picks a building's type and look from its own RNG and writes the look onto
 ## the mesh instance. is_low is the old "garage" roll (a low, wide shed);
 ## h_roll is the height draw in [0, 1]; district is a Districts spec (type
@@ -236,6 +282,17 @@ static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, 
 	elif tile == T_OFFICE:
 		density *= 0.6  # offices at 2 a.m. are mostly dark
 	density = minf(density * float(district.get("lit", 1.0)), 0.6)
+	# World step 1: wear and the roof shape, from the district's tables
+	# (Districts.DEFAULTS when a district leaves them out).
+	var wr: Array = district.get("wear", Districts.DEFAULTS.wear)
+	var wear := rng.randf_range(float(wr[0]), float(wr[1]))
+	var landmark: String = district.get("is_landmark", "")
+	var top: String
+	if landmark != "":
+		top = LANDMARK_TOP[landmark]
+		rng.randf()  # the top roll, so the rest of the look matches a plain building
+	else:
+		top = _pick_top(rng, type, district.get("tops", Districts.DEFAULTS.tops))
 	mi.mesh = unit_box()
 	mi.material_override = material()
 	mi.scale = Vector3(w, h, d)
@@ -245,8 +302,14 @@ static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, 
 	mi.set_instance_shader_parameter("floor_h", fh)
 	mi.set_instance_shader_parameter("lit_density", density)
 	mi.set_instance_shader_parameter("seed", float(rng.randi() % 4096))
+	mi.set_instance_shader_parameter("wear", wear)
 	mi.set_meta("facade_tile", tile)
 	mi.set_meta("building_type", type)
+	mi.set_meta("roof_top", top)
+	if landmark != "":
+		mi.set_meta("landmark", landmark)
+	elif mi.has_meta("landmark"):
+		mi.remove_meta("landmark")
 	var word := ""
 	if rng.randf() < float(spec.sign):
 		var pool: Array = BuildingSigns.GARAGE_WORDS if type == "garage" else BuildingSigns.SHOP_WORDS
@@ -267,7 +330,28 @@ static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, 
 		mi.set_meta("sign_word", word)
 	elif mi.has_meta("sign_word"):
 		mi.remove_meta("sign_word")
-	return {"h": h, "type": type, "tile": tile, "floor_h": fh, "sign": word, "sign_color": sign_color, "sign_style": sign_style, "blade": blade, "roof_seed": rng.randi(), "billboard": float(district.get("billboard", 1.0))}
+	return {"h": h, "type": type, "tile": tile, "floor_h": fh, "sign": word, "sign_color": sign_color, "sign_style": sign_style, "blade": blade, "roof_seed": rng.randi(), "billboard": float(district.get("billboard", 1.0)), "top": top, "wear": wear, "landmark": landmark}
+
+## The roof shape for a building of `type` from a district's weight table,
+## keeping only the shapes that suit the type; flat when none does.
+static func _pick_top(rng: RandomNumberGenerator, type: String, table: Array) -> String:
+	var allowed: Array = TOPS_FOR.get(type, ["flat"])
+	var mine := []
+	for e in table:
+		if allowed.has(String(e[0])):
+			mine.append(e)
+	var roll := rng.randf()  # one draw whatever the table, so looks stay stable across tables
+	if mine.is_empty():
+		return "flat"
+	var total := 0
+	for e in mine:
+		total += int(e[1])
+	var r := int(roll * float(total))
+	for e in mine:
+		r -= int(e[1])
+		if r < 0:
+			return String(e[0])
+	return String(mine[0][0])
 
 static func _weighted_s(rng: RandomNumberGenerator, table: Array) -> String:
 	var total := 0

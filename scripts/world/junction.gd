@@ -38,12 +38,21 @@ class_name Junction
 # plus six lamp meshes, one per lamp colour and group, so 7 draw calls; the
 # lamp state is a material change on those six. No lights.
 
+#
+# The map (road_map.gd, 2026-10-10): on a loop there is a crossing just inside
+# each end of every city area and none on the highway stretches. They are far
+# apart (over a kilometre), so there is still one Junction node: it stands at
+# the crossing nearest the player (focus_z, set by Game) and every question
+# here is answered for the crossing nearest to where it is asked. All of them
+# share the one signal cycle.
+
+const RoadMap := preload("res://scripts/world/road_map.gd")
 const RoadPaint := preload("res://scripts/world/road_paint.gd")
 const RoadSigns := preload("res://scripts/world/road_signs.gd")
 const PlaceNames := preload("res://scripts/world/place_names.gd")
 
 const L := RoadChunkBuilder.CHUNK_LEN
-## Where the crossing's centre is, metres of road from the start.
+## Where the crossing's centre is, metres of road from the start (off a loop).
 const CENTRE_S := 600.0
 ## Cross street: 2 lanes each way.
 const CROSS_LANES := 2
@@ -112,6 +121,7 @@ var night_clock: NightClock
 var force_flash := -1
 
 var _origin := -999999
+var _placed_z := INF
 var _main_key := -1
 var _cross_key := -1
 var _blink := 0.0
@@ -125,13 +135,26 @@ const GREEN_C := Color("#3FD060")
 const LAMP_ON := 4.0
 const LAMP_OFF := 0.04
 
+## Road-space z the crossing node keeps near: the player's (Game sets it).
+static var focus_z := 0.0
+
+## Centre of the crossing nearest to `s` metres along the road, in the same
+## metres.
+static func centre_s_near(s: float) -> float:
+	return RoadMap.junction_near(s) if RoadMap.is_loop() else CENTRE_S
+
+## Road-space z of the crossing nearest to road-space z.
+static func centre_z_near(z: float) -> float:
+	return float(RoadFrame.origin_index) * L - centre_s_near(RoadFrame.s_at(z))
+
+## Road-space z of the crossing the node stands at (the one nearest the player).
 static func centre_z() -> float:
-	return float(RoadFrame.origin_index) * L - CENTRE_S
+	return centre_z_near(focus_z)
 
 ## Chunk-local z of the centre for chunk `chunk_index` (0 at the chunk's
 ## start, -L at its end; outside that range the centre is in another chunk).
 static func local_centre(chunk_index: int) -> float:
-	return float(chunk_index) * L - CENTRE_S
+	return float(chunk_index) * L - centre_s_near((float(chunk_index) + 0.5) * L)
 
 ## Whether chunk-local z (chunk `chunk_index`) is within `half` of the centre.
 static func near(chunk_index: int, z: float, half: float) -> bool:
@@ -194,7 +217,7 @@ func stop_gap(z: float, dir: float, half_l: float, v: float) -> float:
 	var st := main_state()
 	if st == GREEN or st == FLASH_AMBER:
 		return INF
-	var line := centre_z() - dir * STOP_OFF
+	var line := centre_z_near(z) - dir * STOP_OFF
 	var d := (line - z) * dir - half_l
 	if d < -PAST_LINE or d > LOOK:
 		return INF
@@ -228,10 +251,12 @@ func _physics_process(delta: float) -> void:
 
 ## Follows the floating origin (game.gd moves the world back by whole chunks).
 func _place() -> void:
-	if RoadFrame.origin_index == _origin:
+	var cz := centre_z()
+	if RoadFrame.origin_index == _origin and cz == _placed_z:
 		return
 	_origin = RoadFrame.origin_index
-	global_transform = RoadFrame.pose(0.0, 0.0, centre_z(), 0.0)
+	_placed_z = cz
+	global_transform = RoadFrame.pose(0.0, 0.0, cz, 0.0)
 	reset_physics_interpolation()
 
 func _show() -> void:

@@ -105,6 +105,7 @@ const LampLife := preload("res://scripts/world/lamp_life.gd")
 const PlaceNames := preload("res://scripts/world/place_names.gd")
 const RoadSigns := preload("res://scripts/world/road_signs.gd")
 const RoadPaint := preload("res://scripts/world/road_paint.gd")
+const RoadMap := preload("res://scripts/world/road_map.gd")
 
 const LANE_W := 3.2
 const CHUNK_LEN := 50.0
@@ -1441,6 +1442,10 @@ static func _update_step(root: Node3D, body_name: String, xs: Vector2, side: int
 # the pool looks the same as one built fresh.
 
 static var _bld_rng := RandomNumberGenerator.new()
+## On a loop (road_map.gd) a lot's four draws come from here, seeded by the
+## chunk's place on the loop, so the same buildings stand there every lap and
+## when the player turns round and comes back.
+static var _lot_rng := RandomNumberGenerator.new()
 
 static func _new_building(index: int) -> Array:
 	var mi := MeshInstance3D.new()
@@ -1469,10 +1474,22 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 	# Keep these four global calls exactly as they are (see the section
 	# comment; randf_range() takes more draws than randf(), so even swapping
 	# one for the other shifts the road layout).
-	var is_garage: bool = randf() < 0.12
-	var w_draw: float = randf_range(4.0, 10.0)
-	var d_draw: float = randf_range(9.0, 18.0)
-	var h_old: float = randf_range(3.0, 4.5) if is_garage else randf_range(6.0, 22.0)
+	var is_garage: bool
+	var w_draw: float
+	var d_draw: float
+	var h_old: float
+	if RoadMap.is_loop():
+		chunk_index = RoadMap.lap_chunk(chunk_index)
+		_lot_rng.seed = hash([RoadMap.road_id, chunk_index, index, "lot"])
+		is_garage = _lot_rng.randf() < 0.12
+		w_draw = _lot_rng.randf_range(4.0, 10.0)
+		d_draw = _lot_rng.randf_range(9.0, 18.0)
+		h_old = _lot_rng.randf_range(3.0, 4.5) if is_garage else _lot_rng.randf_range(6.0, 22.0)
+	else:
+		is_garage = randf() < 0.12
+		w_draw = randf_range(4.0, 10.0)
+		d_draw = randf_range(9.0, 18.0)
+		h_old = randf_range(3.0, 4.5) if is_garage else randf_range(6.0, 22.0)
 	var h_roll := inverse_lerp(3.0, 4.5, h_old) if is_garage else inverse_lerp(6.0, 22.0, h_old)
 
 	# w and d come from the global sequence, so the look changes from run to

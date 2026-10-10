@@ -19,6 +19,14 @@ extends RefCounted
 # Each new kind is a SPECS row; what the road itself does in a freeway or a
 # canyon run is the road recipe's job (V1), not this table's.
 
+#
+# On a loop (road_map.gd) the districts are the map's, in its order and at its
+# lengths, and come round again every lap; a "run" is then a district's number
+# on the loop. Off a loop (the endless road, and chunks built without a game)
+# it is the hashed map above.
+
+const RoadMap := preload("res://scripts/world/road_map.gd")
+
 const RUN := 16
 # Chunks on each side of a run boundary that mix the two districts. The
 # share of the far district steps 1/5, 2/5 | 3/5, 4/5 across the boundary.
@@ -191,11 +199,15 @@ const SPECS := {
 static var force := ""
 
 static func run_of(chunk_index: int) -> int:
+	if RoadMap.is_loop():
+		return RoadMap.district_of(chunk_index)
 	return floori(float(chunk_index) / float(RUN))
 
 static func name_of_run(run: int) -> String:
 	if force != "":
 		return force
+	if RoadMap.is_loop():
+		return RoadMap.district_kind(run)
 	return ORDER[posmod(run, ORDER.size())]
 
 ## The district a chunk belongs to (its run's), for chunk-wide things like
@@ -211,10 +223,16 @@ static func name_at(chunk_index: int) -> String:
 static func blend_at(chunk_index: int) -> Array:
 	var run := run_of(chunk_index)
 	var pos := posmod(chunk_index, RUN)
+	var left := RUN - 1 - pos
+	var looped := RoadMap.is_loop()
+	if looped:
+		# a loop's districts set their own lengths (road_map.gd)
+		pos = RoadMap.into_district(chunk_index)
+		left = RoadMap.left_in_district(chunk_index)
 	var steps := float(2 * BLEND + 1)
-	if pos >= RUN - BLEND:
-		return [run + 1, float(pos - (RUN - BLEND) + 1) / steps]
-	if pos < BLEND and run != 0:
+	if left < BLEND:
+		return [run + 1, float(BLEND - left) / steps]
+	if pos < BLEND and (run != 0 or looped):
 		return [run - 1, float(BLEND - pos) / steps]
 	return [run, 0.0]
 

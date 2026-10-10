@@ -34,6 +34,14 @@ class_name RoadAlignment
 # the road sits within a couple of centimetres of where the same seed put it.
 # The plain formula above still holds in the middle of a chunk; height_at(),
 # grade_at() and rise() are the eased truth everywhere.
+#
+# A loop (road_map.gd, 2026-10-10): with `period` > 0 the shape repeats every
+# `period` chunks, in both directions (chunks before 0 are the end of the lap
+# before, not straight). The first lap is rolled as usual, except that its
+# last few chunks steer the heading and the grade back to where chunk 0
+# started, and the whole lap is tilted by a constant grade (well under 1 %)
+# so it ends at the height it began. Each lap then sits one lap's length
+# further down the world from the last; nothing wraps in space.
 
 const L := RoadChunkBuilder.CHUNK_LEN
 const MIN_RADIUS := 300.0
@@ -62,6 +70,10 @@ const HEIGHT_SOFT_LIMIT := 30.0
 ## tried (2026-10-10) and measured no better in tests/world/hill_bumps.gd,
 ## for more collision and strip pieces on the chunks either side.
 const EASE := 10.0
+## A loop's last chunks: these many turn the heading back to 0 (30 degrees at
+## MIN_RADIUS takes four), and these many level the grade (one, at 1000 m).
+const CLOSE_CHUNKS := 6
+const CLOSE_VCHUNKS := 2
 
 ## 0 = a straight road, 1 = mostly bends. Share of segments that are bends.
 var curviness := 0.5
@@ -70,6 +82,9 @@ var curviness := 0.5
 var hilliness := 0.0
 ## Chance a crest is a kicker (KICKER_RADIUS_*). 0 outside the R6 playtest.
 var kicker_chance := 0.0
+## Chunks in one lap of a loop; 0 = an endless road.
+var period := 0
+var _closed := false
 
 var _rng := RandomNumberGenerator.new()
 var _k := PackedFloat64Array()    # curvature of chunk i
@@ -92,7 +107,8 @@ var _vseg_target := 0.0  # grade the current vertical segment is heading for
 var _vseg_c := 0.0
 var _vseg_left := 0
 
-func _init(seed_value: int, curviness_value: float, hilliness_value: float = 0.0, kicker_value: float = 0.0) -> void:
+func _init(seed_value: int, curviness_value: float, hilliness_value: float = 0.0, kicker_value: float = 0.0, period_value: int = 0) -> void:
+	period = maxi(period_value, 0)
 	_rng.seed = seed_value
 	_vrng.seed = seed_value ^ 0x5EED_4111
 	curviness = clampf(curviness_value, 0.0, 1.0)
@@ -104,19 +120,40 @@ func _init(seed_value: int, curviness_value: float, hilliness_value: float = 0.0
 func has_hills() -> bool:
 	return hilliness > 0.0
 
+## A loop: chunk i's place on the lap (the lap is rolled on first use).
+func _at(i: int) -> int:
+	if not _closed:
+		_close()
+	return posmod(i, period)
+
+func _close() -> void:
+	_closed = true
+	_ensure(period - 1)
+	# End at the height it began: tilt the lap by a constant grade.
+	var tilt := _h[period] / (float(period) * L)
+	for j in period + 1:
+		_g[j] -= tilt
+		_h[j] -= tilt * float(j) * L
+
 func vcurve(i: int) -> float:
+	if period > 0:
+		return _vc[_at(i)]
 	if i < 0:
 		return 0.0
 	_ensure(i)
 	return _vc[i]
 
 func start_height(i: int) -> float:
+	if period > 0:
+		return _h[_at(i)]
 	if i < 0:
 		return 0.0
 	_ensure(i)
 	return _h0[i]
 
 func start_grade(i: int) -> float:
+	if period > 0:
+		return _g[_at(i)]
 	if i < 0:
 		return 0.0
 	_ensure(i)
@@ -191,12 +228,16 @@ static func ease_grade(g0: float, c: float, dc_in: float, dc_out: float, s: floa
 	return g
 
 func curvature(i: int) -> float:
+	if period > 0:
+		return _k[_at(i)]
 	if i < 0:
 		return 0.0
 	_ensure(i)
 	return _k[i]
 
 func start_heading(i: int) -> float:
+	if period > 0:
+		return _psi[_at(i)]
 	if i < 0:
 		return 0.0
 	_ensure(i)
@@ -204,12 +245,20 @@ func start_heading(i: int) -> float:
 
 ## World-absolute start of chunk i (x, z), as 64-bit floats.
 func start_x(i: int) -> float:
+	if period > 0:
+		var m := _at(i)
+		@warning_ignore("integer_division")
+		return _px[m] + float((i - m) / period) * _px[period]
 	if i < 0:
 		return 0.0
 	_ensure(i)
 	return _px[i]
 
 func start_z(i: int) -> float:
+	if period > 0:
+		var m := _at(i)
+		@warning_ignore("integer_division")
+		return _pz[m] + float((i - m) / period) * _pz[period]
 	if i < 0:
 		return -float(i) * L
 	_ensure(i)
@@ -230,6 +279,8 @@ func _extend() -> void:
 	var end := psi + k * L
 	if absf(end) > MAX_HEADING:
 		k = (signf(end) * MAX_HEADING - psi) / L
+	if period > 0 and i >= period - CLOSE_CHUNKS:
+		k = clampf(-psi / L, -1.0 / MIN_RADIUS, 1.0 / MIN_RADIUS)
 	_k.append(k)
 	var e := arc_point(k, L).rotated(Vector3.UP, psi)
 	_psi.append(psi + k * L)
@@ -250,6 +301,8 @@ func _extend_vertical(i: int) -> void:
 		if c != 0.0 and (g + c * L - _vseg_target) * signf(c) >= 0.0:
 			c = (_vseg_target - g) / L
 			_vseg_c = 0.0
+		if period > 0 and i >= period - CLOSE_VCHUNKS:
+			c = clampf(-g / L, -1.0 / CREST_MIN_RADIUS, 1.0 / SAG_MIN_RADIUS)
 	_vc.append(c)
 	# Eased start of this chunk: half of its own curvature step is behind it.
 	var dc := c - (_vc[i - 1] if i > 0 else 0.0)

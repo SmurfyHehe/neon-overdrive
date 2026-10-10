@@ -62,6 +62,9 @@ var menu_sfx: MenuSfx   # clicks, ticks and the squelch for every menu (menu_sfx
 var night_clock: NightClock  # 8 p.m. to 6 a.m., saved (night_clock.gd); windows follow it
 var _bands := false  # hour bands drive traffic and Dave (bands_on)
 var world_mood: WorldMood  # tonight's events: rule-breaker share, bar close, meets, crackdowns
+var police_heat: PoliceHeat  # heat level + cop_can_see_player (police F0/F1)
+var police: PolicePatrol     # the stand-in patrol car; null with NEON_POLICE=0 or a benchmark
+var heat_icons: HeatIcons
 const TestMode := preload("res://scripts/core/test_mode.gd")
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
@@ -167,6 +170,7 @@ func _ready() -> void:
 	add_child(fx)
 	_setup_hud()
 	_setup_game_state()
+	_setup_police(benchmark)
 	# Dynamic resolution holds the frame rate inside the tier; benchmark runs
 	# keep a fixed scale (comparable numbers) unless --dynres=1.
 	if not benchmark or Benchmark.opt("dynres") == "1":
@@ -525,6 +529,8 @@ func _shift_origin(shift_chunks: int) -> void:
 		RoadChunkBuilder.sync_collision(c.root)
 	# Traffic (milestone 3): every car gets the same bookkeeping as the player.
 	traffic.shift_world(offset)
+	if police != null:
+		police.shift_world(offset)
 	fx.shift_world(offset)  # skid marks are laid in world space
 	# The ground plane stays put: it is infinite.
 	# The camera follows the car's interpolated position in _process, so it
@@ -627,6 +633,30 @@ func _setup_game_state() -> void:
 	_bands = bands_on()
 	night_clock.hour_changed.connect(_on_hour)
 	night_clock.night_ended.connect(func(_n: int) -> void: radio.announce_hour(NightClock.END_HOUR))
+
+# ---------- police (F0/F1, scripts/traffic/police_heat.gd) ----------
+## Heat always exists (it is the hook police systems ask); the patrol car only
+## when PolicePatrol.enabled. Night one's lines go to Dave when his station is
+## on, else to the heat caption.
+func _setup_police(benchmark: bool) -> void:
+	police_heat = PoliceHeat.new()
+	police_heat.name = "PoliceHeat"
+	police_heat.player = player
+	police_heat.night_clock = night_clock
+	add_child(police_heat)
+	heat_icons = HeatIcons.new(police_heat)
+	add_child(heat_icons)
+	police_heat.line_said.connect(func(text: String) -> void:
+		if not radio.announce(text):
+			heat_icons.say(text))
+	game_state.restarting.connect(police_heat.reset)
+	if PolicePatrol.enabled(benchmark):
+		police = PolicePatrol.new()
+		police.name = "Police"
+		police.player = player
+		police.traffic = traffic
+		police.heat = police_heat
+		add_child(police)
 
 ## Dave reads the hour out. 8 p.m. only ever comes from the roll into the next
 ## night, right after his 6 a.m. sign-off, so it is skipped.

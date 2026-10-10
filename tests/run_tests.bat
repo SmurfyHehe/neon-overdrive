@@ -27,6 +27,8 @@ if "%NEON_TICKS%"=="" set "NEON_TICKS=60"
 if "%SOUND%"=="1" set "AUDIO="
 rem No traffic for the older drive-bot tests (they steer across lanes blind); the traffic_* tests ignore this and spawn their own.
 if "%NEON_TRAFFIC%"=="" set "NEON_TRAFFIC=0"
+rem No patrol car (police F1) in the older drive tests; tests/traffic/police_*.gd set their own.
+if "%NEON_POLICE%"=="" set "NEON_POLICE=0"
 rem Straight road for the older drive tests (they steer blind down -Z); the curve tests set their own.
 if "%NEON_CURVES%"=="" set "NEON_CURVES=0"
 if "%NEON_HILLS%"=="" set "NEON_HILLS=0"
@@ -130,6 +132,8 @@ rem Save system: atomic files, 3 slots, chases, rename migration (scripts/save/)
 call :run core/save_system --headless
 rem F0: cash and bank through reloads, chases and 6 a.m. (and the HUD and pause screen).
 call :run core/wallet --headless
+rem Police F0/F1: heat levels and icons, cop_can_see_player, headlights off hides, night one lines.
+call :run traffic/police_heat --headless
 call :run traffic/traffic_spawn "--headless --fixed-fps 60"
 rem Near-band traffic: hand-overs between the 60 m physics band and the rails, both ways, no visible jump.
 call :run traffic/traffic_near_band "--headless --fixed-fps 120"
@@ -223,6 +227,8 @@ if /i not "%~1"=="quick" (
 	call :run core/game_state --headless
 	rem Save system in the game: resume exactly after a quit, quit mid-chase busts.
 	call :run core/save_resume --headless
+	rem Police F1 in the game: the stand-in patrol car spawns unseen, spots a lit car, not a dark one.
+	call :run traffic/police_patrol --headless
 	call :run tuning/tuning_panel --headless
 	call :run tuning/auto_tune_panel --headless
 	call :run tuning/tuner_screen --headless

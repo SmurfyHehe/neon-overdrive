@@ -92,6 +92,8 @@ const STEER_GRIP_FULL := 8.0     # m/s: it applies in full from here up
 const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Vehicle's own shift_time below
 
 var chassis_visual: Node3D
+## H toggles them (set_headlights); police heat reads this.
+var headlights_on := true
 var _steer_smooth := 0.0
 ## Heat and wear (Phase B). Off for sim_only cars so TuneTrack stays clean.
 var health := PowertrainHealth.new()
@@ -289,6 +291,14 @@ func _ready() -> void:
 ## Exhaust heat 0..1 for the heat shimmer (HeatShimmer.next_heat), stepped each tick.
 var heat := 0.0
 
+## Headlights on or off (H, police F1): off, cops only see the car close up
+## (PoliceHeat.SEE_RANGE_DARK). The lamp is CarFx's "Headlights" spot.
+func set_headlights(on: bool) -> void:
+	headlights_on = on
+	var lamp := get_node_or_null("Headlights") as Node3D
+	if lamp != null:
+		lamp.visible = on
+
 func _physics_process(delta: float) -> void:
 	if driver.is_valid():
 		driver.call(self)
@@ -389,6 +399,8 @@ func _read_keyboard() -> void:
 		set_transmission_mode((transmission_mode() + 1) % Transmission.size())
 	if Input.is_action_just_pressed("reverse"):
 		toggle_reverse()
+	if Input.is_action_just_pressed("headlights"):
+		set_headlights(not headlights_on)
 	clutch_input = 1.0 if Input.is_action_pressed("clutch") else 0.0
 	starter_input = Input.is_action_pressed("starter")
 	var throttle := Input.is_action_pressed("accelerate")

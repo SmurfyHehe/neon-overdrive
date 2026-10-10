@@ -90,7 +90,7 @@ func _joins() -> void:
 	var worst := 0.0
 	var bends := 0.0
 	for period: int in [128, 0]:
-		for road_seed: int in [1, 2, 3, 37, 777, RoadMap.seed_of("loop_1")]:
+		for road_seed: int in [1, 2, 3, 37, 777, RoadMap.seed_of(RoadMap.DEFAULT)]:
 			for hills: float in [0.5, 0.8]:
 				var a := RoadAlignment.new(road_seed, 0.5, hills, 0.0, period)
 				var from := -period - 3 if period > 0 else -3

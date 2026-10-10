@@ -374,7 +374,12 @@ def add_part(model, p):
         P = _section_at(D, s)
         x = P[7][0] + p.get('out', 0.09)
         y = P[7][1] + p.get('up', 0.09)
+        sides = p.get('sides', (1, -1))   # a beater may have lost one
         for sx in (1, -1):
+            if sx not in sides:
+                # the mount stub of a missing mirror
+                box(m, (sx * (x - 0.07), y - 0.02, z(s) + 0.02), (0.04, 0.03, 0.05), p.get('stub_mat', 'trim'))
+                continue
             box(m, (sx * x, y, z(s)), (0.1, 0.075, 0.14), p.get('mat', 'paint'), {'-z': 'trim'})
             box(m, (sx * (x - 0.06), y - 0.01, z(s) + 0.02), (0.06, 0.03, 0.06), 'trim')
 
@@ -660,12 +665,19 @@ def add_wheels(model):
 
             disc(R, 0.003, rim_mat)
             ng, frac, r0, r1 = RIM_GAPS.get(style, RIM_GAPS['5spoke'])
-            if style == 'steel':
+            if style in ('steel', 'steel_bare'):
                 disc(R, 0.003, 'rim_dark')
                 for k in range(6):
                     a = 2 * math.pi * k / 6
                     disc(R * 0.12, 0.006, 'under', n=6, cy=r + R * 0.58 * math.sin(a), cz=zc + R * 0.58 * math.cos(a))
-                disc(R * 0.30, 0.009, 'chrome', n=10)
+                if style == 'steel':
+                    disc(R * 0.30, 0.009, 'chrome', n=10)
+                else:
+                    # hubcap gone: the bare, rusting hub and four lug nuts
+                    disc(R * 0.16, 0.008, wh.get('hub_mat', 'rust'), n=8)
+                    for k in range(4):
+                        a = 2 * math.pi * k / 4 + math.pi / 4
+                        disc(R * 0.05, 0.012, 'under', n=5, cy=r + R * 0.30 * math.sin(a), cz=zc + R * 0.30 * math.cos(a))
                 continue
             if style == 'dish':
                 disc(R * 0.80, 0.0045, 'rim_face')

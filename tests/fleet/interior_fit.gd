@@ -242,7 +242,11 @@ static func _faces(mi: MeshInstance3D, inv: Transform3D) -> PackedVector3Array:
 	return out
 
 func _ray(from: Vector3, dir: Vector3) -> PhysicsRayQueryParameters3D:
-	var q := PhysicsRayQueryParameters3D.create(from, from + dir * REACH, SHELL_LAYER)
+	# A hair off the centreline: a ray that runs exactly along x = 0 can slip
+	# between the two triangles that meet on the roof or floor seam there and
+	# miss the shell (the beater's gear lever, one vertex, one run in three).
+	var off := Vector3(0.0007, 0.0003, 0.0005)
+	var q := PhysicsRayQueryParameters3D.create(from + off, from + off + dir * REACH, SHELL_LAYER)
 	q.hit_back_faces = true
 	q.hit_from_inside = false
 	return q

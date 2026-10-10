@@ -49,7 +49,7 @@ Sizes are in metres. H is the overall height, including roof gear.
 
 | Car | L × W × H | Wheelbase | Silhouette rule (short) |
 |---|---|---|---|
-| P0 Rear-engine beater (starter, added 2026-10-09) | 4.05 × 1.58 × 1.50 | 2.40 | one dome nose to tail, pontoon fenders bulging at each wheel, round lamps up on the front fenders, louvred engine lid, tall narrow tyres in sagging arches |
+| P0 Rear-engine beater (starter, added 2026-10-09, rebuilt 2026-10-10) | 4.30 × 1.72 × 1.61 | 2.55 | one dome nose to tail, pontoon fenders bulging at each wheel, round lamps up on the front fenders, louvred engine lid, wheels filling the arches on bare steel rims |
 | P1 Sports coupe | 4.42 × 1.80 × 1.24 | 2.52 | long hood, cabin pushed back, fastback, hoop wing, pop-ups |
 | P2 Hot hatch | 4.05 × 1.83 × 1.40 | 2.56 | short brick, narrow upright cabin on box-blistered hips, upright hatch under an overhanging spoiler |
 | P3 Tuner sedan | 4.48 × 1.78 × 1.36 | 2.62 | square four-door, boxed overfenders, pedestal wing, 4 round tail lamps |
@@ -103,7 +103,14 @@ patrol SUV.
 
 - **Palette:** Amber vs. Dusk, as listed in ROADMAP.md.
 - **Hero paints:**
-  - P0 Faded sage `#8C9B88`, with a primer-grey front lid `#5F5B58` (the one panel never painted)
+  - P0 Faded sage `#8C9B88`, with a primer-grey front lid `#5F5B58` (the one
+    panel never painted) and, since the 2026-10-10 rebuild, all four fenders in
+    the same primer with rust `#6B4A33` on the arch lips and bondo `#B9AE98`
+    patches (Roy: "primer grey with rust and unfinished bondo work like body
+    work"). Four bits are missing: the hubcaps (bare steel rims), the front
+    bumper (two rust brackets remain), the passenger mirror (a rust stub) and
+    the right tail-lamp lens (a dark socket). Air-cooled: six louvres in the
+    engine lid and three intake slots in each rear quarter.
   - P1 Sodium `#FF8A1F`
   - P2 Rally red `#C41E24`
   - P3 Pearl white `#E9E6DF` with bronze wheels

@@ -41,6 +41,8 @@ const TICKER_H := 46.0
 const TICKER_SPEED := 64.0     # design px per second
 const TICKER_GAP := "      +++      "
 const SYNTHWAVE_DIR := "s4_synthwave"
+const DJ_NAME := "Dale"
+const DJ_OLD_NAME := "Dave"
 
 ## Splash timing, matched to the whistle (tools/render_splash_whistle.gd):
 ## the turbo spools for SPOOL seconds, then the valve flutters.
@@ -456,15 +458,17 @@ func _build_ticker() -> void:
 	bar.add_child(ticker_speaker)
 
 ## The lines the news line runs: the talk station's own, then tonight's bands.
+## The DJ is Dale (decided 2026-10-10); the radio data still says Dave, so the
+## name is swapped here until that data is renamed.
 static func news_lines() -> PackedStringArray:
 	var out: PackedStringArray = []
 	for st: Dictionary in RadioStations.STATIONS:
 		if st.get("kind", "") == "talk":
 			for l: String in st.get("dj", []):
-				out.append(l)
+				out.append(l.replace(DJ_OLD_NAME, DJ_NAME))
 	for band: Array in NightBands.BAND_LINES:
 		if not band.is_empty():
-			out.append(str(band[0]))
+			out.append(str(band[0]).replace(DJ_OLD_NAME, DJ_NAME))
 	return out
 
 func _run_ticker(delta: float) -> void:

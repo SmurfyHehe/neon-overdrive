@@ -54,7 +54,11 @@ func _run() -> void:
 	ev.physical_keycode = KEY_SPACE
 	ev.pressed = true
 	Input.parse_input_event(ev)
-	await _frames(3)
+	for i in 60:
+		if not title.splash_running():
+			break
+		await process_frame
+	await _frames(2)
 	_check(not title.splash_running() and not title.splash.visible, "a key skips the splash")
 	_check(gs.state == GameState.State.TITLE, "skipping the splash stays on the title")
 	_check(title.panel.visible, "the menu shows after the splash")
@@ -90,11 +94,16 @@ func _run() -> void:
 	esc.action = "ui_cancel"
 	esc.pressed = true
 	Input.parse_input_event(esc)
-	await _frames(3)
+	for i in 60:   # input lands on a drawn frame, which can lag physics frames
+		if title.main_list.visible:
+			break
+		await process_frame
 	_check(title.main_list.visible and gs.state == GameState.State.TITLE, "Esc comes back to the main list")
 	_check(title.ticker_label.text.length() > 40, "the news line has text")
 	_check(title.slide.find_child("EarlyAccessTag", true, false) != null, "the Early Access tag is on the title")
 	_check(not TitleScreen.news_lines().is_empty(), "there are news lines")
+	_check(title.ticker_speaker.text.strip_edges() == "DALE", "the news line is Dale's, got '%s'" % title.ticker_speaker.text)
+	_check(not ("Dave" in title.ticker_label.text), "no Dave on the news line")
 
 	# ---------- radio ----------
 	var radio: RadioManager = game.radio

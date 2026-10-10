@@ -189,6 +189,22 @@ renderer/rendering_method="mobile"
 
 [shader_globals]
 
+car_lamp_origin={
+"type": "vec3",
+"value": Vector3(0, 0, 0)
+}
+car_lamp_fwd={
+"type": "vec3",
+"value": Vector3(0, 0, -1)
+}
+car_lamp_grid={
+"type": "vec4",
+"value": Vector4(25, 6.25, 18.75, 0)
+}
+car_lamp_light={
+"type": "vec4",
+"value": Vector4(1, 0.55, 0.2, 13.2)
+}
 sky_glow_color={
 "type": "color",
 "value": Color(0.21, 0.11, 0.05, 1)

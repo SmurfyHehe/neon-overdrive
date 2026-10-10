@@ -91,6 +91,9 @@ const STEER_GRIP_FULL := 8.0     # m/s: it applies in full from here up
 
 const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Vehicle's own shift_time below
 
+## How far the player's own tail lamps and flares go toward a traffic car's
+## full brake flare: the chase camera sits right behind them.
+const PLAYER_BRAKE_GLOW := 0.35
 var chassis_visual: Node3D
 ## H toggles them (set_headlights); police heat reads this.
 var headlights_on := true
@@ -303,6 +306,9 @@ func _ready() -> void:
 		if kind == P1CoupeBuilder.KIND:
 			CarParts.attach(self, {"hub_x": P1CoupeBuilder.DESIGN_WHEEL_X})
 		CarFx.attach(self, chassis_visual.get_meta("half_l", 2.2))
+		# Street-lamp light on car paint (High preset): the player feeds the
+		# lamp row to every car shader.
+		add_child(CarLampSweep.new())
 		# Detail parts policy (shocks, later the engine bay and panel contents)
 		# and the undercarriage's Low-preset switch. After CarFx, so the node
 		# finds the underside on its layer.
@@ -340,6 +346,10 @@ func _physics_process(delta: float) -> void:
 	if braking != _smear_brake_on and chassis_visual != null:
 		_smear_brake_on = braking
 		WetReflections.set_tail_brake(chassis_visual, 1.0 if braking else 0.0)
+		# The tail lamps themselves flare on the brake (both body paths).
+		var body := chassis_visual.get_node_or_null(^"Body") as MeshInstance3D
+		if body != null:
+			body.set_instance_shader_parameter("brake", PLAYER_BRAKE_GLOW if braking else 0.0)
 	# Limp mode: the slowest active cause caps the speed by fading the throttle.
 	limp.update(fuel.is_empty(), health.engine_temp if health.enabled else 0.0)
 	if limp.is_limping():

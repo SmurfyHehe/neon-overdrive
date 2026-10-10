@@ -178,6 +178,10 @@ set "TEST_TIMEOUT=%TT_SAVED%"
 rem Player cars (stage D): every PlayerCars.KINDS car boots as the player and gets a drive test.
 call :run fleet/player_cars "--headless --fixed-fps 120"
 call :run fleet/interior_fit --headless
+rem every player car's cabin: its own look, the road band clear, the driver fits
+call :run fleet/interior_unique --headless
+call :run fleet/sight_line --headless
+call :run fleet/driver_fit --headless
 call :run car/special_s0 "--headless --fixed-fps 120"
 rem ~17 s: full throttle at ~245 km/h across floating-origin recenters (the old ground-slab kick), at the game's 120 Hz.
 call :run world/recenter_kick "--headless --fixed-fps 120"

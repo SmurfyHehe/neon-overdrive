@@ -96,6 +96,11 @@ const STRIP_INNER := 0.82     # the band's inner edge, as a share of STRIP_R
 const STRIP_SWEEP := 70.0
 ## The beater's speedo pod sits this far below its CABIN cluster height.
 const POD_SINK := 0.043
+## The open footwell in front of the driver: this far either side of the seat's
+## centre line the dash face stops above the legs and there is no knee panel.
+const WELL_HALF := 0.27
+## A leg's radius with room to spare (the thigh is 7.5 cm at the hip).
+const LEG_R := 0.085
 ## The lever's defaults, overridden per car by the spec's "shifter"
 ## (CarSpec.shifter: the gate, the length and the throw).
 const LEVER_LEN := 0.23
@@ -211,6 +216,9 @@ var _area_run := -1              # the district run the car was last in (area na
 var wheel_angle := 0.0           # the drawn wheel, radians, + = right (chases steering)
 var _wheel_vel := 0.0            # rad/s
 var cockpit := false
+var well_x0 := 0.0               # the footwell's span across the car, and the
+var well_x1 := 0.0               # height the dash face stops at over it
+var well_y := 0.0
 var shifter := {}                # this car's lever (CarSpec.shifter)
 var lever_len := LEVER_LEN
 var row_tilt := LEVER_ROW_TILT
@@ -367,9 +375,25 @@ func _build_static() -> void:
 	var top_near := cl.x
 	var top_far := cowl.x   # the lip's top is the cowl line itself
 	k.wedge(Vector3(dash_w, 0.06, dash_depth), Vector3(0.0, cowl.x - 0.03, (cowl.y + face_z) * 0.5), c_dash, 0.0, top_near - top_far)
-	k.box(Vector3(dash_w, 0.36, 0.12), Vector3(0.0, top_near - 0.20, face_z), c_dash_face)
+	# The dash face and the knee panel under it, in three runs across the car.
+	# In front of the driver both stop above his legs (the footwell is open
+	# there: tests/fleet/driver_fit.gd; before, the panel was one solid block
+	# from door to door and the shins and feet ran through it).
 	var knee_depth := minf(0.32, face_z - cowl.y + 0.12)   # never past the firewall (the kei's dash is 6 cm deep)
-	k.box(Vector3(dash_w, 0.22, knee_depth), Vector3(0.0, top_near - 0.45, face_z + 0.03 - knee_depth * 0.5), c_plastic)
+	well_x0 = maxf(-dash_half, seat_x - WELL_HALF)
+	well_x1 = minf(dash_half, seat_x + WELL_HALF)
+	well_y = clampf(maxf(leg_top_y(face_z + 0.06), leg_top_y(face_z - 0.06)) + 0.02, top_near - 0.38, top_near - 0.06)
+	for run in [[-dash_half, well_x0, false], [well_x0, well_x1, true], [well_x1, dash_half, false]]:
+		var x0: float = run[0]
+		var x1: float = run[1]
+		if x1 - x0 < 0.01:
+			continue
+		var xc := (x0 + x1) * 0.5
+		if run[2]:
+			k.box(Vector3(x1 - x0, top_near - 0.02 - well_y, 0.12), Vector3(xc, (top_near - 0.02 + well_y) * 0.5, face_z), c_dash_face)
+		else:
+			k.box(Vector3(x1 - x0, 0.36, 0.12), Vector3(xc, top_near - 0.20, face_z), c_dash_face)
+			k.box(Vector3(x1 - x0, 0.22, knee_depth), Vector3(xc, top_near - 0.45, face_z + 0.03 - knee_depth * 0.5), c_plastic)
 	k.box(Vector3(dash_w - 0.08, 0.03, 0.06), Vector3(0.0, cowl.x - 0.015, cowl.y), c_trim)  # cowl lip, under the glass line
 	lit.box(Vector3(dash_w - 0.14, 0.006, 0.01), Vector3(0.0, top_near - 0.018, face_z + 0.055), strip)   # dash edge strip
 	# Cluster binnacle and its hood in front of the driver, then the dial faces.
@@ -384,11 +408,12 @@ func _build_static() -> void:
 	if cab.console == "tunnel":
 		var con_len := (hb.z + 0.20) - (face_z + 0.06)
 		var con_z := (face_z + 0.06 + hb.z + 0.20) * 0.5
-		k.box(Vector3(0.26, 0.20, con_len), Vector3(0.0, lever.y - 0.095, con_z), c_plastic)
-		k.box(Vector3(0.30, 0.18, con_len + 0.38), Vector3(0.0, floor_y + 0.06, con_z - 0.01), c_carpet)   # tunnel
-		k.box(Vector3(0.20, 0.05, 0.22), Vector3(0.0, lever.y + 0.03, hb.z - 0.06), c_leather)              # armrest
-		lit.box(Vector3(0.006, 0.004, con_len - 0.2), Vector3(-0.133, lever.y + 0.007, con_z - 0.06), Color(strip, strip.a * 0.86))
-		lit.box(Vector3(0.006, 0.004, con_len - 0.2), Vector3(0.133, lever.y + 0.007, con_z - 0.06), Color(strip, strip.a * 0.86))
+		var con_w := console_width()   # 26 cm; the kei's is narrow, its seats sit close
+		k.box(Vector3(con_w, 0.20, con_len), Vector3(0.0, lever.y - 0.095, con_z), c_plastic)
+		k.box(Vector3(con_w + 0.04, 0.18, con_len + 0.38), Vector3(0.0, floor_y + 0.06, con_z - 0.01), c_carpet)   # tunnel
+		k.box(Vector3(con_w - 0.06, 0.05, 0.22), Vector3(0.0, lever.y + 0.03, hb.z - 0.06), c_leather)              # armrest
+		lit.box(Vector3(0.006, 0.004, con_len - 0.2), Vector3(-con_w * 0.5 - 0.003, lever.y + 0.007, con_z - 0.06), Color(strip, strip.a * 0.86))
+		lit.box(Vector3(0.006, 0.004, con_len - 0.2), Vector3(con_w * 0.5 + 0.003, lever.y + 0.007, con_z - 0.06), Color(strip, strip.a * 0.86))
 	else:
 		# flat floor (rear-engine beater): a low hump with the gate plate on it
 		k.box(Vector3(0.24, 0.07, 0.60), Vector3(0.0, lever.y - 0.035, lever.z + 0.18), c_carpet)
@@ -402,7 +427,7 @@ func _build_static() -> void:
 	# Seats, driver and passenger.
 	var recline := Basis(Vector3.RIGHT, deg_to_rad(12.0))
 	var seat_w := minf(0.50, (door_x - 0.02) - 0.14 if cab.console != "tunnel" else door_x - 0.17)
-	seat_w = clampf(seat_w, 0.40, 0.50)
+	seat_w = clampf(seat_w, 0.34, 0.50)   # the kei's are narrow: two seats and a console in 1.04 m
 	if cab.seats == "bench":
 		# one cushion and backrest across the car, a fold-down armrest hump in the middle
 		var bw := door_x * 2.0 - 0.06
@@ -601,6 +626,29 @@ func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vec
 			zone.offset(c)
 			lit.merge(zone)
 
+## The top of the driver's legs where they cross car-space z: both legs at
+## rest (right foot on the throttle or the brake, left on the clutch or the
+## dead pedal), by the driver's own two-bone IK, plus LEG_R. Behind the hips or
+## ahead of the feet: the floor.
+func leg_top_y(z: float) -> float:
+	var ankles := DriverModel.rest_ankles(cab)
+	var bones := DriverModel.leg_lengths(cab)
+	var top := float(cab.floor_y)
+	for side in ankles:
+		var hip := DriverModel.rest_hip(cab, side)
+		for ankle in ankles[side]:
+			var knee: Vector3 = DriverModel.two_bone(hip, ankle, bones.x, bones.y, DriverModel.knee_pole(side))[0]
+			for seg in [[hip, knee], [knee, ankle]]:
+				var a: Vector3 = seg[0]
+				var b: Vector3 = seg[1]
+				if (z - a.z) * (z - b.z) <= 0.0 and absf(a.z - b.z) > 0.001:
+					top = maxf(top, lerpf(a.y, b.y, (z - a.z) / (b.z - a.z)) + LEG_R)
+	return top
+
+## The centre console's width (a tunnel car's; CABIN "console_w").
+func console_width() -> float:
+	return float(cab.get("console_w", 0.26))
+
 ## This car's cabin colours (TRIMS; an unknown trim is the stock set).
 func trim_colours() -> Dictionary:
 	return TRIMS.get(String(cab.get("trim", "stock")), TRIMS["stock"])
@@ -666,7 +714,8 @@ func _build_glass() -> void:
 	var z0 := float((cab.a_pillar[0] as Vector3).z) + 0.20   # at the A-pillar foot
 	var z1 := float(cab.b_pillar_z) - 0.04                     # at the B-pillar
 	var zt := float((cab.a_pillar[1] as Vector3).z) - 0.04     # top front, where the A-pillar meets the roof
-	var a := Vector3(gx, glass_bottom, z0)
+	# the body narrows toward the pillar's foot: the pane's front bottom corner follows the door card there
+	var a := Vector3(-minf(float(cab.glass_x), float(cab.get("door_x_front", cab.door_x)) + 0.01), glass_bottom, z0)
 	var b := Vector3(gx, glass_bottom, z1)
 	var c := Vector3(gx_top, top, z1)
 	var d := Vector3(gx_top, top, maxf(zt + 0.30, z0 + 0.10))   # the raked pillar: the top edge starts well behind the foot

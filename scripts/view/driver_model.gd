@@ -99,6 +99,14 @@ const LINK_WIDE := 0.012       # across the chain
 const LINK_BAR := 0.0045
 const LINK_TILT_DEG := 35.0
 const THIGH := 0.47
+## The knees fall a little apart (2026-10-10): with them straight up, both
+## thighs ran through the bottom of the wheel rim in every car
+## (tests/fleet/driver_fit.gd). The IK pole leans this far outboard per leg.
+const KNEE_SPLAY := 0.35
+## The leg bones are scaled to the car (2026-10-10): full-length legs in a low
+## car's short footwell folded the knees up into the wheel rim. A car's legs
+## are as long as its furthest pedal needs, plus LEG_SLACK for the pedal's
+## travel, never under LEG_SCALE_MIN of the full THIGH + SHIN (leg_lengths).
 const SHIN := 0.45
 ## Where the hands hold the rim at rest, in degrees round the rim for the right
 ## hand (0 = 3 o'clock, up is positive; the left hand mirrors it about 12
@@ -186,6 +194,8 @@ var bracelet: MeshInstance3D # on the right hand
 var legs := {}               # side -> {thigh, shin, foot}
 var glove_style := DEFAULT_GLOVE
 var grip_deg := DEFAULT_GRIP_DEG   # this car's rest grip, right hand
+var thigh_len := THIGH       # this car's leg bones (leg_lengths)
+var shin_len := SHIN
 ## Per hand (side -> {}): "w" the hand's angle round the rim in car space
 ## (degrees, 0 = 3 o'clock, up positive, unwrapped), "rim" its angle on the
 ## rim itself (turns with the wheel), "grip" true while it holds the rim,
@@ -239,6 +249,9 @@ func _init(cockpit: CockpitFrame) -> void:
 	name = "Driver"
 	# the seat: pelvis 2 cm over the cushion, 2 cm ahead of its centre (the coupe's 0.50, 0.34)
 	pelvis = Vector3(float(cockpit.cab.seat_x), float(cockpit.cab.seat_h) + 0.02, float(cockpit.cab.seat_z) - 0.02)
+	var bones := leg_lengths(cockpit.cab)
+	thigh_len = bones.x
+	shin_len = bones.y
 
 func _ready() -> void:
 	_mat = CockpitKit.material(0.9, 0.0, 0.05)
@@ -385,9 +398,9 @@ func _build_bracelet() -> void:
 
 func _build_leg(side: int) -> Dictionary:
 	var th := CockpitKit.new()
-	_segment(th, THIGH, 0.075, 0.06, JEANS)
+	_segment(th, thigh_len, 0.075, 0.06, JEANS)
 	var sh := CockpitKit.new()
-	_segment(sh, SHIN, 0.055, 0.045, JEANS)
+	_segment(sh, shin_len, 0.055, 0.045, JEANS)
 	sh.box(Vector3(0.09, 0.05, 0.10), Vector3(0.0, 0.02, 0.0), JEANS)             # knee
 	var ft := CockpitKit.new()
 	# foot along -z from the ankle: boot and sole, toe up a little
@@ -400,6 +413,38 @@ func _build_leg(side: int) -> Dictionary:
 	return {"thigh": thigh, "shin": shin, "foot": foot}
 
 # ---------- IK ----------
+
+## Which way a knee bends: up, a little forward, and out to its own side.
+static func knee_pole(side: int) -> Vector3:
+	return Vector3(float(side) * KNEE_SPLAY, 1.0, -0.4)
+
+## Where each foot rests, by side (the right on the throttle or the brake, the
+## left on the clutch or the dead pedal): the ankle targets _pedal_ankle and
+## _dead_pedal_ankle give with the pedals up.
+static func rest_ankles(cab: Dictionary) -> Dictionary:
+	var at: Vector3 = cab.pedals
+	return {
+		1: [at + Vector3(0.0, -0.20, 0.114), at + Vector3(-0.12, -0.20, 0.114)],
+		-1: [at + Vector3(-0.24, -0.20, 0.114), at + Vector3(-0.27, -0.21, 0.17)],
+	}
+
+const LEG_SLACK := 0.07
+const LEG_SCALE_MIN := 0.80
+
+## This car's (thigh, shin): the full bones, scaled down to its footwell.
+static func leg_lengths(cab: Dictionary) -> Vector2:
+	var far := 0.0
+	var ankles := rest_ankles(cab)
+	for side in ankles:
+		for ankle in ankles[side]:
+			far = maxf(far, rest_hip(cab, side).distance_to(ankle))
+	return Vector2(THIGH, SHIN) * clampf((far + LEG_SLACK) / (THIGH + SHIN), LEG_SCALE_MIN, 1.0)
+
+## A leg's hip in car space for a cabin, as _hip() gives it at rest (the
+## torso's recline tips the hip joint 4 mm back). CockpitFrame opens the
+## footwell round the legs with it before the driver exists.
+static func rest_hip(cab: Dictionary, side: int) -> Vector3:
+	return Vector3(float(cab.seat_x) + float(side) * HIP_HALF, float(cab.seat_h) + 0.04, float(cab.seat_z) - 0.016)
 
 ## Two-bone IK: joint positions for a chain root -> elbow -> end reaching for
 ## `target`, bones l1 and l2, bending toward `pole`. Returns [elbow, end].
@@ -834,7 +879,7 @@ func _place_legs(delta: float) -> void:
 		var l: Dictionary = legs[side]
 		var hip := _hip(side)
 		var ankle: Vector3 = targets[side]
-		var ik := two_bone(hip, ankle, THIGH, SHIN, Vector3(0.0, 1.0, -0.4))
+		var ik := two_bone(hip, ankle, thigh_len, shin_len, knee_pole(side))
 		_aim(l.thigh, hip, ik[0], Vector3.RIGHT)
 		_aim(l.shin, ik[0], ik[1], Vector3.RIGHT)
 		var foot: Node3D = l.foot

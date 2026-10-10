@@ -140,6 +140,8 @@ call :run world/road_alignment --headless
 call :run world/road_layout --headless
 rem ~1 min: the median barriers (R1): each type at 9 speeds and angles, crash cushions head-on, crossover rules.
 call :run world/barrier_hit "--headless --fixed-fps 120"
+rem Lamp-post life (world step 2): moths and a bat, banners, steam, litter. Placement, caps, meshes and the wind number; chunk instances are checked when a window is open.
+call :run world/lamp_life --headless
 if /i not "%~1"=="quick" (
 	rem Headless, but ~2 min of simulated driving; --fixed-fps lets physics run faster than the clock.
 	call :run tuning/tune_track "--headless --fixed-fps 60"
@@ -195,6 +197,8 @@ if /i not "%~1"=="quick" (
 	rem Real window: signs read back from the screen (dropped columns, mirrored text), then every sign's placement.
 	call :run world/sign_legibility
 	call :run world/sign_audit
+	rem Same file as the headless run above, with a window: the chunk instances (moths, banners, vents, litter) and the recycle path.
+	call :run world/lamp_life
 	rem ~10 s, real window (shaders): traffic tail lamps, brake lamps, distance flares, barrier reflectors.
 	call :run traffic/night_lights
 	call :run fleet/fleet_silhouette_sweep

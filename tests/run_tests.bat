@@ -263,6 +263,8 @@ if /i not "%~1"=="quick" (
 	rem Same file as the headless run above, with a window: the chunk instances (moths, banners, vents, litter) and the recycle path.
 	call :run world/lamp_life
 	call :run world/wet_reflections
+	rem Wet asphalt shader + visible puddles (S1a): placement needs a window.
+	call :run world/road_wet
 	rem ~10 s, real window (shaders): traffic tail lamps, brake lamps, distance flares, barrier reflectors.
 	call :run traffic/night_lights
 	rem ~25 s, real window: low/high beam, flash, auto-dip, cut-off on a wall, cops see by beam.

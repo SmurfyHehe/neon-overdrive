@@ -66,19 +66,24 @@ void fragment() {
 }
 """
 
+const RoadWet := preload("res://scripts/world/road_wet.gd")
+
 static var wetness := 1.0
 static var _lamp_mat: ShaderMaterial
 static var _tail_mat: ShaderMaterial
 static var _quad: PlaneMesh
 static var _tail_points := {}  # "kind|build" -> Array[Vector3], NPC tail lamp centres
 
-## 0 dry .. 1 soaked. Two uniform writes; nothing else moves.
+## 0 dry .. 1 soaked: the one entry point for every wet-road visual. Two
+## uniform writes here, plus the asphalt and puddles (road_wet.gd); nothing
+## else moves.
 static func set_wetness(w: float) -> void:
 	wetness = clampf(w, 0.0, 1.0)
 	if _lamp_mat != null:
 		_lamp_mat.set_shader_parameter("wet", wetness)
 	if _tail_mat != null:
 		_tail_mat.set_shader_parameter("wet", wetness)
+	RoadWet.set_wetness(wetness)
 
 static func is_on() -> bool:
 	return wetness > 0.0

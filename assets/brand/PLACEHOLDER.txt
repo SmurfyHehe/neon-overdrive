@@ -1,12 +1,24 @@
 These are the real B4 brand files (no longer placeholders). The file name is
 kept so existing links still work.
 
-  logo_B4_combined_256.png  project icon / window icon (mark re-centred)
-  logo_B4_combined.ico      Windows export icon, sizes 16/32/48/64/128/256
-  boot_splash.png           boot splash, 1920x1080, lockup centred
-  title_screen_mock_B4_combined.png  Roy's title screen mock (reference)
-  centring_check.png        before/after of the re-centring
+Everything here is built from one vector description of the mark in
+tools/build_brand.py. Run tools\build_brand.bat to rebuild all of it.
 
-Regenerate the centred files with `python tools/recentre_logo.py`.
-It always reads the untouched originals in originals/. The earlier
-placeholder art is kept in originals/placeholder/.
+  logo_B4_combined_centred.svg  the mark on its navy tile, centred (48 px and up)
+  logo_B4_small.svg             simpler drawing for 32 and 40 px
+  logo_B4_tiny.svg              simplest drawing for 16 to 24 px
+  logo_B4_mark.svg              the mark with no tile (title screen)
+  logo_B4_mark_body.svg / logo_B4_mark_wheel.svg   two layers, so the splash
+                                can spin the wheel
+  logo_B4_combined_256.png      project icon
+  logo_B4_combined.ico          Windows icon, sizes 16/20/24/32/40/48/64/128/256,
+                                each drawn at its own size
+  boot_splash.png               boot splash, 1920x1080, lockup centred
+  store/                        Steam 184 px jpg icon and capsules (not in the game)
+  title_screen_mock_B4_combined.png  Roy's title screen mock (reference)
+
+The original SVG was not on the laptop, so the vector was redrawn from the
+256 px PNG in originals/ (2026-10-10). tools/recentre_logo.py and
+centring_check.png belong to the older PNG-only pipeline and are kept for
+reference; do not run recentre_logo.py, it would overwrite the new icon.
+The earlier placeholder art is kept in originals/placeholder/.

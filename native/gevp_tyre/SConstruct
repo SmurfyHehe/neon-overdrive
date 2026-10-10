@@ -1,0 +1,17 @@
+#!/usr/bin/env python
+# Builds the GevpTyreNative GDExtension. Needs godot-cpp checked out next to
+# this file (the "Native tyre library" workflow does that; nothing is built on
+# the laptop):
+#   git clone --depth 1 -b 4.4 https://github.com/godotengine/godot-cpp
+#   scons platform=windows target=template_release
+#   scons platform=windows target=template_debug
+# Output: addons/gevp_tyre_native/gevp_tyre.<platform>.<target>.<arch>.dll
+
+env = SConscript("godot-cpp/SConstruct")
+env.Append(CPPPATH=["src/"])
+sources = Glob("src/*.cpp")
+library = env.SharedLibrary(
+    "../../addons/gevp_tyre_native/gevp_tyre{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
+    source=sources,
+)
+Default(library)

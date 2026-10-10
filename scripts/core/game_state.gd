@@ -23,7 +23,11 @@ extends Node
 # TITLE is the title screen before the first drive (title_screen.gd): paused
 # like PAUSED, but the title shows instead of the pause menu. Only the first boot
 # of a session shows it; Restart goes straight back to the road.
-enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO, TITLE }
+# WRECKED (ending a run, 2026-10-10): a hard hit ended the run and the crash
+# screen is playing (scripts/core/run_end.gd). The tree is NOT paused, so the
+# car, the camera shake and the sounds carry on in real time; no menu opens
+# from it, and it only ends in a restart.
+enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO, TITLE, WRECKED }
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
 
@@ -276,6 +280,13 @@ func close_autotune() -> void:
 		get_tree().paused = false
 		_set_state(State.PLAYING)
 
+## A hard hit ended the run. True when the state changed (false from a menu).
+func wreck() -> bool:
+	if state != State.PLAYING:
+		return false
+	_set_state(State.WRECKED)
+	return true
+
 # Fresh run: reload the whole scene. Cheapest correct reset -- no per-system
 # reset code to keep in sync as systems are added.
 func restart() -> void:
@@ -322,14 +333,16 @@ func _set_state(new_state: State) -> void:
 		_grace = STALL_GRACE
 	# The engine sound is a generator pushed from _process, which stops while the
 	# tree is paused; the buffer then underruns and clicks. Mute its bus for the
-	# pause, unmute on the way back (Phase A, 2026-10-05).
+	# pause, unmute on the way back (Phase A, 2026-10-05). A wreck does not
+	# pause, so nothing is muted for it here: run_end.gd cuts the sound itself.
 	# The radio plays on, muffled, on the pause screen and the title (PauseLook);
 	# only the Tuner and photo mode still mute it.
+	var muted := new_state != State.PLAYING and new_state != State.WRECKED
 	for bus_name in [&"Engine", &"Turbo"]:
 		var bus := AudioServer.get_bus_index(bus_name)
 		if bus >= 0:
-			AudioServer.set_bus_mute(bus, new_state != State.PLAYING)
+			AudioServer.set_bus_mute(bus, muted)
 	var music_bus := AudioServer.get_bus_index(&"Music")
 	if music_bus >= 0:
-		AudioServer.set_bus_mute(music_bus, new_state != State.PLAYING and new_state != State.PAUSED and new_state != State.TITLE)
+		AudioServer.set_bus_mute(music_bus, muted and new_state != State.PAUSED and new_state != State.TITLE)
 	state_changed.emit(new_state, old)

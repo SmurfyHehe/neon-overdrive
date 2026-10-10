@@ -74,6 +74,9 @@ var saver: SaveDirector
 ## Tonight's cash and the bank (F0, scripts/core/wallet.gd).
 var wallet: Node
 const Wallet := preload("res://scripts/core/wallet.gd")
+## A hard hit ends the run: rules, crash screen, morning (scripts/core/run_end.gd).
+var run_end: Node
+const RunEnd := preload("res://scripts/core/run_end.gd")
 var road_seed := 0
 var run := {}
 
@@ -543,6 +546,14 @@ func _setup_game_state() -> void:
 	# 6 a.m.: tonight's cash goes into the bank (F0).
 	night_clock.night_ended.connect(func(_n: int) -> void: wallet.bank_night())
 	night_clock.night_ended.connect(func(_n: int) -> void: saver.save_now.call_deferred())
+	run_end = RunEnd.new()
+	run_end.player = player
+	run_end.camera = camera
+	run_end.wallet = wallet
+	run_end.night_clock = night_clock
+	run_end.game_state = game_state
+	add_child(run_end)
+	run_end.sensor.enabled = wrecks_on()
 	world_mood = WorldMood.new()
 	add_child(world_mood)
 	world_mood.event_started.connect(_on_event)
@@ -560,6 +571,15 @@ func _on_hour(hour24: int) -> void:
 			radio.announce(WorldMood.BAR_CLOSE_LINE)  # bar close starts on the hour
 		else:
 			radio.announce_hour(hour24)
+
+## A hard hit ends the run (run_end.gd). Off in the benchmark, and in tests
+## unless the test asks with NEON_WRECK=1: the older drive tests crash on
+## purpose and must not be restarted halfway. NEON_WRECK=0 turns it off in play.
+func wrecks_on() -> bool:
+	var env := OS.get_environment("NEON_WRECK")
+	if Benchmark.requested() or env == "0":
+		return false
+	return not TestMode.active() or env == "1"
 
 ## Hour bands (living world step 2, night_bands.gd): the clock sets how much
 ## of the Traffic slider is on the road and which lines Dave adds. Off in the

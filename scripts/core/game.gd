@@ -110,6 +110,15 @@ const WetReflections := preload("res://scripts/world/wet_reflections.gd")
 const WeatherPlan := preload("res://scripts/world/weather_plan.gd")
 ## Real seconds into a night before Dave reads the forecast.
 const FORECAST_DELAY := 8.0
+const SaveStore := preload("res://scripts/save/save_store.gd")
+## Seed every night's weather comes from (WeatherPlan.entry); picked once per
+## new game and kept in the slot's profile (save_store.gd). Tests, bots and the
+## benchmark use the road seed, as before WX0.
+var weather_seed := 0
+## Tonight's one mid-night change has landed (saved, so a resume does not say
+## its line again), and one is waiting for a race to end.
+var _change_done := false
+var _change_waits := false
 # Weather's wetness drives the wet-road reflections; this is the `version` of
 # Weather last pushed to them.
 var _weather_seen := -1
@@ -963,11 +972,14 @@ func _setup_police(benchmark: bool) -> void:
 ## Dave reads the hour out. 8 p.m. only ever comes from the roll into the next
 ## night, right after his 6 a.m. sign-off, so it is skipped.
 func _on_hour(hour24: int) -> void:
+	var weather_spoke := false
 	if hour24 == NightClock.START_HOUR:
 		_begin_night(false)  # the night has already counted up (night_clock.gd)
 	else:
-		_weather_change(hour24)
-	if hour24 != NightClock.START_HOUR:
+		weather_spoke = _weather_change(hour24)
+	# Dave reads the hour unless he just gave the weather change (that line
+	# would be overwritten in the same frame and never heard).
+	if hour24 != NightClock.START_HOUR and not weather_spoke:
 		if hour24 == 2 and world_mood.crackdown_until < 0.0:
 			radio.announce(WorldMood.BAR_CLOSE_LINE)  # bar close starts on the hour
 		else:
@@ -988,13 +1000,34 @@ func wrecks_on() -> bool:
 ## (Weather.ROLL_ON) and starts already wet if it was raining before you got
 ## in the car.
 func _start_weather() -> void:
+	_resolve_weather_seed()
+	if race != null and not race.race_ended.is_connected(_on_race_ended_weather):
+		race.race_ended.connect(_on_race_ended_weather)
 	var pinned := Weather.env_level()
 	if pinned >= 0:
-		Weather.set_level(pinned, true)
+		Weather.set_level(pinned, true, Weather.env_snow_roads())
 	elif _plan_active():
 		_begin_night(true)
 	else:
 		Weather.reset()
+
+## The seed for the night plan. With saving on it lives in the slot profile:
+## a fresh run (nothing to resume) picks a new one, a resumed run from before
+## WX0 falls back to its road seed once and saves that. With saving off
+## (tests, bots, benchmark) it is the road seed, so those runs repeat.
+func _resolve_weather_seed() -> void:
+	if not SaveDirector.enabled:
+		weather_seed = road_seed
+		return
+	var s := SaveStore.weather_seed()
+	if s == 0 or run.is_empty():
+		s = road_seed if not run.is_empty() else maxi(randi() & 0x7fffffff, 1)
+		SaveStore.set_weather_seed(s)
+	weather_seed = s
+
+## The run save's "weather" block (save_director.gd capture()).
+func weather_save() -> Dictionary:
+	return Weather.capture(_change_done)
 
 ## The deck runs when rolling is on, or NEON_WEATHER=plan asks for it (the
 ## tests, a look at the plan with rain still off). Pinned weather, the
@@ -1010,9 +1043,20 @@ func _plan_active() -> bool:
 func _begin_night(boot: bool) -> void:
 	if not _plan_active():
 		return
-	var e := WeatherPlan.entry(night_clock.night, road_seed)
+	var e := WeatherPlan.entry(night_clock.night, weather_seed)
 	Weather.tonight = e
-	Weather.set_level(WeatherPlan.level_at(e, night_clock.minutes), boot)
+	_change_waits = false
+	var saved: Variant = run.get("weather") if boot else null
+	if saved is Dictionary and _saved_weather_ok(saved):
+		# A resumed run: its stage and live values snap back, and a change that
+		# had already landed does not land (or speak) again.
+		Weather.set_level(int(saved.stage), true, float(saved.get("road_snow", 0.0)) >= 1.0)
+		Weather.restore(saved)
+		_change_done = saved.get("change_done", false) == true
+	else:
+		Weather.set_level(WeatherPlan.level_at(e, night_clock.minutes), boot, e.snow_roads)
+		_change_done = e.change_hour >= 0 and night_clock.minutes >= WeatherPlan.minutes_of(e.change_hour)
+	_refresh_frost()
 	# Dave gives the forecast a few seconds into the night (not over his own
 	# 6 a.m. sign-off), only when the night is just beginning.
 	if night_clock.minutes < 30.0:
@@ -1021,15 +1065,45 @@ func _begin_night(boot: bool) -> void:
 			if night_clock.night == night and radio != null:
 				radio.announce(WeatherPlan.forecast_line(e)))
 
-## The hour struck: the night's one mid-night change lands on its hour.
-func _weather_change(hour24: int) -> void:
+## A saved weather block is used only if its stage is one this build knows
+## (a save from a newer build has stages past SLUSH: the plan's stage is used).
+static func _saved_weather_ok(d: Dictionary) -> bool:
+	var s: Variant = d.get("stage")
+	return (s is int or s is float) and float(s) == floorf(float(s)) \
+		and int(s) >= Weather.Level.DRY and int(s) <= Weather.Level.SLUSH
+
+## Frost follows the clock and the stage (a flag only; nothing draws it yet).
+func _refresh_frost() -> void:
+	Weather.set_frost(WeatherPlan.frost_at(Weather.tonight, Weather.level, night_clock.minutes) \
+		if not Weather.tonight.is_empty() else false)
+
+## The hour struck: the night's one mid-night change lands on its hour, or
+## waits for the race to end if one is on.
+## True when Dave said the change (his hour read then waits for next hour).
+func _weather_change(hour24: int) -> bool:
 	var e: Dictionary = Weather.tonight
-	if e.is_empty() or not _plan_active() or int(e.change_hour) != hour24:
-		return
-	Weather.set_level(int(e.change_to))
+	if e.is_empty() or not _plan_active():
+		return false
+	var spoke := false
+	if not _change_done and int(e.change_hour) == hour24:
+		if race != null and race.is_racing():
+			_change_waits = true
+		else:
+			spoke = _apply_weather_change(e)
+	_refresh_frost()
+	return spoke
+
+func _apply_weather_change(e: Dictionary) -> bool:
+	_change_waits = false
+	_change_done = true
+	Weather.set_level(int(e.change_to), false, e.snow_roads)
+	_refresh_frost()
 	var line := WeatherPlan.change_line(e)
-	if line != "" and radio != null:
-		radio.announce(line)
+	return line != "" and radio != null and radio.announce(line)
+
+func _on_race_ended_weather(_result: int) -> void:
+	if _change_waits and not Weather.tonight.is_empty() and _plan_active():
+		_apply_weather_change(Weather.tonight)
 
 ## Hour bands (living world step 2, night_bands.gd): the clock sets how much
 ## of the Traffic slider is on the road and which lines Dave adds. Off in the

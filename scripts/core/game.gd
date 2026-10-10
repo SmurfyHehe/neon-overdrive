@@ -397,7 +397,7 @@ func _update_chunk_pool(ref_z: float) -> void:
 		max_idx = max(max_idx, c.index)
 	for c in chunk_pool:
 		var gap: int = current_idx - c.index
-		if gap > _chunks_behind() and (gap > _chunks_behind() + CHUNKS_SPARE or not ViewGuard.chunk_seen(get_tree(), c.root)):
+		if gap > _chunks_behind() and (gap > _chunks_behind() + CHUNKS_SPARE or not (ViewGuard.chunk_seen(get_tree(), c.root) or _car_stands_on(c.index))):
 			if chunk_event_hook.is_valid():
 				chunk_event_hook.call(c.root, gap)
 			max_idx += 1
@@ -409,6 +409,17 @@ func _update_chunk_pool(ref_z: float) -> void:
 			# over a frame instead of jumping there.
 			c.root.reset_physics_interpolation()
 			c.index = max_idx
+
+## A traffic car in the full sim stands on this chunk's road (road-space z
+## between its two ends). On a hilly road the chunk's own collision is all
+## there is under it (no ground plane): rebuilt, the car falls through the
+## world. With Detail at 300 m cars 210 m back did, drawn in the mirror, which
+## holds their recycle until they leave view (tests/world/hill_drive.gd).
+func _car_stands_on(chunk_index: int) -> bool:
+	if traffic == null:
+		return false
+	var k := chunk_index - origin_index
+	return traffic.has_full_sim_car_between(-float(k + 1) * RoadChunkBuilder.CHUNK_LEN, -float(k) * RoadChunkBuilder.CHUNK_LEN)
 
 # ---------- floating origin (issue #26) ----------
 func _physics_process(_delta: float) -> void:

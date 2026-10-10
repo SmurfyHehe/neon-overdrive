@@ -330,7 +330,7 @@ func _drive(delta: float) -> void:
 	var steer_x := lane_x
 	if changing:
 		var look := clampf(speed * LOOKAHEAD_SECONDS, LOOKAHEAD_MIN, LOOKAHEAD_MAX)
-		steer_x = _path_x_at(_lc_t + look / maxf(absf(v), 1.0))
+		steer_x = _lc_aim_x(look / maxf(absf(v), 1.0))
 	elif weave > 0.0:
 		_weave_t += delta
 		steer_x += weave * sin(TAU * _weave_t / WEAVE_PERIOD)
@@ -538,6 +538,22 @@ func _start_lane_change(lane: int, urgent: bool) -> void:
 func path_x() -> float:
 	return _path_x_at(_lc_t) if changing else lane_x
 
+## Where the lane change steers: along the path's tangent, t_look + LC_AIM_LEAD
+## seconds ahead. Aiming at the path's own point t_look ahead (what this did
+## before) lags the S-curve by half its lateral acceleration times t_look
+## squared (0.9 m at the S's ends at 100 km/h), and the car's own steering lag
+## adds to that: up to 1.04 m mid change (tests/traffic/traffic_spawn.gd,
+## 2026-10-10) on a lane that leaves 1.1 m between bodies. The tangent removes
+## the first; the lead takes up the second. Swept on hill_drive seed 3 at
+## 0 / 0.3 / 0.6 / 1.0 s: worst path error 0.82 / 0.63 / 0.58 / 0.58 m, p95
+## 0.25 / 0.25 / 0.23 / 0.31 m.
+const LC_AIM_LEAD := 0.6
+func _lc_aim_x(t_look: float) -> float:
+	var u := clampf(_lc_t / _lc_dur, 0.0, 1.0)
+	var slope := (lane_x - _lc_from) * 0.5 * PI * sin(PI * u) / _lc_dur
+	var aim := _path_x_at(_lc_t) + slope * (t_look + LC_AIM_LEAD)
+	return clampf(aim, minf(_lc_from, lane_x), maxf(_lc_from, lane_x))
+
 func _path_x_at(t: float) -> float:
 	var u := clampf(t / _lc_dur, 0.0, 1.0)
 	return lerpf(_lc_from, lane_x, 0.5 - 0.5 * cos(PI * u))
@@ -560,11 +576,14 @@ func _check_wreck(delta: float, v: float) -> bool:
 	return bad or wrecked
 
 ## Extra path curvature asked for per m/s^2 of cornering the road's bend
-## needs (see lane_steer), for the traffic tune: 0.0015 took the mean drift
-## on bends from 0.35 m to 0.11 m and the worst back to the straight road's
-## (tests/world/curve_drive.gd); 0.003 overshot to the inside. Another car passes
-## its own. NEON_UNDERSTEER_FF overrides it for tuning runs.
-static var UNDERSTEER_FF := float(OS.get_environment("NEON_UNDERSTEER_FF")) if OS.get_environment("NEON_UNDERSTEER_FF").is_valid_float() else 0.0015
+## needs (see lane_steer), for the traffic tune. Set to 0.0015 (2026-10-07) for
+## the box cars; the NPC bodies (n1/n2/n3) understeer far less and it pushed
+## them to the inside of every bend: 0.0015 / 0.0011 / 0.0008 / 0.0004 / 0
+## gave a worst path error of 1.42 / 0.93 / 0.58 / 0.35 / 0.54 m on
+## tests/world/curve_drive.gd (seed 777, same draws), mean 0.22 / 0.17 / 0.13 /
+## 0.08 / 0.06 m. 0.0004 is the knee. Another car passes its own.
+## NEON_UNDERSTEER_FF overrides it for tuning runs.
+static var UNDERSTEER_FF := float(OS.get_environment("NEON_UNDERSTEER_FF")) if OS.get_environment("NEON_UNDERSTEER_FF").is_valid_float() else 0.0004
 
 ## Below this speed the bearing uses the body heading, above it the velocity
 ## direction (see lane_steer).

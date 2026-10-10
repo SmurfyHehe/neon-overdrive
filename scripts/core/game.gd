@@ -476,11 +476,12 @@ func _setup_road_shape() -> void:
 		# On a loop only the place on the lap matters: laps driven are dropped.
 		origin_index = RoadMap.lap_chunk(int(run.origin_index))
 		recenter_count = int(run.get("recenter_count", 0))
-		if run.get("sections") is Dictionary:
-			for k in run.sections:
-				if run.sections[k] is Dictionary and str(k).is_valid_int():
-					section_cache[str(RoadMap.lap_chunk(int(k)))] = {"own_lanes": OWN_LANES, "onc_lanes": ONC_LANES,
-						"barrier": run.sections[k].get("barrier", false) == true}
+		# The save's "sections" are not read back. They held each chunk's barrier
+		# roll when that was random (true / false); since RoadBarriers (R1) the
+		# barrier type and its crossover gap follow from the road seed alone
+		# (_section_at), and a save from either time may hold a bool or a type
+		# name there. Comparing a type name with true was a script error that
+		# stopped this function before the road was set up.
 	RoadFrame.origin_index = origin_index
 	RoadFrame.align = RoadAlignment.new(road_seed, curviness, hilliness, kicker_chance, RoadMap.period) if curviness > 0.0 or hilliness > 0.0 else null
 	# Lane adds and drops, median splits and exits (road lane proposal): a

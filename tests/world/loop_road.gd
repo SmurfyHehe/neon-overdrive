@@ -193,6 +193,7 @@ func _put(p: PlayerCar, x: float, z: float, yaw: float) -> void:
 	var t := RoadFrame.pose(x, y, z, yaw)
 	game.saver.restore_car(p, {"xform": SaveDirector.xform_to_array(t), "lin_vel": [0.0, 0.0, 0.0], "ang_vel": [0.0, 0.0, 0.0], "gear": 1})
 	game.call("_update_chunk_pool", z)
+	game.call("flush_rebuilds")  # rebuilds are spread over frames; a jump needs its road now
 
 ## Drives along the road: way -1 = down it in lane 1, +1 = back up it in the
 ## far side's lane 1.

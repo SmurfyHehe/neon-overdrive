@@ -1,0 +1,37 @@
+{
+	"about": "People pipeline A1. The one data file for every person in the game: the shared body kit (kit), the house style every outfit must stay inside (style) and the cast (people). Read by scripts/world/person_body.gd; checked by tools/people_pipeline/check_people.gd. Names are placeholders (story is Roy's).",
+	"kit": {
+		"ref_stature": 1.78,
+		"head_height": 0.24,
+		"head_exponent": 0.5,
+		"heights": [1.55, 1.62, 1.68, 1.75, 1.82, 1.88, 1.95],
+		"builds": {
+			"slim":    {"torso": [0.88, 0.86], "belly": [0.86, 0.82], "limb": 0.86, "neck": 0.92, "shoulder": 0.95},
+			"average": {"torso": [1.0, 1.0],   "belly": [1.0, 1.0],   "limb": 1.0,  "neck": 1.0,  "shoulder": 1.0},
+			"heavy":   {"torso": [1.13, 1.16], "belly": [1.2, 1.4],   "limb": 1.16, "neck": 1.14, "shoulder": 1.04}
+		}
+	},
+	"style": {
+		"skin":    ["#F0C8A8", "#DDA27E", "#BE7F5C", "#93603F", "#6C432B", "#4E3020"],
+		"hair":    ["#15110E", "#3B2618", "#6A4A2E", "#8A8782", "#B8955A"],
+		"tops":    ["#1B2A4A", "#0E1424", "#4A3326", "#5A5F68", "#C9CED6", "#7A3A1E", "#2C3A2A", "#FFC066"],
+		"bottoms": ["#2E3A55", "#1A1A1E", "#6B5E45", "#3E4048"],
+		"shoes":   ["#141414", "#3A2A1E", "#C9CED6"],
+		"faces":   ["plain", "heavy_brows", "moustache", "stubble", "beard", "glasses", "tired", "goatee_scar"],
+		"poses":   ["stand", "smoke", "hands_on_hips", "sit"]
+	},
+	"people": [
+		{"id": "mechanic", "role": "player", "height": 1.75, "build": "average", "face": "stubble",
+			"skin": "#DDA27E", "hair": "#3B2618", "top": "#1B2A4A", "sleeves": "short", "bottoms": "#3E4048", "shoes": "#141414", "pose": "stand"},
+		{"id": "dale", "role": "night-shift DJ", "height": 1.68, "build": "heavy", "face": "tired",
+			"skin": "#F0C8A8", "hair": "#8A8782", "top": "#4A3326", "sleeves": "long", "bottoms": "#6B5E45", "shoes": "#3A2A1E", "pose": "smoke"},
+		{"id": "vance", "role": "rival", "height": 1.88, "build": "slim", "face": "goatee_scar",
+			"skin": "#BE7F5C", "hair": "#15110E", "top": "#0E1424", "sleeves": "long", "bottoms": "#1A1A1E", "shoes": "#141414", "pose": "hands_on_hips"},
+		{"id": "ferris", "role": "tow driver", "height": 1.82, "build": "heavy", "face": "beard",
+			"skin": "#93603F", "hair": "#15110E", "top": "#7A3A1E", "sleeves": "short", "bottoms": "#2E3A55", "shoes": "#3A2A1E", "pose": "hands_on_hips"},
+		{"id": "clerk", "role": "gas station clerk", "height": 1.62, "build": "slim", "face": "glasses",
+			"skin": "#6C432B", "hair": "shaved", "top": "#FFC066", "sleeves": "short", "bottoms": "#2E3A55", "shoes": "#C9CED6", "pose": "stand"},
+		{"id": "smoker", "role": "diner regular", "height": 1.95, "build": "average", "face": "moustache",
+			"skin": "#4E3020", "hair": "#15110E", "top": "#5A5F68", "sleeves": "long", "bottoms": "#1A1A1E", "shoes": "#141414", "pose": "smoke"}
+	]
+}

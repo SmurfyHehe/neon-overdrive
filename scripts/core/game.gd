@@ -74,6 +74,7 @@ var saver: SaveDirector
 ## Tonight's cash and the bank (F0, scripts/core/wallet.gd).
 var wallet: Node
 const Wallet := preload("res://scripts/core/wallet.gd")
+const StreetAnimals := preload("res://scripts/world/street_animals.gd")
 var road_seed := 0
 var run := {}
 
@@ -590,6 +591,9 @@ func _on_event(e: int) -> void:
 	if WorldMood.EVENT_LINES.has(e):
 		radio.announce(WorldMood.EVENT_LINES[e])
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_update_bands()
 	_update_chunk_pool(RoadFrame.unroll(player.position).z)
+	# eyes in the headlights (world step 6, A1): one angle check per animal
+	# on the chunks round the car
+	StreetAnimals.step(chunk_pool, player, delta)

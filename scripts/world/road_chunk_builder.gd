@@ -100,6 +100,7 @@ const BuildingKit := preload("res://scripts/world/building_kit.gd")
 const BuildingSigns := preload("res://scripts/world/building_signs.gd")
 const RoofProps := preload("res://scripts/world/roof_props.gd")
 const Districts := preload("res://scripts/world/districts.gd")
+const Kit := preload("res://scripts/world/roadside_kit.gd")
 
 const LANE_W := 3.2
 const CHUNK_LEN := 50.0
@@ -1173,6 +1174,10 @@ static func _create_nodes(root: Node3D) -> void:
 	# shop signs plus rooftop billboards: at most two per building
 	root.add_child(BuildingSigns.new_multimesh(_building_slots() * 4))
 	root.add_child(RoofProps.new_multimesh())
+	# Roadside kit (hydrants, bins, dumpsters, cones, work-zone jersey
+	# barriers, kerb guardrail): one MultiMesh per kind and two collision
+	# bodies, see roadside_kit.gd.
+	Kit.new_nodes(root)
 
 	root.set_meta("nodes_built", true)
 
@@ -1344,12 +1349,14 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var lamps: MultiMesh = (root.get_node(^"Lamps") as MultiMeshInstance3D).multimesh
 	var pools: MultiMesh = (root.get_node(^"LampPools") as MultiMeshInstance3D).multimesh
 	var n_lamps := 0
+	var lamp_zs := {1: [], -1: []}  # pole z per side, for the roadside kit's bins
 	for i in range(_lamp_slots()):
 		for side in [1, -1]:
 			# own side at 6.25, 31.25 m; oncoming at 18.75, 43.75 m into the chunk
 			var lz := -float(i) * LAMP_SPACING - (LAMP_SPACING * 0.25 if side == 1 else LAMP_SPACING * 0.75)
 			if Junction.in_mouth(chunk_index, lz):
 				continue  # the signal masts stand there
+			lamp_zs[side].append(lz)
 			var lt: float = -lz / CHUNK_LEN
 			var curb: float = lerp(start_own_curb, end_own_curb, lt) if side == 1 else lerp(start_onc_curb, end_onc_curb, lt)
 			var pole_x := (curb + LAMP_SETBACK) * float(side)
@@ -1360,6 +1367,20 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			n_lamps += 1
 	lamps.visible_instance_count = n_lamps
 	pools.visible_instance_count = n_lamps
+
+	# roadside kit: laid out from the edges above (so a width change moves
+	# it), the lamps (bins stand at their feet) and the lots a car can drive
+	# into (dumpsters at their back wall).
+	var kit_edges := {
+		1: {"road": [start_own_w, end_own_w], "curb_in": [start_own_shoulder, end_own_shoulder],
+			"curb_out": [start_own_curb, end_own_curb], "walk": [start_own_walk, end_own_walk]},
+		-1: {"road": [start_onc_w, end_onc_w], "curb_in": [start_onc_shoulder, end_onc_shoulder],
+			"curb_out": [start_onc_curb, end_onc_curb], "walk": [start_onc_walk, end_onc_walk]},
+	}
+	var lots := {1: [], -1: []}
+	for info in infos:
+		lots[int(info.side)].append([float(info.z), (BUILDING_SPACING * 0.6) if info.empty else float(info.d)])
+	Kit.apply(root, chunk_index, kit_edges, setback, lamp_zs, lots)
 
 	# center line / barrier -- snapped to this chunk's own end-of-chunk
 	# config, not tapered (see file header). Both the wall and the dash

@@ -62,6 +62,12 @@ class_name TrafficCar
 # enough, it swerves into the next lane if that is safe (no blinker, 1.2 s),
 # otherwise it brakes as hard as the follower law already does.
 #
+# Sirens (step 6): with a lights-on patrol car coming up behind, a driver
+# signals right and moves over a lane at a time to the rightmost lane, slowing
+# to SIREN_SPEED of its speed, edges to the lane's right side there and slows
+# to SIREN_SPEED_RIGHT, and carries on SIREN_RESUME seconds after the siren is
+# past. Oncoming drivers just ease off (SIREN_SPEED_ONCOMING).
+#
 # Wrecks: a car that is flipped, or slow and pointing the wrong way or off its
 # path, for WRECK_SECONDS stops trying (hazard stop: brakes on), and the
 # TrafficManager recycles it once the player cannot see it.
@@ -291,6 +297,13 @@ var _flash_t := -1.0
 var _flash_on := false
 var _lead_was_player := false
 var _last_swerve := -1000.0
+## Pulling over for a siren: TrafficManager.now when it was first noticed (-1 =
+## not), until when the car stays pulled over, the cruise-speed factor, and the
+## sideways shift to the lane's right edge.
+var _siren_seen := -1.0
+var _siren_until := -1000.0
+var _speed_k := 1.0
+var _siren_edge := 0.0
 ## Road-space x and z at the last _accel_command (the decisions reuse them).
 var _my_x := 0.0
 var _my_z := 0.0
@@ -442,6 +455,14 @@ const SWERVE_DECEL := 6.0
 const LC_TIME_SWERVE := 1.2
 const SWERVE_OVERSHOOT := 0.9   # share of the lane width aimed past the lane centre at first
 const SWERVE_BRAKE := 3.0       # m/s^2: the most braking while swerving
+## Sirens: share of the cruise speed kept while moving right, in the rightmost
+## lane, and by oncoming traffic; the shift to the right edge there; and how
+## long after the siren has passed a driver carries on as before.
+const SIREN_SPEED := 0.7
+const SIREN_SPEED_RIGHT := 0.6
+const SIREN_SPEED_ONCOMING := 0.85
+const SIREN_EDGE := 0.4
+const SIREN_RESUME := 2.0
 ## An aborted change steers back in at least this long.
 const ABORT_MIN_T := 1.2
 
@@ -680,7 +701,7 @@ func _accel_command(v: float) -> float:
 			lead_speed = traffic.entry_speed(_lead_k, direction)
 			lead_is_player = _lead_k == 0
 	# Rain: drivers ease off, and take bends slower on wet tyres (weather.gd).
-	var v0 := minf(target_speed * Weather.ai_speed_factor(), bend_speed() * Weather.ai_bend_factor())
+	var v0 := minf(target_speed * _speed_k * Weather.ai_speed_factor(), bend_speed() * Weather.ai_bend_factor())
 	var a := follow_accel(v, v0, lead_gap, lead_speed, _t_gap())
 	signal_held = false
 	if traffic != null and traffic.junction != null:
@@ -773,6 +794,8 @@ func _potential(v: float, gap: float, vl: float) -> float:
 
 func _consider_lane_change(v: float) -> void:
 	_side_watch()
+	if not traffic.sirens.is_empty() or _siren_seen >= 0.0 or _speed_k != 1.0:
+		_siren_step(v)
 	if changing:
 		_consider_abort(v)
 		return
@@ -780,6 +803,8 @@ func _consider_lane_change(v: float) -> void:
 	if _sig_lane >= 0:
 		_signal_step(v)
 		return
+	if _siren_seen >= 0.0:
+		return   # pulling over: no passing, no drifting back
 	# Flashed: after the driver's reaction time, whatever the cooldown says.
 	if flashed_at > -100.0:
 		var since := traffic.now - flashed_at
@@ -852,6 +877,37 @@ func _consider_lane_change(v: float) -> void:
 			why = DO_PASSING
 		# Blinker first: the change itself starts in _signal_step.
 		_signal(best, SIGNAL_T_OBSTACLE if obstacle else SIGNAL_T, why)
+
+## Sirens, at the decision rate (see the header).
+func _siren_step(v: float) -> void:
+	var now := traffic.now
+	var code := traffic.siren_for(_my_z, direction, v)
+	if code == TrafficManager.SIREN_PULL_OVER:
+		if _siren_seen < 0.0:
+			_siren_seen = now
+		_siren_until = now + SIREN_RESUME
+	if _siren_seen < 0.0 or now > _siren_until:
+		# Not pulling over (any more): carry on, easing off for one going the other way.
+		if _siren_seen >= 0.0 and _sig_why == DO_PULL_OVER_SIREN and _sig_lane >= 0:
+			_cancel_signal()
+		_siren_seen = -1.0
+		_siren_edge = 0.0
+		_speed_k = SIREN_SPEED_ONCOMING if code == TrafficManager.SIREN_SLOW else 1.0
+		return
+	if now < _siren_seen + reaction_s:
+		return
+	if traffic.lane_allowed(lane_i + 1, direction > 0.0):
+		_speed_k = SIREN_SPEED
+		_siren_edge = 0.0
+		if not changing and (_sig_lane < 0 or _sig_why != DO_PULL_OVER_SIREN):
+			_signal(lane_i + 1, SIGNAL_T, DO_PULL_OVER_SIREN, 30.0)
+	else:
+		_speed_k = SIREN_SPEED_RIGHT
+		if not changing:
+			# The right side of the lane is +x going down the road, -x coming up it.
+			_siren_edge = minf(SIREN_EDGE, maxf(RoadChunkBuilder.LANE_W * 0.5 - half_w, 0.0)) * -direction
+	if _siren_edge != 0.0 and _edge_want == 0.0:
+		_edge_want = _siren_edge
 
 ## The player alongside, at the decision rate: with under EDGE_GAP of air
 ## between the bodies the car eases EDGE_M toward the far side of its own lane
@@ -929,6 +985,8 @@ func _set_flash(on: bool) -> void:
 func _decide_doing(v: float) -> void:
 	if signal_held:
 		doing = DO_RED_LIGHT_STOP
+	elif _siren_seen >= 0.0 and _speed_k < 1.0:
+		doing = DO_PULL_OVER_SIREN
 	elif weave > 0.0:
 		doing = DO_WEAVING
 	elif lead_gap < INF and lead_gap < S0 + FOLLOW_T * maxf(v, 0.0):
@@ -1236,6 +1294,9 @@ func place(lane: float, dir: float, z: float, y: float, speed: float) -> void:
 	_react_at = INF
 	_flash_t = -1.0
 	_lead_was_player = false
+	_siren_seen = -1.0
+	_siren_edge = 0.0
+	_speed_k = 1.0
 	if _flash_on:
 		_set_flash(false)
 	_lead_k = -1

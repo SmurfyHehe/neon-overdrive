@@ -45,7 +45,7 @@ var game: Node
 var p: PlayerCar
 var traffic: TrafficManager
 var fails: Array[String] = []
-var cases: Array[String] = ["pullout", "noflash", "flash", "blindspot", "abort", "edge", "rulebreak", "cutoff", "swerve", "horns"]
+var cases: Array[String] = ["pullout", "noflash", "flash", "blindspot", "abort", "edge", "rulebreak", "cutoff", "swerve", "horns", "siren"]
 var case_i := -1
 var name_now := ""
 var t := 0.0
@@ -689,6 +689,80 @@ func _tick_horns() -> bool:
 	if TrafficHorns.horn_for("n2_cityhatch") != "beep" or TrafficHorns.horn_for("n3_pickup") != "blare" or TrafficHorns.horn_for("no_such_car") != "two_tone":
 		_fail("the horn table")
 	note = "; ".join(peaks)
+	return false
+
+# ---------- siren ----------
+
+var patrol: PatrolCar
+
+func _setup_siren() -> void:
+	traffic.own_lanes_used = [1, 2]
+	_player(3, 60.0 * KMH)
+	a = _car(1, 140.0, 100.0 * KMH)   # will have to move right
+	b = _car(2, 170.0, 85.0 * KMH)    # already in the rightmost lane open to it
+	for car in [a, b]:
+		car._lc_cooldown = 100.0     # nothing of their own accord
+		car.reaction_s = 0.6
+	patrol = PatrolCar.make()
+	patrol.traffic = traffic
+	patrol.target_speed = 150.0 * KMH
+	game.add_child(patrol)
+	patrol.place(_lane(1), -1.0, _pz() - 40.0, patrol.rest_y, 120.0 * KMH)
+	f["va"] = 100.0 * KMH
+	f["vb"] = 85.0 * KMH
+
+func _behind(car: TrafficCar) -> float:
+	return patrol.road_z() - car.road_z()   # + = the patrol is behind the car
+
+func _tick_siren() -> bool:
+	if phase == 0:
+		# Lights off: the patrol comes up behind and nothing changes.
+		if a.turn != 0 or a.changing or b.turn != 0 or a._speed_k != 1.0 or b._speed_k != 1.0 or absf(b._edge) > 0.01:
+			_fail("traffic reacted to a patrol car with its lights off")
+			return true
+		if _behind(a) < 70.0:
+			phase = 1
+			mark = t
+			patrol.lights_on = true
+	elif phase == 1:
+		var since := t - mark
+		if a.turn == 2 and not f.has("blink_at"):
+			f["blink_at"] = since
+		if a.changing and not f.has("move_at"):
+			f["move_at"] = since
+		f["slow_a"] = minf(float(f.get("slow_a", INF)), a.lane_speed())
+		f["slow_b"] = minf(float(f.get("slow_b", INF)), b.lane_speed())
+		f["edge_b"] = maxf(float(f.get("edge_b", 0.0)), _x(b) - _lane(2))
+		if since > 0.6 + 0.5 and not f.has("blink_at"):
+			_fail("no blinker %.1f s after the lights came on (it is %.0f m ahead of the patrol)" % [since, _behind(a)])
+			return true
+		if _behind(a) < -40.0 and _behind(b) < -40.0:
+			phase = 2
+			mark = t
+			if a.lane_i != 2:
+				_fail("the car in the patrol's lane did not move right (lane %d)" % (a.lane_i + 1))
+			if float(f.slow_a) > 0.75 * float(f.va):
+				_fail("the first car only slowed to %.0f%% of its speed" % (100.0 * float(f.slow_a) / float(f.va)))
+			if float(f.slow_b) > 0.66 * float(f.vb):
+				_fail("the car in the right lane only slowed to %.0f%% of its speed" % (100.0 * float(f.slow_b) / float(f.vb)))
+			if float(f.edge_b) < 0.2 or float(f.edge_b) > 0.6:
+				_fail("the car in the right lane edged %.2f m right (wanted about 0.4)" % float(f.edge_b))
+		elif since > 40.0:
+			_fail("the patrol never got past (%.0f m behind the first car, patrol at %.0f km/h)" % [_behind(a), patrol.lane_speed() * 3.6])
+			return true
+	elif phase == 2 and t - mark >= 8.0:
+		# 2 s after it is 30 m past they carry on: back up to speed, back to the middle.
+		if a._speed_k != 1.0 or b._speed_k != 1.0:
+			_fail("they did not carry on after the patrol had gone")
+		if b.lane_speed() < 0.85 * float(f.vb):
+			_fail("the right-lane car is still at %.0f%% of its speed 8 s later" % (100.0 * b.lane_speed() / float(f.vb)))
+		if absf(_x(b) - _lane(2)) > 0.15:
+			_fail("the right-lane car is still %.2f m off its lane centre" % absf(_x(b) - _lane(2)))
+		note = "lights off: no reaction. On: blinker at %.2f s, moving right at %.2f s, slowed to %.0f%% / %.0f%%, right-lane car edged %.2f m; both carried on after" % [
+			f.get("blink_at", -1.0), f.get("move_at", -1.0), 100.0 * float(f.slow_a) / float(f.va), 100.0 * float(f.slow_b) / float(f.vb), f.edge_b]
+		patrol.queue_free()
+		patrol = null
+		return true
 	return false
 
 # ---------- the end ----------

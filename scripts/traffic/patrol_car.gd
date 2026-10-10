@@ -9,6 +9,22 @@ extends TrafficCar
 
 const KIND := "c1_patrol"
 
+## Emergency lights (and siren) on. Nothing turns them on yet (pursuit is a
+## later stage); this is the hook traffic already answers: with them on, cars
+## ahead pull over to the right and slow (TrafficManager.add_siren).
+var lights_on := false:
+	set(on):
+		lights_on = on
+		if traffic != null:
+			if on:
+				traffic.add_siren(self)
+			else:
+				traffic.remove_siren(self)
+
+func _exit_tree() -> void:
+	if traffic != null:
+		traffic.remove_siren(self)
+
 ## A patrol car ready to add to the tree (TrafficCar's setup runs in _ready).
 static func make() -> PatrolCar:
 	var c := PatrolCar.new()

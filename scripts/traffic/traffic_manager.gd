@@ -270,6 +270,15 @@ var abort_count := 0
 var _beams: Object
 var _flashes_seen := -1
 var _last_behind_spawn := -1000.0
+## Sirens (step 6 of the near-miss fix): cars with their emergency lights on.
+const SIREN_MAX := 3
+const SIREN_RANGE := 120.0
+const SIREN_NEAR := 40.0
+const SIREN_PAST := 30.0
+const SIREN_NONE := 0
+const SIREN_PULL_OVER := 1
+const SIREN_SLOW := 2
+var sirens: Array[TrafficCar] = []
 ## Horns (TrafficHorns): a honk is refused past HONK_RANGE metres from the
 ## player and while HORN_VOICES horns are already sounding. Two shared 3D
 ## players follow the cars that are honking; no car owns one.
@@ -805,6 +814,34 @@ func flash_ahead() -> TrafficCar:
 		flash_count += 1
 		flashed_car = best
 	return best
+
+# ---------- sirens ----------
+
+## A car with its emergency lights on (any TrafficCar with a `lights_on`
+## property: PatrolCar). At most SIREN_MAX are listened to.
+func add_siren(node: TrafficCar) -> void:
+	if node != null and not (node in sirens) and sirens.size() < SIREN_MAX:
+		sirens.append(node)
+
+func remove_siren(node: TrafficCar) -> void:
+	sirens.erase(node)
+
+## What a car at road z, going `dir` at v m/s, should do about the sirens:
+## SIREN_NONE, SIREN_PULL_OVER (one is coming up behind it the same way, within
+## SIREN_RANGE and closing or within SIREN_NEAR; or has not got SIREN_PAST past
+## it yet), or SIREN_SLOW (one is near on the other carriageway).
+func siren_for(z: float, dir: float, v: float) -> int:
+	var out := SIREN_NONE
+	for s in sirens:
+		if not is_instance_valid(s) or not s.get("lights_on"):
+			continue
+		var ahead: float = (z - s.road_z()) * s.direction   # + = this car is ahead of the siren
+		if s.direction == dir:
+			if (ahead > 0.0 and ahead < SIREN_RANGE and (s.lane_speed() > v + 0.5 or ahead < SIREN_NEAR)) or (ahead <= 0.0 and ahead > -SIREN_PAST):
+				return SIREN_PULL_OVER
+		elif absf(ahead) < SIREN_RANGE:
+			out = SIREN_SLOW
+	return out
 
 # ---------- horns ----------
 

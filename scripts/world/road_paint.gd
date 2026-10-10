@@ -26,6 +26,7 @@ extends RefCounted
 
 const WordAtlas := preload("res://scripts/world/word_atlas.gd")
 const PlaceNames := preload("res://scripts/world/place_names.gd")
+const RoadSigns := preload("res://scripts/world/road_signs.gd")
 
 const CAPACITY := 16
 const PAINT_Y := 0.022
@@ -73,10 +74,16 @@ void fragment() {
 static var _material: ShaderMaterial
 static var _quad: PlaneMesh
 
+## How bright unshaded paint is ("flat", a cost experiment: see
+## docs/sign-cost/README.md): about what the lit paint shows between lamps.
+const FLAT_LEVEL := 0.42
+
 static func material() -> ShaderMaterial:
 	if _material == null:
 		var sh := Shader.new()
 		sh.code = SHADER
+		if RoadSigns.has_flag("flat"):
+			sh.code = SHADER.replace("diffuse_lambert, specular_disabled", "unshaded").replace("ALBEDO = paint;", "ALBEDO = paint * %.2f;" % FLAT_LEVEL)
 		_material = ShaderMaterial.new()
 		_material.shader = sh
 		_material.set_shader_parameter("words", WordAtlas.texture())
@@ -107,6 +114,9 @@ static func new_multimesh(capacity: int = CAPACITY, mm_name: String = "RoadPaint
 	mmi.multimesh = mm
 	mmi.material_override = material()
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	if RoadSigns.has_flag("near"):
+		# flat on the road, a word is a sliver past this distance
+		mmi.visibility_range_end = RoadSigns.PAINT_RANGE
 	return mmi
 
 ## The mark `word` (a PlaceNames text or an arrow) as a scale: how wide and how

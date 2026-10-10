@@ -370,7 +370,8 @@ func _build() -> void:
 	# From -x (driving +x): far-right corner (+x, +z), faces -x.
 	_mast(poles, heads, lamps, 3, Vector3(corner, 0.0, corner_z), -PI / 2.0, [])
 
-	_build_names(corner, corner_z, cross_stop)
+	if not RoadSigns.off():
+		_build_names(corner, corner_z, cross_stop)
 
 	_add_mesh("CrossRoad", road, RoadChunkBuilder._get_own_mat())
 	_add_mesh("CrossWalks", walk, RoadChunkBuilder._get_sidewalk_mat())
@@ -409,6 +410,9 @@ func _build_names(corner: float, corner_z: float, cross_stop: float) -> void:
 		signs.multimesh.set_instance_custom_data(k, b.cd)
 		k += 1
 	signs.multimesh.visible_instance_count = k
+	if RoadSigns.has_flag("near"):
+		# a blade is 0.3 m tall: a streak of light past this distance
+		signs.visibility_range_end = RoadSigns.BLADE_RANGE
 	add_child(signs)
 
 	var paint := RoadPaint.new_multimesh(8, "StopPaint")

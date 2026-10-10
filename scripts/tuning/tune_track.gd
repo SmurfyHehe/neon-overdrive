@@ -155,6 +155,7 @@ class Run extends RefCounted:
 		var v := c.current_speed()
 		var kmh := v * 3.6
 		m.top_speed_kmh = maxf(m.get("top_speed_kmh", 0.0), kmh)
+		m.top_gear = maxi(m.get("top_gear", 0), c.current_gear)  # highest gear the run used
 		if not m.has("t_0_100") and v >= 100.0 * KMH:
 			m.t_0_100 = t
 		if not has_start:

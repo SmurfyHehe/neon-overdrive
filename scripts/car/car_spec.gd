@@ -333,8 +333,7 @@ static func player_spec(kind: String) -> Dictionary:
 			# flat four. About 290 Nm, power tier T0 (0.29 Nm/kg: under the T1
 			# band's 0.30). Nothing is wrong with it on paper; it is just slow:
 			# the torque is all low down and gone by 4500 (torque_shape falls
-			# early, low redline), long gears (five: TuneParams tunes gear_ratios/0-4,
-			# so every player car carries five), narrow hard tyres on soft
+			# early, low redline), five long gears, narrow hard tyres on soft
 			# springs, 60% of the weight over the back axle, and the drag of a
 			# brick. Stability aids off: it never had any.
 			var gears: Array[float] = [3.80, 2.30, 1.55, 1.10, 0.86]
@@ -426,10 +425,11 @@ static func player_spec(kind: String) -> Dictionary:
 			s["max_steering_angle"] = deg_to_rad(42.0)
 			s["center_of_gravity_height_offset"] = -0.12
 		"p5_muscle":
-			# Marlowe, T3: 5.7 V8, rear drive, lazy auto, 1800 kg. Torque. (Five
-			# ratios like every player car; the sheet's 4-speed feel is in the
-			# long gaps and the slow shift.)
-			var gears: Array[float] = [2.60, 1.75, 1.25, 0.95, 0.72]
+			# Marlowe, T3: 5.7 V8, rear drive, lazy 4-speed auto, 1800 kg. Torque.
+			# (The sheet's 4-speed, real since gear count is per car: first and
+			# top are the old five-speed's, so launch and top speed are unchanged;
+			# the two gears between have the long gaps.)
+			var gears: Array[float] = [2.60, 1.60, 1.05, 0.72]
 			s["vehicle_mass"] = 1800.0
 			s["front_weight_distribution"] = 0.55
 			s["front_torque_split"] = 0.0
@@ -449,12 +449,13 @@ static func player_spec(kind: String) -> Dictionary:
 			s["rear_arb_ratio"] = 0.10
 			s["shift_time"] = 0.3
 		"p6_crossover":
-			# Cairn, T2: 2.0 flat four, AWD 40:60, tall, lifted. Grips. No factory
-			# turbo: stock is the unboosted 400 Nm (580 was on boost).
+			# Cairn, T2: 2.0 flat four, rear drive (Roy, transmissions notes
+			# section 9; was AWD 40:60), tall, lifted. No factory turbo: stock is
+			# the unboosted 400 Nm (580 was on boost).
 			var gears: Array[float] = [3.30, 2.00, 1.40, 1.07, 0.85]
 			s["vehicle_mass"] = 1450.0
 			s["front_weight_distribution"] = 0.58
-			s["front_torque_split"] = 0.4
+			s["front_torque_split"] = 0.0
 			s["max_torque"] = 400.0
 			s["max_rpm"] = 6800.0
 			s["gear_ratios"] = gears
@@ -462,7 +463,7 @@ static func player_spec(kind: String) -> Dictionary:
 			s["coefficient_of_drag"] = 0.36
 			s["frontal_area"] = 2.45
 			s["front_tire_width"] = 235.0
-			s["rear_tire_width"] = 235.0
+			s["rear_tire_width"] = 265.0
 			s["coefficient_of_friction"] = {"Road": 1.2, "Dirt": 1.05}
 			s["center_of_gravity_height_offset"] = 0.05
 		_:

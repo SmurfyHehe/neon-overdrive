@@ -199,6 +199,14 @@ sky_dawn={
 "type": "float",
 "value": 0.0
 }
+sky_cloud_offset={
+"type": "float",
+"value": 0.0
+}
+sky_blink={
+"type": "float",
+"value": 0.0
+}
 sky_moon_dir={
 "type": "vec3",
 "value": Vector3(-0.3, 0.25, -0.92)

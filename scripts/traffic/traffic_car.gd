@@ -41,8 +41,18 @@ class_name TrafficCar
 # behind, and this car would not need more than B_SAFE for its new leader; a
 # player behind needs PLAYER_TTC seconds of closing time, since nothing says
 # it will brake) and WORTH IT, in this order: get round a stopped or crawling
-# obstacle, move over for something closing fast from behind (that includes
-# the player), pass a slower car, or drop back right onto a free lane.
+# obstacle, move over for a traffic car closing fast from behind (not for the
+# player, see below), pass a slower car, or drop back right onto a free lane.
+#
+# The player and lane changes (near-miss fix, 2026-10-10; Roy's decisions): a
+# car does NOT move over because the player is coming up behind it. It holds
+# its lane until the player flashes it (TrafficManager.flash_ahead), then
+# signals right and moves over if that is safe. Every lane change is judged
+# against where the player is heading, not only where it is
+# (TrafficManager.player_blocks: the intent footprint and the blind spot), and
+# a change is steered back in its first half if the player turns up in the
+# lane it is going to (_consider_abort). Cars still move over for faster
+# TRAFFIC behind them.
 #
 # Wrecks: a car that is flipped, or slow and pointing the wrong way or off its
 # path, for WRECK_SECONDS stops trying (hazard stop: brakes on), and the
@@ -54,8 +64,8 @@ class_name TrafficCar
 # that drives its lane on rails with the same follower law on its speed and
 # the same lane-change decisions, steering the same half-cosine S. Inside the
 # draw distance (TrafficManager.detail_distance) a car on rails stays visible,
-# wheels turning and brake lamps working; beyond it it is hidden and only
-# moves over for a closing player, instantly. The sim resumes, with position,
+# wheels turning and brake lamps working; beyond it it is hidden and holds
+# its lane. The sim resumes, with position,
 # speed, heading and any lane change handed over, when the car comes back
 # inside the band. Going the other way a car only leaves the sim once it is
 # upright and back on its path: a crashed or knocked car stays in the sim, so
@@ -220,19 +230,53 @@ var _lc_cooldown := 0.0
 var _decide_t := 0.0
 var _m_gap := INF
 var _m_speed := 0.0
+## The lane a change started from and why it started (a DO_ name): what an
+## abort returns to.
+var _lc_old_lane := 0
+var _lc_why := ""
+
+## Seconds this driver takes to act on a flash, a siren or being cut off, drawn
+## at each spawn (TrafficManager._respawn). Following and braking do not wait.
+const REACTION_MIN := 0.3
+const REACTION_MAX := 1.2
+var reaction_s := 0.6
+## TrafficManager.now when the player flashed this car (on_flashed); far in the
+## past once it has been dealt with.
+var flashed_at := -1000.0
+## Blinker: 0 off, 1 left, 2 right. On from the moment the driver decides to
+## change lane until the change ends (or is given up).
+var turn := 0
+## The lane being signalled for (-1 = none), how long the blinker has been on,
+## how long it must be on before the car moves, why (a DO_ name), and when the
+## driver gives up if the lane never gets safe.
+var _sig_lane := -1
+var _sig_t := 0.0
+var _sig_need := 0.0
+var _sig_why := ""
+var _sig_give_up := 4.0
+## Seconds of blinker shown before the last lane change started (tests).
+var last_signal_s := 0.0
+## Sideways offset inside the lane, road-space metres (edging away from a
+## player alongside): what it is now and what it is easing to.
+var _edge := 0.0
+var _edge_want := 0.0
+## Road-space x and z at the last _accel_command (the decisions reuse them).
+var _my_x := 0.0
+var _my_z := 0.0
 
 ## What this car is doing, for the near-miss log (near_miss_log.gd). Set where
-## each behaviour starts (_start_lane_change, _hidden_yield, _decide_doing) and
+## each behaviour starts (_start_lane_change, _abort, _decide_doing) and
 ## replaced by the next decision when it ends. The DO_ names that no behaviour
 ## sets yet are for the work that adds them (blinkers, swerving, sirens).
 const DO_CRUISING := "cruising"
 const DO_FOLLOWING := "following"
-const DO_MOVING_OVER_UNFLASHED := "moving_over_unflashed"  # the old yield: no blinker
-const DO_MOVING_OVER_FLASHED := "moving_over_flashed"      # not set yet
+const DO_MOVING_OVER_UNFLASHED := "moving_over_unflashed"  # the old yield for the player: nothing sets it since the near-miss fix
+const DO_MOVING_OVER_FLASHED := "moving_over_flashed"
+const DO_YIELD_TRAFFIC := "yielding_to_traffic"            # moving over for a faster traffic car behind
 const DO_PASSING := "passing"
 const DO_OBSTACLE := "obstacle"
 const DO_KEEP_RIGHT := "keep_right"
-const DO_ABORT := "abort"                                  # not set yet
+const DO_ABORT := "abort"
 const DO_SWERVE := "swerve"                                # not set yet
 const DO_PULL_OVER_SIREN := "pull_over_siren"              # not set yet
 const DO_WEAVING := "weaving"
@@ -308,10 +352,6 @@ const OBSTACLE_SPEED := 3.0    # m/s: anything slower ahead is an obstacle to ge
 const OBSTACLE_RANGE := 100.0
 const YIELD_DV := 3.0          # m/s closing from behind ...
 const YIELD_TTC := 5.0         # ... with this little time to contact: move over
-## A hidden car (beyond the draw distance) moves over for a closing player
-## this early, instantly: nobody sees it, and the player's lane is clear by
-## the time the car comes into view.
-const YIELD_TTC_HIDDEN := 10.0
 const YIELD_SLOWDOWN := 3.0    # m/s a car accepts losing to move over
 const B_SAFE := 2.5            # m/s^2 a change may ask of anyone
 const LC_MIN_GAP_T := 0.5      # s of speed (plus S0) kept to the new leader/follower
@@ -325,6 +365,21 @@ const RB_LC_COOLDOWN := 1.5
 const RB_PASS_DV := 0.5
 const WEAVE_PERIOD := 5.0      # s for one drift left and back
 const MIN_LC_SPEED := 8.0     # m/s; below it only obstacles trigger a change
+## Blinker time before a lane change starts: a normal one (passing, keep
+## right, flashed, siren), one round an obstacle, and how long a driver keeps
+## signalling for a lane that is not safe before giving up.
+const SIGNAL_T := 1.5
+const SIGNAL_T_OBSTACLE := 0.8
+const SIGNAL_GIVE_UP := 4.0
+## The blind spot: no change into a lane while the player is heading for it
+## anywhere from alongside to this many car lengths past the nose.
+const BLIND_AHEAD_LENGTHS := 2.0
+## A player this close behind in the lane (metres, or seconds of its speed)
+## keeps a car from drifting back right in front of it.
+const HOLD_NEAR_M := 30.0
+const HOLD_NEAR_T := 2.0
+## An aborted change steers back in at least this long.
+const ABORT_MIN_T := 1.2
 
 ## Bends (#37): cornering traffic will take, m/s^2 (a calm driver's 0.2 g;
 ## at 2.5 a car at 109 km/h on a 385 m bend still ran 0.76 m wide), and how
@@ -484,7 +539,7 @@ func _drive(delta: float) -> void:
 	if changing:
 		_lc_t += delta
 		if _lc_t >= _lc_dur:
-			changing = false
+			_end_change()
 	_lc_cooldown -= delta
 	var a := _accel_command(v)
 	hazard = _check_wreck(delta, v)
@@ -516,6 +571,8 @@ func _accel_command(v: float) -> float:
 	lead_is_player = false
 	if traffic != null:
 		var p := _road_pos()
+		_my_x = p.x
+		_my_z = p.z
 		_scan_in -= 1
 		if _scan_in <= 0:
 			_scan_in = LEAD_SCAN_TICKS
@@ -612,8 +669,20 @@ func _potential(v: float, gap: float, vl: float) -> float:
 
 func _consider_lane_change(v: float) -> void:
 	if changing:
+		_consider_abort(v)
 		return
 	_decide_doing(v)
+	if _sig_lane >= 0:
+		_signal_step(v)
+		return
+	# Flashed: after the driver's reaction time, whatever the cooldown says.
+	if flashed_at > -100.0:
+		var since := traffic.now - flashed_at
+		if since >= TrafficManager.FLASH_WINDOW:
+			flashed_at = -1000.0
+		elif since >= reaction_s:
+			_flash_move(v)
+			return
 	if _lc_cooldown > 0.0:
 		return
 	# Not while queueing at a red light: the car ahead is waiting, not broken down.
@@ -626,12 +695,22 @@ func _consider_lane_change(v: float) -> void:
 	var f_gap := traffic.scan(u.z, direction, x - half_w - CORRIDOR_MARGIN, x + half_w + CORRIDOR_MARGIN,
 		false, _idx, half_l, LOOK_BEHIND, skip_player)
 	var f_speed := traffic.q_speed
-	var yielding := f_gap < INF and f_speed - v > YIELD_DV and f_gap / (f_speed - v) < YIELD_TTC
+	# Moving over for a faster TRAFFIC car behind. Never for the player: it
+	# holds its lane until flashed (the player picks a side to pass on, and a
+	# car that guesses the same side is the close call this used to cause).
+	var yielding := f_gap < INF and not traffic.q_player and f_speed - v > YIELD_DV and f_gap / (f_speed - v) < YIELD_TTC
 	var cur_pot := _potential(v, lead_gap, lead_speed)
 	var constrained := lead_gap < INF and cur_pot < target_speed - (RB_PASS_DV if rule_breaker else PASS_DV)
 	var keep_right := not (obstacle or yielding or constrained) and _lc_cooldown < -KEEP_RIGHT_AFTER
 	if not (obstacle or yielding or constrained or keep_right):
 		return
+	# The player is coming up behind in this lane, or sitting on the bumper:
+	# hold the lane. It is about to pick a side to pass on, and any move now,
+	# even back to the right, is a guess at which. Only an obstacle overrides.
+	if not obstacle and traffic.react_to_player:
+		var pb := _player_behind(v)
+		if pb == 2 or (pb == 1 and keep_right):
+			return
 	var oncoming := direction > 0.0
 	var best := -1
 	var best_score := -INF
@@ -663,7 +742,7 @@ func _consider_lane_change(v: float) -> void:
 		if obstacle:
 			why = DO_OBSTACLE
 		elif yielding:
-			why = DO_MOVING_OVER_UNFLASHED
+			why = DO_YIELD_TRAFFIC
 		elif constrained:
 			why = DO_PASSING
 		_start_lane_change(best, obstacle or yielding, why)
@@ -693,7 +772,9 @@ func _merge_safe(lx: float, v: float) -> bool:
 		return false
 	if v > _m_speed and (v - _m_speed) * (v - _m_speed) / (2.0 * maxf(_m_gap - S_STOP, 0.3)) > B_SAFE:
 		return false
-	if traffic.player_behind_blocks(z, direction, lo, hi, v, half_l, PLAYER_TTC, PLAYER_MIN_GAP):
+	# The player, by where it is heading: not into its blind spot, not in front
+	# of it while it is closing (nothing says it will brake).
+	if traffic.player_blocks(z, direction, lo, hi, v, half_l, PLAYER_TTC, PLAYER_MIN_GAP, BLIND_AHEAD_LENGTHS * 2.0 * half_l):
 		return false
 	var fg := traffic.scan(z, direction, lo, hi, false, _idx, half_l, LOOK_BEHIND, skip_player)
 	if fg == INF:
@@ -705,8 +786,120 @@ func _merge_safe(lx: float, v: float) -> bool:
 		return false
 	return fs <= v or (fs - v) * (fs - v) / (2.0 * maxf(fg - S_STOP, 0.3)) <= B_SAFE
 
+## The player behind this car in its own lane: 2 = closing (over YIELD_DV,
+## under PLAYER_TTC seconds from contact), 1 = close behind (HOLD_NEAR), 0 = no.
+func _player_behind(v: float) -> int:
+	var tm := traffic
+	if not tm.react_to_player or tm._hi[0] <= _my_x - half_w - CORRIDOR_MARGIN or tm._lo[0] >= _my_x + half_w + CORRIDOR_MARGIN:
+		return 0
+	var d: float = (tm._z[0] - _my_z) * direction
+	if d >= 0.0:
+		return 0
+	var gap: float = -d - half_l - tm._hl[0]
+	var pv: float = tm._vz[0] * direction
+	if pv - v > YIELD_DV and gap / (pv - v) < PLAYER_TTC:
+		return 2
+	return 1 if gap < maxf(HOLD_NEAR_M, HOLD_NEAR_T * pv) else 0
+
+## The player flashed this car and the reaction time is up: signal toward the
+## right lane (the left one only if the right is not open or not safe) and
+## move over once the blinker has been on SIGNAL_T, if it is still safe then.
+## In the rightmost lane there is nowhere to go: it holds its lane.
+func _flash_move(v: float) -> void:
+	var left := TrafficManager.FLASH_WINDOW - (traffic.now - flashed_at)
+	flashed_at = -1000.0
+	var oncoming := direction > 0.0
+	if lane_i + 1 >= (traffic.onc_lanes if oncoming else traffic.own_lanes):
+		return
+	var pick := -1
+	var first := -1
+	for lane in [lane_i + 1, lane_i - 1]:
+		if not traffic.lane_allowed(lane, oncoming):
+			continue
+		if first < 0:
+			first = lane
+		if _merge_safe(TrafficManager.lane_centre(lane, oncoming), v):
+			pick = lane
+			break
+	if pick < 0:
+		pick = first   # nothing safe yet: signal and wait for a gap
+	if pick >= 0:
+		_signal(pick, SIGNAL_T, DO_MOVING_OVER_FLASHED, maxf(left, SIGNAL_T))
+
+## Blinker on toward `lane`; the change starts after `need` seconds of it.
+func _signal(lane: int, need: float, why: String, give_up := SIGNAL_GIVE_UP) -> void:
+	_sig_lane = lane
+	_sig_t = 0.0
+	_sig_need = need
+	_sig_why = why
+	_sig_give_up = give_up
+	turn = 2 if lane > lane_i else 1
+
+## One decision step of a car that is signalling: when the blinker has been on
+## long enough the lane is checked again and the change starts; a lane that is
+## not safe keeps the blinker on until the driver gives up.
+func _signal_step(v: float) -> void:
+	_sig_t += DECIDE_PERIOD
+	if (_sig_why == DO_PASSING or _sig_why == DO_KEEP_RIGHT or _sig_why == DO_YIELD_TRAFFIC) and _player_behind(v) == 2:
+		_cancel_signal()   # the player is closing from behind now: stay put
+		return
+	if _sig_t < _sig_need:
+		return
+	var oncoming := direction > 0.0
+	if traffic.lane_allowed(_sig_lane, oncoming) and _merge_safe(TrafficManager.lane_centre(_sig_lane, oncoming), v):
+		var lane := _sig_lane
+		_sig_lane = -1
+		last_signal_s = _sig_t
+		_start_lane_change(lane, _sig_why == DO_OBSTACLE, _sig_why)
+	elif _sig_t >= _sig_give_up:
+		_cancel_signal()
+
+func _cancel_signal() -> void:
+	_sig_lane = -1
+	turn = 0
+	_lc_cooldown = maxf(_lc_cooldown, 1.0)
+
+## A lane change has run its course.
+func _end_change() -> void:
+	changing = false
+	turn = 0
+
+## Mid lane change, at the decision rate: in the first half, if the player is
+## now heading for the lane this car is moving into (alongside, in the blind
+## spot, or closing from behind), steer back. Past half way it finishes: by
+## then turning back takes as long as going on.
+func _consider_abort(v: float) -> void:
+	if _lc_why == DO_ABORT or _lc_why == DO_SWERVE or _lc_t >= _lc_dur * 0.5:
+		return
+	var lo := lane_x - half_w - CORRIDOR_MARGIN
+	var hi := lane_x + half_w + CORRIDOR_MARGIN
+	if traffic.player_blocks(_my_z, direction, lo, hi, v, half_l, PLAYER_TTC, PLAYER_MIN_GAP, BLIND_AHEAD_LENGTHS * 2.0 * half_l):
+		_abort()
+
+## Back to the lane the change started from: a new S from where the path is
+## now, as long as the share of the lane width already crossed.
+func _abort() -> void:
+	var from := path_x()
+	lane_i = _lc_old_lane
+	lane_x = TrafficManager.lane_centre(lane_i, direction > 0.0)
+	_lc_from = from
+	_lc_t = 0.0
+	_lc_dur = maxf(ABORT_MIN_T, LC_TIME * absf(from - lane_x) / RoadChunkBuilder.LANE_W)
+	_lc_why = DO_ABORT
+	doing = DO_ABORT
+	turn = 0
+	_lc_cooldown = LC_COOLDOWN
+	_scan_in = 0
+	traffic.note_abort(self)
+
+## The player flashed this car (TrafficManager.flash_ahead).
+func on_flashed(t: float) -> void:
+	flashed_at = t
+
 func _start_lane_change(lane: int, urgent: bool, why := DO_PASSING) -> void:
-	doing = DO_RB_CUT_IN if rule_breaker else why
+	doing = DO_RB_CUT_IN if rule_breaker and why == DO_PASSING else why
+	_lc_why = why
+	_lc_old_lane = lane_i
 	_lc_from = path_x()
 	lane_i = lane
 	lane_x = TrafficManager.lane_centre(lane, direction > 0.0)
@@ -851,6 +1044,11 @@ func place(lane: float, dir: float, z: float, y: float, speed: float) -> void:
 	_stuck_t = 0.0
 	_lc_cooldown = 0.0
 	_decide_t = randf() * DECIDE_PERIOD
+	_sig_lane = -1
+	turn = 0
+	flashed_at = -1000.0
+	_edge = 0.0
+	_edge_want = 0.0
 	_lead_k = -1
 	_scan_in = 0
 	var yaw := 0.0 if dir < 0.0 else PI
@@ -886,7 +1084,7 @@ func set_shown(on: bool) -> void:
 			_rail_z = rail_z_now()
 			_rail_pose(_rail_z)
 		_owed = 0
-		# A hidden car may have jumped lanes (_hidden_yield): no smear into view.
+		# A hidden car moves once per think: no smear into view.
 		reset_physics_interpolation()
 
 ## Full sim on (inside the physics band) or the frozen car on rails (outside).
@@ -918,7 +1116,7 @@ func set_detailed(on: bool) -> void:
 		freeze = true
 		var u := RoadFrame.unroll(global_position)
 		if shown:
-			_rail_dx = u.x - path_x()
+			_rail_dx = u.x - path_x() - _edge
 			_rail_dy = u.y - rest_y
 			_rail_dyaw = _yaw_error(RoadFrame.basis_to_road(u.z, global_transform.basis))
 			for w in wheel_array:
@@ -957,7 +1155,7 @@ func _rail_yaw() -> float:
 	return yaw
 
 func _rail_pose(z: float) -> void:
-	global_transform = RoadFrame.pose(path_x() + _rail_dx, rest_y + _rail_dy, z, _rail_yaw() + _rail_dyaw)
+	global_transform = RoadFrame.pose(path_x() + _rail_dx + _edge, rest_y + _rail_dy, z, _rail_yaw() + _rail_dyaw)
 	previous_global_position = global_position
 
 ## Road-space position (y unused on rails) and z of the car: the rails' own
@@ -965,7 +1163,7 @@ func _rail_pose(z: float) -> void:
 func _road_pos() -> Vector3:
 	if detailed or is_nan(_rail_z):
 		return RoadFrame.unroll(global_position)
-	return Vector3(path_x() + _rail_dx, 0.0, _rail_z)
+	return Vector3(path_x() + _rail_dx + _edge, 0.0, _rail_z)
 
 func road_z() -> float:
 	if detailed or is_nan(_rail_z):
@@ -983,8 +1181,7 @@ func _think_phase() -> int:
 	return maxi(_idx, 0) % (think_ticks if shown else think_ticks_hidden)
 
 ## On rails: down the lane path, with the follower law on its speed and, in
-## view, the same lane changes as the sim; hidden, only moving over for the
-## player. See "Rails, the cheap half" in the header for what runs when.
+## view, the same lane changes as the sim; hidden, it holds its lane. See "Rails, the cheap half" in the header for what runs when.
 func _cruise(delta: float) -> void:
 	_think_in -= 1
 	var think := _think_in <= 0
@@ -1004,7 +1201,7 @@ func _cruise(delta: float) -> void:
 	if changing:
 		_lc_t += dt
 		if _lc_t >= _lc_dur:
-			changing = false
+			_end_change()
 	_lc_cooldown -= dt
 	if _rail_dx != 0.0 or _rail_dy != 0.0 or _rail_dyaw != 0.0:
 		var k := exp(-dt / RAIL_EASE)
@@ -1012,7 +1209,7 @@ func _cruise(delta: float) -> void:
 		_rail_dy *= k
 		_rail_dyaw *= k
 	_rail_z += direction * _cruise_speed * dt
-	var xf := RoadFrame.pose(path_x() + _rail_dx, rest_y + _rail_dy, _rail_z, _rail_yaw() + _rail_dyaw)
+	var xf := RoadFrame.pose(path_x() + _rail_dx + _edge, rest_y + _rail_dy, _rail_z, _rail_yaw() + _rail_dyaw)
 	global_transform = xf
 	previous_global_position = xf.origin
 	# Velocity as the sim would report it (current_speed(), drafting, anything
@@ -1025,40 +1222,16 @@ func _cruise(delta: float) -> void:
 		_decide_t -= dt if not shown else delta * float(every)
 		if _decide_t <= 0.0:
 			_decide_t = DECIDE_PERIOD
+			# A hidden car holds its lane (it used to jump lanes for a closing
+			# player; now nobody moves over unflashed).
 			if shown:
 				_consider_lane_change(_cruise_speed)
-			elif traffic.react_to_player:
-				_hidden_yield()
 	if shown:
 		# Lamps and rolling wheels only; the pedals do nothing on rails.
 		brake_input = 1.0 if _rail_a < -A_COAST else 0.0
 		for w in wheel_array:
 			w.spin = _cruise_speed / w.tire_radius
 		_update_lamps()
-
-## A hidden car with the player closing on it in its lane moves over at once
-## (YIELD_TTC_HIDDEN), if a lane next to it is safe.
-func _hidden_yield() -> void:
-	var v := _cruise_speed
-	var fg := traffic.scan(RoadFrame.unroll(global_position).z, direction, lane_x - half_w - CORRIDOR_MARGIN, lane_x + half_w + CORRIDOR_MARGIN,
-		false, _idx, half_l, LOOK_BEHIND, false)
-	if fg == INF or not traffic.q_player:
-		return
-	var closing := traffic.q_speed - v
-	if closing <= YIELD_DV or fg / closing >= YIELD_TTC_HIDDEN:
-		return
-	var oncoming := direction > 0.0
-	for lane in [lane_i + 1, lane_i - 1]:
-		if traffic.lane_allowed(lane, oncoming) and _merge_safe(TrafficManager.lane_centre(lane, oncoming), v):
-			lane_i = lane
-			lane_x = TrafficManager.lane_centre(lane, oncoming)
-			var u := RoadFrame.unroll(global_position)
-			global_transform = RoadFrame.pose(lane_x, u.y, u.z, 0.0 if direction < 0.0 else PI)
-			previous_global_position = global_position
-			lane_changes += 1
-			_scan_in = 0
-			traffic.note_lane_change(self)
-			return
 
 ## Collisions back on after the step that carried a rail car over an origin shift.
 func _end_ghost() -> void:

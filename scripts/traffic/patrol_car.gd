@@ -23,6 +23,3 @@ static func make() -> PatrolCar:
 
 func _consider_lane_change(_v: float) -> void:
 	pass
-
-func _hidden_yield() -> void:
-	pass

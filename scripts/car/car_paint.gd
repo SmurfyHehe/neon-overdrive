@@ -366,8 +366,12 @@ static func finish_for(kind: String) -> Vector4:
 ## Each design triangle is written a, c, b for Godot's clockwise front faces.
 static func build_groups(data: GDScript, tris: PackedVector3Array, mats: PackedByteArray,
 		tint_mats: Array, opts := {}) -> Dictionary:
-	var n_tri := mats.size()
 	var is_wheel: bool = opts.get("is_wheel", false)
+	if not is_wheel and opts.get("mirror", true):
+		var sym := mirrored(tris, mats)
+		tris = sym[0]
+		mats = sym[1]
+	var n_tri := mats.size()
 	var hubs: Array = opts.get("wheels", [])
 	var wheel_r: float = opts.get("wheel_r", 0.3)
 	var cos_crease := cos(deg_to_rad(CREASE_DEG))
@@ -512,6 +516,134 @@ static func build_groups(data: GDScript, tris: PackedVector3Array, mats: PackedB
 				g[5].append(NO_EDGE if hc == NO_EDGE else (1.0 - hc / EDGE_W if j == k else 1.0))
 				g[6].append(NO_EDGE if hs == NO_EDGE else (1.0 - hs / EDGE_W if j == k else 1.0))
 	return groups
+
+## The body with its right half rebuilt as the mirror image of its left half
+## (the driver's side, x < 0): [triangles, materials, sheet materials left
+## alone]. The sheets are the same shape on both sides to the millimetre,
+## but their triangles are not mirror images (each four-sided patch is cut
+## along the same diagonal, not the mirrored one), so the two sides caught
+## the light differently. Left as they are:
+## - parts that exist on one side only (an exhaust, a spotlight, an aerial)
+##   and triangles that cross the centre line,
+## - every sheet material whose left and right halves do not cover the same
+##   area (within MIRROR_AREA_TOL): the red and blue halves of a police
+##   light bar, the beater's one-sided patches. Mirroring those would paint
+##   one side's colours over the other.
+const MIRROR_AREA_TOL := 0.005
+const MIRROR_AREA_MIN := 0.0002
+static func mirrored(tris: PackedVector3Array, mats: PackedByteArray) -> Array:
+	var n_tri := mats.size()
+	var left := {}    # mm key -> true, vertices with x < 0
+	var right := {}   # mm key -> the vertex, x > 0
+	for p in tris:
+		var k := Vector3i((p * 1000.0).round())
+		if k.x < 0:
+			left[k] = true
+		elif k.x > 0:
+			right[k] = p
+	# Pass 1: what would go (0 keep, 1 drop, 2 keep and mirror), and the area
+	# each sheet material would lose and gain on the right.
+	var memo_l := {}
+	var memo_r := {}
+	var plan := PackedByteArray()
+	plan.resize(n_tri)
+	var twins := {}    # triangle -> its three mirrored corners
+	var lost := {}     # material -> area dropped
+	var gained := {}   # material -> area mirrored in
+	var on_right := {} # material -> its whole right-side area
+	for t in n_tri:
+		var a := tris[t * 3]
+		var b := tris[t * 3 + 1]
+		var c := tris[t * 3 + 2]
+		var lo := minf(a.x, minf(b.x, c.x))
+		var hi := maxf(a.x, maxf(b.x, c.x))
+		var area := (b - a).cross(c - a).length() * 0.5
+		var m := mats[t]
+		if lo > -0.0005 and hi > 0.0005:
+			on_right[m] = float(on_right.get(m, 0.0)) + area
+			if _has_twin(left, a, memo_l) and _has_twin(left, b, memo_l) and _has_twin(left, c, memo_l):
+				plan[t] = 1
+				lost[m] = float(lost.get(m, 0.0)) + area
+		elif hi < 0.0005 and lo < -0.0005:
+			var ma: Variant = _twin_of(right, a, memo_r)
+			var mb: Variant = _twin_of(right, b, memo_r)
+			var mc: Variant = _twin_of(right, c, memo_r)
+			if ma != null and mb != null and mc != null:
+				plan[t] = 2
+				# Mirroring turns the triangle inside out: swap two corners back.
+				twins[t] = [ma, mc, mb]
+				gained[m] = float(gained.get(m, 0.0)) + area
+	var skip := {}
+	for m in on_right:
+		if not lost.has(m) and not gained.has(m):
+			continue
+		var diff := absf(float(lost.get(m, 0.0)) - float(gained.get(m, 0.0)))
+		if diff > maxf(MIRROR_AREA_TOL * float(on_right[m]), MIRROR_AREA_MIN):
+			skip[m] = true
+	for m in gained:
+		if not on_right.has(m):
+			skip[m] = true
+	# Pass 2.
+	var out_tris := PackedVector3Array()
+	var out_mats := PackedByteArray()
+	var add_tris := PackedVector3Array()
+	var add_mats := PackedByteArray()
+	for t in n_tri:
+		var m := mats[t]
+		var todo := 0 if skip.has(m) else plan[t]
+		if todo == 1:
+			continue
+		out_tris.append(tris[t * 3])
+		out_tris.append(tris[t * 3 + 1])
+		out_tris.append(tris[t * 3 + 2])
+		out_mats.append(m)
+		if todo == 2:
+			add_tris.append_array(PackedVector3Array(twins[t]))
+			add_mats.append(m)
+	out_tris.append_array(add_tris)
+	out_mats.append_array(add_mats)
+	return [out_tris, out_mats, skip.keys()]
+
+## True when the mirror image of `p` is a left-side vertex (within 1 mm), or
+## `p` is on the centre line. `memo` remembers the answer per vertex.
+static func _has_twin(left: Dictionary, p: Vector3, memo: Dictionary) -> bool:
+	var k := Vector3i((p * 1000.0).round())
+	if k.x == 0:
+		return true
+	var m := Vector3i(-k.x, k.y, k.z)
+	if left.has(m):
+		return true
+	var known: Variant = memo.get(k)
+	if known != null:
+		return known
+	var found := false
+	for i in 27:
+		if left.has(m + Vector3i(i % 3 - 1, (i / 3) % 3 - 1, i / 9 - 1)):
+			found = true
+			break
+	memo[k] = found
+	return found
+
+## The right-side vertex that mirrors left-side `p` (within 1 mm), `p` itself
+## on the centre line, or null. `memo` remembers the answer per vertex.
+static func _twin_of(right: Dictionary, p: Vector3, memo: Dictionary) -> Variant:
+	var k := Vector3i((p * 1000.0).round())
+	if k.x == 0:
+		return p
+	var m := Vector3i(-k.x, k.y, k.z)
+	var exact: Variant = right.get(m)
+	if exact != null:
+		return exact
+	if memo.has(k):
+		return memo[k]
+	var found: Variant = null
+	for i in 27:
+		var o := m + Vector3i(i % 3 - 1, (i / 3) % 3 - 1, i / 9 - 1)
+		if right.has(o):
+			found = right[o]
+			break
+	memo[k] = found
+	return found
 
 const _NO_EDGES: PackedFloat32Array = [NO_EDGE, NO_EDGE, NO_EDGE]
 

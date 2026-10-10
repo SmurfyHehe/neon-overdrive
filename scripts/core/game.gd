@@ -70,12 +70,19 @@ var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust fl
 # a fresh start at the beginning of the road).
 const SaveDirector := preload("res://scripts/save/save_director.gd")
 const UserDirMigration := preload("res://scripts/save/user_dir_migration.gd")
+const RoadMap := preload("res://scripts/world/road_map.gd")
 var saver: SaveDirector
 ## Tonight's cash and the bank (F0, scripts/core/wallet.gd).
 var wallet: Node
 const Wallet := preload("res://scripts/core/wallet.gd")
 var road_seed := 0
 var run := {}
+## Whether `run` puts the car back where it was: false for a fresh run, and for
+## a save from a road this build does not have (or from before the map), which
+## starts at the top of the default road and keeps only the clock and the radio.
+var resume_place := false
+## The act the road is in (road_map.gd: the loop grows by act).
+var road_act := 1
 
 func _ready() -> void:
 	# Auto-Tune worker mode (exported game): no world, just the search.
@@ -295,6 +302,27 @@ func _setup_ground_collision() -> void:
 @export var hilliness := 0.5
 @export var kicker_chance := 0.0
 
+## The map (road_map.gd): which road this run is on, and in which act (the loop
+## grows by act). A resumed run stays on its own; otherwise NEON_ROAD=<id>
+## picks the road ("endless" = the road from before the map), else the default
+## loop, and NEON_ACT=<1-3> the act (1 until the story sets it). What stands on
+## a loop is fixed by the map; its bends and hills come from the night's road
+## seed, new each night and the same on every pass that night.
+func _pick_road() -> int:
+	if not run.is_empty():
+		var saved: Variant = run.road.get("id")
+		if (saved is float or saved is int) and float(saved) == floorf(saved) and RoadMap.knows(int(saved)):
+			resume_place = true
+			road_act = int(run.road.get("act", 1))
+			return int(saved)
+		print("save: this run was on road '%s', which this build does not have; starting at the top of road %d" % [saved, RoadMap.DEFAULT])
+	var act_env := OS.get_environment("NEON_ACT")
+	road_act = int(act_env) if act_env.is_valid_int() else 1
+	var env := OS.get_environment("NEON_ROAD")
+	if env == "endless":
+		return RoadMap.ENDLESS
+	return int(env) if env.is_valid_int() and RoadMap.knows(int(env)) else RoadMap.DEFAULT
+
 func _chunks_behind() -> int:
 	return CHUNKS_BEHIND_HILLS if RoadFrame.has_hills() else CHUNKS_BEHIND
 
@@ -313,21 +341,25 @@ func _setup_road_shape() -> void:
 		hilliness = Benchmark.opt_float("hills", 0.0)
 	var seed_env := OS.get_environment("NEON_ROAD_SEED")
 	road_seed = int(seed_env) if seed_env.is_valid_int() else randi()
-	if not run.is_empty():
+	var road := _pick_road()
+	RoadMap.use(road, road_act)
+	if resume_place:
 		# A resumed run: its own road, and the floating origin where it was.
 		road_seed = int(run.road.seed)
 		curviness = float(run.road.curviness)
 		hilliness = float(run.road.hilliness)
 		kicker_chance = float(run.road.kicker_chance)
-		origin_index = int(run.origin_index)
+		# On a loop only the place on the lap matters: laps driven are dropped.
+		origin_index = RoadMap.lap_chunk(int(run.origin_index))
 		recenter_count = int(run.get("recenter_count", 0))
-		if run.get("sections") is Dictionary:
+		# (A loop's centre barrier is the map's, not the save's.)
+		if run.get("sections") is Dictionary and not RoadMap.is_loop():
 			for k in run.sections:
 				if run.sections[k] is Dictionary and str(k).is_valid_int():
-					section_cache[str(k)] = {"own_lanes": OWN_LANES, "onc_lanes": ONC_LANES,
+					section_cache[str(RoadMap.lap_chunk(int(k)))] = {"own_lanes": OWN_LANES, "onc_lanes": ONC_LANES,
 						"barrier": run.sections[k].get("barrier", false) == true}
 	RoadFrame.origin_index = origin_index
-	RoadFrame.align = RoadAlignment.new(road_seed, curviness, hilliness, kicker_chance) if curviness > 0.0 or hilliness > 0.0 else null
+	RoadFrame.align = RoadAlignment.new(road_seed, curviness, hilliness, kicker_chance, RoadMap.period, RoadMap.pins()) if curviness > 0.0 or hilliness > 0.0 else null
 	# Lane adds and drops, median splits and exits (road lane proposal): a
 	# third stream from the same seed. NEON_LAYOUT=0 keeps the plain 4+4,
 	# NEON_LAYOUT=<metres> forces a change that often (the tests' sweep).
@@ -339,6 +371,7 @@ func _setup_road_shape() -> void:
 
 # ---------- section math (reused from old main.gd, keyed by chunk index instead of distance) ----------
 func _section_at(idx: int) -> Dictionary:
+	idx = RoadMap.lap_chunk(idx)  # a loop: the same chunk every lap
 	var key := str(idx)
 	if section_cache.has(key):
 		return section_cache[key]
@@ -349,7 +382,12 @@ func _section_at(idx: int) -> Dictionary:
 	var onc := ONC_LANES
 	var barrier: bool
 	var lay := RoadFrame.layout
-	if lay != null:
+	if RoadMap.is_loop():
+		# The map's: the same barrier every night, open at the map's gaps.
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash([RoadMap.seed_of(RoadMap.road_id), idx, "barrier"])
+		barrier = rng.randf() < 0.3 and not RoadMap.gap_in(idx)
+	elif lay != null:
 		if lay.lanes_live:
 			var p := lay.lanes_pair(float(idx) * RoadChunkBuilder.CHUNK_LEN)
 			own = p.x
@@ -368,7 +406,7 @@ func _setup_chunk_pool() -> void:
 	# The chunk the car starts on: 0 for a fresh run, the saved car's for a
 	# resumed one (its index counts from origin_index, like _update_chunk_pool).
 	var start := 0
-	if not run.is_empty():
+	if resume_place:
 		var z := RoadFrame.unroll(SaveDirector.v3(run.car.xform.slice(9, 12))).z
 		start = int(floor(-z / RoadChunkBuilder.CHUNK_LEN)) + origin_index
 	for i in range(CHUNKS_AHEAD + _chunks_behind() + CHUNKS_SPARE + 1):
@@ -378,30 +416,79 @@ func _setup_chunk_pool() -> void:
 		var root := RoadChunkBuilder.build_chunk(idx, prev_cfg, cfg, origin_index)
 		add_child(root)
 		chunk_pool.append({"root": root, "index": idx})
+	_pool_centre = start
 
 ## Tests: called as (chunk_root, gap) just before a chunk is rebuilt (it vanishes
 ## from where it stands); gap is how many chunks behind the player it is.
 var chunk_event_hook: Callable = Callable()
 
+## The chunk the pool is centred on: the player's, held until the car is
+## POOL_HYSTERESIS metres into the next one, so a car sitting on a join does
+## not rebuild a chunk at each end of the pool every time it rolls across.
+var _pool_centre := 0
+const POOL_HYSTERESIS := 5.0
+## The centre the pool was last found complete around: nothing to do until the
+## car moves to another chunk.
+var _pool_full_at := -(1 << 40)
+
+## Both directions (the map, 2026-10-10): the pool is the same number of
+## chunks either side of the player (CHUNKS_AHEAD = CHUNKS_BEHIND +
+## CHUNKS_SPARE, 300 m, where the fog has the road), so the road is there
+## whichever way the car goes or turns. A chunk that falls off one end is
+## rebuilt at the other; it is 350 m away when it goes. One rebuild a frame,
+## nearest missing chunk first, taking a piece no camera can see when there is
+## a choice (ViewGuard); only when the chunk under the car itself is missing
+## (the car was put somewhere else) is everything rebuilt at once.
 func _update_chunk_pool(ref_z: float) -> void:
-	var current_idx := int(floor(-ref_z / RoadChunkBuilder.CHUNK_LEN)) + origin_index
-	var max_idx := current_idx
+	var at := -ref_z / RoadChunkBuilder.CHUNK_LEN + float(origin_index)
+	var slack := POOL_HYSTERESIS / RoadChunkBuilder.CHUNK_LEN
+	if floori(at - slack) > _pool_centre:
+		_pool_centre = floori(at - slack)
+	elif floori(at + slack) < _pool_centre:
+		_pool_centre = floori(at + slack)
+	if _pool_centre == _pool_full_at:
+		return
+	@warning_ignore("integer_division")
+	var half := (chunk_pool.size() - 1) / 2
+	var lo := _pool_centre - half
+	var have := {}
+	var spare: Array = []
 	for c in chunk_pool:
-		max_idx = max(max_idx, c.index)
-	for c in chunk_pool:
-		var gap: int = current_idx - c.index
-		if gap > _chunks_behind() and (gap > _chunks_behind() + CHUNKS_SPARE or not ViewGuard.chunk_seen(get_tree(), c.root)):
-			if chunk_event_hook.is_valid():
-				chunk_event_hook.call(c.root, gap)
-			max_idx += 1
-			var prev_cfg := _section_at(max_idx - 1)
-			var cfg := _section_at(max_idx)
-			RoadChunkBuilder.rebuild_chunk(c.root, max_idx, prev_cfg, cfg, origin_index)
-			# Physics interpolation is on (ISSUES B7): without this reset the
-			# recycled chunk would slide from its old spot to the new one
-			# over a frame instead of jumping there.
-			c.root.reset_physics_interpolation()
-			c.index = max_idx
+		if absi(c.index - _pool_centre) > half or have.has(c.index):
+			spare.append(c)
+		else:
+			have[c.index] = true
+	if spare.is_empty():
+		_pool_full_at = _pool_centre
+		return
+	var all := not have.has(_pool_centre)
+	for n in chunk_pool.size():
+		# Outward from the car: 0, +1, -1, +2, ...
+		@warning_ignore("integer_division")
+		var idx := _pool_centre + ((n + 1) / 2) * (1 if n % 2 == 1 else -1)
+		if have.has(idx) or idx < lo or idx >= lo + chunk_pool.size():
+			continue
+		if spare.is_empty():
+			break
+		var pick := spare.size() - 1
+		if not all:
+			for j in spare.size():
+				if not ViewGuard.chunk_seen(get_tree(), spare[j].root):
+					pick = j
+					break
+		var c: Dictionary = spare.pop_at(pick)
+		if chunk_event_hook.is_valid():
+			chunk_event_hook.call(c.root, absi(c.index - _pool_centre))
+		var prev_cfg := _section_at(idx - 1)
+		var cfg := _section_at(idx)
+		RoadChunkBuilder.rebuild_chunk(c.root, idx, prev_cfg, cfg, origin_index)
+		# Physics interpolation is on (ISSUES B7): without this reset the
+		# recycled chunk would slide from its old spot to the new one
+		# over a frame instead of jumping there.
+		c.root.reset_physics_interpolation()
+		c.index = idx
+		if not all:
+			break
 
 # ---------- floating origin (issue #26) ----------
 func _physics_process(_delta: float) -> void:
@@ -476,10 +563,10 @@ const PLAYER_SPAWN_LANE := 1
 func _setup_player() -> void:
 	player = PlayerCar.new()
 	player.position = RoadFrame.roll(Vector3(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, 0))
-	if not run.is_empty():
+	if resume_place:
 		player.transform = SaveDirector.array_to_xform(run.car.xform)
 	add_child(player)
-	if not run.is_empty():
+	if resume_place:
 		saver.restore_car(player, run.car)
 
 # ---------- traffic (milestone 3, stage B step 3) ----------
@@ -592,4 +679,6 @@ func _on_event(e: int) -> void:
 
 func _process(_delta: float) -> void:
 	_update_bands()
-	_update_chunk_pool(RoadFrame.unroll(player.position).z)
+	var pz := RoadFrame.unroll(player.position).z
+	Junction.focus_z = pz
+	_update_chunk_pool(pz)

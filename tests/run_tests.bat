@@ -153,6 +153,10 @@ if /i not "%~1"=="quick" (
 	call :run traffic/traffic_behaviour "--headless --fixed-fps 120"
 	rem ~70 s: City lights, the signalised crossing (J0/J1a): red queue, amber, 1 a.m. flash.
 	call :run world/junction_lights "--headless --fixed-fps 120"
+	rem ~100 s: the map, loop 1: the road repeats each lap, drives both ways, and the save names the road.
+	call :run world/loop_road "--headless --fixed-fps 60"
+	rem ~3 min: the road both ways: 2 km out, 3 km back across the lap seam, ten turns; road under the car every tick, no chunk rebuilt in view.
+	call :run world/two_way_drive "--headless --fixed-fps 60"
 	call :run traffic/traffic_perf "--headless --fixed-fps 120"
 	call :run world/curve_drive "--headless --fixed-fps 120"
 	call :run world/hill_drive "--headless --fixed-fps 120"

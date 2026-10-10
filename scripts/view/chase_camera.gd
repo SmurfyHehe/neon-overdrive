@@ -128,6 +128,8 @@ var aim := Vector3.ZERO     # point the rig looks at before shake
 
 var _follow := Vector2.ZERO
 var _yaw := 0.0
+## Whether the car faces back up the road (RoadFrame's +z).
+var _up_road := false
 var _started := false
 var _prev_vel := Vector3.ZERO
 var _prev_speed := 0.0
@@ -339,7 +341,14 @@ func _place(delta: float) -> void:
 	var u := RoadFrame.unroll(p)
 	# Reversing flips the chase cam to the opposite side of the car looking
 	# the opposite way (2026-09-13 fix, kept); so does holding look_back.
-	var target_yaw := PI if (target.gear == -1 or look_back) else 0.0
+	# The road goes both ways (the map, 2026-10-10): the rig looks the way the
+	# car faces along the road. It changes side only once the car is well
+	# round (past 60 degrees from across the road), so a slide or a spin does
+	# not swing it back and forth.
+	var facing := RoadFrame.dir_to_road(u.z, -target.global_transform.basis.z).z
+	if absf(facing) > 0.5:
+		_up_road = facing > 0.0
+	var target_yaw := PI if (target.gear == -1 or look_back) != _up_road else 0.0
 	if mode == 0 or not _started:
 		_follow = Vector2(u.x, u.y)
 		_yaw = target_yaw

@@ -23,6 +23,22 @@ class_name RoadAlignment
 # constant rate vcurve(i) (1/m; + = sag, - = crest), so
 #   y(s) = h + g s + vcurve s^2 / 2.
 # Its own random stream: changing curviness never changes the hills.
+#
+# A loop (road_map.gd, 2026-10-10): with `period` > 0 the shape repeats every
+# `period` chunks, in both directions (chunks before 0 are the end of the lap
+# before, not straight). The first lap is rolled as usual, except that its
+# last few chunks steer the heading and the grade back to where chunk 0
+# started, and the whole lap is tilted by a constant grade (well under 1 %)
+# so it ends at the height it began. Each lap then sits one lap's length
+# further down the world from the last; nothing wraps in space.
+#
+# Pinned chunks (`pins`, one byte per chunk of the lap; road_map.gd): the
+# places that are fixed on the map (crossings, exits, median gaps) get
+# straight, level road whatever the seed. A pinned chunk never bends, and the
+# grade is brought to level before each pinned stretch. The lap's closing
+# works the same way: a bend is never allowed to leave more heading than the
+# chunks still to come can turn back, so a lap nets no turn, and that
+# correcting bend falls on the last free chunks of the lap.
 
 const L := RoadChunkBuilder.CHUNK_LEN
 const MIN_RADIUS := 300.0
@@ -54,6 +70,14 @@ var curviness := 0.5
 var hilliness := 0.0
 ## Chance a crest is a kicker (KICKER_RADIUS_*). 0 outside the R6 playtest.
 var kicker_chance := 0.0
+## Chunks in one lap of a loop; 0 = an endless road.
+var period := 0
+var _closed := false
+## A loop: free chunks (not pinned) from chunk i to the lap's end, and chunks
+## from i to the next place the grade must be level (a pinned chunk, or the
+## lap's end; 0 on a pinned chunk).
+var _free_from := PackedInt32Array()
+var _to_level := PackedInt32Array()
 
 var _rng := RandomNumberGenerator.new()
 var _k := PackedFloat64Array()    # curvature of chunk i
@@ -70,7 +94,14 @@ var _vseg_target := 0.0  # grade the current vertical segment is heading for
 var _vseg_c := 0.0
 var _vseg_left := 0
 
-func _init(seed_value: int, curviness_value: float, hilliness_value: float = 0.0, kicker_value: float = 0.0) -> void:
+func _init(seed_value: int, curviness_value: float, hilliness_value: float = 0.0, kicker_value: float = 0.0, period_value: int = 0, pins: PackedByteArray = PackedByteArray()) -> void:
+	period = maxi(period_value, 0)
+	_free_from.resize(period + 1)
+	_to_level.resize(period + 1)
+	for i in range(period - 1, -1, -1):
+		var pinned := i < pins.size() and pins[i] != 0
+		_free_from[i] = _free_from[i + 1] + (0 if pinned else 1)
+		_to_level[i] = 0 if pinned else _to_level[i + 1] + 1
 	_rng.seed = seed_value
 	_vrng.seed = seed_value ^ 0x5EED_4111
 	curviness = clampf(curviness_value, 0.0, 1.0)
@@ -82,19 +113,40 @@ func _init(seed_value: int, curviness_value: float, hilliness_value: float = 0.0
 func has_hills() -> bool:
 	return hilliness > 0.0
 
+## A loop: chunk i's place on the lap (the lap is rolled on first use).
+func _at(i: int) -> int:
+	if not _closed:
+		_close()
+	return posmod(i, period)
+
+func _close() -> void:
+	_closed = true
+	_ensure(period - 1)
+	# End at the height it began: tilt the lap by a constant grade.
+	var tilt := _h[period] / (float(period) * L)
+	for j in period + 1:
+		_g[j] -= tilt
+		_h[j] -= tilt * float(j) * L
+
 func vcurve(i: int) -> float:
+	if period > 0:
+		return _vc[_at(i)]
 	if i < 0:
 		return 0.0
 	_ensure(i)
 	return _vc[i]
 
 func start_height(i: int) -> float:
+	if period > 0:
+		return _h[_at(i)]
 	if i < 0:
 		return 0.0
 	_ensure(i)
 	return _h[i]
 
 func start_grade(i: int) -> float:
+	if period > 0:
+		return _g[_at(i)]
 	if i < 0:
 		return 0.0
 	_ensure(i)
@@ -108,12 +160,16 @@ func grade_at(i: int, s: float) -> float:
 	return start_grade(i) + vcurve(i) * s
 
 func curvature(i: int) -> float:
+	if period > 0:
+		return _k[_at(i)]
 	if i < 0:
 		return 0.0
 	_ensure(i)
 	return _k[i]
 
 func start_heading(i: int) -> float:
+	if period > 0:
+		return _psi[_at(i)]
 	if i < 0:
 		return 0.0
 	_ensure(i)
@@ -121,12 +177,20 @@ func start_heading(i: int) -> float:
 
 ## World-absolute start of chunk i (x, z), as 64-bit floats.
 func start_x(i: int) -> float:
+	if period > 0:
+		var m := _at(i)
+		@warning_ignore("integer_division")
+		return _px[m] + float((i - m) / period) * _px[period]
 	if i < 0:
 		return 0.0
 	_ensure(i)
 	return _px[i]
 
 func start_z(i: int) -> float:
+	if period > 0:
+		var m := _at(i)
+		@warning_ignore("integer_division")
+		return _pz[m] + float((i - m) / period) * _pz[period]
 	if i < 0:
 		return -float(i) * L
 	_ensure(i)
@@ -147,6 +211,13 @@ func _extend() -> void:
 	var end := psi + k * L
 	if absf(end) > MAX_HEADING:
 		k = (signf(end) * MAX_HEADING - psi) / L
+	if period > 0 and i < period:
+		if _to_level[i] == 0:
+			k = 0.0  # pinned: straight
+		else:
+			# Never more heading than the free chunks still to come can undo.
+			var room := float(_free_from[i + 1]) * L / MIN_RADIUS
+			k = clampf((clampf(psi + k * L, -room, room) - psi) / L, -1.0 / MIN_RADIUS, 1.0 / MIN_RADIUS)
 	_k.append(k)
 	var e := arc_point(k, L).rotated(Vector3.UP, psi)
 	_psi.append(psi + k * L)
@@ -167,6 +238,13 @@ func _extend_vertical(i: int) -> void:
 		if c != 0.0 and (g + c * L - _vseg_target) * signf(c) >= 0.0:
 			c = (_vseg_target - g) / L
 			_vseg_c = 0.0
+		if period > 0 and i < period:
+			# Level by the next pinned chunk (and by the lap's end): never more
+			# grade than the chunks before it can take out.
+			var n := float(maxi(_to_level[i] - 1, 0))
+			var end := clampf(g + c * L, -n * L / SAG_MIN_RADIUS, n * L / CREST_MIN_RADIUS)
+			if end != g + c * L:
+				c = clampf((end - g) / L, -1.0 / CREST_MIN_RADIUS, 1.0 / SAG_MIN_RADIUS)
 	_vc.append(c)
 	_h.append(_h[i] + g * L + 0.5 * c * L * L)
 	_g.append(g + c * L)

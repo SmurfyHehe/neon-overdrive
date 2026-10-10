@@ -35,9 +35,17 @@ class_name RoadLayout
 # - Drift back: after DRIFT_BACK away from 4+4, a change that restores a lane
 #   is picked first.
 #
+# On a loop (road_map.gd, 2026-10-10) the plan is the map's, not rolled: the
+# districts are the map's city and highway areas, and the only changes are
+# the map's exits, at their fixed places, the same every night and every lap
+# (s before 0 and past the lap's end wraps). Lane drops and median splits
+# stay off a loop until they are designed onto fixed places too.
+#
 # Step 1 builds the plan only. The road and traffic still run 4+4 until
 # `lanes_live` is switched on (step 3); median splits and exits wait for
 # steps 4 and 5 (`splits_live`, `exits_live`).
+
+const RoadMap := preload("res://scripts/world/road_map.gd")
 
 const L := RoadChunkBuilder.CHUNK_LEN
 const MAP_SEED := 20261008
@@ -97,6 +105,8 @@ var _onc := MAX_LANES
 ## Per side, where it last dropped below MAX_LANES (-1 = it has all lanes).
 var _away_since := {"own": -1.0, "onc": -1.0}
 var _next_s := FIRST_CHANGE
+## On a loop: `changes` is one lap of the map's exits, never generated.
+var _loop := false
 var _gen_to := 0.0
 
 func _init(seed_value: int, alignment: RoadAlignment = null, busy_value: float = 1.0) -> void:
@@ -105,11 +115,20 @@ func _init(seed_value: int, alignment: RoadAlignment = null, busy_value: float =
 	busy = busy_value
 	_rng.seed = hash([seed_value, "road_layout"])
 	_map_rng.seed = MAP_SEED
+	_loop = RoadMap.is_loop()
+	if _loop and busy > 0.0:
+		for e in RoadMap.exits():
+			var own := int(e.side) > 0
+			changes.append({"kind": "exit", "side": "own" if own else "onc", "id": e.id, "number": e.number,
+				"s0": float(e.s) if own else float(e.s) - EXIT_LOOP.x, "s1": float(e.s) + EXIT_LOOP.x if own else float(e.s)})
+		changes.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.s0 < b.s0)
 
 # ---------- queries ----------
 
 ## District at s: "city" or "outskirts".
 func district_at(s: float) -> String:
+	if _loop:
+		return "city" if RoadMap.area_at(s) == "city" else "outskirts"
 	_ensure_districts(s)
 	for d in _districts:
 		if s < d.s1:
@@ -186,6 +205,17 @@ func median_extra(s: float) -> float:
 func changes_between(a: float, b: float) -> Array[Dictionary]:
 	_ensure(b)
 	var out: Array[Dictionary] = []
+	if _loop:
+		# The lap's exits, on every lap that [a, b] touches.
+		var lap := RoadMap.length()
+		for n in range(floori((a - EXIT_LOOP.x) / lap), floori(b / lap) + 1):
+			for c in changes:
+				if c.s0 + float(n) * lap <= b and c.s1 + float(n) * lap >= a:
+					var d: Dictionary = c.duplicate()
+					d.s0 += float(n) * lap
+					d.s1 += float(n) * lap
+					out.append(d)
+		return out
 	for c in changes:
 		if c.s0 > b:
 			break
@@ -200,7 +230,7 @@ func ensure(s: float) -> void:
 # ---------- generation ----------
 
 func _ensure(s: float) -> void:
-	if busy <= 0.0:
+	if busy <= 0.0 or _loop:
 		return
 	while _gen_to < s + DROP_TAPER + WARN_FAR:
 		_generate_next()

@@ -933,7 +933,9 @@ var _camber_active := false
 ##     car that has a box (in any gearbox mode) is held still on the flat too
 ##     and pinned to where it stopped: braked at a standstill it used to slide
 ##     on at 2-3 cm/s;
-##  g. process_clutch: creep_torque is added to the clutch torque (the idle creep).
+##  g. process_clutch: feed_torque is added to the clutch torque (the idle
+##     creep, and the drive during an upshift, when the clutch itself is open
+##     and the box walks the revs down).
 var auto_box: AutoBox = null
 var auto_box_on := false
 var clutch_cap_mult := 1.0
@@ -1044,8 +1046,8 @@ func process_clutch(delta : float):
 	var tcs_torque_reduction := 0.0
 	clutch_torque = ((a - b + c)/(motor_moment + drive_inertia_R)) * clutch_factor
 	clutch_torque = clampf(clutch_torque, -max_clutch_torque * clutch_cap_mult * clutch_factor, max_clutch_torque * clutch_cap_mult * clutch_factor)
-	if auto_box_on and clutch_torque < -auto_box.drag_cap:  # (14)
-		clutch_torque = -auto_box.drag_cap
+	if auto_box_on:  # (14) downshift drag limit; idle creep and upshift drive fed in
+		clutch_torque = maxf(clutch_torque, -auto_box.drag_cap) + auto_box.feed_torque
 	
 	## Check if traction control is needed and adjust motor speed and clutch torque if needed
 	if traction_control_max_slip > 0.0:
@@ -1059,8 +1061,6 @@ func process_clutch(delta : float):
 		else:
 			tcs_active = false
 	
-	if auto_box_on:  # (14) idle creep
-		clutch_torque += auto_box.creep_torque
 	var clutch_reaction_torque := clutch_torque + tcs_torque_reduction
 	var new_rpm := motor_rpm - ((ANGULAR_VELOCITY_TO_RPM * delta * clutch_reaction_torque) / motor_moment)
 	if realistic_clutch:

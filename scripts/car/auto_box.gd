@@ -119,7 +119,7 @@ var gain := 1.0                  # torque multiplication on the way to the wheel
 var torque_scale := 1.0          # engine torque cut during an upshift
 var drag_scale := 1.0            # engine braking through the converter
 var drag_cap := INF              # Nm the wheels may put into the engine (downshifts)
-var creep_torque := 0.0          # Nm fed through the clutch at idle (the creep)
+var feed_torque := 0.0           # Nm put through the clutch directly: the idle creep, and the drive during an upshift
 var hill_hold_left := 0.0        # s of hill hold left after the brake came off
 
 # --- state others may read ---
@@ -200,7 +200,7 @@ func reset() -> void:
 	torque_scale = 1.0
 	drag_scale = 1.0
 	drag_cap = INF
-	creep_torque = 0.0
+	feed_torque = 0.0
 	hill_hold_left = 0.0
 	_ref_age = REF_REFRESH
 
@@ -250,6 +250,8 @@ func tick(v: Vehicle, delta: float) -> void:
 	torque_scale = 1.0
 	drag_cap = INF
 	blipping = false
+	var sliding_up := false
+	var shift_feed := 0.0
 
 	if shifting:
 		_shift_t += delta
@@ -261,7 +263,17 @@ func tick(v: Vehicle, delta: float) -> void:
 		else:
 			speed_k = lerpf(_k0, speed_k, s * s * (3.0 - 2.0 * s))
 			if shift_dir > 0:
+				# Upshift: the revs are walked down to the higher gear's speed and
+				# the wheels get shift_torque of what the engine is making. The
+				# clutch solver is left out of it: locking the engine to the falling
+				# target would hand its spin-down to the wheels as extra shove (with
+				# GEVP's heavy flywheel, more than the engine's own torque), which
+				# made a shift faster than no shift.
+				sliding_up = true
 				torque_scale = lerpf(1.0, shift_torque, clampf(minf(s, 1.0 - s) * SHIFT_RAMP, 0.0, 1.0))
+				shift_feed = maxf(v.torque_output, 0.0)  # last tick's, already scaled
+				v.motor_rpm = maxf(w_t * speed_k * Vehicle.ANGULAR_VELOCITY_TO_RPM, v.idle_rpm)
+				w_e = maxf(v.motor_rpm / Vehicle.ANGULAR_VELOCITY_TO_RPM, 1.0)
 			elif _blip_shift:
 				# rev blip: the engine is put on the lower gear's speed, the wheels pay nothing
 				blipping = true
@@ -286,7 +298,7 @@ func tick(v: Vehicle, delta: float) -> void:
 	var x := (v.motor_rpm - v.idle_rpm - IDLE_DEAD) / (stall_rpm - v.idle_rpm - IDLE_DEAD)
 	var cap := _t_ref * x * x if x > 0.0 else 0.0
 	var max_cap := maxf(v.max_clutch_torque * v.clutch_cap_mult, 1.0)
-	clutch_amount = 1.0 - clampf(lerpf(cap / max_cap, 1.0, lock), 0.0, 1.0)
+	clutch_amount = 1.0 if sliding_up else 1.0 - clampf(lerpf(cap / max_cap, 1.0, lock), 0.0, 1.0)
 
 	# torque multiplication while the turbine is well behind the engine
 	var sr := w_t / w_e
@@ -297,10 +309,10 @@ func tick(v: Vehicle, delta: float) -> void:
 	# the engine would take, scaled down, which is next to nothing at walking
 	# pace. So the creep is a set pull instead, fed in next to it: CREEP_ACCEL
 	# from rest, fading to none at CREEP_TOP, off with the brake on.
-	creep_torque = 0.0
-	if (gear == 1 or gear == -1) and v.brake_input <= 0.1 and x < 0.2:
+	feed_torque = shift_feed
+	if (gear == 1 or gear == -1) and v.brake_input <= 0.1 and x < 0.2 and not sliding_up:
 		var along := fwd if gear > 0 else -fwd
-		creep_torque = CREEP_ACCEL * v.mass * v.average_drive_wheel_radius / (absf(ratio) * gain) 				* clampf(1.0 - along / CREEP_TOP, 0.0, 1.0) 				* clampf((v.motor_rpm - 0.6 * v.idle_rpm) / (0.3 * v.idle_rpm), 0.0, 1.0) 				* (1.0 - maxf(x, 0.0) * 5.0)
+		feed_torque = CREEP_ACCEL * v.mass * v.average_drive_wheel_radius / (absf(ratio) * gain) 				* clampf(1.0 - along / CREEP_TOP, 0.0, 1.0) 				* clampf((v.motor_rpm - 0.6 * v.idle_rpm) / (0.3 * v.idle_rpm), 0.0, 1.0) 				* (1.0 - maxf(x, 0.0) * 5.0)
 	drag_scale = lerpf(OVERRUN_BRAKING, 1.0, maxf(lock, v.throttle_amount))
 
 	# hill hold after the brake comes off (modern boxes)

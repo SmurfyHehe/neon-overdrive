@@ -171,6 +171,12 @@ func _lockup() -> void:
 	_check(c.auto_box.family == "90s", "the coupe should be a 90s box, is %s" % c.auto_box.family)
 	# hold 30 km/h on a light throttle
 	var slip30 := await _cruise_slip(c, p, 30.0)
+	# up through the gears into top first, then back down to 90 km/h
+	p.throttle = 0.45
+	var t := 0.0
+	while (c.current_gear < c.gear_ratios.size() or H.kmh(c) < 100.0) and t < 90.0:
+		await physics_frame
+		t += dt
 	var slip90 := await _cruise_slip(c, p, 90.0)
 	print("lock-up (coupe, 90s): engine over gearbox %.1f%% at 30 km/h , %.2f%% at 90 km/h in gear %d" % [slip30 * 100.0, slip90 * 100.0, c.current_gear])
 	_check(slip30 > 0.01, "at 30 km/h the converter should slip: engine %.2f%% over the gearbox" % (slip30 * 100.0))

@@ -96,7 +96,7 @@ func _physics_process(_delta: float) -> bool:
 			_check(not fx.flames.enabled and not fx.flames.is_processing(), "exhaust_flames off should stop ExhaustFlames")
 			fx.set_effect("exhaust_flames", true)
 			_check(fx.flames.enabled and fx.flames.is_processing(), "exhaust_flames on should restart ExhaustFlames")
-			_check(fx.flames.jets.size() == 2, "the test car has two exhaust tips (%d jets)" % fx.flames.jets.size())
+			_check(fx.flames.jets.size() == 4, "the test car has two exhaust tips, two crossed strips each (%d jets)" % fx.flames.jets.size())
 			# the visual path on its own: a direct flash shows the quads
 			fx.flames.flash(0.5)
 			_check(fx.flames.is_showing(), "flash() should start a burst")

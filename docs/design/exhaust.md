@@ -80,3 +80,34 @@ stays above the cockpit mirror whistle's 1.25 / 2.5 kHz tones.
   (`PerspectiveAudio`) and is muted with it on pause (generator underruns click).
 - Test: `tests/car/turbo.gd` (parts whistle at their own pitch, valves differ,
   vent lengths, the fold, the bus and its channel, live lift on the player car).
+
+## Flame visuals v3: look A "shed fire" (2026-10-10)
+
+Roy: the v2 fireball that followed the car looked outdated. Decided look A.
+Code: `scripts/fx/exhaust_flames.gd` (ExhaustFlames), `scripts/fx/heat_shimmer.gd`
+(HeatShimmer). Test: `tests/fx/exhaust_flames.gd`.
+
+- **What the player sees:** a short tight white-amber tongue at the pipe (two
+  crossed strips, so it reads from behind), which breaks into 1-3 ragged
+  lobes that **stay on the road where they were spat** (`LOBE_CARRY` 0.05, was
+  0.5) and stretch into a streak along the car's travel as it pulls away; the
+  edges go dark brown, then a thin grey smoke wisp. Upshift at full throttle
+  = one big "bwap" with 3 lobes; anti-lag = a rattling string of small lobes
+  left down the road; limiter = short stutters.
+- **One quad per lobe, two layers in one pass** (premultiplied blend): a hot
+  additive core and a dark see-through soot rim. No separate smoke puff, no
+  textures. Animation stepped to about 24 fps (`STEP`) for the PS2 feel. A
+  new random shape per lobe.
+- **Knobs:** pops = how often (unchanged); flame = size AND lobe count
+  (0.1 one small spit, 1.0 three big lobes and a longer tongue).
+- **Bone car (ghost style):** the same shaders with a ghost-green set (pale
+  white-green core, #B8F28A, dark olive edge), a steady jet while the throttle
+  is down, an afterburner (`set_afterburner`) that lengthens it and draws
+  shock diamonds, and green V8 pops. `spec.fire_style = "ghost"` or
+  `set_style(Style.GHOST)`. The bone car itself is not on main yet.
+- **Heat shimmer:** one manager with 6 screen-refraction quads for the 6
+  nearest hot cars within 25 m (the player always), re-picked 10 times a
+  second; heat = revs x throttle per car, rising over 2.5 s and cooling over
+  10 s, stepped in the car's own detailed tick so far cars pay nothing. Never
+  in mirrors or the rear strip (render layer 6), off on the Low preset, its
+  own switch "heat_shimmer" (pause menu, `--shimmer=0/1` in the benchmark).

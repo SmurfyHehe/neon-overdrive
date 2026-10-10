@@ -280,6 +280,9 @@ func _ready() -> void:
 			CarParts.attach(self, {"hub_x": P1CoupeBuilder.DESIGN_WHEEL_X})
 		CarFx.attach(self, chassis_visual.get_meta("half_l", 2.2))
 
+## Exhaust heat 0..1 for the heat shimmer (HeatShimmer.next_heat), stepped each tick.
+var heat := 0.0
+
 func _physics_process(delta: float) -> void:
 	if driver.is_valid():
 		driver.call(self)
@@ -296,6 +299,7 @@ func _physics_process(delta: float) -> void:
 	# drafting can recompute and partially cancel the drag force it just
 	# applied this frame. See aero.gd for the actual force math.
 	AeroModel.apply(self)
+	heat = HeatShimmer.next_heat(heat, self, delta)
 	damage.step(self, delta, health, limp)
 	_apply_lamp_damage()
 	health.step(self, delta)

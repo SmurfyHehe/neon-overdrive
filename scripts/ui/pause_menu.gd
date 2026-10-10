@@ -185,6 +185,16 @@ func _ready() -> void:
 			FxSettings.set_smoke(FxSettings.smoke_burnout, v)
 			FxSettings.save_settings())
 
+	# Heat shimmer (2026-10-10, HeatShimmer): the air behind the pipes. Read
+	# live by the manager; the Low preset keeps it off whatever this says.
+	var shimmer := CheckButton.new()
+	shimmer.text = "Heat shimmer (not on Low)"
+	shimmer.button_pressed = FxSettings.is_on("heat_shimmer")
+	shimmer.toggled.connect(func(on: bool) -> void:
+		FxSettings.set_on("heat_shimmer", on)
+		FxSettings.save_settings())
+	box.add_child(shimmer)
+
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	_add_button(box, "Car: " + PlayerCars.title(PlayerCar.chassis_kind()), show_cars)
 	_add_button(box, "Graphics", show_graphics)

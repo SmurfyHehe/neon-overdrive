@@ -1,0 +1,139 @@
+class_name CarDetail
+extends Node
+
+# Parts nobody can see while driving (hide-unseen-parts plan 2026-10-09,
+# Part 1): one node per car that decides when its "detail" parts exist and
+# show. Detail parts are the ones only visible with a panel open or from a
+# camera that walks round the car: the spring and damper units in the arches
+# (CarParts), and later the engine bay, door and trunk contents (PRs #299 and
+# #323 register theirs here). They are built the first time they are needed
+# and hidden again after, so a drive pays nothing for them: no node, no draw
+# call, no per-frame transform work.
+#
+# Detail is on when any of these holds:
+#   - photo mode (GameState.PHOTO)
+#   - the garage view (`CarDetail.garage`, set by the garage screen later)
+#   - the car is stopped (under STOP_SPEED) with a panel open (`panel_open`,
+#     set by the hood/door/trunk code)
+# It polls every POLL_SECS and also answers the state change signal at once,
+# so photo mode never shows a frame without the parts. It runs while the tree
+# is paused (photo mode pauses it).
+#
+# The undercarriage is the other half: it keeps its distance LOD (the real
+# set within Undercarriage.LOD0_END, the plate to LOD1_END, nothing beyond)
+# on every class now, player included, and the Low preset hides it unless
+# detail is on. This node sits in the graphics_settings group for that.
+
+const NODE_NAME := "CarDetail"
+const STOP_SPEED := 0.5  # m/s, under this the car counts as stopped
+const POLL_SECS := 0.2
+
+## The run's state machine, bound once by game.gd (null in tests and tools:
+## then photo mode never counts).
+static var game_state: GameState
+## True while the garage view shows the car (the garage sets this later).
+static var garage := false
+
+## True while a hood, door or trunk on this car is open.
+var panel_open := false
+## Force detail on for this car (tests, the fleet orbit shots).
+var force := false
+
+signal changed(on: bool)
+
+var vehicle: Vehicle
+var on := false
+var _parts: Array = []  # [{name, build: Callable, node: Node}]
+var _underside: Array[VisualInstance3D] = []
+var _t := 0.0
+
+## The car's CarDetail node, made on first use.
+static func of(v: Vehicle) -> CarDetail:
+	var d := v.get_node_or_null(NODE_NAME) as CarDetail
+	if d == null:
+		d = CarDetail.new()
+		d.name = NODE_NAME
+		d.vehicle = v
+		v.add_child(d)
+	return d
+
+const GROUP := "car_detail"
+
+## Bind the run's state machine once (game.gd); every car's node, present or
+## future, then answers photo mode entering and leaving at once.
+static func bind_state(gs: GameState) -> void:
+	game_state = gs
+	gs.state_changed.connect(func(_n: GameState.State, _o: GameState.State) -> void:
+		gs.get_tree().call_group(GROUP, "refresh"))
+
+func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	add_to_group(GraphicsSettings.GROUP)
+	add_to_group(GROUP)
+	_find_underside()
+	refresh()
+	_apply_underside()
+
+## Register a detail part. `build` returns the part's node (already added to
+## the car); it runs once, the first time detail turns on. Until then the
+## part does not exist.
+func register(part_name: String, build: Callable) -> void:
+	_parts.append({"name": part_name, "build": build, "node": null})
+	if on:
+		_show_part(_parts.back())
+
+## The built node of a registered part, or null while it has not been needed.
+func node_of(part_name: String) -> Node:
+	for p in _parts:
+		if p.name == part_name:
+			return p.node
+	return null
+
+static func wants_detail(v: Vehicle, panel: bool, forced := false) -> bool:
+	if forced or garage:
+		return true
+	if game_state != null and game_state.state == GameState.State.PHOTO:
+		return true
+	return panel and v != null and absf(v.speed) < STOP_SPEED
+
+func _process(delta: float) -> void:
+	_t += delta
+	if _t < POLL_SECS:
+		return
+	_t = 0.0
+	refresh()
+
+func apply_graphics() -> void:
+	_apply_underside()
+
+## Recompute and apply. Cheap when nothing changed.
+func refresh() -> void:
+	var want := wants_detail(vehicle, panel_open, force)
+	if want == on:
+		return
+	on = want
+	for p in _parts:
+		if on:
+			_show_part(p)
+		elif p.node != null:
+			(p.node as Node).set("visible", false)
+	_apply_underside()
+	changed.emit(on)
+
+func _show_part(p: Dictionary) -> void:
+	if p.node == null:
+		p.node = (p.build as Callable).call()
+	if p.node != null:
+		(p.node as Node).set("visible", true)
+
+# ---------- the undercarriage on Low ----------
+
+func _find_underside() -> void:
+	_underside.clear()
+	for n in vehicle.find_children(Undercarriage.NODE_NAME + "*", "VisualInstance3D", true, false):
+		_underside.append(n as VisualInstance3D)
+
+func _apply_underside() -> void:
+	var shown := on or GraphicsSettings.preset != "low"
+	for u in _underside:
+		u.visible = shown

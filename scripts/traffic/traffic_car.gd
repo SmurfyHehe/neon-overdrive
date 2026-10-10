@@ -353,6 +353,10 @@ func _ready() -> void:
 			CarParts.attach(self, {"lod": true, "rim": CarParts.rim_for_style(String(spec.get("rim", "")))})
 		# Blob shadow only: 80 spotlights would be a rendering bill of their own.
 		CarFx.attach(self, half_l, false)
+		# Crew and cops carry an underside and maybe parts: the CarDetail node
+		# switches those (Low preset, photo mode). Traffic has neither.
+		if chassis_visual != null and chassis_visual.get_node_or_null(Undercarriage.NODE_NAME) != null:
+			CarDetail.of(self)
 		# Data-driven flames: only a car whose exhaust has a flame value gets
 		# the node (today only the C3 interceptor's preset); the rest pay nothing.
 		var ex: Variant = spec.get("exhaust")

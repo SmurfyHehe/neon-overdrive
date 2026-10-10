@@ -17,11 +17,13 @@ extends Node
 # - All 4 calipers in one MultiMesh (+1 draw call). They sit on the steered
 #   Wheel (the RayCast3D), not on the spinning wheel_node, and follow the hub
 #   up and down each frame.
-# - All 4 spring and damper units in one MultiMesh (+1 draw call). The unit
-#   is built 1 m long hanging from the top mount (the Wheel's origin) and is
-#   scaled each frame to `spring_current_length`, so it compresses with the
-#   sim's suspension.
-# So the player car pays +2 draw calls; traffic pays nothing because it never
+# - All 4 spring and damper units in one MultiMesh (+1 draw call), only while
+#   the car's CarDetail says they can be seen (stopped with a panel open, the
+#   garage, photo mode); built on first need, hidden after. The unit is built
+#   1 m long hanging from the top mount (the Wheel's origin) and is scaled
+#   each frame to `spring_current_length`, so it compresses with the sim's
+#   suspension.
+# So the player car pays +1 draw call driving (+2 in detail); traffic pays nothing because it never
 # calls attach(). Cop, ally and rival cars opt in with `parts = "full"` in
 # their CarSpec dictionary (TrafficCar reads it) and get the same set within
 # LOD_RANGE metres, nothing beyond.
@@ -186,16 +188,29 @@ func _build() -> void:
 	_calipers.multimesh = _new_multimesh(caliper_mesh(_disc_r, disc_t, cfg.caliper_color), 4)
 	vehicle.add_child(_calipers)
 
+	if lod:
+		_calipers.visibility_range_end = LOD_RANGE
+	_update_transforms()
 	# Spring and damper: one unit each, 1 m long from the top mount, scaled to
-	# the live spring length each frame.
+	# the live spring length each frame. Nobody sees them in the arches while
+	# driving, so they are a detail part (hide-unseen-parts Part 1): built the
+	# first time the car is looked at stopped with a panel open, in the garage
+	# or in photo mode, hidden again after, through the car's CarDetail node.
+	CarDetail.of(vehicle).register("shocks", _build_shocks)
+
+## Builds the Shocks MultiMesh on demand (CarDetail). Copies the calipers'
+## render layer, since CarFx.attach has already moved the first set of
+## meshes to the car layer by the time this runs.
+func _build_shocks() -> Node:
 	_shocks = MultiMeshInstance3D.new()
 	_shocks.name = "Shocks"
 	_shocks.multimesh = _new_multimesh(shock_mesh(), 4)
-	vehicle.add_child(_shocks)
-	if lod:
-		_calipers.visibility_range_end = LOD_RANGE
+	_shocks.layers = _calipers.layers
+	if cfg.lod:
 		_shocks.visibility_range_end = LOD_RANGE
+	vehicle.add_child(_shocks)
 	_update_transforms()
+	return _shocks
 
 static func _new_multimesh(mesh: Mesh, count: int) -> MultiMesh:
 	var mm := MultiMesh.new()
@@ -242,8 +257,8 @@ func _update_heat() -> void:
 
 func _update_transforms() -> void:
 	var cal := _calipers.multimesh
-	var sh := _shocks.multimesh
-	var tyre_w: float = cfg.tyre_w
+	var shocks_on := _shocks != null and _shocks.visible
+	var sh: MultiMesh = _shocks.multimesh if shocks_on else null
 	for i in 4:
 		var w := _wheels[i]
 		var side := _sides[i]
@@ -260,6 +275,8 @@ func _update_transforms() -> void:
 			cal_local.basis = Basis(Vector3.RIGHT, -2.0 * CALIPER_ANGLE) * Basis(Vector3.BACK, PI)
 		caliper_xf[i] = w.transform * cal_local
 		cal.set_instance_transform(i, caliper_xf[i])
+		if not shocks_on:
+			continue
 		# Spring and damper: from the top mount height (the Wheel origin) down to
 		# the hub, standing in the arch behind the tyre where the gap shows it,
 		# scaled to the spring's current length. In car space, not the Wheel's:
@@ -271,19 +288,22 @@ func _update_transforms() -> void:
 
 # ---------- counts (tests and the budget) ----------
 
-## Triangles this node adds to a car: 4 wheels, 4 calipers, 4 shocks.
+## Triangles this node adds to a car: 4 wheels, 4 calipers, and the 4 shocks
+## once they exist (detail on).
 func triangle_count() -> int:
 	var n := 0
 	for mi in _wheel_meshes_inst:
 		n += (mi.mesh as ArrayMesh).surface_get_array_len(0) / 3
 	n += 4 * (_calipers.multimesh.mesh as ArrayMesh).surface_get_array_len(0) / 3
-	n += 4 * (_shocks.multimesh.mesh as ArrayMesh).surface_get_array_len(0) / 3
+	if _shocks != null:
+		n += 4 * (_shocks.multimesh.mesh as ArrayMesh).surface_get_array_len(0) / 3
 	return n
 
-## Draw calls this node adds on top of the car's: the two MultiMeshes (the
-## wheel meshes replace the design's, one draw call each, as before).
-static func extra_draw_calls() -> int:
-	return 2
+## Draw calls this node adds on top of the car's: the calipers' MultiMesh
+## while driving, plus the shocks' with detail on (the wheel meshes replace
+## the design's, one draw call each, as before).
+static func extra_draw_calls(detail := false) -> int:
+	return 2 if detail else 1
 
 # ---------- materials ----------
 

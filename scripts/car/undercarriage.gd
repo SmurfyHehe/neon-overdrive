@@ -14,10 +14,11 @@ extends RefCounted
 # mirrors, on a jump and in photo mode, and it has no lights of its own.
 #
 # Per class (the plan's table):
-#   player   the real set, always drawn
-#   crew     ally and enemy cars: the real set within LOD0_END metres, a
-#            dark plate (LOD1, one draw call, a dozen triangles) to LOD1_END,
-#            nothing beyond; Godot's visibility ranges, no script per frame
+#   player   the real set within LOD0_END metres, a dark plate (LOD1, one
+#            draw call, a dozen triangles) to LOD1_END, nothing beyond;
+#            Godot's visibility ranges, no script per frame. Hidden on the
+#            Low preset unless the car is being looked at (CarDetail).
+#   crew     ally and enemy cars: the same
 #   cop      the same with the cop variant: push-bar brackets up front, and
 #            no muffler on the interceptor (a straight pipe)
 #   traffic  nothing: the sheet bodies already carry a flat dark tray in
@@ -87,9 +88,10 @@ static func attach(root: Node3D, p: Dictionary, role: String) -> void:
 	mi.material_override = mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(mi)
-	if role == ROLE_PLAYER:
-		return
-	# Crew and cops: the real set near, the plate at a distance, nothing far.
+	# Every class: the real set near, the plate at a distance, nothing far
+	# (hide-unseen-parts Part 1 put the player on the same LOD; the chase
+	# camera is 5 m behind it, photo mode can walk away). The Low preset hides
+	# both unless the car is being looked at (CarDetail).
 	mi.visibility_range_end = LOD0_END
 	mi.visibility_range_end_margin = 2.0
 	var plate := MeshInstance3D.new()
@@ -106,9 +108,7 @@ static func attach(root: Node3D, p: Dictionary, role: String) -> void:
 ## Draw calls this adds at the given distance from the camera (0 = next to it).
 static func draw_calls(role: String, distance := 0.0) -> int:
 	match role:
-		ROLE_PLAYER:
-			return 1
-		ROLE_CREW, ROLE_COP:
+		ROLE_PLAYER, ROLE_CREW, ROLE_COP:
 			return 1 if distance < LOD1_END else 0
 	return 0
 

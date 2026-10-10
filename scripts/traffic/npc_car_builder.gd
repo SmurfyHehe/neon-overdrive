@@ -148,6 +148,20 @@ const KINDS := {
 		"build_paint": {},
 		"sheet_paint": true,
 	},
+	# The work pickup (Camel, P17, 2026-10-10): the 4-door T2 truck Walt sells
+	# after act 1. Its own sheet mesh (p17_work_pickup_data.gd), not the
+	# traffic pickup's, which stays as it is.
+	"p17_work_pickup": {
+		"data": preload("res://scripts/car/p17_work_pickup_data.gd"),
+		"length": 5.25, "width": 1.80, "height": 1.74, "clearance": 0.28,
+		"front_overhang": 0.90, "rear_overhang": 1.17,
+		"wheel_r": 0.37, "wheel_x": 0.775, "axle_z": 1.59,
+		"drive": "rwd",
+		"rest_y": -0.12,
+		"builds": {"stock": 50, "street": 30, "full": 20},
+		"build_paint": {},
+		"sheet_paint": true,
+	},
 	"c1_patrol": {
 		"data": preload("res://scripts/car/c1_patrol_data.gd"),
 		"length": 5.30, "width": 1.96, "height": 1.6, "clearance": 0.16,

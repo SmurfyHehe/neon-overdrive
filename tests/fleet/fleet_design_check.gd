@@ -2,7 +2,8 @@ extends SceneTree
 
 # Stage B1 design-sheet checks, run in Godot on the exact proxy shapes the
 # sheets show (docs/design/fleet/proxies.json) plus fleet.json:
-#   fleet     7 player (P0 beater starter added 2026-10-09, #274), 3 traffic, 3 police cars
+#   fleet     8 player (P0 beater starter added 2026-10-09, #274; P17 work
+#             pickup 2026-10-10), 3 traffic, 3 police cars
 #   budget    triangles per build within the class budget (player 10k,
 #             police 6k, traffic 4k); draw calls per car <= 7 (B1 plan)
 #   stickers  exactly 4 slots per build (door, hood, windshield sun strip, rear). Every placement sits on the body (a
@@ -73,8 +74,8 @@ func _initialize() -> void:
 	for car in data.cars:
 		roles[car.role] += 1
 	print("fleet: %d player, %d traffic, %d police" % [roles.player, roles.npc, roles.cop])
-	if roles.player != 7 or roles.npc != 3 or roles.cop != 3:
-		_fail("fleet is %s, want 7 player / 3 traffic / 3 police" % roles)
+	if roles.player != 8 or roles.npc != 3 or roles.cop != 3:
+		_fail("fleet is %s, want 8 player / 3 traffic / 3 police" % roles)
 
 	# ---- per car
 	var orbit := _orbit_cameras()

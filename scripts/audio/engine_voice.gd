@@ -58,6 +58,10 @@ const PRESETS := {
 	"p6_crossover": {"cylinders": 4, "firing": _BOXER_UNEQUAL, "cyl_spread": 0.15, "seed": 67,
 			"body_hz": 95.0, "body_q": 1.5, "rasp_hz": 1250.0, "rasp_q": 1.9, "tone": 0.95,
 			"pulse_width": 0.36, "wander": 0.7},
+	# Work pickup, lazy 4.0 V6: deep, even, a touch rough at idle, a muffled
+	# truck rasp. Louder and darker than the traffic pickup's six.
+	"p17_work_pickup": {"cylinders": 6, "cyl_spread": 0.12, "seed": 109, "body_hz": 84.0, "body_q": 1.35,
+			"rasp_hz": 880.0, "rasp_q": 1.5, "tone": 0.72, "pulse_width": 0.40, "wander": 0.75},
 	# Traffic: quiet, smooth, muffled. They should not compete with the player.
 	"n1_commuter": {"cylinders": 4, "cyl_spread": 0.04, "seed": 71, "body_hz": 140.0, "body_q": 1.2,
 			"rasp_hz": 1000.0, "rasp_q": 1.4, "tone": 0.7, "pulse_width": 0.42, "wander": 0.5},

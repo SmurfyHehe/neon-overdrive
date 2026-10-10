@@ -36,7 +36,7 @@ func _light(parent: Control, text: String) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.visible = false
-	l.add_theme_font_size_override("font_size", 20)
+	UiTheme.apply(l, "dial", 20)
 	parent.add_child(l)
 	return l
 

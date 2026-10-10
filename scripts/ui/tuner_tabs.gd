@@ -24,6 +24,7 @@ func _ready() -> void:
 
 func _tab(text: String, target: GameState.State) -> Button:
 	var b := Button.new()
+	UiTheme.apply(b, "menu_strong")
 	b.text = text
 	b.toggle_mode = true
 	b.focus_mode = Control.FOCUS_ALL

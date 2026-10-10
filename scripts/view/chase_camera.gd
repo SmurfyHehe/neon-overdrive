@@ -80,18 +80,49 @@ const COCKPIT_EYE := Vector3(-0.32, 1.10, 0.30)  # car-local, -x is the driver's
 ## (CabinSpec.for_kind(kind).eye, from the CABIN in that car's data file).
 var eye := COCKPIT_EYE
 const COCKPIT_FOV_SPEED_GAIN := 6.0  # degrees added at top speed; the base is ViewSettings.cockpit_fov (default 62)
-## Head movement in the cockpit (Roy, 2026-10-06): the eye sways with the
-## car's forces, capped at HEAD_MAX_M (4 cm) and HEAD_MAX_DEG (2 degrees).
-## Lateral g pushes the head outward and rolls it with the body; braking
+## Head movement in the cockpit (Roy, 2026-10-06; camera upgrade C1,
+## 2026-10-10): the eye sways with the car's forces, capped at HEAD_MAX_M (5 cm)
+## and HEAD_MAX_DEG (3 degrees). Lateral g pushes the head outward (the body
+## slides) but TIPS IT INTO the corner, the way a driver's head does; braking
 ## brings it forward and dips it, acceleration presses it back. The cap is
 ## reached at HEAD_G_FULL g and the motion is smoothed at HEAD_RATE, so bumps
 ## in the sim's speed reading do not twitch the view. FxSettings "head_motion"
 ## ([fx] in settings.cfg, NEON_FX=0) is the off switch: off, the eye eases
-## back to COCKPIT_EYE and stays rigid to the car.
-const HEAD_MAX_M := 0.04
-const HEAD_MAX_DEG := 2.0
+## back to COCKPIT_EYE and stays rigid to the car (and the corner look below
+## is off too).
+const HEAD_MAX_M := 0.05
+const HEAD_MAX_DEG := 3.0
 const HEAD_G_FULL := 0.8
 const HEAD_RATE := 6.0
+## Camera upgrade C2: the horizon. The cabin rolls and pitches with the body,
+## the camera does not follow all of it: in a corner the camera's roll against
+## the world is (1 - HORIZON_ROLL_LEVEL) of the body roll, so the road stays
+## steadier than the cabin. Pitch is levelled less so a hard stop still dips.
+## Past HORIZON_FADE_LO_DEG of body tilt the levelling fades out, so a
+## rollover or a flip is shown in full (and the Euler wrap never shows).
+const HORIZON_ROLL_LEVEL := 0.5
+const HORIZON_PITCH_LEVEL := 0.3
+const HORIZON_FADE_LO_DEG := 25.0
+const HORIZON_FADE_HI_DEG := 50.0
+## Camera upgrade C4: look into corners. Through a bend the view turns up to
+## CORNER_LOOK_MAX_DEG toward where the road goes, driven by how fast the car is
+## turning (yaw rate, rad/s: nothing below CORNER_RATE_DEAD, full at
+## CORNER_RATE_FULL), only above CORNER_SPEED_LO..HI m/s so parking turns do not
+## swing the view. Never while an arrow key is held (then it eases out at
+## LOOK_RATE), never reversing or looking back.
+const CORNER_LOOK_MAX_DEG := 6.0
+const CORNER_RATE_DEAD := 0.04
+const CORNER_RATE_FULL := 0.30
+const CORNER_SPEED_LO := 4.0
+const CORNER_SPEED_HI := 10.0
+const CORNER_LOOK_RATE := 4.0      # 1/s, ~0.75 s to settle; back to 0 well inside 1 s
+## Camera upgrade: no drawn frame moves the FOV more than this (degrees); also
+## capped at FOV_MAX_RATE degrees/s so a low frame rate does not jump either.
+const FOV_MAX_STEP_DEG := 0.5
+const FOV_MAX_RATE := 30.0
+## Cockpit shake is rotation only (position shake could push the eye through the
+## roof or a pillar): a road bump becomes this much pitch instead of a lift.
+const BUMP_ROT := 0.006            # radians at full strength (~0.35 deg)
 var head_offset := Vector3.ZERO   # car-local, metres, current
 var head_tilt := Vector2.ZERO     # (pitch, roll) degrees, current
 var view := View.CHASE
@@ -110,9 +141,20 @@ const LOOK_YAW_MAX := 110.0        # degrees each way
 const LOOK_PITCH_UP := 35.0
 const LOOK_PITCH_DOWN := 30.0
 const LOOK_RATE := 14.0            # 1/s: ~0.2 s to 95% of the turn
-const LOOK_MIRROR_YAW := 35.0      # past this the head is "at" a door mirror
+const LOOK_MIRROR_YAW := 35.0      # a tap stops here: the head is "at" a door mirror
+const LOOK_FOCUS_YAW := 30.0       # past this the door mirror on that side is drawn at twice the size
+## Tap vs hold (camera upgrade): a key held shorter than LOOK_TAP_S sends the
+## head to the door mirror and keeps it there LOOK_TAP_LATCH_S after release;
+## held longer, the head goes on turning to LOOK_YAW_MAX.
+const LOOK_TAP_S := 0.18
+const LOOK_TAP_LATCH_S := 0.9
 var look_yaw := 0.0                # degrees, current, + = left (about +y)
 var look_pitch := 0.0              # degrees, current, + = up
+var corner_yaw := 0.0              # degrees, the look-into-corners turn (+ = left), on top of look_yaw
+var _hold_dir := 0                 # arrow key held (-1 right, +1 left), 0 none
+var _hold_t := 0.0                 # seconds it has been held
+var _latch_dir := 0                # a tap's door mirror, held for _latch_t more seconds
+var _latch_t := 0.0
 var _look_focus := 0               # door mirror the head is turned to (-1 left, +1 right)
 var frame: CockpitFrame
 var perspective: PerspectiveAudio
@@ -143,6 +185,7 @@ var _yaw := 0.0
 ## Whether the car faces back up the road (RoadFrame's +z).
 var _up_road := false
 var _started := false
+var _started_fov := false
 var _prev_vel := Vector3.ZERO
 var _prev_speed := 0.0
 var _accel := 0.0
@@ -257,6 +300,7 @@ func road_bump(strength: float) -> void:
 	bump = maxf(bump, clampf(strength, 0.0, 1.0))
 
 func _process(delta: float) -> void:
+	var fov_before := fov
 	_update_feel(delta)
 	bump *= exp(-BUMP_DECAY * delta)
 	if frame != null:
@@ -266,13 +310,18 @@ func _process(delta: float) -> void:
 		if look_back:
 			global_transform.basis = global_transform.basis * Basis(Vector3.UP, PI)
 		if shake_enabled:
-			_shake(delta)
+			_shake(delta, false)
+			rotate_object_local(Vector3.RIGHT, BUMP_ROT * bump)
+	else:
+		_place(delta)
+		if shake_enabled:
+			_shake(delta, true)
 			global_position += global_basis.y * BUMP_POS * bump
-		return
-	_place(delta)
-	if shake_enabled:
-		_shake(delta)
-		global_position += global_basis.y * BUMP_POS * bump
+	# No drawn frame moves the FOV by more than FOV_MAX_STEP_DEG.
+	if delta > 0.0 and _started_fov:
+		var step := minf(FOV_MAX_STEP_DEG, FOV_MAX_RATE * delta)
+		fov = fov_before + clampf(fov - fov_before, -step, step)
+	_started_fov = true
 
 ## At the driver's eye, on the interpolated transform (same reason as the
 ## chase cam), looking where the car points, plus the head movement; a fixed
@@ -281,21 +330,64 @@ func _place_cockpit(delta: float) -> void:
 	var xf := target.get_global_transform_interpolated()
 	_update_head(delta)
 	_update_look(delta)
-	var turn := Basis.from_euler(Vector3(deg_to_rad(look_pitch), deg_to_rad(look_yaw), 0.0))
+	var turn := Basis.from_euler(Vector3(deg_to_rad(look_pitch), deg_to_rad(look_yaw + corner_yaw), 0.0))
 	var tilt := Basis.from_euler(Vector3(deg_to_rad(head_tilt.x), 0.0, deg_to_rad(head_tilt.y)))
-	global_transform = Transform3D(xf.basis * turn * tilt, xf * (eye + head_offset))
+	global_transform = Transform3D(_levelled(xf.basis) * turn * tilt, xf * (eye + head_offset))
 	fov = ViewSettings.cockpit_fov + COCKPIT_FOV_SPEED_GAIN * speed_t
 
+## The body's orientation with part of its roll and pitch taken out (C2): the
+## camera's tilt against the world is (1 - HORIZON_*_LEVEL) of the body's. Yaw
+## is untouched. The levelling fades out past HORIZON_FADE_LO_DEG..HI so a
+## rollover is shown whole. Once per drawn frame; one Euler decompose and one
+## compose, a few hundred nanoseconds.
+func _levelled(b: Basis) -> Basis:
+	var e := b.orthonormalized().get_euler(EULER_ORDER_YXZ)   # (pitch, yaw, roll)
+	var roll_f := HORIZON_ROLL_LEVEL * (1.0 - smoothstep(HORIZON_FADE_LO_DEG, HORIZON_FADE_HI_DEG, rad_to_deg(absf(e.z))))
+	var pitch_f := HORIZON_PITCH_LEVEL * (1.0 - smoothstep(HORIZON_FADE_LO_DEG, HORIZON_FADE_HI_DEG, rad_to_deg(absf(e.x))))
+	return Basis.from_euler(Vector3(e.x * (1.0 - pitch_f), e.y, e.z * (1.0 - roll_f)), EULER_ORDER_YXZ)
+
 ## Eases the head toward where the arrow keys point it (or back to straight
-## ahead), and focuses the door mirror it has turned to.
+## ahead), and focuses the door mirror it has turned to. A key tapped (under
+## LOOK_TAP_S) stops at the door mirror and stays there a moment; held, the head
+## goes on turning. With no key down, the view leans toward the bend (C4).
 func _update_look(delta: float) -> void:
-	var want_yaw := Input.get_axis("look_right", "look_left") * LOOK_YAW_MAX
+	var axis := Input.get_axis("look_right", "look_left")   # + = left
 	var up := Input.get_axis("look_down", "look_up")
+	var want_yaw := 0.0
+	if axis != 0.0:
+		var dir := 1 if axis > 0.0 else -1
+		if dir != _hold_dir:
+			_hold_dir = dir
+			_hold_t = 0.0
+		_hold_t += delta
+		_latch_t = 0.0
+		want_yaw = axis * (LOOK_MIRROR_YAW if _hold_t < LOOK_TAP_S else LOOK_YAW_MAX)
+	else:
+		if _hold_dir != 0 and _hold_t < LOOK_TAP_S:
+			_latch_dir = _hold_dir
+			_latch_t = LOOK_TAP_LATCH_S
+		_hold_dir = 0
+		_hold_t = 0.0
+		if _latch_t > 0.0:
+			_latch_t -= delta
+			want_yaw = _latch_dir * LOOK_MIRROR_YAW
 	var want_pitch := up * (LOOK_PITCH_UP if up > 0.0 else LOOK_PITCH_DOWN)
 	var k := 1.0 - exp(-LOOK_RATE * delta)
 	look_yaw = lerpf(look_yaw, want_yaw, k)
 	look_pitch = lerpf(look_pitch, want_pitch, k)
-	_set_look_focus(0 if absf(look_yaw) < LOOK_MIRROR_YAW else (-1 if look_yaw > 0.0 else 1))
+	# Look into the corner: how fast the car is turning, never a key press.
+	var key_down := axis != 0.0 or up != 0.0 or _latch_t > 0.0
+	var want_corner := 0.0
+	var corner_k := 1.0 - exp(-CORNER_LOOK_RATE * delta)
+	if key_down:
+		corner_k = k
+	elif not look_back and target.gear != -1 and FxSettings.is_on("head_motion"):
+		var w := target.angular_velocity.y
+		var strength := clampf((absf(w) - CORNER_RATE_DEAD) / (CORNER_RATE_FULL - CORNER_RATE_DEAD), 0.0, 1.0)
+		var gate := smoothstep(CORNER_SPEED_LO, CORNER_SPEED_HI, absf(target.current_speed()))
+		want_corner = signf(w) * strength * gate * CORNER_LOOK_MAX_DEG
+	corner_yaw = lerpf(corner_yaw, want_corner, corner_k)
+	_set_look_focus(0 if absf(look_yaw) < LOOK_FOCUS_YAW else (-1 if look_yaw > 0.0 else 1))
 
 func _set_look_focus(side: int) -> void:
 	if side == _look_focus:
@@ -306,9 +398,9 @@ func _set_look_focus(side: int) -> void:
 
 ## Head sway from lateral g (yaw rate x speed) and longitudinal g (the speed
 ## derivative the FOV already uses). +x is the passenger side: a left turn
-## (yaw rate +) throws the head right and rolls the body right (negative roll
-## about +z); braking (accel -) moves it forward (-z) and dips it (negative
-## pitch about +x).
+## (yaw rate +) slides the head right (outward) but tips it LEFT, into the
+## corner (positive roll about +z; it used to roll with the body, outward);
+## braking (accel -) moves it forward (-z) and dips it (negative pitch about +x).
 func _update_head(delta: float) -> void:
 	var want_offset := Vector3.ZERO
 	var want_tilt := Vector2.ZERO
@@ -316,7 +408,7 @@ func _update_head(delta: float) -> void:
 		var lat_g := clampf(target.angular_velocity.y * target.current_speed() / 9.81 / HEAD_G_FULL, -1.0, 1.0)
 		var long_g := clampf(_accel / 9.81 / HEAD_G_FULL, -1.0, 1.0)
 		want_offset = Vector3(lat_g, 0.0, long_g).limit_length(1.0) * HEAD_MAX_M
-		want_tilt = Vector2(long_g, -lat_g).limit_length(1.0) * HEAD_MAX_DEG
+		want_tilt = Vector2(long_g, lat_g).limit_length(1.0) * HEAD_MAX_DEG
 	var k := 1.0 - exp(-HEAD_RATE * delta)
 	head_offset = head_offset.lerp(want_offset, k)
 	head_tilt = head_tilt.lerp(want_tilt, k)
@@ -394,8 +486,10 @@ func _place(delta: float) -> void:
 	look_at(aim, Vector3.UP)
 
 ## Smooth noise shake applied on top of the chase transform. Amplitude adds
-## the three sources; impact uses trauma^2 so small knocks stay small.
-func _shake(delta: float) -> void:
+## the three sources; impact uses trauma^2 so small knocks stay small. In the
+## cockpit it is rotation only (with_position false): the eye never leaves the
+## cabin on a hit.
+func _shake(delta: float, with_position: bool) -> void:
 	var buzz := pow(speed_t, 1.5)
 	var rot := SPEED_SHAKE_ROT * buzz + SURFACE_SHAKE_ROT * surface_t + IMPACT_SHAKE_ROT * trauma * trauma
 	var pos := SPEED_SHAKE_POS * buzz + SURFACE_SHAKE_POS * surface_t + IMPACT_SHAKE_POS * trauma * trauma
@@ -406,4 +500,5 @@ func _shake(delta: float) -> void:
 	rotate_object_local(Vector3.RIGHT, rot * _noise.get_noise_2d(_t, 0.0))
 	rotate_object_local(Vector3.UP, rot * 0.6 * _noise.get_noise_2d(_t, 100.0))
 	rotate_object_local(Vector3.BACK, rot * 0.8 * _noise.get_noise_2d(_t, 200.0))
-	global_position += global_basis * Vector3(pos * _noise.get_noise_2d(_t, 300.0), pos * _noise.get_noise_2d(_t, 400.0), 0.0)
+	if with_position:
+		global_position += global_basis * Vector3(pos * _noise.get_noise_2d(_t, 300.0), pos * _noise.get_noise_2d(_t, 400.0), 0.0)

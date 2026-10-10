@@ -89,6 +89,13 @@ const DIAL_R := 0.05
 static var enabled := true
 const DIAL_SWEEP := 270.0   # degrees from empty (lower left) to full (lower right)
 const SPEEDO_MAX_KMH := 300.0
+## The muscle sedan's ribbon speedo: a shallow arc of a big circle whose pivot
+## is far down inside the dash, so the band sits in the binnacle, not on it.
+const STRIP_R := 0.30
+const STRIP_INNER := 0.82     # the band's inner edge, as a share of STRIP_R
+const STRIP_SWEEP := 70.0
+## The beater's speedo pod sits this far below its CABIN cluster height.
+const POD_SINK := 0.043
 ## The lever's defaults, overridden per car by the spec's "shifter"
 ## (CarSpec.shifter: the gate, the length and the throw).
 const LEVER_LEN := 0.23
@@ -140,6 +147,33 @@ const AMBER := Color("#FFC066")
 const SODIUM := Color("#FF8A1F")
 const RED := Color("#E5262B")
 const DIAL_FACE := Color("#0B0E14")
+## Each car's cabin colours, by its CABIN "trim" (tests/fleet/interior_unique.gd:
+## no two player cars share one). "strip" is the backlit accent line along the
+## dash, the doors and the console (alpha 0: none); "dash" the dash top and
+## "dash_face" the panel facing the driver.
+##   stock    the coupe: dark plastics, amber strip
+##   worn     the beater: faded greys, rust-brown trim, mismatched seats, painted metal dash
+##   sport    the hot hatch: black with red seat bolsters and a red strip
+##   carbon   the tuner: near-black, graphite seat panels, a thin silver strip
+##   retro    the kei roadster: tan seats, a painted navy dash
+##   wood     the muscle sedan: oxblood bench, a wood-grain dash face, chrome trim
+##   utility  the crossover: two-tone grey cloth, hard grey plastics
+const TRIMS := {
+	"stock": {"plastic": PLASTIC, "plastic_light": PLASTIC_LIGHT, "trim": TRIM, "seat": SEAT, "seat_pass": SEAT, "seat_panel": SEAT_PANEL,
+		"leather": LEATHER, "carpet": CARPET, "strip": Color("#FFC06659"), "dash": PLASTIC, "dash_face": PLASTIC_LIGHT},
+	"worn": {"plastic": Color("#3A3630"), "plastic_light": Color("#4A443B"), "trim": Color("#5A4A3A"), "seat": Color("#4B4036"), "seat_pass": Color("#35383F"), "seat_panel": Color("#3A3129"),
+		"leather": Color("#3F362E"), "carpet": Color("#1A1612"), "strip": Color("#FFC06600"), "dash": Color("#6B7668"), "dash_face": Color("#5E6A5C")},
+	"sport": {"plastic": Color("#1A1C22"), "plastic_light": Color("#272A31"), "trim": Color("#34383F"), "seat": Color("#1B1D23"), "seat_pass": Color("#1B1D23"), "seat_panel": Color("#7A1F22"),
+		"leather": Color("#121318"), "carpet": Color("#0E1014"), "strip": Color("#E5262B59"), "dash": Color("#1A1C22"), "dash_face": Color("#23262C")},
+	"carbon": {"plastic": Color("#14161A"), "plastic_light": Color("#1F2227"), "trim": Color("#3A3E46"), "seat": Color("#15171B"), "seat_pass": Color("#15171B"), "seat_panel": Color("#2E3239"),
+		"leather": Color("#0E0F13"), "carpet": Color("#0B0C0F"), "strip": Color("#C9CED64D"), "dash": Color("#14161A"), "dash_face": Color("#1C1E23")},
+	"retro": {"plastic": Color("#23262E"), "plastic_light": Color("#30343D"), "trim": Color("#8C9098"), "seat": Color("#8A6A48"), "seat_pass": Color("#8A6A48"), "seat_panel": Color("#A27E57"),
+		"leather": Color("#5A432E"), "carpet": Color("#15130F"), "strip": Color("#FFC06640"), "dash": Color("#1B2A4A"), "dash_face": Color("#22335A")},
+	"wood": {"plastic": Color("#201A16"), "plastic_light": Color("#2C241E"), "trim": Color("#8C9098"), "seat": Color("#3B1E1A"), "seat_pass": Color("#3B1E1A"), "seat_panel": Color("#4A2622"),
+		"leather": Color("#2A1612"), "carpet": Color("#120D0B"), "strip": Color("#C9CED640"), "dash": Color("#201A16"), "dash_face": Color("#5A3A22")},
+	"utility": {"plastic": Color("#24272B"), "plastic_light": Color("#33373C"), "trim": Color("#44484E"), "seat": Color("#2B2E33"), "seat_pass": Color("#2B2E33"), "seat_panel": Color("#50545A"),
+		"leather": Color("#1D1F23"), "carpet": Color("#111214"), "strip": Color("#FFC06633"), "dash": Color("#24272B"), "dash_face": Color("#2E3136")},
+}
 const BACKLIGHT_ENERGY := 1.6
 
 var player: PlayerCar
@@ -206,7 +240,7 @@ func _init(car: PlayerCar) -> void:
 	crank_pos = cab.crank
 	switch_pos = cab.switch
 	glass_bottom = float(cab.belt_y) + 0.025
-	dial_sweep = 110.0 if cab.cluster_style == "strip" else DIAL_SWEEP
+	dial_sweep = STRIP_SWEEP if cab.cluster_style == "strip" else DIAL_SWEEP
 
 func _ready() -> void:
 	# Always drawn: in the chase view the cabin and driver show through the glass.
@@ -286,22 +320,23 @@ static func _set_layers(root: Node, bit: int) -> void:
 func _build_static() -> void:
 	var k := CockpitKit.new()
 	var lit := CockpitKit.new()
-	# Trim set: the stock dark plastics, or the beater's worn cabin (Roy,
-	# 2026-10-09: "make the VW a true beater"): faded warm greys, a rusty
-	# brown trim, mismatched seats (brown vinyl and a grey one), no backlit strips.
+	# Trim set: each car's own plastics, seats and accent strip (TRIMS, by the
+	# CABIN's "trim"). The beater's is the worn one (Roy, 2026-10-09: "make the
+	# VW a true beater"): faded warm greys, rusty brown trim, mismatched seats,
+	# no backlit strips, a dash of painted metal in the body's faded paint.
+	var t := trim_colours()
 	var worn := String(cab.get("trim", "stock")) == "worn"
-	var c_plastic := Color("#3A3630") if worn else PLASTIC
-	var c_plastic_light := Color("#4A443B") if worn else PLASTIC_LIGHT
-	var c_trim := Color("#5A4A3A") if worn else TRIM
-	var c_seat := Color("#4B4036") if worn else SEAT
-	var c_seat_pass := Color("#35383F") if worn else SEAT
-	var c_seat_panel := Color("#3A3129") if worn else SEAT_PANEL
-	var c_leather := Color("#3F362E") if worn else LEATHER
-	var c_carpet := Color("#1A1612") if worn else CARPET
-	var strip := Color(AMBER, 0.0 if worn else 0.35)
-	# the beater's dash is painted metal in the body's faded paint, not moulded plastic
-	var c_dash := Color("#6B7668") if worn else c_plastic
-	var c_dash_face := Color("#5E6A5C") if worn else c_plastic_light
+	var c_plastic: Color = t.plastic
+	var c_plastic_light: Color = t.plastic_light
+	var c_trim: Color = t.trim
+	var c_seat: Color = t.seat
+	var c_seat_pass: Color = t.seat_pass
+	var c_seat_panel: Color = t.seat_panel
+	var c_leather: Color = t.leather
+	var c_carpet: Color = t.carpet
+	var strip: Color = t.strip
+	var c_dash: Color = t.dash
+	var c_dash_face: Color = t.dash_face
 	var seat_x := float(cab.seat_x)
 	var seat_h := float(cab.seat_h)
 	var seat_z := float(cab.seat_z)
@@ -477,60 +512,81 @@ func _build_static() -> void:
 	add_child(k.instance(CockpitKit.material(0.85, 0.05), "Cabin"))
 	add_child(lit.instance(CockpitKit.glow_material(BACKLIGHT_ENERGY), "Backlight"))
 
-## The binnacle and the dial faces for this car's cluster style, in car space:
-##   dials   a tach left and a speedo right, the coupe's pair
+## The binnacle and the dial faces for this car's cluster style, in car space.
+## Every player car has its own (tests/fleet/interior_unique.gd):
+##   dials   a tach left and a speedo right in one hooded binnacle (the coupe)
 ##   pod     one big speedo pod in front of the driver with a small tach inset
 ##           low left (the beater's single round binnacle)
-##   triple  the pair plus three small aux gauges in a hood on the dash top
-##   strip   a wide, shallow horizontal speedo band with a small tach to its
-##           left (the muscle sedan); the needles sweep 110 degrees
-## tach and speedo needle pivots come from dial_centres().
+##   tacho   a big tach in the middle and a smaller speedo to its right (the
+##           hot hatch)
+##   triple  the pair, plus three small aux gauges in the middle of the dash
+##           top, turned to the driver (the tuner)
+##   cans    two separate round cans on a stalk, no binnacle (the kei roadster)
+##   strip   a wide ribbon speedo sunk in the dash face with a small tach to
+##           its left (the muscle sedan); the needles sweep STRIP_SWEEP degrees
+##   wide    a wide square binnacle, the dials apart with an info panel
+##           between them (the crossover)
+## tach and speedo needle pivots come from dial_centres(). Nothing here stands
+## above the sight line, 8 degrees below the eye (tests/fleet/sight_line.gd).
 func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vector2) -> void:
 	var style := String(cab.cluster_style)
 	var centres := dial_centres()
 	var radii := dial_radii()
 	var flat := Basis(Vector3.RIGHT, PI / 2.0)
+	var depth := clampf(cl.y - float((cab.cowl as Vector2).y) - 0.04, 0.03, 0.11)   # a can's depth: never through the cowl
 	match style:
 		"pod":
-			var depth := clampf(cl.y - float((cab.cowl as Vector2).y) - 0.04, 0.03, 0.11)   # never through the cowl
-			k.cylinder(0.105, -depth, 0.0, Vector3(seat_x, cl.x, cl.y - 0.052), PLASTIC, 16, flat)
-			k.cylinder(0.115, -0.03, 0.0, Vector3(seat_x, cl.x, cl.y - 0.05), TRIM, 16, flat)
+			var pc: Vector3 = centres[1]
+			k.cylinder(0.090, -depth, 0.0, Vector3(pc.x, pc.y, cl.y - 0.052), PLASTIC, 16, flat)
+			k.cylinder(0.096, -0.03, 0.0, Vector3(pc.x, pc.y, cl.y - 0.05), TRIM, 16, flat)
 		"strip":
-			k.box(Vector3(0.62, 0.11, 0.10), Vector3(seat_x + 0.08, cl.x, cl.y - 0.05), PLASTIC)
-			k.wedge(Vector3(0.66, 0.012, 0.16), Vector3(seat_x + 0.08, cl.x + 0.054, cl.y - 0.07), PLASTIC_LIGHT, 0.0, -0.02)
+			_binnacle(k, seat_x + 0.08, 0.62, cl)
+		"tacho":
+			_binnacle(k, seat_x + 0.02, 0.36, cl)
+		"cans":
+			for i in 2:
+				var cc: Vector3 = centres[i]
+				k.cylinder(float(radii[i]) + 0.010, -depth - 0.03, -0.003, cc, PLASTIC, 14, flat)
+			k.box(Vector3(0.20, 0.03, 0.05), Vector3(seat_x, cl.x - 0.062, cl.y - 0.03), PLASTIC)   # the stalk they share
+		"wide":
+			_binnacle(k, seat_x, 0.46, cl)
+			# the info panel between the dials (the warning lamps light in it)
+			k.box(Vector3(0.096, 0.062, 0.004), Vector3(seat_x, cl.x + 0.004, cl.y - 0.003), TRIM)
+			lit.box(Vector3(0.086, 0.052, 0.002), Vector3(seat_x, cl.x + 0.004, cl.y), Color(DIAL_FACE, 0.15))
 		"triple":
-			k.box(Vector3(0.34, 0.12, 0.10), Vector3(seat_x, cl.x, cl.y - 0.05), PLASTIC)
-			k.wedge(Vector3(0.38, 0.012, 0.16), Vector3(seat_x, cl.x + 0.059, cl.y - 0.07), PLASTIC_LIGHT, 0.0, -0.02)
-			# three aux gauges in a hood on the dash top, angled at the driver
-			var hood := Vector3(seat_x + 0.02, cl.x + 0.085, cl.y - 0.16)
-			k.box(Vector3(0.22, 0.05, 0.07), hood, PLASTIC)
-			var tilt := Basis(Vector3.RIGHT, deg_to_rad(70.0))
+			_binnacle(k, seat_x, 0.34, cl)
+			# three aux gauges in a low hood in the middle of the dash top, turned to the driver
+			var eye: Vector3 = cab.eye
+			var mid := Vector3(0.0, cl.x + 0.026, float(cab.dash_face_z) - 0.06)
+			var turn := Basis(Vector3.UP, atan2(eye.x - mid.x, eye.z - mid.z))
+			k.box(Vector3(0.24, 0.058, 0.07), mid, PLASTIC, turn)
+			var tilt := turn * Basis(Vector3.RIGHT, deg_to_rad(75.0))
 			for i in 3:
-				var c := hood + Vector3(-0.07 + 0.07 * i, 0.006, 0.03)
+				var c := mid + turn * Vector3(-0.075 + 0.075 * i, 0.002, 0.036)
 				lit.cylinder(0.024, -0.004, 0.0, c, Color(DIAL_FACE, 0.15), 12, tilt)
-				k.cylinder(0.030, -0.008, -0.002, c + Vector3(0, 0, 0.001), TRIM, 12, tilt)
-				lit.box(Vector3(0.003, 0.016, 0.002), c + tilt * Vector3(0.0, 0.012, 0.0), Color(RED, 0.6), tilt)
+				k.cylinder(0.029, -0.008, -0.002, c + turn * Vector3(0, 0, 0.001), TRIM, 12, tilt)
+				lit.box(Vector3(0.003, 0.016, 0.002), c + tilt * Vector3(0.0, 0.0, -0.012), Color(RED, 0.6), tilt)
 		_:
-			k.box(Vector3(0.34, 0.12, 0.10), Vector3(seat_x, cl.x, cl.y - 0.05), PLASTIC)
-			k.wedge(Vector3(0.38, 0.012, 0.16), Vector3(seat_x, cl.x + 0.059, cl.y - 0.07), PLASTIC_LIGHT, 0.0, -0.02)
+			_binnacle(k, seat_x, 0.34, cl)
 	# Dial faces (backlit dark), rings and tick marks: 0 = tach, 1 = speedo.
 	var a_start := 225.0 if dial_sweep > 180.0 else 90.0 + dial_sweep * 0.5
+	var ring_col := SILVER if style == "cans" else TRIM
 	for i in 2:
 		var c: Vector3 = centres[i]
 		var r: float = radii[i]
 		if style == "strip" and i == 1:
-			# the speedo band: a wide shallow arc face with the pivot low in the middle
+			# the ribbon: a wide shallow arc face, its pivot far below in the dash
 			var band := CockpitKit.new()
-			band.ring_sector(r * 0.55, r, deg_to_rad(a_start - dial_sweep), deg_to_rad(a_start), -0.004, 0.0, Color(DIAL_FACE, 0.15), 16)
+			band.ring_sector(r * STRIP_INNER, r, deg_to_rad(a_start - dial_sweep), deg_to_rad(a_start), -0.004, 0.0, Color(DIAL_FACE, 0.15), 16)
 			band.offset(c)
 			lit.merge(band)
 			var rim := CockpitKit.new()
-			rim.ring_sector(r * 0.53, r + 0.008, deg_to_rad(a_start - dial_sweep), deg_to_rad(a_start), -0.008, -0.002, TRIM, 16)
+			rim.ring_sector(r * STRIP_INNER - 0.006, r + 0.006, deg_to_rad(a_start - dial_sweep - 1.5), deg_to_rad(a_start + 1.5), -0.008, -0.002, TRIM, 16)
 			rim.offset(c + Vector3(0, 0, -0.001))
 			k.merge(rim)
 		else:
 			lit.cylinder(r, -0.004, 0.0, c, Color(DIAL_FACE, 0.15), 16, flat)
-			k.cylinder(r + 0.008, -0.008, -0.002, c + Vector3(0, 0, -0.001), TRIM, 16, flat)
+			k.cylinder(r + 0.008, -0.008, -0.002, c + Vector3(0, 0, -0.001), ring_col, 16, flat)
 		var ticks := 9 if i == 0 else 7
 		for t in ticks:
 			var a := deg_to_rad(a_start - dial_sweep * float(t) / (ticks - 1))
@@ -545,24 +601,46 @@ func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vec
 			zone.offset(c)
 			lit.merge(zone)
 
+## This car's cabin colours (TRIMS; an unknown trim is the stock set).
+func trim_colours() -> Dictionary:
+	return TRIMS.get(String(cab.get("trim", "stock")), TRIMS["stock"])
+
+## A hooded binnacle `w` wide about x. Its top and the hood stay under the
+## sight line: from the eye the hood's far edge is the highest thing in it, so
+## the hood tapers to nothing there and falls away from the driver.
+func _binnacle(k: CockpitKit, x: float, w: float, cl: Vector2) -> void:
+	var t := trim_colours()
+	k.box(Vector3(w, 0.11, 0.10), Vector3(x, cl.x - 0.007, cl.y - 0.05), t.plastic)
+	k.wedge(Vector3(w + 0.04, 0.012, 0.16), Vector3(x, cl.x + 0.054, cl.y - 0.07), t.plastic_light, -0.012, 0.0)
+
 ## The tach (0) and speedo (1) centres for this car's cluster style, car space.
 func dial_centres() -> Array:
 	var seat_x := float(cab.seat_x)
 	var cl: Vector2 = cab.cluster
 	match String(cab.cluster_style):
-		"pod":
-			return [Vector3(seat_x - 0.075, cl.x - 0.045, cl.y + 0.002), Vector3(seat_x, cl.x, cl.y)]
-		"strip":
-			return [Vector3(seat_x - 0.20, cl.x, cl.y), Vector3(seat_x + 0.11, cl.x - 0.03, cl.y)]
+		"pod":   # sunk POD_SINK into the dash: the pod's top stays under the sight line
+			return [Vector3(seat_x - 0.066, cl.x - POD_SINK - 0.038, cl.y + 0.002), Vector3(seat_x, cl.x - POD_SINK, cl.y)]
+		"strip":   # the ribbon's pivot: its arc tops out just under the binnacle's hood
+			return [Vector3(seat_x - 0.20, cl.x - 0.005, cl.y), Vector3(seat_x + 0.11, cl.x + 0.046 - STRIP_R, cl.y)]
+		"tacho":
+			return [Vector3(seat_x - 0.045, cl.x - 0.012, cl.y), Vector3(seat_x + 0.095, cl.x - 0.022, cl.y)]
+		"cans":
+			return [Vector3(seat_x - 0.062, cl.x - 0.004, cl.y), Vector3(seat_x + 0.062, cl.x - 0.004, cl.y)]
+		"wide":
+			return [Vector3(seat_x - 0.125, cl.x, cl.y), Vector3(seat_x + 0.125, cl.x, cl.y)]
 		_:
 			return [Vector3(seat_x - 0.085, cl.x, cl.y), Vector3(seat_x + 0.085, cl.x, cl.y)]
 
 func dial_radii() -> Array:
 	match String(cab.cluster_style):
 		"pod":
-			return [0.03, 0.085]
+			return [0.027, 0.075]
 		"strip":
-			return [0.045, 0.20]
+			return [0.045, STRIP_R]
+		"tacho":
+			return [0.060, 0.044]
+		"cans":
+			return [0.046, 0.046]
 		_:
 			return [DIAL_R, DIAL_R]
 
@@ -713,11 +791,18 @@ func _build_cluster() -> void:
 	var tach_c: Vector3 = centres[0]
 	var speedo_c: Vector3 = centres[1]
 	tach_needle = _needle(tach_c + Vector3(0.0, 0.0, 0.004), "TachNeedle", float(radii[0]))
-	speedo_needle = _needle(speedo_c + Vector3(0.0, 0.0, 0.004), "SpeedoNeedle", float(radii[1]))
+	var strip: bool = cab.cluster_style == "strip"
+	speedo_needle = _needle(speedo_c + Vector3(0.0, 0.0, 0.004), "SpeedoNeedle", float(radii[1]), float(radii[1]) * STRIP_INNER if strip else 0.0)
 	# The warning lamps sit between the dials (under the speedo pod's tach on the beater).
 	var lamp_c := (tach_c + speedo_c) * 0.5 + Vector3(0.0, 0.03, 0.0)
 	if cab.cluster_style == "pod":
-		lamp_c = speedo_c + Vector3(0.0, -0.055, 0.0)
+		lamp_c = speedo_c + Vector3(0.0, -0.045, 0.0)
+	elif strip:   # between the tach and the ribbon's left end
+		lamp_c = Vector3(tach_c.x + 0.092, tach_c.y + 0.012, tach_c.z)
+	elif cab.cluster_style == "tacho":   # under the small speedo
+		lamp_c = speedo_c + Vector3(0.0, -float(radii[1]) - 0.004, 0.0)
+	elif cab.cluster_style == "wide":   # in the info panel
+		lamp_c = (tach_c + speedo_c) * 0.5 + Vector3(0.0, 0.012, 0.0)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
@@ -736,17 +821,25 @@ func _build_cluster() -> void:
 	lamp_text = _label("ENG BRK TYR CLT", 12, lamp_c + Vector3(0.0, -0.015, 0.002), SILVER, 0.0004)
 	lamp_text.name = "LampText"
 	_label("x1000 rpm", 22, tach_c + Vector3(0.0, -float(radii[0]) * 0.6, 0.002), AMBER, 0.0004)
-	_label("km/h", 22, speedo_c + Vector3(0.0, -float(radii[1]) * 0.6, 0.002), AMBER, 0.0004)
+	var kmh_at := speedo_c + Vector3(0.0, -float(radii[1]) * 0.6, 0.002)
+	if strip:   # under the middle of the band
+		kmh_at = speedo_c + Vector3(0.0, float(radii[1]) * STRIP_INNER - 0.014, 0.002)
+	_label("km/h", 22, kmh_at, AMBER, 0.0004)
 
-func _needle(at: Vector3, node_name: String, r: float = DIAL_R) -> Node3D:
+## A needle on its pivot. `r_from` > 0: only the tip from there out (a ribbon
+## speedo, whose pivot and most of the needle are hidden inside the dash).
+func _needle(at: Vector3, node_name: String, r: float = DIAL_R, r_from: float = 0.0) -> Node3D:
 	var pivot := Node3D.new()
 	pivot.name = node_name
 	pivot.position = at
 	var k := CockpitKit.new()
 	var len := r - 0.006
-	k.box(Vector3(0.004, len, 0.002), Vector3(0.0, len * 0.5 - 0.004, 0.0), Color(RED, 1.0))
-	k.box(Vector3(0.0035, 0.010, 0.002), Vector3(0.0, -0.008, 0.0), Color(SILVER, 0.3))
-	k.cylinder(0.006, -0.001, 0.0015, Vector3.ZERO, Color(SILVER, 0.2), 8, Basis(Vector3.RIGHT, PI / 2.0))
+	if r_from > 0.0:
+		k.box(Vector3(0.004, len - r_from, 0.002), Vector3(0.0, (len + r_from) * 0.5, 0.0), Color(RED, 1.0))
+	else:
+		k.box(Vector3(0.004, len, 0.002), Vector3(0.0, len * 0.5 - 0.004, 0.0), Color(RED, 1.0))
+		k.box(Vector3(0.0035, 0.010, 0.002), Vector3(0.0, -0.008, 0.0), Color(SILVER, 0.3))
+		k.cylinder(0.006, -0.001, 0.0015, Vector3.ZERO, Color(SILVER, 0.2), 8, Basis(Vector3.RIGHT, PI / 2.0))
 	pivot.add_child(k.instance(CockpitKit.glow_material(SteeringWheel.LED_ENERGY)))
 	add_child(pivot)
 	return pivot

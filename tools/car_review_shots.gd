@@ -13,7 +13,9 @@ extends SceneTree
 #   <godot> --path . --audio-driver Dummy -s res://tools/car_review_shots.gd
 #
 # Writes <dir>/<kind>_<view>.png. Without NEON_SHOT_DIR it writes to
-# user://car_review_shots.
+# user://car_review_shots. NEON_SHOT_POD=1 fits the bolt-on boost gauge pod
+# (a car gets it with its first boost setup) and takes only the two cockpit
+# views, as <kind>_pod_<view>.png.
 
 const SEED := 7
 const VIEWS := {
@@ -71,9 +73,15 @@ func _run() -> void:
 	fill.visible = false
 	root.add_child(fill)
 	var eye: Vector3 = cam.frame.cab.eye if cam.frame != null else Vector3(-0.37, 1.1, 0.2)
+	var with_pod := OS.get_environment("NEON_SHOT_POD") == "1"
+	if with_pod and cam.frame != null and cam.frame.pod == null:
+		cam.frame.pod = GaugePod.new(kind, 1.0)
+		cam.frame.add_child(cam.frame.pod)
 	for view in VIEWS:
 		var v: Array = VIEWS[view]
 		var cockpit: bool = String(view).begins_with("cockpit")
+		if with_pod and not cockpit:
+			continue
 		cam.set_view(ChaseCamera.View.COCKPIT if cockpit else ChaseCamera.View.CHASE)
 		for i in 6:
 			await physics_frame
@@ -96,7 +104,7 @@ func _run() -> void:
 		for i in 8:
 			await process_frame
 		await RenderingServer.frame_post_draw
-		var path := "%s/%s_%s.png" % [dir, kind, view]
+		var path := "%s/%s_%s%s.png" % [dir, kind, "pod_" if with_pod else "", view]
 		root.get_viewport().get_texture().get_image().save_png(path)
 		print("car_review_shots: ", path)
 	quit(0)

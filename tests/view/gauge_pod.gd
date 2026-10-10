@@ -107,8 +107,17 @@ func _physics_process(delta: float) -> bool:
 func _check_styles() -> void:
 	for k in PlayerCars.KINDS:
 		var id: String = k.id
-		_check(GaugePod.STYLES.has(id), "a pod style for %s" % id)
-		_check(GaugePod.MOUNTS.has(id), "a pod mount for %s" % id)
+		var cab := CabinSpec.for_kind(id)
+		var own_cabin: bool = cab != P1CoupeBuilder.Data.CABIN or id == P1CoupeBuilder.KIND
+		if own_cabin:   # a car still wearing the coupe's cabin wears its pod too
+			_check(GaugePod.STYLES.has(id), "a pod style for %s" % id)
+		# the pod is clamped to this car's own driver-side pillar, left of the eye
+		var m := GaugePod.mount_of(cab)
+		var foot: Vector3 = cab.a_pillar[0]
+		var top: Vector3 = cab.a_pillar[1]
+		var on_pillar: Vector3 = Geometry3D.get_closest_point_to_segment(m.pos, Vector3(-foot.x, foot.y, foot.z), Vector3(-top.x, top.y, top.z))
+		_check((m.pos as Vector3).distance_to(on_pillar) < 0.25, "%s: the pod is %.2f m from its pillar" % [id, (m.pos as Vector3).distance_to(on_pillar)])
+		_check((m.pos as Vector3).x < (cab.eye as Vector3).x, "%s: the pod is on the driver's side of the eye" % id)
 		var pod := GaugePod.new(id, 1.5)
 		root.add_child(pod)
 		_check(pod.psi_max == 30.0, "%s: a 1.5 bar setup gets a 30 psi face (%.0f)" % [id, pod.psi_max])

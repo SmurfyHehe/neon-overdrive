@@ -37,6 +37,8 @@ static func apply(v: Vehicle, spec: Dictionary) -> void:
 			ForcedInduction.set_kind(v, String(spec[key]))  # not a Vehicle property (C1)
 		elif key == "driver_grip_deg":
 			continue  # cosmetic: where the driver's hands rest on the rim (DriverModel)
+		elif key == "auto":
+			continue  # the realistic automatic's numbers: PlayerCar builds its AutoBox from them
 		else:
 			v.set(key, _own(spec[key]))
 
@@ -324,8 +326,27 @@ static func coupe_worn() -> Dictionary:
 ## turbo_boost_max is, so their max_torque is the table value / TURBO_PEAK.
 const TURBO_PEAK := 1.45
 
+## The realistic automatic (2026-10-10): which family of automatic each player
+## car drives like in AUTO (AutoBox.FAMILIES: old, 90s, modern). Any AutoBox
+## family key can be set per car next to "family", e.g.
+## {"family": "90s", "stall_rpm": 2400.0, "lockup_kmh": 60.0}; what is left out
+## comes from the family. "box" is what the car was built with: every car here
+## has a manual box (AUTO then shifts 0.1 s slower than the family).
+## Only player_spec() sets this: traffic and cop specs have no "auto" block and
+## keep GEVP's simple automatic.
+const PLAYER_AUTO := {
+	"p0_beater": {"family": "old"},
+	"p1_coupe": {"family": "90s"},
+	"p2_hothatch": {"family": "90s"},
+	"p3_tuner": {"family": "90s"},
+	"p4_kei": {"family": "90s"},
+	"p5_muscle": {"family": "old"},
+	"p6_crossover": {"family": "90s"},
+}
+
 static func player_spec(kind: String) -> Dictionary:
 	var s := coupe_default()
+	s["auto"] = (PLAYER_AUTO.get(kind, {"family": AutoBox.DEFAULT_FAMILY}) as Dictionary).duplicate()
 	match kind:
 		"p0_beater":
 			# The prologue car (Roy, 2026-10-09): a worn rear-engine, air-cooled

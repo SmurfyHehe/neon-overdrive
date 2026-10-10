@@ -658,8 +658,16 @@ func _physics_process(delta : float) -> void:
 const HILL_HOLD_SPEED := 0.5        # m/s: below this a braked car holds
 const HILL_HOLD_MIN_PULL := 0.05    # m/s^2 of gravity along the ground (~0.5% grade)
 const HILL_HOLD_TAU := 0.25         # s to bleed off what creep there is
+const HOLD_ANCHOR_SPEED := 0.1      # m/s: (14) under this a held car with a box is pinned to where it stands
+const HOLD_ANCHOR_PULL := 4.0       # 1/s: how hard it is pulled back to that spot
+var _hold_anchor := Vector3.ZERO
+var _hold_anchored := false
 func process_hill_hold() -> void:
-	if throttle_input > 0.05 or (brake_input < 0.3 and handbrake_input < 0.5):
+	# (14) a modern automatic keeps holding for a moment after the brake comes off
+	var box_hold := auto_box_on and auto_box.hill_hold_left > 0.0
+	var was_anchored := _hold_anchored
+	_hold_anchored = false
+	if throttle_input > 0.05 or (brake_input < 0.3 and handbrake_input < 0.5 and not box_hold):
 		return
 	if linear_velocity.length() > HILL_HOLD_SPEED:
 		return
@@ -674,8 +682,22 @@ func process_hill_hold() -> void:
 	n = n.normalized()
 	var pull := current_gravity - n * current_gravity.dot(n)
 	if pull.length() < HILL_HOLD_MIN_PULL:
-		return
+		if auto_box == null:
+			return
+		pull = Vector3.ZERO  # (14) a car with the box stands still on the flat too
 	var creep := linear_velocity - n * linear_velocity.dot(n)
+	if auto_box != null:
+		# (14) Damping alone leaves it sliding at a few cm/s (the tyres' rolling
+		# resistance pushes a stopped car about); once it has all but stopped,
+		# pin it to the spot. A jump of half a metre is the world recentring.
+		if was_anchored and global_position.distance_squared_to(_hold_anchor) < 0.25:
+			_hold_anchored = true
+		elif linear_velocity.length() < HOLD_ANCHOR_SPEED:
+			_hold_anchor = global_position
+			_hold_anchored = true
+		if _hold_anchored:
+			var off := global_position - _hold_anchor
+			creep += (off - n * off.dot(n)) * HOLD_ANCHOR_PULL
 	apply_central_force(-mass * (pull + creep / HILL_HOLD_TAU))
 
 func process_drag() -> void:
@@ -780,6 +802,10 @@ func _realistic_clutch_amount(delta: float) -> float:
 	return 1.0 - smoothstep(0.0, 1.0, engage)
 
 func process_throttle(delta : float) -> void:
+	# (14) the realistic automatic works out its shift and converter numbers first
+	auto_box_on = auto_box != null and automatic_transmission
+	if auto_box_on:
+		auto_box.tick(self, delta)
 	var throttle_delta := throttle_speed * delta
 	
 	if (throttle_input < throttle_amount):
@@ -797,7 +823,9 @@ func process_throttle(delta : float) -> void:
 		throttle_amount = 0.0
 	
 	## Disengage clutch when shifting or below motor idle
-	if realistic_clutch:
+	if auto_box_on and not is_shifting:
+		clutch_amount = auto_box.clutch_amount  # (14) the torque converter
+	elif realistic_clutch:
 		clutch_amount = _realistic_clutch_amount(delta)
 	elif need_clutch or is_shifting:
 		clutch_amount = 1.0
@@ -884,6 +912,30 @@ const AUTO_CLUTCH_SHUT_SPEED := 3.0
 ## model; only computed while some wheel is off its stock camber.
 var body_tilt_deg := 0.0
 var _camber_active := false
+## (14) Realistic automatic (2026-10-10, DEVIATION). A car whose spec has an
+## "auto" block (the player's cars) gets an AutoBox (scripts/car/auto_box.gd);
+## while it is in AUTO the box replaces GEVP's automatic. auto_box stays null on
+## every other car (traffic, cops), and none of the lines below run for them.
+## The box does its own thinking in AutoBox.tick(); GEVP reads the result in
+## seven places, each marked (14):
+##  a. process_throttle: calls tick(), and takes clutch_amount from the box (the
+##     torque converter: grip follows engine rpm, so it creeps and flares);
+##  b. process_motor: engine torque x torque_scale (the cut during an upshift),
+##     engine drag x drag_scale (a slipping converter passes half the braking);
+##  c. process_clutch: the clutch aims for gearbox speed x speed_k instead of
+##     gearbox speed (the slip left in at speed, and the slide of the revs
+##     through a gear change), and the wheels may put at most drag_cap into the
+##     engine (a downshift does not jerk the car);
+##  d. process_drive: torque to the wheels x gain (converter multiplication);
+##  e. process_transmission: GEVP's shift map is skipped, the box shifts by
+##     setting current_gear itself (no is_shifting, so no throttle-off gap);
+##  f. process_hill_hold: holds on while auto_box.hill_hold_left runs; and a
+##     car that has a box (in any gearbox mode) is held still on the flat too
+##     and pinned to where it stopped: braked at a standstill it used to slide
+##     on at 2-3 cm/s;
+##  g. process_clutch: creep_torque is added to the clutch torque (the idle creep).
+var auto_box: AutoBox = null
+var auto_box_on := false
 var clutch_cap_mult := 1.0
 var torque_mult := 1.0
 var brake_mult := 1.0
@@ -900,6 +952,9 @@ func process_motor(delta : float) -> void:
 	var drag_torque := motor_rpm * motor_drag + motor_brake * (1.0 - throttle_amount)
 	var turbo_mult := ForcedInduction.step(self, delta)  # (7) boost lives in scripts/car/forced_induction.gd
 	torque_output = get_torque_at_rpm(motor_rpm) * throttle_amount * turbo_mult * torque_mult
+	if auto_box_on:  # (14)
+		drag_torque *= auto_box.drag_scale
+		torque_output *= auto_box.torque_scale
 	## Adjust torque based on throttle input, clutch input, and motor drag
 	torque_output -= drag_torque * (1.0 + (clutch_amount * (1.0 - throttle_amount)))
 	var engine_off := realistic_clutch and not engine_running
@@ -979,7 +1034,7 @@ func process_clutch(delta : float):
 	var drive_inertia := motor_moment + (pow(absf(current_gear_ratio), 2.0) * gear_inertia) + drive_axles_inertia
 	var drive_inertia_R := drive_inertia / (current_gear_ratio * current_gear_ratio)
 	var reaction_torque := get_drive_wheels_reaction_torque() / current_gear_ratio
-	var speed_difference := (motor_rpm / ANGULAR_VELOCITY_TO_RPM) - (get_drivetrain_spin() * current_gear_ratio)
+	var speed_difference := (motor_rpm / ANGULAR_VELOCITY_TO_RPM) - (get_drivetrain_spin() * current_gear_ratio * (auto_box.speed_k if auto_box_on else 1.0))  # (14)
 	if speed_difference < 0.0:
 		speed_difference = -sqrt(-speed_difference)
 	var a := (motor_moment * drive_inertia_R * speed_difference) / delta
@@ -989,6 +1044,8 @@ func process_clutch(delta : float):
 	var tcs_torque_reduction := 0.0
 	clutch_torque = ((a - b + c)/(motor_moment + drive_inertia_R)) * clutch_factor
 	clutch_torque = clampf(clutch_torque, -max_clutch_torque * clutch_cap_mult * clutch_factor, max_clutch_torque * clutch_cap_mult * clutch_factor)
+	if auto_box_on and clutch_torque < -auto_box.drag_cap:  # (14)
+		clutch_torque = -auto_box.drag_cap
 	
 	## Check if traction control is needed and adjust motor speed and clutch torque if needed
 	if traction_control_max_slip > 0.0:
@@ -1002,6 +1059,8 @@ func process_clutch(delta : float):
 		else:
 			tcs_active = false
 	
+	if auto_box_on:  # (14) idle creep
+		clutch_torque += auto_box.creep_torque
 	var clutch_reaction_torque := clutch_torque + tcs_torque_reduction
 	var new_rpm := motor_rpm - ((ANGULAR_VELOCITY_TO_RPM * delta * clutch_reaction_torque) / motor_moment)
 	if realistic_clutch:
@@ -1022,6 +1081,8 @@ func process_transmission() -> void:
 	if is_shifting:
 		if delta_time > complete_shift_delta_time:
 			complete_shift()
+		return
+	if auto_box_on:  # (14) the box has already shifted, in AutoBox.tick()
 		return
 	
 	## For automatic transmissions to determine when to shift the current wheel speed and 
@@ -1086,6 +1147,8 @@ func process_drive(delta : float) -> void:
 	
 	if current_gear != 0:
 		drive_torque = clutch_torque * current_gear_ratio
+		if auto_box_on and clutch_torque > 0.0:  # (14) converter multiplication
+			drive_torque *= auto_box.gain
 	
 	## Check for slip and adjust variable torque split
 	if variable_torque_split:

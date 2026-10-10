@@ -127,7 +127,18 @@ static func load_meta_raw() -> Dictionary:
 	var m: Dictionary = AtomicJson.read(file("meta")).get("data", {})
 	return {"chase_open": m.get("chase_open", false) == true,
 		"pending_busts": maxi(0, int(m.get("pending_busts", 0))) if _is_whole(m.get("pending_busts", 0)) else 0,
-		"saved_at": int(m.get("saved_at", 0)) if _is_whole(m.get("saved_at", 0)) else 0}
+		"saved_at": int(m.get("saved_at", 0)) if _is_whole(m.get("saved_at", 0)) else 0,
+		"first_wreck_used": m.get("first_wreck_used", false) == true}
+
+# ---------- the first wreck ----------
+
+## The first wreck of a slot is free (Moose and Walt, scripts/core/run_end.gd).
+## True once it has been used.
+static func first_wreck_used() -> bool:
+	return load_meta_raw().first_wreck_used
+
+static func mark_first_wreck() -> bool:
+	return _touch_meta({"first_wreck_used": true})
 
 ## How many busts are waiting for a penalty; resets the count. For stage F.
 static func take_pending_bust() -> int:

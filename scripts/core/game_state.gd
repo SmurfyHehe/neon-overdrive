@@ -20,7 +20,11 @@ extends Node
 # AUTOTUNE with it expanded (Y). The Auto-Tune search runs in a
 # separate headless Godot process (scripts/tuning/auto_tune_job.gd), because the game's
 # physics can neither run faster than real time nor be stepped by hand.
-enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO }
+# WRECKED (ending a run, 2026-10-10): a hard hit ended the run and the crash
+# screen is playing (scripts/core/run_end.gd). The tree is NOT paused, so the
+# car, the camera shake and the sounds carry on in real time; no menu opens
+# from it, and it only ends in a restart.
+enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO, WRECKED }
 
 signal state_changed(new_state: State, old_state: State)
 ## Just before a restart reloads the scene / before the game quits (the save
@@ -141,6 +145,13 @@ func close_autotune() -> void:
 		get_tree().paused = false
 		_set_state(State.PLAYING)
 
+## A hard hit ended the run. True when the state changed (false from a menu).
+func wreck() -> bool:
+	if state != State.PLAYING:
+		return false
+	_set_state(State.WRECKED)
+	return true
+
 # Fresh run: reload the whole scene. Cheapest correct reset -- no per-system
 # reset code to keep in sync as systems are added.
 func restart() -> void:
@@ -157,9 +168,11 @@ func _set_state(new_state: State) -> void:
 	state = new_state
 	# The engine sound is a generator pushed from _process, which stops while the
 	# tree is paused; the buffer then underruns and clicks. Mute its bus for the
-	# pause, unmute on the way back (Phase A, 2026-10-05).
+	# pause, unmute on the way back (Phase A, 2026-10-05). A wreck does not
+	# pause, so nothing is muted for it here: run_end.gd cuts the sound itself.
+	var muted := new_state != State.PLAYING and new_state != State.WRECKED
 	for bus_name in [&"Engine", &"Turbo", &"Music"]:
 		var bus := AudioServer.get_bus_index(bus_name)
 		if bus >= 0:
-			AudioServer.set_bus_mute(bus, new_state != State.PLAYING)
+			AudioServer.set_bus_mute(bus, muted)
 	state_changed.emit(new_state, old)

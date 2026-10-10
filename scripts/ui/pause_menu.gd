@@ -133,6 +133,7 @@ func _build_plate() -> void:
 	plate_time = _plate_label(col, "numbers", 22, SILVER)
 	plate_cash = _plate_label(col, "numbers", 22, AMBER)
 	plate_bank = _plate_label(col, "numbers", 14, UiTheme.DIM)
+	plate_bank.name = "Bank"
 	_refresh_plate()
 
 func _plate_label(parent: Control, role: String, size_px: int, colour: Color) -> Label:

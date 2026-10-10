@@ -111,7 +111,12 @@ static func set_wind(w: float) -> void:
 ## A stable value in [0, 1) for (chunk, tag, k): the same for a pooled chunk
 ## rebuilt to this index as for a fresh one, and no global random draw.
 static func roll(chunk_index: int, tag: int, k: int) -> float:
-	return float(posmod(hash([chunk_index, tag, k]), 65521)) / 65521.0
+	# integer mixing, not hash([...]): this runs ~25 times per chunk rebuild
+	var h := (chunk_index * 0x9E3779B1 + tag * 0x85EBCA6B + k * 0xC2B2AE35) & 0xFFFFFFFF
+	h = ((h ^ (h >> 16)) * 0x45D9F3B) & 0xFFFFFFFF
+	h = ((h ^ (h >> 16)) * 0x45D9F3B) & 0xFFFFFFFF
+	h = h ^ (h >> 16)
+	return float(h & 0xFFFF) / 65536.0
 
 ## District colour/emblem slot (see the banner shader) of a district name.
 static func district_slot(district: String) -> int:

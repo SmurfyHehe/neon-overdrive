@@ -43,6 +43,7 @@ call :run low_fps_watch --headless
 call :run core/smoke --headless
 call :run core/game_info --headless
 call :run core/palette --headless
+call :run ui/fonts --headless
 call :run ui/hud --headless
 call :run fleet/car_loft_normals --headless
 call :run fleet/test_car --headless

@@ -260,7 +260,7 @@ class ClockCanvas extends Control:
 	func _draw() -> void:
 		if unit.clock_text == "":
 			return
-		var font := ThemeDB.fallback_font
+		var font := UiTheme.font("lcd")
 		draw_rect(Rect2(340, 6, 164, 46), HeadUnit.NAVY_DEEP)
 		draw_string(font, Vector2(350, 41), unit.clock_text, HORIZONTAL_ALIGNMENT_RIGHT, 150, 32, HeadUnit.AMBER)
 
@@ -269,7 +269,7 @@ class ScreenCanvas extends Control:
 	var unit: HeadUnit
 
 	func _draw() -> void:
-		var font := ThemeDB.fallback_font
+		var font := UiTheme.font("menu_strong")
 		var w := float(HeadUnit.PX.x)
 		var h := float(HeadUnit.PX.y)
 		draw_rect(Rect2(0, 0, w, h), HeadUnit.NAVY_DEEP)

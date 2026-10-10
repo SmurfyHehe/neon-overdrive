@@ -722,6 +722,7 @@ func _needle(at: Vector3, node_name: String, r: float = DIAL_R) -> Node3D:
 func _label(text: String, size: int, at: Vector3, col: Color, px: float) -> Label3D:
 	var l := Label3D.new()
 	l.text = text
+	l.font = UiTheme.font("dial")   # Dial numbers role
 	l.font_size = size
 	l.pixel_size = px
 	l.modulate = col

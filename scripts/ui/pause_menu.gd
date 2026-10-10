@@ -72,6 +72,7 @@ func _ready() -> void:
 
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.theme = UiTheme.font_theme()   # Menu role for every row, button and tab
 	add_child(center)
 
 	var box := VBoxContainer.new()
@@ -81,10 +82,12 @@ func _ready() -> void:
 
 	var title := Label.new()
 	title.text = "PAUSED"
+	UiTheme.apply(title, "display", 40)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 	bank_label = Label.new()
 	bank_label.name = "Bank"
+	UiTheme.apply(bank_label, "numbers")
 	bank_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(bank_label)
 	_refresh_bank()
@@ -287,6 +290,7 @@ func _build_graphics_page(center: CenterContainer) -> void:
 	center.add_child(graphics_page)
 	var title := Label.new()
 	title.text = "GRAPHICS"
+	UiTheme.apply(title, "display", 40)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	graphics_page.add_child(title)
 	gfx_preset = _add_option(graphics_page, "Preset", ["Low", "Medium", "High", "Custom"], func(i: int) -> void:
@@ -386,6 +390,7 @@ func _build_controls_page(center: CenterContainer) -> void:
 	center.add_child(controls_page)
 	var title := Label.new()
 	title.text = "CONTROLS"
+	UiTheme.apply(title, "display", 40)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	controls_page.add_child(title)
 	controls_scroll = ScrollContainer.new()
@@ -414,14 +419,15 @@ func _refresh_controls() -> void:
 		list.add_child(grid)
 		for entry in group[1]:
 			_grid_label(grid, entry[1], SILVER, 280)
-			_grid_label(grid, keyboard_text(entry[0]), AMBER, 140)
+			_grid_label(grid, keyboard_text(entry[0]), AMBER, 140, "numbers")
 			_grid_label(grid, gamepad_text(entry[0]), SILVER, 140)
 		var gap := Control.new()
 		gap.custom_minimum_size = Vector2(0, 8)
 		list.add_child(gap)
 
-func _grid_label(parent: Control, text: String, colour: Color, min_w: float) -> void:
+func _grid_label(parent: Control, text: String, colour: Color, min_w: float, role := "menu") -> void:
 	var l := Label.new()
+	UiTheme.apply(l, role)
 	l.text = text
 	l.add_theme_color_override("font_color", colour)
 	l.custom_minimum_size = Vector2(min_w, 0)
@@ -497,6 +503,7 @@ func _build_cars_page(center: CenterContainer) -> void:
 	center.add_child(cars_page)
 	var title := Label.new()
 	title.text = "CAR  (restarts the run)"
+	UiTheme.apply(title, "display", 40)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cars_page.add_child(title)
 	var now := PlayerCar.chassis_kind()

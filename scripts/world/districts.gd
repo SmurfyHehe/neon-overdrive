@@ -12,6 +12,14 @@ extends RefCounted
 # a drive starts among tall buildings. The last 2 chunks of a run blend
 # toward the next district, building by building, so changes feel gradual.
 
+#
+# On a loop (road_map.gd) the districts are the map's, in its order and at its
+# lengths, and come round again every lap; a "run" is then a district's number
+# on the loop. Off a loop (the endless road, and chunks built without a game)
+# it is the hashed map above.
+
+const RoadMap := preload("res://scripts/world/road_map.gd")
+
 const RUN := 16
 const BLEND := 2
 
@@ -52,9 +60,13 @@ const SPECS := {
 }
 
 static func run_of(chunk_index: int) -> int:
+	if RoadMap.is_loop():
+		return RoadMap.district_of(chunk_index)
 	return floori(float(chunk_index) / float(RUN))
 
 static func name_of_run(run: int) -> String:
+	if RoadMap.is_loop():
+		return RoadMap.district_kind(run)
 	if run == 0:
 		return "downtown"
 	var total := 0
@@ -77,6 +89,8 @@ static func name_at(chunk_index: int) -> String:
 static func name_for_building(chunk_index: int, roll: float) -> String:
 	var run := run_of(chunk_index)
 	var into := posmod(chunk_index, RUN) - (RUN - BLEND - 1)
+	if RoadMap.is_loop():
+		into = BLEND - RoadMap.left_in_district(chunk_index)
 	if into > 0 and roll < float(into) / float(BLEND + 1):
 		return name_of_run(run + 1)
 	return name_of_run(run)

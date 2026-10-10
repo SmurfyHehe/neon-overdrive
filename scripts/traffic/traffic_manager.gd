@@ -87,6 +87,16 @@ const SLOT_TRIES := 12
 const DEFER_TICKS := 30
 ## Share of cars that drive the oncoming way.
 var oncoming_share := 0.4
+## Which way along the road the player is travelling, as a sign on road-space
+## z: -1 = down the road (the +x lanes are the player's side), +1 = back up it
+## (the map, 2026-10-10: the road is driven both ways, and then the -x lanes
+## are the player's side). "Ahead", "behind", "oncoming" and the lane speeds
+## all follow it. It flips only once the player is doing FLOW_FLIP m/s the
+## other way, so backing up or a spin does not turn the traffic round.
+var flow := -1.0
+const FLOW_FLIP := 6.0
+## Times the flow has turned round (tests).
+var flow_flips := 0
 ## Own-direction / oncoming lanes traffic may use, for spawns and lane
 ## changes; empty = all. Tests keep the player's lane clear with this.
 var own_lanes_used: Array[int] = []
@@ -229,6 +239,9 @@ func _pick_kind() -> String:
 func _physics_process(_delta: float) -> void:
 	_build_index()
 	var pz := _player_z()
+	if _vz[0] * flow < -FLOW_FLIP:
+		flow = -flow
+		flow_flips += 1
 	var pv := _player_speed()
 	var band_hi := _spawn_band().y
 	var frame := Engine.get_physics_frames()
@@ -254,10 +267,10 @@ func _physics_process(_delta: float) -> void:
 				_respawn(car)
 			continue
 		var z := RoadFrame.unroll(car.global_position).z
-		var behind := z - pz
+		var behind := (pz - z) * flow
 		if behind > PARK_BEHIND * 0.5 and frame < car.retry_frame:
 			continue  # parked after a deferred spawn, waiting to retry
-		var receding := car.direction > 0.0 or car.lane_speed() < pv
+		var receding := car.direction != flow or car.lane_speed() < pv
 		var due := behind > recycle_behind or (behind > RECYCLE_RECEDING and receding) or -behind > band_hi + RoadChunkBuilder.CHUNK_LEN
 		# Due is not enough: the move waits until no camera can see the car.
 		# It keeps driving meanwhile and leaves view (or the reveal distance) soon.
@@ -297,10 +310,11 @@ func _car_seen(car: TrafficCar) -> bool:
 func _player_z() -> float:
 	return RoadFrame.unroll(player.global_position).z
 
+## The player's speed the way it is travelling (flow), m/s.
 func _player_speed() -> float:
 	if not player is RigidBody3D:
 		return 0.0
-	return -RoadFrame.dir_to_road(_player_z(), player.linear_velocity).z
+	return flow * RoadFrame.dir_to_road(_player_z(), player.linear_velocity).z
 
 ## [nearest, furthest] metres ahead of the player a car may be placed.
 func _spawn_band() -> Vector2:
@@ -354,7 +368,7 @@ func _bench(car: TrafficCar, pz: float) -> void:
 	car.benched = true
 	bench_count += 1
 	car.set_detailed(false)
-	car.place(car.lane_x, car.direction, pz + PARK_BEHIND, REST_Y, 0.0)
+	car.place(car.lane_x, car.direction, pz - flow * PARK_BEHIND, REST_Y, 0.0)
 	_put(car)
 
 ## Puts a car in a free slot. If every slot is taken it parks the car far
@@ -372,7 +386,7 @@ func _respawn(car: TrafficCar) -> void:
 		deferred_count += 1
 		car.set_detailed(false)
 		car.set_shown(false)
-		car.place(car.lane_x, car.direction, pz + PARK_BEHIND, car.rest_y, 0.0)
+		car.place(car.lane_x, car.direction, pz - flow * PARK_BEHIND, car.rest_y, 0.0)
 		car.retry_frame = Engine.get_physics_frames() + DEFER_TICKS
 		_put(car)
 		return
@@ -397,22 +411,24 @@ func _find_slot(car: TrafficCar, pz: float, extra_speed := 0.0) -> Dictionary:
 	var pv := _player_speed()
 	var band := _spawn_band()
 	for attempt in SLOT_TRIES:
+		# Oncoming for the player; `far_side` is the road's own -x carriageway.
 		var oncoming := randf() < oncoming_share
-		var lanes: Array[int] = onc_lanes_used if oncoming else own_lanes_used
-		var n_lanes := onc_lanes if oncoming else own_lanes
+		var dir := -flow if oncoming else flow
+		var far_side := dir > 0.0
+		var lanes: Array[int] = onc_lanes_used if far_side else own_lanes_used
+		var n_lanes := onc_lanes if far_side else own_lanes
 		var lane_i: int = lanes[randi() % lanes.size()] if not lanes.is_empty() else randi() % n_lanes
-		var lane_x := lane_centre(lane_i, oncoming)
-		var dir := 1.0 if oncoming else -1.0
-		var speed := lane_speed(lane_i, oncoming) + randf_range(-SPEED_JITTER, SPEED_JITTER) + extra_speed
+		var lane_x := lane_centre(lane_i, far_side)
+		var speed := lane_speed(lane_i, far_side) + randf_range(-SPEED_JITTER, SPEED_JITTER) + extra_speed
 		var behind := not oncoming and speed > pv + BEHIND_DV and randf() < BEHIND_SHARE
-		var z := pz + randf_range(spawn_behind_min, spawn_behind_max) if behind else pz - randf_range(band.x, band.y)
+		var z := pz - flow * randf_range(spawn_behind_min, spawn_behind_max) if behind else pz + flow * randf_range(band.x, band.y)
 		var seen := in_view(RoadFrame.roll(Vector3(lane_x, car.rest_y, z)))
 		if seen:
 			continue
 		var check := _slot_check(car, lane_x, z, dir, speed)
 		if check.is_empty():
 			continue
-		return {"lane_x": lane_x, "direction": dir, "z": z, "dist": pz - z, "gap": check.gap, "ttc": check.ttc,
+		return {"lane_x": lane_x, "direction": dir, "z": z, "dist": (z - pz) * flow, "gap": check.gap, "ttc": check.ttc,
 			"behind": behind, "in_view": seen, "speed": speed}
 	return {}
 
@@ -443,8 +459,10 @@ func _slot_check(car: TrafficCar, lane_x: float, z: float, dir: float, speed: fl
 		ttc = minf(ttc, t)
 	return {"gap": minf(gap_a, gap_b), "ttc": ttc}
 
+## `oncoming` is the road's -x carriageway; the slower set goes to whichever
+## side is oncoming for the player (flow).
 func lane_speed(lane_i: int, oncoming: bool) -> float:
-	var speeds := lane_speeds_onc if oncoming else lane_speeds_own
+	var speeds := lane_speeds_onc if oncoming != (flow > 0.0) else lane_speeds_own
 	return speeds[mini(lane_i, speeds.size() - 1)]
 
 ## Whether traffic on that side may drive in lane `lane_i` (spawns and lane
@@ -619,7 +637,7 @@ func set_car_count(n: int) -> void:
 		_make_car()
 	_build_index()
 	for car in cars:
-		if not car.benched and RoadFrame.unroll(car.global_position).z > _player_z() + PARK_BEHIND * 0.5:
+		if not car.benched and absf(RoadFrame.unroll(car.global_position).z - _player_z()) > PARK_BEHIND * 0.5:
 			_respawn(car)
 	car_count = n
 

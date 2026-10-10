@@ -17,12 +17,21 @@ extends Node
 # car's transform, velocity, spin, gear and rpm, the night clock and the radio.
 # Traffic is not saved; it respawns around the car as on a fresh start.
 #
+# Which road (the map, 2026-10-10): road.id names the road the car is on
+# (road_map.gd), with road.s, the metres round it, and road.dir, which way the
+# car was heading (1 = the way the chunks count, -1 = the other way). Game puts
+# the car back only on a road it knows by that id; a save with another id, or
+# none (saves from before the map), starts at the top of the default road and
+# keeps the clock and the radio. So a later loop is a new id, and old saves
+# keep opening. No version bump: the fields are optional.
+#
 # Off in test mode unless a test sets `enabled` (like PlayerTune), so tests that
 # boot Game.tscn never resume each other's runs.
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
 const TestMode := preload("res://scripts/core/test_mode.gd")
+const RoadMap := preload("res://scripts/world/road_map.gd")
 
 const RUN_VERSION := 1
 const AUTOSAVE_SECS := 30.0
@@ -101,13 +110,17 @@ func capture() -> Dictionary:
 	var p: Node3D = game.player
 	var sections := {}
 	for c in game.chunk_pool:
-		for i in [c.index - 1, c.index]:
+		for i in [RoadMap.lap_chunk(c.index - 1), RoadMap.lap_chunk(c.index)]:
 			if game.section_cache.has(str(i)):
 				sections[str(i)] = game.section_cache[str(i)]
+	var along := RoadFrame.unroll(p.global_position).z
 	var run := {
 		"version": RUN_VERSION,
 		"road": {"seed": game.road_seed, "curviness": game.curviness, "hilliness": game.hilliness,
-			"kicker_chance": game.kicker_chance},
+			"kicker_chance": game.kicker_chance,
+			"id": RoadMap.road_id if RoadMap.road_id != "" else RoadMap.ENDLESS,
+			"s": RoadMap.wrap_s(RoadFrame.s_at(along)),
+			"dir": 1 if RoadFrame.dir_to_road(along, -p.global_transform.basis.z).z <= 0.0 else -1},
 		"origin_index": game.origin_index,
 		"recenter_count": game.recenter_count,
 		"sections": sections,

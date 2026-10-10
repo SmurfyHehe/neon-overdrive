@@ -39,6 +39,10 @@ const WARMUP_SECS := 2.0  # skip shader-compile hitches at startup
 ## gfx      low | medium | high: a graphics tier (GraphicsSettings), whose
 ##          traffic and draw distance become the defaults (the saved preset)
 ## dynres   1 = dynamic resolution on (off by default, for fixed-scale numbers)
+## skip     "ClassA,ClassB": stop _process/_physics_process on every node of
+##          those script classes (EngineAudio, Hud, TrafficManager...), to
+##          attribute the frame per subsystem; NEON_BENCH_SKIP does the same
+##          and tests/core/perf_probe.gd honours it too. Diagnostic only.
 ## Defaults reproduce the old benchmark exactly, so earlier lines still compare.
 ## The radio always plays (it is part of the game), so every run has it on.
 const DEFAULT_SECS := 45.0
@@ -53,6 +57,9 @@ var gpu_ms := 0.0  # summed viewport render time, GPU side
 var cpu_ms := 0.0  # summed viewport render time, CPU side (render thread)
 var process_ms := 0.0  # summed main-thread _process time (scripts)
 var physics_ms := 0.0  # summed physics step time (all ticks in the frame)
+var setup_ms := 0.0  # summed RenderingServer frame-setup CPU time
+var objects_sum := 0  # summed objects drawn per frame
+var prims_sum := 0  # summed primitives drawn per frame
 var max_speed := 0.0
 
 static func requested() -> bool:
@@ -86,6 +93,31 @@ func _ready() -> void:
 	lbl.add_theme_color_override("font_color", Color(1.0, 0.54, 0.12))  # sodium #FF8A1F
 	lbl.text = "BENCHMARK -- driving itself for %d s, then quits" % int(run_secs() + WARMUP_SECS)
 	hud.add_child(lbl)
+	apply_skips(get_tree().root, opt("skip", OS.get_environment("NEON_BENCH_SKIP")))
+
+## Attribution runs (perf pass 2026-10-09): stops the per-frame work of every
+## node whose script class is in `classes` ("A,B,C"). Returns how many.
+static func apply_skips(root: Node, classes: String) -> int:
+	var wanted: Array[String] = []
+	for k in classes.split(","):
+		if k.strip_edges() != "":
+			wanted.append(k.strip_edges())
+	if wanted.is_empty():
+		return 0
+	var n := 0
+	var stack: Array[Node] = [root]
+	while not stack.is_empty():
+		var node: Node = stack.pop_back()
+		var scr := node.get_script() as Script
+		var cls := scr.get_global_name() if scr != null else StringName()
+		if (String(cls) in wanted) or (node.get_class() in wanted):
+			node.set_process(false)
+			node.set_physics_process(false)
+			n += 1
+		for c in node.get_children():
+			stack.append(c)
+	print("BENCHMARK skipping process on %d nodes (%s)" % [n, classes])
+	return n
 
 # Render and view options. Traffic, curves and hills are applied earlier, in
 # game.gd, because they shape the world before this node exists.
@@ -142,6 +174,9 @@ func _process(delta: float) -> void:
 		cpu_ms += RenderingServer.viewport_get_measured_render_time_cpu(vp)
 		process_ms += Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
 		physics_ms += Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
+		setup_ms += RenderingServer.get_frame_setup_time_cpu()
+		objects_sum += int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME))
+		prims_sum += int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
 
 	var p: PlayerCar = game.get("player")
 	max_speed = max(max_speed, p.linear_velocity.length())
@@ -199,11 +234,15 @@ func _report() -> void:
 		dc_max = maxi(dc_max, d)
 	var dc_avg := float(dc_sum) / maxi(1, draw_calls.size())
 	var size := get_viewport().get_visible_rect().size
-	var line := "%s  %s %dx%d  frames=%d avg=%.2fms (%d fps) 1%%low=%.2fms (%d fps) p50=%.2f p99=%.2f max=%.2f  gpu=%.2fms render_cpu=%.2fms process=%.2fms physics=%.2fms  traffic=%d@%dm  draw_calls avg=%d max=%d  top_speed=%.1f m/s  spikes>33ms=%d >50ms=%d" % [
+	# process/physics are Godot's per-second WORST frame (Performance holds
+	# the max over the last second), so they describe hitches, not the mean;
+	# gpu, render_cpu and setup are per-frame means.
+	var line := "%s  %s %dx%d  frames=%d avg=%.2fms (%d fps) 1%%low=%.2fms (%d fps) p50=%.2f p99=%.2f max=%.2f  gpu=%.2fms render_cpu=%.2fms setup=%.2fms process_worst=%.2fms physics_worst=%.2fms  traffic=%d@%dm  draw_calls avg=%d max=%d objects=%d prims=%dk nodes=%d  top_speed=%.1f m/s  spikes>33ms=%d >50ms=%d" % [
 		Time.get_datetime_string_from_system(false, true),
 		ProjectSettings.get_setting("rendering/renderer/rendering_method"), int(size.x), int(size.y),
 		n, avg, int(1000.0 / avg), low1, int(1000.0 / low1), s[n / 2], p99, s[n - 1],
-		gpu_ms / n, cpu_ms / n, process_ms / n, physics_ms / n, TrafficSettings.car_count, roundi(TrafficSettings.detail_distance), roundi(dc_avg), dc_max, max_speed, spikes33, spikes50]
+		gpu_ms / n, cpu_ms / n, setup_ms / n, process_ms / n, physics_ms / n, TrafficSettings.car_count, roundi(TrafficSettings.detail_distance), roundi(dc_avg), dc_max,
+		objects_sum / n, prims_sum / n / 1000, int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)), max_speed, spikes33, spikes50]
 	line += "  gfx=%s scale_end=%.2f" % [GraphicsSettings.preset, get_viewport().scaling_3d_scale]
 	line += "  opts=[%s]" % " ".join(OS.get_cmdline_user_args())
 	print("BENCHMARK ", line)

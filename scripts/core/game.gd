@@ -118,11 +118,16 @@ func _ready() -> void:
 	# phases, garage rolls in the chunk builder). Tests set it through
 	# Harness.boot so a failure can be rerun on the same draws; randomize()
 	# below used to throw away the seed the test had just set.
+	# NEON_SEED=<n> pins the global RNG too (tools/look_shot.gd: the same
+	# frame twice, for before/after look checks).
 	var rng_env := OS.get_environment("NEON_RNG_SEED")
+	var seed_env := OS.get_environment("NEON_SEED")
 	if benchmark:
 		seed(Benchmark.SEED)
 	elif rng_env.is_valid_int():
 		seed(int(rng_env))
+	elif seed_env.is_valid_int():
+		seed(int(seed_env))
 	else:
 		randomize()
 	saver = SaveDirector.new(self)

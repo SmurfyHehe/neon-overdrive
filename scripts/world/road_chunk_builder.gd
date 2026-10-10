@@ -1517,6 +1517,14 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 ## spanning from z=0 to z=-CHUNK_LEN locally.
 static func build_chunk(chunk_index: int, prev_cfg: Dictionary, cfg: Dictionary, origin_index: int = 0) -> Node3D:
 	var root := Node3D.new()
+	# The world is static between rebuilds: a chunk only moves in _process
+	# (recycle, floating-origin recenter), never per physics tick, so there
+	# is nothing for physics interpolation to smooth. Off, the renderer skips
+	# interpolating every MultiMesh instance buffer in the chunk each frame
+	# (dashes, pylons, lamps, walls, signs...) and stops warning that the
+	# buffers were written from outside the physics step (perf pass
+	# 2026-10-09). Children inherit the mode.
+	root.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_create_nodes(root)
 	_apply(root, chunk_index, prev_cfg, cfg, origin_index)
 	return root

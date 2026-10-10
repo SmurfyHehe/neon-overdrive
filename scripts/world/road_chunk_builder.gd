@@ -186,7 +186,7 @@ static var _lane_dash_mat: StandardMaterial3D
 static var _center_dash_mesh: BoxMesh
 static var _lane_dash_mesh: BoxMesh
 static var _pylon_mesh: BoxMesh
-static var _barrier_mesh: BoxMesh
+static var _barrier_mesh: ArrayMesh
 static var _lamp_mesh: ArrayMesh
 static var _pool_mesh: PlaneMesh
 static var _pool_mat: StandardMaterial3D
@@ -331,6 +331,10 @@ static func _get_pylon_mesh() -> BoxMesh:
 ## on it. Each dot is a camera-facing quad that never drops below
 ## REFLECTOR_MIN_SCREEN of the screen height and fades out past headlight reach
 ## (REFLECTOR_FADE), like a retroreflector the car's lamps stop catching.
+## A reflector only shines back what hits it: once the player's car reports
+## its headlights (set_reflector_lamp), a dot is lit only inside the beam, so
+## the ones beside and behind the car, and all of them with the lamps off or
+## broken, stay dark instead of hanging there as glowing balls (2026-10-10).
 ## One dot per barrier piece, a MultiMesh child of the Barrier so it shows
 ## and bends with it: one draw call per barrier chunk. TrafficSettings.light_glow scales it.
 const REFLECTOR_SPACING := 5.0
@@ -346,11 +350,20 @@ uniform float gain = 1.0;
 uniform float near_r = 0.06;
 uniform float min_screen = 0.004;
 uniform vec2 fade = vec2(60.0, 200.0);
+uniform float lamp_known = 0.0;
+uniform float lamp_share = 1.0;
+uniform vec3 lamp_pos = vec3(0.0);
+uniform vec3 lamp_dir = vec3(0.0, 0.0, -1.0);
+uniform vec2 lamp_cone = vec2(0.5, 0.82);
 varying float v_k;
 void vertex() {
 	vec3 c = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	float d = max(-c.z, 0.05);
 	v_k = 1.0 - smoothstep(fade.x, fade.y, d);
+	if (lamp_known > 0.5) {
+		vec3 to = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz - lamp_pos;
+		v_k *= lamp_share * smoothstep(lamp_cone.x, lamp_cone.y, dot(normalize(to), lamp_dir));
+	}
 	float far_r = min_screen * 2.0 * d / abs(PROJECTION_MATRIX[1][1]);
 	c *= max(d - 0.1, 0.05) / d;
 	c.xy += UV * max(near_r, far_r) * step(0.001, gain * v_k);
@@ -367,6 +380,25 @@ static func set_reflector_glow(g: float) -> void:
 	if _reflector_mat != null:
 		_reflector_mat.set_shader_parameter("gain", g)
 
+## Cosines of the angle off the headlights' axis at which a reflector is dark
+## and fully lit: wider than the beam itself (CarFx.HEADLIGHT_ANGLE), since a
+## reflector answers to very little stray light.
+const REFLECTOR_LAMP_CONE := Vector2(0.5, 0.82)
+
+## The player's headlights, in world space, each physics tick: where they are,
+## which way they point, and how much of the beam is left (0 = off).
+static func set_reflector_lamp(pos: Vector3, dir: Vector3, share: float) -> void:
+	var m := _get_reflector_mat()
+	m.set_shader_parameter("lamp_known", 1.0)
+	m.set_shader_parameter("lamp_pos", pos)
+	m.set_shader_parameter("lamp_dir", dir)
+	m.set_shader_parameter("lamp_share", share)
+
+## Back to dots that shine whatever the headlights do (no player car).
+static func clear_reflector_lamp() -> void:
+	if _reflector_mat != null:
+		_reflector_mat.set_shader_parameter("lamp_known", 0.0)
+
 static func _get_reflector_mat() -> ShaderMaterial:
 	if _reflector_mat == null:
 		var sh := Shader.new()
@@ -377,6 +409,7 @@ static func _get_reflector_mat() -> ShaderMaterial:
 		_reflector_mat.set_shader_parameter("min_screen", REFLECTOR_MIN_SCREEN)
 		_reflector_mat.set_shader_parameter("fade", REFLECTOR_FADE)
 		_reflector_mat.set_shader_parameter("gain", _reflector_glow)
+		_reflector_mat.set_shader_parameter("lamp_cone", REFLECTOR_LAMP_CONE)
 	return _reflector_mat
 
 ## In one barrier piece's local space (a box centred on the origin, one station long).
@@ -401,9 +434,37 @@ static func _get_reflector_mesh() -> ArrayMesh:
 		_reflector_mesh.surface_set_material(0, _get_reflector_mat())
 	return _reflector_mesh
 
-static func _get_barrier_mesh() -> BoxMesh:
+## How far a barrier piece's sides and top run on past its end faces, into
+## the next piece.
+const BARRIER_OVERLAP := 0.06
+
+## One station of the centre barrier. A plain box per station left a hairline
+## crack at every joint on a bend or a change of slope (the pieces are
+## straight, the road is not), and through the crack you saw the next piece's
+## end face. That face meets the headlights square on while the wall's side
+## only catches them at a glancing angle, so every joint showed as a bright
+## vertical line (2026-10-10). Here the sides and the top overlap the next
+## piece by BARRIER_OVERLAP, which closes the crack; the end faces stay on the
+## joint, inside the neighbour, and still close the wall where a run of
+## barrier ends. No bottom: it sits on the road.
+static func _get_barrier_mesh() -> ArrayMesh:
 	if _barrier_mesh == null:
-		_barrier_mesh = _box_mesh(Vector3(BARRIER_W, BARRIER_H, CHUNK_LEN / STATIONS))
+		var h := Vector3(BARRIER_W, BARRIER_H, CHUNK_LEN / STATIONS) / 2.0
+		var l := h.z + BARRIER_OVERLAP
+		var faces := [
+			[Vector3.RIGHT, Vector3(h.x, -h.y, l), Vector3(h.x, h.y, l), Vector3(h.x, h.y, -l), Vector3(h.x, -h.y, -l)],
+			[Vector3.LEFT, Vector3(-h.x, -h.y, -l), Vector3(-h.x, h.y, -l), Vector3(-h.x, h.y, l), Vector3(-h.x, -h.y, l)],
+			[Vector3.UP, Vector3(-h.x, h.y, l), Vector3(-h.x, h.y, -l), Vector3(h.x, h.y, -l), Vector3(h.x, h.y, l)],
+			[Vector3.BACK, Vector3(-h.x, -h.y, h.z), Vector3(-h.x, h.y, h.z), Vector3(h.x, h.y, h.z), Vector3(h.x, -h.y, h.z)],
+			[Vector3.FORWARD, Vector3(h.x, -h.y, -h.z), Vector3(h.x, h.y, -h.z), Vector3(-h.x, h.y, -h.z), Vector3(-h.x, -h.y, -h.z)],
+		]
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		for f in faces:
+			st.set_normal(f[0])
+			for i in [1, 2, 3, 1, 3, 4]:
+				st.add_vertex(f[i])
+		_barrier_mesh = st.commit()
 	return _barrier_mesh
 
 ## Street lamp, built once and shared by every chunk's lamp MultiMesh: a pole

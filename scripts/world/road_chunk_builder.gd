@@ -526,8 +526,9 @@ const STATIONS := 10
 ## points, so 1 m is plenty for the radii the road uses (300 m and up).
 const CENTERLINE_BAKE := 1.0
 
-## The centreline of the chunk _apply() is laying out.
+## The centreline of the chunk _apply() is laying out, and its curvature.
 static var _curve: Curve3D
+static var _curve_k := 0.0
 ## Its frame every metre, sampled once per _apply() (_cache_frames). Sampling
 ## the Curve3D for each of the ~600 points a chunk lays out cost about a
 ## third of a rebuild (2026-10-07).
@@ -576,9 +577,29 @@ static func _new_centerline() -> Path3D:
 ## Hills (R5): the height rises by g s + vc s^2 / 2; a cubic's y follows that
 ## parabola exactly when its handles carry the start and end slopes over a
 ## third of the chunk each, which they do.
-static func _update_centerline(root: Node3D, k: float, g: float = 0.0, vc: float = 0.0) -> Curve3D:
+##
+## Eased hills (2026-10-10): where the vertical curvature changes at the
+## chunk's start (by dc_in) or end (dc_out), the height is a cubic over the
+## first and last EASE / 2 metres and the parabola between, so the curve gets
+## a point at each change-over and is still exact piece by piece.
+static func _update_centerline(root: Node3D, k: float, g: float = 0.0, vc: float = 0.0, dc_in: float = 0.0, dc_out: float = 0.0) -> Curve3D:
 	var curve: Curve3D = (root.get_node(^"Centerline") as Path3D).curve
 	curve.clear_points()
+	if dc_in != 0.0 or dc_out != 0.0:
+		var e := RoadAlignment.EASE * 0.5
+		var cuts: Array[float] = [0.0, e, CHUNK_LEN - e, CHUNK_LEN]
+		for j in cuts.size():
+			var s := cuts[j]
+			var before := 0.0 if j == 0 else s - cuts[j - 1]
+			var after := 0.0 if j == cuts.size() - 1 else cuts[j + 1] - s
+			var a := RoadAlignment.arc_heading(k, s)
+			var fwd := Vector3(-sin(a), 0.0, -cos(a))
+			var slope := RoadAlignment.ease_grade(g, vc, dc_in, dc_out, s)
+			var p := RoadAlignment.arc_point(k, s) + Vector3(0.0, RoadAlignment.ease_rise(g, vc, dc_in, dc_out, s), 0.0)
+			curve.add_point(p,
+				-fwd * RoadAlignment.bezier_handle(k, before) - Vector3(0.0, slope * before / 3.0, 0.0),
+				fwd * RoadAlignment.bezier_handle(k, after) + Vector3(0.0, slope * after / 3.0, 0.0))
+		return curve
 	var h := RoadAlignment.bezier_handle(k, CHUNK_LEN)
 	var turn := RoadAlignment.arc_heading(k, CHUNK_LEN)
 	var end_fwd := Vector3(-sin(turn), 0.0, -cos(turn))
@@ -861,9 +882,61 @@ static func _update_boundary(root: Node3D, body_name: String, inner_x: float, si
 
 # Road collision (#37 step R5). On a flat road the wheels drive on game.gd's
 # infinite ground plane; on a hilly one there is no single plane, so each
-# chunk carries its own surface: STATIONS quads across the whole drivable
-# width (out past the out-of-bounds walls), following the centreline, in the
-# "Road" group like the plane. Built always, switched on only with hills.
+# chunk carries its own surface: quads across the whole drivable width (out
+# past the out-of-bounds walls), following the centreline, in the "Road"
+# group like the plane. Built always, switched on only with hills.
+#
+# How many quads (2026-10-10, road bumps). The surface used to be STATIONS
+# flat 5 m pieces, one quad wide, whatever the road did. Two things about
+# that kicked the wheels:
+#
+# - Along the road, where it bends vertically, each piece meets the next at
+#   a small angle (1/80 on a 400 m sag), and a wheel crossing that edge has
+#   its spring speed jump by speed x angle: 0.4 m/s at 120 km/h, every 5 m,
+#   which is a bump you feel. So such chunks get shorter pieces, enough that
+#   no edge turns more than ROAD_COL_KINK (ROAD_COL_MAX_ROWS at most).
+# - Across the road, on a bend that also climbs, the inside of the bend is
+#   shorter than the outside, so it climbs more steeply. A quad's two flat
+#   triangles each have one slope, the inside edge's and the outside edge's,
+#   and a wheel crossing the diagonal between them jumps by speed x grade x
+#   quad width / bend radius: up to 0.28 m/s at 120 km/h on one 50 m wide quad,
+#   every piece. So such chunks are cut into ROAD_COL_LANE_COLS columns a side
+#   across the lanes (one more a side covers the rest, which nothing drives).
+#
+# A straight, evenly sloped chunk keeps the old 10 quads. The heights come
+# straight from the road's formula (RoadAlignment), not from the centreline's
+# 1 m bake: rows between baked points would just sit on the chord.
+
+## Most an edge between two road collision pieces may turn, radians. A wheel
+## at 200 km/h has its spring speed change by 39 mm/s over one (the car's own
+## noise on the flat plane is 30-55, tests/world/hill_bumps.gd).
+const ROAD_COL_KINK := 0.0007
+## Most pieces along a chunk: 0.5 m each.
+const ROAD_COL_MAX_ROWS := 100
+## Columns a side across the lanes of a chunk that both bends and slopes.
+const ROAD_COL_LANE_COLS := 4
+## Half-width they cover, m: the widest road's lanes and shoulder.
+const ROAD_COL_LANE_HALF := MAX_OWN_LANES * LANE_W + MEDIAN_GAP + SHOULDER_W
+
+## Pieces along (x) and across (y) a chunk's road collision: k and g are its
+## curvature and start grade, vc its vertical curvature, dc_in / dc_out the
+## vertical curvature steps eased in around its start and end
+## (RoadAlignment.vstep).
+static func road_collision_grid(k: float, g: float, vc: float, dc_in: float = 0.0, dc_out: float = 0.0) -> Vector2i:
+	# The sharpest vertical bend anywhere in the chunk: its own, or the eased
+	# value at either end.
+	var bend := maxf(absf(vc), maxf(absf(vc - 0.5 * dc_in), absf(vc + 0.5 * dc_out)))
+	var rows := STATIONS
+	if bend > 1e-9:
+		rows = clampi(ceili(CHUNK_LEN * bend / ROAD_COL_KINK), STATIONS, ROAD_COL_MAX_ROWS)
+	var cols := 1
+	if absf(k) > 1e-9 and (absf(g) > 1e-6 or bend > 1e-9):
+		cols = 2 * ROAD_COL_LANE_COLS + 2
+	return Vector2i(rows, cols)
+
+## The chunk _apply() is laying out: start grade, vertical curvature and the
+## eased curvature steps at its two ends.
+static var _vert := [0.0, 0.0, 0.0, 0.0]
 
 ## How far past the out-of-bounds walls the road collision reaches, m.
 const ROAD_COL_MARGIN := 2.0
@@ -888,15 +961,54 @@ static func _update_road_collision(root: Node3D, half_w: float) -> void:
 		col.disabled = true
 		tri.set_faces(PackedVector3Array())
 		return
+	var g0: float = _vert[0]
+	var vc: float = _vert[1]
+	var dc_in: float = _vert[2]
+	var dc_out: float = _vert[3]
+	var grid := road_collision_grid(_curve_k, g0, vc, dc_in, dc_out)
+	var n := grid.x
+	var cols := grid.y
+	# Column edges across the road, left to right.
+	var xs := PackedFloat32Array([-half_w, half_w])
+	if cols > 1:
+		xs.resize(cols + 1)
+		var w := minf(ROAD_COL_LANE_HALF, half_w * 0.8) / ROAD_COL_LANE_COLS
+		xs[0] = -half_w
+		for j in 2 * ROAD_COL_LANE_COLS + 1:
+			xs[j + 1] = w * float(j - ROAD_COL_LANE_COLS)
+		xs[cols] = half_w
 	var faces := PackedVector3Array()
-	for k in STATIONS:
-		var z0 := -CHUNK_LEN * float(k) / STATIONS
-		var z1 := -CHUNK_LEN * float(k + 1) / STATIONS
-		var a := _at(-half_w, 0.0, z0)
-		var b := _at(half_w, 0.0, z0)
-		var c := _at(-half_w, 0.0, z1)
-		var d := _at(half_w, 0.0, z1)
-		faces.append_array([a, c, b, b, c, d])
+	faces.resize(6 * n * cols)
+	var last := int(CHUNK_LEN) - 1
+	var prev := PackedVector3Array()
+	var cur := PackedVector3Array()
+	prev.resize(cols + 1)
+	cur.resize(cols + 1)
+	var q := 0
+	for r in n + 1:
+		# One row of points: level, square to the road, at the height the
+		# road's own formula gives (the chunk root sits at its start height).
+		var s := CHUNK_LEN * float(r) / float(n)
+		var i := mini(int(s), last)
+		var t := s - float(i)
+		var o := _frame_o[i].lerp(_frame_o[i + 1], t)
+		var f := _frame_f[i].lerp(_frame_f[i + 1], t)
+		var right := Vector3(-f.z, 0.0, f.x).normalized()
+		o.y = RoadAlignment.ease_rise(g0, vc, dc_in, dc_out, s)
+		for j in cols + 1:
+			cur[j] = o + right * xs[j]
+		if r > 0:
+			for j in cols:
+				var a := prev[j]
+				var b := prev[j + 1]
+				var c := cur[j]
+				var d := cur[j + 1]
+				faces[q] = a; faces[q + 1] = c; faces[q + 2] = b
+				faces[q + 3] = b; faces[q + 4] = c; faces[q + 5] = d
+				q += 6
+		var swap := prev
+		prev = cur
+		cur = swap
 	tri.set_faces(faces)
 	col.disabled = false
 
@@ -1179,9 +1291,16 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# on a straight road that is (0, 0, -(chunk_index - origin_index) * 50).
 	root.transform = RoadFrame.chunk_xf(chunk_index, origin_index)
 	root.set_meta("chunk_index", chunk_index)
-	_curve = _update_centerline(root, RoadFrame.curvature(chunk_index), RoadFrame.start_grade(chunk_index), RoadFrame.vcurve(chunk_index))
+	_curve_k = RoadFrame.curvature(chunk_index)
+	_vert[0] = RoadFrame.start_grade(chunk_index)
+	_vert[1] = RoadFrame.vcurve(chunk_index)
+	_vert[2] = RoadFrame.vstep(chunk_index)
+	_vert[3] = RoadFrame.vstep(chunk_index + 1)
+	_curve = _update_centerline(root, _curve_k, _vert[0], _vert[1], _vert[2], _vert[3])
 	_cache_frames(_curve)
-	_strip_n = strip_pieces(RoadFrame.curvature(chunk_index), RoadFrame.vcurve(chunk_index))
+	# Its own curvatures only: a level chunk easing into a neighbour's hill
+	# leaves a single flat strip by 5 mm at most (RoadAlignment.EASE).
+	_strip_n = strip_pieces(_curve_k, _vert[1])
 
 	var own_lanes: int = clampi(int(cfg.own_lanes), 1, MAX_OWN_LANES)
 	var onc_lanes: int = clampi(int(cfg.onc_lanes), 1, MAX_ONC_LANES)

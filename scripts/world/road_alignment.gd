@@ -23,6 +23,17 @@ class_name RoadAlignment
 # constant rate vcurve(i) (1/m; + = sag, - = crest), so
 #   y(s) = h + g s + vcurve s^2 / 2.
 # Its own random stream: changing curviness never changes the hills.
+#
+# Eased (2026-10-10, road bumps): a vertical bend that switches on all at once
+# at a chunk's start throws the car's weight on or off its springs in one
+# step (0.8 g at 200 km/h into a 400 m sag), which reads as a bump. So the
+# bend rate now ramps from one chunk's value to the next's over EASE metres
+# centred on the join, the way a real road's vertical curve is spiralled in.
+# That is the same as averaging the stepped profile over a sliding EASE-metre
+# window, so no grade is steeper and no crest or sag tighter than before, and
+# the road sits within a couple of centimetres of where the same seed put it.
+# The plain formula above still holds in the middle of a chunk; height_at(),
+# grade_at() and rise() are the eased truth everywhere.
 
 const L := RoadChunkBuilder.CHUNK_LEN
 const MIN_RADIUS := 300.0
@@ -46,6 +57,11 @@ const KICKER_RADIUS_MAX := 250.0
 ## Past this height either way new hills lead back toward 0, so the city
 ## does not climb a mountain over a long run.
 const HEIGHT_SOFT_LIMIT := 30.0
+## Metres over which the vertical bend rate changes from one chunk's to the
+## next's, centred on the join. Must stay under the chunk length. 40 m was
+## tried (2026-10-10) and measured no better in tests/world/hill_bumps.gd,
+## for more collision and strip pieces on the chunks either side.
+const EASE := 10.0
 
 ## 0 = a straight road, 1 = mostly bends. Share of segments that are bends.
 var curviness := 0.5
@@ -64,8 +80,14 @@ var _seg_k := 0.0
 var _seg_left := 0
 var _vrng := RandomNumberGenerator.new()
 var _vc := PackedFloat64Array()        # vertical curvature of chunk i
-var _h := PackedFloat64Array([0.0])    # height at the start of chunk i
-var _g := PackedFloat64Array([0.0])    # grade at the start of chunk i
+# The stepped profile the hills are rolled on (height and grade at the start
+# of chunk i before easing), then what easing makes of it:
+var _h := PackedFloat64Array([0.0])
+var _g := PackedFloat64Array([0.0])
+var _dc := PackedFloat64Array()        # change of vertical curvature entering chunk i
+var _h0 := PackedFloat64Array()        # eased height at the start of chunk i
+var _g0 := PackedFloat64Array()        # eased grade at the start of chunk i
+var _lift := 0.0  # height the easing has added up to the newest chunk
 var _vseg_target := 0.0  # grade the current vertical segment is heading for
 var _vseg_c := 0.0
 var _vseg_left := 0
@@ -92,20 +114,81 @@ func start_height(i: int) -> float:
 	if i < 0:
 		return 0.0
 	_ensure(i)
-	return _h[i]
+	return _h0[i]
 
 func start_grade(i: int) -> float:
 	if i < 0:
 		return 0.0
 	_ensure(i)
-	return _g[i]
+	return _g0[i]
+
+## How much the vertical curvature changes going into chunk i
+## (vcurve(i) - vcurve(i - 1)): the step the easing spreads over EASE metres
+## around the chunk's start.
+func vstep(i: int) -> float:
+	if i < 0:
+		return 0.0
+	_ensure(i)
+	return _dc[i]
+
+## Height of the road above the start of chunk i, s metres into it.
+func rise(i: int, s: float) -> float:
+	if i < -1:
+		return 0.0
+	_ensure(i + 1)
+	if i < 0:
+		return ease_rise(0.0, 0.0, 0.0, _dc[0], s)
+	return ease_rise(_g0[i], _vc[i], _dc[i], _dc[i + 1], s)
 
 ## Height and grade at distance s into chunk i.
 func height_at(i: int, s: float) -> float:
-	return start_height(i) + start_grade(i) * s + 0.5 * vcurve(i) * s * s
+	return start_height(i) + rise(i, s)
 
 func grade_at(i: int, s: float) -> float:
-	return start_grade(i) + vcurve(i) * s
+	if i < -1:
+		return 0.0
+	_ensure(i + 1)
+	if i < 0:
+		return ease_grade(0.0, 0.0, 0.0, _dc[0], s)
+	return ease_grade(_g0[i], _vc[i], _dc[i], _dc[i + 1], s)
+
+# One chunk's eased vertical profile: start grade g0, its own curvature c,
+# and the curvature steps at its start (dc_in) and end (dc_out). A step of 1
+# at t = 0, spread into a ramp from -EASE/2 to +EASE/2, changes the grade by
+# _ease_g(t) and the height by _ease_h(t) compared with the plain step.
+
+static func _ease_g(t: float) -> float:
+	var e := EASE * 0.5
+	if t <= -e or t >= e:
+		return 0.0
+	var d := t + e if t < 0.0 else t - e
+	return d * d / (2.0 * EASE)
+
+static func _ease_h(t: float) -> float:
+	var e := EASE * 0.5
+	if t <= -e:
+		return 0.0
+	if t >= e:
+		return EASE * EASE / 24.0
+	if t < 0.0:
+		return (t + e) * (t + e) * (t + e) / (6.0 * EASE)
+	return (2.0 * e * e * e + (t - e) * (t - e) * (t - e)) / (6.0 * EASE)
+
+static func ease_rise(g0: float, c: float, dc_in: float, dc_out: float, s: float) -> float:
+	var y := g0 * s + 0.5 * c * s * s
+	if dc_in != 0.0:
+		y += dc_in * (_ease_h(s) - EASE * EASE / 48.0 - EASE / 8.0 * s)
+	if dc_out != 0.0:
+		y += dc_out * _ease_h(s - L)
+	return y
+
+static func ease_grade(g0: float, c: float, dc_in: float, dc_out: float, s: float) -> float:
+	var g := g0 + c * s
+	if dc_in != 0.0:
+		g += dc_in * (_ease_g(s) - EASE / 8.0)
+	if dc_out != 0.0:
+		g += dc_out * _ease_g(s - L)
+	return g
 
 func curvature(i: int) -> float:
 	if i < 0:
@@ -168,6 +251,12 @@ func _extend_vertical(i: int) -> void:
 			c = (_vseg_target - g) / L
 			_vseg_c = 0.0
 	_vc.append(c)
+	# Eased start of this chunk: half of its own curvature step is behind it.
+	var dc := c - (_vc[i - 1] if i > 0 else 0.0)
+	_dc.append(dc)
+	_h0.append(_h[i] + _lift + dc * EASE * EASE / 48.0)
+	_g0.append(g + dc * EASE / 8.0)
+	_lift += dc * EASE * EASE / 24.0
 	_h.append(_h[i] + g * L + 0.5 * c * L * L)
 	_g.append(g + c * L)
 

@@ -1542,7 +1542,7 @@ static func _new_building(index: int) -> Array:
 ## Returns the building's length along the road (its z size, so the gap
 ## walls can fill what is left between buildings), its type and sign, and
 ## where its front face is.
-static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: float, side: int, chunk_index: int = 0) -> Dictionary:
+static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: float, side: int, chunk_index: int = 0, draws: Array = []) -> Dictionary:
 	var mi: MeshInstance3D = root.get_node(NodePath("BuildingMesh%d" % index))
 	var body: StaticBody3D = root.get_node(NodePath("BuildingBody%d" % index))
 	var col: CollisionShape3D = body.get_node(^"Shape")
@@ -1564,6 +1564,12 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 		w_draw = _lot_rng.randf_range(4.0, 10.0)
 		d_draw = _lot_rng.randf_range(9.0, 18.0)
 		h_old = _lot_rng.randf_range(3.0, 4.5) if is_garage else _lot_rng.randf_range(6.0, 22.0)
+	elif not draws.is_empty():
+		# a staged rebuild took them when it began (_building_draws)
+		is_garage = draws[0]
+		w_draw = draws[1]
+		d_draw = draws[2]
+		h_old = draws[3]
 	else:
 		is_garage = randf() < 0.12
 		w_draw = randf_range(4.0, 10.0)
@@ -2027,8 +2033,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var bt: float = -bz / CHUNK_LEN
 		var own_edge_b: float = lerp(start_own_walk, end_own_walk, bt)
 		var onc_edge_b: float = lerp(start_onc_walk, end_onc_walk, bt)
-		var own_info := _clear_at_junction(root, i * 2, _update_building(root, i * 2, own_edge_b, bz, 1, chunk_index), chunk_index)
-		var onc_info := _clear_at_junction(root, i * 2 + 1, _update_building(root, i * 2 + 1, onc_edge_b, bz, -1, chunk_index), chunk_index)
+		var own_info := _clear_at_junction(root, i * 2, _update_building(root, i * 2, own_edge_b, bz, 1, chunk_index, job.draws[i * 2] if job != null and not job.draws.is_empty() else []), chunk_index)
+		var onc_info := _clear_at_junction(root, i * 2 + 1, _update_building(root, i * 2 + 1, onc_edge_b, bz, -1, chunk_index, job.draws[i * 2 + 1] if job != null and not job.draws.is_empty() else []), chunk_index)
 		infos.append(own_info)
 		infos.append(onc_info)
 		var d_own: float = own_info.d
@@ -2307,8 +2313,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 # sections instead (a coroutine: its locals carry over), which keeps the
 # intent (a recycled chunk costs a slice per frame, not ~3 ms in one frame;
 # parked below and not solid until done) without a second copy of the body.
-# Not carried over: #314 took the global random draws of the buildings up
-# front; here they are still drawn in the buildings stage.
+# As in #314 the global random draws of the buildings are taken when the
+# rebuild begins (_building_draws), so spreading it changes no layout.
 
 ## The stages of a rebuild, in order; one rebuild_step() call runs one.
 const STAGES: Array[String] = ["strips", "pylons", "buildings", "kerbs", "walls", "lamps", "kit", "dashes"]
@@ -2329,6 +2335,8 @@ class RebuildJob extends RefCounted:
 	var curve_k := 0.0
 	var vert := [0.0, 0.0, 0.0, 0.0]
 	var strip_n := 1
+	# the four global random draws of each building slot, taken at rebuild_begin
+	var draws: Array = []
 
 	func keep(k: float, v: Array, n: int) -> void:
 		curve_k = k
@@ -2380,7 +2388,25 @@ static func rebuild_begin(root: Node3D, chunk_index: int, prev_cfg: Dictionary, 
 	job.prev_cfg = prev_cfg
 	job.cfg = cfg
 	job.origin_index = origin_index
+	job.draws = _building_draws()
 	return job
+
+## The global random draws _update_building() would take for every building
+## slot of a chunk, in its order (own side then oncoming, slot by slot), so
+## a rebuild spread over frames, with traffic spawns drawing in between,
+## still lays out the same road for a seed. None on a loop road: its lots
+## come from their own seeded generator.
+static func _building_draws() -> Array:
+	var out := []
+	if RoadMap.is_loop():
+		return out
+	for i in _building_slots() * 2:
+		var is_garage := randf() < 0.12
+		var w_draw := randf_range(4.0, 10.0)
+		var d_draw := randf_range(9.0, 18.0)
+		var h_old := randf_range(3.0, 4.5) if is_garage else randf_range(6.0, 22.0)
+		out.append([is_garage, w_draw, d_draw, h_old])
+	return out
 
 ## True while a staged rebuild of this chunk is in flight.
 static func is_rebuilding(root: Node3D) -> bool:

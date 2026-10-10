@@ -151,6 +151,8 @@ if /i not "%~1"=="quick" (
 	rem Traffic (stage B step 3) at the game's 120 Hz tick: ~1 min of dense traffic, then the perf sweep.
 	call :run traffic/traffic_stability "--headless --fixed-fps 120"
 	call :run traffic/traffic_behaviour "--headless --fixed-fps 120"
+	rem ~50 s: staggered traffic controller (every 2nd tick, cars alternate) and hidden cars skip wheel visuals.
+	call :run traffic/ai_stagger "--headless --fixed-fps 120"
 	rem ~70 s: City lights, the signalised crossing (J0/J1a): red queue, amber, 1 a.m. flash.
 	call :run world/junction_lights "--headless --fixed-fps 120"
 	call :run traffic/traffic_perf "--headless --fixed-fps 120"

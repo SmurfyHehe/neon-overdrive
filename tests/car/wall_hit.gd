@@ -20,11 +20,20 @@ extends SceneTree
 # scenario:
 # - the car reached the wall (it is a real test of a hit)
 # - it never goes through the wall
-# - it stays near upright (tilt under MAX_TILT; main reached 120 deg)
-# - it gains no speed from the wall: after contact |v| never jumps by more
-#   than MAX_KICK in one tick (full throttle is ~0.05 m/s per tick)
-# - it ends the run back on its wheels: over the last END_SECS it stays under
-#   END_TILT and has at least three wheels on the ground at some tick (parked
+# - it stays near upright (peak tilt under MAX_TILT; main reached 120 deg)
+# - it gains no speed from the wall: after contact |v| never jumps up by more
+#   than MAX_KICK in one tick (full throttle is ~0.05 m/s per tick). The wall
+#   bounces (CarSpec.WALL_BOUNCE): a head-on hit stops the car in one tick and
+#   it leaves at that fraction of its approach speed, so for IMPACT_SECS after
+#   first contact the rebound is allowed on top (0.1 x 33 m/s is 3.3 m/s of
+#   |v| that was not there the tick before; seen as "gained 1.6 m/s" on some
+#   road draws).
+# - it ends the run back on its wheels: for END_SECS it stays under
+#   END_TILT and has at least three wheels on the ground at some tick, in the
+#   run's last END_SECS or, if the car was still settling then (a hard scrape
+#   can send it across the whole road into the far wall at the 4 s mark, 35 m/s
+#   at 10 deg on some road draws), in the first such stretch before RUN_MAX_SECS
+#   (parked
 #   against the wall, one wheel can hang over the 0.5 m gap between the
 #   sidewalk and the wall; still at full throttle it can be hopping the curb on
 #   any single tick), so the player drives off without a reset
@@ -37,11 +46,22 @@ const Harness := preload("res://tests/traffic/traffic_harness.gd")
 const SPEEDS := [8.0, 20.0, 35.0, 55.0]  # m/s (29 to 198 km/h)
 const ANGLES := [10.0, 30.0, 60.0, 89.0]  # degrees toward the wall
 const RUN_SECS := 4.0
+const RUN_MAX_SECS := 8.0  # the run goes on this long while the car is not yet upright
 const START_GAP := 4.6  # m from the wall: on the shoulder, clear of the curb and sidewalk
-const MAX_TILT := 30.0  # degrees from upright (all scenarios peak under 13 now)
-const MAX_KICK := 1.5  # m/s in one tick
+## Peak tilt, degrees from upright. It was 30 when every scenario peaked under
+## 13. Since the per-station wall boxes and the kerb ramp (#37) the hardest
+## scenarios peak at 20 to 35 on some road draws (issue #265): at 55 m/s and
+## 60 deg the car takes the kerb at 53 m/s, hits the wall, is thrown 1.2 m up,
+## lands and spins at 2.5 rad/s with the tyres gripping sideways, and rolls to
+## 33 deg before righting itself (seed 8, tests/car/wall_hit.gd log). That is
+## the car's physics, not a wall seam, and the end-of-run check below still
+## catches a car that stays tipped. 45 leaves room above what was seen and sits
+## far below the 120 deg a car on its roof reaches.
+const MAX_TILT := 45.0
+const MAX_KICK := 1.5  # m/s in one tick, beyond what the wall's rebound explains
+const IMPACT_SECS := 0.1  # after first contact, while the rebound may show up
 const END_TILT := 15.0  # degrees: back on its wheels at the end
-const END_SECS := 0.5  # the end check covers this last stretch of the run
+const END_SECS := 0.5  # the end check covers this stretch of the run
 
 var rate := 120
 var logger := Harness.ErrorCounter.new()
@@ -56,6 +76,11 @@ var run_tick := 0
 var rest_y := 0.0
 var wall_x := 0.0
 var prev_speed := 0.0
+var entry_speed := 0.0  # |v| on the last tick before contact
+var hit_tick := 0       # run_tick of the first contact
+var calm_from := 0      # run_tick the current upright stretch began
+var calm_wheels := 0    # most wheels down at one tick of that stretch
+var calm_tilt := 0.0    # worst tilt of that stretch
 var s := {}
 
 func _initialize() -> void:
@@ -111,6 +136,10 @@ func _start(p: PlayerCar) -> void:
 	p.reset_physics_interpolation()
 	run_tick = 0
 	prev_speed = v
+	entry_speed = v
+	calm_from = 0
+	calm_wheels = 0
+	calm_tilt = 0.0
 	s = {"speed": v, "angle": a, "hit": false, "through": false, "tilt": 0.0, "kick": 0.0,
 		"end_tilt": 0.0, "end_wheels": 0, "finite": true}
 	# end_tilt is the worst and end_wheels the most over the last END_SECS
@@ -142,22 +171,44 @@ func _physics_process(_delta: float) -> bool:
 		var reach := 0.8 * absf(b.x.x) + 1.7 * absf(b.z.x)
 		var speed := p.linear_velocity.length()
 		if s.hit:
-			s.kick = maxf(s.kick, speed - prev_speed)
+			var rebound := CarSpec.WALL_BOUNCE * entry_speed if run_tick - hit_tick <= int(IMPACT_SECS * rate) else 0.0
+			s.kick = maxf(s.kick, speed - prev_speed - rebound)
 		elif p.global_position.x + reach >= wall_x - 0.05:
 			s.hit = true
+			entry_speed = prev_speed
+			hit_tick = run_tick
 		prev_speed = speed
 		if p.global_position.x > wall_x + 0.5:
 			s.through = true
 		if log_ticks:
 			print("  %s t=%.2f x=%.2f wall=%.2f y=%.2f tilt=%.0f v=%.1f vx=%.1f vy=%.1f w=(%.1f %.1f %.1f)" % ["H" if s.hit else "-", run_tick / float(rate), p.global_position.x, wall_x, p.global_position.y, tilt, speed, p.linear_velocity.x, p.linear_velocity.y, p.angular_velocity.x, p.angular_velocity.y, p.angular_velocity.z])
-	if s.finite and run_tick > int((RUN_SECS - END_SECS) * rate):
-		s.end_tilt = maxf(s.end_tilt, rad_to_deg(p.global_transform.basis.y.angle_to(Vector3.UP)))
-		var down := 0
-		for w in p.wheel_array:
-			if (w as Wheel).is_colliding():
-				down += 1
-		s.end_wheels = maxi(s.end_wheels, down)
-	if run_tick >= int(RUN_SECS * rate) or not s.finite:
+	var done: bool = not s.finite
+	if s.finite:
+		# the upright stretch: restarts whenever the car tips past END_TILT
+		var up := rad_to_deg(p.global_transform.basis.y.angle_to(Vector3.UP))
+		if up > END_TILT:
+			calm_from = run_tick
+			calm_wheels = 0
+			calm_tilt = 0.0
+			s.end_tilt = up
+		else:
+			calm_tilt = maxf(calm_tilt, up)
+			var down := 0
+			for w in p.wheel_array:
+				if (w as Wheel).is_colliding():
+					down += 1
+			calm_wheels = maxi(calm_wheels, down)
+		var stretch := run_tick - calm_from
+		if run_tick >= int(RUN_SECS * rate) and stretch >= int(END_SECS * rate) and calm_wheels >= 3:
+			s.end_tilt = calm_tilt
+			s.end_wheels = calm_wheels
+			done = true
+		elif run_tick >= int(RUN_MAX_SECS * rate) or (run_tick >= int(RUN_SECS * rate) and stretch >= int(END_SECS * rate)):
+			# out of time, or upright for a while but never on three wheels
+			s.end_tilt = maxf(calm_tilt, s.end_tilt) if stretch >= int(END_SECS * rate) else s.end_tilt
+			s.end_wheels = calm_wheels
+			done = true
+	if done:
 		_report()
 		index += 1
 		if index >= scenarios.size():
@@ -177,7 +228,7 @@ func _report() -> void:
 	if s.tilt > MAX_TILT:
 		bad.append("rolled to %.0f deg" % s.tilt)
 	if s.kick > MAX_KICK:
-		bad.append("gained %.1f m/s in one tick" % s.kick)
+		bad.append("gained %.1f m/s in one tick beyond the wall's rebound" % s.kick)
 	if s.end_tilt > END_TILT or s.end_wheels < 3:
 		bad.append("not back on its wheels (tilt %.0f deg, %d wheels down)" % [s.end_tilt, s.end_wheels])
 	print("%s: peak tilt %5.1f deg, biggest one-tick speed gain %4.2f m/s, end tilt %4.1f deg, %d wheels down  %s" % [name, s.tilt, s.kick, s.end_tilt, s.end_wheels, "ok" if bad.is_empty() else "FAIL " + ", ".join(bad)])

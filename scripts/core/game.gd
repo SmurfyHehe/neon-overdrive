@@ -114,8 +114,15 @@ func _ready() -> void:
 		TrafficSettings.set_car_count(int(traffic_env))
 	if OS.get_environment("NEON_MUTE") == "1":
 		AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), true)
+	# NEON_RNG_SEED=<n> fixes the global random stream (traffic spawns, junction
+	# phases, garage rolls in the chunk builder). Tests set it through
+	# Harness.boot so a failure can be rerun on the same draws; randomize()
+	# below used to throw away the seed the test had just set.
+	var rng_env := OS.get_environment("NEON_RNG_SEED")
 	if benchmark:
 		seed(Benchmark.SEED)
+	elif rng_env.is_valid_int():
+		seed(int(rng_env))
 	else:
 		randomize()
 	saver = SaveDirector.new(self)

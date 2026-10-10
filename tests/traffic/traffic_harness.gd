@@ -32,7 +32,13 @@ const SETTINGS_PATH := "user://traffic_test_settings.cfg"
 ## TrafficManager (lanes used etc.) before set_car_count() when the test needs
 ## control over the initial placement.
 static func boot(tree: SceneTree, car_count: int, detail: float, seed_value: int, recenter: float = 0.0) -> Node:
+	# NEON_TEST_SEED=<n> reruns any harness test on another seed.
+	var seed_env := OS.get_environment("NEON_TEST_SEED")
+	if seed_env.is_valid_int():
+		seed_value = int(seed_env)
 	seed(seed_value)
+	# Game._ready would randomize() over the seed above; this keeps it.
+	OS.set_environment("NEON_RNG_SEED", str(seed_value))
 	OS.set_environment("NEON_TRAFFIC", "")  # run_tests.bat sets 0 for the other tests
 	AudioSettings.path = SETTINGS_PATH
 	TrafficSettings.set_car_count(car_count)

@@ -59,6 +59,12 @@ func _check(chunk: Node3D, prev_cfg: Dictionary, cfg: Dictionary) -> void:
 			]:
 				var x: float = probe[0] * side
 				var q := PhysicsRayQueryParameters3D.create(Vector3(x, 5.0, z), Vector3(x, -1.0, z))
+				# Only the sidewalk collision's own layer: a garage (3 to 4.5 m,
+				# under the ray's start) whose front reaches over the sidewalk's
+				# wide end was hit first on about 1 build in 100 and read as
+				# "no Dirt" (CI, 2026-10-10: 2->4 side 1 t=0.98 x=16.87). Where
+				# buildings stand is not what this test measures.
+				q.collision_mask = 1 << (CarSpec.KERB_LAYER - 1)
 				var hit := space.intersect_ray(q)
 				var is_dirt: bool = not hit.is_empty() and (hit.collider as Node).is_in_group("Dirt")
 				checks += 1

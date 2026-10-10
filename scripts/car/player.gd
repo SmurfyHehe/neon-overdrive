@@ -529,6 +529,7 @@ const WALL_MAX_TILT := deg_to_rad(25.0)
 
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	super(state)
+	_barrier_contacts(state)
 	if _touching_wall(state):
 		var b := state.transform.basis
 		var w := state.angular_velocity
@@ -545,6 +546,26 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 			if r < -limit:
 				tip += axis * (-limit - r)
 		state.angular_velocity = yaw + tip
+
+## Median barriers (R1, RoadBarriers): what each type does beyond its surface
+## material. The cable drags the car down while it is against it; a guardrail
+## dents and a crash cushion crumples where they are hit. One drag per body
+## per step, however many of its pieces touch.
+## The contacts here come from the last step's solve, so the velocity has
+## already lost the hit; how hard it was is read from the velocity one step
+## earlier (_barrier_prev_v).
+var _barrier_prev_v := Vector3.ZERO
+
+func _barrier_contacts(state: PhysicsDirectBodyState3D) -> void:
+	var seen := {}
+	var before := _barrier_prev_v
+	for i in state.get_contact_count():
+		var other := state.get_contact_collider_object(i) as CollisionObject3D
+		if other == null or not other.has_meta("barrier") or seen.has(other):
+			continue
+		seen[other] = true
+		state.linear_velocity += RoadBarriers.contact_effect(other, state.get_contact_collider_shape(i), state.transform.origin, state.linear_velocity, before, state.step)
+	_barrier_prev_v = state.linear_velocity
 
 func _touching_wall(state: PhysicsDirectBodyState3D) -> bool:
 	var wall_bit := 1 << (CarSpec.WALL_LAYER - 1)

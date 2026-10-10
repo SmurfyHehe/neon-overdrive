@@ -494,6 +494,12 @@ static func _get_wall_mat() -> StandardMaterial3D:
 
 ## Distance from the centre line to the road edge on a side with `lanes` lanes:
 ## the median gap plus the lanes. (The name is older than the gap.)
+static func _barrier_kind(cfg: Dictionary) -> String:
+	var b: Variant = cfg.get("barrier", false)
+	if b is bool:
+		return RoadBarriers.CONCRETE if b else RoadBarriers.NONE
+	return String(b)
+
 static func _lane_w(lanes: int) -> float:
 	return MEDIAN_GAP + float(lanes) * LANE_W
 
@@ -1261,12 +1267,17 @@ static func _create_nodes(root: Node3D) -> void:
 	# The centre barrier, one piece per station so it can follow a bend (#37).
 	# Its reflectors are a child with one piece per station too, placed with
 	# the same transforms, so they show and bend with it.
+	# R1 (RoadBarriers): its mesh is swapped per barrier type, the reflectors
+	# have two more slots for the crash cushions at a crossover, and the
+	# barrier and cushions are real collision.
 	var barrier_mmi := _new_multimesh("Barrier", _get_barrier_mesh(), _get_barrier_mat(), STATIONS)
-	var refl := _new_multimesh("Reflectors", _get_reflector_mesh(), null, STATIONS)
+	var refl := _new_multimesh("Reflectors", _get_reflector_mesh(), null, STATIONS + 2)
 	refl.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	refl.extra_cull_margin = 1.0
 	barrier_mmi.add_child(refl)
 	root.add_child(barrier_mmi)
+	root.add_child(_new_multimesh("Cushions", RoadBarriers.cushion_mesh(), null, 2))
+	RoadBarriers.new_bodies(root)
 
 	for i in range(_building_slots() * 2):
 		for n in _new_building(i):
@@ -1304,10 +1315,15 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 
 	var own_lanes: int = clampi(int(cfg.own_lanes), 1, MAX_OWN_LANES)
 	var onc_lanes: int = clampi(int(cfg.onc_lanes), 1, MAX_ONC_LANES)
+	# cfg.barrier: a RoadBarriers type ("" for none), or the old bool (true
+	# = concrete). cfg.gap: this chunk holds its district's crossover.
 	# City lights (Junction, J0): no centre barrier on a chunk the crossing
 	# touches. Read here, not rolled in game.gd's _section_at, so the road
 	# layout's random sequence is the same with the switch on or off.
-	var barrier: bool = cfg.barrier and not Junction.touches(chunk_index)
+	var barrier_kind := _barrier_kind(cfg)
+	if Junction.touches(chunk_index):
+		barrier_kind = RoadBarriers.NONE
+	var barrier := barrier_kind != RoadBarriers.NONE
 	var start_own_w := _lane_w(prev_cfg.own_lanes)
 	var end_own_w := _lane_w(own_lanes)
 	var start_onc_w := _lane_w(prev_cfg.onc_lanes)
@@ -1469,16 +1485,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# buffer always exist; only one of them is shown.
 	var slots := _dash_slots()
 	var center: MultiMesh = (root.get_node(^"CenterDashes") as MultiMeshInstance3D).multimesh
-	var barrier_mmi := root.get_node(^"Barrier") as MultiMeshInstance3D
-	var refl_mm: MultiMesh = (barrier_mmi.get_node(^"Reflectors") as MultiMeshInstance3D).multimesh
-	var seg := CHUNK_LEN / STATIONS
-	for k in STATIONS:
-		var bxf := _xf(0.0, BARRIER_Y, -seg * (float(k) + 0.5))
-		barrier_mmi.multimesh.set_instance_transform(k, bxf)
-		refl_mm.set_instance_transform(k, bxf)
-	barrier_mmi.multimesh.visible_instance_count = STATIONS
-	refl_mm.visible_instance_count = STATIONS
-	barrier_mmi.visible = barrier
+	RoadBarriers.apply(root, chunk_index, barrier_kind, bool(cfg.get("gap", false)))
 	if barrier:
 		center.visible_instance_count = 0
 	else:

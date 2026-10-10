@@ -45,6 +45,9 @@ class ErrorCounter extends Logger:
 const C := preload("res://scripts/view/chase_camera.gd")
 const MAX_TICKS := 60 * 90
 
+## Game.PLAYER_SPAWN_LANE (game.gd has no class_name to read it through).
+const SPAWN_LANE := 1
+
 var logger := ErrorCounter.new()
 var fails := 0
 var game: Node
@@ -112,8 +115,11 @@ func _sidewalk_x(p: PlayerCar) -> float:
 	return RoadChunkBuilder._lane_w(cfg.own_lanes) + RoadChunkBuilder.SHOULDER_W + RoadChunkBuilder.CURB_W + RoadChunkBuilder.SIDEWALK_W / 2.0
 
 ## Holds the heading down the road toward lateral position aim_x, like
-## chunk_drive.gd's bot (which is aim_x = 0, max_term = 0.05).
-func _hold_heading(p: PlayerCar, aim_x: float = 0.0, max_term: float = 0.05) -> void:
+## chunk_drive.gd's bot. Default aim is the player's spawn lane: x = 0 is the
+## median, a solid barrier since R1 (RoadBarriers).
+func _hold_heading(p: PlayerCar, aim_x: float = NAN, max_term: float = 0.05) -> void:
+	if is_nan(aim_x):
+		aim_x = TrafficManager.lane_centre(SPAWN_LANE, false)
 	var err: float = p.global_rotation.y + clampf((aim_x - p.global_position.x) * 0.02, -max_term, max_term)
 	_press(KEY_A, err < -0.02)
 	_press(KEY_D, err > 0.02)
@@ -237,7 +243,7 @@ func _physics_process(_delta: float) -> bool:
 				col.shape = box
 				wall.add_child(col)
 				game.add_child(wall)
-				wall.global_position = Vector3(0.0, 1.5, p.global_position.z - 30.0)
+				wall.global_position = Vector3(p.global_position.x, 1.5, p.global_position.z - 30.0)
 			if game.has_node("TestWall"):
 				wall_hit_trauma = maxf(wall_hit_trauma, cam.trauma)
 				if cam.trauma > 0.3 and not shake_seen:

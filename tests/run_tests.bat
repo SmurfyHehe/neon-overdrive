@@ -159,6 +159,8 @@ call :run world/road_frame --headless
 call :run world/road_centerline --headless
 call :run world/road_alignment --headless
 call :run world/road_layout --headless
+rem ~1 min: the median barriers (R1): each type at 9 speeds and angles, crash cushions head-on, crossover rules.
+call :run world/barrier_hit "--headless --fixed-fps 120"
 if /i not "%~1"=="quick" (
 	rem Headless, but ~2 min of simulated driving; --fixed-fps lets physics run faster than the clock.
 	call :run tuning/tune_track "--headless --fixed-fps 60"

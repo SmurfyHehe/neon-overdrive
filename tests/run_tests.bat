@@ -156,6 +156,8 @@ if /i not "%~1"=="quick" (
 	call :run traffic/traffic_perf "--headless --fixed-fps 120"
 	call :run world/curve_drive "--headless --fixed-fps 120"
 	call :run world/hill_drive "--headless --fixed-fps 120"
+	rem ~4 min: 10 km of the default hilly, bending road at 120 and 200 km/h, watching the springs for bumps.
+	call :run world/hill_bumps "--headless --fixed-fps 120"
 	call :run world/hill_park "--headless --fixed-fps 60"
 	rem ~8 s: brake + throttle from a stop holds the fronts only (line lock burnout).
 	call :run car/burnout_line_lock "--headless --fixed-fps 120"

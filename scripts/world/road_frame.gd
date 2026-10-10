@@ -73,13 +73,18 @@ static func curvature(i: int) -> float:
 	return 0.0 if align == null else align.curvature(i)
 
 ## Grade at the start of chunk i (rise per metre) and its vertical curvature
-## (1/m, + = sag): the chunk's surface is start_grade s + vcurve s^2 / 2
-## above its start. 0 on a flat road.
+## (1/m, + = sag): the middle of the chunk's surface is start_grade s +
+## vcurve s^2 / 2 above its start, and the curvature eases to the next
+## chunk's over RoadAlignment.EASE metres around each join (vstep(i) is the
+## change going into chunk i). 0 on a flat road.
 static func start_grade(i: int) -> float:
 	return 0.0 if align == null else align.start_grade(i)
 
 static func vcurve(i: int) -> float:
 	return 0.0 if align == null else align.vcurve(i)
+
+static func vstep(i: int) -> float:
+	return 0.0 if align == null else align.vstep(i)
 
 ## Whether the road leaves y = 0 anywhere (the flat ground plane is not
 ## enough then; every chunk carries its own road collision).
@@ -88,7 +93,7 @@ static func has_hills() -> bool:
 
 ## Height of the road surface above the start of chunk i, s metres into it.
 static func _rise(i: int, s: float) -> float:
-	return start_grade(i) * s + 0.5 * vcurve(i) * s * s
+	return 0.0 if align == null else align.rise(i, s)
 
 ## chunk_xf(i).affine_inverse(), cached (perf, 2026-10-08): unroll() runs
 ## about a hundred times a physics tick (traffic, the chunk pool, the camera)

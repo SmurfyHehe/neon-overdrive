@@ -374,7 +374,10 @@ static func is_freeway(chunk_index: int) -> bool:
 	var lay: RoadLayout = RoadFrame.layout
 	if lay == null:
 		return false
-	return lay.district_at((float(chunk_index) + 0.5) * RoadChunkBuilder.CHUNK_LEN) == "outskirts"
+	# On a loop the same chunk every lap (and never a negative distance, which
+	# the layout reads as its first city): buildings stood 0.8 m further out a
+	# lap later where only the later lap fell in the outskirts.
+	return lay.district_at((float(RoadMap.lap_chunk(chunk_index)) + 0.5) * RoadChunkBuilder.CHUNK_LEN) == "outskirts"
 
 static func walk_at(chunk_index: int) -> float:
 	return float(cross_at(chunk_index).walk)

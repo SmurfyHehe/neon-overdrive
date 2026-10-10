@@ -1,6 +1,6 @@
 extends RefCounted
 
-# Test mode: true when a script under res://tests/ is the thing running
+# Test mode: true when a script under res://tests/ or res://tools/ is the thing running
 # (`godot -s res://tests/foo.gd`, which is how tests/run_tests.bat starts every
 # test), or when NEON_TEST=1 is set. In test mode the game's own save files
 # move to test_* names, so a test that boots Game.tscn can never write over
@@ -15,7 +15,9 @@ static func active() -> bool:
 	if OS.get_environment("NEON_TEST") == "1":
 		return true
 	for a in OS.get_cmdline_args():
-		if a.begins_with("res://tests/"):
+		# tools/ too (2026-10-10): a screenshot tool that booted Game.tscn
+		# outside test mode resumed Roy's real run and autosaved over it
+		if a.begins_with("res://tests/") or a.begins_with("res://tools/"):
 			return true
 	return false
 

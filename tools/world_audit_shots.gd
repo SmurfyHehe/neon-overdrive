@@ -32,6 +32,7 @@ var chunks: Array = []
 var step := 0
 var out_dir := ""
 var sheets: Array = []
+var hud_hidden := false
 
 func _initialize() -> void:
 	OS.set_environment("NEON_COCKPIT", "0")
@@ -56,9 +57,6 @@ func _initialize() -> void:
 			chunks.append(first + k * stepn)
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	game = Harness.boot(self, 0, 300.0, 7)
-	for c in game.get_children():
-		if c is CanvasLayer:
-			c.visible = false  # no HUD over the shots
 	cam = Camera3D.new()
 	cam.fov = 80.0
 	cam.far = 1500.0
@@ -89,6 +87,10 @@ func _process(_delta: float) -> bool:
 		cam.global_transform = t
 		cam.current = true
 		return false
+	if not hud_hidden:
+		_hide_hud(root)
+		hud_hidden = true
+		return false
 	var img := root.get_viewport().get_texture().get_image()
 	var name := "%s_chunk%03d_%s" % [Districts.name_at(ci), ci, look[3]]
 	img.save_png(out_dir.path_join(name + ".png"))
@@ -113,3 +115,10 @@ func _sheet() -> void:
 		sheet.blit_rect(im, Rect2i(0, 0, w, h), Vector2i((i % cols) * w, (i / cols) * h))
 	sheet.save_png(out_dir.path_join("sheet.png"))
 	print("sheet: ", sheets.size(), " shots")
+
+## No HUD over the shots: every CanvasLayer in the tree goes dark.
+func _hide_hud(n: Node) -> void:
+	if n is CanvasLayer:
+		(n as CanvasLayer).visible = false
+	for c in n.get_children():
+		_hide_hud(c)

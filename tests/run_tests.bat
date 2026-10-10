@@ -158,6 +158,8 @@ call :run core/run_end "--headless --fixed-fps 120"
 call :run core/run_end_restart "--headless --fixed-fps 120"
 rem Test build sandbox: free money and fuel, no run-ending, parked start, X start, put back on the road.
 call :run core/test_build_sandbox "--headless --fixed-fps 120"
+rem The key: X starts the engine and switches it off; starter, catch and shutdown sounds.
+call :run car/engine_key "--headless --fixed-fps 120"
 rem Delete a save: the store, and the title's Load > Delete a save with its question.
 call :run core/save_delete --headless
 rem Test build: every player car with everything its mod tree offers fitted.

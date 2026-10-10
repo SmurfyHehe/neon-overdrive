@@ -504,8 +504,19 @@ func apply_keys(k: int) -> void:
 	if Input.is_action_just_pressed("high_beam"):
 		toggle_high_beam()
 	clutch_input = 1.0 if k & KEY_CLUTCH else 0.0
-	starter_input = k & KEY_STARTER != 0
+	# X: starts a stopped engine, switches a running one off (key_off). The
+	# press that switched it off is spent: it cranks again only once X has
+	# been let go and pressed anew.
+	var x_down := k & KEY_STARTER != 0
+	if x_down and not _x_held and engine_running and key_off():
+		_x_spent = true
+	elif not x_down:
+		_x_spent = false
+	_x_held = x_down
+	starter_input = x_down and not _x_spent
 	if starter_input and not engine_running:
+		if _crank_left <= 0.0:
+			_begin_crank()
 		_crank_left = CRANK_LATCH_S
 	var throttle := k & KEY_ACCEL != 0
 	var braking := k & KEY_BRAKE != 0
@@ -632,6 +643,32 @@ func set_transmission_mode(mode: int) -> void:
 ## tick the engine runs. A tap of X is enough: the starter stays in for
 ## CRANK_LATCH_S or until it fires.
 const CRANK_LATCH_S := 2.5
+## X with the engine running switches it off, but only below this speed (m/s,
+## about 7 km/h). Faster than that the press does nothing.
+const ENGINE_OFF_MAX_SPEED := 2.0
+## A start with the key turns the engine over for a while before it fires:
+## this long on a warm engine, this long on a cold one (a four-cylinder; a
+## bigger engine turns slower, see StarterAudio.pace), give or take
+## CRANK_SPREAD. GEVP's own starter would have it running in a few ticks.
+const CRANK_WARM_S := 0.6
+const CRANK_COLD_S := 1.25
+const CRANK_SPREAD := 0.12
+## What the starter turns the engine at (a four-cylinder), under STARTER_RPM.
+const CRANK_RPM := 230.0
+## Seconds of running that warm a cold engine through, and of standing
+## switched off that let it go cold again.
+const WARM_UP_S := 25.0
+const COOL_DOWN_S := 120.0
+## The revs the engine flares to as it catches, over idle.
+const START_FLARE := 1.45
+## How many times the key has switched the engine off, and how long the last
+## key start cranked for (StarterAudio, tests).
+var key_offs := 0
+var crank_hold := 0.0
+var _crank_hold_left := 0.0
+var _warmth := 0.0
+var _x_held := false
+var _x_spent := false
 ## Test build: what ModTree.build fitted to this car ({} when nothing was).
 var mod_build := {}
 var _ignition_mode := -1
@@ -655,8 +692,36 @@ func ignition_off() -> void:
 	throttle_amount = 0.0
 	clutch_pedal = 0.0
 	_crank_left = 0.0
+	_crank_hold_left = 0.0
 	if auto_box != null:
 		auto_box.reset()
+
+## X on a running engine: switches it off, as ignition_off() does, but the
+## engine spins down by its own drag (the tach falls, StarterAudio plays the
+## shutdown). False, and nothing happens, above ENGINE_OFF_MAX_SPEED. Radio and
+## lights are not the engine's: they stay as they are.
+func key_off() -> bool:
+	if not engine_running or linear_velocity.length() > ENGINE_OFF_MAX_SPEED:
+		return false
+	var rpm := motor_rpm
+	ignition_off()
+	motor_rpm = rpm
+	boost = 0.0
+	key_offs += 1
+	return true
+
+## 0 on an engine that has run a while, 1 on one that has not run yet or has
+## stood switched off: a cold one cranks for longer.
+func coldness() -> float:
+	return 1.0 - _warmth
+
+func crank_pace() -> float:
+	return StarterAudio.pace(int((spec.get("engine_voice", {}) as Dictionary).get("cylinders", 4)))
+
+## A key start begins: picks how long it turns over before it fires.
+func _begin_crank() -> void:
+	crank_hold = lerpf(CRANK_WARM_S, CRANK_COLD_S, coldness()) / crank_pace() * randf_range(1.0 - CRANK_SPREAD, 1.0 + CRANK_SPREAD)
+	_crank_hold_left = crank_hold
 
 ## Runs the engine at once, in the box that was picked (no cranking).
 func ignition_on() -> void:
@@ -669,18 +734,32 @@ func ignition_on() -> void:
 ## Each tick, before the sim: holds the starter in after a tap, and hands the
 ## car back to its own box once the engine has caught.
 func _step_ignition(delta: float) -> void:
+	_warmth = clampf(_warmth + (delta / WARM_UP_S if engine_running else -delta / COOL_DOWN_S), 0.0, 1.0)
 	if engine_running:
 		_crank_left = 0.0
+		_crank_hold_left = 0.0
 		if _ignition_mode >= 0:
 			var mode := _ignition_mode
 			_ignition_mode = -1
 			set_transmission_mode(mode)
 			if mode == Transmission.MANUAL:
 				current_gear = 0  # in gear with the pedal up it would stall at once
+			motor_rpm = maxf(motor_rpm, idle_rpm * START_FLARE)
 		return
 	if _crank_left > 0.0:
 		_crank_left -= delta
 		starter_input = true
+	if _crank_hold_left > 0.0:
+		# A key start: turning over, not yet firing. Held under STARTER_RPM
+		# until the time is up, then let through it.
+		if not starter_input:
+			_crank_hold_left = 0.0
+		else:
+			_crank_hold_left -= delta
+			if _crank_hold_left > 0.0:
+				motor_rpm = minf(motor_rpm, CRANK_RPM * crank_pace())
+			else:
+				motor_rpm = maxf(motor_rpm, STARTER_RPM + 30.0)
 	if _ignition_mode >= 0:
 		handbrake_input = 1.0  # parked: it does not roll off down a hill
 

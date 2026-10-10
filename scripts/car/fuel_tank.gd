@@ -19,6 +19,7 @@ extends RefCounted
 # The state is one number so a stop or the garage can save it later.
 
 const TestMode := preload("res://scripts/core/test_mode.gd")
+const TestBuild := preload("res://scripts/core/test_build.gd")
 
 const CAPACITY_L := 50.0
 const START_FRACTION := 1.0 / 3.0
@@ -68,6 +69,8 @@ func refuel(bank: Object, max_litres := INF) -> float:
 	var room := minf(CAPACITY_L - litres, max_litres)
 	var want := int(ceil(room - 0.001))
 	var can := floori(float(bank.get("bank")) / PRICE_PER_LITRE) if PRICE_PER_LITRE > 0 else want
+	if TestBuild.on():
+		can = want  # sandbox: the pump always fills, whatever the bank holds
 	var buy := clampi(mini(want, can), 0, want)
 	if buy <= 0 or not bank.call("spend_bank", buy * PRICE_PER_LITRE):
 		return 0.0

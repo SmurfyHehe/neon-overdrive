@@ -49,6 +49,7 @@ class_name TrafficManager
 # crashed one stays crashed.
 
 const LANE_W := RoadChunkBuilder.LANE_W
+const Weather := preload("res://scripts/world/weather.gd")
 
 var player: Node3D
 var own_lanes := 4
@@ -486,7 +487,10 @@ func _respawn(car: TrafficCar) -> void:
 	if breaker:
 		rule_breaker_spawns += 1
 	car.set_detailed(absf(slot.dist) <= minf(physics_distance, detail_distance))
-	car.place(slot.lane_x, slot.direction, slot.z, car.rest_y, slot.speed)
+	# In the wet a car arrives already at its wet speed, on wet tyres
+	# (weather.gd, wet_grip.gd): spawning is not a change anyone feels.
+	car.place(slot.lane_x, slot.direction, slot.z, car.rest_y, slot.speed * Weather.ai_speed_factor())
+	car.wet.settle()
 	car.set_shown(absf(slot.dist) <= reveal_distance())
 	_put(car)
 	if car.visible and event_hook.is_valid():

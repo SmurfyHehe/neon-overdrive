@@ -102,6 +102,9 @@ var health := PowertrainHealth.new()
 ## Fuel and limp mode (Stage C). Off for sim_only cars, like health.
 var fuel := FuelTank.new()
 var limp := LimpMode.new()
+## Rain and puddles on each tyre (wet_grip.gd), applied over health's grip.
+var wet := WetGrip.new()
+const WetGrip := preload("res://scripts/car/wet_grip.gd")
 ## Broken parts (Stage C damage, slice 1). Off for sim_only cars, like health.
 var damage := CarDamage.new()
 var _head_share := 1.0
@@ -335,6 +338,10 @@ func _physics_process(delta: float) -> void:
 	_apply_lamp_damage()
 	_light_reflectors()
 	health.step(self, delta)
+	# Water after health: health rewrites grip_mult every tick.
+	if wet.step(self, delta):
+		wet.write_over(self)
+		wet.apply_drag(self)
 	fuel.step_values(delta, health.engine_load if health.enabled else throttle_amount, engine_running)
 	if limp.is_limping():
 		torque_mult = limp.torque_mult(health.torque_mult)

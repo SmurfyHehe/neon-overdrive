@@ -69,6 +69,7 @@ var police: PolicePatrol     # the stand-in patrol car; null with NEON_POLICE=0 
 var heat_icons: HeatIcons
 const TestMode := preload("res://scripts/core/test_mode.gd")
 var rescue: OffMapRescue  # off-map rescue (off_map_rescue.gd)
+const Weather := preload("res://scripts/world/weather.gd")
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
 # Save system (run structure, 2026-10-09): auto-save into one of 3 slots, and a
@@ -536,6 +537,7 @@ func _physics_process(_delta: float) -> void:
 		var t0 := Time.get_ticks_usec()
 		_shift_origin(int(floor(-z / RoadChunkBuilder.CHUNK_LEN)))
 		recenter_us_max = maxi(recenter_us_max, Time.get_ticks_usec() - t0)
+	Weather.step(_delta)  # before the cars: they read this tick's wetness
 	if Input.is_action_just_pressed("mute"):
 		toggle_mute()
 	if Input.is_action_just_pressed("radio_next") and radio != null:
@@ -720,6 +722,8 @@ func _setup_game_state() -> void:
 		moments.announce = radio.announce
 	world_mood = WorldMood.new()
 	add_child(world_mood)
+	_start_weather()
+	night_clock.night_ended.connect(func(_n: int) -> void: _roll_weather())
 	world_mood.event_started.connect(_on_event)
 	if OS.get_environment("NEON_CRACKDOWN") == "1":
 		world_mood.start_crackdown(night_clock.minutes)
@@ -768,6 +772,24 @@ func wrecks_on() -> bool:
 	if Benchmark.requested() or env == "0":
 		return false
 	return not TestMode.active() or env == "1"
+
+## Tonight's weather (weather.gd): NEON_WEATHER pins it; otherwise the
+## benchmark and tests stay dry, so their numbers keep matching earlier runs,
+## and a real run rolls it (Weather.ROLL_ON) and starts already wet (it was
+## raining before you got in the car).
+func _start_weather() -> void:
+	var pinned := Weather.env_level()
+	if pinned >= 0:
+		Weather.set_level(pinned, true)
+	elif Benchmark.requested() or TestMode.active() or not Weather.ROLL_ON:
+		Weather.reset()
+	else:
+		Weather.set_level(Weather.roll(randf()), true)
+
+## A new night may bring different weather; the road wets or dries gradually.
+func _roll_weather() -> void:
+	if Weather.ROLL_ON and Weather.env_level() < 0 and not Benchmark.requested() and not TestMode.active():
+		Weather.set_level(Weather.roll(randf()))
 
 ## Hour bands (living world step 2, night_bands.gd): the clock sets how much
 ## of the Traffic slider is on the road and which lines Dave adds. Off in the

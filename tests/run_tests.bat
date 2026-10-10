@@ -110,6 +110,8 @@ call :run world/night_clock --headless
 call :run world/night_bands "--headless --fixed-fps 60"
 call :run world/world_mood "--headless --fixed-fps 60"
 call :run world/moment_spots "--headless --fixed-fps 60"
+rem Water (rain, puddles): the rules and their CPU cost, no game boot.
+call :run world/water_rules --headless
 call :run core/view_settings --headless
 call :run view/camera_smoothing_setting --headless
 call :run core/log_folder --headless
@@ -217,6 +219,8 @@ if /i not "%~1"=="quick" (
 	rem ~4 min: 10 km of the default hilly, bending road at 120 and 200 km/h, watching the springs for bumps.
 	call :run world/hill_bumps "--headless --fixed-fps 120"
 	call :run world/hill_park "--headless --fixed-fps 60"
+	rem ~40 s: a downpour at 120 Hz: player and traffic tyres in the wet, NPC wet speed, step() cost.
+	call :run world/water_drive "--headless --fixed-fps 120"
 	rem ~8 s: brake + throttle from a stop holds the fronts only (line lock burnout).
 	call :run car/burnout_line_lock "--headless --fixed-fps 120"
 	rem ~3 min: fuel burn calibration, a dry tank in every gearbox, limp causes (slowest wins), refuel from the bank.

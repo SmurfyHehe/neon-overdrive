@@ -18,7 +18,7 @@ const FULL_NIGHT_METRES := 24000.0   # a 20-minute night at about 70 km/h covers
 const OFF_ROAD_RATE := 4.0           # kerbs, verges and dirt shoulders coat it four times as fast
 const SAVE_EVERY_SECS := 5.0
 const DEFAULT_PATH := "user://car_dirt.cfg"
-const TestMode := preload("res://scripts/test_mode.gd")
+const TestMode := preload("res://scripts/core/test_mode.gd")
 static var path := TestMode.path(DEFAULT_PATH)
 
 ## 0..1, the stored amount of grime.

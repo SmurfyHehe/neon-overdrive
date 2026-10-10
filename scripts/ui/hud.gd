@@ -431,7 +431,7 @@ func _refresh() -> void:
 	rpm_bar.queue_redraw()
 
 	if engine_off:
-		lbl_status.text = "ENGINE OFF · hold X to start"
+		lbl_status.text = "ENGINE OFF · press X to start"
 		Hud.set_font_color(lbl_status, RED)
 	elif player.damage.is_engine_dead():
 		lbl_status.text = "ENGINE DEAD · tow in the pause menu"

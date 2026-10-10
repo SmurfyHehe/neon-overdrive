@@ -17,6 +17,7 @@ extends Node
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
+const TestBuild := preload("res://scripts/core/test_build.gd")
 
 signal changed(cash: int, bank: int)
 signal banked(amount: int)
@@ -58,6 +59,8 @@ func add_cash(amount: int) -> void:
 
 ## Takes up to `amount` from tonight's cash; returns what it took.
 func take_cash(amount: int) -> int:
+	if TestBuild.on():
+		return 0  # sandbox: nothing is ever lost
 	var t := clampi(amount, 0, cash)
 	cash -= t
 	_changed()
@@ -65,6 +68,8 @@ func take_cash(amount: int) -> int:
 
 ## Takes up to `amount` from the bank; returns what it took.
 func take_bank(amount: int) -> int:
+	if TestBuild.on():
+		return maxi(amount, 0)  # sandbox: paid, and the bank is not touched
 	var t := clampi(amount, 0, bank)
 	bank -= t
 	_changed()
@@ -72,6 +77,8 @@ func take_bank(amount: int) -> int:
 
 ## Pays `amount` from the bank, all or nothing (the pump: FuelTank.refuel).
 func spend_bank(amount: int) -> bool:
+	if TestBuild.on():
+		return amount >= 0  # sandbox: every payment goes through, for free
 	if amount < 0 or amount > bank:
 		return false
 	bank -= amount

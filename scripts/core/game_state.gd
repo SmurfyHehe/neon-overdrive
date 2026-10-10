@@ -132,6 +132,7 @@ func _ready() -> void:
 	PhotoMode.ensure_actions()
 	SpecialKeys.ensure_actions()
 	special_unlocked = SaveStore.load_special().unlocked
+	_unmute_for_play()
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	# Not in test mode either: windowed tests and shot tools on a busy machine
 	# were being paused mid-run (the stall guard next to it is play-only too).
@@ -388,6 +389,18 @@ func start_drive() -> void:
 	_title_freeze_at = -1
 	get_tree().paused = false
 	_set_state(State.PLAYING)
+
+## The audio buses outlive a scene reload, and _set_state is the only thing
+## that unmutes Engine and Turbo. A restart from the pause menu, Settings or
+## the title reloads the scene while they are muted, and the new game starts
+## PLAYING without a state change: the car was silent until the next pause
+## (Roy, 2026-10-10: "spawning in sometimes doesnt spawn you in with your
+## vehicle making sound"). So every new game starts with them open.
+func _unmute_for_play() -> void:
+	for bus_name in [&"Engine", &"Turbo", &"Music"]:
+		var bus := AudioServer.get_bus_index(bus_name)
+		if bus >= 0:
+			AudioServer.set_bus_mute(bus, false)
 
 func _set_state(new_state: State) -> void:
 	var old := state

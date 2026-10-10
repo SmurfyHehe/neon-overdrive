@@ -23,7 +23,7 @@ class_name CarAudio
 # - wind: a low buffet and a brighter rush, both louder with speed, the rush
 #   taking over as speed climbs; slow random gusts; a mirror whistle above
 #   about 150 km/h. Pitch barely moves.
-# - surface: kerb/sidewalk rumble on the "Dirt" surface.
+# - surface: kerb/sidewalk rumble on the "Kerb" surface.
 # - cabin: PerspectiveAudio feeds `cabin` (0 chase .. 1 cockpit) and `window`
 #   (0 closed .. 1 open). In the cockpit with the window up the wind is a
 #   sealed hush plus a seal whistle at speed; cracked open, the low "throb" a

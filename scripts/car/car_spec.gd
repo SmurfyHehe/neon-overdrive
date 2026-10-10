@@ -39,6 +39,29 @@ static func apply(v: Vehicle, spec: Dictionary) -> void:
 			continue  # cosmetic: where the driver's hands rest on the rim (DriverModel)
 		else:
 			v.set(key, _own(spec[key]))
+	add_kerb_surfaces(v)
+
+## Surface numbers for the "Kerb" (pavement) and "Grass" (verge) groups, as a
+## multiple of the spec's own "Dirt" entry, so a car's Dirt tune carries over.
+## The sidewalk used to be Dirt (kerb grip group, pavements step 3); Kerb keeps
+## Dirt's grip and stiffness, so nothing about the pavement's feel changes,
+## but a hard surface rolls easier than dirt. Grass is slicker, softer and
+## drags more. tools/kerb_sweep.gd measures the result. A key the spec already
+## has is left alone.
+const SURFACE_KEYS := ["tire_stiffnesses", "coefficient_of_friction", "rolling_resistance", "lateral_grip_assist", "longitudinal_grip_ratio"]
+const KERB_SURFACE := {"tire_stiffnesses": 1.0, "coefficient_of_friction": 1.0, "rolling_resistance": 0.7, "lateral_grip_assist": 1.0, "longitudinal_grip_ratio": 1.0}
+const GRASS_SURFACE := {"tire_stiffnesses": 0.7, "coefficient_of_friction": 0.8, "rolling_resistance": 1.8, "lateral_grip_assist": 1.0, "longitudinal_grip_ratio": 0.9}
+
+static func add_kerb_surfaces(v: Object) -> void:
+	for key in SURFACE_KEYS:
+		var d: Variant = v.get(key)
+		if not (d is Dictionary) or not d.has("Dirt"):
+			continue
+		var dirt: float = d["Dirt"]
+		if not d.has("Kerb"):
+			d["Kerb"] = dirt * float(KERB_SURFACE[key])
+		if not d.has("Grass"):
+			d["Grass"] = dirt * float(GRASS_SURFACE[key])
 
 ## The vehicle gets its own copy of every array and dictionary. Without this the
 ## spec, the Vehicle and (via Vehicle.initialize()) all four wheels would share

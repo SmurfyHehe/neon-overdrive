@@ -15,6 +15,7 @@ extends SceneTree
 #   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/world/road_space.gd
 
 const B := preload("res://scripts/world/road_chunk_builder.gd")
+const Districts := preload("res://scripts/world/districts.gd")
 const EPS := 0.001
 
 var fails := 0
@@ -56,7 +57,7 @@ func _run() -> void:
 		_check(absf(edge - (B.MEDIAN_GAP + lanes * B.LANE_W)) < EPS, "road edge %.2f" % edge)
 		var road := (chunk.get_node(^"RoadOwn" if side == 1 else ^"RoadOnc") as MeshInstance3D).mesh.get_aabb()
 		_check(absf(maxf(absf(road.position.x), absf(road.end.x)) - edge) < EPS, "drawn road ends at %.2f, not %.2f" % [maxf(absf(road.position.x), absf(road.end.x)), edge])
-		var walk_out: float = edge + B.SHOULDER_W + B.CURB_W + B.SIDEWALK_W
+		var walk_out: float = edge + Districts.shoulder_at(0) + B.CURB_W + Districts.walk_at(0)
 		var wall: StaticBody3D = chunk.get_node(^"BoundaryOwn" if side == 1 else ^"BoundaryOnc")
 		# The wall is one box per centreline station (#37); they all sit at one x.
 		var inner_face := absf(wall.position.x + (wall.get_node(^"Shape") as Node3D).position.x) - B.BOUNDARY_T / 2.0

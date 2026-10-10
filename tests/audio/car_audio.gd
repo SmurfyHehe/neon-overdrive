@@ -12,7 +12,7 @@ extends SceneTree
 #   idle   -- standing still: every layer silent
 #   launch -- full throttle (automatic gearbox) to 30 m/s: wind and road follow speed
 #   slide  -- handbrake + full lock at speed: tyres squeal
-#   kerb   -- steer onto the sidewalk ("Dirt"): kerb rumble
+#   kerb   -- steer onto the sidewalk ("Kerb"): kerb rumble
 #
 # Asserts (exit code 1 on failure):
 # - each loop: finite, peak 0.8 (normalised), no click at the loop point,
@@ -40,6 +40,7 @@ extends SceneTree
 # Phase lengths are in seconds, not ticks: the suite runs at 60 Hz (NEON_TICKS=60)
 # but the game ships at 120, and the levels are smoothed per second, so a
 # tick count means different things at the two rates.
+const Districts := preload("res://scripts/world/districts.gd")
 const MAX_SECONDS := 120
 
 func _sec(seconds: float) -> int:
@@ -143,7 +144,7 @@ func _check_loops() -> void:
 func _sidewalk_x(p: PlayerCar) -> float:
 	var idx := int(floor(-p.global_position.z / RoadChunkBuilder.CHUNK_LEN)) + int(game.get("origin_index"))
 	var cfg: Dictionary = game.call("_section_at", idx)
-	return RoadChunkBuilder._lane_w(cfg.own_lanes) + RoadChunkBuilder.SHOULDER_W + RoadChunkBuilder.CURB_W + RoadChunkBuilder.SIDEWALK_W / 2.0
+	return RoadChunkBuilder._lane_w(cfg.own_lanes) + Districts.shoulder_at(1) + RoadChunkBuilder.CURB_W + Districts.walk_at(1) / 2.0
 
 ## World x of the lane the test drives in.
 func _lane_x() -> float:

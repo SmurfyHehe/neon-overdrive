@@ -286,21 +286,86 @@ static func setback_at(chunk_index: int) -> float:
 		return own
 	return lerpf(own, float(SPECS[name_of_run(int(b[0]))].setback), float(b[1]))
 
-# Pavements (step 1, 2026-10-10). walk: pavement width, m, per district; the
-# road builder tapers it between chunks like the lanes. All 2.2 (the
-# drivable-shortcut width) until step 2 sets widths by area. drops: the
-# building types whose frontage gets a dropped kerb (a car-park entrance);
-# "*" = every building (strip malls all sit behind a lot).
-const WALK := {"downtown": 2.2, "residential": 2.2, "strip": 2.2, "industrial": 2.2}
-const DROPS := {
-	"downtown": ["parking"],
-	"residential": ["parking", "garage"],
-	"strip": ["*"],
-	"industrial": ["warehouse", "garage", "parking"],
+# Cross-section table (pavements steps 1-2 and 5, 2026-10-10). One row per
+# district says how the road's edge is laid out from the lane edge outward:
+#   shoulder: paved strip from the lane to the gutter, m (a parking lane in
+#     the districts where cars park at the kerb: downtown, residential);
+#   walk:     pavement width, m;
+#   kerb_h:   kerb height, m (the pavement sits at this height; the drawn
+#     face rises from the gutter to it);
+#   kerb:     false = no raised kerb (a freeway: shoulder, then a flat verge);
+#   drops:    the building types whose frontage gets a dropped kerb (a
+#     car-park entrance); "*" = every building (strip malls all sit behind
+#     a lot).
+# The road builder tapers every value between chunks like the lanes, and
+# buildings, boundary walls, lamps, pylons and the roadside kit all lay
+# themselves out from the edges it produces. Read it through cross_at /
+# walk_at / shoulder_at / kerb_h_at, not by indexing CROSS.
+#
+# Picks (Roy answered "widths by area table" yes, the numbers are mine):
+# pavements are widest downtown and thinnest in the industrial yards; kerb
+# height follows (a 6 in kerb downtown, 4 in on the strip); parking lanes
+# only where the buildings front the street.
+const CROSS := {
+	"downtown": {"walk": 3.6, "shoulder": 2.4, "kerb_h": 0.15, "kerb": true, "drops": ["parking"]},
+	"residential": {"walk": 2.4, "shoulder": 2.2, "kerb_h": 0.13, "kerb": true, "drops": ["parking", "garage"]},
+	"strip": {"walk": 2.0, "shoulder": 1.4, "kerb_h": 0.10, "kerb": true, "drops": ["*"]},
+	"industrial": {"walk": 1.5, "shoulder": 1.4, "kerb_h": 0.10, "kerb": true, "drops": ["warehouse", "garage", "parking"]},
 }
+## A freeway stretch (the layout's "outskirts"): no raised kerb, a wide hard
+## shoulder, and a flat verge instead of a pavement (K5).
+const FREEWAY := {"walk": 1.2, "shoulder": 3.0, "kerb_h": 0.0, "kerb": false, "drops": []}
+## The geometry at a crossing: Junction draws its own quads at these widths,
+## so a chunk that touches one is laid out with exactly this section (the
+## district's kerb and drops carry on).
+const JUNCTION := {"walk": 2.2, "shoulder": 1.4, "kerb_h": 0.1}
+
+## TEST BUILD (integration): the seven newer district kinds (world step 3,
+## #378) have no CROSS row yet, so each borrows the nearest of the four
+## that do. Placeholder picks, not design: the kerbs owner sets real rows.
+const CROSS_LIKE := {
+	"lofts": "downtown", "old_town": "downtown", "hillside": "residential",
+	"docks": "industrial", "airport": "industrial",
+}
+const CROSS_OPEN := ["freeway", "canyon"]   # no raised kerb: the FREEWAY section
+
+static func cross_of(name: String) -> Dictionary:
+	if CROSS.has(name):
+		return CROSS[name]
+	if name in CROSS_OPEN:
+		return FREEWAY
+	return CROSS[CROSS_LIKE.get(name, "residential")]
+
+## The section at the END of chunk `chunk_index` (the road builder tapers
+## from cross_at(i - 1) to cross_at(i) across chunk i). Keyed by the same
+## fixed-map districts as everything else here, so a recycled chunk matches
+## a fresh one. A chunk whose neighbour touches a crossing is held at the
+## crossing's section too, so the chunk that touches it starts and ends there.
+static func cross_at(chunk_index: int) -> Dictionary:
+	if Junction.touches(chunk_index) or Junction.touches(chunk_index + 1):
+		var d: Dictionary = cross_of(name_at(chunk_index)).duplicate()
+		d.merge(JUNCTION, true)  # the crossing's geometry, the district's drops
+		return d
+	if is_freeway(chunk_index):
+		return FREEWAY
+	return cross_of(name_at(chunk_index))
+
+## Whether the chunk is on a freeway stretch: RoadLayout's "outskirts"
+## (fixed map seed, so the same stretches every run). No layout, no freeway.
+static func is_freeway(chunk_index: int) -> bool:
+	var lay: RoadLayout = RoadFrame.layout
+	if lay == null:
+		return false
+	return lay.district_at((float(chunk_index) + 0.5) * RoadChunkBuilder.CHUNK_LEN) == "outskirts"
 
 static func walk_at(chunk_index: int) -> float:
-	return float(WALK.get(name_at(chunk_index), 2.2))   # the newer district kinds have no row yet
+	return float(cross_at(chunk_index).walk)
+
+static func shoulder_at(chunk_index: int) -> float:
+	return float(cross_at(chunk_index).shoulder)
+
+static func kerb_h_at(chunk_index: int) -> float:
+	return float(cross_at(chunk_index).kerb_h)
 
 static func drops_for(name: String) -> Array:
-	return DROPS.get(name, [])
+	return cross_of(name).drops

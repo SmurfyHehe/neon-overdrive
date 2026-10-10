@@ -3,13 +3,13 @@ extends SceneTree
 # Kerb and pavement test (pavements step 1, 2026-10-10).
 #
 # Asserts (exit code 1 on failure):
-# - the kerb strip is raised: its top is at KERB_H and its foot is in the
-#   gutter (below the shoulder), with a vertical face on the road side
+# - the kerb strip is raised: its top is at the district's kerb height
+#   (Districts.CROSS) and its foot is in the gutter (below the shoulder), with a vertical face on the road side
 # - the gutter strip dips GUTTER_DIP from the shoulder's edge to the kerb foot
-# - the pavement sits at KERB_H and is SIDEWALK_W (Districts.walk_at) wide
+# - the pavement sits at the kerb height and is Districts.walk_at wide
 # - a chunk in the strip district (every building has a car-park entrance)
 #   has dropped kerb rows at DROP_MIN of the height, and the pavement and its
-#   Dirt collision drop with it; a downtown chunk with no parking has none
+#   Kerb collision drop with it; a downtown chunk with no parking has none
 # - with the crossing on, the kerb through its mouth is dropped and the rows
 #   just outside the mouth are painted yellow; with it off, no row is yellow
 #   except beside a hydrant, and at most one hydrant stands per side
@@ -79,14 +79,15 @@ func _lowest(tops: Dictionary) -> Array:
 func _run() -> void:
 	var holder := Node3D.new()
 	root.add_child(holder)
-	var kerb_x := B._lane_w(2) + B.SHOULDER_W
+	var kerb_x := B._lane_w(2) + Districts.shoulder_at(1)
+	var kh := Districts.kerb_h_at(1)
 	Junction.enabled = false
 
 	# --- a downtown chunk with no crossing: raised kerb, gutter, pavement
 	var c0: Node3D = B.build_chunk(1, CFG, CFG)
 	holder.add_child(c0)
 	var kerb := _verts(c0, "CurbOwn")
-	_check(absf(_max_y(kerb) - B.KERB_H) < EPS, "kerb top at %.3f, expected %.3f" % [_max_y(kerb), B.KERB_H])
+	_check(absf(_max_y(kerb) - kh) < EPS, "kerb top at %.3f, expected %.3f" % [_max_y(kerb), kh])
 	_check(_min_y(kerb) < -0.01, "kerb foot at %.3f, expected below the shoulder" % _min_y(kerb))
 	var face := 0
 	for p in kerb:
@@ -100,11 +101,11 @@ func _run() -> void:
 	for p in walk:
 		walk_w = maxf(walk_w, p.x - (kerb_x + B.CURB_W))
 	_check(absf(walk_w - Districts.walk_at(1)) < EPS, "pavement %.2f wide, expected %.2f" % [walk_w, Districts.walk_at(1)])
-	_check(absf(_max_y(walk) - B.KERB_H) < EPS, "pavement top at %.3f" % _max_y(walk))
+	_check(absf(_max_y(walk) - kh) < EPS, "pavement top at %.3f, expected %.3f" % [_max_y(walk), kh])
 	var hyd: MultiMesh = (c0.get_node(^"Hydrants") as MultiMeshInstance3D).multimesh
 	_check(hyd.visible_instance_count <= 2, "%d hydrants on one chunk" % hyd.visible_instance_count)
 	var onc := _verts(c0, "CurbOnc")
-	_check(absf(_max_y(onc) - B.KERB_H) < EPS and _min_y(onc) < -0.01, "oncoming kerb spans %.3f..%.3f" % [_min_y(onc), _max_y(onc)])
+	_check(absf(_max_y(onc) - kh) < EPS and _min_y(onc) < -0.01, "oncoming kerb spans %.3f..%.3f" % [_min_y(onc), _max_y(onc)])
 
 	# --- the strip district: every building front gets a dropped kerb
 	var strip_run := 1
@@ -112,6 +113,8 @@ func _run() -> void:
 		strip_run += 1
 	_check(Districts.name_of_run(strip_run) == "strip", "no strip district in the first 60 runs")
 	var si := strip_run * Districts.RUN + 1
+	var skh := Districts.kerb_h_at(si)
+	var skerb_x := B._lane_w(2) + Districts.shoulder_at(si)
 	var dropped := 0
 	var any_building := false
 	for side in ["Own", "Onc"]:
@@ -126,9 +129,9 @@ func _run() -> void:
 			var mi := c1.get_node(NodePath("BuildingMesh%d" % (i * 2 + (0 if side == "Own" else 1)))) as MeshInstance3D
 			if mi.visible:
 				any_building = true
-		if low < B.KERB_H - EPS:
+		if low < skh - EPS:
 			dropped += 1
-			_check(absf(low - B.KERB_H * B.DROP_MIN) < EPS, "%s dropped kerb bottoms at %.3f, expected %.3f" % [side, low, B.KERB_H * B.DROP_MIN])
+			_check(absf(low - skh * B.DROP_MIN) < EPS, "%s dropped kerb bottoms at %.3f, expected %.3f" % [side, low, skh * B.DROP_MIN])
 			var wkey := roundi(low_z * 100.0)
 			_check(walk_tops.has(wkey) and absf(float(walk_tops[wkey]) - low) < EPS, "%s pavement at the drop (z=%.2f) is %s, kerb %.3f" % [side, low_z, str(walk_tops.get(wkey)), low])
 		# the collision top follows: cast down at the lowest row
@@ -137,13 +140,13 @@ func _run() -> void:
 		var sx := 1.0 if side == "Own" else -1.0
 		var space := c1.get_world_3d().direct_space_state
 		var z := low_z
-		var x := (kerb_x + B.CURB_W + 1.0) * sx
+		var x := (skerb_x + B.CURB_W + 0.8) * sx
 		var from := c1.to_global(Vector3(x, 2.0, z))
 		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(from, from + Vector3.DOWN * 4.0))
-		_check(not hit.is_empty(), "%s: no Dirt hit over the pavement at z=%.1f" % [side, z])
+		_check(not hit.is_empty(), "%s: no Kerb hit over the pavement at z=%.1f" % [side, z])
 		if not hit.is_empty():
 			var top_y: float = c1.to_local(hit.position).y
-			var want := 0.15 * maxf(low / B.KERB_H, B.DROP_MIN)
+			var want := (skh + B.COL_EXTRA) * maxf(low / skh, B.DROP_MIN)
 			_check(absf(top_y - want) < 0.01, "%s collision top %.3f at the drop, expected %.3f" % [side, top_y, want])
 		holder.remove_child(c1)
 		c1.free()

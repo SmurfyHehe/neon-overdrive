@@ -26,6 +26,8 @@ var sheets: Array = []
 
 func _initialize() -> void:
 	OS.set_environment("NEON_COCKPIT", "0")
+	# test mode: never resume (or autosave over) Roy's real run
+	OS.set_environment("NEON_TEST", "1")
 	out_dir = OS.get_environment("FLOAT_SHOT_DIR")
 	var list := OS.get_environment("FLOAT_SHOT_CHUNKS")
 	if list == "":

@@ -16,7 +16,8 @@ extends SceneTree
 # Every piece -- building, gap wall, lamp, pylon, barrier piece, reflector,
 # dash, light pool, sign, billboard, roof prop -- must have its lowest point
 # on a support, within TOL:
-# - the road surface at that spot (ground; reaching below it is fine), or
+# - the road surface at that spot (ground; reaching below it, or being
+#   hidden entirely under it, is fine), or
 # - the top face of a building it stands on, or
 # - another piece of the chunk it rests on or is threaded through (a canopy
 #   on its columns, a billboard panel on its poles, the diner sign on its
@@ -168,9 +169,10 @@ func _check_chunk(chunk: Node3D, idx: int, label: String) -> void:
 		var box: AABB = p[2]
 		checked += 1
 		var foot := Vector3(box.position.x + box.size.x / 2.0, box.position.y, box.position.z + box.size.z / 2.0)
-		# 1. on (or into) the ground
+		# 1. on (or into) the ground, or hidden under it (the gas station sinks
+		# the edge posts it clears 50 m down, #324: not floating)
 		var sy := _surface_y(foot)
-		if box.position.y <= sy + TOL and box.end.y >= sy - TOL:
+		if box.position.y <= sy + TOL:
 			continue
 		var ok := false
 		# 2. on a building's top face, inside its footprint

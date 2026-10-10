@@ -19,6 +19,15 @@ const ROWS := 24
 const ROW_PX := 9
 const ATLAS_W := 64
 const GLYPH_W := 6  # 5 px glyph + 1 px spacing
+## Texels per glyph pixel. The atlas was 1 texel per pixel with nearest
+## sampling and no mipmaps, so a sign smaller on screen than its pixel grid
+## skipped whole columns: LAUNDRY read LAU DRY, DINER a scribble, from a
+## car length away at a glancing angle (Roy, 2026-10-10: "some of it is
+## messed up"). Now each pixel is a 4x4 block and the texture is sampled
+## linear with mipmaps, so a far sign averages to a lit bar instead of
+## losing letters. Rows are 9 px (1 pad, 7 glyph, 1 pad): the first mip
+## levels never reach the next row. GPU-side only; no per-frame CPU.
+const SUPER := 4
 
 # Word lists by building type. DINER is kept back for the diner itself.
 const SHOP_WORDS := ["LIQUOR", "PAWN", "LAUNDRY", "NOODLES", "VIDEO", "BAR", "CAFE", "OPEN", "24 HR", "KEYS"]
@@ -66,8 +75,8 @@ const SHADER := """
 shader_type spatial;
 render_mode diffuse_lambert, specular_disabled;
 
-// no mipmaps: at a glancing angle a smaller mip drops whole letter columns
-uniform sampler2D words : source_color, filter_nearest, repeat_disable;
+// 4x4 texels per glyph pixel, linear + mipmaps (see SUPER)
+uniform sampler2D words : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform vec3 colors[4];
 uniform float energy = 1.5;
 uniform float rows = 24.0;
@@ -204,6 +213,7 @@ static func atlas() -> ImageTexture:
 					for gx in line.length():
 						if line[gx] == "#":
 							img.set_pixel(k * GLYPH_W + gx, r * ROW_PX + 1 + gy, Color(1, 1, 1, 1))
+		img.resize(ATLAS_W * SUPER, ROWS * ROW_PX * SUPER, Image.INTERPOLATE_NEAREST)
 		img.generate_mipmaps()
 		_atlas = ImageTexture.create_from_image(img)
 	return _atlas

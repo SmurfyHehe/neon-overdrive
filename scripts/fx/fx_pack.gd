@@ -12,6 +12,7 @@ var skids: SkidMarks
 var flames: ExhaustFlames
 var smoke: TyreSmoke
 var shimmer: HeatShimmer  # heat shimmer behind the tailpipes (2026-10-10)
+var dirt: CarDirt  # road grime on the player body (2026-10-09), washed in WashScreen
 
 var _player: PlayerCar
 var _camera: ChaseCamera
@@ -34,6 +35,8 @@ func _ready() -> void:
 	_player.add_child(flames)
 	shimmer = HeatShimmer.new(_player)
 	add_child(shimmer)
+	dirt = CarDirt.new(_player)
+	add_child(dirt)
 	apply_settings()
 
 ## Push the FxSettings flags to the nodes.
@@ -44,6 +47,7 @@ func apply_settings() -> void:
 	flames.enabled = FxSettings.is_on("exhaust_flames")
 	smoke.enabled = FxSettings.is_on("tyre_smoke")
 	shimmer.enabled = FxSettings.is_on("heat_shimmer")
+	dirt.enabled = FxSettings.is_on("dirt")
 
 ## Flip one effect (FxSettings.EFFECTS) live, and remember it.
 func set_effect(effect: String, on: bool) -> void:

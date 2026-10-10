@@ -32,7 +32,7 @@ func _initialize() -> void:
 
 	# --- damaged settings file ---
 	var f := FileAccess.open(AudioSettings.path, FileAccess.WRITE)
-	f.store_string("[audio]\nmaster=nan\nengine=inf\n\n[traffic]\ncar_count=nan\ndetail_distance=nan\n\n[view]\ncockpit_fov=nan\n\n[fx]\nvignette=\"false\"\nspeed_lines=\"true\"\nskid_marks=false\n")
+	f.store_string("[audio]\nmaster=nan\nengine=inf\n\n[traffic]\ncar_count=nan\ndetail_distance=nan\n\n[view]\ncockpit_fov=nan\n\n[fx]\nvignette=\"false\"\nspeed_lines=\"true\"\nskid_marks=false\ndirt=\"false\"\n")
 	f = null
 	AudioSettings.load_settings()
 	TrafficSettings.load_settings()
@@ -47,6 +47,7 @@ func _initialize() -> void:
 	_check(not FxSettings.is_on("vignette"), "a quoted \"false\" left the vignette on")
 	_check(FxSettings.is_on("speed_lines"), "a quoted \"true\" turned speed lines off")
 	_check(not FxSettings.is_on("skid_marks"), "a plain false left skid marks on")
+	_check(not FxSettings.is_on("dirt"), "a quoted \"false\" left the dirt on")
 
 	# --- setters ---
 	AudioSettings.set_volume("Master", NAN)

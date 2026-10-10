@@ -103,6 +103,8 @@ func _ready() -> void:
 	# Until meet spots exist (RC3) a race starts from here; mid-race the row above reads "Quit race".
 	race_button = _add_button(box, "Race a test rival", _race_pressed)
 	photo_button = _add_button(box, "Photo mode", game_state.open_photo_from_pause)
+	# Garage wash mini-game (dirt-and-wash, #294); its Dirt on/off switch has no row on the new Settings screen yet.
+	_add_button(box, "Wash car", game_state.open_wash)
 	title_button = _add_button(box, "Quit to title", _ask_quit_to_title)
 
 	# Version line (release readiness, 2026-10-08), so a bug report can name the build.

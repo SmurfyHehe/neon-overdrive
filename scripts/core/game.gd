@@ -648,6 +648,7 @@ func _setup_game_state() -> void:
 	add_child(gas_station)
 	add_child(PumpPanel.new(game_state, player, wallet, night_clock))
 	gas_station.pulled_up.connect(func(_s: float) -> void: game_state.open_station())
+	add_child(WashScreen.new(game_state))
 	radio = RadioManager.new()
 	radio.listener = player  # reception follows the car (tunnels, bridges)
 	radio.process_mode = Node.PROCESS_MODE_ALWAYS   # plays on, muffled, while paused (PauseLook)

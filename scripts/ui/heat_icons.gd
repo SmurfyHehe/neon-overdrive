@@ -126,6 +126,8 @@ func _ready() -> void:
 	add_child(caption)
 	if heat != null:
 		heat.level_changed.connect(_on_level)
+		heat.warning_started.connect(_on_warning)
+		heat.warning_ended.connect(_on_warning_end)
 		_on_level(heat.level)
 
 func say(text: String) -> void:
@@ -133,7 +135,19 @@ func say(text: String) -> void:
 	caption.visible = true
 	_caption_t = CAPTION_SECS
 
+## P2: a warning shows the first icon dim, with no heat behind it.
+func _on_warning(_cop: Node3D, _kind: int) -> void:
+	icon.kind = PoliceHeat.icon_for(PoliceHeat.ONE_CAR)
+	icon.modulate = Color(1, 1, 1, 0.4)
+	icon.visible = true
+	icon.queue_redraw()
+
+func _on_warning_end(_complied: bool) -> void:
+	icon.modulate = Color.WHITE
+	_on_level(heat.level)
+
 func _on_level(lvl: int) -> void:
+	icon.modulate = Color.WHITE
 	var k := PoliceHeat.icon_for(lvl)
 	if k != "" and k != icon.kind:
 		_flash = FLASH_SECS if lvl > PoliceHeat.ICONS.find(icon.kind) else 0.0

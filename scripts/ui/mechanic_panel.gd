@@ -29,6 +29,7 @@ func _init(panel: AutoTunePanel) -> void:
 	auto = panel
 
 func _ready() -> void:
+	theme = UiTheme.font_theme()
 	add_theme_constant_override("separation", 6)
 	var row := HBoxContainer.new()
 	add_child(row)

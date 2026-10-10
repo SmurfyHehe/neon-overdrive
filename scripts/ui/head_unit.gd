@@ -21,6 +21,8 @@ extends Node3D
 # turns the radio off); a modern factory screen is touch only, and "off" is a
 # power spot on the glass.
 
+const PlaceNames := preload("res://scripts/world/place_names.gd")
+
 const NAVY := Color("#1B2A4A")
 const NAVY_DEEP := Color("#0E1424")
 const SODIUM := Color("#FF8A1F")
@@ -42,6 +44,8 @@ const KNOB_R := 0.014
 const KNOB_DEPTH := 0.018
 const KNOB_PRESS := 0.004
 const TICK_SECS := 0.028
+## How long the name of an area you cross into stays on the screen.
+const AREA_SECS := 4.0
 
 ## Keyed by PlayerCar.chassis_kind(); DEFAULT_STYLE for anything unlisted.
 ##   aftermarket: printed bezel, tablet proud of the stack
@@ -66,6 +70,8 @@ var station := -1
 var now_playing := ""
 var level := 0.0
 var clock_text := ""     # the car clock, drawn top right (NightClock)
+var area_name := ""      # the area just entered, shown for AREA_SECS (world step 4)
+var area_t := 0.0
 var taps := 0
 var knob_presses := 0
 var viewport: SubViewport
@@ -205,6 +211,10 @@ static func _px_to_local(p: Vector2) -> Vector3:
 func show_state(s: int, track: String, lvl: float, delta: float) -> void:
 	_meter_t -= delta
 	var changed := s != station or track != now_playing
+	if area_t > 0.0:
+		area_t = maxf(area_t - delta, 0.0)
+		if area_t == 0.0:
+			changed = true   # the banner is over: back to the radio
 	station = s
 	now_playing = track
 	if s >= 0 and _meter_t <= 0.0:
@@ -222,6 +232,13 @@ func show_clock(t: String) -> void:
 	if t != clock_text:
 		clock_text = t
 		_redraw()
+
+## The car crossed into an area: its name takes the header for AREA_SECS
+## (world step 4; the name comes from PlaceNames). Shows with the radio off too.
+func show_area(area: String) -> void:
+	area_name = area
+	area_t = AREA_SECS
+	_redraw()
 
 ## The finger touched the unit: tick, and push the knob in for an off press.
 func tap(on_knob: bool) -> void:
@@ -247,7 +264,8 @@ class ScreenCanvas extends Control:
 	var unit: HeadUnit
 
 	func _draw() -> void:
-		var font := ThemeDB.fallback_font
+		var font := UiTheme.font("menu_strong")
+		var lcd := UiTheme.font("lcd")
 		var w := float(HeadUnit.PX.x)
 		var h := float(HeadUnit.PX.y)
 		draw_rect(Rect2(0, 0, w, h), HeadUnit.NAVY_DEEP)
@@ -259,12 +277,19 @@ class ScreenCanvas extends Control:
 		if on:
 			title = RadioStations.STATIONS[unit.station].name.to_upper()
 			sub = unit.now_playing.replace("_", " ") if unit.now_playing != "" else ("ON AIR" if not RadioStations.has_music(unit.station) else "TUNING")
-		draw_string(font, Vector2(HeadUnit.MARGIN, 66), title, HORIZONTAL_ALIGNMENT_LEFT, 330, 26, HeadUnit.AMBER)
-		if not on:
-			sub = ""
-		draw_string(font, Vector2(HeadUnit.MARGIN, 92), sub, HORIZONTAL_ALIGNMENT_LEFT, 330, 15, HeadUnit.SILVER)
+		if unit.area_t > 0.0:
+			# the area just entered, in place of the radio's header
+			draw_rect(Rect2(HeadUnit.MARGIN - 8, 12, 344, 80), HeadUnit.NAVY)
+			draw_rect(Rect2(HeadUnit.MARGIN - 8, 12, 5, 80), HeadUnit.SODIUM)
+			draw_string(font, Vector2(HeadUnit.MARGIN + 6, 34), HeadUnit.PlaceNames.ENTERING, HORIZONTAL_ALIGNMENT_LEFT, 320, 14, HeadUnit.SILVER.darkened(0.25))
+			draw_string(font, Vector2(HeadUnit.MARGIN + 6, 78), unit.area_name, HORIZONTAL_ALIGNMENT_LEFT, 320, 38, HeadUnit.SODIUM)
+		else:
+			draw_string(font, Vector2(HeadUnit.MARGIN, 66), title, HORIZONTAL_ALIGNMENT_LEFT, 330, 26, HeadUnit.AMBER)
+			if not on:
+				sub = ""
+			draw_string(font, Vector2(HeadUnit.MARGIN, 92), sub, HORIZONTAL_ALIGNMENT_LEFT, 330, 15, HeadUnit.SILVER)
 		if unit.clock_text != "":
-			draw_string(font, Vector2(372, 34), unit.clock_text, HORIZONTAL_ALIGNMENT_RIGHT, 116, 18, HeadUnit.AMBER)
+			draw_string(lcd, Vector2(372, 34), unit.clock_text, HORIZONTAL_ALIGNMENT_RIGHT, 116, 18, HeadUnit.AMBER)
 		var bars := 10
 		for i in bars:
 			var x := 372.0 + i * 12.0

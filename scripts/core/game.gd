@@ -116,6 +116,9 @@ func _ready() -> void:
 		AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), true)
 	if benchmark:
 		seed(Benchmark.SEED)
+	elif OS.get_environment("NEON_SEED").is_valid_int():
+		# tests and shot tools: the same buildings and signs every run
+		seed(int(OS.get_environment("NEON_SEED")))
 	else:
 		randomize()
 	saver = SaveDirector.new(self)

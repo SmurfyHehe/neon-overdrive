@@ -110,6 +110,7 @@ func _ready() -> void:
 	bg.set_border_width_all(2)
 	bg.set_content_margin_all(10)
 	frame.add_theme_stylebox_override("panel", bg)
+	frame.theme = UiTheme.font_theme()   # Menu roles; values opt in to Numbers
 	add_child(frame)
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 8)
@@ -647,8 +648,7 @@ class PitWall extends VBoxContainer:
 
 	func _ready() -> void:
 		add_theme_constant_override("separation", 4)
-		var mono := SystemFont.new()
-		mono.font_names = PackedStringArray(["Consolas", "Courier New", "monospace"])
+		var mono := UiTheme.font("numbers")
 		var title := Label.new()
 		title.text = "TEST RUN vs STOCK"
 		title.add_theme_color_override("font_color", TunerScreen.SILVER)

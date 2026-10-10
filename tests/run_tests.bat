@@ -41,6 +41,8 @@ set "CRASHED="
 call :run core/smoke --headless
 call :run core/game_info --headless
 call :run core/palette --headless
+call :run ui/fonts --headless
+call :run world/names --headless
 call :run ui/hud --headless
 call :run fleet/car_loft_normals --headless
 call :run fleet/test_car --headless
@@ -187,6 +189,10 @@ if /i not "%~1"=="quick" (
 	call :run tuning/tuner_screen --headless
 	call :run tuning/tuner_typing --headless
 	call :run world/roadside_detail
+	call :run world/floating_structures
+	rem Real window: signs read back from the screen (dropped columns, mirrored text), then every sign's placement.
+	call :run world/sign_legibility
+	call :run world/sign_audit
 	rem ~10 s, real window (shaders): traffic tail lamps, brake lamps, distance flares, barrier reflectors.
 	call :run traffic/night_lights
 	call :run fleet/fleet_silhouette_sweep

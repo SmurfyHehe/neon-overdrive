@@ -166,6 +166,7 @@ func _build_lcd() -> void:
 	lcd = Label3D.new()
 	lcd.name = "Lcd"
 	lcd.text = "0 rpm\n0 km/h  N"
+	lcd.font = UiTheme.font("lcd")   # DSEG7: car digital displays
 	lcd.font_size = 30
 	lcd.pixel_size = 0.00048
 	lcd.modulate = AMBER

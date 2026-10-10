@@ -90,6 +90,7 @@ func _init(car: PlayerCar, state: GameState) -> void:
 	game_state = state
 
 func _ready() -> void:
+	theme = UiTheme.font_theme()
 	add_theme_constant_override("separation", 24)
 	_read_from_player()
 	start_values = values.duplicate()
@@ -117,6 +118,7 @@ func _ready() -> void:
 		sliders[k[0]] = s
 		var v := Label.new()
 		v.custom_minimum_size = Vector2(60, 0)
+		UiTheme.apply(v, "numbers")
 		grid.add_child(v)
 		value_labels[k[0]] = v
 		var line := Label.new()
@@ -301,6 +303,4 @@ const DEFAULT_TORQUE_SHAPE := {"low_end": %.2f, "peak_pos": %.2f, "plateau": %.2
 	copy_button.text = "Copied (also printed)"
 
 func _mono_font() -> Font:
-	var f := SystemFont.new()
-	f.font_names = PackedStringArray(["Consolas", "Courier New", "monospace"])
-	return f
+	return UiTheme.font("numbers")

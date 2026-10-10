@@ -778,6 +778,18 @@ static func _new_sidewalk_collision(body_name: String) -> StaticBody3D:
 	body.add_child(col)
 	return body
 
+## Pieces along the chunk _apply() is laying out: STATIONS, or more on a hill
+## tight enough to fold the sidewalk under a wheel the way it folded the road
+## (see "Road collision"). Whole metres apart at most, where _frame() is exact;
+## it is a kerb to cut across, so a metre is fine enough.
+static var _sidewalk_rows := STATIONS
+
+static func sidewalk_rows(vc: float) -> int:
+	var want := CHUNK_LEN * absf(vc) / SIDEWALK_KINK
+	return STATIONS if want <= STATIONS else (25 if want <= 25.0 else 50)
+
+const SIDEWALK_KINK := 0.0025
+
 static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: float, inner1: float, outer0: float, outer1: float, side: int) -> void:
 	var body: StaticBody3D = root.get_node(NodePath(body_name))
 	# chunk start is z=0, end is z=-CHUNK_LEN; top at 0.15 like the old box.
@@ -801,25 +813,36 @@ static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: 
 	# old prism's.
 	var sx := float(side)
 	var faces := PackedVector3Array()
-	for k in STATIONS:
-		var t0 := float(k) / STATIONS
-		var t1 := float(k + 1) / STATIONS
+	var rows := _sidewalk_rows
+	for k in rows:
+		var t0 := float(k) / rows
+		var t1 := float(k + 1) / rows
 		var z0 := -CHUNK_LEN * t0
 		var z1 := -CHUNK_LEN * t1
+		# The chunk's two ends reach COL_OVERLAP past it (see there), the taper
+		# carried on with them.
+		var e0 := Vector3.ZERO
+		var e1 := Vector3.ZERO
+		if k == 0:
+			t0 = -COL_OVERLAP / CHUNK_LEN
+			e0 = _frame(0.0).basis.z * COL_OVERLAP
+		if k == rows - 1:
+			t1 = 1.0 + COL_OVERLAP / CHUNK_LEN
+			e1 = _frame(CHUNK_LEN).basis.z * -COL_OVERLAP
 		var i0 := lerpf(inner0, inner1, t0)
 		var i1 := lerpf(inner0, inner1, t1)
 		var o0 := lerpf(outer0, outer1, t0)
 		var o1 := lerpf(outer0, outer1, t1)
 		var ramp0 := minf(SIDEWALK_RAMP, absf(o0 - i0) / 2.0)
 		var ramp1 := minf(SIDEWALK_RAMP, absf(o1 - i1) / 2.0)
-		var foot0 := _at(i0 * sx, 0.0, z0)
-		var foot1 := _at(i1 * sx, 0.0, z1)
-		var lip0 := _at((i0 + ramp0) * sx, 0.15, z0)
-		var lip1 := _at((i1 + ramp1) * sx, 0.15, z1)
-		var top0 := _at((o0 - ramp0) * sx, 0.15, z0)
-		var top1 := _at((o1 - ramp1) * sx, 0.15, z1)
-		var back0 := _at(o0 * sx, 0.0, z0)
-		var back1 := _at(o1 * sx, 0.0, z1)
+		var foot0 := _at(i0 * sx, 0.0, z0) + e0
+		var foot1 := _at(i1 * sx, 0.0, z1) + e1
+		var lip0 := _at((i0 + ramp0) * sx, 0.15, z0) + e0
+		var lip1 := _at((i1 + ramp1) * sx, 0.15, z1) + e1
+		var top0 := _at((o0 - ramp0) * sx, 0.15, z0) + e0
+		var top1 := _at((o1 - ramp1) * sx, 0.15, z1) + e1
+		var back0 := _at(o0 * sx, 0.0, z0) + e0
+		var back1 := _at(o1 * sx, 0.0, z1) + e1
 		faces.append_array([foot0, foot1, lip0, lip0, foot1, lip1])  # the ramp
 		faces.append_array([lip0, lip1, top0, top0, lip1, top1])     # the top
 		faces.append_array([top0, top1, back0, back0, top1, back1])  # the back ramp
@@ -861,17 +884,42 @@ static func _update_boundary(root: Node3D, body_name: String, inner_x: float, si
 
 # Road collision (#37 step R5). On a flat road the wheels drive on game.gd's
 # infinite ground plane; on a hilly one there is no single plane, so each
-# chunk carries its own surface: STATIONS quads across the whole drivable
-# width (out past the out-of-bounds walls), following the centreline, in the
-# "Road" group like the plane. Built always, switched on only with hills.
+# chunk carries its own surface across the whole drivable width (out past the
+# out-of-bounds walls), in the "Road" group like the plane. Built always,
+# switched on only with hills.
+#
+# Two bodies since 2026-10-10 (Roy: "I've driven over multiple bumps",
+# tests/world/road_bumps.gd). It used to be one body of STATIONS flat 5 m
+# pieces, and that made bumps two ways:
+# - Every 5 m the surface folded under the wheels, by 5 m / the hill's radius
+#   (0.7 deg on a 400 m sag), and on a bend that climbs each piece also folded
+#   along its diagonal (the inside of a bend is shorter, so steeper). A wheel
+#   crossing a fold has its suspension speed step in one tick (200-480 mm/s
+#   measured), which kicks the damper, and on a crest GEVP drops the wheel's
+#   force for a tick.
+# - The chassis shape rides a few cm off the road and a dip at speed presses
+#   it on (aero plus the sag's own load). A convex shape sliding over a
+#   triangle mesh catches every fold: jolts of 20-46 m/s^2 at 245 km/h.
+# So "RoadCol" is the wheels' surface: wheels only (KERB_LAYER, like the
+# sidewalks), cut finely enough that no fold is over ROAD_COL_KINK. "RoadBed"
+# is what car bodies land on: the old coarse pieces, ROAD_BED_DROP below the
+# surface, so a car on its wheels never reaches it (the suspension's bump
+# stops hold it up first) and only a car on its side or roof rests on it.
 
 ## How far past the out-of-bounds walls the road collision reaches, m.
 const ROAD_COL_MARGIN := 2.0
 
 static func _new_road_collision() -> StaticBody3D:
+	return _new_road_body("RoadCol", CarSpec.KERB_LAYER)  # wheels only, see CarSpec
+
+static func _new_road_bed() -> StaticBody3D:
+	return _new_road_body("RoadBed", CarSpec.WORLD_LAYER)
+
+static func _new_road_body(body_name: String, layer: int) -> StaticBody3D:
 	var body := StaticBody3D.new()
-	body.name = "RoadCol"
+	body.name = body_name
 	body.add_to_group("Road")
+	body.collision_layer = 1 << (layer - 1)
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
 	var tri := ConcavePolygonShape3D.new()
@@ -881,24 +929,98 @@ static func _new_road_collision() -> StaticBody3D:
 	body.add_child(col)
 	return body
 
-static func _update_road_collision(root: Node3D, half_w: float) -> void:
+## How far below the road surface the bodies' bed lies, m. The chassis shape
+## dips 3-5 cm under the surface with the rear springs on their bump stops
+## (245 km/h through a sag, tests/world/road_bumps.gd).
+const ROAD_BED_DROP := 0.12
+
+## The sharpest fold allowed between two neighbouring triangles of the wheels'
+## surface, radians: 50 mm/s of suspension speed at 250 km/h, a third of what
+## the car's own motion steps it by. 0.003 still stepped it 180 mm/s.
+const ROAD_COL_KINK := 0.0007
+## Rows and columns of quads per chunk at most: 200 rows is a 360 m sag at
+## ROAD_COL_KINK, tighter than the road builds (RoadAlignment.SAG_MIN_RADIUS),
+## and a 300 m bend at the steepest grade wants 14 columns. Most chunks need
+## far fewer: seed 37's first 400 average 63 triangles (20 before), 800 at
+## worst, and a rebuild takes 0.1 ms longer.
+const ROAD_COL_MAX_ROWS := 200
+const ROAD_COL_MAX_COLS := 16
+
+## Rows of quads along a chunk of horizontal curvature k and vertical
+## curvature vc: each row's straight chord turns vc * its length from the next.
+static func road_col_rows(k: float, vc: float) -> int:
+	if absf(vc) < 1e-9:
+		return 1 if absf(k) < 1e-9 else STATIONS
+	return clampi(ceili(CHUNK_LEN * absf(vc) / ROAD_COL_KINK), STATIONS, ROAD_COL_MAX_ROWS)
+
+## Columns of quads across `width` metres of road: on a bend that climbs the
+## surface twists (the inside of the bend is shorter, so steeper) by
+## grade * k per metre across, and a quad folds along its diagonal by that
+## times its width.
+static func road_col_cols(k: float, g: float, vc: float, width: float) -> int:
+	var steepest := maxf(absf(g), absf(g + vc * CHUNK_LEN))
+	return clampi(ceili(width * steepest * absf(k) / ROAD_COL_KINK), 1, ROAD_COL_MAX_COLS)
+
+static func _update_road_collision(root: Node3D, half_w: float, k: float, g: float, vc: float) -> void:
 	var col: CollisionShape3D = root.get_node(^"RoadCol/Shape")
-	var tri: ConcavePolygonShape3D = col.shape
+	var bed: CollisionShape3D = root.get_node(^"RoadBed/Shape")
 	if not RoadFrame.has_hills():
-		col.disabled = true
-		tri.set_faces(PackedVector3Array())
+		for c: CollisionShape3D in [col, bed]:
+			c.disabled = true
+			(c.shape as ConcavePolygonShape3D).set_faces(PackedVector3Array())
 		return
-	var faces := PackedVector3Array()
-	for k in STATIONS:
-		var z0 := -CHUNK_LEN * float(k) / STATIONS
-		var z1 := -CHUNK_LEN * float(k + 1) / STATIONS
-		var a := _at(-half_w, 0.0, z0)
-		var b := _at(half_w, 0.0, z0)
-		var c := _at(-half_w, 0.0, z1)
-		var d := _at(half_w, 0.0, z1)
-		faces.append_array([a, c, b, b, c, d])
-	tri.set_faces(faces)
+	(col.shape as ConcavePolygonShape3D).set_faces(_road_faces(half_w, k, g, vc,
+		road_col_rows(k, vc), road_col_cols(k, g, vc, 2.0 * half_w), 0.0))
+	(bed.shape as ConcavePolygonShape3D).set_faces(_road_faces(half_w, k, g, vc,
+		1 if absf(vc) < 1e-9 and absf(k) < 1e-9 else STATIONS, 1, -ROAD_BED_DROP))
 	col.disabled = false
+	bed.disabled = false
+
+## How far the wheels' surfaces (road and sidewalk) reach past each end of
+## their chunk, m. Two chunks' edges meet to float rounding, not exactly, and
+## a wheel's ray that lands in the hairline between them hits nothing: the
+## wheel carries no load for a tick (tests/world/road_bumps.gd, seed 101, at
+## the join of chunks 19 and 20). The road's shape is carried on past the end,
+## so the two overlapping surfaces lie within a micron of each other.
+const COL_OVERLAP := 0.02
+
+## The road surface `y` above itself as rows x cols quads, 2 * half_w wide, in
+## chunk-local space. Corners come straight from the road's own arc and height
+## (what RoadFrame.roll answers), not the baked centreline: that is a 1 m
+## polyline, too coarse for rows shorter than a metre.
+static func _road_faces(half_w: float, k: float, g: float, vc: float, rows: int, cols: int, y: float) -> PackedVector3Array:
+	var pts := PackedVector3Array()
+	pts.resize((rows + 1) * (cols + 1))
+	var n := 0
+	for r in rows + 1:
+		var s := CHUNK_LEN * float(r) / float(rows)
+		# The first and last rows reach COL_OVERLAP past the chunk's ends.
+		if r == 0:
+			s = -COL_OVERLAP
+		elif r == rows:
+			s = CHUNK_LEN + COL_OVERLAP
+		var h := RoadAlignment.arc_heading(k, s)
+		var o := RoadAlignment.arc_point(k, s)
+		o.y = g * s + 0.5 * vc * s * s + y
+		var right := Vector3(cos(h), 0.0, -sin(h))
+		for c in cols + 1:
+			pts[n] = o + right * (half_w * (2.0 * float(c) / float(cols) - 1.0))
+			n += 1
+	var faces := PackedVector3Array()
+	faces.resize(6 * rows * cols)
+	n = 0
+	for r in rows:
+		var i0 := r * (cols + 1)
+		var i1 := i0 + cols + 1
+		for c in cols:
+			var a := pts[i0 + c]
+			var b := pts[i0 + c + 1]
+			var cc := pts[i1 + c]
+			var d := pts[i1 + c + 1]
+			faces[n] = a; faces[n + 1] = cc; faces[n + 2] = b
+			faces[n + 3] = b; faces[n + 4] = cc; faces[n + 5] = d
+			n += 6
+	return faces
 
 ## The district cross wall: spans x between the two boundary lines (xs.x and
 ## xs.y, both |x|) at the chunk's start, z = 0. Disabled when there is no step.
@@ -1121,6 +1243,7 @@ static func _create_nodes(root: Node3D) -> void:
 	root.add_child(_new_strip("SidewalkOnc", _get_sidewalk_mat()))
 
 	root.add_child(_new_road_collision())
+	root.add_child(_new_road_bed())
 	root.add_child(_new_sidewalk_collision("SidewalkColOwn"))
 	root.add_child(_new_sidewalk_collision("SidewalkColOnc"))
 	root.add_child(_new_boundary("BoundaryOwn"))
@@ -1182,6 +1305,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	_curve = _update_centerline(root, RoadFrame.curvature(chunk_index), RoadFrame.start_grade(chunk_index), RoadFrame.vcurve(chunk_index))
 	_cache_frames(_curve)
 	_strip_n = strip_pieces(RoadFrame.curvature(chunk_index), RoadFrame.vcurve(chunk_index))
+	_sidewalk_rows = sidewalk_rows(RoadFrame.vcurve(chunk_index))
 
 	var own_lanes: int = clampi(int(cfg.own_lanes), 1, MAX_OWN_LANES)
 	var onc_lanes: int = clampi(int(cfg.onc_lanes), 1, MAX_ONC_LANES)
@@ -1245,7 +1369,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var step_onc := Vector2(bound_onc, start_onc_walk + BUILDING_GAP + prev_setback)
 	_update_step(root, "BoundaryStepOwn", step_own, 1, absf(setback - prev_setback) > 0.01)
 	_update_step(root, "BoundaryStepOnc", step_onc, -1, absf(setback - prev_setback) > 0.01)
-	_update_road_collision(root, maxf(bound_own, bound_onc) + BOUNDARY_T + ROAD_COL_MARGIN)
+	_update_road_collision(root, maxf(bound_own, bound_onc) + BOUNDARY_T + ROAD_COL_MARGIN,
+		RoadFrame.curvature(chunk_index), RoadFrame.start_grade(chunk_index), RoadFrame.vcurve(chunk_index))
 
 	# edge pylons -- cosmetic rhythm/speed cues, interpolated along each
 	# shoulder's outer edge between this chunk's start and end width

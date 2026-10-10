@@ -195,6 +195,7 @@ func _hills() -> void:
 	var cfg := {"own_lanes": 4, "onc_lanes": 4, "barrier": false}
 	var worst_fit := 0.0
 	var worst_seam := 0.0
+	var worst_fold := 0.0
 	var prev_end: Array = []
 	for i in 60:
 		var chunk: Node3D = B.build_chunk(i, cfg, cfg)
@@ -220,9 +221,18 @@ func _hills() -> void:
 				worst_seam = maxf(worst_seam, best)
 		prev_end = end
 		var road_col := chunk.get_node(^"RoadCol/Shape") as CollisionShape3D
-		_check(not road_col.disabled and (road_col.shape as ConcavePolygonShape3D).get_faces().size() == 6 * B.STATIONS, "chunk %d: no road collision on a hilly road" % i)
+		var road_bed := chunk.get_node(^"RoadBed/Shape") as CollisionShape3D
+		var col_faces := (road_col.shape as ConcavePolygonShape3D).get_faces()
+		_check(not road_col.disabled and not col_faces.is_empty(), "chunk %d: no road collision on a hilly road" % i)
+		_check(not road_bed.disabled and not (road_bed.shape as ConcavePolygonShape3D).get_faces().is_empty(), "chunk %d: no road bed on a hilly road" % i)
+		# No fold in the wheels' surface sharper than the builder allows: along
+		# the road each row turns by vcurve x its length.
+		var rows := B.road_col_rows(RoadFrame.curvature(i), RoadFrame.vcurve(i))
+		worst_fold = maxf(worst_fold, absf(RoadFrame.vcurve(i)) * B.CHUNK_LEN / float(rows))
+		_check(col_faces.size() % (6 * rows) == 0, "chunk %d: road collision is not %d rows" % [i, rows])
 		chunk.free()
 	_check(worst_fit < 0.02, "hills: the centreline strays %.4f m from the road's height" % worst_fit)
+	_check(worst_fold <= B.ROAD_COL_KINK * 1.001, "hills: the road collision folds %.5f rad between rows" % worst_fold)
 	_check(worst_seam < EPS, "hills: road strips open a %.4f m gap between chunks" % worst_seam)
 	print("hills: join %.5f m, round trip %.5f m, centreline fit %.4f m, strip seam %.5f m" % [worst_join, worst_rt, worst_fit, worst_seam])
 

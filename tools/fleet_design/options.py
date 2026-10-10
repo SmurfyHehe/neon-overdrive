@@ -1,6 +1,6 @@
 """Per-car swappable parts (slots -> options) and example builds."""
 import mods as M
-from cars import P1, P2, P3, P4, P5, P6, N1, N2, N3, C1, C2, C3
+from cars import P1, P2, P3, P4, P5, P6, P17, N1, N2, N3, C1, C2, C3
 
 STOCK = {'label': 'Stock', 'ops': []}
 
@@ -136,6 +136,20 @@ P6['options'] = {
     'stance': {'stock': STOCK, 'lowered': M.stance(0.045, 'Street-lowered 4.5 cm'), 'raised': M.stance(-0.03, 'Gravel-raised 3 cm')},
 }
 
+# ------------------------------------------------------------------ P17
+P17['options'] = {
+    'trim': {'stock': {'label': 'Open bed', 'ops': []},
+             'covered': {'label': 'Bed cover', 'ops': [{'op': 'open', 'value': []}]}},
+    'front_bumper': {'stock': {'label': 'Chrome blade', 'ops': []},
+                     'bullbar': {'label': 'Bull bar', 'ops': [
+                         {'op': 'add', 'part': {'type': 'pushbar', 's': -0.10, 'y0': 0.34, 'y1': 0.92, 'w': 0.84}}]}},
+    'wheels': _wheel_set('Steel', ('six', M.wheels('6spoke', '6-spoke alloy', 0.62)),
+                         ('rally', M.wheels('6spoke', 'Rally 6-spoke gold', 0.64, 'rim_gold')),
+                         ('dish', M.wheels('dish', 'Deep dish', 0.66, 'rim_dark'))),
+    'exhaust': {'stock': {'label': 'Single (rear corner)', 'ops': []}, 'dual': M.exhaust(P17, 'dual', 0.042), 'side': M.exhaust(P17, 'side', 0.048)},
+    'stance': {'stock': STOCK, 'lowered': M.stance(0.05, 'Street-lowered 5 cm'), 'raised': M.stance(-0.04, 'Lifted 4 cm')},
+}
+
 # ------------------------------------------------------------------ NPC trims
 N1['options'] = {
     'trim': {'stock': {'label': 'Base', 'ops': []},
@@ -209,6 +223,10 @@ BUILDS = {
     'p6_crossover': {
         'street': {'kit': 'street', 'front_bumper': 'lip', 'hood': 'scoop', 'wheels': 'mesh', 'stance': 'lowered'},
         'full': {'kit': 'rally', 'skirts': 'mudflaps', 'hood': 'scoop', 'spoiler': 'big', 'wheels': 'rally', 'exhaust': 'center', 'stance': 'raised'},
+    },
+    'p17_work_pickup': {
+        'street': {'wheels': 'six', 'exhaust': 'dual', 'stance': 'lowered'},
+        'full': {'front_bumper': 'bullbar', 'trim': 'covered', 'wheels': 'rally', 'exhaust': 'side', 'stance': 'raised'},
     },
     'n1_commuter': {'sport': {'trim': 'sport'}, 'taxi': {'trim': 'taxi'}},
     'n2_cityhatch': {'sport': {'trim': 'sport'}, 'rack': {'trim': 'rack'}},

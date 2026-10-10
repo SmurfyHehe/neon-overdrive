@@ -6362,6 +6362,709 @@
    }
   },
   {
+   "id": "p17_work_pickup",
+   "role": "player",
+   "label": "Work pickup",
+   "refs": "the mid-size 4-door work pickups of the late 1990s (category only; no brand): a 4.0 V6, rear drive, a long bed",
+   "silhouette_rule": "Low flat hood under a tall upright double cab, one long open bed behind it on flared box sides, a side stripe the length of the body, steel wheels in big arches, a single tailpipe out the rear corner.",
+   "dims": {
+    "length": 5.25,
+    "width_body": 1.8,
+    "height": 1.74,
+    "wheelbase": 3.18,
+    "front_overhang": 0.9,
+    "rear_overhang": 1.17,
+    "ground_clearance": 0.28
+   },
+   "physics_hint": {
+    "wheel_r": 0.37,
+    "wheel_x": 0.775,
+    "axle_z": 1.59,
+    "tire_w_front": 0.245,
+    "tire_w_rear": 0.245,
+    "note": "CarSpec.build_wheels uses symmetric axle_z; this origin already sits midway between the axles."
+   },
+   "curves": {
+    "top": [
+     [
+      0.0,
+      0.86
+     ],
+     [
+      0.04,
+      0.96
+     ],
+     [
+      0.2,
+      1.02
+     ],
+     [
+      1.3,
+      1.09
+     ],
+     [
+      1.95,
+      1.7
+     ],
+     [
+      3.25,
+      1.74
+     ],
+     [
+      3.32,
+      1.16
+     ],
+     [
+      5.22,
+      1.14
+     ],
+     [
+      5.25,
+      1.08
+     ]
+    ],
+    "floor": [
+     [
+      0,
+      0.46
+     ],
+     [
+      0.3,
+      0.28
+     ],
+     [
+      4.5,
+      0.28
+     ],
+     [
+      5.25,
+      0.5
+     ]
+    ],
+    "hw": [
+     [
+      0,
+      0.76
+     ],
+     [
+      0.08,
+      0.86
+     ],
+     [
+      0.3,
+      0.9
+     ],
+     [
+      3.32,
+      0.9
+     ],
+     [
+      3.55,
+      0.9
+     ],
+     [
+      3.75,
+      0.94
+     ],
+     [
+      4.95,
+      0.94
+     ],
+     [
+      5.12,
+      0.9
+     ],
+     [
+      5.25,
+      0.88
+     ]
+    ],
+    "waist": [
+     [
+      0,
+      0.76
+     ],
+     [
+      0.4,
+      0.88
+     ],
+     [
+      5.25,
+      0.88
+     ]
+    ],
+    "belt": [
+     [
+      0,
+      0.86
+     ],
+     [
+      0.2,
+      0.98
+     ],
+     [
+      1.3,
+      1.06
+     ],
+     [
+      3.32,
+      1.12
+     ],
+     [
+      5.25,
+      1.12
+     ]
+    ]
+   },
+   "section": {
+    "tumble": 0.035,
+    "sill_in": 0.03,
+    "rocker_h": 0.5
+   },
+   "cabin": {
+    "A": 1.3,
+    "W": 1.95,
+    "R": 3.25,
+    "C": 3.32,
+    "D": 3.18,
+    "roof_w": [
+     [
+      1.95,
+      0.7
+     ],
+     [
+      3.25,
+      0.7
+     ]
+    ],
+    "roof_drop": 0.03,
+    "pillars": [
+     [
+      2.52,
+      2.6
+     ]
+    ]
+   },
+   "open_top": [
+    {
+     "s0": 3.4,
+     "s1": 5.22,
+     "floor": 0.84,
+     "wall": 0.05,
+     "mat": "bed"
+    }
+   ],
+   "wheel": {
+    "r": 0.37,
+    "w": 0.245,
+    "track": 1.55,
+    "arch_gap": 0.055,
+    "arch_lift": 0.02,
+    "rim": "steel",
+    "rim_ratio": 0.58
+   },
+   "decals": [
+    {
+     "view": "front",
+     "rect": [
+      -0.5,
+      0.7,
+      0.5,
+      0.9
+     ],
+     "mat": "grille",
+     "cell": 0.16
+    },
+    {
+     "view": "front",
+     "rect": [
+      0.54,
+      0.74,
+      0.82,
+      0.88
+     ],
+     "mat": "head",
+     "mirror": true
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.84,
+      0.48,
+      0.84,
+      0.6
+     ],
+     "mat": "chrome",
+     "tag": "fbumper"
+    },
+    {
+     "view": "left",
+     "rect": [
+      0.4,
+      0.74,
+      5.05,
+      0.82
+     ],
+     "mat": "paint2",
+     "mirror": true
+    },
+    {
+     "view": "left",
+     "rect": [
+      0.4,
+      0.715,
+      5.05,
+      0.735
+     ],
+     "mat": "trim",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.78,
+      0.72,
+      0.9,
+      1.06
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.84,
+      0.5,
+      0.84,
+      0.62
+     ],
+     "mat": "chrome",
+     "cell": 0.25,
+     "tag": "rbumper"
+    }
+   ],
+   "parts": [
+    {
+     "type": "mirrors",
+     "out": 0.11,
+     "up": 0.09
+    },
+    {
+     "type": "step",
+     "s0": 1.45,
+     "s1": 3.2,
+     "y": 0.4
+    }
+   ],
+   "sticker_slots": [
+    {
+     "id": "door",
+     "view": "left",
+     "mirror": true,
+     "note": "",
+     "rect": [
+      1.45,
+      0.86,
+      3.1,
+      1.06
+     ],
+     "center": [
+      -0.898,
+      0.96,
+      -0.215
+     ],
+     "normal": [
+      -0.989,
+      0.147,
+      -0.002
+     ],
+     "size": [
+      1.65,
+      0.2
+     ]
+    },
+    {
+     "id": "hood",
+     "view": "top",
+     "mirror": false,
+     "note": "",
+     "rect": [
+      -0.32,
+      0.3,
+      0.32,
+      1.1
+     ],
+     "center": [
+      0.0,
+      1.061,
+      -1.79
+     ],
+     "normal": [
+      0.0,
+      0.998,
+      -0.064
+     ],
+     "size": [
+      0.64,
+      0.8
+     ]
+    },
+    {
+     "id": "sun",
+     "view": "top",
+     "mirror": false,
+     "note": "windshield sun strip",
+     "rect": [
+      -0.6299999999999999,
+      1.8,
+      0.6299999999999999,
+      1.93
+     ],
+     "center": [
+      0.0,
+      1.602,
+      -0.625
+     ],
+     "normal": [
+      0.009,
+      0.674,
+      -0.739
+     ],
+     "size": [
+      1.26,
+      0.13
+     ]
+    },
+    {
+     "id": "rear",
+     "view": "rear",
+     "mirror": false,
+     "note": "tailgate",
+     "rect": [
+      -0.45,
+      0.88,
+      0.45,
+      1.08
+     ],
+     "center": [
+      0.0,
+      0.98,
+      2.772
+     ],
+     "normal": [
+      0.0,
+      -0.0,
+      1.0
+     ],
+     "size": [
+      0.9,
+      0.2
+     ]
+    }
+   ],
+   "paint": {
+    "hero": [
+     "Camel",
+     "#C4A264"
+    ],
+    "alts": [
+     [
+      "Work white",
+      "#E9E6DF"
+     ],
+     [
+      "Midnight",
+      "#1B2A4A"
+     ],
+     [
+      "Forest",
+      "#2B4A3A"
+     ],
+     [
+      "Oxide red",
+      "#8E2A28"
+     ]
+    ],
+    "trim": "#1A1D24",
+    "rim": "#A9AEB6",
+    "extra": {
+     "paint2": "#FF8A1F",
+     "chrome": "#C9CED6"
+    }
+   },
+   "options": {
+    "trim": {
+     "stock": {
+      "label": "Open bed",
+      "ops": []
+     },
+     "covered": {
+      "label": "Bed cover",
+      "ops": [
+       {
+        "op": "open",
+        "value": []
+       }
+      ]
+     }
+    },
+    "front_bumper": {
+     "stock": {
+      "label": "Chrome blade",
+      "ops": []
+     },
+     "bullbar": {
+      "label": "Bull bar",
+      "ops": [
+       {
+        "op": "add",
+        "part": {
+         "type": "pushbar",
+         "s": -0.1,
+         "y0": 0.34,
+         "y1": 0.92,
+         "w": 0.84
+        }
+       }
+      ]
+     }
+    },
+    "wheels": {
+     "stock": {
+      "label": "Steel",
+      "ops": []
+     },
+     "six": {
+      "label": "6-spoke alloy",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "6spoke"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.62
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim"
+       }
+      ]
+     },
+     "rally": {
+      "label": "Rally 6-spoke gold",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "6spoke"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.64
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim_gold"
+       }
+      ]
+     },
+     "dish": {
+      "label": "Deep dish",
+      "ops": [
+       {
+        "op": "set",
+        "path": "wheel.rim",
+        "value": "dish"
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_ratio",
+        "value": 0.66
+       },
+       {
+        "op": "set",
+        "path": "wheel.rim_mat",
+        "value": "rim_dark"
+       }
+      ]
+     }
+    },
+    "exhaust": {
+     "stock": {
+      "label": "Single (rear corner)",
+      "ops": []
+     },
+     "dual": {
+      "label": "Dual (split)",
+      "ops": [
+       {
+        "op": "exhaust",
+        "tips": [
+         {
+          "x": 0.558,
+          "y": 0.571,
+          "r": 0.042
+         },
+         {
+          "x": -0.558,
+          "y": 0.571,
+          "r": 0.042
+         }
+        ]
+       }
+      ]
+     },
+     "side": {
+      "label": "Side exit",
+      "ops": [
+       {
+        "op": "exhaust",
+        "tips": [
+         {
+          "dir": "side",
+          "side": "right",
+          "s": 3.495,
+          "y": 0.35,
+          "r": 0.048
+         },
+         {
+          "dir": "side",
+          "side": "left",
+          "s": 3.495,
+          "y": 0.35,
+          "r": 0.048
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "stance": {
+     "stock": {
+      "label": "Stock",
+      "ops": []
+     },
+     "lowered": {
+      "label": "Street-lowered 5 cm",
+      "ops": [
+       {
+        "op": "drop",
+        "value": 0.05
+       }
+      ]
+     },
+     "raised": {
+      "label": "Lifted 4 cm",
+      "ops": [
+       {
+        "op": "drop",
+        "value": -0.04
+       }
+      ]
+     }
+    }
+   },
+   "builds": {
+    "street": {
+     "wheels": "six",
+     "exhaust": "dual",
+     "stance": "lowered"
+    },
+    "full": {
+     "front_bumper": "bullbar",
+     "trim": "covered",
+     "wheels": "rally",
+     "exhaust": "side",
+     "stance": "raised"
+    }
+   },
+   "budget_tris": 10000,
+   "proxy_tris": {
+    "stock": 2542,
+    "street": 2500,
+    "full": 2400
+   },
+   "exhaust_tips": {
+    "stock": [
+     {
+      "pos": [
+       0.68,
+       0.4,
+       2.469
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.04
+     }
+    ],
+    "dual": [
+     {
+      "pos": [
+       0.558,
+       0.571,
+       2.81
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.042
+     },
+     {
+      "pos": [
+       -0.558,
+       0.571,
+       2.81
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.042
+     }
+    ],
+    "side": [
+     {
+      "pos": [
+       0.91,
+       0.35,
+       1.005
+      ],
+      "dir": [
+       1,
+       0,
+       0
+      ],
+      "r": 0.048
+     },
+     {
+      "pos": [
+       -0.91,
+       0.35,
+       1.005
+      ],
+      "dir": [
+       -1,
+       0,
+       0
+      ],
+      "r": 0.048
+     }
+    ]
+   }
+  },
+  {
    "id": "n1_commuter",
    "role": "npc",
    "label": "Commuter sedan",

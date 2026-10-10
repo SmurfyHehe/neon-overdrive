@@ -122,7 +122,7 @@ call :run traffic/traffic_spawn "--headless --fixed-fps 60"
 rem Near-band traffic: hand-overs between the 60 m physics band and the rails, both ways, no visible jump.
 call :run traffic/traffic_near_band "--headless --fixed-fps 120"
 rem ~40 s: the traffic cars (stage B step 5) against their sheets, then a drive each at the game's 120 Hz.
-rem npc_cars drives every kind (13 since the player and cop cars joined), about 15 min: give it 20.
+rem npc_cars drives every kind (14 since the player and cop cars joined), about 16 min: give it 20.
 set "TT_SAVED=%TEST_TIMEOUT%"
 if %TEST_TIMEOUT% LSS 1200 set "TEST_TIMEOUT=1200"
 call :run traffic/npc_cars "--headless --fixed-fps 120"

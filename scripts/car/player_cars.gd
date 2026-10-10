@@ -29,6 +29,8 @@ const KINDS := [
 	{"id": "p4_kei", "label": "Kei roadster", "name": "Mite", "tier": "T1", "nm": 180, "kg": 760},
 	{"id": "p5_muscle", "label": "Muscle sedan", "name": "Marlowe", "tier": "T3", "nm": 820, "kg": 1800},
 	{"id": "p6_crossover", "label": "Perf. crossover", "name": "Cairn", "tier": "T2", "nm": 400, "kg": 1450},
+	# The 4-door work pickup Walt sells after act 1 (Roy, 2026-10-10).
+	{"id": "p17_work_pickup", "label": "Work pickup", "name": "Camel", "tier": "T2", "nm": 640, "kg": 1780},
 ]
 
 static var selected := DEFAULT

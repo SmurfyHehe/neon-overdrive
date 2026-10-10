@@ -1,5 +1,59 @@
 {
  "cars": {
+  "p0_beater": {
+   "builds": {
+    "stock": {
+     "tris": 3232,
+     "draw_calls": 7,
+     "budget": 10000,
+     "slots": {
+      "door": {
+       "placements": 2,
+       "max_gap_m": 0.004,
+       "area_m2": 0.142
+      },
+      "hood": {
+       "placements": 1,
+       "max_gap_m": 0.006,
+       "area_m2": 0.32
+      },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.018,
+       "area_m2": 0.187
+      },
+      "rear": {
+       "placements": 1,
+       "max_gap_m": 0.012,
+       "area_m2": 0.057
+      }
+     },
+     "orbit_views_with_slot": 96,
+     "orbit_views": 96,
+     "orbit_blind_views": [],
+     "slot_view_counts": {
+      "rear": 32,
+      "door": 78,
+      "sun": 52,
+      "hood": 59
+     },
+     "chase_cam_slots": [
+      "rear"
+     ],
+     "chase_rear_readable_m2": 0.053,
+     "tips": {
+      "count": 1,
+      "clear_tips": 1
+     }
+    }
+   },
+   "exhaust_options": {
+    "stock": {
+     "count": 1,
+     "clear_tips": 1
+    }
+   }
+  },
   "p1_coupe": {
    "builds": {
     "stock": {
@@ -17,22 +71,24 @@
        "max_gap_m": 0.007,
        "area_m2": 0.424
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.004,
+       "area_m2": 0.167
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.134
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 30,
       "door": 72,
+      "sun": 59,
       "hood": 61
      },
      "chase_cam_slots": [
@@ -59,22 +115,24 @@
        "max_gap_m": 0.007,
        "area_m2": 0.424
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.004,
+       "area_m2": 0.167
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.134
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 30,
       "door": 72,
+      "sun": 60,
       "hood": 61
      },
      "chase_cam_slots": [
@@ -101,22 +159,24 @@
        "max_gap_m": 0.004,
        "area_m2": 0.425
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.004,
+       "area_m2": 0.167
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.134
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 30,
       "door": 72,
+      "sun": 60,
       "hood": 61
      },
      "chase_cam_slots": [
@@ -161,22 +221,24 @@
        "max_gap_m": 0.011,
        "area_m2": 0.425
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.007,
+       "area_m2": 0.16
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.2
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 32,
       "door": 68,
+      "sun": 59,
       "hood": 61
      },
      "chase_cam_slots": [
@@ -203,22 +265,24 @@
        "max_gap_m": 0.011,
        "area_m2": 0.425
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.007,
+       "area_m2": 0.16
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.2
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 32,
       "door": 68,
+      "sun": 59,
       "hood": 61
      },
      "chase_cam_slots": [
@@ -245,22 +309,24 @@
        "max_gap_m": 0.005,
        "area_m2": 0.426
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.007,
+       "area_m2": 0.16
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.2
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 32,
       "door": 68,
+      "sun": 59,
       "hood": 61
      },
      "chase_cam_slots": [
@@ -305,22 +371,24 @@
        "max_gap_m": 0.011,
        "area_m2": 0.482
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.007,
+       "area_m2": 0.191
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.009,
        "area_m2": 0.102
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 34,
       "door": 68,
+      "sun": 59,
       "hood": 61
      },
      "chase_cam_slots": [
@@ -347,22 +415,24 @@
        "max_gap_m": 0.011,
        "area_m2": 0.482
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.007,
+       "area_m2": 0.191
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.01,
        "area_m2": 0.101
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 32,
       "door": 68,
+      "sun": 59,
       "hood": 61
      },
      "chase_cam_slots": [
@@ -389,22 +459,24 @@
        "max_gap_m": 0.005,
        "area_m2": 0.483
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.007,
+       "area_m2": 0.191
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.009,
        "area_m2": 0.102
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 34,
       "door": 68,
+      "sun": 59,
       "hood": 61
      },
      "chase_cam_slots": [
@@ -453,6 +525,11 @@
        "max_gap_m": 0.007,
        "area_m2": 0.331
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.003,
+       "area_m2": 0.174
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
@@ -465,6 +542,7 @@
      "slot_view_counts": {
       "rear": 32,
       "door": 77,
+      "sun": 56,
       "hood": 64
      },
      "chase_cam_slots": [
@@ -491,6 +569,11 @@
        "max_gap_m": 0.007,
        "area_m2": 0.331
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.003,
+       "area_m2": 0.174
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
@@ -503,6 +586,7 @@
      "slot_view_counts": {
       "rear": 32,
       "door": 78,
+      "sun": 56,
       "hood": 64
      },
      "chase_cam_slots": [
@@ -529,6 +613,11 @@
        "max_gap_m": 0.007,
        "area_m2": 0.331
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.003,
+       "area_m2": 0.174
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
@@ -541,6 +630,7 @@
      "slot_view_counts": {
       "rear": 32,
       "door": 78,
+      "sun": 56,
       "hood": 64
      },
      "chase_cam_slots": [
@@ -585,22 +675,24 @@
        "max_gap_m": 0.01,
        "area_m2": 0.674
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.008,
+       "area_m2": 0.166
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.16
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 28,
       "door": 68,
+      "sun": 61,
       "hood": 61
      },
      "chase_cam_slots": [
@@ -627,22 +719,24 @@
        "max_gap_m": 0.01,
        "area_m2": 0.674
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.008,
+       "area_m2": 0.166
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.16
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 28,
       "door": 68,
+      "sun": 61,
       "hood": 61
      },
      "chase_cam_slots": [
@@ -669,22 +763,24 @@
        "max_gap_m": 0.01,
        "area_m2": 0.674
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.008,
+       "area_m2": 0.166
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.16
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 28,
       "door": 68,
+      "sun": 61,
       "hood": 61
      },
      "chase_cam_slots": [
@@ -729,22 +825,24 @@
        "max_gap_m": 0.009,
        "area_m2": 0.484
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.01,
+       "area_m2": 0.195
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.009,
        "area_m2": 0.219
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 34,
       "door": 72,
+      "sun": 59,
       "hood": 59
      },
      "chase_cam_slots": [
@@ -771,22 +869,24 @@
        "max_gap_m": 0.029,
        "area_m2": 0.484
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.01,
+       "area_m2": 0.195
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.009,
        "area_m2": 0.219
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 34,
       "door": 72,
+      "sun": 59,
       "hood": 59
      },
      "chase_cam_slots": [
@@ -813,22 +913,24 @@
        "max_gap_m": 0.029,
        "area_m2": 0.484
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.01,
+       "area_m2": 0.195
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.009,
        "area_m2": 0.219
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 34,
       "door": 72,
+      "sun": 59,
       "hood": 59
      },
      "chase_cam_slots": [
@@ -852,6 +954,156 @@
     }
    }
   },
+  "p17_work_pickup": {
+   "builds": {
+    "stock": {
+     "tris": 3212,
+     "draw_calls": 7,
+     "budget": 10000,
+     "slots": {
+      "door": {
+       "placements": 2,
+       "max_gap_m": 0.011,
+       "area_m2": 0.334
+      },
+      "hood": {
+       "placements": 1,
+       "max_gap_m": 0.01,
+       "area_m2": 0.513
+      },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.013,
+       "area_m2": 0.245
+      },
+      "rear": {
+       "placements": 1,
+       "max_gap_m": 0.012,
+       "area_m2": 0.18
+      }
+     },
+     "orbit_views_with_slot": 96,
+     "orbit_views": 96,
+     "orbit_blind_views": [],
+     "slot_view_counts": {
+      "rear": 28,
+      "door": 74,
+      "sun": 52,
+      "hood": 59
+     },
+     "chase_cam_slots": [
+      "rear"
+     ],
+     "chase_rear_readable_m2": 0.169,
+     "tips": {
+      "count": 1,
+      "clear_tips": 1
+     }
+    },
+    "street": {
+     "tris": 3170,
+     "draw_calls": 7,
+     "budget": 10000,
+     "slots": {
+      "door": {
+       "placements": 2,
+       "max_gap_m": 0.011,
+       "area_m2": 0.334
+      },
+      "hood": {
+       "placements": 1,
+       "max_gap_m": 0.01,
+       "area_m2": 0.513
+      },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.013,
+       "area_m2": 0.245
+      },
+      "rear": {
+       "placements": 1,
+       "max_gap_m": 0.012,
+       "area_m2": 0.18
+      }
+     },
+     "orbit_views_with_slot": 96,
+     "orbit_views": 96,
+     "orbit_blind_views": [],
+     "slot_view_counts": {
+      "rear": 28,
+      "door": 74,
+      "sun": 52,
+      "hood": 61
+     },
+     "chase_cam_slots": [
+      "rear"
+     ],
+     "chase_rear_readable_m2": 0.168,
+     "tips": {
+      "count": 2,
+      "clear_tips": 2
+     }
+    },
+    "full": {
+     "tris": 3070,
+     "draw_calls": 7,
+     "budget": 10000,
+     "slots": {
+      "door": {
+       "placements": 2,
+       "max_gap_m": 0.011,
+       "area_m2": 0.334
+      },
+      "hood": {
+       "placements": 1,
+       "max_gap_m": 0.01,
+       "area_m2": 0.513
+      },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.013,
+       "area_m2": 0.245
+      },
+      "rear": {
+       "placements": 1,
+       "max_gap_m": 0.012,
+       "area_m2": 0.18
+      }
+     },
+     "orbit_views_with_slot": 96,
+     "orbit_views": 96,
+     "orbit_blind_views": [],
+     "slot_view_counts": {
+      "rear": 28,
+      "door": 74,
+      "sun": 52,
+      "hood": 59
+     },
+     "chase_cam_slots": [
+      "rear"
+     ],
+     "chase_rear_readable_m2": 0.17,
+     "tips": {
+      "count": 2,
+      "clear_tips": 2
+     }
+    }
+   },
+   "exhaust_options": {
+    "stock": {
+     "count": 1,
+     "clear_tips": 1
+    },
+    "dual": {
+     "count": 2,
+     "clear_tips": 2
+    },
+    "side": {
+     "count": 2,
+     "clear_tips": 2
+    }
+   }
+  },
   "n1_commuter": {
    "builds": {
     "stock": {
@@ -869,22 +1121,24 @@
        "max_gap_m": 0.012,
        "area_m2": 0.454
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.014,
+       "area_m2": 0.2
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.11
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 30,
       "door": 68,
+      "sun": 59,
       "hood": 59
      },
      "chase_cam_slots": [
@@ -911,22 +1165,24 @@
        "max_gap_m": 0.012,
        "area_m2": 0.454
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.014,
+       "area_m2": 0.2
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.11
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 30,
       "door": 68,
+      "sun": 59,
       "hood": 59
      },
      "chase_cam_slots": [
@@ -953,22 +1209,24 @@
        "max_gap_m": 0.012,
        "area_m2": 0.454
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.014,
+       "area_m2": 0.2
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.11
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 30,
       "door": 68,
+      "sun": 59,
       "hood": 59
      },
      "chase_cam_slots": [
@@ -1005,6 +1263,11 @@
        "max_gap_m": 0.008,
        "area_m2": 0.303
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.008,
+       "area_m2": 0.181
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
@@ -1017,6 +1280,7 @@
      "slot_view_counts": {
       "rear": 32,
       "door": 72,
+      "sun": 58,
       "hood": 64
      },
      "chase_cam_slots": [
@@ -1043,6 +1307,11 @@
        "max_gap_m": 0.008,
        "area_m2": 0.303
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.008,
+       "area_m2": 0.181
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
@@ -1055,6 +1324,7 @@
      "slot_view_counts": {
       "rear": 32,
       "door": 72,
+      "sun": 58,
       "hood": 64
      },
      "chase_cam_slots": [
@@ -1081,6 +1351,11 @@
        "max_gap_m": 0.008,
        "area_m2": 0.303
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.008,
+       "area_m2": 0.181
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
@@ -1093,6 +1368,7 @@
      "slot_view_counts": {
       "rear": 32,
       "door": 72,
+      "sun": 58,
       "hood": 64
      },
      "chase_cam_slots": [
@@ -1129,22 +1405,24 @@
        "max_gap_m": 0.01,
        "area_m2": 0.513
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.014,
+       "area_m2": 0.248
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.216
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 28,
       "door": 68,
+      "sun": 52,
       "hood": 59
      },
      "chase_cam_slots": [
@@ -1171,22 +1449,24 @@
        "max_gap_m": 0.01,
        "area_m2": 0.513
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.014,
+       "area_m2": 0.248
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.216
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 28,
       "door": 68,
+      "sun": 52,
       "hood": 59
      },
      "chase_cam_slots": [
@@ -1213,22 +1493,24 @@
        "max_gap_m": 0.01,
        "area_m2": 0.513
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.014,
+       "area_m2": 0.248
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.216
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 28,
       "door": 68,
+      "sun": 52,
       "hood": 59
      },
      "chase_cam_slots": [
@@ -1265,22 +1547,24 @@
        "max_gap_m": 0.011,
        "area_m2": 0.601
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.009,
+       "area_m2": 0.226
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.16
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 28,
       "door": 70,
+      "sun": 59,
       "hood": 61
      },
      "chase_cam_slots": [
@@ -1307,22 +1591,24 @@
        "max_gap_m": 0.011,
        "area_m2": 0.601
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.009,
+       "area_m2": 0.226
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.16
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 28,
       "door": 70,
+      "sun": 59,
       "hood": 61
      },
      "chase_cam_slots": [
@@ -1349,22 +1635,24 @@
        "max_gap_m": 0.011,
        "area_m2": 0.601
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.009,
+       "area_m2": 0.226
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.16
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 28,
       "door": 70,
+      "sun": 59,
       "hood": 61
      },
      "chase_cam_slots": [
@@ -1401,22 +1689,24 @@
        "max_gap_m": 0.01,
        "area_m2": 0.481
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.014,
+       "area_m2": 0.268
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.16
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 28,
       "door": 72,
+      "sun": 53,
       "hood": 59
      },
      "chase_cam_slots": [
@@ -1443,22 +1733,24 @@
        "max_gap_m": 0.01,
        "area_m2": 0.481
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.014,
+       "area_m2": 0.268
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.16
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 28,
       "door": 72,
+      "sun": 53,
       "hood": 59
      },
      "chase_cam_slots": [
@@ -1495,22 +1787,24 @@
        "max_gap_m": 0.011,
        "area_m2": 0.602
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.006,
+       "area_m2": 0.169
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.097
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 28,
       "door": 72,
+      "sun": 61,
       "hood": 61
      },
      "chase_cam_slots": [
@@ -1537,22 +1831,24 @@
        "max_gap_m": 0.011,
        "area_m2": 0.602
       },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.006,
+       "area_m2": 0.169
+      },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
        "area_m2": 0.097
       }
      },
-     "orbit_views_with_slot": 93,
+     "orbit_views_with_slot": 96,
      "orbit_views": 96,
-     "orbit_blind_views": [
-      "yaw 165 pitch 2",
-      "yaw 180 pitch 2",
-      "yaw 195 pitch 2"
-     ],
+     "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 28,
       "door": 72,
+      "sun": 61,
       "hood": 61
      },
      "chase_cam_slots": [
@@ -1609,11 +1905,11 @@
   ]
  },
  "arch_gap": {
-  "max_player": 0.045,
+  "max_player": 0.055,
   "min_traffic": 0.065
  },
  "palette": {
-  "checked": 97,
+  "checked": 111,
   "flagged": []
  }
 }

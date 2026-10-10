@@ -42,6 +42,10 @@ extends SceneTree
 # they are machine dependent. The 120 Hz budget line (8.33 ms) is printed for
 # reading them against.
 #
+# Near-band traffic (2026-10-09): only cars within TrafficManager.physics_distance
+# (60 m) run the sim, so full_sim is far below the drawn count. Set
+# NEON_PERF_OLD_BAND=1 to put every drawn car in the sim, as before.
+#
 # Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --fixed-fps 120 --path . -s res://tests/traffic/traffic_perf.gd
 
@@ -111,6 +115,10 @@ func _next_phase() -> void:
 		return
 	var cfg: Dictionary = PHASES[phase]
 	traffic.detail_distance = cfg.detail
+	# NEON_PERF_OLD_BAND=1: every drawn car in the sim, the behaviour before
+	# near-band traffic (2026-10-09), for before/after numbers on one build.
+	if OS.get_environment("NEON_PERF_OLD_BAND") == "1":
+		traffic.physics_distance = cfg.detail
 	traffic.set_car_count(cfg.cars)
 	phase_start = tick
 	samples.clear()

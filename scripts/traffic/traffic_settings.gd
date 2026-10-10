@@ -6,9 +6,10 @@ extends RefCounted
 # uses (its own [traffic] section). The pause menu shows two sliders; Game
 # applies the saved values when it builds the TrafficManager.
 #
-# Draw distance is also the sim-quality distance: a car beyond it is hidden and
-# runs the frozen lane cruise instead of the raycast sim (traffic_car.gd).
-# 300 m (the chunk pool) keeps every car in the full sim, which is Option C.
+# Draw distance only decides what is drawn. Since near-band traffic
+# (2026-10-09) the raycast sim runs for cars within about 60 m of the player
+# (TrafficManager.physics_distance); further out, drawn or not, cars drive on
+# rails (traffic_car.gd).
 #
 # Budget (2026-10-06, traffic milestone 4, Roy: default 40 -> 16): a full-sim
 # car costs 0.19-0.36 ms per 120 Hz tick (tests/traffic/traffic_perf.gd, i5-1235U,

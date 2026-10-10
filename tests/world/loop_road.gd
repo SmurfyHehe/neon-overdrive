@@ -8,17 +8,25 @@ extends SceneTree
 # - the loop's shape repeats every lap in both directions (bends, heading,
 #   grade, height), every join is smooth, the lap closing included, and the
 #   closing chunks stay inside the road's limits
+# - bends and hills differ from night to night (the road seed) but pinned
+#   chunks (crossings, exits, median gaps) are straight and level on every one
 # - 8 districts, the same ones a lap on and a lap back; a crossing just inside
 #   each end of each city area and none on the highway stretches
+# - the loop grows by act (8, 12, 16 districts) and nothing already placed moves
+# - map data: every district start, crossing and exit lies on the drawn loop in
+#   loop order, map_point wraps, stops point at real exits, the layout's exits
+#   are the map's on every lap
 # In the game (curved, hilly, with traffic):
 # - turning round and driving back the other way, past where the road used to
 #   begin: road under the car all the way, the chunk pool the same both sides,
 #   and traffic turns with the player (cars ahead in its lanes going its way,
 #   oncoming ones on the other side, none placed in view)
 # - a whole lap on, the same buildings stand in the same places
-# - the save names the road, the place on the lap and the heading; a save from
-#   laps later resumes in the same spot; a save with no road id, or one this
-#   build does not know, starts at the top of the loop and keeps the clock
+# - the centre barrier is the map's: open at the gaps, the same every lap
+# - the save records road id, s and dir (RoadMap.where); a save made heading
+#   back up the road, laps later, resumes in the same spot facing the same way;
+#   a save with no road id, or one this build does not know, starts at the top
+#   of the loop and keeps the clock; the act is saved and resumed
 #
 # Exit code 1 on failure. Run (headless):
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --fixed-fps 60 --path . -s res://tests/world/loop_road.gd
@@ -46,10 +54,13 @@ func _fail(msg: String) -> void:
 func _initialize() -> void:
 	_shape()
 	_districts()
+	_acts()
+	_map_data()
 	OS.set_environment("NEON_CURVES", "0.5")
 	OS.set_environment("NEON_HILLS", "0.5")
 	OS.set_environment("NEON_TRAFFIC", "14")
 	OS.set_environment("NEON_ROAD", "")
+	OS.set_environment("NEON_ACT", "")
 	OS.set_environment("NEON_ROAD_SEED", "")
 	OS.set_environment("NEON_CITY_LIGHTS", "1")
 	OS.set_environment("NEON_LAYOUT", "0")
@@ -73,13 +84,41 @@ func _boot() -> void:
 # ---------- without a game ----------
 
 func _shape() -> void:
-	RoadMap.use("loop_1")
+	RoadMap.use(0)
 	var n := RoadMap.period
 	if n != 128 or RoadMap.district_count() != 8:
-		_fail("loop_1 is %d chunks in %d districts, expected 128 in 8" % [n, RoadMap.district_count()])
+		_fail("road 0 is %d chunks in %d districts, expected 128 in 8" % [n, RoadMap.district_count()])
 	var worst_join := 0.0
-	for road_seed in [1, 2, 3, 777, RoadMap.seed_of("loop_1")]:
-		var a := RoadAlignment.new(road_seed, 0.8, 0.8, 0.0, n)
+	var pins := RoadMap.pins()
+	var pinned := 0
+	for b in pins:
+		pinned += b
+	var bends := {}
+	for road_seed in [1, 2, 3, 777, 20261010]:
+		var a := RoadAlignment.new(road_seed, 0.8, 0.8, 0.0, n, pins)
+		var sig := PackedFloat64Array()
+		var turned := 0
+		for i in n:
+			sig.append(a.curvature(i))
+			sig.append(a.vcurve(i))
+			if a.curvature(i) != 0.0:
+				turned += 1
+			# Pinned: straight, no vertical curve, and level but for the lap's tilt.
+			if pins[i] != 0 and (a.curvature(i) != 0.0 or absf(a.vcurve(i)) > 1e-12 or absf(a.start_grade(i) - a.start_grade(0)) > 1e-9):
+				_fail("seed %d: pinned chunk %d is not straight and level (k %.5f, vcurve %.6f, grade %.4f)" % [road_seed, i, a.curvature(i), a.vcurve(i), a.start_grade(i)])
+				break
+		if absf(a.start_grade(0)) > 0.01:
+			_fail("seed %d: the lap is tilted by %.4f" % [road_seed, a.start_grade(0)])
+		if turned < n / 8:
+			_fail("seed %d: only %d of %d chunks bend" % [road_seed, turned, n])
+		if bends.has(hash(sig)):
+			_fail("seed %d has the same bends and hills as another night" % road_seed)
+		bends[hash(sig)] = true
+		var again := RoadAlignment.new(road_seed, 0.8, 0.8, 0.0, n, pins)
+		for i in n:
+			if again.curvature(n - 1 - i) != a.curvature(n - 1 - i) or again.start_height(i) != a.start_height(i):
+				_fail("seed %d: the same night gave a different road" % road_seed)
+				break
 		for i in range(-n - 3, 2 * n + 3):
 			if a.curvature(i) != a.curvature(i + n) or a.vcurve(i) != a.vcurve(i + n) \
 					or a.start_heading(i) != a.start_heading(i + n) or a.start_grade(i) != a.start_grade(i + n) \
@@ -112,10 +151,10 @@ func _shape() -> void:
 	var plain := RoadAlignment.new(777, 0.8, 0.8)
 	if plain.curvature(-1) != 0.0 or plain.start_z(-2) != 100.0:
 		_fail("endless road: chunks before 0 are no longer straight")
-	print("shape: %d chunks a lap (%.1f km), worst join %.9f" % [n, RoadMap.length() / 1000.0, worst_join])
+	print("shape: %d chunks a lap (%.1f km), %d pinned, worst join %.9f" % [n, RoadMap.length() / 1000.0, pinned, worst_join])
 
 func _districts() -> void:
-	RoadMap.use("loop_1")
+	RoadMap.use(0)
 	var n := RoadMap.period
 	var seen := {}
 	for i in n:
@@ -158,7 +197,105 @@ func _districts() -> void:
 		_fail("only %d chunks have a crossing, for %d crossings" % [touched, js.size()])
 	Junction.enabled = false
 	print("districts: 8, crossings at %s m" % [js])
-	RoadMap.use("")
+	RoadMap.use(RoadMap.ENDLESS)
+
+## The loop grows by act and nothing already placed moves.
+func _acts() -> void:
+	var before := {}
+	for a in [1, 2, 3]:
+		RoadMap.use(0, a)
+		var want: int = [8, 12, 16][a - 1]
+		if RoadMap.district_count() != want or RoadMap.period != want * 16:
+			_fail("act %d: %d districts, %d chunks; expected %d, %d" % [a, RoadMap.district_count(), RoadMap.period, want, want * 16])
+		if RoadMap.district_info(RoadMap.district_count() - 1).area != "highway":
+			_fail("act %d ends in a city area, so the first crossing would move" % a)
+		var now := {}
+		for d in RoadMap.district_count():
+			now["district %d" % d] = RoadMap.district_start(d)
+		for c in RoadMap.junctions():
+			now["crossing %.0f" % c] = c
+		for e in RoadMap.exits():
+			now["exit %s" % e.id] = float(e.s)
+		for g in RoadMap.gaps():
+			now["gap %s" % g.id] = float(g.s)
+		for k in before:
+			if not now.has(k) or now[k] != before[k]:
+				_fail("act %d: %s moved or went (was at %.0f m)" % [a, k, before[k]])
+		if a > 1 and now.size() <= before.size():
+			_fail("act %d adds nothing" % a)
+		for e in RoadMap.exits() + RoadMap.gaps():
+			if float(e.s) < 0.0 or float(e.s) >= RoadMap.length():
+				_fail("act %d: %s is off the loop at %.0f m" % [a, e.id, e.s])
+		print("act %d: %d districts, %.1f km, %d crossings, %d exits, %d gaps" % [a, RoadMap.district_count(), RoadMap.length() / 1000.0,
+			RoadMap.junctions().size(), RoadMap.exits().size(), RoadMap.gaps().size()])
+		before = now
+	RoadMap.use(RoadMap.ENDLESS)
+
+## How far along the drawn loop (0 .. its length) point p is, or -1 if off it.
+func _along_map(pts: Array, p: Vector2) -> float:
+	var run := 0.0
+	for i in pts.size():
+		var a: Vector2 = pts[i]
+		var b: Vector2 = pts[(i + 1) % pts.size()]
+		var t := clampf((p - a).dot(b - a) / (b - a).length_squared(), 0.0, 1.0)
+		if a.lerp(b, t).distance_to(p) < 1e-4:
+			return run + t * a.distance_to(b)
+		run += a.distance_to(b)
+	return -1.0
+
+func _map_data() -> void:
+	for a in [1, 3]:
+		RoadMap.use(0, a)
+		var pts: Array = RoadMap.ROADS[0].map
+		if pts.size() < 8 or pts.size() > 20:
+			_fail("the map has %d points, expected 8 to 20" % pts.size())
+		for pt in pts:
+			if pt.x < 0.0 or pt.x > 1.0 or pt.y < 0.0 or pt.y > 1.0:
+				_fail("map point %s is outside the 0-1 square" % pt)
+		# Every district start, crossing and exit, in loop order.
+		var places: Array = []
+		for d in RoadMap.district_count():
+			places.append(RoadMap.district_start(d))
+		for c in RoadMap.junctions():
+			places.append(c)
+		for e in RoadMap.exits():
+			places.append(float(e.s))
+		places.sort()
+		var last := -1.0
+		for s in places:
+			var p := RoadMap.map_point(0, s)
+			var t := _along_map(pts, p)
+			if t < 0.0:
+				_fail("act %d: %.0f m maps to %s, which is not on the drawn loop" % [a, s, p])
+			elif t < last - 1e-4:
+				_fail("act %d: %.0f m is out of loop order on the map" % [a, s])
+			last = t
+			# Wraps: a lap on, laps back.
+			if p.distance_to(RoadMap.map_point(0, s + RoadMap.length())) > 1e-5 or p.distance_to(RoadMap.map_point(0, s - 3.0 * RoadMap.length())) > 1e-5:
+				_fail("act %d: map_point does not wrap at %.0f m" % [a, s])
+		if RoadMap.map_point(0, 0.0).distance_to(pts[0]) > 1e-5:
+			_fail("the map does not start at its first point")
+		if RoadMap.map_point(0, RoadMap.length() - 0.01).distance_to(pts[0]) > 0.01:
+			_fail("the drawn loop does not close")
+		# The layout's exits are the map's, on every lap, in both directions.
+		var lay := RoadLayout.new(5, null, 1.0)
+		if lay.changes.size() != RoadMap.exits().size():
+			_fail("act %d: the layout has %d changes for %d exits" % [a, lay.changes.size(), RoadMap.exits().size()])
+		for lap in [-2, 0, 1]:
+			var off := float(lap) * RoadMap.length()
+			var got := lay.changes_between(off + 390.0, off + 410.0)
+			if got.size() != 2 or got[0].kind != "exit":
+				_fail("act %d: %d exits found at 400 m on lap %d, expected 2" % [a, got.size(), lap])
+		if lay.district_at(100.0) != "city" or lay.district_at(2000.0 - RoadMap.length()) != "outskirts":
+			_fail("act %d: the layout districts are not the map areas" % a)
+	for st in RoadMap.STOPS:
+		var at := RoadMap.stop_place(st.id)
+		if at.is_empty() or not RoadMap.knows(int(st.road)):
+			_fail("stop %s points at exit %s, which road %s does not have" % [st.id, st.exit, st.road])
+	if not RoadMap.INTERCHANGES.is_empty():
+		_fail("interchanges before there is a second loop")
+	print("map: %d points, %d stops, %d interchanges" % [RoadMap.ROADS[0].map.size(), RoadMap.STOPS.size(), RoadMap.INTERCHANGES.size()])
+	RoadMap.use(RoadMap.ENDLESS)
 
 # ---------- in the game ----------
 
@@ -227,10 +364,15 @@ func _physics_process(_delta: float) -> bool:
 	match phase:
 		0:  # turn round and drive back up the road, past where it used to begin
 			if ticks == 2:
-				if RoadMap.road_id != "loop_1" or not RoadMap.is_loop():
-					_fail("a fresh run is on road '%s', not loop_1" % RoadMap.road_id)
-				if game.road_seed != RoadMap.seed_of("loop_1"):
-					_fail("loop_1 was built from seed %d, not its own" % game.road_seed)
+				if RoadMap.road_id != 0 or not RoadMap.is_loop() or RoadMap.act != 1:
+					_fail("a fresh run is on road %d, act %d, not road 0, act 1" % [RoadMap.road_id, RoadMap.act])
+				# The centre barrier is the map's: open at the gaps, the same every lap.
+				for i in RoadMap.period:
+					var cfg: Dictionary = game.call("_section_at", i)
+					if cfg.barrier and RoadMap.gap_in(i):
+						_fail("chunk %d is a median gap with a barrier in it" % i)
+					if cfg != game.call("_section_at", i + RoadMap.period) or cfg != game.call("_section_at", i - 2 * RoadMap.period):
+						_fail("chunk %d has a different section from lap to lap" % i)
 				var span := _pool_span()
 				if span != Vector2i(-6, 6):
 					_fail("pool at the start spans %s, expected -6..6" % span)
@@ -315,8 +457,13 @@ func _physics_process(_delta: float) -> bool:
 			# The save: which road, where on the lap, which way.
 			saved = game.saver.capture()
 			var want_s := fposmod((float(lap_from) + 0.5) * L, RoadMap.length())
-			if saved.road.get("id") != "loop_1" or absf(float(saved.road.get("s", -1.0)) - want_s) > 2.0 or saved.road.get("dir") != 1:
-				_fail("save says road %s, s %s, dir %s; expected loop_1, %.0f, 1" % [saved.road.get("id"), saved.road.get("s"), saved.road.get("dir"), want_s])
+			if saved.road.get("id") != 0 or absf(float(saved.road.get("s", -1.0)) - want_s) > 2.0 or saved.road.get("dir") != 1 or saved.road.get("act") != 1:
+				_fail("save says road %s, s %s, dir %s; expected 0, %.0f, 1" % [saved.road.get("id"), saved.road.get("s"), saved.road.get("dir"), want_s])
+			# Turned round, on the far side: the same place, the other heading.
+			_put(p, TrafficManager.lane_centre(1, true), RoadFrame.unroll(p.global_position).z, PI)
+			saved = game.saver.capture()
+			if saved.road.get("id") != 0 or absf(float(saved.road.get("s", -1.0)) - want_s) > 2.0 or saved.road.get("dir") != -1:
+				_fail("heading back, save says road %s, s %s, dir %s; expected 0, %.0f, -1" % [saved.road.get("id"), saved.road.get("s"), saved.road.get("dir"), want_s])
 			# The same save from three laps later: must resume in the same spot.
 			saved.origin_index = int(saved.origin_index) + 3 * RoadMap.period
 			saved.clock = {"minutes": 123.0, "night": 2}
@@ -326,8 +473,13 @@ func _physics_process(_delta: float) -> bool:
 		2:
 			if ticks < 3:
 				return false
-			if not game.resume_place or RoadMap.road_id != "loop_1":
-				_fail("a loop_1 save did not resume on loop_1")
+			if not game.resume_place or RoadMap.road_id != 0:
+				_fail("a road 0 save did not resume on road 0")
+			var at := RoadMap.where(RoadFrame.unroll(p.global_position).z, -p.global_transform.basis.z)
+			if at.road != 0 or absf(at.s - float(saved.road.s)) > 0.5 or at.dir != -1:
+				_fail("resumed at road %d, %.1f m, dir %d; saved at 0, %.1f m, -1" % [at.road, at.s, at.dir, saved.road.s])
+			if game.road_seed != int(saved.road.seed):
+				_fail("resumed on the road of another night (seed %d, saved %d)" % [game.road_seed, saved.road.seed])
 			if game.origin_index < 0 or game.origin_index >= RoadMap.period:
 				_fail("resumed origin index %d is not within one lap" % game.origin_index)
 			var want := SaveDirector.array_to_xform(saved.car.xform)
@@ -338,12 +490,13 @@ func _physics_process(_delta: float) -> bool:
 			_road_under(p, "resumed")
 			if _sig(_chunk_of(p)) != sigs[lap_from]:
 				_fail("the resumed chunk is not the place that was saved")
-			print("resume: chunk %d, origin %d" % [_chunk_of(p), game.origin_index])
+			print("resume: chunk %d, origin %d, %.1f m round, dir %d" % [_chunk_of(p), game.origin_index, at.s, at.dir])
 			# A save from before the map (no road id).
 			var old: Dictionary = saved.duplicate(true)
 			old.road.erase("id")
 			old.road.erase("s")
 			old.road.erase("dir")
+			old.road.erase("act")
 			SaveStore.save_run(old)
 			phase = 3
 			_boot()
@@ -351,22 +504,43 @@ func _physics_process(_delta: float) -> bool:
 			if ticks < 3:
 				return false
 			var what := "a save with no road id" if phase == 3 else "a save from a road this build does not have"
-			if game.resume_place or RoadMap.road_id != "loop_1":
-				_fail("%s: on road '%s', resume_place %s" % [what, RoadMap.road_id, game.resume_place])
+			if game.resume_place or RoadMap.road_id != 0:
+				_fail("%s: on road %d, resume_place %s" % [what, RoadMap.road_id, game.resume_place])
 			var from_top := RoadFrame.s_at(RoadFrame.unroll(p.global_position).z)
 			if absf(from_top) > 5.0 or game.origin_index != 0 or p.linear_velocity.length() > 1.0:
 				_fail("%s: did not start at the top of the loop (%.1f m from it, origin %d)" % [what, from_top, game.origin_index])
 			if absf(game.night_clock.minutes - 123.0) > 1.0 or game.night_clock.night != 2:
 				_fail("%s: the clock was not kept (%.1f, night %d)" % [what, game.night_clock.minutes, game.night_clock.night])
 			_road_under(p, what)
-			print("%s: starts at the top of loop_1, clock kept" % what)
+			print("%s: starts at the top of road 0, clock kept" % what)
 			if phase == 4:
-				_finish()
-				return true
+				# Act 2: a longer loop, saved and resumed whatever the launch says.
+				SaveStore.clear_run()
+				OS.set_environment("NEON_ACT", "2")
+				phase = 5
+				_boot()
+				return false
 			var other: Dictionary = saved.duplicate(true)
 			other.road.id = "loop_9"
 			SaveStore.save_run(other)
 			phase = 4
+			_boot()
+		5, 6:
+			if ticks < 3:
+				return false
+			if RoadMap.act != 2 or RoadMap.period != 192 or game.resume_place != (phase == 6):
+				_fail("phase %d: act %d, %d chunks, resume_place %s; expected act 2, 192" % [phase, RoadMap.act, RoadMap.period, game.resume_place])
+			_road_under(p, "act 2")
+			if phase == 6:
+				print("act 2: %d chunks a lap, saved and resumed" % RoadMap.period)
+				_finish()
+				return true
+			var two: Dictionary = game.saver.capture()
+			if two.road.get("act") != 2:
+				_fail("the act 2 save says act %s" % two.road.get("act"))
+			SaveStore.save_run(two)
+			OS.set_environment("NEON_ACT", "")
+			phase = 6
 			_boot()
 	return false
 

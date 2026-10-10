@@ -31,6 +31,14 @@ class_name RoadAlignment
 # started, and the whole lap is tilted by a constant grade (well under 1 %)
 # so it ends at the height it began. Each lap then sits one lap's length
 # further down the world from the last; nothing wraps in space.
+#
+# Pinned chunks (`pins`, one byte per chunk of the lap; road_map.gd): the
+# places that are fixed on the map (crossings, exits, median gaps) get
+# straight, level road whatever the seed. A pinned chunk never bends, and the
+# grade is brought to level before each pinned stretch. The lap's closing
+# works the same way: a bend is never allowed to leave more heading than the
+# chunks still to come can turn back, so a lap nets no turn, and that
+# correcting bend falls on the last free chunks of the lap.
 
 const L := RoadChunkBuilder.CHUNK_LEN
 const MIN_RADIUS := 300.0
@@ -54,10 +62,6 @@ const KICKER_RADIUS_MAX := 250.0
 ## Past this height either way new hills lead back toward 0, so the city
 ## does not climb a mountain over a long run.
 const HEIGHT_SOFT_LIMIT := 30.0
-## A loop's last chunks: these many turn the heading back to 0 (30 degrees at
-## MIN_RADIUS takes four), and these many level the grade (one, at 1000 m).
-const CLOSE_CHUNKS := 6
-const CLOSE_VCHUNKS := 2
 
 ## 0 = a straight road, 1 = mostly bends. Share of segments that are bends.
 var curviness := 0.5
@@ -69,6 +73,11 @@ var kicker_chance := 0.0
 ## Chunks in one lap of a loop; 0 = an endless road.
 var period := 0
 var _closed := false
+## A loop: free chunks (not pinned) from chunk i to the lap's end, and chunks
+## from i to the next place the grade must be level (a pinned chunk, or the
+## lap's end; 0 on a pinned chunk).
+var _free_from := PackedInt32Array()
+var _to_level := PackedInt32Array()
 
 var _rng := RandomNumberGenerator.new()
 var _k := PackedFloat64Array()    # curvature of chunk i
@@ -85,8 +94,14 @@ var _vseg_target := 0.0  # grade the current vertical segment is heading for
 var _vseg_c := 0.0
 var _vseg_left := 0
 
-func _init(seed_value: int, curviness_value: float, hilliness_value: float = 0.0, kicker_value: float = 0.0, period_value: int = 0) -> void:
+func _init(seed_value: int, curviness_value: float, hilliness_value: float = 0.0, kicker_value: float = 0.0, period_value: int = 0, pins: PackedByteArray = PackedByteArray()) -> void:
 	period = maxi(period_value, 0)
+	_free_from.resize(period + 1)
+	_to_level.resize(period + 1)
+	for i in range(period - 1, -1, -1):
+		var pinned := i < pins.size() and pins[i] != 0
+		_free_from[i] = _free_from[i + 1] + (0 if pinned else 1)
+		_to_level[i] = 0 if pinned else _to_level[i + 1] + 1
 	_rng.seed = seed_value
 	_vrng.seed = seed_value ^ 0x5EED_4111
 	curviness = clampf(curviness_value, 0.0, 1.0)
@@ -196,8 +211,13 @@ func _extend() -> void:
 	var end := psi + k * L
 	if absf(end) > MAX_HEADING:
 		k = (signf(end) * MAX_HEADING - psi) / L
-	if period > 0 and i >= period - CLOSE_CHUNKS:
-		k = clampf(-psi / L, -1.0 / MIN_RADIUS, 1.0 / MIN_RADIUS)
+	if period > 0 and i < period:
+		if _to_level[i] == 0:
+			k = 0.0  # pinned: straight
+		else:
+			# Never more heading than the free chunks still to come can undo.
+			var room := float(_free_from[i + 1]) * L / MIN_RADIUS
+			k = clampf((clampf(psi + k * L, -room, room) - psi) / L, -1.0 / MIN_RADIUS, 1.0 / MIN_RADIUS)
 	_k.append(k)
 	var e := arc_point(k, L).rotated(Vector3.UP, psi)
 	_psi.append(psi + k * L)
@@ -218,8 +238,13 @@ func _extend_vertical(i: int) -> void:
 		if c != 0.0 and (g + c * L - _vseg_target) * signf(c) >= 0.0:
 			c = (_vseg_target - g) / L
 			_vseg_c = 0.0
-		if period > 0 and i >= period - CLOSE_VCHUNKS:
-			c = clampf(-g / L, -1.0 / CREST_MIN_RADIUS, 1.0 / SAG_MIN_RADIUS)
+		if period > 0 and i < period:
+			# Level by the next pinned chunk (and by the lap's end): never more
+			# grade than the chunks before it can take out.
+			var n := float(maxi(_to_level[i] - 1, 0))
+			var end := clampf(g + c * L, -n * L / SAG_MIN_RADIUS, n * L / CREST_MIN_RADIUS)
+			if end != g + c * L:
+				c = clampf((end - g) / L, -1.0 / CREST_MIN_RADIUS, 1.0 / SAG_MIN_RADIUS)
 	_vc.append(c)
 	_h.append(_h[i] + g * L + 0.5 * c * L * L)
 	_g.append(g + c * L)

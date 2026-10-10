@@ -986,7 +986,7 @@ static func _update_building(root: Node3D, index: int, edge_x_abs: float, z: flo
 	var h_old: float
 	if RoadMap.is_loop():
 		chunk_index = RoadMap.lap_chunk(chunk_index)
-		_lot_rng.seed = hash([RoadMap.road_id, chunk_index, index, "lot"])
+		_lot_rng.seed = hash([RoadMap.seed_of(RoadMap.road_id), chunk_index, index, "lot"])
 		is_garage = _lot_rng.randf() < 0.12
 		w_draw = _lot_rng.randf_range(4.0, 10.0)
 		d_draw = _lot_rng.randf_range(9.0, 18.0)

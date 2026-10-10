@@ -81,6 +81,8 @@ var run := {}
 ## a save from a road this build does not have (or from before the map), which
 ## starts at the top of the default road and keeps only the clock and the radio.
 var resume_place := false
+## The act the road is in (road_map.gd: the loop grows by act).
+var road_act := 1
 
 func _ready() -> void:
 	# Auto-Tune worker mode (exported game): no world, just the search.
@@ -300,19 +302,26 @@ func _setup_ground_collision() -> void:
 @export var hilliness := 0.5
 @export var kicker_chance := 0.0
 
-## The map (road_map.gd): which road this run is on. A resumed run stays on its
-## own; otherwise NEON_ROAD=<id> picks one ("endless" = the road from before
-## the map), else the default loop. A loop has its own fixed seed, so the city
-## is the same every run; NEON_ROAD_SEED still overrides it.
-func _pick_road() -> String:
+## The map (road_map.gd): which road this run is on, and in which act (the loop
+## grows by act). A resumed run stays on its own; otherwise NEON_ROAD=<id>
+## picks the road ("endless" = the road from before the map), else the default
+## loop, and NEON_ACT=<1-3> the act (1 until the story sets it). What stands on
+## a loop is fixed by the map; its bends and hills come from the night's road
+## seed, new each night and the same on every pass that night.
+func _pick_road() -> int:
 	if not run.is_empty():
-		var saved := str(run.road.get("id", ""))
-		if RoadMap.knows(saved):
+		var saved: Variant = run.road.get("id")
+		if (saved is float or saved is int) and float(saved) == floorf(saved) and RoadMap.knows(int(saved)):
 			resume_place = true
-			return saved
-		print("save: this run was on road '%s', which this build does not have; starting at the top of %s" % [saved, RoadMap.DEFAULT])
+			road_act = int(run.road.get("act", 1))
+			return int(saved)
+		print("save: this run was on road '%s', which this build does not have; starting at the top of road %d" % [saved, RoadMap.DEFAULT])
+	var act_env := OS.get_environment("NEON_ACT")
+	road_act = int(act_env) if act_env.is_valid_int() else 1
 	var env := OS.get_environment("NEON_ROAD")
-	return env if RoadMap.knows(env) else RoadMap.DEFAULT
+	if env == "endless":
+		return RoadMap.ENDLESS
+	return int(env) if env.is_valid_int() and RoadMap.knows(int(env)) else RoadMap.DEFAULT
 
 func _chunks_behind() -> int:
 	return CHUNKS_BEHIND_HILLS if RoadFrame.has_hills() else CHUNKS_BEHIND
@@ -332,9 +341,8 @@ func _setup_road_shape() -> void:
 		hilliness = Benchmark.opt_float("hills", 0.0)
 	var seed_env := OS.get_environment("NEON_ROAD_SEED")
 	road_seed = int(seed_env) if seed_env.is_valid_int() else randi()
-	RoadMap.use(_pick_road())
-	if RoadMap.is_loop() and not seed_env.is_valid_int():
-		road_seed = RoadMap.seed_of(RoadMap.road_id)
+	var road := _pick_road()
+	RoadMap.use(road, road_act)
 	if resume_place:
 		# A resumed run: its own road, and the floating origin where it was.
 		road_seed = int(run.road.seed)
@@ -344,13 +352,14 @@ func _setup_road_shape() -> void:
 		# On a loop only the place on the lap matters: laps driven are dropped.
 		origin_index = RoadMap.lap_chunk(int(run.origin_index))
 		recenter_count = int(run.get("recenter_count", 0))
-		if run.get("sections") is Dictionary:
+		# (A loop's centre barrier is the map's, not the save's.)
+		if run.get("sections") is Dictionary and not RoadMap.is_loop():
 			for k in run.sections:
 				if run.sections[k] is Dictionary and str(k).is_valid_int():
 					section_cache[str(RoadMap.lap_chunk(int(k)))] = {"own_lanes": OWN_LANES, "onc_lanes": ONC_LANES,
 						"barrier": run.sections[k].get("barrier", false) == true}
 	RoadFrame.origin_index = origin_index
-	RoadFrame.align = RoadAlignment.new(road_seed, curviness, hilliness, kicker_chance, RoadMap.period) if curviness > 0.0 or hilliness > 0.0 else null
+	RoadFrame.align = RoadAlignment.new(road_seed, curviness, hilliness, kicker_chance, RoadMap.period, RoadMap.pins()) if curviness > 0.0 or hilliness > 0.0 else null
 	# Lane adds and drops, median splits and exits (road lane proposal): a
 	# third stream from the same seed. NEON_LAYOUT=0 keeps the plain 4+4,
 	# NEON_LAYOUT=<metres> forces a change that often (the tests' sweep).
@@ -373,7 +382,12 @@ func _section_at(idx: int) -> Dictionary:
 	var onc := ONC_LANES
 	var barrier: bool
 	var lay := RoadFrame.layout
-	if lay != null:
+	if RoadMap.is_loop():
+		# The map's: the same barrier every night, open at the map's gaps.
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash([RoadMap.seed_of(RoadMap.road_id), idx, "barrier"])
+		barrier = rng.randf() < 0.3 and not RoadMap.gap_in(idx)
+	elif lay != null:
 		if lay.lanes_live:
 			var p := lay.lanes_pair(float(idx) * RoadChunkBuilder.CHUNK_LEN)
 			own = p.x
@@ -413,12 +427,18 @@ var chunk_event_hook: Callable = Callable()
 ## not rebuild a chunk at each end of the pool every time it rolls across.
 var _pool_centre := 0
 const POOL_HYSTERESIS := 5.0
+## The centre the pool was last found complete around: nothing to do until the
+## car moves to another chunk.
+var _pool_full_at := -(1 << 40)
 
 ## Both directions (the map, 2026-10-10): the pool is the same number of
 ## chunks either side of the player (CHUNKS_AHEAD = CHUNKS_BEHIND +
 ## CHUNKS_SPARE, 300 m, where the fog has the road), so the road is there
 ## whichever way the car goes or turns. A chunk that falls off one end is
-## rebuilt at the other; it is 350 m away when it goes.
+## rebuilt at the other; it is 350 m away when it goes. One rebuild a frame,
+## nearest missing chunk first, taking a piece no camera can see when there is
+## a choice (ViewGuard); only when the chunk under the car itself is missing
+## (the car was put somewhere else) is everything rebuilt at once.
 func _update_chunk_pool(ref_z: float) -> void:
 	var at := -ref_z / RoadChunkBuilder.CHUNK_LEN + float(origin_index)
 	var slack := POOL_HYSTERESIS / RoadChunkBuilder.CHUNK_LEN
@@ -426,6 +446,8 @@ func _update_chunk_pool(ref_z: float) -> void:
 		_pool_centre = floori(at - slack)
 	elif floori(at + slack) < _pool_centre:
 		_pool_centre = floori(at + slack)
+	if _pool_centre == _pool_full_at:
+		return
 	@warning_ignore("integer_division")
 	var half := (chunk_pool.size() - 1) / 2
 	var lo := _pool_centre - half
@@ -437,11 +459,24 @@ func _update_chunk_pool(ref_z: float) -> void:
 		else:
 			have[c.index] = true
 	if spare.is_empty():
+		_pool_full_at = _pool_centre
 		return
-	for idx in range(lo, lo + chunk_pool.size()):
-		if have.has(idx) or spare.is_empty():
+	var all := not have.has(_pool_centre)
+	for n in chunk_pool.size():
+		# Outward from the car: 0, +1, -1, +2, ...
+		@warning_ignore("integer_division")
+		var idx := _pool_centre + ((n + 1) / 2) * (1 if n % 2 == 1 else -1)
+		if have.has(idx) or idx < lo or idx >= lo + chunk_pool.size():
 			continue
-		var c: Dictionary = spare.pop_back()
+		if spare.is_empty():
+			break
+		var pick := spare.size() - 1
+		if not all:
+			for j in spare.size():
+				if not ViewGuard.chunk_seen(get_tree(), spare[j].root):
+					pick = j
+					break
+		var c: Dictionary = spare.pop_at(pick)
 		if chunk_event_hook.is_valid():
 			chunk_event_hook.call(c.root, absi(c.index - _pool_centre))
 		var prev_cfg := _section_at(idx - 1)
@@ -452,6 +487,8 @@ func _update_chunk_pool(ref_z: float) -> void:
 		# over a frame instead of jumping there.
 		c.root.reset_physics_interpolation()
 		c.index = idx
+		if not all:
+			break
 
 # ---------- floating origin (issue #26) ----------
 func _physics_process(_delta: float) -> void:

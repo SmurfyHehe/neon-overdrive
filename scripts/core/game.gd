@@ -233,6 +233,12 @@ func _ready() -> void:
 	rescue = OffMapRescue.new(self, player)
 	add_child(rescue)
 	_park_at_start()
+	if TestBuild.on():
+		# One line in the log, so a bug report shows the build was the sandbox.
+		var u := RoadFrame.unroll(player.global_position)
+		print("TEST BUILD sandbox on: money and fuel free, no run-ending, put_back key. Car %s at x %.1f, engine %s, fitted: %s + %d Workshop items" % [
+			PlayerCar.chassis_kind(), u.x, "on" if player.engine_running else "off (X starts it)",
+			", ".join(PackedStringArray(player.mod_build.get("nodes", []))), (player.mod_build.get("bolt_ons", []) as Array).size()])
 	_setup_game_state()
 	_setup_police(benchmark)
 	# Dynamic resolution holds the frame rate inside the tier; benchmark runs

@@ -92,6 +92,13 @@ call :run view/cockpit_head_motion --headless
 call :run ui/hud_rear_strip --headless
 call :run view/look_back --headless
 call :run view/look_around --headless
+call :run view/cockpit_horizon --headless
+call :run view/cockpit_eye_inside --headless
+call :run view/cockpit_shake_rotation_only --headless
+call :run view/look_into_corner --headless
+call :run view/look_tap_hold "--headless --fixed-fps 60"
+call :run view/camera_rate_independent --headless
+call :run view/fov_step_limit --headless
 call :run view/cockpit_driver --headless
 call :run view/cockpit_window --headless
 call :run view/gauge_pod --headless

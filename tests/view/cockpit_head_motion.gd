@@ -2,8 +2,10 @@ extends SceneTree
 
 # Head movement in the cockpit (Roy, 2026-10-06), headless and silent:
 # - rigid at the eye while cruising straight at a steady speed (offset ~0)
-# - hard braking moves the eye forward and dips it, within 4 cm and 2 degrees
-# - a hard turn moves the eye outward and rolls it, within the same caps
+# - hard braking moves the eye forward and dips it, within 5 cm and 3 degrees
+# - a hard turn moves the eye outward and tips the head INTO the corner
+#   (camera upgrade C1, 2026-10-10: it used to roll with the body, outward),
+#   within the same caps
 # - FxSettings "head_motion" off: the eye eases back to COCKPIT_EYE and stays
 #   there through the same braking
 # Read from ChaseCamera.head_offset (car-local metres) and head_tilt (pitch,
@@ -47,6 +49,8 @@ var peak_fwd := 0.0
 var peak_pitch := 0.0
 var peak_lat := 0.0
 var peak_roll := 0.0
+var peak_roll_signed := 0.0   # the roll at its largest, with its sign
+var peak_lat_signed := 0.0
 var max_offset := 0.0
 var max_tilt := 0.0
 var off_offset := 0.0
@@ -103,8 +107,8 @@ func _physics_process(_delta: float) -> bool:
 			peak_pitch = maxf(peak_pitch, -h[1])
 			if waited == ticks(1.2):
 				print("brake: head forward %.3f m, dip %.2f deg" % [peak_fwd, peak_pitch])
-				_check(peak_fwd > 0.01 and peak_fwd <= ChaseCamera.HEAD_MAX_M + EPS_M, "braking moves the head forward 1 to 4 cm (%.3f)" % peak_fwd)
-				_check(peak_pitch > 0.5 and peak_pitch <= ChaseCamera.HEAD_MAX_DEG + EPS_DEG, "braking dips the head 0.5 to 2 degrees (%.2f)" % peak_pitch)
+				_check(peak_fwd > 0.01 and peak_fwd <= ChaseCamera.HEAD_MAX_M + EPS_M, "braking moves the head forward 1 to 5 cm (%.3f)" % peak_fwd)
+				_check(peak_pitch > 0.5 and peak_pitch <= ChaseCamera.HEAD_MAX_DEG + EPS_DEG, "braking dips the head 0.5 to 3 degrees (%.2f)" % peak_pitch)
 				brake = 0.0
 				throttle = 1.0
 				_go(Step.TURN)
@@ -120,12 +124,19 @@ func _physics_process(_delta: float) -> bool:
 			if steer != 0.0:
 				peak_lat = maxf(peak_lat, absf((h[0] as Vector3).x))
 				peak_roll = maxf(peak_roll, absf(h[2]))
+				if absf(h[2]) > absf(peak_roll_signed):
+					peak_roll_signed = h[2]
+				if absf((h[0] as Vector3).x) > absf(peak_lat_signed):
+					peak_lat_signed = (h[0] as Vector3).x
 			if waited > ticks(20.0):
 				return _end("the car never got back up to speed for the turn (%.0f km/h)" % (p.current_speed() * 3.6))
 			if steer != 0.0 and waited == ticks(7.0):
 				print("turn: speed %.0f km/h, head sideways %.3f m, roll %.2f deg" % [p.current_speed() * 3.6, peak_lat, peak_roll])
-				_check(peak_lat > 0.005 and peak_lat <= ChaseCamera.HEAD_MAX_M + EPS_M, "a hard turn moves the head sideways 0.5 to 4 cm (%.3f)" % peak_lat)
-				_check(peak_roll > 0.25 and peak_roll <= ChaseCamera.HEAD_MAX_DEG + EPS_DEG, "a hard turn rolls the head 0.25 to 2 degrees (%.2f)" % peak_roll)
+				_check(peak_lat > 0.005 and peak_lat <= ChaseCamera.HEAD_MAX_M + EPS_M, "a hard turn moves the head sideways 0.5 to 5 cm (%.3f)" % peak_lat)
+				_check(peak_roll > 0.25 and peak_roll <= ChaseCamera.HEAD_MAX_DEG + EPS_DEG, "a hard turn rolls the head 0.25 to 3 degrees (%.2f)" % peak_roll)
+				# right turn (steer -0.6): the head tips right = negative roll about +z (into the turn), slides left (-x... outward is +x for a left turn, so -x here)
+				_check(peak_roll_signed < 0.0, "the head tips INTO a right turn (roll %.2f, negative = right)" % peak_roll_signed)
+				_check(peak_lat_signed < 0.0, "while the body slides outward, to the left in a right turn (x %.3f)" % peak_lat_signed)
 				steer = 0.0
 				FxSettings.set_on("head_motion", false)
 				_go(Step.OFF)

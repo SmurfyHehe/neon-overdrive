@@ -66,6 +66,11 @@ def splash() -> Image.Image:
 
 
 def main() -> None:
+    if (OUT / "originals").exists():
+        raise SystemExit(
+            "assets/brand holds the real B4 files now; this script would overwrite "
+            "them with placeholders. Use tools/recentre_logo.py instead."
+        )
     OUT.mkdir(parents=True, exist_ok=True)
     square_icon(256).save(OUT / "logo_B4_combined_256.png")
     sizes = [16, 32, 48, 256]

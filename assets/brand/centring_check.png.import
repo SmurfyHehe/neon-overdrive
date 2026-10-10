@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cipxph0ox7ry4"
-path="res://.godot/imported/boot_splash.png-07bf4bd549e0c30719440df9af3564ee.ctex"
+uid="uid://b5agknhhxoyve"
+path="res://.godot/imported/centring_check.png-9bb3aad8e436538d4ff3e34cc890c96f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/brand/boot_splash.png"
-dest_files=["res://.godot/imported/boot_splash.png-07bf4bd549e0c30719440df9af3564ee.ctex"]
+source_file="res://assets/brand/centring_check.png"
+dest_files=["res://.godot/imported/centring_check.png-9bb3aad8e436538d4ff3e34cc890c96f.ctex"]
 
 [params]
 

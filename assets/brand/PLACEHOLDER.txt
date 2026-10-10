@@ -1,3 +1,12 @@
-These three files are placeholders drawn by tools/make_brand_art.py.
-Replace them with the real B4 logo files at the same paths:
-  logo_B4_combined_256.png, logo_B4_combined.ico, boot_splash.png
+These are the real B4 brand files (no longer placeholders). The file name is
+kept so existing links still work.
+
+  logo_B4_combined_256.png  project icon / window icon (mark re-centred)
+  logo_B4_combined.ico      Windows export icon, sizes 16/32/48/64/128/256
+  boot_splash.png           boot splash, 1920x1080, lockup centred
+  title_screen_mock_B4_combined.png  Roy's title screen mock (reference)
+  centring_check.png        before/after of the re-centring
+
+Regenerate the centred files with `python tools/recentre_logo.py`.
+It always reads the untouched originals in originals/. The earlier
+placeholder art is kept in originals/placeholder/.

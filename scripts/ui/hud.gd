@@ -51,6 +51,8 @@ var camera: ChaseCamera
 var traffic: TrafficManager
 ## The night clock (living world step 1); null in tests that build a bare HUD.
 var night_clock: NightClock
+## Tonight's cash (F0, scripts/core/wallet.gd); null in tests that build a bare HUD.
+var wallet: Node
 
 var lbl_gear: Label
 var lbl_mode: Label
@@ -62,6 +64,7 @@ var lbl_rpm: Label
 var lbl_fuel: Label
 var lbl_info: Label
 var lbl_clock: Label
+var lbl_cash: Label
 var lbl_hint: Label
 var rpm_bar: RpmBar
 var cluster: VBoxContainer   # the gear / speed / RPM block; hidden in the cockpit view
@@ -209,9 +212,13 @@ func _ready() -> void:
 	margin.add_child(cluster)
 
 	# The car's clock, over the speedo (the head unit shows it in the cockpit).
-	lbl_clock = _label(cluster, 18, AMBER)
+	lbl_clock = _label(cluster, 18, AMBER, "numbers")
 	lbl_clock.name = "Clock"
 	lbl_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	# Tonight's cash, under the clock (F0); the bank is on the pause screen.
+	lbl_cash = _label(cluster, 18, AMBER, "numbers")
+	lbl_cash.name = "Cash"
+	lbl_cash.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	# Row: gear (+ A/M) on the left, speed on the right.
 	var row := HBoxContainer.new()
@@ -224,7 +231,7 @@ func _ready() -> void:
 	gear_col.add_theme_constant_override("separation", -6)
 	gear_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(gear_col)
-	lbl_gear = _label(gear_col, 56, AMBER)
+	lbl_gear = _label(gear_col, 56, AMBER, "display")
 	lbl_gear.custom_minimum_size = Vector2(52, 0)
 	lbl_gear.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl_mode = _label(gear_col, 16, SILVER)
@@ -234,7 +241,7 @@ func _ready() -> void:
 	speed_col.add_theme_constant_override("separation", -10)
 	speed_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(speed_col)
-	lbl_speed = _label(speed_col, 64, SILVER)
+	lbl_speed = _label(speed_col, 64, SILVER, "display")
 	lbl_speed.custom_minimum_size = Vector2(190, 0)
 	lbl_speed.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	lbl_unit = _label(speed_col, 16, SILVER)
@@ -253,13 +260,13 @@ func _ready() -> void:
 	var under := HBoxContainer.new()
 	under.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cluster.add_child(under)
-	lbl_boost = _label(under, 14, AMBER)
+	lbl_boost = _label(under, 14, AMBER, "numbers")
 	lbl_boost.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lbl_rpm = _label(under, 14, SILVER)
+	lbl_rpm = _label(under, 14, SILVER, "numbers")
 	lbl_rpm.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	# Fuel gauge (Stage C): eight bars, amber, red and blinking when low.
-	lbl_fuel = _label(cluster, 14, AMBER)
+	lbl_fuel = _label(cluster, 14, AMBER, "numbers")
 	lbl_fuel.name = "Fuel"
 	lbl_fuel.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
@@ -328,8 +335,9 @@ func _refresh_rear_cue() -> void:
 	if camera.frame != null:
 		camera.frame.mirrors.set_rear_cue(level)
 
-func _label(parent: Control, font_size: int, colour: Color) -> Label:
+func _label(parent: Control, font_size: int, colour: Color, role := "menu_strong") -> Label:
 	var l := Label.new()
+	l.add_theme_font_override("font", UiTheme.font(role))
 	l.add_theme_font_size_override("font_size", font_size)
 	l.add_theme_color_override("font_color", colour)
 	l.add_theme_color_override("font_outline_color", DUSK)
@@ -355,6 +363,7 @@ func _refresh() -> void:
 	var engine_off: bool = player.realistic_clutch and not player.engine_running
 
 	lbl_clock.text = night_clock.text() if night_clock != null else ""
+	lbl_cash.text = wallet.money(wallet.cash) if wallet != null else ""
 	lbl_gear.text = gear_text(gear)
 	lbl_mode.text = PlayerCar.TRANSMISSION_LETTERS[player.transmission_mode()]
 	lbl_speed.text = str(kmh(player.current_speed()))
@@ -374,6 +383,9 @@ func _refresh() -> void:
 
 	if engine_off:
 		lbl_status.text = "ENGINE OFF · hold X to start"
+		Hud.set_font_color(lbl_status, RED)
+	elif player.damage.is_engine_dead():
+		lbl_status.text = "ENGINE DEAD · tow in the pause menu"
 		Hud.set_font_color(lbl_status, RED)
 	elif player.limp.is_limping():
 		lbl_status.text = "LIMP · " + LimpMode.cause_name(player.limp.cause)

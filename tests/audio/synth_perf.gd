@@ -6,8 +6,8 @@ extends SceneTree
 # 75 fps). The synth is a per-sample GDScript loop that runs on a worker thread
 # (engine_audio.gd), so this is what that thread owes every frame.
 # FINGERPRINT line: a hash of every sample rendered over scenarios that reach
-# each branch (cruise, overrun pops, anti-lag, limiter, boost + blow-off,
-# upshift bang). An optimisation of the loop must leave it unchanged; compare
+# each branch (cruise, overrun pops, anti-lag, limiter, upshift bang; the turbo
+# is TurboSynth since B1). An optimisation of the loop must leave it unchanged; compare
 # the value before and after. Exit code 0 always; this is a measuring tool.
 #
 # Run: godot --headless --path . -s res://tests/audio/synth_perf.gd
@@ -37,8 +37,6 @@ func _init() -> void:
 				2: rpm = 7400.0; redline = (i % 3 == 0)           # limiter
 				3: thr = 0.0; rpm = 6000.0                        # anti-lag volley
 				4:
-					s.boost = 0.7
-					if i == 100: s.blow_off(1.0)
 					if i == 200: s.shift_cut(1.0)
 			var t0 := Time.get_ticks_usec()
 			var block := s.render(640, rpm, thr, redline)

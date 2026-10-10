@@ -41,8 +41,12 @@ set "CRASHED="
 call :run core/smoke --headless
 call :run core/game_info --headless
 call :run core/palette --headless
+call :run ui/fonts --headless
 call :run ui/hud --headless
 call :run ui/settings_screen --headless
+call :run ui/title_and_pause --headless
+call :run ui/pause_look --headless
+call :run audio/menu_sfx --headless
 call :run core/key_bindings --headless
 call :run fleet/car_loft_normals --headless
 call :run fleet/test_car --headless
@@ -92,6 +96,7 @@ call :run core/log_folder --headless
 call :run car/powertrain_health "--headless --fixed-fps 60"
 call :run car/car_parts --headless
 call :run car/turbo "--headless --fixed-fps 60"
+call :run car/forced_induction "--headless --fixed-fps 60"
 call :run car/chassis_targets "--headless --fixed-fps 60"
 call :run car/reverse_and_tabs --headless
 call :run car/transmission_modes "--headless --fixed-fps 60"
@@ -103,6 +108,10 @@ rem The player's tune survives a reset and a relaunch (PlayerTune).
 call :run tuning/tune_persist --headless
 call :run core/settings_safety --headless
 call :run core/setting_danger --headless
+rem Save system: atomic files, 3 slots, chases, rename migration (scripts/save/).
+call :run core/save_system --headless
+rem F0: cash and bank through reloads, chases and 6 a.m. (and the HUD and pause screen).
+call :run core/wallet --headless
 call :run traffic/traffic_spawn "--headless --fixed-fps 60"
 rem ~40 s: the traffic cars (stage B step 5) against their sheets, then a drive each at the game's 120 Hz.
 rem npc_cars drives every kind (13 since the player and cop cars joined), about 15 min: give it 20.
@@ -158,6 +167,8 @@ if /i not "%~1"=="quick" (
 	call :run car/burnout_line_lock "--headless --fixed-fps 120"
 	rem ~3 min: fuel burn calibration, a dry tank in every gearbox, limp causes (slowest wins), refuel from the bank.
 	call :run car/fuel_limp "--headless --fixed-fps 60"
+	rem ~25 s: damage slice 1: hits by direction, crash pull, rear sag, dead engine, lamps, steam, rattle, garage/station/tow.
+	call :run car/car_damage "--headless --fixed-fps 120"
 	rem No car or road chunk pops in or out where a camera can see it (Roy, 2026-10-09): flat road, then the hilly one.
 	call :run traffic/no_visible_spawn "--headless --fixed-fps 60"
 	set "NEON_HILLS=1"
@@ -175,6 +186,8 @@ if /i not "%~1"=="quick" (
 	rem Also a real window (it reads the interpolated camera); ~45 s of driving 500 km down the road.
 	call :run world/floating_origin_drive
 	call :run core/game_state --headless
+	rem Save system in the game: resume exactly after a quit, quit mid-chase busts.
+	call :run core/save_resume --headless
 	call :run tuning/tuning_panel --headless
 	call :run tuning/auto_tune_panel --headless
 	call :run tuning/tuner_screen --headless

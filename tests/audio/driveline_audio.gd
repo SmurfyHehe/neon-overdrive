@@ -33,7 +33,7 @@ func _settings_test() -> void:
 	AudioSettings.set_volume("Engine", 0.5)
 	AudioSettings.set_volume("Effects", 0.25)
 	_check(is_equal_approx(AudioServer.get_bus_volume_db(AudioServer.get_bus_index(&"Engine")), linear_to_db(0.5)), "Engine volume not applied to its bus")
-	for b in [&"Tires", &"World", &"UI"]:
+	for b in [&"Tires", &"World"]:   # the UI bus has its own Menu sounds slider since 2026-10-10
 		_check(is_equal_approx(AudioServer.get_bus_volume_db(AudioServer.get_bus_index(b)), linear_to_db(0.25)), "Effects volume not applied to %s" % b)
 	_check(AudioSettings.save_settings(), "settings did not save")
 	AudioSettings.set_volume("Engine", 1.0)

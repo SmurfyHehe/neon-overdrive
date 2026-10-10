@@ -18,8 +18,13 @@ extends CanvasLayer
 signal closed
 
 const GameInfo := preload("res://scripts/core/game_info.gd")
+const LogFolder := preload("res://scripts/core/log_folder.gd")
 
-const PAGES: Array[String] = ["Sound", "Picture", "Driving", "Controls"]
+const PAGES: Array[String] = ["Sound", "Picture", "Driving", "Controls", "Game"]
+## What a mixer channel is called on the Sound page (the rest use their own name).
+const CHANNEL_LABELS := {"Menus": "Menu sounds"}
+## How much of the end of the log the "Copy my log" button puts on the clipboard.
+const LOG_TAIL_BYTES := 24000
 const SILVER := Color("#C9CED6")
 const AMBER := Color("#FFC066")
 
@@ -47,7 +52,6 @@ var current_page := 0
 
 # Sound
 var volume_sliders := {}   # channel -> HSlider
-var turbo_slider: HSlider
 # Picture
 var fullscreen_check: CheckButton
 var resolution_option: OptionButton
@@ -74,6 +78,16 @@ var controls_status: Label
 var controls_save_button: Button
 var controls_reset_button: Button
 var back_button: Button
+var tips_check: CheckButton
+var copy_log_button: Button
+var log_status: Label
+var car_option: OptionButton
+var car_restart_button: Button
+var service_button: Button
+var tow_button: Button
+## Garage stand-ins the pause menu hands over (they act on the running game).
+var service_action: Callable
+var tow_action: Callable
 var keys_dirty := false   # rebinds not saved yet
 
 var _capture := {}        # {action, slot, button} while waiting for a key
@@ -95,6 +109,7 @@ func _ready() -> void:
 
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.theme = UiTheme.font_theme()   # Menu role for every row, button and tab
 	add_child(center)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
@@ -102,6 +117,7 @@ func _ready() -> void:
 
 	_title = Label.new()
 	_title.text = "SETTINGS"
+	UiTheme.apply(_title, "display", 40)
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(_title)
 
@@ -127,6 +143,7 @@ func _ready() -> void:
 	pages.append(_build_picture_page(stack))
 	pages.append(_build_driving_page(stack))
 	pages.append(_build_controls_page(stack))
+	pages.append(_build_game_page(stack))
 
 	back_button = Button.new()
 	back_button.text = "Back"
@@ -142,6 +159,7 @@ func _ready() -> void:
 ## Shows the screen on a page (a PAGES name or index).
 func open(page: Variant = 0) -> void:
 	_sync_all()
+	_refresh_game_page()
 	visible = true
 	if game_state != null:
 		game_state.set_modal(true)
@@ -179,7 +197,7 @@ func _fit_pages() -> void:
 		(p as ScrollContainer).custom_minimum_size = Vector2(660, clampf(h * 0.55, 160.0, 460.0))
 
 func _on_state_changed(new_state: GameState.State, _old_state: GameState.State) -> void:
-	if new_state != GameState.State.PAUSED and visible:
+	if new_state != GameState.State.PAUSED and new_state != GameState.State.TITLE and visible:
 		close()
 
 func _input(event: InputEvent) -> void:
@@ -282,7 +300,7 @@ func _sync_all() -> void:
 	_syncing = true
 	for channel in volume_sliders:
 		volume_sliders[channel].value = AudioSettings.volumes[channel]
-	turbo_slider.value = AudioSettings.turbo_volume
+	tips_check.button_pressed = GameSettings.tips
 	fullscreen_check.button_pressed = DisplaySettings.fullscreen
 	for i in resolution_option.item_count:
 		if resolution_option.get_item_metadata(i) == DisplaySettings.resolution:
@@ -312,14 +330,10 @@ func _build_sound_page(parent: Control) -> Control:
 	var page := _new_page(parent)
 	_heading(page, "Volume")
 	for channel in AudioSettings.CHANNELS:
-		volume_sliders[channel] = _add_slider(page, channel, 0.0, 1.0, 0.05, AudioSettings.volumes[channel],
+		volume_sliders[channel] = _add_slider(page, CHANNEL_LABELS.get(channel, channel), 0.0, 1.0, 0.05, AudioSettings.volumes[channel],
 			func(v: float) -> void:
 				AudioSettings.set_volume(channel, v)
 				AudioSettings.save_settings())
-	# Turbo sounds sit on top of Engine; the turbo voice reads AudioSettings.turbo_gain().
-	turbo_slider = _add_slider(page, "Turbo", 0.0, 1.0, 0.05, AudioSettings.turbo_volume, func(v: float) -> void:
-		AudioSettings.set_turbo_volume(v)
-		AudioSettings.save_settings())
 	return _page_of(page)
 
 # ---------- Picture ----------
@@ -447,6 +461,74 @@ func _build_driving_page(parent: Control) -> Control:
 			FxSettings.set_smoke(FxSettings.smoke_burnout, v)
 			FxSettings.save_settings())
 	return _page_of(page)
+
+# ---------- Game ----------
+func _build_game_page(parent: Control) -> Control:
+	var page := _new_page(parent)
+	_heading(page, "Game")
+	tips_check = _add_check(page, "Tips", GameSettings.tips, func(on: bool) -> void:
+		GameSettings.set_tips(on)
+		GameSettings.save_settings())
+	copy_log_button = _add_button(page, "Copy my log", _copy_log)
+	log_status = Label.new()
+	log_status.add_theme_color_override("font_color", AMBER)
+	page.add_child(log_status)
+	_add_button(page, "Open log folder", LogFolder.open)
+	var build := Label.new()
+	build.name = "Build"
+	build.text = "Build  %s" % GameInfo.title()
+	build.add_theme_color_override("font_color", SILVER)
+	page.add_child(build)
+
+	# Stand-ins until the garage exists; only usable from the pause screen.
+	_heading(page, "Garage stand-ins")
+	car_option = _add_option(page, "Car", [], func(_i: int) -> void:
+		pass)
+	for k in PlayerCars.KINDS:
+		car_option.add_item("%s   %d Nm / %d kg" % [PlayerCars.title(k.id), int(k.nm), int(k.kg)])
+		car_option.set_item_metadata(car_option.item_count - 1, String(k.id))
+	car_restart_button = _add_button(page, "Restart the run in this car", _pick_car)
+	service_button = _add_button(page, "Service car (reset wear and damage)", func() -> void:
+		if service_action.is_valid():
+			service_action.call())
+	tow_button = _add_button(page, "Call a tow (engine dead)", func() -> void:
+		if tow_action.is_valid():
+			tow_action.call())
+	return _page_of(page)
+
+## Selects the running car in the Car dropdown and enables the stand-ins only on
+## the pause screen (they act on a frozen run, not from the title).
+func _refresh_game_page() -> void:
+	log_status.text = ""
+	var now := PlayerCar.chassis_kind()
+	for i in car_option.item_count:
+		if car_option.get_item_metadata(i) == now:
+			car_option.select(i)
+	var paused := game_state != null and game_state.state == GameState.State.PAUSED
+	car_option.disabled = not paused
+	car_restart_button.disabled = not paused
+	service_button.disabled = not paused or not service_action.is_valid()
+	tow_button.disabled = not paused or not tow_action.is_valid()
+
+func _pick_car() -> void:
+	if car_option.selected < 0 or game_state == null:
+		return
+	PlayerCars.select(String(car_option.get_item_metadata(car_option.selected)))
+	PlayerCars.save_settings()
+	game_state.restart()
+
+## The end of godot.log on the clipboard, for a bug report.
+func _copy_log() -> void:
+	var f := FileAccess.open(LogFolder.log_file(), FileAccess.READ)
+	if f == null:
+		log_status.text = "No log file yet."
+		return
+	var n := f.get_length()
+	if n > LOG_TAIL_BYTES:
+		f.seek(n - LOG_TAIL_BYTES)
+	var text := f.get_buffer(mini(n, LOG_TAIL_BYTES)).get_string_from_utf8()
+	DisplayServer.clipboard_set("%s\n\n%s" % [GameInfo.title(), text])
+	log_status.text = "Copied the end of the log."
 
 # ---------- Controls ----------
 func _build_controls_page(parent: Control) -> Control:

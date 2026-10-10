@@ -108,6 +108,7 @@ func _ready() -> void:
 	_label = Label.new()
 	_label.position = Vector2(16, 40)
 	_label.add_theme_color_override("font_color", Color(1.0, 0.75, 0.4))  # amber #FFC066
+	UiTheme.apply(_label, "menu_strong")
 	_label.visible = false
 	layer.add_child(_label)
 	_dj_label = Label.new()
@@ -117,7 +118,7 @@ func _ready() -> void:
 	_dj_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_dj_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_dj_label.add_theme_color_override("font_color", Color(1.0, 0.54, 0.12))
-	_dj_label.add_theme_font_size_override("font_size", 20)
+	UiTheme.subtitle(_dj_label, 20)   # Dale: Subtitles role
 	_dj_label.visible = false
 	layer.add_child(_dj_label)
 
@@ -132,6 +133,12 @@ func _ensure_speaker_filter() -> void:
 	var lp := AudioEffectLowPassFilter.new()
 	lp.cutoff_hz = SPEAKER_CUTOFF_HZ
 	AudioServer.add_bus_effect(bus, lp)
+
+## Straight to station s (-1 = off), quietly: a resumed run's radio.
+func tune_to(s: int) -> void:
+	station = s if s >= 0 and s < RadioStations.station_count() else -1
+	if station >= 0:
+		_request_load(station)
 
 ## N: next station, with off after the last one.
 func next_station() -> void:

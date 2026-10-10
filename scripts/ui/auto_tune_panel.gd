@@ -64,6 +64,7 @@ func _init(car: PlayerCar, state: GameState) -> void:
 	game_state = state
 
 func _ready() -> void:
+	theme = UiTheme.font_theme()
 	var columns := HBoxContainer.new()
 	columns.add_theme_constant_override("separation", 24)
 	add_child(columns)
@@ -91,6 +92,7 @@ func _ready() -> void:
 		grid.add_child(s)
 		goal_sliders[goal] = s
 		var v := Label.new()
+		UiTheme.apply(v, "numbers")
 		v.custom_minimum_size = Vector2(36, 0)
 		grid.add_child(v)
 		goal_labels[goal] = v
@@ -174,9 +176,7 @@ func _button(parent: Control, text: String, action: Callable) -> Button:
 	return b
 
 func _mono_font() -> Font:
-	var f := SystemFont.new()
-	f.font_names = PackedStringArray(["Consolas", "Courier New", "monospace"])
-	return f
+	return UiTheme.font("numbers")
 
 # ---------- open / close ----------
 

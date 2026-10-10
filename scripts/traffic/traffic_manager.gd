@@ -111,7 +111,8 @@ const SPAWN_TTC_PLAYER := 10.0
 ## clear filled every slot, and retrying each tick cost 24 scans a car).
 const SLOT_TRIES := 12
 const DEFER_TICKS := 30
-## Share of cars that drive the oncoming way.
+## Share of the cars on the road that drive the oncoming way (_find_slot
+## spawns toward it).
 var oncoming_share := 0.4
 ## Which way along the road the player is travelling, as a sign on road-space
 ## z: -1 = down the road (the +x lanes are the player's side), +1 = back up it
@@ -525,9 +526,26 @@ func _respawn(car: TrafficCar) -> void:
 func _find_slot(car: TrafficCar, pz: float, extra_speed := 0.0) -> Dictionary:
 	var pv := _player_speed()
 	var band := _spawn_band()
+	# oncoming_share is a share of the cars on the road, not of the spawns: an
+	# oncoming car is past the player and recycled in a few seconds while one
+	# going the player's way stays for a minute, so drawing each spawn at 40%
+	# left the other carriageway nearly empty (1 car in 14 at 110 km/h). The
+	# first half of the tries fill whichever side is short; the rest draw as
+	# before, so a full side never blocks a spawn.
+	var others := 0
+	var others_onc := 0
+	for c in cars:
+		if c != car and not c.benched and not c.race_pinned:
+			others += 1
+			if c.direction != flow:
+				others_onc += 1
+	var short_onc := float(others_onc) < oncoming_share * float(others + 1)
 	for attempt in SLOT_TRIES:
 		# Oncoming for the player; `far_side` is the road's own -x carriageway.
+		# (The draw is taken either way: the same number of draws per try as before.)
 		var oncoming := randf() < oncoming_share
+		if attempt * 2 < SLOT_TRIES:
+			oncoming = short_onc
 		var dir := -flow if oncoming else flow
 		var far_side := dir > 0.0
 		var lanes: Array[int] = onc_lanes_used if far_side else own_lanes_used

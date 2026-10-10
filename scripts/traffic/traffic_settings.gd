@@ -39,6 +39,12 @@ const LIGHT_GLOW_MAX := 2.0
 ## crossing is part of the road layout, built before the first chunk).
 const CITY_LIGHTS_DEFAULT := false
 
+## Rule breakers cutting in on the player, tailgating it and weaving toward
+## it. Not in the pause menu and not saved; NEON_CUT_IN_PLAYER=1 turns it on
+## for one run (tests).
+# Off by Roy's decision 908 (2026-10-10). May return as a higher-difficulty option.
+static var cut_in_player := false
+
 static var car_count := CAR_COUNT_DEFAULT
 static var city_lights := CITY_LIGHTS_DEFAULT
 static var detail_distance := DETAIL_DEFAULT
@@ -67,6 +73,7 @@ static func load_settings() -> void:
 	set_detail_distance(float(cfg.get_value("traffic", "detail_distance", DETAIL_DEFAULT)) if ok else DETAIL_DEFAULT)
 	set_light_glow(float(cfg.get_value("traffic", "light_glow", LIGHT_GLOW_DEFAULT)) if ok else LIGHT_GLOW_DEFAULT)
 	city_lights = (cfg.get_value("traffic", "city_lights", CITY_LIGHTS_DEFAULT) == true) if ok else CITY_LIGHTS_DEFAULT
+	cut_in_player = OS.get_environment("NEON_CUT_IN_PLAYER") == "1"
 	# NEON_CITY_LIGHTS=1/0 overrides it for one run (tests, screenshots).
 	var lights_env := OS.get_environment("NEON_CITY_LIGHTS")
 	if lights_env == "1" or lights_env == "0":

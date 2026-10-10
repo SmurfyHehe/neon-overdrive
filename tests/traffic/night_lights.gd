@@ -71,7 +71,7 @@ func _run() -> void:
 
 	# Stopped cars hold the brake: lamps on. Running level first.
 	for car in cars:
-		NpcCarBuilder.set_lamps(car.chassis_visual, 0.0, false)
+		NpcCarBuilder.set_lamps(car.chassis_visual, 0.0, NpcCarBuilder.TURN_OFF)
 	TrafficSettings.set_light_glow(0.0)
 	var off := await _shot("glow0")
 	TrafficSettings.set_light_glow(1.0)
@@ -86,7 +86,7 @@ func _run() -> void:
 		var want := 1.3 if DISTS[k] < 50.0 else 2.0
 		_check(b > a * want, "car at %.0f m: tail lamps under %.1fx the red light they make without night lights (%.3f vs %.3f)" % [DISTS[k], want, b, a])
 
-	NpcCarBuilder.set_lamps(cars[1].chassis_visual, 1.0, false)
+	NpcCarBuilder.set_lamps(cars[1].chassis_visual, 1.0, NpcCarBuilder.TURN_OFF)
 	var brake := await _shot("brake")
 	var spot1 := _tail_spot(cars[1])
 	var r0 := _red(on, spot1)
@@ -94,7 +94,7 @@ func _run() -> void:
 	print("night_lights: car at 90 m, tail red %.3f running, %.3f braking" % [r0, r1])
 	_check(r1 > r0 * 1.2, "brake lamps at 90 m not 20%% brighter than running lamps (%.3f vs %.3f)" % [r1, r0])
 
-	NpcCarBuilder.set_lamps(cars[1].chassis_visual, 1.0, true)
+	NpcCarBuilder.set_lamps(cars[1].chassis_visual, 1.0, NpcCarBuilder.TURN_BOTH)
 	await _shot("hazard")
 
 	# A reflector 60 m out: the dot nearest that distance on the barrier.

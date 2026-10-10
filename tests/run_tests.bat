@@ -250,6 +250,10 @@ if /i not "%~1"=="quick" (
 	rem Traffic (stage B step 3) at the game's 120 Hz tick: ~1 min of dense traffic, then the perf sweep.
 	call :run traffic/traffic_stability "--headless --fixed-fps 120"
 	call :run traffic/traffic_behaviour "--headless --fixed-fps 120"
+	rem ~15 s: the near-miss log (kinds, who moved, what the car was doing, the file, cost per tick). The weave baseline (near_miss_weave, 90 s a seed) is run by hand, one seed at a time.
+	call :run traffic/near_miss_log "--headless --fixed-fps 120"
+	rem ~60 s: the near-miss fix's staged cases (pull-out, no flash, flash, blind spot, abort, edge away, rule breakers, cut-off, swerve, horns, siren). The flow checks (near_miss_flow: spawn safety 5 min, blinker 60 s), the before/after bots (near_miss_scenarios) and the script-cost check (near_miss_cost) are run by hand, one at a time.
+	call :run traffic/near_miss_cases "--headless --fixed-fps 120"
 	rem ~50 s: staggered traffic controller (every 2nd tick, cars alternate) and hidden cars skip wheel visuals.
 	call :run traffic/ai_stagger "--headless --fixed-fps 120"
 	rem ~70 s: City lights, the signalised crossing (J0/J1a): red queue, amber, 1 a.m. flash.

@@ -84,7 +84,10 @@ func _physics_process(_delta: float) -> bool:
 		p = game.get("player")
 		Harness.move_player_to_lane(p, Harness.lane_x(PLAYER_LANE))
 		Harness.launch_player(p, PLAYER_KMH * KMH)
-		p.driver = Harness.lane_driver(Harness.lane_x(PLAYER_LANE), 1.0, PLAYER_KMH * KMH)
+		# Flashes and brakes for the car ahead: since the near-miss fix (2026-10-10)
+		# traffic holds its lane until flashed, and the old never-braking lane
+		# keeper pushed the car in front along (131 km/h on average instead of 160).
+		p.driver = Harness.flash_brake_driver(traffic, Harness.lane_x(PLAYER_LANE), PLAYER_KMH * KMH)
 		return false
 	tick += 1
 	if not Harness.finite(p):
@@ -185,7 +188,10 @@ func _end(msg: String) -> bool:
 	_check(rail_still == 0, "%d car-ticks where a drawn car on rails did not move" % rail_still)
 	_check(player_contacts == 0, "%d ticks with traffic touching the player" % player_contacts)
 	_check(pair_contacts == 0, "two sim cars touched (%d samples)" % pair_contacts)
-	_check(mean_kmh > PLAYER_KMH - 15.0, "the player averaged %.0f km/h, under %.0f" % [mean_kmh, PLAYER_KMH - 15.0])
+	# Was PLAYER_KMH - 15 while traffic cleared the lane unasked. Now the player
+	# waits behind each car until its flash is answered (135 km/h on this seed,
+	# 2026-10-10); the check is only that it kept driving through the band.
+	_check(mean_kmh > PLAYER_KMH - 40.0, "the player averaged %.0f km/h, under %.0f" % [mean_kmh, PLAYER_KMH - 40.0])
 	print("errors=%d warnings=%d" % [logger.errors.size(), logger.warnings])
 	_check(logger.errors.is_empty(), "engine or script errors: %s" % str(logger.errors.slice(0, 3)))
 	for f in fails:

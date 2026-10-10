@@ -11,3 +11,9 @@ func _init() -> void:
 	var v := OS.get_environment("NEON_TICKS")
 	if v.is_valid_int():
 		Engine.physics_ticks_per_second = clampi(int(v), 30, 240)
+	# Catch-up steps per frame (project setting: 4, so a slow frame turns into
+	# slow motion instead of a pile of physics steps). NEON_MAX_STEPS overrides
+	# it for before/after measurements (8 is the engine default).
+	var m := OS.get_environment("NEON_MAX_STEPS")
+	if m.is_valid_int():
+		Engine.max_physics_steps_per_frame = clampi(int(m), 1, 32)

@@ -35,6 +35,9 @@ var scale := 1.0
 var base := 1.0
 var budget_ms := 1000.0 / 60.0
 var gpu_avg := 0.0
+## PerfLadder's hold on the picture: the scale shown is never above this,
+## whatever the GPU time says (1.0 = no hold).
+var ceiling := 1.0
 var _over := 0.0
 var _under := 0.0
 
@@ -103,5 +106,10 @@ func _process(delta: float) -> void:
 	if scale != before:
 		_push()
 
+## PerfLadder: hold the picture at the lowest scale (on), or let go.
+func hold_low(on: bool) -> void:
+	ceiling = floor_for(base) if on else 1.0
+	_push()
+
 func _push() -> void:
-	get_viewport().scaling_3d_scale = scale
+	get_viewport().scaling_3d_scale = minf(scale, ceiling)

@@ -162,7 +162,7 @@ func _physics_process(_delta: float) -> bool:
 				_check(hud != null and hud.lbl_clock.text == clock.text(), "the HUD shows the clock (%s)" % (hud.lbl_clock.text if hud else "no HUD"))
 				var frame = _find_frame()
 				_check(frame != null and frame.head_unit.clock_text == clock.text(), "the head unit shows the clock (%s)" % (frame.head_unit.clock_text if frame else "no cockpit"))
-				clock.speed = 120.0   # one game minute per tick at 60 Hz
+				clock.speed = 240.0   # one game minute per tick at 60 Hz
 				_go(Step.MIDNIGHT)
 		Step.MIDNIGHT:
 			if hours.has(0) and waited >= 2:
@@ -185,7 +185,7 @@ func _physics_process(_delta: float) -> bool:
 				_check(clock.minutes == minutes_at, "the clock stops while paused (%.2f -> %.2f)" % [minutes_at, clock.minutes])
 				game.game_state.resume()
 				game.radio.station = TALK
-				clock.speed = 600.0
+				clock.speed = 1200.0
 				_go(Step.DAWN)
 		Step.DAWN:
 			if nights_ended == 1 and waited >= 2:

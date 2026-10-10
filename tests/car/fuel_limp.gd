@@ -160,7 +160,7 @@ func _physics_process(_delta: float) -> bool:
 				var used := cal_litres0 - p.fuel.litres
 				var lps := used / 120.0
 				var tank_min := FuelTank.CAPACITY_L / maxf(lps, 1e-6) / 60.0
-				print("fuel calibration: %.2f L in 120 s city cycle -> a full tank lasts %.1f min (night = 20 min), a third %.1f min" % [used, tank_min, tank_min / 3.0])
+				print("fuel calibration: %.2f L in 120 s city cycle -> a full tank lasts %.1f min (sized for a 20 min night; the night is now 40), a third %.1f min" % [used, tank_min, tank_min / 3.0])
 				_check(tank_min >= 12.0 and tank_min <= 19.0, "a full tank should last 12-19 min of city driving, got %.1f" % tank_min)
 				throttle = 0.0
 				brake = 1.0

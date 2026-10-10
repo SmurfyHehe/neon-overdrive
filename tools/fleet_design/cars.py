@@ -56,50 +56,97 @@ P1 = {
     'options': {},
 }
 
+def _fender(s_ax, lo=0.40, hi=0.78, half=0.50, r=0.365, yc=0.30):
+    """The pontoon fender over one arch as a side-view polygon (s, y): the
+    panel from the rocker to the belt, cut out around the wheel arch."""
+    import math
+    pts = [(s_ax - half, lo), (s_ax - half, hi), (s_ax + half, hi), (s_ax + half, lo)]
+    for k in range(9):
+        a = math.pi * k / 8
+        pts.append((s_ax + r * math.cos(a), yc + r * math.sin(a)))
+    return pts
+
+
+P0_AXLES = (0.85, 3.40)
 P0 = {
     'id': 'p0_beater', 'role': 'player', 'label': 'Rear-engine beater',
     'refs': 'the rear-engine, air-cooled economy cars of the 1960s (category only; no brand)',
-    'rule': 'One dome from nose to tail, pontoon fenders bulging at each wheel, round lamps up on the front fenders, louvred engine lid at the back; tall narrow tyres in sagging arches.',
-    'tier': 'T0 beater: the prologue car, 2026-10-09',
-    'L': 4.05, 'WB': 2.40, 'OHf': 0.80, 'W': 1.58,
-    'wheel': {'r': 0.30, 'w': 0.155, 'w_rear': 0.165, 'track': 1.30, 'arch_gap': 0.07, 'rim': 'steel', 'rim_ratio': 0.56},
-    'top': [(0.0, 0.60), (0.05, 0.74), (0.30, 0.86), (0.85, 0.99), (1.30, 1.06), (1.62, 1.44), (1.85, 1.50), (2.10, 1.50),
-            (2.40, 1.46), (2.70, 1.36), (3.00, 1.22), (3.30, 1.06), (3.60, 0.92), (3.85, 0.78), (4.02, 0.68), (4.05, 0.58)],
-    'floor': [(0, 0.30), (0.22, 0.17), (3.85, 0.17), (4.05, 0.30)],
-    'hw': [(0, 0.40), (0.10, 0.56), (0.40, 0.72), (0.80, 0.80), (1.25, 0.74), (1.55, 0.69), (2.45, 0.69), (2.80, 0.74),
-           (3.20, 0.80), (3.60, 0.74), (3.92, 0.60), (4.05, 0.46)],
-    'waist': [(0, 0.46), (0.80, 0.56), (1.60, 0.60), (2.40, 0.60), (3.20, 0.56), (4.05, 0.48)],
-    'belt': [(0, 0.60), (0.35, 0.80), (1.30, 0.92), (2.20, 0.93), (3.00, 0.92), (3.60, 0.84), (4.05, 0.70)],
-    'tumble': 0.10, 'sill_in': 0.03, 'rocker_h': 0.36, 'rocker_trim': True,
-    'cabin': {'A': 1.30, 'W': 1.62, 'R': 2.30, 'C': 3.00, 'D': 2.75,
-              'roof_w': [(1.62, 0.52), (2.30, 0.52), (3.00, 0.44)], 'roof_drop': 0.05, 'pillars': [(2.00, 2.07)]},
+    'rule': 'One dome from nose to tail, pontoon fenders bulging at each wheel, round lamps up on the front fenders, louvred engine lid at the back; wheels fill the arches, bare steel rims.',
+    'tier': 'T0 beater: the prologue car, 2026-10-09; rebuilt from the decided sheet 2026-10-10 '
+            '(stretched, primer fenders with rust and bondo, four bits missing, air-cooled vents)',
+    # Stretched from 4.05 x 1.58 (the cabin audit: belt 0.15-0.25 m too narrow
+    # for adult shoulders, 1.1 m glass to glass, rear roof 0.73 m over the floor).
+    'L': 4.30, 'WB': 2.55, 'OHf': 0.85, 'W': 1.72,
+    # Wheels fill the arches (arch_gap like the other player cars), wider
+    # tyres, bare steel rims: the hubcaps are the first of the missing bits.
+    'wheel': {'r': 0.30, 'w': 0.175, 'w_rear': 0.185, 'track': 1.44, 'arch_gap': 0.025, 'rim': 'steel_bare', 'rim_ratio': 0.56},
+    'top': [(0.0, 0.60), (0.05, 0.74), (0.32, 0.86), (0.90, 0.99), (1.40, 1.07), (1.74, 1.56), (2.00, 1.61), (2.35, 1.61),
+            (2.62, 1.57), (2.95, 1.44), (3.32, 1.23), (3.65, 1.04), (3.95, 0.88), (4.15, 0.76), (4.27, 0.66), (4.30, 0.56)],
+    'floor': [(0, 0.30), (0.24, 0.17), (4.08, 0.17), (4.30, 0.30)],
+    'hw': [(0, 0.42), (0.10, 0.58), (0.42, 0.76), (0.85, 0.86), (1.32, 0.80), (1.65, 0.76), (2.60, 0.76), (2.98, 0.80),
+           (3.40, 0.86), (3.82, 0.80), (4.17, 0.64), (4.30, 0.48)],
+    'waist': [(0, 0.46), (0.85, 0.56), (1.70, 0.60), (2.55, 0.60), (3.40, 0.56), (4.30, 0.48)],
+    'belt': [(0, 0.60), (0.37, 0.80), (1.40, 0.96), (2.35, 0.97), (3.20, 0.95), (3.82, 0.86), (4.30, 0.70)],
+    'tumble': 0.08, 'sill_in': 0.03, 'rocker_h': 0.36, 'rocker_trim': True,
+    'cabin': {'A': 1.40, 'W': 1.74, 'R': 2.62, 'C': 3.32, 'D': 3.05,
+              'roof_w': [(1.74, 0.64), (2.62, 0.62), (3.32, 0.50)], 'roof_drop': 0.02, 'pillars': [(2.15, 2.22)]},
     'decals': [
-        # round lamps standing on the fender crowns, a tiny trunk-lid vent and a thin chrome blade bumper
-        {'view': 'front', 'circle': (0.50, 0.84, 0.095, 14), 'mat': 'head', 'mirror': True},
-        {'view': 'front', 'rect': (-0.16, 0.62, 0.16, 0.66), 'mat': 'trim'},
-        {'view': 'front', 'rect': (-0.62, 0.30, 0.62, 0.36), 'mat': 'chrome', 'tag': 'fbumper'},
+        # Decal order matters: each decal sits 1.5 mm further off the skin than
+        # the one before, so the nose and tail (the length the tests measure)
+        # come first and the side panels last; nose and tail decals also pin their
+        # own offset, so the car measures its sheet length.
+        # engine lid: six louvre slots, licence recess, blade bumper, one tailpipe.
+        # One tail lamp (left) works; the right lens is gone (missing bit 4):
+        # a dark socket with a rust ring.
+        {'view': 'rear', 'rect': (-0.28, 0.90, 0.28, 0.925), 'mat': 'grille', 'offset': 0.004},
+        {'view': 'rear', 'rect': (-0.28, 0.85, 0.28, 0.875), 'mat': 'grille', 'offset': 0.004},
+        {'view': 'rear', 'rect': (-0.28, 0.80, 0.28, 0.825), 'mat': 'grille', 'offset': 0.004},
+        {'view': 'rear', 'rect': (-0.28, 0.75, 0.28, 0.775), 'mat': 'grille', 'offset': 0.004},
+        {'view': 'rear', 'rect': (-0.28, 0.70, 0.28, 0.725), 'mat': 'grille', 'offset': 0.004},
+        {'view': 'rear', 'rect': (-0.28, 0.65, 0.28, 0.675), 'mat': 'grille', 'offset': 0.004},
+        {'view': 'rear', 'ellipse': (-0.56, 0.80, 0.065, 0.085, 12), 'mat': 'tail', 'offset': 0.004},
+        {'view': 'rear', 'ellipse': (0.56, 0.80, 0.075, 0.095, 12), 'mat': 'rust', 'offset': 0.004},
+        {'view': 'rear', 'ellipse': (0.56, 0.80, 0.055, 0.075, 12), 'mat': 'exh_hole', 'offset': 0.006},
+        {'view': 'rear', 'rect': (-0.16, 0.46, 0.16, 0.56), 'mat': 'trim', 'offset': 0.004},
+        {'view': 'rear', 'rect': (-0.66, 0.30, 0.66, 0.36), 'mat': 'chrome', 'tag': 'rbumper', 'offset': 0.004},
+        # round lamps standing on the fender crowns, a thin chrome blade on the nose.
+        # No front bumper (missing bit 2): two rusty brackets are left, see parts.
+        {'view': 'front', 'circle': (0.54, 0.84, 0.095, 14), 'mat': 'head', 'mirror': True, 'offset': 0.004},
+        {'view': 'front', 'rect': (-0.16, 0.62, 0.16, 0.66), 'mat': 'trim', 'offset': 0.004},
         # the primer front lid: one panel that never got painted (paint2)
-        {'view': 'top', 'rect': (-0.34, 0.30, 0.34, 1.15), 'mat': 'paint2', 'tag': 'hood'},
-        # engine lid: four louvre slots, small tail lamps, licence recess, blade bumper, one tailpipe
-        {'view': 'rear', 'rect': (-0.26, 0.86, 0.26, 0.885), 'mat': 'grille'},
-        {'view': 'rear', 'rect': (-0.26, 0.81, 0.26, 0.835), 'mat': 'grille'},
-        {'view': 'rear', 'rect': (-0.26, 0.76, 0.26, 0.785), 'mat': 'grille'},
-        {'view': 'rear', 'rect': (-0.26, 0.71, 0.26, 0.735), 'mat': 'grille'},
-        {'view': 'rear', 'ellipse': (0.52, 0.80, 0.065, 0.085, 12), 'mat': 'tail', 'mirror': True},
-        {'view': 'rear', 'rect': (-0.16, 0.46, 0.16, 0.56), 'mat': 'trim'},
-        {'view': 'rear', 'rect': (-0.62, 0.30, 0.62, 0.36), 'mat': 'chrome', 'tag': 'rbumper'},
+        {'view': 'top', 'rect': (-0.36, 0.32, 0.36, 1.22), 'mat': 'paint2', 'tag': 'hood'},
+        # the four pontoon fenders in primer (Roy, 2026-10-09: "primer grey with
+        # rust and unfinished bondo work like body work"): primer panel cut
+        # round each arch, rust blooms on the arch lips, bondo patches sanded flat.
+        {'view': 'left', 'poly': _fender(P0_AXLES[0]), 'mat': 'primer', 'mirror': True, 'cell': 0.16, 'tag': 'fender'},
+        {'view': 'left', 'poly': _fender(P0_AXLES[1]), 'mat': 'primer', 'mirror': True, 'cell': 0.16, 'tag': 'fender'},
+        {'view': 'left', 'ellipse': (0.57, 0.46, 0.10, 0.045, 10), 'mat': 'rust', 'mirror': True, 'cell': 0.12},
+        {'view': 'left', 'ellipse': (1.14, 0.50, 0.09, 0.05, 10), 'mat': 'rust', 'mirror': True, 'cell': 0.12},
+        {'view': 'left', 'ellipse': (3.12, 0.47, 0.11, 0.05, 10), 'mat': 'rust', 'mirror': True, 'cell': 0.12},
+        {'view': 'left', 'ellipse': (3.72, 0.52, 0.08, 0.05, 10), 'mat': 'rust', 'mirror': True, 'cell': 0.12},
+        {'view': 'left', 'poly': [(0.46, 0.58), (0.72, 0.56), (0.76, 0.72), (0.50, 0.74)], 'mat': 'bondo', 'mirror': True, 'cell': 0.12},
+        {'view': 'left', 'poly': [(3.44, 0.60), (3.78, 0.58), (3.82, 0.74), (3.50, 0.76)], 'mat': 'bondo', 'mirror': True, 'cell': 0.12},
+        # air-cooled: intake slots in the rear quarters feed the engine bay
+        {'view': 'left', 'rect': (3.12, 0.74, 3.15, 0.88), 'mat': 'grille', 'mirror': True},
+        {'view': 'left', 'rect': (3.19, 0.74, 3.22, 0.88), 'mat': 'grille', 'mirror': True},
+        {'view': 'left', 'rect': (3.26, 0.74, 3.29, 0.88), 'mat': 'grille', 'mirror': True},
     ],
     'parts': [
-        {'type': 'mirrors', 's': 1.34},
+        # driver's mirror only: the passenger one is gone (missing bit 3), a rust stub stays
+        {'type': 'mirrors', 's': 1.46, 'sides': [-1], 'stub_mat': 'rust'},
+        # front bumper brackets, bumper gone (missing bit 2)
+        {'type': 'box', 's': 0.06, 'xy': (0.42, 0.33), 'size': (0.05, 0.08, 0.10), 'mat': 'rust'},
+        {'type': 'box', 's': 0.06, 'xy': (-0.42, 0.33), 'size': (0.05, 0.08, 0.10), 'mat': 'rust'},
     ],
-    'exhaust': [{'x': 0.30, 'y': 0.24, 'r': 0.03}],
+    'exhaust': [{'x': 0.32, 'y': 0.24, 'r': 0.03, 'out': 0.01}],   # a stub of pipe, not a tip
     'stickers': [
-        {'id': 'door', 'view': 'left', 'rect': (1.38, 0.48, 1.96, 0.72), 'mirror': True},
-        {'id': 'hood', 'view': 'top', 'rect': (-0.26, 0.40, 0.26, 1.00)},
-        {'id': 'rear', 'view': 'rear', 'rect': (-0.26, 0.58, 0.26, 0.69), 'note': 'engine lid'},
+        {'id': 'door', 'view': 'left', 'rect': (1.50, 0.50, 2.12, 0.74), 'mirror': True},
+        {'id': 'hood', 'view': 'top', 'rect': (-0.26, 0.44, 0.26, 1.08)},
+        {'id': 'rear', 'view': 'rear', 'rect': (-0.26, 0.52, 0.26, 0.63), 'note': 'engine lid'},
     ],
     'paint': {'hero': ('Faded sage', '#8C9B88'), 'alts': [('Primer grey', '#6E6B68'), ('Dust beige', '#B9AE98'), ('Faded red', '#8E2A28'), ('Oxide brown', '#6B4A33')],
-              'trim': '#2A2C30', 'rim': '#8D939C', 'extra': {'paint2': '#5F5B58', 'chrome': '#9FA4AA'}},
+              'trim': '#2A2C30', 'rim': '#8D939C',
+              'extra': {'paint2': '#5F5B58', 'chrome': '#9FA4AA', 'primer': '#5F5B58', 'rust': '#6B4A33', 'bondo': '#B9AE98'}},
     'options': {},
 }
 

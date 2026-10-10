@@ -31,6 +31,14 @@ const CARBON := Color("#262B33")
 const CARBON_ALT := Color("#1A1E25")
 const PAD := Color("#0E1014")
 const SPOKE := Color("#2A2E36")
+
+## Per-car looks, set by CockpitFrame before the wheel is added (the beater's
+## ivory rim on a painted-metal dash, Roy 2026-10-09); the defaults are the coupe's.
+var rim_colour := LEATHER
+var seam_colour := STITCH
+var spoke_colour := SPOKE
+var carbon_colour := CARBON
+var carbon_alt_colour := CARBON_ALT
 const LCD_BG := Color("#0A0C10")
 const AMBER := Color("#FFC066")
 const SILVER := Color("#C9CED6")
@@ -108,20 +116,20 @@ func _build_body() -> void:
 		var grip := _is_grip(deg)
 		for j in SIDES:
 			var k := (j + 1) % SIDES
-			var col := LEATHER
+			var col := rim_colour
 			if grip:
 				if j == SEAM:
-					col = STITCH          # the seam, between the driver-facing and inward faces
+					col = seam_colour     # the seam, between the driver-facing and inward faces
 			else:
-				col = CARBON if (s % 2 == 0) else CARBON_ALT
+				col = carbon_colour if (s % 2 == 0) else carbon_alt_colour
 			kit.quad(rings[s][j], rings[s + 1][j], rings[s + 1][k], rings[s][k], col)
 	# Top plate inside the rim that carries the LEDs (carbon), and the LCD bezel.
-	kit.ring_sector(0.118, RADIUS - CARBON_R + 0.004, deg_to_rad(38.0), deg_to_rad(142.0), -0.006, 0.006, CARBON, 14, CARBON_ALT)
+	kit.ring_sector(0.118, RADIUS - CARBON_R + 0.004, deg_to_rad(38.0), deg_to_rad(142.0), -0.006, 0.006, carbon_colour, 14, carbon_alt_colour)
 	kit.box(Vector3(0.090, 0.046, 0.012), Vector3(0.0, 0.088, 0.004), LCD_BG)
 	# Spokes: 9, 3 and 6 o'clock, flat bars from the pad to the rim.
-	kit.box(Vector3(0.12, 0.034, 0.012), Vector3(-0.105, 0.0, 0.0), SPOKE)
-	kit.box(Vector3(0.12, 0.034, 0.012), Vector3(0.105, 0.0, 0.0), SPOKE)
-	kit.box(Vector3(0.034, 0.10, 0.012), Vector3(0.0, -0.085, 0.0), SPOKE)
+	kit.box(Vector3(0.12, 0.034, 0.012), Vector3(-0.105, 0.0, 0.0), spoke_colour)
+	kit.box(Vector3(0.12, 0.034, 0.012), Vector3(0.105, 0.0, 0.0), spoke_colour)
+	kit.box(Vector3(0.034, 0.10, 0.012), Vector3(0.0, -0.085, 0.0), spoke_colour)
 	# Centre pad (plain, no badge) and a hub ring behind it.
 	kit.box(Vector3(0.115, 0.085, 0.030), Vector3(0.0, 0.0, 0.012), PAD)
 	kit.cylinder(0.055, -0.03, 0.0, Vector3.ZERO, SPOKE, 10, Basis(Vector3.RIGHT, PI / 2.0))

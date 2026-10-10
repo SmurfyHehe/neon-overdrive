@@ -14,6 +14,29 @@ const NAMES := ["chrome", "exh_hole", "glass", "grille", "head", "interior", "pa
 const COLORS := {"chrome": "#C9CED6", "exh_hole": "#050608", "glass": "#151D2E", "grille": "#0D1017", "head": "#FFE7BD", "interior": "#141820", "paint": "#F2B53A", "rim": "#C9CED6", "rim_face": "#8D939C", "rim_gap": "#0B0E14", "roof": "#F2B53A", "tail": "#E5262B", "tire": "#15171C", "tire_side": "#1C1F26", "trim": "#1A1D24", "under": "#0B0E14"}
 const EMISSIVE := ["head", "pol_b", "pol_r", "tail", "turn"]
 const GLASS := ["glass"]
+## The cabin, car space (the car at rest, lift included), measured from this
+## body by tools/fleet_design/cabin_measure.gd (2026-10-09) and hand-tuned.
+## CockpitFrame builds the interior from these; nothing in it is the coupe's.
+const CABIN := {
+	"seat_x": -0.231, "seat_h": 0.446, "seat_z": -0.025,
+	"eye": Vector3(-0.191, 1.066, -0.085),
+	"floor_y": 0.256, "belt_y": 0.842,
+	"cowl": Vector2(0.756, -0.775), "dash_face_z": -0.715,
+	"header": Vector2(1.245, -0.375), "roof_y": 1.245, "roof_z1": 0.475, "open_top": true,
+	"door_x": 0.470, "door_x_rear": 0.470, "door_x_front": 0.470, "glass_x": 0.0, "glass_top": 1.205,
+	"a_pillar": [Vector3(0.500, 0.756, -0.775), Vector3(0.560, 1.245, -0.375)],
+	"b_pillar_z": 0.075, "rear_z": 0.475,
+	"shelf": {},
+	"wheel": Vector3(-0.231, 0.736, -0.565), "wheel_tilt_deg": -25.0,
+	"cluster": Vector2(0.896, -0.734), "cluster_style": "dials", "speedo_max_kmh": 180.0,
+	"head_unit": Vector3(0.0, 0.798, -0.639),
+	"lever": Vector3(0.0, 0.581, -0.405), "handbrake": Vector3(0.0, 0.581, 0.055),
+	"pedals": Vector3(-0.131, 0.526, -0.885),
+	"crank": Vector3(-0.450, 0.616, -0.565), "switch": Vector3(-0.424, 0.753, -0.365),
+	"rear_mirror": Vector3(0.0, 1.120, -0.433),
+	"door_mirror": Vector3(0.741, 0.892, -0.635),
+	"console": "tunnel", "seats": "bucket",
+}
 ## Build name -> body_tris, tris_total, body_pos (chunks), body_mat, wheels
 ## (front and rear right-hand wheel, hub-relative), slots, tips. Car space.
 const BUILDS := {

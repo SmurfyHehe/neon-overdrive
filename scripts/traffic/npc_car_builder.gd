@@ -88,9 +88,11 @@ const KINDS := {
 	# prologue car share one mesh path.
 	"p0_beater": {
 		"data": preload("res://scripts/car/p0_beater_data.gd"),
-		"length": 4.05, "width": 1.58, "height": 1.50, "clearance": 0.17,
-		"front_overhang": 0.80, "rear_overhang": 0.85,
-		"wheel_r": 0.30, "wheel_x": 0.65, "axle_z": 1.20,
+		## Rebuilt from the decided sheet (2026-10-10): stretched to 4.30 x 1.72,
+		## wheels filling the arches on a 1.44 m track.
+		"length": 4.30, "width": 1.72, "height": 1.61, "clearance": 0.17,
+		"front_overhang": 0.85, "rear_overhang": 0.90,
+		"wheel_r": 0.30, "wheel_x": 0.72, "axle_z": 1.275,
 		## Measured by tests/fleet/player_cars.gd and tests/traffic/npc_cars.gd: the soft,
 		## long springs of CarSpec.player_spec sit it 1.6 cm lower than the others.
 		"rest_y": -0.136,

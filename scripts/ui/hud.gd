@@ -228,7 +228,7 @@ func _ready() -> void:
 	cluster.add_child(row)
 
 	var gear_col := VBoxContainer.new()
-	gear_col.add_theme_constant_override("separation", -6)
+	gear_col.add_theme_constant_override("separation", -10)
 	gear_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(gear_col)
 	lbl_gear = _label(gear_col, 56, AMBER)
@@ -247,6 +247,18 @@ func _ready() -> void:
 	lbl_unit = _label(speed_col, 16, SILVER)
 	lbl_unit.text = "km/h"
 	lbl_unit.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+	# The gear (56) and speed (64) labels have different line heights, and the
+	# shorter gear label sat at the top of its column, so "D5" read higher than
+	# the speed. Give both the same line box with the text centred in it, and
+	# the columns the same separation, so the two share one vertical centre.
+	var digit_h := 0.0
+	for l in [lbl_gear, lbl_speed]:
+		var font: Font = l.get_theme_font("font")
+		digit_h = maxf(digit_h, font.get_height(l.get_theme_font_size("font_size")))
+	for l in [lbl_gear, lbl_speed]:
+		l.custom_minimum_size.y = ceilf(digit_h)
+		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
 	# Status line (ENGINE OFF / SHIFT), kept in the layout even when empty so
 	# nothing jumps.

@@ -38,6 +38,10 @@ class_name Junction
 # plus six lamp meshes, one per lamp colour and group, so 7 draw calls; the
 # lamp state is a material change on those six. No lights.
 
+const RoadPaint := preload("res://scripts/world/road_paint.gd")
+const RoadSigns := preload("res://scripts/world/road_signs.gd")
+const PlaceNames := preload("res://scripts/world/place_names.gd")
+
 const L := RoadChunkBuilder.CHUNK_LEN
 ## Where the crossing's centre is, metres of road from the start.
 const CENTRE_S := 600.0
@@ -341,6 +345,8 @@ func _build() -> void:
 	# From -x (driving +x): far-right corner (+x, +z), faces -x.
 	_mast(poles, heads, lamps, 3, Vector3(corner, 0.0, corner_z), -PI / 2.0, [])
 
+	_build_names(corner, corner_z, cross_stop)
+
 	_add_mesh("CrossRoad", road, RoadChunkBuilder._get_own_mat())
 	_add_mesh("CrossWalks", walk, RoadChunkBuilder._get_sidewalk_mat())
 	_add_mesh("Paint", lines, paint)
@@ -349,6 +355,50 @@ func _build() -> void:
 	_add_mesh("Heads", heads, housing)
 	for i in 6:
 		_add_mesh("Lamps%d" % i, lamps[i], _mats[i])
+
+## Names at the crossing (world step 4): a street-name blade on each signal
+## mast (the cross street's name on the main road's masts, the main road's on
+## the cross street's), and STOP painted on the cross street's approach
+## lanes (it flashes red after 1 a.m.). Two small MultiMeshes, flat in the
+## crossing's own frame like the rest of it. The crossing is number 0: there
+## is only one on the road, so its cross street is PlaceNames.cross_street(0).
+func _build_names(corner: float, corner_z: float, cross_stop: float) -> void:
+	var signs := RoadSigns.new_multimesh(8)
+	signs.name = "StreetNames"
+	# [mast base, yaw, name, on an arm]: the heads (and the blade) face +z at yaw 0
+	var masts := [
+		[Vector3(corner, 0.0, -corner_z), 0.0, PlaceNames.cross_street(0), true],
+		[Vector3(-corner, 0.0, corner_z), PI, PlaceNames.cross_street(0), true],
+		[Vector3(-corner, 0.0, -corner_z), PI / 2.0, PlaceNames.MAIN_STREET, false],
+		[Vector3(corner, 0.0, corner_z), -PI / 2.0, PlaceNames.MAIN_STREET, false],
+	]
+	var k := 0
+	for m in masts:
+		var xf := Transform3D(Basis(Vector3.UP, float(m[1])), m[0])
+		var n: Vector3 = xf.basis * Vector3.BACK
+		# on top of the arm between the pole and the first head, or on the
+		# pole's top where there is no arm
+		var local := Vector3(-1.9, 6.13, 0.0) if m[3] else Vector3(0.0, 3.85, 0.14)
+		var b := RoadSigns.blade(String(m[2]), xf * local, n)
+		signs.multimesh.set_instance_transform(k, b.xf)
+		signs.multimesh.set_instance_custom_data(k, b.cd)
+		k += 1
+	signs.multimesh.visible_instance_count = k
+	add_child(signs)
+
+	var paint := RoadPaint.new_multimesh(8, "StopPaint")
+	var n_paint := 0
+	for s: float in [1.0, -1.0]:
+		for i in CROSS_LANES:
+			# in the approach lanes, a little upstream of the stop line
+			var x := s * (cross_stop + STOP_LINE_W + 5.0)
+			var z := -s * (RoadChunkBuilder.MEDIAN_GAP + (float(i) + 0.5) * RoadChunkBuilder.LANE_W)
+			var it := RoadPaint.item("STOP", x, z, s * PI / 2.0)
+			paint.multimesh.set_instance_transform(n_paint, Transform3D(it.basis, Vector3(x, 0.03, z)))
+			paint.multimesh.set_instance_custom_data(n_paint, it.cd)
+			n_paint += 1
+	paint.multimesh.visible_instance_count = n_paint
+	add_child(paint)
 
 ## A pole at `base` with an arm out over the lanes (one head per entry in
 ## `arm_x`, metres in from the pole) plus one head on the pole itself.

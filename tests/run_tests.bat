@@ -44,6 +44,7 @@ call :run core/smoke --headless
 call :run core/game_info --headless
 call :run core/palette --headless
 call :run ui/fonts --headless
+call :run world/names --headless
 call :run ui/hud --headless
 call :run ui/settings_screen --headless
 call :run ui/title_and_pause --headless

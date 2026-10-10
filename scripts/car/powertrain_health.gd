@@ -180,7 +180,7 @@ func step(v: Vehicle, dt: float) -> void:
 		w.grip_mult = tyre_grip[i]
 	# clutch: slip power = torque x speed difference across the plates
 	var clutch_slip := 0.0
-	if v.current_gear != 0 and v.clutch_amount < 0.95:
+	if v.current_gear != 0 and v.clutch_amount < 0.95 and not v.auto_box_on:  # a torque converter slips in oil: no wear
 		var engine_w := v.motor_rpm / 9.5488
 		var input_w := v.get_drivetrain_spin() * v.get_gear_ratio(v.current_gear)
 		clutch_slip = absf(v.clutch_torque) * absf(engine_w - input_w)

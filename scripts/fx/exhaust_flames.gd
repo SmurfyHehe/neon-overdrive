@@ -380,7 +380,8 @@ func _process(delta: float) -> void:
 	_animate(delta)
 
 ## An upshift with the foot down, on a high-flame car: the ignition cut spits
-## fire. GEVP raises is_up_shifting for the shift's length.
+## fire. GEVP raises is_up_shifting for the shift's length (not in AUTO with
+## the realistic automatic: its shifts have no cut).
 func _watch_upshift(flame: float) -> void:
 	var up: bool = _car.is_up_shifting
 	if up and not _was_up_shifting and flame >= UPSHIFT_FLAME_MIN and upshift_spits(_car):
@@ -389,7 +390,8 @@ func _watch_upshift(flame: float) -> void:
 
 ## The upshift law, shared with EngineAudio's upshift bang so sound and fire
 ## agree: foot down and revs up when the shift starts. GEVP raises
-## is_up_shifting in auto, semi and manual alike.
+## is_up_shifting in semi and manual, and for a car on its simple automatic;
+## the player's realistic automatic never does (no ignition cut, no flame).
 static func upshift_spits(car: Vehicle) -> bool:
 	var rpm_norm := clampf((car.motor_rpm - car.idle_rpm) / maxf(car.max_rpm - car.idle_rpm, 1.0), 0.0, 1.0)
 	return car.throttle_input > 0.6 and rpm_norm > 0.5

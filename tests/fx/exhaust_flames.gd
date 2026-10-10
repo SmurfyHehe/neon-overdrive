@@ -113,8 +113,9 @@ func _run() -> void:
 	print("upshift at flame 0.6: %d upshift bursts, gear %d" % [fl.upshift_bursts - up0, p.current_gear])
 	_check(fl.upshift_bursts > up0, "flame 0.6 should flame on a full-throttle upshift")
 
-	# --- upshift bang (the pop voice) with its flame, in every gearbox mode.
-	# AUTO waits for the gearbox's own upshift; SEMI and MANUAL shift by hand.
+	# --- upshift bang (the pop voice) with its flame: SEMI and MANUAL, shifted
+	# by hand. AUTO waits for the gearbox's own upshift, which is under power
+	# with no ignition cut (the realistic automatic): no bang, no flame.
 	var synth: EngineSynth = fl._audio.synth
 	for mode in [PlayerCar.Transmission.AUTO, PlayerCar.Transmission.SEMI, PlayerCar.Transmission.MANUAL]:
 		p.set_transmission_mode(mode)
@@ -133,8 +134,12 @@ func _run() -> void:
 			p.shift(1)
 		await create_timer(0.3).timeout
 		print("mode %d upshift: %d bang clusters, %d flames" % [mode, synth.upshift_clusters - bang0, fl.upshift_bursts - fire0])
-		_check(synth.upshift_clusters > bang0, "mode %d: a flat-out upshift at flame 0.6 should bang" % mode)
-		_check(fl.upshift_bursts > fire0, "mode %d: and flame with it" % mode)
+		if mode == PlayerCar.Transmission.AUTO:
+			_check(synth.upshift_clusters == bang0, "AUTO: the automatic's own upshift should not bang")
+			_check(fl.upshift_bursts == fire0, "AUTO: nor flame")
+		else:
+			_check(synth.upshift_clusters > bang0, "mode %d: a flat-out upshift at flame 0.6 should bang" % mode)
+			_check(fl.upshift_bursts > fire0, "mode %d: and flame with it" % mode)
 	p.set_transmission_mode(PlayerCar.Transmission.SEMI)
 	throttle = 0.0
 

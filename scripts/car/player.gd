@@ -225,6 +225,11 @@ func _ready() -> void:
 		_saved_tune = PlayerTune.values_from(spec)
 	CarSpec.apply(self, spec)
 	TuneParams.set_gear_count(gear_ratios.size())   # the tuner lists one box per gear of this car
+	# The realistic automatic: only cars whose spec has an "auto" block (the
+	# player's; see CarSpec.PLAYER_AUTO). It runs while the car is in AUTO.
+	if spec.has("auto"):
+		auto_box = AutoBox.new()
+		auto_box.setup(self, spec.auto)
 	if not sim_only:
 		_apply_keyboard_steering()
 
@@ -477,6 +482,18 @@ func set_transmission_mode(mode: int) -> void:
 	# half-pressed pedal from the other model.
 	engine_running = true
 	clutch_pedal = 0.0
+	if auto_box != null:
+		auto_box.reset()
+
+## Shift paddles behind the wheel: only a car built with a paddle box has them
+## (none yet; the mid-engine exotic will). They flick on the box's own shifts.
+func has_paddles() -> bool:
+	return auto_box != null and auto_box.box == AutoBox.BOX_PADDLE
+
+## AUTO in a car built with a manual box: the gearbox shifts itself and the
+## stick stays where it is (Roy's pick 8: the hand stays on the wheel).
+func auto_stick_fixed() -> bool:
+	return automatic_transmission and auto_box != null and auto_box.box == AutoBox.BOX_MANUAL
 
 ## In MANUAL a gear change needs the clutch in; in the other modes it always may.
 func clutch_ready() -> bool:
@@ -496,7 +513,7 @@ var gear: int:
 ## countdown timer -- this getter keeps game.gd's existing ">0.0 means flash
 ## now" HUD check working unchanged.
 var shift_flash_t: float:
-	get: return SHIFT_FLASH_DURATION if is_shifting else 0.0
+	get: return SHIFT_FLASH_DURATION if is_shifting or (auto_box_on and auto_box.shifting) else 0.0
 
 func current_speed() -> float:
 	return -local_velocity.z  # forward = -Z, matches the road-chunk convention

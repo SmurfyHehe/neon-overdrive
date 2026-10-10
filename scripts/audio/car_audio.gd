@@ -71,6 +71,15 @@ const SCRUB_FULL := 0.16
 const SQUEAL_START := 0.14
 const SQUEAL_FULL := 0.38
 const SPIN_START := 0.15
+## Wheelspin has to be tread actually sliding over the road, in m/s. GEVP's slip
+## ratio alone is not enough: at walking pace a wheel turning a few cm/s faster
+## than the road reads -0.3 to -0.6 (a car creeping off in D does), which would
+## chirp, smoke and leave marks. Nothing under SPIN_SLIDE_FROM, all of it from
+## SPIN_SLIDE_FULL. A burnout or a hard launch is several m/s.
+const SPIN_SLIDE_FROM := 0.6
+const SPIN_SLIDE_FULL := 2.0
+static func spin_slide(w: Wheel, body_speed: float) -> float:
+	return smoothstep(SPIN_SLIDE_FROM, SPIN_SLIDE_FULL, absf(w.spin) * w.tire_radius - body_speed)
 const SPIN_FULL := 0.5
 const LOCK_START := 0.2
 const LOCK_FULL := 0.6
@@ -228,7 +237,7 @@ func _read_car() -> Dictionary:
 			# scrub fades out as the slide grows into a squeal
 			"scrub": smoothstep(SCRUB_START, SCRUB_FULL, lat) * (1.0 - 0.8 * smoothstep(SQUEAL_START, SQUEAL_FULL, lat)),
 			"squeal": smoothstep(SQUEAL_START, SQUEAL_FULL, lat),
-			"spin": smoothstep(SPIN_START, SPIN_FULL, -lon),
+			"spin": smoothstep(SPIN_START, SPIN_FULL, -lon) * spin_slide(w, st.speed),
 			"lock": smoothstep(LOCK_START, LOCK_FULL, lon),
 		}
 		for kind in KINDS:

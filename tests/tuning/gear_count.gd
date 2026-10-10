@@ -127,15 +127,24 @@ func _check_cockpit(car: PlayerCar, gears: int) -> void:
 	var frame := CockpitFrame.new(car)
 	car.add_child(frame)
 	var label := frame._gate_labels[PlayerCar.Transmission.MANUAL] as Label3D
-	_check(label.text == CockpitFrame.gate_pattern(gears), "%d gears: console label is '%s'" % [gears, label.text.replace("\n", "|")])
-	if gears < 6:
-		_check(not label.text.contains("6"), "%d gears: console still prints a 6th gear" % gears)
-	var cols := CockpitFrame.gate_columns(gears)
+	# the gate is the car's own (CarSpec.shifter, fitted to the gear count): the
+	# label prints every gear the box has, once, and nothing it lacks
+	_check(label.text == frame.gate_text(), "%d gears: console label is '%s'" % [gears, label.text.replace("
+", "|")])
+	for g in range(1, 8):
+		_check(label.text.contains(str(g)) == (g <= gears), "%d gears: console label '%s' and gear %d" % [gears, label.text.replace("
+", "|"), g])
+	_check(label.text.contains("R"), "%d gears: the console label has no R" % gears)
 	frame.lever_mode = PlayerCar.Transmission.MANUAL
-	var rev := frame._slot_of(-1)
-	_check(is_equal_approx(rev.x, float(cols) - float(cols - 1) / 2.0) and rev.y == 1.0, "%d gears: reverse slot %s" % [gears, str(rev)])
-	var last := frame._slot_of(gears)
-	_check(last.x < rev.x, "%d gears: top gear not left of reverse (%s vs %s)" % [gears, str(last), str(rev)])
+	var slots := {}
+	for g in range(-1, gears + 1):
+		if g == 0:
+			continue
+		_check(frame.gate_slot(g) != null, "%d gears: gear %d has no gate slot" % [gears, g])
+		var slot := frame._slot_of(g)
+		_check(not slots.has(slot), "%d gears: gears %d and %s share the slot %s" % [gears, g, str(slots.get(slot)), str(slot)])
+		_check(absf(slot.y) == 1.0, "%d gears: gear %d is not in a slot (%s)" % [gears, g, str(slot)])
+		slots[slot] = g
 	frame.queue_free()
 
 ## A tune saved when the car had five gears, loaded now that it has four: the

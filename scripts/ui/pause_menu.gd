@@ -19,6 +19,7 @@ const GROUPS := [
 	["Camera", [["camera_cycle", "Camera smoothing"], ["camera_view", "Chase / cockpit view"], ["look_back", "Look back (hold)"], ["look_left", "Look left (cockpit, hold)"], ["look_right", "Look right (cockpit, hold)"], ["look_up", "Look up (cockpit, hold)"], ["look_down", "Look down (cockpit, hold)"], ["window", "Side window (hold: down, tap: up)"]]],
 	["Audio & Radio", [["mute", "Mute"], ["radio_next", "Next radio station"]]],
 	["Photo mode", [["photo_mode", "Photo mode"], ["photo_forward", "Forward"], ["photo_back", "Back"], ["photo_left", "Left"], ["photo_right", "Right"], ["photo_down", "Down"], ["photo_up", "Up"], ["photo_fast", "Faster (hold)"], ["photo_look_left", "Look left"], ["photo_look_right", "Look right"], ["photo_look_up", "Look up"], ["photo_look_down", "Look down"], ["photo_fov_narrow", "Zoom in"], ["photo_fov_wide", "Zoom out"], ["photo_shot", "Save photo"]]],
+	["Special vehicles", SpecialKeys.LABELS],
 	["Menus", [["pause", "Pause / back"], ["tuning_panel", "Tuning panel"], ["autotune_panel", "Auto-Tune panel"]]],
 ]
 
@@ -500,7 +501,10 @@ func _build_cars_page(center: CenterContainer) -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cars_page.add_child(title)
 	var now := PlayerCar.chassis_kind()
+	var listed := game_state.garage_cars()
 	for k in PlayerCars.KINDS:
+		if not String(k.id) in listed:
+			continue  # a special vehicle not unlocked yet
 		var text := "%s   %d Nm / %d kg" % [PlayerCars.title(k.id), int(k.nm), int(k.kg)]
 		if k.id == now:
 			text += "   (driving)"

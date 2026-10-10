@@ -17,6 +17,9 @@ extends RefCounted
 # T2 club, T3 district. Torque and mass are starting values for the D data
 # pass, not measured.
 
+const SaveStore := preload("res://scripts/save/save_store.gd")
+const TestMode := preload("res://scripts/core/test_mode.gd")
+
 const DEFAULT := "p1_coupe"
 
 ## In the order the garage lists them. "name" is the working name from the
@@ -29,7 +32,17 @@ const KINDS := [
 	{"id": "p4_kei", "label": "Kei roadster", "name": "Mite", "tier": "T1", "nm": 180, "kg": 760},
 	{"id": "p5_muscle", "label": "Muscle sedan", "name": "Marlowe", "tier": "T3", "nm": 820, "kg": 1800},
 	{"id": "p6_crossover", "label": "Perf. crossover", "name": "Cairn", "tier": "T2", "nm": 580, "kg": 1450},
+	# Special vehicles (S0): story-end unlocks, not sprint-race cars. The truck's
+	# numbers are its own (S1); the lowrider borrows the coupe's until its body step.
+	{"id": "m1_monster", "label": "Monster truck", "name": "Brute", "tier": "S", "nm": 750, "kg": 3500},
+	{"id": "l1_lowrider", "label": "Lowrider", "name": "Slab", "tier": "S", "nm": 460, "kg": 1300},
 ]
+
+## Each special vehicle's own data file; its SPECIAL const is what is_special reads.
+const SPECIAL_DATA := {
+	"m1_monster": preload("res://scripts/car/m1_monster_data.gd"),
+	"l1_lowrider": preload("res://scripts/car/l1_lowrider_data.gd"),
+}
 
 static var selected := DEFAULT
 
@@ -48,6 +61,10 @@ const CABIN_OFFSET := {
 	"p4_kei": Vector3(0.0, -0.066, -0.075),
 	"p5_muscle": Vector3(0.0, 0.036, -0.025),
 	"p6_crossover": Vector3(0.0, 0.22, -0.29),
+	# The truck's driver sits high in the lifted cab; the lowrider wears the
+	# P1's cabin until its body step.
+	"m1_monster": Vector3(0.0, 1.55, 0.35),
+	"l1_lowrider": Vector3.ZERO,
 }
 
 static func cabin_offset(kind: String) -> Vector3:
@@ -61,6 +78,28 @@ static func ids() -> Array[String]:
 
 static func is_player_kind(kind: String) -> bool:
 	return kind in ids()
+
+## True for a story-end special vehicle (its data file's SPECIAL).
+static func is_special(kind: String) -> bool:
+	var d: Variant = SPECIAL_DATA.get(kind)
+	return d != null and d.SPECIAL
+
+## The cars a sprint race may pick from: no specials.
+static func sprint_ids() -> Array[String]:
+	var out: Array[String] = []
+	for k in ids():
+		if not is_special(k):
+			out.append(k)
+	return out
+
+## The cars the garage / free roam list: every normal car, plus the specials
+## whose entry in `unlocked` (GameState.special_unlocked) is true.
+static func garage_ids(unlocked: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	for k in ids():
+		if not is_special(k) or unlocked.get(k, false) == true:
+			out.append(k)
+	return out
 
 ## The car's peak torque as the player reads it: on full boost for a turbo car.
 static func peak_torque(spec: Dictionary) -> float:
@@ -87,6 +126,10 @@ static func load_settings() -> void:
 		select(DEFAULT)
 		return
 	select(str(cfg.get_value("player", "car", DEFAULT)))
+	# A special saved as the car but not unlocked (a new slot, a wiped save)
+	# spawns the default car instead.
+	if is_special(selected) and not TestMode.active() 			and not SaveStore.load_special().get("unlocked", {}).get(selected, false):
+		select(DEFAULT)
 
 ## Keeps the other sections (audio, traffic, fx) as they are.
 static func save_settings() -> void:

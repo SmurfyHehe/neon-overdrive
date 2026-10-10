@@ -1,14 +1,14 @@
 class_name PhotoMode
 extends Node
 
-# Photo mode (ROADMAP item 12, Roy's idea). P pauses the game (GameState.PHOTO),
+# Photo mode (ROADMAP item 12, Roy's idea). F12 pauses the game (GameState.PHOTO),
 # hides every HUD layer and hands the view to a free camera that starts where the
 # chase camera was. Keyboard only, no on-screen hints; the keys are on the
 # Controls page like every other action.
 #
 #   W/S forward/back, A/D left/right, Q/E down/up (hold Shift for fast),
 #   arrows look, Z/X narrower/wider field of view, Enter saves a PNG,
-#   P or Esc leaves.
+#   F12 or Esc leaves.
 #
 # Film grain and the screen effects stay on (they are the look, not the HUD).
 # Shots go to user://photos/neon_overdrive_<date>_<time>.png.
@@ -24,7 +24,7 @@ const KEEP_LAYERS := ["film_grain.gd", "screen_fx.gd"]  # scripts of the CanvasL
 
 ## action -> keycode; registered into the InputMap so the Controls page lists them.
 const KEYS := {
-	"photo_mode": KEY_P, "photo_shot": KEY_ENTER,
+	"photo_mode": KEY_F12, "photo_shot": KEY_ENTER,
 	"photo_forward": KEY_W, "photo_back": KEY_S, "photo_left": KEY_A, "photo_right": KEY_D,
 	"photo_down": KEY_Q, "photo_up": KEY_E, "photo_fast": KEY_SHIFT,
 	"photo_look_left": KEY_LEFT, "photo_look_right": KEY_RIGHT,

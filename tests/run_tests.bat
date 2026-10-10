@@ -124,6 +124,7 @@ call :run core/log_folder --headless
 call :run car/powertrain_health "--headless --fixed-fps 60"
 call :run car/car_parts --headless
 call :run car/car_detail --headless
+call :run car/car_paint --headless
 call :run car/turbo "--headless --fixed-fps 60"
 call :run car/forced_induction "--headless --fixed-fps 60"
 call :run car/bolt_ons --headless

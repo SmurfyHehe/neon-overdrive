@@ -3,7 +3,7 @@ extends SceneTree
 # Sky probe (2026-10-07, night pass 2026-10-10): the sky gradient shows and
 # the moon renders.
 # Boots Game.tscn, then looks at the sky through its own camera: 120 m above
-# the car (clear of the downtown towers), a 30 degree lens aimed at the moon,
+# the car (clear of the downtown towers), a 30 degree lens aimed 15 degrees up on the moon's bearing,
 # so the frame runs from the horizon glow at the bottom to ~30 degrees of
 # navy at the top. Region-averaged because the film grain is per-pixel
 # noise. Then steps the moon through its phases and measures the lit area.
@@ -24,6 +24,7 @@ const PHASES := [0.0, 0.12, 0.25, 0.38, 0.5]
 const SETTLE := 6  # frames per change
 const CAM_UP := 120.0
 const CAM_FOV := 30.0
+const AIM_EL_DEG := 15.0
 
 var game: Node
 var env: Environment
@@ -53,7 +54,11 @@ func _process(_delta: float) -> bool:
 		root.add_child(cam)
 		var car: Node3D = game.get("player")
 		cam.global_position = car.global_position + Vector3(0.0, CAM_UP, 0.0)
-		cam.look_at(cam.global_position + NightSky.moon_dir_of(env.sky))
+		# Towards the moon but 15 degrees up, so the 30 degree frame runs from
+		# the horizon to 30 degrees and holds the moon (about 22 up) as well.
+		var md: Vector3 = NightSky.moon_dir_of(env.sky)
+		var flat := Vector3(md.x, 0.0, md.z).normalized()
+		cam.look_at(cam.global_position + flat * cos(deg_to_rad(AIM_EL_DEG)) + Vector3.UP * sin(deg_to_rad(AIM_EL_DEG)))
 		cam.current = true
 		NightSky.set_phase(env.sky, 0.5)
 		wait_until = frame + SETTLE
@@ -103,8 +108,8 @@ static func _avg(img: Image, r: Rect2i) -> Vector3:
 	return sum / float(r.get_area())
 
 ## Sky at the top of the frame (~28 degrees up), the middle, and just above
-## the horizon (the moon sits at 12-20 degrees, so the frame's bottom edge is
-## at or a little above 0 degrees).
+## the horizon (the camera aims AIM_EL_DEG up, so the frame's bottom edge is
+## at 0 degrees).
 func _regions(tag: String) -> Dictionary:
 	var img := _shot(tag)
 	var w := img.get_width()

@@ -220,10 +220,10 @@ func _check_districts() -> void:
 				if bx < sx - half - 0.6 or bx > sx + half + 0.6:
 					_fail("chunk %d %s: step wall %.1f..%.1f misses the boundary at %.1f" % [idx, nm, sx - half, sx + half, bx])
 	c.free()
-	for n in ["downtown", "residential", "strip", "industrial"]:
+	for n in D.SPECS:
 		if not seen.has(n):
 			_fail("district %s never appears in 400 chunks" % n)
-	for t in ["apartment", "shop", "office", "parking", "garage", "warehouse", "gas", "diner", "lot"]:
+	for t in B.BuildingKit.TYPES.keys() + ["lot"]:
 		if not types.has(t):
 			_fail("building type %s never appears in 400 chunks" % t)
 	print("districts: %s over 400 chunks, %d step walls; types %s" % [seen.keys(), steps, types.keys()])

@@ -21,6 +21,13 @@ Examples:
   python tools/radio_import/import_treblo.py --dry-run    # checks only, no writes
   python tools/radio_import/import_treblo.py --ab         # import + blind-test copies
   python tools/radio_import/import_treblo.py --ab-only    # only the blind-test copies
+  python tools/radio_import/import_treblo.py --pairs      # paired blind test (see below)
+
+--pairs reads PAIRS below (Treblo song vs our song already in assets/radio),
+cuts 45 s from 15 s in for both, matches both to -16 LUFS and writes
+<inbox>/blind-test/pair_NN_A.wav + pair_NN_B.wav (Treblo is randomly A or B),
+solo_10..12.wav for three Grey Hour songs, and key.txt with the answers.
+It only reads the game's files; nothing is written to the repo.
 """
 import argparse
 import array
@@ -29,6 +36,7 @@ import datetime
 import hashlib
 import json
 import math
+import random
 import re
 import shutil
 import subprocess
@@ -59,9 +67,27 @@ CLIP_DB = -0.1             # peak at/above this ...
 CLIP_PEAK_COUNT = 20       # ... reached this many times = clipped
 ABRUPT_END_RATIO = 0.5     # last 100 ms RMS vs track median RMS (0.5 = -6 dB)
 AB_SECONDS = 45.0
+PAIR_START = 15.0          # blind-test cut starts this far in
+
+# Blind-test pairs: (pair number, Treblo song id prefix, our song under assets/radio).
+PAIRS = [
+    (1, "afterglow_01", "s4_synthwave/01_harlow_drive.ogg"),
+    (2, "afterglow_02", "s4_synthwave/02_night_overpass.ogg"),
+    (3, "afterglow_03", "s4_synthwave/07_midnight_garage.ogg"),
+    (4, "undertow_01", "s2_dark/02_cold_asphalt.ogg"),
+    (5, "undertow_02", "s2_dark/06_dead_lights.ogg"),
+    (6, "undertow_03", "s2_dark/07_hollow_street.ogg"),
+    (7, "slipstream_01", "s1_drift/03_late_shift.ogg"),
+    (8, "slipstream_02", "s1_drift/05_hairpin.ogg"),
+    (9, "slipstream_03", "s1_drift/07_last_lap.ogg"),
+]
+# Grey Hour has no old songs to compare with, so three play alone (one per late/dead/dawn).
+SOLOS = [(10, "greyhour_01"), (11, "greyhour_02"), (12, "greyhour_03")]
 
 TERMS_NAME = "Treblo free plan terms"
 SOURCE_NAME = "Treblo (free plan)"
+API_SOURCE_NAME = "Treblo API"
+API_TERMS_NAME = "Treblo API Terms (https://treblo.com/api-terms)"
 LICENCE_HEADER = (
     "| id | file path | title | artist | source URL | licence (name and URL) | "
     "date downloaded | proof | modifications | exact attribution text | "
@@ -332,6 +358,115 @@ def encode(ff, wav, out_ogg, args):
     return ff.duration(out_ogg), float(check["input_i"])
 
 
+def cut_matched(ff, src, out, start, length):
+    """Cut [start, start+length) and write a -16 LUFS 44.1 kHz stereo 16-bit WAV."""
+    seg = "atrim=start=%.3f:duration=%.3f,asetpts=PTS-STARTPTS" % (start, length)
+    m = ff.loudnorm_measure(src, seg)
+    ln = ("loudnorm=I=%g:TP=%g:LRA=11:measured_I=%s:measured_TP=%s:measured_LRA=%s:"
+          "measured_thresh=%s:offset=%s:linear=true" % (
+              TARGET_LUFS, TRUE_PEAK, m["input_i"], m["input_tp"], m["input_lra"],
+              m["input_thresh"], m["target_offset"]))
+    rc, _, err = run([ff.ffmpeg, "-v", "error", "-y", "-i", str(src), "-vn",
+                      "-af", seg + "," + ln + ",aresample=44100", "-ac", "2", "-ar", "44100",
+                      "-c:a", "pcm_s16le", "-map_metadata", "-1", str(out)])
+    if rc != 0:
+        raise Reject("cut failed: " + err.strip())
+
+
+def find_treblo_wav(inbox, prefix):
+    """The Treblo WAV for an id prefix like afterglow_01: in the inbox, else in done/."""
+    for folder in (inbox, inbox / "done"):
+        hits = sorted(folder.glob(prefix + "_*.wav")) if folder.is_dir() else []
+        if hits:
+            return hits[0]
+    return None
+
+
+def read_api_meta(wav):
+    """<name>.api.json written next to the WAV by treblo_batch.py, or None."""
+    side = wav.with_name(wav.stem + ".api.json")
+    try:
+        return json.loads(side.read_text(encoding="utf-8")) if side.exists() else None
+    except ValueError:
+        return None
+
+
+def read_key(path):
+    """pair number -> 'A' or 'B' (where the Treblo song sits), from an earlier key.txt."""
+    got = {}
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            m = re.match(r"pair_(\d\d): Treblo = ([AB])\b", line)
+            if m:
+                got[int(m.group(1))] = m.group(2)
+    return got
+
+
+def run_pairs(ff, inbox, repo, seed):
+    """Paired blind test. Returns an exit code. Writes only under <inbox>/blind-test/."""
+    out_dir = inbox / "blind-test"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    key_path = out_dir / "key.txt"
+    kept = read_key(key_path)            # a re-run must not reshuffle a test Roy has started
+    rng = random.Random(seed)
+    need = AB_SECONDS + PAIR_START
+    lines, problems, made = [], [], 0
+
+    def usable(path, label):
+        d = ff.duration(path)
+        if d < need:
+            raise Reject("%s is only %.0f s, need %.0f s for a cut from %.0f s in" % (
+                label, d, need, PAIR_START))
+
+    for num, prefix, game_rel in PAIRS:
+        tag = "pair_%02d" % num
+        try:
+            tre = find_treblo_wav(inbox, prefix)
+            if tre is None:
+                raise Reject("no %s_*.wav in the inbox yet" % prefix)
+            game = repo / "assets" / "radio" / game_rel
+            if not game.is_file():
+                raise Reject("our song %s not found" % game_rel)
+            usable(tre, tre.name)
+            usable(game, game_rel)
+            side = kept.get(num) or rng.choice("AB")
+            other = "B" if side == "A" else "A"
+            cut_matched(ff, tre, out_dir / ("%s_%s.wav" % (tag, side)), PAIR_START, AB_SECONDS)
+            cut_matched(ff, game, out_dir / ("%s_%s.wav" % (tag, other)), PAIR_START, AB_SECONDS)
+            lines.append("%s: Treblo = %s, ours = %s  (%s vs %s)" % (
+                tag, side, other, tre.name, game_rel))
+            print("PAIR    %s  ready  (%s vs %s)" % (tag, tre.name, game_rel))
+            made += 1
+        except Reject as e:
+            problems.append("%s: %s" % (tag, e))
+            print("SKIP    %s  %s" % (tag, e))
+    for num, prefix in SOLOS:
+        tag = "solo_%02d" % num
+        try:
+            tre = find_treblo_wav(inbox, prefix)
+            if tre is None:
+                raise Reject("no %s_*.wav in the inbox yet" % prefix)
+            usable(tre, tre.name)
+            cut_matched(ff, tre, out_dir / ("%s.wav" % tag), PAIR_START, AB_SECONDS)
+            lines.append("%s: Treblo only, no pair  (%s)" % (tag, tre.name))
+            print("SOLO    %s  ready  (%s)" % (tag, tre.name))
+            made += 1
+        except Reject as e:
+            problems.append("%s: %s" % (tag, e))
+            print("SKIP    %s  %s" % (tag, e))
+    header = ["Blind test key - do not open until you have chosen.",
+              "Each pair: which side (A or B) is the Treblo song.",
+              "Cuts are 45 s from 0:15, both sides matched to %g LUFS." % TARGET_LUFS, ""]
+    if lines:
+        key_path.write_text("\n".join(header + lines) + "\n", encoding="utf-8")
+    print("\n%d of %d pair or solo sets made in %s" % (made, len(PAIRS) + len(SOLOS), out_dir))
+    if problems:
+        print("Not made yet:")
+        for pr in problems:
+            print("  " + pr)
+    return 0 if made else 1
+
+
 def write_ab(ff, wav, inbox, today):
     """45 s, loudness matched, unlabelled copy for blind testing + a key file."""
     dur = ff.duration(wav)
@@ -340,17 +475,7 @@ def write_ab(ff, wav, inbox, today):
     digest = sha256(wav)[:8]
     out = inbox / "ab" / ("ab_%s.wav" % digest)
     out.parent.mkdir(parents=True, exist_ok=True)
-    seg = "atrim=start=%.3f:duration=%.3f,asetpts=PTS-STARTPTS" % (start, length)
-    m = ff.loudnorm_measure(wav, seg)
-    ln = ("loudnorm=I=%g:TP=%g:LRA=11:measured_I=%s:measured_TP=%s:measured_LRA=%s:"
-          "measured_thresh=%s:offset=%s:linear=true" % (
-              TARGET_LUFS, TRUE_PEAK, m["input_i"], m["input_tp"], m["input_lra"],
-              m["input_thresh"], m["target_offset"]))
-    rc, _, err = run([ff.ffmpeg, "-v", "error", "-y", "-i", str(wav), "-vn",
-                      "-af", seg + "," + ln + ",aresample=44100", "-ac", "2", "-ar", "44100",
-                      "-c:a", "pcm_s16le", "-map_metadata", "-1", str(out)])
-    if rc != 0:
-        raise Reject("ab copy failed: " + err.strip())
+    cut_matched(ff, wav, out, start, length)
     key = inbox / "ab-key.csv"
     new = not key.exists()
     with open(key, "a", newline="", encoding="utf-8") as f:
@@ -369,6 +494,9 @@ def main(argv=None):
     ap.add_argument("--dry-run", action="store_true", help="run every check, write nothing")
     ap.add_argument("--ab", action="store_true", help="also write 45 s blind-test copies to <inbox>/ab/")
     ap.add_argument("--ab-only", action="store_true", help="only write blind-test copies, no import")
+    ap.add_argument("--pairs", action="store_true",
+                    help="paired blind test: writes <inbox>/blind-test/ pairs, solos and key.txt")
+    ap.add_argument("--seed", type=int, default=None, help="--pairs: fix the A/B shuffle")
     ap.add_argument("--strict-tempo", action="store_true", help="tempo outside the station range = reject")
     ap.add_argument("--bitrate", default=BITRATE)
     ap.add_argument("--min-seconds", type=float, default=MIN_SECONDS, help="minimum track length")
@@ -386,6 +514,9 @@ def main(argv=None):
         if not shutil.which(tool):
             print("ERROR: %s not found on PATH" % tool)
             return 2
+    if args.pairs:
+        inbox.mkdir(parents=True, exist_ok=True)
+        return run_pairs(ff, inbox, repo, args.seed)
     if not inbox.is_dir():
         print("ERROR: inbox %s does not exist" % inbox)
         return 2
@@ -440,6 +571,8 @@ def main(argv=None):
             if "| %s |" % stem in logged or ("%s.ogg" % stem) in logged:
                 raise Reject("already imported (id %s is in docs/audio-licences.md)" % stem)
             warns, facts = check_file(ff, wav, m.groupdict(), sheet, stations, args)
+            if not row["prompt"]:
+                warns.append("prompt text is empty in the sheet (licence trail incomplete)")
             if args.dry_run:
                 print("OK      %-48s %d:%02d  peak %.1f dBFS  ~%s BPM%s" % (
                     name, facts["duration"] // 60, facts["duration"] % 60, facts["peak"],
@@ -454,16 +587,25 @@ def main(argv=None):
             rel = out_ogg.relative_to(repo).as_posix()
             title = pretty_title(slug)
             proof_rel = proof.relative_to(repo).as_posix()
+            api = read_api_meta(wav)
+            if api:
+                src_name, terms_name = API_SOURCE_NAME, api.get("terms") or API_TERMS_NAME
+                trail = "; API task %s made %s" % (api.get("task_id", "?"), api.get("made", "?"))
+                pending = ("PENDING: Roy to confirm API Terms s3 (outputs owned, no restriction) "
+                           "and that s6 attribution applies only to apps that call the API")
+            else:
+                src_name, terms_name, trail = SOURCE_NAME, TERMS_NAME, ""
+                pending = "PENDING: Roy to confirm the free plan allows commercial use"
             append_row(licence_log,
                 "| %s | %s | %s | generated with Treblo | %s | %s, saved at %s | %s | %s | "
                 "trimmed silence, %gs fade out, normalised to %g LUFS, Ogg Vorbis %s; "
-                "source WAV sha256 %s; ogg sha256 %s | none known | PENDING: Roy to confirm the "
-                "free plan allows commercial use | not checked | pending Roy |" % (
-                    stem, rel, title, SOURCE_NAME, TERMS_NAME, proof_rel, today, proof_rel,
-                    args.fade, TARGET_LUFS, args.bitrate, src_hash, ogg_hash))
+                "source WAV sha256 %s; ogg sha256 %s%s | none known | %s "
+                "| not checked | pending Roy |" % (
+                    stem, rel, title, src_name, terms_name, proof_rel, today, proof_rel,
+                    args.fade, TARGET_LUFS, args.bitrate, src_hash, ogg_hash, trail, pending))
             append_row(repo / "assets" / "radio" / "CREDITS.md",
                 "| %s | %s | %s | %s | %s | %s |" % (
-                    out_ogg.name, stations[station]["label"], title, band, SOURCE_NAME, src_hash[:16]),
+                    out_ogg.name, stations[station]["label"], title, band, src_name, src_hash[:16]),
                 CREDITS_HEADER, CREDITS_SECTION)
             update_tracks(out_ogg.parent / "tracks.md", stations[station]["label"],
                           [nn, out_ogg.name, title, band, "%d:%02d" % (length // 60, length % 60),
@@ -474,6 +616,9 @@ def main(argv=None):
             if dest.exists():
                 dest = done / ("%s_%s" % (today, name))
             shutil.move(str(wav), str(dest))
+            sidecar = wav.with_name(wav.stem + ".api.json")
+            if sidecar.exists():
+                shutil.move(str(sidecar), str(dest.with_name(dest.stem + ".api.json")))
             logged += "| %s |" % stem
             print("IMPORT  %-48s %d:%02d  %.1f LUFS  -> %s%s" % (
                 name, length // 60, length % 60, lufs, rel,

@@ -172,8 +172,12 @@ func _physics_process(_delta: float) -> bool:
 				game.game_state.pause()
 		Step.PAUSE:
 			if waited >= 3:
-				_check(AudioServer.is_bus_mute(AudioServer.get_bus_index(&"Music")), "pausing should mute the Music bus")
+				# The pause screen keeps the radio on, muffled (pause_look.gd); the Tuner mutes it.
+				_check(not AudioServer.is_bus_mute(AudioServer.get_bus_index(&"Music")), "pausing should keep the Music bus playing")
 				game.game_state.resume()
+				game.game_state.toggle_tuning()
+				_check(AudioServer.is_bus_mute(AudioServer.get_bus_index(&"Music")), "the Tuner should mute the Music bus")
+				game.game_state.close_tuning()
 				return _end("")
 	return false
 

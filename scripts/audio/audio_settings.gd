@@ -18,13 +18,18 @@ const CHANNELS := {
 	"Master": [&"Master"],
 	"Engine": [&"Engine"],
 	"Turbo": [&"Turbo"],
-	"Effects": [&"Tires", &"World", &"UI", &"Traffic", &"Sirens"],
+	"Effects": [&"Tires", &"World", &"Traffic", &"Sirens"],
 	"Music": [&"Music", &"Scanner"],
+	# Spoken lines (Dale, people). No voice audio plays on the bus yet; the
+	# slider is ready for when the first one does.
+	"Voices": [&"Voices"],
+	# Menu clicks, ticks and the squelch (menu_sfx.gd).
+	"Menus": [&"UI"],
 }
 
 ## Tests point this at a scratch file.
 static var path := default_path()
-static var volumes := {"Master": 1.0, "Engine": 1.0, "Turbo": 1.0, "Effects": 1.0, "Music": 1.0}
+static var volumes := {"Master": 1.0, "Engine": 1.0, "Turbo": 1.0, "Effects": 1.0, "Music": 1.0, "Voices": 1.0, "Menus": 1.0}
 
 static func set_volume(channel: String, value: float) -> void:
 	if not CHANNELS.has(channel):

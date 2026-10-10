@@ -44,6 +44,9 @@ call :run core/palette --headless
 call :run ui/fonts --headless
 call :run ui/hud --headless
 call :run ui/settings_screen --headless
+call :run ui/title_and_pause --headless
+call :run ui/pause_look --headless
+call :run audio/menu_sfx --headless
 call :run core/key_bindings --headless
 call :run fleet/car_loft_normals --headless
 call :run fleet/test_car --headless

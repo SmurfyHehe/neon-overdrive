@@ -66,26 +66,27 @@ func _process(_delta: float) -> bool:
 			state.pause()
 			_check(menu.visible and menu.main_page.visible, "pausing opens the pause menu")
 			_check(menu.main_page.find_children("*", "HSlider", true, false).is_empty(), "the pause column has no sliders left")
-			_check(menu.main_page.find_children("*", "Button", true, false).size() <= 8, "the pause column is short")
+			_check(menu.main_page.find_children("*", "Button", true, false).size() == 5, "the pause column is the five rows")
 			_check(menu.settings != null and not menu.settings.visible and menu.settings_button != null, "Settings starts closed, with a button")
 			menu.settings_button.pressed.emit()
 			_check(menu.settings.visible and menu.settings.current_page == 0, "the Settings button opens the Sound page")
-			_check(menu.settings.pages.size() == 4 and menu.settings.tab_buttons.size() == 4, "four pages")
-			_check(["Sound", "Picture", "Driving", "Controls"] == Array(SettingsScreen.PAGES), "page names")
+			_check(menu.settings.pages.size() == 5 and menu.settings.tab_buttons.size() == 5, "five pages")
+			_check(["Sound", "Picture", "Driving", "Controls", "Game"] == Array(SettingsScreen.PAGES), "page names")
 			_check(state.modal_open, "game shortcuts stand down while Settings is open")
 			var s := menu.settings
 			# Sound
 			s.volume_sliders["Music"].value = 0.4
 			_check(is_equal_approx(AudioSettings.volumes["Music"], 0.4), "Music slider sets the volume")
-			s.turbo_slider.value = 0.25
-			_check(is_equal_approx(AudioSettings.turbo_volume, 0.25), "Turbo slider sets turbo volume")
-			_check(is_equal_approx(AudioSettings.turbo_gain(), AudioSettings.volumes["Engine"] * 0.25), "turbo_gain is Engine x Turbo")
+			# Turbo, Voices and Menu sounds are mixer channels like the rest
+			_check(s.volume_sliders.has("Turbo") and s.volume_sliders.has("Voices") and s.volume_sliders.has("Menus"), "Sound page has Turbo, Voices and Menu sounds")
+			s.volume_sliders["Turbo"].value = 0.25
+			_check(is_equal_approx(AudioSettings.volumes["Turbo"], 0.25), "Turbo slider sets the Turbo channel")
 			var cfg := ConfigFile.new()
 			cfg.load(AudioSettings.path)
 			_check(is_equal_approx(float(cfg.get_value("audio", "turbo", -1.0)), 0.25), "turbo volume is saved")
-			AudioSettings.turbo_volume = 1.0
+			AudioSettings.volumes["Turbo"] = 1.0
 			AudioSettings.load_settings()
-			_check(is_equal_approx(AudioSettings.turbo_volume, 0.25), "turbo volume loads back")
+			_check(is_equal_approx(AudioSettings.volumes["Turbo"], 0.25), "turbo volume loads back")
 			# Tabs
 			s.show_page(1)
 			_check(s.pages[1].visible and not s.pages[0].visible and s.tab_buttons[1].button_pressed, "tab switch shows only that page")

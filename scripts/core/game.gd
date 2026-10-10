@@ -58,6 +58,7 @@ var game_state: GameState
 # speed feel (FOV, dolly, shake) all live in chase_camera.gd.
 var camera: ChaseCamera
 var radio: RadioManager
+var menu_sfx: MenuSfx   # clicks, ticks and the squelch for every menu (menu_sfx.gd)
 var night_clock: NightClock  # 8 p.m. to 6 a.m., saved (night_clock.gd); windows follow it
 var _bands := false  # hour bands drive traffic and Dave (bands_on)
 var world_mood: WorldMood  # tonight's events: rule-breaker share, bar close, meets, crackdowns
@@ -94,6 +95,7 @@ func _ready() -> void:
 	GraphicsSettings.load_settings()   # preset, edge smoothing, render scale ([graphics])
 	DisplaySettings.load_settings()    # fullscreen, window size ([display]); applied below in a play session
 	KeyBindings.load_settings()        # the player's rebound keys ([keys])
+	GameSettings.load_settings()       # tips on/off ([game])
 	# Benchmark mode (-- --benchmark, see benchmark.gd) drives a fixed road so
 	# runs are comparable; normal play gets a fresh one each time. It also runs
 	# the default traffic (car count and draw distance), not whatever the
@@ -528,18 +530,31 @@ func _setup_hud() -> void:
 # ---------- game state (pause / restart / quit, issue #27) ----------
 func _setup_game_state() -> void:
 	game_state = GameState.new()
+	# Real play sessions only (tests and benchmarks keep running): alt-tab and a
+	# stalled frame pause the game and say why on the pause screen.
+	var real_play: bool = DisplaySettings.player_run() and not Benchmark.requested()
+	game_state.pause_on_focus_loss = real_play
+	game_state.stall_secs = GameState.STALL_SECS if real_play else 0.0
 	add_child(game_state)
 	var pause := PauseMenu.new(game_state)
 	pause.wallet = wallet
+	pause.night_clock = night_clock
 	add_child(pause)
 	add_child(TunerScreen.new(player, game_state))
 	add_child(WarningLights.new(player))
 	add_child(PhotoMode.new(game_state, camera))
 	radio = RadioManager.new()
 	radio.listener = player  # reception follows the car (tunnels, bridges)
+	radio.process_mode = Node.PROCESS_MODE_ALWAYS   # plays on, muffled, while paused (PauseLook)
 	add_child(radio)
+	add_child(PauseLook.new(game_state, player, camera))
+	add_child(TitleScreen.new(game_state))
+	menu_sfx = MenuSfx.new()
+	add_child(menu_sfx)
 	if run.get("radio") is float or run.get("radio") is int:
 		radio.tune_to(int(run.radio))
+	if GameState.wants_title():
+		game_state.enter_title()   # the title shows over the frozen world; Drive is instant
 	game_state.state_changed.connect(saver.on_state_changed)
 	game_state.restarting.connect(saver.on_restart)
 	game_state.quitting.connect(saver.save_now)

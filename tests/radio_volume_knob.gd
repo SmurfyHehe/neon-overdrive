@@ -32,6 +32,11 @@ var frame: CockpitFrame
 var d: DriverModel
 var held := KEY_NONE
 var key_tick := -1
+## Render frames at the key press / slider set. The hand's pose and the knob move
+## in _process by the render frame's delta, and a loaded machine renders far
+## fewer frames than it ticks physics, so "N ticks later" is not "N frames later".
+var key_frame := -1
+var act_checked := false
 var contact_tick := -1
 var vol_at_key := 0.0
 var vol_at_release := 0.0
@@ -107,12 +112,15 @@ func _physics_process(_delta: float) -> bool:
 				_shot("radio_volume_rest.png")
 				vol_at_key = _vol()
 				key_tick = tick
+				key_frame = Engine.get_process_frames()
+				act_checked = false
 				_key(KEY_PERIOD, true)
 				_go(Step.UP)
 		Step.UP:
 			if contact_tick < 0:
 				_check(is_equal_approx(_vol(), vol_at_key), "the volume moved before the hand reached the knob (%.3f)" % _vol())
-				if waited == _s(0.17):
+				if not act_checked and Engine.get_process_frames() >= key_frame + 3:
+					act_checked = true
 					_check(d.act == DriverModel.Act.VOLUME_REACH, ". sends the right hand to the knob (act %s)" % DriverModel.Act.keys()[d.act])
 				return false
 			if tick == contact_tick + 1:
@@ -156,7 +164,8 @@ func _physics_process(_delta: float) -> bool:
 				AudioSettings.set_volume("Music", 0.7)
 				vol_at_key = -1.0
 				key_tick = tick
-			if vol_at_key < 0.0 and tick == key_tick + 3:
+				key_frame = Engine.get_process_frames()
+			if vol_at_key < 0.0 and Engine.get_process_frames() >= key_frame + 3:
 				_knob_ok("Music slider set to 0.7")
 				_check(d.act == DriverModel.Act.GRIP, "the slider doesn't send the hand (act %s)" % DriverModel.Act.keys()[d.act])
 				return _end("")

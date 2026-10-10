@@ -56,6 +56,7 @@ static func set_minutes(m: float) -> void:
 	# The facade buildings (BuildingKit) pick lit windows in their shader; they
 	# follow the same curve, relative to midnight's share.
 	BuildingKit.set_lit_scale(lit_fraction_target(m) / lit_fraction_target(240.0))
+	BuildingKit.set_minutes(m)  # shop shutters (world step 3)
 	if _tex == null:
 		return
 	if _paint():

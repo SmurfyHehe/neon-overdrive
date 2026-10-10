@@ -29,6 +29,17 @@ extends RefCounted
 # Step 2 adds building types on top (see TYPES) and shop / garage signs
 # (scripts/world/building_signs.gd). Which windows are lit is decided per window in the
 # shader from a hash, so it never repeats from one building to the next.
+#
+# World step 3 (2026-10-10): shop fronts with life inside. The ground-floor
+# glass of a shop shows a lit room behind it, drawn by the same shader with
+# interior mapping: the view ray is traced from the glass into a box one bay
+# wide, one floor tall and ROOM_DEPTH deep, and whichever wall it hits is
+# painted from a hash (shelves, washing machines, a back bar with figures, a
+# bare room with one security light). No geometry, no texture, no extra draw
+# call: the room costs fragments only where shop glass is on screen. Shops
+# roll a shutter down as the night clock passes their closing time (ROOMS
+# below, jittered per building); bars stay lit to closing. What a district's
+# shops are is data (Districts "fronts").
 
 const BuildingSigns := preload("res://scripts/world/building_signs.gd")
 const Districts := preload("res://scripts/world/districts.gd")
@@ -74,6 +85,37 @@ const TINTS := [
 	Color(0.23, 0.24, 0.28),  # slate
 ]
 
+# Shop rooms (world step 3). id is the shader's room kind; close is game
+# minutes since 8 p.m. when the shutter comes down ([min, max], jittered per
+# building), -1 never, -2 down all night; close_chance is the share of that
+# kind that closes at all (a corner store is 24-hour more often than not).
+# What a kind looks like inside is in the shader (room_back / room_floor /
+# room_ceiling).
+const ROOMS := {
+	"store": {"id": 0, "close": [180.0, 300.0], "close_chance": 0.3},
+	"laundromat": {"id": 1, "close": [90.0, 210.0], "close_chance": 1.0},
+	"bar": {"id": 2, "close": [330.0, 400.0], "close_chance": 1.0},
+	"vacant": {"id": 3, "close": -1, "close_chance": 0.0},
+	"shuttered": {"id": 3, "close": -2, "close_chance": 1.0},
+}
+const ROOM_NAMES := ["store", "laundromat", "bar", "vacant"]
+# Sign words that fit each room (all from BuildingSigns' word atlas), so a
+# laundromat is not signed BAR. A vacant or shuttered unit keeps an old sign.
+const SIGN_WORDS := {
+	"store": ["LIQUOR", "PAWN", "VIDEO", "OPEN", "24 HR", "KEYS", "NOODLES"],
+	"laundromat": ["LAUNDRY", "OPEN"],
+	"bar": ["BAR", "CAFE", "NOODLES", "OPEN"],
+	"vacant": ["LIQUOR", "PAWN", "VIDEO", "KEYS", "NOODLES", "LAUNDRY"],
+	"shuttered": ["LIQUOR", "PAWN", "VIDEO", "KEYS", "NOODLES", "LAUNDRY"],
+}
+# Shader values for "never" and "all night" closing times.
+const NEVER := 1.0e9
+const ALWAYS := -1.0e9
+## Game minutes a shutter takes to roll down (12 real seconds at the
+## 20-minute night).
+const SHUTTER_MINUTES := 6.0
+const ROOM_DEPTH := 4.0
+
 const SHADER := """
 shader_type spatial;
 render_mode diffuse_lambert, specular_schlick_ggx;
@@ -87,6 +129,12 @@ uniform float glow[8];
 // Night clock (living world step 1): scales every building's lit density, so
 // the same windows go dark in the same order through the night (WindowLights).
 uniform float lit_scale = 1.0;
+// Shop fronts (world step 3): the night clock in game minutes since 8 p.m.,
+// how deep the fake room is, how bright, and how long a shutter takes.
+uniform float minutes = 240.0;
+uniform float room_depth = 4.0;
+uniform float room_energy = 0.7;
+uniform float shutter_minutes = 6.0;
 
 instance uniform int tile = 0;
 instance uniform vec3 tint : source_color = vec3(0.3);
@@ -101,19 +149,202 @@ instance uniform float base = 0.0;
 // streaks down some bays, dark stains, a soot line under the roof edge, and
 // a patchy roof. All of it is hashed per bay and floor, no texture.
 instance uniform float wear = 0.5;
+// Shop front (world step 3): the room kind behind the ground-floor glass
+// (0 store, 1 laundromat, 2 bar, 3 vacant; -1 none) and when its shutter
+// comes down, game minutes since 8 p.m. (1e9 never, -1e9 all night).
+instance uniform int room = -1;
+instance uniform float close_at = 1e9;
 
 varying vec3 lpos;
 varying vec3 lnrm;
+varying vec3 lcam;
 
 void vertex() {
 	lpos = VERTEX * size;  // the mesh is a shared unit cube, scaled by the node
 	lnrm = NORMAL;
+	// the camera in the same space, for the shop-front ray (24 vertices per
+	// building, so the inverse is cheap)
+	lcam = (inverse(MODEL_MATRIX) * vec4(CAMERA_POSITION_WORLD, 1.0)).xyz * size;
 }
 
 float hash3(vec3 p) {
 	p = fract(p * vec3(0.1031, 0.1030, 0.0973));
 	p += dot(p, p.yxz + 33.33);
 	return fract((p.x + p.y) * p.z);
+}
+
+// ---- shop rooms (world step 3) ----
+// Room space: x along the face (0 .. bay width), y up from the floor
+// (0 .. floor height), z into the building (0 .. room_depth).
+
+// Product colours on a store shelf: white, red, amber, olive, brown, navy.
+vec3 product(float h) {
+	int k = int(h * 6.0);
+	if (k == 0) { return vec3(0.9, 0.88, 0.8); }
+	if (k == 1) { return vec3(0.8, 0.18, 0.12); }
+	if (k == 2) { return vec3(1.0, 0.7, 0.2); }
+	if (k == 3) { return vec3(0.45, 0.55, 0.2); }
+	if (k == 4) { return vec3(0.5, 0.3, 0.15); }
+	return vec3(0.15, 0.2, 0.4);
+}
+
+// The back wall, by room kind. p is the hit in room space, bw the bay width,
+// s the building seed.
+vec3 room_back(int kind, vec3 p, float bw, float s) {
+	if (kind == 0) {
+		// shelves to 2.2 m, a plank every 0.45 m, products in 0.25 m cells
+		if (p.y > 2.2) { return vec3(0.55, 0.52, 0.48); }
+		float row = floor(p.y / 0.45);
+		float fy = fract(p.y / 0.45);
+		if (fy > 0.88) { return vec3(0.7, 0.62, 0.5); }
+		vec2 cell = vec2(floor(p.x / 0.25), row);
+		float h = hash3(vec3(cell, s + 5.0));
+		if (h > 0.82) { return vec3(0.3, 0.28, 0.26); }  // an empty slot
+		float gap = step(0.08, fract(p.x / 0.25)) * step(fy, 0.75);
+		return product(h / 0.82) * mix(0.35, 1.0, gap);
+	}
+	if (kind == 1) {
+		// a row of front loaders 0.75 m wide, 0.95 m tall, a shelf above
+		if (p.y < 0.95) {
+			vec2 c = vec2(fract(p.x / 0.75) - 0.5, p.y / 0.95 - 0.5);
+			float r = length(c * vec2(1.0, 1.27));
+			if (r < 0.26) { return vec3(0.08, 0.09, 0.1); }
+			if (r < 0.31) { return vec3(0.75, 0.78, 0.8); }
+			float edge = step(abs(c.x), 0.46);
+			return vec3(0.82, 0.84, 0.85) * mix(0.4, 1.0, edge);
+		}
+		if (p.y < 1.05) { return vec3(0.5, 0.5, 0.52); }
+		// a poster on the wall now and then, else plain tile
+		float h = hash3(vec3(floor(p.x / 1.5), 1.0, s + 9.0));
+		float px = fract(p.x / 1.5);
+		if (h < 0.3 && p.y > 1.4 && p.y < 2.1 && px > 0.2 && px < 0.7) { return vec3(0.9, 0.6, 0.25); }
+		return vec3(0.62, 0.66, 0.66);
+	}
+	if (kind == 2) {
+		// the back bar: a dark counter front, bottles on two lit shelves,
+		// dark wall above
+		if (p.y < 1.05) { return vec3(0.12, 0.08, 0.06); }
+		if (p.y < 2.1) {
+			float row = floor((p.y - 1.05) / 0.525);
+			float fy = fract((p.y - 1.05) / 0.525);
+			if (fy < 0.08) { return vec3(0.9, 0.75, 0.5); }  // the lit shelf edge
+			float cx = fract(p.x / 0.12);
+			float h = hash3(vec3(floor(p.x / 0.12), row, s + 13.0));
+			float tall = 0.35 + 0.5 * fract(h * 7.0);
+			if (fy < tall && abs(cx - 0.5) < 0.3) {
+				vec3 g = h < 0.4 ? vec3(1.0, 0.6, 0.2) : (h < 0.7 ? vec3(0.4, 0.6, 0.25) : vec3(0.85, 0.85, 0.75));
+				return g * 1.3;
+			}
+			return vec3(0.35, 0.22, 0.12);
+		}
+		return vec3(0.18, 0.12, 0.08);
+	}
+	// vacant: bare plaster with a paler patch where the shelves were
+	float qx = fract(p.x / bw + 0.1);
+	float patch = step(0.6, p.y) * step(p.y, 2.0) * step(0.3, qx) * step(qx, 0.8);
+	return vec3(0.45, 0.42, 0.38) * mix(1.0, 1.25, patch);
+}
+
+vec3 room_floor(int kind, vec3 p) {
+	if (kind == 1) {
+		float ch = step(0.5, fract(floor(p.x / 0.5) * 0.5 + floor(p.z / 0.5) * 0.5));
+		return mix(vec3(0.22, 0.24, 0.25), vec3(0.7, 0.72, 0.7), ch);
+	}
+	if (kind == 2) {
+		float plank = step(0.92, fract(p.x / 0.3));
+		return vec3(0.3, 0.18, 0.1) * (1.0 - 0.5 * plank);
+	}
+	if (kind == 3) { return vec3(0.3, 0.28, 0.26); }
+	float line = max(step(0.94, fract(p.x / 0.6)), step(0.94, fract(p.z / 0.6)));
+	return vec3(0.58, 0.56, 0.52) * (1.0 - 0.3 * line);
+}
+
+// Ceiling: tubes down the middle of the room for the store and laundromat,
+// pendants for the bar, nothing in a vacant unit.
+vec3 room_ceiling(int kind, vec3 p, float depth) {
+	vec3 ceil_col = kind == 2 ? vec3(0.12, 0.09, 0.07) : vec3(0.6, 0.6, 0.58);
+	if (kind == 3) { return ceil_col * 0.7; }
+	if (kind == 2) {
+		float pend = step(length(vec2(fract(p.x / 1.2) - 0.5, p.z / depth - 0.55) * vec2(1.0, 4.0)), 0.12);
+		return ceil_col + vec3(1.0, 0.65, 0.3) * 2.5 * pend;
+	}
+	float tube = step(abs(p.z / depth - 0.5), 0.05) * step(0.1, fract(p.x / 1.4));
+	return ceil_col + vec3(1.0, 1.0, 0.95) * 2.0 * tube;
+}
+
+// A shop front fragment: the shutter, or the room behind the glass.
+// bay is the bay index along the face, u01 the position across it (0..1),
+// pv metres above the floor,
+// cy the atlas cell y (0 top .. 1 bottom), rd the view ray in local space,
+// uax the along-face axis, n the outward face normal.
+// Returns the colour; sets `shut` to 1 where the shutter covers the glass.
+vec3 shop_front(float bay, float u01, float pv, float cy, vec3 rd, vec3 uax, vec3 n, float bw, float fh, out float shut) {
+	float roll = clamp((minutes - close_at) / shutter_minutes, 0.0, 1.0);
+	// the glass runs from atlas y 9/32 to 30/32; the shutter rolls down over it
+	float edge = 0.28 + roll * 0.66;
+	shut = step(cy, edge);
+	if (shut > 0.5) {
+		float slat = fract(pv * 3.0);
+		float sl = 0.55 + 0.3 * smoothstep(0.0, 0.3, slat) * smoothstep(1.0, 0.7, slat);
+		// the bottom rail while it is still moving
+		sl += 0.4 * smoothstep(0.03, 0.0, abs(cy - edge)) * step(roll, 0.999);
+		return vec3(sl);
+	}
+	float ru = dot(rd, uax);
+	float rv = rd.y;
+	float rin = max(-dot(rd, n), 1e-3);
+	vec3 p = vec3(u01 * bw, pv, 0.0);
+	float tb = room_depth / rin;
+	float tu = ru > 1e-4 ? (bw - p.x) / ru : (ru < -1e-4 ? -p.x / ru : 1e9);
+	float tv = rv > 1e-4 ? (fh - p.y) / rv : (rv < -1e-4 ? -p.y / rv : 1e9);
+	float tm = min(tb, min(tu, tv));
+	vec3 r = vec3(ru, rv, rin);
+	vec3 h = p + r * tm;
+	float s = seed + bay * 17.0;  // each bay its own stock and people
+	vec3 col;
+	if (tm == tb) {
+		col = room_back(room, h, bw, s);
+	} else if (tm == tv) {
+		col = rv < 0.0 ? room_floor(room, h) : room_ceiling(room, h, room_depth);
+	} else {
+		// a side wall: the same fittings as the back wall, run along the depth
+		col = room_back(room, vec3(h.z + (ru > 0.0 ? 0.0 : 1.7), h.y, h.x), room_depth, s + 31.0) * 0.85;
+	}
+	// figures: a bar has people at the counter, a store a customer now and
+	// then; dark silhouettes on a plane two thirds of the way in
+	if (room == 2 || room == 0) {
+		float tf = room_depth * 0.66 / rin;
+		if (tf < tm) {
+			vec3 f = p + r * tf;
+			float dark = 0.0;
+			float thresh = room == 2 ? 0.75 : 0.25;
+			for (int k = 0; k < 3; k++) {
+				vec3 key = vec3(float(k), 2.0, s + 23.0);
+				if (hash3(key) > thresh) { continue; }
+				float cx = (0.15 + 0.7 * hash3(key + 1.0)) * bw;
+				float ht = 1.55 + 0.25 * hash3(key + 2.0);
+				float body = step(abs(f.x - cx), 0.2) * step(f.y, ht - 0.2);
+				float head = step(length(vec2(f.x - cx, f.y - ht + 0.05)), 0.12);
+				dark = max(dark, max(body, head));
+			}
+			col = mix(col, vec3(0.02, 0.015, 0.01), dark);
+		}
+	}
+	// the room light: cold white in a store, cold fluorescent in a
+	// laundromat, dim amber in a bar; a vacant unit has one security lamp on
+	// the back wall and nothing else
+	vec3 light;
+	if (room == 0) { light = vec3(0.95, 1.0, 0.9) * 0.9; }
+	else if (room == 1) { light = vec3(0.78, 0.9, 0.78) * 0.85; }
+	else if (room == 2) { light = vec3(1.0, 0.6, 0.28) * 0.4; }
+	else {
+		vec3 lamp = vec3(bw * 0.5, fh * 0.85, room_depth - 0.1);
+		float d = length(h - lamp);
+		light = vec3(1.0, 0.75, 0.4) * (0.22 / (0.3 + d * d));
+		if (tm == tb && d < 0.09) { light = vec3(2.5, 2.0, 1.4); }
+	}
+	float depthk = 1.0 - 0.3 * h.z / room_depth;
+	return col * light * depthk * room_energy;
 }
 
 void fragment() {
@@ -156,6 +387,25 @@ void fragment() {
 		vec3 c = h2 < cool_bias[tile] ? cool : warm;
 		if (h2 > 0.96) { c = tv; }
 		EMISSION = c * lit * mix(0.55, 1.0, hash3(key + 3.7)) * emission_energy * glow[tile];
+		// shop front (world step 3): the ground-floor glass of a shop shows
+		// its room, or its shutter
+		if (room >= 0 && fl < 0.5 && t.a > 0.5) {
+			vec3 uax = on_x ? vec3(0.0, 0.0, sign(lnrm.x)) : vec3(-sign(lnrm.z), 0.0, 0.0);
+			vec3 rd = normalize(lpos - lcam);
+			float shut = 0.0;
+			vec3 rc = shop_front(floor(u), fract(u), v * floor_h, cell.y, rd, uax, lnrm, len / bays, floor_h, shut);
+			if (shut > 0.5) {
+				// nothing real lights the street, so the slats carry a
+				// little of the sodium glow themselves or they read as black
+				ALBEDO = tint * rc;
+				ROUGHNESS = 0.7;
+				EMISSION = vec3(1.0, 0.72, 0.45) * rc * 0.07;
+			} else {
+				ALBEDO = vec3(0.02);
+				ROUGHNESS = 0.25;
+				EMISSION = rc;
+			}
+		}
 		// wear (world step 1): all on the wall, lit glass stays lit
 		float wall = 1.0 - t.a;
 		float hm = max(lpos.y + size.y * 0.5 - base, 0.0);  // metres above the road
@@ -173,6 +423,7 @@ void fragment() {
 
 static var _material: ShaderMaterial
 static var _lit_scale := 1.0
+static var _minutes := 240.0
 static var _atlas: ImageTexture
 static var _unit_box: BoxMesh
 
@@ -189,7 +440,28 @@ static func material() -> ShaderMaterial:
 		_material.set_shader_parameter("cool_bias", PackedFloat32Array(COOL_BIAS))
 		_material.set_shader_parameter("glow", PackedFloat32Array(GLOW))
 		_material.set_shader_parameter("lit_scale", _lit_scale)
+		_material.set_shader_parameter("minutes", _minutes)
+		_material.set_shader_parameter("room_depth", ROOM_DEPTH)
+		_material.set_shader_parameter("shutter_minutes", SHUTTER_MINUTES)
 	return _material
+
+## Night clock hook (WindowLights.set_minutes): the shop fronts read the time
+## for their shutters. Only pushed to the GPU when it moved a tenth of a game
+## minute, so a still clock costs nothing.
+static func set_minutes(m: float) -> void:
+	if absf(m - _minutes) < 0.1 and _material != null:
+		return
+	_minutes = m
+	if _material != null:
+		_material.set_shader_parameter("minutes", m)
+
+static func minutes() -> float:
+	return _minutes
+
+## The shutter position for a closing time, 0 up .. 1 down, as the shader
+## computes it (tests read it).
+static func shutter_at(close_at: float, m: float) -> float:
+	return clampf((m - close_at) / SHUTTER_MINUTES, 0.0, 1.0)
 
 ## Night clock hook (WindowLights.set_minutes): 1 is the midnight look the
 ## lit densities were tuned for, more early in the evening, less near dawn.
@@ -303,6 +575,14 @@ static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, 
 	mi.set_instance_shader_parameter("lit_density", density)
 	mi.set_instance_shader_parameter("seed", float(rng.randi() % 4096))
 	mi.set_instance_shader_parameter("wear", wear)
+	# World step 3: what is behind the ground-floor glass, and when it shuts
+	var front := pick_front(rng, type, district.get("fronts", Districts.DEFAULTS.fronts))
+	mi.set_instance_shader_parameter("room", int(front.room))
+	mi.set_instance_shader_parameter("close_at", float(front.close_at))
+	if front.kind != "":
+		mi.set_meta("shop_front", front.kind)
+	elif mi.has_meta("shop_front"):
+		mi.remove_meta("shop_front")
 	mi.set_meta("facade_tile", tile)
 	mi.set_meta("building_type", type)
 	mi.set_meta("roof_top", top)
@@ -313,6 +593,8 @@ static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, 
 	var word := ""
 	if rng.randf() < float(spec.sign):
 		var pool: Array = BuildingSigns.GARAGE_WORDS if type == "garage" else BuildingSigns.SHOP_WORDS
+		if type == "shop" and SIGN_WORDS.has(front.kind):
+			pool = SIGN_WORDS[front.kind]
 		word = pool[rng.randi() % pool.size()]
 		if spec.has("word"):
 			word = spec.word
@@ -331,6 +613,44 @@ static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, 
 	elif mi.has_meta("sign_word"):
 		mi.remove_meta("sign_word")
 	return {"h": h, "type": type, "tile": tile, "floor_h": fh, "sign": word, "sign_color": sign_color, "sign_style": sign_style, "blade": blade, "roof_seed": rng.randi(), "billboard": float(district.get("billboard", 1.0)), "top": top, "wear": wear, "landmark": landmark}
+
+## The shop front for a building of `type`: {kind, room, close_at}. kind is
+## a ROOMS key ("" and room -1 for a building with no shop glass), room the
+## shader's kind id, close_at game minutes since 8 p.m. (NEVER / ALWAYS).
+## Always three RNG draws, so the rest of the look stays stable per type.
+static func pick_front(rng: RandomNumberGenerator, type: String, table: Array) -> Dictionary:
+	var r1 := rng.randf()
+	var r2 := rng.randf()
+	var r3 := rng.randf()
+	var kind := ""
+	if type == "gas":
+		kind = "store"
+	elif type == "diner":
+		kind = "bar"
+	elif type == "shop":
+		var total := 0
+		for e in table:
+			total += int(e[1])
+		var r := int(r1 * float(total))
+		kind = String(table[0][0])
+		for e in table:
+			r -= int(e[1])
+			if r < 0:
+				kind = String(e[0])
+				break
+	if kind == "":
+		return {"kind": "", "room": -1, "close_at": NEVER}
+	var spec: Dictionary = ROOMS[kind]
+	var close_at := NEVER
+	var c = spec.close
+	if c is Array:
+		if type == "gas" or type == "diner":
+			close_at = NEVER  # 24-hour
+		elif r2 < float(spec.close_chance):
+			close_at = lerpf(float(c[0]), float(c[1]), r3)
+	elif int(c) == -2:
+		close_at = ALWAYS
+	return {"kind": kind, "room": int(spec.id), "close_at": close_at}
 
 ## The roof shape for a building of `type` from a district's weight table,
 ## keeping only the shapes that suit the type; flat when none does.

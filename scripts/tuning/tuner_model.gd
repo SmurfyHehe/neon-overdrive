@@ -50,18 +50,18 @@ func _init(target: Vehicle, target_spec: Dictionary, stock_spec: Dictionary) -> 
 static func pages() -> Array:
 	return [
 		{"id": "setup", "title": "Setup", "settings": []},
-		{"id": "tyres", "title": "Tyres", "settings": [
+		{"id": "tyres", "title": "Tires", "settings": [
 			_choice("compound", "Compound", ["Street", "Sport", "Semi-slick"], "Softer rubber grips harder but is touchier at the limit. Sport is how the car left the factory."),
 			_range("front_tyre_pressure", "Pressure front", ["front_tyre_pressure"], 1.6, 2.8, "Low", "High", "Lower: a longer, softer contact patch. Higher: sharper response and a little less drag. Far from stock either way loses grip.", "bar"),
 			_range("rear_tyre_pressure", "Pressure rear", ["rear_tyre_pressure"], 1.6, 2.8, "Low", "High", "Lower: a longer, softer contact patch. Higher: sharper response and a little less drag. Far from stock either way loses grip.", "bar"),
-			_range("front_static_camber", "Camber front", ["front_static_camber"], -4.0, 1.0, "Neg", "Pos", "Some negative camber keeps the outside tyre flat in a corner. Too much and the tyre stands on its edge when you launch and brake.", "deg"),
-			_range("rear_static_camber", "Camber rear", ["rear_static_camber"], -4.0, 1.0, "Neg", "Pos", "Some negative camber keeps the outside tyre flat in a corner. Too much and the tyre stands on its edge when you launch and brake.", "deg"),
+			_range("front_static_camber", "Camber front", ["front_static_camber"], -4.0, 1.0, "Neg", "Pos", "Some negative camber keeps the outside tire flat in a corner. Too much and the tire stands on its edge when you launch and brake.", "deg"),
+			_range("rear_static_camber", "Camber rear", ["rear_static_camber"], -4.0, 1.0, "Neg", "Pos", "Some negative camber keeps the outside tire flat in a corner. Too much and the tire stands on its edge when you launch and brake.", "deg"),
 			_range("front_toe", "Toe front", ["front_toe"], -0.02, 0.02, "Out", "In", "Toe-out sharpens turn-in but wanders on the straight. Toe-in settles it.", "toe"),
 			_range("rear_toe", "Toe rear", ["rear_toe"], 0.0, 0.02, "Zero", "In", "Rear toe-in keeps the back planted. Less of it lets the rear rotate.", "toe"),
 		]},
 		{"id": "suspension", "title": "Suspension", "settings": [
-			_range("front_spring_length", "Ride height front", ["front_spring_length"], 0.16, 0.28, "Low", "High", "Lower: less body roll and a lower centre of gravity, but less travel over bumps.", "cm"),
-			_range("rear_spring_length", "Ride height rear", ["rear_spring_length"], 0.18, 0.27, "Low", "High", "Lower: less body roll and a lower centre of gravity, but less travel over bumps.", "cm"),
+			_range("front_spring_length", "Ride height front", ["front_spring_length"], 0.16, 0.28, "Low", "High", "Lower: less body roll and a lower center of gravity, but less travel over bumps.", "cm"),
+			_range("rear_spring_length", "Ride height rear", ["rear_spring_length"], 0.18, 0.27, "Low", "High", "Lower: less body roll and a lower center of gravity, but less travel over bumps.", "cm"),
 			_range("front_resting_ratio", "Springs front", ["front_resting_ratio"], 0.3, 0.7, "Soft", "Stiff", "Stiffer front springs: sharper turn-in and less roll, but the front washes wide sooner. Moves balance toward understeer.", ""),
 			_range("rear_resting_ratio", "Springs rear", ["rear_resting_ratio"], 0.3, 0.55, "Soft", "Stiff", "Stiffer rear springs: the rear steps out sooner. Moves balance toward oversteer.", ""),
 			_range("front_damping_ratio", "Dampers front", ["front_damping_ratio"], 0.25, 0.9, "Soft", "Firm", "Firmer dampers: the car settles faster after a bump or a weight shift, but skips over rough road.", ""),
@@ -80,7 +80,7 @@ static func pages() -> Array:
 			_range("diff_lock", "Diff lock", ["rear_locking_differential_engage_torque"], 0.0, 1000.0, "Open", "Locked", "A locked diff drives both rear wheels together: better traction out of a corner, easier slides, more push on the way in.", "diff", true),
 		]},
 		{"id": "brakes", "title": "Brakes", "settings": [
-			_range("brake_force_multiplier", "Brake pressure", ["brake_force_multiplier"], 1.0, 3.0, "Soft", "Hard", "More pressure stops harder until the tyres lock; past that, ABS does the work.", "x"),
+			_range("brake_force_multiplier", "Brake pressure", ["brake_force_multiplier"], 1.0, 3.0, "Soft", "Hard", "More pressure stops harder until the tires lock; past that, ABS does the work.", "x"),
 			_choice("bias_mode", "Bias mode", ["Auto", "Manual"], "Auto splits the braking from the springs, as the factory does. Manual lets you set the split yourself."),
 			_range("front_brake_bias", "Brake bias", ["front_brake_bias"], 0.45, 0.75, "Rear", "Front", "More front bias is stable under braking. More rear bias helps the car rotate into a corner, and can spin it.", "bias"),
 		]},
@@ -99,6 +99,37 @@ static func pages() -> Array:
 		{"id": "advanced", "title": "Advanced", "settings": []},
 	]
 
+## The Quick page (tuner overhaul, 2026-10-10): the page T opens on. A preset,
+## three dials that each move a handful of real settings together, Walt, and the
+## switch that shows the full pages. Not in pages(): it writes no paths of its
+## own, so page_paths() and the per-page reset do not apply to it.
+##   "preset" : Left/Right look through PRESETS (the screen previews them),
+##              Enter fits the one on show.
+##   "dial"   : an 11-notch bar, middle = the preset as it is (see DIALS).
+##   "walt"   : Left/Right pick one goal, Enter sends Walt out (Auto-Tune).
+##   "switch" : Off/On, the Detailed pages.
+static func quick_page() -> Dictionary:
+	var goals: Array = []
+	for g in WALT_GOALS:
+		goals.append(g[1])
+	return {"id": "quick", "title": "Quick", "settings": [
+		{"id": "q_preset", "kind": "preset", "label": "Preset", "options": PRESETS,
+			"hint": "A whole setup in one go. Look through them: the numbers on the right show what each would change before you fit it."},
+		_dial("q_grip_slide", "Grip / Slide", "Grip", "Slide", "Moves the rear anti-roll bar, rear toe, rear tire pressure, the diff and stability together."),
+		_dial("q_soft_stiff", "Soft / Stiff", "Soft", "Stiff", "Moves the springs and dampers, front and rear, together."),
+		_dial("q_pull_top", "Pull / Top speed", "Pull", "Top", "Moves the final drive and both wings together."),
+		{"id": "q_walt", "kind": "walt", "label": "Ask Walt", "options": goals,
+			"hint": "Pick one thing you want more of and Walt works on the gearing, aero, brakes and tires until the car does it."},
+		{"id": "q_detailed", "kind": "switch", "label": "Detailed", "options": ["Off", "On"],
+			"hint": "Shows every setting on its own page: tires, suspension, gearbox, engine, diff, brakes, aero, assists, exhaust and the raw numbers."},
+	]}
+
+## Walt's goals: [Auto-Tune goal, the word on the Quick page].
+const WALT_GOALS := [["accel", "Launch"], ["top_speed", "Top speed"], ["braking", "Braking"], ["grip", "Cornering"]]
+
+static func _dial(id: String, label: String, lo_word: String, hi_word: String, hint: String) -> Dictionary:
+	return {"id": id, "kind": "dial", "label": label, "lo_word": lo_word, "hi_word": hi_word, "hint": hint}
+
 static func _range(id: String, label: String, paths: Array, lo: float, hi: float, lo_word: String, hi_word: String, hint: String, unit: String, invert := false) -> Dictionary:
 	return {"id": id, "kind": "range", "label": label, "paths": paths, "lo": lo, "hi": hi,
 		"lo_word": lo_word, "hi_word": hi_word, "hint": hint, "unit": unit, "invert": invert}
@@ -107,6 +138,8 @@ static func _choice(id: String, label: String, options: Array, hint: String) -> 
 	return {"id": id, "kind": "choice", "label": label, "options": options, "hint": hint}
 
 static func page(id: String) -> Dictionary:
+	if id == "quick":
+		return quick_page()
 	for p in pages():
 		if p.id == id:
 			return p
@@ -117,6 +150,8 @@ static func page(id: String) -> Dictionary:
 func notch(s: Dictionary) -> int:
 	if s.kind == "choice":
 		return choice_index(s)
+	if s.kind == "dial":
+		return dial(s.id) + DIAL_STEPS
 	var v := _range_value(s)
 	var t := clampf((v - s.lo) / (s.hi - s.lo), 0.0, 1.0)
 	if s.invert:
@@ -132,6 +167,12 @@ func nudge(s: Dictionary, step: int) -> bool:
 		if to == i:
 			return false
 		set_choice(s, to)
+		return true
+	if s.kind == "dial":
+		var d := dial(s.id)
+		if clampi(d + step, -DIAL_STEPS, DIAL_STEPS) == d:
+			return false
+		set_dial(s.id, d + step)
 		return true
 	var cur := notch(s)
 	var to := clampi(cur + step, 0, NOTCHES - 1)
@@ -208,6 +249,9 @@ func value_text(s: Dictionary) -> String:
 	if s.kind == "choice":
 		var i := choice_index(s)
 		return s.options[i] if i >= 0 else "Custom"
+	if s.kind == "dial":
+		var d := dial(s.id)
+		return "As preset" if d == 0 else "%s %d" % [s.hi_word if d > 0 else s.lo_word, absi(d)]
 	var v := _range_value(s)
 	match s.unit:
 		"bar": return "%.1f bar" % v
@@ -237,6 +281,140 @@ func _on_notch(s: Dictionary) -> bool:
 		t = 1.0 - t
 	return is_equal_approx(lerpf(s.lo, s.hi, t), _range_value(s))
 
+# ---------- the Quick dials ----------
+
+## A dial sits at -DIAL_STEPS..+DIAL_STEPS; 0 is the preset untouched.
+const DIAL_STEPS := 5
+
+## What one notch of each dial adds to its paths, on top of the preset's value:
+## [path, amount per notch, how]. "add" adds it, "mul" multiplies by it once per
+## notch, "mul+" does that only on the high side (the diff only ever locks
+## further for Slide: opening it does not add grip). No path is on two dials, so
+## they never fight. Values stay inside the safe ranges (TuneParams min..max).
+const DIALS := {
+	"q_grip_slide": [
+		["rear_arb_ratio", 0.03, "add"],
+		["rear_toe", -0.002, "add"],
+		["rear_tyre_pressure", 0.04, "add"],
+		["rear_locking_differential_engage_torque", 0.8, "mul+"],
+		["stability_yaw_strength", 0.88, "mul+"],
+	],
+	"q_soft_stiff": [
+		["front_resting_ratio", 0.03, "add"],
+		["rear_resting_ratio", 0.02, "add"],
+		["front_damping_ratio", 0.05, "add"],
+		["rear_damping_ratio", 0.05, "add"],
+	],
+	"q_pull_top": [
+		["final_drive", 0.96, "mul"],
+		["aero_downforce_coefficient_front", -0.03, "add"],
+		["aero_downforce_coefficient_rear", -0.04, "add"],
+	],
+}
+
+## Where each dial was last put, for the case where two notches give the same
+## clamped values (a dial at the end of a setting's range).
+var _dial_mem := {}
+
+## The {path: value} a dial at `n` sets: the preset's value moved n notches.
+func dial_values(id: String, n: int) -> Dictionary:
+	var base := _preset_values(preset)
+	var out := {}
+	for d in DIALS[id]:
+		var p: String = d[0]
+		var v: float = base.get(p, TuneParams.get_value(stock, p))
+		match d[2]:
+			"add": v += float(d[1]) * n
+			"mul": v *= pow(float(d[1]), n)
+			"mul+": v *= pow(float(d[1]), maxi(n, 0))
+		out[p] = _clamp_path(p, v)
+	if id == "q_pull_top":  # drag follows the wings, as on the Aero page
+		out["coefficient_of_drag"] = _clamp_path("coefficient_of_drag", float(stock.coefficient_of_drag)
+			+ 0.02 * (float(out["aero_downforce_coefficient_front"]) - float(stock.aero_downforce_coefficient_front))
+			+ 0.04 * (float(out["aero_downforce_coefficient_rear"]) - float(stock.aero_downforce_coefficient_rear)))
+	return out
+
+## Where a dial sits, read back from the car: the notch whose values the car
+## has, or the nearest one if a Detailed page moved things since.
+func dial(id: String) -> int:
+	var mem: int = _dial_mem.get(id, 0)
+	for n: int in [mem, 0]:
+		if _matches(dial_values(id, n)):
+			return n
+	var best := 0
+	var best_err := INF
+	for n in range(-DIAL_STEPS, DIAL_STEPS + 1):
+		var vals := dial_values(id, n)
+		var err := 0.0
+		for p in vals:
+			var e := TuneParams.find(p)
+			err += absf(TuneParams.get_value(spec, p) - float(vals[p])) / maxf(float(e.max) - float(e.min), 0.0001)
+		if err < best_err - 1e-9:
+			best = n
+			best_err = err
+	return best
+
+func set_dial(id: String, n: int) -> void:
+	n = clampi(n, -DIAL_STEPS, DIAL_STEPS)
+	var vals := dial_values(id, n)
+	for p in vals:
+		_write(p, vals[p])
+	_dial_mem[id] = n
+	_touched()
+
+# ---------- changed since stock, and undo ----------
+
+## Every path a setting writes.
+func setting_paths(s: Dictionary) -> Array:
+	match s.kind:
+		"range": return s.paths
+		"choice": return choice_values(s.id, 0).keys()
+		"dial": return dial_values(s.id, 0).keys()
+	return []
+
+## True if the setting is not where the car left the factory (the dot on a row).
+func is_changed(s: Dictionary) -> bool:
+	if s.kind == "dial":
+		return dial(s.id) != 0
+	if s.kind == "preset":
+		return preset != "Stock"
+	for p in setting_paths(s):
+		if path_changed(p):
+			return true
+	return false
+
+func path_changed(path: String) -> bool:
+	return absf(TuneParams.get_value(spec, path) - TuneParams.get_value(stock, path)) > 0.0005
+
+func page_changed(id: String) -> bool:
+	if id == "advanced" or id == "quick":
+		return false  # they show the other pages' settings again
+	if id == "exhaust":
+		for p in TuneParams.exhaust_paths():
+			if path_changed(p):
+				return true
+		return false
+	for s in page(id).get("settings", []):
+		if is_changed(s):
+			return true
+	return false
+
+## Everything Backspace needs to put the car back: every tunable value, the
+## preset name and the dial positions.
+func snapshot() -> Dictionary:
+	var vals := {}
+	for e in TuneParams.all():
+		vals[e.path] = TuneParams.get_value(spec, e.path)
+	return {"vals": vals, "preset": preset, "modified": modified, "dials": _dial_mem.duplicate()}
+
+func restore(snap: Dictionary) -> void:
+	for p in snap.vals:
+		if absf(TuneParams.get_value(spec, p) - float(snap.vals[p])) > 1e-9:
+			_write(p, snap.vals[p])
+	preset = snap.preset
+	modified = snap.modified
+	_dial_mem = snap.dials.duplicate()
+
 # ---------- presets ----------
 
 ## Applies a preset: everything back to stock, then the preset's offsets.
@@ -252,6 +430,7 @@ func apply_preset(name: String) -> void:
 		_drag_follows_downforce()
 	preset = name
 	modified = false
+	_dial_mem = {}
 
 ## Every path a page's settings write (ranges and choices).
 static func page_paths(id: String) -> Array[String]:

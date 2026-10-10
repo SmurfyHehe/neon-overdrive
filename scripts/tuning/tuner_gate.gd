@@ -19,3 +19,17 @@ static func set_advanced_ok(ok: bool) -> bool:
 	cfg.load(AudioSettings.path)
 	cfg.set_value("tuner", "advanced_ok", ok)
 	return cfg.save(AudioSettings.path) == OK
+
+## The Quick page's Detailed switch (tuner overhaul, 2026-10-10): whether the
+## full pages show next to Quick. Off until the player turns it on.
+static func detailed() -> bool:
+	var cfg := ConfigFile.new()
+	if cfg.load(AudioSettings.path) != OK:
+		return false
+	return cfg.get_value("tuner", "detailed", false) == true
+
+static func set_detailed(on: bool) -> bool:
+	var cfg := ConfigFile.new()
+	cfg.load(AudioSettings.path)
+	cfg.set_value("tuner", "detailed", on)
+	return cfg.save(AudioSettings.path) == OK

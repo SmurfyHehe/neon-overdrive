@@ -397,8 +397,8 @@ static func change_words(path: String, old: float, now: float) -> String:
 		"aero_downforce_coefficient_front": return ("More front downforce" if up else "Less front downforce") + nums
 		"aero_downforce_coefficient_rear": return ("More rear wing" if up else "Less rear wing") + nums
 		"brake_force_multiplier": return ("Harder brakes" if up else "Softer brakes") + nums
-		"tire_stiffnesses/Road": return ("Stiffer tyres" if up else "Softer tyres") + nums
-		"coefficient_of_friction/Road": return ("Grippier tyres" if up else "Less grippy tyres") + nums
+		"tire_stiffnesses/Road": return ("Stiffer tires" if up else "Softer tires") + nums
+		"coefficient_of_friction/Road": return ("Grippier tires" if up else "Less grippy tires") + nums
 		"lateral_grip_assist/Road": return ("More cornering grip" if up else "Less cornering grip") + nums
 		"longitudinal_grip_ratio/Road": return ("More launch and braking grip" if up else "Less launch and braking grip") + nums
 	return "%s %s%s" % [TuneParams.find(path).get("label", path), "up" if up else "down", nums]

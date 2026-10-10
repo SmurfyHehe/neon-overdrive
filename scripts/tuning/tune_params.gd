@@ -112,8 +112,8 @@ static func all() -> Array[Dictionary]:
 		_entries.append(_e("longitudinal_grip_ratio/Road", "Longitudinal grip", 0.5, 1.2, TIRE))
 		# Tuner redesign PR 1: not Auto-Tune until the calibration sweep has run
 		# with it (proposal section 9).
-		_entries.append(_e("front_tyre_pressure", "Tyre pressure front bar", 1.6, 2.8, TYRE_SETUP, false))
-		_entries.append(_e("rear_tyre_pressure", "Tyre pressure rear bar", 1.6, 2.8, TYRE_SETUP, false))
+		_entries.append(_e("front_tyre_pressure", "Tire pressure front bar", 1.6, 2.8, TYRE_SETUP, false))
+		_entries.append(_e("rear_tyre_pressure", "Tire pressure rear bar", 1.6, 2.8, TYRE_SETUP, false))
 		_entries.append(_e("front_static_camber", "Camber front deg", -4.0, 1.0, TYRE_SETUP, false))
 		_entries.append(_e("rear_static_camber", "Camber rear deg", -4.0, 1.0, TYRE_SETUP, false))
 		# Tuner redesign PR 2: chassis settings, raw-panel only like PR 1's.

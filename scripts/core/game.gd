@@ -371,7 +371,7 @@ func _setup_chunk_pool() -> void:
 	if not run.is_empty():
 		var z := RoadFrame.unroll(SaveDirector.v3(run.car.xform.slice(9, 12))).z
 		start = int(floor(-z / RoadChunkBuilder.CHUNK_LEN)) + origin_index
-	for i in range(CHUNKS_AHEAD + _chunks_behind() + CHUNKS_SPARE + 1):
+	for i in range(CHUNKS_AHEAD + chunks_ahead_extra + _chunks_behind() + CHUNKS_SPARE + 1):
 		var idx := start + i - _chunks_behind() - CHUNKS_SPARE
 		var prev_cfg := _section_at(idx - 1)
 		var cfg := _section_at(idx)
@@ -383,11 +383,30 @@ func _setup_chunk_pool() -> void:
 ## from where it stands); gap is how many chunks behind the player it is.
 var chunk_event_hook: Callable = Callable()
 
+## Extra chunks kept built ahead of the player, on top of CHUNKS_AHEAD (the
+## pool grows by the same number). Skeleton-car spike (2026-10-10): at
+## 400 km/h the stock 300 m look-ahead is 2.7 s of road, so the junction chunk
+## is shown one chunk earlier. NEON_CHUNKS_AHEAD_EXTRA=<n> sets it for one run;
+## tests set it before the pool is built.
+var chunks_ahead_extra := int(OS.get_environment("NEON_CHUNKS_AHEAD_EXTRA")) if OS.get_environment("NEON_CHUNKS_AHEAD_EXTRA").is_valid_int() else 0
+
+## Chunk rebuild timing (skeleton-car spike): wall-clock microseconds of the
+## last RoadChunkBuilder.rebuild_chunk, the slowest one, the running total,
+## how many, and the most rebuilt in one frame. Read by tests/world/jet_drive.gd.
+var rebuild_us_last := 0
+var rebuild_us_max := 0
+var rebuild_us_total := 0
+var rebuild_count := 0
+var rebuilds_in_frame_max := 0
+## Slowest _shift_origin (floating-origin recenter), microseconds.
+var recenter_us_max := 0
+
 func _update_chunk_pool(ref_z: float) -> void:
 	var current_idx := int(floor(-ref_z / RoadChunkBuilder.CHUNK_LEN)) + origin_index
 	var max_idx := current_idx
 	for c in chunk_pool:
 		max_idx = max(max_idx, c.index)
+	var rebuilt_now := 0
 	for c in chunk_pool:
 		var gap: int = current_idx - c.index
 		if gap > _chunks_behind() and (gap > _chunks_behind() + CHUNKS_SPARE or not ViewGuard.chunk_seen(get_tree(), c.root)):
@@ -396,7 +415,14 @@ func _update_chunk_pool(ref_z: float) -> void:
 			max_idx += 1
 			var prev_cfg := _section_at(max_idx - 1)
 			var cfg := _section_at(max_idx)
+			var t0 := Time.get_ticks_usec()
 			RoadChunkBuilder.rebuild_chunk(c.root, max_idx, prev_cfg, cfg, origin_index)
+			rebuild_us_last = Time.get_ticks_usec() - t0
+			rebuild_us_max = maxi(rebuild_us_max, rebuild_us_last)
+			rebuild_us_total += rebuild_us_last
+			rebuild_count += 1
+			rebuilt_now += 1
+			rebuilds_in_frame_max = maxi(rebuilds_in_frame_max, rebuilt_now)
 			# Physics interpolation is on (ISSUES B7): without this reset the
 			# recycled chunk would slide from its old spot to the new one
 			# over a frame instead of jumping there.
@@ -412,7 +438,9 @@ func _physics_process(_delta: float) -> void:
 	# the whole-chunk shift counts in.
 	var z := RoadFrame.unroll(player.global_position).z
 	if absf(z) >= recenter_dist:
+		var t0 := Time.get_ticks_usec()
 		_shift_origin(int(floor(-z / RoadChunkBuilder.CHUNK_LEN)))
+		recenter_us_max = maxi(recenter_us_max, Time.get_ticks_usec() - t0)
 	if Input.is_action_just_pressed("mute"):
 		toggle_mute()
 	if Input.is_action_just_pressed("radio_next") and radio != null:

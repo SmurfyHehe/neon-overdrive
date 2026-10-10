@@ -270,6 +270,19 @@ var abort_count := 0
 var _beams: Object
 var _flashes_seen := -1
 var _last_behind_spawn := -1000.0
+## Horns (TrafficHorns): a honk is refused past HONK_RANGE metres from the
+## player and while HORN_VOICES horns are already sounding. Two shared 3D
+## players follow the cars that are honking; no car owns one.
+const HONK_RANGE := 60.0
+const HORN_VOICES := 2
+const HORN_DB := 3.0
+## Honks sounded, and the last 100: {t, kind, horn, long} (tests, the log).
+var honk_count := 0
+var honk_log: Array[Dictionary] = []
+var _horn_until := PackedFloat32Array([0.0, 0.0])
+var _horn_cars: Array = [null, null]
+var _horn_players: Array[AudioStreamPlayer3D] = []
+var _horns_live := false
 ## Draws that must not disturb the game's random sequence (reaction times):
 ## tests and the benchmark keep the placements they had before.
 var _own_rng := RandomNumberGenerator.new()
@@ -291,6 +304,8 @@ func _ready() -> void:
 	if NearMissLog.enabled():
 		near_miss = NearMissLog.new(self)
 	_own_rng.seed = 90817
+	if not sim_only:
+		TrafficHorns.warm()
 	target_count = car_count
 	for i in car_count:
 		_make_car()
@@ -341,6 +356,8 @@ func _physics_process(_delta: float) -> void:
 	_tick += 1
 	now += _delta
 	_watch_flash()
+	if _horns_live:
+		_follow_horns()
 	if _tick % maxi(1, roundi(Engine.physics_ticks_per_second / BOOKKEEP_HZ)) != 0 and _index_cars == cars.size():
 		_refresh_index()
 		if near_miss != null:
@@ -423,6 +440,8 @@ func _physics_process(_delta: float) -> void:
 func _exit_tree() -> void:
 	if near_miss != null:
 		near_miss.finish()
+	if not sim_only:
+		TrafficHorns.finish()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST and near_miss != null:
@@ -604,6 +623,7 @@ func _respawn(car: TrafficCar) -> void:
 	car.spawn_frame = Engine.get_physics_frames()
 	car.spawned_behind = bool(slot.behind)
 	car.reaction_s = _own_rng.randf_range(TrafficCar.REACTION_MIN, TrafficCar.REACTION_MAX)
+	car.horn_pitch = _own_rng.randf_range(1.0 - TrafficCar.HORN_PITCH_JITTER, 1.0 + TrafficCar.HORN_PITCH_JITTER)
 	if slot.behind:
 		_last_behind_spawn = now
 	car.wet.settle()
@@ -785,6 +805,63 @@ func flash_ahead() -> TrafficCar:
 		flash_count += 1
 		flashed_car = best
 	return best
+
+# ---------- horns ----------
+
+## `car` sounds its horn (short tap or long). False if it is too far from the
+## player to matter or both voices are busy; the car's own 5 s limit is its own.
+func honk(car: TrafficCar, long: bool) -> bool:
+	if absf(car._my_z - _z[0]) > HONK_RANGE:
+		return false
+	var voice := -1
+	for i in HORN_VOICES:
+		if now >= _horn_until[i]:
+			voice = i
+			break
+	if voice < 0:
+		return false
+	_horn_until[voice] = now + (TrafficHorns.LONG_S if long else TrafficHorns.SHORT_S)
+	_horn_cars[voice] = car
+	_horns_live = true
+	honk_count += 1
+	car.honks += 1
+	car.honk_at = now
+	var horn := TrafficHorns.horn_for(car.kind, car.tail_dark)
+	honk_log.append({"t": now, "kind": car.kind, "horn": horn, "long": long})
+	if honk_log.size() > 100:
+		honk_log.pop_front()
+	if not (sim_only or car.sim_only):
+		_play_horn(voice, car, horn, long)
+	return true
+
+func _play_horn(voice: int, car: TrafficCar, horn: String, long: bool) -> void:
+	var stream := TrafficHorns.stream(horn, long)
+	if stream == null:
+		return   # still being built: this one is silent
+	if _horn_players.is_empty():
+		for i in HORN_VOICES:
+			var pl := AudioStreamPlayer3D.new()
+			pl.bus = &"Traffic"
+			pl.unit_size = 14.0
+			pl.max_distance = 160.0
+			pl.volume_db = HORN_DB
+			add_child(pl)
+			_horn_players.append(pl)
+	var player3d := _horn_players[voice]
+	player3d.stream = stream
+	player3d.pitch_scale = car.horn_pitch
+	player3d.global_position = car.global_position
+	player3d.play()
+
+## The horn players ride with the cars that are honking.
+func _follow_horns() -> void:
+	_horns_live = false
+	for i in HORN_VOICES:
+		if now < _horn_until[i]:
+			_horns_live = true
+			var car: Variant = _horn_cars[i]
+			if i < _horn_players.size() and is_instance_valid(car):
+				_horn_players[i].global_position = (car as Node3D).global_position
 
 ## A random number that does not move the game's own random sequence.
 func own_randf_range(from: float, to: float) -> float:

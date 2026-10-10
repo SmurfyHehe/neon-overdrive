@@ -70,6 +70,10 @@ const TRAFFIC_PHRASE := {
 	"weaving": "weaved into you",
 	"spawned_behind": "had just spawned behind you",
 	"spawned_ahead": "had just spawned ahead of you",
+	"yielding_to_traffic": "moved over for a car behind it, next to you",
+	"abort": "was steering back out of your way",
+	"swerve": "swerved round you",
+	"pull_over_siren": "was pulling over for a siren next to you",
 }
 
 var tm: Node
@@ -278,7 +282,7 @@ func _eval(car: TrafficCar, x: float, hw: float, dz: float, vz: float, hl: float
 			"closest": closest, "ttc": ttc,
 			"who": "both" if (traffic_moved and you_moved) else ("traffic" if traffic_moved else ("you" if you_moved else "neither")),
 			"lateral_you": lateral_you, "doing": doing_of(car),
-			"seen": _check_no, "first": _check_no,
+			"seen": _check_no, "first": _check_no, "honked": false,
 		}
 		_pending[id] = rec
 		return
@@ -313,6 +317,11 @@ func _flush(all: bool) -> void:
 		if all or int(rec["seen"]) != _check_no or age >= HOLD_S:
 			done.append(id)
 	for id in done:
+		# Did it sound its horn over this? (The horn comes a reaction time after
+		# the moment, so it is looked up when the record is written.)
+		var car := instance_from_id(id) as TrafficCar
+		if car != null and float(tm.now) - car.honk_at < 3.0:
+			_pending[id]["honked"] = true
 		_emit(_pending[id])
 		_last_emit[id] = _t
 		_pending.erase(id)
@@ -377,6 +386,8 @@ static func line_for(rec: Dictionary) -> String:
 		gap = "%.1f s to contact" % float(rec["ttc"])
 	else:
 		gap = "closest %.1f m" % maxf(float(rec["closest"]), 0.0)
+	if bool(rec.get("honked", false)):
+		gap += ", it honked"
 	return "%s  night %d  %s  %s  you %d km/h  [%s, lanes you %s / it %s, road %d m, it was %s, boot+%d s]" % [
 		rec["clock"], rec["night"], what, gap, rec["speed_kmh"],
 		kind, rec["you_lane"], rec["car_lane"], rec["z"], String(rec["doing"]).replace("_", " "), rec["boot_s"]]

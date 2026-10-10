@@ -54,6 +54,14 @@ class_name TrafficCar
 # lane it is going to (_consider_abort). Cars still move over for faster
 # TRAFFIC behind them.
 #
+# Cut off (step 5 of the near-miss fix): a driver the player cuts in on, or
+# passes with a hand's width to spare, sounds the horn and flashes the
+# headlights twice after its reaction time (TrafficManager.honk: at most two
+# horns at once, only near the player; one reaction per car per REACT_EVERY).
+# With the player suddenly SWERVE_TTC from contact and braking alone not
+# enough, it swerves into the next lane if that is safe (no blinker, 1.2 s),
+# otherwise it brakes as hard as the follower law already does.
+#
 # Wrecks: a car that is flipped, or slow and pointing the wrong way or off its
 # path, for WRECK_SECONDS stops trying (hazard stop: brakes on), and the
 # TrafficManager recycles it once the player cannot see it.
@@ -267,6 +275,22 @@ var last_signal_s := 0.0
 ## player alongside): what it is now and what it is easing to.
 var _edge := 0.0
 var _edge_want := 0.0
+## Horn: times sounded, when (TrafficManager.now), and this car's own pitch
+## (drawn at spawn, +-HORN_PITCH_JITTER).
+const HORN_PITCH_JITTER := 0.06
+var honks := 0
+var honk_at := -1000.0
+var horn_pitch := 1.0
+## Headlight flashes shown (tests).
+var head_flashes := 0
+## A reaction (horn + two flashes) waiting for the driver's reaction time.
+var _react_at := INF
+var _react_long := false
+var _last_react := -1000.0
+var _flash_t := -1.0
+var _flash_on := false
+var _lead_was_player := false
+var _last_swerve := -1000.0
 ## Road-space x and z at the last _accel_command (the decisions reuse them).
 var _my_x := 0.0
 var _my_z := 0.0
@@ -395,6 +419,29 @@ const HOLD_NEAR_T := 2.0
 const EDGE_GAP := 1.5
 const EDGE_M := 0.3
 const EDGE_RATE := 0.6
+## Cut off: the player becomes the car ahead with a gap under CUT_GAP_M or
+## CUT_GAP_T of this car's speed and the follower wants CUT_DECEL of braking or
+## more (the follower law caps ordinary braking at B_COMF, the same 2.5, so a
+## same-speed cut-in asks for exactly that; a long horn past CUT_DECEL_LONG); or it passes with under
+## SIDE_HONK_GAP of air. The reaction waits the driver's reaction time, at most
+## REACT_DELAY_MAX, and a car reacts once per REACT_EVERY.
+const CUT_GAP_M := 10.0
+const CUT_GAP_T := 0.8
+const CUT_DECEL := 2.5
+const CUT_DECEL_LONG := 4.0
+const SIDE_HONK_GAP := 0.4
+const REACT_DELAY_MAX := 0.8
+const REACT_EVERY := 5.0
+## Flashing back: twice, FLASH_ON on and FLASH_OFF off.
+const FLASH_ON := 0.2
+const FLASH_OFF := 0.15
+## Last-moment swerve: the player under SWERVE_TTC from contact and more than
+## SWERVE_DECEL needed to stop short: into the next lane in LC_TIME_SWERVE.
+const SWERVE_TTC := 1.5
+const SWERVE_DECEL := 6.0
+const LC_TIME_SWERVE := 1.2
+const SWERVE_OVERSHOOT := 0.9   # share of the lane width aimed past the lane centre at first
+const SWERVE_BRAKE := 3.0       # m/s^2: the most braking while swerving
 ## An aborted change steers back in at least this long.
 const ABORT_MIN_T := 1.2
 
@@ -564,6 +611,12 @@ func _drive(delta: float) -> void:
 			_end_change()
 	_lc_cooldown -= delta
 	var a := _accel_command(v)
+	if traffic != null:
+		_watch_player_ahead(v, a)
+		if _react_at <= traffic.now:
+			_react()
+		if _flash_t >= 0.0:
+			_flash_step(delta)
 	hazard = _check_wreck(delta, v)
 	if _edge != _edge_want:
 		_edge = move_toward(_edge, _edge_want, EDGE_RATE * delta)
@@ -571,6 +624,13 @@ func _drive(delta: float) -> void:
 	if changing:
 		var look := clampf(speed * LOOKAHEAD_SECONDS, LOOKAHEAD_MIN, LOOKAHEAD_MAX)
 		steer_x = _lc_aim_x(look / maxf(absf(v), 1.0))
+		if _lc_why == DO_SWERVE:
+			# A swerve is steering, not braking: the tyres cannot do both. Aim
+			# past the lane for the first half (the lane keeper is gentle by
+			# design) and stay off the heavy brake until the car is round.
+			if _lc_t < _lc_dur * 0.5:
+				steer_x = lane_x + SWERVE_OVERSHOOT * (lane_x - _lc_from)
+			a = maxf(a, -SWERVE_BRAKE)
 	elif weave > 0.0:
 		_weave_t += delta
 		var drift := weave * sin(TAU * _weave_t / WEAVE_PERIOD)
@@ -806,6 +866,63 @@ func _side_watch() -> void:
 	if air >= 0.0 and air < EDGE_GAP:
 		var room := maxf(RoadChunkBuilder.LANE_W * 0.5 - half_w, 0.0)
 		_edge_want = minf(EDGE_M, room) * signf(_my_x - pcx)
+		if air < SIDE_HONK_GAP:
+			_want_react(false)   # a pass with a hand's width to spare
+
+## The player as the car ahead, every controller run: being cut off, and the
+## last-moment swerve.
+func _watch_player_ahead(v: float, a: float) -> void:
+	if lead_is_player and traffic.react_to_player and not changing:
+		if not _lead_was_player and lead_gap < maxf(CUT_GAP_M, CUT_GAP_T * v) and a < -CUT_DECEL + 0.05:
+			_want_react(a < -CUT_DECEL_LONG)
+		var closing := v - lead_speed
+		if closing > 0.5 and lead_gap < closing * SWERVE_TTC and closing * closing / (2.0 * maxf(lead_gap, 0.3)) > SWERVE_DECEL:
+			_swerve(v)
+	_lead_was_player = lead_is_player
+
+## Into the next lane, now, if one is safe (right first); the horn either way.
+func _swerve(v: float) -> void:
+	if traffic.now - _last_swerve >= REACT_EVERY:
+		var oncoming := direction > 0.0
+		for lane in [lane_i + 1, lane_i - 1]:
+			if traffic.lane_allowed(lane, oncoming) and _merge_safe(TrafficManager.lane_centre(lane, oncoming), v):
+				_last_swerve = traffic.now
+				_sig_lane = -1
+				turn = 0
+				last_signal_s = 0.0
+				_start_lane_change(lane, true, DO_SWERVE)
+				_lc_dur = LC_TIME_SWERVE
+				break
+	_want_react(true)
+
+## Horn and two headlight flashes, once the driver has reacted.
+func _want_react(long: bool) -> void:
+	var now := traffic.now
+	if _react_at < INF or now - _last_react < REACT_EVERY or absf(traffic._z[0] - _my_z) > TrafficManager.HONK_RANGE:
+		return
+	_last_react = now
+	_react_long = long
+	_react_at = now + minf(reaction_s, REACT_DELAY_MAX)
+
+func _react() -> void:
+	_react_at = INF
+	traffic.honk(self, _react_long)
+	_flash_t = 0.0
+
+func _flash_step(delta: float) -> void:
+	_flash_t += delta
+	var on := _flash_t < FLASH_ON or (_flash_t >= FLASH_ON + FLASH_OFF and _flash_t < FLASH_ON * 2.0 + FLASH_OFF)
+	if on != _flash_on:
+		_set_flash(on)
+	if _flash_t >= FLASH_ON * 2.0 + FLASH_OFF:
+		_flash_t = -1.0
+
+func _set_flash(on: bool) -> void:
+	_flash_on = on
+	if on:
+		head_flashes += 1
+	if chassis_visual != null and NpcCarBuilder.is_npc(kind):
+		NpcCarBuilder.set_flash(chassis_visual, on)
 
 ## The label for a car that is not changing lane: runs at the decision rate,
 ## which also ends the label of a lane change that has just finished.
@@ -1116,6 +1233,11 @@ func place(lane: float, dir: float, z: float, y: float, speed: float) -> void:
 	flashed_at = -1000.0
 	_edge = 0.0
 	_edge_want = 0.0
+	_react_at = INF
+	_flash_t = -1.0
+	_lead_was_player = false
+	if _flash_on:
+		_set_flash(false)
 	_lead_k = -1
 	_scan_in = 0
 	var yaw := 0.0 if dir < 0.0 else PI

@@ -243,10 +243,13 @@ render_mode unshaded, cull_disabled;
 uniform float energy = 2.5;
 uniform float tail_gain = 1.0;
 uniform float brake_gain = 2.2;
+const float FLASH_GAIN = 3.5;
 instance uniform float brake : instance_index(1) = 0.0;
 // Turn lamps: 0 off, 1 left, 2 right, 3 both (hazard). Plus 4: the left tail
 // lamp is out (a weaving driver's tell).
 instance uniform float turn : instance_index(2) = 0.0;
+// 1 while the driver flashes the headlights (at a player who cut in).
+instance uniform float flash : instance_index(3) = 0.0;
 varying float v_side;
 void vertex() {
 	v_side = sign(VERTEX.x);  // + = the car's right (it faces -Z)
@@ -264,6 +267,9 @@ void fragment() {
 	k *= mix(1.0, 0.03, tail * lamp_out * step(v_side, 0.0));
 	float lit = sig > 2.5 ? 1.0 : (sig > 1.5 ? step(0.0, v_side) : (sig > 0.5 ? step(v_side, 0.0) : 0.0));
 	k *= mix(1.0, mix(0.15, 2.5, blink), amber * lit);
+	// The head lamps (warm white: the only lamp with all three channels up).
+	float head = step(0.8, c.r) * step(0.7, c.g) * step(0.3, c.b);
+	k *= mix(1.0, FLASH_GAIN, head * flash);
 	ALBEDO = c;
 	EMISSION = c * energy * k;
 }
@@ -326,6 +332,13 @@ static func set_light_glow(g: float) -> void:
 		_glow_mat.set_shader_parameter("tail_gain", g)
 	if _flare_mat != null:
 		_flare_mat.set_shader_parameter("gain", g)
+
+## Head lamps on full for a flash (TrafficCar: flashing back at the player).
+## One instance uniform, written at the start and end of each flash.
+static func set_flash(vis: Node3D, on: bool) -> void:
+	var mi := vis.get_node_or_null(^"Body") as MeshInstance3D
+	if mi != null:
+		mi.set_instance_shader_parameter("flash", 1.0 if on else 0.0)
 
 ## Turn lamp states for set_lamps.
 const TURN_OFF := 0

@@ -45,7 +45,7 @@ var game: Node
 var p: PlayerCar
 var traffic: TrafficManager
 var fails: Array[String] = []
-var cases: Array[String] = ["pullout", "noflash", "flash", "blindspot", "abort", "edge", "rulebreak"]
+var cases: Array[String] = ["pullout", "noflash", "flash", "blindspot", "abort", "edge", "rulebreak", "cutoff", "swerve", "horns"]
 var case_i := -1
 var name_now := ""
 var t := 0.0
@@ -537,6 +537,158 @@ func _tick_rulebreak() -> bool:
 			note = "%s; follows you at %.2f s off, %.2f s on; weaver toward you %.2f m off, %.2f m on" % [
 				f.merge, f.follow_off, follow_on, f.weave_off, -float(f.b_lo)]
 			return true
+	return false
+
+# ---------- cutoff ----------
+
+func _setup_cutoff() -> void:
+	traffic.own_lanes_used = [1]
+	_player(3, 100.0 * KMH)
+	a = _car(1, 60.0, 100.0 * KMH)
+	a.reaction_s = 0.6
+	f["h0"] = traffic.honk_count
+
+## Puts you in the car's lane with 0.5 s of its speed between the bumpers,
+## going a little slower than it (the follower then wants about 3.5 m/s^2).
+func _cut_in() -> void:
+	var gap := 0.5 * a.lane_speed()
+	p_x = _lane(1)
+	p_v = a.lane_speed() - 1.5
+	TestDriver.place(p, p_x, _ahead(a) + a.half_l + P_HL + gap, 0.0, p_v)
+	pace = null
+
+func _tick_cutoff() -> bool:
+	f["brake"] = maxf(float(f.get("brake", 0.0)), a.brake_input)
+	if phase == 0 and t >= 2.0:
+		phase = 1
+		mark = t
+		_cut_in()
+	elif phase == 1:
+		if traffic.honk_count - int(f.h0) >= 1 and not f.has("honk_at"):
+			f["honk_at"] = t - mark
+			f["long"] = bool(traffic.honk_log.back().long)
+		if t - mark >= 2.5:
+			if not f.has("honk_at"):
+				_fail("no horn within 2.5 s of the cut-in (follower asked for brake %.2f)" % float(f.brake))
+				return true
+			if float(f.honk_at) < 0.6 - 0.02 or float(f.honk_at) > 0.8 + 0.1:
+				_fail("horn %.2f s after the cut-in (its reaction time is 0.6)" % float(f.honk_at))
+			if a.head_flashes != 2:
+				_fail("%d headlight flashes, wanted 2" % a.head_flashes)
+			if float(f.brake) < 0.2:
+				_fail("it barely braked (pedal %.2f)" % float(f.brake))
+			# Away and straight back in: inside 5 s there is no second horn.
+			phase = 2
+			_player(3, 100.0 * KMH)
+			TestDriver.place(p, _lane(3), 0.0, 0.0, 100.0 * KMH)
+	elif phase == 2 and t - mark >= 3.2:
+		phase = 3
+		_cut_in()
+	elif phase == 3 and t - mark >= 4.8:
+		if traffic.honk_count - int(f.h0) != 1:
+			_fail("a second horn %.1f s after the first" % (t - mark))
+		phase = 4
+		_player(3, 100.0 * KMH)
+		TestDriver.place(p, _lane(3), 0.0, 0.0, 100.0 * KMH)
+	elif phase == 4 and t - mark >= 7.0:
+		phase = 5
+		_cut_in()
+	elif phase == 5 and t - mark >= 9.0:
+		if traffic.honk_count - int(f.h0) != 2:
+			_fail("%d horns after a third cut-in past the 5 s limit, wanted 2" % (traffic.honk_count - int(f.h0)))
+		if touched:
+			_fail("you touched")
+		note = "horn %.2f s after the cut-in (%s), 2 headlight flashes, brake pedal %.2f; no second horn inside 5 s, one again after" % [
+			f.honk_at, "long" if f.long else "short", f.brake]
+		return true
+	return false
+
+# ---------- swerve ----------
+
+func _setup_swerve() -> void:
+	traffic.own_lanes_used = [1, 2]
+	_player(3, 100.0 * KMH)
+	a = _car(1, 80.0, 100.0 * KMH)
+	a.reaction_s = 0.4
+	a._lc_cooldown = 100.0   # no pass or keep-right of its own
+
+func _tick_swerve() -> bool:
+	if phase == 0 and t >= 2.0:
+		phase = 1
+		mark = t
+		# You, suddenly in its lane, slow and braking to a stop, 1.2 s from contact.
+		var slow := 10.0
+		var gap := 1.2 * (a.lane_speed() - slow)
+		p_x = _lane(1)
+		TestDriver.place(p, p_x, _ahead(a) + a.half_l + P_HL + gap, 0.0, slow)
+		p_brake = true
+	elif phase == 1:
+		f["over"] = maxf(float(f.get("over", 0.0)), _x(a) - _lane(2))
+		if a._lc_why == TrafficCar.DO_SWERVE and a.changing and not f.has("swerve_at"):
+			f["swerve_at"] = t - mark
+			if a.turn != 0:
+				_fail("it signalled an emergency swerve")
+		if touched:
+			_fail("it hit you %.2f s in (swerve %s; it was %.2f m sideways of you, doing %.0f km/h to your %.0f)" % [
+				t - mark, "started %.2f s in" % float(f.swerve_at) if f.has("swerve_at") else "never started",
+				absf(_x(a) - _px()), a.lane_speed() * 3.6, p.current_speed() * 3.6])
+			return true
+		if _ahead(a) > 15.0 and t - mark > 1.0:
+			if not f.has("swerve_at"):
+				_fail("it got past without swerving?")
+			if a.honks < 1:
+				_fail("no horn")
+			if float(f.over) + a.half_w > RoadChunkBuilder.LANE_W * 0.5 + 0.3:
+				_fail("it overshot the lane it swerved into by %.2f m" % float(f.over))
+			# The gap is by the index's footprints (yours is 0.1 m wider than the body each side).
+			note = "swerved %.2f s after you appeared, no contact (%.2f m between footprints), overshot its new lane centre by %.2f m, horn %s" % [
+				f.get("swerve_at", -1.0), min_side, f.over, "sounded" if a.honks > 0 else "silent"]
+			return true
+		if t - mark > 8.0:
+			_fail("it never got past (speed %.1f m/s, doing %s)" % [a.lane_speed(), a.doing])
+			return true
+	return false
+
+# ---------- horns ----------
+
+func _setup_horns() -> void:
+	_player(1, 80.0 * KMH)
+
+## The six horns are six different sounds: right length, not silent, and each
+## table entry names a horn that exists.
+func _tick_horns() -> bool:
+	if phase == 1:
+		# Checked already: only waiting for the build thread.
+		if TrafficHorns.ready() or t > 20.0:
+			if not TrafficHorns.ready():
+				_fail("the horns were never built")
+			return true
+		return false
+	phase = 1
+	var peaks := PackedStringArray()
+	var seen := {}
+	for horn in TrafficHorns.NAMES:
+		var s := TrafficHorns.samples(horn, TrafficHorns.LONG_S)
+		var peak := 0.0
+		var crossings := 0
+		for i in range(1, s.size()):
+			peak = maxf(peak, absf(s[i]))
+			if s[i - 1] < 0.0 and s[i] >= 0.0:
+				crossings += 1
+		if s.size() != int(TrafficHorns.LONG_S * TrafficHorns.RATE):
+			_fail("%s is %d samples long" % [horn, s.size()])
+		if peak < 0.2 or peak > 1.0:
+			_fail("%s peaks at %.2f" % [horn, peak])
+		if seen.has(crossings):
+			_fail("%s and %s sound the same (%d zero crossings)" % [horn, seen[crossings], crossings])
+		seen[crossings] = horn
+		peaks.append("%s %d Hz-ish, peak %.2f" % [horn, crossings, peak])
+	for kind in TrafficHorns.BY_KIND:
+		if not (TrafficHorns.BY_KIND[kind] in TrafficHorns.NAMES):
+			_fail("%s has an unknown horn" % kind)
+	if TrafficHorns.horn_for("n2_cityhatch") != "beep" or TrafficHorns.horn_for("n3_pickup") != "blare" or TrafficHorns.horn_for("no_such_car") != "two_tone":
+		_fail("the horn table")
+	note = "; ".join(peaks)
 	return false
 
 # ---------- the end ----------

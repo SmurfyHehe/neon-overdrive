@@ -2,8 +2,8 @@ class_name AudioSettings
 extends RefCounted
 
 # Volume settings (Phase B, 2026-10-05; stage B step 4's "Settings tab" starts
-# here): one slider each for Master, Engine, Effects (tyres, wind, UI, traffic,
-# sirens) and Music (the radio and the scanner),
+# here): one slider each for Master, Engine, Turbo (the spool and the valve, B1),
+# Effects (tyres, wind, UI, traffic, sirens) and Music (the radio and the scanner),
 # applied to the audio buses and saved in user://settings.cfg. The pause menu
 # shows the sliders; Game applies the saved values at start. 1.0 is the buses'
 # own level, so the defaults change nothing.
@@ -17,24 +17,14 @@ static func default_path() -> String:
 const CHANNELS := {
 	"Master": [&"Master"],
 	"Engine": [&"Engine"],
+	"Turbo": [&"Turbo"],
 	"Effects": [&"Tires", &"World", &"UI", &"Traffic", &"Sirens"],
 	"Music": [&"Music", &"Scanner"],
 }
 
 ## Tests point this at a scratch file.
 static var path := default_path()
-static var volumes := {"Master": 1.0, "Engine": 1.0, "Effects": 1.0, "Music": 1.0}
-## Turbo sounds (spool, whistle, blow-off) on top of the Engine channel: 0..1,
-## saved as [audio] turbo. The Settings Sound page has the slider; the turbo
-## voice reads turbo_gain() when it lands (turbo sounds plan, section 13).
-static var turbo_volume := 1.0
-
-static func set_turbo_volume(value: float) -> void:
-	turbo_volume = clampf(value, 0.0, 1.0) if is_finite(value) else 1.0
-
-## Linear gain for the turbo voice: the Engine slider times the Turbo slider.
-static func turbo_gain() -> float:
-	return float(volumes["Engine"]) * turbo_volume
+static var volumes := {"Master": 1.0, "Engine": 1.0, "Turbo": 1.0, "Effects": 1.0, "Music": 1.0}
 
 static func set_volume(channel: String, value: float) -> void:
 	if not CHANNELS.has(channel):
@@ -74,8 +64,6 @@ static func load_settings() -> void:
 	for channel in CHANNELS:
 		var v := float(cfg.get_value("audio", channel.to_lower(), 1.0)) if ok else 1.0
 		volumes[channel] = clampf(v, 0.0, 1.0) if is_finite(v) else 1.0  # a hand-edited "nan" loads as NaN
-	var t := float(cfg.get_value("audio", "turbo", 1.0)) if ok else 1.0
-	set_turbo_volume(t)
 	apply_all()
 
 static func save_settings() -> bool:
@@ -83,5 +71,4 @@ static func save_settings() -> bool:
 	cfg.load(path)  # keep the other sections (TrafficSettings); a missing file is fine
 	for channel in CHANNELS:
 		cfg.set_value("audio", channel.to_lower(), volumes[channel])
-	cfg.set_value("audio", "turbo", turbo_volume)
 	return cfg.save(path) == OK

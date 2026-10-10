@@ -134,6 +134,9 @@ var emitted := 0
 ## Puffs emitted as burnout / drift (tests: which kind the slip read as).
 var emitted_burnout := 0
 var emitted_drift := 0
+## Steam puffs off a broken radiator (CarDamage), from the same pool.
+var emitted_steam := 0
+var _steam_carry := 0.0
 
 var _player: PlayerCar
 var _mat: ShaderMaterial
@@ -236,6 +239,33 @@ func _physics_process(delta: float) -> void:
 		while _carry[i] >= 1.0:
 			_carry[i] -= 1.0
 			_emit(w, fwd, lat, lon, burnout)
+	_step_steam(delta, fwd)
+
+## Steam off a broken radiator (damage slice 1: the hood stays shut, the
+## radiator shows its damage this way). Rises from the grille, thin and slow.
+func _step_steam(delta: float, fwd: Vector3) -> void:
+	var rate := _player.damage.steam_rate()
+	if rate <= 0.0:
+		_steam_carry = 0.0
+		return
+	_steam_carry += rate * delta
+	var half_l := 2.2
+	if _player.chassis_visual != null:
+		half_l = float(_player.chassis_visual.get_meta("half_l", 2.2))
+	var nose := _player.global_position + fwd * (half_l - 0.3) + _player.global_transform.basis.y * 0.75
+	while _steam_carry >= 1.0:
+		_steam_carry -= 1.0
+		var p := nose + Vector3(randf_range(-0.3, 0.3), 0.0, randf_range(-0.15, 0.15))
+		var vel := _player.linear_velocity * 0.6 + Vector3(randf_range(-0.2, 0.2), randf_range(0.6, 1.1), randf_range(-0.2, 0.2))
+		var life := randf_range(1.2, 1.8)
+		var xf := Transform3D(Basis(vel, Vector3(SIZE_START * 0.6, SIZE_GROW * 0.5, 0.0), Vector3.ZERO), p)
+		multimesh.set_instance_transform(_next, xf)
+		multimesh.set_instance_custom_data(_next, Color(_t, life, 0.45, randf()))
+		_xf[_next] = xf
+		_birth[_next] = _t
+		_life[_next] = life
+		_next = (_next + 1) % MAX_PUFFS
+		emitted_steam += 1
 
 ## Advance wheel i's scorch toward the current slip strength and return it.
 func step_scorch(i: int, strength: float, dt: float) -> float:

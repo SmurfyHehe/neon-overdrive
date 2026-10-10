@@ -19,6 +19,9 @@ var resume_button: Button
 var settings_button: Button
 var settings: SettingsScreen
 var main_page: VBoxContainer
+## The bank (F0, scripts/core/wallet.gd), shown under the title; null in bare tests.
+var wallet: Node
+var bank_label: Label
 var cars_page: VBoxContainer
 
 func _init(state: GameState) -> void:
@@ -36,6 +39,7 @@ func _ready() -> void:
 
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.theme = UiTheme.font_theme()   # Menu role for every row, button and tab
 	add_child(center)
 
 	var box := VBoxContainer.new()
@@ -45,13 +49,21 @@ func _ready() -> void:
 
 	var title := Label.new()
 	title.text = "PAUSED"
+	UiTheme.apply(title, "display", 40)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
+	bank_label = Label.new()
+	bank_label.name = "Bank"
+	UiTheme.apply(bank_label, "numbers")
+	bank_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(bank_label)
+	_refresh_bank()
 
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	_add_button(box, "Car: " + PlayerCars.title(PlayerCar.chassis_kind()), show_cars)
 	settings_button = _add_button(box, "Settings", show_settings)
-	_add_button(box, "Service car (reset wear)", _service_car)
+	_add_button(box, "Service car (reset wear and damage)", _service_car)
+	_add_button(box, "Call a tow (engine dead)", _call_tow)
 	_add_button(box, "Open log folder", LogFolder.open)
 	_add_button(box, "Restart", game_state.restart)
 	_add_button(box, "Quit", game_state.quit)
@@ -75,6 +87,24 @@ func _service_car() -> void:
 	var player: Variant = get_parent().get("player")
 	if player != null and player.get("health") != null:
 		player.health.repair()
+		player.damage.garage_repair(null)  # free until the garage and the bank exist
+
+## Ferris's tow (damage slice 1): only for a dead engine, never in a chase.
+## The car goes home, the night ends, and the garage at home fixes it; the
+## bank pays once it exists (null = free for now). Chases come with Stage F.
+func _call_tow() -> void:
+	var game := get_parent()
+	var player: Variant = game.get("player")
+	if player == null or player.get("damage") == null or not player.damage.is_engine_dead():
+		return
+	if not player.damage.tow(null, false):
+		return
+	player.damage.garage_repair(null)
+	player.health.repair()
+	var clock: Variant = game.get("night_clock")
+	if clock != null:
+		clock.end_night()
+	game_state.restart()
 
 func _add_button(parent: Control, text: String, action: Callable) -> Button:
 	var b := Button.new()
@@ -88,6 +118,13 @@ func _on_state_changed(new_state: GameState.State, _old_state: GameState.State) 
 	visible = new_state == GameState.State.PAUSED
 	if visible:
 		show_main()  # always reopen on the main page
+		_refresh_bank()
+
+## "Bank $4,200 · tonight $350"
+func _refresh_bank() -> void:
+	bank_label.visible = wallet != null
+	if wallet != null:
+		bank_label.text = "Bank %s  ·  tonight %s" % [wallet.money(wallet.bank), wallet.money(wallet.cash)]
 
 ## Opens the Settings screen on top of this menu (a page name, or the first).
 func show_settings(page: Variant = 0) -> void:
@@ -119,6 +156,7 @@ func _build_cars_page(center: CenterContainer) -> void:
 	center.add_child(cars_page)
 	var title := Label.new()
 	title.text = "CAR  (restarts the run)"
+	UiTheme.apply(title, "display", 40)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cars_page.add_child(title)
 	var now := PlayerCar.chassis_kind()

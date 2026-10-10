@@ -29,8 +29,12 @@ static func apply(v: Vehicle, spec: Dictionary) -> void:
 			continue  # cosmetic: EngineAudio reads it from the spec, the Vehicle has no such property
 		elif key == "engine_voice":
 			continue  # sound only (#80): EngineAudio hands it to EngineSynth
+		elif key == "turbo_voice":
+			continue  # sound only (B1): EngineAudio hands it to TurboSynth
 		elif key == "window_control":
 			continue  # cosmetic: how the cockpit's side window is worked (CockpitFrame)
+		elif key == "boost_kind":
+			ForcedInduction.set_kind(v, String(spec[key]))  # not a Vehicle property (C1)
 		elif key == "driver_grip_deg":
 			continue  # cosmetic: where the driver's hands rest on the rim (DriverModel)
 		else:
@@ -462,6 +466,7 @@ static func player_spec(kind: String) -> Dictionary:
 			return s  # p1_coupe, or an unknown kind: the coupe
 	s["exhaust"] = ExhaustTune.for_car(kind).to_dict()
 	s["engine_voice"] = EngineVoice.for_car(kind)
+	s["turbo_voice"] = TurboVoice.for_car(kind)
 	return s
 
 static func traffic_default() -> Dictionary:
@@ -569,7 +574,7 @@ static func npc_spec(kind: String) -> Dictionary:
 					"idle_rpm", "torque_shape", "gear_ratios", "final_drive", "coefficient_of_drag", "frontal_area",
 					"front_tire_width", "rear_tire_width", "coefficient_of_friction", "front_damping_ratio",
 					"rear_damping_ratio", "front_arb_ratio", "rear_arb_ratio", "front_spring_length",
-					"rear_spring_length", "center_of_gravity_height_offset", "engine_voice", "exhaust"]:
+					"rear_spring_length", "center_of_gravity_height_offset", "engine_voice", "turbo_voice", "exhaust"]:
 				s[k] = ps[k]
 		"p2_hothatch":
 			# Hot hatch (Golf GTI / Civic Si class), 2.0 l four, front drive: light

@@ -47,7 +47,6 @@ var current_page := 0
 
 # Sound
 var volume_sliders := {}   # channel -> HSlider
-var turbo_slider: HSlider
 # Picture
 var fullscreen_check: CheckButton
 var resolution_option: OptionButton
@@ -282,7 +281,6 @@ func _sync_all() -> void:
 	_syncing = true
 	for channel in volume_sliders:
 		volume_sliders[channel].value = AudioSettings.volumes[channel]
-	turbo_slider.value = AudioSettings.turbo_volume
 	fullscreen_check.button_pressed = DisplaySettings.fullscreen
 	for i in resolution_option.item_count:
 		if resolution_option.get_item_metadata(i) == DisplaySettings.resolution:
@@ -316,10 +314,6 @@ func _build_sound_page(parent: Control) -> Control:
 			func(v: float) -> void:
 				AudioSettings.set_volume(channel, v)
 				AudioSettings.save_settings())
-	# Turbo sounds sit on top of Engine; the turbo voice reads AudioSettings.turbo_gain().
-	turbo_slider = _add_slider(page, "Turbo", 0.0, 1.0, 0.05, AudioSettings.turbo_volume, func(v: float) -> void:
-		AudioSettings.set_turbo_volume(v)
-		AudioSettings.save_settings())
 	return _page_of(page)
 
 # ---------- Picture ----------

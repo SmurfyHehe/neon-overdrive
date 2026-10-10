@@ -247,7 +247,8 @@ class ScreenCanvas extends Control:
 	var unit: HeadUnit
 
 	func _draw() -> void:
-		var font := ThemeDB.fallback_font
+		var font := UiTheme.font("menu_strong")
+		var lcd := UiTheme.font("lcd")
 		var w := float(HeadUnit.PX.x)
 		var h := float(HeadUnit.PX.y)
 		draw_rect(Rect2(0, 0, w, h), HeadUnit.NAVY_DEEP)
@@ -264,7 +265,7 @@ class ScreenCanvas extends Control:
 			sub = ""
 		draw_string(font, Vector2(HeadUnit.MARGIN, 92), sub, HORIZONTAL_ALIGNMENT_LEFT, 330, 15, HeadUnit.SILVER)
 		if unit.clock_text != "":
-			draw_string(font, Vector2(372, 34), unit.clock_text, HORIZONTAL_ALIGNMENT_RIGHT, 116, 18, HeadUnit.AMBER)
+			draw_string(lcd, Vector2(372, 34), unit.clock_text, HORIZONTAL_ALIGNMENT_RIGHT, 116, 18, HeadUnit.AMBER)
 		var bars := 10
 		for i in bars:
 			var x := 372.0 + i * 12.0

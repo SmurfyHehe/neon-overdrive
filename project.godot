@@ -27,6 +27,10 @@ TickRate="*res://scripts/core/tick_rate.gd"
 
 window/vsync/vsync_mode.editor=0
 
+[gui]
+
+theme/custom_font="res://assets/fonts/BarlowSemiCondensed-Regular.ttf"
+
 [input]
 
 accelerate={

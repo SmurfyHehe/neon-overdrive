@@ -215,5 +215,24 @@ static func basis_to_road(z: float, b: Basis) -> Basis:
 
 ## World transform of something at road-space (x, y, z), yawed by `yaw`
 ## relative to the road (0 = pointing down the road, PI = oncoming).
+##
+## One pass over the chunk lookup, curvature and arc heading that basis_at()
+## and roll() would each do on their own (perf pass 2026-10-09: this is the
+## traffic's rail pose, 16 cars x 120 Hz; the fused form takes about a
+## quarter less time and gives the same floats, since both halves used the
+## same k, s and h).
 static func pose(x: float, y: float, z: float, yaw: float) -> Transform3D:
-	return Transform3D(basis_at(z) * Basis(Vector3.UP, yaw), roll(Vector3(x, y, z)))
+	if align == null:
+		return Transform3D(Basis(Vector3.UP, yaw), Vector3(x, y, z))
+	# _chunk_of / _s_in_chunk / _rise written out: a GDScript call costs about
+	# as much as the arithmetic it wraps, and this runs ~2000 times a second.
+	var oz := float(origin_index) * L - z
+	var i := floori(oz / L)
+	var s := oz - float(i) * L
+	var k := align.curvature(i)
+	var h := RoadAlignment.arc_heading(k, s)
+	var xf := chunk_xf(i)
+	var rise := align.start_grade(i) * s + 0.5 * align.vcurve(i) * s * s
+	var basis := Basis(Vector3.UP, align.start_heading(i) + h) * Basis(Vector3.RIGHT, atan(align.grade_at(i, s))) * Basis(Vector3.UP, yaw)
+	var local := RoadAlignment.arc_point(k, s) + Vector3(cos(h), 0.0, -sin(h)) * x + Vector3(0.0, rise + y, 0.0)
+	return Transform3D(basis, xf * local)

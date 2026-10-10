@@ -41,7 +41,7 @@ var game: Node
 var p: PlayerCar
 var traffic: TrafficManager
 var fails: Array[String] = []
-var cases: Array[String] = ["pullout", "noflash", "flash", "blindspot", "abort"]
+var cases: Array[String] = ["pullout", "noflash", "flash", "blindspot", "abort", "edge"]
 var case_i := -1
 var name_now := ""
 var t := 0.0
@@ -403,6 +403,43 @@ func _tick_abort() -> bool:
 		if t - mark > 6.0:
 			_fail("no abort (abort_count %d, changing %s, lane %d)" % [traffic.abort_count, a.changing, a.lane_i + 1])
 			return true
+	return false
+
+# ---------- edge ----------
+
+func _setup_edge() -> void:
+	traffic.own_lanes_used = [1]   # nowhere to go: this is about the shift, not a lane change
+	_player(2, 100.0 * KMH)
+	a = _car(1, 0.0, 100.0 * KMH)
+	p_x = _lane(1) + a.half_w + P_HW + 1.2   # 1.2 m of air beside it
+	TestDriver.place(p, p_x, 0.0, 0.0, 100.0 * KMH)
+	pace = a
+	pace_off = 0.0
+
+func _tick_edge() -> bool:
+	var off := _x(a) - _lane(1)   # - = away from you
+	if phase == 0:
+		f["most"] = minf(float(f.get("most", 0.0)), off)
+		if absf(off) + a.half_w > RoadChunkBuilder.LANE_W * 0.5:
+			_fail("it left its lane (%.2f m off centre)" % off)
+			return true
+		if t >= 5.0:
+			f["held"] = off
+			if off > -0.15:
+				_fail("it shifted %.2f m away (wanted up to 0.3)" % -off)
+			if float(f.most) < -0.45:
+				_fail("it shifted %.2f m, more than the 0.3 allowed" % -float(f.most))
+			phase = 1
+			mark = t
+			pace = null
+			p_v = 150.0 * KMH   # drive off
+	elif t - mark >= 5.0:
+		if absf(off) > 0.12:
+			_fail("it did not come back to the middle after you left (%.2f m off)" % off)
+		if a.lane_changes > 0:
+			_fail("it changed lane")
+		note = "shifted %.2f m away with you 1.2 m beside it, back to %.2f m off centre after you left" % [-float(f.held), absf(off)]
+		return true
 	return false
 
 # ---------- the end ----------

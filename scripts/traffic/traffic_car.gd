@@ -378,6 +378,11 @@ const BLIND_AHEAD_LENGTHS := 2.0
 ## keeps a car from drifting back right in front of it.
 const HOLD_NEAR_M := 30.0
 const HOLD_NEAR_T := 2.0
+## Edging away from a player alongside: under EDGE_GAP of air between the
+## bodies, up to EDGE_M sideways inside the lane, eased at EDGE_RATE m/s.
+const EDGE_GAP := 1.5
+const EDGE_M := 0.3
+const EDGE_RATE := 0.6
 ## An aborted change steers back in at least this long.
 const ABORT_MIN_T := 1.2
 
@@ -497,15 +502,18 @@ func _physics_process(delta: float) -> void:
 		wet.apply_drag(self)
 	_update_lamps()
 
-## Brake lamps on any brake pedal (a held stop included), hazards while the
-## hazard brake holds. NPC bodies only; the old box cars have no such lamps.
+## Brake lamps on any brake pedal (a held stop included), the blinker on the
+## side the car is about to move to, hazards (both sides) while the hazard
+## brake holds. NPC bodies only; the old box cars have no such lamps. The
+## uniforms are written only when the state changes.
 func _update_lamps() -> void:
 	if chassis_visual == null or not NpcCarBuilder.is_npc(kind):
 		return
-	var key := (1 if brake_input > 0.05 else 0) + (2 if hazard else 0)
+	var sig := NpcCarBuilder.TURN_BOTH if hazard else turn
+	var key := (1 if brake_input > 0.05 else 0) + sig * 2
 	if key != _lamp_key:
 		_lamp_key = key
-		NpcCarBuilder.set_lamps(chassis_visual, float(key & 1), hazard)
+		NpcCarBuilder.set_lamps(chassis_visual, float(key & 1), sig)
 		WetReflections.set_tail_brake(chassis_visual, float(key & 1))
 
 ## Wheel._process only poses the wheel meshes (hub height, roll, spin): a car
@@ -543,7 +551,9 @@ func _drive(delta: float) -> void:
 	_lc_cooldown -= delta
 	var a := _accel_command(v)
 	hazard = _check_wreck(delta, v)
-	var steer_x := lane_x
+	if _edge != _edge_want:
+		_edge = move_toward(_edge, _edge_want, EDGE_RATE * delta)
+	var steer_x := lane_x + _edge
 	if changing:
 		var look := clampf(speed * LOOKAHEAD_SECONDS, LOOKAHEAD_MIN, LOOKAHEAD_MAX)
 		steer_x = _lc_aim_x(look / maxf(absf(v), 1.0))
@@ -668,6 +678,7 @@ func _potential(v: float, gap: float, vl: float) -> float:
 	return clampf(vl + K_GAP * (gap - (S0 + _t_gap() * v)), 0.0, target_speed)
 
 func _consider_lane_change(v: float) -> void:
+	_side_watch()
 	if changing:
 		_consider_abort(v)
 		return
@@ -745,7 +756,22 @@ func _consider_lane_change(v: float) -> void:
 			why = DO_YIELD_TRAFFIC
 		elif constrained:
 			why = DO_PASSING
-		_start_lane_change(best, obstacle or yielding, why)
+		# Blinker first: the change itself starts in _signal_step.
+		_signal(best, SIGNAL_T_OBSTACLE if obstacle else SIGNAL_T, why)
+
+## The player alongside, at the decision rate: with under EDGE_GAP of air
+## between the bodies the car eases EDGE_M toward the far side of its own lane
+## (never out of it), and back to the middle once the player has gone.
+func _side_watch() -> void:
+	_edge_want = 0.0
+	var tm := traffic
+	if changing or not tm.react_to_player or absf(tm._z[0] - _my_z) > half_l + tm._hl[0]:
+		return
+	var pcx: float = (tm._lo[0] + tm._hi[0]) * 0.5
+	var air := absf(pcx - _my_x) - half_w - TrafficManager.PLAYER_HALF_W
+	if air >= 0.0 and air < EDGE_GAP:
+		var room := maxf(RoadChunkBuilder.LANE_W * 0.5 - half_w, 0.0)
+		_edge_want = minf(EDGE_M, room) * signf(_my_x - pcx)
 
 ## The label for a car that is not changing lane: runs at the decision rate,
 ## which also ends the label of a lane change that has just finished.
@@ -1203,6 +1229,8 @@ func _cruise(delta: float) -> void:
 		if _lc_t >= _lc_dur:
 			_end_change()
 	_lc_cooldown -= dt
+	if _edge != _edge_want:
+		_edge = move_toward(_edge, _edge_want, EDGE_RATE * dt)
 	if _rail_dx != 0.0 or _rail_dy != 0.0 or _rail_dyaw != 0.0:
 		var k := exp(-dt / RAIL_EASE)
 		_rail_dx *= k

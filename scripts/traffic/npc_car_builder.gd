@@ -22,7 +22,8 @@ class_name NpcCarBuilder
 #
 # Night lights (2026-10-07): the tail lamps glow at a running level and
 # brighten when the car brakes (instance uniform "brake", set by TrafficCar);
-# a wrecked or hazard-stopped car blinks its amber turn lamps ("hazard").
+# the amber turn lamps blink on one side before and during a lane change, on
+# both for a wrecked or hazard-stopped car (instance uniform "turn").
 # Each tail lamp also carries a camera-facing flare that never shrinks below
 # FLARE_MIN_SCREEN of the screen, so a car 200 m up the road is still two red points
 # instead of nothing. It only shows from behind (it fades out as the car turns
@@ -243,16 +244,22 @@ uniform float energy = 2.5;
 uniform float tail_gain = 1.0;
 uniform float brake_gain = 2.2;
 instance uniform float brake : instance_index(1) = 0.0;
-instance uniform float hazard : instance_index(2) = 0.0;
+// Turn lamps: 0 off, 1 left, 2 right, 3 both (hazard).
+instance uniform float turn : instance_index(2) = 0.0;
+varying float v_side;
+void vertex() {
+	v_side = sign(VERTEX.x);  // + = the car's right (it faces -Z)
+}
 void fragment() {
 	vec3 c = COLOR.rgb;
 	// Linear colours: the tail red is the only lamp with green and blue near 0,
 	// the amber turn lamp the only one with green between 0.3 and 0.7.
 	float tail = step(0.4, c.r) * step(c.g, 0.06) * step(c.b, 0.06);
-	float turn = step(0.8, c.r) * step(0.3, c.g) * step(c.g, 0.7) * step(c.b, 0.2);
+	float amber = step(0.8, c.r) * step(0.3, c.g) * step(c.g, 0.7) * step(c.b, 0.2);
 	float k = mix(1.0, tail_gain * (1.0 + brake * brake_gain), tail);
 	float blink = step(0.5, fract(TIME * 1.4));
-	k *= mix(1.0, mix(0.15, 2.5, blink), turn * step(0.5, hazard));
+	float lit = turn > 2.5 ? 1.0 : (turn > 1.5 ? step(0.0, v_side) : (turn > 0.5 ? step(v_side, 0.0) : 0.0));
+	k *= mix(1.0, mix(0.15, 2.5, blink), amber * lit);
 	ALBEDO = c;
 	EMISSION = c * energy * k;
 }
@@ -313,13 +320,20 @@ static func set_light_glow(g: float) -> void:
 	if _flare_mat != null:
 		_flare_mat.set_shader_parameter("gain", g)
 
-## Brake (0..1) and hazard (on/off) for one car's lamps; `vis` is its
-## chassis_visual. Two instance uniforms on the body, no material change.
-static func set_lamps(vis: Node3D, brake: float, hazard: bool) -> void:
+## Turn lamp states for set_lamps.
+const TURN_OFF := 0
+const TURN_LEFT := 1
+const TURN_RIGHT := 2
+const TURN_BOTH := 3
+
+## Brake (0..1) and turn lamps (TURN_OFF / LEFT / RIGHT / BOTH = hazard) for one
+## car's lamps; `vis` is its chassis_visual. Two instance uniforms on the body,
+## no material change.
+static func set_lamps(vis: Node3D, brake: float, turn: int) -> void:
 	var mi := vis.get_node_or_null(^"Body") as MeshInstance3D
 	if mi != null:
 		mi.set_instance_shader_parameter("brake", brake)
-		mi.set_instance_shader_parameter("hazard", 1.0 if hazard else 0.0)
+		mi.set_instance_shader_parameter("turn", float(turn))
 
 static func is_npc(kind: String) -> bool:
 	return KINDS.has(kind)

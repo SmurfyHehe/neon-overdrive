@@ -1,0 +1,71 @@
+{
+	"version": 1,
+	"_note": "What every car's tree shares (step T1 + the data half of T3, 2026-10-10): tier bands, price factors, the Workshop row and the parts ladder. Prices are GUESSES in nights of play until the in-game economy is worked out (Roy, 2026-10-10). Read by scripts/car/mod_tree.gd.",
+
+	"tiers": {
+		"_note": "Power bands in Nm of peak torque (on full boost) per kg, PR #175: a build is in tier Tn when its number is at or over floor[n] and under floor[n+1]. price_factor: price = nights x the car's tier factor (starting values). ceiling_by_car_tier: the highest tier a car's fully fitted build may reach, by the tier the car arrives at.",
+		"names": ["T0", "T1", "T2", "T3", "T4", "T5"],
+		"floor_nm_per_kg": [0.0, 0.30, 0.36, 0.42, 0.52, 0.60],
+		"price_factor": {"T0": 0.6, "T1": 0.8, "T2": 1.0, "T3": 1.2, "T4": 1.4, "T5": 1.6},
+		"ceiling_by_car_tier": {"T0": "T2", "T1": "T3", "T2": "T4", "T3": "T4", "T4": "T4"},
+		"t5_builds": ["p1_coupe/B1", "n13_gt/B1"]
+	},
+
+	"cred_per_night": 1000,
+
+	"workshop": {
+		"_note": "The Workshop (bolt-on) row: the 26 items of data/bolt_ons/bolt_ons.json, any order, any car. The ECU unlock lives here, not in a car's slots. Only prices are added here; a stepped item is priced per step. All guesses.",
+		"source": "res://data/bolt_ons/bolt_ons.json",
+		"default_nights": 0.3,
+		"nights": {
+			"ecu_unlock": 0.8, "cold_air_intake": 0.5, "air_filter": 0.2, "iridium_plugs": 0.2, "throttle_body": 0.5,
+			"underdrive_pulley": 0.3, "light_battery": 0.3, "light_wheel_nuts": 0.1, "short_shifter": 0.4, "shift_light": 0.2,
+			"brake_pads": 0.4, "brake_lines": 0.3, "bushings": 0.4, "strut_bar_front": 0.3, "strut_bar_rear": 0.3,
+			"drift_handbrake": 0.5, "cabin_strip_1": 0.2, "cabin_strip_2": 0.3, "cabin_strip_3": 0.5,
+			"bright_bulbs": 0.3, "fog_lamps": 0.3, "blind_spot_lamp": 0.4, "fuel_can": 0.2, "tow_strap": 0.2,
+			"quiet_muffler": 0.4, "straight_pipe": 0.3, "oil_cooler": 0.5, "gauge_pod": 0.2
+		}
+	},
+
+	"ladder": {
+		"_note": "Parts ladder, the same on every car. Each part is stock plus three rungs, each rung bought once per car; the fitted id is <part>_<rung> (tyres_2). A rung sets how far the Tuner sliders it covers may move from the car's base build: 'notches' is the half-width in Tuner notches (a notch is a tenth of the slider's safe range), -1 is the whole safe range. Index 0 is stock. A rung's ops move the base (same op format as a tree node). Presets ignore the windows. Paths no part covers (aero, assists, steering lock, brake bias) stay open; boost belongs to the turbo node.",
+		"notches": [1, 2, 4, -1],
+		"parts": [
+			{"id": "tyres", "label": "Tyres", "rungs": ["Street", "Sport", "Semi-slick", "Slick"], "cost_nights": [0, 1.0, 2.0, 3.5],
+				"paths": ["front_tyre_pressure", "rear_tyre_pressure", "front_static_camber", "rear_static_camber", "front_toe", "rear_toe", "tire_stiffnesses/Road", "longitudinal_grip_ratio/Road"],
+				"ops": [[], [], [], []],
+				"option": "compound", "unlocks": [["street"], ["street", "sport"], ["street", "sport", "semi"], ["street", "sport", "semi", "slick"]]},
+			{"id": "suspension", "label": "Suspension", "rungs": ["Stock", "Sport springs", "Coilovers", "Adjustable coilovers"], "cost_nights": [0, 1.0, 2.0, 3.5],
+				"paths": ["front_spring_length", "rear_spring_length", "front_resting_ratio", "rear_resting_ratio", "front_damping_ratio", "rear_damping_ratio", "front_arb_ratio", "rear_arb_ratio"],
+				"ops": [[], [], [], []]},
+			{"id": "diff", "label": "Differential", "rungs": ["Open", "Viscous LSD", "Clutch LSD", "Plate LSD"], "cost_nights": [0, 1.0, 2.0, 3.5],
+				"paths": ["front_locking_differential_engage_torque", "rear_locking_differential_engage_torque"],
+				"ops": [[], [], [], []]},
+			{"id": "brakes", "label": "Brakes", "rungs": ["Stock", "Fast-road pads", "Bigger discs", "Big brake kit"], "cost_nights": [0, 1.0, 2.0, 3.5],
+				"paths": ["brake_force_multiplier"],
+				"ops": [[], [{"path": "brake_force_multiplier", "mul": 1.04}], [{"path": "brake_force_multiplier", "mul": 1.08}], [{"path": "brake_force_multiplier", "mul": 1.15}]]},
+			{"id": "gearbox", "label": "Gearbox", "rungs": ["Stock", "Short final drive", "Close-ratio", "Sequential"], "cost_nights": [0, 1.0, 2.0, 3.5],
+				"paths": ["final_drive", "gear_ratios/0", "gear_ratios/1", "gear_ratios/2", "gear_ratios/3", "gear_ratios/4"],
+				"ops": [[], [], [], [{"path": "shift_time", "mul": 0.6}]]},
+			{"id": "weight", "label": "Weight", "rungs": ["Stock", "Strip the trunk", "Lightweight panels", "Carbon panels"], "cost_nights": [0, 1.0, 2.0, 3.5],
+				"paths": [],
+				"ops": [[], [{"path": "vehicle_mass", "mul": 0.97}], [{"path": "vehicle_mass", "mul": 0.94}], [{"path": "vehicle_mass", "mul": 0.90}]]}
+		],
+		"options": {
+			"_note": "The Tyres option hook: the tyre rung unlocks compounds, the player fits one (fitted id compound_<id>; none fitted = the best one unlocked). The compound owns tyre friction, so the Tuner has no friction slider on a tree car.",
+			"compound": {
+				"street": {"label": "Street", "ops": []},
+				"sport": {"label": "Sport", "ops": [{"path": "coefficient_of_friction/Road", "mul": 1.04}]},
+				"semi": {"label": "Semi-slick", "ops": [{"path": "coefficient_of_friction/Road", "mul": 1.08}, {"path": "tire_stiffnesses/Road", "mul": 1.1}]},
+				"slick": {"label": "Slick", "ops": [{"path": "coefficient_of_friction/Road", "mul": 1.12}, {"path": "tire_stiffnesses/Road", "mul": 1.2}]}
+			}
+		}
+	},
+
+	"owners": {
+		"_note": "Who owns which number. tree: hardware a node sets; saved tunes stop storing these and the Tuner stops showing them when the tree is wired in. ladder: set by a part rung or its option. Everything else in TuneParams stays the Tuner's, inside the windows.",
+		"tree": ["max_torque", "max_rpm", "torque_shape/low_end", "torque_shape/peak_pos", "torque_shape/plateau", "torque_shape/falloff",
+			"boost_kind", "turbo_gain", "turbo_rpm_thresh", "turbo_tau_up", "turbo_tau_down"],
+		"ladder": ["coefficient_of_friction/Road", "vehicle_mass"]
+	}
+}

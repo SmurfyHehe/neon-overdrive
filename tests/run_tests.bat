@@ -92,6 +92,7 @@ call :run car/car_parts --headless
 call :run car/turbo "--headless --fixed-fps 60"
 call :run car/forced_induction "--headless --fixed-fps 60"
 call :run car/chassis_targets "--headless --fixed-fps 60"
+call :run car/gearbox_per_car "--headless --fixed-fps 60"
 call :run car/reverse_and_tabs --headless
 call :run car/transmission_modes "--headless --fixed-fps 60"
 call :run tuning/auto_tune_worker_mode --headless

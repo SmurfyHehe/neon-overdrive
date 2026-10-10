@@ -23,6 +23,10 @@ extends Node
 enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO }
 
 signal state_changed(new_state: State, old_state: State)
+## Just before a restart reloads the scene / before the game quits (the save
+## system: a restart starts a fresh run, a quit saves it).
+signal restarting
+signal quitting
 
 var state: State = State.PLAYING
 
@@ -140,10 +144,12 @@ func close_autotune() -> void:
 # Fresh run: reload the whole scene. Cheapest correct reset -- no per-system
 # reset code to keep in sync as systems are added.
 func restart() -> void:
+	restarting.emit()
 	get_tree().paused = false
 	get_tree().reload_current_scene()
 
 func quit() -> void:
+	quitting.emit()
 	get_tree().quit()
 
 func _set_state(new_state: State) -> void:
@@ -152,7 +158,7 @@ func _set_state(new_state: State) -> void:
 	# The engine sound is a generator pushed from _process, which stops while the
 	# tree is paused; the buffer then underruns and clicks. Mute its bus for the
 	# pause, unmute on the way back (Phase A, 2026-10-05).
-	for bus_name in [&"Engine", &"Music"]:
+	for bus_name in [&"Engine", &"Turbo", &"Music"]:
 		var bus := AudioServer.get_bus_index(bus_name)
 		if bus >= 0:
 			AudioServer.set_bus_mute(bus, new_state != State.PLAYING)

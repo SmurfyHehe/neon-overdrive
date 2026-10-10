@@ -98,6 +98,9 @@ var health := PowertrainHealth.new()
 ## Fuel and limp mode (Stage C). Off for sim_only cars, like health.
 var fuel := FuelTank.new()
 var limp := LimpMode.new()
+## Broken parts (Stage C damage, slice 1). Off for sim_only cars, like health.
+var damage := CarDamage.new()
+var _head_share := 1.0
 
 ## This car's tune: the one dictionary Vehicle properties are set from and that
 ## CarSpec.set_param() keeps in step with the live car. Set it before add_child()
@@ -254,6 +257,7 @@ func _ready() -> void:
 	add_to_group("aero_vehicles")
 	health.enabled = not sim_only
 	fuel.enabled = not sim_only
+	damage.enabled = not sim_only
 
 	# Engine sound (2026-09-29, prototype of docs/research/PROPOSAL-audio.md option C): a
 	# synthesised engine driven by this car's motor_rpm/throttle. Added after
@@ -264,6 +268,7 @@ func _ready() -> void:
 		add_child(CarAudio.new())
 		add_child(DrivelineAudio.new())
 		add_child(CrashAudio.new())  # crashes and scrapes (2026-10-08)
+		add_child(DamageAudio.new())  # rattle once parts are broken (damage slice 1)
 
 		# Stage A (2026-10-04): headlights + blob shadow, since the world is dark
 		# on purpose now (Look Board B). After the body and wheels exist, because
@@ -291,6 +296,8 @@ func _physics_process(delta: float) -> void:
 	# drafting can recompute and partially cancel the drag force it just
 	# applied this frame. See aero.gd for the actual force math.
 	AeroModel.apply(self)
+	damage.step(self, delta, health, limp)
+	_apply_lamp_damage()
 	health.step(self, delta)
 	fuel.step_values(delta, health.engine_load if health.enabled else throttle_amount, engine_running)
 	if limp.is_limping():
@@ -300,6 +307,17 @@ func _physics_process(delta: float) -> void:
 		if _tune_check_left <= 0.0:
 			_tune_check_left = TUNE_CHECK_SECS
 			_save_tune_if_changed()
+
+## A broken head lamp takes its half of the beam (CarFx's one spot light).
+func _apply_lamp_damage() -> void:
+	var share := damage.headlight_share()
+	if share == _head_share:
+		return
+	_head_share = share
+	var spot := get_node_or_null("Headlights") as SpotLight3D
+	if spot != null:
+		spot.light_energy = CarFx.HEADLIGHT_ENERGY * share
+		spot.visible = share > 0.0
 
 func _exit_tree() -> void:
 	if _keeps_tune:

@@ -93,7 +93,7 @@ const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Veh
 
 ## How far the player's own tail lamps and flares go toward a traffic car's
 ## full brake flare: the chase camera sits right behind them.
-const PLAYER_BRAKE_GLOW := 0.6
+const PLAYER_BRAKE_GLOW := 0.35
 var chassis_visual: Node3D
 ## H toggles them (set_headlights); police heat reads this.
 var headlights_on := true

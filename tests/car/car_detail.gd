@@ -9,6 +9,10 @@ extends SceneTree
 #   open at speed; it builds the part once and hides it after
 # - the undercarriage keeps its LOD on the player (real set to LOD0_END, plate
 #   to LOD1_END) and the Low preset hides it unless detail is on
+# - (Part 2) a car on its roof shows its detail parts and, on Low, its
+#   underside at once; a car in the air shows them after AIRBORNE_MIN, not on
+#   a kerb hop; both hold EXPOSED_HOLD after it lands or rights itself; a
+#   flipped cop shows its shocks too
 # - a traffic car gets no CarDetail node; a cop (underside + parts) does
 # - nothing logs an error the whole time
 # Exit code 1 on failure. Run:
@@ -47,6 +51,12 @@ func _run() -> void:
 	_check(logger.errors.is_empty(), "errors were logged: %s" % [logger.errors])
 	print("PASS" if fails == 0 else "FAILURES: %d" % fails)
 	quit(1 if fails > 0 else 0)
+
+## The exposed timers run on the wall clock, and headless frames do not.
+func _wait_secs(secs: float) -> void:
+	var until := Time.get_ticks_msec() + int(secs * 1000.0)
+	while Time.get_ticks_msec() < until:
+		await physics_frame
 
 func _floor() -> StaticBody3D:
 	var body := StaticBody3D.new()
@@ -144,6 +154,52 @@ func _player() -> void:
 		GraphicsSettings.preset = was
 		GraphicsSettings.apply(self)
 		_check(under.visible and plate.visible, "back on %s it shows" % was)
+
+	# Exposed undersides (Part 2). On its roof: on at once, and the underside
+	# shows even on Low. Righted: still on through the hold, off after it.
+	var rest := player.global_transform
+	player.freeze = true
+	player.global_transform = Transform3D(Basis(Vector3.FORWARD, PI), Vector3(0.0, 1.0, 0.0))
+	await physics_frame
+	_check(CarDetail.is_flipped(player), "upside down counts as flipped")
+	var preset_was := GraphicsSettings.preset
+	GraphicsSettings.preset = "low"
+	GraphicsSettings.apply(self)
+	detail.refresh()
+	_check(detail.on and shocks != null and shocks.visible, "on its roof: detail on, the shocks show")
+	_check(under != null and under.visible, "and the underside shows on Low while flipped")
+	player.global_transform = rest
+	player.freeze = false
+	await physics_frame
+	detail.refresh()
+	_check(detail.on, "righted: still on during the hold")
+	await _wait_secs(CarDetail.EXPOSED_HOLD + 0.3)
+	detail.refresh()
+	_check(not detail.on, "and off %.1f s after it" % CarDetail.EXPOSED_HOLD)
+	_check(under != null and not under.visible, "the underside hides again on Low")
+	GraphicsSettings.preset = preset_was
+	GraphicsSettings.apply(self)
+
+	# In the air: nothing on a fresh hop, on once it has been up AIRBORNE_MIN,
+	# off again after the hold once it lands.
+	player.freeze = true
+	player.global_transform = Transform3D(Basis(), Vector3(0.0, 3.0, 0.0))
+	await physics_frame
+	await physics_frame
+	_check(CarDetail.is_airborne(player) and not CarDetail.is_flipped(player), "3 m up with no wheel touching counts as airborne")
+	detail.refresh()
+	_check(not detail.on, "a fresh hop does not turn detail on")
+	await _wait_secs(CarDetail.AIRBORNE_MIN + 0.15)
+	detail.refresh()
+	_check(detail.on, "airborne past %.2f s: on" % CarDetail.AIRBORNE_MIN)
+	player.global_transform = rest
+	player.freeze = false
+	for i in 10:
+		await physics_frame
+	await _wait_secs(CarDetail.EXPOSED_HOLD + 0.3)
+	detail.refresh()
+	_check(not CarDetail.is_airborne(player), "back on the floor the wheels touch")
+	_check(not detail.on, "landed: off after the hold")
 	player.queue_free()
 	await process_frame
 
@@ -169,6 +225,14 @@ func _traffic() -> void:
 		d.refresh()
 		var sh := cop.get_node_or_null("Shocks") as MultiMeshInstance3D
 		_check(sh != null and sh.visible and is_equal_approx(sh.visibility_range_end, CarParts.LOD_RANGE), "detail on builds the cop's shocks with the %.0f m range" % CarParts.LOD_RANGE)
+		d.force = false
+		d.refresh()
+		_check(not d.on, "force off: the cop's detail is off again")
+		cop.freeze = true
+		cop.global_transform = Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(-5.0, 1.0, 0.0))
+		await physics_frame
+		d.refresh()
+		_check(d.on and sh != null and sh.visible, "a cop on its side shows its shocks")
 	plain.queue_free()
 	cop.queue_free()
 	await process_frame

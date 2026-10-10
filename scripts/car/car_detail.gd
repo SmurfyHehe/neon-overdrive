@@ -15,6 +15,13 @@ extends Node
 #   - the garage view (`CarDetail.garage`, set by the garage screen later)
 #   - the car is stopped (under STOP_SPEED) with a panel open (`panel_open`,
 #     set by the hood/door/trunk code)
+#   - the underside is exposed (Part 2, flipped-car undersides): the car is
+#     on its side or roof (basis.y.y under EXPOSED_UP, the wreck test's
+#     threshold) or every wheel has been off the ground for AIRBORNE_MIN
+#     seconds (a kerb hop builds nothing). It stays on EXPOSED_HOLD seconds
+#     after the car lands or rights itself, so a bumpy landing does not
+#     flicker the shocks. The undercarriage follows: on Low, where it is
+#     hidden while driving, it shows while the car is exposed.
 # It polls every POLL_SECS and also answers the state change signal at once,
 # so photo mode never shows a frame without the parts. It runs while the tree
 # is paused (photo mode pauses it).
@@ -27,6 +34,9 @@ extends Node
 const NODE_NAME := "CarDetail"
 const STOP_SPEED := 0.5  # m/s, under this the car counts as stopped
 const POLL_SECS := 0.2
+const EXPOSED_UP := 0.5     # basis.y.y below this: on its side or roof (TrafficCar.WRECK_UP)
+const AIRBORNE_MIN := 0.25  # seconds in the air before a jump counts as exposed
+const EXPOSED_HOLD := 0.6   # seconds detail stays on after the car lands or rights itself
 
 ## The run's state machine, bound once by game.gd (null in tests and tools:
 ## then photo mode never counts).
@@ -46,6 +56,8 @@ var on := false
 var _parts: Array = []  # [{name, build: Callable, node: Node}]
 var _underside: Array[VisualInstance3D] = []
 var _t := 0.0
+var _exposed_until_ms := 0
+var _airborne_since_ms := -1
 
 ## The car's CarDetail node, made on first use.
 static func of(v: Vehicle) -> CarDetail:
@@ -89,12 +101,45 @@ func node_of(part_name: String) -> Node:
 			return p.node
 	return null
 
-static func wants_detail(v: Vehicle, panel: bool, forced := false) -> bool:
-	if forced or garage:
+static func wants_detail(v: Vehicle, panel: bool, forced := false, exposed := false) -> bool:
+	if forced or garage or exposed:
 		return true
 	if game_state != null and game_state.state == GameState.State.PHOTO:
 		return true
 	return panel and v != null and absf(v.speed) < STOP_SPEED
+
+## On its side or roof.
+static func is_flipped(v: Vehicle) -> bool:
+	return v != null and v.is_inside_tree() and v.global_transform.basis.y.y < EXPOSED_UP
+
+## No wheel touching anything. A car with no wheels wired up is never airborne.
+static func is_airborne(v: Vehicle) -> bool:
+	if v == null or not v.is_inside_tree():
+		return false
+	var any := false
+	for w in [v.front_left_wheel, v.front_right_wheel, v.rear_left_wheel, v.rear_right_wheel]:
+		if w == null:
+			continue
+		if (w as RayCast3D).is_colliding():
+			return false
+		any = true
+	return any
+
+## True while the underside can be seen from outside (flipped, or airborne
+## for AIRBORNE_MIN) or within EXPOSED_HOLD seconds of that.
+func exposed() -> bool:
+	var now := Time.get_ticks_msec()
+	var now_exposed := is_flipped(vehicle)
+	if is_airborne(vehicle):
+		if _airborne_since_ms < 0:
+			_airborne_since_ms = now
+		now_exposed = now_exposed or now - _airborne_since_ms >= int(AIRBORNE_MIN * 1000.0)
+	else:
+		_airborne_since_ms = -1
+	if now_exposed:
+		_exposed_until_ms = now + int(EXPOSED_HOLD * 1000.0)
+		return true
+	return now < _exposed_until_ms
 
 func _process(delta: float) -> void:
 	_t += delta
@@ -108,7 +153,7 @@ func apply_graphics() -> void:
 
 ## Recompute and apply. Cheap when nothing changed.
 func refresh() -> void:
-	var want := wants_detail(vehicle, panel_open, force)
+	var want := wants_detail(vehicle, panel_open, force, exposed())
 	if want == on:
 		return
 	on = want

@@ -61,7 +61,9 @@ func _initialize() -> void:
 	OS.set_environment("NEON_TRAFFIC", "14")
 	OS.set_environment("NEON_ROAD", "")
 	OS.set_environment("NEON_ACT", "")
-	OS.set_environment("NEON_ROAD_SEED", "")
+	# One night's road, so the drive is the same every run (the game rolls a new
+	# one each night when this is not set).
+	OS.set_environment("NEON_ROAD_SEED", "31337")
 	OS.set_environment("NEON_CITY_LIGHTS", "1")
 	OS.set_environment("NEON_LAYOUT", "0")
 	SaveStore.root = "user://test_loop_road"
@@ -340,12 +342,13 @@ func _put(p: PlayerCar, x: float, z: float, yaw: float) -> void:
 ## far side's lane 1.
 func _drive(p: PlayerCar, way: float) -> void:
 	p.driver = func(c: Vehicle) -> void:
-		# About 110 km/h: this bot steers on its lane offset alone.
-		c.throttle_input = 1.0 if c.linear_velocity.length() < 30.0 else 0.0
+		# About 100 km/h, with the pure-pursuit steering the traffic uses (and
+		# the damping of tests/traffic/traffic_harness.gd's lane driver).
+		c.throttle_input = 1.0 if c.linear_velocity.length() < 28.0 else 0.0
 		c.brake_input = 0.0
-		var u := RoadFrame.unroll(c.global_position)
 		var lane := TrafficManager.lane_centre(1, way > 0.0)
-		c.steering_input = clampf((u.x - lane) * 0.08 * -way, -0.3, 0.3)
+		var side_v := RoadFrame.dir_to_road(RoadFrame.unroll(c.global_position).z, c.linear_velocity).x
+		c.steering_input = TrafficCar.lane_steer(c, lane - side_v * 3.0, way, 2.5, 0.0008)
 		if c.current_gear < 3 and c.motor_rpm > 6000.0:
 			c.current_gear += 1
 

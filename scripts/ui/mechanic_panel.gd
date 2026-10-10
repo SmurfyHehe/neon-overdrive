@@ -14,7 +14,7 @@ const KEEPS := [
 	["gearbox", "Keep gearbox", ["final_drive", "gear_ratios/"]],
 	["aero", "Keep aero", ["coefficient_of_drag", "aero_downforce_coefficient_front", "aero_downforce_coefficient_rear"]],
 	["brakes", "Keep brakes", ["brake_force_multiplier"]],
-	["tyres", "Keep tyres", ["tire_stiffnesses/", "coefficient_of_friction/", "lateral_grip_assist/", "longitudinal_grip_ratio/"]],
+	["tyres", "Keep tires", ["tire_stiffnesses/", "coefficient_of_friction/", "lateral_grip_assist/", "longitudinal_grip_ratio/"]],
 ]
 ## Normal search (60 runs) in the simple view.
 const SIMPLE_BUDGET := 1

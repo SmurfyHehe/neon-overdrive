@@ -35,9 +35,9 @@ const KNOBS := [
 	["falloff", "Torque at redline", "torque_shape/falloff", 0.01],
 	# Settings safety part 2 (2026-10-07): every chassis number, out to the
 	# Advanced hard limits (TuneParams.ADVANCED), past the simple pages' ranges.
-	["friction", "Tyre friction", "coefficient_of_friction/Road", 0.05],
+	["friction", "Tire friction", "coefficient_of_friction/Road", 0.05],
 	["long_grip", "Longitudinal grip", "longitudinal_grip_ratio/Road", 0.05],
-	["stiffness", "Tyre stiffness", "tire_stiffnesses/Road", 0.5],
+	["stiffness", "Tire stiffness", "tire_stiffnesses/Road", 0.5],
 	["pressure_f", "Pressure front bar", "front_tyre_pressure", 0.1],
 	["pressure_r", "Pressure rear bar", "rear_tyre_pressure", 0.1],
 	["camber_f", "Camber front deg", "front_static_camber", 0.5],
@@ -65,6 +65,8 @@ const KNOBS := [
 ## Gears must each be shorter than the one before; a slider stops this far short
 ## of its neighbour (an out-of-order box makes the automatic hunt between gears).
 const GEAR_GAP := 0.01
+## In front of the name of any row that is not at its stock value (tuner overhaul).
+const CHANGED_DOT := "• "
 const AIR_DENSITY := 1.2  # kg/m^3, for the drag-limited top speed estimate
 # gevp_vehicle.gd process_motor() only cuts torque above max_rpm * 1.1, and the
 # torque curve holds its redline value up to there -- so the speeds a gear
@@ -80,6 +82,7 @@ var values := {}
 var start_values := {}
 var sliders := {}
 var value_labels := {}
+var name_labels := {}   # key -> the row's name; a dot marks a value that is not stock
 var line_labels := {}  # key -> consequence Label (settings safety part 3)
 var stock := CarSpec.player_spec(PlayerCar.chassis_kind())  # what "Stock" means for this car, as on the Tuner screen
 var readout: Label
@@ -104,6 +107,7 @@ func _ready() -> void:
 		var name_label := Label.new()
 		name_label.text = k[1]
 		grid.add_child(name_label)
+		name_labels[k[0]] = name_label
 		var entry := TuneParams.find(k[2])
 		var s := HSlider.new()
 		s.min_value = entry.adv_min
@@ -209,6 +213,8 @@ func _refresh() -> void:
 		value_labels[k[0]].text = ("%d" % values[k[0]]) if step >= 1.0 else ("%.3f" % values[k[0]] if step < 0.01 else "%.2f" % values[k[0]])
 		# Danger colour and the consequence line (settings safety part 3).
 		var path: String = k[2]
+		var changed := absf(float(values[k[0]]) - TuneParams.get_value(stock, path)) > 0.0005
+		name_labels[k[0]].text = (CHANGED_DOT if changed else "") + k[1]
 		var level := SettingDanger.level(path, values[k[0]])
 		var c := SettingDanger.colour(level)
 		value_labels[k[0]].add_theme_color_override("font_color", c)

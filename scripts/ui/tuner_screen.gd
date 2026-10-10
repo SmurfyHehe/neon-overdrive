@@ -2,9 +2,18 @@ class_name TunerScreen
 extends CanvasLayer
 
 # The Tuner (Tuner redesign PR 3, 2026-10-06; proposal approved by Roy, see
-# docs/planning/tuner-redesign-proposal-2026-10-06.md). T opens it on Setup, Y on
+# docs/planning/tuner-redesign-proposal-2026-10-06.md). T opens it on Quick, Y on
 # Mechanic, Esc closes; the game is paused while it is open (GameState.TUNING /
 # AUTOTUNE).
+#
+# Tuner overhaul (2026-10-10, Roy's decisions): Quick is the first page and the
+# only one in the list until its Detailed switch is on. It has the presets (the
+# stat panel previews the one on show before Enter fits it), three dials that
+# each move several real settings (TunerModel.DIALS; the hint line says what one
+# notch either way does to the numbers), and Ask Walt, which runs Auto-Tune
+# toward one goal and fits the result. Every row has a "You'll feel" line
+# (TunerFeel) and a dot when it is not at stock; Backspace undoes the last
+# change, whichever page or panel made it.
 #
 #   +------------+------------------------------+-------------+
 #   | page list  | the page: notch bars or a    | stat panel  |
@@ -78,6 +87,26 @@ var stats: TunerStats
 var before_notches := {}
 var before_stats := {}
 
+## In front of the name of any row or page that is not at stock.
+const CHANGED_DOT := "• "
+const UNDO_MAX := 100
+## The Quick page's Detailed switch: off, the page list is only Quick.
+var detailed := false
+var page_titles: Array[String] = []
+## The preset on show on the Quick page (an index into TunerModel.PRESETS); it
+## is only fitted on Enter, until then the stat panel previews it.
+var preset_show := 0
+var preview_label: Label
+## Ask Walt: the goal picked, what the row says, and whether a search of his is out.
+var walt_goal := 0
+var walt_text := ""
+var _walt_active := false
+## Backspace: the setups before each change, newest last (TunerModel.snapshot).
+var undo_stack: Array[Dictionary] = []
+var _last_snap := {}
+var _undo_last_path := ""
+var _undoing := false
+
 func _init(car: PlayerCar, state: GameState) -> void:
 	player = car
 	game_state = state
@@ -95,8 +124,10 @@ func _ready() -> void:
 	# it still shows after the screen closes.
 	watchdog = TuneWatchdog.new(player, game_state)
 	get_parent().add_child.call_deferred(watchdog)
-	for p in TunerModel.pages():
+	for p in [TunerModel.quick_page()] + TunerModel.pages():
 		page_ids.append(p.id)
+		page_titles.append(p.title)
+	detailed = TunerGate.detailed()
 
 	var frame := PanelContainer.new()
 	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -117,7 +148,7 @@ func _ready() -> void:
 
 	var header := HBoxContainer.new()
 	column.add_child(header)
-	car_label = _label("TUNER   P1 Coupe", SILVER)
+	car_label = _label(_car_title(), SILVER)
 	car_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(car_label)
 	preset_label = _label("", AMBER)
@@ -131,8 +162,8 @@ func _ready() -> void:
 	var page_list := VBoxContainer.new()
 	page_list.custom_minimum_size = Vector2(130, 0)
 	body.add_child(page_list)
-	for p in TunerModel.pages():
-		var l := _label(p.title, SILVER)
+	for title in page_titles:
+		var l := _label(title, SILVER)
 		page_list.add_child(l)
 		page_labels.append(l)
 
@@ -205,6 +236,9 @@ func _ready() -> void:
 	var right := VBoxContainer.new()
 	right.custom_minimum_size = Vector2(250, 0)
 	body.add_child(right)
+	preview_label = _label("", AMBER)
+	preview_label.visible = false
+	right.add_child(preview_label)
 	stats = TunerStats.new()
 	right.add_child(stats)
 	pit_wall = PitWall.new()
@@ -218,12 +252,22 @@ func _ready() -> void:
 
 	hint = _label("", SILVER)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.custom_minimum_size = Vector2(0, 44)
+	hint.custom_minimum_size = Vector2(0, 92)  # what it is, what you'll feel, and a dial's preview
 	column.add_child(hint)
 
+	# The Exhaust sliders have no signal of their own: follow them for the dots and undo.
+	for sl in exhaust.sliders.values():
+		(sl as Range).value_changed.connect(func(_v: float) -> void: _refresh())
+	exhaust.anti_lag_check.toggled.connect(func(_on: bool) -> void: _refresh())
+	get_viewport().gui_focus_changed.connect(func(_c: Control) -> void: _refresh_hint())
 	manual.tune_changed.connect(_on_panel_changed)
 	auto.tune_changed.connect(_on_auto_changed)
 	game_state.state_changed.connect(_on_state_changed)
+
+## "TUNER   Kobo - Hot hatch": the car being tuned, by its own name.
+func _car_title() -> String:
+	var k := PlayerCars.info(PlayerCar.chassis_kind())
+	return "TUNER   %s - %s" % [k.name, k.label]
 
 func _label(text: String, colour: Color) -> Label:
 	var l := Label.new()
@@ -245,7 +289,15 @@ func _on_state_changed(new_state: GameState.State, old_state: GameState.State) -
 			for p in TunerModel.pages():
 				for s in p.settings:
 					before_notches[s.id] = model.notch(s)
-		show_page("mechanic" if new_state == GameState.State.AUTOTUNE else "setup")
+			for s in TunerModel.quick_page().settings:
+				if s.kind == "dial":
+					before_notches[s.id] = model.notch(s)
+			car_label.text = _car_title()
+			preset_show = maxi(TunerModel.PRESETS.find(model.preset), 0)
+			undo_stack.clear()
+			_last_snap = model.snapshot()
+			_undo_last_path = ""
+		show_page("mechanic" if new_state == GameState.State.AUTOTUNE else "quick")
 	else:
 		# Sliders and buttons keep keyboard focus otherwise and eat the arrow keys.
 		var focused := get_viewport().gui_get_focus_owner()
@@ -260,9 +312,7 @@ func show_page(id: String) -> void:
 	row_index = 0
 	var page := TunerModel.page(id)
 	page_title.text = page.title.to_upper()
-	for i in page_labels.size():
-		page_labels[i].text = ("> " if i == page_index else "  ") + TunerModel.pages()[i].title
-		page_labels[i].add_theme_color_override("font_color", SODIUM if i == page_index else SILVER)
+	_undo_last_path = ""
 	for pid in panel_pages:
 		panel_pages[pid].visible = pid == id
 	for c in content.get_children():
@@ -273,11 +323,13 @@ func show_page(id: String) -> void:
 		focused.release_focus()
 	for s in page.settings:
 		rows.append(_add_row(s))
-	if not page.settings.is_empty():
+	if not page.settings.is_empty() and id != "quick":
 		rows.append(_add_reset_row())
 	_refresh()
 	if id == "setup":
 		preset_buttons[0].grab_focus()
+	elif id == "quick":
+		pass  # rows, like the settings pages: nothing takes focus
 	elif id == "mechanic":
 		(mechanic.goal_buttons.values()[0] as Control).grab_focus()
 	elif id == "exhaust":
@@ -307,16 +359,16 @@ func _add_row(s: Dictionary) -> Dictionary:
 	var name := _label(s.label, SILVER)
 	name.custom_minimum_size = Vector2(170, 0)
 	h.add_child(name)
-	var lo := _label(s.lo_word if s.kind == "range" else "", DIM)
+	var lo := _label(s.get("lo_word", ""), DIM)
 	lo.custom_minimum_size = Vector2(48, 0)
 	lo.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	h.add_child(lo)
 	var bar := NotchBar.new()
 	bar.custom_minimum_size = Vector2(176, 18)
 	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	bar.choices = s.options.size() if s.kind == "choice" else TunerModel.NOTCHES
+	bar.choices = s.options.size() if s.has("options") else TunerModel.NOTCHES
 	h.add_child(bar)
-	var hi := _label(s.hi_word if s.kind == "range" else "", DIM)
+	var hi := _label(s.get("hi_word", ""), DIM)
 	hi.custom_minimum_size = Vector2(48, 0)
 	h.add_child(hi)
 	var value := _label("", AMBER)
@@ -374,9 +426,11 @@ func _input(event: InputEvent) -> void:
 	var key: int = (event as InputEventKey).keycode
 	match key:
 		KEY_Q:
-			show_page(page_ids[(page_index + page_ids.size() - 1) % page_ids.size()])
+			_step_page(-1)
 		KEY_E:
-			show_page(page_ids[(page_index + 1) % page_ids.size()])
+			_step_page(1)
+		KEY_BACKSPACE:
+			undo()
 		_:
 			if rows.is_empty():
 				return  # panel pages: their own controls take the arrows
@@ -386,17 +440,100 @@ func _input(event: InputEvent) -> void:
 				KEY_LEFT: _nudge(-1)
 				KEY_RIGHT: _nudge(1)
 				KEY_ENTER, KEY_KP_ENTER:
-					if rows[row_index].setting.kind != "reset":
-						return
-					_nudge(1)
+					match rows[row_index].setting.kind:
+						"reset": _nudge(1)
+						"preset": _on_preset(TunerModel.PRESETS[preset_show])
+						"walt": ask_walt()
+						"switch": set_detailed(not detailed)
+						_: return
 				_: return
 			_refresh()
 	get_viewport().set_input_as_handled()
 
+## The pages Q and E walk through: only Quick until Detailed is on.
+func visible_page_ids() -> Array[String]:
+	var only: Array[String] = ["quick"]
+	return page_ids if detailed else only
+
+func _step_page(step: int) -> void:
+	var ids := visible_page_ids()
+	var i := ids.find(current_page())
+	var to: String = ids[0] if i < 0 else ids[(i + step + ids.size()) % ids.size()]
+	if to != current_page():
+		show_page(to)
+
+## Shows or hides the full pages. `save` false keeps it out of the settings file.
+func set_detailed(on: bool, save := true) -> void:
+	detailed = on
+	if save:
+		TunerGate.set_detailed(on)
+	_refresh()
+
+## Backspace: puts the car back to how it was before the last change. True if
+## there was one to undo.
+func undo() -> bool:
+	if undo_stack.is_empty():
+		return false
+	model.restore(undo_stack.pop_back())
+	_undoing = true
+	manual.refresh_from_player()
+	exhaust.refresh()
+	auto.refresh_lock_labels()
+	preset_show = maxi(TunerModel.PRESETS.find(model.preset), 0)
+	_refresh()
+	_undoing = false
+	_undo_last_path = ""
+	return true
+
+## Sends Walt out for the goal on the Ask Walt row: an Auto-Tune search with
+## that one goal, through the Mechanic page's own panel. The result is fitted
+## when he is back (Backspace takes it off again). Enter while he is out calls
+## him back.
+func ask_walt() -> void:
+	if auto.running:
+		auto._on_cancel()
+		_walt_active = false
+		walt_text = "Called off"
+		_refresh()
+		return
+	mechanic.set_advanced(false)
+	mechanic.set_goal(TunerModel.WALT_GOALS[walt_goal][0])
+	auto._on_run()
+	_walt_active = auto.running
+	walt_text = "Walt is out on the track" if _walt_active else auto.status_label.text
+	_refresh()
+
+## Walt is back (or was stopped): fit what he found, if it beat the car as it was.
+func _walt_finish() -> void:
+	_walt_active = false
+	if auto.result.get("improved", false):
+		var pct := float(auto.result.get("score", 0.0)) * 100.0
+		auto._on_apply()
+		walt_text = "Fitted: %+.1f%% %s" % [pct, (TunerModel.WALT_GOALS[walt_goal][1] as String).to_lower()]
+	elif auto.result.is_empty():
+		walt_text = auto.status_label.text  # cancelled or failed: its own words
+		if walt_text == "":
+			walt_text = "Nothing found"
+	else:
+		walt_text = "Nothing better found"
+	_refresh()
+
 func _nudge(step: int) -> void:
-	if rows[row_index].setting.kind == "reset":
+	var kind: String = rows[row_index].setting.kind
+	if kind == "reset":
 		if step > 0:
 			reset_current_page()
+		return
+	if kind == "preset":
+		preset_show = clampi(preset_show + step, 0, TunerModel.PRESETS.size() - 1)
+		return
+	if kind == "walt":
+		if not _walt_active:
+			walt_goal = clampi(walt_goal + step, 0, TunerModel.WALT_GOALS.size() - 1)
+			walt_text = ""
+		return
+	if kind == "switch":
+		set_detailed(step > 0)
 		return
 	if model.nudge(rows[row_index].setting, step):
 		manual.refresh_from_player()
@@ -436,6 +573,12 @@ func cancel_test_run(why: String) -> void:
 	test_button.text = why
 
 func _process(delta: float) -> void:
+	if _walt_active:
+		if not auto.running:
+			_walt_finish()
+		elif walt_text != auto.status_label.text:
+			walt_text = auto.status_label.text
+			_refresh_quick_rows()
 	if not test_running():
 		return
 	if Time.get_ticks_msec() - _test_started_ms > test_timeout_s * 1000.0:
@@ -460,6 +603,7 @@ func _process(delta: float) -> void:
 
 func _on_preset(name: String) -> void:
 	model.apply_preset(name)
+	preset_show = maxi(TunerModel.PRESETS.find(name), 0)
 	manual.refresh_from_player()
 	exhaust.refresh()
 	auto.refresh_lock_labels()
@@ -478,16 +622,73 @@ func _on_auto_changed() -> void:
 
 # ---------- drawing ----------
 
+## Notes the setup before a change so Backspace can put it back. Every change
+## ends in _refresh(), whichever page or panel made it, so this is the one place.
+## Dragging one raw slider is one undo step, not one per tick of the slider.
+func _track_undo() -> void:
+	var snap := model.snapshot()
+	if _last_snap.is_empty():
+		_last_snap = snap
+		return
+	var changed: Array[String] = []
+	for p in snap.vals:
+		if absf(float(snap.vals[p]) - float(_last_snap.vals[p])) > 1e-9:
+			changed.append(p)
+	if changed.is_empty():
+		return
+	if not _undoing:
+		var same_slider := rows.is_empty() and changed.size() == 1 and changed[0] == _undo_last_path
+		if not same_slider:
+			undo_stack.append(_last_snap)
+			if undo_stack.size() > UNDO_MAX:
+				undo_stack.pop_front()
+		_undo_last_path = changed[0] if changed.size() == 1 else ""
+	_last_snap = snap
+
+## The Quick page's own rows (preset on show, Walt, Detailed); cheap, so Walt's
+## progress can redraw them every poll.
+func _refresh_quick_rows() -> void:
+	for r: Dictionary in rows:
+		var s: Dictionary = r.setting
+		match s.kind:
+			"preset":
+				var name: String = TunerModel.PRESETS[preset_show]
+				var fitted := name == model.preset
+				r.value.text = name + ("  preview" if not fitted else ("  modified" if model.modified else ""))
+				r.bar.now = preset_show
+				r.bar.before = maxi(TunerModel.PRESETS.find(model.preset), 0)
+			"walt":
+				r.value.text = walt_text if walt_text != "" else str(s.options[walt_goal])
+				r.bar.now = walt_goal
+				r.bar.before = walt_goal
+			"switch":
+				r.value.text = s.options[int(detailed)]
+				r.bar.now = int(detailed)
+				r.bar.before = int(detailed)
+			_:
+				continue
+		r.bar.queue_redraw()
+
 func _refresh() -> void:
+	_track_undo()
 	preset_label.text = "Setup: " + model.preset_label()
+	for i in page_labels.size():
+		var dot := CHANGED_DOT if model.page_changed(page_ids[i]) else ""
+		page_labels[i].text = ("> " if i == page_index else "  ") + dot + page_titles[i]
+		page_labels[i].add_theme_color_override("font_color", SODIUM if i == page_index else SILVER)
+		page_labels[i].visible = detailed or i == page_index or page_ids[i] == "quick"
 	for i in rows.size():
 		var r: Dictionary = rows[i]
 		var s: Dictionary = r.setting
 		var focused := i == row_index
-		r.name.text = ("> " if focused else "  ") + s.label
+		var row_dot := CHANGED_DOT if s.kind != "reset" and model.is_changed(s) else ""
+		r.name.text = ("> " if focused else "  ") + row_dot + s.label
 		r.name.add_theme_color_override("font_color", SODIUM if focused else SILVER)
 		if s.kind == "reset":
 			continue
+		r.bar.focused = focused
+		if s.kind in ["preset", "walt", "switch"]:
+			continue  # drawn by _refresh_quick_rows below
 		r.value.text = model.value_text(s)
 		var danger := SettingDanger.Level.GREEN
 		if r.path != "":
@@ -499,27 +700,110 @@ func _refresh() -> void:
 		r.value.add_theme_color_override("font_color", AMBER if danger == SettingDanger.Level.GREEN else SettingDanger.colour(danger))
 		r.bar.now = model.notch(s)
 		r.bar.before = before_notches.get(s.id, r.bar.now)
-		r.bar.focused = focused
 		r.bar.queue_redraw()
-	var page := TunerModel.page(current_page())
-	if not rows.is_empty():
-		hint.text = rows[row_index].setting.hint
-	else:
-		hint.text = {
-			"setup": "Stock: as it left the factory. Street: forgiving and comfortable. Grip: fast laps. Drift: easy slides.",
-			"mechanic": "The mechanic tries setups on a closed track and keeps what scores best for your goals.",
-			"exhaust": "How the exhaust sounds, and the flames. Purely cosmetic.",
-			"advanced": "Every raw number, out to the extremes: gearing, power, tyres, suspension, diff, brakes, aero, assists.",
-		}.get(page.id, "")
+	_refresh_quick_rows()
+	_refresh_hint()
 	if stats.measured_for != player.spec.hash():
 		stats.measured = {}  # measured on a setup the car no longer has
 	stats.measured_for = player.spec.hash()
-	stats.set_values(before_stats, TunerModel.estimate(player.spec))
-	var flip := stats.measured.has("trace") and stock_run.has("trace")
+	# Hover preview: with the Preset row in focus and a preset on show that is not
+	# the one fitted, the panel shows what fitting it would do (silver = now).
+	var now_est := TunerModel.estimate(player.spec)
+	var previewing := _preview_preset() != ""
+	preview_label.visible = previewing
+	stats.preview = previewing
+	if previewing:
+		var scratch := CarSpec.clone_spec(player.spec)
+		TunerModel.new(null, scratch, model.stock).apply_preset(_preview_preset())
+		preview_label.text = "PREVIEW: %s" % _preview_preset().to_upper()
+		stats.set_values(now_est, TunerModel.estimate(scratch))
+	else:
+		stats.set_values(before_stats, now_est)
+	var flip := not previewing and stats.measured.has("trace") and stock_run.has("trace")
 	stats.visible = not flip
 	pit_wall.visible = flip
 	if flip:
 		pit_wall.show_result(stats.measured, stock_run)
+
+## The preset the stat panel is previewing, or "" for none.
+func _preview_preset() -> String:
+	if rows.is_empty() or rows[row_index].setting.kind != "preset":
+		return ""
+	var name: String = TunerModel.PRESETS[preset_show]
+	return "" if name == model.preset and not model.modified else name
+
+## The line at the bottom: what the focused row is, what you'll feel, and for a
+## dial what one notch either way does to the numbers. On the panel pages it
+## follows the slider that has the keyboard.
+func _refresh_hint() -> void:
+	if hint == null or not visible:
+		return
+	if not rows.is_empty():
+		var s: Dictionary = rows[row_index].setting
+		var text: String = s.hint
+		var feel := TunerFeel.for_setting(s) if s.kind != "reset" else ""
+		if feel != "":
+			text += "\n" + TunerFeel.PREFIX + feel
+		if s.kind == "dial":
+			text += "\n" + _dial_preview(s)
+		hint.text = text
+		return
+	var page_text: String = {
+		"setup": "Stock: as it left the factory. Street: forgiving and comfortable. Grip: fast laps. Drift: easy slides.",
+		"mechanic": "Walt tries setups on a closed track and keeps what scores best for your goals.",
+		"exhaust": "How the exhaust sounds, and the flames. Purely cosmetic.",
+		"advanced": "Every raw number, out to the extremes: gearing, power, tires, suspension, diff, brakes, aero, assists.",
+	}.get(current_page(), "")
+	var slider_feel := TunerFeel.for_path(_focused_path())
+	if slider_feel != "":
+		page_text += "\n" + TunerFeel.PREFIX + slider_feel
+	hint.text = page_text
+
+## The TuneParams path of the raw slider that has the keyboard (Advanced or
+## Exhaust), or "".
+func _focused_path() -> String:
+	var c := get_viewport().gui_get_focus_owner() if is_inside_tree() else null
+	if c == null:
+		return ""
+	var key = manual.sliders.find_key(c)
+	if key != null:
+		return manual._path_of(key)
+	key = exhaust.sliders.find_key(c)
+	if key != null:
+		return "exhaust/" + str(key)
+	return "exhaust/anti_lag" if c == exhaust.anti_lag_check else ""
+
+## "One notch toward Grip: 0-100 +0.05 s ...": what the estimates do either way.
+func _dial_preview(s: Dictionary) -> String:
+	var now_est := TunerModel.estimate(player.spec)
+	var d := model.dial(s.id)
+	var parts: Array[String] = []
+	for step: int in [-1, 1]:
+		var word: String = s.lo_word if step < 0 else s.hi_word
+		if absi(d + step) > TunerModel.DIAL_STEPS:
+			parts.append("%s: as far as it goes." % word)
+			continue
+		var scratch := CarSpec.clone_spec(player.spec)
+		var vals := model.dial_values(s.id, d + step)
+		for p in vals:
+			TuneParams.set_value(scratch, p, vals[p])
+		parts.append("One notch toward %s: %s." % [word, delta_words(now_est, TunerModel.estimate(scratch))])
+	return "  ".join(parts)
+
+## The change between two stat estimates in a few words.
+static func delta_words(a: Dictionary, b: Dictionary) -> String:
+	var out: Array[String] = []
+	if absf(b.top - a.top) >= 0.5:
+		out.append("top speed %+d km/h" % roundi(b.top - a.top))
+	if absf(b.accel - a.accel) >= 0.02:
+		out.append("0-100 %+.2f s" % (b.accel - a.accel))
+	if absf(b.brake - a.brake) >= 0.2:
+		out.append("100-0 %+.1f m" % (b.brake - a.brake))
+	if absf(b.grip - a.grip) >= 0.005:
+		out.append("grip %+.2f g" % (b.grip - a.grip))
+	if absf(b.balance - a.balance) >= 0.02:
+		out.append("more oversteer" if b.balance > a.balance else "more understeer")
+	return ", ".join(out) if not out.is_empty() else "the numbers stay, the feel changes"
 
 # ---------- small drawn widgets ----------
 
@@ -567,6 +851,8 @@ class TunerStats extends VBoxContainer:
 	## change to the car clears them back to estimates.
 	var measured := {}
 	var measured_for := 0
+	## Showing a preset that is not fitted: estimates only, never the track numbers.
+	var preview := false
 
 	func _ready() -> void:
 		add_theme_constant_override("separation", 4)
@@ -596,7 +882,7 @@ class TunerStats extends VBoxContainer:
 			if k == "balance":
 				text = "Understeer" if v < -0.15 else ("Oversteer" if v > 0.15 else "Neutral")
 				text = "%s  %s" % [r[1], text]
-			elif _measured_value(k) != null:
+			elif not preview and _measured_value(k) != null:
 				v = _measured_value(k)
 				text = "%s  %s" % [r[1], (r[2] as String).replace("~", "") % v]
 			else:

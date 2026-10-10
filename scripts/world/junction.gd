@@ -140,18 +140,46 @@ static var focus_z := 0.0
 static func centre_s_near(s: float) -> float:
 	return RoadMap.junction_near(s) if RoadMap.is_loop() else CENTRE_S
 
+## Within this far of the player a point's nearest crossing is the player's,
+## or it is too far from any other to matter: crossings are at least 1450 m
+## apart (tests/world/loop_road.gd checks) and nothing here looks further than
+## LOOK. So every traffic car's question each tick is one cached answer.
+const NEAR_FOCUS := 500.0
+static var _focus_key := Vector2(INF, INF)
+static var _focus_cz := 0.0
+
 ## Road-space z of the crossing nearest to road-space z.
 static func centre_z_near(z: float) -> float:
+	if absf(z - focus_z) < NEAR_FOCUS:
+		return centre_z()
 	return float(RoadFrame.origin_index) * L - centre_s_near(RoadFrame.s_at(z))
 
 ## Road-space z of the crossing the node stands at (the one nearest the player).
 static func centre_z() -> float:
-	return centre_z_near(focus_z)
+	if _focus_key.x != focus_z or _focus_key.y != float(RoadFrame.origin_index):
+		_focus_key = Vector2(focus_z, float(RoadFrame.origin_index))
+		_focus_cz = float(RoadFrame.origin_index) * L - centre_s_near(RoadFrame.s_at(focus_z))
+	return _focus_cz
+
+func _enter_tree() -> void:
+	_focus_key = Vector2(INF, INF)  # a new game: maybe another road
 
 ## Chunk-local z of the centre for chunk `chunk_index` (0 at the chunk's
 ## start, -L at its end; outside that range the centre is in another chunk).
+## The chunk builder asks this many times while building one chunk, so the
+## last answer is kept.
 static func local_centre(chunk_index: int) -> float:
-	return float(chunk_index) * L - centre_s_near((float(chunk_index) + 0.5) * L)
+	if chunk_index != _local_idx or RoadMap.period != _local_period or RoadMap.road_id != _local_road:
+		_local_idx = chunk_index
+		_local_period = RoadMap.period
+		_local_road = RoadMap.road_id
+		_local_c = float(chunk_index) * L - centre_s_near((float(chunk_index) + 0.5) * L)
+	return _local_c
+
+static var _local_idx := -(1 << 40)
+static var _local_period := -1
+static var _local_road := -2
+static var _local_c := 0.0
 
 ## Whether chunk-local z (chunk `chunk_index`) is within `half` of the centre.
 static func near(chunk_index: int, z: float, half: float) -> bool:

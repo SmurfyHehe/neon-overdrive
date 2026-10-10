@@ -181,6 +181,11 @@ func _districts() -> void:
 			city_edges += 1
 	if js.size() != city_edges or js.size() == 0:
 		_fail("%d crossings for %d city edges" % [js.size(), city_edges])
+	# Far enough apart that a car is only ever near one (Junction.NEAR_FOCUS).
+	for a in js.size():
+		var gap := fposmod(js[(a + 1) % js.size()] - js[a], RoadMap.length())
+		if gap < 1450.0:
+			_fail("crossings at %.0f m and %.0f m are only %.0f m apart" % [js[a], js[(a + 1) % js.size()], gap])
 	for s in js:
 		if RoadMap.district_info(RoadMap.district_of(floori(s / L))).area != "city":
 			_fail("crossing at %.0f m is not in a city area" % s)

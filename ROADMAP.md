@@ -252,6 +252,7 @@ each change is marked `DEVIATION` there, with the exceptions noted. There is no
 | 8 | Heat and wear hooks `torque_mult`, `brake_mult` | `gevp_vehicle.gd:799` | `07b504b` (#103) |
 | 9 | Opt-in realistic clutch, stall, starter | `gevp_vehicle.gd:802` | `8933bb7` (#106) |
 | 10 | `tyre_load_sensitivity`, `clutch_cap_mult`, per-tyre `grip_mult` | `gevp_vehicle.gd:823`, `gevp_wheel.gd:66` | `3c820cf` (#107) |
+| 14 | Realistic automatic (2026-10-10): hooks for `AutoBox` (`scripts/car/auto_box.gd`), all behind `auto_box_on` / `auto_box != null`, so traffic and cops never run them. (a) `process_throttle` calls `AutoBox.tick()` and takes `clutch_amount` from it (the converter); (b) `process_motor`: torque x `torque_scale`, drag x `drag_scale`; (c) `process_clutch`: the clutch aims for gearbox speed x `speed_k`, and at most `drag_cap` flows back into the engine; (d) `process_drive`: wheel torque x `gain`; (e) `process_transmission`: GEVP's shift map is skipped; (f) `process_hill_hold`: holds while `hill_hold_left` runs, and a car with a box is pinned where it stopped, on the flat too; (g) `process_clutch`: `creep_torque` added | `gevp_vehicle.gd`, search `(14)` | this PR |
 | - | Neutral zeroes `clutch_torque` (2026-09-13, Roy's request) | `process_clutch`, `gevp_vehicle.gd:911` | baseline era |
 | - | `brake_force_multiplier` is applied (#75). Marked **"Local change"**, not `DEVIATION` | `calculate_brake_force`, `gevp_vehicle.gd:1234` | `ee9ee5a` (#78) |
 

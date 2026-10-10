@@ -1,9 +1,12 @@
 extends SceneTree
 
 # The gear lever follows the gearbox mode (2026-10-07), headless and silent:
-# - AUTO: the T-handle selector and the R N D pattern show, the others hide;
-#   driving off it sits in D (tilted back one row) and the right hand stays
-#   on the rim through the automatic's own shifts
+# - AUTO in a car built with a manual box (every car so far): the H-gate
+#   stick stays in the cabin and does not move, no paddle flicks, and the
+#   right hand stays on the rim through the automatic's own shifts
+# - AUTO in a car built with an automatic: the T-handle selector and the
+#   P R N D pattern show, the others hide; in a forward gear it sits in D
+#   (tilted back one row)
 # - SEMI: the sequential stick shows and rests in the centre; an upshift
 #   rocks it back, a downshift forward, and it springs back to the centre;
 #   the right hand is on the knob for each tap and back on the rim after
@@ -46,6 +49,8 @@ var hand_busy := false
 var max_tilt := -90.0
 var min_tilt := 90.0
 var hand_at_knob := false
+var stick_moved := false
+var paddle_flicked := false
 var gear_before := 0
 
 func _initialize() -> void:
@@ -61,10 +66,10 @@ func _drive(c: PlayerCar) -> void:
 	c.clutch_input = clutch
 
 ## Only the mode's knob and gate pattern are visible.
-func _check_heads(frame: CockpitFrame, mode: int, label: String) -> void:
+func _check_heads(frame: CockpitFrame, mode: int, label: String, shown := -1) -> void:
 	_check(frame.lever_mode == mode, "%s: the lever is in mode %d (is %d)" % [label, mode, frame.lever_mode])
 	for m in frame._lever_heads:
-		var want: bool = m == mode
+		var want: bool = m == (mode if shown < 0 else shown)
 		_check((frame._lever_heads[m] as Node3D).visible == want, "%s: knob %s visible %s" % [label, (frame._lever_heads[m] as Node).name, want])
 		_check((frame._gate_labels[m] as Node3D).visible == want, "%s: gate %s visible %s" % [label, (frame._gate_labels[m] as Node).name, want])
 
@@ -89,11 +94,22 @@ func _physics_process(_delta: float) -> bool:
 			_go(Step.AUTO)
 		Step.AUTO:
 			hand_busy = hand_busy or d.is_busy()
+			stick_moved = stick_moved or frame.lever_moving or absf(tilt) > TILT_TOL
+			paddle_flicked = paddle_flicked or frame.wheel._paddle_t[-1] > 0.0 or frame.wheel._paddle_t[1] > 0.0 or d.paddle_t > 0.0
 			if waited == ticks(2.5):
-				_check_heads(frame, PlayerCar.Transmission.AUTO, "auto")
+				_check(p.auto_box.box == AutoBox.BOX_MANUAL, "the coupe was built with a manual box")
+				_check_heads(frame, PlayerCar.Transmission.AUTO, "auto, manual box", PlayerCar.Transmission.MANUAL)
 				_check(p.gear >= 1, "auto: driving off puts the box in a forward gear (%d)" % p.gear)
+				_check(not stick_moved, "auto, manual box: the stick does not move (tilt %.1f)" % tilt)
+				_check(not paddle_flicked, "auto: no paddle flick on a car without paddles")
+				_check(not hand_busy, "auto, manual box: the right hand stays on the rim")
+				p.auto_box.box = AutoBox.BOX_AUTO   # the same car as if built with an automatic
+			if waited == ticks(3.3):
+				_check_heads(frame, PlayerCar.Transmission.AUTO, "auto")
+				_check((frame._gate_labels[PlayerCar.Transmission.AUTO] as Label3D).text.replace(char(10), "").begins_with("PRND"), "auto: the selector pattern starts P R N D")
 				_check(absf(tilt - CockpitFrame.LEVER_ROW_TILT) < TILT_TOL, "auto: the selector sits in D (tilt %.1f, want %.1f)" % [tilt, CockpitFrame.LEVER_ROW_TILT])
 				_check(not hand_busy, "auto: the right hand stays on the rim")
+				p.auto_box.box = AutoBox.BOX_MANUAL
 				throttle = 0.4
 				p.set_transmission_mode(PlayerCar.Transmission.SEMI)
 				_go(Step.SEMI_UP)

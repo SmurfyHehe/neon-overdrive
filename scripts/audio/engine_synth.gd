@@ -161,7 +161,8 @@ func apply_voice(v: Dictionary) -> void:
 			int(v.get("seed", 4)))
 
 ## The ignition cut of a flat-out upshift (EngineAudio calls it on GEVP's
-## is_up_shifting edge, in every gearbox mode): one or two hard bangs with a
+## is_up_shifting edge: SEMI and MANUAL. The realistic automatic shifts under
+## power with no cut, so AUTO has no bang): one or two hard bangs with a
 ## long pipe ring. Only on high-flame cars, the same rule as the upshift flame
 ## (ExhaustFlames.UPSHIFT_FLAME_MIN). No flame event: ExhaustFlames queues its
 ## own upshift burst with the same delay, so the two land together.

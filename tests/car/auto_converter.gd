@@ -31,6 +31,7 @@ var fails: Array[String] = []
 var dt := 1.0 / 120.0
 
 func _initialize() -> void:
+	Engine.physics_ticks_per_second = 120  # the game's rate, whatever NEON_TICKS says
 	_run()
 
 func _run() -> void:

@@ -10,6 +10,7 @@ const H := preload("res://tests/car/auto_box_harness.gd")
 const LIMIT_S := 60.0
 
 func _initialize() -> void:
+	Engine.physics_ticks_per_second = 120  # the game's rate, whatever NEON_TICKS says
 	_run()
 
 func _run() -> void:

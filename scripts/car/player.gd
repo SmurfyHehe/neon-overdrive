@@ -485,6 +485,16 @@ func set_transmission_mode(mode: int) -> void:
 	if auto_box != null:
 		auto_box.reset()
 
+## Shift paddles behind the wheel: only a car built with a paddle box has them
+## (none yet; the mid-engine exotic will). They flick on the box's own shifts.
+func has_paddles() -> bool:
+	return auto_box != null and auto_box.box == AutoBox.BOX_PADDLE
+
+## AUTO in a car built with a manual box: the gearbox shifts itself and the
+## stick stays where it is (Roy's pick 8: the hand stays on the wheel).
+func auto_stick_fixed() -> bool:
+	return automatic_transmission and auto_box != null and auto_box.box == AutoBox.BOX_MANUAL
+
 ## In MANUAL a gear change needs the clutch in; in the other modes it always may.
 func clutch_ready() -> bool:
 	return transmission_mode() != Transmission.MANUAL or clutch_input >= SHIFT_CLUTCH_MIN

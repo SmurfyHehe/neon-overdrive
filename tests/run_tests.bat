@@ -95,6 +95,11 @@ call :run car/chassis_targets "--headless --fixed-fps 60"
 call :run car/gearbox_per_car "--headless --fixed-fps 60"
 call :run car/reverse_and_tabs --headless
 call :run car/transmission_modes "--headless --fixed-fps 60"
+rem Realistic automatic (2026-10-10), at the game's 120 Hz: the shift keys do nothing in AUTO (~20 s);
+rem the converter: creep, flare, power-on shift, lock-up, hill (~3 min); the shift brain: no hunting, kickdown, corner hold, brake downshift (~3 min).
+call :run car/auto_ignores_shift_keys "--headless --fixed-fps 120"
+call :run car/auto_converter "--headless --fixed-fps 120"
+call :run car/auto_shift_brain "--headless --fixed-fps 120"
 call :run tuning/auto_tune_worker_mode --headless
 call :run tuning/tune_params --headless
 call :run tuning/gear_count --headless

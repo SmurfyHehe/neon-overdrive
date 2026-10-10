@@ -132,7 +132,9 @@ func _ready() -> void:
 	SpecialKeys.ensure_actions()
 	special_unlocked = SaveStore.load_special().unlocked
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	auto_pause_on_low_fps = auto_pause_on_low_fps and DisplayServer.get_name() != "headless"
+	# Not in test mode either: windowed tests and shot tools on a busy machine
+	# were being paused mid-run (the stall guard next to it is play-only too).
+	auto_pause_on_low_fps = auto_pause_on_low_fps and DisplayServer.get_name() != "headless" and not TestMode.active()
 	state_changed.connect(func(_n, _o): _fps_watch.reset())
 
 ## Low fps watch (#309): sustained slow frames on the wall clock, which is

@@ -60,6 +60,7 @@ var camera: ChaseCamera
 var radio: RadioManager
 var menu_sfx: MenuSfx   # clicks, ticks and the squelch for every menu (menu_sfx.gd)
 var night_clock: NightClock  # 8 p.m. to 6 a.m., saved (night_clock.gd); windows follow it
+var race: RaceController  # race core RC1 (race_controller.gd)
 var _bands := false  # hour bands drive traffic and Dave (bands_on)
 var world_mood: WorldMood  # tonight's events: rule-breaker share, bar close, meets, crackdowns
 var police_heat: PoliceHeat  # heat level + cop_can_see_player (police F0/F1)
@@ -602,6 +603,11 @@ func _setup_game_state() -> void:
 	game_state.stall_secs = GameState.STALL_SECS if real_play else 0.0
 	add_child(game_state)
 	CarDetail.bind_state(game_state)  # photo mode shows the cars' detail parts
+	# Before the pause menu, which reads it for the race button.
+	race = RaceController.new(player, traffic, night_clock, game_state)
+	add_child(race)
+	# The pause screen's "Quit race" row (title/pause branch) gives the race up.
+	game_state.race_quit_requested.connect(race.give_up)
 	var pause := PauseMenu.new(game_state)
 	pause.wallet = wallet
 	pause.night_clock = night_clock

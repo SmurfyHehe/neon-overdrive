@@ -30,6 +30,7 @@ var photo_button: Button
 var title_button: Button
 var settings: SettingsScreen
 var confirm: ConfirmBox
+var race_button: Button
 var main_page: VBoxContainer
 var slide_root: MarginContainer   # what MenuMotion slides in
 ## The bank (F0, scripts/core/wallet.gd) and the clock, shown on the plate; null in bare tests.
@@ -99,6 +100,8 @@ func _ready() -> void:
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	restart_button = _add_button(box, "Restart night", _ask_restart)
 	settings_button = _add_button(box, "Settings", show_settings)
+	# Until meet spots exist (RC3) a race starts from here; mid-race the row above reads "Quit race".
+	race_button = _add_button(box, "Race a test rival", _race_pressed)
 	photo_button = _add_button(box, "Photo mode", game_state.open_photo_from_pause)
 	title_button = _add_button(box, "Quit to title", _ask_quit_to_title)
 
@@ -153,6 +156,26 @@ func _plate_label(parent: Control, role: String, size_px: int, colour: Color) ->
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	parent.add_child(l)
 	return l
+
+## Race core (RC1): until meet spots exist (RC3) a race starts from here, and
+## mid-race the same button is "Give up race" (Roy 88). Either way the game
+## resumes at once.
+func _race_pressed() -> void:
+	var race: RaceController = get_parent().get("race")
+	if race == null:
+		return
+	if race.is_racing():
+		race.give_up()
+	else:
+		race.start_race()
+	game_state.resume()
+
+func _refresh_race_button() -> void:
+	var race: Variant = get_parent().get("race")
+	race_button.visible = race != null and not race.is_racing()
+	if race != null:
+		race_button.text = "Give up race" if race.is_racing() else "Race a test rival"
+
 
 ## The refusal toast lives on its own layer beside this one, because this layer
 ## is hidden whenever the game is not paused, which is exactly when it shows.
@@ -238,6 +261,7 @@ func _on_state_changed(new_state: GameState.State, old_state: GameState.State) -
 	var was_visible := visible
 	visible = new_state == GameState.State.PAUSED
 	if visible:
+		_refresh_race_button()
 		show_main()  # always reopen on the main page
 		_refresh_plate()
 		_refresh_notice()

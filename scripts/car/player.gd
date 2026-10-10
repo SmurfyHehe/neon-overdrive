@@ -122,7 +122,9 @@ var sim_only := false
 ## The tune kept between runs (PlayerTune): only the game's own car, the one
 ## built from the default spec, loads and saves it.
 const PlayerTune := preload("res://scripts/car/player_tune.gd")
+const WetReflections := preload("res://scripts/world/wet_reflections.gd")
 const TUNE_CHECK_SECS := 1.0
+var _smear_brake_on := false  # last brake state sent to the tail smears
 var _keeps_tune := false
 var _saved_tune := {}
 var _tune_check_left := TUNE_CHECK_SECS
@@ -167,6 +169,10 @@ func _ready() -> void:
 		else:
 			chassis_visual = P1CoupeBuilder.build_chassis_visual()
 		add_child(chassis_visual)
+		# Wet-road tail smears (wet_reflections.gd): ride with the visual.
+		var tail: Dictionary = WetReflections.tail_info(chassis_visual)
+		if not tail.is_empty():
+			WetReflections.attach_tail(chassis_visual, tail.lamps, tail.ground_y)
 
 	# BUG FIX (2026-09-13, verified headless): RigidBody3D falls asleep after
 	# ~0.5s of low apparent velocity (standard Godot sleep threshold), and
@@ -289,6 +295,11 @@ func _physics_process(delta: float) -> void:
 	else:
 		_read_keyboard()
 	_update_line_lock()
+	# Tail smears brighten with the brakes; one instance-colour write per flip.
+	var braking := brake_input > 0.05
+	if braking != _smear_brake_on and chassis_visual != null:
+		_smear_brake_on = braking
+		WetReflections.set_tail_brake(chassis_visual, 1.0 if braking else 0.0)
 	# Limp mode: the slowest active cause caps the speed by fading the throttle.
 	limp.update(fuel.is_empty(), health.engine_temp if health.enabled else 0.0)
 	if limp.is_limping():

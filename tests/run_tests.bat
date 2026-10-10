@@ -125,6 +125,8 @@ call :run fx/exhaust_flames --headless
 call :run world/boundary_walls --headless
 rem ~1 min: the player into the out-of-bounds wall at 16 speeds and angles, at the game's 120 Hz.
 call :run car/wall_hit "--headless --fixed-fps 120"
+rem ~4 min: off the map (under the road, outside or over the walls, off the road's end): faded and put back, free.
+call :run world/off_map_rescue "--headless --fixed-fps 120"
 call :run car/car_scrape "--headless --fixed-fps 120"
 call :run car/car_scrape_tunes "--headless --fixed-fps 120"
 rem ~4 min each: every player car stock and at the Tuner's lowest suspension corners.

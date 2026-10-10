@@ -173,6 +173,10 @@ func _ready() -> void:
 	# frame 150 and linear_velocity stayed pinned at ~0 forever after. A
 	# player-controlled vehicle should never sleep.
 	can_sleep = false
+	# Swept collision (2026-10-10, driving off the map): at 220 m/s the car moves
+	# 1.8 m a tick and a head-on hit could step through the out-of-bounds wall
+	# (tests/world/off_map_rescue.gd); slower hits never did.
+	continuous_cd = true
 	# Contacts are reported so _integrate_forces can tell a wall hit (see below).
 	contact_monitor = true
 	max_contacts_reported = 8

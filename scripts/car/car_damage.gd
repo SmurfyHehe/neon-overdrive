@@ -207,6 +207,13 @@ func apply_hit(dv_local: Vector3) -> void:
 func _add(p: Part, a: float) -> void:
 	parts[p] = clampf(parts[p] + a, 0.0, 1.0)
 
+## The car was moved and stopped by the game (off-map rescue): the jump in
+## velocity is not a hit.
+func forget_motion() -> void:
+	_prev_vel = Vector3.ZERO
+	_hit_dv = Vector3.ZERO
+	_hit_left = -1.0
+
 ## One physics step from raw numbers: world velocity, the car's basis, and
 ## whether the body touches something other than the road.
 func step_values(dt: float, vel: Vector3, basis: Basis, touching: bool) -> void:

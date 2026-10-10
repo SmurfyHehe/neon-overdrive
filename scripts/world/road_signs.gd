@@ -127,6 +127,41 @@ void fragment() {
 }
 """
 
+## Cost switches (tools/sign_cost_bench.gd, docs/sign-cost/README.md). The
+## env var NEON_SIGNS is a comma list; unset means DEFAULT_FLAGS.
+##   off    no area signs, road paint, street blades or lettering atlas at all
+##          (the measuring baseline; tests that look for the nodes fail)
+##   asis   nothing below: the signs as PR #381 first built them
+##   hide   a chunk's NameSigns / RoadPaint node is hidden while it shows no
+##          instance, so the renderer does not cull or count it every frame
+##   cache  the gantry / advance part lists are laid out once per area and
+##          moved to the post's foot, instead of laid out on every rebuild
+##   near   road paint is not drawn beyond PAINT_RANGE metres, the street
+##          blades at a crossing not beyond BLADE_RANGE
+##   flat   road paint is unshaded (no per-pixel lighting)
+const DEFAULT_FLAGS := "hide,cache,near"
+const PAINT_RANGE := 160.0
+const BLADE_RANGE := 140.0
+
+static var _flags: PackedStringArray
+static var _flags_read := false
+
+static func has_flag(flag: String) -> bool:
+	if not _flags_read:
+		var env := OS.get_environment("NEON_SIGNS")
+		set_flags(env if env != "" else DEFAULT_FLAGS)
+	return _flags.has(flag)
+
+## Tools: switch in the running process. Only safe before any chunk is built,
+## or for chunk roots built after the call.
+static func set_flags(csv: String) -> void:
+	_flags = csv.split(",", false)
+	_flags_read = true
+
+static func off() -> bool:
+	return has_flag("off")
+
+static var _cache := {}
 static var _material: ShaderMaterial
 static var _box: BoxMesh
 
@@ -234,6 +269,16 @@ static func gantry(area: String, foot: Vector3, foundation: float, burnt: int = 
 		var style := LAMP_DEAD if k == burnt else LAMP
 		out.append(_item(Vector3(lx, bottom - 0.08, foot.z) + n * 0.32, n, 0.6, 0.14, 0.3, 0, 0, 0, style))
 	return out
+
+## The parts of an area sign ("gantry" or "advance") laid out around a post
+## foot at the origin, built once per area and kept ("cache"). Every part's
+## place is its place here plus the foot, so the caller only adds the foot.
+## Do not change the returned list.
+static func parts_at_origin(kind: String, area: String, foundation: float, burnt: int) -> Array:
+	var key := "%s|%s|%.2f|%d" % [kind, area, foundation, burnt]
+	if not _cache.has(key):
+		_cache[key] = gantry(area, Vector3.ZERO, foundation, burnt) if kind == "gantry" else advance(area, Vector3.ZERO, foundation)
+	return _cache[key]
 
 ## Height of the lowest part of a gantry panel above the road, m.
 static func gantry_clearance(area: String) -> float:

@@ -100,6 +100,9 @@ var aero_downforce_coefficient_rear := 0.0
 var chassis_visual: Node3D
 ## Exhaust flames, only on a car whose spec has a flame value (null otherwise).
 var flames: ExhaustFlames
+## Exhaust heat 0..1 for the heat shimmer (HeatShimmer.next_heat); only
+## stepped while detailed, so a far cruising car pays nothing.
+var heat := 0.0
 var wheelbase := 2.5
 ## Footprint half sizes for the occupancy index: across the tyres, and
 ## bumper to the middle.
@@ -305,6 +308,7 @@ func _physics_process(delta: float) -> void:
 	_drive(delta)
 	super._physics_process(delta)
 	AeroModel.apply(self)
+	heat = HeatShimmer.next_heat(heat, self, delta)
 	_update_lamps()
 
 ## Brake lamps on any brake pedal (a held stop included), hazards while the

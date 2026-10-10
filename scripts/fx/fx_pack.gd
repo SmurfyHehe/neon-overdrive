@@ -11,6 +11,7 @@ var screen: ScreenFx
 var skids: SkidMarks
 var flames: ExhaustFlames
 var smoke: TyreSmoke
+var shimmer: HeatShimmer  # heat shimmer behind the tailpipes (2026-10-10)
 
 var _player: PlayerCar
 var _camera: ChaseCamera
@@ -31,6 +32,8 @@ func _ready() -> void:
 	# On the car, so it rides along (and is interpolated) with the body.
 	flames = ExhaustFlames.new(_player)
 	_player.add_child(flames)
+	shimmer = HeatShimmer.new(_player)
+	add_child(shimmer)
 	apply_settings()
 
 ## Push the FxSettings flags to the nodes.
@@ -40,6 +43,7 @@ func apply_settings() -> void:
 	skids.enabled = FxSettings.is_on("skid_marks")
 	flames.enabled = FxSettings.is_on("exhaust_flames")
 	smoke.enabled = FxSettings.is_on("tyre_smoke")
+	shimmer.enabled = FxSettings.is_on("heat_shimmer")
 
 ## Flip one effect (FxSettings.EFFECTS) live, and remember it.
 func set_effect(effect: String, on: bool) -> void:
@@ -50,4 +54,4 @@ func set_effect(effect: String, on: bool) -> void:
 func shift_world(offset: Vector3) -> void:
 	skids.shift_world(offset)
 	smoke.shift_world(offset)
-	flames.shift_world(offset)  # fireballs and smoke left behind in world space
+	flames.shift_world(offset)  # shed fire left behind in world space (the shimmer quads are re-placed every frame)

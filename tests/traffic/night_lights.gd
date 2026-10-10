@@ -115,6 +115,18 @@ func _run() -> void:
 			best = s
 	print("night_lights: barrier reflector ~60 m, amber %.3f with the setting at 0, %.3f at 1 (pixel %s)" % [amber_off, amber_on, best])
 	_check(amber_on > amber_off + 0.05, "barrier reflectors add nothing at 60 m (%.3f vs %.3f)" % [amber_on, amber_off])
+
+	# Headlights off: a reflector has nothing to shine back (2026-10-10).
+	var spot := p.get_node_or_null("Headlights") as SpotLight3D
+	if spot != null:
+		spot.visible = false
+		for i in 4:
+			await physics_frame
+		var dark := await _shot("lamps_off")
+		var amber_dark := _amber(dark, best)
+		print("night_lights: same reflector with the headlights off, amber %.3f" % amber_dark)
+		_check(amber_dark < amber_off + 0.02, "barrier reflector still glows with the headlights off (%.3f vs %.3f)" % [amber_dark, amber_off])
+		spot.visible = true
 	_finish()
 
 ## Screen position of the centre between the car's two tail flares.

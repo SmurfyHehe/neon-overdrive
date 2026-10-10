@@ -304,6 +304,7 @@ func _physics_process(delta: float) -> void:
 	AeroModel.apply(self)
 	damage.step(self, delta, health, limp)
 	_apply_lamp_damage()
+	_light_reflectors()
 	health.step(self, delta)
 	fuel.step_values(delta, health.engine_load if health.enabled else throttle_amount, engine_running)
 	if limp.is_limping():
@@ -325,7 +326,17 @@ func _apply_lamp_damage() -> void:
 		spot.light_energy = CarFx.HEADLIGHT_ENERGY * share
 		spot.visible = share > 0.0
 
+## The median's reflectors shine only in this car's beam (RoadChunkBuilder).
+func _light_reflectors() -> void:
+	var spot := get_node_or_null("Headlights") as SpotLight3D
+	if spot == null:
+		return
+	var on := spot.visible and spot.light_energy > 0.0
+	RoadChunkBuilder.set_reflector_lamp(spot.global_position, -spot.global_basis.z,
+			clampf(spot.light_energy / CarFx.HEADLIGHT_ENERGY, 0.0, 1.0) if on else 0.0)
+
 func _exit_tree() -> void:
+	RoadChunkBuilder.clear_reflector_lamp()
 	if _keeps_tune:
 		_save_tune_if_changed()  # restart reloads the scene; quit frees it
 

@@ -22,6 +22,12 @@ extends SceneTree
 # - support: no building's block ends above the road, and every piece of
 #   every landmark stands on the ground, on its building's roof (inside the
 #   footprint) or on another piece
+# - the street at night (world step 3b): every kind's street kit names a real
+#   lamp shape, light colour, lamp count and road surface, and real sign
+#   colours; no two kinds have the same kit; kinds that are neighbours in the
+#   loop differ in at least two of lamp shape, light colour, lamp count and
+#   road surface; and a built chunk carries its kind's lamp mesh, pool
+#   material and road materials, shared, not built per chunk
 # It also prints the build cost (ms per fresh build and per rebuild) and one
 # line per kind, for the PR; it does not assert on the cost.
 #
@@ -46,6 +52,7 @@ func _initialize() -> void:
 	var stats := _check_look()
 	_check_skyline(stats)
 	_check_landmark_support()
+	_check_streets()
 	print("district_kinds: %s" % ("PASS" if fails == 0 else "FAIL"))
 	quit(0 if fails == 0 else 1)
 
@@ -319,3 +326,54 @@ func _check_landmark_support() -> void:
 				if not held:
 					_fail("landmark %s (side %d): a piece at %s floats" % [kind, side, pos])
 	print("support: %d landmarks, every piece stands on the ground, the roof or another piece" % R.LANDMARKS.size())
+
+func _check_streets() -> void:
+	var D := B.Districts
+	var keys := ["lamp", "light", "every", "road"]
+	var names: Array = D.SPECS.keys()
+	for n in names:
+		var st: Dictionary = D.street(n)
+		if not B.LAMP_KINDS.has(st.lamp) or not D.WASH_REACH.has(st.lamp):
+			_fail("street %s: unknown lamp %s" % [n, st.lamp])
+		if not D.LIGHTS.has(st.light):
+			_fail("street %s: unknown light %s" % [n, st.light])
+		if not D.WASH_BY_EVERY.has(int(st.every)):
+			_fail("street %s: lamp count 'every' is %s" % [n, st.every])
+		if not B.ROADS.has(st.road):
+			_fail("street %s: unknown road %s" % [n, st.road])
+		for e in D.SPECS[n].get("signs", []):
+			if int(e[0]) < 0 or int(e[0]) >= B.BuildingSigns.COLORS.size():
+				_fail("district %s: sign colour %d does not exist" % [n, e[0]])
+	for i in names.size():
+		for j in range(i + 1, names.size()):
+			if D.street(names[i]) == D.street(names[j]):
+				_fail("%s and %s have the same street kit" % [names[i], names[j]])
+	for r in D.ORDER.size():
+		var a: Dictionary = D.street(D.ORDER[r])
+		var b: Dictionary = D.street(D.ORDER[(r + 1) % D.ORDER.size()])
+		var diff := 0
+		for k in keys:
+			if a[k] != b[k]:
+				diff += 1
+		if diff < 2:
+			_fail("neighbours %s and %s differ in only %d of lamp, light, count, road" % [D.ORDER[r], D.ORDER[(r + 1) % D.ORDER.size()], diff])
+	# a built chunk points at the shared pieces of its kind
+	var cfg := _cfg(2, 2, true)
+	for r in D.ORDER.size():
+		var idx: int = r * D.RUN + 5
+		var st: Dictionary = D.street_at(idx)
+		for pass_i in 2:
+			var chunk: Node3D = B.build_chunk(idx, cfg, cfg)
+			var lamps := chunk.get_node(^"Lamps") as MultiMeshInstance3D
+			var pools := chunk.get_node(^"LampPools") as MultiMeshInstance3D
+			if lamps.multimesh.mesh != B._get_lamp_mesh(st.lamp, st.light):
+				_fail("chunk %d (%s): not its kind's lamp mesh" % [idx, D.ORDER[r]])
+			if pools.material_override != B._get_pool_mat(st.light):
+				_fail("chunk %d (%s): not its kind's pool material" % [idx, D.ORDER[r]])
+			if (chunk.get_node(^"RoadOwn") as MeshInstance3D).material_override != B._get_road_mats(st.road)[0]:
+				_fail("chunk %d (%s): not its kind's road material" % [idx, D.ORDER[r]])
+			var want: int = {0: 0, 1: 4, 2: 2, 4: 1}[int(st.every)]
+			if lamps.multimesh.visible_instance_count != want:
+				_fail("chunk %d (%s): %d lamps, expected %d" % [idx, D.ORDER[r], lamps.multimesh.visible_instance_count, want])
+			chunk.free()
+	print("streets: %d kits, all different; %d lamp meshes, %d pool materials, %d road kinds in use" % [names.size(), B._lamp_meshes.size(), B._pool_mats.size(), B._road_mats.size()])

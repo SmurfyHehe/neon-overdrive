@@ -111,6 +111,7 @@ uniform float cell_vary[12];
 // Night clock (living world step 1): scales every building's lit density, so
 // the same windows go dark in the same order through the night (WindowLights).
 uniform float lit_scale = 1.0;
+uniform float wash_energy = 2.0;
 
 instance uniform int tile = 0;
 instance uniform vec3 tint : source_color = vec3(0.3);
@@ -125,6 +126,11 @@ instance uniform float base = 0.0;
 // streaks down some bays, dark stains, a soot line under the roof edge, and
 // a patchy roof. All of it is hashed per bay and floor, no texture.
 instance uniform float wear = 0.5;
+// Street light on the walls (world step 3b): the district's lamp colour
+// times its strength, and how high up the front it reaches, m. A whole
+// street takes the colour of its lamps, and a dark district stays dark.
+instance uniform vec3 street = vec3(0.0);
+instance uniform float street_reach = 10.0;
 
 varying vec3 lpos;
 varying vec3 lnrm;
@@ -199,6 +205,9 @@ void fragment() {
 		float stain = step(hash3(vec3(floor(u * 0.5), floor(v * 0.5), seed + 11.0)), wear * 0.18) * wall;
 		float soot = wear * 0.3 * smoothstep(size.y - base - 0.8, size.y - base, hm);
 		ALBEDO *= 1.0 - clamp(grime + streak * 0.35 + stain * 0.22 + soot, 0.0, 0.6);
+		// the lamps' light up the wall, strongest at the sidewalk
+		float up = clamp(1.0 - hm / street_reach, 0.0, 1.0);
+		EMISSION += ALBEDO * street * (up * up) * wash_energy * wall;
 	}
 }
 """
@@ -355,6 +364,9 @@ static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, 
 	mi.set_instance_shader_parameter("lit_density", density)
 	mi.set_instance_shader_parameter("seed", float(rng.randi() % 4096))
 	mi.set_instance_shader_parameter("wear", wear)
+	var wash := Districts.wash_of(district)
+	mi.set_instance_shader_parameter("street", wash[0])
+	mi.set_instance_shader_parameter("street_reach", wash[1])
 	mi.set_meta("facade_tile", tile)
 	mi.set_meta("building_type", type)
 	mi.set_meta("roof_top", top)
@@ -368,8 +380,12 @@ static func dress(mi: MeshInstance3D, rng: RandomNumberGenerator, is_low: bool, 
 		word = pool[rng.randi() % pool.size()]
 		if spec.has("word"):
 			word = spec.word
-	var sign_color := rng.randi() % BuildingSigns.COLORS.size()
-	var sign_style := 1 if rng.randf() < 0.3 else 0
+	# World step 3b: a district may weight its sign colours and how many are
+	# lit panels. The same two draws either way, so no other roll moves.
+	var sign_roll := rng.randi()
+	var sign_table: Array = district.get("signs", [])
+	var sign_color: int = sign_roll % BuildingSigns.COLORS.size() if sign_table.is_empty() else _weighted_at(sign_roll, sign_table)
+	var sign_style := 1 if rng.randf() < float(district.get("panel", Districts.DEFAULTS.panel)) else 0
 	# short words on shops can hang as a blade over the sidewalk instead
 	var blade := type == "shop" and word.length() <= 5 and rng.randf() < 0.45
 	if type == "gas":

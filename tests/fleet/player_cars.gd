@@ -47,8 +47,10 @@ func _initialize() -> void:
 	_run.call_deferred()
 
 func _run() -> void:
-	for k in PlayerCars.KINDS:
-		await _drive(String(k.id))
+	# The special vehicles borrow the coupe body until their body steps and are
+	# driven by tests/car/special_s0.gd.
+	for k in PlayerCars.sprint_ids():
+		await _drive(k)
 	OS.set_environment("NEON_CAR", "")
 	_finish()
 

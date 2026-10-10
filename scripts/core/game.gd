@@ -654,6 +654,13 @@ func _setup_game_state() -> void:
 	add_child(PumpPanel.new(game_state, player, wallet, night_clock))
 	gas_station.pulled_up.connect(func(_s: float) -> void: game_state.open_station())
 	add_child(WashScreen.new(game_state))
+	# Special vehicles: a flip ends the run (SpecialRunEnd). A restart is the
+	# stand-in until the run loop (stage C) owns what "ends the night" means.
+	var kind := PlayerCar.chassis_kind()
+	if SpecialRunEnd.has_limit(kind):
+		var special_end := SpecialRunEnd.new(player, kind)
+		special_end.run_ended.connect(func(_why: String) -> void: game_state.restart())
+		add_child(special_end)
 	radio = RadioManager.new()
 	radio.listener = player  # reception follows the car (tunnels, bridges)
 	radio.process_mode = Node.PROCESS_MODE_ALWAYS   # plays on, muffled, while paused (PauseLook)

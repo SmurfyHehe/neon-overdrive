@@ -10,6 +10,7 @@ extends RefCounted
 #   garage.json    {"owned_parts": [part id, ...]}         every part ever bought
 #   mod_tree.json  {"cars": {car_id: {"installed": [node id, ...]}}}
 #   run.json       where the run is, to resume it exactly (SaveDirector)
+#   special.json   {"unlocked": {vehicle id: bool}}        story-end special vehicles
 #   meta.json      {"chase_open": bool, "pending_busts": int, "saved_at": unix}
 #
 # Bought parts live in garage.json, not in the mod tree: the tree only says
@@ -33,7 +34,7 @@ const TestMode := preload("res://scripts/core/test_mode.gd")
 
 const SLOTS := 3
 const DEFAULT_ROOT := "user://saves"
-const SECTIONS := ["wallet", "garage", "mod_tree", "run", "meta"]
+const SECTIONS := ["wallet", "garage", "mod_tree", "run", "meta", "special"]
 
 static var root := TestMode.path(DEFAULT_ROOT)
 ## The slot being played, 1..SLOTS. Kept in <root>/active_slot.json.
@@ -199,6 +200,23 @@ static func load_mod_tree(n: int = 0) -> Dictionary:
 
 static func save_mod_tree(cars: Dictionary) -> bool:
 	return save("mod_tree", {"cars": cars})
+
+## Special vehicles unlocked in this slot (S0). Only true entries are kept.
+static func load_special(n: int = 0) -> Dictionary:
+	var raw: Variant = AtomicJson.read(file("special", n)).get("data", {}).get("unlocked", {})
+	var out := {}
+	if raw is Dictionary:
+		for k in raw:
+			if raw[k] == true:
+				out[str(k)] = true
+	return {"unlocked": out}
+
+static func save_special(unlocked: Dictionary) -> bool:
+	var out := {}
+	for k in unlocked:
+		if unlocked[k] == true:
+			out[str(k)] = true
+	return save("special", {"unlocked": out})
 
 static func load_run(n: int = 0) -> Dictionary:
 	return AtomicJson.read(file("run", n)).get("data", {})

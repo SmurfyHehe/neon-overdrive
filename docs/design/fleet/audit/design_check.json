@@ -957,7 +957,7 @@
   "p17_work_pickup": {
    "builds": {
     "stock": {
-     "tris": 3224,
+     "tris": 3212,
      "draw_calls": 7,
      "budget": 10000,
      "slots": {
@@ -1001,7 +1001,7 @@
      }
     },
     "street": {
-     "tris": 3182,
+     "tris": 3170,
      "draw_calls": 7,
      "budget": 10000,
      "slots": {
@@ -1045,7 +1045,7 @@
      }
     },
     "full": {
-     "tris": 3082,
+     "tris": 3070,
      "draw_calls": 7,
      "budget": 10000,
      "slots": {

@@ -6308,10 +6308,6 @@
      "s0": 1.45,
      "s1": 3.2,
      "y": 0.4
-    },
-    {
-     "type": "tow",
-     "y": 0.44
     }
    ],
    "sticker_slots": [
@@ -6644,9 +6640,9 @@
    },
    "budget_tris": 10000,
    "proxy_tris": {
-    "stock": 2554,
-    "street": 2512,
-    "full": 2412
+    "stock": 2542,
+    "street": 2500,
+    "full": 2400
    },
    "exhaust_tips": {
     "stock": [

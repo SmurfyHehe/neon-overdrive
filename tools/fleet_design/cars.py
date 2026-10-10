@@ -344,7 +344,6 @@ P17 = {
     'parts': [
         {'type': 'mirrors', 'out': 0.11, 'up': 0.09},
         {'type': 'step', 's0': 1.45, 's1': 3.20, 'y': 0.40},
-        {'type': 'tow', 'y': 0.44},
     ],
     # one pipe out the rear corner (right side), no headache rack
     'exhaust': [{'x': 0.68, 'y': 0.40, 'r': 0.04}],

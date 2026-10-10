@@ -67,6 +67,7 @@ var police_heat: PoliceHeat  # heat level + cop_can_see_player (police F0/F1)
 var police: PolicePatrol     # the stand-in patrol car; null with NEON_POLICE=0 or a benchmark
 var heat_icons: HeatIcons
 const TestMode := preload("res://scripts/core/test_mode.gd")
+var rescue: OffMapRescue  # off-map rescue (off_map_rescue.gd)
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
 # Save system (run structure, 2026-10-09): auto-save into one of 3 slots, and a
@@ -173,6 +174,9 @@ func _ready() -> void:
 	fx = FxPack.new(player, camera)
 	add_child(fx)
 	_setup_hud()
+	# Off the map (fell off, outside the walls): fade and put the car back.
+	rescue = OffMapRescue.new(self, player)
+	add_child(rescue)
 	_setup_game_state()
 	_setup_police(benchmark)
 	# Dynamic resolution holds the frame rate inside the tier; benchmark runs

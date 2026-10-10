@@ -213,6 +213,12 @@ func _physics_process(delta: float) -> void:
 	_accel = (speed - _prev_speed) / delta
 	_prev_speed = speed
 
+## The car was moved and stopped by the game (off-map rescue): the jump in
+## velocity is not an impact.
+func forget_motion() -> void:
+	_prev_vel = target.linear_velocity
+	_prev_speed = target.current_speed()
+
 ## Feeds one tick's velocity change (m/s) into the impact shake. Split out so
 ## tests/view/camera_feel.gd can check the tick-rate independence directly.
 func register_impact(dv: float) -> void:

@@ -19,19 +19,22 @@ extends RefCounted
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
 ## Lamp smear quad, m: across the road, then along it.
-const SMEAR_W := 1.8
+const SMEAR_W := 2.2
 const SMEAR_LEN := 26.0
 ## Just above the light pools (RoadChunkBuilder.POOL_Y 0.045); depth is never
 ## written or tested so this only keeps the maths tidy.
 const SMEAR_Y := 0.055
 ## Tail smear quad, m: across, then how far it trails behind the lamp.
-const TAIL_W := 0.55
+const TAIL_W := 0.7
 const TAIL_LEN := 8.0
+## Tail quads sit this far above the road at rest: the body dips under load
+## and the road is depth-tested, so a quad at road level would vanish.
+const TAIL_LIFT := 0.1
 ## Sodium orange and the sheet's tail red (tests/core/palette.gd), linear.
 const LAMP_TINT := Color(1.0, 0.55, 0.2)
 const TAIL_TINT := Color(1.0, 0.16, 0.05)
-const LAMP_ENERGY := 0.55
-const TAIL_ENERGY := 0.9
+const LAMP_ENERGY := 1.4
+const TAIL_ENERGY := 1.2
 ## Tail smears brighten this much over the running level under braking.
 const BRAKE_GAIN := 1.5
 ## Lamp smears fade out between these distances, like the pools (110-170).
@@ -140,7 +143,7 @@ static func attach_tail(vis: Node3D, lamps: Array, ground_y: float) -> MultiMesh
 		# z = rear_z - 0.3 .. rear_z - 0.3 + TAIL_LEN, so it starts just
 		# under the bumper and trails out behind.
 		var z0 := rear_z - 0.3
-		var xf := Transform3D(Basis.from_scale(Vector3(TAIL_W, 1.0, TAIL_LEN)), Vector3(p.x, ground_y + 0.02, z0 + TAIL_LEN / 2.0))
+		var xf := Transform3D(Basis.from_scale(Vector3(TAIL_W, 1.0, TAIL_LEN)), Vector3(p.x, ground_y + TAIL_LIFT, z0 + TAIL_LEN / 2.0))
 		mm.set_instance_transform(i, xf)
 		mm.set_instance_color(i, Color.WHITE)
 	var mmi := MultiMeshInstance3D.new()

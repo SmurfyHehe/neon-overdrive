@@ -129,7 +129,7 @@ func _check_tail_mmi(mmi: MultiMeshInstance3D, info: Dictionary, label: String, 
 			_fail("%s smear %d: x %.2f, lamp x %.2f" % [label, i, xf.origin.x, lamp.x])
 		if xf.origin.z < lamp.z:
 			_fail("%s smear %d: centre z %.2f is ahead of the lamp z %.2f" % [label, i, xf.origin.z, lamp.z])
-		if absf(xf.origin.y - (float(info.ground_y) + 0.02)) > EPS:
+		if absf(xf.origin.y - (float(info.ground_y) + W.TAIL_LIFT)) > EPS:
 			_fail("%s smear %d: y %.2f, ground %.2f" % [label, i, xf.origin.y, info.ground_y])
 		if mmi.multimesh.get_instance_color(i) != Color.WHITE:
 			_fail("%s smear %d: running colour %s, want white" % [label, i, mmi.multimesh.get_instance_color(i)])

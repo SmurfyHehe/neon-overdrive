@@ -137,8 +137,13 @@ const SODIUM := Color(1.0, 0.55, 0.2)
 
 const WALL_H := 2.2         # gap walls between buildings
 const WALL_T := 0.3
-const BOUNDARY_H := 6.0  # invisible out-of-bounds wall (#28)
-const BOUNDARY_T := 1.0
+# Invisible out-of-bounds wall (#28). Was 6 m high and 1 m thick; raised and
+# thickened 2026-10-10 (driving off the map, step 1) for the tall and the very
+# fast cars to come: a car thrown 8 m up at the wall went over the 6 m one
+# (tests/world/off_map_rescue.gd). Thickness grows outward, into the buildings.
+# What still gets past is put back by OffMapRescue.
+const BOUNDARY_H := 20.0
+const BOUNDARY_T := 3.0
 
 # Dash / pylon / barrier dimensions, previously inline magic numbers repeated
 # at each construction site. They are constants now because the shared meshes
@@ -845,6 +850,11 @@ static func _new_boundary(body_name: String) -> StaticBody3D:
 		body.add_child(col)
 	return body
 
+## Inner faces of a built chunk's two out-of-bounds walls, |x| from the centre
+## line: (own side, oncoming side). What OffMapRescue tests the car against.
+static func bounds(root: Node3D) -> Vector2:
+	return root.get_meta(&"bounds", Vector2.ZERO)
+
 ## Boxes overlap their neighbours by this much, so the outside of a bend
 ## never opens a gap between two straight pieces.
 const BOUNDARY_OVERLAP := 0.1
@@ -1237,6 +1247,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var bound_onc := maxf(start_onc_walk, end_onc_walk) + BUILDING_GAP + setback
 	_update_boundary(root, "BoundaryOwn", bound_own, 1)
 	_update_boundary(root, "BoundaryOnc", bound_onc, -1)
+	root.set_meta(&"bounds", Vector2(bound_own, bound_onc))
 	# Where the setback changes from the previous chunk, a cross wall at this
 	# chunk's start closes the step between the two boundary lines, so the
 	# deeper lot does not open behind the shallower chunk's wall.

@@ -62,6 +62,7 @@ var night_clock: NightClock  # 8 p.m. to 6 a.m., saved (night_clock.gd); windows
 var _bands := false  # hour bands drive traffic and Dave (bands_on)
 var world_mood: WorldMood  # tonight's events: rule-breaker share, bar close, meets, crackdowns
 const TestMode := preload("res://scripts/core/test_mode.gd")
+var rescue: OffMapRescue  # off-map rescue (off_map_rescue.gd)
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
 # Save system (run structure, 2026-10-09): auto-save into one of 3 slots, and a
@@ -145,6 +146,9 @@ func _ready() -> void:
 	fx = FxPack.new(player, camera)
 	add_child(fx)
 	_setup_hud()
+	# Off the map (fell off, outside the walls): fade and put the car back.
+	rescue = OffMapRescue.new(self, player)
+	add_child(rescue)
 	_setup_game_state()
 	# Dynamic resolution holds the frame rate inside the tier; benchmark runs
 	# keep a fixed scale (comparable numbers) unless --dynres=1.

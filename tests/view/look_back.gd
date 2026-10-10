@@ -89,7 +89,7 @@ func _physics_process(_delta: float) -> bool:
 					keys.append((ev as InputEventKey).keycode)
 			_check(keys.has(KEY_B), "look_back is on B (%s)" % [keys])
 			var listed := false
-			for group in PauseMenu.controls_groups():
+			for group in SettingsScreen.controls_groups():
 				for row in group[1]:
 					if row[0] == "look_back":
 						listed = true

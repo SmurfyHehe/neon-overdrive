@@ -92,6 +92,8 @@ func _ready() -> void:
 	FxSettings.load_settings()   # cockpit mirrors on/off and quality ([fx] in settings.cfg)
 	ViewSettings.load_settings()
 	GraphicsSettings.load_settings()   # preset, edge smoothing, render scale ([graphics])
+	DisplaySettings.load_settings()    # fullscreen, window size ([display]); applied below in a play session
+	KeyBindings.load_settings()        # the player's rebound keys ([keys])
 	# Benchmark mode (-- --benchmark, see benchmark.gd) drives a fixed road so
 	# runs are comparable; normal play gets a fresh one each time. It also runs
 	# the default traffic (car count and draw distance), not whatever the
@@ -168,6 +170,7 @@ func _ready() -> void:
 	if GraphicsAutoPick.wanted():
 		add_child(GraphicsAutoPick.new())   # first launch: time a few seconds, pick a tier
 	GraphicsSettings.apply(get_tree())
+	DisplaySettings.apply(get_window())   # only touches the window in a real play session
 	if benchmark:
 		add_child(Benchmark.new())
 	add_child(saver)

@@ -114,7 +114,7 @@ func _physics_process(_delta: float) -> bool:
 						keys.append((ev as InputEventKey).keycode)
 				_check(keys.has(pair[1]), "%s is on the arrow key (%s)" % [pair[0], keys])
 				var listed := false
-				for group in PauseMenu.controls_groups():
+				for group in SettingsScreen.controls_groups():
 					for row in group[1]:
 						if row[0] == pair[0]:
 							listed = true

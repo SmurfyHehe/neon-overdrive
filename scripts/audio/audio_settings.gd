@@ -25,6 +25,20 @@ const CHANNELS := {
 ## Tests point this at a scratch file.
 static var path := default_path()
 static var volumes := {"Master": 1.0, "Engine": 1.0, "Turbo": 1.0, "Effects": 1.0, "Music": 1.0}
+## Turbo sounds (spool, whistle, blow-off): the Turbo channel above, under the
+## name the Settings Sound page uses. One number, saved as [audio] turbo.
+static var turbo_volume: float:
+	get:
+		return float(volumes["Turbo"])
+	set(value):
+		set_volume("Turbo", value if is_finite(value) else 1.0)
+
+static func set_turbo_volume(value: float) -> void:
+	turbo_volume = value
+
+## Linear gain of the turbo voice against full volume: the Engine slider times the Turbo slider.
+static func turbo_gain() -> float:
+	return float(volumes["Engine"]) * turbo_volume
 
 static func set_volume(channel: String, value: float) -> void:
 	if not CHANNELS.has(channel):
@@ -64,6 +78,8 @@ static func load_settings() -> void:
 	for channel in CHANNELS:
 		var v := float(cfg.get_value("audio", channel.to_lower(), 1.0)) if ok else 1.0
 		volumes[channel] = clampf(v, 0.0, 1.0) if is_finite(v) else 1.0  # a hand-edited "nan" loads as NaN
+	var t := float(cfg.get_value("audio", "turbo", 1.0)) if ok else 1.0
+	set_turbo_volume(t)
 	apply_all()
 
 static func save_settings() -> bool:
@@ -71,4 +87,5 @@ static func save_settings() -> bool:
 	cfg.load(path)  # keep the other sections (TrafficSettings); a missing file is fine
 	for channel in CHANNELS:
 		cfg.set_value("audio", channel.to_lower(), volumes[channel])
+	cfg.set_value("audio", "turbo", turbo_volume)
 	return cfg.save(path) == OK

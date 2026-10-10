@@ -146,8 +146,8 @@ func _check_tier(p: String) -> void:
 		_check(sizes[0] == want, "%s: rear mirror renders at %s (got %s)" % [p, want, sizes[0]])
 
 func _pick(i: int) -> void:
-	menu.gfx_preset.select(i)
-	menu.gfx_preset.item_selected.emit(i)
+	menu.settings.gfx_preset.select(i)
+	menu.settings.gfx_preset.item_selected.emit(i)
 
 func _process(_delta: float) -> bool:
 	frame += 1
@@ -167,7 +167,7 @@ func _process(_delta: float) -> bool:
 			_check(not _mirror_sizes().is_empty(), "the cockpit mirrors exist (their size is checked per tier)")
 			if menu == null:
 				return _finish()
-			menu.show_graphics()
+			menu.show_settings("Picture")
 			_pick(0)
 			wait = 5
 		1:
@@ -183,37 +183,36 @@ func _process(_delta: float) -> bool:
 			_check(not GraphicsSettings.auto_picked, "a menu pick is not marked automatic")
 			# Every option on the page, each value, applies.
 			for i in GraphicsSettings.AA_MODES.size():
-				menu.gfx_aa.item_selected.emit(i)
+				menu.settings.gfx_aa.item_selected.emit(i)
 				_check(GraphicsSettings.aa == GraphicsSettings.AA_MODES[i], "edge smoothing %s applies" % GraphicsSettings.AA_NAMES[i])
-			menu.gfx_aa.item_selected.emit(GraphicsSettings.AA_MODES.find("msaa2"))
+			menu.settings.gfx_aa.item_selected.emit(GraphicsSettings.AA_MODES.find("msaa2"))
 			for i in 3:
-				menu.gfx_mirrors.item_selected.emit(i)
+				menu.settings.gfx_mirrors.item_selected.emit(i)
 				_check(FxSettings.mirror_quality == i, "mirrors option %d applies" % i)
 				var sizes := _mirror_sizes()
 				if not sizes.is_empty():
 					_check(sizes[0] == CockpitMirrors._scaled(CockpitMirrors.REAR_SIZE), "mirrors option %d resizes the render" % i)
-			menu.gfx_mirrors.item_selected.emit(1)
-			menu.gfx_dynres.item_selected.emit(1)
+			menu.settings.gfx_mirrors.item_selected.emit(1)
+			menu.settings.gfx_dynres.item_selected.emit(1)
 			_check(not GraphicsSettings.dynamic_res, "dynamic resolution off applies")
-			menu.gfx_dynres.item_selected.emit(0)
+			menu.settings.gfx_dynres.item_selected.emit(0)
 			_check(GraphicsSettings.dynamic_res, "dynamic resolution on applies")
-			menu.gfx_cap.item_selected.emit(1)
+			menu.settings.gfx_cap.item_selected.emit(1)
 			_check(GraphicsSettings.fps_cap == 30 and Engine.max_fps == 30, "the 30 fps cap reaches the engine")
-			menu.gfx_cap.item_selected.emit(0)
+			menu.settings.gfx_cap.item_selected.emit(0)
 			_check(Engine.max_fps == 0, "V-sync only clears the cap")
 			for v in [GraphicsSettings.SCALE_MIN, GraphicsSettings.SCALE_MAX]:
-				menu.gfx_scale.value = v
+				menu.settings.gfx_scale.value = v
 				_check(is_equal_approx(root.scaling_3d_scale, v), "resolution slider at %.2f reaches the viewport" % v)
 			_check(GraphicsSettings.preset == "medium", "back on Medium's values reads Medium (got %s)" % GraphicsSettings.preset)
 			# A traffic slider moved by hand: Custom; a tier moves the main page's slider.
-			menu.show_main()
-			menu.traffic_cars_slider.value = 40
+			menu.show_settings("Picture")
+			menu.settings.traffic_cars_slider.value = 40
 			_check(GraphicsSettings.preset == "custom", "a traffic slider moved by hand makes the preset Custom")
-			menu.show_graphics()
-			_check(menu.gfx_preset.selected == 3, "the Graphics page shows Custom")
+			menu.show_settings("Picture")
+			_check(menu.settings.gfx_preset.selected == 3, "the Graphics page shows Custom")
 			_pick(0)
-			menu.show_main()
-			_check(int(menu.traffic_cars_slider.value) == GraphicsSettings.PRESET_VALUES.low.traffic, "the main page's Cars slider follows the tier")
+			_check(int(menu.settings.traffic_cars_slider.value) == GraphicsSettings.PRESET_VALUES.low.traffic, "the Cars slider follows the tier")
 			# Save and load each preset.
 			for p in GraphicsSettings.PRESETS:
 				GraphicsSettings.set_preset(p)
@@ -251,11 +250,11 @@ func _process(_delta: float) -> bool:
 		6:
 			if GraphicsSettings.preset in GraphicsSettings.PRESETS:
 				_check_tier(GraphicsSettings.preset)
-			menu.show_graphics()
-			_check(menu.gfx_auto_label.visible, "the Graphics page says the preset was picked automatically")
-			menu.gfx_cap.item_selected.emit(0)
-			_check(not GraphicsSettings.auto_picked and not menu.gfx_auto_label.visible, "a hand change clears the automatic mark")
-			menu.show_main()
+			menu.show_settings("Picture")
+			_check(menu.settings.gfx_auto_label.visible, "the Graphics page says the preset was picked automatically")
+			menu.settings.gfx_cap.item_selected.emit(0)
+			_check(not GraphicsSettings.auto_picked and not menu.settings.gfx_auto_label.visible, "a hand change clears the automatic mark")
+			menu.settings.close()
 			return _finish()
 	step += 1
 	return false

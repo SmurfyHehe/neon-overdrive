@@ -99,18 +99,18 @@ func _process(_delta: float) -> bool:
 		for n in game.get_children():
 			if n is PauseMenu:
 				menu = n
-		_check(menu != null and menu.graphics_page != null, "the pause menu has a Graphics page")
+		_check(menu != null and menu.settings != null, "the pause menu has a Settings screen")
 		if menu != null:
-			menu.show_graphics()
-			_check(menu.graphics_page.visible and not menu.main_page.visible, "the Graphics page opens")
-			menu.gfx_preset.select(2)
-			menu.gfx_preset.item_selected.emit(2)  # High
+			menu.show_settings("Picture")
+			_check(menu.settings.visible and menu.settings.current_page == 1, "the Picture page opens")
+			menu.settings.gfx_preset.select(2)
+			menu.settings.gfx_preset.item_selected.emit(2)  # High
 			_check(GraphicsSettings.preset == "high" and vp.msaa_3d == Viewport.MSAA_4X, "picking High in the menu applies MSAA 4x")
-			menu.gfx_preset.item_selected.emit(0)  # Low
+			menu.settings.gfx_preset.item_selected.emit(0)  # Low
 			_check(vp.scaling_3d_scale < 1.0 and vp.msaa_3d == Viewport.MSAA_2X, "picking Low applies its scale and MSAA 2x")
-			menu.gfx_aa.item_selected.emit(0)
-			_check(GraphicsSettings.preset == "custom" and menu.gfx_preset.selected == 3, "a hand change shows Custom")
-			menu.show_main()
+			menu.settings.gfx_aa.item_selected.emit(0)
+			_check(GraphicsSettings.preset == "custom" and menu.settings.gfx_preset.selected == 3, "a hand change shows Custom")
+			menu.settings.close()
 	if frame == 40:
 		for e in logger.errors:
 			failures.append("logged error: " + e)

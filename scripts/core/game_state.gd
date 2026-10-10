@@ -37,6 +37,21 @@ var state: State = State.PLAYING
 const TEXT_GUARDED := [&"pause", &"tuning_panel", &"autotune_panel", &"photo_mode"]
 var _typed_into_text: Dictionary = {}
 
+# The Settings screen (scripts/ui/settings_screen.gd) sits on top of the pause
+# menu and takes Esc and every key itself (closing, capturing a new key for a
+# binding), so the polled shortcuts below stand down while it is open. Closing
+# is delayed by one physics tick, so the Esc that closed it is not also read as
+# "resume".
+var modal_open := false
+var _modal_release := false
+
+func set_modal(on: bool) -> void:
+	if on:
+		modal_open = true
+		_modal_release = false
+	else:
+		_modal_release = true
+
 ## True for the two states that show the Tuner screen.
 static func is_tuner(s: State) -> bool:
 	return s == State.TUNING or s == State.AUTOTUNE
@@ -78,6 +93,12 @@ func _input(event: InputEvent) -> void:
 func _physics_process(_delta: float) -> void:
 	var blocked := _typed_into_text
 	_typed_into_text = {}
+	var modal := modal_open
+	if _modal_release:
+		modal_open = false
+		_modal_release = false
+	if modal:
+		return
 	if Input.is_action_just_pressed("pause") and not blocked.has(&"pause"):
 		toggle_pause()
 	elif Input.is_action_just_pressed("tuning_panel") and not blocked.has(&"tuning_panel"):

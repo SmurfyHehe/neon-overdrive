@@ -374,6 +374,23 @@ static func build_groups(data: GDScript, tris: PackedVector3Array, mats: PackedB
 	var cos_high := cos(deg_to_rad(HIGHLIGHT_DEG))
 
 	var names: Array = data.NAMES
+	# Per sheet material, worked out once: class, colour, finish, pit, tyre.
+	var m_class := PackedByteArray()
+	var m_col := PackedColorArray()
+	var m_fin := PackedVector2Array()
+	var m_pit := PackedByteArray()
+	var m_tyre := PackedByteArray()
+	for mname: String in names:
+		var cls := 3 if mname in data.EMISSIVE else (2 if mname in data.GLASS else (0 if mname in tint_mats else 1))
+		m_class.append(cls)
+		var col := Color(data.COLORS[mname]).srgb_to_linear() if data.COLORS.has(mname) else Color.BLACK
+		col.a = 0.0 if cls == 0 else 1.0
+		m_col.append(col)
+		var fin: Array = FINISH.get(mname, FINISH_DEFAULT)
+		m_fin.append(Vector2(fin[0], fin[1]))
+		m_pit.append(1 if mname in PIT_MATS else 0)
+		m_tyre.append(1 if mname in TYRE_MATS else 0)
+	var arch_top := wheel_r * 2.6
 	var fn := PackedVector3Array()   # face normal, zero = degenerate
 	fn.resize(n_tri)
 	var fa := PackedFloat32Array()   # face area
@@ -393,8 +410,7 @@ static func build_groups(data: GDScript, tris: PackedVector3Array, mats: PackedB
 		var b := tris[t * 3 + 1]
 		var c := tris[t * 3 + 2]
 		var n := (b - a).cross(c - a)
-		var mname: String = names[mats[t]]
-		fclass[t] = 3 if mname in data.EMISSIVE else (2 if mname in data.GLASS else (0 if mname in tint_mats else 1))
+		fclass[t] = m_class[mats[t]]
 		if n.length_squared() < 1e-12:
 			continue
 		fa[t] = n.length() * 0.5
@@ -423,16 +439,16 @@ static func build_groups(data: GDScript, tris: PackedVector3Array, mats: PackedB
 	for t in n_tri:
 		if fn[t] == Vector3.ZERO:
 			continue
-		var mname: String = names[mats[t]]
+		var mi := mats[t]
 		var cls := fclass[t]
 		var surf: String = "glow" if cls == 3 else ("glass" if cls == 2 else "body")
 		if not groups.has(surf):
 			groups[surf] = [PackedVector3Array(), PackedVector3Array(), PackedColorArray(),
 				PackedVector2Array(), PackedVector2Array(), PackedFloat32Array(), PackedFloat32Array()]
 		var g: Array = groups[surf]
-		var col := Color(data.COLORS[mname]).srgb_to_linear()
-		col.a = 0.0 if cls == 0 else 1.0
-		var fin: Array = FINISH.get(mname, FINISH_DEFAULT)
+		var col := m_col[mi]
+		var fin := m_fin[mi]
+		var no_edges := true
 		var centre := (tris[t * 3] + tris[t * 3 + 1] + tris[t * 3 + 2]) / 3.0
 		# Edge k is the one opposite corner k.
 		var crease_h := [NO_EDGE, NO_EDGE, NO_EDGE]
@@ -448,10 +464,12 @@ static func build_groups(data: GDScript, tris: PackedVector3Array, mats: PackedB
 				var h := 2.0 * fa[t] / maxf(pa.distance_to(pb), 1e-6)
 				if fclass[o] != cls and (cls == 0 or fclass[o] == 0):
 					seam_h[k] = h
+					no_edges = false
 				elif cls == 0 and fn[o].dot(fn[t]) < cos_high:
 					var oc := (tris[o * 3] + tris[o * 3 + 1] + tris[o * 3 + 2]) / 3.0
 					if fn[t].dot(oc - centre) < -1e-5:
 						crease_h[k] = h
+						no_edges = false
 		for k in [0, 2, 1]:
 			var p := tris[t * 3 + k]
 			var n := Vector3.ZERO
@@ -464,30 +482,38 @@ static func build_groups(data: GDScript, tris: PackedVector3Array, mats: PackedB
 			if surf == "glass":
 				g[3].append(Vector2(1.0 - inverse_lerp(glass_y0, glass_y1, p.y) if glass_y1 > glass_y0 else 0.0, 0.0))
 			else:
-				g[3].append(Vector2(fin[0], fin[1]))
+				g[3].append(fin)
 			var occ := 0.0
-			if mname in PIT_MATS:
+			if m_pit[mi] == 1:
 				occ = 1.0
 			elif is_wheel:
-				if not (mname in TYRE_MATS):
+				if m_tyre[mi] == 0:
 					occ = clampf((x_out - p.x) / 0.12, 0.0, 1.0) * 0.75
 			else:
 				occ = 0.4 * (1.0 - smoothstep(0.1, 0.45, p.y))
 				if fn[t].y < -0.5:
 					occ = maxf(occ, 0.7)
-				for hub: Vector3 in hubs:
+				for hub: Vector3 in (hubs if p.y < arch_top else []):
 					var to_hub := Vector2(hub.y - p.y, hub.z - p.z)
 					var d := to_hub.length()
 					if d < wheel_r * 1.5 and absf(p.x - hub.x) < 0.45:
 						var facing := Vector2(fn[t].y, fn[t].z).dot(to_hub / maxf(d, 1e-4))
 						occ = maxf(occ, 0.92 if facing > 0.35 else 0.5 * (1.0 - smoothstep(wheel_r * 1.02, wheel_r * 1.5, d)))
 			g[4].append(Vector2(occ, 0.0))
+			if surf != "body":
+				continue
+			if no_edges:
+				g[5].append_array(_NO_EDGES)
+				g[6].append_array(_NO_EDGES)
+				continue
 			for j in 3:
 				var hc: float = crease_h[j]
 				var hs: float = seam_h[j]
 				g[5].append(NO_EDGE if hc == NO_EDGE else (1.0 - hc / EDGE_W if j == k else 1.0))
 				g[6].append(NO_EDGE if hs == NO_EDGE else (1.0 - hs / EDGE_W if j == k else 1.0))
 	return groups
+
+const _NO_EDGES: PackedFloat32Array = [NO_EDGE, NO_EDGE, NO_EDGE]
 
 static func _edge_key(a: int, b: int) -> int:
 	return mini(a, b) * 1000003 + maxi(a, b)

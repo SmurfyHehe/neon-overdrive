@@ -14,7 +14,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 [application]
 
-config/name="Neon Overdrive"
+config/name="Boost Simcade"
 config/version="0.1.0"
 run/main_scene="res://Game.tscn"
 config/features=PackedStringArray("4.7", "Mobile")

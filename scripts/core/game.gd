@@ -627,8 +627,6 @@ func _update_chunk_pool(ref_z: float) -> void:
 		rebuilt_now += 1
 		rebuilds_in_frame_max = maxi(rebuilds_in_frame_max, rebuilt_now)
 		c.index = idx
-		if moments != null:
-			moments.dress_chunk(c.root, idx)
 	_run_rebuild_jobs()
 
 func _run_rebuild_jobs() -> void:
@@ -639,20 +637,28 @@ func _run_rebuild_jobs() -> void:
 		if _rebuild_jobs.is_empty():
 			break
 		if RoadChunkBuilder.rebuild_step(_rebuild_jobs[0]):
-			_rebuild_jobs.pop_front()
-			rebuild_count += 1
+			_rebuilt(_rebuild_jobs.pop_front())
 	# Skeleton-car spike counters: the cost of this frame's slice of rebuild work.
 	rebuild_us_last = Time.get_ticks_usec() - t0
 	rebuild_us_max = maxi(rebuild_us_max, rebuild_us_last)
 	rebuild_us_total += rebuild_us_last
 	SpikeLog.mark("chunk_rebuild", SpikeLog.since(t0))
 
+## A staged rebuild has just finished: the chunk is in its new place and solid.
+## Only now can the night's moments dress it: a trap's patrol car is placed
+## against the chunk's own transform, and before the finish that was still the
+## place the chunk was recycled from (the car then stood, solid, wherever the
+## difference between the two put it, the road included).
+func _rebuilt(job: RoadChunkBuilder.RebuildJob) -> void:
+	rebuild_count += 1
+	if moments != null and is_instance_valid(job.root):
+		moments.dress_chunk(job.root, job.index)
+
 ## Finishes every rebuild in flight now (tests that walk the pool by hand).
 func flush_rebuilds() -> void:
 	while not _rebuild_jobs.is_empty():
 		if RoadChunkBuilder.rebuild_step(_rebuild_jobs[0]):
-			_rebuild_jobs.pop_front()
-			rebuild_count += 1
+			_rebuilt(_rebuild_jobs.pop_front())
 
 # ---------- floating origin (issue #26) ----------
 func _physics_process(_delta: float) -> void:

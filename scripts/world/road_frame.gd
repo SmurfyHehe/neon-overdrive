@@ -237,7 +237,7 @@ static func pose(x: float, y: float, z: float, yaw: float) -> Transform3D:
 	var k := align.curvature(i)
 	var h := RoadAlignment.arc_heading(k, s)
 	var xf := chunk_xf(i)
-	var rise := align.start_grade(i) * s + 0.5 * align.vcurve(i) * s * s
+	var rise := align.rise(i, s)
 	var basis := Basis(Vector3.UP, align.start_heading(i) + h) * Basis(Vector3.RIGHT, atan(align.grade_at(i, s))) * Basis(Vector3.UP, yaw)
 	var local := RoadAlignment.arc_point(k, s) + Vector3(cos(h), 0.0, -sin(h)) * x + Vector3(0.0, rise + y, 0.0)
 	return Transform3D(basis, xf * local)

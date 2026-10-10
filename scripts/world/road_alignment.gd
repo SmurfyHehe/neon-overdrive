@@ -143,9 +143,19 @@ func vcurve(i: int) -> float:
 	_ensure(i)
 	return _vc[i]
 
+# A loop's eased start of chunk i comes from the lap's own stepped profile
+# (_h, _g after the tilt) and the chunk before it on the lap, so the last
+# chunk eases into the first like any other join. _h0, _g0 and _dc are the
+# endless road's: they know neither the tilt nor that chunk 0 has a chunk
+# before it. (Until 2026-10-10 a loop answered with the stepped _h and _g
+# while the chunks were built eased, which left a step of up to 25 cm in the
+# road at every join where the vertical bend changes.)
+
 func start_height(i: int) -> float:
 	if period > 0:
-		return _h[_at(i)]
+		var m := _at(i)
+		var before := _vc[posmod(m - 1, period)]
+		return _h[m] + before * EASE * EASE / 24.0 + (_vc[m] - before) * EASE * EASE / 48.0
 	if i < 0:
 		return 0.0
 	_ensure(i)
@@ -153,7 +163,8 @@ func start_height(i: int) -> float:
 
 func start_grade(i: int) -> float:
 	if period > 0:
-		return _g[_at(i)]
+		var m := _at(i)
+		return _g[m] + (_vc[m] - _vc[posmod(m - 1, period)]) * EASE / 8.0
 	if i < 0:
 		return 0.0
 	_ensure(i)
@@ -163,6 +174,9 @@ func start_grade(i: int) -> float:
 ## (vcurve(i) - vcurve(i - 1)): the step the easing spreads over EASE metres
 ## around the chunk's start.
 func vstep(i: int) -> float:
+	if period > 0:
+		var m := _at(i)
+		return _vc[m] - _vc[posmod(m - 1, period)]
 	if i < 0:
 		return 0.0
 	_ensure(i)
@@ -170,24 +184,14 @@ func vstep(i: int) -> float:
 
 ## Height of the road above the start of chunk i, s metres into it.
 func rise(i: int, s: float) -> float:
-	if i < -1:
-		return 0.0
-	_ensure(i + 1)
-	if i < 0:
-		return ease_rise(0.0, 0.0, 0.0, _dc[0], s)
-	return ease_rise(_g0[i], _vc[i], _dc[i], _dc[i + 1], s)
+	return ease_rise(start_grade(i), vcurve(i), vstep(i), vstep(i + 1), s)
 
 ## Height and grade at distance s into chunk i.
 func height_at(i: int, s: float) -> float:
 	return start_height(i) + rise(i, s)
 
 func grade_at(i: int, s: float) -> float:
-	if i < -1:
-		return 0.0
-	_ensure(i + 1)
-	if i < 0:
-		return ease_grade(0.0, 0.0, 0.0, _dc[0], s)
-	return ease_grade(_g0[i], _vc[i], _dc[i], _dc[i + 1], s)
+	return ease_grade(start_grade(i), vcurve(i), vstep(i), vstep(i + 1), s)
 
 # One chunk's eased vertical profile: start grade g0, its own curvature c,
 # and the curvature steps at its start (dc_in) and end (dc_out). A step of 1

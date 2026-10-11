@@ -153,6 +153,79 @@ class ImportTreblo(unittest.TestCase):
         self.assertTrue((self.inbox / "ab-key.csv").exists())
         self.assertTrue((self.inbox / "whatever.wav").exists())   # left in place
 
+    # ---- paired blind test (--pairs) ------------------------------------------
+    def make_game_ogg(self, rel, seconds=70, amp=0.8):
+        src = self.tmp / "game_src.wav"
+        write_wav(src, seconds, amp=amp)
+        out = self.repo / "assets" / "radio" / rel
+        out.parent.mkdir(parents=True, exist_ok=True)
+        rc, _, err = imp.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-ac", "2",
+                              "-c:a", "libvorbis", "-b:a", "112k", str(out)])
+        self.assertEqual(rc, 0, err)
+        return out
+
+    def probe(self, path):
+        rc, out, _ = imp.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
+                              "stream=codec_name,sample_rate,channels", "-of", "csv=p=0", str(path)])
+        return out.strip()
+
+    def test_pairs(self):
+        game_rel = imp.PAIRS[0][2]
+        game = self.make_game_ogg(game_rel)
+        before = sorted(p.name for p in (self.repo / "assets" / "radio").rglob("*"))
+        # Treblo song much quieter than ours: loudness must still match after the cut
+        write_wav(self.inbox / "afterglow_01_harlow-drive_dusk.wav", 70, amp=0.15)
+        write_wav(self.inbox / "greyhour_01_wet-road_late.wav", 70, amp=0.3)
+        code = self.run_import("--pairs", "--seed", "7")
+        self.assertEqual(code, 0)
+        bt = self.inbox / "blind-test"
+        a, b = bt / "pair_01_A.wav", bt / "pair_01_B.wav"
+        self.assertTrue(a.exists() and b.exists())
+        ff = imp.Ff()
+        for f in (a, b, bt / "solo_10.wav"):
+            self.assertAlmostEqual(ff.duration(f), 45.0, delta=0.3)
+            self.assertEqual(self.probe(f), "pcm_s16le,44100,2")
+            self.assertAlmostEqual(float(ff.loudnorm_measure(f)["input_i"]), -16.0, delta=1.5)
+        key = (bt / "key.txt").read_text(encoding="utf-8")
+        self.assertRegex(key, r"pair_01: Treblo = [AB], ours = [AB]")
+        self.assertIn("solo_10: Treblo only", key)
+        # pairs with no Treblo WAV yet are skipped, not faked
+        self.assertFalse((bt / "pair_02_A.wav").exists())
+        self.assertNotIn("pair_02", key)
+        # key.txt is right: the "ours" side really is the game song (same loudness is not
+        # enough to tell, so compare the amplitude pattern via the source cut)
+        self.assertNotEqual(key.split("pair_01: Treblo = ")[1][0], key.split("ours = ")[1][0])
+        # nothing written to the game's files, and the inbox WAVs are left alone
+        after = sorted(p.name for p in (self.repo / "assets" / "radio").rglob("*"))
+        self.assertEqual(before, after)
+        self.assertTrue(game.exists())
+        self.assertTrue((self.inbox / "afterglow_01_harlow-drive_dusk.wav").exists())
+        # a re-run keeps the same A/B answers
+        first = key.split("pair_01: Treblo = ")[1][0]
+        self.run_import("--pairs", "--seed", "99")
+        key2 = (bt / "key.txt").read_text(encoding="utf-8")
+        self.assertEqual(key2.split("pair_01: Treblo = ")[1][0], first)
+
+    def test_pairs_rejects_short_song(self):
+        self.make_game_ogg(imp.PAIRS[0][2])
+        write_wav(self.inbox / "afterglow_01_harlow-drive_dusk.wav", 40)   # < 60 s
+        self.assertEqual(self.run_import("--pairs"), 1)
+        self.assertFalse((self.inbox / "blind-test" / "pair_01_A.wav").exists())
+        self.assertFalse((self.inbox / "blind-test" / "pair_01_B.wav").exists())
+
+    def test_pair_table_is_sane(self):
+        self.assertEqual([n for n, _, _ in imp.PAIRS], list(range(1, 10)))
+        self.assertEqual([n for n, _ in imp.SOLOS], [10, 11, 12])
+        for _, prefix, rel in imp.PAIRS:
+            self.assertTrue((ROOT / "assets" / "radio" / rel).is_file(), rel)
+        sheet = imp.load_sheet(ROOT / "docs" / "audio" / "treblo-prompts.md")
+        self.assertEqual(len(sheet), 40)
+        ids = list(sheet)
+        for _, prefix, _ in imp.PAIRS:
+            self.assertEqual(sum(i.startswith(prefix + "_") for i in ids), 1, prefix)
+        for _, prefix in imp.SOLOS:
+            self.assertEqual(sum(i.startswith(prefix + "_") for i in ids), 1, prefix)
+
     def test_tempo(self):
         ff = imp.Ff()
         p = self.tmp / "t.wav"

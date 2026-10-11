@@ -1,0 +1,15 @@
+SOURCE: https://treblo.com/developers and https://treblo.com/developers/docs
+FETCHED: 2026-10-10 via built-in browser (reading only, not signed in). Paraphrased notes, not a full copy.
+
+- Base URL https://api.treblo.com/v1, Bearer API key. Model v3 at POST /generations/v3.
+- "Every v3 request (generate, extend, inpaint, reference) costs 100 credits."
+- Failures: "FAILURE - ... no credits were deducted."
+- Poll GET /generations/status/{task_id}; then GET /generations/{task_id} -> song_paths[].
+- Songs may be deleted from Treblo's servers one week after generation.
+- output_format: mp3, flac, wav, ogg (default), m4a. instrumental: true is documented.
+- length_range [min,max] in multiples of 30; one v3 generation is capped at 4:45.
+- POST /generations/v3/extend takes audio_url (the CDN path of a Treblo generation) and context_seconds.
+- GET /credits/balance -> num_credits, num_credits_payg.
+- Plans (developers page): Free Trial = 3,000 credits "after a quick card verification. Nothing is charged."
+  Starter $11/mo = 20,000 credits. Pro $88/mo = 160,000.
+- API Terms s6 (attribution) is quoted in full in api-terms.txt.

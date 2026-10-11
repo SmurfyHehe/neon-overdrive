@@ -119,6 +119,10 @@ var t := 0.0
 var night_clock: NightClock
 ## Tests pin the flash on or off: -1 = follow the clock, 0 = off, 1 = on.
 var force_flash := -1
+## The player's car, for the U-turn hold (Game sets it; null = no hold).
+var player: Node3D
+## Heading off the road's axis past which a car in the box counts as turning.
+const U_TURN_YAW := PI / 4.0
 
 var _origin := -999999
 var _placed_z := INF
@@ -243,16 +247,37 @@ func stop_gap(z: float, dir: float, half_l: float, v: float) -> float:
 	if not enabled:
 		return INF
 	var st := main_state()
-	if st == GREEN or st == FLASH_AMBER:
+	# A U-turn in the box (see uturn_hold) is a red for the crossing the player
+	# is in, whatever the lamps say.
+	var held := uturn_hold and absf(z - focus_z) < NEAR_FOCUS
+	if not held and (st == GREEN or st == FLASH_AMBER):
 		return INF
 	var line := centre_z_near(z) - dir * STOP_OFF
 	var d := (line - z) * dir - half_l
 	if d < -PAST_LINE or d > LOOK:
 		return INF
 	var need := v * v / (2.0 * maxf(d, 0.1))
-	if need > (B_AMBER if st == AMBER else B_RED):
+	if need > (B_AMBER if st == AMBER and not held else B_RED):
 		return INF
 	return d
+
+## Whether the player is inside the box with its nose more than U_TURN_YAW off
+## the road: a U-turn (or a stop across the road) in the crossing. Main-road
+## traffic then treats the stop lines as red, so nobody drives into the car
+## crossing their carriageway. It lets go the moment the player is inside the
+## box heading along the road again, or has left it. Nothing else changes:
+## there is no offence for it (no heat), and the lights are not touched.
+var uturn_hold := false
+
+func _update_uturn() -> void:
+	uturn_hold = false
+	if player != null and is_instance_valid(player):
+		var pu := RoadFrame.unroll(player.global_position)
+		if absf(pu.z - centre_z()) < STOP_OFF - STOP_LINE_W and absf(pu.x) < MAIN_ROAD_HALF:
+			var f := RoadFrame.dir_to_road(pu.z, -player.global_transform.basis.z)
+			var flat := Vector2(f.x, f.z)
+			if flat.length() > 0.001:
+				uturn_hold = absf(flat.normalized().y) < cos(U_TURN_YAW)
 
 func _ready() -> void:
 	name = "Junction"
@@ -274,6 +299,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	t = fposmod(t + delta, CYCLE)
 	_blink = fposmod(_blink + delta, FLASH_PERIOD)
+	_update_uturn()
 	_place()
 	_show()
 

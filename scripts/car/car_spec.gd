@@ -445,6 +445,7 @@ const PLAYER_AUTO := {
 	"p5_muscle": {"family": "old"},
 	"p6_crossover": {"family": "90s"},
 	"p7_wagon": {"family": "old"},
+	"p10_truck": {"family": "90s"},
 }
 
 static func player_spec(kind: String) -> Dictionary:
@@ -656,6 +657,36 @@ static func player_spec(kind: String) -> Dictionary:
 			s["rear_damping_ratio"] = 0.35
 			s["front_arb_ratio"] = 0.18
 			s["rear_arb_ratio"] = 0.08
+			s["turbo_boost_max"] = 0.0
+		"p10_truck":
+			# Harlan Drover, T2 (MC2 brief, 2026-10-11): a lowered regular-cab sport
+			# truck, pushrod V8, rear drive, 4-speed automatic with overdrive (the
+			# "90s" family), 1750 kg. Cloned from the Camel and lowered: 680 Nm on
+			# the game's torque scale (0.39 Nm/kg, nudged up from the Camel's 0.36
+			# toward 0-100 in about 6.8 s and 225 km/h), torque low down, done by
+			# 5500, a tall overdrive top, street tyres 255 / 285, a high centre of
+			# gravity on stiffer springs than the Camel, a soft rear bar (the empty
+			# bed is light; MC10 tunes the rest). Data only: no new physics.
+			var gears: Array[float] = [2.74, 1.57, 1.00, 0.70]
+			s["vehicle_mass"] = 1750.0
+			s["front_weight_distribution"] = 0.58
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 680.0
+			s["max_rpm"] = 5500.0
+			s["idle_rpm"] = 650.0
+			s["torque_shape"] = {"low_end": 0.75, "peak_pos": 0.45, "plateau": 0.20, "falloff": 0.60}
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.73
+			s["coefficient_of_drag"] = 0.40
+			s["frontal_area"] = 2.70
+			s["front_tire_width"] = 255.0
+			s["rear_tire_width"] = 285.0
+			s["coefficient_of_friction"] = {"Road": 1.15, "Dirt": 1.0}
+			s["center_of_gravity_height_offset"] = 0.09
+			s["front_damping_ratio"] = 0.35
+			s["rear_damping_ratio"] = 0.32
+			s["front_arb_ratio"] = 0.16
+			s["rear_arb_ratio"] = 0.06
 			s["turbo_boost_max"] = 0.0
 		_:
 			return s  # p1_coupe, or an unknown kind: the coupe
@@ -904,6 +935,28 @@ static func npc_spec(kind: String) -> Dictionary:
 			s["rear_damping_ratio"] = 0.35
 			s["front_arb_ratio"] = 0.18
 			s["rear_arb_ratio"] = 0.08
+		"p10_truck":
+			# Street truck (Harlan Drover): the player_spec numbers, so a rival or
+			# a parked one drives like the player's.
+			var gears: Array[float] = [2.74, 1.57, 1.00, 0.70]
+			s["vehicle_mass"] = 1750.0
+			s["front_weight_distribution"] = 0.58
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 680.0
+			s["max_rpm"] = 5500.0
+			s["torque_shape"] = {"low_end": 0.75, "peak_pos": 0.45, "plateau": 0.20, "falloff": 0.60}
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.73
+			s["coefficient_of_drag"] = 0.40
+			s["frontal_area"] = 2.70
+			s["front_tire_width"] = 255.0
+			s["rear_tire_width"] = 285.0
+			s["coefficient_of_friction"] = {"Road": 1.15, "Dirt": 1.0}
+			s["center_of_gravity_height_offset"] = 0.09
+			s["front_damping_ratio"] = 0.35
+			s["rear_damping_ratio"] = 0.32
+			s["front_arb_ratio"] = 0.16
+			s["rear_arb_ratio"] = 0.06
 		"c1_patrol":
 			# Patrol sedan (Crown Vic / Charger Pursuit class), V8, rear drive:
 			# heavy, police-spec damping, long gears.

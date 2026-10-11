@@ -67,6 +67,11 @@ const PRESETS := {
 	# truck rasp. Louder and darker than the traffic pickup's six.
 	"p17_work_pickup": {"cylinders": 6, "cyl_spread": 0.12, "seed": 109, "body_hz": 84.0, "body_q": 1.35,
 			"rasp_hz": 880.0, "rasp_q": 1.5, "tone": 0.72, "pulse_width": 0.40, "wander": 0.75},
+	# Street truck, pushrod V8 on a single pipe: the muscle car's lope, a
+	# touch lower in the body and more muffled, its own seed.
+	"p10_truck": {"cylinders": 8, "firing": _V8_FIRING, "cyl_amps": _V8_BANKS, "cyl_spread": 0.2, "seed": 97,
+			"body_hz": 62.0, "body_q": 1.3, "rasp_hz": 820.0, "rasp_q": 1.5, "tone": 0.76,
+			"pulse_width": 0.40, "wander": 0.75},
 	# Traffic: quiet, smooth, muffled. They should not compete with the player.
 	"n1_commuter": {"cylinders": 4, "cyl_spread": 0.04, "seed": 71, "body_hz": 140.0, "body_q": 1.2,
 			"rasp_hz": 1000.0, "rasp_q": 1.4, "tone": 0.7, "pulse_width": 0.42, "wander": 0.5},

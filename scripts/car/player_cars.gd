@@ -36,6 +36,8 @@ const KINDS := [
 	{"id": "p6_crossover", "label": "Perf. crossover", "name": "Cairn", "tier": "T2", "nm": 400, "kg": 1450},
 	# The 4-door work pickup Walt sells after act 1 (Roy, 2026-10-10).
 	{"id": "p17_work_pickup", "label": "Work pickup", "name": "Camel", "tier": "T2", "nm": 640, "kg": 1780},
+	# The lowered sport truck, Diesel Row's crew truck, for sale after act 2 (MC2 brief, 2026-10-11).
+	{"id": "p10_truck", "label": "Street truck", "name": "Harlan Drover", "tier": "T2", "nm": 680, "kg": 1750},
 	# Special vehicles (S0): story-end unlocks, not sprint-race cars. nm / kg are
 	# the coupe's, which they borrow until their body steps (see their data files).
 	{"id": "m1_monster", "label": "Monster truck", "name": "Brute", "tier": "S", "nm": 460, "kg": 1300},

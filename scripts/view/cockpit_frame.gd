@@ -161,6 +161,7 @@ const DIAL_FACE := Color("#0B0E14")
 ##   retro    the kei roadster: tan seats, a painted navy dash
 ##   wood     the muscle sedan: oxblood bench, a wood-grain dash face, chrome trim
 ##   utility  the crossover: two-tone grey cloth, hard grey plastics
+##   truck    the street truck: charcoal cloth bench, grey-black plastics, a sodium strip
 const TRIMS := {
 	"stock": {"plastic": PLASTIC, "plastic_light": PLASTIC_LIGHT, "trim": TRIM, "seat": SEAT, "seat_pass": SEAT, "seat_panel": SEAT_PANEL,
 		"leather": LEATHER, "carpet": CARPET, "strip": Color("#FFC06659"), "dash": PLASTIC, "dash_face": PLASTIC_LIGHT},
@@ -176,6 +177,8 @@ const TRIMS := {
 		"leather": Color("#2A1612"), "carpet": Color("#120D0B"), "strip": Color("#C9CED640"), "dash": Color("#201A16"), "dash_face": Color("#5A3A22")},
 	"utility": {"plastic": Color("#24272B"), "plastic_light": Color("#33373C"), "trim": Color("#44484E"), "seat": Color("#2B2E33"), "seat_pass": Color("#2B2E33"), "seat_panel": Color("#50545A"),
 		"leather": Color("#1D1F23"), "carpet": Color("#111214"), "strip": Color("#FFC06633"), "dash": Color("#24272B"), "dash_face": Color("#2E3136")},
+	"truck": {"plastic": Color("#202226"), "plastic_light": Color("#2C2F34"), "trim": Color("#3A3D43"), "seat": Color("#2A2B2E"), "seat_pass": Color("#2A2B2E"), "seat_panel": Color("#3C3E42"),
+		"leather": Color("#1E1F22"), "carpet": Color("#121316"), "strip": Color("#FF8A1F4D"), "dash": Color("#202226"), "dash_face": Color("#2A2D32")},
 }
 const BACKLIGHT_ENERGY := 1.6
 

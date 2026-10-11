@@ -182,6 +182,20 @@ const KINDS := {
 		"build_paint": {},
 		"sheet_paint": true,
 	},
+	# The street truck (Harlan Drover, P10, 2026-10-11): the lowered regular-cab
+	# sport truck, built from its parts glb; the sheet mesh is the
+	# NEON_PARTS_LEGACY body. Not the Camel (tall) and not the traffic pickup.
+	"p10_truck": {
+		"data": preload("res://scripts/car/p10_truck_data.gd"),
+		"length": 5.05, "width": 1.92, "height": 1.62, "clearance": 0.14,
+		"front_overhang": 0.90, "rear_overhang": 1.20,
+		"wheel_r": 0.36, "wheel_x": 0.81, "axle_z": 1.475,
+		"drive": "rwd",
+		"rest_y": -0.12,
+		"builds": {"stock": 100},
+		"build_paint": {},
+		"sheet_paint": true,
+	},
 	"c1_patrol": {
 		"data": preload("res://scripts/car/c1_patrol_data.gd"),
 		"length": 5.30, "width": 1.96, "height": 1.6, "clearance": 0.16,

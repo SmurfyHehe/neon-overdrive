@@ -1,6 +1,6 @@
 """Per-car swappable parts (slots -> options) and example builds."""
 import mods as M
-from cars import P1, P2, P3, P4, P5, P6, P17, N1, N2, N3, C1, C2, C3
+from cars import P1, P2, P3, P4, P5, P6, P10, P17, N1, N2, N3, C1, C2, C3
 
 STOCK = {'label': 'Stock', 'ops': []}
 
@@ -154,6 +154,11 @@ P17['options'] = {
     'exhaust': {'stock': {'label': 'Single (rear corner)', 'ops': []}, 'dual': M.exhaust(P17, 'dual', 0.042), 'side': M.exhaust(P17, 'side', 0.048)},
     'stance': {'stock': STOCK, 'lowered': M.stance(0.05, 'Street-lowered 5 cm'), 'raised': M.stance(-0.04, 'Lifted 4 cm')},
 }
+
+# ------------------------------------------------------------------ P10
+# Stock only (MC2 brief, 2026-10-11): the push bar, the bed-mounted spoiler and
+# the Diesel Row light rail are options for the crew kit, not the stock truck.
+P10['options'] = {}
 
 # ------------------------------------------------------------------ NPC trims
 N1['options'] = {

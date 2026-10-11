@@ -158,6 +158,31 @@ const CARS := {
 			["trunk", "body", Vector3.RIGHT, Vector3.UP, 2, 2.28],
 		],
 	},
+	"p10_truck": {
+		## a regular cab (no B-pillar inside the glass), no deck lid: the tail is the
+		## tailgate on its own hinge and the deck the fixed hard bed cover
+		"without": ["trunk", "pillar_b_l", "pillar_b_r"],
+		"parts": ["grille", "lamp_block_l", "lamp_block_r", "glass_slider", "plate_lamp", "tailgate", "handle_tailgate",
+			"bed_cover", "hood_dome", "mirror_l", "mirror_r", "antenna", "caliper_fl", "caliper_fr", "caliper_rl", "caliper_rr",
+			"bay_floor", "bay_radiator_core", "frame", "subframe_f", "susp_fl", "susp_fr", "leaf_l", "leaf_r", "axle_r",
+			"diff_cover", "driveshaft", "tank", "exhaust_pipe", "muffler",
+			"trunk", "pillar_b_l", "pillar_b_r"],   # listed so that `without` is checked
+		## the rear blinkers are the red tops of the lamp blocks (era)
+		"lamps": {"head_l": "glow_head", "head_r": "glow_head", "turn_fl": "glow_turn", "turn_fr": "glow_turn",
+			"turn_rl": "glow_tail", "turn_rr": "glow_tail", "tail_l": "glow_tail", "tail_r": "glow_tail",
+			"brake_l": "glow_brake", "brake_r": "glow_brake", "brake_c": "glow_brake",
+			"reverse_l": "glow_reverse", "reverse_r": "glow_reverse", "plate_lamp": "glow_lens"},
+		"anchors": ["bay_engine", "bay_radiator", "tank", "fuel_filler", "diff"],
+		## 330 mm vented discs in front, 300 mm at the rear
+		"brakes": {"fl": 0.165, "fr": 0.165, "rl": 0.15, "rr": 0.15},
+		"no_hubcap": [],
+		"gaps": [
+			["hood", "fender_fr", Vector3.RIGHT, Vector3.UP, 2, -1.60],
+			["fender_fr", "door_r", Vector3.BACK, Vector3.RIGHT, 1, 0.92],
+			["door_r", "body", Vector3.BACK, Vector3.RIGHT, 1, 0.95],
+			["bed_cover", "body", Vector3.RIGHT, Vector3.UP, 2, 1.40],
+		],
+	},
 }
 
 var fails := 0

@@ -38,7 +38,7 @@ const SMOKE := Color(0.78, 0.71, 0.60)
 const CAN_R := 0.031
 const CAN_HALF := 0.0575
 ## The hand's origin over the pocket floor when it holds an item standing in it.
-const STAND := 0.065
+const STAND := 0.085
 const LED_IDLE := 0.35
 const LED_DRAW := 3.2
 
@@ -47,7 +47,7 @@ const EXHALE_PUFFS := 8
 const EXHALE_GAP := 0.05         # seconds between puffs
 const SHUT_LIFE := 2.0
 const OPEN_LIFE := 1.4
-const SHUT_ALPHA := 0.20
+const SHUT_ALPHA := 0.13
 const OPEN_ALPHA := 0.30
 const PUFF_R0 := 0.03
 const PUFF_R1 := 0.09
@@ -116,13 +116,13 @@ func _part(kit: CockpitKit, mat: Material, node_name: String) -> MeshInstance3D:
 ## Hand space (DriverModel._hold_mesh): the stick runs along local y through
 ## the grip, the mouthpiece at +y, the LED at the far end.
 static func _vape_mesh(k: CockpitKit) -> void:
-	k.box(Vector3(0.024, 0.088, 0.014), Vector3(0.0, -0.01, 0.0), VAPE_BODY)
+	k.box(Vector3(0.024, 0.105, 0.014), Vector3(0.0, -0.0225, 0.0), VAPE_BODY)   # the far 4 cm stand clear of the fingers
 	k.box(Vector3(0.025, 0.006, 0.015), Vector3(0.0, 0.03, 0.0), SILVER)
 	k.box(Vector3(0.012, 0.02, 0.009), Vector3(0.0, 0.044, 0.0), VAPE_TIP)
 
 static func _led_mesh(k: CockpitKit) -> void:
-	k.box(Vector3(0.012, 0.003, 0.008), Vector3(0.0, -0.0555, 0.0), AMBER)        # the end cap
-	k.box(Vector3(0.005, 0.016, 0.002), Vector3(0.0, -0.042, -0.0078), AMBER)     # a strip on the face the fingers leave clear
+	k.box(Vector3(0.012, 0.003, 0.008), Vector3(0.0, -0.0765, 0.0), AMBER)        # the end cap
+	k.box(Vector3(0.006, 0.024, 0.002), Vector3(0.0, -0.058, -0.0078), AMBER)     # a strip on the face that looks up at the driver
 
 ## The can stands along local y, centred on the grip.
 static func _can_mesh(k: CockpitKit) -> void:
@@ -169,6 +169,7 @@ func _build_cloud() -> void:
 	cloud = MultiMeshInstance3D.new()
 	cloud.name = "VapeCloud"
 	cloud.multimesh = mm
+	cloud.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF   # moved every drawn frame, in car space
 	cloud.custom_aabb = AABB(Vector3(-4.0, -1.0, -3.0), Vector3(8.0, 4.0, 45.0))   # it trails back along the car
 	add_child(cloud)
 
@@ -220,7 +221,7 @@ func _emit() -> void:
 		var eye: Vector3 = cab.eye
 		var jitter := Vector3(_rand() - 0.5, _rand() - 0.5, _rand() - 0.5)
 		_pos[i] = eye + MOUTH + jitter * 0.02
-		_vel[i] = (Vector3(-1.1, -0.1, -0.25) if _open else Vector3(0.0, -0.32, -0.55)) + jitter * 0.3
+		_vel[i] = (Vector3(-1.1, -0.1, -0.25) if _open else Vector3(0.0, -0.12, -0.75)) + jitter * 0.3
 		_age[i] = 0.0
 		_life[i] = (OPEN_LIFE if _open else SHUT_LIFE) * (0.85 + 0.15 * _rand())
 		_out[i] = 0

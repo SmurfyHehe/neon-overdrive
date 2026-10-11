@@ -170,7 +170,9 @@ const IDLE_LIFT_SECS := 0.40
 const IDLE_LOWER_SECS := 0.45
 const IDLE_RETURN_SECS := 0.30
 const IDLE_HOLD_SECS := {IdleActions.VAPE: 0.85, IdleActions.BEER: 0.95}
-const IDLE_MOUTH := {IdleActions.VAPE: Vector3(0.0, -0.10, -0.19), IdleActions.BEER: Vector3(0.0, -0.14, -0.18)}
+## From the eye. A hand's width to the left of the mouth, so the hand comes up beside the gauges, not over them.
+const IDLE_MOUTH := {IdleActions.VAPE: Vector3(-0.07, -0.10, -0.19), IdleActions.BEER: Vector3(-0.07, -0.14, -0.18)}
+const IDLE_YAW_DEG := 20.0     # the item turned in toward the mouth
 const IDLE_TILT_DEG := {IdleActions.VAPE: 80.0, IdleActions.BEER: 20.0}   # the item's lean toward the driver at the mouth
 const SIP_TILT_DEG := 40.0     # more, at the top of the sip
 const SIP_HEAD_DEG := 14.0     # the head tips back with it (seen from the chase view)
@@ -415,8 +417,8 @@ func _build_finger_hand() -> void:
 static func _hold_mesh(k: CockpitKit, glove: Color, cuff: Color, r: float) -> void:
 	var wrist_x := -(r + 0.01)
 	k.box(Vector3(0.035, 0.085, 0.075), Vector3(-(r + 0.0175), 0.0, 0.01), glove)                              # palm
-	k.box(Vector3(1.5 * r + 0.035, 0.08, 0.028), Vector3(-(0.5 * r + 0.035) * 0.5, 0.0, -(r + 0.014)), glove)   # fingers over the far side
-	k.box(Vector3(0.024, 0.075, 0.024), Vector3(0.5 * r + 0.01, 0.0, -(r + 0.004)), glove)                      # fingertips curling in
+	k.box(Vector3(1.5 * r + 0.035, 0.05 + r, 0.028), Vector3(-(0.5 * r + 0.035) * 0.5, 0.0, -(r + 0.014)), glove)   # fingers over the far side
+	k.box(Vector3(0.024, 0.045 + r, 0.024), Vector3(0.5 * r + 0.01, 0.0, -(r + 0.004)), glove)                  # fingertips curling in
 	k.box(Vector3(r + 0.04, 0.028, 0.026), Vector3(-(r + 0.02) * 0.5, 0.02, r + 0.013), glove)                  # thumb
 	k.box(Vector3(0.05, 0.03, 0.07), Vector3(wrist_x, 0.0, 0.06), glove)                                        # wrist
 	k.cylinder(CUFF_R, CUFF_Z0, CUFF_Z1, Vector3(wrist_x, 0.0, 0.0), glove, 10, Basis(Vector3.RIGHT, PI / 2.0))
@@ -766,7 +768,8 @@ func _idle_transform(e: float, draw: float) -> Transform3D:
 	var tilt: float = IDLE_TILT_DEG[_idle_item] * e
 	if _idle_item == IdleActions.BEER:
 		tilt += SIP_TILT_DEG * draw
-	return Transform3D(Basis(Vector3.RIGHT, deg_to_rad(tilt)), from.lerp(via, e).lerp(via.lerp(to, e), e))
+	var b := Basis(Vector3.UP, deg_to_rad(IDLE_YAW_DEG) * e) * Basis(Vector3.RIGHT, deg_to_rad(tilt))
+	return Transform3D(b, from.lerp(via, e).lerp(via.lerp(to, e), e))
 
 func _begin_gesture() -> void:
 	_gesture_wanted = false

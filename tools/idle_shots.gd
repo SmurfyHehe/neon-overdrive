@@ -29,8 +29,8 @@ func _initialize() -> void:
 func _shot(view: String, label: String) -> void:
 	if view == "close":
 		var xf: Transform3D = p.global_transform
-		close.global_position = xf * Vector3(-1.9, 1.25, -1.0)
-		close.look_at(xf * Vector3(-0.5, 1.0, 0.1))
+		close.global_position = xf * Vector3(-1.5, 1.2, -0.75)
+		close.look_at(xf * Vector3(-0.4, 0.98, 0.1))
 		close.make_current()
 	else:
 		cam.set_view(ChaseCamera.View.COCKPIT if view == "cockpit" else ChaseCamera.View.CHASE)
@@ -39,17 +39,25 @@ func _shot(view: String, label: String) -> void:
 	for i in 12:
 		await process_frame
 	root.get_viewport().get_texture().get_image().save_png("%s/%s_%s_%s.png" % [dir, kind, view, label])
-	print("%s %s %s: hand at %s, %d puffs" % [kind, view, label, str(d.hold_hands[IdleActions.item].position), d.props.puff_count()])
+	print("%s %s %s: %s, %d puffs" % [kind, view, label, DriverModel.LeftAct.keys()[d.left_act], d.props.puff_count()])
 	Engine.time_scale = 1.0
 
-## Presses L and waits `secs` into the use.
-func _use(secs: float) -> void:
+## Presses L and waits for the middle of the draw or the sip.
+func _use() -> void:
 	Input.action_press("idle_action")
 	for i in 3:
 		await physics_frame
 	Input.action_release("idle_action")
-	for i in int(secs * 60.0) - 3:
-		await physics_frame
+	var mid: float = DriverModel.IDLE_LIFT_SECS + DriverModel.IDLE_HOLD_SECS[IdleActions.item] * 0.5
+	while not (d.left_act == DriverModel.LeftAct.IDLE_USE and d.left_t >= mid):
+		await process_frame
+
+## Waits for the whole cloud to be out.
+func _cloud() -> void:
+	while d.props.puff_count() < IdleProps.EXHALE_PUFFS:
+		await process_frame
+	for i in 12:
+		await process_frame
 
 func _run() -> void:
 	for i in 30:
@@ -76,22 +84,21 @@ func _run() -> void:
 	IdleActions.set_item(IdleActions.VAPE)
 	cam.perspective.window = 0.0
 	cam.set_view(ChaseCamera.View.COCKPIT)
-	await _use(1.1)
+	await _use()
 	await _shot("cockpit", "vape_shut_draw")
-	await _shot("close", "vape_shut_draw")
 	cam.set_view(ChaseCamera.View.COCKPIT)
 	cam.make_current()
-	for i in 45:
-		await physics_frame
+	await _cloud()
 	await _shot("cockpit", "vape_shut_cloud")
 	while d.is_idling() or d.props.puff_count() > 0:
 		await physics_frame
 
-	# the beer: mid-sip
+	# the beer: mid-sip (window down, so the close view sees in)
 	IdleActions.set_item(IdleActions.BEER)
+	cam.perspective.window = 1.0
 	for i in 10:
 		await physics_frame
-	await _use(1.15)
+	await _use()
 	await _shot("cockpit", "beer_sip")
 	await _shot("chase", "beer_sip")
 	await _shot("close", "beer_sip")
@@ -107,7 +114,11 @@ func _run() -> void:
 	Harness.launch_player(p, 14.0)
 	for i in 90:
 		await physics_frame
-	await _use(1.95)
+	await _use()
+	await _shot("close", "vape_open_draw")
+	cam.set_view(ChaseCamera.View.CHASE)
+	cam.make_current()
+	await _cloud()
 	await _shot("chase", "vape_open_cloud")
 	await _shot("close", "vape_open_cloud")
 	quit(0)

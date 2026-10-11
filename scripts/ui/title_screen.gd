@@ -8,7 +8,9 @@ extends CanvasLayer
 # car parked under one street lamp. The world is already loaded and frozen, so
 # the drive starts at once; while the title is up the camera looks at the
 # Kerbside set only and the frame rate is held at 30, which keeps the title
-# cheap. The synthwave station plays under it, muffled (PauseLook).
+# cheap. Roy's theme song (Full Boost) plays under it on the Music bus, muffled
+# (PauseLook's low-pass); holding W opens the filter. It is the title's alone:
+# no radio station carries it and it stops when the drive starts.
 #
 # On screen: the B4 mark and the BOOST wordmark top left with the Early Access
 # tag, the menu bottom left, one line of late-night radio news along the
@@ -28,6 +30,7 @@ const DIM := Color(0.79, 0.81, 0.84, 0.38)
 
 const MARK_BODY := "res://assets/brand/logo_B4_mark_body.svg"
 const MARK_WHEEL := "res://assets/brand/logo_B4_mark_wheel.svg"
+const THEME := "res://assets/music/title_theme_full_boost.ogg"
 const WHISTLE := "res://assets/ui/sfx/splash_whistle.wav"
 const MENU_WHISTLE_LOOP := "res://assets/ui/sfx/menu_whistle_loop.wav"
 const MENU_WHISTLE_FLUTTER := "res://assets/ui/sfx/menu_whistle_flutter.wav"
@@ -43,6 +46,14 @@ const TICKER_H := 46.0
 const TICKER_SPEED := 64.0     # design px per second
 const TICKER_GAP := "      +++      "
 const SYNTHWAVE_DIR := "s4_synthwave"
+## The theme song's voicing: muffled at rest, opened by the turbo (boost 0..1).
+const THEME_MUFFLE_HZ := 900.0
+const THEME_MUFFLE_DB := -6.0
+const THEME_OPEN_HZ := 20000.0
+const THEME_OPEN_DB := 3.0
+const THEME_CLOSE_SECS := 2.0  # open -> muffled after the turbo is let go
+const THEME_DUCK_DB := -12.0   # under the start of the drive
+const THEME_DUCK_SECS := 0.4
 const DJ_NAME := "Dale"
 const DJ_OLD_NAME := "Dave"
 
@@ -108,6 +119,9 @@ var _whistle_gain := 0.0       # 0..1 fade of the held whistle
 var _was_live := false         # W was held (and the title listening) last frame
 var _shake_clock := 0.0
 var _flutter_t := -1.0         # >= 0 while the release shake runs
+var _theme: AudioStreamPlayer  # Roy's theme song, Music bus, loops
+var _theme_open := 0.0         # 0 muffled .. 1 open (follows the boost, 2 s back)
+var _theme_tween: Tween        # the Continue duck
 var _ticker_w := 0.0
 var _lists: Array[VBoxContainer] = []
 
@@ -141,6 +155,10 @@ func _ready() -> void:
 	_menu_whistle = _menu_player(MENU_WHISTLE_LOOP)
 	_menu_flutter = _menu_player(MENU_WHISTLE_FLUTTER)
 	_build_menu()
+	_theme = AudioStreamPlayer.new()
+	_theme.bus = &"Music"
+	_theme.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(_theme)
 	_build_ticker()
 	_build_welcome()
 
@@ -663,6 +681,7 @@ func _run_splash(delta: float) -> void:
 		splash_mark.position.y = _mark_y
 		splash_mark.rotation = 0.0
 		_wheel_speed = move_toward(_wheel_speed, 0.6, delta * 20.0)
+		_start_theme()   # the flutter is over: the song comes in under the hold
 	splash_wheel.rotation += _wheel_speed * delta
 	var end := SPLASH_SOUND_AT + vent_at + SPLASH_FLUTTER + SPLASH_HOLD
 	if _splash_t > end:
@@ -689,6 +708,7 @@ func _process(delta: float) -> void:
 		if not splash_running():
 			_run_menu_spin(delta)
 	_run_menu_voice(delta)
+	_run_theme(delta)
 
 # Hold W (the throttle) and the menu logo's wheel spools up; let go and it
 # eases to a stop. Polled, because the tree is paused behind the title and
@@ -835,9 +855,7 @@ func _arrive() -> void:
 	kerbside.camera.make_current()   # after PauseLook's own camera took over
 	var radio: Variant = get_parent().get("radio")
 	if radio != null:
-		var s := _synthwave_station()
-		if s >= 0:
-			radio.borrow(s)   # saves still keep the player's own station
+		radio.borrow(-1)   # the song replaces the radio; saves keep the player's station
 	_refresh_saves()
 	if splash_due():
 		_start_splash()
@@ -846,6 +864,7 @@ func _arrive() -> void:
 		_enter_menu()
 
 func _enter_menu() -> void:
+	_start_theme()
 	slide.visible = true
 	_show_list(main_list)
 	MenuMotion.slide_in(slide, Vector2.LEFT)
@@ -858,6 +877,7 @@ func _enter_menu() -> void:
 ## Leaving for the road: the street goes, the radio and the frame cap come back.
 func _leave_title() -> void:
 	_stop_menu_voice()
+	_end_theme()
 	if splash_running():
 		_end_splash()
 	if kerbside != null:
@@ -868,6 +888,69 @@ func _leave_title() -> void:
 		radio.give_back()
 	if _caps_fps():
 		Engine.max_fps = GraphicsSettings.fps_cap
+
+# ---------------------------------------------------------------- theme song
+
+## Starts the song once per visit (idempotent): after the splash flutter, or at
+## the menu when the splash is skipped or not due.
+func _start_theme() -> void:
+	if _theme == null or (_theme.playing and _theme_tween == null):
+		return
+	if _theme_tween != null:   # back on the title before the duck finished
+		_theme_tween.kill()
+		_theme_tween = null
+		_theme.stop()
+	if _theme.stream == null:
+		var st := load(THEME) as AudioStreamOggVorbis
+		if st == null:
+			return
+		st.loop = true
+		_theme.stream = st
+	_theme_open = 0.0
+	_theme.volume_db = 0.0
+	_theme.play()
+	_voice_theme(0.0)
+
+func theme_playing() -> bool:
+	return _theme != null and _theme.playing
+
+## How far the turbo is open, 0..1. The hook for menu_boost: when the menu
+## turbo lands, return its value here. Until then it is the logo wheel's spin
+## fraction, and only while W is listening (not under Settings or the Load list).
+func _theme_boost() -> float:
+	if not _menu_live():
+		return 0.0
+	return clampf(menu_spin / MENU_SPIN_MAX, 0.0, 1.0)
+
+func _run_theme(delta: float) -> void:
+	if not theme_playing() or _theme_tween != null:
+		return
+	var boost := _theme_boost()
+	if boost >= _theme_open:
+		_theme_open = boost   # opens as fast as the turbo spools
+	else:
+		_theme_open = move_toward(_theme_open, boost, delta / THEME_CLOSE_SECS)
+	_voice_theme(_theme_open)
+
+## The Music bus's pause low-pass, set to the song's voicing (900 Hz and
+## -6 dB muffled, 20 kHz and +3 dB open), geometric in frequency.
+func _voice_theme(open: float) -> void:
+	var look := _sibling("PauseLook") as PauseLook
+	if look != null:
+		look.set_muffle(THEME_MUFFLE_HZ * pow(THEME_OPEN_HZ / THEME_MUFFLE_HZ, open),
+			lerpf(THEME_MUFFLE_DB, THEME_OPEN_DB, open))
+
+## The drive starts: duck -12 dB over 0.4 s under the start, then stop.
+func _end_theme() -> void:
+	if _theme == null or not _theme.playing:
+		return
+	if _theme_tween != null:
+		_theme_tween.kill()
+	_theme_tween = create_tween().set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	_theme_tween.tween_property(_theme, "volume_db", THEME_DUCK_DB, THEME_DUCK_SECS)
+	_theme_tween.tween_callback(func() -> void:
+		_theme.stop()
+		_theme_tween = null)
 
 static func _synthwave_station() -> int:
 	for i in RadioStations.STATIONS.size():

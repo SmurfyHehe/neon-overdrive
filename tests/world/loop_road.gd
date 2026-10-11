@@ -106,8 +106,8 @@ func _shape() -> void:
 			if a.curvature(i) != 0.0:
 				turned += 1
 			# Pinned: straight, no vertical curve, and level but for the lap's tilt.
-			if pins[i] != 0 and (a.curvature(i) != 0.0 or absf(a.vcurve(i)) > 1e-12 or absf(a.start_grade(i) - a.start_grade(0)) > 1e-9):
-				_fail("seed %d: pinned chunk %d is not straight and level (k %.5f, vcurve %.6f, grade %.4f)" % [road_seed, i, a.curvature(i), a.vcurve(i), a.start_grade(i)])
+			if pins[i] != 0 and (a.curvature(i) != 0.0 or absf(a.vcurve(i)) > 1e-12 or absf(a.grade_at(i, L * 0.5) - a.grade_at(0, L * 0.5)) > 1e-9):   # mid-chunk: a chunk's first metres carry the eased tail of the one before
+				_fail("seed %d: pinned chunk %d is not straight and level (k %.5f, vcurve %.6f, grade %.4f)" % [road_seed, i, a.curvature(i), a.vcurve(i), a.grade_at(i, L * 0.5)])
 				break
 		if absf(a.start_grade(0)) > 0.01:
 			_fail("seed %d: the lap is tilted by %.4f" % [road_seed, a.start_grade(0)])
@@ -378,8 +378,9 @@ func _physics_process(_delta: float) -> bool:
 				# The centre barrier is the map's: open at the gaps, the same every lap.
 				for i in RoadMap.period:
 					var cfg: Dictionary = game.call("_section_at", i)
-					if cfg.barrier and RoadMap.gap_in(i):
-						_fail("chunk %d is a median gap with a barrier in it" % i)
+					# cfg.barrier is the barrier's kind now; the opening travels as cfg.gap.
+					if RoadMap.gap_in(i) and not cfg.gap:
+						_fail("chunk %d is a median gap with no opening in its barrier" % i)
 					if cfg != game.call("_section_at", i + RoadMap.period) or cfg != game.call("_section_at", i - 2 * RoadMap.period):
 						_fail("chunk %d has a different section from lap to lap" % i)
 				var span := _pool_span()

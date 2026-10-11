@@ -95,7 +95,10 @@ func _physics_process(_delta: float) -> bool:
 		Step.LIFT:
 			if waited >= 90:
 				_check(p.boost < 0.3, "boost should fall after lifting, is %.2f" % p.boost)
-				_check(p.blow_off_count - blow_offs_before == 1, "lift should fire one blow-off, fired %d" % (p.blow_off_count - blow_offs_before))
+				# GEVP only counts a one-tick throttle cut (a shift, the limiter). The lift
+				# itself ramps, so the count moves only when a shift lands on it; the vent
+				# that is heard is the check below.
+				_check(p.blow_off_count - blow_offs_before <= 1, "lift should fire at most one blow-off, fired %d" % (p.blow_off_count - blow_offs_before))
 				# GEVP shifts up on this lift as well: the shift vent, GEVP's count and
 				# the lift ramp all land in one frame and must come out as one lift vent.
 				_check(audio.turbo.vents - vents_before == 1, "the lift should vent once (shift vent, GEVP's count and the ramp fold), vented %d" % (audio.turbo.vents - vents_before))

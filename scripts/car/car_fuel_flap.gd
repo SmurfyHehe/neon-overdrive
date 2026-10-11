@@ -30,6 +30,8 @@ const FLAP_W := 0.17               # along the car (z)
 const FLAP_H := 0.12
 const HOSE_SEGMENTS := 8
 const HOVER := Vector3(0.0, 0.25, 0.0)
+## A refuel from anywhere (the tank gains fuel) holds the flap open this long.
+const REFUEL_HOLD_S := 2.5
 
 var vehicle: Node
 var fuel: Object
@@ -42,6 +44,8 @@ var _nozzle: MultiMeshInstance3D
 var _p := Vector3.ZERO
 var _n := Vector3.RIGHT
 var _t := 0.0
+var _hold := 0.0
+var _last_litres := -1.0
 
 ## Hangs the flap (and the nozzle) on a car whose body has a fuel recess.
 ## `fuel_tank` is the car's FuelTank, or null for a car that never refuels
@@ -118,7 +122,7 @@ func _build(site: Dictionary, body: Node3D) -> void:
 func _wants_open() -> bool:
 	if fuel == null:
 		return false
-	return bool(fuel.get("at_pump")) or bool(fuel.call("is_filling"))
+	return bool(fuel.get("at_pump")) or bool(fuel.call("is_filling")) or _hold > 0.0
 
 func _process(delta: float) -> void:
 	advance(delta)
@@ -126,6 +130,12 @@ func _process(delta: float) -> void:
 ## One step of the animation (tests call it with their own dt).
 func advance(delta: float) -> void:
 	_t += delta
+	if fuel != null:
+		var l := float(fuel.get("litres"))
+		if _last_litres >= 0.0 and l > _last_litres + 0.01:
+			_hold = REFUEL_HOLD_S
+		_last_litres = l
+		_hold = maxf(_hold - delta, 0.0)
 	var want := _wants_open()
 	# The flap stays open while the nozzle is still out.
 	var flap_target := 1.0 if (want or plug > 0.001) else 0.0
@@ -156,7 +166,7 @@ func _place_nozzle() -> void:
 	var hover := cap + _n * 0.9 + HOVER
 	var tip := hover.lerp(cap, ease_t)
 	# While filling the gun shudders with the flow.
-	if fuel != null and bool(fuel.call("is_filling")) and plug > 0.999:
+	if fuel != null and (bool(fuel.call("is_filling")) or _hold > 0.0) and plug > 0.999:
 		tip += Vector3(0.0, sin(_t * 170.0), 0.0) * 0.004 + _n * (sin(_t * 90.0) * 0.003)
 	var spout_end := tip + _n * 0.16
 	var handle_end := spout_end + _n * 0.14 + Vector3(0.0, 0.16, 0.0)

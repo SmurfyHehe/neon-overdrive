@@ -147,9 +147,10 @@ func _car(kind: String) -> void:
 
 	# ---- any refuel opens the flap, even with no flags set
 	p.fuel.litres = 10.0
+	f.advance(0.0)
 	var bank := FakeBank.new()
 	_check(p.fuel.refuel(bank) > 0.0, "%s: a refuel buys fuel" % kind)
-	_check(p.fuel.is_filling(), "%s: a refuel counts as filling for the flap" % kind)
+	_check(not p.fuel.is_filling(), "%s: refuel alone is not a pump flag; the flap notices the fuel arriving" % kind)
 	for i in 30:
 		f.advance(0.02)
 	_check(f.open > 0.99, "%s: a refuel from anywhere opens the flap" % kind)

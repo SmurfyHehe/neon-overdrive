@@ -45,6 +45,10 @@ $class = if ($Tool -eq "tick") { "GevpTickBreakdown" } else { "TrafficProfile" }
 $tag = if ($Tool -eq "tick") { "TICK_JSON " } else { "TPROF_JSON " }
 $releaseExe = Join-Path $root "release_console.exe"
 if (($Builds -contains "release") -and -not (Test-Path $releaseExe)) { Copy-Item $Template $releaseExe }
+# The console template is only a wrapper: it starts the .exe next to it of the
+# same name without "_console", so the main template goes in as release.exe.
+$releaseMain = Join-Path $root "release.exe"
+if (($Builds -contains "release") -and -not (Test-Path $releaseMain)) { Copy-Item ($Template -replace "_console", "") $releaseMain }
 
 $combos = @()
 foreach ($b in $Builds) { foreach ($p in $Physics) { foreach ($t in $Tyres) { $combos += ,@($b, $p, $t) } } }

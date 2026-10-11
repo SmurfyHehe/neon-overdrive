@@ -66,6 +66,11 @@ func _initialize() -> void:
 
 func _on_process_frame() -> void:
 	game_t += root.get_process_delta_time()
+	# Every car in the sim, not just the 60 m near-band (as tools/crossing_bench.gd):
+	# the question is the cost per full-sim car.
+	var tm: Object = game.get("traffic")
+	if tm != null:
+		tm.set("physics_distance", 1000.0)
 	if not done and game_t >= Benchmark.run_secs():
 		done = true
 		_finish()
@@ -104,6 +109,18 @@ func _finish() -> void:
 	}
 	if cars.is_empty():
 		out["error"] = "no full-sim traffic cars"
+		var seen := 0
+		var seen_detailed := 0
+		var stack: Array = [root]
+		while not stack.is_empty():
+			var n: Node = stack.pop_back()
+			stack.append_array(n.get_children())
+			if n is TrafficCar:
+				seen += 1
+				if n.get("detailed"):
+					seen_detailed += 1
+		out["traffic_cars_seen"] = seen
+		out["traffic_cars_detailed"] = seen_detailed
 		_emit(out)
 		return
 

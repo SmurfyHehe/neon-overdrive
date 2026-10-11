@@ -64,6 +64,8 @@ const CHANGE_GAIN := 3.0         # m/s a lane must be faster by to be worth movi
 ## Spin recovery.
 const SPIN_SLIP := 0.45          # rad between nose and travel = spinning
 const SPIN_MIN_SPEED := 6.0
+const REJOIN_OFF := 1.5 * TrafficManager.LANE_W  # m off its lane: rejoin at a shallow angle
+const REJOIN_SLOPE := 3.0        # lookahead per metre off the lane (18 deg approach)
 const WRONG_WAY := 1.2           # rad off the road's heading at low speed = turn round
 const TURN_LEG_SECS := 2.5
 const TURN_DONE := 0.8           # rad: the lane keeper can take it from here
@@ -224,7 +226,14 @@ func steer_to(c: PlayerCar, lane_x: float) -> float:
 	# Less damping while it is moving over on purpose, or a lane change at
 	# town speed takes five seconds.
 	var damp := CHANGE_DAMP_T if _changing and c.speed < 60.0 else LAT_DAMP_T
-	return TrafficCar.lane_steer(c, lane_x - side_v * damp, -1.0, wheelbase, UNDERSTEER_FF)
+	# More than a lane and a half off (back from a turn-round on the shoulder):
+	# aim far enough down the road to rejoin at a shallow angle. With the 8 m
+	# town lookahead, 10 m off its lane the bot aimed 50 deg across the road,
+	# overshot, came round the wrong way and hit the median (drive_clean turn).
+	var off := absf(RoadFrame.unroll(c.global_position).x - lane_x)
+	var look := REJOIN_SLOPE * off if off > REJOIN_OFF else -1.0
+	look = maxf(look, clampf(c.speed * TrafficCar.LOOKAHEAD_SECONDS, TrafficCar.LOOKAHEAD_MIN, TrafficCar.LOOKAHEAD_MAX)) if look > 0.0 else -1.0
+	return TrafficCar.lane_steer(c, lane_x - side_v * damp, -1.0, wheelbase, UNDERSTEER_FF, look)
 
 ## 1. Pedals for `v0` m/s behind something `gap` m ahead doing `lead_v` (INF =
 ## clear road). Brakes as hard as the gap needs; reuses the traffic follower law.

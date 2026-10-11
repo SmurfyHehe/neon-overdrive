@@ -128,9 +128,12 @@ func _next_phase() -> void:
 		_clear_ahead(launch * launch / (2.0 * 6.0) + 140.0, false)
 	elif phase == speeds.size():
 		# Spin recovery: alone on the road, going backwards at 90 km/h.
+		# Lane 2: the 0.24 rad yaw carries it ~3 m sideways toward the median
+		# while it brakes, and since R1 barriers (f45e4cd) the median is a real
+		# wall 2.7 m from lane 1, too close for any driver to miss.
 		traffic.set_car_count(0)
 		bot = TestDriver.start(game, "clean", {"speed": 100.0})
-		TestDriver.place(p, Harness.lane_x(1), 0.0, 2.9, 25.0)
+		TestDriver.place(p, Harness.lane_x(2), 0.0, 2.9, 25.0)
 		p.linear_velocity = -p.linear_velocity
 		_clear_ahead(400.0, true)
 	else:

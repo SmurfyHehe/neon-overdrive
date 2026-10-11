@@ -82,6 +82,8 @@ var back_button: Button
 var tips_check: CheckButton
 var copy_log_button: Button
 var log_status: Label
+var idle_item_option: OptionButton    # Driver: what the L key does
+var beer_moving_option: OptionButton
 var car_option: OptionButton
 var car_restart_button: Button
 var service_button: Button
@@ -525,6 +527,20 @@ func _build_game_page(parent: Control) -> Control:
 		CabinMods.save_settings()
 		_sync_strut_bar())
 	strut.selected = 1 if CabinMods.strut_bar else 0
+
+	# What the L key does (IdleActions; the garage's "You" tab will own it later).
+	_heading(page, "Driver")
+	var item_names := []
+	for id in IdleActions.IDS:
+		item_names.append(IdleActions.NAMES[id])
+	idle_item_option = _add_option(page, "In the car", item_names, func(i: int) -> void:
+		IdleActions.set_item(IdleActions.IDS[clampi(i, 0, IdleActions.IDS.size() - 1)])
+		IdleActions.save_settings())
+	idle_item_option.selected = IdleActions.item_index()
+	beer_moving_option = _add_option(page, "Beer while driving", ["Off", "On"], func(i: int) -> void:
+		IdleActions.set_beer_while_moving(i == 1)
+		IdleActions.save_settings())
+	beer_moving_option.selected = 1 if IdleActions.beer_while_moving else 0
 
 	# Stand-ins until the garage exists; only usable from the pause screen.
 	_heading(page, "Garage stand-ins")

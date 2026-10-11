@@ -40,7 +40,7 @@ const TITLE_FPS := 30
 const TICKER_H := 46.0
 const TICKER_SPEED := 64.0     # design px per second
 const TICKER_GAP := "      +++      "
-const SYNTHWAVE_DIR := "s4_synthwave"
+const SYNTHWAVE_DIR := "afterglow"   # the dial's synthwave station
 const DJ_NAME := "Dale"
 const DJ_OLD_NAME := "Dave"
 

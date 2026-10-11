@@ -134,11 +134,7 @@ func _apply_state(c: Array) -> void:
 	persp.blend = c[0]
 	persp.window = c[1]
 	persp.head_yaw_deg = c[3]
-	var want_station := -1 if c[2] == "off" else 0
-	var guard := 0
-	while radio.station != want_station and guard < 10:
-		radio.next_station()
-		guard += 1
+	radio.set_power(c[2] != "off")
 	AudioSettings.set_volume("Music", 0.3 if c[2] == "quiet" else 1.0)
 	persp.scanner_open = c[2] == "scanner"
 	persp.scanner_duck = 1.0 if c[2] == "scanner" else 0.0

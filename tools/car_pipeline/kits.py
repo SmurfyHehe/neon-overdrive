@@ -573,9 +573,11 @@ WAGON = {
 }
 
 import kit_p2_hothatch  # noqa: E402  (a kit file uses the helpers above)
+import kit_p4_kei       # noqa: E402
 
 KITS = {
     'p0_beater': BUG,
     'p7_wagon': WAGON,
     'p2_hothatch': kit_p2_hothatch.KIT,
+    'p4_kei': kit_p4_kei.KIT,
 }

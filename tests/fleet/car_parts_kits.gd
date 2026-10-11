@@ -110,6 +110,30 @@ const CARS := {
 			["hatch", "body", Vector3.RIGHT, Vector3.BACK, 1, 0.58],
 		],
 	},
+	"p4_kei": {
+		## open top: the screen's glass wedge is the windscreen, front and back; the lamps are pop-ups, not head_*
+		"without": ["glass_backlight", "seal_backlight", "head_l", "head_r"],
+		"parts": ["popup_l", "popup_r", "hump_l", "hump_r", "intake_l", "intake_r", "intake_lip_l", "intake_lip_r",
+			"seal_cockpit", "arch_lips", "grille", "mirror_l", "mirror_r", "bumper_r_insert", "caliper_fl", "caliper_fr", "bay_floor"],
+		"lamps": {"popup_l": "glow_head", "popup_r": "glow_head", "turn_fl": "glow_turn", "turn_fr": "glow_turn",
+			"turn_rl": "glow_turn", "turn_rr": "glow_turn", "tail_l": "glow_tail", "tail_r": "glow_tail",
+			"brake_l": "glow_brake", "brake_r": "glow_brake", "brake_c": "glow_brake",
+			"reverse_c": "glow_reverse", "plate_lamp": "glow_lens"},
+		"anchors": ["bay_engine", "tank", "diff"],
+		"hinges": ["hinge_hood", "hinge_trunk", "hinge_door_l", "hinge_door_r", "hinge_popup_l", "hinge_popup_r"],
+		"on_hinge": {"hinge_popup_l": ["popup_l"], "hinge_popup_r": ["popup_r"]},
+		## the short side pane is fixed to the screen frame: it must not swing with the door
+		"off_hinge": {"hinge_door_l": ["glass_door_l"], "hinge_door_r": ["glass_door_r"]},
+		## 230 mm discs in front, 180 mm drums at the rear; alloy wheels, a centre cap on all four
+		"brakes": {"fl": 0.115, "fr": 0.115, "rl": 0.09, "rr": 0.09},
+		"no_hubcap": [],
+		"gaps": [
+			["hood", "fender_fr", Vector3.RIGHT, Vector3.UP, 2, -1.43],
+			["fender_fr", "door_r", Vector3.BACK, Vector3.RIGHT, 1, 0.47],
+			["door_r", "body", Vector3.BACK, Vector3.RIGHT, 1, 0.47],
+			["trunk", "body", Vector3.RIGHT, Vector3.UP, 2, 0.75],
+		],
+	},
 }
 
 var fails := 0
@@ -210,6 +234,9 @@ func _car(id: String, want: Dictionary) -> void:
 	for hname in want.get("on_hinge", {}):
 		for p in want.on_hinge[hname]:
 			_check(p in hinges.get(hname, {}).get("parts", []), "%s: %s should hang on %s" % [id, p, hname])
+	for hname in want.get("off_hinge", {}):
+		for p in want.off_hinge[hname]:
+			_check(not (p in hinges.get(hname, {}).get("parts", [])), "%s: %s should not hang on %s" % [id, p, hname])
 
 	# ---- gaps
 	var gap_txt := PackedStringArray()

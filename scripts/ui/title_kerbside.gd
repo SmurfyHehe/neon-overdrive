@@ -19,6 +19,14 @@ extends Node3D
 # runs while the title pauses the tree. The wind is one number
 # (set_title_wind); the turbo on the title raises it. NEON_LAMP_LIFE=0 turns it
 # off here as in the world.
+#
+# Graffiti (M10, 2026-10-11): the wall wears the graffiti set (graffiti.gd):
+# one big block piece high on the wall left of the car, part of it buffed by a
+# roller patch, tags around the shutter, a NO PARKING stencil on the shutter
+# with a tag sprayed over it, and a torn poster that flaps in the same wind
+# as the litter. Nothing bright sits behind the car's roof line (the camera
+# sees the car against wall x 0.5..7 m, y below about 2.2 m). One MultiMesh,
+# one draw call. NEON_GRAFFITI=0 turns it off.
 
 const SITE := Vector3(0.0, -600.0, 0.0)
 const SODIUM_LIGHT := Color(1.0, 0.62, 0.3)
@@ -32,6 +40,11 @@ const SWAY_M := 0.18
 const SWAY_SECS := 17.0
 
 const LampLife := preload("res://scripts/world/lamp_life.gd")
+const Graffiti := preload("res://scripts/world/graffiti.gd")
+## Paint sits this far off a face, past z-fighting.
+const PAINT_LIFT := 0.012
+## The shutter's front face is this far in front of the wall face.
+const SHUTTER_FACE := 0.08
 ## The district and chunk index lamp life is asked for. Chunk 1 is not a
 ## banner chunk (every third lamp wears one); the lamp has no banner here.
 const LIFE_DISTRICT := "downtown"
@@ -72,6 +85,9 @@ var _look := Vector3.ZERO
 ## set by _build_lamp; lamp life reads the head and the pool from it.
 var _lamp_xf := Transform3D.IDENTITY
 var life_root: Node3D
+var wall_art: Node3D
+## The graffiti items placed on the wall (what tests and shots read).
+var graffiti_items: Array = []
 ## What _build_lamp_life wrote (a MultiMesh does not hand its data back on the
 ## headless renderer, so tests and shots read it from here): litter_xf, the
 ## two litter custom colours, vent_xf (the manhole cover), vent_round, moth_xf
@@ -86,6 +102,7 @@ func _init(car_kind: String) -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	position = SITE
 	_build_street()
+	_build_graffiti()
 	_build_lamp()
 	_build_lamp_life()
 	set_car(car_kind)
@@ -171,6 +188,7 @@ func _exit_tree() -> void:
 	# the wind is lamp life's one global number: hand it back at rest
 	if LampLife.enabled:
 		LampLife.set_wind(LampLife.DEFAULT_WIND)
+	Graffiti.set_wind(LampLife.DEFAULT_WIND)
 
 ## The wind the title wants (0 still, 1 breeze, 2 gale). The turbo calls this
 ## each frame with lerpf(WIND_REST, WIND_MAX, boost); a higher wind is taken at
@@ -198,6 +216,7 @@ func _ease_wind(delta: float) -> void:
 		_wind_now = w
 		if LampLife.enabled:
 			LampLife.set_wind(w)
+		Graffiti.set_wind(w)
 
 func _build_street() -> void:
 	# Asphalt: the road, from the kerb out past the camera.
@@ -219,6 +238,45 @@ func _build_street() -> void:
 		_flat(Color(0.2, 0.21, 0.22), 0.55, 0.6))
 	_slab(Vector3(STREET_LEN, 0.25, 0.5), Vector3(0.0, 3.6, wall_z + 0.05),
 		_flat(Color(0.11, 0.09, 0.08), 0.95))
+
+## The wall's graffiti (see the header). Items are in title space: the wall
+## face is at wall_z and faces +Z (toward the road and the camera), so a quad
+## with the identity basis lies flat on it. Order matters where pieces
+## overlap: later items are lifted a little further off the wall.
+func _build_graffiti() -> void:
+	wall_art = Node3D.new()
+	wall_art.name = "WallArt"
+	add_child(wall_art)
+	var wall_z := -RoadChunkBuilder.CURB_W - RoadChunkBuilder.SIDEWALK_W
+	var on_wall := wall_z + PAINT_LIFT
+	var on_shutter := wall_z + SHUTTER_FACE + PAINT_LIFT
+	graffiti_items = [
+		# the big piece, high on the wall left of the car, above the ledge
+		{"xf": Transform3D(Basis(Vector3.BACK, 0.025), Vector3(-4.2, 4.7, on_wall)),
+			"cell": "piece_pike_speed", "fade": 0.85, "tint": "white"},
+		# the roller patch that buffed its right end
+		{"xf": Transform3D(Basis(), Vector3(-2.0, 4.55, on_wall + 0.006)),
+			"cell": "roller_1", "fade": 1.0, "tint": "white"},
+		# tags round the shutter: a throw-up left of the lamp post, a
+		# handstyle between the post and the shutter, an older one low and
+		# far left
+		{"xf": Transform3D(Basis(Vector3.BACK, -0.04), Vector3(-3.6, 2.0, on_wall)),
+			"cell": "tag_kemr", "fade": 0.9, "tint": "white"},
+		{"xf": Transform3D(Basis(Vector3.BACK, 0.06), Vector3(-0.6, 2.3, on_wall)),
+			"cell": "tag_dusk", "fade": 0.8, "tint": "white"},
+		{"xf": Transform3D(Basis(Vector3.BACK, -0.08), Vector3(-6.3, 1.5, on_wall)),
+			"cell": "tag_ironbridge", "fade": 0.65, "tint": "white", "scale": 1.15},
+		# the NO PARKING stencil on the shutter, with a tag sprayed over it
+		{"xf": Transform3D(Basis(), Vector3(1.9, 1.95, on_shutter)),
+			"cell": "stencil_no_parking", "fade": 0.75, "tint": "white", "scale": 1.3},
+		{"xf": Transform3D(Basis(Vector3.BACK, -0.1), Vector3(2.2, 1.65, on_shutter + 0.008)),
+			"cell": "tag_meks", "fade": 0.95, "tint": "white"},
+		# a torn poster, far left, flapping in the litter's wind
+		{"xf": Transform3D(Basis(Vector3.BACK, 0.03), Vector3(-7.6, 1.8, on_wall)),
+			"cell": "poster_2", "fade": 0.9, "tint": "white", "flap": true},
+	]
+	Graffiti.create(wall_art, graffiti_items.size())
+	Graffiti.place(wall_art, graffiti_items)
 
 func _build_lamp() -> void:
 	var post := MeshInstance3D.new()

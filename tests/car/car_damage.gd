@@ -5,8 +5,11 @@ extends SceneTree
 # - small hits do nothing; a straight front hit shares the two front corners
 #   and the radiator; an oblique one lands on its corner and breaks its lamp;
 #   a rear hit leaves the front alone
-# - no effect below FREE_BELOW; the engine limps from ENGINE_LIMP_AT and is
-#   dead at 1.0; a hurt radiator runs the engine hotter
+# - no effect below FREE_BELOW; the engine limps from ENGINE_LIMP_AT and keeps
+#   limping at 1.0 (damage never kills it); a hurt radiator runs the engine
+#   hotter
+# - offsets (DP0): a hit gives the toe and spring numbers it always did, a
+#   repair puts the offsets back to neutral, the save carries `totalled`
 # - the station patch (once a night), the garage (bank pays, short bank
 #   changes nothing, null is free), the tow (never in a chase, bank pays what
 #   it has), to_dict / from_dict
@@ -18,15 +21,17 @@ extends SceneTree
 #   front-right takes more than the front-left, the numbers stay finite
 # - PULL: a fully bent front-left arm, wheel straight at ~70 km/h for 4 s: the
 #   car drifts left, a healthy car does not (much); front-right drifts right
-# - SAG: a broken rear-left corner softens that spring by SPRING_LOSS, and a
-#   Tuner spring change keeps the damage on the new base
-# - DEAD: radiator at 1.0, full throttle from rest: the car does not move
+# - SAG: a broken rear-left corner softens that spring by SPRING_LOSS, a repair
+#   brings the tuned rate back exactly, and a Tuner spring change keeps the
+#   damage on the new base
+# - LIMP: radiator at 1.0, full throttle from rest: the car still drives
 # - LAMPS: both head lamps broken switch the beam off
 # - STEAM / RATTLE: a hurt radiator steams; a loose car at speed rattles
 # Exit code 1 on failure. Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --fixed-fps 120 --audio-driver Dummy --path . -s res://tests/car/car_damage.gd
 
 const Harness := preload("res://tests/traffic/traffic_harness.gd")
+const DamageOffsets := preload("res://scripts/car/damage_offsets.gd")
 
 class StubBank:
 	extends RefCounted
@@ -39,7 +44,7 @@ class StubBank:
 		bank -= amount
 		return true
 
-enum Step { BOOT, WALL, PULL_BASE, PULL_FL, PULL_FR, SAG, DEAD, LAMPS, STEAM, DONE }
+enum Step { BOOT, WALL, PULL_BASE, PULL_FL, PULL_FR, SAG, LIMP, LAMPS, STEAM, DONE }
 
 var game: Node
 var step := Step.BOOT
@@ -96,11 +101,11 @@ func _unit_tests() -> void:
 	e.parts[D.Part.RADIATOR] = D.ENGINE_LIMP_AT
 	_check(e.engine_cap_kmh() == D.ENGINE_LIMP_KMH, "the engine limps from ENGINE_LIMP_AT")
 	e.parts[D.Part.RADIATOR] = 1.0
-	_check(e.is_engine_dead() and e.engine_cap_kmh() == 0.0, "the front at 100 % kills the engine")
+	_check(not e.is_engine_dead() and e.engine_cap_kmh() == D.ENGINE_LIMP_KMH, "the front at 100 % limps, it does not kill the engine")
 	var limp := LimpMode.new()
 	limp.engine_damage_kmh = e.engine_cap_kmh()
 	limp.update(false, 90.0)
-	_check(limp.cause == LimpMode.Cause.ENGINE and limp.throttle_scale(0.0) == 0.0, "a dead engine gets no throttle")
+	_check(limp.cause == LimpMode.Cause.ENGINE and limp.throttle_scale(0.0) > 0.0, "a wrecked radiator still gets throttle")
 	# heat: same drive, healthy against half-broken radiator
 	var temps := []
 	for rad in [0.0, 0.6]:
@@ -114,11 +119,42 @@ func _unit_tests() -> void:
 	print("engine after 60 s at 60 %% load, 90 km/h: healthy %.0f C, radiator 0.6 %.0f C" % temps)
 	_check(temps[1] > temps[0] + 5.0, "a hurt radiator runs the engine hotter")
 	# station patch: once a night
-	_check(e.station_patch(3) and not e.is_engine_dead() and e.part(D.Part.RADIATOR) < D.FREE_BELOW, "a station patch revives a dead engine")
+	_check(e.station_patch(3) and e.engine_cap_kmh() == INF and e.part(D.Part.RADIATOR) < D.FREE_BELOW, "a station patch ends the limp")
 	e.parts[D.Part.RADIATOR] = 0.9
 	_check(not e.station_patch(3) and e.part(D.Part.RADIATOR) == 0.9, "only one patch a night")
 	_check(e.station_patch(4), "a new night, a new patch")
 	_check(not CarDamage.new().station_patch(1), "nothing to patch on a healthy car")
+	# offsets (DP0): the same numbers the old per-tick writes gave
+	var ox := CarDamage.new()
+	_check(ox.offsets.is_neutral(), "a new car has neutral offsets")
+	ox.apply_hit(Vector3(9.0, 0, 9.0))   # from the front-left corner
+	var fl_effect := clampf((ox.part(D.Part.STEER_FL) - D.FREE_BELOW) / (1.0 - D.FREE_BELOW), 0.0, 1.0)
+	var ox_toe: float = ox.offsets.get_wheel(0, DamageOffsets.TOE_ADD)
+	print("front-left hit dv 12.7: FL %.3f -> toe %+.5f rad (MAX_TOE_BEND %.3f)" % [ox.part(D.Part.STEER_FL), ox_toe, D.MAX_TOE_BEND])
+	_check(ox_toe > 0.0 and is_equal_approx(ox_toe, D.MAX_TOE_BEND * fl_effect) and is_equal_approx(ox_toe, ox.toe_offset(0)), "a front-left hit bends that toe by MAX_TOE_BEND x effect")
+	_check(ox.offsets.get_wheel(1, DamageOffsets.TOE_ADD) == 0.0 and ox.offsets.get_wheel(2, DamageOffsets.TOE_ADD) == 0.0, "the other toes stay at zero")
+	var ox_rr := CarDamage.new()
+	ox_rr.apply_hit(Vector3(0, 0, -16.0))   # rear-ended
+	var rr_effect := clampf((ox_rr.part(D.Part.SUSP_RR) - D.FREE_BELOW) / (1.0 - D.FREE_BELOW), 0.0, 1.0)
+	var rr_mult: float = ox_rr.offsets.get_wheel(3, DamageOffsets.SPRING_MULT)
+	print("rear hit dv 16: RR %.3f -> spring x%.4f" % [ox_rr.part(D.Part.SUSP_RR), rr_mult])
+	_check(rr_mult < 1.0 and is_equal_approx(rr_mult, 1.0 - D.SPRING_LOSS * rr_effect), "a rear hit softens that spring by SPRING_LOSS x effect")
+	_check(ox_rr.offsets.get_wheel(0, DamageOffsets.SPRING_MULT) == 1.0, "a front spring is untouched")
+	var ox_rad := CarDamage.new()
+	ox_rad.apply_hit(Vector3(0, 0, 22.0))
+	_check(is_equal_approx(ox_rad.offsets.get_car(DamageOffsets.COOLING_MULT), ox_rad.cooling_mult()) and ox_rad.cooling_mult() < 1.0, "a hurt radiator lowers COOLING_MULT")
+	_check(ox_rad.offsets.get_car(DamageOffsets.TORQUE_MULT) == 1.0 and ox_rad.offsets.get_wheel(0, DamageOffsets.GRIP_MULT) == 1.0, "fields no sim reads yet stay neutral")
+	ox_rad.garage_repair(null)
+	ox.garage_repair(null)
+	ox_rr.garage_repair(null)
+	_check(ox.offsets.is_neutral() and ox_rr.offsets.is_neutral() and ox_rad.offsets.is_neutral(), "a repair puts the offsets back to neutral")
+	var ox_k := CarDamage.new()
+	ox_k.apply_kerb_strike(0, 12.0)
+	_check(ox_k.offsets.get_wheel(0, DamageOffsets.TOE_ADD) > 0.0, "a kerb strike bends the toe through the offsets")
+	var ox_p := CarDamage.new()
+	ox_p.parts[D.Part.RADIATOR] = 0.9
+	ox_p.rebuild_offsets()
+	_check(ox_p.station_patch(1) and ox_p.offsets.get_car(DamageOffsets.COOLING_MULT) == 1.0, "a station patch rebuilds the offsets")
 	# garage
 	var g := CarDamage.new()
 	g.apply_hit(Vector3(9.0, 0, 9.0))
@@ -151,6 +187,10 @@ func _unit_tests() -> void:
 	var copy := CarDamage.new()
 	copy.from_dict(s.to_dict())
 	_check(copy.parts == s.parts and copy.lamps == s.lamps and copy.patched_night == 2, "to_dict / from_dict round trip")
+	_check(copy.offsets.data == s.offsets.data and not copy.offsets.is_neutral(), "a loaded car has its offsets rebuilt")
+	s.totalled = 0.5
+	copy.from_dict(s.to_dict())
+	_check(is_equal_approx(copy.totalled, 0.5) and CarDamage.new().to_dict().has("totalled"), "totalled round trips (0 by default)")
 	# detection
 	var det := CarDamage.new()
 	var dt := 1.0 / 120.0
@@ -221,30 +261,43 @@ func _physics_process(_delta: float) -> bool:
 				else:
 					_next_pull(p, step + 1)
 		Step.SAG:
+			var ratio_off := 1.0 - CarDamage.SPRING_LOSS
 			if t == hz / 2:
 				drift["rl0"] = p.wheel_array[2].spring_rate
+				drift["rr0"] = p.wheel_array[3].spring_rate
 				p.damage.parts[CarDamage.Part.SUSP_RL] = 1.0
+				p.damage.rebuild_offsets()
 			elif t == hz / 2 + 2:
 				var ratio: float = p.wheel_array[2].spring_rate / drift["rl0"]
-				_check(is_equal_approx(ratio, 1.0 - CarDamage.SPRING_LOSS), "a broken rear-left spring is %.2f of stock (%.2f)" % [1.0 - CarDamage.SPRING_LOSS, ratio])
-				_check(is_equal_approx(p.wheel_array[3].spring_rate, drift["rl0"]) or p.wheel_array[3].spring_rate > 0.0, "the other rear spring is untouched")
-				# what a Tuner spring change does: GEVP writes a new rate to every wheel
-				for w in p.wheel_array:
-					w.spring_rate = drift["rl0"] * 1.2
+				_check(is_equal_approx(ratio, ratio_off), "a broken rear-left spring is %.2f of stock (%.2f)" % [ratio_off, ratio])
+				_check(is_equal_approx(p.wheel_array[3].spring_rate, drift["rr0"]), "the other rear spring is untouched")
+				p.damage.garage_repair(null)
 			elif t == hz / 2 + 4:
+				_check(p.damage.offsets.is_neutral(), "after the repair the offsets are neutral")
+				_check(p.wheel_array[2].spring_rate == drift["rl0"], "the tuned spring rate is back exactly after hit + repair (%.4f vs %.4f)" % [p.wheel_array[2].spring_rate, drift["rl0"]])
+				# what a Tuner spring change does: a new rear ride, applied to the wheels
+				p.rear_resting_ratio *= 1.2
+				p.apply_suspension()
+				drift["rl1"] = p.wheel_array[2].spring_rate
+				p.damage.parts[CarDamage.Part.SUSP_RL] = 1.0
+				p.damage.rebuild_offsets()
+			elif t == hz / 2 + 6:
 				var ratio2: float = p.wheel_array[2].spring_rate / p.wheel_array[3].spring_rate
-				_check(absf(ratio2 - (1.0 - CarDamage.SPRING_LOSS)) < 0.01, "the damage stays on after a Tuner change (%.2f)" % ratio2)
+				_check(not is_equal_approx(drift["rl1"], drift["rl0"]), "the Tuner change moved the spring rate (%.1f -> %.1f)" % [drift["rl0"], drift["rl1"]])
+				_check(absf(ratio2 - ratio_off) < 0.01, "the damage stays on after a Tuner change (%.2f)" % ratio2)
 			elif t >= hz:
 				_fresh(p)
 				p.damage.parts[CarDamage.Part.RADIATOR] = 1.0
+				p.damage.rebuild_offsets()
 				_launch(p, 0.0)
 				p.driver = _hold(1.0, 0.0)
-				step = Step.DEAD
-		Step.DEAD:
+				step = Step.LIMP
+		Step.LIMP:
 			if t >= hz * 3:
 				var kmh := p.current_speed() * 3.6
-				print("dead engine, 3 s full throttle: %.1f km/h" % kmh)
-				_check(kmh < 3.0, "a dead engine does not drive (%.1f km/h)" % kmh)
+				print("wrecked radiator, 3 s full throttle: %.1f km/h (limp cap %.0f)" % [kmh, CarDamage.ENGINE_LIMP_KMH])
+				_check(kmh > 10.0, "a wrecked radiator limps, it does not stop the car (%.1f km/h)" % kmh)
+				_check(not p.damage.is_engine_dead(), "damage never kills the engine")
 				_fresh(p)
 				p.damage.lamps[CarDamage.Lamp.HEAD_L] = true
 				p.damage.lamps[CarDamage.Lamp.HEAD_R] = true
@@ -261,6 +314,7 @@ func _physics_process(_delta: float) -> bool:
 				_fresh(p)
 				p.damage.parts[CarDamage.Part.RADIATOR] = 0.6
 				p.damage.parts[CarDamage.Part.SUSP_RR] = 0.6
+				p.damage.rebuild_offsets()
 				_launch(p, 20.0)
 				p.driver = _hold(0.5, 0.0)
 				step = Step.STEAM
@@ -309,6 +363,7 @@ func _next_pull(p: PlayerCar, s: int) -> void:
 		p.damage.parts[CarDamage.Part.STEER_FL] = 1.0
 	elif s == Step.PULL_FR:
 		p.damage.parts[CarDamage.Part.STEER_FR] = 1.0
+	p.damage.rebuild_offsets()
 	step = s as Step
 	_launch(p, 19.0)
 	p.driver = _hold(0.35, 0.0)

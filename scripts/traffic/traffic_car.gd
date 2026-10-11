@@ -606,6 +606,8 @@ func _physics_process(delta: float) -> void:
 	if not detailed:
 		if _ghost_frame >= 0 and Engine.get_physics_frames() > _ghost_frame:
 			_end_ghost()
+		if _flash_t >= 0.0:
+			_flash_step(delta)
 		_cruise(delta)
 		return
 	_drive(delta)
@@ -1009,6 +1011,12 @@ func _react() -> void:
 	_react_at = INF
 	traffic.honk(self, _react_long)
 	_flash_t = 0.0
+
+## Two headlight flashes and no horn: an oncoming driver warning of a cop up
+## the road (MomentSpots). Works on the rails too.
+func flash_twice() -> void:
+	if _flash_t < 0.0:
+		_flash_t = 0.0
 
 func _flash_step(delta: float) -> void:
 	_flash_t += delta

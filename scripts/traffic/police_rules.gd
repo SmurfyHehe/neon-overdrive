@@ -185,6 +185,17 @@ static func reach(mode: int, lit_here: bool) -> float:
 		return REACH_LOW
 	return REACH_DARK_LIT if lit_here else REACH_DARK
 
+## Seconds in the cone before a cop judges speed. `delay` is the cop's
+## alertness factor (CopAlertness: 1.0 = normal, a distracted parked cop more).
+## The radar car skips the base second, so a sharp one still judges at once.
+static func judge_secs(delay := 1.0, radar := false) -> float:
+	return maxf(JUDGE_SECS * maxf(delay, 1.0) - (JUDGE_SECS if radar else 0.0), 0.0)
+
+## Seconds in sight before a cop notices an offence that needs no speed
+## judgement: none for a normal cop, the extra of `delay` for a distracted one.
+static func notice_secs(delay := 1.0) -> float:
+	return JUDGE_SECS * maxf(delay - 1.0, 0.0)
+
 ## Geometry only (no walls): whether a cop at `cop_xf` (facing its -Z) sees a
 ## target by cone and reach. `mirrors` = a driving cop whose target is
 ## MIRROR_FASTER_KMH or more faster than it.

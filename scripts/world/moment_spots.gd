@@ -26,6 +26,11 @@ extends Node
 ##   which reaches the two lanes next to it and not the two by the centre
 ##   line. It emits `clocked` or `slipped`; heat is the police system's to
 ##   raise from `clocked`.
+##   The cop has a look for the night (CopAlertness: reading, on break, bored,
+##   half asleep) and a distracted one needs the car in sight and over the
+##   line a little longer before it clocks it. About one trap in FLASH_ONE_IN
+##   is given away: an oncoming car that has just passed it flashes its
+##   headlights twice at the player, once.
 
 const Districts := preload("res://scripts/world/districts.gd")
 const TestMode := preload("res://scripts/core/test_mode.gd")
@@ -66,6 +71,13 @@ const SIDEWALK_Y := 0.15
 const SEE_LIT := 140.0
 const SEE_DARK := 9.0
 const PAST := 6.0            # m beyond the cop where the pass is over
+## The oncoming warning (more-alive T8): one trap in FLASH_ONE_IN, from a car
+## FLASH_NEAR..FLASH_FAR m past the trap that the player can see ahead.
+const FLASH_ONE_IN := 3
+const FLASH_NEAR := 200.0
+const FLASH_FAR := 400.0
+const FLASH_SEE_MIN := 15.0  # m ahead of the player: not a car already alongside
+const FLASH_SEE_MAX := 180.0
 const CLOCKED_LINE := "Dave: Word is there is a patrol car sitting dark on the sidewalk tonight, and it just woke up. Somebody is having a worse shift than me."
 
 var road_seed := 0
@@ -75,6 +87,10 @@ var player: Node3D
 var pool: Array = []
 ## Dave's line, as RadioManager.announce.
 var announce: Callable = Callable()
+## The oncoming lanes' cars, for the warning flash; null = nobody flashes.
+var traffic: TrafficManager
+## Warning flashes given tonight (tests).
+var flashes := 0
 
 ## Tonight's spots by run: run -> [{chunk, card, fired}]. Emptied at 6 a.m.
 var _runs: Dictionary = {}
@@ -195,6 +211,10 @@ func dress_chunk(root: Node3D, chunk: int, rebuilt := true) -> void:
 		cop.transform = root.transform.affine_inverse() * RoadFrame.pose(x, SIDEWALK_Y, z, 0.0)
 		cop.reset_physics_interpolation()
 		_cop_lamps(cop, s.fired)
+		_alertness(s)
+		CopAlertness.tag(cop, s.look, s.sharp)
+		cop.set_meta(&"radar", true)
+		CopAlertness.dress(cop, TRAP_KIND, s.look)
 	elif cop != null:
 		root.remove_child(cop)
 
@@ -220,6 +240,44 @@ func _set_dark(root: Node3D, dark: bool, rebuilt := false) -> void:
 			mi.set_instance_shader_parameter("lit_density", 0.0)
 		elif not rebuilt and mi.has_meta("moment_lit"):
 			mi.set_instance_shader_parameter("lit_density", mi.get_meta("moment_lit"))
+
+## What tonight's cop at this trap is doing, drawn once (the hour it was first
+## dressed decides whether it can be half asleep) and kept for the night.
+func _alertness(spot: Dictionary) -> void:
+	if spot.has("look"):
+		return
+	var hour := NightClock.hour24(night_clock.minutes) if night_clock != null else NightClock.START_HOUR
+	var a := CopAlertness.pick(hash([road_seed, tonight, spot.chunk]), hour)
+	spot["look"] = a.look
+	spot["sharp"] = a.sharp
+
+## Whether an oncoming driver gives this trap away tonight.
+static func trap_warned(seed: int, night: int, chunk: int) -> bool:
+	return posmod(hash([seed, night, chunk, "flash"]), FLASH_ONE_IN) == 0
+
+## The oncoming warning for one trap `trap_s` metres along the road, the
+## player at `s`: the first shown oncoming car in the band that the player can
+## see ahead flashes twice. `cars` are TrafficCars (direction, benched, shown,
+## road_z(), flash_twice()); `flow` is the player's direction of travel.
+## At most once per trap per night. Returns the car that flashed.
+func oncoming_flash(spot: Dictionary, s: float, trap_s: float, cars: Array, flow: float) -> Object:
+	if spot.get("flashed", false) or s >= trap_s - FLASH_NEAR:
+		return null
+	if not spot.has("warned"):
+		spot["warned"] = trap_warned(road_seed, tonight, spot.chunk)
+	if not spot.warned or s + FLASH_SEE_MIN > trap_s - FLASH_NEAR or s + FLASH_SEE_MAX < trap_s - FLASH_FAR:
+		return null
+	for car in cars:
+		if car.benched or not car.shown or car.direction == flow:
+			continue
+		var cs := RoadFrame.s_at(car.road_z())
+		if cs < trap_s - FLASH_FAR or cs > trap_s - FLASH_NEAR or cs - s < FLASH_SEE_MIN or cs - s > FLASH_SEE_MAX:
+			continue
+		spot["flashed"] = true
+		flashes += 1
+		car.flash_twice()
+		return car
+	return null
 
 ## Across the road: the middle of the own-side sidewalk.
 static func trap_x() -> float:
@@ -323,7 +381,10 @@ func lights_on() -> bool:
 	return v == null or v == true
 
 func _watch_trap(spot: Dictionary, s: float, x: float) -> void:
-	var ahead := float(spot.chunk) * RoadChunkBuilder.CHUNK_LEN + TRAP_Z - s
+	var trap_s := float(spot.chunk) * RoadChunkBuilder.CHUNK_LEN + TRAP_Z
+	var ahead := trap_s - s
+	if traffic != null and ahead <= FLASH_FAR + FLASH_SEE_MAX:
+		oncoming_flash(spot, s, trap_s, traffic.cars, traffic.flow)
 	if ahead > SEE_LIT:
 		return
 	var lit := lights_on()
@@ -331,7 +392,12 @@ func _watch_trap(spot: Dictionary, s: float, x: float) -> void:
 	var kmh := 0.0
 	if player.has_method("current_speed"):
 		kmh = absf(player.current_speed()) * 3.6
-	if seen and ahead >= -PAST and kmh > PoliceRules.offence_line(PoliceRules.area_at(s), false):
+	# A distracted cop needs the reading held for the extra of its factor.
+	var reading := seen and ahead >= -PAST and kmh > PoliceRules.offence_line(PoliceRules.area_at(s), false)
+	spot["held"] = float(spot.get("held", 0.0)) + CHECK_EVERY if reading else 0.0
+	_alertness(spot)
+	var need := PoliceRules.judge_secs(CopAlertness.delay_factor(spot.look, spot.sharp), true)
+	if reading and float(spot.held) - CHECK_EVERY >= need - 0.001:
 		spot.fired = true
 		var cop := _cop_of(spot.chunk)
 		if cop != null:

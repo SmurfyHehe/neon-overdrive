@@ -30,7 +30,7 @@ extends SceneTree
 #   bright behind the car's roof line, the poster flaps, and
 #   Graffiti.enabled = false leaves the node empty
 # - the menu has Continue, New Game, Load, Settings, Extras, Quit; Load lists
-#   one row per save slot plus Back; Esc comes back to the main list
+#   one row per save slot plus Delete a save and Back; Esc comes back to the main list
 # - the news line has text; the Early Access tag is on the title
 # - the radio is on the synthwave station but the save keeps the player's own
 # - Continue (the drive button) starts the drive: the set is freed, the radio
@@ -118,7 +118,8 @@ func _run() -> void:
 	title.load_button.pressed.emit()
 	await _frames(2)
 	_check(title.load_list.visible and not title.main_list.visible, "Load opens the save list")
-	_check(title.load_list.get_child_count() == SaveStore.SLOTS + 1, "one row per save slot plus Back")
+	# one row per slot, DELETE A SAVE (8000037, tests/core/save_delete.gd), BACK
+	_check(title.load_list.get_child_count() == SaveStore.SLOTS + 2, "one row per save slot plus Delete a save and Back")
 	var esc := InputEventAction.new()
 	esc.action = "ui_cancel"
 	esc.pressed = true

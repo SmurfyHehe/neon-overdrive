@@ -23,6 +23,13 @@ const AREAS := {
 	"residential": {"name": "RESIDENTIAL", "bus": false},
 	"strip": {"name": "THE STRIP", "bus": false},
 	"industrial": {"name": "INDUSTRIAL", "bus": false},
+	"old_town": {"name": "OLD TOWN", "bus": true},
+	"lofts": {"name": "THE LOFTS", "bus": false},
+	"hillside": {"name": "HILLSIDE", "bus": false},
+	"airport": {"name": "AIRPORT", "bus": false},
+	"docks": {"name": "THE DOCKS", "bus": false},
+	"freeway": {"name": "ROUTE 9", "bus": false},
+	"canyon": {"name": "CANYON", "bus": false},
 }
 
 ## How far apart the round repeater signs stand inside an area, in chunks

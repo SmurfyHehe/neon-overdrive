@@ -183,17 +183,18 @@ func _initialize() -> void:
 	check(str(Plan.entry(15, 99)) == str(Plan.entry(15, 99)) and Plan.entry(15, 99).night == 15, "3 entry(): cached lookup returns the night asked for")
 
 	# 4 season: winter acts 31-54 against summer acts 91-114, same number of
-	# acts each side, seasons from the 28-night calendar
+	# acts each side, seasons from the 28-night calendar. Wet means
+	# is_wet_level: haze and fog (WX0) are dry-road nights, not wet ones.
 	var wet_winter := 0
 	var wet_summer := 0
 	for sd in SEEDS:
 		for a in WINTER_ACTS:
 			for e in Plan.generate(a[0], a[1], sd):
-				if e.level != Plan.DRY:
+				if Plan.is_wet_level(e.level):
 					wet_winter += 1
 		for a in SUMMER_ACTS:
 			for e in Plan.generate(a[0], a[1], sd):
-				if e.level != Plan.DRY:
+				if Plan.is_wet_level(e.level):
 					wet_summer += 1
 	check(Plan.season_name(31) == "winter" and Plan.season_name(91) == "summer", "4 season: night 31 is %s, night 91 is %s" % [Plan.season_name(31), Plan.season_name(91)])
 	check(wet_winter > 1.5 * wet_summer and wet_summer > 0, "4 season: wet nights winter %d vs summer %d over %d seeds" % [wet_winter, wet_summer, SEEDS])

@@ -38,8 +38,10 @@ func _initialize() -> void:
 	change_scene_to_file("res://Game.tscn")
 
 func _station_tests() -> void:
-	_check(RadioStations.station_count() == 4, "expected 4 stations, got %d" % RadioStations.station_count())
-	var want_counts := [7, 7, 0, 7]
+	_check(RadioStations.station_count() == 8, "expected 8 stations, got %d" % RadioStations.station_count())
+	# Drift, Dark, Dave (talk), Synthwave, then the Treblo API stations (Afterglow,
+	# Undertow, Slipstream, Grey Hour; counts from the 2026-10-11 import).
+	var want_counts := [7, 7, 0, 7, 7, 6, 5, 5]
 	var found := {}
 	for s in RadioStations.station_count():
 		var paths := RadioStations.track_paths(s)
@@ -53,7 +55,7 @@ func _station_tests() -> void:
 		_check(false, "song length table is stale (run tools/radio_lengths.gd): %s" % m)
 	_check(not RadioStations.has_music(2), "The Dave Show should be talk only")
 	_check(RadioStations.STATIONS[2].dj.size() >= 4, "Dave needs lines")
-	for s in [0, 1, 3]:
+	for s in [0, 1, 3, 4, 5, 6, 7]:
 		_check(not RadioStations.break_state(s, 5.0).in_break, "music station %d has no breaks" % s)
 	_check(RadioStations.break_state(2, 3.0).in_break, "Dave should talk at the start of his period")
 	_check(not RadioStations.break_state(2, RadioStations.BREAK_SECS + 5.0).in_break, "Dave should be quiet between lines")

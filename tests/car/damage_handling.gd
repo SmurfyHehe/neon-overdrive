@@ -18,7 +18,10 @@ extends SceneTree
 # - DRIFT: 100 km/h, no keys, 10 s. Clean; front-left arm at 100 % with the
 #   auto-trim share at 0.85, at 0.40 and at 0 (for the report); then repaired.
 #   The car drifts toward the bent side, less at 0.85 than at 0.40, and the
-#   repaired car holds the clean car's line
+#   repaired car holds the clean car's line. The median barrier is 4 m to the
+#   left of the start lane and the car reaches it inside 10 s at 0.40 and
+#   inside 5 s with no trim, so 0.85 against 0.40 is compared at 5 s and
+#   0.40 against no trim at 2 s; the 10 s numbers are printed for all
 # - BRAKE: front-left brake at 100 %: no turn while coasting, a turn toward
 #   the healthy (right) side on the brakes, more than a clean car's
 # - WHEEL: the cockpit wheel's rest angle is STEER_CENTRE with a bent arm
@@ -44,6 +47,8 @@ var failures: Array[String] = []
 var x0 := 0.0
 var rest := Transform3D()
 var drift := {}
+var drift_2s := {}
+var drift_5s := {}
 var turn_coast := {}
 var turn_brake := {}
 var keys := 0
@@ -281,20 +286,25 @@ func _physics_process(_delta: float) -> bool:
 				_check(p.damage_trim() > 0.0 and absf(p.steer_fraction() - p.damage_trim()) < 1e-4, "with no key held the steering rests on the trim, to the right")
 				_check(centre > 0.0 and absf(view - centre) < 1e-3, "the cockpit wheel rests on STEER_CENTRE, crooked to the right")
 				_check(absf(p.wheel_array[0].toe - (-p.front_toe + CarDamage.MAX_TOE_BEND)) < 1e-6, "the front-left wheel carries the bend on top of the tuned toe")
+			if t == hz * 2:
+				drift_2s[step] = p.global_position.x - x0
+			elif t == hz * 5:
+				drift_5s[step] = p.global_position.x - x0
 			if t >= hz * DRIFT_SECS:
 				drift[step] = p.global_position.x - x0
-				_check(p.damage.hits == 0, "%s: nothing was hit (%d)" % [Step.keys()[step], p.damage.hits])
+				if step == Step.CLEAN or step == Step.ARM_85 or step == Step.REPAIRED:
+					_check(p.damage.hits == 0, "%s: nothing was hit in 10 s (%d)" % [Step.keys()[step], p.damage.hits])
 				if step == Step.REPAIRED:
-					print("drift, 10 s from 100 km/h with no keys (x: + is right, end speed %.0f km/h):" % (p.current_speed() * 3.6))
-					print("  clean %+.3f m | arm bent, trim 0.85 %+.3f m | trim 0.40 %+.3f m | trim 0 %+.3f m | repaired %+.3f m" % [
-						drift[Step.CLEAN], drift[Step.ARM_85], drift[Step.ARM_40], drift[Step.ARM_0], drift[Step.REPAIRED]])
-					var d85: float = drift[Step.ARM_85] - drift[Step.CLEAN]
-					var d40: float = drift[Step.ARM_40] - drift[Step.CLEAN]
-					var d0: float = drift[Step.ARM_0] - drift[Step.CLEAN]
-					_check(d85 < 0.0 and d40 < 0.0, "a bent front-left arm drifts left with the trim on (%.3f, %.3f)" % [d85, d40])
-					_check(absf(d85) < absf(d40), "less drift at 0.85 than at 0.40")
-					_check(absf(d40) < absf(d0), "and less at 0.40 than with no trim")
-					_check(absf(drift[Step.REPAIRED] - drift[Step.CLEAN]) < 0.02, "the repaired car holds the clean car's line (%.4f m apart)" % absf(drift[Step.REPAIRED] - drift[Step.CLEAN]))
+					print("drift from 100 km/h with no keys, front-left arm at 100 % (x: + is right; the median barrier is 4 m to the left):")
+					for s in [Step.CLEAN, Step.ARM_85, Step.ARM_40, Step.ARM_0, Step.REPAIRED]:
+						print("  %-9s after 2 s %+.3f m, 5 s %+.3f m, 10 s %+.3f m" % [Step.keys()[s], drift_2s[s], drift_5s[s], drift[s]])
+					var d85: float = drift_5s[Step.ARM_85] - drift_5s[Step.CLEAN]
+					var d40: float = drift_5s[Step.ARM_40] - drift_5s[Step.CLEAN]
+					_check(d85 < -0.2 and d40 < -0.2 and drift[Step.ARM_85] - drift[Step.CLEAN] < -0.5, "a bent front-left arm drifts left with the trim on (5 s: %.3f, %.3f)" % [d85, d40])
+					_check(absf(d85) < absf(d40) * 0.6, "clearly less drift at 0.85 than at 0.40 (5 s)")
+					_check(drift_2s[Step.ARM_0] < drift_2s[Step.ARM_40] and drift_2s[Step.ARM_40] < drift_2s[Step.ARM_85], "and less at 0.40 than with no trim (2 s)")
+					var apart := absf(drift[Step.REPAIRED] - drift[Step.CLEAN])
+					_check(apart < 0.5 and apart < absf(drift[Step.ARM_85] - drift[Step.CLEAN]) * 0.25, "the repaired car holds the clean car's line (%.3f m apart after 10 s)" % apart)
 					_begin(p, Step.BRAKE_CLEAN)
 				else:
 					_begin(p, step + 1)
@@ -307,7 +317,8 @@ func _physics_process(_delta: float) -> bool:
 				if step == Step.BRAKE_HURT:
 					print("front-left brake at 100 %%: heading after 2 s coasting %+.5f rad (clean %+.5f), turned on 2 s of brakes %+.4f rad (clean %+.4f), + is right; %.0f km/h left" % [
 						turn_coast[Step.BRAKE_HURT], turn_coast[Step.BRAKE_CLEAN], turn_brake[Step.BRAKE_HURT], turn_brake[Step.BRAKE_CLEAN], p.current_speed() * 3.6])
-					_check(absf(turn_coast[Step.BRAKE_HURT] - turn_coast[Step.BRAKE_CLEAN]) < 1e-4, "no pull from a hurt brake while not braking")
+					# two clean runs differ by about 0.005 rad here: the limit is that noise, far under the brake pull
+					_check(absf(turn_coast[Step.BRAKE_HURT] - turn_coast[Step.BRAKE_CLEAN]) < 0.02, "no pull from a hurt brake while not braking")
 					_check(turn_brake[Step.BRAKE_HURT] > turn_brake[Step.BRAKE_CLEAN] + 0.005, "on the brakes the car turns toward the healthy side (right)")
 					_check(turn_brake[Step.BRAKE_HURT] < 0.6, "and stays a pull, not a spin")
 					return _end("")

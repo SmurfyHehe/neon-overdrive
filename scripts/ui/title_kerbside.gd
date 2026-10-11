@@ -29,6 +29,18 @@ extends Node3D
 # 0.5 every roach out runs for cover, and none come out until the scare has
 # been under 0.2 for 3 s. A very quiet skitter plays when two or more flee at
 # once. Hidden with the rest of lamp life.
+#
+# Street life (menu street life M8 + rats M9, 2026-10-11): on the same clock,
+# wind and scare, title_street_life.gd adds the neighbour's window above the
+# shop front, four pigeons on the lamp arm, a cat on the shutter box, bin
+# bags with a cloud of flies and a pair of sneakers on a wire, and
+# title_rats.gd three rats along the foot of the wall. The events the turbo
+# can set off (the neighbour waking, the pigeons lifting, the cat leaving)
+# are scheduled here, one at a time, none in the first FIRST_EVENT_AT
+# seconds, and the pigeons never with the bat's pass (a tiny time probe reads
+# the shaders' TIME once, so the bat's schedule is known; without a renderer
+# the rule is skipped). Settings > Game > "Roaches and rats" (GameSettings.
+# critters) hides the roaches, the rats and the flies; the moths stay.
 
 const SITE := Vector3(0.0, -600.0, 0.0)
 const SODIUM_LIGHT := Color(1.0, 0.62, 0.3)
@@ -70,6 +82,27 @@ const BAT_PERIOD_SEED := 0.05
 const WIND_REST := 0.6
 const WIND_MAX := 2.0
 const WIND_FALL_SECS := 3.0
+## Street-life events (M8): one at a time, none before FIRST_EVENT_AT.
+const FIRST_EVENT_AT := 10.0
+const NEIGHBOUR_BOOST := 0.85
+const NEIGHBOUR_HOLD := 4.0
+const NEIGHBOUR_COOLDOWN := 60.0
+const BIG_BLOW := 0.7
+const DOUBLE_BLOW_SECS := 20.0
+const PIGEON_BOOST := 0.6
+const CAT_BOOST := 0.7
+## The bat's flight at the title lamp (lamp_life.gd's swarm shader with
+## BAT_PERIOD_SEED and the 0.2 phase seed below): period and length at rest.
+const BAT_PERIOD := 14.0 + 20.0 * BAT_PERIOD_SEED
+const BAT_PHASE := 0.2 * BAT_PERIOD
+const BAT_LEN := 2.6
+const BAT_MARGIN := 0.3
+const SNAP := "res://assets/ui/sfx/blind_snap.wav"
+const CLAP := "res://assets/ui/sfx/wing_clap.wav"
+const SQUEAK := "res://assets/ui/sfx/rat_squeak.wav"
+const SNAP_DB := -22.0
+const CLAP_DB := -14.0
+const SQUEAK_DB := -20.0
 
 var kind := ""
 var camera: Camera3D
@@ -104,6 +137,35 @@ var roach_env := {}
 var _scare := 0.0
 var _calm_since := 0.0
 var _skitter: AudioStreamPlayer
+## Rats (title_rats.gd): their own origin and scare, on the roach clock.
+var rat_origin := 0.0
+var rat_scare_t := -1.0
+var rat_sched: Array[Color] = []
+var _rat_calm_since := 0.0
+## Street life (title_street_life.gd): the event clocks the shaders read.
+var neighbour_wake_t := -1.0
+var pigeon_lift_t := -1.0
+var pigeon_ret: Array[float] = []
+var cat_leave_t := -1.0
+var cat_back_t := -1.0
+var shoes_wrap_t := -1.0
+var _event_until := 0.0
+var _neighbour_last := -1000.0
+var _boost_hi_secs := 0.0
+var _blows: Array[float] = []
+var _snap_at := -1.0
+var _lift_count := 0
+var _critters := true
+var _snap: AudioStreamPlayer
+var _clap: AudioStreamPlayer
+var _squeak: AudioStreamPlayer
+## The time probe: what the shaders' TIME was (mod 60 s) at roach clock
+## _probe_clock, or -1 while unknown (headless, or not read yet).
+var _probe_vp: SubViewport
+var _probe_frames := 0
+var _probe_time := -1.0
+var _probe_clock := 0.0
+var _probe_pending := 0.0
 
 func _init(car_kind: String) -> void:
 	name = "TitleKerbside"
@@ -120,6 +182,10 @@ func _init(car_kind: String) -> void:
 	if ResourceLoader.exists(SKITTER):
 		_skitter.stream = load(SKITTER)
 	add_child(_skitter)
+	_snap = _player("BlindSnap", SNAP, SNAP_DB)
+	_clap = _player("WingClap", CLAP, CLAP_DB)
+	_squeak = _player("RatSqueak", SQUEAK, SQUEAK_DB)
+	_build_time_probe()
 	set_car(car_kind)
 	camera = Camera3D.new()
 	camera.fov = CAM_FOV
@@ -234,11 +300,19 @@ func start_roaches() -> void:
 ## Screenshots: hold the roaches where they are (true) or let them run.
 func freeze_roaches(hold: bool) -> void:
 	roach_frozen = hold
+	if not hold:
+		_probe_frames = 0   # the clock stood still while TIME ran: read it again
 
 ## Moves the roach clock to t and writes it (screenshots, tests).
 func set_roach_clock(t: float) -> void:
 	roach_clock = t
 	TitleRoaches.set_uniform("clock", roach_clock)
+	TitleRats.set_uniform("clock", roach_clock)
+	TitleStreetLife.set_clock(roach_clock)
+
+## The street clock every shader here runs on (the roaches', M7).
+func street_clock() -> float:
+	return roach_clock
 
 ## The scare, 0..1 (the turbo's menu_boost; a passing car later). Crossing
 ## 0.5 upward sends every roach out running for cover; once it has been under
@@ -248,6 +322,7 @@ func set_scare(v: float) -> void:
 	v = clampf(v, 0.0, 1.0)
 	var was := _scare
 	_scare = v
+	_scare_rats(v, was)
 	if roach_sched.is_empty():
 		return
 	if v > TitleRoaches.SCARE_ON and roach_scare_t < 0.0:
@@ -278,7 +353,7 @@ func _run_roaches(delta: float) -> void:
 	set_roach_clock(roach_clock + delta)
 	# the calm-down after a scare counts on the clock, whether or not the
 	# scare value is still being written
-	if roach_scare_t >= 0.0 and _scare < TitleRoaches.SCARE_OFF:
+	if (roach_scare_t >= 0.0 or rat_scare_t >= 0.0) and _scare < TitleRoaches.SCARE_OFF:
 		set_scare(_scare)
 
 func _aim() -> void:
@@ -307,6 +382,10 @@ func _process(delta: float) -> void:
 	_aim()
 	_ease_wind(delta)
 	_run_roaches(delta)
+	_run_street(delta)
+	_run_time_probe()
+	if _critters != GameSettings.critters:
+		set_critters(GameSettings.critters)
 
 func _ease_wind(delta: float) -> void:
 	var w := _wind_now
@@ -318,6 +397,7 @@ func _ease_wind(delta: float) -> void:
 		_wind_now = w
 		if LampLife.enabled:
 			LampLife.set_wind(w)
+			TitleStreetLife.set_wind(w)
 
 func _build_street() -> void:
 	# Asphalt: the road, from the kerb out past the camera.
@@ -370,6 +450,10 @@ func _build_lamp_life() -> void:
 	add_child(life_root)
 	LampLife.create_nodes(life_root, 1)
 	life_root.add_child(TitleRoaches.create_node())
+	life_root.add_child(TitleRats.create_node())
+	for n in TitleStreetLife.create_all():
+		n.visible = LampLife.enabled
+		life_root.add_child(n)
 	var litter := (life_root.get_node(^"WindLitter") as MultiMeshInstance3D).multimesh
 	litter.instance_count = 2   # two gust phases (data is written below)
 	var turn := Basis(Vector3.UP, PI * 0.5)
@@ -407,6 +491,262 @@ func _build_lamp_life() -> void:
 	moths.set_instance_custom_data(0, Color(0.37, BAT_PERIOD_SEED, 0.2, 1.0))
 	life["moth_xf"] = _lamp_xf
 	life["moth_custom"] = Color(0.37, BAT_PERIOD_SEED, 0.2, 1.0)
+	# 5. the rats' schedule (M9) and the street's event uniforms at rest (M8)
+	rat_sched = TitleRats.fill((life_root.get_node(^"Rats") as MultiMeshInstance3D).multimesh)
+	TitleRats.set_uniform("origin", 0.0)
+	TitleRats.set_uniform("scare_t", -1.0)
+	TitleStreetLife.set_uniform("neighbour", "wake_t", -1.0)
+	TitleStreetLife.set_uniform("pigeon", "lift_t", -1.0)
+	TitleStreetLife.set_uniform("cat", "leave_t", -1.0)
+	TitleStreetLife.set_uniform("cat", "back_t", -1.0)
+	TitleStreetLife.set_uniform("wire", "wrap_t", -1.0)
+	TitleStreetLife.set_wind(_wind_now)
+	set_critters(GameSettings.critters)
+
+# ---------------------------------------------------------------- rats (M9)
+
+func _player(node_name: String, path: String, db: float) -> AudioStreamPlayer:
+	var p := AudioStreamPlayer.new()
+	p.name = node_name
+	p.bus = &"UI"
+	p.volume_db = db
+	if ResourceLoader.exists(path):
+		p.stream = load(path)
+	add_child(p)
+	return p
+
+static func _play(p: AudioStreamPlayer) -> void:
+	if p != null and p.stream != null:
+		p.play()
+
+## The rats' side of set_scare: above SCARE_ON a rat that is out bolts (a
+## faint scratch and squeak); once the scare has been under SCARE_OFF for
+## CALM_SECS the cycles start over from now, so none come in before then.
+func _scare_rats(v: float, was: float) -> void:
+	if rat_sched.is_empty():
+		return
+	if v > TitleRats.SCARE_ON and rat_scare_t < 0.0:
+		var bolting := TitleRats.out_count(rat_sched, roach_clock, rat_origin, -1.0)
+		rat_scare_t = roach_clock
+		TitleRats.set_uniform("scare_t", rat_scare_t)
+		if bolting >= 1:
+			_play(_squeak)
+	elif v < TitleRats.SCARE_OFF and rat_scare_t >= 0.0:
+		if was >= TitleRats.SCARE_OFF:
+			_rat_calm_since = roach_clock
+		if roach_clock - _rat_calm_since >= TitleRats.CALM_SECS:
+			rat_scare_t = -1.0
+			rat_origin = roach_clock
+			TitleRats.set_uniform("scare_t", -1.0)
+			TitleRats.set_uniform("origin", rat_origin)
+
+## Where every rat is now (or at clock t): a list of {out, pos, sit}.
+func rat_positions(t := -1.0) -> Array:
+	if rat_sched.is_empty():
+		return []
+	return TitleRats.positions(rat_sched, roach_clock if t < 0.0 else t, rat_origin, rat_scare_t)
+
+## Settings > Game > "Roaches and rats": off hides the roaches, the rats and
+## the flies over the bin bags. The moths and the rest stay.
+func set_critters(on: bool) -> void:
+	_critters = on
+	if life_root == null:
+		return
+	for n in ["Roaches", "Rats", "Flies"]:
+		var node := life_root.get_node_or_null(NodePath(n)) as Node3D
+		if node != null:
+			node.visible = on and LampLife.enabled
+
+func critters_on() -> bool:
+	return _critters
+
+# ---------------------------------------------------------------- street (M8)
+
+## The turbo blew off at this boost (title_screen.gd): a second big one
+## inside DOUBLE_BLOW_SECS wakes the neighbour.
+func blow_off(boost: float) -> void:
+	if boost >= BIG_BLOW:
+		_blows.append(roach_clock)
+		while _blows.size() > 4:
+			_blows.pop_front()
+
+## A car passing within a few metres (nothing on the title yet; the hook for
+## later): the pigeons lift as on a boost.
+func startle_pigeons() -> void:
+	_try_lift_pigeons(true)
+
+func event_free(t: float) -> bool:
+	return t >= FIRST_EVENT_AT and t >= _event_until
+
+func _double_blow(t: float) -> bool:
+	if _blows.size() < 2:
+		return false
+	return t - _blows[_blows.size() - 2] <= DOUBLE_BLOW_SECS
+
+func pigeons_settled(t: float) -> bool:
+	if pigeon_lift_t < 0.0:
+		return true
+	for i in TitleStreetLife.PIGEON_COUNT:
+		if TitleStreetLife.pigeon_state(i, t, pigeon_lift_t, pigeon_ret[i]) != "rest":
+			return false
+	return true
+
+func cat_home(t: float) -> bool:
+	return TitleStreetLife.cat_state(t, cat_leave_t, cat_back_t) == "sit"
+
+func _run_street(delta: float) -> void:
+	if not roach_running or roach_frozen or life_root == null or not LampLife.enabled:
+		return
+	var t := roach_clock
+	# the neighbour: 4 s of hard boost, or the second big blow-off in 20 s
+	_boost_hi_secs = _boost_hi_secs + delta if _scare > NEIGHBOUR_BOOST else 0.0
+	if (_boost_hi_secs >= NEIGHBOUR_HOLD or _double_blow(t)) and t - _neighbour_last >= NEIGHBOUR_COOLDOWN and event_free(t):
+		wake_neighbour()
+	if _snap_at >= 0.0 and t >= _snap_at:
+		_snap_at = -1.0
+		_play(_snap)
+	# the pigeons: boost over 0.6, all of them back on the arm, no bat
+	if _scare > PIGEON_BOOST:
+		_try_lift_pigeons(false)
+	# the cat: boost over 0.7 while it sits there; it is back 45-90 s later
+	if _scare > CAT_BOOST and cat_leave_t < 0.0 and event_free(t):
+		leave_cat()
+	if cat_leave_t >= 0.0 and cat_back_t >= 0.0 and t >= cat_back_t + TitleStreetLife.CAT_RUN_IN + TitleStreetLife.CAT_JUMP:
+		cat_leave_t = -1.0
+		cat_back_t = -1.0
+		TitleStreetLife.set_uniform("cat", "leave_t", -1.0)
+		TitleStreetLife.set_uniform("cat", "back_t", -1.0)
+	# the shoes: a gale wraps them round the wire once
+	if _wind_now >= TitleStreetLife.WRAP_WIND and (shoes_wrap_t < 0.0 or t > shoes_wrap_t + TitleStreetLife.WRAP_LEN + 2.0):
+		wrap_shoes()
+
+## The window lights, the blind snaps up, the shape stands there, the blind
+## drops, the light goes off (TitleStreetLife.WAKE_LEN seconds).
+func wake_neighbour() -> void:
+	var t := roach_clock
+	neighbour_wake_t = t
+	_neighbour_last = t
+	_boost_hi_secs = 0.0
+	_blows.clear()
+	_event_until = t + TitleStreetLife.WAKE_LEN
+	_snap_at = t + TitleStreetLife.WAKE_BLIND_UP
+	TitleStreetLife.set_uniform("neighbour", "wake_t", t)
+
+func _try_lift_pigeons(force: bool) -> void:
+	var t := roach_clock
+	if not pigeons_settled(t) or not (force or event_free(t)):
+		return
+	var lift_len := TitleStreetLife.LIFT_FLY + TitleStreetLife.LIFT_STAGGER * float(TitleStreetLife.PIGEON_COUNT)
+	if not bat_clear(t, t + lift_len):
+		return
+	lift_pigeons()
+
+## The flock lifts off together; each bird's return clock is written to its
+## custom data (20-40 s on, one by one, clear of the bat).
+func lift_pigeons() -> void:
+	var t := roach_clock
+	pigeon_lift_t = t
+	_lift_count += 1
+	_event_until = t + TitleStreetLife.LIFT_FLY + TitleStreetLife.LIFT_STAGGER * float(TitleStreetLife.PIGEON_COUNT)
+	pigeon_ret.clear()
+	var mm := (life_root.get_node(^"Pigeons") as MultiMeshInstance3D).multimesh
+	var prev := t
+	for i in TitleStreetLife.PIGEON_COUNT:
+		var h := TitleRoaches.hs(0.41 + 0.137 * float(_lift_count), i)
+		var ret := t + TitleStreetLife.LIFT_STAGGER * float(i) + TitleStreetLife.LIFT_FLY \
+			+ TitleStreetLife.RETURN_MIN + (TitleStreetLife.RETURN_MAX - TitleStreetLife.RETURN_MIN) * h
+		ret = maxf(ret, prev + 3.0)
+		while not bat_clear(ret, ret + TitleStreetLife.RETURN_FLY):
+			ret += 0.5
+		pigeon_ret.append(ret)
+		prev = ret
+		mm.set_instance_custom_data(i, TitleStreetLife.pigeon_custom(i, ret))
+	TitleStreetLife.set_uniform("pigeon", "lift_t", t)
+	_play(_clap)
+
+## The cat drops off the box and runs off right; back_t is when it comes
+## running back along the sidewalk.
+func leave_cat() -> void:
+	var t := roach_clock
+	cat_leave_t = t
+	_event_until = t + TitleStreetLife.CAT_DROP + TitleStreetLife.CAT_RUN
+	var h := TitleRoaches.hs(0.77 + 0.3 * float(_lift_count), 3 + int(t) % 7)
+	cat_back_t = t + TitleStreetLife.CAT_DROP + TitleStreetLife.CAT_RUN \
+		+ TitleStreetLife.CAT_BACK_MIN + (TitleStreetLife.CAT_BACK_MAX - TitleStreetLife.CAT_BACK_MIN) * h
+	TitleStreetLife.set_uniform("cat", "leave_t", cat_leave_t)
+	TitleStreetLife.set_uniform("cat", "back_t", cat_back_t)
+
+func wrap_shoes() -> void:
+	shoes_wrap_t = roach_clock
+	TitleStreetLife.set_uniform("wire", "wrap_t", shoes_wrap_t)
+
+# ---- the bat and the time probe
+
+## The shaders' TIME at street clock t, mod 60 s, or -1 when the probe has
+## not read it (headless, or the first frames).
+func shader_time(t: float) -> float:
+	if _probe_time < 0.0:
+		return -1.0
+	return fposmod(_probe_time + (t - _probe_clock), 60.0)
+
+## True when the bat is not crossing the pool anywhere in [t0, t1] (street
+## clock). Unknown shader time counts as clear.
+func bat_clear(t0: float, t1: float) -> bool:
+	var st := shader_time(t0)
+	if st < 0.0:
+		return true
+	var m := fposmod(st + BAT_PHASE, BAT_PERIOD)
+	return m >= BAT_LEN + BAT_MARGIN and m + (t1 - t0) <= BAT_PERIOD - BAT_MARGIN
+
+const PROBE_SHADER := """
+shader_type canvas_item;
+void fragment() {
+	float f = fract(TIME / 60.0);
+	float hi = floor(f * 255.0);
+	COLOR = vec4(hi / 255.0, f * 255.0 - hi, 0.0, 1.0);
+}
+"""
+
+## A 4x4 viewport whose one shader writes TIME into its pixels; read back
+## once a few frames in (and again now and then), it tells where the bat is.
+func _build_time_probe() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	_probe_vp = SubViewport.new()
+	_probe_vp.name = "TimeProbe"
+	_probe_vp.size = Vector2i(4, 4)
+	_probe_vp.disable_3d = true
+	_probe_vp.transparent_bg = false
+	_probe_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	var rect := ColorRect.new()
+	rect.size = Vector2(4, 4)
+	var sh := Shader.new()
+	sh.code = PROBE_SHADER
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	rect.material = m
+	_probe_vp.add_child(rect)
+	add_child(_probe_vp)
+
+func _run_time_probe() -> void:
+	# the offset only holds while the street clock runs with the frames
+	if _probe_vp == null or not roach_running or roach_frozen:
+		return
+	_probe_frames += 1
+	var k := _probe_frames % 1800
+	if k == 1:
+		# draw it once on this frame; the clock this frame is what it shows
+		_probe_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+		_probe_pending = roach_clock
+	elif k == 4:
+		var img := _probe_vp.get_texture().get_image()
+		if img != null and not img.is_empty():
+			var c := img.get_pixel(1, 1)
+			_probe_time = (roundf(c.r * 255.0) + c.g) / 255.0 * 60.0
+			_probe_clock = _probe_pending
+
+func probe_known() -> bool:
+	return _probe_time >= 0.0
 
 func _slab(size: Vector3, at: Vector3, mat: Material) -> void:
 	var mi := MeshInstance3D.new()

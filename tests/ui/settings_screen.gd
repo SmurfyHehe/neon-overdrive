@@ -106,6 +106,19 @@ func _process(_delta: float) -> bool:
 			_check(is_equal_approx(ViewSettings.cockpit_fov, 70.0), "FOV slider sets the cockpit FOV")
 			s.smoke_burnout_slider.value = 1.5
 			_check(is_equal_approx(FxSettings.smoke_burnout, 1.5), "Burnout smoke slider")
+			# Game: "Roaches and rats" saves with the rest and loads back
+			s.show_page(4)
+			_check(s.critters_check != null and s.critters_check.text == "Roaches and rats" and s.critters_check.button_pressed, "Game page has Roaches and rats, on by default")
+			s.critters_check.button_pressed = false
+			_check(not GameSettings.critters, "the switch turns the critters off")
+			var gcfg := ConfigFile.new()
+			gcfg.load(AudioSettings.path)
+			_check(gcfg.get_value("game", "critters", true) == false, "critters off is saved")
+			GameSettings.critters = true
+			GameSettings.load_settings()
+			_check(not GameSettings.critters, "critters off loads back")
+			s.critters_check.button_pressed = true
+			_check(GameSettings.critters, "and on again")
 			# Controls: rebind handbrake slot 0 to K
 			s.show_page(3)
 			_check(s.controls_save_button != null and s.controls_reset_button != null, "Controls has Save and Reset")

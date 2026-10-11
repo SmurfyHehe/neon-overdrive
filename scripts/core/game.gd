@@ -535,6 +535,12 @@ func _section_at(idx: int) -> Dictionary:
 	# legal), "emergency" (a crossover, cops only) or "" (RoadBarriers.gap_kind).
 	var gap_kind := RoadBarriers.gap_kind(idx)
 	var cfg := {"own_lanes": own, "onc_lanes": onc, "barrier": RoadBarriers.kind_at(idx), "gap": gap_kind != "", "gap_kind": gap_kind}
+	# The slip lane beside the outside lane at a ring site (R1), the same on
+	# both sides: its width at this chunk's start and end.
+	if lay != null:
+		var aux := lay.aux(idx)
+		if aux != Vector2.ZERO:
+			cfg["aux"] = [aux.x, aux.y, aux.x, aux.y]
 	section_cache[key] = cfg
 	return cfg
 

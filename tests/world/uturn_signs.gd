@@ -2,7 +2,8 @@ extends SceneTree
 
 # Signed U-turns (T1): the barrier's two kinds of opening read differently.
 #
-# The map's gaps (RoadMap.gaps, two per district) are legal U-turns; the
+# The map's gaps (RoadMap.gaps, one at the start of each district that has no
+# crossing there; ring sites R1 moved them) are legal U-turns; the
 # emergency crossovers (RoadBarriers.has_gap, about one per district) are for
 # cops. RoadBarriers.gap_kind() says which a chunk's opening is, and the signs
 # and paint are decided from that and the chunk number alone.
@@ -177,7 +178,8 @@ func _built() -> void:
 	# a chunk 200 m from this opening may also be 200 m from the next or the
 	# last one (gaps are 8 chunks apart): 3 parts per advance sign
 	for w in [["before", u - 4], ["after", u + 4]]:
-		var want := 3 * _count(B.rule_signs(int(w[1])), "advance")
+		# (an exit gantry in the same chunk is 8 more: post, arm, panel, 3 lines, 2 lamps)
+		var want := 3 * _count(B.rule_signs(int(w[1])), "advance") + 8 * _count(B.rule_signs(int(w[1])), "exit")
 		if B.name_sign_kind(int(w[1])) != "":
 			continue
 		_check(want >= 3 and counts[w[0]] == want, "the chunk 200 m %s draws %d parts (expected %d)" % [w[0], counts[w[0]], want])

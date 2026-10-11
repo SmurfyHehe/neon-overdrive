@@ -56,6 +56,14 @@ static func has_bus(district: String) -> bool:
 static func cross_street(k: int) -> String:
 	return CROSS_STREETS[posmod(k, CROSS_STREETS.size())]
 
+## Exit gantries (ring sites R1): "EXIT 3" over where it leads over how far.
+const SERVICES := "SERVICES"
+const EXIT_FAR := "1 km"
+const EXIT_MAX := 16
+
+static func exit_word(number: int) -> String:
+	return "EXIT %d" % number
+
 ## Every text the atlas has to draw, in layer order, without repeats.
 static func atlas_words() -> Array:
 	var out: Array = [ENTERING, ADVANCE, MAIN_STREET]
@@ -71,4 +79,9 @@ static func atlas_words() -> Array:
 			out.append(w)
 	for a in ARROWS:
 		out.append(a)
+	# after everything older, so no existing layer moves
+	out.append(SERVICES)
+	out.append(EXIT_FAR)
+	for n in range(1, EXIT_MAX + 1):
+		out.append(exit_word(n))
 	return out

@@ -9,7 +9,10 @@ extends SceneTree
 #   offsets at once
 # - difficulty: damage per hit x0.6 / x1.0 / x1.3 (wall hits and kerb
 #   strikes), the auto-trim share and effects-at-once numbers, a harder
-#   difficulty cools worse
+#   difficulty leaks coolant faster
+# - the coolant leak: 60 % throttle leaks less than half as fast, a less
+#   broken radiator leaks slower, an engine that is off does not leak, the
+#   save keeps the level, the garage refills it
 # - the same hit always does the same damage
 # - a radiator sets no limp of its own on any difficulty
 # - the [game] settings save and load "damage" and "difficulty" by name
@@ -20,8 +23,9 @@ extends SceneTree
 # twice the full-throttle time.
 #
 # NEON_HEAT_SWEEP=<cooling multipliers, comma separated> skips the checks and
-# prints the full-throttle time for each value instead (how COOLING_LOSS and
-# the cooling factors were tuned), e.g. NEON_HEAT_SWEEP=0.3,0.2,0.1.
+# prints the full-throttle time to LIMP_C for each FIXED cooling multiplier
+# (no leak) instead, e.g. NEON_HEAT_SWEEP=0.3,0.24,0.22. It shows why the
+# radiator is a leak: x0.22 limps in 16 s and x0.24 never does.
 # Exit code 1 on failure. Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --fixed-fps 60 --audio-driver Dummy --path . -s res://tests/car/damage_settings.gd
 
@@ -143,14 +147,46 @@ func _unit_tests() -> void:
 		rad.parts[D.Part.RADIATOR] = 1.0
 		rad.rebuild_offsets()
 		_check(rad.engine_cap_kmh() == INF and not rad.is_engine_dead(), "%s: a 100 %% radiator sets no limp of its own" % name)
-		_check(rad.cooling_mult() > 0.0 and rad.cooling_mult() < 1.0, "%s: a 100 %% radiator still cools a little (%.3f)" % [name, rad.cooling_mult()])
+		_check(rad.cooling_mult() == 1.0, "%s: a 100 %% radiator cools fully until its coolant has leaked" % name)
+		rad.step_coolant(10000.0, 1.0, true)
+		_check(rad.coolant == 0.0 and rad.cooling_mult() > 0.0 and rad.cooling_mult() < 0.1, "%s: with the coolant gone a little cooling is left (%.3f)" % [name, rad.cooling_mult()])
+		_check(is_equal_approx(rad.offsets.get_car(DamageOffsets.COOLING_MULT), rad.cooling_mult()), "%s: the offsets follow the coolant" % name)
+	# the leak: slower on an easier difficulty, on a lighter throttle, on a less broken radiator
 	var cool := []
 	for k in 3:
 		var r := CarDamage.new()
 		r.difficulty = k
 		r.parts[D.Part.RADIATOR] = 1.0
-		cool.append(r.cooling_mult())
-	_check(cool[0] > cool[1] and cool[1] > cool[2], "a harder difficulty cools worse (%.3f > %.3f > %.3f)" % cool)
+		for i in 30 * 60:
+			r.step_coolant(1.0 / 60.0, 1.0, true)
+		cool.append(r.coolant)
+	_check(cool[0] > cool[1] and cool[1] > cool[2], "a harder difficulty leaks faster (coolant after 30 s: %.3f > %.3f > %.3f)" % cool)
+	var leak_full := CarDamage.new()
+	var leak_gentle := CarDamage.new()
+	var leak_half := CarDamage.new()
+	var leak_off := CarDamage.new()
+	leak_full.parts[D.Part.RADIATOR] = 1.0
+	leak_gentle.parts[D.Part.RADIATOR] = 1.0
+	leak_half.parts[D.Part.RADIATOR] = 0.625
+	leak_off.parts[D.Part.RADIATOR] = 1.0
+	for i in 20 * 60:
+		leak_full.step_coolant(1.0 / 60.0, 1.0, true)
+		leak_gentle.step_coolant(1.0 / 60.0, 0.6, true)
+		leak_half.step_coolant(1.0 / 60.0, 1.0, true)
+		leak_off.step_coolant(1.0 / 60.0, 1.0, false)
+	_check((1.0 - leak_full.coolant) >= 2.0 * (1.0 - leak_gentle.coolant), "60 %% throttle leaks less than half as fast as flat out (%.3f vs %.3f lost)" % [1.0 - leak_gentle.coolant, 1.0 - leak_full.coolant])
+	_check(absf((1.0 - leak_half.coolant) - 0.5 * (1.0 - leak_full.coolant)) < 1.0e-4, "a radiator halfway past the free band leaks half as fast")
+	_check(leak_off.coolant == 1.0, "nothing leaks with the engine off")
+	var looks_rad := CarDamage.new()
+	looks_rad.mode = GameSettings.Damage.LOOKS_ONLY
+	looks_rad.parts[D.Part.RADIATOR] = 1.0
+	looks_rad.step_coolant(10000.0, 1.0, true)
+	_check(looks_rad.offsets.is_neutral() and looks_rad.steam_rate() > 0.0, "Looks only: a drained radiator steams but the engine cools as new")
+	var saved := CarDamage.new()
+	saved.from_dict(leak_full.to_dict())
+	_check(is_equal_approx(saved.coolant, leak_full.coolant) and is_equal_approx(saved.cooling_mult(), leak_full.cooling_mult()), "the save keeps the coolant level")
+	leak_full.garage_repair(null)
+	_check(leak_full.coolant == 1.0 and leak_full.offsets.is_neutral(), "the garage refills the coolant")
 	_check(DamageDifficulty.row(99) == DamageDifficulty.row(DamageDifficulty.DEFAULT), "an unknown difficulty reads as the default")
 	# no random damage
 	var a := _hit(0, WW, Vector3(3.0, 0, 11.0))
@@ -195,6 +231,9 @@ func _start_trial(p: PlayerCar) -> void:
 	p.damage.parts[CarDamage.Part.RADIATOR] = 1.0
 	p.damage.rebuild_offsets()
 	if tr["cooling"] >= 0.0:
+		# sweep: a fixed cooling multiplier and no leak (the radiator part is
+		# healthy, so nothing rewrites the slot)
+		p.damage.parts[CarDamage.Part.RADIATOR] = 0.0
 		p.damage.offsets.set_car(DamageOffsets.COOLING_MULT, tr["cooling"])
 	tr["cooling_used"] = p.damage.offsets.get_car(DamageOffsets.COOLING_MULT)
 	p.global_transform = rest
@@ -236,8 +275,9 @@ func _physics_process(_delta: float) -> bool:
 		tr["kmh"] = speed_sum / t * 3.6
 		tr["load"] = load_sum / t
 		tr["limp"] = LimpMode.cause_name(p.limp.cause)
-		print("%s, throttle %.0f %%, cooling x%.3f: %s (engine %.0f C, average %.0f km/h, average load %.2f, limp cause '%s')" % [
-			DamageDifficulty.NAMES[tr["difficulty"]], tr["throttle"] * 100.0, tr["cooling_used"],
+		print("%s, throttle %.0f %%, %s: %s (engine %.0f C, average %.0f km/h, average load %.2f, limp cause '%s')" % [
+			DamageDifficulty.NAMES[tr["difficulty"]], tr["throttle"] * 100.0,
+			("fixed cooling x%.3f" % tr["cooling_used"]) if tr["cooling"] >= 0.0 else ("coolant left %.2f" % p.damage.coolant),
 			("LIMP_C after %.1f s" % secs) if limped else ("not at LIMP_C after %.0f s" % secs),
 			tr["temp"], tr["kmh"], tr["load"], tr["limp"]])
 		_start_trial(p)

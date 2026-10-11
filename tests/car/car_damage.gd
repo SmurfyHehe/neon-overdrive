@@ -94,15 +94,16 @@ func _unit_tests() -> void:
 	e.parts[D.Part.RADIATOR] = 0.2
 	e.parts[D.Part.STEER_FL] = 0.2
 	e.parts[D.Part.SUSP_RR] = 0.2
-	_check(e.cooling_mult() == 1.0 and e.toe_offset(0) == 0.0 and e.spring_mult(3) == 1.0 and e.engine_cap_kmh() == INF, "no effect under 25 %")
+	_check(not e.step_coolant(60.0, 1.0, true) and e.cooling_mult() == 1.0 and e.toe_offset(0) == 0.0 and e.spring_mult(3) == 1.0 and e.engine_cap_kmh() == INF, "no effect under 25 %")
 	_check(not e.warning(), "no DMG lamp under 25 %")
 	e.parts[D.Part.RADIATOR] = 0.5
-	_check(e.cooling_mult() < 1.0 and e.engine_cap_kmh() == INF and e.warning(), "a hurt radiator cools worse, no limp yet, DMG on")
+	_check(e.step_coolant(60.0, 1.0, true) and e.coolant < 1.0 and e.cooling_mult() < 1.0 and e.engine_cap_kmh() == INF and e.warning(), "a hurt radiator leaks and cools worse, no limp yet, DMG on")
 	# the heat window (brief DP4a): a radiator never limps by its size, only
 	# through engine heat (tests/car/damage_settings.gd times it)
 	e.parts[D.Part.RADIATOR] = 1.0
 	_check(not e.is_engine_dead() and e.engine_cap_kmh() == INF, "the front at 100 % sets no limp of its own and does not kill the engine")
-	_check(is_equal_approx(e.cooling_mult(), 1.0 - D.COOLING_LOSS), "a wrecked radiator loses COOLING_LOSS of the cooling (%.2f left)" % e.cooling_mult())
+	e.step_coolant(10000.0, 1.0, true)
+	_check(e.coolant == 0.0 and is_equal_approx(e.cooling_mult(), 1.0 - D.COOLING_LOSS), "a wrecked radiator drains dry and loses COOLING_LOSS of the cooling (%.2f left)" % e.cooling_mult())
 	var limp := LimpMode.new()
 	limp.engine_damage_kmh = e.engine_cap_kmh()
 	limp.update(false, 90.0)
@@ -111,18 +112,20 @@ func _unit_tests() -> void:
 	_check(limp.cause == LimpMode.Cause.OVERHEAT, "it limps once the engine is at LIMP_C")
 	# heat: same drive, healthy against half-broken radiator
 	var temps := []
-	for rad in [0.0, 0.6]:
+	for rad in [0.0, 1.0]:
 		var hd := CarDamage.new()
 		hd.parts[D.Part.RADIATOR] = rad
 		var h := PowertrainHealth.new()
-		h.cooling_mult = hd.cooling_mult()
-		for i in 120 * 60:
+		for i in 120 * 90:
+			hd.step_coolant(1.0 / 120.0, 1.0, true)
+			h.cooling_mult = hd.cooling_mult()
 			h.step_values(1.0 / 120.0, 0.6, false, 25.0, 0.0)
 		temps.append(h.engine_temp)
-	print("engine after 60 s at 60 %% load, 90 km/h: healthy %.0f C, radiator 0.6 %.0f C" % temps)
+	print("engine after 90 s at 60 %% load, 90 km/h: healthy %.0f C, wrecked radiator (coolant gone) %.0f C" % temps)
 	_check(temps[1] > temps[0] + 5.0, "a hurt radiator runs the engine hotter")
 	# station patch: once a night
 	_check(e.station_patch(3) and e.engine_cap_kmh() == INF and e.part(D.Part.RADIATOR) < D.FREE_BELOW, "a station patch puts the radiator back in the free band")
+	_check(e.coolant == 1.0 and e.cooling_mult() == 1.0, "and tops up the coolant")
 	e.parts[D.Part.RADIATOR] = 0.9
 	_check(not e.station_patch(3) and e.part(D.Part.RADIATOR) == 0.9, "only one patch a night")
 	_check(e.station_patch(4), "a new night, a new patch")
@@ -145,7 +148,9 @@ func _unit_tests() -> void:
 	_check(ox_rr.offsets.get_wheel(0, DamageOffsets.SPRING_MULT) == 1.0, "a front spring is untouched")
 	var ox_rad := CarDamage.new()
 	ox_rad.apply_hit(Vector3(0, 0, 22.0))
-	_check(is_equal_approx(ox_rad.offsets.get_car(DamageOffsets.COOLING_MULT), ox_rad.cooling_mult()) and ox_rad.cooling_mult() < 1.0, "a hurt radiator lowers COOLING_MULT")
+	_check(ox_rad.offsets.get_car(DamageOffsets.COOLING_MULT) == 1.0, "a hurt radiator still cools fully while it has its coolant")
+	ox_rad.step_coolant(30.0, 1.0, true)
+	_check(is_equal_approx(ox_rad.offsets.get_car(DamageOffsets.COOLING_MULT), ox_rad.cooling_mult()) and ox_rad.cooling_mult() < 1.0, "a leaking radiator lowers COOLING_MULT")
 	_check(ox_rad.offsets.get_car(DamageOffsets.TORQUE_MULT) == 1.0 and ox_rad.offsets.get_wheel(0, DamageOffsets.GRIP_MULT) == 1.0, "fields no sim reads yet stay neutral")
 	ox_rad.garage_repair(null)
 	ox.garage_repair(null)

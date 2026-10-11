@@ -7,6 +7,11 @@ extends SceneTree
 # - the first-launch card shows once, OK closes it and it is remembered
 # - the Kerbside set exists with a copy of the player's car, and its camera is
 #   the one in use
+# - lamp life stands on the title (menu litter M2): the nodes are under the set,
+#   two litter sets blow a gust phase apart, one round manhole with its steam
+#   is inside the camera frustum between the camera and the car, the lamp has
+#   moths and a bat in frame, wind eases back down over 3 s, and
+#   LampLife.enabled = false leaves every node empty
 # - the menu has Continue, New Game, Load, Settings, Extras, Quit; Load lists
 #   one row per save slot plus Back; Esc comes back to the main list
 # - the news line has text; the Early Access tag is on the title
@@ -18,6 +23,7 @@ extends SceneTree
 #   godot --headless --audio-driver Dummy --path . -s res://tests/ui/title_kerbside.gd
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
+const LampLife := preload("res://scripts/world/lamp_life.gd")
 const TIMEOUT_FRAMES := 900
 const ICO := "res://assets/brand/logo_B4_combined.ico"
 
@@ -81,6 +87,10 @@ func _run() -> void:
 		var lights := set_node.find_children("*", "Light3D", true, false)
 		_check(lights.size() == 1, "one lamp lights the set, got %d" % lights.size())
 
+	# ---------- lamp life ----------
+	if set_node != null:
+		_check_lamp_life(set_node)
+
 	# ---------- menu ----------
 	var rows: Array[String] = []
 	for b in title.main_list.get_children():
@@ -134,6 +144,69 @@ func _run() -> void:
 		"the window uses the multi-size .ico")
 	_check(_ico_sizes(ICO) == [16, 20, 24, 32, 40, 48, 64, 128, 256], "the .ico holds every size, got %s" % [_ico_sizes(ICO)])
 	_finish("")
+
+func _mm_of(life: Node, node_name: String) -> MultiMesh:
+	var n := life.get_node_or_null(NodePath(node_name)) as MultiMeshInstance3D
+	return n.multimesh if n != null else null
+
+func _check_lamp_life(set_node: TitleKerbside) -> void:
+	var life := set_node.life_root
+	_check(life != null and life.get_parent() == set_node, "lamp life has a root under the set")
+	if life == null:
+		return
+	for n in ["LampMoths", "LampBanners", "SteamVents", "VentCovers", "WindLitter"]:
+		_check(_mm_of(life, n) != null, "lamp life node %s exists under the title set" % n)
+	if not LampLife.enabled:
+		return
+	var cam := set_node.camera
+	var d: Dictionary = set_node.life
+	# two litter sets, a gust phase apart (counts are real, the data is the
+	# set's own record: the headless renderer does not hand MultiMesh data back)
+	var litter := _mm_of(life, "WindLitter")
+	_check(litter.instance_count == 2 and litter.visible_instance_count == 2, "two litter sets, got %d" % litter.visible_instance_count)
+	var lc: Array = d.get("litter_custom", [])
+	_check(lc.size() == 2 and absf(lc[0].a - lc[1].a) > 0.3, "the litter sets are phased apart, got %s" % [lc])
+	var lxf: Transform3D = d.get("litter_xf", Transform3D.IDENTITY)
+	var lane := lxf.origin + Vector3(0.0, 0.5, TitleKerbside.LITTER_Z)
+	_check(cam.is_position_in_frustum(set_node.to_global(lane)), "the litter lane is in the picture")
+	_check(lane.z > set_node.car.position.z and lane.z < cam.position.z, "the litter lane is between the camera and the car")
+	# one round manhole, in frame, between the camera and the car
+	var steam := _mm_of(life, "SteamVents")
+	var cover := _mm_of(life, "VentCovers")
+	_check(steam.visible_instance_count == 1 and cover.visible_instance_count == 1, "one vent with its cover")
+	_check(d.get("vent_round", false), "the vent is a round manhole, not a drain")
+	var vxf: Transform3D = d.get("vent_xf", Transform3D.IDENTITY)
+	var hole := vxf.origin
+	_check(vxf.basis.is_equal_approx(Basis()) and hole.is_equal_approx(TitleKerbside.VENT_AT), "the manhole cover is unsquashed (round) at the forced spot")
+	_check(cam.is_position_in_frustum(set_node.to_global(hole)), "the manhole is inside the camera frustum")
+	_check(cam.is_position_in_frustum(set_node.to_global(hole + Vector3(0.0, 1.5, 0.0))), "the steam above it is in frame")
+	_check(hole.z > set_node.car.position.z and hole.z < cam.position.z, "the manhole is on the road between the camera and the car")
+	# moths and the bat at the lamp head, in frame
+	var moths := _mm_of(life, "LampMoths")
+	_check(moths.visible_instance_count == 1, "the lamp has a moth swarm")
+	var mc: Color = d.get("moth_custom", Color(0, 0, 0, 0))
+	_check(mc.a > 0.5, "the lamp always has its bat")
+	_check(mc.g < 0.1, "the bat flies about every 15 s")
+	var mxf: Transform3D = d.get("moth_xf", Transform3D.IDENTITY)
+	var head := set_node.to_global(mxf.origin + mxf.basis * LampLife.HEAD)
+	_check(cam.is_position_in_frustum(head), "the lamp head with its moths is in frame")
+	_check(_mm_of(life, "LampBanners").visible_instance_count == 0, "no banner on the title lamp")
+	# wind: up at once, back down over 3 s
+	set_node.set_title_wind(2.0)
+	set_node._ease_wind(0.016)
+	_check(is_equal_approx(LampLife.wind(), 2.0), "turbo wind is taken at once, got %.2f" % LampLife.wind())
+	set_node.set_title_wind(TitleKerbside.WIND_REST)
+	set_node._ease_wind(1.5)
+	_check(LampLife.wind() > 1.2 and LampLife.wind() < 1.5, "wind is easing back after release, got %.2f" % LampLife.wind())
+	set_node._ease_wind(2.0)
+	_check(is_equal_approx(LampLife.wind(), TitleKerbside.WIND_REST), "wind is back at rest after 3 s, got %.2f" % LampLife.wind())
+	# the switch: off leaves every node empty
+	LampLife.enabled = false
+	var off := TitleKerbside.new(set_node.kind)
+	LampLife.enabled = true
+	for n in ["LampMoths", "LampBanners", "SteamVents", "VentCovers", "WindLitter"]:
+		_check(_mm_of(off.life_root, n).visible_instance_count == 0, "NEON_LAMP_LIFE=0 empties %s on the title" % n)
+	off.free()
 
 ## The picture sizes inside a Windows .ico, smallest first.
 func _ico_sizes(path: String) -> Array:

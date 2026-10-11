@@ -179,6 +179,7 @@ call :run traffic/police_heat --headless
 rem Police P1/P2: the rulebook table, sight, offences, warning step, heat times.
 call :run traffic/police_rules --headless
 call :run traffic/free_driver_pure --headless
+call :run traffic/cop_brain_pure --headless
 rem Ending a run on a crash: the rules, the hit sensor, the crash screen; then the real restart.
 call :run core/run_end "--headless --fixed-fps 120"
 call :run core/run_end_restart "--headless --fixed-fps 120"
@@ -354,6 +355,9 @@ if /i not "%~1"=="quick" (
 	call :run traffic/city_pace "--headless --fixed-fps 60"
 	rem P4 proof: the free driver chases the weave bot 5 min through 40 cars: no flips, never stuck, no touches (about 3.5 min).
 	call :run traffic/free_driver_chase "--headless --fixed-fps 60"
+	rem P5: the cop brain in the game: warning to pursuit, the bust ring, lost and search, called off (about 2 min).
+	call :run traffic/police_chase "--headless --fixed-fps 60"
+	rem (traffic/police_escape_rate is a measurement, about 2 min a trial: run it by hand.)
 	call :run tuning/tuning_panel --headless
 	call :run tuning/auto_tune_panel --headless
 	call :run tuning/tuner_screen --headless

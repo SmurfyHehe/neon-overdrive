@@ -105,6 +105,9 @@ var seen := false              # a (good) cop notices the player right now
 var seen_by: Node3D
 var cops: Array[Node3D] = []
 var bad_cops: Array[Node3D] = []
+## Cops that called the chase off (CopBrain): they see nothing for the heat
+## until it is gone, so a terminated pursuit can cool.
+var stood_down: Array[Node3D] = []
 var warned := false
 var mocked := false
 ## P2.
@@ -146,11 +149,17 @@ func register_cop(cop: Node3D, bad := false) -> void:
 func unregister_cop(cop: Node3D) -> void:
 	cops.erase(cop)
 	bad_cops.erase(cop)
+	stood_down.erase(cop)
 	_cs.erase(cop)
 	if seen_by == cop:
 		seen_by = null
 	if warning_cop == cop:
 		warning_cop = null
+
+## Busted (police_patrol.gd): the chase is over, heat starts from nothing.
+func bust() -> void:
+	_clear_heat()
+	_cancel_warning()
 
 ## Run restarted: no heat, and night one may warn again.
 func reset() -> void:
@@ -164,6 +173,7 @@ func reset() -> void:
 
 func _clear_heat() -> void:
 	heat = 0.0
+	stood_down.clear()
 	seen = false
 	seen_by = null
 	_unseen_t = 0.0
@@ -301,6 +311,13 @@ func _look(dt: float) -> void:
 		var c := cops[(_start + j) % n]
 		nearest = minf(nearest, c.global_position.distance_to(player.global_position))
 		var s: Dictionary = _cs.get(c, {"cone": false, "near": false, "run": 0.0, "los": true})
+		if stood_down.has(c):
+			# it called this chase off: it is not watching you until the heat is gone
+			s.cone = false
+			s.near = false
+			s.run = 0.0
+			_cs[c] = s
+			continue
 		var g := _geometry(c, pk)
 		var los: bool = s.los
 		if g.cone or g.near:

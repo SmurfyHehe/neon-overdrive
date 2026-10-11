@@ -1943,7 +1943,7 @@ static func _update_names(root: Node3D, chunk_index: int, walk0: float, walk1: f
 			var ew := lerpf(walk0, walk1, -rz / CHUNK_LEN) if eside > 0.0 else lerpf(onc0, onc1, -rz / CHUNK_LEN)
 			var ring: Dictionary = RoadMap.rings()[int(r.ring)]
 			var leads := PlaceNames.SERVICES if RoadMap.ring_has_stop(int(r.ring)) else PlaceNames.area_name(RoadMap.district_kind(RoadMap.district_of(floori(float(ring.s) / CHUNK_LEN))))
-			list = RoadSigns.exit_gantry(PlaceNames.exit_word(int(ring.number)), leads, PlaceNames.EXIT_FAR if bool(r.far) else PlaceNames.ADVANCE,
+			list = RoadSigns.exit_gantry(PlaceNames.EXIT, leads, PlaceNames.EXIT_FAR if bool(r.far) else PlaceNames.ADVANCE,
 				Vector3((ew + NAME_SIGN_SETBACK) * eside, 0.0, rz), _foundation(), eside)
 		else:
 			var moved: Array = RoadSigns.median_parts(String(r.kind), float(r.dir), bool(r.lamp))

@@ -398,6 +398,7 @@ func _physics_process(delta: float) -> void:
 	AeroModel.apply(self)
 	heat = HeatShimmer.next_heat(heat, self, delta)
 	damage.step(self, delta, health, limp)
+	_apply_damage_offsets()
 	_apply_lamp_damage()
 	_light_reflectors()
 	health.step(self, delta)
@@ -413,6 +414,43 @@ func _physics_process(delta: float) -> void:
 		if _tune_check_left <= 0.0:
 			_tune_check_left = TUNE_CHECK_SECS
 			_save_tune_if_changed()
+
+## True while damage offsets are written into the wheels, so one tick of
+## neutral writes the tuned values back (a repair) and then it goes quiet.
+var _offsets_written := false
+
+## Damage offsets (brief DP0) applied on top of the tune, once per physics tick:
+## effective = tuned x mult (or + add). The tuned values stay in their own
+## places and are never written over: toe is front_toe / rear_toe, and the
+## spring rate is worked out from the suspension settings exactly as
+## Vehicle.apply_suspension() does. A repair is the offsets going back to
+## neutral; nothing guesses a base from what is in a Wheel.
+## Read today: toe (TOE_ADD), spring rate (SPRING_MULT), cooling (COOLING_MULT).
+## Neutral and unread for now (the brief that wires each, as I understand the
+## plan; DP1 = suspension and geometry, DP3 = tyres and brakes, LM = limp mode
+## and the engine's output):
+##   DP1: CAMBER_ADD, DAMPER_MULT, RIDE_DROP, STEER_CENTRE
+##   DP3: PRESSURE_MULT, GRIP_MULT, RUNOUT, BRAKE_MULT
+##   LM:  STEER_LOCK_MULT, TORQUE_MULT, BOOST_MULT, DRAG_ADD, DOWNFORCE_REAR_MULT
+func _apply_damage_offsets() -> void:
+	if not damage.enabled:
+		return
+	var o := damage.offsets
+	health.cooling_mult = o.get_car(CarDamage.DamageOffsets.COOLING_MULT)
+	var neutral := o.is_neutral()
+	if neutral and not _offsets_written:
+		return
+	_offsets_written = not neutral
+	var tuned_toe := [-front_toe, front_toe, -rear_toe, rear_toe]
+	var front_rate := calculate_spring_rate(vehicle_mass * front_weight_distribution * 4.9,
+		front_spring_length, front_resting_ratio)
+	var rear_rate := calculate_spring_rate(vehicle_mass * (1.0 - front_weight_distribution) * 4.9,
+		rear_spring_length, rear_resting_ratio)
+	var tuned_rate := [front_rate, front_rate, rear_rate, rear_rate]
+	for i in mini(4, wheel_array.size()):
+		var w: Wheel = wheel_array[i]
+		w.toe = tuned_toe[i] + o.get_wheel(i, CarDamage.DamageOffsets.TOE_ADD)
+		w.spring_rate = tuned_rate[i] * o.get_wheel(i, CarDamage.DamageOffsets.SPRING_MULT)
 
 ## A broken head lamp takes its half of the beam (CarFx's one spot light).
 func _apply_lamp_damage() -> void:

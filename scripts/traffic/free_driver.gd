@@ -58,6 +58,7 @@ const T_GAP := 0.7               # s gap to traffic in pursuit (traffic keeps 1.
 const T_GAP_TARGET := 0.35       # s gap to the target's own bumper
 const BEND_K := 1.5              # bends at this times the traffic car's bend speed
 const BRAKE_READ := 0.6           # s ahead a braking target's speed is read
+const PASS_CLEAR := 6.5          # m of clear road in front of a target before moving over in front of it
 const B_PLAN := 5.5              # m/s^2 it counts on when closing on its spot
 ## Stuck.
 const STUCK_SECS := 5.0
@@ -71,6 +72,13 @@ var offset_back := 10.0
 var lead_secs := LEAD_SECS
 ## Bumper gap it keeps to a stopped target that is in its way (traffic keeps S0).
 var stand_gap := 2.0
+## The chaser's nudge: inside `ram_gap` of a target that is slower than it, it
+## does not brake to a stand-off but closes at `ram_dv` and touches.
+var ram := false
+var ram_gap := 3.0
+var ram_dv := 3.0
+## Which side it goes round a target it has to get in front of (0 = not passing).
+var pass_side := 0.0
 var v_max := INF
 ## Read back by its owner and by tests.
 var v_top := 60.0
@@ -201,6 +209,19 @@ func drive(car: TrafficCar, delta: float) -> void:
 	# stand-off at speed). Across the road it is led, so the steering is early.
 	var spot_z := tu.z - td * offset_back
 	var spot_x := tu.x + tv.x * lead_secs + offset_x
+	# A spot in front of the target (a blocker) while the car is still behind
+	# or beside it: it goes round, one lane to the side with road, and only
+	# moves over to the spot once it is clear in front.
+	var rel := (u.z - tu.z) * td   # + = the car is in front of the target
+	if offset_back < 0.0 and rel < car.half_l + PASS_CLEAR:
+		if pass_side == 0.0:
+			pass_side = signf(u.x - tu.x) if absf(u.x - tu.x) > 1.0 else 1.0
+			var px := tu.x + pass_side * RoadChunkBuilder.LANE_W
+			if px < span.x or px > span.y:
+				pass_side = -pass_side
+		spot_x = tu.x + pass_side * RoadChunkBuilder.LANE_W
+	else:
+		pass_side = 0.0
 	# It keeps to its own carriageway: a target on the other one is shadowed
 	# from the lane nearest the centre (crossing over is the cop brain's, P5).
 	spot_x = clampf(spot_x, span.x, span.y)
@@ -222,7 +243,10 @@ func drive(car: TrafficCar, delta: float) -> void:
 	var a := approach_accel(v, v0, gap_along, vt)
 	var body_gap := (tu.z - u.z) * car.direction - car.half_l - 2.2
 	if body_gap > -4.0 and absf(tu.x - u.x) < car.half_w + 1.0 + TrafficCar.CORRIDOR_MARGIN:
-		a = minf(a, TrafficCar.follow_accel(v, v0, maxf(body_gap + TrafficCar.S0 - stand_gap, 0.0), vt, T_GAP_TARGET))
+		if ram and body_gap < ram_gap and vt < v0 and vt > 1.0:
+			a = minf(a, TrafficCar.K_V * 2.0 * (vt + ram_dv - v))   # a nudge, not a brake
+		else:
+			a = minf(a, TrafficCar.follow_accel(v, v0, maxf(body_gap + TrafficCar.S0 - stand_gap, 0.0), vt, T_GAP_TARGET))
 	if _lead_gap < INF:
 		a = minf(a, TrafficCar.follow_accel(v, v0, _lead_gap, _lead_v, T_GAP))
 		_lead_gap = maxf(_lead_gap - (v - _lead_v) * delta, 0.0)   # until the next plan

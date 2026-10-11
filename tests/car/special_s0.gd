@@ -4,7 +4,7 @@ extends SceneTree
 #     reuses the drive keys while photo mode is on, so only photo_mode itself,
 #     the global toggle, is compared);
 #   - the new keys exist, Ctrl is the one `special` key, the hydraulic keys are
-#     the 7 8 9 0 / U I O P columns plus L and K, and they do nothing in other cars;
+#     the 7 8 9 0 / U I O P columns plus 6 and minus, and they do nothing in other cars;
 #   - m1_monster and l1_lowrider are KINDS, flagged special by their data
 #     files, and absent from the sprint race list; the garage lists them only
 #     once unlocked; the unlock round-trips through the save;
@@ -66,7 +66,7 @@ func _keys() -> void:
 	_check(SpecialKeys.KEYS.special == KEY_CTRL, "special is not Ctrl")
 	var want := {"hyd_pump_left": KEY_7, "hyd_pump_front": KEY_8, "hyd_pump_back": KEY_9, "hyd_pump_right": KEY_0,
 		"hyd_dump_left": KEY_U, "hyd_dump_front": KEY_I, "hyd_dump_back": KEY_O, "hyd_dump_right": KEY_P,
-		"hyd_three": KEY_L, "hyd_dump_all": KEY_K}
+		"hyd_three": KEY_6, "hyd_dump_all": KEY_MINUS}
 	for a in want:
 		_check(SpecialKeys.KEYS[a] == want[a], "%s is not on its column key" % a)
 	# nothing in ordinary cars; hydraulics only in the lowrider; special in both

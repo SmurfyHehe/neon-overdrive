@@ -48,6 +48,18 @@ extends Node3D
 #     and rides it round as the glass moves, on a switch car it rests on the
 #     armrest with the thumb on the rocker; back to the rim once the window
 #     has stopped;
+#   - flip off (2026-10-11, the K key): the left hand leaves the rim, goes out
+#     of the open side window and up past the door mirror, back of the hand
+#     to whoever it is for, middle finger up, and comes back. A tap is one
+#     gesture; while the key is held the hand stays out and pumps. With the
+#     window shut it does the same behind the glass. Glove only, like every
+#     other hand (no arm, no sleeve), and it changes nothing but the hand;
+#   - idle action (2026-10-11, the L key, IdleActions): the left hand reaches
+#     down to the pocket on the door, lifts the vape or the beer can to the
+#     mouth (the LED brightens and a cloud follows; the head tips back for the
+#     sip), puts it back and returns to the rim. One press is one use; a press
+#     during a use queues one more. It waits for the window and the flip-off,
+#     and they wait for it. Looks only (IdleProps holds the items and the cloud);
 #   - idle: breathing, and a head bob from the road.
 # Hand contact: one mechanism for every reach. The moment the hand arrives (the
 # knob, the handbrake grip) or the finger lands (the screen, the radio knob),
@@ -132,6 +144,42 @@ const PADDLE_SECS := 0.25
 const BRAKE_REACH_SECS := 0.20
 const WINDOW_REACH_SECS := 0.25
 const WINDOW_LINGER_SECS := 0.3   # the hand stays this long after the window stops
+## Flip off (the left hand, K). The pose comes from the car's own cabin: the
+## hand sits on the ray GESTURE_YAW_DEG left of straight ahead from the eye, at
+## about eye height, GESTURE_OUT past the door line with the window open or
+## GESTURE_IN inside the pane with it shut. Outside the 20 degree road cone
+## (tests/view/gesture_flip_off.gd).
+const GESTURE_REACH_SECS := 0.25
+const GESTURE_RETURN_SECS := 0.25
+const GESTURE_MIN_HOLD_SECS := 0.8   # a tap keeps the hand up this long
+const GESTURE_PUMP_EVERY := 0.6      # while the key is held
+const GESTURE_PUMP_SECS := 0.26
+const GESTURE_PUMP := 0.035          # m, how far a pump jabs up
+const GESTURE_OUT := 0.13
+const GESTURE_IN := 0.085
+const GESTURE_BELOW_EYE := 0.04      # the fist's centre under the eye line
+const GESTURE_MIRROR_CLEAR := 0.13   # the fist's centre over the door mirror when it is right behind it
+const GESTURE_WINDOW_OPEN := 0.5     # the window counts as open from half way down
+const GESTURE_FINGER_IN := 0.35      # the fist takes over from the mitten this far into the reach
+## Idle action (the left hand, L): rim -> the door pocket -> the mouth -> the
+## pocket -> rim, about 2.5 s in all. The mouth pose hangs off the car's eye,
+## low enough that no part of the hand or the item comes within 8 degrees of
+## the eye line (tests/view/idle_actions.gd).
+const IDLE_REACH_SECS := 0.30
+const IDLE_LIFT_SECS := 0.40
+const IDLE_LOWER_SECS := 0.45
+const IDLE_RETURN_SECS := 0.30
+const IDLE_HOLD_SECS := {IdleActions.VAPE: 0.85, IdleActions.BEER: 0.95}
+## From the eye. A hand's width to the left of the mouth, so the hand comes up beside the gauges, not over them.
+const IDLE_MOUTH := {IdleActions.VAPE: Vector3(-0.07, -0.10, -0.19), IdleActions.BEER: Vector3(-0.07, -0.14, -0.18)}
+const IDLE_YAW_DEG := 20.0     # the item turned in toward the mouth
+const IDLE_TILT_DEG := {IdleActions.VAPE: 80.0, IdleActions.BEER: 20.0}   # the item's lean toward the driver at the mouth
+const SIP_TILT_DEG := 40.0     # more, at the top of the sip
+const SIP_HEAD_DEG := 14.0     # the head tips back with it (seen from the chase view)
+const HOLD_R := {IdleActions.VAPE: 0.012, IdleActions.BEER: IdleProps.CAN_R}
+enum { AIM_AHEAD, AIM_LEFT, AIM_BACK }
+## Degrees left of straight ahead, by aim (AIM_LEFT with look left held, AIM_BACK with look back).
+const GESTURE_YAW_DEG := [35.0, 80.0, 125.0]
 const HEAD_YAW_RAD := 0.20       # at full steer fraction
 const LEAN_RAD_PER_G := 0.08
 const HIP_HALF := 0.09
@@ -146,6 +194,10 @@ const MAX_RADIO_REQUESTS := 4
 
 ## The right hand touched something (one of the CONTACT_ names).
 signal hand_contact(target: StringName)
+## The flip-off reached the top: once per gesture (a hold's pumps do not repeat it).
+signal gesture_peak(window_open: bool)
+## The idle item reached the mouth: once per use ("vape" or "beer").
+signal idle_used(item: String)
 
 enum Act { GRIP, SHIFT_REACH, SHIFT_HOLD, SHIFT_RETURN, RADIO_REACH, RADIO_PRESS, RADIO_RETURN, BRAKE_REACH, BRAKE_HOLD, BRAKE_RETURN }
 
@@ -174,11 +226,30 @@ var _still := 0.0                # seconds the wheel has been still
 var shuffle_count := 0           # hands that let go to shuffle (tests)
 var act := Act.GRIP
 var act_t := 0.0
-enum LeftAct { GRIP, WINDOW_REACH, WINDOW_HOLD, WINDOW_RETURN }
+enum LeftAct { GRIP, WINDOW_REACH, WINDOW_HOLD, WINDOW_RETURN, GESTURE_REACH, GESTURE_HOLD, GESTURE_RETURN, IDLE_REACH, IDLE_USE, IDLE_RETURN }
 var left_act := LeftAct.GRIP
 var left_t := 0.0
 var _left_from := Transform3D()
 var _left_xf := Transform3D()
+var finger_hand: MeshInstance3D  # the left fist with the middle finger up, shown instead of the mitten mid-gesture
+var gesture_peaks := 0           # every top the hand reached, pumps included (tests)
+var _gesture_key := false        # the key is down
+var _gesture_wanted := false     # a press waiting for the window to stop
+var _gesture_aim := AIM_AHEAD
+var _gesture_open := false       # this gesture goes out of the window
+var _pump_t := 0.0               # seconds left of the current pump
+var _next_pump := 0.0
+var _pump_counted := true
+var props: IdleProps             # the vape, the can, their pocket and the cloud
+var hold_hands := {}             # item -> the left hand shaped round it, shown instead of the mitten while it is held
+var idle_uses := 0               # uses that reached the mouth (tests)
+var _idle_key := false           # the key is down
+var _idle_pending := 0           # presses waiting for the hand (never more than one)
+var _idle_item := ""             # what this use is
+var _idle_holding := false       # the item is in the hand
+var _idle_counted := false
+var _idle_exhaled := false
+var _draw := 0.0                 # 0..1 through the draw or the sip
 var _window_idle := 0.0          # seconds since the window last moved
 var radio_requests := 0          # next-station presses waiting for the hand
 var contact_count := 0
@@ -223,6 +294,8 @@ func _ready() -> void:
 		hands[side] = _build_hand(side)
 		legs[side] = _build_leg(side)
 	_build_bracelet()
+	_build_finger_hand()
+	_build_idle()
 	for n in find_children("*", "VisualInstance3D", true, false):
 		(n as VisualInstance3D).layers = CockpitFrame.DRIVER_BIT
 		if n is GeometryInstance3D:
@@ -315,6 +388,54 @@ static func _hand_mesh(k: CockpitKit, side: int, glove: Color, cuff: Color) -> v
 	band.ring_sector(CUFF_R, CUFF_R + 0.003, 0.0, TAU, BAND_Z0, BAND_Z1, cuff, 10)
 	band.offset(Vector3(sx * WRIST_X, 0.0, 0.0))
 	k.merge(band)
+
+## The flip-off fist, left hand, in the mitten's hand space so the two swap in
+## place: the back of the hand on -x, the wrist and the same closed cuff along
+## +z, the knuckles at -z with the middle finger standing straight out of them.
+static func _finger_mesh(k: CockpitKit, glove: Color, cuff: Color) -> void:
+	k.box(Vector3(0.04, 0.085, 0.075), Vector3(-0.03, 0.0, 0.01), glove)                       # the fist: back of the hand
+	k.box(Vector3(0.03, 0.085, 0.045), Vector3(0.005, 0.0, -0.012), glove)                     # curled fingers
+	k.box(Vector3(0.022, 0.06, 0.026), Vector3(0.031, -0.006, -0.008), glove)                  # thumb across them
+	k.box(Vector3(0.024, 0.021, 0.042), Vector3(-0.028, 0.0, -0.047), glove)                   # middle finger
+	k.box(Vector3(0.02, 0.018, 0.036), Vector3(-0.028, 0.0, -0.085), glove)                    # its tip
+	k.box(Vector3(0.05, 0.03, 0.07), Vector3(-WRIST_X, 0.0, 0.06), glove)                      # wrist
+	k.cylinder(CUFF_R, CUFF_Z0, CUFF_Z1, Vector3(-WRIST_X, 0.0, 0.0), glove, 10, Basis(Vector3.RIGHT, PI / 2.0))
+	var band := CockpitKit.new()
+	band.ring_sector(CUFF_R, CUFF_R + 0.003, 0.0, TAU, BAND_Z0, BAND_Z1, cuff, 10)
+	band.offset(Vector3(-WRIST_X, 0.0, 0.0))
+	k.merge(band)
+
+func _build_finger_hand() -> void:
+	var k := CockpitKit.new()
+	_finger_mesh(k, GLOVE_STYLES[glove_style].glove, GLOVE_STYLES[glove_style].cuff)
+	finger_hand = _part(k, "HandLFinger")
+	finger_hand.visible = false
+
+## The left hand round a tube of radius r along local y (the vape, the can),
+## in the mitten's hand space so they swap in place: the palm on -x, fingers
+## over the far side (-z), the thumb on the driver's side, the same closed cuff.
+static func _hold_mesh(k: CockpitKit, glove: Color, cuff: Color, r: float) -> void:
+	var wrist_x := -(r + 0.01)
+	k.box(Vector3(0.035, 0.085, 0.075), Vector3(-(r + 0.0175), 0.0, 0.01), glove)                              # palm
+	k.box(Vector3(1.5 * r + 0.035, 0.05 + r, 0.028), Vector3(-(0.5 * r + 0.035) * 0.5, 0.0, -(r + 0.014)), glove)   # fingers over the far side
+	k.box(Vector3(0.024, 0.045 + r, 0.024), Vector3(0.5 * r + 0.01, 0.0, -(r + 0.004)), glove)                  # fingertips curling in
+	k.box(Vector3(r + 0.04, 0.028, 0.026), Vector3(-(r + 0.02) * 0.5, 0.02, r + 0.013), glove)                  # thumb
+	k.box(Vector3(0.05, 0.03, 0.07), Vector3(wrist_x, 0.0, 0.06), glove)                                        # wrist
+	k.cylinder(CUFF_R, CUFF_Z0, CUFF_Z1, Vector3(wrist_x, 0.0, 0.0), glove, 10, Basis(Vector3.RIGHT, PI / 2.0))
+	var band := CockpitKit.new()
+	band.ring_sector(CUFF_R, CUFF_R + 0.003, 0.0, TAU, BAND_Z0, BAND_Z1, cuff, 10)
+	band.offset(Vector3(wrist_x, 0.0, 0.0))
+	k.merge(band)
+
+func _build_idle() -> void:
+	for item in HOLD_R:
+		var k := CockpitKit.new()
+		_hold_mesh(k, GLOVE_STYLES[glove_style].glove, GLOVE_STYLES[glove_style].cuff, HOLD_R[item])
+		var hand := _part(k, "HandLHold" + String(item).capitalize())
+		hand.visible = false
+		hold_hands[item] = hand
+	props = IdleProps.new(self)
+	add_child(props)
 
 ## Gold Cuban-link bracelet round the right wrist (Roy, 2026-10-06): LINKS flat
 ## oblong links lying on the cuff, long side along the chain, each tilted the
@@ -554,6 +675,107 @@ func _switch_hand_transform(pressed: float) -> Transform3D:
 	var p := frame.switch_press_position() - b * thumb + Vector3(0.0, 0.012 * (1.0 - pressed), 0.0)
 	return Transform3D(b, p)
 
+## The door line: how far out (|x|) the driver's door and its glass reach at the belt.
+func door_line() -> float:
+	return maxf(float(frame.cab.door_x), float(frame.cab.glass_x))
+
+## The car has a pane in the driver's door (the open kei has none).
+func has_door_glass() -> bool:
+	return float(frame.cab.glass_x) > 0.0
+
+## |x| of the door pane at height y (it leans in toward the roof, as CockpitFrame builds it).
+func pane_x(y: float) -> float:
+	var cab := frame.cab
+	if not has_door_glass():
+		return float(cab.door_x)
+	var top: float = float(cab.belt_y) + 0.30 if cab.open_top else float(cab.get("glass_top", float(cab.roof_y) - 0.03))
+	var x_top := minf(float(cab.glass_x), float((cab.a_pillar[1] as Vector3).x) - 0.01)
+	var t := clampf((y - frame.glass_bottom) / maxf(top - frame.glass_bottom, 0.01), 0.0, 1.0)
+	return lerpf(float(cab.glass_x), x_top, t)
+
+## The flip-off pose, car space; pump 0..1 jabs it up.
+func _gesture_transform(pump: float) -> Transform3D:
+	var cab := frame.cab
+	var eye: Vector3 = cab.eye
+	var yaw := deg_to_rad(GESTURE_YAW_DEG[_gesture_aim])
+	var y := eye.y - GESTURE_BELOW_EYE
+	var x := 0.0
+	if _gesture_open:
+		x = -(door_line() + GESTURE_OUT)
+	else:
+		x = -(pane_x(y + 0.06) - GESTURE_IN)
+	var z := eye.z - absf(x - eye.x) / tan(yaw)
+	if _gesture_open:
+		# right behind the door mirror: up past it, not through it
+		var dm: Vector3 = cab.door_mirror
+		if absf(z - dm.z) < 0.16 and absf(-x - absf(dm.x)) < 0.16:
+			y = maxf(y, dm.y + GESTURE_MIRROR_CLEAR)
+	var aim := Vector3(-sin(yaw), 0.0, -cos(yaw))
+	return Transform3D(_hand_basis(-1, aim, Vector3.DOWN), Vector3(x, y + GESTURE_PUMP * pump, z))
+
+## From one hand transform to another for the gesture, e 0..1. The hand swings
+## wide (a curve pulled toward a point just outside the sill, or along the door
+## under it with the window shut) instead of cutting across the pillar and the view.
+func _gesture_path(from: Transform3D, to: Transform3D, e: float) -> Transform3D:
+	var eye: Vector3 = frame.cab.eye
+	var via := Vector3(-(door_line() + 0.05), frame.glass_bottom + 0.14, eye.z - 0.25)
+	if not _gesture_open:
+		via = Vector3(-(pane_x(frame.glass_bottom) - GESTURE_IN), frame.glass_bottom, eye.z - 0.25)   # along the door, under the sill
+	var p := from.origin.lerp(via, e).lerp(via.lerp(to.origin, e), e)
+	return Transform3D(Basis(from.basis.get_rotation_quaternion().slerp(to.basis.get_rotation_quaternion(), e)), p)
+
+## The flip-off key, from the camera each physics tick (tests call it too):
+## a press asks for one gesture, holding keeps the hand out. `aim` is where the
+## driver is looking when the key goes down (AIM_).
+func gesture_key(down: bool, aim: int = AIM_AHEAD) -> void:
+	if down and not _gesture_key and (left_act == LeftAct.GESTURE_RETURN or not is_gesturing()):
+		_gesture_wanted = true
+		_gesture_aim = clampi(aim, AIM_AHEAD, AIM_BACK)
+	_gesture_key = down
+
+## The idle action key, from the camera each physics tick (tests call it too).
+func idle_key(down: bool) -> void:
+	if down and not _idle_key:
+		request_idle()
+	_idle_key = down
+
+## One press: a use as soon as the hand is free. Nothing with None picked, or
+## with the beer on the move when that is switched off. A press during a use
+## queues one more; further presses are dropped.
+func request_idle() -> bool:
+	if not IdleActions.allowed(player.linear_velocity.length(), player.engine_running):
+		return false
+	_idle_pending = 1
+	return true
+
+func _begin_idle() -> void:
+	_idle_pending = 0
+	_idle_item = IdleActions.item
+	if not HOLD_R.has(_idle_item):
+		return   # switched to None while the press waited
+	_idle_counted = false
+	_idle_exhaled = false
+	_start_left(LeftAct.IDLE_REACH)
+
+## The hand with the item, car space: e 0 at the pocket .. 1 at the mouth,
+## `draw` 0..1 through the sip. It comes back along the door first and then up,
+## clear of the wheel.
+func _idle_transform(e: float, draw: float) -> Transform3D:
+	var from := props.holder_xf().origin
+	var eye: Vector3 = frame.cab.eye
+	var to: Vector3 = eye + IDLE_MOUTH[_idle_item]
+	var via := Vector3(lerpf(from.x, to.x, 0.35), from.y + 0.06, eye.z - 0.10)
+	var tilt: float = IDLE_TILT_DEG[_idle_item] * e
+	if _idle_item == IdleActions.BEER:
+		tilt += SIP_TILT_DEG * draw
+	var b := Basis(Vector3.UP, deg_to_rad(IDLE_YAW_DEG) * e) * Basis(Vector3.RIGHT, deg_to_rad(tilt))
+	return Transform3D(b, from.lerp(via, e).lerp(via.lerp(to, e), e))
+
+func _begin_gesture() -> void:
+	_gesture_wanted = false
+	_gesture_open = frame.window >= GESTURE_WINDOW_OPEN or not has_door_glass()
+	_start_left(LeftAct.GESTURE_REACH)
+
 ## Ankle position for a pedal, car space: behind and a little below the pad.
 func _pedal_ankle(pedal: String) -> Vector3:
 	var pivot: Node3D = frame.pedals[pedal]
@@ -580,7 +802,8 @@ func _process(delta: float) -> void:
 	torso.position = pelvis + Vector3(0.0, 0.004 * sin(_breath * TAU * 0.25), 0.0)
 	# head: yaw into the turn, bob
 	var steer := frame.steering
-	head.rotation = Vector3(0.0, lerp_angle(head.rotation.y, -steer * HEAD_YAW_RAD, 1.0 - exp(-5.0 * delta)), 0.0)
+	var sip := deg_to_rad(SIP_HEAD_DEG) * _draw if _idle_holding and _idle_item == IdleActions.BEER else 0.0
+	head.rotation = Vector3(sip, lerp_angle(head.rotation.y, -steer * HEAD_YAW_RAD, 1.0 - exp(-5.0 * delta)), 0.0)
 	head.position = Vector3(0.0, HEAD_Y + _head_bob, 0.0)
 
 	_update_events()
@@ -722,7 +945,71 @@ func _step_left(delta: float) -> void:
 	var working := frame.window_direction != 0
 	_window_idle = 0.0 if working else _window_idle + delta
 	var crank := frame.window_control == "crank"
+	# a flip-off waits for the window to stop, then takes the hand from wherever it is
+	if _gesture_wanted and not working and not is_idling() and (left_act == LeftAct.GESTURE_RETURN or not is_gesturing()):
+		_begin_gesture()
+	# an idle action waits for the window and the flip-off, and starts from the rim
+	if _idle_pending > 0 and not working and left_act == LeftAct.GRIP:
+		_begin_idle()
 	match left_act:
+		LeftAct.IDLE_REACH:
+			var t := clampf(left_t / IDLE_REACH_SECS, 0.0, 1.0)
+			_left_xf = _left_from.interpolate_with(props.holder_xf(), _ease(t))
+			if t >= 1.0:
+				_idle_holding = true
+				_start_left(LeftAct.IDLE_USE)
+		LeftAct.IDLE_USE:
+			var hold: float = IDLE_HOLD_SECS[_idle_item]
+			var up := clampf(left_t / IDLE_LIFT_SECS, 0.0, 1.0)
+			var down := clampf((left_t - IDLE_LIFT_SECS - hold) / IDLE_LOWER_SECS, 0.0, 1.0)
+			_draw = sin(clampf((left_t - IDLE_LIFT_SECS) / hold, 0.0, 1.0) * PI)
+			_left_xf = _idle_transform(_ease(up) - _ease(down), _draw)
+			if up >= 1.0 and not _idle_counted:
+				_idle_counted = true
+				idle_uses += 1
+				idle_used.emit(_idle_item)
+			if down > 0.0 and not _idle_exhaled:
+				_idle_exhaled = true
+				if _idle_item == IdleActions.VAPE:
+					props.exhale(frame.window >= GESTURE_WINDOW_OPEN or not has_door_glass())
+			if down >= 1.0:
+				_idle_holding = false
+				_draw = 0.0
+				_start_left(LeftAct.IDLE_RETURN)
+		LeftAct.IDLE_RETURN:
+			var t := clampf(left_t / IDLE_RETURN_SECS, 0.0, 1.0)
+			_left_xf = _left_from.interpolate_with(grip, _ease(t))
+			if t >= 1.0:
+				_start_left(LeftAct.GRIP)
+		LeftAct.GESTURE_REACH:
+			var t := clampf(left_t / GESTURE_REACH_SECS, 0.0, 1.0)
+			_left_xf = _gesture_path(_left_from, _gesture_transform(0.0), _ease(t))
+			if t >= 1.0:
+				gesture_peaks += 1
+				gesture_peak.emit(_gesture_open)
+				_pump_t = 0.0
+				_next_pump = GESTURE_PUMP_EVERY
+				_start_left(LeftAct.GESTURE_HOLD)
+		LeftAct.GESTURE_HOLD:
+			if _gesture_key and left_t >= _next_pump and _pump_t <= 0.0:
+				_next_pump += GESTURE_PUMP_EVERY
+				_pump_t = GESTURE_PUMP_SECS
+				_pump_counted = false
+			var pump := 0.0
+			if _pump_t > 0.0:
+				_pump_t = maxf(_pump_t - delta, 0.0)
+				pump = sin((1.0 - _pump_t / GESTURE_PUMP_SECS) * PI)
+				if not _pump_counted and _pump_t <= GESTURE_PUMP_SECS * 0.5:
+					_pump_counted = true
+					gesture_peaks += 1
+			_left_xf = _gesture_transform(pump)
+			if not _gesture_key and left_t >= GESTURE_MIN_HOLD_SECS and _pump_t <= 0.0:
+				_start_left(LeftAct.GESTURE_RETURN)
+		LeftAct.GESTURE_RETURN:
+			var t := clampf(left_t / GESTURE_RETURN_SECS, 0.0, 1.0)
+			_left_xf = _gesture_path(_left_from, grip, _ease(t))
+			if t >= 1.0:
+				_start_left(LeftAct.GRIP)
 		LeftAct.GRIP:
 			_left_xf = grip
 			if working:
@@ -757,6 +1044,19 @@ func _place_hands() -> void:
 	for side in [-1, 1]:
 		var hand_xf: Transform3D = _hand_xf if side > 0 else _left_xf
 		(hands[side] as Node3D).transform = hand_xf
+	# the fist with the finger up stands in for the left mitten through the middle of a gesture
+	var fist := left_act == LeftAct.GESTURE_HOLD \
+		or (left_act == LeftAct.GESTURE_REACH and left_t >= GESTURE_REACH_SECS * GESTURE_FINGER_IN) \
+		or (left_act == LeftAct.GESTURE_RETURN and left_t < GESTURE_RETURN_SECS * (1.0 - GESTURE_FINGER_IN))
+	finger_hand.transform = _left_xf
+	finger_hand.visible = fist
+	# and the hand shaped round the vape or the can while it holds one
+	for item in hold_hands:
+		var hand: MeshInstance3D = hold_hands[item]
+		hand.transform = _left_xf
+		hand.visible = _idle_holding and item == _idle_item
+	(hands[-1] as Node3D).visible = not fist and not _idle_holding
+	props.place(_idle_item if _idle_holding else "", _left_xf, _draw if _idle_item == IdleActions.VAPE else 0.0)
 
 func _place_legs(delta: float) -> void:
 	var p := player
@@ -806,6 +1106,18 @@ func leg_gap(side: int) -> float:
 
 func is_busy() -> bool:
 	return act != Act.GRIP
+
+## The left hand is off the rim on a flip-off (reach, hold or the way back).
+func is_gesturing() -> bool:
+	return left_act >= LeftAct.GESTURE_REACH and left_act <= LeftAct.GESTURE_RETURN
+
+## The left hand is off the rim on an idle action (reach, use or the way back).
+func is_idling() -> bool:
+	return left_act >= LeftAct.IDLE_REACH
+
+## An idle press is waiting for the hand (tests).
+func idle_waiting() -> bool:
+	return _idle_pending > 0
 
 ## The left hand is off the rim, at the window (tests).
 func left_at_window() -> bool:

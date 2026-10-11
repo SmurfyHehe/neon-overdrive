@@ -95,6 +95,8 @@ call :run view/look_back --headless
 call :run view/look_around --headless
 call :run view/cockpit_driver --headless
 call :run view/cockpit_window --headless
+call :run view/gesture_flip_off "--headless --fixed-fps 60"
+call :run view/idle_actions "--headless --fixed-fps 60"
 call :run view/gauge_pod --headless
 call :run view/gauge_layout --headless
 call :run view/cockpit_steering_hands --headless

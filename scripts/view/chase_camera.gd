@@ -125,6 +125,10 @@ var shake_enabled := true
 # Smoothed state the HUD and tests can read.
 var speed_t := 0.0     # 0..1, eased speed factor
 var accel_fov := 0.0   # current acceleration FOV term, degrees
+## A window tap made during an idle action (L), kept until the hand is back:
+## 0 none, 1 the key went down during the use, above 1 the ticks left of the replayed tap.
+const WINDOW_TAP_TICKS := 3
+var _window_tap := 0
 var trauma := 0.0      # 0..1, impact shake energy
 var bump := 0.0        # 0..1, the last road bump, decaying
 var surface_t := 0.0   # 0..1, share of wheels on a rough surface (scaled by speed)
@@ -216,9 +220,28 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("camera_view"):
 		set_view(View.CHASE if view == View.COCKPIT else View.COCKPIT)
 	look_back = Input.is_action_pressed("look_back")
-	perspective.window_key(Input.is_action_pressed("window"), delta)
+	# the left hand does one thing at a time: the window key waits while it is out on a gesture
+	var gesturing := frame != null and frame.driver != null and frame.driver.is_gesturing()
+	# nor during a puff or a sip; a window tap in the middle of one is kept and played once the hand is back
+	var idling := frame != null and frame.driver != null and frame.driver.is_idling()
+	var window_down := Input.is_action_pressed("window")
+	if idling:
+		if window_down:
+			_window_tap = 1
+		elif _window_tap == 1:
+			_window_tap = WINDOW_TAP_TICKS + 1   # pressed and let go during the use
+	elif _window_tap == 1:
+		_window_tap = 0                          # still held: the key itself carries on
+	elif _window_tap > 1:
+		_window_tap -= 1
+		window_down = _window_tap > 1            # the kept tap: down for WINDOW_TAP_TICKS, then up
+	perspective.window_key(window_down and not gesturing and not idling, delta)
 	if frame != null:
 		frame.set_window(perspective.window, perspective.window_direction())
+		if frame.driver != null:
+			var aim := DriverModel.AIM_BACK if look_back else (DriverModel.AIM_LEFT if Input.is_action_pressed("look_left") else DriverModel.AIM_AHEAD)
+			frame.driver.gesture_key(Input.is_action_pressed("flip_off"), aim)
+			frame.driver.idle_key(Input.is_action_pressed("idle_action"))
 	# where the driver's head points, for the radio and the window's wind
 	perspective.head_yaw_deg = look_yaw + (180.0 if look_back else 0.0) if view == View.COCKPIT else 0.0
 	if perspective.car_audio == null:

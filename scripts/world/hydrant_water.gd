@@ -180,7 +180,7 @@ void fragment() {
 	float glass = smoothstep(0.74, 0.56, uv.y) * amount;
 	float n = noise(vec2(uv.x * 10.0, uv.y * 4.0 - TIME * 2.6));
 	float m = noise(vec2(uv.x * 23.0 + 4.0, uv.y * 7.0 - TIME * 3.4));
-	vec2 off = vec2(n - 0.5, m - 0.5) * 0.04 * glass;
+	vec2 off = vec2(n - 0.5, m - 0.5) * 0.024 * glass;
 	vec3 c = texture(screen, uv + off).rgb;
 	c = mix(c, c * 0.8 + vec3(0.05, 0.043, 0.032), glass * 0.6);
 	COLOR = vec4(c, step(0.002, glass));
@@ -225,6 +225,9 @@ static func _get_patch_mat() -> ShaderMaterial:
 		sh.code = PATCH_SHADER
 		_patch_mat = ShaderMaterial.new()
 		_patch_mat.shader = sh
+		# after the lamps' light pools (additive quads at the same height),
+		# so the wet stain shows inside a pool of light too
+		_patch_mat.render_priority = 2
 	return _patch_mat
 
 ## Filtered noise, looped: `hz` is the low-pass corner (a hiss of water high,
@@ -279,7 +282,19 @@ func _new_spray_node() -> Node3D:
 	mm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
-	mm.albedo_color = Color(0.85, 0.74, 0.58, 0.10)
+	mm.albedo_color = Color(0.85, 0.74, 0.58, 0.16)
+	# a soft round puff, not a square card
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1.0, 1.0, 1.0, 1.0))
+	grad.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
+	var puff := GradientTexture2D.new()
+	puff.gradient = grad
+	puff.fill = GradientTexture2D.FILL_RADIAL
+	puff.fill_from = Vector2(0.5, 0.5)
+	puff.fill_to = Vector2(1.0, 0.5)
+	puff.width = 32
+	puff.height = 32
+	mm.albedo_texture = puff
 	mm.vertex_color_use_as_albedo = false
 	mist.material_override = mm
 	mist.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE

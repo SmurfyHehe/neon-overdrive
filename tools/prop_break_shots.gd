@@ -6,7 +6,7 @@ extends SceneTree
 #
 #   hydrant_chase    a gusher on the kerb, from the chase camera, at night
 #   hydrant_cockpit  driving through it in the cockpit view (the water sheet)
-#   hydrant_patch    the wet patch down the gutter, from the kerb
+#   hydrant_patch    the wet patch down the gutter, from the kerb (and _top, from above)
 #   lamp_down        a felled lamp, dark, with its stump
 #   debris           knocked cones, a rolled bin and bent posts at rest
 #
@@ -123,16 +123,20 @@ func _run() -> void:
 	var u := RoadFrame.unroll(base)
 	_look(RoadFrame.roll(Vector3(u.x + 1.5, 1.7, u.z + 7.0)), RoadFrame.roll(Vector3(u.x - 2.0, 0.0, u.z - 14.0)))
 	await _shot("hydrant_patch")
+	_look(base + Vector3(-1.5, 9.0, -6.0), base + Vector3(-1.5, 0.0, -6.01))
+	await _shot("hydrant_patch_top")
 
 	# through the jet in the cockpit view
 	game.camera.set_view(1)
 	game.camera.make_current()
 	brake = false
-	TestDriver.place(p, hx, -9.0 + 16.0 - 16.0, 0.0, 9.0, RoadFrame.unroll(p.global_position).y + 0.2)
-	for i in 240:
+	s = RoadFrame.s_at(RoadFrame.unroll(p.global_position).z)
+	TestDriver.place(p, hx, hs - s - 9.0, 0.0, 9.0, RoadFrame.unroll(p.global_position).y + 0.2)
+	for i in 600:
 		await physics_frame
 		if breaker.water.sheet >= 0.99:
 			break
+	print("cockpit: sheet %.2f" % breaker.water.sheet)
 	await _shot("hydrant_cockpit")
 	game.camera.set_view(0)
 	brake = true
@@ -143,7 +147,7 @@ func _run() -> void:
 		var foot := _knock(l, 0.5)
 		await _wait(1.5)
 		var lu := RoadFrame.unroll(foot)
-		_look(RoadFrame.roll(Vector3(lu.x - 5.0, 1.8, lu.z + 8.0)), RoadFrame.roll(Vector3(lu.x, 0.5, lu.z - 4.0)))
+		_look(RoadFrame.roll(Vector3(lu.x - 8.0, 1.7, lu.z + 1.0)), RoadFrame.roll(Vector3(lu.x, 0.6, lu.z - 4.0)))
 		await _shot("lamp_down")
 
 	# cones, a bin and posts at rest

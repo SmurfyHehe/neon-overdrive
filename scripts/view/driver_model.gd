@@ -1001,6 +1001,8 @@ func _step_left(delta: float) -> void:
 					props.exhale(_window_is_open())
 				elif _idle_item == IdleActions.CIGARETTE:
 					props.flick_butt(_window_is_open())
+				elif _idle_item == IdleActions.BEER and frame.clutter != null:
+					frame.clutter.beer_finished()   # the empty goes on the footwell floor
 			if down >= 1.0:
 				_idle_holding = false
 				_draw = 0.0

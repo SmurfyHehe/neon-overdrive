@@ -95,6 +95,7 @@ var race_action: Callable   # start (or give up) a race against a test rival, un
 var wash_action: Callable   # the garage wash mini-game
 var race_button: Button
 var wash_button: Button
+var clean_button: Button      # Walt's free cabin clean (CabinDirt)
 var keys_dirty := false   # rebinds not saved yet
 
 var _capture := {}        # {action, slot, button} while waiting for a key
@@ -564,6 +565,10 @@ func _build_game_page(parent: Control) -> Control:
 		if wash_action.is_valid():
 			close()
 			wash_action.call())
+	# Walt's clean (MA6): the cabin back to Clean, cans and receipts gone. Free for now.
+	clean_button = _add_button(page, "Clean the car", func() -> void:
+		CabinDirt.clean(PlayerCar.chassis_kind())
+		_refresh_game_page())
 
 	return _page_of(page)
 
@@ -582,6 +587,9 @@ func _refresh_game_page() -> void:
 	tow_button.disabled = not paused or not tow_action.is_valid()
 	race_button.disabled = not paused or not race_action.is_valid()
 	wash_button.disabled = not paused or not wash_action.is_valid()
+	var dirt := CabinDirt.level(now)
+	clean_button.text = "Clean the car (Walt, free)" if dirt > CabinDirt.CLEAN or CabinDirt.cans(now) > 0 else "Clean the car (already clean)"
+	clean_button.disabled = not paused
 
 func _pick_car() -> void:
 	if car_option.selected < 0 or game_state == null:

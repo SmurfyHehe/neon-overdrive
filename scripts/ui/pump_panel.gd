@@ -37,6 +37,9 @@ var player: Node
 var wallet: Node
 var night_clock: NightClock
 
+## A fill was paid for (litres bought): the receipt on the dash (CabinDirt).
+signal filled(litres: float)
+
 var tank_label: Label
 var money_label: Label
 var message: Label
@@ -174,6 +177,7 @@ func fill() -> void:
 	message.text = "Filling: %.0f L for %s" % [_fill_litres, Wallet.money(bank_before - wallet.bank)]
 	message.add_theme_color_override("font_color", AMBER)
 	_fill_t = 0.0
+	filled.emit(_fill_litres)
 	refresh()
 
 func _process(delta: float) -> void:

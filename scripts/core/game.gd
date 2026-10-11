@@ -895,7 +895,9 @@ func _setup_game_state() -> void:
 	gas_station = GasStation.new()
 	gas_station.player = player
 	add_child(gas_station)
-	add_child(PumpPanel.new(game_state, player, wallet, night_clock))
+	var pump := PumpPanel.new(game_state, player, wallet, night_clock)
+	pump.filled.connect(func(_l: float) -> void: CabinDirt.fuel_stop(PlayerCar.chassis_kind()))   # a receipt for the dash
+	add_child(pump)
 	gas_station.pulled_up.connect(func(_s: float) -> void: game_state.open_station())
 	add_child(WashScreen.new(game_state))
 	# Special vehicles: a flip ends the run (SpecialRunEnd). A restart is the
@@ -922,6 +924,7 @@ func _setup_game_state() -> void:
 	game_state.quitting.connect(saver.save_now)
 	# 6 a.m.: tonight's cash goes into the bank (F0).
 	night_clock.night_ended.connect(func(_n: int) -> void: wallet.bank_night())
+	night_clock.night_ended.connect(func(_n: int) -> void: CabinDirt.night_ended(PlayerCar.chassis_kind()))   # the cabin gets lived in
 	night_clock.night_ended.connect(func(_n: int) -> void: saver.save_now.call_deferred())
 	run_end = RunEnd.new()
 	run_end.player = player

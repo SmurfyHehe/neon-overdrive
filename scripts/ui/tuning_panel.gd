@@ -223,7 +223,7 @@ func _refresh() -> void:
 		value_labels[k[0]].text = ("%d" % values[k[0]]) if step >= 1.0 else ("%.3f" % values[k[0]] if step < 0.01 else "%.2f" % values[k[0]])
 		# Danger colour and the consequence line (settings safety part 3).
 		var path: String = k[2]
-		var changed := absf(float(values[k[0]]) - TuneParams.get_value(stock, path)) > 0.0005
+		var changed := absf(float(values[k[0]]) - _stock_value(path, values[k[0]])) > 0.0005
 		name_labels[k[0]].text = (CHANGED_DOT if changed else "") + k[1]
 		var level := SettingDanger.level(path, values[k[0]])
 		var c := SettingDanger.colour(level)

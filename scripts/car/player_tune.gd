@@ -105,6 +105,8 @@ static func save(spec: Dictionary) -> bool:
 		return false
 	if in_slot():
 		return SaveCore.persist and SaveCore.set_tune(kind, "live", values_from(spec))
+	# a fresh user folder has no autotune/ yet (Auto-Tune makes it on its first job)
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(file().get_base_dir()))
 	var f := FileAccess.open(file(), FileAccess.WRITE)
 	if f == null:
 		push_error("PlayerTune: cannot write %s (%s)" % [file(), error_string(FileAccess.get_open_error())])

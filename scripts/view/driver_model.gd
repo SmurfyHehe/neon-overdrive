@@ -181,6 +181,7 @@ const HOLD_R := {IdleActions.VAPE: 0.012, IdleActions.BEER: IdleProps.CAN_R, Idl
 ## (a click and a flame), then CIG_DRAGS drags, each one a breath out.
 const CIG_LIGHT_SECS := 0.4
 const CIG_DRAGS := 3
+const CIG_WINDOW := 0.55   # how far the window rolls down by itself for a cigarette
 enum { AIM_AHEAD, AIM_LEFT, AIM_BACK }
 ## Degrees left of straight ahead, by aim (AIM_LEFT with look left held, AIM_BACK with look back).
 const GESTURE_YAW_DEG := [35.0, 80.0, 125.0]
@@ -765,6 +766,9 @@ func _begin_idle() -> void:
 	_idle_drags = 0
 	if _idle_item == IdleActions.CIGARETTE:
 		props.cigarette_reset()
+		# the window rolls down a little by itself, so there is a window to flick it out of
+		if has_door_glass() and PerspectiveAudio.current != null:
+			PerspectiveAudio.current.assist_open(CIG_WINDOW)
 	_start_left(LeftAct.IDLE_REACH)
 
 ## The hand with the item, car space: e 0 at the pocket .. 1 at the mouth,
@@ -984,6 +988,7 @@ func _step_left(delta: float) -> void:
 					props.light_up()
 				var v := clampf((into - CIG_LIGHT_SECS) / (hold - CIG_LIGHT_SECS), 0.0, 1.0)
 				_draw = absf(sin(v * PI * CIG_DRAGS)) if into > CIG_LIGHT_SECS else 0.0
+				props.set_burn(1.0 - (1.0 - IdleProps.BURN_END) * v)   # shorter with every drag
 				var done := CIG_DRAGS if v >= 1.0 else int(v * CIG_DRAGS)
 				while _idle_drags < done:
 					_idle_drags += 1
@@ -1000,7 +1005,9 @@ func _step_left(delta: float) -> void:
 				if _idle_item == IdleActions.VAPE:
 					props.exhale(_window_is_open())
 				elif _idle_item == IdleActions.CIGARETTE:
-					props.flick_butt(_window_is_open())
+					props.flick_butt()
+					if PerspectiveAudio.current != null:
+						PerspectiveAudio.current.release_assist()   # back up, if the driver opened it
 			if down >= 1.0:
 				_idle_holding = false
 				_draw = 0.0

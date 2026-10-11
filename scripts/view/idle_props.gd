@@ -43,6 +43,9 @@ const CIG_FILTER := Color("#B9782F")
 const LIGHTER_BODY := Color(0.18, 0.2, 0.24, 0.05)   # in the glow material: a low alpha reads lit, not bright
 const CIG_R := 0.004
 const CIG_HALF := 0.04
+const PAPER_TOP := 0.014         # where the filter ends and the paper starts (hand space y)
+const PAPER_LEN := 0.054         # a whole cigarette's paper
+const BURN_END := 0.25           # the butt, as a share of the paper
 const FLAME_SECS := 0.4
 const FLAME_LIGHT := 0.9         # the one extra light, energy
 const TIP_UNLIT := 0.0
@@ -86,7 +89,9 @@ var tri_count := 0
 var exhales := 0                 # clouds asked for (tests)
 var lighter_clicks := 0          # times the lighter was struck (tests)
 var butts_flicked := 0           # ends thrown out of an open window (tests)
-var butts_dropped := 0           # ends put out inside with the window shut (tests)
+var paper: MeshInstance3D        # the cigarette's paper, scaled with how much is left
+var tip: MeshInstance3D          # the burning end, riding on the paper's far end
+var _burn := 1.0
 var _tip_mat: ShaderMaterial
 var _click: AudioStreamPlayer
 var _flame_t := 0.0
@@ -134,26 +139,36 @@ func _ready() -> void:
 	k = CockpitKit.new()
 	_cig_mesh(k)
 	cig = _part(k, mat, "Cigarette")
+	# the paper is one unit-long box scaled to the cigarette's length, hung from
+	# the filter; the tip rides on its far end, so the burn eats toward the mouth
+	k = CockpitKit.new()
+	k.box(Vector3(2.0 * CIG_R, 1.0, 2.0 * CIG_R), Vector3(0.0, -0.5, 0.0), CIG_PAPER)
+	tri_count += k.tri_count()
+	paper = k.instance(mat, "CigarettePaper")
+	paper.position = Vector3(0.0, PAPER_TOP, 0.0)
+	cig.add_child(paper)
 	k = CockpitKit.new()
 	_tip_mesh(k)
 	_tip_mat = CockpitKit.glow_material(TIP_UNLIT)
 	tri_count += k.tri_count()
-	cig.add_child(k.instance(_tip_mat, "CigaretteTip"))
+	tip = k.instance(_tip_mat, "CigaretteTip")
+	cig.add_child(tip)
+	set_burn(1.0)
 	k = CockpitKit.new()
 	_lighter_mesh(k)
 	tri_count += k.tri_count()
 	lighter = k.instance(CockpitKit.glow_material(1.6), "Lighter")
 	lighter.visible = false
-	cig.add_child(lighter)
+	tip.add_child(lighter)
 	flame_light = OmniLight3D.new()
 	flame_light.name = "FlameLight"
 	flame_light.light_color = AMBER
 	flame_light.light_energy = FLAME_LIGHT
 	flame_light.omni_range = 0.8
 	flame_light.shadow_enabled = false
-	flame_light.position = Vector3(0.0, -0.06, 0.012)
+	flame_light.position = Vector3(0.0, -0.02, 0.012)
 	flame_light.visible = false
-	cig.add_child(flame_light)
+	tip.add_child(flame_light)
 	_click = AudioStreamPlayer.new()
 	_click.name = "LighterClick"
 	_click.stream = _lighter_stream()
@@ -181,17 +196,17 @@ static func _led_mesh(k: CockpitKit) -> void:
 
 ## Hand space like the vape: the filter at +y (the mouth), the tip at -y.
 static func _cig_mesh(k: CockpitKit) -> void:
-	k.box(Vector3(2.0 * CIG_R, 2.0 * CIG_HALF - 0.008, 2.0 * CIG_R), Vector3(0.0, -0.004, 0.0), CIG_PAPER)
 	k.box(Vector3(2.0 * CIG_R + 0.0006, 0.026, 2.0 * CIG_R + 0.0006), Vector3(0.0, CIG_HALF - 0.013, 0.0), CIG_FILTER)
 
-## The burning end: its face alpha is the glow, lit by the material's energy.
+## The burning end, in the tip node's own space (its origin is the paper's far
+## end): its face alpha is the glow, lit by the material's energy.
 static func _tip_mesh(k: CockpitKit) -> void:
-	k.box(Vector3(2.0 * CIG_R - 0.0004, 0.004, 2.0 * CIG_R - 0.0004), Vector3(0.0, -CIG_HALF - 0.0005, 0.0), AMBER)
+	k.box(Vector3(2.0 * CIG_R - 0.0004, 0.004, 2.0 * CIG_R - 0.0004), Vector3(0.0, -0.002, 0.0), AMBER)
 
-## A lighter held end-on to the tip: a small body and the flame above it.
+## A lighter held end-on to the tip (tip space): a small body and the flame above it.
 static func _lighter_mesh(k: CockpitKit) -> void:
-	k.box(Vector3(0.016, 0.03, 0.009), Vector3(0.0, -0.093, 0.0), LIGHTER_BODY)
-	k.box(Vector3(0.005, 0.016, 0.005), Vector3(0.0, -0.07, 0.0), AMBER)
+	k.box(Vector3(0.016, 0.03, 0.009), Vector3(0.0, -0.053, 0.0), LIGHTER_BODY)
+	k.box(Vector3(0.005, 0.016, 0.005), Vector3(0.0, -0.03, 0.0), AMBER)
 
 ## A lighter strike: a flint scrape and click, then a short soft whoosh, made
 ## in code (nothing downloaded), once and shared.
@@ -280,6 +295,8 @@ func place(held: String, hand: Transform3D, draw: float) -> void:
 	vape.transform = hand if held == IdleActions.VAPE else rest
 	can.visible = held == IdleActions.BEER or (held == "" and item == IdleActions.BEER)
 	can.transform = hand if held == IdleActions.BEER else rest
+	if held == "" and (_burn < 1.0 or _butt_gone):
+		cigarette_reset()   # the hand is empty: the next cigarette waits whole in the pocket
 	cig.visible = (held == IdleActions.CIGARETTE and not _butt_gone) or (held == "" and item == IdleActions.CIGARETTE)
 	cig.transform = hand if held == IdleActions.CIGARETTE else rest
 	var d := clampf(draw, 0.0, 1.0)
@@ -299,6 +316,18 @@ func cigarette_reset() -> void:
 	_butt_gone = false
 	_flame_t = 0.0
 	_show_flame(false)
+	set_burn(1.0)
+
+## How much cigarette is left, 1 whole .. BURN_END the butt. It is the only
+## "health bar" there is: the paper's visible length, the tip riding on its end.
+func set_burn(left: float) -> void:
+	_burn = clampf(left, BURN_END, 1.0)
+	var len := PAPER_LEN * _burn
+	paper.scale = Vector3(1.0, len, 1.0)
+	tip.position = Vector3(0.0, PAPER_TOP - len, 0.0)
+
+func burn_left() -> float:
+	return _burn
 
 ## The lighter: a click, a small flame for FLAME_SECS, and the tip catches.
 func light_up() -> void:
@@ -309,20 +338,17 @@ func light_up() -> void:
 	if _click.is_inside_tree():
 		_click.play()
 
-## The end goes out of the open window (the same ember as the traffic flick,
-## from the same burst) or, with the window shut, into the pocket.
-func flick_butt(open: bool) -> void:
+## The butt goes out of the window, always (the driver rolled it down for the
+## cigarette): the same ember as the traffic flick, from the same burst.
+func flick_butt() -> void:
 	_butt_gone = true
 	_lit = false
 	_show_flame(false)
-	if open:
-		butts_flicked += 1
-		var eye: Vector3 = cab.eye
-		var local := Vector3(-(driver.door_line() + 0.10), eye.y + CIG_FLICK_LOCAL_Y, eye.z - 0.08)
-		if EmberFlick.current != null and is_instance_valid(EmberFlick.current):
-			EmberFlick.current.flick_from_player(driver.player, local, driver.player.linear_velocity)
-	else:
-		butts_dropped += 1
+	butts_flicked += 1
+	var eye: Vector3 = cab.eye
+	var local := Vector3(-(driver.door_line() + 0.10), eye.y + CIG_FLICK_LOCAL_Y, eye.z - 0.08)
+	if EmberFlick.current != null and is_instance_valid(EmberFlick.current):
+		EmberFlick.current.flick_from_player(driver.player, local, driver.player.linear_velocity)
 
 func is_lit() -> bool:
 	return _lit

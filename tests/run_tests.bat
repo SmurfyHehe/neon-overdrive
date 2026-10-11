@@ -74,6 +74,7 @@ call :run view/cockpit_shifter --headless
 call :run view/cockpit_shifter_rnd --headless
 call :run ui/touch_radio --headless
 call :run car/tyres "--headless --fixed-fps 60"
+call :run car/surface_feel "--headless --fixed-fps 60"
 call :run car/clutch_model --headless
 call :run audio/driveline_audio --headless
 call :run audio/sound_fixes --headless

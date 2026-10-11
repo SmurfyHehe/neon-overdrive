@@ -507,6 +507,13 @@ func _build_game_page(parent: Control) -> Control:
 		CabinMods.set_trinket(DashTrinket.IDS[clampi(i, 0, DashTrinket.IDS.size() - 1)])
 		CabinMods.save_settings())
 	trinket.selected = DashTrinket.index_of(CabinMods.trinket)
+	# Bobble head (BobbleHead): one per car, passenger side of the dash. Every
+	# figure is pickable in the test build; the won / bought rules come later.
+	var bobble_kind := PlayerCar.chassis_kind()
+	var bobble := _add_option(page, "Bobble head", BobbleFigures.names(), func(i: int) -> void:
+		CabinMods.set_bobble(bobble_kind, BobbleFigures.IDS[clampi(i, 0, BobbleFigures.IDS.size() - 1)])
+		CabinMods.save_settings())
+	bobble.selected = BobbleFigures.index_of(CabinMods.bobble_for(bobble_kind))
 	var knob_names := []
 	for id in CabinMods.KNOB_IDS:
 		knob_names.append(CabinMods.KNOB_NAMES[id])

@@ -87,6 +87,7 @@ call :run view/cockpit --headless
 call :run view/cockpit_interior --headless
 call :run view/wheel_screen --headless
 call :run view/dash_trinket --headless
+call :run view/bobble_head --headless
 call :run view/cabin_mods --headless
 call :run view/cockpit_isolation "--headless --fixed-fps 120"
 call :run view/cockpit_head_motion --headless

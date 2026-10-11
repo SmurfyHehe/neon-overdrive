@@ -233,6 +233,9 @@ static func pigeon_custom(i: int, ret_t: float) -> Color:
 static func create_cat() -> MultiMeshInstance3D:
 	var n := _mm_node("Cat", StreetAnimals.mesh(), mat("cat"), 1)
 	n.multimesh.set_instance_custom_data(0, Color(1.0, 0.0, 0.0, 0.0))
+	# the shader moves it from the box top along the sidewalk and off frame:
+	# the box must cover all of it, or the renderer culls it with the set's origin
+	n.multimesh.custom_aabb = AABB(Vector3(0.0, -0.5, -3.5), Vector3(CAT_OFF_X + 1.0, 5.0, 5.0))
 	return n
 
 static func create_bags() -> MeshInstance3D:
@@ -603,10 +606,11 @@ void fragment() {
 		ROUGHNESS = 0.6;
 		METALLIC = 0.3;
 	} else if (part < 0.6) {
-		// glass: a dusk reflection when dark, amber-white when the light is on
+		// glass: dusk-dark when off, amber-white when the room is lit. Kept
+		// rough: on this unlit wall a low roughness + specular made the
+		// emission vanish (checked 2026-10-11 with lone test quads)
 		ALBEDO = mix(vec3(0.07, 0.09, 0.13), vec3(0.6, 0.5, 0.36), lit);
-		ROUGHNESS = 0.15;
-		SPECULAR = 0.6;
+		ROUGHNESS = 0.7;
 		EMISSION = vec3(1.0, 0.80, 0.55) * 1.3 * lit;
 	} else if (part < 0.9) {
 		// the blind: pale cloth, lit through from behind when the room is on
@@ -678,12 +682,13 @@ void vertex() {
 			flap = 1.0;
 			pitch = -0.25 + 0.35 * smoothstep(FLY, 0.0, ar);
 		}
-		// wings: folded down along the body at rest, beating in flight
+		// wings: folded in along the flanks at rest, beating in flight
 		if (COLOR.r > 0.4 && COLOR.r < 0.6) {
 			float side = COLOR.g > 0.5 ? 1.0 : -1.0;
-			float fold = mix(-1.25, 0.0, flap);
+			float fold = mix(-1.05, 0.0, flap);
 			float beat = flap * (0.9 * sin(clock * 6.283185307 * 7.0 + s * 6.0) + 0.1);
 			vec2 rel = p.zy - vec2(0.0, 0.10);
+			rel.x *= mix(0.28, 1.0, flap);   // tucked short against the body
 			p.zy = vec2(0.0, 0.10) + rot2(side * (fold + beat)) * rel;
 		}
 		// the head bobs on a slow loop at rest, a peck now and then
@@ -876,12 +881,12 @@ void vertex() {
 	c.x += g * ph * 2.0;
 	c += 0.02 * vec3(sin(clock * 31.0 + ph * 50.0), sin(clock * 37.0 + ph * 70.0), sin(clock * 29.0 + ph * 30.0));
 	vec4 vp = MODELVIEW_MATRIX * vec4(c, 1.0);
-	vp.xy += (UV - vec2(0.5)) * 2.0 * 0.011 * (1.0 - 0.4 * g);
+	vp.xy += (UV - vec2(0.5)) * 2.0 * 0.008 * (1.0 - 0.4 * g);
 	POSITION = PROJECTION_MATRIX * vp;
 }
 
 void fragment() {
-	ALBEDO = vec3(0.07, 0.06, 0.05);
+	ALBEDO = vec3(0.02, 0.018, 0.015);
 }
 """
 

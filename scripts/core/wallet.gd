@@ -25,8 +25,13 @@ signal banked(amount: int)
 const TEST_CASH := 250
 const TEST_ACTION := &"debug_add_cash"
 
+## The last shop payments ("day4:halloran_brakes"). pay_shop refuses a receipt
+## it has already seen, so a replayed or reloaded day can never pay twice.
+const RECEIPTS_KEPT := 10
+
 var cash := 0
 var bank := 0
+var receipts: Array[String] = []
 var _dirty := false
 
 ## Loads the slot's money at once (not in _ready, which can run after the
@@ -35,6 +40,7 @@ func _init() -> void:
 	var w := SaveStore.load_wallet()
 	cash = int(w.cash)
 	bank = int(w.bank)
+	receipts.assign(w.receipts)
 
 func _ready() -> void:
 	if OS.is_debug_build() and not InputMap.has_action(TEST_ACTION):
@@ -85,6 +91,20 @@ func spend_bank(amount: int) -> bool:
 	_changed()
 	return true
 
+## Shop pay (Walt's board): straight into the bank, never cash. One write for
+## the money and the receipt together, so a crash cannot pay without the
+## receipt or the receipt without the pay. A receipt already seen pays
+## nothing and returns false.
+func pay_shop(amount: int, receipt: String) -> bool:
+	if amount < 0 or receipt == "" or receipt in receipts:
+		return false
+	bank += amount
+	receipts.append(receipt)
+	while receipts.size() > RECEIPTS_KEPT:
+		receipts.remove_at(0)
+	_changed()
+	return true
+
 ## The night is over (6 a.m., or heading home): tonight's cash goes into the bank.
 func bank_night() -> void:
 	var amount := cash
@@ -98,7 +118,7 @@ func _changed() -> void:
 	_save()
 
 func _save() -> bool:
-	_dirty = not SaveStore.save_wallet(cash, bank)
+	_dirty = not SaveStore.save_wallet(cash, bank, receipts)
 	return not _dirty
 
 ## "$1,250"

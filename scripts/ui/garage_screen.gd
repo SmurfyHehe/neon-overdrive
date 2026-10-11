@@ -16,12 +16,14 @@ extends CanvasLayer
 # pause menu). Keyboard only; nothing on screen names a key.
 
 const GarageService := preload("res://scripts/car/garage_service.gd")
+const WorkOrders := preload("res://scripts/core/work_orders.gd")
 
 const AMBER := Color("#FFC066")
 const SILVER := Color("#C9CED6")
 
 var game_state: GameState
 var player: PlayerCar
+var board_button: Button
 var service_button: Button
 var wash_button: Button
 var out_button: Button
@@ -31,6 +33,11 @@ var confirm: ConfirmBox
 var status_label: Label
 var root_box: MarginContainer
 var services := 0   # times Service car was pressed (tests read it)
+## Walt's board (work board W2): set by Game when the shop is on, null when off.
+var shop_day: Node
+## How long the "Walt did it" slip shows on the way out, seconds.
+var out_delay := 1.4
+var _leaving := false
 
 func _init(state: GameState, car: PlayerCar) -> void:
 	game_state = state
@@ -69,9 +76,11 @@ func _ready() -> void:
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(status_label)
 
+	board_button = _add_button(box, "Walt's board", game_state.open_workboard)
+	board_button.visible = false
 	service_button = _add_button(box, "Service car", _service)
 	wash_button = _add_button(box, "Wash car", game_state.open_wash)
-	out_button = _add_button(box, "Go out", game_state.leave_garage)
+	out_button = _add_button(box, "Go out", _go_out)
 	settings_button = _add_button(box, "Settings", _open_settings)
 	title_button = _add_button(box, "Quit to title", _ask_quit)
 
@@ -94,6 +103,8 @@ func _on_state_changed(new_state: GameState.State, old_state: GameState.State) -
 	var was := visible
 	visible = open
 	if open:
+		# The board row shows while today's board is not settled.
+		board_button.visible = shop_day != null and shop_day.can_reopen()
 		# Back from the wash or the settings screen: say what happened, keep focus.
 		if old_state != GameState.State.WASH:
 			status_label.text = ""
@@ -102,6 +113,24 @@ func _on_state_changed(new_state: GameState.State, old_state: GameState.State) -
 			var sfx: Variant = get_parent().get("menu_sfx")
 			if sfx != null:
 				sfx.squelch()
+
+## Go out: a day nobody took an order on is Walt's, with his flat pay and a
+## slip shown on the way out (once: a second Go out the same day pays nothing).
+func _go_out() -> void:
+	if _leaving:
+		return
+	var paid := 0
+	if shop_day != null and shop_day.enabled:
+		paid = shop_day.settle_for_exit()
+	if paid <= 0 or out_delay <= 0.0:
+		game_state.leave_garage()
+		return
+	_leaving = true
+	status_label.text = "Walt did it. %s into the bank." % WorkOrders.money(paid)
+	var t := get_tree().create_timer(out_delay, true, false, true)
+	t.timeout.connect(func() -> void:
+		_leaving = false
+		game_state.leave_garage())
 
 func _service() -> void:
 	if GarageService.fix_everything(player):

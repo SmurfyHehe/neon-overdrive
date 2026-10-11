@@ -138,6 +138,11 @@ func _run() -> void:
 	radio.next_station()
 	_check(radio.slide_count == slides and radio.station == radio.card, "N while off turns it on at the card without a slide")
 
+	# the clock: the AM/PM suffix is drawn in a font that has an M (not the LCD one)
+	var parts := HeadUnit.clock_parts(NightClock.clock_text(181))
+	_check(parts[0] == "11:01" and parts[1] == "PM" and HeadUnit.AMPM_FONT != "lcd", "the clock reads 11:01 with a PM label (%s)" % str(parts))
+	_check(HeadUnit.clock_parts(NightClock.clock_text(245))[1] == "AM", "the clock shows AM after midnight")
+
 	for f in failures:
 		printerr("FAIL: ", f)
 	print("radio_carousel: ", "PASS" if failures.is_empty() else "FAIL")

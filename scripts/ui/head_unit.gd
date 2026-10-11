@@ -65,19 +65,39 @@ const DEFAULT_STYLE := "p1_coupe"
 ## (y 0-56) keeps the clock, weather, level meter and the area banner.
 const MARGIN := 18.0
 const STRIP_H := 56.0
-const CARD_MOVING := Vector2(180, 214)   # centre card while the ring is in use
-const CARD_REST := Vector2(160, 186)     # shrunk, 4 s after the last change
+const CARD_MOVING := Vector2(184, 214)   # centre card while the ring is in use
+const CARD_REST := Vector2(150, 170)     # shrunk, 4 s after the last change
 const CARD_CENTRE_Y := 171.0             # moving card's middle
-const CARD_REST_Y := 154.0
+const CARD_REST_Y := 148.0
 const REST_AFTER := 4.0                  # s of quiet before the side cards fade
 const REST_FADE := 0.4
 const SONG_FADE := 0.1
 const NEAR_SCALE := 0.62
 ## Ring anchors by |distance| from the centre: x offset, scale, brightness.
-const RING_X := [0.0, 154.0, 254.0, 354.0]
+## Two cards out is dark, so nothing is ever cut by the glass edge (look pass,
+## 2026-10-11); a card that still crosses MARGIN fades over EDGE_FADE px, so
+## a longer dial (Breakline, the hidden 87.9) needs no new numbers.
+const RING_X := [0.0, 160.0, 210.0, 290.0]
 const RING_SCALE := [1.0, 0.62, 0.5, 0.5]
-const RING_BRIGHT := [1.0, 0.5, 0.25, 0.0]
-const LINE_MAX_W := 440.0
+const RING_BRIGHT := [1.0, 0.55, 0.0, 0.0]
+const EDGE_FADE := 24.0
+const LINE_MAX_W := 470.0
+## Text sizes, screen px: 1 px is 0.42 mm on the 216 mm glass, so 36 px is
+## 15 mm tall, which reads from the seat at 1280x720 (about 17 px on screen)
+## and 1920x1080 (25 px). The resting card scales its text half as much as
+## its box (TEXT_SHRINK), so the name stays readable when the song lines are up.
+const NAME_SIZE := 36
+const DIAL_SIZE := 32
+const SIDE_DIAL_SIZE := 26
+const SIDE_NAME_SIZE := 19
+const SONG_SIZE := 30
+const ARTIST_SIZE := 25
+const TEXT_SHRINK := 0.5
+## The clock: DSEG7 has no M, so the time is LCD and the AM/PM suffix is set
+## in the menu font beside it (Roy, 2026-10-11: it showed "P").
+const CLOCK_SIZE := 30
+const AMPM_FONT := "menu_strong"
+const AMPM_SIZE := 22
 const POWER_SPOT := Vector2(322, 40)   # touch-only units: tap here for off (left of the clock)
 
 var style: Dictionary
@@ -370,18 +390,33 @@ func _redraw() -> void:
 	canvas.queue_redraw()
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS if animating else SubViewport.UPDATE_ONCE
 
+## The clock text split into the time and its AM/PM suffix ("11:01 PM" ->
+## ["11:01", "PM"]); no suffix gives "".
+static func clock_parts(t: String) -> Array:
+	var sp := t.rfind(" ")
+	if sp < 0:
+		return [t, ""]
+	return [t.substr(0, sp), t.substr(sp + 1)]
+
 ## The clock, on its own layer so the radio-off dimming (ScreenCanvas.modulate)
-## leaves it lit. Big enough to read from the seat: 32 px on a 512 px screen
-## is 13 mm tall on the 216 mm glass.
+## leaves it lit. Big enough to read from the seat: 30 px on a 512 px screen
+## is 13 mm tall on the 216 mm glass; the AM/PM suffix sits beside it in the
+## menu font (the LCD font cannot draw an M).
 class ClockCanvas extends Control:
 	var unit: HeadUnit
 
 	func _draw() -> void:
 		if unit.clock_text == "":
 			return
-		var font := UiTheme.font("lcd")
+		var parts := HeadUnit.clock_parts(unit.clock_text)
 		draw_rect(Rect2(340, 6, 164, 46), HeadUnit.NAVY_DEEP)
-		draw_string(font, Vector2(350, 41), unit.clock_text, HORIZONTAL_ALIGNMENT_RIGHT, 150, 32, HeadUnit.AMBER)
+		var right := 500.0
+		if parts[1] != "":
+			var small := UiTheme.font(HeadUnit.AMPM_FONT)
+			var sw := small.get_string_size(parts[1], HORIZONTAL_ALIGNMENT_LEFT, -1, HeadUnit.AMPM_SIZE).x
+			draw_string(small, Vector2(right - sw, 41), parts[1], HORIZONTAL_ALIGNMENT_LEFT, -1, HeadUnit.AMPM_SIZE, HeadUnit.AMBER)
+			right -= sw + 6.0
+		draw_string(UiTheme.font("lcd"), Vector2(344, 41), parts[0], HORIZONTAL_ALIGNMENT_RIGHT, right - 344.0, HeadUnit.CLOCK_SIZE, HeadUnit.AMBER)
 
 ## The screen's contents.
 class ScreenCanvas extends Control:
@@ -440,10 +475,10 @@ class ScreenCanvas extends Control:
 			var lines := _song_lines()
 			var cy := lerpf(HeadUnit.CARD_CENTRE_Y, HeadUnit.CARD_REST_Y, rest)
 			var base := cy + lerpf(HeadUnit.CARD_MOVING.y, HeadUnit.CARD_REST.y, rest) * 0.5
-			var t1 := _ellipsize(font, lines[0], 24, HeadUnit.LINE_MAX_W)
-			var t2 := _ellipsize(font, lines[1], 20, HeadUnit.LINE_MAX_W)
-			draw_string(font, Vector2(0, base + 26), t1, HORIZONTAL_ALIGNMENT_CENTER, w, 24, _dim(HeadUnit.AMBER, rest))
-			draw_string(font, Vector2(0, base + 50), t2, HORIZONTAL_ALIGNMENT_CENTER, w, 20, _dim(HeadUnit.SILVER, rest))
+			var t1 := _ellipsize(font, lines[0], HeadUnit.SONG_SIZE, HeadUnit.LINE_MAX_W)
+			var t2 := _ellipsize(font, lines[1], HeadUnit.ARTIST_SIZE, HeadUnit.LINE_MAX_W)
+			draw_string(font, Vector2(0, base + 32), t1, HORIZONTAL_ALIGNMENT_CENTER, w, HeadUnit.SONG_SIZE, _dim(HeadUnit.AMBER, rest))
+			draw_string(font, Vector2(0, base + 60), t2, HORIZONTAL_ALIGNMENT_CENTER, w, HeadUnit.ARTIST_SIZE, _dim(HeadUnit.SILVER, rest))
 		# a little glare across the glass, and a thumb smudge where it gets tapped
 		draw_colored_polygon(PackedVector2Array([Vector2(w * 0.55, 0), Vector2(w * 0.72, 0), Vector2(w * 0.40, h), Vector2(w * 0.23, h)]), Color(1, 1, 1, 0.035))
 		draw_circle(Vector2(w * 0.62, h * 0.62), 22.0, Color(1, 1, 1, 0.025))
@@ -494,59 +529,125 @@ class ScreenCanvas extends Control:
 		var x := 256.0 + signf(d) * _lerp_anchors(HeadUnit.RING_X, ad)
 		var c := Vector2(x, lerpf(HeadUnit.CARD_CENTRE_Y, cy, centre_w))
 		var r := Rect2(c - size * 0.5, size)
+		# a card crossing the glass margin fades out rather than being cut
+		var edge := minf(r.position.x - HeadUnit.MARGIN, float(HeadUnit.PX.x) - HeadUnit.MARGIN - r.end.x)
+		if edge < 0.0:
+			bright *= clampf(1.0 + edge / HeadUnit.EDGE_FADE, 0.0, 1.0)
+			if bright <= 0.01:
+				return
 		var k := size.y / HeadUnit.CARD_MOVING.y
+		var kt := lerpf(1.0, k, HeadUnit.TEXT_SHRINK)   # text shrinks less than the box
 		var st: Dictionary = RadioStations.STATIONS[idx]
 		draw_rect(r, _dim(HeadUnit.NAVY, bright))
 		var is_centre := ad < 0.5
 		if ad < 1.0:
 			var art_b := bright * clampf(1.0 - ad * 1.6, 0.0, 1.0)
 			if art_b > 0.02:
-				_art(Rect2(r.position + Vector2(10, 10) * k, Vector2(r.size.x - 20.0 * k, 100.0 * k)), st.id, art_b)
+				_art(Rect2(r.position + Vector2(10, 10) * k, Vector2(r.size.x - 20.0 * k, 96.0 * k)), st.id, art_b)
 		var name_s: String = str(st.name) if (on or not is_centre) else "OFF"
 		if not is_centre:
-			var nsz := _fit(font, name_s, r.size.x - 12.0, 20)
-			draw_string(font, Vector2(r.position.x, c.y + 6.0), name_s, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, nsz, _dim(HeadUnit.SILVER, bright))
+			# side cards: the dial number big (it is short and reads from the
+			# seat), the name under it
+			var lcd_s := UiTheme.font("lcd")
+			draw_string(lcd_s, Vector2(r.position.x, c.y - 2.0), str(st.dial), HORIZONTAL_ALIGNMENT_CENTER, r.size.x, HeadUnit.SIDE_DIAL_SIZE, _dim(HeadUnit.SILVER, bright))
+			var nsz := maxi(_fit(font, name_s, r.size.x - 10.0, HeadUnit.SIDE_NAME_SIZE), 14)
+			var side_s := _ellipsize(font, name_s, nsz, r.size.x - 10.0)
+			draw_string(font, Vector2(r.position.x, c.y + 22.0), side_s, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, nsz, _dim(HeadUnit.SILVER.darkened(0.15), bright))
 		else:
 			var ncol := _dim(HeadUnit.AMBER if on else HeadUnit.SILVER, bright)
-			var nsz2 := _fit(font, name_s, r.size.x - 12.0, int(round(34.0 * k)))
-			draw_string(font, Vector2(r.position.x, r.position.y + 150.0 * k), name_s, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, nsz2, ncol)
+			var nsz2 := _fit(font, name_s, r.size.x - 12.0, int(round(HeadUnit.NAME_SIZE * kt)))
+			draw_string(font, Vector2(r.position.x, r.position.y + 148.0 * k), name_s, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, nsz2, ncol)
 			if on:
 				var lcd := UiTheme.font("lcd")
-				draw_string(lcd, Vector2(r.position.x, r.position.y + 192.0 * k), str(st.dial), HORIZONTAL_ALIGNMENT_CENTER, r.size.x, int(round(30.0 * k)), _dim(HeadUnit.SODIUM, bright))
+				draw_string(lcd, Vector2(r.position.x, r.position.y + 194.0 * k), str(st.dial), HORIZONTAL_ALIGNMENT_CENTER, r.size.x, int(round(HeadUnit.DIAL_SIZE * kt)), _dim(HeadUnit.SODIUM, bright))
 			draw_rect(r.grow(-2.0), _dim(HeadUnit.SODIUM, bright), false, 4.0)
 
-	## Track art generated from the palette, one motif per station.
+	static func _uv(a: Rect2, u: float, v: float) -> Vector2:
+		return a.position + Vector2(u * a.size.x, v * a.size.y)
+
+	## Card art drawn from the palette, one motif per station, sized to the
+	## art box (164x96 on the moving card) so it still reads at 80 px on the
+	## glass from the seat: Slipstream streaks, Undertow a low moon over water,
+	## Afterglow a striped sun over street lamps, Grey Hour wipers on wet
+	## glass, Graveyard Radio a microphone. Anything else on the dial
+	## (Breakline 94.1, the hidden 87.9) gets a tuning scale until it has art.
 	func _art(a: Rect2, id: String, b: float) -> void:
 		draw_rect(a, HeadUnit.NAVY_DEEP)
-		var c := a.get_center()
+		var s := a.size.y / 96.0   # line weights follow the box
 		var amb := _dim(HeadUnit.AMBER, b)
 		var sod := _dim(HeadUnit.SODIUM, b)
-		var sil := _dim(HeadUnit.SILVER.darkened(0.2), b)
+		var sil := _dim(HeadUnit.SILVER.darkened(0.15), b)
 		var nav := _dim(HeadUnit.NAVY, b)
 		match id:
-			"slipstream":   # drift: three slanted streaks
+			"slipstream":   # drift: three speed streaks, thick at the head, tailing off left
 				for k in 3:
-					var y := a.position.y + a.size.y * (0.3 + 0.2 * k)
-					draw_line(Vector2(a.position.x + 8, y + 10), Vector2(a.end.x - 8, y - 10), sod if k == 1 else amb.darkened(0.3), 4.0)
-			"undertow":   # dark: a low sodium moon behind a skyline
-				draw_circle(c + Vector2(0, -6), a.size.y * 0.28, sod.darkened(0.45))
+					var y0 := 0.34 + 0.2 * k
+					var y1 := y0 - 0.2
+					var th := (0.055 if k == 1 else 0.04)
+					var col := sod if k == 1 else amb.darkened(0.3)
+					draw_colored_polygon(PackedVector2Array([_uv(a, 0.06, y0), _uv(a, 0.94, y1 - th), _uv(a, 0.94, y1 + th)]), col)
+				draw_line(_uv(a, 0.06, 0.9), _uv(a, 0.94, 0.9), nav.lightened(0.15), 2.0 * s)
+			"undertow":   # dark: a low moon half set in black water, its reflection broken up
+				draw_circle(_uv(a, 0.5, 0.5), a.size.y * 0.3, sod.darkened(0.25))
+				draw_rect(Rect2(_uv(a, 0.0, 0.56), Vector2(a.size.x, a.size.y * 0.44)), nav.darkened(0.35))
+				draw_line(_uv(a, 0.0, 0.56), _uv(a, 1.0, 0.56), sil.darkened(0.3), 1.5 * s)
 				for k in 5:
-					var bw := a.size.x / 5.0
-					var bh := a.size.y * (0.25 + 0.12 * ((k * 7) % 3))
-					draw_rect(Rect2(a.position.x + k * bw, a.end.y - bh, bw - 2, bh), nav)
-			"graveyard":   # talk: a microphone
-				draw_rect(Rect2(c.x - 8, c.y - 26, 16, 30), sil)
-				draw_arc(c + Vector2(0, -4), 15.0, 0.0, PI, 10, sil, 2.0)
-				draw_line(c + Vector2(0, 11), c + Vector2(0, 24), sil, 2.0)
-			"afterglow":   # synthwave: a striped sun over a horizon grid
-				draw_circle(c + Vector2(0, -4), a.size.y * 0.3, amb)
+					var v := 0.63 + 0.08 * k
+					var half := 0.24 - 0.035 * k
+					var jig := 0.025 * (1 if k % 2 == 0 else -1)
+					draw_line(_uv(a, 0.5 + jig - half, v), _uv(a, 0.5 + jig + half, v), sod.darkened(0.45 + 0.08 * k), 2.5 * s)
+			"graveyard":   # talk: a stand microphone, a live light beside it
+				var head := _uv(a, 0.5, 0.3)
+				var hr := a.size.y * 0.17
+				draw_circle(head, hr, sil)
+				draw_rect(Rect2(head - Vector2(hr, 0.0), Vector2(hr * 2.0, a.size.y * 0.2)), sil)
 				for k in 3:
-					draw_rect(Rect2(c.x - a.size.y * 0.3, c.y + 2 + 6 * k, a.size.y * 0.6, 2), HeadUnit.NAVY_DEEP)
+					var gy := head.y - hr * 0.5 + k * hr * 0.5
+					draw_line(Vector2(head.x - hr * 0.8, gy), Vector2(head.x + hr * 0.8, gy), HeadUnit.NAVY_DEEP, 1.5 * s)
+				draw_arc(_uv(a, 0.5, 0.5), a.size.y * 0.26, 0.0, PI, 12, sil, 2.5 * s)
+				draw_line(_uv(a, 0.5, 0.76), _uv(a, 0.5, 0.94), sil, 2.5 * s)
+				draw_line(_uv(a, 0.36, 0.94), _uv(a, 0.64, 0.94), sil, 3.0 * s)
+				draw_circle(_uv(a, 0.84, 0.2), 3.5 * s, sod)
+			"afterglow":   # synthwave: a striped sun setting over a row of street lamps
+				var sc := _uv(a, 0.5, 0.42)
+				var sr := a.size.y * 0.3
+				draw_circle(sc, sr, amb)
 				for k in 4:
-					var y := c.y + a.size.y * 0.18 + k * 5
-					draw_line(Vector2(a.position.x, y), Vector2(a.end.x, y), sod.darkened(0.3), 1.0)
-			_:   # grey hour: a wet horizon, slanted rain
-				draw_line(Vector2(a.position.x, c.y + 14), Vector2(a.end.x, c.y + 14), sil, 2.0)
-				for k in 6:
-					var x := a.position.x + a.size.x * (0.12 + 0.15 * k)
-					draw_line(Vector2(x, a.position.y + 8 + (k % 2) * 10), Vector2(x - 6, c.y + 8), amb.darkened(0.35), 1.5)
+					var gy := sc.y + sr * (0.08 + 0.24 * k)
+					draw_rect(Rect2(sc.x - sr, gy, sr * 2.0, (1.5 + k) * s), HeadUnit.NAVY_DEEP)
+				draw_rect(Rect2(_uv(a, 0.0, 0.70), Vector2(a.size.x, a.size.y * 0.3)), HeadUnit.NAVY_DEEP)
+				draw_line(_uv(a, 0.0, 0.70), _uv(a, 1.0, 0.70), sod.darkened(0.3), 1.5 * s)
+				for u in [0.18, 0.5, 0.82]:
+					draw_line(_uv(a, u, 0.98), _uv(a, u, 0.76), sil.darkened(0.2), 2.0 * s)
+					draw_rect(Rect2(_uv(a, u, 0.76) - Vector2(5.0 * s, 1.5 * s), Vector2(10.0 * s, 3.5 * s)), sod)
+					draw_circle(_uv(a, u, 0.76), 6.0 * s, Color(sod, 0.18))
+			"greyhour":   # rain: one wiper mid-sweep, the glass wet outside its arc
+				draw_rect(a, nav.darkened(0.3))
+				var rs := 7
+				for k in 34:
+					rs = (rs * 1103515245 + 12345) & 0x7fffffff
+					var u := float(rs % 1000) / 1000.0
+					rs = (rs * 1103515245 + 12345) & 0x7fffffff
+					var v := float(rs % 1000) / 1000.0 * 0.96
+					var dp := _uv(a, u, v)
+					draw_circle(dp, 1.8 * s, amb.darkened(0.4))
+					draw_line(dp, dp + Vector2(-1.0, 4.5) * s, amb.darkened(0.55), 1.2 * s)
+				# the swept sector is clean glass: pivot under the box, the arc inside it
+				var piv := _uv(a, 0.5, 1.1)
+				var bl := a.size.y * 0.9
+				var pts := PackedVector2Array([piv])
+				for k in 11:
+					var ang := deg_to_rad(-140.0 + 10.0 * k)
+					pts.append(piv + Vector2(cos(ang), sin(ang)) * bl)
+				draw_colored_polygon(pts, HeadUnit.NAVY_DEEP)
+				draw_arc(piv, bl, deg_to_rad(-140.0), deg_to_rad(-40.0), 14, sil.darkened(0.5), 1.5 * s)
+				var tip := piv + Vector2(cos(deg_to_rad(-112.0)), sin(deg_to_rad(-112.0))) * bl
+				draw_line(piv, tip, sil, 3.5 * s)
+				draw_line(piv + (tip - piv) * 0.45, tip, HeadUnit.NAVY_DEEP, 1.0 * s)
+			_:   # no art yet: a tuning scale with the needle on it
+				draw_line(_uv(a, 0.1, 0.55), _uv(a, 0.9, 0.55), sil, 2.0 * s)
+				for k in 9:
+					var u := 0.1 + 0.1 * k
+					var tall := k % 4 == 0
+					draw_line(_uv(a, u, 0.55), _uv(a, u, 0.55 - (0.16 if tall else 0.08)), sil, 1.5 * s)
+				draw_line(_uv(a, 0.62, 0.28), _uv(a, 0.62, 0.8), sod, 3.0 * s)

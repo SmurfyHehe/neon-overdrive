@@ -347,6 +347,9 @@ func _put_back() -> void:
 			_player.health.repair()
 		if _player.fuel.is_low():
 			_player.fuel.litres = FuelTank.CAPACITY_L
+	var cabin := CabinLifeAudio.of(_player)
+	if cabin != null:
+		cabin.reset_cabin()  # the glovebox shuts, the can is back (MA1)
 	count += 1
 	last_reason = _reason
 	print("OffMapRescue: car parked at the kerb (%s)" % _reason)

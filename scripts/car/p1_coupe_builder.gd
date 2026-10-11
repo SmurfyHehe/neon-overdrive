@@ -364,6 +364,7 @@ static func _build_mesh(tris: PackedVector3Array, mats: PackedByteArray, is_body
 		var fit := CarFittings.build(KIND + "|" + Data.BUILD, tris, mats, Data.NAMES, Data.GLASS, Data.EMISSIVE, Data.COLORS)
 		_fit_counts = fit.counts
 		_fit_points = fit.points
+		_fit_frames = {"screen": fit.get("screen", {}), "flap": fit.get("flap", {})}
 		NpcCarBuilder._append_fittings(groups, fit)
 	var mesh := ArrayMesh.new()
 	for kind in ["body", "glass", "glow"]:

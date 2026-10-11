@@ -624,6 +624,7 @@ static func body_mesh(kind: String, build: String) -> ArrayMesh:
 		var fit := CarFittings.build(key, tris, mats, data.NAMES, data.GLASS, data.EMISSIVE, data.COLORS)
 		_fit_counts[key] = fit.counts
 		_fit_points[key] = fit.points
+		_fit_frames[key] = {"screen": fit.get("screen", {}), "flap": fit.get("flap", {})}
 		var mesh := _build_mesh(data, tris, mats, true, {"wheels": hubs, "wheel_r": float(k.wheel_r), "fit": fit})
 		mesh.set_meta("paint_seams", CarPaint.cut_seams(data, tris, mats, int(CarPaint.DOORS.get(kind, 2))))
 		_body_meshes[key] = mesh
@@ -688,10 +689,21 @@ static func _append_fittings(groups: Dictionary, fit: Dictionary) -> void:
 		if (ex[0] as PackedVector3Array).is_empty():
 			continue
 		if not groups.has(surf):
-			groups[surf] = [PackedVector3Array(), PackedVector3Array(), PackedColorArray()]
+			groups[surf] = [PackedVector3Array(), PackedVector3Array(), PackedColorArray(),
+				PackedVector2Array(), PackedVector2Array(), PackedFloat32Array(), PackedFloat32Array()]
 		var g: Array = groups[surf]
 		for i in 3:
 			g[i].append_array(ex[i])
+		# CarPaint's groups also carry finish, occlusion and (body) edge arrays
+		# per vertex: the fittings get the default finish, no occlusion, no edges.
+		var n_v: int = (ex[0] as PackedVector3Array).size()
+		var fin: Array = CarPaint.FINISH_DEFAULT
+		for _v in n_v:
+			g[3].append(Vector2(fin[0], fin[1]))
+			g[4].append(Vector2.ZERO)
+			if surf == "body":
+				g[5].append_array(CarPaint._NO_EDGES)
+				g[6].append_array(CarPaint._NO_EDGES)
 
 ## One flare quad per side at the area-weighted centre of that side's tail
 ## lamp faces (two triangles, all corners at the centre, UV = the corner).

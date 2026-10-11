@@ -1,11 +1,11 @@
 class_name PatrolCar
 extends TrafficCar
 
-# The stand-in patrol car (police build plan F1): a C1 patrol body with the
-# cop undercarriage, driven by the traffic controller down one lane. It is
-# not in TrafficManager's pool, so it reads the traffic around it (scan) but
-# never asks the manager to re-file it: no lane changes. Real cop driving
-# (pursuit, roadblocks) is a later stage.
+# The patrol car (police build plan F1): a C1 patrol body with the cop
+# undercarriage. On patrol it is driven by the traffic controller; PolicePatrol
+# hands it to TrafficManager.adopt(), so it is in the index like a rival and
+# changes lanes like traffic. In a chase a CopBrain gives it a FreeDriver
+# (police steps P4 / P5).
 
 const KIND := "c1_patrol"
 
@@ -37,8 +37,11 @@ static func make() -> PatrolCar:
 	c.add_to_group("patrol_cars")   # the near-miss log looks at it (near_miss_log.gd)
 	return c
 
-func _consider_lane_change(_v: float) -> void:
-	pass
+## Lane changes only once the manager has it in its index (TrafficManager.adopt);
+## a car outside the index cannot be re-filed.
+func _consider_lane_change(v: float) -> void:
+	if _idx >= 0:
+		super(v)
 
 ## P2 warning (police_heat.gd): the light bar goes once and the cop gives one
 ## whoop. Stand-in: the hazard/brake lamps flash for FLASH_SECS; the whoop is a

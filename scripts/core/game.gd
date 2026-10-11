@@ -1010,7 +1010,12 @@ func _setup_police(benchmark: bool) -> void:
 		police.player = player
 		police.traffic = traffic
 		police.heat = police_heat
+		# no centre barrier here: an oncoming lane to meet (the danger number, P5)
+		police.undivided_at = func(z: float) -> bool:
+			return RoadMap.period > 0 and RoadMap.gap_in(floori(RoadFrame.s_at(z) / RoadChunkBuilder.CHUNK_LEN))
 		add_child(police)
+		heat_icons.patrol = police
+		police.busted.connect(func(_cop: Node3D) -> void: heat_icons.say("Busted."))
 
 ## The rulebook's inputs (P1): tonight's crackdown, the crossing, the lane's
 ## flow (matching it is never speeding), lit districts, and contacts from the

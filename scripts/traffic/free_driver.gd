@@ -69,6 +69,8 @@ var target: Node3D
 var offset_x := 0.0
 var offset_back := 10.0
 var lead_secs := LEAD_SECS
+## Bumper gap it keeps to a stopped target that is in its way (traffic keeps S0).
+var stand_gap := 2.0
 var v_max := INF
 ## Read back by its owner and by tests.
 var v_top := 60.0
@@ -220,7 +222,7 @@ func drive(car: TrafficCar, delta: float) -> void:
 	var a := approach_accel(v, v0, gap_along, vt)
 	var body_gap := (tu.z - u.z) * car.direction - car.half_l - 2.2
 	if body_gap > -4.0 and absf(tu.x - u.x) < car.half_w + 1.0 + TrafficCar.CORRIDOR_MARGIN:
-		a = minf(a, TrafficCar.follow_accel(v, v0, maxf(body_gap, 0.0), vt, T_GAP_TARGET))
+		a = minf(a, TrafficCar.follow_accel(v, v0, maxf(body_gap + TrafficCar.S0 - stand_gap, 0.0), vt, T_GAP_TARGET))
 	if _lead_gap < INF:
 		a = minf(a, TrafficCar.follow_accel(v, v0, _lead_gap, _lead_v, T_GAP))
 		_lead_gap = maxf(_lead_gap - (v - _lead_v) * delta, 0.0)   # until the next plan

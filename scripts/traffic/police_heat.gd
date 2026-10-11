@@ -152,6 +152,11 @@ func unregister_cop(cop: Node3D) -> void:
 	if warning_cop == cop:
 		warning_cop = null
 
+## Busted (police_patrol.gd): the chase is over, heat starts from nothing.
+func bust() -> void:
+	_clear_heat()
+	_cancel_warning()
+
 ## Run restarted: no heat, and night one may warn again.
 func reset() -> void:
 	_clear_heat()

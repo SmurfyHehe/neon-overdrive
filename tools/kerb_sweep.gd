@@ -175,6 +175,7 @@ func _place(p: PlayerCar, x: float, yaw: float, speed_ms: float, z: float) -> vo
 func _clear_damage(p: PlayerCar) -> void:
 	for i in p.damage.parts.size():
 		p.damage.parts[i] = 0.0
+	p.damage.rebuild_offsets()
 	p.damage.kerb_strikes = 0
 	p.damage.last_kerb_strike = 0.0
 	p.damage.hits = 0

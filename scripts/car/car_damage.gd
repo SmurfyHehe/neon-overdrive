@@ -8,7 +8,9 @@ extends RefCounted
 #   arm per corner, a rear suspension corner each side, the four lamps, and
 #   the body (cost only).
 # - no performance loss under 25 % in a part (FREE_BELOW).
-# - the front at 100 % kills the engine: towed home, the night ends.
+# - the engine never dies from damage (the fun test, 2026-10-11): a wrecked
+#   radiator limps at ENGINE_LIMP_KMH, it does not stop the car. The tow is
+#   kept for a totalled car (`totalled`, unused for now).
 # - parts break instead of the hood popping: nothing ever covers the view,
 #   and there are no dents until the car redesign (week of 2026-10-12). For
 #   now the signs are a DMG lamp, steam off a hurt radiator, a crash pull,
@@ -16,6 +18,9 @@ extends RefCounted
 # - once a night a fuel station patches the engine for free; the garage
 #   repairs everything; repairs and tows are paid from the BANK, never the
 #   night's pot. No tow during a chase.
+# - (DP0, 2026-10-11) damage reaches the sim only as `offsets` (DamageOffsets):
+#   numbers built here when damage changes and applied by the car on top of the
+#   tune. Nothing here writes into a Wheel any more.
 # - traffic is look-only (no damage sim); this is the player's car (and the
 #   race rival's, later).
 #
@@ -29,8 +34,8 @@ extends RefCounted
 # Effects (each only past FREE_BELOW, scaled from 0 there to full at 1.0):
 # - radiator: the engine cools worse (PowertrainHealth.cooling_mult), so it
 #   runs hot and the existing derate and OVERHEAT limp take over; from
-#   ENGINE_LIMP_AT the engine limps on its own (LimpMode.ENGINE); at 1.0 it is
-#   dead (cap 0) until towed.
+#   ENGINE_LIMP_AT the engine limps on its own (LimpMode.ENGINE), at
+#   ENGINE_LIMP_KMH, also at 1.0: it never dies.
 # - front corner: the wheel's toe is bent toward the hit, so the car pulls to
 #   that side (the "crash pull").
 # - rear corner: that spring is softer, the corner sags and the rear wallows.
@@ -49,6 +54,8 @@ extends RefCounted
 # garage can keep it. Until the save system lands it lives as long as the car,
 # like FuelTank: Restart starts a fresh, undamaged car.
 
+const DamageOffsets := preload("res://scripts/car/damage_offsets.gd")
+
 enum Part { RADIATOR, STEER_FL, STEER_FR, SUSP_RL, SUSP_RR, BODY }
 enum Lamp { HEAD_L, HEAD_R, TAIL_L, TAIL_R }
 const PART_NAMES := ["radiator", "steer_fl", "steer_fr", "susp_rl", "susp_rr", "body"]
@@ -63,13 +70,13 @@ const COOLDOWN := 0.12
 const DV_FREE := 3.0
 ## Damage per m/s of velocity change above DV_FREE, shared out over the parts.
 ## A 36 km/h straight wall hit (dv 10) puts each front part near 0.3; a
-## 72 km/h one (dv 20) is past 0.5; head-on at 130 km/h kills the engine.
+## 72 km/h one (dv 20) is past 0.5; head-on at 130 km/h wrecks the radiator.
 const DAMAGE_PER_DV := 0.06
 ## Below this a part is cosmetic (Roy: no performance loss under 25 %).
 const FREE_BELOW := 0.25
 ## The radiator from here makes the engine limp at ENGINE_LIMP_KMH.
 const ENGINE_LIMP_AT := 0.75
-const ENGINE_LIMP_KMH := 70.0
+const ENGINE_LIMP_KMH := 70.0   # the cap stays up at 100 %: the engine never dies
 ## Engine cooling lost with a wrecked radiator (1.0 = no cooling at all).
 const COOLING_LOSS := 0.7
 ## Toe (rad) a fully bent front arm adds. The Tuner's toe range is +-0.02;
@@ -106,6 +113,10 @@ var parts: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 var lamps: Array[bool] = [false, false, false, false]   # true = broken
 ## The night number of the last free patch; one patch per night.
 var patched_night := -1
+## 0..1, unused yet: a totalled car (the save core stores it).
+var totalled := 0.0
+## What the sim reads on top of the tune; rebuilt only when damage changes.
+var offsets := DamageOffsets.new()
 var hits := 0
 var last_hit_dv := 0.0
 var last_hit_dir := Vector2.ZERO   # car-local (x, z) of the velocity change
@@ -119,8 +130,6 @@ var _prev_vel := Vector3.ZERO
 var _hit_dv := Vector3.ZERO
 var _hit_left := -1.0
 var _wait := 0.0
-var _base_rate: Array[float] = [0.0, 0.0, 0.0, 0.0]
-var _written_rate: Array[float] = [-1.0, -1.0, -1.0, -1.0]
 
 func part(p: Part) -> float:
 	return parts[p]
@@ -129,8 +138,10 @@ func part(p: Part) -> float:
 static func effect(amount: float) -> float:
 	return clampf((amount - FREE_BELOW) / (1.0 - FREE_BELOW), 0.0, 1.0)
 
+## Damage never kills the engine (the fun test, 2026-10-11): always false. The
+## name stays for the HUD and the pause menu's tow until a totalled car uses it.
 func is_engine_dead() -> bool:
-	return enabled and parts[Part.RADIATOR] >= 1.0
+	return false
 
 ## The DMG lamp: any part past the free band, or a lamp out.
 func warning() -> bool:
@@ -145,13 +156,22 @@ func warning() -> bool:
 func cooling_mult() -> float:
 	return 1.0 - COOLING_LOSS * effect(parts[Part.RADIATOR]) if enabled else 1.0
 
-## The cap LimpMode.engine_damage_kmh takes: INF healthy, 0 dead.
+## The cap LimpMode.engine_damage_kmh takes: INF healthy, ENGINE_LIMP_KMH from
+## ENGINE_LIMP_AT up to 100 % (never 0).
 func engine_cap_kmh() -> float:
 	if not enabled:
 		return INF
-	if is_engine_dead():
-		return 0.0
 	return ENGINE_LIMP_KMH if parts[Part.RADIATOR] >= ENGINE_LIMP_AT else INF
+
+## Rebuilds `offsets` from the parts. Called when damage changes (a hit, a
+## kerb strike, a repair, a load); a test or tool that sets `parts` directly
+## calls it too. The effect functions below stay plain readers of the parts.
+func rebuild_offsets() -> void:
+	offsets.neutral()
+	for i in 4:
+		offsets.set_wheel(i, DamageOffsets.TOE_ADD, toe_offset(i))
+		offsets.set_wheel(i, DamageOffsets.SPRING_MULT, spring_mult(i))
+	offsets.set_car(DamageOffsets.COOLING_MULT, cooling_mult())
 
 ## Toe added to wheel i (FL, FR, RL, RR): bent toward the hit side, so the
 ## car pulls that way (a wheel's rotation.y turns it left when positive).
@@ -224,6 +244,7 @@ func apply_hit(dv_local: Vector3) -> void:
 	for i in 4:
 		if amount * share[i] >= LAMP_BREAK:
 			lamps[[Lamp.HEAD_L, Lamp.HEAD_R, Lamp.TAIL_L, Lamp.TAIL_R][i]] = true
+	rebuild_offsets()
 
 ## One kerb strike from raw numbers (testable without a car): wheel i (FL,
 ## FR, RL, RR) met the kerb at `approach` m/s across the kerb face.
@@ -235,6 +256,7 @@ func apply_kerb_strike(i: int, approach: float) -> void:
 	last_kerb_strike = approach
 	_add([Part.STEER_FL, Part.STEER_FR, Part.SUSP_RL, Part.SUSP_RR][clampi(i, 0, 3)], amount)
 	_add(Part.BODY, amount * KERB_BODY_SHARE)
+	rebuild_offsets()
 
 ## Looks for a wheel that has just come onto the "Kerb" surface and, if it
 ## came hard, strikes. The speed into the kerb is the car's sideways speed in
@@ -280,27 +302,15 @@ func step_values(dt: float, vel: Vector3, basis: Basis, touching: bool) -> void:
 		_hit_dv = dv
 		_hit_left = HIT_WINDOW
 
-## One step on the car: reads contacts, applies the parts' effects.
-func step(v: Vehicle, dt: float, health: PowertrainHealth, limp: LimpMode) -> void:
+## One step on the car: reads contacts (a hit or a kerb strike rebuilds the
+## offsets) and sets the engine's limp cap. The offsets themselves are applied
+## by the car (PlayerCar._apply_damage_offsets), on top of the tune.
+func step(v: Vehicle, dt: float, _health: PowertrainHealth, limp: LimpMode) -> void:
 	if not enabled:
 		return
 	step_values(dt, v.linear_velocity, v.global_transform.basis, _touching(v))
 	_kerb_step(v)
-	health.cooling_mult = cooling_mult()
 	limp.engine_damage_kmh = engine_cap_kmh()
-	_apply_wheels(v)
-
-## Toe and springs. The base values come from the tune (GEVP initialize sets
-## them, the Tuner re-runs it), so a rate this did not write is a new base.
-func _apply_wheels(v: Vehicle) -> void:
-	var base_toe := [-v.front_toe, v.front_toe, -v.rear_toe, v.rear_toe]
-	for i in mini(4, v.wheel_array.size()):
-		var w: Wheel = v.wheel_array[i]
-		w.toe = base_toe[i] + toe_offset(i)
-		if not is_equal_approx(w.spring_rate, _written_rate[i]):
-			_base_rate[i] = w.spring_rate
-		w.spring_rate = _base_rate[i] * spring_mult(i)
-		_written_rate[i] = w.spring_rate
 
 ## Touching a wall, a building or another car (not the road under the body).
 static func _touching(v: Vehicle) -> bool:
@@ -325,6 +335,7 @@ func garage_repair(bank: Object) -> int:
 		parts[i] = 0.0
 	for i in lamps.size():
 		lamps[i] = false
+	rebuild_offsets()
 	return price
 
 ## What the garage would charge right now.
@@ -338,15 +349,17 @@ func repair_price() -> int:
 	return roundi(total)
 
 ## A fuel station's free engine patch, once a night: the radiator comes back
-## to the no-loss band (a dead engine runs again). Returns true if it patched.
+## to the no-loss band (the limp ends). Returns true if it patched.
 func station_patch(night: int) -> bool:
 	if not enabled or night == patched_night or parts[Part.RADIATOR] < FREE_BELOW:
 		return false
 	parts[Part.RADIATOR] = PATCH_TO
 	patched_night = night
+	rebuild_offsets()
 	return true
 
-## Ferris's tow: never during a chase. Paid from the bank, as much as it holds
+## Ferris's tow: kept for a totalled car (the engine never dies from damage
+## now, so nothing calls it yet). Never during a chase. Paid from the bank, as much as it holds
 ## (a tow is never refused for money). The caller ends the night and puts the
 ## car home. Returns false if refused.
 func tow(bank: Object, in_chase: bool) -> bool:
@@ -359,7 +372,7 @@ func tow(bank: Object, in_chase: bool) -> bool:
 	return true
 
 func to_dict() -> Dictionary:
-	var d := {"lamps": lamps.duplicate(), "patched_night": patched_night}
+	var d := {"lamps": lamps.duplicate(), "patched_night": patched_night, "totalled": totalled}
 	for i in parts.size():
 		d[PART_NAMES[i]] = parts[i]
 	return d
@@ -371,3 +384,5 @@ func from_dict(d: Dictionary) -> void:
 	for i in lamps.size():
 		lamps[i] = bool(l[i]) if i < l.size() else false
 	patched_night = int(d.get("patched_night", -1))
+	totalled = clampf(float(d.get("totalled", 0.0)), 0.0, 1.0)
+	rebuild_offsets()

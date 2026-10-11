@@ -240,6 +240,8 @@ func _service_car() -> void:
 		player.damage.garage_repair(null)  # free until the garage and the bank exist
 
 ## Ferris's tow (damage slice 1): only for a dead engine, never in a chase.
+## Damage no longer kills the engine (DP0), so this is unreachable until a
+## totalled car (CarDamage.totalled) makes is_engine_dead() true again.
 ## The car goes home, the night ends, and the garage at home fixes it; the
 ## bank pays once it exists (null = free for now). Chases come with Stage F.
 func _call_tow() -> void:

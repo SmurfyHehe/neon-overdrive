@@ -248,7 +248,7 @@ func _physics_process(_delta: float) -> bool:
 				var at := RoadFrame.unroll(cop.global_position)
 				_check(absf(at.x - MomentSpots.trap_x()) < 0.05, "the patrol car is on the sidewalk (x %.2f)" % at.x)
 				_check(absf(RoadFrame.s_at(at.z) - (trap_chunk * 50.0 + MomentSpots.TRAP_Z)) < 0.05, "at its spot along the road")
-				_check(cop is StaticBody3D and cop.get_node_or_null(^"NpcBody") != null and cop.get_child_count() == 6 + (1 if cop.has_node(CopAlertness.LOOK_NODE) else 0), "body, four wheels and a box (and tonight's look)")
+				_check(cop is StaticBody3D and cop.get_node_or_null(^"NpcBody") != null and cop.get_child_count() == 6, "body, four wheels and a box")
 				_check(cop.get_script() == null, "the patrol car has no script")
 			if not clocks.is_empty():
 				_check(has_meta("cop_checked"), "the patrol car was there before it clocked")

@@ -26,11 +26,8 @@ extends Node
 ##   which reaches the two lanes next to it and not the two by the centre
 ##   line. It emits `clocked` or `slipped`; heat is the police system's to
 ##   raise from `clocked`.
-##   The cop has a look for the night (CopAlertness: reading, on break, bored,
-##   half asleep) and a distracted one needs the car in sight and over the
-##   line a little longer before it clocks it. About one trap in FLASH_ONE_IN
-##   is given away: an oncoming car that has just passed it flashes its
-##   headlights twice at the player, once.
+##   About one trap in FLASH_ONE_IN is given away: an oncoming car that has
+##   just passed it flashes its headlights twice at the player, once.
 
 const Districts := preload("res://scripts/world/districts.gd")
 const TestMode := preload("res://scripts/core/test_mode.gd")
@@ -211,10 +208,6 @@ func dress_chunk(root: Node3D, chunk: int, rebuilt := true) -> void:
 		cop.transform = root.transform.affine_inverse() * RoadFrame.pose(x, SIDEWALK_Y, z, 0.0)
 		cop.reset_physics_interpolation()
 		_cop_lamps(cop, s.fired)
-		_alertness(s)
-		CopAlertness.tag(cop, s.look, s.sharp)
-		cop.set_meta(&"radar", true)
-		CopAlertness.dress(cop, TRAP_KIND, s.look)
 	elif cop != null:
 		root.remove_child(cop)
 
@@ -240,16 +233,6 @@ func _set_dark(root: Node3D, dark: bool, rebuilt := false) -> void:
 			mi.set_instance_shader_parameter("lit_density", 0.0)
 		elif not rebuilt and mi.has_meta("moment_lit"):
 			mi.set_instance_shader_parameter("lit_density", mi.get_meta("moment_lit"))
-
-## What tonight's cop at this trap is doing, drawn once (the hour it was first
-## dressed decides whether it can be half asleep) and kept for the night.
-func _alertness(spot: Dictionary) -> void:
-	if spot.has("look"):
-		return
-	var hour := NightClock.hour24(night_clock.minutes) if night_clock != null else NightClock.START_HOUR
-	var a := CopAlertness.pick(hash([road_seed, tonight, spot.chunk]), hour)
-	spot["look"] = a.look
-	spot["sharp"] = a.sharp
 
 ## Whether an oncoming driver gives this trap away tonight.
 static func trap_warned(seed: int, night: int, chunk: int) -> bool:
@@ -392,12 +375,7 @@ func _watch_trap(spot: Dictionary, s: float, x: float) -> void:
 	var kmh := 0.0
 	if player.has_method("current_speed"):
 		kmh = absf(player.current_speed()) * 3.6
-	# A distracted cop needs the reading held for the extra of its factor.
-	var reading := seen and ahead >= -PAST and kmh > PoliceRules.offence_line(PoliceRules.area_at(s), false)
-	spot["held"] = float(spot.get("held", 0.0)) + CHECK_EVERY if reading else 0.0
-	_alertness(spot)
-	var need := PoliceRules.judge_secs(CopAlertness.delay_factor(spot.look, spot.sharp), true)
-	if reading and float(spot.held) - CHECK_EVERY >= need - 0.001:
+	if seen and ahead >= -PAST and kmh > PoliceRules.offence_line(PoliceRules.area_at(s), false):
 		spot.fired = true
 		var cop := _cop_of(spot.chunk)
 		if cop != null:

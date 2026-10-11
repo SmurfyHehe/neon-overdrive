@@ -137,7 +137,7 @@ var _x_hist: Array[Vector2] = []   # (time, road x) for the fault test
 var _clock := 0.0
 var _acc := 0.0
 var _start := 0
-var _cs := {}                  # cop -> {cone, near, run, see, los}
+var _cs := {}                  # cop -> {cone, near, run, los}
 var _ray := PhysicsRayQueryParameters3D.new()
 var _rays_left := 0
 
@@ -310,13 +310,12 @@ func _look(dt: float) -> void:
 	for j in n:
 		var c := cops[(_start + j) % n]
 		nearest = minf(nearest, c.global_position.distance_to(player.global_position))
-		var s: Dictionary = _cs.get(c, {"cone": false, "near": false, "run": 0.0, "see": 0.0, "los": true})
+		var s: Dictionary = _cs.get(c, {"cone": false, "near": false, "run": 0.0, "los": true})
 		if stood_down.has(c):
 			# it called this chase off: it is not watching you until the heat is gone
 			s.cone = false
 			s.near = false
 			s.run = 0.0
-			s.see = 0.0
 			_cs[c] = s
 			continue
 		var g := _geometry(c, pk)
@@ -331,7 +330,6 @@ func _look(dt: float) -> void:
 		s.cone = g.cone and los
 		s.near = g.near and los
 		s.run = float(s.run) + dt if s.cone else 0.0
-		s.see = float(s.see) + dt if (s.cone or s.near) else 0.0
 		_cs[c] = s
 		if not seen and (s.cone or s.near):
 			seen = true
@@ -345,24 +343,22 @@ func _look(dt: float) -> void:
 		spotted.emit(seen_by)
 
 ## The first good cop that judges speed now: the cone for JUDGE_SECS in a row,
-## or at once for the radar car. A distracted parked cop (CopAlertness) takes
-## its factor longer.
+## or at once for the radar car.
 func _judge_cop() -> Node3D:
 	for c in cops:
 		var s: Dictionary = _cs.get(c, {})
 		if s.is_empty() or not s.cone:
 			continue
-		if float(s.run) >= PoliceRules.judge_secs(CopAlertness.delay_of(c), c.get_meta(&"radar", false)):
+		if float(s.run) >= PoliceRules.JUDGE_SECS or c.get_meta(&"radar", false):
 			return c
 	return null
 
 ## A cop that notices the player for an offence needing no speed judgement:
-## the cone or the all-round 12 m (a distracted parked cop: after the extra
-## of its factor in sight).
+## the cone or the all-round 12 m.
 func _notice_cop() -> Node3D:
 	for c in cops:
 		var s: Dictionary = _cs.get(c, {})
-		if not s.is_empty() and (s.cone or s.near) and float(s.get("see", 0.0)) >= PoliceRules.notice_secs(CopAlertness.delay_of(c)):
+		if not s.is_empty() and (s.cone or s.near):
 			return c
 	return null
 

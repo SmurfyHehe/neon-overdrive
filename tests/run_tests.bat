@@ -164,6 +164,8 @@ rem F0: cash and bank through reloads, chases and 6 a.m. (and the HUD and pause 
 call :run core/wallet --headless
 rem Police F0/F1: heat levels and icons, cop_can_see_player, headlights off hides, night one lines.
 call :run traffic/police_heat --headless
+rem Police P1/P2: the rulebook table, sight, offences, warning step, heat times.
+call :run traffic/police_rules --headless
 rem Ending a run on a crash: the rules, the hit sensor, the crash screen; then the real restart.
 call :run core/run_end "--headless --fixed-fps 120"
 call :run core/run_end_restart "--headless --fixed-fps 120"
@@ -315,6 +317,8 @@ if /i not "%~1"=="quick" (
 	call :run core/save_resume --headless
 	rem Police F1 in the game: the stand-in patrol car spawns unseen, spots a lit car, not a dark one.
 	call :run traffic/police_patrol --headless
+	rem P1 proof in the real game: 10 min at the traffic flow = 0 heat (about 3 min of test).
+	call :run traffic/police_flow "--headless --fixed-fps 60"
 	call :run tuning/tuning_panel --headless
 	call :run tuning/auto_tune_panel --headless
 	call :run tuning/tuner_screen --headless

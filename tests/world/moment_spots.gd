@@ -252,7 +252,7 @@ func _physics_process(_delta: float) -> bool:
 				_check(cop.get_script() == null, "the patrol car has no script")
 			if not clocks.is_empty():
 				_check(has_meta("cop_checked"), "the patrol car was there before it clocked")
-				_check(clocks[0] > MomentSpots.SPEED_LIMIT_KMH, "clocked at %d km/h" % int(clocks[0]))
+				_check(clocks[0] > PoliceRules.OFFENCE_KMH["city"], "clocked at %d km/h" % int(clocks[0]))
 				_check(clock_cop != null and clock_cop.get_parent() == _root(trap_chunk), "the clocking cop is the one at the spot")
 				_check(lines.has(MomentSpots.CLOCKED_LINE), "Dave's trap line went out")
 				_go(Step.DONE)

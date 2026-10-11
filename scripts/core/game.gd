@@ -254,6 +254,7 @@ func _ready() -> void:
 			", ".join(PackedStringArray(player.mod_build.get("nodes", []))), (player.mod_build.get("bolt_ons", []) as Array).size()])
 	_setup_game_state()
 	_setup_police(benchmark)
+	_wire_police()
 	# Dynamic resolution holds the frame rate inside the tier; benchmark runs
 	# keep a fixed scale (comparable numbers) unless --dynres=1.
 	var dynres: DynamicResolution = null
@@ -1005,6 +1006,26 @@ func _setup_police(benchmark: bool) -> void:
 		police.traffic = traffic
 		police.heat = police_heat
 		add_child(police)
+
+## The rulebook's inputs (P1): tonight's crackdown, the crossing, the lane's
+## flow (matching it is never speeding), lit districts, and contacts from the
+## wreck sensor (a crash with traffic, a touch on a cop).
+func _wire_police() -> void:
+	police_heat.world_mood = world_mood
+	police_heat.junction = junction
+	if traffic != null:
+		police_heat.flow_kmh = func() -> float:
+			var x := RoadFrame.unroll(player.global_position).x
+			if x < 0.0:
+				return traffic.lane_speed(clampi(RoadChunkBuilder.lane_at(-x), 0, traffic.onc_lanes - 1), true) * 3.6
+			return traffic.lane_speed(clampi(RoadChunkBuilder.lane_at(x), 0, traffic.own_lanes - 1), false) * 3.6
+	police_heat.lit_here = func(pos: Vector3) -> bool:
+		if RoadMap.period <= 0:
+			return false
+		var chunk := floori(RoadFrame.s_at(RoadFrame.unroll(pos).z) / RoadChunkBuilder.CHUNK_LEN)
+		var kind := RoadMap.district_kind(RoadMap.district_of(chunk))
+		return kind == "downtown" or kind == "strip"
+	run_end.sensor.touched.connect(police_heat.on_contact)
 
 ## Dave reads the hour out. 8 p.m. only ever comes from the roll into the next
 ## night, right after his 6 a.m. sign-off, so it is skipped.

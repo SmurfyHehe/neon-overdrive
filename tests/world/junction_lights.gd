@@ -27,6 +27,7 @@ extends SceneTree
 # NEON_SCENES=red,amber (comma list) runs only those scenes.
 
 const Harness := preload("res://tests/traffic/traffic_harness.gd")
+const Districts := preload("res://scripts/world/districts.gd")
 
 const RATE := 120
 const KMH := 1.0 / 3.6
@@ -229,16 +230,28 @@ func _end_place() -> void:
 	var touched := 0
 	var problems: Array[String] = []
 	var counts: Array[String] = []
-	var ref: Node3D
-	for c in game.get("chunk_pool"):
-		if not Junction.touches(c.index):
-			ref = c.root
 	for c in game.get("chunk_pool"):
 		var idx: int = c.index
 		if not Junction.touches(idx):
 			continue
 		touched += 1
 		var root: Node3D = c.root
+		# The reference is the nearest chunk away from the crossing in the same
+		# district: since the district street kits (ee1bd46, "districts you can
+		# tell apart at night") a district sets how many lamps a chunk has, so
+		# a chunk from the next district over can have fewer than the crossing
+		# chunk had before its mouth was cleared.
+		var ref: Node3D
+		var ref_gap := 1 << 30
+		for o in game.get("chunk_pool"):
+			if Junction.touches(o.index) or Districts.name_at(o.index) != Districts.name_at(idx):
+				continue
+			if absi(int(o.index) - idx) < ref_gap:
+				ref_gap = absi(int(o.index) - idx)
+				ref = o.root
+		if ref == null:
+			problems.append("chunk %d: no chunk in the pool from its district to compare with" % idx)
+			continue
 		var jc := Junction.local_centre(idx)
 		# buildings: no visible one overlapping the cleared corner
 		var k := 0

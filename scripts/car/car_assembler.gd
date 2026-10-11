@@ -78,6 +78,10 @@ const MATERIALS := {
 	"glow_brake": ["glow", 8],
 	"glow_reverse": ["glow", 8],
 }
+## Vertex alpha of the switched lamps on the glow surface, the tags the lamp
+## shader reads (NpcCarBuilder.GLOW_SHADER): 0.7 indicator, 0.8 brake lamp,
+## 0.9 reverse. Every other glow material is 1.0, lit all the time.
+const GLOW_TAGS := {"glow_turn": 0.7, "glow_brake": 0.8, "glow_reverse": 0.9}
 const GLOW_ENERGY := 2.5
 const CUSTOM0_FLAGS := Mesh.ARRAY_CUSTOM_RGBA8_UNORM << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
 
@@ -523,6 +527,8 @@ static func _merged(car_id: String, parts: Dictionary) -> Dictionary:
 				col.a = float(info[1]) / 8.0
 				if info[0] == "glass":
 					col.a = 1.0
+				elif info[0] == "glow":
+					col.a = GLOW_TAGS.get(mname, 1.0)
 				if not surf.has(info[0]):
 					surf[info[0]] = _builder()
 				_append(surf[info[0]], m, col, Vector3.ZERO)

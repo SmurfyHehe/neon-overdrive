@@ -62,6 +62,9 @@ const BRAKES := {
 	# Muscle (and the big sedan when it lands): discs on all four, Roy 1223.
 	"p5_muscle": {"front": "disc", "rear": "disc", "rim": "five", "caliper": Color("#C9CED6")},
 	"p6_crossover": {"front": "disc", "rear": "disc", "rim": "dish", "caliper": Color("#4A505B")},
+	# Shop wagon: small discs in front, 200 mm drums at the rear, steel wheels
+	# with hubcaps (the sheet, 98373a7).
+	"p7_wagon": {"front": "disc", "rear": "drum", "rim": "steel", "caliper": Color("#4A505B")},
 	# Camel work pickup: 300 mm front discs, drums at the back (the sheet).
 	"p17_work_pickup": {"front": "disc", "rear": "drum", "rim": "steel", "caliper": Color("#4A505B")},
 	# Drift coupe: 260 mm vented discs on all four, black single-pot calipers (the parts glb models them).

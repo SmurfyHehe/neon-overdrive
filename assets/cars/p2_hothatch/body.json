@@ -1,0 +1,708 @@
+{
+ "id": "p2_hothatch",
+ "build": "stock",
+ "generator": "neon-overdrive tools/car_pipeline/build_car.py",
+ "godot_axes": "X right, Y up, -Z forward; origin on the ground midway between the axles",
+ "dims": {
+  "L": 3.97,
+  "W": 1.83,
+  "WB": 2.56,
+  "OHf": 0.74,
+  "H_body": 1.33
+ },
+ "wheels": {
+  "r": 0.315,
+  "track": 1.58,
+  "axle_z": [
+   -1.28,
+   1.28
+  ],
+  "hubs": {
+   "fr": [
+    0.79,
+    0.315,
+    -1.28
+   ],
+   "fl": [
+    -0.79,
+    0.315,
+    -1.28
+   ],
+   "rr": [
+    0.79,
+    0.315,
+    1.28
+   ],
+   "rl": [
+    -0.79,
+    0.315,
+    1.28
+   ]
+  }
+ },
+ "hinges": {
+  "hinge_hood": {
+   "pos": [
+    0.0,
+    0.91,
+    -0.9199999999999999
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "open_sign": 1,
+   "open_deg": 45,
+   "panel": "hood"
+  },
+  "hinge_door_r": {
+   "pos": [
+    0.83,
+    0.62,
+    -0.8599999999999999
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "open_sign": 1,
+   "open_deg": 60,
+   "panel": "door_r"
+  },
+  "hinge_door_l": {
+   "pos": [
+    -0.83,
+    0.62,
+    -0.8599999999999999
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "open_sign": -1,
+   "open_deg": 60,
+   "panel": "door_l"
+  },
+  "hinge_hatch": {
+   "pos": [
+    0.0,
+    1.32,
+    1.6
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "open_sign": -1,
+   "open_deg": 75,
+   "panel": "hatch"
+  },
+  "hinge_fuel_flap": {
+   "pos": [
+    0.8224,
+    0.76,
+    0.615
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "open_sign": 1,
+   "open_deg": 80,
+   "panel": "fuel_flap"
+  }
+ },
+ "regions": {
+  "nose_s": 0.31,
+  "tail_s": 3.73,
+  "tail_y": 0.54,
+  "hood_hw": 0.6799999999999999,
+  "door_s0": 1.1600000000000001,
+  "door_s1": 2.52,
+  "door_y0": 0.34,
+  "trunk_s0": 3.7899999999999996,
+  "trunk_s1": 3.8200000000000003,
+  "trunk_hw": 0.6499999999999999
+ },
+ "shut": {
+  "gap": 0.004,
+  "return": 0.015,
+  "band": 0.006
+ },
+ "attributes": {
+  "COLOR_0.r": "ao: baked vertex ambient occlusion, 32 rays, 1 = open",
+  "COLOR_0.g": "shut: 1 on a shut line, 0 at 6 mm from it"
+ },
+ "lamps": {
+  "head": {
+   "r": [
+    0.53,
+    0.5449999999999999,
+    -2.028000000000003
+   ],
+   "l": [
+    -0.53,
+    0.5449999999999999,
+    -2.027999999999998
+   ]
+  },
+  "tail": {
+   "r": [
+    0.6225,
+    0.8375,
+    1.9560000000000013
+   ],
+   "l": [
+    -0.6225,
+    0.8375,
+    1.956000000000003
+   ]
+  }
+ },
+ "mirrors": [],
+ "symmetry": {
+  "rule": "the left half is the mirror image of the right, vertex for vertex",
+  "mirrored_pairs": [
+   "arch_liner_fr -> arch_liner_fl",
+   "arch_liner_rr -> arch_liner_rl",
+   "blister_fr -> blister_fl",
+   "blister_rr -> blister_rl",
+   "brake_r -> brake_l",
+   "caliper_fr -> caliper_fl",
+   "door_r -> door_l",
+   "fender_fr -> fender_fl",
+   "fog_r -> fog_l",
+   "glass_door_r -> glass_door_l",
+   "glass_quarter_r -> glass_quarter_l",
+   "handle_r -> handle_l",
+   "head_r -> head_l",
+   "lamp_block_r -> lamp_block_l",
+   "pillar_a_r -> pillar_a_l",
+   "pillar_b_r -> pillar_b_l",
+   "reverse_r -> reverse_l",
+   "rub_door_r -> rub_door_l",
+   "rub_strip_r -> rub_strip_l",
+   "sail_r -> sail_l",
+   "seal_door_r -> seal_door_l",
+   "seal_quarter_r -> seal_quarter_l",
+   "susp_fr -> susp_fl",
+   "susp_rr -> susp_rl",
+   "tail_r -> tail_l",
+   "turn_fr -> turn_fl",
+   "turn_rr -> turn_rl"
+  ],
+  "not_mirrored": {
+   "mirror_l": "door mirrors: the game aims the two cups differently at the driver (P1CoupeBuilder.MIRRORS yaw 12 / -20)",
+   "mirror_r": "door mirrors: the game aims the two cups differently at the driver (P1CoupeBuilder.MIRRORS yaw 12 / -20)",
+   "wiper_l": "wipers park the same way round on both sides, as on a real car",
+   "wiper_r": "wipers park the same way round on both sides, as on a real car",
+   "antenna": "one mast, on the left rear quarter",
+   "wiper_rear": "one rear wiper, on the hatch glass",
+   "fuel_recess": "one filler, on the right rear quarter",
+   "fuel_flap": "one filler, on the right rear quarter",
+   "engine": "a transverse engine: the gearbox hangs on its left end",
+   "bay_battery": "one battery, on the right",
+   "exhaust": "one tail pipe, on the left"
+  }
+ },
+ "slots": [
+  {
+   "id": "door",
+   "node": "slot_door_l",
+   "center": [
+    -0.831,
+    0.75,
+    -0.1
+   ],
+   "normal": [
+    -0.9818,
+    0.1897,
+    -0.0005
+   ],
+   "size": [
+    0.9,
+    0.24
+   ],
+   "area": 0.22
+  },
+  {
+   "id": "door",
+   "node": "slot_door_r",
+   "center": [
+    0.8309,
+    0.75,
+    -0.1
+   ],
+   "normal": [
+    0.9818,
+    0.1897,
+    -0.0006
+   ],
+   "size": [
+    0.9,
+    0.24
+   ],
+   "area": 0.22
+  },
+  {
+   "id": "hood",
+   "node": "slot_hood",
+   "center": [
+    -0.0,
+    0.855,
+    -1.4
+   ],
+   "normal": [
+    0.0,
+    0.9886,
+    -0.1504
+   ],
+   "size": [
+    0.6,
+    0.7
+   ],
+   "area": 0.4248
+  },
+  {
+   "id": "sun",
+   "node": "slot_sun",
+   "center": [
+    0.0,
+    1.2555,
+    -0.345
+   ],
+   "normal": [
+    0.0019,
+    0.8505,
+    -0.526
+   ],
+   "size": [
+    1.02,
+    0.13
+   ],
+   "area": 0.1563
+  },
+  {
+   "id": "rear",
+   "node": "slot_rear",
+   "center": [
+    0.0,
+    0.82,
+    1.962
+   ],
+   "normal": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "size": [
+    1.0,
+    0.12
+   ],
+   "area": 0.12
+  }
+ ],
+ "exhaust_tips": [
+  {
+   "pos": [
+    -0.42,
+    0.24,
+    1.925
+   ],
+   "dir": [
+    0,
+    0,
+    1
+   ],
+   "r": 0.04
+  }
+ ],
+ "budget_tris": 7000,
+ "required_slots": {
+  "brakes": {
+   "front": "disc 262 mm, single-pot caliper",
+   "rear": "drum 200 mm"
+  },
+  "brake_lamps": 2,
+  "third_brake": 1,
+  "reverse": 2,
+  "blinkers_front": 2,
+  "blinkers_rear": 2,
+  "hazards": "the four blinkers",
+  "plates": 2,
+  "plate_lamp": 1,
+  "wipers": 3,
+  "fuel_flap": 1,
+  "fog": 2,
+  "condition": 0.45
+ },
+ "budget_target": [
+  5000,
+  6500
+ ],
+ "materials": {
+  "chrome": "#C9CED6",
+  "glass": "#151D2E",
+  "glow_brake": "#7A1418",
+  "glow_head": "#FFE7BD",
+  "glow_lens": "#8A7350",
+  "glow_reverse": "#3A3A38",
+  "glow_tail": "#E5262B",
+  "glow_turn": "#FFC066",
+  "paint": "#C41E24",
+  "plastic": "#1A1D24",
+  "plate": "#E9E6DF",
+  "rim": "#C9CED6",
+  "rubber": "#08090C",
+  "steel": "#4A4E55",
+  "under_paint": "#0B0D12"
+ },
+ "emissive": [
+  "glow_brake",
+  "glow_head",
+  "glow_lens",
+  "glow_reverse",
+  "glow_tail",
+  "glow_turn",
+  "head",
+  "pol_b",
+  "pol_r",
+  "tail",
+  "turn"
+ ],
+ "parts": {
+  "body": null,
+  "fender_fr": null,
+  "fender_fl": null,
+  "bumper_f": null,
+  "bumper_r": null,
+  "antenna": null,
+  "arch_liner_fr": null,
+  "arch_liner_fl": null,
+  "arch_liner_rr": null,
+  "arch_liner_rl": null,
+  "bay_battery": null,
+  "bay_radiator_core": null,
+  "blister_fr": null,
+  "blister_fl": null,
+  "blister_rr": null,
+  "blister_rl": null,
+  "brake_c": null,
+  "brake_r": null,
+  "brake_l": null,
+  "bumper_f_insert": null,
+  "bumper_r_insert": null,
+  "caliper_fr": null,
+  "caliper_fl": null,
+  "cargo": null,
+  "engine": null,
+  "exhaust": null,
+  "fog_r": null,
+  "fog_l": null,
+  "fuel_recess": null,
+  "glass_quarter_r": null,
+  "glass_quarter_l": null,
+  "glass_windshield": null,
+  "grille": null,
+  "head_r": null,
+  "head_l": null,
+  "lamp_block_r": null,
+  "lamp_block_l": null,
+  "pillar_a_r": null,
+  "pillar_a_l": null,
+  "pillar_b_r": null,
+  "pillar_b_l": null,
+  "plate_f": null,
+  "reverse_r": null,
+  "reverse_l": null,
+  "rub_strip_r": null,
+  "rub_strip_l": null,
+  "sail_r": null,
+  "sail_l": null,
+  "seal_quarter_r": null,
+  "seal_quarter_l": null,
+  "seal_windshield": null,
+  "spoiler": null,
+  "susp_fr": null,
+  "susp_fl": null,
+  "susp_rr": null,
+  "susp_rl": null,
+  "tail_r": null,
+  "tail_l": null,
+  "turn_fr": null,
+  "turn_fl": null,
+  "turn_rr": null,
+  "turn_rl": null,
+  "underbody": null,
+  "wiper_l": null,
+  "wiper_r": null,
+  "hood": "hinge_hood",
+  "door_r": "hinge_door_r",
+  "glass_door_r": "hinge_door_r",
+  "handle_r": "hinge_door_r",
+  "mirror_r": "hinge_door_r",
+  "rub_door_r": "hinge_door_r",
+  "seal_door_r": "hinge_door_r",
+  "door_l": "hinge_door_l",
+  "glass_door_l": "hinge_door_l",
+  "handle_l": "hinge_door_l",
+  "mirror_l": "hinge_door_l",
+  "rub_door_l": "hinge_door_l",
+  "seal_door_l": "hinge_door_l",
+  "glass_backlight": "hinge_hatch",
+  "handle_hatch": "hinge_hatch",
+  "hatch": "hinge_hatch",
+  "plate_lamp": "hinge_hatch",
+  "plate_r": "hinge_hatch",
+  "seal_backlight": "hinge_hatch",
+  "wiper_rear": "hinge_hatch",
+  "fuel_flap": "hinge_fuel_flap"
+ },
+ "backend": "blender",
+ "bevel": true,
+ "bevel_mm": [
+  8.0,
+  12.0
+ ],
+ "bevelled_edges": 216,
+ "source_commit": "a6b57ea",
+ "nodes": [
+  "p2_hothatch",
+  "hinge_hood",
+  "hood",
+  "hinge_door_r",
+  "door_r",
+  "glass_door_r",
+  "handle_r",
+  "mirror_r",
+  "rub_door_r",
+  "seal_door_r",
+  "hinge_door_l",
+  "door_l",
+  "glass_door_l",
+  "handle_l",
+  "mirror_l",
+  "rub_door_l",
+  "seal_door_l",
+  "hinge_hatch",
+  "glass_backlight",
+  "handle_hatch",
+  "hatch",
+  "plate_lamp",
+  "plate_r",
+  "seal_backlight",
+  "wiper_rear",
+  "hinge_fuel_flap",
+  "fuel_flap",
+  "body",
+  "fender_fr",
+  "fender_fl",
+  "bumper_f",
+  "bumper_r",
+  "antenna",
+  "arch_liner_fr",
+  "arch_liner_fl",
+  "arch_liner_rr",
+  "arch_liner_rl",
+  "bay_battery",
+  "bay_radiator_core",
+  "blister_fr",
+  "blister_fl",
+  "blister_rr",
+  "blister_rl",
+  "brake_c",
+  "brake_r",
+  "brake_l",
+  "bumper_f_insert",
+  "bumper_r_insert",
+  "caliper_fr",
+  "caliper_fl",
+  "cargo",
+  "engine",
+  "exhaust",
+  "fog_r",
+  "fog_l",
+  "fuel_recess",
+  "glass_quarter_r",
+  "glass_quarter_l",
+  "glass_windshield",
+  "grille",
+  "head_r",
+  "head_l",
+  "lamp_block_r",
+  "lamp_block_l",
+  "pillar_a_r",
+  "pillar_a_l",
+  "pillar_b_r",
+  "pillar_b_l",
+  "plate_f",
+  "reverse_r",
+  "reverse_l",
+  "rub_strip_r",
+  "rub_strip_l",
+  "sail_r",
+  "sail_l",
+  "seal_quarter_r",
+  "seal_quarter_l",
+  "seal_windshield",
+  "spoiler",
+  "susp_fr",
+  "susp_fl",
+  "susp_rr",
+  "susp_rl",
+  "tail_r",
+  "tail_l",
+  "turn_fr",
+  "turn_fl",
+  "turn_rr",
+  "turn_rl",
+  "underbody",
+  "wiper_l",
+  "wiper_r",
+  "wheel_fr",
+  "wheel_fr_mesh",
+  "wheel_fl",
+  "wheel_fl_mesh",
+  "wheel_rr",
+  "wheel_rr_mesh",
+  "wheel_rl",
+  "wheel_rl_mesh",
+  "mount_front_bumper",
+  "mount_rear_bumper",
+  "mount_skirt_r",
+  "mount_skirt_l",
+  "mount_wing",
+  "mount_hood",
+  "lamp_l",
+  "lamp_r",
+  "slot_door_l",
+  "slot_door_r",
+  "slot_hood",
+  "slot_sun",
+  "slot_rear",
+  "tip_0",
+  "hub_fr",
+  "shock_top_fr",
+  "hub_fl",
+  "shock_top_fl",
+  "hub_rr",
+  "shock_top_rr",
+  "hub_rl",
+  "shock_top_rl",
+  "strut_top_fr",
+  "strut_top_fl",
+  "bay_engine",
+  "bay_radiator",
+  "exhaust_route_0",
+  "exhaust_route_1",
+  "exhaust_route_2",
+  "exhaust_route_3",
+  "tank",
+  "cam_front_quarter",
+  "cam_rear_quarter",
+  "cam_side",
+  "cam_top",
+  "cam_under",
+  "cam_wheel",
+  "torsion_beam_r"
+ ],
+ "tris": {
+  "hood": 118,
+  "door_r": 63,
+  "glass_door_r": 36,
+  "handle_r": 14,
+  "mirror_r": 24,
+  "rub_door_r": 4,
+  "seal_door_r": 40,
+  "door_l": 63,
+  "glass_door_l": 36,
+  "handle_l": 14,
+  "mirror_l": 24,
+  "rub_door_l": 4,
+  "seal_door_l": 40,
+  "glass_backlight": 96,
+  "handle_hatch": 28,
+  "hatch": 234,
+  "plate_lamp": 8,
+  "plate_r": 12,
+  "seal_backlight": 52,
+  "wiper_rear": 24,
+  "fuel_flap": 4,
+  "body": 980,
+  "fender_fr": 237,
+  "fender_fl": 237,
+  "bumper_f": 298,
+  "bumper_r": 190,
+  "antenna": 18,
+  "arch_liner_fr": 42,
+  "arch_liner_fl": 42,
+  "arch_liner_rr": 55,
+  "arch_liner_rl": 55,
+  "bay_battery": 12,
+  "bay_radiator_core": 28,
+  "blister_fr": 144,
+  "blister_fl": 144,
+  "blister_rr": 144,
+  "blister_rl": 144,
+  "brake_c": 4,
+  "brake_r": 2,
+  "brake_l": 2,
+  "bumper_f_insert": 8,
+  "bumper_r_insert": 8,
+  "caliper_fr": 12,
+  "caliper_fl": 12,
+  "cargo": 8,
+  "engine": 36,
+  "exhaust": 30,
+  "fog_r": 28,
+  "fog_l": 28,
+  "fuel_recess": 10,
+  "glass_quarter_r": 4,
+  "glass_quarter_l": 4,
+  "glass_windshield": 42,
+  "grille": 32,
+  "head_r": 6,
+  "head_l": 6,
+  "lamp_block_r": 2,
+  "lamp_block_l": 2,
+  "pillar_a_r": 12,
+  "pillar_a_l": 12,
+  "pillar_b_r": 11,
+  "pillar_b_l": 11,
+  "plate_f": 12,
+  "reverse_r": 2,
+  "reverse_l": 2,
+  "rub_strip_r": 2,
+  "rub_strip_l": 2,
+  "sail_r": 11,
+  "sail_l": 11,
+  "seal_quarter_r": 12,
+  "seal_quarter_l": 12,
+  "seal_windshield": 36,
+  "spoiler": 72,
+  "susp_fr": 20,
+  "susp_fl": 20,
+  "susp_rr": 18,
+  "susp_rl": 18,
+  "tail_r": 2,
+  "tail_l": 2,
+  "turn_fr": 2,
+  "turn_fl": 2,
+  "turn_rr": 2,
+  "turn_rl": 2,
+  "underbody": 50,
+  "wiper_l": 24,
+  "wiper_r": 24,
+  "wheel_fr_mesh": 256,
+  "wheel_fl_mesh": 256,
+  "wheel_rr_mesh": 218,
+  "wheel_rl_mesh": 218
+ },
+ "tris_total": 5348,
+ "tris_body": 4400
+}

@@ -72,7 +72,8 @@ const P1_PILLAR := Vector3(0.16, 0.515, 0.66)
 const MOUNTS := {
 	"p0_beater":    {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
 	"p1_coupe":     {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
-	"p2_hothatch":  {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
+	# its own pillar, (-0.773, 0.875, -0.91) to (-0.512, 1.435, -0.25): 40% up, the coupe's bracket offset, faces to its own eye
+	"p2_hothatch":  {"pos": Vector3(-0.581, 1.107, -0.561), "yaw": 23.3, "pitch": 3.1, "along": Vector3(0.261, 0.560, 0.660)},
 	"p3_tuner":     {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
 	"p4_kei":       {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
 	"p5_muscle":    {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},

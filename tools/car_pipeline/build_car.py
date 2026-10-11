@@ -435,6 +435,7 @@ def build_scene(D, build_name):
                      'not_mirrored': info['asymmetric']},
         'slots': slots, 'exhaust_tips': tips,
         'budget_tris': TRI_BUDGET[2],
+        **({'required_slots': kit['slots']} if kit.get('slots') else {}),
         'budget_target': [TRI_BUDGET[0], TRI_BUDGET[1]],
         'materials': {m: cols.get(m, '#C9CED6') for m in used},
         'emissive': sorted(set(frender.EMISSIVE) | {m for m in used if m.startswith('glow_')}),

@@ -41,17 +41,22 @@ for p in P1['parts']:
 P2['options'] = {
     'front_bumper': {'stock': STOCK, 'lip': M.lip(P2), 'race': M.race_front(P2)},
     'rear_bumper': {'stock': STOCK, 'diffuser': M.diffuser(P2)},
-    'hood': {'stock': STOCK, 'vented': M.vented_hood(P2, 0.40, 1.10)},
-    'skirts': {'stock': STOCK, 'skirts': M.skirts(P2), 'widebody': M.widebody(P2, 0.07)},
+    'hood': {'stock': STOCK, 'vented': M.vented_hood(P2, 0.32, 1.02)},
+    'skirts': {'stock': {'label': 'Riveted box blisters', 'ops': []}, 'skirts': M.skirts(P2), 'widebody': M.widebody(P2, 0.07),
+               # Roy 291: both. The body-shop option blends the arches into the body instead of bolting boxes on.
+               'smooth': {'label': 'Smooth blended arches', 'ops': [
+                   {'op': 'remove', 'tag': 'flares'},
+                   {'op': 'curve', 'curve': 'hw', 'keys': [(0.32, 0.915), (1.16, 0.915), (1.26, 0.85), (2.80, 0.85),
+                                                           (2.90, 0.915), (3.72, 0.915)]}]}},
     'spoiler': {'stock': {'label': 'Roof spoiler', 'ops': []},
                 'big': {'label': 'Big roof wing', 'ops': [
                     {'op': 'remove', 'tag': 'spoiler'},
-                    {'op': 'add', 'part': {'type': 'roof_spoiler', 'tag': 'spoiler', 's0': 3.40, 's1': 3.98, 'y0': 1.35,
+                    {'op': 'add', 'part': {'type': 'roof_spoiler', 'tag': 'spoiler', 's0': 3.34, 's1': 3.92, 'y0': 1.35,
                                            'y1': 1.31, 'span': 1.32, 'thick': 0.055, 'brake_light': True}}]},
                 'none': M.no_spoiler()},
     'wheels': _wheel_set('6-spoke', ('turbofan', M.wheels('turbofan', 'Turbofan', 0.72)), ('mesh', M.wheels('mesh', 'Mesh', 0.74)),
                          ('split', M.wheels('split', 'Split 5-spoke', 0.76, 'rim_dark'))),
-    'exhaust': {'stock': {'label': 'Dual (one side)', 'ops': []}, 'center': M.exhaust(P2, 'center'), 'dual': M.exhaust(P2, 'dual', 0.04)},
+    'exhaust': {'stock': {'label': 'Single', 'ops': []}, 'center': M.exhaust(P2, 'center'), 'dual': M.exhaust(P2, 'dual', 0.04)},
     'stance': _stance(),
 }
 

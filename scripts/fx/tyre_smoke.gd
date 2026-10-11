@@ -219,7 +219,7 @@ func _physics_process(delta: float) -> void:
 		var w: Wheel = _player.wheel_array[i]
 		var lat := 0.0
 		var lon := 0.0
-		if w.is_colliding() and w.surface_type == "Road":
+		if w.is_colliding() and w.surface_type == "Road" and _player.surface_feel.lays_rubber(i):
 			var load := clampf(w.spring_force / static_load, 0.0, 1.0)
 			# GEVP slip ratio is negative when the tyre spins faster than the
 			# road (wheelspin: burnout smoke) and positive when it drags behind

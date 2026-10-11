@@ -115,6 +115,13 @@ const THROB_GAIN := 0.4
 const FLUTTER_GAIN := 0.55
 const ROAD_GAIN := 0.45
 const SURFACE_GAIN := 0.6
+const GRIT_GAIN := 0.5
+const WET_GAIN := 0.42
+const KERB_HIT_GAIN := 0.5
+const GRIT_FULL := 18.0  # m/s: the shoulder's crunch is at full level
+# Water on the road: tyres hiss instead of screaming. How much of each tyre
+# kind is left on a soaked road.
+const WET_KEEPS := {"scrub": 0.7, "squeal": 0.35, "spin": 0.5, "lock": 0.5}
 
 # Cabin: how much of the outside wind gets in with the window up, and how much
 # louder the buffet is with it fully down (the opening is next to your ear).
@@ -133,6 +140,9 @@ var wind_level := 0.0
 var road_level := 0.0
 var squeal_level := 0.0  # all tyre noise together: the loudest kind on either side
 var surface_level := 0.0
+var grit_level := 0.0      # loose grit under the tyres (the shoulder)
+var wet_level := 0.0       # water thrown off the tread
+var kerb_hit_count := 0    # wheels that climbed onto the kerb strip or pavement
 var whistle_level := 0.0
 var throb_level := 0.0
 var buffeting_level := 0.0
@@ -150,7 +160,8 @@ var cabin := 0.0
 var window := 0.0
 
 ## Listen pack and tests: keys here replace what the car reports
-## ("speed", "on_road", "on_rough", and per kind "<kind>_l" / "<kind>_r").
+## ("speed", "on_road", "on_rough", "on_grit", "grit_slip", "wet", and per kind
+## "<kind>_l" / "<kind>_r").
 var forced := {}
 
 static var _streams := {}
@@ -164,6 +175,8 @@ var _chirp_wait := 0.0
 var _spin_prev := 0.0
 var _wheelbase := 2.6
 var _on_cover := {}        # wheel index -> on a manhole last frame
+var _on_kerb := {}         # wheel index -> on the kerb strip or pavement last frame
+var _feel: SurfaceFeel     # the car's per-wheel surface state; null on a car without one
 
 func _ready() -> void:
 	_vehicle = get_parent() as Vehicle
@@ -172,6 +185,7 @@ func _ready() -> void:
 		set_process(false)
 		return
 	_rng.seed = 4242
+	_feel = _vehicle.get(&"surface_feel") as SurfaceFeel
 	for kind in KINDS:
 		tyre[kind] = [0.0, 0.0]
 		_players[kind + "_l"] = _add_player(kind + "_l", &"Tires")
@@ -182,6 +196,8 @@ func _ready() -> void:
 		_players[layer + "_b"] = _add_player(layer + "_b", bus)
 	_players.throb = _add_player("throb", &"World")
 	_players.surface = _add_player("surface", &"Tires")
+	_players.grit = _add_player("grit", &"Tires")
+	_players.wet = _add_player("wet", &"Tires")
 	_players.chirp = _add_player("chirp", &"Tires", false)
 	var chirps: Array[AudioStream] = []
 	for k in CHIRP_VARIANTS:
@@ -214,7 +230,7 @@ func _add_player(layer: String, bus_name: StringName, looping := true) -> AudioS
 ## What the car is doing this frame, as plain numbers (so the listen pack can
 ## set them directly).
 func _read_car() -> Dictionary:
-	var st := {"speed": 0.0, "on_road": 0.0, "on_rough": 0.0, "deck": 0.0, "concrete": 0.0}
+	var st := {"speed": 0.0, "on_road": 0.0, "on_rough": 0.0, "on_grit": 0.0, "grit_slip": 0.0, "wet": 0.0, "deck": 0.0, "concrete": 0.0}
 	for kind in KINDS:
 		st[kind + "_l"] = 0.0
 		st[kind + "_r"] = 0.0
@@ -222,19 +238,44 @@ func _read_car() -> Dictionary:
 		return st
 	st.speed = _vehicle.speed  # GEVP: length of the body's local velocity
 	var grounded := 0
-	var rough := 0
+	var rough := 0   # off the asphalt altogether (the pavement)
+	var kerb := 0    # on the kerb strip: rumbles, and still squeals
+	var grit := 0    # on the shoulder: crunches, never squeals
+	var water := 0.0
+	var feel := _feel if _feel != null and SurfaceFeel.enabled else null
 	var static_load := _vehicle.mass * 9.81 / 4.0
-	for w in _vehicle.wheel_array:
+	for i in _vehicle.wheel_array.size():
+		var w: Wheel = _vehicle.wheel_array[i]
 		if not w.is_colliding():
+			_on_kerb[i] = false
 			continue
 		grounded += 1
+		var band: int = SurfaceMap.Kind.ASPHALT
+		var wetness := 0.0
 		if w.surface_type != "Road":
+			band = SurfaceMap.Kind.PAVEMENT
+		elif feel != null and i < feel.kind.size():
+			band = feel.kind[i]
+			wetness = feel.wet[i]
+		# A wheel climbing onto the kerb strip or the pavement: one thump.
+		var up := band == SurfaceMap.Kind.KERB or band == SurfaceMap.Kind.PAVEMENT
+		if up and not _on_kerb.get(i, true):
+			hit_kerb(st.speed)
+		_on_kerb[i] = up
+		if band == SurfaceMap.Kind.PAVEMENT:
 			rough += 1
 			continue
-		var side := "_l" if _vehicle.to_local(w.global_position).x < 0.0 else "_r"
-		var load := minf(clampf(w.spring_force / static_load, 0.0, 1.5), 1.0)
 		var lat := absf(w.slip_vector.x)
 		var lon := w.slip_vector.y
+		if band == SurfaceMap.Kind.GRIT:
+			grit += 1
+			st.grit_slip = maxf(st.grit_slip, maxf(smoothstep(SCRUB_START, SQUEAL_FULL, lat), smoothstep(SPIN_START, LOCK_FULL, absf(lon))))
+			continue
+		if band == SurfaceMap.Kind.KERB:
+			kerb += 1
+		water += wetness
+		var side := "_l" if _vehicle.to_local(w.global_position).x < 0.0 else "_r"
+		var load := minf(clampf(w.spring_force / static_load, 0.0, 1.5), 1.0)
 		var amounts := {
 			# scrub fades out as the slide grows into a squeal
 			"scrub": smoothstep(SCRUB_START, SCRUB_FULL, lat) * (1.0 - 0.8 * smoothstep(SQUEAL_START, SQUEAL_FULL, lat)),
@@ -243,8 +284,12 @@ func _read_car() -> Dictionary:
 			"lock": smoothstep(LOCK_START, LOCK_FULL, lon),
 		}
 		for kind in KINDS:
-			st[kind + side] = maxf(st[kind + side], amounts[kind] * load)
-	st.on_road = float(grounded - rough) / 4.0
+			st[kind + side] = maxf(st[kind + side], amounts[kind] * load * lerpf(1.0, WET_KEEPS[kind], wetness))
+	# The shoulder is still tarmac under the grit: half the road roar stays.
+	st.on_road = (float(grounded - rough) - 0.5 * float(grit)) / 4.0
+	st.on_grit = float(grit) / 4.0
+	st.wet = water / 4.0
+	rough += kerb
 	var here := _vehicle.global_position
 	st.deck = 1.0 if SoundZone.find(SoundZone.Kind.BRIDGE_DECK, here) != null else 0.0
 	st.concrete = 1.0 if JOINTS_EVERYWHERE or SoundZone.find(SoundZone.Kind.CONCRETE, here) != null else 0.0
@@ -267,6 +312,9 @@ func _process(delta: float) -> void:
 	wind_level = _approach(wind_level, minf(1.0, pow(speed / WIND_FULL, WIND_EXP)), delta)
 	road_level = _approach(road_level, pow(clampf(speed / ROAD_FULL, 0.0, 1.0), 1.2) * st.on_road, delta)
 	surface_level = _approach(surface_level, st.on_rough * clampf(speed / SURFACE_FULL, 0.0, 1.0), delta)
+	# Grit crunches with speed, and under a spinning or sliding tyre even at a crawl.
+	grit_level = _approach(grit_level, st.on_grit * maxf(clampf(speed / GRIT_FULL, 0.0, 1.0) * (0.65 + 0.35 * st.grit_slip), 0.8 * st.grit_slip), delta)
+	wet_level = _approach(wet_level, st.wet * smoothstep(2.0, 32.0, speed), delta)
 
 	# --- tyres. A tyre sliding at walking pace doesn't scream: fade the sliding
 	# kinds in by 3 m/s. Wheelspin needs no gate (a burnout squeals standing still).
@@ -279,7 +327,8 @@ func _process(delta: float) -> void:
 		lv[0] = _approach(lv[0], st[kind + "_l"] * gate, delta)
 		lv[1] = _approach(lv[1], st[kind + "_r"] * gate, delta)
 		squeal_level = maxf(squeal_level, maxf(lv[0], lv[1]))
-		var pitch := _tyre_pitch(kind, maxf(lv[0], lv[1]), speed)
+		# wet rubber sings lower
+		var pitch := _tyre_pitch(kind, maxf(lv[0], lv[1]), speed) * (1.0 - 0.12 * float(st.wet))
 		_drive_layer(_players[kind + "_l"], lv[0] * TYRE_GAIN[kind], pitch)
 		_drive_layer(_players[kind + "_r"], lv[1] * TYRE_GAIN[kind], pitch * 1.01)
 		if kind == "spin":
@@ -299,6 +348,8 @@ func _process(delta: float) -> void:
 	_drive_pair("road_dark", road_level * ROAD_GAIN * (1.0 - 0.55 * bright), 0.92 + 0.1 * clampf(speed / 45.0, 0.0, 1.2))
 	_drive_pair("road_bright", road_level * ROAD_GAIN * bright, 0.94 + 0.1 * clampf(speed / 45.0, 0.0, 1.2))
 	_drive_layer(_players.surface, surface_level * SURFACE_GAIN, 0.5 + clampf(speed / 30.0, 0.0, 1.5))
+	_drive_layer(_players.grit, grit_level * GRIT_GAIN, 0.75 + 0.45 * clampf(speed / 30.0, 0.0, 1.2))
+	_drive_layer(_players.wet, wet_level * WET_GAIN, 0.8 + 0.4 * clampf(speed / 40.0, 0.0, 1.2))
 	_road_features(st, speed, delta)
 
 	# --- wind
@@ -356,6 +407,19 @@ func hit_manhole(speed: float) -> void:
 	p.volume_db = linear_to_db(maxf(MANHOLE_GAIN * (0.4 + 0.6 * strength), 0.001))
 	p.play()
 	road_bump.emit(strength * 0.8)
+
+## One wheel climbing onto the kerb strip or the pavement: a low thump (the
+## joint hit, pitched down) and a kick through the camera.
+func hit_kerb(speed: float) -> void:
+	if speed < 2.0:
+		return
+	kerb_hit_count += 1
+	var strength := smoothstep(2.0, 25.0, speed)
+	var p: AudioStreamPlayer = _players.joint
+	p.volume_db = linear_to_db(maxf(KERB_HIT_GAIN * (0.4 + 0.6 * strength), 0.001))
+	p.pitch_scale = 0.7
+	p.play()
+	road_bump.emit(0.4 + 0.5 * strength)
 
 ## Gusts: a slow random wander of the wind level, quicker and wider at speed.
 func _update_gust(speed: float, delta: float) -> void:
@@ -576,6 +640,29 @@ static func _loop(layer: String, seed: int, secs: float, tune: float) -> PackedF
 				var w := rng.randf_range(-1.0, 1.0)
 				brown = clampf(brown * 0.995 + w * 0.08, -1.0, 1.0)
 				s[i] = 0.6 * f1.step(brown) + 0.08 * f2.step(w)
+		"grit":
+			# loose grit and small stones under the tread: hundreds of tiny
+			# clicks a second over a low crunch
+			var f1 := AudioDsp.bp(r, 2100.0, 1.2)
+			var f2 := AudioDsp.bp(r, 4200.0, 1.5)
+			var body := AudioDsp.lp(r, 260.0)
+			var env := 0.0
+			for i in total:
+				var w := rng.randf_range(-1.0, 1.0)
+				if rng.randf() < 0.012:
+					env = rng.randf_range(0.4, 1.0)
+				env *= 0.992
+				s[i] = (f1.step(w) + 0.6 * f2.step(w)) * env * env + 0.9 * body.step(w)
+		"wet":
+			# water thrown off the tread: a wide hiss with slow swells in it
+			var f1 := AudioDsp.hp(r, 2400.0)
+			var f2 := AudioDsp.bp(r, 1100.0, 0.7)
+			var phases := [rng.randf() * TAU, rng.randf() * TAU]
+			for i in total:
+				var t := float(i) / r
+				var w := rng.randf_range(-1.0, 1.0)
+				var swell := (sin(TAU * 1.5 * t + phases[0]) + 0.6 * sin(TAU * 3.5 * t + phases[1])) / 1.6
+				s[i] = (0.8 * f1.step(w) + 0.5 * f2.step(w)) * (0.75 + 0.25 * swell)
 		"surface":
 			# rumble strip: noise gated in ~32 Hz bursts, plus some grit
 			var lp1 := 0.0

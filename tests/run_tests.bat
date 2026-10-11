@@ -139,6 +139,7 @@ for %%c in (p0_beater p1_coupe p2_hothatch p3_tuner p4_kei p5_muscle p6_crossove
 set "NEON_CAR="
 call :run ui/touch_radio --headless
 call :run car/tyres "--headless --fixed-fps 60"
+call :run car/surface_feel "--headless --fixed-fps 60"
 call :run car/clutch_model --headless
 call :run audio/driveline_audio --headless
 call :run audio/sound_fixes --headless

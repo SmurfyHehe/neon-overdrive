@@ -474,6 +474,10 @@ func _setup_ground_collision() -> void:
 	# slightly higher and is tagged "Dirt", so a wheel over the sidewalk hits
 	# that closer box first regardless of this plane extending underneath it.
 	body.add_to_group("Road")
+	# The shoulder, kerb strip and paint are bands of this one plane: SurfaceMap
+	# tells them apart by position (tyre and surface feel, 2026-10-11).
+	body.set_meta(SurfaceMap.BANDS_META, true)
+	SurfaceMap.read_env()
 	add_child(body)
 
 # ---------- road shape (#37 curves) ----------

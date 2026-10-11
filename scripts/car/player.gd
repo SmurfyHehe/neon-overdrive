@@ -102,6 +102,8 @@ var beams := HeadlightBeams.new()
 var _steer_smooth := 0.0
 ## Heat and wear (Phase B). Off for sim_only cars so TuneTrack stays clean.
 var health := PowertrainHealth.new()
+## Grip, slide and roughness per surface under each wheel (surface_feel.gd).
+var surface_feel := SurfaceFeel.new()
 ## Fuel and limp mode (Stage C). Off for sim_only cars, like health.
 var fuel := FuelTank.new()
 var limp := LimpMode.new()
@@ -411,6 +413,7 @@ func _physics_process(delta: float) -> void:
 	if wet.step(self, delta):
 		wet.write_over(self)
 		wet.apply_drag(self)
+	surface_feel.step(self, delta)
 	fuel.step_values(delta, health.engine_load if health.enabled else throttle_amount, engine_running)
 	if limp.is_limping():
 		torque_mult = limp.torque_mult(health.torque_mult)

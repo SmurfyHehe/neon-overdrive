@@ -580,16 +580,18 @@ func _update_feel(delta: float) -> void:
 	dist_now = base_dist * (DOLLY * widen + (1.0 - DOLLY))
 	height_now = base_height - SQUAT * speed_t
 	trauma = maxf(0.0, trauma - TRAUMA_DECAY * delta)
-	var rough := 0
-	var grounded := 0
-	for w in target.wheel_array:
-		if w.is_colliding():
-			grounded += 1
-			if w.surface_type != "Road":
-				rough += 1
-	var want_s := 0.0
-	if grounded > 0:
-		want_s = float(rough) / float(grounded) * clampf(speed / 15.0, 0.0, 1.0)
+	# How rough the ground under the wheels is (SurfaceFeel): the pavement and
+	# the kerb strip shake fully, the gritty shoulder about a third as much.
+	var want_s := target.surface_feel.rough_share() * clampf(speed / 15.0, 0.0, 1.0)
+	if not SurfaceFeel.enabled:
+		var rough := 0
+		var grounded := 0
+		for w in target.wheel_array:
+			if w.is_colliding():
+				grounded += 1
+				if w.surface_type != "Road":
+					rough += 1
+		want_s = float(rough) / float(grounded) * clampf(speed / 15.0, 0.0, 1.0) if grounded > 0 else 0.0
 	surface_t = lerpf(surface_t, want_s, 1.0 - exp(-12.0 * delta))
 
 ## Eases orbit_yaw / orbit_lift toward the arrow keys (chase view only).

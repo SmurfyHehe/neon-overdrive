@@ -191,7 +191,7 @@ tail pipe.
 **P7, the shop wagon** (`p7_wagon`): 4,298 body triangles in 82 parts, 776
 more in the wheels; 0.000 mm over 44 mirrored parts and pairs. No deck lid
 (`no_trunk`): the tail is two barn doors cut out of the tail face (`cuts`),
-each on its own hinge with its half of the rear glass (`split_backlight`), a
+each on its own hinge, 5 mm apart (Roy), with its half of the rear glass (`split_backlight`), a
 handle, and on the right one the rear wiper. Tall lamp columns at the rear
 corners (blinker, running lamp, brake lamp, three parts a side), a brake lamp
 on the roof edge, reversing lamps in the bumper. Roof rails (the drip-rail

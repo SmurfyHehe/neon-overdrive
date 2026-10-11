@@ -371,13 +371,15 @@ WAGON_NO_CAP = 'rl'    # the sheet: one hubcap missing, left rear, bare black st
 BARN_HW = 0.60         # each barn door reaches this far from the centre line
 BARN_Y0 = 0.56         # and down to the top of the bumper
 LAMP_X = (0.62, 0.73)  # the tall lamp columns outboard of the doors (rear view)
+BARN_GAP = 0.005       # between the two doors (Roy, 2026-10-11: 5 mm; the sheet's 6 is over the parts rule's 5)
 
 
 def _wagon_cuts(D, R, z, cut):
     """The two barn doors: the tail below the glass, split on the centre line."""
     tail = lambda ps: ps.col(0) == -2
     for sx, nm in ((1, 'r'), (-1, 'l')):
-        cut('barn_' + nm, [((sx, 0, 0), 0.0), ((-sx, 0, 0), -BARN_HW), ((0, 1, 0), BARN_Y0)], tail, True)
+        # every cut trims GAP / 2 a side; the centre line gets the rest of BARN_GAP
+        cut('barn_' + nm, [((sx, 0, 0), (BARN_GAP - P.GAP) / 2), ((-sx, 0, 0), -BARN_HW), ((0, 1, 0), BARN_Y0)], tail, True)
     return ['barn_r', 'barn_l']
 
 

@@ -13,7 +13,8 @@ extends SceneTree
 #             on the wheels the car should have them on, wheel nuts on the rest
 #   plates    520 x 110 mm, in a dark recess
 #   flap      the fuel flap swings outward on its hinge
-#   gaps      the shut gap between panels is 3.5 to 4.5 mm
+#   gaps      the shut gap between panels is 3.5 to 4.5 mm (5 mm between the
+#             wagon's barn doors, never more)
 #   symmetry  every part that is not listed as one-sided in body.json is the
 #             mirror image of its twin (or of itself) within 0.05 mm; at most
 #             12 vertices a car may differ in normal or ao after the import
@@ -80,7 +81,8 @@ const CARS := {
 			["hood", "fender_fr", Vector3.RIGHT, Vector3.UP, 2, -1.42],
 			["fender_fr", "door_r", Vector3.BACK, Vector3.RIGHT, 1, 0.60],
 			["door_r", "body", Vector3.BACK, Vector3.RIGHT, 1, 0.60],
-			["barn_l", "barn_r", Vector3.RIGHT, Vector3.BACK, 1, 0.57],
+			# between the two barn doors: 5 mm (Roy, 2026-10-11), the most the parts rule allows
+			["barn_l", "barn_r", Vector3.RIGHT, Vector3.BACK, 1, 0.57, 0.0049, 0.0050],
 		],
 	},
 }
@@ -186,7 +188,9 @@ func _car(id: String, want: Dictionary) -> void:
 	for g in want.gaps:
 		var gap := _gap(id, g[0], g[1], g[2], g[3], g[4], g[5])
 		gap_txt.append("%s/%s %.2f" % [g[0], g[1], gap * 1000.0])
-		_check(gap >= GAP_MIN and gap <= GAP_MAX, "%s: gap %s to %s is %.2f mm, want 3.5-4.5" % [id, g[0], g[1], gap * 1000.0])
+		var lo: float = g[6] if g.size() > 6 else GAP_MIN
+		var hi: float = g[7] if g.size() > 7 else GAP_MAX
+		_check(gap >= lo - 1e-5 and gap <= hi + 1e-5, "%s: gap %s to %s is %.2f mm, want %.1f-%.1f" % [id, g[0], g[1], gap * 1000.0, lo * 1000.0, hi * 1000.0])
 	if not meta.is_empty():
 		_check(float(meta.shut.gap) >= GAP_MIN and float(meta.shut.gap) <= GAP_MAX, "%s: body.json gap %.4f" % [id, float(meta.shut.gap)])
 

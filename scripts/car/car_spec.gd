@@ -512,8 +512,8 @@ static func player_spec(kind: String) -> Dictionary:
 			s["coefficient_of_friction"] = {"Road": 1.2, "Dirt": 1.05}
 			s["center_of_gravity_height_offset"] = 0.05
 		"p7_wagon":
-			# Bramley 240 Estate (placeholder name), T1, free. STAND-IN NUMBERS
-			# (2026-10-11): the sheet gives the layout and the feel, no torque,
+			# Bramley 240 Estate (placeholder name), T1, free. PROVISIONAL STAND-IN
+			# NUMBERS, kept for the playtest (2026-10-11), Roy has not set them: the sheet gives the layout and the feel, no torque,
 			# mass, ratios or times. Known and used: small inline four, no turbo,
 			# front drive, 63% of the weight on the front, 4-speed (the sheet's
 			# automatic is the player's transmission mode), redline 5500 and

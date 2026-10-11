@@ -366,7 +366,7 @@ func _build_ui() -> void:
 
 func _label(size: int, colour: Color) -> Label:
 	var l := Label.new()
-	l.add_theme_font_size_override("font_size", size)
+	UiTheme.apply(l, "menu", size)
 	l.add_theme_color_override("font_color", colour)
 	l.add_theme_color_override("font_outline_color", NAVY)
 	l.add_theme_constant_override("outline_size", 6)

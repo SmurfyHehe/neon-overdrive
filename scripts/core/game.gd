@@ -331,6 +331,7 @@ func _start_bot(bot_mode: String) -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	var lbl := Label.new()
+	UiTheme.apply(lbl, "menu")
 	lbl.position = Vector2(16, 56)
 	lbl.add_theme_color_override("font_color", Color(1.0, 0.54, 0.12))  # sodium #FF8A1F
 	lbl.text = "BOT: %s" % bot_mode + ("" if bot_mode in ["replay", "fuzz", "hold"] else " at %d km/h" % roundi(bot.target_speed / TestDriver.KMH))

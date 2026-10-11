@@ -517,6 +517,41 @@ func release_rival(car: TrafficCar) -> void:
 		car.race_pinned = false
 		car.race_released = true
 
+## Takes a car made elsewhere (a police car: police_patrol.gd) into the index,
+## pinned like a rival: traffic sees it and it sees traffic, it is shown,
+## hidden and put on the rails by distance like the rest (full sim out to
+## pinned_distance), and never recycled. The car stays its owner's child.
+func adopt(car: TrafficCar) -> void:
+	if car == null or cars.has(car):
+		return
+	car.traffic = self
+	car.race_pinned = true
+	cars.append(car)
+	_build_index()
+
+## Hands an adopted car back to its owner (who frees it).
+func disown(car: TrafficCar) -> void:
+	if car == null or not cars.has(car):
+		return
+	cars.erase(car)
+	car.race_pinned = false
+	car._idx = -1
+	_build_index()
+
+## Traffic cars up to `reach` m ahead of road z along `dir`, on the -x
+## carriageway (`far`) or the +x one, not counting `skip`. For the police
+## danger number, at 10 Hz.
+func count_ahead(z: float, dir: float, reach: float, far: bool, skip: TrafficCar = null) -> int:
+	var n := 0
+	for car in cars:
+		var k := car._idx
+		if car == skip or car.benched or car.race_pinned or k < 0 or k >= _z.size():
+			continue
+		var d: float = (_z[k] - z) * dir
+		if d >= 0.0 and d <= reach and ((_lo[k] + _hi[k]) < 0.0) == far:
+			n += 1
+	return n
+
 ## How a rail car this far from the player is moved between thinks. Only plain
 ## traffic leaves the every-tick tier: never a rival (live or released), a cop,
 ## or an ally or crew car.

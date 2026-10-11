@@ -62,8 +62,8 @@ const SMALL_LINE_H := 0.62     # "ENTERING" / "400 m"
 const MARGIN := 0.35           # panel margin around the lettering, m
 const MAX_PANEL_LEN := 11.0
 const LIMIT_GAP := 0.3         # between the gantry's limit plate and its lettering, m
-const REPEATER_D := 0.95       # repeater plate diameter, m
-const REPEATER_Y := 3.0        # its centre above the road
+const REPEATER_D := 1.2        # repeater plate diameter, m
+const REPEATER_Y := 3.1        # its centre above the road
 
 const SHADER := """
 shader_type spatial;

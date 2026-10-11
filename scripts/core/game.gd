@@ -180,7 +180,7 @@ func _ready() -> void:
 			GraphicsSettings.set_preset(Benchmark.opt("gfx"))
 		TrafficSettings.set_detail_distance(Benchmark.opt_float("detail", tier.detail))
 		TrafficSettings.set_car_count(int(Benchmark.opt_float("traffic", tier.traffic)))
-	PlayerCars.load_settings()   # which car the player spawns in ([player] in settings.cfg)
+	PlayerCars.load_settings()   # which car the player spawns in (the slot's current_car)
 	# NEON_TRAFFIC=<n> overrides the saved car count, like NEON_TICKS/NEON_MUTE:
 	# tests/run_tests.bat sets 0 so the older drive-bot tests, which steer
 	# across lanes blind, do not hit traffic (tests/traffic_*.gd clear it).
@@ -1002,9 +1002,9 @@ func _setup_game_state() -> void:
 		game_state.enter_garage_boot()   # no title: the dawn card and garage first
 	game_state.state_changed.connect(saver.on_state_changed)
 	game_state.restarting.connect(saver.on_restart)
-	game_state.quitting.connect(saver.save_now)
+	game_state.quitting.connect(saver.on_quit)
 	# 6 a.m.: tonight's cash goes into the bank (F0).
-	night_clock.night_ended.connect(func(_n: int) -> void: wallet.bank_night())
+	night_clock.night_ended.connect(func(n: int) -> void: wallet.bank_night(n))
 	night_clock.night_ended.connect(func(_n: int) -> void: saver.save_now.call_deferred())
 	night_clock.night_ended.connect(game_state.request_dawn)   # after the bank, so the card shows it
 	run_end = RunEnd.new()

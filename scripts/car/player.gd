@@ -131,6 +131,7 @@ var sim_only := false
 ## The tune kept between runs (PlayerTune): only the game's own car, the one
 ## built from the default spec, loads and saves it.
 const PlayerTune := preload("res://scripts/car/player_tune.gd")
+const SaveCore := preload("res://scripts/save/save_core.gd")
 const WetReflections := preload("res://scripts/world/wet_reflections.gd")
 const TUNE_CHECK_SECS := 1.0
 var _smear_brake_on := false  # last brake state sent to the tail smears
@@ -296,6 +297,16 @@ func _ready() -> void:
 	health.enabled = not sim_only
 	fuel.enabled = not sim_only
 	damage.enabled = not sim_only
+	# The game's own car comes back as it was left: wear, broken parts and fuel
+	# are saved with the slot (save core S1), so a quit is not a free repair.
+	if _keeps_tune and not sim_only and SaveCore.persist:
+		var state := SaveCore.car_state(kind)
+		if state.get("wear") is Dictionary and not state.wear.is_empty():
+			health.from_dict(state.wear)
+		if state.get("damage") is Dictionary and not state.damage.is_empty():
+			damage.from_dict(state.damage)
+		if state.get("fuel") is Dictionary and not state.fuel.is_empty():
+			fuel.from_dict(state.fuel)
 
 	# Engine sound (2026-09-29, prototype of docs/research/PROPOSAL-audio.md option C): a
 	# synthesised engine driven by this car's motor_rpm/throttle. Added after

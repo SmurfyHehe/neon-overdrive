@@ -15,6 +15,13 @@ extends RefCounted
 #   slots.save("Street", player.spec)
 #   slots.apply("Street", player)      # through CarSpec.set_param()
 #
+# Where (save core S1, 2026-10-11): in the game the named tunes live in the
+# save slot, per car (career block tunes[car id].slots, SaveCore.tune /
+# set_tune), so each save has its own and a new game starts with none. The old
+# shared user://tune_slots.json is upgraded into the slot that was being
+# played, under the car that was being driven, and not read again. A test that
+# passes its own path, and test mode, still use one plain JSON file.
+#
 # Deleting a slot only removes its entry; the file is never deleted. A file that
 # will not parse is treated as empty and left untouched; the next save copies it
 # to tune_slots.bad.json first, so a hand-edit typo never wipes every slot.
@@ -24,6 +31,7 @@ extends RefCounted
 
 const DEFAULT_PATH := "user://tune_slots.json"
 const TestMode := preload("res://scripts/core/test_mode.gd")
+const SaveCore := preload("res://scripts/save/save_core.gd")
 const MAX_NAME_LENGTH := 24
 
 var path: String
@@ -109,24 +117,35 @@ static func engine_paths() -> Array[String]:
 static func _is_number(x: Variant) -> bool:
 	return (x is float or x is int) and is_finite(float(x))
 
+## True when the named tunes live in the save slot (the game), not a file.
+func in_slot() -> bool:
+	return path == DEFAULT_PATH
+
 func _load_file() -> void:
 	_slots = {}
 	_unreadable = false
-	if not FileAccess.file_exists(path):
-		return
-	var text := FileAccess.get_file_as_string(path)
-	if text.strip_edges() == "":
-		return  # nothing in it to lose
-	_unreadable = true
-	var json := JSON.new()  # parse() reports an error code; parse_string() prints an engine error
-	if json.parse(text) != OK:
-		return
-	var parsed: Variant = json.data
-	if not parsed is Dictionary or not parsed.get("slots") is Dictionary:
-		return
-	_unreadable = false
-	for n in parsed.slots:
-		var slot: Variant = parsed.slots[n]
+	var slots: Variant
+	if in_slot():
+		slots = SaveCore.tune(PlayerCar.chassis_kind()).get("slots") if SaveCore.persist else null
+		if not slots is Dictionary:
+			return
+	else:
+		if not FileAccess.file_exists(path):
+			return
+		var text := FileAccess.get_file_as_string(path)
+		if text.strip_edges() == "":
+			return  # nothing in it to lose
+		_unreadable = true
+		var json := JSON.new()  # parse() reports an error code; parse_string() prints an engine error
+		if json.parse(text) != OK:
+			return
+		var parsed: Variant = json.data
+		if not parsed is Dictionary or not parsed.get("slots") is Dictionary:
+			return
+		_unreadable = false
+		slots = parsed.slots
+	for n in slots:
+		var slot: Variant = slots[n]
 		if not slot is Dictionary:
 			continue
 		var clean := {}
@@ -136,6 +155,8 @@ func _load_file() -> void:
 		_slots[str(n)] = clean
 
 func _write_file() -> bool:
+	if in_slot():
+		return SaveCore.persist and SaveCore.set_tune(PlayerCar.chassis_kind(), "slots", _slots)
 	if _unreadable:
 		var err := DirAccess.copy_absolute(ProjectSettings.globalize_path(path), ProjectSettings.globalize_path(bad_path()))
 		if err != OK:

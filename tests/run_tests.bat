@@ -187,6 +187,10 @@ call :run core/save_system --headless
 rem ~15 s: a saved run brings back the gearbox mode, the gear, and the automatic as it was.
 call :run core/save_gearbox "--headless --fixed-fps 120"
 call :run core/garage_g0 --headless
+rem Save core S1: one save per slot (career + night + meta), the commit order, a kill at every step, tunes per slot, wear and damage kept.
+call :run save/save_core --headless
+rem Save core S2: old saves upgrade (frozen fixtures in tests/save/fixtures); fails when the save version is bumped without an upgrade step.
+call :run save/save_upgrade --headless
 rem F0: cash and bank through reloads, chases and 6 a.m. (and the HUD and pause screen).
 call :run core/wallet --headless
 rem Work board W0: pay rules, the daily draw, shop pay into the bank once.

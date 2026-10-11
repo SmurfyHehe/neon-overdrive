@@ -681,14 +681,46 @@ const CRANK_RPM := 230.0
 ## switched off that let it go cold again.
 const WARM_UP_S := 25.0
 const COOL_DOWN_S := 120.0
-## The revs the engine flares to as it catches, over idle.
-const START_FLARE := 1.45
+## The catch (2026-10-11, Roy: "sounds weak"): a real blip. The revs climb to
+## START_FLARE x the idle of the moment over FLARE_RISE_S and fall back on the
+## engine's own drag; the engine voice hears part throttle (start_throttle)
+## until FLARE_THROTTLE_S.
+const START_FLARE := 1.3
+const FLARE_RISE_S := 0.22
+const FLARE_THROTTLE_S := 0.45
+## Fast idle after a key start (Roy 2026-10-10: yes to about 20 s): the idle
+## sits at FAST_IDLE_RATIO x the car's own, kept inside FAST_IDLE_MIN..MAX rpm,
+## and settles to normal over FAST_IDLE_COLD_S on a cold engine. A warm one
+## gets FAST_IDLE_WARM of that rise for FAST_IDLE_WARM_S.
+const FAST_IDLE_COLD_S := 20.0
+const FAST_IDLE_WARM_S := 3.0
+const FAST_IDLE_RATIO := 1.75
+const FAST_IDLE_MIN_RPM := 1500.0
+const FAST_IDLE_MAX_RPM := 1800.0
+const FAST_IDLE_WARM := 0.4
+## Cabin shake (ChaseCamera reads start_shake, 0..1): this much while the
+## starter turns, pulsing with the compression strokes, and a full bump at the
+## catch that dies away at SHAKE_DECAY a second.
+const CRANK_SHAKE := 0.3
+const CRANK_SHAKE_PULSE := 0.25
+const SHAKE_DECAY := 5.0
 ## How many times the key has switched the engine off, and how long the last
 ## key start cranked for (StarterAudio, tests).
 var key_offs := 0
 var crank_hold := 0.0
 var _crank_hold_left := 0.0
 var _warmth := 0.0
+## 0..1: the engine rocking the car on its mounts as it cranks and catches.
+var start_shake := 0.0
+## 0..1: throttle the engine voice hears on the blip at the catch (sound only).
+var start_throttle := 0.0
+## The car's own idle while the fast idle holds idle_rpm above it, else 0.
+var base_idle_rpm := 0.0
+## How cold the engine was when the last key start began (StarterAudio).
+var crank_cold := 0.0
+var _fast_idle_t := 0.0
+var _fast_idle_cold := 0.0
+var _flare_t := -1.0
 var _x_held := false
 var _x_spent := false
 ## Test build: what ModTree.build fitted to this car ({} when nothing was).
@@ -715,6 +747,9 @@ func ignition_off() -> void:
 	clutch_pedal = 0.0
 	_crank_left = 0.0
 	_crank_hold_left = 0.0
+	_end_fast_idle()
+	_flare_t = -1.0
+	start_throttle = 0.0
 	if auto_box != null:
 		auto_box.reset()
 
@@ -740,8 +775,29 @@ func coldness() -> float:
 func crank_pace() -> float:
 	return StarterAudio.pace(int((spec.get("engine_voice", {}) as Dictionary).get("cylinders", 4)))
 
+## Rpm the fast idle adds to an idle of `base`, `t` seconds after the catch of
+## an engine that was `cold` (0 warm .. 1 cold): held for the first part, then
+## easing down to nothing by fast_idle_span(cold).
+static func fast_idle_add(base: float, cold: float, t: float) -> float:
+	var top := maxf(clampf(base * FAST_IDLE_RATIO, FAST_IDLE_MIN_RPM, FAST_IDLE_MAX_RPM) - base, 0.0)
+	var x := clampf(t / fast_idle_span(cold), 0.0, 1.0)
+	return top * lerpf(FAST_IDLE_WARM, 1.0, cold) * (1.0 - smoothstep(0.15, 1.0, x))
+
+static func fast_idle_span(cold: float) -> float:
+	return lerpf(FAST_IDLE_WARM_S, FAST_IDLE_COLD_S, clampf(cold, 0.0, 1.0))
+
+func _end_fast_idle() -> void:
+	if base_idle_rpm > 0.0:
+		idle_rpm = base_idle_rpm
+		base_idle_rpm = 0.0
+
+## Compression strokes a second while the starter turns this engine.
+func crank_chugs() -> float:
+	return StarterAudio.chug_rate(int((spec.get("engine_voice", {}) as Dictionary).get("cylinders", 4)))
+
 ## A key start begins: picks how long it turns over before it fires.
 func _begin_crank() -> void:
+	crank_cold = coldness()
 	crank_hold = lerpf(CRANK_WARM_S, CRANK_COLD_S, coldness()) / crank_pace() * randf_range(1.0 - CRANK_SPREAD, 1.0 + CRANK_SPREAD)
 	_crank_hold_left = crank_hold
 
@@ -757,6 +813,7 @@ func ignition_on() -> void:
 ## car back to its own box once the engine has caught.
 func _step_ignition(delta: float) -> void:
 	_warmth = clampf(_warmth + (delta / WARM_UP_S if engine_running else -delta / COOL_DOWN_S), 0.0, 1.0)
+	start_shake *= exp(-SHAKE_DECAY * delta)
 	if engine_running:
 		_crank_left = 0.0
 		_crank_hold_left = 0.0
@@ -766,8 +823,31 @@ func _step_ignition(delta: float) -> void:
 			set_transmission_mode(mode)
 			if mode == Transmission.MANUAL:
 				current_gear = 0  # in gear with the pedal up it would stall at once
-			motor_rpm = maxf(motor_rpm, idle_rpm * START_FLARE)
+			# It has caught: the bump, the blip and the fast idle begin.
+			start_shake = 1.0
+			_flare_t = 0.0
+			_end_fast_idle()
+			base_idle_rpm = idle_rpm
+			_fast_idle_t = 0.0
+			_fast_idle_cold = crank_cold
+		if base_idle_rpm > 0.0:
+			_fast_idle_t += delta
+			if _fast_idle_t >= fast_idle_span(_fast_idle_cold):
+				_end_fast_idle()
+			else:
+				idle_rpm = base_idle_rpm + fast_idle_add(base_idle_rpm, _fast_idle_cold, _fast_idle_t)
+		if _flare_t >= 0.0:
+			_flare_t += delta
+			if _flare_t < FLARE_RISE_S:
+				var k := 1.0 - pow(1.0 - _flare_t / FLARE_RISE_S, 2.0)
+				motor_rpm = maxf(motor_rpm, lerpf(STARTER_RPM, idle_rpm * START_FLARE, k))
+			start_throttle = 0.8 * clampf((FLARE_THROTTLE_S - _flare_t) / (FLARE_THROTTLE_S - FLARE_RISE_S), 0.0, 1.0)
+			if _flare_t >= FLARE_THROTTLE_S:
+				_flare_t = -1.0
+				start_throttle = 0.0
 		return
+	_flare_t = -1.0
+	start_throttle = 0.0
 	if _crank_left > 0.0:
 		_crank_left -= delta
 		starter_input = true
@@ -780,6 +860,8 @@ func _step_ignition(delta: float) -> void:
 			_crank_hold_left -= delta
 			if _crank_hold_left > 0.0:
 				motor_rpm = minf(motor_rpm, CRANK_RPM * crank_pace())
+				var stroke := sin((crank_hold - _crank_hold_left) * crank_chugs() * PI)
+				start_shake = maxf(start_shake, CRANK_SHAKE + CRANK_SHAKE_PULSE * stroke * stroke)
 			else:
 				motor_rpm = maxf(motor_rpm, STARTER_RPM + 30.0)
 	if _ignition_mode >= 0:

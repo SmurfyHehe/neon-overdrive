@@ -167,8 +167,14 @@ func _process(delta: float) -> void:
 			blocks_full += 1
 		_task_start_usec = Time.get_ticks_usec()
 		_task = WorkerThreadPool.add_task(_render.bind(n, _vehicle.motor_rpm,
-				_vehicle.throttle_amount, _vehicle.motor_is_redline, tn,
+				_throttle(), _vehicle.motor_is_redline, tn,
 				loop_mode == LoopMode.LOOPS, f0, f1), false, "engine audio")
+
+## The throttle the voice hears: the pedal, or the blip as a key start catches
+## (PlayerCar.start_throttle), whichever is more.
+func _throttle() -> float:
+	var p := _vehicle as PlayerCar
+	return maxf(_vehicle.throttle_amount, p.start_throttle) if p != null else _vehicle.throttle_amount
 
 ## Worker thread: one block of each, straight into the streams.
 func _render(n: int, rpm: float, throttle: float, redline: bool, tn: int,
@@ -304,7 +310,7 @@ func _update_loops(delta: float) -> void:
 			loop_mode = LoopMode.LOOPS
 			bank.gain = 1.0
 	if loop_mode != LoopMode.LIVE:
-		bank.update(delta, _vehicle.motor_rpm, _vehicle.throttle_amount, _vehicle.motor_is_redline,
+		bank.update(delta, _vehicle.motor_rpm, _throttle(), _vehicle.motor_is_redline,
 				_vehicle.engine_running)
 
 ## Worker thread: the bank for one voice, from the cache when it was baked before.

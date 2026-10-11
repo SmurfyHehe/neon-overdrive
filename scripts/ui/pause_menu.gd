@@ -8,6 +8,9 @@ extends CanvasLayer
 #
 #   Resume, Restart night (Quit race in a race), Settings, Photo mode, Quit to title
 #
+# plus a Map row under Resume while the run is on a loop. The Map page (M opens
+# the pause straight onto it) is built when it opens and freed when it closes.
+#
 # Sliders, keys and the garage stand-ins live on the Settings screen
 # (settings_screen.gd). Top-right, on a plate: the night, the clock, the cash.
 #
@@ -17,6 +20,8 @@ extends CanvasLayer
 #     player (the pause is refused, the menu never opens).
 
 const GameInfo := preload("res://scripts/core/game_info.gd")
+const RoadMap := preload("res://scripts/world/road_map.gd")
+const MapView := preload("res://scripts/ui/map_view.gd")
 
 const SILVER := Color("#C9CED6")
 const AMBER := Color("#FFC066")
@@ -24,6 +29,10 @@ const TOAST_SECS := 1.0
 
 var game_state: GameState
 var resume_button: Button
+var map_button: Button
+## The Map page: null unless it is up.
+var map_view: Control
+var _map_modal := false
 var lower_look_button: Button
 var restart_button: Button
 var settings_button: Button
@@ -92,6 +101,8 @@ func _ready() -> void:
 	lower_look_button = _add_button(box, "Lower the look", _lower_look)
 	lower_look_button.visible = false
 	resume_button = _add_button(box, "Resume", game_state.resume)
+	map_button = _add_button(box, "Map", show_map)
+	map_button.visible = RoadMap.is_loop()
 	restart_button = _add_button(box, "Restart night", _ask_restart)
 	settings_button = _add_button(box, "Settings", show_settings)
 	# TEST BUILD: "Race a test rival" and "Wash car" are on Settings > Game (stand-ins),
@@ -122,6 +133,7 @@ func _ready() -> void:
 	settings.closed.connect(_on_settings_closed)
 	game_state.state_changed.connect(_on_state_changed)
 	game_state.pause_refused.connect(_show_refusal)
+	game_state.map_requested.connect(show_map)
 	_build_toast.call_deferred()
 
 ## The plate in the top-right corner: night, clock, cash.
@@ -259,9 +271,14 @@ func _call_tow() -> void:
 func _on_state_changed(new_state: GameState.State, old_state: GameState.State) -> void:
 	var was_visible := visible
 	visible = new_state == GameState.State.PAUSED
+	if not visible and map_view != null:
+		hide_map()
 	if visible:
 		_refresh_race_button()
 		show_main()  # always reopen on the main page
+		map_button.visible = RoadMap.is_loop()
+		if game_state.open_on_map and map_button.visible:
+			show_map()
 		_refresh_plate()
 		_refresh_notice()
 		restart_button.text = "Quit race" if game_state.in_race else "Restart night"
@@ -326,6 +343,45 @@ func show_settings(page: Variant = 0) -> void:
 func _on_settings_closed() -> void:
 	if visible:
 		settings_button.grab_focus()
+
+## The Map page: the loop with the car on it. Built here, freed in hide_map.
+func show_map() -> void:
+	if map_view != null or not RoadMap.is_loop() or not visible:
+		return
+	map_view = MapView.new()
+	add_child(map_view)
+	map_view.show_place(_player_place())
+	map_view.back_requested.connect(hide_map)
+	map_view.close_requested.connect(_close_map_and_resume)
+	main_page.visible = false
+	game_state.map_open = true
+	if not game_state.modal_open:   # Esc and M belong to the page while it is up
+		game_state.set_modal(true)
+		_map_modal = true
+
+func hide_map() -> void:
+	if map_view == null:
+		return
+	map_view.queue_free()
+	map_view = null
+	game_state.map_open = false
+	if _map_modal:
+		game_state.set_modal(false)
+		_map_modal = false
+	if visible:
+		show_main()
+
+func _close_map_and_resume() -> void:
+	hide_map()
+	game_state.resume()
+
+## {road, s, dir} where the car is; the start of the road when there is no car.
+func _player_place() -> Dictionary:
+	var p: Variant = get_parent().get("player") if get_parent() != null else null
+	if p is Node3D:
+		return RoadMap.where(RoadFrame.unroll(p.global_position).z, -p.global_transform.basis.z)
+	var at := RoadMap.start_of(RoadMap.road_id)
+	return {"road": RoadMap.road_id, "s": float(at.s), "dir": int(at.dir)}
 
 func show_main() -> void:
 	main_page.visible = true

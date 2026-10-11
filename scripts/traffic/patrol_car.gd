@@ -9,6 +9,22 @@ extends TrafficCar
 
 const KIND := "c1_patrol"
 
+## Emergency lights (and siren) on. Nothing turns them on yet (pursuit is a
+## later stage); this is the hook traffic already answers: with them on, cars
+## ahead pull over to the right and slow (TrafficManager.add_siren).
+var lights_on := false:
+	set(on):
+		lights_on = on
+		if traffic != null:
+			if on:
+				traffic.add_siren(self)
+			else:
+				traffic.remove_siren(self)
+
+func _exit_tree() -> void:
+	if traffic != null:
+		traffic.remove_siren(self)
+
 ## A patrol car ready to add to the tree (TrafficCar's setup runs in _ready).
 static func make() -> PatrolCar:
 	var c := PatrolCar.new()
@@ -18,10 +34,8 @@ static func make() -> PatrolCar:
 	c.spec = CarSpec.clone_spec(CarSpec.npc_spec(KIND))
 	c.spec["parts"] = "full"   # real wheels and brakes, like the fleet's cops
 	c.color = NpcCarBuilder.sheet_paint(KIND)
+	c.add_to_group("patrol_cars")   # the near-miss log looks at it (near_miss_log.gd)
 	return c
 
 func _consider_lane_change(_v: float) -> void:
-	pass
-
-func _hidden_yield() -> void:
 	pass

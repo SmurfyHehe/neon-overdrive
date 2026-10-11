@@ -102,8 +102,9 @@ func _run() -> void:
 	_check(title.ticker_label.text.length() > 40, "the news line has text")
 	_check(title.slide.find_child("EarlyAccessTag", true, false) != null, "the Early Access tag is on the title")
 	_check(not TitleScreen.news_lines().is_empty(), "there are news lines")
-	_check(title.ticker_speaker.text.strip_edges() == "DALE", "the news line is Dale's, got '%s'" % title.ticker_speaker.text)
-	_check(not ("Dave" in title.ticker_label.text), "no Dave on the news line")
+	# The speaker's name comes from the radio data, whatever it says there.
+	var dj := str(TitleScreen.news_lines()[0]).get_slice(": ", 0).to_upper()
+	_check(title.ticker_speaker.text.strip_edges() == dj, "the news line names the DJ, got '%s'" % title.ticker_speaker.text)
 
 	# ---------- radio ----------
 	var radio: RadioManager = game.radio

@@ -132,8 +132,8 @@ func _check_chunk(chunk: Node3D, c: int, label: String, headless: bool) -> int:
 	return 1 if n > 0 else 0
 
 func _check_wetness() -> void:
-	if absf(RW.PUDDLE_FULL_AT - Weather.LEVEL_WETNESS[Weather.Level.RAIN]) > EPS:
-		_fail("PUDDLE_FULL_AT %.2f != Weather's steady-rain wetness %.2f" % [RW.PUDDLE_FULL_AT, Weather.LEVEL_WETNESS[Weather.Level.RAIN]])
+	if absf(RW.PUDDLE_FULL_AT - Weather.STAGE[Weather.Level.RAIN].wet) > EPS:
+		_fail("PUDDLE_FULL_AT %.2f != Weather's steady-rain wetness %.2f" % [RW.PUDDLE_FULL_AT, Weather.STAGE[Weather.Level.RAIN].wet])
 	W.set_wetness(0.375)
 	if absf(float(B._get_own_mat().get_shader_parameter("wetness")) - 0.375) > EPS:
 		_fail("set_wetness(0.375): road reads %s" % B._get_own_mat().get_shader_parameter("wetness"))

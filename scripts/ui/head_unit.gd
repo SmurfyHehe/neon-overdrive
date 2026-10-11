@@ -74,7 +74,11 @@ var level := 0.0
 var clock_text := ""     # the car clock, drawn top right (NightClock)
 var area_name := ""      # the area just entered, shown for AREA_SECS (world step 4)
 var area_t := 0.0
-var weather_level := 0   # Weather.Level: 1 rain, 2 storm get an icon, else none
+## Weather.Level ints that get an icon: rain 1, storm 2, fog 5, drizzle 6,
+## snow 7, slush 8 (by number so this unit needs no weather preload).
+const ICON_LEVELS := [1, 2, 5, 6, 7, 8]
+var weather_level := 0   # one of ICON_LEVELS, else 0 (no icon)
+var frost_on := false    # small flake beside the clock
 var taps := 0
 var knob_presses := 0
 var viewport: SubViewport
@@ -250,11 +254,20 @@ func show_area(area: String) -> void:
 	area_t = AREA_SECS
 	_redraw()
 
-## Rain (1) or storm (2) icon beside the clock; anything else draws nothing.
+## The weather icon beside the clock, drawn shapes in silver and amber (no
+## words): rain, storm, fog (three stacked lines), drizzle (cloud and one
+## drop), snow (flake), slush (flake over a bar). Clear, haze and after-rain
+## draw nothing. Levels are Weather.Level ints; unknown ones draw nothing.
 func show_weather(level: int) -> void:
-	var l := level if level == 1 or level == 2 else 0
+	var l := level if level in ICON_LEVELS else 0
 	if l != weather_level:
 		weather_level = l
+		_redraw()
+
+## Frost: a small flake beside the clock after 3 a.m. on frost nights.
+func show_frost(on: bool) -> void:
+	if on != frost_on:
+		frost_on = on
 		_redraw()
 
 ## The finger touched the unit: tick, and push the knob in for an off press.
@@ -293,20 +306,43 @@ class ClockCanvas extends Control:
 class ScreenCanvas extends Control:
 	var unit: HeadUnit
 
-	## A small cloud with falling drops (rain) or a bolt (storm), left of the
-	## clock, in the head unit's own silver and amber.
+	## A small cloud with falling drops (rain, 1), a bolt (storm, 2) or one
+	## drop (drizzle, 6); three stacked lines (fog, 5); a flake (snow, 7) or a
+	## flake over a bar (slush, 8). Left of the clock, in the head unit's own
+	## silver and amber.
 	func _draw_weather(l: int) -> void:
 		var c := Vector2(352, 26)
-		var cloud := HeadUnit.SILVER
-		draw_circle(c + Vector2(-6, 2), 5.0, cloud)
-		draw_circle(c + Vector2(1, -2), 6.5, cloud)
-		draw_circle(c + Vector2(8, 2), 5.0, cloud)
-		draw_rect(Rect2(c + Vector2(-6, 2), Vector2(14, 5)), cloud)
-		if l == 2:
-			draw_polyline(PackedVector2Array([c + Vector2(3, 6), c + Vector2(-1, 12), c + Vector2(3, 12), c + Vector2(-1, 18)]), HeadUnit.AMBER, 2.0)
-		else:
-			for dx in [-4.0, 1.0, 6.0]:
-				draw_line(c + Vector2(dx, 9), c + Vector2(dx - 2, 15), HeadUnit.AMBER, 1.5)
+		match l:
+			5:
+				for i in 3:
+					var y := c.y - 8.0 + i * 8.0
+					draw_line(Vector2(c.x - 10 + (i % 2) * 3, y), Vector2(c.x + 10 + (i % 2) * 3, y), HeadUnit.SILVER, 2.5)
+			7:
+				_draw_flake(c + Vector2(0, -1), 9.0, HeadUnit.SILVER, HeadUnit.AMBER)
+			8:
+				_draw_flake(c + Vector2(0, -4), 7.0, HeadUnit.SILVER, HeadUnit.AMBER)
+				draw_rect(Rect2(c + Vector2(-9, 8), Vector2(18, 4)), HeadUnit.AMBER)
+			_:
+				var cloud := HeadUnit.SILVER
+				draw_circle(c + Vector2(-6, 2), 5.0, cloud)
+				draw_circle(c + Vector2(1, -2), 6.5, cloud)
+				draw_circle(c + Vector2(8, 2), 5.0, cloud)
+				draw_rect(Rect2(c + Vector2(-6, 2), Vector2(14, 5)), cloud)
+				if l == 2:
+					draw_polyline(PackedVector2Array([c + Vector2(3, 6), c + Vector2(-1, 12), c + Vector2(3, 12), c + Vector2(-1, 18)]), HeadUnit.AMBER, 2.0)
+				elif l == 6:
+					draw_line(c + Vector2(1, 9), c + Vector2(-1, 15), HeadUnit.AMBER, 2.0)
+				else:
+					for dx in [-4.0, 1.0, 6.0]:
+						draw_line(c + Vector2(dx, 9), c + Vector2(dx - 2, 15), HeadUnit.AMBER, 1.5)
+
+	## Three crossed strokes with amber tips: a flake.
+	func _draw_flake(c: Vector2, r: float, arm: Color, tip: Color) -> void:
+		for i in 3:
+			var d := Vector2.from_angle(float(i) * PI / 3.0) * r
+			draw_line(c - d, c + d, arm, 1.8)
+			draw_circle(c + d, 1.6, tip)
+			draw_circle(c - d, 1.6, tip)
 
 	func _draw() -> void:
 		var font := UiTheme.font("menu_strong")
@@ -334,6 +370,9 @@ class ScreenCanvas extends Control:
 			draw_string(font, Vector2(HeadUnit.MARGIN, 92), sub, HORIZONTAL_ALIGNMENT_LEFT, 330, 15, HeadUnit.SILVER)
 		if unit.weather_level > 0:
 			_draw_weather(unit.weather_level)
+		if unit.frost_on:
+			# a small flake: beside the clock, left of the weather icon if any
+			_draw_flake(Vector2(326 if unit.weather_level > 0 else 352, 26), 6.0, HeadUnit.SILVER, HeadUnit.AMBER)
 		# the clock is drawn by ClockCanvas, over this; the meter sits under it
 		var bars := 10
 		for i in bars:

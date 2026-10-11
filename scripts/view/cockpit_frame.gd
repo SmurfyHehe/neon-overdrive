@@ -1106,6 +1106,7 @@ func _update_radio(delta: float) -> void:
 	if scene != null and scene.get("night_clock") is NightClock:
 		head_unit.show_clock(scene.night_clock.text())
 		head_unit.show_weather(Weather.level)
+		head_unit.show_frost(Weather.frost)
 	var r := _find_radio()
 	if r == null:
 		return

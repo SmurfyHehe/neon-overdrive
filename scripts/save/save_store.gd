@@ -148,7 +148,19 @@ static func load_meta_raw() -> Dictionary:
 	return {"chase_open": m.get("chase_open", false) == true,
 		"pending_busts": maxi(0, int(m.get("pending_busts", 0))) if _is_whole(m.get("pending_busts", 0)) else 0,
 		"saved_at": int(m.get("saved_at", 0)) if _is_whole(m.get("saved_at", 0)) else 0,
-		"first_wreck_used": m.get("first_wreck_used", false) == true}
+		"first_wreck_used": m.get("first_wreck_used", false) == true,
+		"weather_seed": int(m.get("weather_seed", 0)) if _is_whole(m.get("weather_seed", 0)) else 0}
+
+# ---------- the weather seed (WX0) ----------
+
+## The slot's weather seed (weather_plan.gd draws every night's weather from
+## it plus the night number), 0 = none picked yet. Lives in the profile next
+## to the night clock's night, so each slot has its own weather.
+static func weather_seed() -> int:
+	return maxi(load_meta_raw().weather_seed, 0)
+
+static func set_weather_seed(s: int) -> bool:
+	return _touch_meta({"weather_seed": maxi(s, 1)})
 
 # ---------- the first wreck ----------
 

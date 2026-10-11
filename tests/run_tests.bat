@@ -294,6 +294,7 @@ rem ~1 min: the median barriers (R1): each type at 9 speeds and angles, crash cu
 call :run world/barrier_hit "--headless --fixed-fps 120"
 rem Lamp-post life (world step 2): moths and a bat, banners, steam, litter. Placement, caps, meshes and the wind number; chunk instances are checked when a window is open.
 call :run world/lamp_life --headless
+call :run world/graffiti --headless
 rem The quick driving set (shared test driver, scripts/core/test_driver.gd; docs/TEST_DRIVER.md),
 rem at the game's 120 Hz: a clean run at 150 and 300 km/h in traffic plus spin recovery, crashes
 rem on purpose, seeded random keys, spawning at 0 to 400 km/h, and record-then-replay.

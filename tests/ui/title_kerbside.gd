@@ -25,6 +25,10 @@ extends SceneTree
 #   never more than two, one sits up in the lamp light; scare 1 bolts the one
 #   out and none start until 3 s of calm; Settings' "Roaches and rats" off
 #   hides roaches, rats and flies and leaves the moths
+# - graffiti (M10) is on the wall: one Graffiti MultiMesh under the set with
+#   every item placed, the big piece and the shutter tags in frame, nothing
+#   bright behind the car's roof line, the poster flaps, and
+#   Graffiti.enabled = false leaves the node empty
 # - the menu has Continue, New Game, Load, Settings, Extras, Quit; Load lists
 #   one row per save slot plus Back; Esc comes back to the main list
 # - the news line has text; the Early Access tag is on the title
@@ -37,6 +41,7 @@ extends SceneTree
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
 const LampLife := preload("res://scripts/world/lamp_life.gd")
+const Graffiti := preload("res://scripts/world/graffiti.gd")
 const TIMEOUT_FRAMES := 900
 const ICO := "res://assets/brand/logo_B4_combined.ico"
 
@@ -103,6 +108,7 @@ func _run() -> void:
 	# ---------- lamp life ----------
 	if set_node != null:
 		_check_lamp_life(set_node)
+		_check_graffiti(set_node)
 
 	# ---------- menu ----------
 	var rows: Array[String] = []
@@ -508,6 +514,70 @@ func _check_rats(set_node: TitleKerbside) -> void:
 	_check((life.get_node(^"Rats") as Node3D).visible and (life.get_node(^"Roaches") as Node3D).visible, "Roaches and rats on shows them again")
 	set_node.rat_scare_t = scare_t
 	set_node.freeze_roaches(was_frozen)
+func _check_graffiti(set_node: TitleKerbside) -> void:
+	var art := set_node.wall_art
+	_check(art != null and art.get_parent() == set_node, "the wall art has a root under the set")
+	if art == null:
+		return
+	var mm := _mm_of(art, "Graffiti")
+	_check(mm != null, "the Graffiti MultiMesh exists under the title set")
+	if mm == null:
+		return
+	var items: Array = set_node.graffiti_items
+	_check(items.size() >= 7, "the wall has the piece, the roller, tags, the stencil and a poster (%d items)" % items.size())
+	_check(mm.visible_instance_count == items.size() and mm.instance_count == items.size(), "every item is placed, %d of %d" % [mm.visible_instance_count, items.size()])
+	var cam := set_node.camera
+	var wall_z := -RoadChunkBuilder.CURB_W - RoadChunkBuilder.SIDEWALK_W
+	var kinds := {}
+	var flaps := 0
+	for it in items:
+		var c: Dictionary = Graffiti.cell(it.cell)
+		_check(not c.is_empty(), "title cell %s exists in the atlas" % [it.cell])
+		_check(Graffiti.tint_index(it.tint) >= 0, "title tint %s is on the palette" % [it.tint])
+		kinds[c.get("kind", "")] = true
+		var o: Vector3 = it.xf.origin
+		_check(o.z > wall_z and o.z < wall_z + 0.2, "%s sits just off the wall face (z %.3f)" % [c.get("id"), o.z])
+		_check(cam.is_position_in_frustum(set_node.to_global(o)), "%s is in the picture" % c.get("id"))
+		if bool(it.get("flap", false)):
+			flaps += 1
+		# the car's silhouette: the camera sees it against wall x 0.5..7, y < 2.2.
+		# Only the stencil and the tag on the shutter may be there, and they are
+		# low and dull; nothing white or amber at the roof line
+		if o.x > 0.5 and o.x < 7.0 and o.y < 2.6:
+			_check(c.get("kind") == "stencil" or (c.get("kind") == "tag" and o.y < 2.0), "%s does not sit on the car's roof line (x %.1f y %.1f)" % [c.get("id"), o.x, o.y])
+	for k in ["piece", "roller", "tag", "stencil", "poster"]:
+		_check(kinds.has(k), "the wall has a %s" % k)
+	_check(flaps == 1, "one poster flaps, got %d" % flaps)
+	# the big piece: above the ledge, left of the car
+	var piece: Dictionary = items[0]
+	_check(String(Graffiti.cell(piece.cell).id).begins_with("piece_") and piece.xf.origin.y > 3.9 and piece.xf.origin.x < -1.0, "the big piece is high on the wall left of the car")
+	# the stencil on the shutter has a tag over it
+	var stencil_i := -1
+	var over_i := -1
+	for i in range(items.size()):
+		var id := String(Graffiti.cell(items[i].cell).id)
+		if id == "stencil_no_parking":
+			stencil_i = i
+		elif stencil_i >= 0 and over_i < 0 and Graffiti.cell(items[i].cell).kind == "tag":
+			over_i = i
+	_check(stencil_i >= 0 and over_i > stencil_i, "a tag is sprayed over the NO PARKING stencil")
+	if stencil_i >= 0 and over_i > stencil_i:
+		var so: Vector3 = items[stencil_i].xf.origin
+		var to: Vector3 = items[over_i].xf.origin
+		_check(to.z > so.z and absf(to.x - so.x) < 0.8 and absf(to.y - so.y) < 0.8, "the tag lies over the stencil, in front of it")
+		_check(so.x > 0.1 and so.x < 3.7 and so.y > 0.1 and so.y < 2.8 and so.z > wall_z + TitleKerbside.SHUTTER_FACE, "the stencil is on the shutter's face")
+	# the wind reaches the graffiti too (the poster flaps with the litter)
+	set_node.set_title_wind(2.0)
+	set_node._ease_wind(0.016)
+	_check(is_equal_approx(Graffiti.wind(), 2.0), "turbo wind reaches the graffiti, got %.2f" % Graffiti.wind())
+	set_node.set_title_wind(TitleKerbside.WIND_REST)
+	set_node._ease_wind(4.0)
+	# the switch
+	Graffiti.enabled = false
+	var off := TitleKerbside.new(set_node.kind)
+	Graffiti.enabled = true
+	_check(_mm_of(off.wall_art, "Graffiti").visible_instance_count == 0, "NEON_GRAFFITI=0 empties the wall on the title")
+	off.free()
 
 ## The picture sizes inside a Windows .ico, smallest first.
 func _ico_sizes(path: String) -> Array:

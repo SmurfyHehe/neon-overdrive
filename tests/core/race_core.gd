@@ -2,9 +2,13 @@ extends SceneTree
 
 # Race core test (RC1, races plan section 8). Pure checks first, then the real
 # Game.tscn on an empty straight road with the scripted dummy rival:
-#   1. WIN: full throttle over 1200 m, across a floating-origin recenter
-#      (recenter_dist is 1000 m), beats the 108 km/h dummy. The Tuner is shut
+#   1. WIN: flat out over 1200 m, across a floating-origin recenter
+#      (recenter_dist is 1000 m), beats the rival. The Tuner is shut
 #      mid-race; the clock gains 15 min; the rival is released to traffic.
+#      The shared test driver holds the player's lane: hands-off at 220 km/h
+#      the car wanders across the road, and since tyre and surface feel
+#      (d0c1335) it wandered onto the pavement and crashed 20 m short.
+#      Then the "YOU WIN" caption shows, and clears after CAPTION_SECONDS.
 #   2. LOSE: the player sits still and the rival crosses 300 m first.
 #   3. GAVE_UP: the pause menu button gives the race up and resumes.
 #
@@ -12,6 +16,7 @@ extends SceneTree
 #   Godot_v4.7.2-stable_win64_console.exe --headless --fixed-fps 60 --path . -s res://tests/core/race_core.gd
 
 const TIMEOUT_TICKS := 60 * 90
+const TestDriver := preload("res://scripts/core/test_driver.gd")
 
 enum Step { BOOT, WIN_RACE, WIN_CAPTION, LOSE_RACE, GIVE_UP, DONE }
 
@@ -26,6 +31,7 @@ var night_before := 1
 var recenters_before := 0
 var rival_ref: TrafficCar
 var rival_m := 0.0  # rival progress on the last racing tick
+var bot: TestDriver
 
 func _initialize() -> void:
 	OS.set_environment("NEON_TRAFFIC", "0")
@@ -69,7 +75,14 @@ func _physics_process(_delta: float) -> bool:
 				_check(game.traffic.cars.has(rival_ref), "rival is in the traffic index")
 				game.game_state.toggle_tuning()
 				_check(game.game_state.state == GameState.State.PLAYING, "Tuner refused mid-race")
-				Input.action_press("accelerate")
+				# Flat out in the start lane, on an empty road as far as the bot
+				# knows (so it never brakes or swerves for the rival beside it).
+				var x: float = RoadFrame.unroll(game.player.global_position).x
+				var lane := 0
+				for i in 4:
+					if absf(TrafficManager.lane_centre(i, false) - x) < absf(TrafficManager.lane_centre(lane, false) - x):
+						lane = i
+				bot = TestDriver.start(game, "clean", {"speed": 400.0, "lane": lane, "traffic": false})
 				_go(Step.WIN_RACE)
 		Step.WIN_RACE:
 			if waited == 60 * 4 and rival_ref != null:
@@ -77,7 +90,8 @@ func _physics_process(_delta: float) -> bool:
 			if race.phase == RaceController.Phase.RACING:
 				rival_m = race.rival_progress()
 			else:
-				Input.action_release("accelerate")
+				bot.detach(game.player)
+				_check(bot.wall_contacts == 0 and bot.car_contacts == 0, "race 1 driven clean (%s)" % bot.first_contact)
 				_check(race.result == RaceController.Result.WIN, "race 1 is a WIN (got %s)" % RaceController.Result.keys()[race.result])
 				_check(game.recenter_count > recenters_before, "race 1 crossed a floating-origin recenter")
 				_check(race.player_progress() >= 1200.0 - 1.0, "player really crossed 1200 m (%.0f)" % race.player_progress())
@@ -89,16 +103,22 @@ func _physics_process(_delta: float) -> bool:
 				_check(is_equal_approx(race.stub_pay, RaceController.PAY_WIN_NIGHTS), "win paid into the stub")
 				_check(rival_m > 400.0, "the dummy rival really raced (%.0f m)" % rival_m)
 				print("race 1: WIN in %.1f s, rival at %.0f m of 1200" % [race.race_time, rival_m])
+				var cap: Label = race._caption
+				_check(cap.visible and cap.text.begins_with(RaceController.result_text(RaceController.Result.WIN)), "win caption shows (\"%s\")" % cap.text)
 				_go(Step.WIN_CAPTION)
 		Step.WIN_CAPTION:
-			# Brake to a stop (released before it turns into reverse), then wait
-			# for the caption to clear.
-			var stopped: bool = game.player.linear_velocity.length() < 1.0
-			if stopped:
-				Input.action_release("brake")
-			elif waited == 1:
+			# Brake to a stop and stay on the brake until the caption has
+			# cleared: off the brake the automatic creeps up to 2 m/s in D
+			# (auto_box.gd CREEP_TOP, realistic automatic 63fadcc), so a car
+			# that stopped early never read as stopped once the caption went.
+			# Held at rest S only brakes: reverse is its own key (R).
+			if waited == 1:
 				Input.action_press("brake")
+			var stopped: bool = game.player.linear_velocity.length() < 1.0
 			if race.phase == RaceController.Phase.IDLE and stopped:
+				Input.action_release("brake")
+				_check(not race._caption.visible, "win caption cleared")
+				_check(waited >= int(RaceController.CAPTION_SECONDS * 60.0) - 2, "win caption stayed %.1f s" % RaceController.CAPTION_SECONDS)
 				_check(race.start_race(300.0), "race 2 starts")
 				_go(Step.LOSE_RACE)
 		Step.LOSE_RACE:
@@ -143,6 +163,8 @@ func _abort(why: String) -> bool:
 	return _finish()
 
 func _finish() -> bool:
+	if bot != null and game != null and is_instance_valid(game.player):
+		bot.detach(game.player)
 	Input.action_release("accelerate")
 	Input.action_release("brake")
 	for f in failures:

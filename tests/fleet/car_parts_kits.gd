@@ -5,7 +5,8 @@ extends SceneTree
 #   slots     every required part is in the glb by name: brakes on all four
 #             wheels, plates front and rear, the lamps as parts of their own
 #             (head, tail, brake, reverse, blinkers), wipers, the fuel flap on
-#             its hinge, handles, seals, arch liners, what is under the lids
+#             its hinge, handles, seals, arch liners, what is under the lids;
+#             the wagon also its barn doors, rear wiper and roof rails
 #   lamps     every lamp part carries its own glow material, so it can be lit
 #             on its own later
 #   brakes    each wheel mesh has its drum (240 mm) or disc; the hubcaps are
@@ -60,6 +61,28 @@ const CARS := {
 		],
 		"rear_engine": true,
 	},
+	"p7_wagon": {
+		## no deck lid: the tail is two barn doors, each with its half of the rear glass
+		"without": ["trunk", "glass_backlight", "seal_backlight"],
+		"parts": ["barn_l", "barn_r", "glass_barn_l", "glass_barn_r", "seal_barn_l", "seal_barn_r", "handle_barn_l", "handle_barn_r",
+			"wiper_rear", "roof_rails", "grille", "mirror_l", "mirror_r", "bumper_f_insert", "bumper_r_insert", "rub_strip",
+			"rub_door_l", "rub_door_r", "caliper_fl", "caliper_fr", "engine", "spare", "susp_fl", "susp_fr", "susp_rl", "susp_rr"],
+		"lamps": {"head_l": "glow_head", "head_r": "glow_head", "turn_fl": "glow_turn", "turn_fr": "glow_turn",
+			"turn_rl": "glow_turn", "turn_rr": "glow_turn", "tail_l": "glow_tail", "tail_r": "glow_tail",
+			"brake_l": "glow_brake", "brake_r": "glow_brake", "brake_c": "glow_brake",
+			"reverse_l": "glow_reverse", "reverse_r": "glow_reverse"},
+		"anchors": ["bay_engine", "tank", "torsion_beam_r", "spare_cradle", "strut_top_fl", "strut_top_fr"],
+		"hinges": ["hinge_hood", "hinge_door_l", "hinge_door_r", "hinge_barn_l", "hinge_barn_r"],
+		## small discs in front, 200 mm drums at the rear
+		"brakes": {"fl": 0.118, "fr": 0.118, "rl": 0.10, "rr": 0.10},
+		"no_hubcap": ["rl"],
+		"gaps": [
+			["hood", "fender_fr", Vector3.RIGHT, Vector3.UP, 2, -1.42],
+			["fender_fr", "door_r", Vector3.BACK, Vector3.RIGHT, 1, 0.60],
+			["door_r", "body", Vector3.BACK, Vector3.RIGHT, 1, 0.60],
+			["barn_l", "barn_r", Vector3.RIGHT, Vector3.BACK, 1, 0.57],
+		],
+	},
 }
 
 var fails := 0
@@ -90,7 +113,10 @@ func _car(id: String, want: Dictionary) -> void:
 
 	# ---- slots
 	for p in COMMON + want.parts + want.lamps.keys():
-		_check(names.has(p), "%s: part %s missing from the glb" % [id, p])
+		if p in want.get("without", []):
+			_check(not names.has(p), "%s: part %s should not be on this car" % [id, p])
+		else:
+			_check(names.has(p), "%s: part %s missing from the glb" % [id, p])
 	for a in want.anchors:
 		_check(CarAssembler.anchor(id, a) != Transform3D.IDENTITY, "%s: anchor %s missing" % [id, a])
 	if want.get("engine_behind_axle", false):
@@ -152,7 +178,7 @@ func _car(id: String, want: Dictionary) -> void:
 		var turned := far.rotated(h.axis, deg_to_rad(h.open_sign * h.open_deg))
 		var side := signf(h.origin.x)
 		_check(turned.x * side > far.x * side + 0.03, "%s: the fuel flap should swing outward" % id)
-	for hname in ["hinge_hood", "hinge_trunk", "hinge_door_l", "hinge_door_r"]:
+	for hname in want.get("hinges", ["hinge_hood", "hinge_trunk", "hinge_door_l", "hinge_door_r"]):
 		_check(hinges.has(hname), "%s: %s missing" % [id, hname])
 
 	# ---- gaps

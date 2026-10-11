@@ -194,7 +194,8 @@
    "tail_r": "the lens is gone (the sheet's missing bit 4): a rust ring round a dark socket",
    "fuel_recess": "one filler, on the right front quarter",
    "fuel_flap": "one filler, on the right front quarter",
-   "fuel_neck": "one filler, on the right front quarter"
+   "fuel_neck": "one filler, on the right front quarter",
+   "exhaust": "one tail pipe, right of centre"
   }
  },
  "slots": [
@@ -425,7 +426,7 @@
   12.0
  ],
  "bevelled_edges": 226,
- "source_commit": "40b05b8",
+ "source_commit": "a49df4f",
  "nodes": [
   "p0_beater",
   "hinge_hood",
@@ -580,7 +581,7 @@
   "brake_l": 5,
   "bumper_blade": 8,
   "engine": 130,
-  "exhaust": 60,
+  "exhaust": 30,
   "fuel_neck": 20,
   "fuel_recess": 10,
   "glass_backlight": 90,
@@ -623,6 +624,6 @@
   "wheel_rr_mesh": 182,
   "wheel_rl_mesh": 182
  },
- "tris_total": 6862,
- "tris_body": 6080
+ "tris_total": 6832,
+ "tris_body": 6050
 }

@@ -58,6 +58,11 @@ const PRESETS := {
 	"p6_crossover": {"cylinders": 4, "firing": _BOXER_UNEQUAL, "cyl_spread": 0.15, "seed": 67,
 			"body_hz": 95.0, "body_q": 1.5, "rasp_hz": 1250.0, "rasp_q": 1.9, "tone": 0.95,
 			"pulse_width": 0.36, "wander": 0.7},
+	# Shop wagon, a small tired inline four: even, thin, a soft rasp, quieter
+	# than the hatch. (The sheet's feel text says "flat four" idle; the engines
+	# doc says inline four. Inline here.)
+	"p7_wagon": {"cylinders": 4, "cyl_spread": 0.10, "seed": 127, "body_hz": 128.0, "body_q": 1.2,
+			"rasp_hz": 1150.0, "rasp_q": 1.3, "tone": 0.6, "pulse_width": 0.42, "wander": 0.8},
 	# Work pickup, lazy 4.0 V6: deep, even, a touch rough at idle, a muffled
 	# truck rasp. Louder and darker than the traffic pickup's six.
 	"p17_work_pickup": {"cylinders": 6, "cyl_spread": 0.12, "seed": 109, "body_hz": 84.0, "body_q": 1.35,

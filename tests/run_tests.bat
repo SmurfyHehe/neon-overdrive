@@ -72,7 +72,7 @@ call :run fleet/fleet_design_check --headless
 rem Car pipeline step 1: the P1 body.glb from tools/car_pipeline/build_car.py loads, splits into panels, sits on the sheet's numbers.
 call :run fleet/car_pipeline_p1 --headless
 call :run car/car_assembler --headless
-rem Cars from parts after the pilot (kits.py): the Bug's required parts, gaps, symmetry, triangles, draw calls.
+rem Cars from parts after the pilot (kits.py): the Bug's and the wagon's required parts, gaps, symmetry, triangles, draw calls.
 call :run fleet/car_parts_kits --headless
 call :run audio/exhaust_tune --headless
 call :run audio/exhaust_pops --headless

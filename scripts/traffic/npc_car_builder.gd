@@ -153,6 +153,19 @@ const KINDS := {
 		"sheet_paint": true,
 	},
 	# The work pickup (Camel, P17, 2026-10-10): the 4-door T2 truck Walt sells
+	# The shop wagon (sheet p7_wagon, 2026-10-11): front drive, built from
+	# its parts glb like the Bug; the sheet mesh is the NEON_PARTS_LEGACY body.
+	"p7_wagon": {
+		"data": preload("res://scripts/car/p7_wagon_data.gd"),
+		"length": 4.30, "width": 1.74, "height": 1.55, "clearance": 0.16,
+		"front_overhang": 0.72, "rear_overhang": 0.98,
+		"wheel_r": 0.305, "wheel_x": 0.73, "axle_z": 1.30,
+		"drive": "fwd",
+		"rest_y": -0.12,
+		"builds": {"stock": 100},
+		"build_paint": {},
+		"sheet_paint": true,
+	},
 	# after act 1. Its own sheet mesh (p17_work_pickup_data.gd), not the
 	# traffic pickup's, which stays as it is.
 	"p17_work_pickup": {
@@ -303,6 +316,7 @@ static var _body_mat: ShaderMaterial
 static var _wheel_mat: ShaderMaterial
 static var _glass_mat: StandardMaterial3D
 static var _glow_mat: ShaderMaterial
+static var _parts_glow_mat: ShaderMaterial
 static var _flare_mat: ShaderMaterial
 static var _light_glow := 1.0
 
@@ -312,6 +326,8 @@ static func set_light_glow(g: float) -> void:
 	_light_glow = g
 	if _glow_mat != null:
 		_glow_mat.set_shader_parameter("tail_gain", g)
+	if _parts_glow_mat != null:
+		_parts_glow_mat.set_shader_parameter("tail_gain", g)
 	if _flare_mat != null:
 		_flare_mat.set_shader_parameter("gain", g)
 
@@ -414,7 +430,7 @@ static func chassis_visual(kind: String, build: String, paint: Color, role := ""
 		# (set_lamps) work on a parts car as they do on a sheet car.
 		var gi := CarAssembler.surface_index(body.mesh, "glow")
 		if gi >= 0:
-			body.set_surface_override_material(gi, _get_glow_material())
+			body.set_surface_override_material(gi, _get_parts_glow_material())
 		root.add_child(body)
 		root.set_meta("body_mat", paint_mat)
 		root.set_meta("tail_lights", _parts_tail_lamps(kind, lift))
@@ -662,6 +678,20 @@ static func _get_glass_material() -> StandardMaterial3D:
 		_glass_mat.metallic = 0.6
 		_glass_mat.roughness = 0.08
 	return _glass_mat
+
+## The same lamp shader for a body assembled from parts, one-sided: a parts
+## lamp is wound outward, and a lamp laid on the rear glass (the wagon's tall
+## columns) must not shine into the cabin and the rear-view mirror.
+static func _get_parts_glow_material() -> ShaderMaterial:
+	if _parts_glow_mat == null:
+		var sh := Shader.new()
+		sh.code = GLOW_SHADER.replace("unshaded, cull_disabled", "unshaded, cull_back")
+		_parts_glow_mat = ShaderMaterial.new()
+		_parts_glow_mat.shader = sh
+		_parts_glow_mat.set_shader_parameter("energy", GLOW_ENERGY)
+		_parts_glow_mat.set_shader_parameter("tail_gain", _light_glow)
+		_parts_glow_mat.set_shader_parameter("brake_gain", BRAKE_GAIN)
+	return _parts_glow_mat
 
 static func _get_glow_material() -> ShaderMaterial:
 	if _glow_mat == null:

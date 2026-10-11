@@ -175,16 +175,31 @@ What a kit car has that the pilot does not:
 | Fuel flap | `fuel_recess` (dark, with the cap) and `fuel_flap` on `hinge_fuel_flap`. It lies ON the skin: a flap cut into one side would have to be cut into the other to keep the body a mirror image |
 | Plates | 520 x 110 mm in a dark recess (`plates` in the kit) |
 | Other paints | `paint_primer`, `paint_rust`, `paint_bondo`: fixed colours on the body surface. `panel_mats` paints a whole cut panel, `paint_regions` a stretch of the side skin, split on the region's edges |
+| Own panels | `cuts` cuts panels the common recipe does not have (barn doors), `hinge_of` hangs parts on a kit hinge, `no_trunk` drops the deck lid |
 | Fewer triangles | `merge_flat`: runs of flat quads along the loft (a wheel arch puts nine stations across the roof and the floor) become one quad when the fourth corner stays within 3 mm of the plane of the other three. Outline and long edges do not move |
 
-**P0, the Bug** (`p0_beater`): 6,080 body triangles in 69 parts with the
+**P0, the Bug** (`p0_beater`): 6,050 body triangles in 69 parts with the
 Blender backend, 782 more in the four wheels; worst mirror deviation 0.000 mm
-over 39 mirrored parts and pairs. Rear engine under the lid (`engine`), spare
+over 38 mirrored parts and pairs. Rear engine under the lid (`engine`), spare
 and tank under the front lid (`bay_spare`, `bay_tank`), torsion bar tubes and
 swing axles in the wheel wells (`susp_*`), drums on all four wheels, hubcaps
 on three (front right shows its wheel nuts). One-sided on purpose, as the
-sheet decided: the driver's mirror, the left tail lamp (the right lens is
-gone), the filler on the right front quarter.
+sheet decided (Roy kept them, 2026-10-11): the driver's mirror, the left tail
+lamp (the right lens is gone), the filler on the right front quarter, the one
+tail pipe.
+
+**P7, the shop wagon** (`p7_wagon`): 4,298 body triangles in 82 parts, 776
+more in the wheels; 0.000 mm over 44 mirrored parts and pairs. No deck lid
+(`no_trunk`): the tail is two barn doors cut out of the tail face (`cuts`),
+each on its own hinge with its half of the rear glass (`split_backlight`), a
+handle, and on the right one the rear wiper. Tall lamp columns at the rear
+corners (blinker, running lamp, brake lamp, three parts a side), a brake lamp
+on the roof edge, reversing lamps in the bumper. Roof rails (the drip-rail
+gutter), a rub strip in three lengths a side so the door's piece opens with
+the door. Small discs in the front wheels with the caliper on the body,
+200 mm drums at the rear, hubcaps on three wheels (left rear bare). Strut and
+torsion beam ends in the wheel wells, the spare in its cradle under the floor,
+a transverse engine under the bonnet.
 
 In the game a kit car is built by `NpcCarBuilder` like any sheet car; when its
 glb is there the body comes from `CarAssembler` instead. `NEON_PARTS_LEGACY=1`

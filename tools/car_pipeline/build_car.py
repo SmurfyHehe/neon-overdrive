@@ -402,6 +402,9 @@ def build_scene(D, build_name):
             twin.mirror_of = node
             twin.origin = lparent.origin
             centre_of[p.twin] = [-centre_of[p.name][0], centre_of[p.name][1], centre_of[p.name][2]]
+    for hname in [h for h, hn in hinge_nodes.items() if not hn.children]:
+        root.children.remove(hinge_nodes.pop(hname))      # a hinge nothing hangs on (a kit without a deck lid)
+        H.pop(hname)
     for tag, (hub, wp) in wheels.items():
         wn = root.add(Node('wheel_' + tag, translation=hub, extras={'r': wh['r']}))
         wn.origin = hub

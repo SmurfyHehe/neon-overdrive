@@ -714,7 +714,10 @@ def build_parts(D, tips_out=None):
     hw_, s0, s1 = R['hood_hw'], R['nose_s'], cab['A']
     cut('hood', [((0, 0, 1), z(s0)), ((0, 0, -1), -z(s1)), ((1, 0, 0), -hw_), ((-1, 0, 0), -hw_)], top, True)
     hw_, s0, s1 = R['trunk_hw'], R['trunk_s0'], R['trunk_s1']
-    cut('trunk', [((0, 0, 1), z(s0)), ((0, 0, -1), -z(s1)), ((1, 0, 0), -hw_), ((-1, 0, 0), -hw_)], top, True)
+    if kit.get('no_trunk'):
+        sets['trunk'] = (PolySet(), [])          # no deck lid: the kit cuts its own tail doors
+    else:
+        cut('trunk', [((0, 0, 1), z(s0)), ((0, 0, -1), -z(s1)), ((1, 0, 0), -hw_), ((-1, 0, 0), -hw_)], top, True)
     for sx, nm in ((1, 'r'), (-1, 'l')):
         side = (lambda sx: lambda ps: (ps.col(1) == sx) & (ps.col(0) >= 3) & (ps.col(0) <= 7))(sx)
         cut('door_' + nm, [((0, 0, 1), z(R['door_s0'])), ((0, 0, -1), -z(R['door_s1'])), ((0, 1, 0), R['door_y0'])],
@@ -723,6 +726,10 @@ def build_parts(D, tips_out=None):
     # the nose: it carries the floor against the hood and both fenders
     cut('bumper_f', [((0, 0, -1), -z(R['nose_s']))], everything, False, [True])
     cut('bumper_r', [((0, 0, 1), z(R['tail_s'])), ((0, -1, 0), -R['tail_y'])], everything, False, [True, True])
+    extra_cuts = []
+    if kit.get('cuts'):
+        # the kit's own panels: f(D, R, z, cut) -> the names it cut
+        extra_cuts = list(kit['cuts'](D, R, z, cut))
     for sx, nm in ((1, 'r'), (-1, 'l')):
         side = (lambda sx: lambda ps: ~ps.mat_is('glass') & (ps.centroids()[:, 0] * sx > 0))(sx)
         cut('fender_f' + nm, [((0, 0, 1), z(R['nose_s'])), ((0, 0, -1), -z(R['door_s0'])), ((sx, 0, 0), R['hood_hw'])],
@@ -738,7 +745,10 @@ def build_parts(D, tips_out=None):
             return name
         if mat == 'glass':
             if tag[0] >= 8:
-                return 'glass_windshield' if s_of(cen) < 0.5 * (cab['W'] + cab['R']) else 'glass_backlight'
+                if s_of(cen) < 0.5 * (cab['W'] + cab['R']):
+                    return 'glass_windshield'
+                # tail doors (kit): each carries its half of the rear glass
+                return ('glass_barn_' + lr) if kit.get('split_backlight') else 'glass_backlight'
             return ('sail_' if s_of(cen) < R['door_s0'] else 'glass_quarter_') + lr
         if mat == 'pillar':
             return 'pillar_b_' + lr
@@ -749,7 +759,7 @@ def build_parts(D, tips_out=None):
     # laid over it and no shut line is added.
     for s0, s1, y0, y1, mat in kit.get('paint_regions', []):
         box_ = [((0, 0, 1), z(s0)), ((0, 0, -1), -z(s1)), ((0, 1, 0), y0), ((0, -1, 0), -y1)]
-        for name in CUT_PARTS:
+        for name in list(CUT_PARTS) + extra_cuts:
             ps, planes = sets[name]
             m = ps.mat_is('paint') & (ps.col(0) >= 3) & (ps.col(0) <= 7)
             ins, rest = ps.pick(m), ps.pick(~m)
@@ -761,13 +771,16 @@ def build_parts(D, tips_out=None):
 
     parts = {}
 
+    hinge_of = dict(HINGE_OF)
+    hinge_of.update(kit.get('hinge_of', {}))
+
     def part(name, parent=None, bevel=None):
         if name not in parts:
-            parts[name] = Part(name, parent if parent is not None else HINGE_OF.get(name), bevel)
+            parts[name] = Part(name, parent if parent is not None else hinge_of.get(name), bevel)
         return parts[name]
 
     counts = {}
-    for name in CUT_PARTS:
+    for name in list(CUT_PARTS) + extra_cuts:
         ps, planes = sets[name]
         rows = finish_shut(ps, planes)
         counts[name] = {'wall': sum(len(r[0]) - 2 for r in rows if r[2] == WALL),
@@ -1142,7 +1155,7 @@ def add_fittings(D, parts, part, body_tris, R, info, tips_out):
 
     # ---- antenna: a short mast on the left rear quarter
     an = part('antenna', bevel=0)
-    s_a = cab['C'] + 0.10
+    s_a = kit.get('antenna_s', cab['C'] + 0.10)   # a kit may stand it elsewhere (a wagon has no rear deck)
     base = on_top(-(pl(D['hw'], s_a) - 0.16), s_a)
     tip = base + np.array([0.0, 0.27, 0.06])
     Bt = frame_basis(tip - base, (0, 0, 1))

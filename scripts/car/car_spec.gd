@@ -366,6 +366,7 @@ const PLAYER_AUTO := {
 	"p4_kei": {"family": "90s"},
 	"p5_muscle": {"family": "old"},
 	"p6_crossover": {"family": "90s"},
+	"p7_wagon": {"family": "old"},
 }
 
 static func player_spec(kind: String) -> Dictionary:
@@ -510,6 +511,39 @@ static func player_spec(kind: String) -> Dictionary:
 			s["rear_tire_width"] = 265.0
 			s["coefficient_of_friction"] = {"Road": 1.2, "Dirt": 1.05}
 			s["center_of_gravity_height_offset"] = 0.05
+		"p7_wagon":
+			# Bramley 240 Estate (placeholder name), T1, free. STAND-IN NUMBERS
+			# (2026-10-11): the sheet gives the layout and the feel, no torque,
+			# mass, ratios or times. Known and used: small inline four, no turbo,
+			# front drive, 63% of the weight on the front, 4-speed (the sheet's
+			# automatic is the player's transmission mode), redline 5500 and
+			# strained above 4500, high centre of gravity, soft bars so it leans
+			# and understeers, slow flat response. Invented until Roy sets them:
+			# 1180 kg, 280 Nm (0.24 Nm/kg, the hot hatch's 270 on 100 kg more),
+			# the four ratios, final drive, drag, tyres.
+			var gears: Array[float] = [3.45, 1.95, 1.28, 0.90]
+			s["vehicle_mass"] = 1180.0
+			s["front_weight_distribution"] = 0.63
+			s["front_torque_split"] = 1.0
+			s["max_torque"] = 280.0
+			s["max_rpm"] = 5500.0
+			s["idle_rpm"] = 800.0
+			s["torque_shape"] = {"low_end": 0.62, "peak_pos": 0.50, "plateau": 0.18, "falloff": 0.45}
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.1
+			s["coefficient_of_drag"] = 0.42
+			s["frontal_area"] = 2.3
+			s["front_tire_width"] = 185.0   # fleet.json wheel w
+			s["rear_tire_width"] = 185.0
+			s["coefficient_of_friction"] = {"Road": 1.0, "Dirt": 0.85}
+			s["center_of_gravity_height_offset"] = 0.08
+			s["front_damping_ratio"] = 0.36
+			s["rear_damping_ratio"] = 0.36
+			s["front_arb_ratio"] = 0.20
+			s["rear_arb_ratio"] = 0.06
+			s["aero_downforce_coefficient_front"] = 0.0
+			s["aero_downforce_coefficient_rear"] = 0.0
+			s["shift_time"] = 0.32
 		"p17_work_pickup":
 			# Camel, T2 (Roy, 2026-10-10, notes/car-sheets/p17_work_pickup): a
 			# 4.0 V6 work pickup, rear drive, 5-speed manual, 1780 kg. 640 Nm
@@ -759,6 +793,14 @@ static func npc_spec(kind: String) -> Dictionary:
 			s["rear_damping_ratio"] = 0.45
 			s["front_arb_ratio"] = 0.20
 			s["rear_arb_ratio"] = 0.18
+		"p7_wagon":
+			# Shop wagon as an AI car: the player's own (stand-in) numbers.
+			var ps := player_spec("p7_wagon")
+			for k in ["vehicle_mass", "front_weight_distribution", "front_torque_split", "max_torque", "max_rpm",
+					"idle_rpm", "torque_shape", "gear_ratios", "final_drive", "coefficient_of_drag", "frontal_area",
+					"front_tire_width", "rear_tire_width", "coefficient_of_friction", "front_damping_ratio",
+					"rear_damping_ratio", "front_arb_ratio", "rear_arb_ratio", "center_of_gravity_height_offset"]:
+				s[k] = ps[k]
 		"p17_work_pickup":
 			# Work pickup (Camel): the player_spec numbers, so a rival or a
 			# parked one drives like the player's.

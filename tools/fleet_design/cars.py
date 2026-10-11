@@ -406,6 +406,57 @@ P17 = {
     'options': {},
 }
 
+P7 = {
+    'id': 'p7_wagon', 'role': 'player', 'label': 'Shop wagon',
+    'refs': 'the boxy front-drive estate cars of the late 1980s (category only; no brand): a small four, an automatic, barn doors',
+    'rule': 'A shoebox on small wheels: snub nose, short flat bonnet, then ONE flat roof line from the top of the windscreen '
+            'to a square tail; glass all round, three side windows, two barn doors, tall lamp columns at the rear corners.',
+    'tier': 'T1 shop wagon (Bramley 240 Estate, placeholder name), free; sheet notes/car-sheets/p7_wagon, added 2026-10-11. '
+            'Stand-ins, not in the sheet: bonnet height (0.86 nose to 0.96 at the screen), nose and tail plan curves. '
+            'The sheet asks for square arches and a 34 degree screen; the loft draws round arches, and A-pillar base '
+            's=1.05 with screen top s=1.55 over this bonnet gives 40 degrees.',
+    'L': 4.30, 'WB': 2.60, 'OHf': 0.72, 'W': 1.74,
+    'wheel': {'r': 0.305, 'w': 0.185, 'track': 1.46, 'arch_gap': 0.05, 'rim': 'steel', 'rim_ratio': 0.60},
+    'top': [(0.0, 0.66), (0.04, 0.80), (0.14, 0.86), (1.05, 0.96), (1.55, 1.55), (4.22, 1.55), (4.27, 0.88), (4.30, 0.56)],
+    'floor': [(0, 0.34), (0.20, 0.16), (3.95, 0.16), (4.30, 0.30)],
+    # pinched 2 cm at the doors: 0.85 there, 0.87 over the arches
+    'hw': [(0, 0.74), (0.06, 0.83), (0.20, 0.87), (1.10, 0.87), (1.25, 0.85), (2.80, 0.85), (2.95, 0.87), (3.75, 0.87),
+           (4.24, 0.86), (4.30, 0.82)],
+    'waist': [(0, 0.56), (0.20, 0.60), (4.30, 0.60)],
+    # the belt is one straight line at 0.86, no sweep
+    'belt': [(0, 0.60), (0.05, 0.76), (0.14, 0.83), (1.05, 0.86), (4.30, 0.86)],
+    'tumble': 0.04, 'sill_in': 0.03, 'rocker_h': 0.30, 'rocker_trim': True,
+    'cabin': {'A': 1.05, 'W': 1.55, 'R': 4.22, 'C': 4.27, 'D': 4.22,
+              'roof_w': [(1.55, 0.72), (4.22, 0.74)], 'roof_drop': 0.02, 'pillars': [(2.10, 2.17), (3.15, 3.22)]},
+    'decals': [
+        # slot grille 0.90 x 0.06 between single square flush lamps 0.18 x 0.16
+        {'view': 'front', 'rect': (-0.45, 0.70, 0.45, 0.76), 'mat': 'grille'},
+        {'view': 'front', 'rect': (0.50, 0.66, 0.68, 0.82), 'mat': 'head', 'mirror': True},
+        # black plastic bumpers, an amber indicator in the front one
+        {'view': 'front', 'rect': (-0.84, 0.36, 0.84, 0.54), 'mat': 'trim', 'cell': 0.3, 'tag': 'fbumper'},
+        {'view': 'front', 'rect': (0.52, 0.42, 0.66, 0.48), 'mat': 'turn', 'mirror': True},
+        # tall lamp columns at the rear corners, bumper top to the gutter:
+        # amber bottom third, red above; a brake lamp on the roof edge
+        {'view': 'rear', 'rect': (0.70, 0.56, 0.82, 0.875), 'mat': 'turn', 'mirror': True},
+        {'view': 'rear', 'rect': (0.70, 0.875, 0.82, 1.51), 'mat': 'tail', 'mirror': True},
+        {'view': 'rear', 'rect': (-0.15, 1.495, 0.15, 1.535), 'mat': 'tail', 'tag': 'roof_brake'},
+        {'view': 'rear', 'rect': (-0.84, 0.36, 0.84, 0.54), 'mat': 'trim', 'cell': 0.3, 'tag': 'rbumper'},
+        # the 40 mm black rub strip along the waist
+        {'view': 'left', 'rect': (0.22, 0.58, 4.20, 0.62), 'mat': 'trim', 'mirror': True, 'cell': 0.5, 'tag': 'rub'},
+    ],
+    'parts': [MIRRORS],
+    'exhaust': [{'x': -0.45, 'y': 0.26, 'r': 0.035}],
+    'stickers': [
+        {'id': 'door', 'view': 'left', 'rect': (1.55, 0.545, 2.65, 0.895), 'mirror': True},
+        {'id': 'hood', 'view': 'top', 'rect': (-0.30, 0.30, 0.30, 0.85)},
+        {'id': 'rear', 'view': 'rear', 'rect': (-0.62, 0.575, -0.07, 1.025), 'note': 'left barn door'},
+    ],
+    'paint': {'hero': ('Shop white', '#E4DDD0'),
+              'alts': [('Primer grey', '#7E7F82'), ('Fleet tan', '#B89B6E'), ('Sodium', '#FF8A1F'), ('Dusk navy', '#1B2A4A')],
+              'trim': '#1A1D24', 'rim': '#B9BEC6', 'extra': {'chrome': '#C9CED6'}},
+    'options': {},
+}
+
 # ----------------------------------------------------------------------------
 # NPC FLEET: taller, softer, small wheels in big arch gaps, tyres tucked in,
 # no aero, plain paints. They recede so the player's car always pops.
@@ -644,7 +695,7 @@ C3 = {
     'options': {},
 }
 
-FLEET = [P0, P1, P2, P3, P4, P5, P6, P17, N1, N2, N3, C1, C2, C3]
+FLEET = [P0, P1, P2, P3, P4, P5, P6, P7, P17, N1, N2, N3, C1, C2, C3]
 
 
 def _add_sun_strips():

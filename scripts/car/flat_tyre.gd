@@ -8,7 +8,10 @@ extends RefCounted
 # - grip: CarDamage puts DamageOffsets.GRIP_MULT at CarDamage.RIM_GRIP for
 #   that wheel; the car multiplies it into the wheel's grip.
 # - rolling drag: a force against the car's motion at that wheel, RIM_DRAG of
-#   the load the wheel carries, so the car pulls toward that corner.
+#   the load the wheel carries plus a part that grows with the square of the
+#   speed (the rim hammering the road), never more than metal can grip
+#   (RIM_DRAG_MAX of the load). The car pulls toward that corner, and how
+#   fast it can still go depends on the car: its weight and its engine.
 # - shake: an up-and-down force at that wheel once per wheel turn that grows
 #   with the square of the speed, and a 0..1 number for the camera.
 # - rim wear (CarDamage.rim_wear, 0..1) grows with distance x speed and raises
@@ -25,16 +28,20 @@ const DamageOffsets := preload("res://scripts/car/damage_offsets.gd")
 
 ## At or under this pressure share the wheel runs on its rim.
 const RIM_PRESSURE := 0.1
-## Rolling drag as a share of the wheel's load, and how much more at full wear.
+## Rolling drag as a share of the wheel's load: at a crawl, per (m/s)^2 on
+## top, how much more at full wear, and the most it can ever be (a steel rim
+## sliding on asphalt grips about this much).
 const RIM_DRAG := 0.15
-const RIM_WEAR_DRAG := 0.6
+const RIM_DRAG_V2 := 0.0006
+const RIM_WEAR_DRAG := 0.5
+const RIM_DRAG_MAX := 0.6
 ## The drag fades in over this speed (m/s), so a parked car is not pushed.
 const DRAG_FADE_MS := 1.5
 ## Shake force (N) per (m/s)^2, how much more at full wear, and its cap as a
 ## share of the wheel's load (the wheel is never thrown off the road by it).
 const RIM_SHAKE_N := 0.9
 const RIM_WEAR_SHAKE := 1.0
-const RIM_SHAKE_MAX := 0.45
+const RIM_SHAKE_MAX := 0.3
 ## The camera's shake is full at this speed with one wheel on a worn rim.
 const SHAKE_FULL_MS := 35.0
 ## Rim wear per (m/s)^2 second, i.e. per metre x speed: 2 km at 72 km/h wears
@@ -47,7 +54,8 @@ static func on_rim(offsets: DamageOffsets, i: int) -> bool:
 
 ## Drag force (N) for a wheel on its rim carrying `load` N at `speed` m/s.
 static func drag_force(load: float, speed: float, wear: float) -> float:
-	return RIM_DRAG * (1.0 + RIM_WEAR_DRAG * clampf(wear, 0.0, 1.0)) * maxf(load, 0.0) * clampf(speed / DRAG_FADE_MS, 0.0, 1.0)
+	var share := minf((RIM_DRAG + RIM_DRAG_V2 * speed * speed) * (1.0 + RIM_WEAR_DRAG * clampf(wear, 0.0, 1.0)), RIM_DRAG_MAX)
+	return share * maxf(load, 0.0) * clampf(speed / DRAG_FADE_MS, 0.0, 1.0)
 
 ## Peak of the once-per-turn shake force (N).
 static func shake_force(load: float, speed: float, wear: float) -> float:

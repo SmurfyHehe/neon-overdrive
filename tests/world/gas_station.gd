@@ -189,7 +189,10 @@ func _physics_process(_delta: float) -> bool:
 			_check(w.cash == 0 and w.bank == 300, "tow banked wrong: cash %d bank %d" % [w.cash, w.bank])
 			var third := FuelTank.CAPACITY_L * FuelTank.START_FRACTION
 			_check(is_equal_approx(player.fuel.litres, third), "tow left %.1f L, expected %.1f" % [player.fuel.litres, third])
-			# Fill up from the bank.
+			# Fill up from the bank. A tow now starts the night on a full tank
+			# (START_FULL_TANK, 7292d9b), so burn it back to the design's third
+			# first or the fill has nothing to buy.
+			player.fuel.litres = FuelTank.CAPACITY_L / 3.0
 			var want := int(ceil(FuelTank.CAPACITY_L - player.fuel.litres - 0.001))
 			clock_before = clock.minutes
 			panel.call("fill")

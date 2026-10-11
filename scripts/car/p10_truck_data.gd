@@ -25,7 +25,8 @@ const GLASS := ["glass"]
 ## this body by tools/fleet_design/cabin_measure.gd (2026-10-11), the rest
 ## hand-tuned. Not another car's block.
 ## Square speedo and tacho side by side in a flat panel with the idiot-light
-## row between them ("wide"), fuel and temp below; a 60/40 charcoal cloth
+## row between them ("panel": no hood, unlike the crossover's "wide"
+## binnacle, tests/fleet/interior_unique.gd), fuel and temp below; a 60/40 charcoal cloth
 ## bench with a fold-down armrest ("bench", "flat" floor, trim "truck"); a
 ## floor PRND lever on the automatic; a single-DIN cassette deck; a fat
 ## four-spoke factory wheel (wheel_fit: 39 cm factory, 35-40, 5 cm dish);
@@ -45,7 +46,7 @@ const CABIN := {
 	"wheel": Vector3(-0.360, 1.060, -0.560), "wheel_tilt_deg": -22.0,
 	"wheel_fit": {"factory_cm": 39.0, "range_cm": [35.0, 40.0], "max_dish_cm": 5.0},
 	"wheel_factory": "a fat four-spoke factory wheel, 39 cm, soft black plastic rim",
-	"cluster": Vector2(1.060, -0.700), "cluster_style": "wide", "speedo_max_kmh": 200.0,
+	"cluster": Vector2(1.060, -0.700), "cluster_style": "panel", "speedo_max_kmh": 200.0,
 	"head_unit": Vector3(0.0, 1.040, -0.540),
 	"lever": Vector3(0.0, 0.900, -0.360), "handbrake": Vector3(0.0, 0.900, 0.060),
 	"pedals": Vector3(-0.260, 0.720, -0.840),

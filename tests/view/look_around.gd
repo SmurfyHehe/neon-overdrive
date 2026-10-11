@@ -11,7 +11,7 @@ extends SceneTree
 #   it is the focused mirror at twice the resolution; the car does not steer
 # - release: the head eases back straight ahead, focus cleared
 # - hold Left: the head turns left; hold Up / Down: it tilts up / down, capped
-# - chase view: the arrow keys do nothing to the camera
+# - chase view: no head turn (look_yaw stays 0; the arrows orbit, see chase_orbit.gd)
 # - blind spot: a same-way car in the right lane, just behind, lights only the
 #   right dot; on the left, only the left dot; a car straight behind in our
 #   lane or an oncoming car alongside lights neither
@@ -193,7 +193,7 @@ func _physics_process(_delta: float) -> bool:
 		Step.CHASE:
 			if waited == 10:
 				Input.action_release("look_right")
-				_check(absf(cam.look_yaw) < 0.01, "the chase view ignores the arrow keys (%.1f)" % cam.look_yaw)
+				_check(absf(cam.look_yaw) < 0.01, "the chase view has no head to turn: the arrows orbit instead (look_yaw %.1f)" % cam.look_yaw)
 				cam.set_view(ChaseCamera.View.COCKPIT)
 				_put_car(p, 3.2, 3.0, false)
 				_go(Step.SPOT_RIGHT)

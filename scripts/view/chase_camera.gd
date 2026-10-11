@@ -156,6 +156,27 @@ var _hold_t := 0.0                 # seconds it has been held
 var _latch_dir := 0                # a tap's door mirror, held for _latch_t more seconds
 var _latch_t := 0.0
 var _look_focus := 0               # door mirror the head is turned to (-1 left, +1 right)
+## Look around outside (Roy, 2026-10-11): in the chase view the arrow keys swing
+## the camera round the car on a circle of the usual chase distance. Hold
+## Left/Right: out to ORBIT_HOLD_DEG on that side of the CAR (Left always shows
+## the car's left flank, also while the rig is in front of it in reverse); tap:
+## an ORBIT_TAP_DEG glance, kept LOOK_TAP_LATCH_S, then back. Up lifts the camera
+## ORBIT_LIFT_UP_M, Down drops it to ORBIT_LOW_ABOVE_ROAD_M above the road.
+## Release eases back at ORBIT_RATE. B wins (the orbit eases to 0 under the
+## look-back swing); F, photo mode and a pause clear it (see reset_orbit).
+const ORBIT_HOLD_DEG := 100.0
+const ORBIT_TAP_DEG := 35.0
+const ORBIT_RATE := 8.0            # 1/s, in every smoothing mode: ~0.6 s from full swing to under 2 degrees
+const ORBIT_LIFT_UP_M := 2.5
+const ORBIT_LOW_ABOVE_ROAD_M := 0.6
+const ORBIT_AIM_LO_DEG := 20.0     # the aim slides from "down the road" to the car's centre
+const ORBIT_AIM_HI_DEG := 60.0     # between these two orbit angles
+var orbit_yaw := 0.0               # degrees, + = toward the car's left flank
+var orbit_lift := 0.0              # -1 (low) .. +1 (high)
+var _orbit_dir := 0                # arrow held (-1 right, +1 left), 0 none
+var _orbit_hold_t := 0.0
+var _orbit_latch_dir := 0
+var _orbit_latch_t := 0.0
 var frame: CockpitFrame
 var perspective: PerspectiveAudio
 var target: PlayerCar
@@ -233,11 +254,31 @@ func set_view(v: View) -> void:
 		look_yaw = 0.0   # the chase view has no head to turn
 		look_pitch = 0.0
 		_set_look_focus(0)
+	reset_orbit()   # F: both ways start from the straight chase view
 	if frame != null:
 		frame.set_cockpit(cockpit)
 	elif target.chassis_visual != null:
 		target.chassis_visual.visible = not cockpit   # no cockpit built: the Phase C behaviour
 	perspective.set_cockpit(cockpit)
+
+## Orbit back to 0 at once and forget which arrow was down (F, photo mode).
+func reset_orbit() -> void:
+	orbit_yaw = 0.0
+	orbit_lift = 0.0
+	_clear_orbit_keys()
+
+func _clear_orbit_keys() -> void:
+	_orbit_dir = 0
+	_orbit_hold_t = 0.0
+	_orbit_latch_dir = 0
+	_orbit_latch_t = 0.0
+
+## The camera does not process while paused, so an arrow pressed or released
+## in a menu would otherwise look like a tap or a hold on the first frame back:
+## read the keys fresh on both edges.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PAUSED or what == NOTIFICATION_UNPAUSED:
+		_clear_orbit_keys()
 
 ## The driver's side window, 0 closed .. 1 fully down: the one value the glass,
 ## the driver's hand and the cabin sound all follow (PerspectiveAudio owns it).
@@ -445,7 +486,41 @@ func _update_feel(delta: float) -> void:
 		want_s = float(rough) / float(grounded) * clampf(speed / 15.0, 0.0, 1.0)
 	surface_t = lerpf(surface_t, want_s, 1.0 - exp(-12.0 * delta))
 
+## Eases orbit_yaw / orbit_lift toward the arrow keys (chase view only).
+## Tap-or-hold uses the cockpit's constants (LOOK_TAP_S, LOOK_TAP_LATCH_S).
+## Holding B keeps the timer running but wants 0 and starts no latch, so an
+## arrow still down when B is released carries straight on as a hold.
+func _update_orbit(delta: float) -> void:
+	var axis := Input.get_axis("look_right", "look_left")   # + = left
+	var up := Input.get_axis("look_down", "look_up")
+	var want_yaw := 0.0
+	if axis != 0.0:
+		var dir := 1 if axis > 0.0 else -1
+		if dir != _orbit_dir:
+			_orbit_dir = dir
+			_orbit_hold_t = 0.0
+		_orbit_hold_t += delta
+		_orbit_latch_t = 0.0
+		want_yaw = axis * (ORBIT_TAP_DEG if _orbit_hold_t < LOOK_TAP_S else ORBIT_HOLD_DEG)
+	else:
+		if _orbit_dir != 0 and _orbit_hold_t < LOOK_TAP_S and not look_back:
+			_orbit_latch_dir = _orbit_dir
+			_orbit_latch_t = LOOK_TAP_LATCH_S
+		_orbit_dir = 0
+		_orbit_hold_t = 0.0
+		if _orbit_latch_t > 0.0:
+			_orbit_latch_t -= delta
+			want_yaw = _orbit_latch_dir * ORBIT_TAP_DEG
+	if look_back:
+		want_yaw = 0.0
+		up = 0.0
+		_orbit_latch_t = 0.0
+	var k := 1.0 - exp(-ORBIT_RATE * delta)
+	orbit_yaw = lerpf(orbit_yaw, want_yaw, k)
+	orbit_lift = lerpf(orbit_lift, up, k)
+
 func _place(delta: float) -> void:
+	_update_orbit(delta)
 	# The interpolated position, not target.position: the car only moves on
 	# the 60 Hz physics tick, and with vsync off the camera updates several
 	# times per tick. Following the raw position made car and road judder.
@@ -478,10 +553,24 @@ func _place(delta: float) -> void:
 			_yaw = target_yaw
 	# Distance along the road stays locked to the car (only sideways and
 	# height motion is smoothed); the dolly shortens it with speed.
-	var back := Vector3(0, 0, dist_now).rotated(Vector3.UP, _yaw)
+	# The orbit goes round the car's own sides: with the rig behind the car
+	# (rel 0) Left is minus about +y, with it in front (rel PI: reversing, B)
+	# it is plus. Worked from the rig's yaw relative to where the car faces, so
+	# it also holds driving the other way along the road, and it runs through
+	# 0 (not a jump) while the rig swings round.
+	var rel := _yaw - (PI if _up_road else 0.0)
+	var orbit := -cos(rel) * deg_to_rad(orbit_yaw)
+	var back := Vector3(0, 0, dist_now).rotated(Vector3.UP, _yaw + orbit)
 	var ahead := Vector3(0, 0, -look_ahead).rotated(Vector3.UP, _yaw)
-	anchor = RoadFrame.roll(Vector3(_follow.x + back.x, _follow.y + height_now, u.z + back.z))
-	aim = RoadFrame.roll(Vector3(_follow.x + ahead.x, _follow.y + look_height, u.z + ahead.z))
+	var h := height_now + ORBIT_LIFT_UP_M * orbit_lift
+	if orbit_lift < 0.0:
+		h = lerpf(height_now, ORBIT_LOW_ABOVE_ROAD_M - _follow.y, -orbit_lift)
+	anchor = RoadFrame.roll(Vector3(_follow.x + back.x, _follow.y + h, u.z + back.z))
+	var aim_rs := Vector3(_follow.x + ahead.x, _follow.y + look_height, u.z + ahead.z)
+	var centre_t := smoothstep(ORBIT_AIM_LO_DEG, ORBIT_AIM_HI_DEG, absf(orbit_yaw))
+	if centre_t > 0.0:
+		aim_rs = aim_rs.lerp(Vector3(u.x, u.y + look_height, u.z), centre_t)
+	aim = RoadFrame.roll(aim_rs)
 	global_position = anchor
 	look_at(aim, Vector3.UP)
 

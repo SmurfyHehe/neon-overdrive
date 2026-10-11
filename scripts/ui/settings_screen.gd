@@ -289,6 +289,31 @@ func _add_option(parent: Control, text: String, items: Array, on_select: Callabl
 	row.add_child(o)
 	return o
 
+## Cost dots (GraphicsSettings.COST) after a row's control: 1 to 3 of three
+## lit. Returns the dots' box (named "CostDots", lit count in its metadata).
+func _cost_dots(control: Control, key: String) -> Control:
+	var n: int = GraphicsSettings.COST.get(key, 0)
+	var box := HBoxContainer.new()
+	box.name = "CostDots"
+	box.set_meta("cost", n)
+	box.tooltip_text = GraphicsSettings.COST_NAMES[n]
+	box.mouse_filter = Control.MOUSE_FILTER_PASS
+	box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	box.add_theme_constant_override("separation", 4)
+	for i in 3:
+		var dot := Panel.new()
+		dot.custom_minimum_size = Vector2(9, 9)
+		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = AMBER if i < n else Color(AMBER, 0.18)
+		sb.set_corner_radius_all(5)
+		dot.add_theme_stylebox_override("panel", sb)
+		box.add_child(dot)
+	var row := control.get_parent()
+	row.add_child(box)
+	row.move_child(box, control.get_index() + 1)
+	return box
+
 func _add_check(parent: Control, text: String, on: bool, on_toggle: Callable) -> CheckButton:
 	var c := CheckButton.new()
 	c.text = text
@@ -364,6 +389,10 @@ func _build_picture_page(parent: Control) -> Control:
 		resolution_option.set_item_metadata(resolution_option.item_count - 1, r)
 
 	_heading(page, "Graphics")
+	var dots_note := Label.new()
+	dots_note.text = "Dots: how much a setting can cost in speed"
+	dots_note.modulate.a = 0.6
+	page.add_child(dots_note)
 	gfx_preset = _add_option(page, "Quality", ["Low", "Medium", "High", "Custom"], func(i: int) -> void:
 		if i < GraphicsSettings.PRESETS.size():
 			GraphicsSettings.set_preset(GraphicsSettings.PRESETS[i])
@@ -385,9 +414,14 @@ func _build_picture_page(parent: Control) -> Control:
 	gfx_dynres = _add_option(page, "Dynamic resolution", ["On", "Off"], func(i: int) -> void:
 		GraphicsSettings.set_dynamic_res(i == 0)
 		_graphics_changed())
-	gfx_cap = _add_option(page, "Frame cap", ["V-sync", "30 fps"], func(i: int) -> void:
+	gfx_cap = _add_option(page, "Frame cap", GraphicsSettings.FPS_CAP_NAMES, func(i: int) -> void:
 		GraphicsSettings.set_fps_cap(GraphicsSettings.FPS_CAPS[i])
 		_graphics_changed())
+	_cost_dots(gfx_aa, "aa")
+	_cost_dots(gfx_scale, "render_scale")
+	_cost_dots(gfx_mirrors, "mirrors")
+	_cost_dots(gfx_dynres, "dynamic_res")
+	_cost_dots(gfx_cap, "fps_cap")
 	gfx_auto_label = Label.new()
 	gfx_auto_label.text = "Quality picked automatically on first launch"
 	gfx_auto_label.add_theme_color_override("font_color", AMBER)
@@ -418,6 +452,9 @@ func _build_picture_page(parent: Control) -> Control:
 		func(v: float) -> void:
 			TrafficSettings.set_light_glow(v)
 			TrafficSettings.save_settings())
+	_cost_dots(traffic_cars_slider, "cars")
+	_cost_dots(traffic_dist_slider, "draw_distance")
+	_cost_dots(night_lights_slider, "night_lights")
 	# City lights: the signalised crossing and red lights for traffic. The
 	# crossing is part of the road layout, so it appears (or goes) on Restart.
 	city_lights_check = _add_check(page, "City lights (on restart)", TrafficSettings.city_lights, func(on: bool) -> void:

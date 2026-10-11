@@ -89,6 +89,7 @@ const DiscordPresence := preload("res://scripts/core/discord_presence.gd")
 const SaveDirector := preload("res://scripts/save/save_director.gd")
 const UserDirMigration := preload("res://scripts/save/user_dir_migration.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
+const ColorGrade := preload("res://scripts/world/color_grade.gd")
 # The shared test driver and the F9 drive recorder (2026-10-10). `bot` is the
 # driver when the game was started with -- --bot=<mode> / NEON_BOT (watching
 # the bot in a window uses the same switch the headless tests do), with
@@ -369,6 +370,10 @@ func _setup_world() -> void:
 	env.glow_bloom = 0.0
 	env.glow_hdr_threshold = 1.0
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
+	# TONE MAPPING + GRADE (2026-10-10): rolls the bright end off so lamps keep a
+	# hot core instead of clipping to flat orange, and leans the picture toward
+	# Amber vs. Dusk. All in the post pass glow already runs (color_grade.gd).
+	ColorGrade.apply(env)
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)

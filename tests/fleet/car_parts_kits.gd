@@ -179,10 +179,10 @@ const CARS := {
 		"brakes": {"fl": 0.13, "fr": 0.13, "rl": 0.13, "rr": 0.13},
 		"no_hubcap": [],
 		"gaps": [
-			["hood", "fender_fr", Vector3.RIGHT, Vector3.UP, 2, -1.10],
-			["fender_fr", "door_r", Vector3.BACK, Vector3.RIGHT, 1, 0.60],
-			["door_r", "body", Vector3.BACK, Vector3.RIGHT, 1, 0.60],
-			["trunk", "body", Vector3.RIGHT, Vector3.UP, 2, 1.60],
+			["hood", "fender_fr", Vector3.RIGHT, Vector3.UP, 2, -1.35],
+			["fender_fr", "door_r", Vector3.BACK, Vector3.RIGHT, 1, 0.51],
+			["door_r", "body", Vector3.BACK, Vector3.RIGHT, 1, 0.51],
+			["trunk", "body", Vector3.RIGHT, Vector3.UP, 2, 1.65],
 		],
 	},
 }

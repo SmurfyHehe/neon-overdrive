@@ -680,7 +680,7 @@ static func player_spec(kind: String) -> Dictionary:
 			s["idle_rpm"] = 1100.0
 			s["torque_shape"] = {"low_end": 0.40, "peak_pos": 0.68, "plateau": 0.15, "falloff": 0.7}
 			s["gear_ratios"] = gears
-			s["final_drive"] = 4.3
+			s["final_drive"] = 4.0   # 7800 in 5th is 225 km/h; 4.3 ran out at 210
 			s["coefficient_of_drag"] = 0.36
 			s["frontal_area"] = 1.95
 			s["front_tire_width"] = 205.0

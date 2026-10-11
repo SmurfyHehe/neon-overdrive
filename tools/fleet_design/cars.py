@@ -559,10 +559,11 @@ P8 = {
     'exhaust': [{'x': 0.42, 'y': 0.26, 'r': 0.045, 'squash': 0.67}],
     'stickers': [
         {'id': 'door', 'view': 'left', 'rect': (1.80, 0.44, 2.70, 0.72), 'mirror': True},
-        {'id': 'hood', 'view': 'top', 'rect': (-0.25, 0.45, 0.25, 1.05)},
-        # the rear slot is the left rear quarter panel (the trunk stays clear); one placement, so the car keeps
-        # the fleet's five
-        {'id': 'rear', 'view': 'left', 'rect': (3.15, 0.80, 3.55, 1.10), 'note': 'rear quarter panel, left'},
+        {'id': 'hood', 'view': 'top', 'rect': (-0.25, 0.42, 0.25, 1.12)},
+        # the rear slot: a bumper sticker on the tail face between the bumper band and the tail panel (the trunk
+        # stays clear; the fleet check wants the rear slot on the upright tail, so the sheet's quarter-panel spot
+        # cannot be it)
+        {'id': 'rear', 'view': 'rear', 'rect': (-0.30, 0.455, 0.30, 0.555), 'note': 'tail face, under the tail panel'},
     ],
     'paint': {'hero': ('Dusty silver', '#AAB0B8'),
               'alts': [('Chalk', '#E6E2D6'), ('Sodium', '#FF8A1F'), ('Dusk navy', '#1B2A4A'), ('Primer grey', '#6E6B68')],

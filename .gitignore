@@ -20,3 +20,6 @@ build/
 # plus machine-local session data. Never commit.
 .claude/
 bench-results/
+
+# Written by tools/gevp-tick-matrix.ps1 (machine-local project overrides)
+override.cfg

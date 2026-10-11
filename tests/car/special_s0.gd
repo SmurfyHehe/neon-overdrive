@@ -78,7 +78,7 @@ func _keys() -> void:
 	_check(SpecialKeys.applies("hyd_pump_left", "l1_lowrider") and SpecialKeys.applies("hyd_dump_all", "l1_lowrider"), "hydraulics do not work in the lowrider")
 	# the Controls page lists them under "Special vehicles"
 	var listed := false
-	for g in PauseMenu.controls_groups():
+	for g in SettingsScreen.controls_groups():
 		if g[0] == "Special vehicles":
 			listed = g[1].size() == SpecialKeys.LABELS.size()
 	_check(listed, "the Controls page does not list the special vehicle keys")
@@ -94,8 +94,10 @@ func _lists() -> void:
 	_check(not "m1_monster" in PlayerCars.garage_ids({}), "a locked special is in the garage")
 	var g := PlayerCars.garage_ids({"l1_lowrider": true})
 	_check("l1_lowrider" in g and not "m1_monster" in g, "garage_ids ignores the unlock map: %s" % [g])
+	# Specials wear the P1's cabin until their body steps (the per-car offset
+	# table is gone: every cabin comes from CabinSpec now).
 	for k in SPECIALS:
-		_check(PlayerCars.CABIN_OFFSET.has(k), "%s has no CABIN_OFFSET entry" % k)
+		_check(CabinSpec.missing(CabinSpec.for_kind(k)).is_empty(), "%s has no complete cabin" % k)
 	# save round trip (test saves folder, see TestMode)
 	SaveStore.save_special({})
 	var unlocked: Dictionary = SaveStore.load_special().unlocked

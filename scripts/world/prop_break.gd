@@ -33,17 +33,27 @@
 ## Cost: `cost_usec` is the time of the last tick, `cost_peak` the worst since
 ## reset_cost(); tests/world/prop_hit.gd fails over CEILING_USEC in a spree.
 ##
+## Breakaway set (I3): a lamp post snaps at the foot, falls along the car's
+## way and lies there dark (its copy is swapped for the unlit mesh, its light
+## pool and wet streak go); a sign post bends over and stays bent; a hydrant
+## is knocked off, leaves a stump and bursts (hydrant_water.gd). All three
+## are remembered for the night, cost a FIXED hit, and a cop who sees one
+## raises the heat a step (a warning first). The night after, each is whole
+## again with a cone standing beside it. Gantry legs are still ghosts.
+##
 ## No class_name on purpose: preload it, so no class cache refresh is needed.
 extends Node3D
 
 const Props := preload("res://scripts/world/roadside_props.gd")
+const Water := preload("res://scripts/world/hydrant_water.gd")
+const Kit := preload("res://scripts/world/roadside_kit.gd")
 
 signal prop_hit(kind: int, chunk: int, index: int)
 
 static var enabled := OS.get_environment("NEON_PROPS") != "0"
 
 ## Kinds that answer a hit in this build (the rest are still ghosts).
-const ACTIVE := [Props.POST, Props.CONE, Props.BIN]
+const ACTIVE := [Props.POST, Props.CONE, Props.BIN, Props.HYDRANT, Props.LAMP, Props.SIGN]
 
 ## Per kind, in RoadsideProps order: post, cone, bin, hydrant, lamp, sign, gantry.
 const LOSS_KMH := [1.0, 1.0, 2.5, 10.0, 20.0, 5.0, 0.0]
@@ -80,22 +90,40 @@ const POST_H := 1.0
 const POST_LEAN := 0.38      # rad the post is left leaning at
 const POST_FLAT := 1.4       # rad at the bottom of the bend
 const BEND_TIME := 0.9
+const SIGN_LEAN := 1.05      # rad a hit sign is left bent over at
+const LAMP_FALL_TIME := 0.95
+const LAMP_DOWN := 1.52      # rad: flat on the pavement, a touch short of level
+const STUMP_CAP := 8
+const REPAIR_CAP := 4
+## A repair cone's slot in the props record is its RepairCones index plus this.
+const REPAIR_SLOT := 200
+const LAMP_LINE := "Dave: Somebody took out a lamp on Calder. Again."
+const LAMP_LINE_IN := 4      # the line is said for about one lamp in this many
 
 var player: Node3D
 var traffic: Node
 var pool: Array = []          # game.chunk_pool: {root, index}
+var game: Node                # for the things a breakaway reaches: heat, radio, fx, camera
+var water: Node3D             # hydrant_water.gd
 var night_clock: Node:
 	set(v):
 		night_clock = v
 		if v != null and v.has_signal("night_ended"):
 			v.night_ended.connect(func(_n): new_night.call_deferred())
 
-## Breakaways broken tonight: key (chunk:kind:side:z in cm) -> true.
+## Breakaways broken tonight: key (chunk:kind:side:z in cm) -> the way it
+## fell, in its chunk's own space (a flat unit vector).
 var broken := {}
+## Last night's, mended: key -> true. Each gets a cone beside it tonight.
+var mended := {}
+var heat_raised := 0          # breakaways a cop saw (tests)
+var lamp_lines := 0
+var _dark_meshes := {}
 var hits := 0
 var hits_by_kind := PackedInt32Array()
 var last := {}                # the last hit, for tests: kind, corner, loss, speed
 var cost_usec := 0.0
+var water_usec := 0.0         # the water's share of cost_usec
 var cost_peak := 0.0
 var cost_sum := 0.0
 var cost_ticks := 0
@@ -170,6 +198,10 @@ func _ready() -> void:
 	_roll_age.resize(MAX_ROLLERS)
 	_roll_kind.resize(MAX_ROLLERS)
 	_roll_chunk.resize(MAX_ROLLERS)
+	water = Water.new()
+	water.name = "HydrantWater"
+	water.game = game
+	add_child(water)
 
 # ---------- chunks ----------
 
@@ -195,16 +227,73 @@ func dress_chunk(root: Node3D, chunk: int) -> void:
 	for i in range(_bends.size() - 1, -1, -1):
 		if _bends[i].root == root:
 			_bends.remove_at(i)
-	if rec.is_empty() or broken.is_empty():
-		return
-	for i in rec.kind.size():
-		if broken.has(_key(chunk, rec, i)):
-			gone[i] = 1
-			_show_broken(root, rec, i)
-	root.set_meta("props_gone", gone)
+	for n in ["Stumps", "Fallen_lamp", "RepairCones"]:
+		var old := root.get_node_or_null(NodePath(n)) as MultiMeshInstance3D
+		if old != null:
+			old.multimesh.visible_instance_count = 0
+			old.visible = false
+	root.set_meta("stumps_n", 0)
+	if not rec.is_empty() and not (broken.is_empty() and mended.is_empty()):
+		var cones := 0
+		for i in gone.size():
+			var key := _key(chunk, rec, i)
+			if broken.has(key):
+				gone[i] = 1
+				_show_broken(root, rec, i, broken[key])
+			elif mended.has(key) and cones < REPAIR_CAP:
+				_repair_cone(root, rec, i, cones)
+				cones += 1
+		if cones > 0:
+			Props.write(root, rec)
+			gone.resize(rec.kind.size())
+		root.set_meta("props_gone", gone)
+	if water != null:
+		water.dress_chunk(root, chunk, _roots)
 
+## The night is over: what was broken is mended (a cone stands by each for
+## the night that follows), and the water is gone.
 func new_night() -> void:
+	mended = {}
+	for key in broken:
+		mended[key] = true
 	broken.clear()
+	if water != null:
+		water.new_night()
+	for e in pool:
+		if is_instance_valid(e.root) and not e.root.get_meta("rebuilding", false):
+			_restore(e.root)
+			dress_chunk(e.root, int(e.index))
+
+## Puts a loaded chunk's broken things back whole (the builder does this for
+## a chunk it lays afresh; a chunk that is just standing there needs it done
+## here). A felled lamp's light pool is the one thing left out: only the
+## builder knows its size, so it comes back when the chunk is next recycled.
+func _restore(root: Node3D) -> void:
+	var rec: Dictionary = Props.of(root)
+	if rec.is_empty():
+		return
+	var gone: PackedByteArray = root.get_meta("props_gone", PackedByteArray())
+	for i in mini(rec.kind.size(), gone.size()):
+		if gone[i] == 0 or Props.CLASS[rec.kind[i]] != Props.BREAKAWAY:
+			continue
+		var mmi := _mmi(root, rec, i)
+		var slot := _slot(rec, i)
+		var turn := Basis() if rec.side[i] > 0 else Basis(Vector3.UP, PI)
+		match rec.kind[i]:
+			Props.LAMP, Props.HYDRANT:
+				if mmi != null and slot >= 0 and slot < mmi.multimesh.instance_count:
+					mmi.multimesh.set_instance_transform(slot, Transform3D(turn, rec.pos[i]))
+			Props.SIGN:
+				var xfs: Array = root.get_meta("name_sign_xfs", [])
+				var mm := (root.get_node(^"NameSigns") as MultiMeshInstance3D).multimesh
+				for k in xfs.size():
+					mm.set_instance_transform(k, xfs[k])
+	# last night's repair cones are records of this file's making: drop them
+	var keep := Props.begin()
+	for i in rec.kind.size():
+		if rec.slot[i] < REPAIR_SLOT:
+			Props.add(keep, rec.kind[i], rec.pos[i], rec.slot[i], rec.side[i], rec.road[i].x, rec.road[i].y)
+	Props.write(root, keep)
 
 static func _key(chunk: int, rec: Dictionary, i: int) -> String:
 	return "%d:%d:%d:%d" % [chunk, rec.kind[i], rec.side[i], roundi(rec.road[i].y * 100.0)]
@@ -214,6 +303,8 @@ func is_broken(chunk: int, rec: Dictionary, i: int) -> bool:
 
 ## The floating origin moved the world by `offset`.
 func shift_world(offset: Vector3) -> void:
+	if water != null:
+		water.shift_world(offset)
 	for i in MAX_FLYERS:
 		if _fly_on[i] != 0:
 			_fly[i].global_position += offset
@@ -255,6 +346,13 @@ func _physics_process(delta: float) -> void:
 		_step_rollers(delta)
 	if not _bends.is_empty():
 		_step_bends(delta)
+	if water != null and (not water.wet.is_empty() or water.sheet > 0.0):
+		var tw := Time.get_ticks_usec()
+		var pl: RigidBody3D = player as RigidBody3D if player != null and is_instance_valid(player) else null
+		water.step(delta, pl, _half_of(pl) if pl != null else Vector3.ONE, _roots)
+		water_usec = float(Time.get_ticks_usec() - tw)
+	else:
+		water_usec = 0.0
 	cost_usec = float(Time.get_ticks_usec() - t0)
 	cost_peak = maxf(cost_peak, cost_usec)
 	cost_sum += cost_usec
@@ -381,14 +479,32 @@ func _hit(car: RigidBody3D, is_player: bool, root: Node3D, chunk: int, rec: Dict
 		last = {"kind": kind, "corner": corner, "loss_kmh": loss * 3.6, "speed_kmh": speed * 3.6, "nudge": dw, "chunk": chunk, "index": i}
 		_sound(car, float(SOUND_DV[kind]), SURFACE[kind])
 		if Props.CLASS[kind] == Props.BREAKAWAY:
-			broken[_key(chunk, rec, i)] = true
 			var dmg = car.get("damage")
 			if dmg != null and float(DAMAGE_DV[kind]) > 0.0:
 				# from the front, at the corner that met it (x right, z back)
 				dmg.apply_hit(Vector3(-corner * 0.6, 0.0, 1.0).normalized() * float(DAMAGE_DV[kind]))
+			_seen_by_cop()
+	var local_dir: Vector3 = root.global_transform.basis.inverse() * dir
+	local_dir.y = 0.0
+	local_dir = local_dir.normalized()
+	if Props.CLASS[kind] == Props.BREAKAWAY:
+		broken[_key(chunk, rec, i)] = local_dir
 	match kind:
 		Props.POST:
 			_bend(root, rec, i, dir)
+		Props.SIGN:
+			_bend_sign(root, rec, i, local_dir, 0.0)
+		Props.LAMP:
+			_fell_lamp(root, rec, i, local_dir, 0.0)
+			_stump(root, rec, i)
+			if is_player:
+				_lamp_line(chunk, i)
+		Props.HYDRANT:
+			_hide(root, rec, i)
+			_stump(root, rec, i)
+			_launch_flyer(root, chunk, rec, i, foot, vel * 0.6, right * corner, speed * 0.6, car.global_transform.basis)
+			if water != null:
+				water.burst(_key(chunk, rec, i), chunk, rec.pos[i], rec.road[i], rec.slot[i] >= RoadChunkBuilder.KIT_SLOT or rec.slot[i] < 0, _roots)
 		Props.BIN:
 			_hide(root, rec, i)
 			_launch_roller(root, chunk, rec, i, foot, vel, right * signf(corner if absf(corner) > 0.05 else 1.0), speed)
@@ -415,7 +531,7 @@ static func _node_name(kind: int, side: int, slot: int) -> String:
 		Props.POST:
 			return "PylonsOwn" if side > 0 else "PylonsOnc"
 		Props.CONE:
-			return "Kit_cone"
+			return "RepairCones" if slot >= REPAIR_SLOT else "Kit_cone"
 		Props.BIN:
 			return "Kit_bin"
 		Props.HYDRANT:
@@ -430,6 +546,8 @@ static func _mmi(root: Node3D, rec: Dictionary, i: int) -> MultiMeshInstance3D:
 
 static func _slot(rec: Dictionary, i: int) -> int:
 	var s: int = rec.slot[i]
+	if s >= REPAIR_SLOT:
+		return s - REPAIR_SLOT
 	return s - RoadChunkBuilder.KIT_SLOT if s >= RoadChunkBuilder.KIT_SLOT else s
 
 func _hide(root: Node3D, rec: Dictionary, i: int) -> void:
@@ -439,9 +557,142 @@ func _hide(root: Node3D, rec: Dictionary, i: int) -> void:
 		return
 	mmi.multimesh.set_instance_transform(slot, Transform3D(Basis.from_scale(Vector3.ZERO), rec.pos[i]))
 
-## Tonight's broken thing, on a chunk that has just been laid afresh.
-func _show_broken(root: Node3D, rec: Dictionary, i: int) -> void:
+## Tonight's broken thing, on a chunk that has just been laid afresh: as it
+## was left, with no animation.
+func _show_broken(root: Node3D, rec: Dictionary, i: int, fell: Variant) -> void:
+	var local_dir: Vector3 = fell if fell is Vector3 else Vector3.FORWARD
+	match rec.kind[i]:
+		Props.LAMP:
+			_fell_lamp(root, rec, i, local_dir, LAMP_FALL_TIME)
+			_stump(root, rec, i)
+		Props.SIGN:
+			_bend_sign(root, rec, i, local_dir, BEND_TIME)
+		_:
+			_hide(root, rec, i)
+			_stump(root, rec, i)
+
+## A cop that sees a breakaway go down raises the heat (PoliceHeat decides:
+## a warning first). Witnesses cannot call one.
+func _seen_by_cop() -> void:
+	var heat = game.get("police_heat") if game != null else null
+	if heat != null and is_instance_valid(heat) and heat.has_method("on_property_damage"):
+		if heat.on_property_damage():
+			heat_raised += 1
+
+## Dave, now and then, about a lamp. Which lamps is from their place.
+func _lamp_line(chunk: int, i: int) -> void:
+	if posmod(hash([chunk, i, "lamp line"]), LAMP_LINE_IN) != 0:
+		return
+	var radio = game.get("radio") if game != null else null
+	if radio != null and is_instance_valid(radio) and radio.has_method("announce"):
+		if radio.announce(LAMP_LINE):
+			lamp_lines += 1
+
+# ---------- stumps, fallen lamps, repair cones ----------
+
+static var _stump_mesh: CylinderMesh
+
+func _lazy_mmi(root: Node3D, node_name: String, mesh: Mesh, mat: Material, cap: int) -> MultiMeshInstance3D:
+	var mmi := root.get_node_or_null(NodePath(node_name)) as MultiMeshInstance3D
+	if mmi == null:
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mesh
+		mm.instance_count = cap
+		mm.visible_instance_count = 0
+		mmi = MultiMeshInstance3D.new()
+		mmi.name = node_name
+		mmi.multimesh = mm
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mmi.visibility_range_end = 160.0
+		root.add_child(mmi)
+	mmi.multimesh.mesh = mesh
+	mmi.material_override = mat
+	return mmi
+
+## What is left standing: a short sheared foot.
+func _stump(root: Node3D, rec: Dictionary, i: int) -> void:
+	if _stump_mesh == null:
+		_stump_mesh = CylinderMesh.new()
+		_stump_mesh.top_radius = 0.09
+		_stump_mesh.bottom_radius = 0.11
+		_stump_mesh.height = 0.16
+		_stump_mesh.radial_segments = 6
+		_stump_mesh.rings = 0
+		var m := StandardMaterial3D.new()
+		m.albedo_color = Color(0.13, 0.12, 0.11)
+		m.roughness = 0.7
+		_stump_mesh.material = m
+	var mmi := _lazy_mmi(root, "Stumps", _stump_mesh, null, STUMP_CAP)
+	var n: int = root.get_meta("stumps_n", 0)
+	if n >= STUMP_CAP:
+		return
+	mmi.multimesh.set_instance_transform(n, Transform3D(Basis(), (rec.pos[i] as Vector3) + Vector3(0.0, 0.08, 0.0)))
+	mmi.multimesh.visible_instance_count = n + 1
+	mmi.visible = true
+	root.set_meta("stumps_n", n + 1)
+
+## A felled lamp's light goes out: its pool on the road and its wet streak.
+func _lamp_dark(root: Node3D, rec: Dictionary, i: int) -> void:
+	var slot := _slot(rec, i)
+	for n in ["LampPools", "LampSmears"]:
+		var mmi := root.get_node_or_null(NodePath(n)) as MultiMeshInstance3D
+		if mmi != null and slot >= 0 and slot < mmi.multimesh.instance_count:
+			mmi.multimesh.set_instance_transform(slot, Transform3D(Basis.from_scale(Vector3.ZERO), rec.pos[i]))
+
+## The lamp snaps: its lit copy goes, its light goes, and a dark copy falls
+## along `local_dir` from `t` seconds into the fall (LAMP_FALL_TIME = lying).
+func _fell_lamp(root: Node3D, rec: Dictionary, i: int, local_dir: Vector3, t: float) -> void:
+	var lamps := _mmi(root, rec, i)
+	var slot := _slot(rec, i)
+	if lamps == null or slot < 0 or slot >= lamps.multimesh.instance_count:
+		return
 	_hide(root, rec, i)
+	_lamp_dark(root, rec, i)
+	# the same mesh with the head switched off, as the power cut uses
+	var dark: Mesh = lamps.multimesh.mesh
+	if dark != null and dark.get_surface_count() > 1:
+		var id := dark.get_instance_id()
+		if not _dark_meshes.has(id):
+			var d: Mesh = dark.duplicate()
+			var off := StandardMaterial3D.new()
+			off.albedo_color = Color(0.09, 0.08, 0.07)
+			off.roughness = 0.8
+			d.surface_set_material(1, off)
+			_dark_meshes[id] = d
+		dark = _dark_meshes[id]
+	var fallen := _lazy_mmi(root, "Fallen_lamp", dark, lamps.material_override, lamps.multimesh.instance_count)
+	if fallen.multimesh.visible_instance_count == 0:
+		# first one on this chunk: every other slot stays scaled to nothing
+		for k in fallen.multimesh.instance_count:
+			fallen.multimesh.set_instance_transform(k, Transform3D(Basis.from_scale(Vector3.ZERO), Vector3.ZERO))
+		fallen.multimesh.visible_instance_count = fallen.multimesh.instance_count
+	fallen.visible = true
+	var turn := Basis() if rec.side[i] > 0 else Basis(Vector3.UP, PI)
+	_add_bend({"mm": fallen.multimesh, "slots": PackedInt32Array([slot]), "bases": [Transform3D(turn, rec.pos[i])],
+		"foot": rec.pos[i], "axis": Vector3.UP.cross(local_dir).normalized(), "t": t, "root": root, "mode": "fall"})
+
+## The sign's parts all turn about its foot, to a lasting bend.
+func _bend_sign(root: Node3D, rec: Dictionary, i: int, local_dir: Vector3, t: float) -> void:
+	var xfs: Array = root.get_meta("name_sign_xfs", [])
+	var mmi := root.get_node_or_null(^"NameSigns") as MultiMeshInstance3D
+	if mmi == null or xfs.is_empty() or rec.slot[i] < 0:
+		return
+	var slots := PackedInt32Array()
+	for k in xfs.size():
+		slots.append(k)
+	_add_bend({"mm": mmi.multimesh, "slots": slots, "bases": xfs, "foot": rec.pos[i],
+		"axis": Vector3.UP.cross(local_dir).normalized(), "t": t, "root": root, "mode": "sign"})
+
+## Last night's mended thing gets a cone beside it: one more prop on this
+## chunk, a copy in the chunk's RepairCones, knocked over like any cone.
+func _repair_cone(root: Node3D, rec: Dictionary, i: int, n: int) -> void:
+	var mmi := _lazy_mmi(root, "RepairCones", Kit.mesh(Kit.CONE), null, REPAIR_CAP)
+	var p: Vector3 = (rec.pos[i] as Vector3) + Vector3(0.0, 0.0, 0.8)
+	mmi.multimesh.set_instance_transform(n, Transform3D(Basis(), p))
+	mmi.multimesh.visible_instance_count = n + 1
+	mmi.visible = true
+	Props.add(rec, Props.CONE, p, REPAIR_SLOT + n, rec.side[i], rec.road[i].x, minf(rec.road[i].y + 0.8, 0.0))
 
 # ---------- bends ----------
 
@@ -450,16 +701,40 @@ func _bend(root: Node3D, rec: Dictionary, i: int, dir: Vector3) -> void:
 	var slot := _slot(rec, i)
 	if mmi == null or slot < 0:
 		return
-	if _bends.size() >= MAX_BENDS:
-		_bend_write(_bends[0], BEND_TIME)   # the oldest finishes where it ends
-		_bends.remove_at(0)
 	# falls away from the car: about the flat axis square to its travel
 	var local_dir: Vector3 = root.global_transform.basis.inverse() * dir
 	local_dir.y = 0.0
 	local_dir = local_dir.normalized()
-	var b := {"mm": mmi.multimesh, "slot": slot, "foot": rec.pos[i], "axis": Vector3.UP.cross(local_dir).normalized(), "t": 0.0, "root": root}
+	_add_bend({"mm": mmi.multimesh, "slots": PackedInt32Array([slot]),
+		"bases": [Transform3D(Basis(), (rec.pos[i] as Vector3) + Vector3(0.0, POST_H * 0.5, 0.0))],
+		"foot": rec.pos[i], "axis": Vector3.UP.cross(local_dir).normalized(), "t": 0.0, "root": root, "mode": "post"})
+
+## Starts a baked animation (or, with t already at its end, just writes the
+## final pose). When all MAX_BENDS are busy the oldest jumps to its end.
+func _add_bend(b: Dictionary) -> void:
+	var total := LAMP_FALL_TIME if b.mode == "fall" else BEND_TIME
+	if float(b.t) >= total:
+		_bend_write(b, total)
+		return
+	if _bends.size() >= MAX_BENDS:
+		var old: Dictionary = _bends[0]
+		_bend_write(old, LAMP_FALL_TIME if old.mode == "fall" else BEND_TIME)
+		_bends.remove_at(0)
 	_bends.append(b)
-	_bend_write(b, 0.0)
+	_bend_write(b, float(b.t))
+
+## A falling lamp's angle: slow off the vertical, fast at the ground, one
+## small bounce.
+static func fall_angle(t: float) -> float:
+	var k := clampf(t / (LAMP_FALL_TIME * 0.8), 0.0, 1.0)
+	if k < 1.0:
+		return LAMP_DOWN * k * k
+	var r := clampf((t - LAMP_FALL_TIME * 0.8) / (LAMP_FALL_TIME * 0.2), 0.0, 1.0)
+	return LAMP_DOWN - 0.07 * sin(r * PI)
+
+static func sign_angle(t: float) -> float:
+	var k := clampf(t / BEND_TIME, 0.0, 1.0)
+	return SIGN_LEAN * (1.0 - exp(-6.0 * k) * cos(k * 9.0)) if k < 1.0 else SIGN_LEAN
 
 ## The lean (rad) t seconds into a bend: down flat in a blink, then up to a
 ## lean with a wobble that dies out.
@@ -472,15 +747,26 @@ static func bend_angle(t: float) -> float:
 	return POST_LEAN + (POST_FLAT - POST_LEAN) * exp(-5.0 * k) * cos(k * 14.0)
 
 func _bend_write(b: Dictionary, t: float) -> void:
-	var rot := Basis(b.axis, bend_angle(t))
-	(b.mm as MultiMesh).set_instance_transform(b.slot, Transform3D(rot, (b.foot as Vector3) + rot * Vector3(0.0, POST_H * 0.5, 0.0)))
+	var a := bend_angle(t)
+	if b.mode == "fall":
+		a = fall_angle(t)
+	elif b.mode == "sign":
+		a = sign_angle(t)
+	# every part turns about the foot
+	var foot: Vector3 = b.foot
+	var turn := Transform3D(Basis(), foot) * Transform3D(Basis(b.axis, a), Vector3.ZERO) * Transform3D(Basis(), -foot)
+	var slots: PackedInt32Array = b.slots
+	var bases: Array = b.bases
+	var mm: MultiMesh = b.mm
+	for k in slots.size():
+		mm.set_instance_transform(slots[k], turn * (bases[k] as Transform3D))
 
 func _step_bends(delta: float) -> void:
 	for k in range(_bends.size() - 1, -1, -1):
 		var b: Dictionary = _bends[k]
 		b.t += delta
 		_bend_write(b, b.t)
-		if b.t >= BEND_TIME:
+		if b.t >= (LAMP_FALL_TIME if b.mode == "fall" else BEND_TIME):
 			_bends.remove_at(k)
 
 # ---------- scripted flyers ----------

@@ -502,6 +502,22 @@ func on_contact(other: Object, closing_kmh: float) -> void:
 	_flee_t = 0.0
 	_offence(PoliceRules.Offence.CRASH, notice, area)
 
+## The player knocked down a lamp post, hydrant or sign (prop_break.gd). Only
+## a cop that sees it counts (witnesses cannot call one): a warning first at
+## heat 0, one step of heat otherwise. True when a cop saw it.
+func on_property_damage() -> bool:
+	if player == null:
+		return false
+	var cop := _notice_cop()
+	if cop == null or cop in bad_cops:
+		return false
+	if level >= ONE_CAR:
+		offence_seen.emit(PoliceRules.Offence.PROPERTY, cop)
+		_add_heat(1.0)
+	else:
+		_offence(PoliceRules.Offence.PROPERTY, cop, _area(RoadFrame.unroll(player.global_position).z))
+	return true
+
 ## The fault test (PoliceRules.player_at_fault) from the cars' road-space state.
 func player_at_fault(other: Node3D) -> bool:
 	var p := RoadFrame.unroll(player.global_position)

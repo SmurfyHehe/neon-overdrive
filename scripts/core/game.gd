@@ -593,6 +593,7 @@ func _setup_chunk_pool() -> void:
 		breaker.name = "PropBreak"
 		breaker.pool = chunk_pool
 		breaker.night_clock = night_clock
+		breaker.game = self
 		add_child(breaker)
 	var start := 0
 	if resume_place:

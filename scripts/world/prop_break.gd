@@ -58,9 +58,11 @@ const SURFACE := ["metal", "concrete", "metal", "metal", "metal", "metal", "meta
 const MAX_SHARE := 0.6
 ## Largest change in turning speed a hit may cause (rad/s).
 const NUDGE_CAP := 0.35
-## The nudge fades with speed above this (m/s): the faster the car, the
-## longer its tyres take to cancel a kick, so the same kick would turn it more.
-const NUDGE_FULL_BELOW := 14.0
+## The nudge is held for this long as a half-sine on top of the car's own
+## turning speed (a single kick is gone in a few hundredths of a second, the
+## tyres cancel it: 0.2-0.8 degrees, measured 2026-10-11). At the cap this
+## turns the nose about 3 degrees; a hydrant 2, a sign 1.
+const NUDGE_TIME := 0.32
 ## Slower than this (m/s) the car pushes things over without a hit.
 const MIN_SPEED := 1.5
 
@@ -245,6 +247,8 @@ func _physics_process(delta: float) -> void:
 			if car.detailed:
 				_check(car as RigidBody3D, false, delta * 4.0)
 			i += 4
+	if _nudge_car != null:
+		_step_nudge(delta)
 	if _fly_n > 0:
 		_step_flyers(delta)
 	if _roll_n > 0:
@@ -255,6 +259,28 @@ func _physics_process(delta: float) -> void:
 	cost_peak = maxf(cost_peak, cost_usec)
 	cost_sum += cost_usec
 	cost_ticks += 1
+
+var _nudge_car: RigidBody3D
+var _nudge_w0 := 0.0
+var _nudge_dw := 0.0
+var _nudge_t := 0.0
+
+func _nudge_now() -> float:
+	if _nudge_car == null:
+		return 0.0
+	return _nudge_dw * sin(PI * clampf(_nudge_t / NUDGE_TIME, 0.0, 1.0))
+
+## Flat only: the turning speed about the vertical is set, nothing else.
+func _step_nudge(delta: float) -> void:
+	if not is_instance_valid(_nudge_car):
+		_nudge_car = null
+		return
+	_nudge_t += delta
+	var w := _nudge_car.angular_velocity
+	w.y = _nudge_w0 + _nudge_now()
+	_nudge_car.angular_velocity = w
+	if _nudge_t >= NUDGE_TIME:
+		_nudge_car = null
 
 func _half_of(car: Node3D) -> Vector3:
 	var id := car.get_instance_id()
@@ -303,7 +329,7 @@ func _check(car: RigidBody3D, is_player: bool, dt: float) -> void:
 			continue
 		_out.clear()
 		var to_car := car_inv * root.global_transform
-		Props.near(rec, to_car, local_z, half.x, front, back, gone, _out)
+		Props.near(rec, to_car, u.x, local_z, half.x, front, back, gone, _out)
 		if _out.is_empty():
 			continue
 		var changed := false
@@ -324,10 +350,10 @@ static func loss_for(kind: int, speed_kmh: float) -> float:
 	return minf(float(LOSS_KMH[kind]), speed_kmh * MAX_SHARE)
 
 ## The change in turning speed (rad/s, + = nose to the left) for a hit on
-## `kind` at `corner` (-1 the left corner .. 1 the right) at `speed` m/s.
-static func nudge_for(kind: int, corner: float, speed: float) -> float:
-	var fade := minf(1.0, NUDGE_FULL_BELOW / maxf(speed, 0.1))
-	return -clampf(corner, -1.0, 1.0) * NUDGE_CAP * float(NUDGE[kind]) * fade
+## `kind` at `corner` (-1 the left corner .. 1 the right): the peak of the
+## NUDGE_TIME half-sine. Toward the hit corner.
+static func nudge_for(kind: int, corner: float) -> float:
+	return -clampf(corner, -1.0, 1.0) * NUDGE_CAP * float(NUDGE[kind])
 
 func _hit(car: RigidBody3D, is_player: bool, root: Node3D, chunk: int, rec: Dictionary, i: int, corner: float) -> void:
 	var kind: int = rec.kind[i]
@@ -344,9 +370,14 @@ func _hit(car: RigidBody3D, is_player: bool, root: Node3D, chunk: int, rec: Dict
 		var loss := loss_for(kind, speed * 3.6) / 3.6
 		# one flat push through the centre: no pitch, no roll, no lift
 		car.linear_velocity = vel - dir * loss
-		var dw := nudge_for(kind, corner, speed)
+		var dw := nudge_for(kind, corner)
 		if dw != 0.0:
-			car.angular_velocity += Vector3.UP * dw
+			# a second hit mid-nudge starts again from the turning speed
+			# the car would have had without the first
+			_nudge_w0 = car.angular_velocity.y - _nudge_now()
+			_nudge_dw = dw
+			_nudge_t = 0.0
+			_nudge_car = car
 		last = {"kind": kind, "corner": corner, "loss_kmh": loss * 3.6, "speed_kmh": speed * 3.6, "nudge": dw, "chunk": chunk, "index": i}
 		_sound(car, float(SOUND_DV[kind]), SURFACE[kind])
 		if Props.CLASS[kind] == Props.BREAKAWAY:
@@ -501,9 +532,10 @@ func _step_flyers(delta: float) -> void:
 		if _fly_on[k] == 0:
 			continue
 		var m := _fly[k]
+		var xf := m.global_transform
 		var v := _fly_vel[k]
 		v.y -= GRAVITY * delta
-		var p := m.global_position + v * delta
+		var p := xf.origin + v * delta
 		var ground := _fly_foot[k].y + (p - _fly_foot[k]).dot(_fly_slope[k]) + _fly_rest[k]
 		var landed := false
 		if p.y <= ground:
@@ -516,7 +548,7 @@ func _step_flyers(delta: float) -> void:
 			landed = absf(v.y) < 0.7 and Vector2(v.x, v.z).length() < 1.2
 		_fly_vel[k] = v
 		_fly_age[k] += delta
-		m.global_transform = Transform3D(Basis(_fly_axis[k], _fly_spin[k] * delta) * m.global_transform.basis, p)
+		m.global_transform = Transform3D(Basis(_fly_axis[k], _fly_spin[k] * delta) * xf.basis, p)
 		if landed or _fly_age[k] >= FLYER_LIFE:
 			_freeze_flyer(k)
 
@@ -611,7 +643,7 @@ func _to_debris(from_chunk: int, kind: int, mesh: Mesh, mat: Material, world: Tr
 		if root == null or not is_instance_valid(root) or root.get_meta("rebuilding", false):
 			return
 	var n: int = root.get_meta("debris_n", 0)
-	var node_name := "Debris_" + Props.NAMES[kind]
+	var node_name: String = "Debris_" + Props.NAMES[kind]
 	var mmi := root.get_node_or_null(NodePath(node_name)) as MultiMeshInstance3D
 	if mmi == null:
 		var mm := MultiMesh.new()

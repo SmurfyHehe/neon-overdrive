@@ -62,6 +62,7 @@ var measured_loss := 0.0
 var prop_ref: Array = []
 var spree_cost := PackedFloat32Array()
 var spree_hits0 := 0
+var spree_water := 0.0
 var max_fly := 0
 var max_roll := 0
 var max_bend := 0
@@ -165,6 +166,7 @@ func _physics_process(_delta: float) -> bool:
 				_start_spree()
 		"spree":
 			spree_cost.append(breaker.cost_usec)
+			spree_water += float(breaker.get("water_usec")) if breaker.get("water_usec") != null else 0.0
 			if t >= RATE * 7:
 				_judge_spree()
 				return _end()
@@ -194,6 +196,8 @@ func _next_case() -> void:
 		return
 	var c: Array = cases[case_i]
 	var x := Harness.lane_x(LANE)
+	if breaker.get("water") != null:
+		breaker.water.new_night()   # the last case's burst hydrant is not this case's wet road
 	_place(float(c[1]), x)
 	# far enough for the springs to settle before the hit
 	var ahead := float(c[1]) / 3.6 * 0.7 + 6.0
@@ -256,7 +260,7 @@ func _start_real_post() -> void:
 		for i in rec.kind.size():
 			if rec.kind[i] != Props.POST or rec.side[i] != 1 or rec.slot[i] < 0:
 				continue
-			var ahead := float(c) * Props.CHUNK_LEN - rec.road[i].y - s
+			var ahead: float = float(c) * Props.CHUNK_LEN - rec.road[i].y - s
 			if ahead > 40.0 and ahead < best:
 				best = ahead
 				post_x = rec.road[i].x
@@ -274,10 +278,14 @@ func _start_spree() -> void:
 	var x := Harness.lane_x(LANE)
 	_place(100.0, x)
 	spree_hits0 = breaker.hits
-	var kinds: Array = PropBreak.ACTIVE
+	# the spree of the budget: flying and rolling things, and one hydrant
+	var kinds: Array = [Props.CONE, Props.BIN, Props.CONE, Props.POST, Props.CONE]
 	var stood := 0
 	for k in 20:
-		var ref: Array = breaker.add_test_prop(int(kinds[k % kinds.size()]), x + (float(k % 3) - 1.0) * 0.6, p.global_position, 20.0 + float(k) * 2.5)
+		var kind := int(kinds[k % kinds.size()])
+		if k == 10 and Props.HYDRANT in PropBreak.ACTIVE:
+			kind = Props.HYDRANT
+		var ref: Array = breaker.add_test_prop(kind, x + (float(k % 3) - 1.0) * 0.6, p.global_position, 20.0 + float(k) * 2.5)
 		if not ref.is_empty():
 			stood += 1
 	if stood < 20:
@@ -299,8 +307,8 @@ func _judge_spree() -> void:
 	mean /= maxf(float(spree_cost.size()), 1.0)
 	var p95 := spree_cost[int(float(spree_cost.size()) * 0.95)]
 	var peak := spree_cost[spree_cost.size() - 1]
-	print("spree: %d hits; most at once: %d flying, %d rolling, %d bending; breaker tick mean %.1f us, 95th %.1f us, worst %.1f us (ceiling %.0f)" % [
-		n, max_fly, max_roll, max_bend, mean, p95, peak, PropBreak.CEILING_USEC])
+	print("spree: %d hits; most at once: %d flying, %d rolling, %d bending; breaker tick mean %.1f us (water %.1f of it), 95th %.1f us, worst %.1f us (ceiling %.0f)" % [
+		n, max_fly, max_roll, max_bend, mean, spree_water / maxf(float(spree_cost.size()), 1.0), p95, peak, PropBreak.CEILING_USEC])
 	if n < 20:
 		_fail("spree: %d of 20 props were hit" % n)
 	if max_fly > PropBreak.MAX_FLYERS or max_roll > PropBreak.MAX_ROLLERS or max_bend > PropBreak.MAX_BENDS:

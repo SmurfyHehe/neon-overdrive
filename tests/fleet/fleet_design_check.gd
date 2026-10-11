@@ -74,8 +74,8 @@ func _initialize() -> void:
 	for car in data.cars:
 		roles[car.role] += 1
 	print("fleet: %d player, %d traffic, %d police" % [roles.player, roles.npc, roles.cop])
-	if roles.player != 9 or roles.npc != 3 or roles.cop != 3:
-		_fail("fleet is %s, want 9 player / 3 traffic / 3 police" % roles)
+	if roles.player != 10 or roles.npc != 3 or roles.cop != 3:
+		_fail("fleet is %s, want 10 player / 3 traffic / 3 police" % roles)
 
 	# ---- per car
 	var orbit := _orbit_cameras()

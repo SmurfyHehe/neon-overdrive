@@ -17,7 +17,7 @@ extends SceneTree
 ## Forward gears each car carries.
 const GEARS := {
 	"p0_beater": 5, "p1_coupe": 5, "p2_hothatch": 5, "p3_tuner": 5,
-	"p4_kei": 5, "p5_muscle": 4, "p6_crossover": 5,
+	"p4_kei": 5, "p5_muscle": 4, "p6_crossover": 5, "p10_truck": 4,
 }
 ## [0-100 km/h ceiling s, top speed floor km/h, top speed ceiling km/h].
 const SPEED := {
@@ -28,10 +28,11 @@ const SPEED := {
 	"p4_kei": [12.5, 170.0, 200.0],
 	"p5_muscle": [5.8, 257.0, 300.0],
 	"p6_crossover": [6.5, 225.0, 262.0],
+	"p10_truck": [7.5, 205.0, 248.0],
 }
 ## Cars whose top gear is an overdrive: flat out they stop pulling one gear
 ## below it, so the run never revs out into top (the kei tops out in fourth).
-const OVERDRIVE := ["p4_kei"]
+const OVERDRIVE := ["p4_kei", "p10_truck"]
 ## Past this slide angle the corner run is a spin (tools/balance_sweep.gd).
 const SPIN_DEG := 45.0
 

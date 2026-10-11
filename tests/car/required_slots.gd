@@ -179,7 +179,7 @@ func _brake_rules() -> void:
 	for kind in ["p2_hothatch", "p4_kei"]:
 		var b := CarFittings.brakes_for(kind)
 		_check(b.front == "disc" and b.rear == "drum", "%s has front discs and rear drums, got %s" % [kind, b])
-	for kind in ["p1_coupe", "p3_tuner", "p5_muscle", "p6_crossover", "c1_patrol", "c2_patrolsuv", "c3_interceptor"]:
+	for kind in ["p1_coupe", "p3_tuner", "p5_muscle", "p6_crossover", "p10_truck", "c1_patrol", "c2_patrolsuv", "c3_interceptor"]:
 		var b := CarFittings.brakes_for(kind)
 		_check(b.front == "disc" and b.rear == "disc", "%s has discs all round, got %s" % [kind, b])
 	for kind in CarFittings.BRAKES:

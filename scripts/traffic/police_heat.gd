@@ -486,6 +486,10 @@ func on_contact(other: Object, closing_kmh: float) -> void:
 		return
 	var area := _area(RoadFrame.unroll(player.global_position).z)
 	if other in cops:
+		# A cop that drives into you (the chaser's nudge, a box-in) is not your
+		# offence: the same fault test as for a crash with traffic (P6).
+		if level >= ONE_CAR and not player_at_fault(other as Node3D):
+			return
 		var kind := PoliceRules.Offence.RAM_COP if closing_kmh >= PoliceRules.BUMP_KMH else PoliceRules.Offence.TOUCH_COP
 		_offence(kind, other as Node3D, area)
 		return

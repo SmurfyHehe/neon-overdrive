@@ -30,6 +30,14 @@ extends RefCounted
 # index walk (the danger number) per step.
 
 enum State { PATROL, CHECKING, PURSUIT, LOST, SEARCH, CALLED_OFF }
+## What it does in Pursuit (P6, spec section 3.1; the dispatcher deals them):
+##   chaser   tails 12 m behind, pulls right up when you are slow, and nudges
+##            your tail if you are slower than it inside 3 m.
+##   blocker  gets in front of you in your lane (it passes in a free lane, or
+##            it was put on the road ahead of you) and then drives slower.
+##   flanker  holds its nose by your rear wheel, one side or the other.
+enum Role { CHASER, BLOCKER, FLANKER }
+const ROLE_NAMES := ["chaser", "blocker", "flanker"]
 const NAMES := ["patrol", "checking", "pursuit", "lost", "search", "called off"]
 
 signal state_changed(from: int, to: int)
@@ -44,6 +52,10 @@ var player: Node3D
 var ghost: Node3D
 ## Bad cops skip the danger number and never call off (P14 sets this).
 var honest := true
+var role := Role.CHASER
+## The fastest this cop's car is driven, m/s (the dispatcher sets it by car).
+var v_cap := INF
+var flank_side := 0.0         # +1 / -1 once the flanker has picked a side
 ## Whether the road has no barrier between the carriageways at road z (wired
 ## by the game; unknown = divided).
 var undivided_at := Callable()
@@ -83,7 +95,10 @@ func in_chase() -> bool:
 func step(dt: float) -> void:
 	if car == null or not is_instance_valid(car) or heat == null or player == null:
 		return
-	sees = heat.cop_can_see_player(car)
+	# The cops in a chase talk: what one sees they all know (PoliceHeat.seen is
+	# any cop that has not stood down). A blocker in front of you rarely sees
+	# you itself; it must not go looking for you while the chaser is on your tail.
+	sees = heat.seen or heat.cop_can_see_player(car)
 	if sees:
 		_note_seen()
 	if stood_down_at >= 0 and heat.level == PoliceHeat.NONE:
@@ -105,9 +120,7 @@ func step(dt: float) -> void:
 				_enter(State.PATROL)
 			elif sees:
 				unseen_t = 0.0
-				if driver != null:
-					# a target that has all but stopped is pulled right up to (the bust ring)
-					driver.offset_back = PoliceRules.CLOSE_BACK if absf(heat._kmh_of(player)) < PoliceRules.CLOSE_KMH else PoliceRules.CHASE_BACK
+				_role_step()
 				_danger_step(dt)
 			else:
 				_danger_t = 0.0
@@ -134,8 +147,16 @@ func step(dt: float) -> void:
 	_place_ghost()
 	# On the rails (far off, out of the sim) the free driver is not run and the
 	# car is traffic at its cruise speed: keep that at what the state wants.
+	# In front of its spot (a blocker put on the road ahead) it dawdles so the
+	# player catches it up; behind it, it comes on as fast as its car goes.
 	if driver != null and not car.detailed:
-		car.target_speed = minf(driver.v_top, driver.v_max)
+		var fast := minf(driver.v_top, driver.v_max)
+		if state == State.PURSUIT and driver.target == player:
+			var pu := RoadFrame.unroll(player.global_position)
+			var to_spot := (pu.z - last_dir * driver.offset_back - car.road_z()) * car.direction
+			if to_spot < 0.0:
+				fast = minf(fast, maxf(absf(heat._kmh_of(player)) / 3.6 * 0.6, 12.0))
+		car.target_speed = fast
 
 ## Metres from the cop to the last place it saw the player, along its own
 ## direction (negative = it has driven past).
@@ -151,6 +172,50 @@ func _note_seen() -> void:
 	var vz := RoadFrame.dir_to_road(u.z, vel).z
 	if absf(vz) > 2.0:
 		last_dir = signf(vz)
+
+## Where this cop's role wants it, from how fast the player is going.
+func _role_step() -> void:
+	if driver == null or driver.target != player:
+		return
+	var kmh := absf(heat._kmh_of(player))
+	driver.ram = false
+	driver.offset_x = 0.0
+	driver.v_max = v_cap
+	match role:
+		Role.CHASER:
+			# a target that has all but stopped is pulled right up to (the bust ring)
+			driver.offset_back = PoliceRules.CLOSE_BACK if kmh < PoliceRules.CLOSE_KMH else PoliceRules.CHASE_BACK
+			driver.ram = true
+			driver.ram_gap = PoliceRules.RAM_GAP
+			driver.ram_dv = PoliceRules.RAM_DV
+		Role.BLOCKER:
+			var boxing := kmh < PoliceRules.BOX_KMH
+			driver.offset_back = -(PoliceRules.BOX_AHEAD if boxing else PoliceRules.BLOCK_AHEAD)
+			# in front of you and in your lane: now it slows, and you have to go round
+			var u := RoadFrame.unroll(car.global_position)
+			var pu := RoadFrame.unroll(player.global_position)
+			if car.detailed and absf(driver.gap_along) < PoliceRules.BLOCK_IN_PLACE and absf(u.x - pu.x) < 1.2:
+				var slow := maxf(kmh - PoliceRules.BLOCK_SLOW_KMH, PoliceRules.BLOCK_MIN_KMH)
+				driver.v_max = minf(v_cap, (kmh if boxing else slow) / 3.6)
+		Role.FLANKER:
+			var fu := RoadFrame.unroll(car.global_position)
+			var fp := RoadFrame.unroll(player.global_position)
+			if flank_side == 0.0 or absf(fu.x - fp.x) > 1.0:
+				var side := signf(fu.x - fp.x) if absf(fu.x - fp.x) > 1.0 else 1.0
+				# the side it is on, unless there is no road there
+				var lanes := traffic.onc_lanes if fp.x < 0.0 else traffic.own_lanes
+				var span := FreeDriver.side_span(lanes, fp.x < 0.0)
+				var x := fp.x + side * PoliceRules.FLANK_SIDE
+				if x < span.x or x > span.y:
+					side = -side
+				flank_side = side
+			driver.offset_back = PoliceRules.FLANK_BACK
+			driver.offset_x = flank_side * PoliceRules.FLANK_SIDE
+
+## The dispatcher's word that the chase is terminated (another cop called it).
+func call_off() -> void:
+	if honest and in_chase():
+		_enter(State.CALLED_OFF)
 
 ## Honest cops give up a chase that has become too dangerous.
 func _danger_step(dt: float) -> void:
@@ -192,6 +257,7 @@ func _enter(to: int) -> void:
 		State.PURSUIT:
 			car.lights_on = true
 			_drive(player, PoliceRules.CHASE_BACK)
+			_role_step()
 		State.LOST:
 			car.lights_on = true
 			_drive(ghost, 0.0)
@@ -199,7 +265,7 @@ func _enter(to: int) -> void:
 			car.lights_on = true
 			search_t = 0.0
 			_drive(ghost, 0.0)
-			driver.v_max = float(PoliceRules.SEARCH_KMH[PoliceRules.area_at(last_s)]) / 3.6
+			driver.v_max = minf(v_cap, float(PoliceRules.SEARCH_KMH[PoliceRules.area_at(last_s)]) / 3.6)
 		State.CALLED_OFF:
 			called_off += 1
 			stood_down_at = heat.level
@@ -217,7 +283,8 @@ func _drive(target: Node3D, back: float) -> void:
 	driver.target = target
 	driver.offset_back = back
 	driver.offset_x = 0.0
-	driver.v_max = INF
+	driver.ram = false
+	driver.v_max = v_cap
 
 func _release() -> void:
 	if driver == null:

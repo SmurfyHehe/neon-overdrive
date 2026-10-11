@@ -115,8 +115,9 @@ static func new_multimesh() -> MultiMeshInstance3D:
 ## Places this chunk's animals and writes their state to the root's
 ## "animals" meta: [{pos, basis, flee, speed, scale, shine, hold, t, state}]
 ## in chunk-local space (state 0 sitting, 1 fleeing, 2 gone). walks:
-## [start_own, end_own, start_onc, end_onc] pavement outer edges.
-static func update(root: Node3D, chunk_index: int, infos: Array, mouths: Array, walks: Array, setback: float) -> void:
+## [start_own, end_own, start_onc, end_onc] pavement outer edges. pave_tops:
+## side -> [hs, ts], the drawn pavement height rows from the kerb pass.
+static func update(root: Node3D, chunk_index: int, infos: Array, mouths: Array, walks: Array, setback: float, pave_tops: Dictionary = {}) -> void:
 	var mm: MultiMesh = (root.get_node(^"Animals") as MultiMeshInstance3D).multimesh
 	var list := []
 	if enabled:
@@ -136,7 +137,13 @@ static func update(root: Node3D, chunk_index: int, infos: Array, mouths: Array, 
 			# side street, facing the road; it bolts into the side street
 			var az := z + corner * (SideStreets.MOUTH_HALF + 0.5)
 			var ax := walk - 0.5
-			list.append(_make(chunk_index, k, ax * float(side), az, side, Vector3(float(side), 0.0, 0.0), 0.0))
+			# standing on the raised pavement there (part-dropped this close to
+			# the mouth), not on road level sunk into the slab (#560)
+			var ay := 0.0
+			if pave_tops.has(side):
+				var top: Array = pave_tops[side]
+				ay = RoadChunkBuilder.KERB_H * RoadChunkBuilder._drop_at(top[0], top[1], az)
+			list.append(_make(chunk_index, k, ax * float(side), az, side, Vector3(float(side), 0.0, 0.0), 0.0, ay))
 			k += 1
 		for info in infos:
 			if list.size() >= CAPACITY:
@@ -165,12 +172,12 @@ static func update(root: Node3D, chunk_index: int, infos: Array, mouths: Array, 
 ## One animal at road-description (x, z), facing `face` (+1 = up the road
 ## toward the car, -1 = away, 0 = across toward the road) and fleeing along
 ## `flee` (road-description direction, x across, z along).
-static func _make(chunk_index: int, k: int, x: float, z: float, side: int, flee: Vector3, face: float) -> Dictionary:
+static func _make(chunk_index: int, k: int, x: float, z: float, side: int, flee: Vector3, face: float, y: float = 0.0) -> Dictionary:
 	var dog := posmod(hash([chunk_index, "animal_kind", k]), 100) < DOG_CHANCE
 	# -Z is the nose: face +1 looks up the road (+z), 0 looks at the road
 	var look := Vector3(-float(side), 0.0, 0.0) if face == 0.0 else Vector3(0.0, 0.0, face)
-	var xf := RoadChunkBuilder._xf_up(x, 0.0, z, Basis.looking_at(look, Vector3.UP))
-	var flee_xf := RoadChunkBuilder._xf_up(x, 0.0, z, Basis())
+	var xf := RoadChunkBuilder._xf_up(x, y, z, Basis.looking_at(look, Vector3.UP))
+	var flee_xf := RoadChunkBuilder._xf_up(x, y, z, Basis())
 	return {
 		"pos": xf.origin, "basis": xf.basis, "up": flee_xf.basis,
 		"flee": (flee_xf.basis * flee).normalized(),

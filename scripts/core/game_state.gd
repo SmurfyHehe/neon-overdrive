@@ -30,13 +30,27 @@ extends Node
 # STATION: stopped at a gas station pump (scripts/world/gas_station.gd); paused
 # while the pump menu (scripts/ui/pump_panel.gd) is up, Esc drives off.
 # WASH (2026-10-09): the garage wash mini-game (scripts/wash_screen.gd), opened
-# from the pause menu; paused like the rest, Esc leaves it.
-enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO, TITLE, WRECKED, STATION, WASH }
+# from the garage; paused like the rest, Esc leaves it.
+# DAWN and GARAGE (garage G0, 2026-10-11): the dawn card after a night (or at
+# boot) and the garage behind it. Both are paused, neither is ever auto-paused
+# (a slow frame in the garage never opens the pause screen) and Esc does nothing
+# in them: "Go out" is the way back to the road (scripts/ui/garage_screen.gd).
+# WORKBOARD (work board W2, 2026-10-11): Walt's board, between the dawn card
+# and the garage. Paused, never auto-paused, Esc does nothing (like DAWN and
+# GARAGE); it reports as the garage (in_garage) for the frame cap and the rest.
+enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO, TITLE, WRECKED, STATION, WASH, DAWN, GARAGE, WORKBOARD }
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
 const TestMode := preload("res://scripts/core/test_mode.gd")
+const RoadMap := preload("res://scripts/world/road_map.gd")
 
 signal state_changed(new_state: State, old_state: State)
+## The garage is about to take over, before the state changes, so the world is
+## still on screen: the save and the Polaroid happen on this. `entry` is one of
+## the ENTRY_ names below. Not sent again for dawn card -> garage.
+signal garage_entering(entry: String)
+## "Go out" was pressed: the car waits outside with the engine off (GarageFlow).
+signal garage_left
 ## Just before a restart reloads the scene / before the game quits (the save
 ## system: a restart starts a fresh run, a quit saves it).
 signal restarting
@@ -60,6 +74,34 @@ const REASON_STALL := "Your PC fell behind, so the game paused. Lower the look t
 const REASON_FOCUS := "The game paused because the window lost focus."
 var pause_notice := ""
 
+## Garage entries (G0): how the player got there.
+const ENTRY_BOOT := "boot"            # first drive of a session, after the title
+const ENTRY_DAWN := "dawn"            # 6 a.m.: the night ended
+const ENTRY_FORECOURT := "forecourt"  # pulled in at the garage mid-night
+
+## Garage plumbing is live only in a real play session (like the title), or when
+## a test or shell run sets NEON_GARAGE=1 (NEON_GARAGE=0 turns it off). Game
+## copies wants_garage() into garage_enabled; tests set it by hand.
+var garage_enabled := false
+## How the player got to the garage this time (an ENTRY_ name, "" before).
+var garage_entry := ""
+## The night that just ended (the dawn card reads it); 0 at boot.
+var dawn_night := 0
+## 6 a.m. came while a cop had eyes on the player or a race was on: the dawn
+## card waits until that is over.
+var dawn_pending := false
+## Set once the player has gone out of the garage for the first time this
+## session; a static like title_seen, so Restart (instant retry) skips it.
+static var garage_seen := false
+var _wash_from_garage := false
+var _garage_boot_at := -1
+
+static func wants_garage() -> bool:
+	var env := OS.get_environment("NEON_GARAGE")
+	if env == "0":
+		return false
+	return env == "1" or DisplaySettings.player_run()
+
 ## Set once the player has left the title screen; a static, so it survives the
 ## scene reload that Restart does (instant retry, no title in between).
 static var title_seen := false
@@ -73,6 +115,12 @@ signal race_quit_requested
 ## the save system tracks); the pause screen shows this for a second instead.
 const CHASE_LOCK_TEXT := "Not while they're on you."
 signal pause_refused
+## M while paused on the pause list: the pause menu shows its Map page.
+signal map_requested
+## Set by M from the road: the pause that follows opens on the Map page.
+var open_on_map := false
+## True while the pause menu's Map page is up (the menu sets it).
+var map_open := false
 
 ## Title screen at boot: in a real play session, or when a test sets NEON_TITLE=1.
 static func wants_title() -> bool:
@@ -99,7 +147,7 @@ signal special_unlocked_changed
 # name) would also switch tabs or close the tuner. _input() runs before the GUI
 # sees the key, so it can tell whether a text control had focus when the key went
 # down; the poll then skips that press.
-const TEXT_GUARDED := [&"pause", &"tuning_panel", &"autotune_panel", &"photo_mode"]
+const TEXT_GUARDED := [&"pause", &"map", &"tuning_panel", &"autotune_panel", &"photo_mode"]
 var _typed_into_text: Dictionary = {}
 
 # The Settings screen (scripts/ui/settings_screen.gd) sits on top of the pause
@@ -132,6 +180,7 @@ func _ready() -> void:
 	PhotoMode.ensure_actions()
 	SpecialKeys.ensure_actions()
 	special_unlocked = SaveStore.load_special().unlocked
+	_unmute_for_play()
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	# Not in test mode either: windowed tests and shot tools on a busy machine
 	# were being paused mid-run (the stall guard next to it is play-only too).
@@ -146,6 +195,11 @@ func _watch_low_fps() -> void:
 	var now := Time.get_ticks_usec()
 	var frame_seconds := (now - _last_frame_usec) / 1000000.0 if _last_frame_usec > 0 else 0.0
 	_last_frame_usec = now
+	feed_frame(frame_seconds)
+
+## One frame's real duration into the low-fps watch. Only while PLAYING: the
+## dawn card and the garage (and every other screen) never pause themselves.
+func feed_frame(frame_seconds: float) -> void:
 	if not auto_pause_on_low_fps or state != State.PLAYING:
 		return
 	if _fps_watch.feed(frame_seconds):
@@ -216,8 +270,17 @@ func _physics_process(_delta: float) -> void:
 	if state == State.TITLE and _title_freeze_at >= 0 and Engine.get_physics_frames() >= _title_freeze_at:
 		_title_freeze_at = -1
 		get_tree().paused = true
+	if _garage_boot_at >= 0 and Engine.get_physics_frames() >= _garage_boot_at:
+		_garage_boot_at = -1
+		if state == State.PLAYING:
+			_enter_dawn(ENTRY_BOOT)
+	if dawn_pending and state == State.PLAYING and not chase_locked() and not race_active:
+		dawn_pending = false
+		_enter_dawn(ENTRY_DAWN)
 	if Input.is_action_just_pressed("pause") and not blocked.has(&"pause"):
 		toggle_pause()
+	elif Input.is_action_just_pressed("map") and not blocked.has(&"map"):
+		toggle_map()
 	elif Input.is_action_just_pressed("tuning_panel") and not blocked.has(&"tuning_panel"):
 		toggle_tuning()
 	elif Input.is_action_just_pressed("photo_mode") and not blocked.has(&"photo_mode"):
@@ -251,20 +314,116 @@ func close_photo() -> void:
 	get_tree().paused = false
 	_set_state(State.PLAYING)
 
-## Garage wash: from the pause menu (stays paused) or straight from the road.
+## Garage wash: from the garage (Esc or a clean car goes back to it), or from
+## the pause menu / straight from the road (tests, the old stand-in).
 func open_wash() -> void:
-	if state == State.PAUSED or state == State.PLAYING:
+	if state == State.PAUSED or state == State.PLAYING or state == State.GARAGE:
+		_wash_from_garage = state == State.GARAGE
 		get_tree().paused = true
 		_set_state(State.WASH)
 
 func close_wash() -> void:
-	if state == State.WASH:
-		get_tree().paused = false
-		_set_state(State.PLAYING)
+	if state != State.WASH:
+		return
+	if _wash_from_garage:
+		_wash_from_garage = false
+		_set_state(State.GARAGE)   # still paused, still in the garage
+		return
+	get_tree().paused = false
+	_set_state(State.PLAYING)
+
+# ---------- dawn card and garage (G0) ----------
+
+## 6 a.m. (Game wires night_clock.night_ended here). The dawn card opens at once,
+## or waits while a cop sees the player or a race is on. Does nothing when the
+## garage is off (tests, the benchmark).
+func request_dawn(night_ended: int) -> void:
+	if not garage_enabled:
+		return
+	dawn_night = night_ended
+	if state == State.PLAYING and not chase_locked() and not race_active:
+		_enter_dawn(ENTRY_DAWN)
+	else:
+		dawn_pending = true
+
+## First drive of a session in a no-title boot: the dawn card opens after the
+## car has settled on its springs, like the title freeze.
+func enter_garage_boot() -> void:
+	if not garage_enabled or garage_seen or state != State.PLAYING:
+		return
+	_garage_boot_at = Engine.get_physics_frames() + TITLE_SETTLE_TICKS
+
+func _enter_dawn(entry: String) -> void:
+	garage_entry = entry
+	if entry != ENTRY_DAWN:
+		dawn_night = 0   # (request_dawn sets it for a real dawn)
+	# From the title the world is hidden behind it: nothing to photograph.
+	if state == State.PLAYING:
+		garage_entering.emit(entry)
+	get_tree().paused = true
+	_set_state(State.DAWN)
+
+## The dawn card is dismissed: on into the garage (no second entering signal).
+func dawn_continue() -> void:
+	if state == State.DAWN:
+		# A real dawn goes through Walt's board first, when the shop is on and
+		# today is not settled (workboard_gate is set by Game; unset = no board).
+		if garage_entry == ENTRY_DAWN and workboard_gate.is_valid() and workboard_gate.call(dawn_night):
+			_set_state(State.WORKBOARD)
+		else:
+			_set_state(State.GARAGE)
+
+## Asked on the dawn card's Continue: should the work board open? Takes the
+## night that just ended, returns a bool. Set by Game (ShopDay.want_board).
+var workboard_gate: Callable = Callable()
+
+## The garage's "Walt's board" row: back onto the board.
+func open_workboard() -> void:
+	if state == State.GARAGE:
+		_set_state(State.WORKBOARD)
+
+## The board is done (Head out, or the garage tag): on into the garage.
+func close_workboard() -> void:
+	if state == State.WORKBOARD:
+		_set_state(State.GARAGE)
+
+## A mid-night visit: the car is stopped at the garage forecourt. Refused while
+## a cop has eyes on the player (the same toast as the pause key), in a race, or
+## with the garage off. True when the garage opened.
+func open_garage(entry: String = ENTRY_FORECOURT) -> bool:
+	if state != State.PLAYING or not garage_enabled:
+		return false
+	if chase_locked():
+		pause_refused.emit()
+		return false
+	if race_active:
+		return false
+	garage_entry = entry
+	dawn_night = 0
+	garage_entering.emit(entry)
+	get_tree().paused = true
+	_set_state(State.GARAGE)
+	return true
+
+## True on the dawn card, in the garage, and in the wash opened from it.
+func in_garage() -> bool:
+	return state == State.DAWN or state == State.GARAGE or state == State.WORKBOARD \
+			or (state == State.WASH and _wash_from_garage)
+
+## "Go out": back to the road, the car parked outside with the engine off.
+func leave_garage() -> void:
+	if state != State.GARAGE:
+		return
+	garage_seen = true
+	get_tree().paused = false
+	_set_state(State.PLAYING)
+	garage_left.emit()
 
 func toggle_pause() -> void:
 	if state == State.WASH:
 		close_wash()  # Esc leaves the wash
+	elif state == State.DAWN or state == State.GARAGE or state == State.WORKBOARD:
+		pass          # no pause screen here: Continue and Go out are the way on
 	elif state == State.TUNING:
 		close_tuning()  # Esc backs out of the tuning panel
 	elif state == State.AUTOTUNE:
@@ -280,6 +439,25 @@ func toggle_pause() -> void:
 			pause_refused.emit()   # the menu stays shut while a cop sees you
 		else:
 			pause()
+
+## M: the pause screen, straight onto the Map page. Refused while a cop sees you,
+## like Esc. Nothing on the endless road (it has no map). While paused it brings
+## the page up from the list, or closes the pause when the page is already up.
+func toggle_map() -> void:
+	if RoadMap.road_id == RoadMap.ENDLESS or not RoadMap.is_loop():
+		return
+	if state == State.PLAYING:
+		if chase_locked():
+			pause_refused.emit()
+		else:
+			open_on_map = true
+			pause()
+			open_on_map = false
+	elif state == State.PAUSED:
+		if map_open:
+			resume()
+		else:
+			map_requested.emit()
 
 ## `notice` is the amber line the pause screen shows ("" for the player's own Esc).
 func pause(notice := "") -> void:
@@ -366,6 +544,7 @@ func quit() -> void:
 func quit_to_title() -> void:
 	quitting.emit()
 	title_seen = false
+	garage_seen = false   # coming back from the title means the garage again
 	get_tree().paused = false
 	get_tree().reload_current_scene()
 
@@ -386,8 +565,23 @@ func start_drive() -> void:
 		return
 	title_seen = true
 	_title_freeze_at = -1
+	if garage_enabled and not garage_seen:
+		_enter_dawn(ENTRY_BOOT)   # dawn card, then the garage; stays paused
+		return
 	get_tree().paused = false
 	_set_state(State.PLAYING)
+
+## The audio buses outlive a scene reload, and _set_state is the only thing
+## that unmutes Engine and Turbo. A restart from the pause menu, Settings or
+## the title reloads the scene while they are muted, and the new game starts
+## PLAYING without a state change: the car was silent until the next pause
+## (Roy, 2026-10-10: "spawning in sometimes doesnt spawn you in with your
+## vehicle making sound"). So every new game starts with them open.
+func _unmute_for_play() -> void:
+	for bus_name in [&"Engine", &"Turbo", &"Music"]:
+		var bus := AudioServer.get_bus_index(bus_name)
+		if bus >= 0:
+			AudioServer.set_bus_mute(bus, false)
 
 func _set_state(new_state: State) -> void:
 	var old := state
@@ -407,5 +601,7 @@ func _set_state(new_state: State) -> void:
 			AudioServer.set_bus_mute(bus, muted)
 	var music_bus := AudioServer.get_bus_index(&"Music")
 	if music_bus >= 0:
-		AudioServer.set_bus_mute(music_bus, muted and new_state != State.PAUSED and new_state != State.TITLE)
+		var radio_plays := new_state == State.PAUSED or new_state == State.TITLE \
+				or new_state == State.DAWN or new_state == State.GARAGE
+		AudioServer.set_bus_mute(music_bus, muted and not radio_plays)
 	state_changed.emit(new_state, old)

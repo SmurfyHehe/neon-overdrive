@@ -11,7 +11,7 @@ var failures: Array[String] = []
 func _initialize() -> void:
 	await process_frame
 	var items := BoltOns.items()
-	_check(items.size() == 28, "26 items with the cabin strip stepped x3 is 28 entries, got %d" % items.size())
+	_check(items.size() == 31, "29 items with the cabin strip stepped x3 is 31 entries, got %d" % items.size())
 	var seen := {}
 	var base_items := {}
 	for it in items:
@@ -25,7 +25,7 @@ func _initialize() -> void:
 		for key in it.get("deltas", {}):
 			var op: Array = it.deltas[key]
 			_check(op.size() == 2 and String(op[0]) in ["mul", "add", "set"], "%s: bad op on %s" % [it.id, key])
-	_check(base_items.size() == 26, "26 distinct items, got %d" % base_items.size())
+	_check(base_items.size() == 29, "29 distinct items, got %d" % base_items.size())
 
 	# Every item fits every player car, finite and without touching the input.
 	for car in PlayerCars.ids():

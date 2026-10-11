@@ -28,9 +28,11 @@ const KINDS := [
 	{"id": "p0_beater", "label": "Rear-engine beater", "name": "Tarp", "tier": "T0", "nm": 290, "kg": 1000},
 	{"id": "p1_coupe", "label": "Sports coupe", "name": "Coupe", "tier": "T3", "nm": 460, "kg": 1300},
 	{"id": "p2_hothatch", "label": "Hot hatch", "name": "Kobo", "tier": "T1", "nm": 270, "kg": 1080},
+	# The shop wagon (sheet p7_wagon, 2026-10-11). nm / kg are stand-ins, see CarSpec.player_spec.
+	{"id": "p7_wagon", "label": "Shop wagon", "name": "Bramley", "tier": "T1", "nm": 280, "kg": 1180},
 	{"id": "p3_tuner", "label": "Tuner sedan", "name": "Ronin", "tier": "T2", "nm": 360, "kg": 1300},
 	{"id": "p4_kei", "label": "Kei roadster", "name": "Mite", "tier": "T1", "nm": 180, "kg": 760},
-	{"id": "p5_muscle", "label": "Muscle sedan", "name": "Marlowe", "tier": "T3", "nm": 820, "kg": 1800},
+	{"id": "p5_muscle", "label": "Muscle hardtop", "name": "Marlowe", "tier": "T3", "nm": 820, "kg": 1800},
 	{"id": "p6_crossover", "label": "Perf. crossover", "name": "Cairn", "tier": "T2", "nm": 400, "kg": 1450},
 	# The 4-door work pickup Walt sells after act 1 (Roy, 2026-10-10).
 	{"id": "p17_work_pickup", "label": "Work pickup", "name": "Camel", "tier": "T2", "nm": 640, "kg": 1780},

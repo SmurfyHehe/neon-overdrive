@@ -19,10 +19,19 @@ const STATIONS := [
 		"Dave: Road is wet, the lights are sodium, and nobody is looking. Drive like it.",
 		"Dave: This broadcast is not happening. Neither are you. Keep it flat, driver."]},
 	{"name": "Synthwave", "kind": "music", "dir": "res://assets/radio/s4_synthwave", "dj": []},
+	# Treblo API songs (2026-10-11, docs/audio-licences.md). Played in folder order; the
+	# hour band in each file name (dusk/late/dead/dawn) is not used yet.
+	{"name": "Afterglow", "kind": "music", "dir": "res://assets/radio/afterglow", "dj": []},
+	{"name": "Undertow", "kind": "music", "dir": "res://assets/radio/undertow", "dj": []},
+	{"name": "Slipstream", "kind": "music", "dir": "res://assets/radio/slipstream", "dj": []},
+	{"name": "Grey Hour", "kind": "music", "dir": "res://assets/radio/greyhour", "dj": []},
 ]
 
 const DAVE_PERIOD := 30.0   # seconds from one Dave line to the next
 const BREAK_SECS := 8.0     # how long a line's caption stays up (and the music, if any, ducks)
+
+## Dave names the speed limits once, on night 1 (police step P3; game.gd).
+const LIMIT_LINE := "Dave: City's sixty, highway's a hundred, and the cops give you a bit over that."
 
 ## Dave's time checks, read out on the hour (NightClock -> RadioManager.announce_hour).
 ## Placeholders like his other lines: the story is Roy's to write.

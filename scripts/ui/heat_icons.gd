@@ -21,6 +21,10 @@ const CAPTION_SECS := 7.0
 var heat: PoliceHeat
 var icon: HeatIcon
 var caption: Label
+## The bust ring (P5): a bar under the icon that fills while you are nearly
+## stopped with a chasing cop beside you. Set by the game from PolicePatrol.
+var patrol: PolicePatrol
+var bust_bar: ColorRect
 var _flash := 0.0
 var _caption_t := 0.0
 
@@ -109,6 +113,15 @@ func _ready() -> void:
 	icon.position = Vector2(-ICON_SIZE.x * 0.5, 14)
 	icon.visible = false
 	add_child(icon)
+	bust_bar = ColorRect.new()
+	bust_bar.name = "BustBar"
+	bust_bar.color = RED
+	bust_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bust_bar.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	bust_bar.position = Vector2(-ICON_SIZE.x * 0.5, 14 + ICON_SIZE.y + 4)
+	bust_bar.size = Vector2(0, 6)
+	bust_bar.visible = false
+	add_child(bust_bar)
 	# Above Dave's caption (bottom centre), same width and colour family.
 	caption = Label.new()
 	caption.name = "PoliceCaption"
@@ -126,6 +139,8 @@ func _ready() -> void:
 	add_child(caption)
 	if heat != null:
 		heat.level_changed.connect(_on_level)
+		heat.warning_started.connect(_on_warning)
+		heat.warning_ended.connect(_on_warning_end)
 		_on_level(heat.level)
 
 func say(text: String) -> void:
@@ -133,7 +148,19 @@ func say(text: String) -> void:
 	caption.visible = true
 	_caption_t = CAPTION_SECS
 
+## P2: a warning shows the first icon dim, with no heat behind it.
+func _on_warning(_cop: Node3D, _kind: int) -> void:
+	icon.kind = PoliceHeat.icon_for(PoliceHeat.ONE_CAR)
+	icon.modulate = Color(1, 1, 1, 0.4)
+	icon.visible = true
+	icon.queue_redraw()
+
+func _on_warning_end(_complied: bool) -> void:
+	icon.modulate = Color.WHITE
+	_on_level(heat.level)
+
 func _on_level(lvl: int) -> void:
+	icon.modulate = Color.WHITE
 	var k := PoliceHeat.icon_for(lvl)
 	if k != "" and k != icon.kind:
 		_flash = FLASH_SECS if lvl > PoliceHeat.ICONS.find(icon.kind) else 0.0
@@ -142,6 +169,10 @@ func _on_level(lvl: int) -> void:
 	icon.queue_redraw()
 
 func _process(delta: float) -> void:
+	var fill := patrol.bust_fill if patrol != null and is_instance_valid(patrol) else 0.0
+	bust_bar.visible = fill > 0.0
+	if fill > 0.0:
+		bust_bar.size = Vector2(ICON_SIZE.x * fill, 6)
 	if _caption_t > 0.0:
 		_caption_t -= delta
 		caption.visible = _caption_t > 0.0

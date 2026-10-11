@@ -13,8 +13,14 @@ extends Node3D
 # (scripts/ui/pump_panel.gd, GameState.State.STATION). No key hint on screen
 # (Roy's UI rule): stopping at the pump is the action.
 #
-# One station mesh, moved to whichever station is nearest the player: they
-# are SPACING apart, far past the draw distance, so two are never in view.
+# On a loop (RoadMap.period > 0) the stations are fixed places: the STOPS of
+# kind "station", four on Loop 1, two on each side of the road and never
+# opposite one another, the same every lap (2026-10-11). The endless road and
+# tests that move first_s keep the old first_s + k x SPACING, own side only.
+#
+# One station mesh per side (side +1 own carriageway, -1 oncoming, turned half
+# a circle), moved to whichever station of its side is nearest the player:
+# they are far past the draw distance, so two of a side are never in view.
 # RoadChunkBuilder asks cleared()/in_bay() so the buildings, lamps and edge
 # posts make room, like the crossing does (Junction).
 #
@@ -22,6 +28,7 @@ extends Node3D
 # sign's text and one fake light pool. No real lights. One static body.
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
+const RoadMap := preload("res://scripts/world/road_map.gd")
 const L := RoadChunkBuilder.CHUNK_LEN
 
 ## Where the first station is and how far apart they are, metres of road.
@@ -49,6 +56,8 @@ static var first_s := DEFAULT_FIRST_S
 signal pulled_up(station_s: float)
 
 var player: Node3D
+## Which carriageway this node's station stands on: +1 own, -1 oncoming.
+var side := 1
 ## The station the mesh stands at (metres of road), and the floating origin it
 ## was placed for.
 var station_s := -1.0
@@ -64,56 +73,109 @@ var armed := true
 static func s_of(k: int) -> float:
 	return first_s + float(k) * SPACING
 
-## The station nearest `s`.
-static func nearest(s: float) -> float:
+static var _loop_key := ""
+## Lap metres of the loop's stations, per side (side -> Array of float).
+static var _loop_stations := {1: [], -1: []}
+
+## Whether the stations come from the loop's STOPS.
+static func _on_loop() -> bool:
+	return enabled and RoadMap.period > 0 and is_equal_approx(first_s, DEFAULT_FIRST_S)
+
+## Lap metres of this side's stations on the loop (this act's road, inside
+## the lap).
+static func _loop_s(side: int) -> Array:
+	var key := "%d/%d/%d" % [RoadMap.road_id, RoadMap.act, RoadMap.period]
+	if key != _loop_key:
+		_loop_key = key
+		_loop_stations = {1: [], -1: []}
+		var lap := RoadMap.length()
+		for st in RoadMap.STOPS:
+			if String(st.kind) != "station" or int(st.road) != RoadMap.road_id:
+				continue
+			var at := RoadMap.stop_place(String(st.id))
+			if at.is_empty() or float(at.s) < 0.0 or float(at.s) >= lap:
+				continue
+			(_loop_stations[1 if int(at.side) >= 0 else -1] as Array).append(float(at.s))
+	return _loop_stations[side]
+
+## The station of `side` nearest `s` (INF when that side has none).
+static func nearest(s: float, side := 1) -> float:
+	if _on_loop():
+		var lap := RoadMap.length()
+		var m := fposmod(s, lap)
+		var best := INF
+		for st in _loop_s(side):
+			var d := fposmod(float(st) - m + lap * 0.5, lap) - lap * 0.5
+			if absf(d) < absf(best):
+				best = d
+		return s + best
+	if side != 1:
+		return INF
 	return s_of(maxi(0, roundi((s - first_s) / SPACING)))
 
-## The next station ahead of `s`; one the car is still in the bay of counts.
-static func next_after(s: float) -> float:
+## The next station of `side` ahead of `s` (more s, the same lap as the car);
+## one the car is still in the bay of counts. INF when that side has none.
+static func next_after(s: float, side := 1) -> float:
+	if _on_loop():
+		var lap := RoadMap.length()
+		var from := s - BAY_HALF_S
+		var m := fposmod(from, lap)
+		var best := INF
+		for st in _loop_s(side):
+			best = minf(best, fposmod(float(st) - m, lap))
+		return from + best
+	if side != 1:
+		return INF
 	return s_of(maxi(0, ceili((s - BAY_HALF_S - first_s) / SPACING)))
 
-## Distance from the centre line to the own side's road edge at `s`.
-static func own_edge(s: float) -> float:
-	var lanes := RoadChunkBuilder.MAX_OWN_LANES
+## Distance from the centre line to the road edge of `side` (+1 own, -1
+## oncoming) at `s`.
+static func own_edge(s: float, side := 1) -> float:
+	var lanes := RoadChunkBuilder.MAX_OWN_LANES if side == 1 else RoadChunkBuilder.MAX_ONC_LANES
 	if RoadFrame.layout != null and RoadFrame.layout.lanes_live:
-		lanes = RoadFrame.layout.lanes_at(false, s)
+		lanes = RoadFrame.layout.lanes_at(side != 1, s)
 	return RoadChunkBuilder.MEDIAN_GAP + float(lanes) * RoadChunkBuilder.LANE_W
 
-## Chunk-local z (0 at the chunk start, -L at its end) of the station nearest
-## chunk `chunk_index`.
-static func _local(chunk_index: int, z: float) -> float:
+## Chunk-local z (0 at the chunk start, -L at its end) of the station of `side`
+## nearest chunk `chunk_index`; INF when that side has none.
+static func _local(chunk_index: int, z: float, side := 1) -> float:
 	var s := float(chunk_index) * L - z
-	return float(chunk_index) * L - nearest(s)
+	var n := nearest(s, side)
+	if is_inf(n):
+		return INF
+	return float(chunk_index) * L - n
 
-## Whether own-side chunk-local z is within `half` of a station.
-static func near(chunk_index: int, z: float, half: float) -> bool:
-	return enabled and absf(z - _local(chunk_index, z)) < half
+## Whether chunk-local z on `side` is within `half` of a station.
+static func near(chunk_index: int, z: float, half: float, side := 1) -> bool:
+	return enabled and absf(z - _local(chunk_index, z, side)) < half
 
-## Whether an own-side building spanning [z0, z1] (chunk-local) has to go.
-static func cleared(chunk_index: int, z0: float, z1: float) -> bool:
+## Whether a building of `side` spanning [z0, z1] (chunk-local) has to go.
+static func cleared(chunk_index: int, z0: float, z1: float, side := 1) -> bool:
 	if not enabled:
 		return false
-	var c := _local(chunk_index, (z0 + z1) / 2.0)
+	var c := _local(chunk_index, (z0 + z1) / 2.0, side)
 	return maxf(z0, z1) > c - CLEAR_HALF and minf(z0, z1) < c + CLEAR_HALF
 
-## No own-side lamp or edge post here.
-static func in_bay(chunk_index: int, z: float) -> bool:
-	return near(chunk_index, z, CLEAR_HALF)
+## No lamp or edge post of `side` here.
+static func in_bay(chunk_index: int, z: float, side := 1) -> bool:
+	return near(chunk_index, z, CLEAR_HALF, side)
 
 ## Road-space position of a node: x across (own side +), s along.
 static func road_pos(n: Node3D) -> Vector2:
 	var u := RoadFrame.unroll(n.global_position)
 	return Vector2(u.x, RoadFrame.s_at(u.z))
 
-## Whether road position `p` (x, s) is in the bay of the station at `ss`.
-static func in_spot(p: Vector2, ss: float) -> bool:
-	var x := p.x - own_edge(ss)
+## Whether road position `p` (x, s) is in the bay of the `side` station at `ss`.
+static func in_spot(p: Vector2, ss: float, side := 1) -> bool:
+	if is_inf(ss):
+		return false
+	var x := p.x * float(side) - own_edge(ss, side)
 	return absf(p.y - ss) <= BAY_HALF_S and x >= BAY_X.x and x <= BAY_X.y
 
 # ---------- the node ----------
 
 func _ready() -> void:
-	name = "GasStation"
+	name = "GasStation" if side == 1 else "GasStationOnc"
 	visible = enabled
 	if not enabled:
 		set_physics_process(false)
@@ -123,10 +185,10 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	_place()
-	if player == null:
+	if player == null or is_inf(station_s):
 		return
 	var p := road_pos(player)
-	var in_bay_now := in_spot(p, station_s)
+	var in_bay_now := in_spot(p, station_s, side)
 	if not in_bay_now:
 		armed = true
 		_held = 0.0
@@ -142,13 +204,18 @@ func _physics_process(delta: float) -> void:
 
 ## Follows the player from station to station and the floating origin.
 func _place() -> void:
-	var s := nearest(road_pos(player).y) if player != null else first_s
+	var s := nearest(road_pos(player).y if player != null else 0.0, side)
 	if s == station_s and RoadFrame.origin_index == _origin:
 		return
 	station_s = s
 	_origin = RoadFrame.origin_index
+	visible = enabled and not is_inf(s)
+	if is_inf(s):
+		return
 	var z := float(RoadFrame.origin_index) * L - s
-	global_transform = RoadFrame.pose(own_edge(s), 0.0, z, 0.0)
+	# the oncoming station is the same mesh turned half a circle about the
+	# road's up axis, so its pumps face the road and its sign faces its traffic
+	global_transform = RoadFrame.pose(own_edge(s, side) * float(side), 0.0, z, 0.0 if side == 1 else PI)
 	reset_physics_interpolation()
 
 # Local frame: x = 0 is the own road edge, +x away from the road, -z ahead.

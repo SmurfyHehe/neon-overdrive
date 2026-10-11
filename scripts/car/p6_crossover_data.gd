@@ -28,14 +28,14 @@ const CABIN := {
 	"b_pillar_z": 0.230, "rear_z": 1.446,
 	"shelf": {"y": 1.125, "z0": 1.446, "z1": 1.950, "half_w": 0.800},
 	"wheel": Vector3(-0.355, 0.956, -0.410), "wheel_tilt_deg": -25.0,
-	"cluster": Vector2(1.116, -0.579), "cluster_style": "dials", "speedo_max_kmh": 260.0,
+	"cluster": Vector2(1.116, -0.579), "cluster_style": "wide", "speedo_max_kmh": 260.0,
 	"head_unit": Vector3(0.0, 1.018, -0.484),
 	"lever": Vector3(0.0, 0.801, -0.250), "handbrake": Vector3(0.0, 0.801, 0.210),
 	"pedals": Vector3(-0.255, 0.626, -0.730),
 	"crank": Vector3(-0.746, 0.836, -0.410), "switch": Vector3(-0.720, 0.973, -0.210),
 	"rear_mirror": Vector3(0.0, 1.470, -0.380),
 	"door_mirror": Vector3(0.953, 1.207, -0.850),
-	"console": "tunnel", "seats": "bucket",
+	"console": "tunnel", "seats": "bucket", "trim": "utility",
 }
 ## Build name -> body_tris, tris_total, body_pos (chunks), body_mat, wheels
 ## (front and rear right-hand wheel, hub-relative), slots, tips. Car space.

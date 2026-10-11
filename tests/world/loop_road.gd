@@ -106,8 +106,8 @@ func _shape() -> void:
 			if a.curvature(i) != 0.0:
 				turned += 1
 			# Pinned: straight, no vertical curve, and level but for the lap's tilt.
-			if pins[i] != 0 and (a.curvature(i) != 0.0 or absf(a.vcurve(i)) > 1e-12 or absf(a.start_grade(i) - a.start_grade(0)) > 1e-9):
-				_fail("seed %d: pinned chunk %d is not straight and level (k %.5f, vcurve %.6f, grade %.4f)" % [road_seed, i, a.curvature(i), a.vcurve(i), a.start_grade(i)])
+			if pins[i] != 0 and (a.curvature(i) != 0.0 or absf(a.vcurve(i)) > 1e-12 or absf(a.grade_at(i, L * 0.5) - a.grade_at(0, L * 0.5)) > 1e-9):   # mid-chunk: a chunk's first metres carry the eased tail of the one before
+				_fail("seed %d: pinned chunk %d is not straight and level (k %.5f, vcurve %.6f, grade %.4f)" % [road_seed, i, a.curvature(i), a.vcurve(i), a.grade_at(i, L * 0.5)])
 				break
 		if absf(a.start_grade(0)) > 0.01:
 			_fail("seed %d: the lap is tilted by %.4f" % [road_seed, a.start_grade(0)])
@@ -251,7 +251,8 @@ func _along_map(pts: Array, p: Vector2) -> float:
 	return -1.0
 
 func _map_data() -> void:
-	for a in [1, 3]:
+	var placed := {}   # place (metres) -> its map point in the first act that had it
+	for a in [1, 2, 3]:
 		RoadMap.use(0, a)
 		var pts: Array = RoadMap.ROADS[0].map
 		if pts.size() < 8 or pts.size() > 20:
@@ -277,13 +278,31 @@ func _map_data() -> void:
 			elif t < last - 1e-4:
 				_fail("act %d: %.0f m is out of loop order on the map" % [a, s])
 			last = t
+			# A place keeps the same point in every act (the line is the full loop).
+			if placed.has(s) and placed[s].distance_to(p) > 1e-5:
+				_fail("act %d: %.0f m moved on the map between acts (%s -> %s)" % [a, s, placed[s], p])
+			placed[s] = p
 			# Wraps: a lap on, laps back.
 			if p.distance_to(RoadMap.map_point(0, s + RoadMap.length())) > 1e-5 or p.distance_to(RoadMap.map_point(0, s - 3.0 * RoadMap.length())) > 1e-5:
 				_fail("act %d: map_point does not wrap at %.0f m" % [a, s])
 		if RoadMap.map_point(0, 0.0).distance_to(pts[0]) > 1e-5:
 			_fail("the map does not start at its first point")
-		if RoadMap.map_point(0, RoadMap.length() - 0.01).distance_to(pts[0]) > 0.01:
-			_fail("the drawn loop does not close")
+		var seam := RoadMap.map_seam(0)
+		var near_end := RoadMap.map_point(0, RoadMap.length() - 0.01)
+		if a < RoadMap.MAX_ACT:
+			# Not every district is open: the drawn line stops short of its start and the seam bridges it.
+			if near_end.distance_to(pts[0]) < 0.05:
+				_fail("act %d: the drawn line closes on itself; only act 3 should" % a)
+			if seam.size() != 2 or seam[1].distance_to(pts[0]) > 1e-5 or seam[0].distance_to(near_end) > 0.01:
+				_fail("act %d: the seam is %s, expected the end of the open line back to its start" % [a, seam])
+			var span := RoadMap.map_locked_span(0)
+			if not is_equal_approx(span.x, RoadMap.length()) or not is_equal_approx(span.y, RoadMap.map_full_length(0)):
+				_fail("act %d: locked span %s is not [open length, full length]" % [a, span])
+		else:
+			if near_end.distance_to(pts[0]) > 0.01:
+				_fail("the drawn loop does not close")
+			if not seam.is_empty() or RoadMap.map_locked_span(0).x != RoadMap.map_locked_span(0).y:
+				_fail("act 3 has a seam or a locked stretch")
 		# The layout's exits are the map's, on every lap, in both directions.
 		var lay := RoadLayout.new(5, null, 1.0)
 		if lay.changes.size() != RoadMap.exits().size():
@@ -298,9 +317,14 @@ func _map_data() -> void:
 	for st in RoadMap.STOPS:
 		var at := RoadMap.stop_place(st.id)
 		if at.is_empty() or not RoadMap.knows(int(st.road)):
-			_fail("stop %s points at exit %s, which road %s does not have" % [st.id, st.exit, st.road])
+			_fail("stop %s has no place on road %s (exit %s)" % [st.id, st.road, st.get("exit", "none, it has its own s")])
 	if not RoadMap.INTERCHANGES.is_empty():
 		_fail("interchanges before there is a second loop")
+	for st in RoadMap.STOPS:
+		if not RoadMap.stop_known(st.id):
+			_fail("placeholder stop %s is not known" % st.id)
+	if RoadMap.stop_known("nowhere"):
+		_fail("an unknown stop reads as known")
 	print("map: %d points, %d stops, %d interchanges" % [RoadMap.ROADS[0].map.size(), RoadMap.STOPS.size(), RoadMap.INTERCHANGES.size()])
 	RoadMap.use(RoadMap.ENDLESS)
 
@@ -378,8 +402,9 @@ func _physics_process(_delta: float) -> bool:
 				# The centre barrier is the map's: open at the gaps, the same every lap.
 				for i in RoadMap.period:
 					var cfg: Dictionary = game.call("_section_at", i)
-					if cfg.barrier and RoadMap.gap_in(i):
-						_fail("chunk %d is a median gap with a barrier in it" % i)
+					# cfg.barrier is the barrier's kind now; the opening travels as cfg.gap.
+					if RoadMap.gap_in(i) and not cfg.gap:
+						_fail("chunk %d is a median gap with no opening in its barrier" % i)
 					if cfg != game.call("_section_at", i + RoadMap.period) or cfg != game.call("_section_at", i - 2 * RoadMap.period):
 						_fail("chunk %d has a different section from lap to lap" % i)
 				var span := _pool_span()

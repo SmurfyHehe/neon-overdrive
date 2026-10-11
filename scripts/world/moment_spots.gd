@@ -63,7 +63,6 @@ const CUT_LINE := "Dave: And there goes the east side grid again. If your street
 const TRAP_KIND := "c1_patrol"
 const TRAP_Z := 19.0         # m into the chunk, between two lamps
 const SIDEWALK_Y := 0.15
-const SPEED_LIMIT_KMH := 70.0
 const SEE_LIT := 140.0
 const SEE_DARK := 9.0
 const PAST := 6.0            # m beyond the cop where the pass is over
@@ -263,7 +262,7 @@ static func build_cop() -> Node3D:
 
 ## Dark while it waits; brake lamps and hazards once it has clocked the car.
 func _cop_lamps(cop: Node3D, woke: bool) -> void:
-	NpcCarBuilder.set_lamps(cop.get_node(^"NpcBody") as Node3D, 1.0 if woke else 0.0, woke)
+	NpcCarBuilder.set_lamps(cop.get_node(^"NpcBody") as Node3D, 1.0 if woke else 0.0, NpcCarBuilder.TURN_BOTH if woke else NpcCarBuilder.TURN_OFF)
 
 # ---------- the watch ----------
 
@@ -332,7 +331,7 @@ func _watch_trap(spot: Dictionary, s: float, x: float) -> void:
 	var kmh := 0.0
 	if player.has_method("current_speed"):
 		kmh = absf(player.current_speed()) * 3.6
-	if seen and ahead >= -PAST and kmh > SPEED_LIMIT_KMH:
+	if seen and ahead >= -PAST and kmh > PoliceRules.offence_line(PoliceRules.area_at(s), false):
 		spot.fired = true
 		var cop := _cop_of(spot.chunk)
 		if cop != null:

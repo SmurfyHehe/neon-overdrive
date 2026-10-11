@@ -18,11 +18,26 @@ extends CanvasLayer
 # The two timed ones wait in case the car is only passing over (a hop along
 # the top of the wall) and comes back by itself.
 #
-# Upside down ON the road is not handled here: that is a crash, not a place
-# the map should not have let the car reach.
+# Upside down ON the road is a crash, not a place the map should not have let
+# the car reach, so the real rules leave it alone. The test build's sandbox
+# (TestBuild) has no crash rules, so there a car left on its roof or side for
+# FLIP_S is put back too, and "Put me back on the road" (request(): the pause
+# menu row and the put_back key) does it on demand from anywhere.
+#
+# Where it is put back (2026-10-10, Roy: "i want you to spawn on the side of
+# the road ... to need to actually start the car"): parked at the kerb on the
+# own side, off the driving lanes, facing along the road, level, standing
+# still, engine off (PlayerCar.ignition_off; X starts it). spot() is also
+# where a run starts and where a saved run comes back (Game._setup_player).
 #
 # Game._physics_process already unrolls the player's position each tick and
 # RoadFrame memoises it, so the watch itself is a dozen comparisons.
+
+const TestBuild := preload("res://scripts/core/test_build.gd")
+const TestMode := preload("res://scripts/core/test_mode.gd")
+const TestDriver := preload("res://scripts/core/test_driver.gd")
+const Districts := preload("res://scripts/world/districts.gd")
+const GasStation := preload("res://scripts/world/gas_station.gd")
 
 ## The car was put back; `reason` is one of the REASON_ strings.
 signal rescued(reason: String)
@@ -32,6 +47,32 @@ const REASON_BELOW := "below the road"
 const REASON_ABOVE := "far above the road"
 const REASON_OUTSIDE := "outside the walls"
 const REASON_NO_ROAD := "off the end of the road"
+const REASON_FLIPPED := "on its roof or side"
+const REASON_ASKED := "asked to be put back"
+
+## Sandbox only: on its roof or side (basis.y.y under FLIP_UP) and slower than
+## FLIP_SPEED m/s for this many seconds.
+const FLIP_S := 2.5
+const FLIP_UP := 0.3
+const FLIP_SPEED := 2.0
+## Parked: the car's centre this far in from the kerb face, m (half a car plus
+## a hand's width). A shoulder narrower than the car leaves it part in the
+## kerbside lane, never less than PARK_MIN out from the road edge.
+const PARK_FROM_KERB := 1.05
+const PARK_MIN := 0.35
+## How far it looks either way along the road for a free parking spot, in
+## steps of PARK_STEP m.
+const PARK_STEP := 8.0
+const PARK_STEPS := 12
+## Never parked this close to a gas station's bay (stopping in the bay opens
+## the pump), m along the road.
+const STATION_CLEAR := 30.0
+## The box that must be free of anything solid, m (a car and a margin), and
+## how high its centre sits over the road.
+const PARK_BOX := Vector3(2.2, 1.0, 5.0)
+const PARK_BOX_Y := 0.95
+## The car's origin over the road surface when it is set down, m.
+const PARK_Y := 0.05
 
 ## Under the road surface, m. The lowest a driving car's origin gets is a few
 ## cm (springs bottomed out in a dip).
@@ -69,6 +110,9 @@ enum Phase { WATCH, FADE_OUT, HOLD, FADE_IN }
 
 ## Tests: false switches the watch off (the car can be left out of bounds).
 var enabled := true
+## Parking also switches the engine off (X starts it). Off in automated tests
+## unless they ask (NEON_PARKED=1): they drive the moment they are placed.
+var engine_off_when_parked := parked_start()
 ## How many times the car has been put back this session.
 var count := 0
 var last_reason := ""
@@ -86,6 +130,7 @@ var _good_x := 0.0
 var _good_y := 0.0
 var _chunk := {}  # the chunk_pool entry the car was last in
 var _tick := 0
+var _flipped_for := 0.0
 
 func _init(game: Node, player: PlayerCar) -> void:
 	_game = game
@@ -151,6 +196,13 @@ func _watch(delta: float) -> void:
 		return
 	var c := check()
 	var reason: String = c[0]
+	if reason == "" and TestBuild.on():
+		var over := _player.global_transform.basis.y.y < FLIP_UP and _player.linear_velocity.length() < FLIP_SPEED
+		_flipped_for = _flipped_for + delta if over else 0.0
+		if _flipped_for >= FLIP_S:
+			_flipped_for = 0.0
+			request(REASON_FLIPPED)
+			return
 	if reason == "":
 		_out_for = 0.0
 		_tick += 1
@@ -195,57 +247,113 @@ func _remember() -> void:
 	_good_x = u.x
 	_good_y = u.y
 
-## Road-space spot to put the car back on: the last good place along the
-## road, kept inside the built road, in the own-direction lane nearest where
-## it was, moved to another lane or further back if traffic stands there.
+## Whether a run starts parked at the kerb with the engine off, and a put-back
+## leaves it off: in play, yes. Automated tests, the benchmark and the test
+## driver's bots start in the lane with the engine running, as they always
+## did, unless NEON_PARKED=1 asks; NEON_PARKED=0 turns it off in play.
+static func parked_start() -> bool:
+	var env := OS.get_environment("NEON_PARKED")
+	if env == "0" or env == "1":
+		return env == "1"
+	if TestMode.active() or Benchmark.requested():
+		return false
+	return TestDriver.requested_mode() == "" and TestDriver.requested_replay() == ""
+
+## Puts the car back now (fade, park, fade in), wherever it is and however it
+## lies. False while a put-back is already running.
+func request(reason := REASON_ASKED) -> bool:
+	if phase != Phase.WATCH:
+		return false
+	_reason = reason
+	phase = Phase.FADE_OUT
+	_t = 0.0
+	return true
+
+## Road-space x of the parked car at `s` metres along the road: on the own
+## side's shoulder, its kerb side PARK_FROM_KERB in from the kerb face.
+static func park_x(s: float) -> float:
+	var shoulder := Districts.shoulder_at(floori(s / RoadChunkBuilder.CHUNK_LEN))
+	return GasStation.own_edge(s) + maxf(shoulder - PARK_FROM_KERB, PARK_MIN)
+
+## Road-space spot to put the car back on: parked at the kerb beside where it
+## is (or, with no usable position, where it last drove), kept inside the built
+## road, moved along the road if traffic, a pole, a prop or a gas station's bay
+## is in the way.
 func target() -> Vector3:
+	var cur := RoadFrame.unroll(_player.global_position)
+	var s: float = RoadFrame.s_at(cur.z) if cur.is_finite() else NAN
+	if not is_finite(s) or _bounds_at(float(RoadFrame.origin_index) * RoadChunkBuilder.CHUNK_LEN - s) == Vector2.ZERO:
+		s = _good_s if _has_good else NAN
+	return spot(s)
+
+## The parking spot nearest `s` metres along the road (NAN: the middle of the
+## built road).
+func spot(s: float) -> Vector3:
 	var l := RoadChunkBuilder.CHUNK_LEN
 	var lo := INF
 	var hi := -INF
 	for c: Dictionary in _game.chunk_pool:
 		lo = minf(lo, float(c.index) * l)
 		hi = maxf(hi, float(c.index + 1) * l)
-	var cur := RoadFrame.unroll(_player.global_position)
-	var s: float = _good_s if _has_good else RoadFrame.s_at(cur.z)
 	if not is_finite(s):
 		s = (lo + hi) / 2.0
 	s = clampf(s, lo + END_INSET, hi - END_INSET)
-	var want_x: float = _good_x if _has_good else TrafficManager.lane_centre(_game.PLAYER_SPAWN_LANE, false)
-	for back in BACK_STEPS + 1:
-		var sb := maxf(s - float(back) * CLEAR_Z, lo + END_INSET)
-		var z := float(RoadFrame.origin_index) * l - sb
-		var lanes := _lanes_at(sb)
-		lanes.sort_custom(func(a: float, b: float) -> bool: return absf(a - want_x) < absf(b - want_x))
-		for x: float in lanes:
-			if _clear(x, z):
-				return Vector3(x, _good_y, z)
-	# Nowhere clear (a jam six car lengths deep): the nearest lane anyway.
-	return Vector3(_lanes_at(s)[0], _good_y, float(RoadFrame.origin_index) * l - s)
-
-func _lanes_at(s: float) -> Array[float]:
-	var n: int = _game.OWN_LANES
-	if RoadFrame.layout != null:
-		n = RoadFrame.layout.lanes_at(false, s)
-	var xs: Array[float] = []
-	for i in maxi(n, 1):
-		xs.append(TrafficManager.lane_centre(i, false))
-	return xs
-
-func _clear(x: float, z: float) -> bool:
-	var traffic: TrafficManager = _game.traffic
-	if traffic == null:
-		return true
-	for car in traffic.cars:
-		if car.benched or not car.global_position.is_finite():
+	for step in PARK_STEPS * 2 + 1:
+		# s, then 1 back, 1 on, 2 back, 2 on ...
+		var off := float((step + 1) / 2) * PARK_STEP * (-1.0 if step % 2 == 1 else 1.0)
+		var st := s + off
+		if st < lo + END_INSET or st > hi - END_INSET:
 			continue
-		var u := RoadFrame.unroll(car.global_position)
-		if absf(u.z - z) < CLEAR_Z and absf(u.x - x) < CLEAR_X:
-			return false
-	return true
+		var x := park_x(st)
+		var z := float(RoadFrame.origin_index) * l - st
+		if _clear(x, z, st):
+			return Vector3(x, 0.0, z)
+	# Nowhere free either way: beside where it is anyway.
+	return Vector3(park_x(s), 0.0, float(RoadFrame.origin_index) * l - s)
+
+func _clear(x: float, z: float, s: float) -> bool:
+	if GasStation.enabled and absf(s - GasStation.s_of(maxi(0, roundi((s - GasStation.first_s) / GasStation.SPACING)))) < STATION_CLEAR:
+		return false
+	var traffic: TrafficManager = _game.traffic
+	if traffic != null:
+		for car in traffic.cars:
+			if car.benched or not car.global_position.is_finite():
+				continue
+			var u := RoadFrame.unroll(car.global_position)
+			if absf(u.z - z) < CLEAR_Z and absf(u.x - x) < CLEAR_X:
+				return false
+	# Anything solid standing there: a pole, a prop, a wall, a parked car.
+	if not _player.is_inside_tree():
+		return true
+	var q := PhysicsShapeQueryParameters3D.new()
+	var box := BoxShape3D.new()
+	box.size = PARK_BOX
+	q.shape = box
+	q.transform = RoadFrame.pose(x, PARK_BOX_Y, z, 0.0)
+	q.exclude = [_player.get_rid()]
+	q.collision_mask = 0xFFFFFFFF
+	return _player.get_world_3d().direct_space_state.intersect_shape(q, 1).is_empty()
+
+## Parks the car at spot(s) at once, with no fade (the start of a run).
+func park_at(s: float) -> void:
+	_park(spot(s))
 
 func _put_back() -> void:
-	var u := target()
-	_player.global_transform = RoadFrame.pose(u.x, u.y, u.z, 0.0)
+	_park(target())
+	# The sandbox never leaves a tester with a car that cannot drive on.
+	if TestBuild.on():
+		if _player.damage.is_engine_dead():
+			_player.damage.garage_repair(null)
+			_player.health.repair()
+		if _player.fuel.is_low():
+			_player.fuel.litres = FuelTank.CAPACITY_L
+	count += 1
+	last_reason = _reason
+	print("OffMapRescue: car parked at the kerb (%s)" % _reason)
+	rescued.emit(_reason)
+
+func _park(u: Vector3) -> void:
+	_player.global_transform = RoadFrame.pose(u.x, u.y + PARK_Y, u.z, 0.0)
 	# Standing still, with the sim's saved positions and wheel spin to match
 	# (GEVP reads speed off them; see Game._shift_origin).
 	TrafficCar.set_moving(_player, 0.0)
@@ -257,7 +365,5 @@ func _put_back() -> void:
 	var cam: ChaseCamera = _game.camera
 	if cam != null:
 		cam.forget_motion()
-	count += 1
-	last_reason = _reason
-	print("OffMapRescue: car put back on the road (%s)" % _reason)
-	rescued.emit(_reason)
+	if engine_off_when_parked:
+		_player.ignition_off()

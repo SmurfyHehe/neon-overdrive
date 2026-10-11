@@ -12,7 +12,8 @@ extends RefCounted
 #
 # Edge smoothing on the Mobile renderer: MSAA (smooths geometry edges, the
 # road lines and car silhouettes) and FXAA (a cheap screen blur on edges, also
-# catches thin emissive lines MSAA misses). TAA and SMAA are Forward+ only.
+# catches thin emissive lines MSAA misses). TAA is Forward+ only. (SMAA does
+# run on Mobile in Godot 4.7; it is not a menu choice yet.)
 # Render scale below 1 draws the 3D view at fewer pixels and stretches it back
 # up (bilinear: FSR 1 is Forward+ only, Godot warns and ignores it on Mobile);
 # the HUD is drawn after, so it stays sharp.
@@ -30,11 +31,12 @@ extends RefCounted
 # those sliders by hand shows "Custom" here too.
 #
 # Not in any preset: dynamic resolution (DynamicResolution, on by default,
-# lowers the render scale while the GPU is over budget), the frame cap (V-sync
-# or 30 fps) and whether the preset was the first-launch automatic pick
+# lowers the render scale while the GPU is over budget), the frame cap (V-sync,
+# 30 to 144 fps, or none) and whether the preset was the first-launch automatic pick
 # (GraphicsAutoPick).
 
 const RoadWet := preload("res://scripts/world/road_wet.gd")
+const TestMode := preload("res://scripts/core/test_mode.gd")
 
 const PRESETS := ["low", "medium", "high"]
 const PRESET_DEFAULT := "medium"
@@ -46,8 +48,25 @@ const AA_NAMES := ["Off", "FXAA", "MSAA 2x", "MSAA 2x + FXAA", "MSAA 4x"]
 const SCALE_MIN := 0.5
 const SCALE_MAX := 1.0
 
-## Frame cap: 0 = V-sync only (the display's rate), 30 = 30 fps.
-const FPS_CAPS := [0, 30]
+## Frame cap, in menu order: 0 = V-sync only (the display's rate), a number =
+## that many frames a second, CAP_NONE = no cap and no V-sync (as fast as the
+## PC goes; the picture can tear).
+const CAP_NONE := -1
+const FPS_CAPS := [0, 30, 60, 120, 144, CAP_NONE]
+const FPS_CAP_NAMES := ["V-sync", "30 fps", "60 fps", "120 fps", "144 fps", "No cap"]
+
+## Cost dots on the Picture page, 1 to 3: how much a setting can cost in speed
+## on the i5-1235U / Iris Xe. From the measured numbers: render scale is the
+## biggest graphics-chip lever (75% saves 1.7 ms of ~5), the traffic count the
+## biggest processor one (traffic is about half the processor frame), edge
+## smoothing costs 0 to 1.9 ms by mode, the mirrors redraw the road up to three
+## more times, draw distance moves how many cars run the full sim. Dynamic
+## resolution, the frame cap and the lamp glow strength are close to free.
+## Car paint (2026-10-11, busy laptop, 1080p, MSAA 2x, coupe in the chase
+## view): reflections about +0.5 ms over plain, lamp light about +0.5 ms more.
+const COST := {"aa": 2, "render_scale": 3, "mirrors": 2, "dynamic_res": 1, "fps_cap": 1,
+	"cars": 3, "draw_distance": 2, "night_lights": 1, "car_paint": 2}
+const COST_NAMES := ["", "Low cost", "Medium cost", "High cost"]
 
 ## Every value per preset. Measured on the i5-1235U (Iris Xe, 1920x1080,
 ## tests/core/graphics_perf.gd, GPU median vs no smoothing): MSAA 2x ~0 ms, FXAA
@@ -56,11 +75,14 @@ const FPS_CAPS := [0, 30]
 ## CPU side: traffic = car count, detail = traffic sim/draw distance (m),
 ## mirror_q = FxSettings mirror quality (0 low, 1 medium, 2 high). Medium is
 ## today's defaults, so Roy's laptop plays exactly as before at Medium.
+## car_paint = the car paint tier (CarPaint: 0 plain, 1 mirrors the city,
+## 2 + street-lamp light and metal flake).
 const PRESET_VALUES := {
-	"low": {"aa": "msaa2", "render_scale": 0.75, "traffic": 10, "detail": 100.0, "mirror_q": 0},
-	"medium": {"aa": "msaa2", "render_scale": 1.0, "traffic": 16, "detail": 150.0, "mirror_q": 1},
-	"high": {"aa": "msaa4", "render_scale": 1.0, "traffic": 25, "detail": 200.0, "mirror_q": 2},
+	"low": {"aa": "msaa2", "render_scale": 0.75, "traffic": 10, "detail": 100.0, "mirror_q": 0, "car_paint": 0},
+	"medium": {"aa": "msaa2", "render_scale": 1.0, "traffic": 16, "detail": 150.0, "mirror_q": 1, "car_paint": 1},
+	"high": {"aa": "msaa4", "render_scale": 1.0, "traffic": 25, "detail": 200.0, "mirror_q": 2, "car_paint": 2},
 }
+const CAR_PAINT_NAMES := ["Plain", "Reflections", "Reflections + lamp light"]
 
 ## Nodes that switch with these settings join this group and implement
 ## apply_graphics().
@@ -71,6 +93,9 @@ static var aa := "msaa2"
 static var render_scale := 1.0
 static var dynamic_res := true
 static var fps_cap := 0
+## Car paint tier, 0..2 (CAR_PAINT_NAMES). NEON_CAR_PAINT=<0|1|2> forces it
+## for one run (benchmarks, pictures).
+static var car_paint := 1
 ## True when the preset came from the first-launch benchmark, not the menu.
 static var auto_picked := false
 ## False until the file has a [graphics] preset: GraphicsAutoPick runs then.
@@ -83,6 +108,7 @@ static func set_preset(p: String) -> void:
 	var v: Dictionary = PRESET_VALUES[p]
 	aa = v.aa
 	render_scale = v.render_scale
+	car_paint = v.car_paint
 	TrafficSettings.set_car_count(v.traffic)
 	TrafficSettings.set_detail_distance(v.detail)
 	FxSettings.set_mirror_quality(v.mirror_q)
@@ -96,11 +122,29 @@ static func set_render_scale(s: float) -> void:
 	render_scale = clampf(s, SCALE_MIN, SCALE_MAX) if is_finite(s) else 1.0  # clampf passes NaN through
 	refresh_preset()
 
+static func set_car_paint(tier: int) -> void:
+	car_paint = clampi(tier, 0, CAR_PAINT_NAMES.size() - 1)
+	refresh_preset()
+
 static func set_dynamic_res(on: bool) -> void:
 	dynamic_res = on
 
 static func set_fps_cap(cap: int) -> void:
 	fps_cap = cap if cap in FPS_CAPS else 0
+
+## What Engine.max_fps gets: the cap, or 0 (none) for V-sync and No cap.
+static func engine_fps() -> int:
+	return maxi(fps_cap, 0)
+
+## V-sync stays on for "V-sync" and for any cap the screen can show anyway (30
+## or 60 on a 60 Hz screen: no tearing, nothing lost). A cap above the screen's
+## rate only means something with V-sync off, and so does No cap.
+static func wants_vsync(cap: int, refresh_hz: float) -> bool:
+	if cap == 0:
+		return true
+	if cap < 0:
+		return false
+	return float(cap) <= (refresh_hz if refresh_hz > 1.0 else 60.0) + 1.0
 
 ## After a hand change (here, or a traffic or mirror slider): still the named
 ## preset if every value matches it, else "custom".
@@ -110,7 +154,7 @@ static func refresh_preset() -> void:
 static func matching_preset() -> String:
 	for p in PRESETS:
 		var v: Dictionary = PRESET_VALUES[p]
-		if v.aa == aa and is_equal_approx(v.render_scale, render_scale) 				and TrafficSettings.car_count == v.traffic 				and is_equal_approx(TrafficSettings.detail_distance, v.detail) 				and FxSettings.mirror_quality == v.mirror_q:
+		if v.aa == aa and is_equal_approx(v.render_scale, render_scale) and v.car_paint == car_paint				and TrafficSettings.car_count == v.traffic 				and is_equal_approx(TrafficSettings.detail_distance, v.detail) 				and FxSettings.mirror_quality == v.mirror_q:
 			return p
 	return "custom"
 
@@ -118,10 +162,17 @@ static func matching_preset() -> String:
 ## (the traffic manager, the mirrors, dynamic resolution).
 static func apply(tree: SceneTree) -> void:
 	apply_viewport(tree.root)
-	Engine.max_fps = fps_cap
+	Engine.max_fps = engine_fps()
+	# Tests and the benchmark set V-sync themselves (off, for real frame times).
+	if not TestMode.active() and not Benchmark.requested():
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED
+			if wants_vsync(fps_cap, DisplayServer.screen_get_refresh_rate()) else DisplayServer.VSYNC_DISABLED)
 	# Wet-road mirrors (road_wet.gd) are off on Low; a hand-tuned "custom"
 	# set keeps them, like every other Medium default.
 	RoadWet.set_reflections(preset != "low")
+	# Car paint (car_paint.gd): plain, mirrors the city, or the street lamps
+	# too. Its own row on the Picture page; each preset picks one.
+	CarPaint.set_tier(car_paint)
 	tree.call_group(GROUP, "apply_graphics")
 
 static func apply_viewport(vp: Viewport) -> void:
@@ -151,6 +202,7 @@ static func apply_viewport(vp: Viewport) -> void:
 static func load_settings() -> void:
 	aa = PRESET_VALUES[PRESET_DEFAULT].aa
 	render_scale = PRESET_VALUES[PRESET_DEFAULT].render_scale
+	car_paint = PRESET_VALUES[PRESET_DEFAULT].car_paint
 	dynamic_res = true
 	fps_cap = 0
 	auto_picked = false
@@ -165,11 +217,20 @@ static func load_settings() -> void:
 		var cap: Variant = cfg.get_value("graphics", "fps_cap", 0)
 		set_fps_cap(int(cap) if (cap is float or cap is int) else 0)
 		auto_picked = FxSettings._to_bool(cfg.get_value("graphics", "auto", false))
+		# A file from before the row existed: what its preset showed then
+		# (Low plain, High with the lamps, anything else the city).
+		var saved := str(cfg.get_value("graphics", "preset", PRESET_DEFAULT))
+		var was: int = PRESET_VALUES[saved if PRESET_VALUES.has(saved) else PRESET_DEFAULT].car_paint
+		var cp: Variant = cfg.get_value("graphics", "car_paint", was)
+		set_car_paint(int(cp) if (cp is float or cp is int) else was)
 	refresh_preset()
 	var forced := OS.get_environment("NEON_GFX")
 	if PRESET_VALUES.has(forced):
 		set_preset(forced)
 		has_saved_preset = true  # a forced run never auto-picks
+	var forced_paint := OS.get_environment("NEON_CAR_PAINT")
+	if forced_paint.is_valid_int():
+		set_car_paint(int(forced_paint))
 
 ## True on a first launch: no preset in the file and none forced.
 static func needs_auto_pick() -> bool:
@@ -187,6 +248,7 @@ static func save_settings() -> bool:
 	cfg.set_value("graphics", "render_scale", render_scale)
 	cfg.set_value("graphics", "dynamic_res", dynamic_res)
 	cfg.set_value("graphics", "fps_cap", fps_cap)
+	cfg.set_value("graphics", "car_paint", car_paint)
 	cfg.set_value("graphics", "auto", auto_picked)
 	has_saved_preset = true
 	return cfg.save(AudioSettings.path) == OK

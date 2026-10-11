@@ -121,11 +121,18 @@ const ROADS := {
 }
 
 ## Places to stop: rest areas off an exit, and real side streets. `exit` is an
-## exit id on `road`. Placeholders until the stops are designed.
+## exit id on `road`; a stop with `s` and `side` instead opens straight off the
+## road (no exit): side +1 is the own carriageway, -1 the oncoming one.
+## Placeholders until the stops are designed. `known`: on the map from the start
+## (the placeholders); a later stop is found in play (learn_stop).
+## The four fuel stops are staggered, never opposite one another: own side at
+## 2,225 and 5,425, oncoming side at 1,825 and 5,025 (the median gaps).
 const STOPS := [
-	{"id": "shop", "name": "The Shop", "kind": "shop", "road": 0, "exit": "x1a"},
-	{"id": "fuel_1", "name": "Fuel 1", "kind": "station", "road": 0, "exit": "x3a"},
-	{"id": "fuel_2", "name": "Fuel 2", "kind": "station", "road": 0, "exit": "x7b"},
+	{"id": "shop", "name": "The Shop", "kind": "shop", "road": 0, "exit": "x1a", "known": true},
+	{"id": "fuel_3a", "name": "Fuel 3A", "kind": "station", "road": 0, "s": 2225.0, "side": 1, "known": true},
+	{"id": "fuel_3b", "name": "Fuel 3B", "kind": "station", "road": 0, "s": 1825.0, "side": -1, "known": true},
+	{"id": "fuel_7a", "name": "Fuel 7A", "kind": "station", "road": 0, "s": 5425.0, "side": 1, "known": true},
+	{"id": "fuel_7b", "name": "Fuel 7B", "kind": "station", "road": 0, "s": 5025.0, "side": -1, "known": true},
 ]
 
 ## Joins between loops: [{id, a: {road, s}, b: {road, s}, kind}]. Empty until
@@ -310,10 +317,13 @@ static func exit_of(id: int, exit_id: String) -> Dictionary:
 				return e
 	return {}
 
-## Where a stop is: {road, s, side} of its exit ({} for an unknown stop).
+## Where a stop is: {road, s, side} of its own place, or of its exit ({} for an
+## unknown stop).
 static func stop_place(stop_id: String) -> Dictionary:
 	for st in STOPS:
 		if st.id == stop_id:
+			if st.has("s") and st.has("side"):
+				return {"road": int(st.road), "s": float(st.s), "side": int(st.side)}
 			var e := exit_of(int(st.road), String(st.exit))
 			return {"road": int(st.road), "s": float(e.s), "side": int(e.side)} if not e.is_empty() else {}
 	return {}
@@ -332,18 +342,89 @@ static func junction_near(s: float) -> float:
 			best = d
 	return s + best
 
-## Where s metres round road `id` is on the drawn map (0-1 square). s wraps,
-## so both headings and every lap give the same point. The line is walked at
-## an even rate, so a place keeps its share of the way round, not its exact
-## point, when a later act makes the loop longer.
+## Where s metres round road `id` is on the drawn map (0-1 square). s wraps by
+## this act's length, so both headings and every lap give the same point. The
+## line is drawn for the FULL loop (every district), and a place is its metres
+## as a share of that, so it keeps the same point in every act: later acts
+## only fill in more of the line.
 static func map_point(id: int, s: float) -> Vector2:
 	if id != road_id or period <= 0:
 		return Vector2(0.5, 0.5)
+	return _map_at(id, fposmod(s, length()))
+
+## The point for `s_full` metres along the full-length loop, no wrapping.
+static func _map_at(id: int, s_full: float) -> Vector2:
 	var pts: Array = ROADS[id].map
 	var n := pts.size()
-	var want := fposmod(s, length()) / length() * _map_len[n]
+	var want := clampf(s_full / map_full_length(id), 0.0, 1.0) * _map_len[n]
 	var i := 0
 	while i < n - 1 and _map_len[i + 1] <= want:
 		i += 1
 	var seg := _map_len[i + 1] - _map_len[i]
 	return (pts[i] as Vector2).lerp(pts[(i + 1) % n], (want - _map_len[i]) / seg if seg > 0.0 else 0.0)
+
+## Metres round road `id` with every district in it (act 3), whatever act the
+## run is in: what the drawn line stands for.
+static func map_full_length(id: int) -> float:
+	if not ROADS.has(id):
+		return 0.0
+	var chunks := 0
+	for d in ROADS[id].districts:
+		chunks += int(d.chunks)
+	return float(chunks) * L
+
+## The seam: the drawn line has no road past the open part, so it does not
+## close on itself until act 3. [point at the end of the open loop, point at
+## s = 0]; empty once every district is open (the line closes by itself).
+static func map_seam(id: int) -> Array:
+	if id != road_id or period <= 0 or length() >= map_full_length(id) - 0.5:
+		return []
+	return [_map_at(id, length()), _map_at(id, 0.0)]
+
+## The drawn line between two places (metres on the full-length loop, no
+## wrapping) as map points, `step` metres apart, ends included.
+static func map_span(id: int, from_s: float, to_s: float, step := 100.0) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	if id != road_id or period <= 0 or to_s <= from_s:
+		return out
+	var s := from_s
+	while s < to_s:
+		out.append(_map_at(id, s))
+		s += step
+	out.append(_map_at(id, to_s))
+	return out
+
+## Which way the drawn line runs at s, as a unit vector on the map, for a
+## driver heading `dir` (+1 = the way s counts). Looks 50 m either side
+## without wrapping, so it is right next to s = 0 and the end of an open loop.
+static func map_heading(id: int, s: float, dir: int) -> Vector2:
+	if id != road_id or period <= 0:
+		return Vector2.UP
+	var full := map_full_length(id)
+	var a := _map_at(id, clampf(s - 50.0, 0.0, full))
+	var b := _map_at(id, clampf(s + 50.0, 0.0, full))
+	var d := (b - a).normalized()
+	return (d if dir >= 0 else -d) if d.length() > 0.0 else Vector2.UP
+
+## The districts not open yet, as [start, end] metres on the full-length loop
+## (Vector2.ZERO-width once act 3 has opened them all).
+static func map_locked_span(id: int) -> Vector2:
+	var full := map_full_length(id)
+	if id != road_id or period <= 0:
+		return Vector2(full, full)
+	return Vector2(minf(length(), full), full)
+
+## Stops the player has found, by stop id (a run's save carries these). A stop
+## whose STOPS row has `known` is on the map from the start.
+static var known_stops := {}
+
+static func stop_known(stop_id: String) -> bool:
+	if known_stops.has(stop_id):
+		return true
+	for st in STOPS:
+		if st.id == stop_id:
+			return bool(st.get("known", false))
+	return false
+
+static func learn_stop(stop_id: String) -> void:
+	known_stops[stop_id] = true

@@ -37,7 +37,7 @@ const CABIN := {
 	"crank": Vector3(-0.746, 0.650, -0.180), "switch": Vector3(-0.720, 0.787, 0.020),
 	"rear_mirror": Vector3(0.0, 1.220, -0.130),
 	"door_mirror": Vector3(1.010, 0.980, -0.550),
-	"console": "tunnel", "seats": "bucket",
+	"console": "tunnel", "seats": "bucket", "trim": "stock",
 }
 const BODY_TRIS := 2288
 const TRIS_TOTAL := 2760

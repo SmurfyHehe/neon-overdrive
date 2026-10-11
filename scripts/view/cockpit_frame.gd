@@ -13,8 +13,10 @@ class_name CockpitFrame
 #   PowertrainHealth), the SteeringWheel (LED strip, LCD, paddles) on a column,
 #   a centre stack with the touch-screen HeadUnit (station tiles; the driver's
 #   hand taps them, the station changes on the tap), a console with a gear
-#   lever that follows the gearbox mode (H-gate in MANUAL, sequential stick in
-#   SEMI, R-N-D selector in AUTO) and a handbrake that lifts,
+#   lever that follows the gearbox mode (the car's own H-gate in MANUAL, a
+#   sequential stick or paddles in SEMI, R-N-D selector in AUTO; the lever
+#   travels the gate on the shift's clock with the driver's hand on the knob)
+#   and a handbrake that lifts,
 #   two seats, door cards, sills, A- and B-pillars, roof liner, sun visors,
 #   floor and footwell, three pedals that follow the inputs, and the three
 #   CockpitMirrors. Dark materials, one dim amber cabin light, backlit trim.
@@ -87,12 +89,30 @@ const DIAL_R := 0.05
 static var enabled := true
 const DIAL_SWEEP := 270.0   # degrees from empty (lower left) to full (lower right)
 const SPEEDO_MAX_KMH := 300.0
+## The muscle sedan's ribbon speedo: a shallow arc of a big circle whose pivot
+## is far down inside the dash, so the band sits in the binnacle, not on it.
+const STRIP_R := 0.30
+const STRIP_INNER := 0.86     # the band's inner edge, as a share of STRIP_R
+const STRIP_SWEEP := 70.0
+## The open footwell in front of the driver: this far either side of the seat's
+## centre line the dash face stops above the legs and there is no knee panel.
+const WELL_HALF := 0.27
+## A leg's radius with room to spare (the thigh is 7.5 cm at the hip).
+const LEG_R := 0.085
+## The lever's defaults, overridden per car by the spec's "shifter"
+## (CarSpec.shifter: the gate, the length and the throw).
 const LEVER_LEN := 0.23
 const LEVER_ROW_TILT := 16.0   # degrees fore/aft for a gear slot
 const LEVER_COL_TILT := 11.0   # degrees left/right per column
-const LEVER_SPEED := 12.0      # slot units per second along the gate path
-## SEMI: the tap waits this long, so the driver's hand (DriverModel.REACH_SECS) is on it first.
+## A lever move waits this long at most for the driver's hand to arrive on
+## the knob (DriverModel reaches in less), then goes on its own.
 const SEQ_WAIT := 0.22
+## The shortest lever travel, and the selector's own travel in AUTO (no hand).
+const LEVER_MIN_SECS := 0.08
+const LEVER_ALONE_SECS := 0.25
+## The round knob's radius: it fills the hollow of the driver's mitten
+## (DriverModel.hand_boxes, 3.3 cm palm to fingertips) with a little air.
+const KNOB_R := 0.015
 const PEDAL_TRAVEL_DEG := 22.0
 
 ## The driver's side window (2026-10-09, Roy: "the Z to roll up and roll down
@@ -130,6 +150,33 @@ const AMBER := Color("#FFC066")
 const SODIUM := Color("#FF8A1F")
 const RED := Color("#E5262B")
 const DIAL_FACE := Color("#0B0E14")
+## Each car's cabin colours, by its CABIN "trim" (tests/fleet/interior_unique.gd:
+## no two player cars share one). "strip" is the backlit accent line along the
+## dash, the doors and the console (alpha 0: none); "dash" the dash top and
+## "dash_face" the panel facing the driver.
+##   stock    the coupe: dark plastics, amber strip
+##   worn     the beater: faded greys, rust-brown trim, mismatched seats, painted metal dash
+##   sport    the hot hatch: black with red seat bolsters and a red strip
+##   carbon   the tuner: near-black, graphite seat panels, a thin silver strip
+##   retro    the kei roadster: tan seats, a painted navy dash
+##   wood     the muscle sedan: oxblood bench, a wood-grain dash face, chrome trim
+##   utility  the crossover: two-tone grey cloth, hard grey plastics
+const TRIMS := {
+	"stock": {"plastic": PLASTIC, "plastic_light": PLASTIC_LIGHT, "trim": TRIM, "seat": SEAT, "seat_pass": SEAT, "seat_panel": SEAT_PANEL,
+		"leather": LEATHER, "carpet": CARPET, "strip": Color("#FFC06659"), "dash": PLASTIC, "dash_face": PLASTIC_LIGHT},
+	"worn": {"plastic": Color("#3A3630"), "plastic_light": Color("#4A443B"), "trim": Color("#5A4A3A"), "seat": Color("#4B4036"), "seat_pass": Color("#35383F"), "seat_panel": Color("#3A3129"),
+		"leather": Color("#3F362E"), "carpet": Color("#1A1612"), "strip": Color("#FFC06600"), "dash": Color("#6B7668"), "dash_face": Color("#5E6A5C")},
+	"sport": {"plastic": Color("#1A1C22"), "plastic_light": Color("#272A31"), "trim": Color("#34383F"), "seat": Color("#1B1D23"), "seat_pass": Color("#1B1D23"), "seat_panel": Color("#7A1F22"),
+		"leather": Color("#121318"), "carpet": Color("#0E1014"), "strip": Color("#E5262B59"), "dash": Color("#1A1C22"), "dash_face": Color("#23262C")},
+	"carbon": {"plastic": Color("#14161A"), "plastic_light": Color("#1F2227"), "trim": Color("#3A3E46"), "seat": Color("#15171B"), "seat_pass": Color("#15171B"), "seat_panel": Color("#2E3239"),
+		"leather": Color("#0E0F13"), "carpet": Color("#0B0C0F"), "strip": Color("#C9CED64D"), "dash": Color("#14161A"), "dash_face": Color("#1C1E23")},
+	"retro": {"plastic": Color("#23262E"), "plastic_light": Color("#30343D"), "trim": Color("#8C9098"), "seat": Color("#8A6A48"), "seat_pass": Color("#8A6A48"), "seat_panel": Color("#A27E57"),
+		"leather": Color("#5A432E"), "carpet": Color("#15130F"), "strip": Color("#FFC06640"), "dash": Color("#1B2A4A"), "dash_face": Color("#22335A")},
+	"wood": {"plastic": Color("#201A16"), "plastic_light": Color("#2C241E"), "trim": Color("#8C9098"), "seat": Color("#3B1E1A"), "seat_pass": Color("#3B1E1A"), "seat_panel": Color("#4A2622"),
+		"leather": Color("#2A1612"), "carpet": Color("#120D0B"), "strip": Color("#C9CED640"), "dash": Color("#201A16"), "dash_face": Color("#5A3A22")},
+	"utility": {"plastic": Color("#24272B"), "plastic_light": Color("#33373C"), "trim": Color("#44484E"), "seat": Color("#2B2E33"), "seat_pass": Color("#2B2E33"), "seat_panel": Color("#50545A"),
+		"leather": Color("#1D1F23"), "carpet": Color("#111214"), "strip": Color("#FFC06633"), "dash": Color("#24272B"), "dash_face": Color("#2E3136")},
+}
 const BACKLIGHT_ENERGY := 1.6
 
 var player: PlayerCar
@@ -145,9 +192,16 @@ var pod: GaugePod                # the bolt-on AFR/PSI pod; fitted with the firs
 var mirrors: CockpitMirrors
 var tach_needle: Node3D
 var speedo_needle: Node3D
+## The amber mark on the speedo's rim at the speed the police act on here
+## (PoliceRules' offence line: 85 in the city, 125 on the highway). It moves
+## when the car drives into another area (police step P3).
+var limit_tick: Node3D
+var limit_kmh := 0.0
+var _limit_wait := 0.0
 var lamps: MultiMeshInstance3D
 var lamp_text: Label3D
 var trinket: DashTrinket        # the charm on the rear-view mirror (CabinMods.trinket)
+var bobble: BobbleHead          # the bobble head on the passenger-side dash (CabinMods.bobble_for)
 var head_unit: HeadUnit         # the touch-screen radio on the centre stack
 var lever: Node3D
 var lever_knob: Node3D
@@ -167,15 +221,28 @@ var _area_run := -1              # the district run the car was last in (area na
 var wheel_angle := 0.0           # the drawn wheel, radians, + = right (chases steering)
 var _wheel_vel := 0.0            # rad/s
 var cockpit := false
-var lever_moving := false
+var well_x0 := 0.0               # the footwell's span across the car, and the
+var well_x1 := 0.0               # height the dash face stops at over it
+var well_y := 0.0
+var shifter := {}                # this car's lever (CarSpec.shifter)
+var lever_len := LEVER_LEN
+var row_tilt := LEVER_ROW_TILT
+var col_tilt := LEVER_COL_TILT
+var lever_moving := false        # a move is pending or under way
+var lever_started := false       # the lever itself is travelling (the hand has it)
 var _lever_gear := 0
 var _lever_pos := Vector2.ZERO   # (col, row) in slot units, row -1 forward, +1 back
-var _lever_path: Array[Vector2] = []
+var _lever_path: Array[Vector2] = []   # waypoints after _lever_from
+var _lever_from := Vector2.ZERO
+var _lever_t := 0.0              # time into the travel
+var _lever_dur := 0.0            # the travel's length
+var _lever_deadline := 0.0       # when the move should land, from the request
+var _lever_wait := 0.0           # time spent waiting for the hand
+var _lever_rail_passed := false  # the move crossed the neutral rail (tests)
 var lever_mode := -1             # PlayerCar.Transmission the lever shows
 var _stick_fixed := false        # AUTO in a manual-box car: the H-gate stick, not moving
 var _lever_heads := {}           # mode -> knob mesh
 var _gate_labels := {}           # mode -> pattern label on the console
-var _lever_wait := 0.0
 var _last_gear := 0
 var _static_tris := 0
 
@@ -186,7 +253,7 @@ func _init(car: PlayerCar) -> void:
 	crank_pos = cab.crank
 	switch_pos = cab.switch
 	glass_bottom = float(cab.belt_y) + 0.025
-	dial_sweep = 110.0 if cab.cluster_style == "strip" else DIAL_SWEEP
+	dial_sweep = STRIP_SWEEP if cab.cluster_style == "strip" else DIAL_SWEEP
 
 func _ready() -> void:
 	# Always drawn: in the chase view the cabin and driver show through the glass.
@@ -208,6 +275,8 @@ func _ready() -> void:
 	# knob / short shifter, both reading CabinMods; before the layer pass.
 	trinket = DashTrinket.new(player, PlayerCar.chassis_kind())
 	add_child(trinket)
+	bobble = BobbleHead.new(player, PlayerCar.chassis_kind())
+	add_child(bobble)
 	add_child(ShifterMods.new(self))
 	mirrors = CockpitMirrors.new()
 	mirrors.name = "Mirrors"
@@ -234,6 +303,8 @@ func _ready() -> void:
 func set_cockpit(on: bool) -> void:
 	cockpit = on
 	mirrors.set_active(on)
+	if bobble != null:
+		bobble.set_active(on)   # built and bobbing only in this view
 	driver.set_cockpit(on)
 	var bit := MIRROR_ONLY_BIT if on else CAR_BIT
 	if player.chassis_visual != null:
@@ -266,22 +337,23 @@ static func _set_layers(root: Node, bit: int) -> void:
 func _build_static() -> void:
 	var k := CockpitKit.new()
 	var lit := CockpitKit.new()
-	# Trim set: the stock dark plastics, or the beater's worn cabin (Roy,
-	# 2026-10-09: "make the VW a true beater"): faded warm greys, a rusty
-	# brown trim, mismatched seats (brown vinyl and a grey one), no backlit strips.
+	# Trim set: each car's own plastics, seats and accent strip (TRIMS, by the
+	# CABIN's "trim"). The beater's is the worn one (Roy, 2026-10-09: "make the
+	# VW a true beater"): faded warm greys, rusty brown trim, mismatched seats,
+	# no backlit strips, a dash of painted metal in the body's faded paint.
+	var t := trim_colours()
 	var worn := String(cab.get("trim", "stock")) == "worn"
-	var c_plastic := Color("#3A3630") if worn else PLASTIC
-	var c_plastic_light := Color("#4A443B") if worn else PLASTIC_LIGHT
-	var c_trim := Color("#5A4A3A") if worn else TRIM
-	var c_seat := Color("#4B4036") if worn else SEAT
-	var c_seat_pass := Color("#35383F") if worn else SEAT
-	var c_seat_panel := Color("#3A3129") if worn else SEAT_PANEL
-	var c_leather := Color("#3F362E") if worn else LEATHER
-	var c_carpet := Color("#1A1612") if worn else CARPET
-	var strip := Color(AMBER, 0.0 if worn else 0.35)
-	# the beater's dash is painted metal in the body's faded paint, not moulded plastic
-	var c_dash := Color("#6B7668") if worn else c_plastic
-	var c_dash_face := Color("#5E6A5C") if worn else c_plastic_light
+	var c_plastic: Color = t.plastic
+	var c_plastic_light: Color = t.plastic_light
+	var c_trim: Color = t.trim
+	var c_seat: Color = t.seat
+	var c_seat_pass: Color = t.seat_pass
+	var c_seat_panel: Color = t.seat_panel
+	var c_leather: Color = t.leather
+	var c_carpet: Color = t.carpet
+	var strip: Color = t.strip
+	var c_dash: Color = t.dash
+	var c_dash_face: Color = t.dash_face
 	var seat_x := float(cab.seat_x)
 	var seat_h := float(cab.seat_h)
 	var seat_z := float(cab.seat_z)
@@ -312,9 +384,25 @@ func _build_static() -> void:
 	var top_near := cl.x
 	var top_far := cowl.x   # the lip's top is the cowl line itself
 	k.wedge(Vector3(dash_w, 0.06, dash_depth), Vector3(0.0, cowl.x - 0.03, (cowl.y + face_z) * 0.5), c_dash, 0.0, top_near - top_far)
-	k.box(Vector3(dash_w, 0.36, 0.12), Vector3(0.0, top_near - 0.20, face_z), c_dash_face)
+	# The dash face and the knee panel under it, in three runs across the car.
+	# In front of the driver both stop above his legs (the footwell is open
+	# there: tests/fleet/driver_fit.gd; before, the panel was one solid block
+	# from door to door and the shins and feet ran through it).
 	var knee_depth := minf(0.32, face_z - cowl.y + 0.12)   # never past the firewall (the kei's dash is 6 cm deep)
-	k.box(Vector3(dash_w, 0.22, knee_depth), Vector3(0.0, top_near - 0.45, face_z + 0.03 - knee_depth * 0.5), c_plastic)
+	well_x0 = maxf(-dash_half, seat_x - WELL_HALF)
+	well_x1 = minf(dash_half, seat_x + WELL_HALF)
+	well_y = clampf(maxf(leg_top_y(face_z + 0.06), leg_top_y(face_z - 0.06)) + 0.02, top_near - 0.38, top_near - 0.06)
+	for run in [[-dash_half, well_x0, false], [well_x0, well_x1, true], [well_x1, dash_half, false]]:
+		var x0: float = run[0]
+		var x1: float = run[1]
+		if x1 - x0 < 0.01:
+			continue
+		var xc := (x0 + x1) * 0.5
+		if run[2]:
+			k.box(Vector3(x1 - x0, top_near - 0.02 - well_y, 0.12), Vector3(xc, (top_near - 0.02 + well_y) * 0.5, face_z), c_dash_face)
+		else:
+			k.box(Vector3(x1 - x0, 0.36, 0.12), Vector3(xc, top_near - 0.20, face_z), c_dash_face)
+			k.box(Vector3(x1 - x0, 0.22, knee_depth), Vector3(xc, top_near - 0.45, face_z + 0.03 - knee_depth * 0.5), c_plastic)
 	k.box(Vector3(dash_w - 0.08, 0.03, 0.06), Vector3(0.0, cowl.x - 0.015, cowl.y), c_trim)  # cowl lip, under the glass line
 	lit.box(Vector3(dash_w - 0.14, 0.006, 0.01), Vector3(0.0, top_near - 0.018, face_z + 0.055), strip)   # dash edge strip
 	# Cluster binnacle and its hood in front of the driver, then the dial faces.
@@ -329,11 +417,12 @@ func _build_static() -> void:
 	if cab.console == "tunnel":
 		var con_len := (hb.z + 0.20) - (face_z + 0.06)
 		var con_z := (face_z + 0.06 + hb.z + 0.20) * 0.5
-		k.box(Vector3(0.26, 0.20, con_len), Vector3(0.0, lever.y - 0.095, con_z), c_plastic)
-		k.box(Vector3(0.30, 0.18, con_len + 0.38), Vector3(0.0, floor_y + 0.06, con_z - 0.01), c_carpet)   # tunnel
-		k.box(Vector3(0.20, 0.05, 0.22), Vector3(0.0, lever.y + 0.03, hb.z - 0.06), c_leather)              # armrest
-		lit.box(Vector3(0.006, 0.004, con_len - 0.2), Vector3(-0.133, lever.y + 0.007, con_z - 0.06), Color(strip, strip.a * 0.86))
-		lit.box(Vector3(0.006, 0.004, con_len - 0.2), Vector3(0.133, lever.y + 0.007, con_z - 0.06), Color(strip, strip.a * 0.86))
+		var con_w := console_width()   # 26 cm; the kei's is narrow, its seats sit close
+		k.box(Vector3(con_w, 0.20, con_len), Vector3(0.0, lever.y - 0.095, con_z), c_plastic)
+		k.box(Vector3(con_w + 0.04, 0.18, con_len + 0.38), Vector3(0.0, floor_y + 0.06, con_z - 0.01), c_carpet)   # tunnel
+		k.box(Vector3(con_w - 0.06, 0.05, 0.22), Vector3(0.0, lever.y + 0.03, hb.z - 0.06), c_leather)              # armrest
+		lit.box(Vector3(0.006, 0.004, con_len - 0.2), Vector3(-con_w * 0.5 - 0.003, lever.y + 0.007, con_z - 0.06), Color(strip, strip.a * 0.86))
+		lit.box(Vector3(0.006, 0.004, con_len - 0.2), Vector3(con_w * 0.5 + 0.003, lever.y + 0.007, con_z - 0.06), Color(strip, strip.a * 0.86))
 	else:
 		# flat floor (rear-engine beater): a low hump with the gate plate on it
 		k.box(Vector3(0.24, 0.07, 0.60), Vector3(0.0, lever.y - 0.035, lever.z + 0.18), c_carpet)
@@ -347,7 +436,7 @@ func _build_static() -> void:
 	# Seats, driver and passenger.
 	var recline := Basis(Vector3.RIGHT, deg_to_rad(12.0))
 	var seat_w := minf(0.50, (door_x - 0.02) - 0.14 if cab.console != "tunnel" else door_x - 0.17)
-	seat_w = clampf(seat_w, 0.40, 0.50)
+	seat_w = clampf(seat_w, 0.34, 0.50)   # the kei's are narrow: two seats and a console in 1.04 m
 	if cab.seats == "bench":
 		# one cushion and backrest across the car, a fold-down armrest hump in the middle
 		var bw := door_x * 2.0 - 0.06
@@ -387,7 +476,7 @@ func _build_static() -> void:
 		lit.box(Vector3(0.004, 0.004, door_len - 0.25), Vector3(side * (door_x - 0.002), card_top, door_zc), Color(strip, strip.a * 0.86))
 		k.box(Vector3(0.14, 0.12, door_len + 0.10), Vector3(side * (minf(door_x, door_x_f) - 0.04), floor_y + 0.04, door_zc + 0.05), c_plastic)   # sill
 		# B-pillar inner face and the rear quarter trim behind the door
-		if open_top:
+		if open_top or bool(cab.get("hardtop", false)):   # a pillarless hardtop: only the stub at the belt
 			k.box(Vector3(0.06, 0.08, 0.08), Vector3(side * (door_x_r - 0.05), belt + 0.02, b_z), c_plastic)
 		else:   # up the tumblehome to the roof's edge
 			_bar(k, Vector3(side * (door_x_r - 0.05), belt, b_z), Vector3(side * (pillar_top.x - 0.04), roof_y - 0.05, b_z), 0.07, c_plastic)
@@ -457,60 +546,83 @@ func _build_static() -> void:
 	add_child(k.instance(CockpitKit.material(0.85, 0.05), "Cabin"))
 	add_child(lit.instance(CockpitKit.glow_material(BACKLIGHT_ENERGY), "Backlight"))
 
-## The binnacle and the dial faces for this car's cluster style, in car space:
-##   dials   a tach left and a speedo right, the coupe's pair
-##   pod     one big speedo pod in front of the driver with a small tach inset
-##           low left (the beater's single round binnacle)
-##   triple  the pair plus three small aux gauges in a hood on the dash top
-##   strip   a wide, shallow horizontal speedo band with a small tach to its
-##           left (the muscle sedan); the needles sweep 110 degrees
-## tach and speedo needle pivots come from dial_centres().
+## The binnacle and the dial faces for this car's cluster style, in car space.
+## Every player car has its own (tests/fleet/interior_unique.gd):
+##   dials   a tach left and a speedo right in one hooded binnacle (the coupe)
+##   pod     one round speedo pod in front of the driver with a small
+##           accessory tach beside it, each in its own can (the beater)
+##   tacho   a big tach in the middle and a smaller speedo to its right (the
+##           hot hatch)
+##   triple  the pair, plus three small aux gauges in the middle of the dash
+##           top, turned to the driver (the tuner)
+##   cans    two separate round cans on a stalk, no binnacle (the kei roadster)
+##   strip   a wide ribbon speedo sunk in the dash face with a small tach to
+##           its left (the muscle sedan); the needles sweep STRIP_SWEEP degrees
+##   wide    a wide square binnacle, the dials apart with an info panel
+##           between them (the crossover)
+## tach and speedo needle pivots come from dial_centres(). Nothing here stands
+## above the sight line, 8 degrees below the eye (tests/fleet/sight_line.gd).
 func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vector2) -> void:
 	var style := String(cab.cluster_style)
 	var centres := dial_centres()
 	var radii := dial_radii()
 	var flat := Basis(Vector3.RIGHT, PI / 2.0)
+	var depth := clampf(cl.y - float((cab.cowl as Vector2).y) - 0.04, 0.03, 0.11)   # a can's depth: never through the cowl
 	match style:
 		"pod":
-			var depth := clampf(cl.y - float((cab.cowl as Vector2).y) - 0.04, 0.03, 0.11)   # never through the cowl
-			k.cylinder(0.105, -depth, 0.0, Vector3(seat_x, cl.x, cl.y - 0.052), PLASTIC, 16, flat)
-			k.cylinder(0.115, -0.03, 0.0, Vector3(seat_x, cl.x, cl.y - 0.05), TRIM, 16, flat)
+			var pc: Vector3 = centres[1]
+			k.cylinder(float(radii[1]) + 0.006, -depth, -0.003, pc, PLASTIC, 16, flat)
+			k.cylinder(float(radii[1]) + 0.012, -0.03, -0.003, pc, TRIM, 16, flat)
+			var tc: Vector3 = centres[0]
+			k.cylinder(float(radii[0]) + 0.006, -minf(depth, 0.05), -0.003, tc, TRIM, 12, flat)
 		"strip":
-			k.box(Vector3(0.62, 0.11, 0.10), Vector3(seat_x + 0.08, cl.x, cl.y - 0.05), PLASTIC)
-			k.wedge(Vector3(0.66, 0.012, 0.16), Vector3(seat_x + 0.08, cl.x + 0.054, cl.y - 0.07), PLASTIC_LIGHT, 0.0, -0.02)
+			_binnacle(k, seat_x + 0.08, 0.62, cl, 0.054, 0.09)
+		"tacho":
+			_binnacle(k, seat_x + 0.02, 0.36, cl, 0.061, 0.09)
+		"cans":
+			for i in 2:
+				var cc: Vector3 = centres[i]
+				k.cylinder(float(radii[i]) + 0.010, -depth - 0.03, -0.003, cc, PLASTIC, 14, flat)
+			k.box(Vector3(0.20, 0.03, 0.05), Vector3(seat_x, cl.x - 0.062, cl.y - 0.03), PLASTIC)   # the stalk they share
+		"wide":
+			_binnacle(k, seat_x, 0.46, cl)
+			# the info panel between the dials (the warning lamps light in it)
+			k.box(Vector3(0.096, 0.062, 0.004), Vector3(seat_x, cl.x + 0.004, cl.y - 0.003), TRIM)
+			lit.box(Vector3(0.086, 0.052, 0.002), Vector3(seat_x, cl.x + 0.004, cl.y), Color(DIAL_FACE, 0.15))
 		"triple":
-			k.box(Vector3(0.34, 0.12, 0.10), Vector3(seat_x, cl.x, cl.y - 0.05), PLASTIC)
-			k.wedge(Vector3(0.38, 0.012, 0.16), Vector3(seat_x, cl.x + 0.059, cl.y - 0.07), PLASTIC_LIGHT, 0.0, -0.02)
-			# three aux gauges in a hood on the dash top, angled at the driver
-			var hood := Vector3(seat_x + 0.02, cl.x + 0.085, cl.y - 0.16)
-			k.box(Vector3(0.22, 0.05, 0.07), hood, PLASTIC)
-			var tilt := Basis(Vector3.RIGHT, deg_to_rad(70.0))
+			_binnacle(k, seat_x, 0.34, cl)
+			# three aux gauges in a low hood in the middle of the dash top, turned to the driver
+			var eye: Vector3 = cab.eye
+			var mid := Vector3(0.0, cl.x + 0.026, float(cab.dash_face_z) - 0.06)
+			var turn := Basis(Vector3.UP, atan2(eye.x - mid.x, eye.z - mid.z))
+			k.box(Vector3(0.24, 0.058, 0.07), mid, PLASTIC, turn)
+			var tilt := turn * Basis(Vector3.RIGHT, deg_to_rad(75.0))
 			for i in 3:
-				var c := hood + Vector3(-0.07 + 0.07 * i, 0.006, 0.03)
+				var c := mid + turn * Vector3(-0.075 + 0.075 * i, 0.002, 0.036)
 				lit.cylinder(0.024, -0.004, 0.0, c, Color(DIAL_FACE, 0.15), 12, tilt)
-				k.cylinder(0.030, -0.008, -0.002, c + Vector3(0, 0, 0.001), TRIM, 12, tilt)
-				lit.box(Vector3(0.003, 0.016, 0.002), c + tilt * Vector3(0.0, 0.012, 0.0), Color(RED, 0.6), tilt)
+				k.cylinder(0.029, -0.008, -0.002, c + turn * Vector3(0, 0, 0.001), TRIM, 12, tilt)
+				lit.box(Vector3(0.003, 0.016, 0.002), c + tilt * Vector3(0.0, 0.0, -0.012), Color(RED, 0.6), tilt)
 		_:
-			k.box(Vector3(0.34, 0.12, 0.10), Vector3(seat_x, cl.x, cl.y - 0.05), PLASTIC)
-			k.wedge(Vector3(0.38, 0.012, 0.16), Vector3(seat_x, cl.x + 0.059, cl.y - 0.07), PLASTIC_LIGHT, 0.0, -0.02)
+			_binnacle(k, seat_x, 0.34, cl)
 	# Dial faces (backlit dark), rings and tick marks: 0 = tach, 1 = speedo.
 	var a_start := 225.0 if dial_sweep > 180.0 else 90.0 + dial_sweep * 0.5
+	var ring_col := SILVER if style == "cans" else TRIM
 	for i in 2:
 		var c: Vector3 = centres[i]
 		var r: float = radii[i]
 		if style == "strip" and i == 1:
-			# the speedo band: a wide shallow arc face with the pivot low in the middle
+			# the ribbon: a wide shallow arc face, its pivot far below in the dash
 			var band := CockpitKit.new()
-			band.ring_sector(r * 0.55, r, deg_to_rad(a_start - dial_sweep), deg_to_rad(a_start), -0.004, 0.0, Color(DIAL_FACE, 0.15), 16)
+			band.ring_sector(r * STRIP_INNER, r, deg_to_rad(a_start - dial_sweep), deg_to_rad(a_start), -0.004, 0.0, Color(DIAL_FACE, 0.15), 16)
 			band.offset(c)
 			lit.merge(band)
 			var rim := CockpitKit.new()
-			rim.ring_sector(r * 0.53, r + 0.008, deg_to_rad(a_start - dial_sweep), deg_to_rad(a_start), -0.008, -0.002, TRIM, 16)
+			rim.ring_sector(r * STRIP_INNER - 0.006, r + 0.006, deg_to_rad(a_start - dial_sweep - 1.5), deg_to_rad(a_start + 1.5), -0.008, -0.002, TRIM, 16)
 			rim.offset(c + Vector3(0, 0, -0.001))
 			k.merge(rim)
 		else:
 			lit.cylinder(r, -0.004, 0.0, c, Color(DIAL_FACE, 0.15), 16, flat)
-			k.cylinder(r + 0.008, -0.008, -0.002, c + Vector3(0, 0, -0.001), TRIM, 16, flat)
+			k.cylinder(r + 0.008, -0.008, -0.002, c + Vector3(0, 0, -0.001), ring_col, 16, flat)
 		var ticks := 9 if i == 0 else 7
 		for t in ticks:
 			var a := deg_to_rad(a_start - dial_sweep * float(t) / (ticks - 1))
@@ -525,24 +637,89 @@ func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vec
 			zone.offset(c)
 			lit.merge(zone)
 
+## The top of the driver's legs where they cross car-space z: both legs at
+## rest (right foot on the throttle or the brake, left on the clutch or the
+## dead pedal), by the driver's own two-bone IK, plus LEG_R. Behind the hips or
+## ahead of the feet: the floor.
+func leg_top_y(z: float) -> float:
+	var ankles := DriverModel.rest_ankles(cab)
+	var bones := DriverModel.leg_lengths(cab)
+	var top := float(cab.floor_y)
+	for side in ankles:
+		var hip := DriverModel.rest_hip(cab, side)
+		for ankle in ankles[side]:
+			var knee: Vector3 = DriverModel.two_bone(hip, ankle, bones.x, bones.y, DriverModel.knee_pole(side))[0]
+			for seg in [[hip, knee], [knee, ankle]]:
+				var a: Vector3 = seg[0]
+				var b: Vector3 = seg[1]
+				if (z - a.z) * (z - b.z) <= 0.0 and absf(a.z - b.z) > 0.001:
+					top = maxf(top, lerpf(a.y, b.y, (z - a.z) / (b.z - a.z)) + LEG_R)
+	return top
+
+## The centre console's width (a tunnel car's; CABIN "console_w").
+func console_width() -> float:
+	return float(cab.get("console_w", 0.26))
+
+## This car's cabin colours (TRIMS; an unknown trim is the stock set).
+func trim_colours() -> Dictionary:
+	return TRIMS.get(String(cab.get("trim", "stock")), TRIMS["stock"])
+
+## A hooded binnacle `w` wide about x, its hood's underside `top` over the
+## cluster height and `depth` long. The box and the hood stay under the sight
+## line: from the eye the hood's far edge is the highest thing in it, so the
+## hood tapers to nothing there and falls away from the driver; a taller
+## binnacle (bigger dials) gets a shorter hood. The dials' centres sit at the
+## cluster height or above: below it the dash face is in front of them.
+func _binnacle(k: CockpitKit, x: float, w: float, cl: Vector2, top: float = 0.048, depth: float = 0.16) -> void:
+	var t := trim_colours()
+	var box_depth := minf(0.10, depth)
+	k.box(Vector3(w, top + 0.062, box_depth), Vector3(x, cl.x + (top - 0.062) * 0.5, cl.y - box_depth * 0.5), t.plastic)
+	k.wedge(Vector3(w + 0.04, 0.012, depth), Vector3(x, cl.x + top + 0.006, cl.y + 0.01 - depth * 0.5), t.plastic_light, -0.012, 0.0)
+
 ## The tach (0) and speedo (1) centres for this car's cluster style, car space.
 func dial_centres() -> Array:
 	var seat_x := float(cab.seat_x)
 	var cl: Vector2 = cab.cluster
 	match String(cab.cluster_style):
 		"pod":
-			return [Vector3(seat_x - 0.075, cl.x - 0.045, cl.y + 0.002), Vector3(seat_x, cl.x, cl.y)]
-		"strip":
-			return [Vector3(seat_x - 0.20, cl.x, cl.y), Vector3(seat_x + 0.11, cl.x - 0.03, cl.y)]
+			return [Vector3(seat_x - 0.090, cl.x, cl.y), Vector3(seat_x + 0.018, cl.x, cl.y)]
+		"strip":   # the ribbon's pivot: its arc tops out just under the binnacle's hood
+			return [Vector3(seat_x - 0.20, cl.x, cl.y), Vector3(seat_x + 0.11, cl.x + 0.049 - STRIP_R, cl.y)]
+		"tacho":
+			return [Vector3(seat_x - 0.040, cl.x, cl.y), Vector3(seat_x + 0.094, cl.x, cl.y)]
+		"cans":
+			return [Vector3(seat_x - 0.062, cl.x, cl.y), Vector3(seat_x + 0.062, cl.x, cl.y)]
+		"wide":
+			return [Vector3(seat_x - 0.125, cl.x, cl.y), Vector3(seat_x + 0.125, cl.x, cl.y)]
 		_:
 			return [Vector3(seat_x - 0.085, cl.x, cl.y), Vector3(seat_x + 0.085, cl.x, cl.y)]
+
+## The two dial faces as the driver reads them, [{centre, r}] (tach, speedo):
+## the dial itself, or for the ribbon speedo the middle of its band (its
+## pivot is hidden in the dash).
+func dial_faces() -> Array:
+	var centres := dial_centres()
+	var radii := dial_radii()
+	var out := []
+	for i in 2:
+		var c: Vector3 = centres[i]
+		var r: float = radii[i]
+		if i == 1 and String(cab.cluster_style) == "strip":
+			out.append({"centre": c + Vector3(0.0, r * (1.0 + STRIP_INNER) * 0.5, 0.0), "r": r * (1.0 - STRIP_INNER) * 0.5})
+		else:
+			out.append({"centre": c, "r": r})
+	return out
 
 func dial_radii() -> Array:
 	match String(cab.cluster_style):
 		"pod":
-			return [0.03, 0.085]
+			return [0.028, 0.054]
 		"strip":
-			return [0.045, 0.20]
+			return [0.045, STRIP_R]
+		"tacho":
+			return [0.052, 0.040]
+		"cans":
+			return [0.046, 0.046]
 		_:
 			return [DIAL_R, DIAL_R]
 
@@ -568,7 +745,8 @@ func _build_glass() -> void:
 	var z0 := float((cab.a_pillar[0] as Vector3).z) + 0.20   # at the A-pillar foot
 	var z1 := float(cab.b_pillar_z) - 0.04                     # at the B-pillar
 	var zt := float((cab.a_pillar[1] as Vector3).z) - 0.04     # top front, where the A-pillar meets the roof
-	var a := Vector3(gx, glass_bottom, z0)
+	# the body narrows toward the pillar's foot: the pane's front bottom corner follows the door card there
+	var a := Vector3(-minf(float(cab.glass_x), float(cab.get("door_x_front", cab.door_x)) + 0.01), glass_bottom, z0)
 	var b := Vector3(gx, glass_bottom, z1)
 	var c := Vector3(gx_top, top, z1)
 	var d := Vector3(gx_top, top, maxf(zt + 0.30, z0 + 0.10))   # the raked pillar: the top edge starts well behind the foot
@@ -693,11 +871,25 @@ func _build_cluster() -> void:
 	var tach_c: Vector3 = centres[0]
 	var speedo_c: Vector3 = centres[1]
 	tach_needle = _needle(tach_c + Vector3(0.0, 0.0, 0.004), "TachNeedle", float(radii[0]))
-	speedo_needle = _needle(speedo_c + Vector3(0.0, 0.0, 0.004), "SpeedoNeedle", float(radii[1]))
+	var strip: bool = cab.cluster_style == "strip"
+	speedo_needle = _needle(speedo_c + Vector3(0.0, 0.0, 0.004), "SpeedoNeedle", float(radii[1]), float(radii[1]) * STRIP_INNER if strip else 0.0)
+	limit_tick = Node3D.new()
+	limit_tick.name = "LimitTick"
+	limit_tick.position = speedo_c + Vector3(0.0, 0.0, 0.003)
+	var lk := CockpitKit.new()
+	lk.box(Vector3(0.005, 0.008, 0.002), Vector3(0.0, float(radii[1]) - 0.005, 0.0), Color(SODIUM, 1.0))
+	limit_tick.add_child(lk.instance(CockpitKit.glow_material(SteeringWheel.LED_ENERGY)))
+	add_child(limit_tick)
 	# The warning lamps sit between the dials (under the speedo pod's tach on the beater).
 	var lamp_c := (tach_c + speedo_c) * 0.5 + Vector3(0.0, 0.03, 0.0)
-	if cab.cluster_style == "pod":
-		lamp_c = speedo_c + Vector3(0.0, -0.055, 0.0)
+	if cab.cluster_style == "pod":   # in the speedo's face, over its hub
+		lamp_c = speedo_c + Vector3(0.0, 0.018, 0.0)
+	elif strip:   # between the tach and the ribbon's left end
+		lamp_c = Vector3(tach_c.x + 0.092, tach_c.y + 0.012, tach_c.z)
+	elif cab.cluster_style == "tacho":   # in the tach's face, over its hub
+		lamp_c = tach_c + Vector3(0.0, 0.022, 0.0)
+	elif cab.cluster_style == "wide":   # in the info panel
+		lamp_c = (tach_c + speedo_c) * 0.5 + Vector3(0.0, 0.012, 0.0)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
@@ -716,17 +908,25 @@ func _build_cluster() -> void:
 	lamp_text = _label("ENG BRK TYR CLT", 12, lamp_c + Vector3(0.0, -0.015, 0.002), SILVER, 0.0004)
 	lamp_text.name = "LampText"
 	_label("x1000 rpm", 22, tach_c + Vector3(0.0, -float(radii[0]) * 0.6, 0.002), AMBER, 0.0004)
-	_label("km/h", 22, speedo_c + Vector3(0.0, -float(radii[1]) * 0.6, 0.002), AMBER, 0.0004)
+	var kmh_at := speedo_c + Vector3(0.0, -float(radii[1]) * 0.6, 0.002)
+	if strip:   # under the middle of the band
+		kmh_at = speedo_c + Vector3(0.0, float(radii[1]) * STRIP_INNER - 0.014, 0.002)
+	_label("km/h", 22, kmh_at, AMBER, 0.0004)
 
-func _needle(at: Vector3, node_name: String, r: float = DIAL_R) -> Node3D:
+## A needle on its pivot. `r_from` > 0: only the tip from there out (a ribbon
+## speedo, whose pivot and most of the needle are hidden inside the dash).
+func _needle(at: Vector3, node_name: String, r: float = DIAL_R, r_from: float = 0.0) -> Node3D:
 	var pivot := Node3D.new()
 	pivot.name = node_name
 	pivot.position = at
 	var k := CockpitKit.new()
 	var len := r - 0.006
-	k.box(Vector3(0.004, len, 0.002), Vector3(0.0, len * 0.5 - 0.004, 0.0), Color(RED, 1.0))
-	k.box(Vector3(0.0035, 0.010, 0.002), Vector3(0.0, -0.008, 0.0), Color(SILVER, 0.3))
-	k.cylinder(0.006, -0.001, 0.0015, Vector3.ZERO, Color(SILVER, 0.2), 8, Basis(Vector3.RIGHT, PI / 2.0))
+	if r_from > 0.0:
+		k.box(Vector3(0.004, len - r_from, 0.002), Vector3(0.0, (len + r_from) * 0.5, 0.0), Color(RED, 1.0))
+	else:
+		k.box(Vector3(0.004, len, 0.002), Vector3(0.0, len * 0.5 - 0.004, 0.0), Color(RED, 1.0))
+		k.box(Vector3(0.0035, 0.010, 0.002), Vector3(0.0, -0.008, 0.0), Color(SILVER, 0.3))
+		k.cylinder(0.006, -0.001, 0.0015, Vector3.ZERO, Color(SILVER, 0.2), 8, Basis(Vector3.RIGHT, PI / 2.0))
 	pivot.add_child(k.instance(CockpitKit.glow_material(SteeringWheel.LED_ENERGY)))
 	add_child(pivot)
 	return pivot
@@ -785,34 +985,68 @@ func _on_hand_contact(target: StringName) -> void:
 
 # ---------- gear lever and handbrake ----------
 
+## The lever's gate: gear -> (col, row) from the spec, neutral on the rail.
+func _gate() -> Dictionary:
+	return shifter.get("gate", {})
+
+## Where a gear sits in the H gate, or null when the gate has no slot for it.
+func gate_slot(g: int) -> Variant:
+	var gate := _gate()
+	var v: Variant = gate.get(g, gate.get(str(g)))
+	if v == null:
+		return null
+	return Vector2(float(v[0]), float(v[1]))
+
+## SEMI mode on this car taps the stick ("lever") or flicks the paddle ("paddle").
+func paddle_semi() -> bool:
+	return str(shifter.get("sequential", "lever")) == "paddle"
+
+## The driver's hand rides the lever in this mode: MANUAL always, SEMI with a
+## stick. AUTO's selector and a paddle car's SEMI move without it.
+func lever_needs_hand() -> bool:
+	if player.automatic_transmission:
+		return false
+	return lever_mode != PlayerCar.Transmission.SEMI or not paddle_semi()
+
 func _build_lever() -> void:
+	shifter = CarSpec.fit_gate(player.spec.get("shifter", CarSpec.shifter("h5")), player.gear_ratios.size())
+	lever_len = float(shifter.get("lever_len", LEVER_LEN))
+	row_tilt = float(shifter.get("row_tilt_deg", LEVER_ROW_TILT))
+	col_tilt = float(shifter.get("col_tilt_deg", LEVER_COL_TILT))
 	lever = Node3D.new()
 	lever.name = "Lever"
 	lever.position = cab.lever
 	var k := CockpitKit.new()
-	k.cylinder(0.008, 0.0, LEVER_LEN - 0.02, Vector3.ZERO, SILVER, 8)
+	k.cylinder(0.008, 0.0, lever_len - 0.02, Vector3.ZERO, SILVER, 8)
 	k.cylinder(0.02, 0.0, 0.02, Vector3.ZERO, LEATHER, 8)   # boot collar
 	lever.add_child(k.instance(CockpitKit.material(0.35, 0.7)))
 	lever_knob = Node3D.new()
 	lever_knob.name = "Knob"
-	lever_knob.position = Vector3(0.0, LEVER_LEN, 0.0)
+	lever_knob.position = Vector3(0.0, lever_len, 0.0)
 	lever.add_child(lever_knob)
 	add_child(lever)
 	# one head per gearbox mode on the same knob point (the hand's target), and
 	# the pattern printed on the console behind the boot; set_lever_mode shows one
 	var mat := CockpitKit.material(0.6, 0.2)
-	var h := CockpitKit.new()   # MANUAL: leather knob, silver top
-	h.box(Vector3(0.040, 0.046, 0.040), Vector3.ZERO, LEATHER)
-	h.box(Vector3(0.028, 0.004, 0.028), Vector3(0.0, 0.025, 0.0), SILVER)
-	var s := CockpitKit.new()   # SEMI: taller sequential grip, silver collar
-	s.cylinder(0.019, -0.03, 0.035, Vector3.ZERO, LEATHER, 10)
-	s.cylinder(0.021, -0.034, -0.026, Vector3.ZERO, SILVER, 10)
+	var h := CockpitKit.new()   # MANUAL: a leather ball the hand wraps, silver top
+	if str(shifter.get("knob", "ball")) == "tee":
+		h.box(Vector3(0.062, 0.030, 0.036), Vector3(0.0, 0.004, 0.0), LEATHER)
+		h.box(Vector3(0.028, 0.004, 0.028), Vector3(0.0, 0.021, 0.0), SILVER)
+	else:
+		var along_x := Basis(Vector3.BACK, PI / 2.0)
+		h.cylinder(KNOB_R, -0.014, 0.014, Vector3.ZERO, LEATHER, 12, along_x)
+		h.cylinder(KNOB_R - 0.004, -0.018, -0.014, Vector3.ZERO, LEATHER, 12, along_x)
+		h.cylinder(KNOB_R - 0.004, 0.014, 0.018, Vector3.ZERO, LEATHER, 12, along_x)
+		h.box(Vector3(0.014, 0.003, 0.014), Vector3(0.0, KNOB_R - 0.0015, 0.0), SILVER)   # top flush with the ball
+	var sq := CockpitKit.new()   # SEMI: taller sequential grip, silver collar
+	sq.cylinder(0.019, -0.03, 0.035, Vector3.ZERO, LEATHER, 10)
+	sq.cylinder(0.021, -0.034, -0.026, Vector3.ZERO, SILVER, 10)
 	var a := CockpitKit.new()   # AUTO: T-handle with the lock button
 	a.box(Vector3(0.066, 0.030, 0.034), Vector3(0.0, 0.004, 0.0), LEATHER)
 	a.box(Vector3(0.012, 0.006, 0.014), Vector3(-0.02, 0.021, 0.0), SILVER)
 	var heads := {
-		PlayerCar.Transmission.MANUAL: [h, "KnobH", gate_pattern(player.gear_ratios.size())],
-		PlayerCar.Transmission.SEMI: [s, "KnobSeq", "−\n+"],
+		PlayerCar.Transmission.MANUAL: [h, "KnobH", gate_text()],
+		PlayerCar.Transmission.SEMI: [sq, "KnobSeq", "−\n+"],
 		PlayerCar.Transmission.AUTO: [a, "KnobAuto", selector_pattern(player)],
 	}
 	for m in heads:
@@ -823,6 +1057,27 @@ func _build_lever() -> void:
 		l.name = "Gate" + (heads[m][1] as String).trim_prefix("Knob")
 		l.rotation_degrees = Vector3(-90.0, 0.0, 0.0)   # flat on the console, top line forward
 		_gate_labels[m] = l
+
+## The H pattern printed on the console, from the gate: the forward row over
+## the back row, one column per gate column.
+func gate_text() -> String:
+	var gate := _gate()
+	var cols := {}
+	for g in gate:
+		cols[int(gate[g][0])] = true
+	var order := cols.keys()
+	order.sort()
+	var lines := []
+	for row in [-1, 1]:
+		var cells := []
+		for c in order:
+			var cell := " "
+			for g in gate:
+				if int(gate[g][0]) == c and int(gate[g][1]) == row:
+					cell = "R" if int(g) < 0 else str(int(g))
+			cells.append(cell)
+		lines.append(" ".join(cells))
+	return "\n".join(lines)
 
 func _build_handbrake() -> void:
 	handbrake = Node3D.new()
@@ -849,6 +1104,7 @@ func set_lever_mode(mode: int) -> void:
 	_lever_path.clear()
 	_lever_wait = 0.0
 	lever_moving = false
+	lever_started = false
 	_lever_gear = player.gear
 	_lever_pos = _slot_of(player.gear)
 	_apply_lever(_lever_pos)
@@ -877,9 +1133,9 @@ static func gate_pattern(forward_gears: int) -> String:
 	return " ".join(top) + "\n" + " ".join(bottom)
 
 ## The slot of a gear as (column, row), row -1 forward and +1 back, in the
-## current lever mode. MANUAL, the H-gate: odd gears forward, even gears and
-## reverse back, 0 the neutral gate, reverse right of the last column. SEMI:
-## the sequential stick rests in the centre in every gear. AUTO: one column,
+## current lever mode. MANUAL: the car's H gate (CarSpec.shifter), 0 the
+## neutral rail; a gear the gate leaves out sits on the rail. SEMI: the
+## sequential stick rests in the centre in every gear. AUTO: one column,
 ## R forward, N, D back.
 func _slot_of(g: int) -> Vector2:
 	if lever_mode == PlayerCar.Transmission.SEMI:
@@ -888,52 +1144,123 @@ func _slot_of(g: int) -> Vector2:
 		return Vector2.ZERO if _stick_fixed else Vector2(0.0, signf(float(g)))
 	if g == 0:
 		return Vector2.ZERO
-	var n_cols := gate_columns(player.gear_ratios.size())
-	if g < 0:
-		return Vector2(float(n_cols) - float(n_cols - 1) / 2.0, 1.0)
-	var col := float((g - 1) / 2) - float(n_cols - 1) / 2.0
-	return Vector2(col, -1.0 if g % 2 == 1 else 1.0)
+	var slot: Variant = gate_slot(g)
+	if slot == null:
+		return Vector2.ZERO
+	return slot
 
 ## Lever tilt from a slot position (slot units -> degrees).
 func _apply_lever(p: Vector2) -> void:
-	lever.rotation_degrees = Vector3(p.y * LEVER_ROW_TILT, 0.0, -p.x * LEVER_COL_TILT)
+	lever.rotation_degrees = Vector3(p.y * row_tilt, 0.0, -p.x * col_tilt)
 
-## Start moving the lever to a gear, through the neutral gate like a hand would.
-## SEMI: a tap instead, back for an upshift and forward for a downshift, then
-## back to the centre, after SEQ_WAIT so the driver's hand is on it first.
-func move_lever_to(g: int) -> void:
+## The knob's centre with the lever in a gear's slot, car space (where the
+## lever tip lands for that gear; tests compare it with lever_tip()).
+func gate_tip(g: int) -> Vector3:
+	var p := _slot_of(g)
+	var b := Basis.from_euler(Vector3(deg_to_rad(p.y * row_tilt), 0.0, deg_to_rad(-p.x * col_tilt)))
+	return lever.position + b * Vector3(0.0, lever_len, 0.0)
+
+## The knob's centre now, car space.
+func lever_tip() -> Vector3:
+	return lever.transform * lever_knob.position
+
+## Start a lever move to a gear, landing in secs (the physics shift_time, so
+## the lever drops into gear as the box does and the gear sound plays). The
+## path runs through the neutral rail like a hand would: out of the slot,
+## along the rail, into the new slot. The lever waits for the driver's hand
+## to take the knob (DriverModel, at most SEQ_WAIT) and then travels with an
+## ease over what is left of secs. SEMI with a stick: a tap instead, back
+## for an upshift and forward for a downshift, then the centre.
+func move_lever_to(g: int, secs: float = LEVER_ALONE_SECS) -> void:
 	var to := _slot_of(g)
 	_lever_path.clear()
+	_lever_from = _lever_pos
+	_lever_rail_passed = false
 	if lever_mode == PlayerCar.Transmission.SEMI:
 		_lever_path.append(Vector2(0.0, 1.0 if g > _lever_gear else -1.0))
 		_lever_path.append(Vector2.ZERO)
-		_lever_wait = SEQ_WAIT
-		_lever_gear = g
-		lever_moving = true
-		return
-	if _lever_pos.y != 0.0:
-		_lever_path.append(Vector2(_lever_pos.x, 0.0))
-	if to.x != _lever_pos.x:
-		_lever_path.append(Vector2(to.x, 0.0))
-	_lever_path.append(to)
+	else:
+		if _lever_pos.y != 0.0:
+			_lever_path.append(Vector2(_lever_pos.x, 0.0))
+		if to.x != _lever_pos.x:
+			_lever_path.append(Vector2(to.x, 0.0))
+		if _lever_path.is_empty() or _lever_path[-1] != to:
+			_lever_path.append(to)
 	_lever_gear = g
+	_lever_deadline = maxf(secs, LEVER_MIN_SECS)
+	_lever_wait = 0.0
+	_lever_t = 0.0
+	_lever_dur = 0.0
 	lever_moving = true
+	lever_started = false
 
 func lever_knob_position() -> Vector3:
 	return lever_knob.global_position
 
+## How far along its path the lever is, 0..1 (tests).
+func lever_progress() -> float:
+	if not lever_moving:
+		return 1.0
+	if not lever_started or _lever_dur <= 0.0:
+		return 0.0
+	return clampf(_lever_t / _lever_dur, 0.0, 1.0)
+
+## The move crossed the neutral rail (tests).
+func lever_passed_rail() -> bool:
+	return _lever_rail_passed
+
+## The point a fraction u along the path (piecewise linear by distance).
+func _path_point(u: float) -> Vector2:
+	if _lever_path.is_empty():
+		return _lever_from
+	var total := 0.0
+	var prev := _lever_from
+	for w in _lever_path:
+		total += prev.distance_to(w)
+		prev = w
+	if total <= 0.0:
+		return _lever_path[-1]
+	var want := u * total
+	prev = _lever_from
+	for i in _lever_path.size():
+		var w := _lever_path[i]
+		var seg := prev.distance_to(w)
+		if want <= seg or i == _lever_path.size() - 1:
+			return prev.lerp(w, clampf(want / maxf(seg, 1e-6), 0.0, 1.0))
+		want -= seg
+		prev = w
+	return _lever_path[-1]
+
 func _step_lever(delta: float) -> void:
+	if not lever_moving:
+		return
 	if _lever_path.is_empty():
 		lever_moving = false
+		lever_started = false
 		return
-	if _lever_wait > 0.0:
-		_lever_wait -= delta
-		return
-	var next := _lever_path[0]
-	_lever_pos = _lever_pos.move_toward(next, LEVER_SPEED * delta)
-	if _lever_pos.is_equal_approx(next):
-		_lever_path.remove_at(0)
+	if not lever_started:
+		# wait for the hand to take the knob, up to SEQ_WAIT, unless no hand comes
+		var hand_there := driver != null and driver.hand_on_knob()
+		if lever_needs_hand() and not hand_there and _lever_wait < SEQ_WAIT:
+			_lever_wait += delta
+			return
+		lever_started = true
+		_lever_t = 0.0
+		_lever_dur = maxf(_lever_deadline - _lever_wait, LEVER_MIN_SECS)
+	_lever_t += delta
+	var u := clampf(_lever_t / _lever_dur, 0.0, 1.0)
+	var e := u * u * (3.0 - 2.0 * u)
+	var prev_row := _lever_pos.y
+	_lever_pos = _path_point(e)
+	if _lever_pos.y == 0.0 or prev_row * _lever_pos.y < 0.0:
+		_lever_rail_passed = true   # on the rail, or crossed it between frames
 	_apply_lever(_lever_pos)
+	if u >= 1.0:
+		_lever_pos = _lever_path[-1]
+		_apply_lever(_lever_pos)
+		_lever_path.clear()
+		lever_moving = false
+		lever_started = false
 
 # ---------- pedals ----------
 
@@ -1013,6 +1340,13 @@ func _process(delta: float) -> void:
 	tach_needle.rotation = Vector3(0.0, 0.0, deg_to_rad(rest - dial_sweep * frac))
 	var kmh := clampf(absf(p.current_speed()) * Hud.KMH_PER_MS / float(cab.speedo_max_kmh), 0.0, 1.0)
 	speedo_needle.rotation = Vector3(0.0, 0.0, deg_to_rad(rest - dial_sweep * kmh))
+	_limit_wait -= delta
+	if _limit_wait <= 0.0:
+		_limit_wait = 0.5
+		limit_kmh = PoliceRules.offence_line(PoliceRules.area_at(RoadFrame.s_at(RoadFrame.unroll(p.global_position).z)), false)
+		var lt := limit_kmh / float(cab.speedo_max_kmh)
+		limit_tick.visible = lt <= 1.0
+		limit_tick.rotation = Vector3(0.0, 0.0, deg_to_rad(rest - dial_sweep * lt))
 	_update_lamps()
 	_update_pod(delta)
 	var inputs := pedal_inputs()
@@ -1039,16 +1373,17 @@ func _process(delta: float) -> void:
 				_lever_gear = p.gear
 	else:
 		# Manual and semi: the lever starts for the requested gear the moment
-		# the shift starts (the driver's hand rides it through the shift_time),
-		# and is set straight on gear changes that skip is_shifting (out of neutral).
+		# the shift starts and lands as the box engages (shift_time), the
+		# driver's hand on it; gear changes that skip is_shifting (out of
+		# neutral, the reverse toggle) get the same travel after the fact.
 		if p.is_shifting and _lever_gear != p.requested_gear:
-			move_lever_to(p.requested_gear)
+			move_lever_to(p.requested_gear, p.shift_time)
 		if p.gear != _last_gear:
 			if _lever_gear != p.gear:
-				move_lever_to(p.gear)
+				move_lever_to(p.gear, p.shift_time)
 			_last_gear = p.gear
 		if _lever_gear != p.gear and not lever_moving and not p.is_shifting:
-			move_lever_to(p.gear)
+			move_lever_to(p.gear, p.shift_time)
 	_step_lever(delta)
 	_update_radio(delta)
 
@@ -1106,6 +1441,7 @@ func _update_radio(delta: float) -> void:
 	if scene != null and scene.get("night_clock") is NightClock:
 		head_unit.show_clock(scene.night_clock.text())
 		head_unit.show_weather(Weather.level)
+		head_unit.show_frost(Weather.frost)
 	var r := _find_radio()
 	if r == null:
 		return

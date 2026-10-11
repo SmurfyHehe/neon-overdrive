@@ -75,8 +75,9 @@ func _run() -> void:
 	_check(menu.visible and menu.main_page.visible, "pause should open the pause screen")
 	var rows: Array[String] = []
 	for b in menu.main_page.find_children("*", "Button", true, false):
-		rows.append((b as Button).text)
-	_check(rows == ["Resume", "Restart night", "Settings", "Photo mode", "Quit to title"], "pause rows are the five from the spec, got %s" % [rows])
+		if (b as Button).is_visible_in_tree() and (b as Button).text != "Put me back on the road":   # hidden rows and the test-build row do not count
+			rows.append((b as Button).text)
+	_check(rows == ["Resume", "Map", "Restart night", "Settings", "Photo mode", "Quit to title"], "pause rows are the six from the spec (Map under Resume), got %s" % [rows])
 	_check(menu.plate_night.text.begins_with("NIGHT "), "the plate shows the night")
 	_check(menu.plate_time.text.ends_with("AM") or menu.plate_time.text.ends_with("PM"), "the plate shows the clock")
 	_check(menu.plate_cash.visible and menu.plate_cash.text.begins_with("$"), "the plate shows cash")
@@ -168,7 +169,8 @@ func _run() -> void:
 	GameSettings.load_settings()
 	_check(not GameSettings.tips, "Tips off is saved")
 	_check(st.find_child("Build", true, false) != null, "the Game tab shows the build number")
-	_check(not st.car_option.disabled and not st.service_button.disabled, "the garage stand-ins are usable from the pause screen")
+	_check(not st.car_option.disabled and not st.tow_button.disabled, "the test stand-ins are usable from the pause screen")
+	_check(st.get("service_button") == null and st.get("wash_button") == null, "Service car and Wash car are not on Settings any more")
 	st.close()
 
 	# ---------- Quit to title ----------

@@ -72,6 +72,8 @@ func _initialize() -> void:
 					_fail("%s: a %s has a shop front (room %s, kind '%s')" % [where, type, str(room), kind])
 				continue
 			n_fronts += 1
+			if type == "gas":
+				_fail("%s: a building of type gas (the real station is gas_station.gd)" % where)
 			if room == null or close == null:
 				_fail("%s: no room / close_at parameter" % where)
 				continue
@@ -132,6 +134,23 @@ func _initialize() -> void:
 	for k in K.ROOMS:
 		if not kinds.has(k):
 			_fail("no %s anywhere along %d chunks" % [k, CHUNKS])
+	# 2026-10-11: no building says GAS; the only station is gas_station.gd's.
+	# Every chunk of Loop 1 in every act, and the endless road above.
+	var RM := B.RoadMap
+	for act in range(1, RM.MAX_ACT + 1):
+		RM.use(0, act)
+		var gas := 0
+		for idx in RM.period:
+			var fresh_l := B.build_chunk(idx, _cfg(2, 2, false), _cfg(1 + idx % 4, 1 + (idx / 4) % 2, idx % 3 == 0))
+			for i in B._building_slots() * 2:
+				var mi_l := fresh_l.get_node_or_null(NodePath("BuildingMesh%d" % i)) as MeshInstance3D
+				if mi_l != null and mi_l.get_meta("building_type", "") == "gas":
+					gas += 1
+			fresh_l.free()
+		if gas > 0:
+			_fail("act %d: %d buildings of type gas on Loop 1" % [act, gas])
+		print("shop fronts: act %d, %d chunks checked for gas buildings, %d found" % [act, RM.period, gas])
+	RM.use(RM.ENDLESS)
 	if store_24h == 0 or store_closing == 0:
 		_fail("stores: %d 24-hour, %d closing; both kinds are expected" % [store_24h, store_closing])
 	# the clock reaches the material

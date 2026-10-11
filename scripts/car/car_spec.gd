@@ -39,6 +39,8 @@ static func apply(v: Vehicle, spec: Dictionary) -> void:
 			continue  # cosmetic: where the driver's hands rest on the rim (DriverModel)
 		elif key == "auto":
 			continue  # the realistic automatic's numbers: PlayerCar builds its AutoBox from them
+		elif key == "shifter":
+			continue  # cosmetic: this car's gear lever and shift gate (CockpitFrame)
 		else:
 			v.set(key, _own(spec[key]))
 	add_kerb_surfaces(v)
@@ -307,7 +309,83 @@ static func coupe_default() -> Dictionary:
 		# coupe's flat-bottom wheel. Per car so each interior keeps its own
 		# driver; the sightline cap (DriverModel.GRIP_HIGH_DEG) bounds it.
 		"driver_grip_deg": 0.0,
+		# This car's gear lever (2026-10-09, Roy: the lever must travel the gate
+		# and the hand must ride the knob). See shifter(): the H gate per gear,
+		# the lever's length and throw, and what SEMI mode shows.
+		"shifter": shifter("h5"),
 	}
+
+## The gear lever of a car, cosmetic (CockpitFrame draws it, DriverModel's
+## hand rides it; CarSpec.apply skips it). A gate maps each gear to its slot
+## as (column, row) in slot units: columns run left (-) to right (+) across
+## the gate, row -1 is forward, +1 back, 0 the neutral rail every move passes
+## along. Neutral is (0, 0) unless the gate says otherwise. Reverse is gear -1.
+##   "gate"          gear -> [col, row]
+##   "lever_len"     pivot to knob, metres
+##   "row_tilt_deg"  the lever's fore/aft tilt in a slot (the throw)
+##   "col_tilt_deg"  its side tilt per column
+##   "knob"          "ball" (round, hand wraps it) or "tee" (a T grip)
+##   "sequential"    SEMI mode: "lever" (the stick taps fore/aft) or
+##                   "paddle" (the hand flicks the wheel paddle, like AUTO)
+## Layouts: "h5" a five-speed H, R back right past 5 (most cars); "dogleg"
+## R forward left of 1, like old European boxes (the beater); "h5_long" the
+## same H with a long lazy throw (the muscle car); "h5_short" a short, close
+## gate (the kei car); "h5_paddle" the H in MANUAL, paddles in SEMI (the tuner).
+static func shifter(layout: String) -> Dictionary:
+	var h5 := {1: [-1, -1], 2: [-1, 1], 3: [0, -1], 4: [0, 1], 5: [1, -1], -1: [1, 1]}
+	var dogleg := {-1: [-1, -1], 1: [-1, 1], 2: [0, -1], 3: [0, 1], 4: [1, -1], 5: [1, 1]}
+	var s := {"gate": h5, "lever_len": 0.23, "row_tilt_deg": 16.0, "col_tilt_deg": 11.0, "knob": "ball", "sequential": "lever"}
+	match layout:
+		"dogleg":
+			s["gate"] = dogleg
+			s["lever_len"] = 0.27
+			s["row_tilt_deg"] = 19.0
+			s["col_tilt_deg"] = 12.0
+		"h5_long":
+			s["lever_len"] = 0.25
+			s["row_tilt_deg"] = 20.0
+			s["col_tilt_deg"] = 13.0
+		"h5_short":
+			s["lever_len"] = 0.19
+			s["row_tilt_deg"] = 12.0
+			s["col_tilt_deg"] = 9.0
+		"h5_paddle":
+			s["lever_len"] = 0.21
+			s["row_tilt_deg"] = 14.0
+			s["col_tilt_deg"] = 10.0
+			s["sequential"] = "paddle"
+	return s
+
+## The shifter with its gate fitted to a box of `forward_gears` gears (gear
+## count is per car and a mod can change it): gears the box does not have lose
+## their slot, extra gears take the next slots of the plain H (odd forward,
+## even back, a column per pair), and reverse moves right of the last column
+## when a forward gear needs its slot. The layout's own slots stay as they are.
+static func fit_gate(shifter_spec: Dictionary, forward_gears: int) -> Dictionary:
+	var s := shifter_spec.duplicate(true)
+	var gate: Dictionary = s.get("gate", {})
+	for g in gate.keys():
+		if int(g) > forward_gears:
+			gate.erase(g)
+	var used := {}
+	var max_col := -1
+	for g in gate:
+		if int(g) > 0:
+			used[Vector2i(int(gate[g][0]), int(gate[g][1]))] = true
+		max_col = maxi(max_col, int(gate[g][0]))
+	for g in range(1, forward_gears + 1):
+		if gate.has(g):
+			continue
+		var slot := Vector2i((g - 1) / 2 - 1, -1 if g % 2 == 1 else 1)
+		while used.has(slot):
+			slot.x += 1
+		gate[g] = [slot.x, slot.y]
+		used[slot] = true
+		max_col = maxi(max_col, slot.x)
+	if not gate.has(-1) or used.has(Vector2i(int(gate[-1][0]), int(gate[-1][1]))):
+		gate[-1] = [max_col + 1, 1]
+	s["gate"] = gate
+	return s
 
 ## The starter car (balance slice 1, 2026-10-09): the P1 coupe "as found" under
 ## the tarp, from docs/planning/rival-and-car-ladder-proposal (option A, which
@@ -366,6 +444,7 @@ const PLAYER_AUTO := {
 	"p4_kei": {"family": "90s"},
 	"p5_muscle": {"family": "old"},
 	"p6_crossover": {"family": "90s"},
+	"p7_wagon": {"family": "old"},
 }
 
 static func player_spec(kind: String) -> Dictionary:
@@ -409,6 +488,7 @@ static func player_spec(kind: String) -> Dictionary:
 			s["aero_downforce_coefficient_rear"] = 0.0
 			s["shift_time"] = 0.35
 			s["automatic_time_between_shifts"] = 1200.0
+			s["shifter"] = shifter("dogleg")   # old box: R forward, left of 1
 		"p2_hothatch":
 			# Kobo, T1: 2.0 four, front drive, light, short gears. Launches. No
 				# turbo from the factory (Roy, 2026-10-09): the 340 Nm table peak was
@@ -429,6 +509,7 @@ static func player_spec(kind: String) -> Dictionary:
 			s["front_arb_ratio"] = 0.25
 			s["rear_arb_ratio"] = 0.32   # a stiff rear bar: lift-off tuck, not plough
 		"p3_tuner":
+			s["shifter"] = shifter("h5_paddle")   # modern: paddles in SEMI
 			# Ronin, T2: 2.6 straight six, rear drive (the tree adds AWD). Revs.
 			# No factory turbo: stock is the unboosted 360 Nm (520 was on boost).
 			var gears: Array[float] = [3.20, 1.95, 1.40, 1.07, 0.85]
@@ -444,6 +525,7 @@ static func player_spec(kind: String) -> Dictionary:
 			s["front_tire_width"] = 245.0
 			s["rear_tire_width"] = 245.0
 		"p4_kei":
+			s["shifter"] = shifter("h5_short")   # tiny close gate
 			# Mite, T1: 0.66 triple behind the seats, rear drive, 760 kg, 9500
 			# redline. Corners; slow on the straights. No turbo stock: "Small
 			# turbo" is a node of its tree (PR #197), and the Tuner's torque floor
@@ -469,6 +551,7 @@ static func player_spec(kind: String) -> Dictionary:
 			s["max_steering_angle"] = deg_to_rad(42.0)
 			s["center_of_gravity_height_offset"] = -0.12
 		"p5_muscle":
+			s["shifter"] = shifter("h5_long")   # long lazy throw
 			# Marlowe, T3: 5.7 V8, rear drive, lazy 4-speed auto, 1800 kg. Torque.
 			# (The sheet's 4-speed, real since gear count is per car: first and
 			# top are the old five-speed's, so launch and top speed are unchanged;
@@ -510,6 +593,39 @@ static func player_spec(kind: String) -> Dictionary:
 			s["rear_tire_width"] = 265.0
 			s["coefficient_of_friction"] = {"Road": 1.2, "Dirt": 1.05}
 			s["center_of_gravity_height_offset"] = 0.05
+		"p7_wagon":
+			# Bramley 240 Estate (placeholder name), T1, free. PROVISIONAL STAND-IN
+			# NUMBERS, kept for the playtest (2026-10-11), Roy has not set them: the sheet gives the layout and the feel, no torque,
+			# mass, ratios or times. Known and used: small inline four, no turbo,
+			# front drive, 63% of the weight on the front, 4-speed (the sheet's
+			# automatic is the player's transmission mode), redline 5500 and
+			# strained above 4500, high centre of gravity, soft bars so it leans
+			# and understeers, slow flat response. Invented until Roy sets them:
+			# 1180 kg, 280 Nm (0.24 Nm/kg, the hot hatch's 270 on 100 kg more),
+			# the four ratios, final drive, drag, tyres.
+			var gears: Array[float] = [3.45, 1.95, 1.28, 0.90]
+			s["vehicle_mass"] = 1180.0
+			s["front_weight_distribution"] = 0.63
+			s["front_torque_split"] = 1.0
+			s["max_torque"] = 280.0
+			s["max_rpm"] = 5500.0
+			s["idle_rpm"] = 800.0
+			s["torque_shape"] = {"low_end": 0.62, "peak_pos": 0.50, "plateau": 0.18, "falloff": 0.45}
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.1
+			s["coefficient_of_drag"] = 0.42
+			s["frontal_area"] = 2.3
+			s["front_tire_width"] = 185.0   # fleet.json wheel w
+			s["rear_tire_width"] = 185.0
+			s["coefficient_of_friction"] = {"Road": 1.0, "Dirt": 0.85}
+			s["center_of_gravity_height_offset"] = 0.08
+			s["front_damping_ratio"] = 0.36
+			s["rear_damping_ratio"] = 0.36
+			s["front_arb_ratio"] = 0.20
+			s["rear_arb_ratio"] = 0.06
+			s["aero_downforce_coefficient_front"] = 0.0
+			s["aero_downforce_coefficient_rear"] = 0.0
+			s["shift_time"] = 0.32
 		"p17_work_pickup":
 			# Camel, T2 (Roy, 2026-10-10, notes/car-sheets/p17_work_pickup): a
 			# 4.0 V6 work pickup, rear drive, 5-speed manual, 1780 kg. 640 Nm
@@ -759,6 +875,14 @@ static func npc_spec(kind: String) -> Dictionary:
 			s["rear_damping_ratio"] = 0.45
 			s["front_arb_ratio"] = 0.20
 			s["rear_arb_ratio"] = 0.18
+		"p7_wagon":
+			# Shop wagon as an AI car: the player's own (stand-in) numbers.
+			var ps := player_spec("p7_wagon")
+			for k in ["vehicle_mass", "front_weight_distribution", "front_torque_split", "max_torque", "max_rpm",
+					"idle_rpm", "torque_shape", "gear_ratios", "final_drive", "coefficient_of_drag", "frontal_area",
+					"front_tire_width", "rear_tire_width", "coefficient_of_friction", "front_damping_ratio",
+					"rear_damping_ratio", "front_arb_ratio", "rear_arb_ratio", "center_of_gravity_height_offset"]:
+				s[k] = ps[k]
 		"p17_work_pickup":
 			# Work pickup (Camel): the player_spec numbers, so a rival or a
 			# parked one drives like the player's.
@@ -838,6 +962,11 @@ static func npc_spec(kind: String) -> Dictionary:
 			s["rear_damping_ratio"] = 0.50
 			s["front_arb_ratio"] = 0.22
 			s["rear_arb_ratio"] = 0.16
+	# Cops, rivals and crew cars (every kind with a brake entry) show their
+	# brakes within 40 m (CarParts, car-parts-every-vehicle plan, Roy 1171);
+	# traffic stays on wheels only.
+	if CarFittings.has_brakes(kind):
+		s["parts"] = "full"
 	return s
 
 ## Physics layers (milestone 3). Every car sits on CAR_LAYER and collides with

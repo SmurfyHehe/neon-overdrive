@@ -20,6 +20,9 @@ const WreckRules := preload("res://scripts/car/wreck_rules.gd")
 ## A hit at or over the wreck threshold. Speeds in km/h; `other` is the thing
 ## hit (a TrafficCar, a wall body, or null if it is already gone).
 signal wrecked(outcome: int, wall_kmh: float, closing_kmh: float, other: Object)
+## Any new contact with a wall or a moving thing, bump or not (police: a crash
+## with traffic over 15 km/h, a touch on a cop). `closing_kmh` as in wrecked.
+signal touched(other: Object, closing_kmh: float)
 
 ## A contact flatter than this (normal.y) is the road, not a wall.
 const GROUND_NORMAL_Y := 0.6
@@ -88,6 +91,7 @@ func _read(vel: Vector3) -> void:
 	hits += 1
 	last_wall_kmh = worst * 3.6
 	last_closing_kmh = worst_closing * 3.6
+	touched.emit(worst_obj, last_closing_kmh)
 	var result := WreckRules.outcome(last_wall_kmh)
 	if result != WreckRules.Outcome.BUMP:
 		wrecked.emit(result, last_wall_kmh, last_closing_kmh, worst_obj)

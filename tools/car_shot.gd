@@ -8,7 +8,15 @@ extends SceneTree
 #   set NEON_CAR=p17_work_pickup
 #   Godot_v4.7.2-stable_win64_console.exe --path . --audio-driver Dummy -s res://tools/car_shot.gd
 #
-# Writes user://car_shots/<kind>_chase.png, _front.png and _side.png (the
+# For the P1 coupe (NEON_CAR=p1_coupe) two more switches, read by
+# P1CoupeBuilder: NEON_COUPE_LEGACY=1 shoots the old one-piece sheet body (the
+# "before" of a parts build), NEON_CAR_PANELS=open the hood, doors and trunk open.
+#
+# Any car with a parts glb (the Bug, NEON_CAR=p0_beater): NEON_PARTS_LEGACY=1
+# shoots its one-piece sheet body, NEON_CAR_PANELS=open the lids, doors and
+# fuel flap open.
+#
+# Writes user://car_shots/<kind>_chase.png, _front.png, _side.png, _rear.png and _far.png (the
 # path is printed at the end). Any NpcCarBuilder kind works, traffic and
 # police included, so a new car can be shot next to the one it replaces.
 
@@ -37,7 +45,8 @@ func _run() -> void:
 		# car space: X right, -Z forward
 		# the car may be rolling (the harness boots it driving), so the camera
 		# follows it every frame until the shot is taken
-		for shot in [["front", Vector3(3.6, 1.4, -6.2)], ["side", Vector3(7.0, 1.2, 0.0)]]:
+		for shot in [["front", Vector3(3.6, 1.4, -6.2)], ["side", Vector3(7.0, 1.2, 0.0)], ["rear", Vector3(-3.4, 1.5, 6.0)],
+				["far", Vector3(0.0, 1.5, 100.0)]]:   # what the car behind sees at 100 m
 			cam.make_current()
 			for i in 12:
 				cam.global_position = car.global_transform * Vector3(shot[1])

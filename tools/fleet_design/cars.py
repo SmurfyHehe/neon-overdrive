@@ -155,38 +155,56 @@ P0 = {
 P2 = {
     'id': 'p2_hothatch', 'role': 'player', 'label': 'Hot hatch',
     'refs': 'Civic Si/EK, Golf GTI Mk2, 205 GTI',
-    'rule': 'Short brick on wheels pushed to the corners: narrow upright cabin on wide box-blistered hips, '
+    'rule': 'Short brick on wheels pushed to the corners: narrow upright cabin on wide bolted-on box blisters, '
             'near-vertical hatch under an overhanging roof spoiler.',
-    'L': 4.05, 'WB': 2.56, 'OHf': 0.82, 'W': 1.83,
+    'tier': 'T1 hot hatch (Juno), sheet p2_hothatch (Roy 291-294), rebuilt from parts 2026-10-11. The nose is 8 cm '
+            'shorter than the B1 sheet (front overhang 0.82 to 0.74, shape research 2026-10-11): every s below is the '
+            'old one minus 0.08, so nothing behind the front bumper moved in car space. The body is 0.85 wide all '
+            'along (no waist pinch); the four box blisters carry it out to 0.915. Belt straight at 0.90 (the hard 80s '
+            'shoulder), roof 10 cm longer so the hatch glass stands at 71 degrees.',
+    'L': 3.97, 'WB': 2.56, 'OHf': 0.74, 'W': 1.83,
     'wheel': {'r': 0.315, 'w': 0.225, 'track': 1.58, 'arch_gap': 0.02, 'rim': '6spoke', 'rim_ratio': 0.68},
-    'top': [(0.0, 0.60), (0.05, 0.69), (0.25, 0.78), (1.20, 0.92), (1.84, 1.31), (3.60, 1.33), (3.68, 1.30),
-            (3.84, 0.99), (3.96, 0.96), (4.05, 0.62)],
-    'floor': [(0, 0.27), (0.22, 0.12), (3.75, 0.12), (4.05, 0.28)],
-    'hw': [(0, 0.70), (0.08, 0.82), (0.30, 0.86), (0.40, 0.915), (1.24, 0.915), (1.34, 0.85), (2.88, 0.85),
-           (2.98, 0.915), (3.80, 0.915), (3.90, 0.88), (4.05, 0.82)],
-    'waist': [(0, 0.48), (0.40, 0.58), (3.80, 0.60), (4.05, 0.58)],
-    'belt': [(0, 0.58), (0.25, 0.75), (1.20, 0.90), (3.60, 0.98), (4.05, 0.92)],
-    'tumble': 0.06, 'sill_in': 0.03, 'rocker_h': 0.28,
-    'cabin': {'A': 1.20, 'W': 1.84, 'R': 3.60, 'C': 3.84, 'D': 3.36,
-              'roof_w': [(1.86, 0.58), (3.58, 0.57)], 'roof_drop': 0.03, 'pillars': [(2.60, 2.68)]},
+    'top': [(0.0, 0.60), (0.05, 0.69), (0.20, 0.78), (1.12, 0.92), (1.76, 1.31), (3.62, 1.33), (3.64, 1.31),
+            (3.76, 0.95), (3.88, 0.93), (3.97, 0.62)],
+    'floor': [(0, 0.27), (0.20, 0.12), (3.67, 0.12), (3.97, 0.28)],
+    'hw': [(0, 0.70), (0.07, 0.82), (0.26, 0.85), (3.82, 0.85), (3.97, 0.82)],
+    'waist': [(0, 0.48), (0.32, 0.58), (3.72, 0.60), (3.97, 0.58)],
+    'belt': [(0, 0.58), (0.20, 0.76), (1.12, 0.90), (3.76, 0.90), (3.97, 0.88)],
+    'tumble': 0.06, 'sill_in': 0.03, 'rocker_h': 0.28, 'rocker_trim': True,
+    'cabin': {'A': 1.12, 'W': 1.76, 'R': 3.62, 'C': 3.76, 'D': 3.28,
+              'roof_w': [(1.78, 0.58), (3.60, 0.57)], 'roof_drop': 0.03, 'pillars': [(2.52, 2.60)]},
     'decals': [
-        {'view': 'front', 'rect': (-0.40, 0.50, 0.40, 0.58), 'mat': 'grille'},
-        {'view': 'front', 'rect': (0.42, 0.50, 0.76, 0.62), 'mat': 'head', 'mirror': True},
-        {'view': 'front', 'rect': (-0.50, 0.22, 0.50, 0.36), 'mat': 'grille', 'tag': 'fbumper'},
-        {'view': 'front', 'circle': (0.60, 0.29, 0.04, 10), 'mat': 'head', 'mirror': True},
-        {'view': 'rear', 'rect': (0.56, 0.70, 0.82, 0.94), 'mat': 'tail', 'mirror': True},
-        {'view': 'rear', 'rect': (-0.25, 0.52, 0.25, 0.66), 'mat': 'trim'},
-        {'view': 'rear', 'rect': (-0.65, 0.22, 0.65, 0.32), 'mat': 'trim', 'tag': 'rbumper'},
+        # nose and tail decals pin their own offset (as on the Bug), so the car measures its sheet length
+        # slim_bar front: two slim lenses with an amber corner, a black slot between them,
+        # the lower mouth in the bumper with two round fogs (Roy 293)
+        {'view': 'front', 'rect': (-0.40, 0.52, 0.40, 0.59), 'mat': 'grille', 'offset': 0.004},
+        {'view': 'front', 'rect': (0.42, 0.50, 0.64, 0.59), 'mat': 'head', 'mirror': True, 'offset': 0.006},
+        {'view': 'front', 'rect': (0.64, 0.50, 0.70, 0.59), 'mat': 'turn', 'mirror': True, 'offset': 0.006},
+        {'view': 'front', 'rect': (-0.50, 0.28, 0.50, 0.38), 'mat': 'grille', 'tag': 'fbumper', 'offset': 0.004},
+        {'view': 'front', 'circle': (0.60, 0.33, 0.04, 10), 'mat': 'head', 'mirror': True, 'tag': 'fog', 'offset': 0.006},
+        {'view': 'front', 'rect': (-0.66, 0.385, 0.66, 0.415), 'mat': 'trim', 'tag': 'fstrip', 'cell': 0.4, 'offset': 0.004},
+        # tall_blocks rear: three cells a side (tail, brake, reverse) and an amber edge
+        {'view': 'rear', 'rect': (0.56, 0.785, 0.685, 0.89), 'mat': 'tail', 'mirror': True, 'tag': 'tail', 'offset': 0.006},
+        {'view': 'rear', 'rect': (0.56, 0.67, 0.685, 0.775), 'mat': 'tail_off', 'mirror': True, 'tag': 'brake', 'offset': 0.006},
+        {'view': 'rear', 'rect': (0.56, 0.56, 0.685, 0.66), 'mat': 'head_off', 'mirror': True, 'tag': 'reverse', 'offset': 0.006},
+        {'view': 'rear', 'rect': (0.69, 0.56, 0.72, 0.89), 'mat': 'turn', 'mirror': True, 'tag': 'turn_r', 'offset': 0.006},
+        {'view': 'rear', 'rect': (-0.27, 0.635, 0.27, 0.745), 'mat': 'trim', 'tag': 'plate_recess', 'offset': 0.004},
+        {'view': 'rear', 'rect': (-0.65, 0.22, 0.65, 0.32), 'mat': 'trim', 'tag': 'rbumper', 'offset': 0.004},
+        # the 40 mm black rub strip at y 0.60, between the blisters
+        {'view': 'left', 'rect': (1.165, 0.58, 2.875, 0.62), 'mat': 'trim', 'mirror': True, 'cell': 0.5, 'tag': 'rub'},
     ],
     'parts': [
         MIRRORS,
-        {'type': 'roof_spoiler', 'tag': 'spoiler', 's0': 3.48, 's1': 3.88, 'y0': 1.34, 'y1': 1.29, 'span': 1.22, 'thick': 0.05, 'brake_light': True},
+        # four riveted box blisters, 6.5 cm proud of the doors (Roy 291)
+        {'type': 'flares', 'tag': 'flares', 'band': 0.10, 'proud': 0.065, 'lip_mat': 'trim', 'rivets': True},
+        # the roof spoiler overhangs the hatch by 0.20 m and stands above the roof line; the third brake lamp is under its edge
+        {'type': 'roof_spoiler', 'tag': 'spoiler', 's0': 3.42, 's1': 3.84, 'y0': 1.30, 'y1': 1.335, 'span': 1.22, 'thick': 0.05, 'brake_light': True},
     ],
-    'exhaust': [{'x': -0.42, 'y': 0.24, 'r': 0.038}, {'x': -0.32, 'y': 0.24, 'r': 0.038}],
+    'exhaust': [{'x': -0.42, 'y': 0.24, 'r': 0.04}],
     'stickers': [
-        {'id': 'door', 'view': 'left', 'rect': (1.55, 0.42, 2.45, 0.66), 'mirror': True},
-        {'id': 'hood', 'view': 'top', 'rect': (-0.30, 0.35, 0.30, 1.05)},
-        {'id': 'rear', 'view': 'rear', 'rect': (-0.50, 0.70, 0.50, 0.90), 'note': 'tailgate panel'},
+        {'id': 'door', 'view': 'left', 'rect': (1.47, 0.63, 2.37, 0.87), 'mirror': True},
+        {'id': 'hood', 'view': 'top', 'rect': (-0.30, 0.27, 0.30, 0.97)},
+        {'id': 'rear', 'view': 'rear', 'rect': (-0.50, 0.76, 0.50, 0.88), 'note': 'tailgate panel'},
     ],
     'paint': {'hero': ('Rally red', '#C41E24'), 'alts': [('Pearl', '#E9E6DF'), ('Gunmetal', '#4A505B'), ('Sodium', '#FF8A1F'), ('Black', '#15171C')],
               'trim': '#1A1D24', 'rim': '#C9CED6'},
@@ -236,35 +254,54 @@ P3 = {
 P4 = {
     'id': 'p4_kei', 'role': 'player', 'label': 'Kei roadster',
     'refs': 'Honda Beat, Suzuki Cappuccino, Autozam AZ-1',
-    'rule': 'Tiny open two-seater: no roof, twin headrest humps, wheels at the very corners.',
+    'rule': 'Tiny open two-seater with the wheels at the very corners, a low screen and two headrest humps '
+            'that run back into the engine lid.',
+    'tier': 'T1 kei roadster (Pilar), sheet p4_kei (Roy 317-320), rebuilt from parts 2026-10-11: the screen top is down '
+            'from 1.13 to 1.05, two smooth humps instead of the hoops, kei-sized pop-ups, a real side intake, thinner '
+            'sidewalls (rim ratio 0.70) and arch lips. The cockpit opening ends at 2.18 (was 2.32), just behind the '
+            "cabin's rear bulkhead, so the humps stand on the deck.",
     'L': 3.30, 'WB': 2.27, 'OHf': 0.55, 'W': 1.40,
-    'wheel': {'r': 0.28, 'w': 0.175, 'w_rear': 0.185, 'track': 1.23, 'arch_gap': 0.025, 'rim': '5spoke', 'rim_ratio': 0.66},
-    'top': [(0.0, 0.48), (0.05, 0.57), (0.22, 0.63), (0.92, 0.74), (1.30, 1.12), (1.36, 1.13), (1.42, 0.82),
+    'wheel': {'r': 0.28, 'w': 0.165, 'w_rear': 0.175, 'track': 1.23, 'arch_gap': 0.025, 'rim': '5spoke', 'rim_ratio': 0.70},
+    'top': [(0.0, 0.48), (0.05, 0.57), (0.22, 0.63), (0.92, 0.74), (1.30, 1.04), (1.36, 1.05), (1.42, 0.80),
             (2.32, 0.80), (3.05, 0.82), (3.22, 0.79), (3.30, 0.62)],
     'floor': [(0, 0.24), (0.16, 0.12), (3.10, 0.12), (3.30, 0.28)],
-    'hw': [(0, 0.52), (0.08, 0.63), (0.30, 0.69), (3.00, 0.70), (3.20, 0.66), (3.30, 0.60)],
+    # pinched 1 cm at the doors: 0.69 there, 0.70 over the arches
+    'hw': [(0, 0.52), (0.08, 0.63), (0.30, 0.70), (0.86, 0.70), (0.96, 0.69), (2.40, 0.69), (2.50, 0.70), (3.00, 0.70),
+           (3.20, 0.66), (3.30, 0.60)],
     'waist': [(0, 0.36), (0.30, 0.46), (3.30, 0.48)],
     'belt': [(0, 0.46), (0.30, 0.60), (0.92, 0.71), (2.32, 0.77), (3.30, 0.74)],
     'tumble': 0.05, 'sill_in': 0.03, 'rocker_h': 0.26,
     'cabin': {'A': 0.92, 'W': 1.30, 'R': 1.36, 'C': 1.42, 'D': 1.40,
-              'roof_w': 0.54, 'roof_drop': 0.02, 'pillars': [], 'roof_h': 1.13},
-    'open': [{'s0': 1.42, 's1': 2.32, 'floor': 0.42, 'wall': 0.06, 'mat': 'interior'}],
+              'roof_w': 0.54, 'roof_drop': 0.02, 'pillars': [], 'roof_h': 1.05},
+    'open': [{'s0': 1.42, 's1': 2.18, 'floor': 0.40, 'wall': 0.06, 'mat': 'interior'}],
     'decals': [
-        {'view': 'front', 'ellipse': (0.48, 0.52, 0.10, 0.055, 12), 'mat': 'head', 'mirror': True},
-        {'view': 'front', 'rect': (-0.25, 0.28, 0.25, 0.36), 'mat': 'grille', 'tag': 'fbumper'},
-        {'view': 'left', 'rect': (2.36, 0.46, 2.60, 0.62), 'mat': 'grille', 'mirror': True},
-        {'view': 'rear', 'ellipse': (0.48, 0.66, 0.09, 0.05, 12), 'mat': 'tail', 'mirror': True},
-        {'view': 'rear', 'rect': (-0.50, 0.22, 0.50, 0.30), 'mat': 'trim', 'tag': 'rbumper'},
+        # nose and tail decals pin their own offset, so the car measures its sheet length
+        # a single slot grille in the bumper with an amber turn lamp at each end (the lamps are pop-ups: parts)
+        {'view': 'front', 'rect': (-0.25, 0.28, 0.25, 0.36), 'mat': 'grille', 'tag': 'fbumper', 'offset': 0.004},
+        {'view': 'front', 'rect': (0.26, 0.29, 0.33, 0.35), 'mat': 'turn', 'mirror': True, 'offset': 0.006},
+        # round_twin rear: two ovals, a small amber lamp under each, one reversing lamp in the bumper centre (era)
+        {'view': 'rear', 'ellipse': (0.48, 0.66, 0.09, 0.05, 12), 'mat': 'tail', 'mirror': True, 'offset': 0.006},
+        {'view': 'rear', 'rect': (0.42, 0.54, 0.54, 0.585), 'mat': 'turn', 'mirror': True, 'tag': 'turn_r', 'offset': 0.006},
+        {'view': 'rear', 'circle': (0.0, 0.40, 0.03, 10), 'mat': 'head_off', 'tag': 'reverse', 'offset': 0.006},
+        {'view': 'rear', 'rect': (-0.27, 0.605, 0.27, 0.715), 'mat': 'trim', 'tag': 'plate_recess', 'offset': 0.004},
+        {'view': 'rear', 'rect': (-0.50, 0.29, 0.50, 0.35), 'mat': 'trim', 'tag': 'rbumper', 'offset': 0.004},
+        # the side intake behind each door (Roy 319: a real scooped-in intake; the parts build cuts it in)
+        {'view': 'left', 'rect': (2.20, 0.49, 2.44, 0.63), 'mat': 'grille', 'mirror': True, 'tag': 'intake'},
     ],
     'parts': [
         {'type': 'mirrors', 's': 1.10},
-        {'type': 'rollhoops', 's': 2.30, 'h': 1.00, 'x': 0.30, 'w': 0.26},
+        # two smooth headrest fairings (Roy 317), no hoop: 0.26 wide, up to 1.00, tapering back into the engine lid
+        {'type': 'rollhoops', 's': 2.00, 'h': 1.00, 'x': 0.30, 'w': 0.26, 's0': 1.95, 's1': 2.40},
+        # kei-sized pop-ups (Roy 320); the sheet draws them up
+        {'type': 'popups', 's0': 0.30, 's1': 0.56, 'x0': 0.31, 'x1': 0.57, 'h': 0.08},
+        # arch lips, so the wheels read as fitted
+        {'type': 'flares', 'tag': 'lips', 'band': 0.035, 'proud': 0.01},
     ],
-    'exhaust': [{'x': 0.35, 'y': 0.22, 'r': 0.035}],
+    'exhaust': [{'x': 0.0, 'y': 0.24, 'r': 0.035}],
     'stickers': [
         {'id': 'door', 'view': 'left', 'rect': (1.30, 0.40, 2.05, 0.60), 'mirror': True},
         {'id': 'hood', 'view': 'top', 'rect': (-0.25, 0.15, 0.25, 0.80)},
-        {'id': 'rear', 'view': 'rear', 'rect': (-0.34, 0.58, 0.34, 0.74), 'note': 'tail panel'},
+        {'id': 'rear', 'view': 'rear', 'rect': (-0.34, 0.45, 0.34, 0.59), 'note': 'tail panel'},
     ],
     'paint': {'hero': ('Signal yellow', '#F2B53A'), 'alts': [('Signal red', '#B3191E'), ('Cream', '#E8DCC0'), ('Racing green', '#1F4D3A'), ('Silver', '#C9CED6')],
               'trim': '#1A1D24', 'rim': '#C9CED6'},
@@ -272,42 +309,49 @@ P4 = {
 }
 
 P5 = {
-    'id': 'p5_muscle', 'role': 'player', 'label': 'Muscle sedan',
-    'refs': 'Impala SS (1994-96), Chevelle SS, Caprice 9C1',
-    'rule': 'Long, low, wide land yacht: tall cowl scoop, chopped slit-window cabin, ducktail, coke-bottle hips; full-width tail bar.',
-    'L': 5.35, 'WB': 2.95, 'OHf': 1.12, 'W': 2.02,
-    'wheel': {'r': 0.345, 'w': 0.255, 'w_rear': 0.32, 'track': 1.66, 'arch_gap': 0.03, 'rim': 'dish', 'rim_ratio': 0.68},
-    'top': [(0.0, 0.70), (0.04, 0.79), (0.22, 0.84), (1.88, 0.95), (2.55, 1.28), (3.28, 1.30), (3.92, 1.00),
-            (5.06, 0.99), (5.22, 1.11), (5.28, 1.11), (5.32, 0.90), (5.35, 0.70)],
-    'floor': [(0, 0.28), (0.30, 0.15), (5.00, 0.15), (5.20, 0.22), (5.35, 0.36)],
-    'hw': [(0, 0.86), (0.08, 0.95), (0.45, 0.975), (1.12, 0.985), (1.70, 0.965), (2.40, 0.935), (3.10, 0.94),
-           (3.70, 0.985), (4.07, 1.01), (4.60, 1.005), (5.05, 0.96), (5.25, 0.91), (5.35, 0.85)],
-    'waist': [(0, 0.48), (0.50, 0.60), (4.00, 0.66), (5.35, 0.62)],
-    'belt': [(0, 0.66), (0.30, 0.81), (1.88, 0.93), (3.92, 0.99), (5.35, 0.93)],
-    'tumble': 0.09, 'sill_in': 0.04, 'rocker_h': 0.32,
-    'cabin': {'A': 1.88, 'W': 2.55, 'R': 3.28, 'C': 3.92, 'D': 3.62,
-              'roof_w': [(2.55, 0.62), (3.28, 0.57), (3.92, 0.66)], 'roof_drop': 0.035, 'pillars': [(2.98, 3.08)]},
+    'id': 'p5_muscle', 'role': 'player', 'label': 'Muscle hardtop',
+    'refs': 'Chevelle SS (1970), Charger R/T (1968), Torino GT (1970)',
+    'rule': 'Two-door 68-72 muscle hardtop: long hood, short deck, coke-bottle hips, tunnel-back roof with buttresses, full-width tail bar.',
+    # Rebuilt 2026-10-11 (Roy 191-192, 1218): 5.00 x 1.93 x 1.33, wheelbase 2.84, overhangs 0.90 / 1.26.
+    # The physics has one wheel radius and one track per car, so the 0.72 m rear wheel and the wider
+    # rear track of the decision are not here: 0.70 m all round, the fat rear tyre flush with its arch.
+    'L': 5.00, 'WB': 2.84, 'OHf': 0.90, 'W': 1.93,
+    'wheel': {'r': 0.35, 'w': 0.255, 'w_rear': 0.32, 'track': 1.60, 'arch_gap': 0.02, 'rim': 'dish', 'rim_ratio': 0.68},
+    # long flat roof (2.12 to 3.30), fast backlight, a deck that stays high to a square tail
+    'top': [(0.0, 0.79), (0.05, 0.84), (0.30, 0.862), (1.45, 0.90), (2.12, 1.305), (2.50, 1.33), (3.00, 1.33), (3.30, 1.31),
+            (3.80, 0.965), (4.90, 0.935), (4.97, 0.925), (5.00, 0.90)],
+    'floor': [(0, 0.30), (0.25, 0.16), (4.70, 0.16), (4.88, 0.22), (5.00, 0.37)],
+    # coke bottle: 0.965 over both arches, 0.90 at the doors (7% a side)
+    'hw': [(0, 0.87), (0.08, 0.93), (0.40, 0.955), (0.90, 0.965), (1.25, 0.965), (1.90, 0.90), (2.90, 0.90),
+           (3.45, 0.965), (4.10, 0.965), (4.60, 0.95), (4.90, 0.925), (5.00, 0.90)],
+    # the shoulder crease: the widest point of the section, 0.78 up, nose to tail
+    'waist': [(0, 0.70), (0.30, 0.78), (5.00, 0.78)],
+    'belt': [(0, 0.76), (0.30, 0.84), (1.45, 0.86), (3.80, 0.87), (5.00, 0.87)],
+    'tumble': [(0, 0.07), (4.60, 0.07), (5.00, 0.03)], 'sill_in': 0.04, 'rocker_h': 0.36,
+    # hardtop: no B-pillar, the side glass runs from the A-pillar to the sail panel
+    'cabin': {'A': 1.45, 'W': 2.12, 'R': 3.30, 'C': 3.80, 'D': 3.42,
+              'roof_w': [(2.12, 0.64), (3.30, 0.62), (3.80, 0.70)], 'roof_drop': 0.035, 'pillars': []},
     'decals': [
-        {'view': 'front', 'rect': (-0.48, 0.52, 0.48, 0.66), 'mat': 'grille'},
-        {'view': 'front', 'rect': (0.50, 0.53, 0.86, 0.65), 'mat': 'head', 'mirror': True},
-        {'view': 'front', 'rect': (-0.60, 0.26, 0.60, 0.38), 'mat': 'grille', 'tag': 'fbumper'},
-        {'view': 'rear', 'rect': (0.12, 0.80, 0.86, 0.88), 'mat': 'tail', 'mirror': True},
-        {'view': 'rear', 'rect': (-0.12, 0.80, 0.12, 0.88), 'mat': 'trim'},
-        {'view': 'rear', 'rect': (-0.26, 0.50, 0.26, 0.64), 'mat': 'trim'},
-        {'view': 'rear', 'rect': (-0.80, 0.24, 0.80, 0.36), 'mat': 'trim', 'tag': 'rbumper'},
+        {'view': 'front', 'rect': (-0.80, 0.50, 0.80, 0.66), 'mat': 'grille'},
+        {'view': 'front', 'circle': (0.66, 0.58, 0.075, 12), 'mat': 'head', 'mirror': True},
+        {'view': 'front', 'rect': (-0.84, 0.36, 0.84, 0.44), 'mat': 'chrome', 'tag': 'fbumper', 'cell': 0.3},
+        {'view': 'front', 'rect': (0.50, 0.375, 0.66, 0.425), 'mat': 'turn', 'mirror': True},
+        {'view': 'rear', 'rect': (-0.85, 0.73, 0.85, 0.83), 'mat': 'tail', 'cell': 0.3},
+        {'view': 'rear', 'rect': (-0.84, 0.39, 0.84, 0.55), 'mat': 'chrome', 'tag': 'rbumper', 'cell': 0.3},
     ],
     'parts': [
         MIRRORS,
-        {'type': 'scoop', 'tag': 'hood', 's0': 0.95, 's1': 1.74, 'w': 0.70, 'h': 0.17},
     ],
     'exhaust': [{'x': 0.66, 'y': 0.26, 'r': 0.05}, {'x': -0.66, 'y': 0.26, 'r': 0.05}],
     'stickers': [
-        {'id': 'door', 'view': 'left', 'rect': (2.00, 0.45, 3.60, 0.66), 'mirror': True},
-        {'id': 'hood', 'view': 'top', 'rect': (-0.32, 0.40, 0.32, 1.45)},
-        {'id': 'rear', 'view': 'rear', 'rect': (-0.55, 0.645, 0.55, 0.79), 'note': 'tail panel'},
+        {'id': 'door', 'view': 'left', 'rect': (1.62, 0.42, 2.62, 0.66), 'mirror': True},
+        {'id': 'hood', 'view': 'top', 'rect': (-0.32, 0.40, 0.32, 1.30)},
+        {'id': 'rear', 'view': 'rear', 'rect': (-0.55, 0.58, 0.55, 0.71), 'note': 'tail panel'},
     ],
-    'paint': {'hero': ('Cherry', '#6A1620'), 'alts': [('Black', '#15171C'), ('Silver', '#C9CED6'), ('Racing green', '#1F4D3A'), ('Pearl', '#E9E6DF')],
+    'paint': {'hero': ('Cherry', '#6A1620'), 'alts': [('Hugger orange', '#D9541E'), ('Fathom green', '#1F4D3A'), ('Black', '#15171C'), ('Silver', '#C9CED6')],
               'trim': '#1A1D24', 'rim': '#C9CED6'},
+    # T3: clean, polished, chrome bright (Roy 1212). Read by the paint work when wear lands.
+    'condition': 0.1,
     'options': {},
 }
 
@@ -403,6 +447,57 @@ P17 = {
     ],
     'paint': {'hero': ('Camel', '#C4A264'), 'alts': [('Work white', '#E9E6DF'), ('Midnight', '#1B2A4A'), ('Forest', '#2B4A3A'), ('Oxide red', '#8E2A28')],
               'trim': '#1A1D24', 'rim': '#A9AEB6', 'extra': {'paint2': '#FF8A1F', 'chrome': '#C9CED6'}},
+    'options': {},
+}
+
+P7 = {
+    'id': 'p7_wagon', 'role': 'player', 'label': 'Shop wagon',
+    'refs': 'the boxy front-drive estate cars of the late 1980s (category only; no brand): a small four, an automatic, barn doors',
+    'rule': 'A shoebox on small wheels: snub nose, short flat bonnet, then ONE flat roof line from the top of the windscreen '
+            'to a square tail; glass all round, three side windows, two barn doors, tall lamp columns at the rear corners.',
+    'tier': 'T1 shop wagon (Bramley 240 Estate, placeholder name), free; sheet notes/car-sheets/p7_wagon, added 2026-10-11. '
+            'Stand-ins, not in the sheet: bonnet height (0.86 nose to 0.96 at the screen), nose and tail plan curves. '
+            'The sheet asks for square arches and a 34 degree screen; the loft draws round arches, and A-pillar base '
+            's=1.05 with screen top s=1.55 over this bonnet gives 40 degrees.',
+    'L': 4.30, 'WB': 2.60, 'OHf': 0.72, 'W': 1.74,
+    'wheel': {'r': 0.305, 'w': 0.185, 'track': 1.46, 'arch_gap': 0.05, 'rim': 'steel', 'rim_ratio': 0.60},
+    'top': [(0.0, 0.66), (0.04, 0.80), (0.14, 0.86), (1.05, 0.96), (1.55, 1.55), (4.22, 1.55), (4.27, 0.88), (4.30, 0.56)],
+    'floor': [(0, 0.34), (0.20, 0.16), (3.95, 0.16), (4.30, 0.30)],
+    # pinched 2 cm at the doors: 0.85 there, 0.87 over the arches
+    'hw': [(0, 0.74), (0.06, 0.83), (0.20, 0.87), (1.10, 0.87), (1.25, 0.85), (2.80, 0.85), (2.95, 0.87), (3.75, 0.87),
+           (4.24, 0.86), (4.30, 0.82)],
+    'waist': [(0, 0.56), (0.20, 0.60), (4.30, 0.60)],
+    # the belt is one straight line at 0.86, no sweep
+    'belt': [(0, 0.60), (0.05, 0.76), (0.14, 0.83), (1.05, 0.86), (4.30, 0.86)],
+    'tumble': 0.04, 'sill_in': 0.03, 'rocker_h': 0.30, 'rocker_trim': True,
+    'cabin': {'A': 1.05, 'W': 1.55, 'R': 4.22, 'C': 4.27, 'D': 4.22,
+              'roof_w': [(1.55, 0.72), (4.22, 0.74)], 'roof_drop': 0.02, 'pillars': [(2.10, 2.17), (3.15, 3.22)]},
+    'decals': [
+        # slot grille 0.90 x 0.06 between single square flush lamps 0.18 x 0.16
+        {'view': 'front', 'rect': (-0.45, 0.70, 0.45, 0.76), 'mat': 'grille'},
+        {'view': 'front', 'rect': (0.50, 0.66, 0.68, 0.82), 'mat': 'head', 'mirror': True},
+        # black plastic bumpers, an amber indicator in the front one
+        {'view': 'front', 'rect': (-0.84, 0.36, 0.84, 0.54), 'mat': 'trim', 'cell': 0.3, 'tag': 'fbumper'},
+        {'view': 'front', 'rect': (0.52, 0.42, 0.66, 0.48), 'mat': 'turn', 'mirror': True},
+        # tall lamp columns at the rear corners, bumper top to the gutter:
+        # amber bottom third, red above; a brake lamp on the roof edge
+        {'view': 'rear', 'rect': (0.70, 0.56, 0.82, 0.875), 'mat': 'turn', 'mirror': True},
+        {'view': 'rear', 'rect': (0.70, 0.875, 0.82, 1.51), 'mat': 'tail', 'mirror': True},
+        {'view': 'rear', 'rect': (-0.15, 1.495, 0.15, 1.535), 'mat': 'tail', 'tag': 'roof_brake'},
+        {'view': 'rear', 'rect': (-0.84, 0.36, 0.84, 0.54), 'mat': 'trim', 'cell': 0.3, 'tag': 'rbumper'},
+        # the 40 mm black rub strip along the waist
+        {'view': 'left', 'rect': (0.22, 0.58, 4.20, 0.62), 'mat': 'trim', 'mirror': True, 'cell': 0.5, 'tag': 'rub'},
+    ],
+    'parts': [MIRRORS],
+    'exhaust': [{'x': -0.45, 'y': 0.26, 'r': 0.035}],
+    'stickers': [
+        {'id': 'door', 'view': 'left', 'rect': (1.55, 0.545, 2.65, 0.895), 'mirror': True},
+        {'id': 'hood', 'view': 'top', 'rect': (-0.30, 0.30, 0.30, 0.85)},
+        {'id': 'rear', 'view': 'rear', 'rect': (-0.62, 0.575, -0.07, 1.025), 'note': 'left barn door'},
+    ],
+    'paint': {'hero': ('Shop white', '#E4DDD0'),
+              'alts': [('Primer grey', '#7E7F82'), ('Fleet tan', '#B89B6E'), ('Sodium', '#FF8A1F'), ('Dusk navy', '#1B2A4A')],
+              'trim': '#1A1D24', 'rim': '#B9BEC6', 'extra': {'chrome': '#C9CED6'}},
     'options': {},
 }
 
@@ -644,7 +739,7 @@ C3 = {
     'options': {},
 }
 
-FLEET = [P0, P1, P2, P3, P4, P5, P6, P17, N1, N2, N3, C1, C2, C3]
+FLEET = [P0, P1, P2, P3, P4, P5, P6, P7, P17, N1, N2, N3, C1, C2, C3]
 
 
 def _add_sun_strips():

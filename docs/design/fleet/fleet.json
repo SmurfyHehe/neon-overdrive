@@ -2005,13 +2005,13 @@
    "role": "player",
    "label": "Hot hatch",
    "refs": "Civic Si/EK, Golf GTI Mk2, 205 GTI",
-   "silhouette_rule": "Short brick on wheels pushed to the corners: narrow upright cabin on wide box-blistered hips, near-vertical hatch under an overhanging roof spoiler.",
+   "silhouette_rule": "Short brick on wheels pushed to the corners: narrow upright cabin on wide bolted-on box blisters, near-vertical hatch under an overhanging roof spoiler.",
    "dims": {
-    "length": 4.05,
+    "length": 3.97,
     "width_body": 1.83,
-    "height": 1.4,
+    "height": 1.385,
     "wheelbase": 2.56,
-    "front_overhang": 0.82,
+    "front_overhang": 0.74,
     "rear_overhang": 0.67,
     "ground_clearance": 0.12
    },
@@ -2034,35 +2034,35 @@
       0.69
      ],
      [
-      0.25,
+      0.2,
       0.78
      ],
      [
-      1.2,
+      1.12,
       0.92
      ],
      [
-      1.84,
+      1.76,
       1.31
      ],
      [
-      3.6,
+      3.62,
       1.33
      ],
      [
-      3.68,
-      1.3
+      3.64,
+      1.31
      ],
      [
-      3.84,
-      0.99
+      3.76,
+      0.95
      ],
      [
-      3.96,
-      0.96
+      3.88,
+      0.93
      ],
      [
-      4.05,
+      3.97,
       0.62
      ]
     ],
@@ -2072,15 +2072,15 @@
       0.27
      ],
      [
-      0.22,
+      0.2,
       0.12
      ],
      [
-      3.75,
+      3.67,
       0.12
      ],
      [
-      4.05,
+      3.97,
       0.28
      ]
     ],
@@ -2090,43 +2090,19 @@
       0.7
      ],
      [
-      0.08,
+      0.07,
       0.82
      ],
      [
-      0.3,
-      0.86
-     ],
-     [
-      0.4,
-      0.915
-     ],
-     [
-      1.24,
-      0.915
-     ],
-     [
-      1.34,
+      0.26,
       0.85
      ],
      [
-      2.88,
+      3.82,
       0.85
      ],
      [
-      2.98,
-      0.915
-     ],
-     [
-      3.8,
-      0.915
-     ],
-     [
-      3.9,
-      0.88
-     ],
-     [
-      4.05,
+      3.97,
       0.82
      ]
     ],
@@ -2136,15 +2112,15 @@
       0.48
      ],
      [
-      0.4,
+      0.32,
       0.58
      ],
      [
-      3.8,
+      3.72,
       0.6
      ],
      [
-      4.05,
+      3.97,
       0.58
      ]
     ],
@@ -2154,20 +2130,20 @@
       0.58
      ],
      [
-      0.25,
-      0.75
+      0.2,
+      0.76
      ],
      [
-      1.2,
+      1.12,
       0.9
      ],
      [
-      3.6,
-      0.98
+      3.76,
+      0.9
      ],
      [
-      4.05,
-      0.92
+      3.97,
+      0.88
      ]
     ]
    },
@@ -2177,26 +2153,26 @@
     "rocker_h": 0.28
    },
    "cabin": {
-    "A": 1.2,
-    "W": 1.84,
-    "R": 3.6,
-    "C": 3.84,
-    "D": 3.36,
+    "A": 1.12,
+    "W": 1.76,
+    "R": 3.62,
+    "C": 3.76,
+    "D": 3.28,
     "roof_w": [
      [
-      1.86,
+      1.78,
       0.58
      ],
      [
-      3.58,
+      3.6,
       0.57
      ]
     ],
     "roof_drop": 0.03,
     "pillars": [
      [
-      2.6,
-      2.68
+      2.52,
+      2.6
      ]
     ]
    },
@@ -2214,65 +2190,138 @@
      "view": "front",
      "rect": [
       -0.4,
-      0.5,
+      0.52,
       0.4,
-      0.58
+      0.59
      ],
-     "mat": "grille"
+     "mat": "grille",
+     "offset": 0.004
     },
     {
      "view": "front",
      "rect": [
       0.42,
       0.5,
-      0.76,
-      0.62
+      0.64,
+      0.59
      ],
      "mat": "head",
-     "mirror": true
+     "mirror": true,
+     "offset": 0.006
+    },
+    {
+     "view": "front",
+     "rect": [
+      0.64,
+      0.5,
+      0.7,
+      0.59
+     ],
+     "mat": "turn",
+     "mirror": true,
+     "offset": 0.006
     },
     {
      "view": "front",
      "rect": [
       -0.5,
-      0.22,
+      0.28,
       0.5,
-      0.36
+      0.38
      ],
      "mat": "grille",
-     "tag": "fbumper"
+     "tag": "fbumper",
+     "offset": 0.004
     },
     {
      "view": "front",
      "circle": [
       0.6,
-      0.29,
+      0.33,
       0.04,
       10
      ],
      "mat": "head",
-     "mirror": true
+     "mirror": true,
+     "tag": "fog",
+     "offset": 0.006
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.66,
+      0.385,
+      0.66,
+      0.415
+     ],
+     "mat": "trim",
+     "tag": "fstrip",
+     "cell": 0.4,
+     "offset": 0.004
     },
     {
      "view": "rear",
      "rect": [
       0.56,
-      0.7,
-      0.82,
-      0.94
+      0.785,
+      0.685,
+      0.89
      ],
      "mat": "tail",
-     "mirror": true
+     "mirror": true,
+     "tag": "tail",
+     "offset": 0.006
     },
     {
      "view": "rear",
      "rect": [
-      -0.25,
-      0.52,
-      0.25,
+      0.56,
+      0.67,
+      0.685,
+      0.775
+     ],
+     "mat": "tail_off",
+     "mirror": true,
+     "tag": "brake",
+     "offset": 0.006
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.56,
+      0.56,
+      0.685,
       0.66
      ],
-     "mat": "trim"
+     "mat": "head_off",
+     "mirror": true,
+     "tag": "reverse",
+     "offset": 0.006
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.69,
+      0.56,
+      0.72,
+      0.89
+     ],
+     "mat": "turn",
+     "mirror": true,
+     "tag": "turn_r",
+     "offset": 0.006
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.27,
+      0.635,
+      0.27,
+      0.745
+     ],
+     "mat": "trim",
+     "tag": "plate_recess",
+     "offset": 0.004
     },
     {
      "view": "rear",
@@ -2283,7 +2332,21 @@
       0.32
      ],
      "mat": "trim",
-     "tag": "rbumper"
+     "tag": "rbumper",
+     "offset": 0.004
+    },
+    {
+     "view": "left",
+     "rect": [
+      1.165,
+      0.58,
+      2.875,
+      0.62
+     ],
+     "mat": "trim",
+     "mirror": true,
+     "cell": 0.5,
+     "tag": "rub"
     }
    ],
    "parts": [
@@ -2291,12 +2354,20 @@
      "type": "mirrors"
     },
     {
+     "type": "flares",
+     "tag": "flares",
+     "band": 0.1,
+     "proud": 0.065,
+     "lip_mat": "trim",
+     "rivets": true
+    },
+    {
      "type": "roof_spoiler",
      "tag": "spoiler",
-     "s0": 3.48,
-     "s1": 3.88,
-     "y0": 1.34,
-     "y1": 1.29,
+     "s0": 3.42,
+     "s1": 3.84,
+     "y0": 1.3,
+     "y1": 1.335,
      "span": 1.22,
      "thick": 0.05,
      "brake_light": true
@@ -2309,19 +2380,19 @@
      "mirror": true,
      "note": "",
      "rect": [
-      1.55,
-      0.42,
-      2.45,
-      0.66
+      1.47,
+      0.63,
+      2.37,
+      0.87
      ],
      "center": [
-      -0.858,
-      0.54,
+      -0.831,
+      0.75,
       -0.1
      ],
      "normal": [
-      -1.0,
-      0.029,
+      -0.982,
+      0.19,
       -0.0
      ],
      "size": [
@@ -2336,19 +2407,19 @@
      "note": "",
      "rect": [
       -0.3,
-      0.35,
+      0.27,
       0.3,
-      1.05
+      0.97
      ],
      "center": [
       -0.0,
-      0.857,
+      0.855,
       -1.4
      ],
      "normal": [
       0.0,
       0.989,
-      -0.147
+      -0.15
      ],
      "size": [
       0.6,
@@ -2362,19 +2433,19 @@
      "note": "windshield sun strip",
      "rect": [
       -0.51,
-      1.6900000000000002,
+      1.61,
       0.51,
-      1.82
+      1.74
      ],
      "center": [
       0.0,
-      1.249,
+      1.256,
       -0.345
      ],
      "normal": [
-      0.001,
-      0.833,
-      -0.554
+      0.002,
+      0.85,
+      -0.526
      ],
      "size": [
       1.02,
@@ -2388,23 +2459,23 @@
      "note": "tailgate panel",
      "rect": [
       -0.5,
-      0.7,
+      0.76,
       0.5,
-      0.9
+      0.88
      ],
      "center": [
       0.0,
-      0.8,
+      0.82,
       1.962
      ],
      "normal": [
       0.0,
-      -0.0,
+      0.0,
       1.0
      ],
      "size": [
       1.0,
-      0.2
+      0.12
      ]
     }
    ],
@@ -2449,7 +2520,7 @@
          "type": "splitter",
          "s0": -0.05,
          "s1": 0.3,
-         "y": 0.183,
+         "y": 0.175,
          "w": 1.537
         }
        }
@@ -2571,12 +2642,12 @@
         "curve": "top",
         "keys": [
          [
-          0.575,
-          0.853
+          0.495,
+          0.85
          ],
          [
-          0.925,
-          0.904
+          0.845,
+          0.903
          ]
         ]
        },
@@ -2586,9 +2657,9 @@
          "view": "top",
          "rect": [
           0.12,
-          0.575,
+          0.495,
           0.36,
-          0.875
+          0.795
          ],
          "mat": "grille",
          "mirror": true
@@ -2599,7 +2670,7 @@
     },
     "skirts": {
      "stock": {
-      "label": "Stock",
+      "label": "Riveted box blisters",
       "ops": []
      },
      "skirts": {
@@ -2609,8 +2680,8 @@
         "op": "add",
         "part": {
          "type": "skirts",
-         "s0": 1.195,
-         "s1": 3.005
+         "s0": 1.115,
+         "s1": 2.925
         }
        }
       ]
@@ -2631,8 +2702,8 @@
         "op": "add",
         "part": {
          "type": "skirts",
-         "s0": 1.275,
-         "s1": 2.925
+         "s0": 1.195,
+         "s1": 2.845
         }
        },
        {
@@ -2644,6 +2715,45 @@
         "op": "set",
         "path": "wheel.w",
         "value": 0.245
+       }
+      ]
+     },
+     "smooth": {
+      "label": "Smooth blended arches",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "flares"
+       },
+       {
+        "op": "curve",
+        "curve": "hw",
+        "keys": [
+         [
+          0.32,
+          0.915
+         ],
+         [
+          1.16,
+          0.915
+         ],
+         [
+          1.26,
+          0.85
+         ],
+         [
+          2.8,
+          0.85
+         ],
+         [
+          2.9,
+          0.915
+         ],
+         [
+          3.72,
+          0.915
+         ]
+        ]
        }
       ]
      }
@@ -2665,8 +2775,8 @@
         "part": {
          "type": "roof_spoiler",
          "tag": "spoiler",
-         "s0": 3.4,
-         "s1": 3.98,
+         "s0": 3.34,
+         "s1": 3.92,
          "y0": 1.35,
          "y1": 1.31,
          "span": 1.32,
@@ -2754,7 +2864,7 @@
     },
     "exhaust": {
      "stock": {
-      "label": "Dual (one side)",
+      "label": "Single",
       "ops": []
      },
      "center": {
@@ -2839,9 +2949,9 @@
    },
    "budget_tris": 10000,
    "proxy_tris": {
-    "stock": 2540,
-    "street": 2690,
-    "full": 2956
+    "stock": 2566,
+    "street": 2746,
+    "full": 3076
    },
    "exhaust_tips": {
     "stock": [
@@ -2856,20 +2966,7 @@
        0,
        1
       ],
-      "r": 0.038
-     },
-     {
-      "pos": [
-       -0.32,
-       0.24,
-       1.925
-      ],
-      "dir": [
-       0,
-       0,
-       1
-      ],
-      "r": 0.038
+      "r": 0.04
      }
     ],
     "center": [
@@ -3940,11 +4037,11 @@
    "role": "player",
    "label": "Kei roadster",
    "refs": "Honda Beat, Suzuki Cappuccino, Autozam AZ-1",
-   "silhouette_rule": "Tiny open two-seater: no roof, twin headrest humps, wheels at the very corners.",
+   "silhouette_rule": "Tiny open two-seater with the wheels at the very corners, a low screen and two headrest humps that run back into the engine lid.",
    "dims": {
     "length": 3.3,
     "width_body": 1.4,
-    "height": 1.13,
+    "height": 1.05,
     "wheelbase": 2.27,
     "front_overhang": 0.55,
     "rear_overhang": 0.48,
@@ -3954,8 +4051,8 @@
     "wheel_r": 0.28,
     "wheel_x": 0.615,
     "axle_z": 1.135,
-    "tire_w_front": 0.175,
-    "tire_w_rear": 0.185,
+    "tire_w_front": 0.165,
+    "tire_w_rear": 0.175,
     "note": "CarSpec.build_wheels uses symmetric axle_z; this origin already sits midway between the axles."
    },
    "curves": {
@@ -3978,15 +4075,15 @@
      ],
      [
       1.3,
-      1.12
+      1.04
      ],
      [
       1.36,
-      1.13
+      1.05
      ],
      [
       1.42,
-      0.82
+      0.8
      ],
      [
       2.32,
@@ -4034,7 +4131,23 @@
      ],
      [
       0.3,
+      0.7
+     ],
+     [
+      0.86,
+      0.7
+     ],
+     [
+      0.96,
       0.69
+     ],
+     [
+      2.4,
+      0.69
+     ],
+     [
+      2.5,
+      0.7
      ],
      [
       3.0,
@@ -4100,39 +4213,27 @@
     "roof_w": 0.54,
     "roof_drop": 0.02,
     "pillars": [],
-    "roof_h": 1.13
+    "roof_h": 1.05
    },
    "open_top": [
     {
      "s0": 1.42,
-     "s1": 2.32,
-     "floor": 0.42,
+     "s1": 2.18,
+     "floor": 0.4,
      "wall": 0.06,
      "mat": "interior"
     }
    ],
    "wheel": {
     "r": 0.28,
-    "w": 0.175,
-    "w_rear": 0.185,
+    "w": 0.165,
+    "w_rear": 0.175,
     "track": 1.23,
     "arch_gap": 0.025,
     "rim": "5spoke",
-    "rim_ratio": 0.66
+    "rim_ratio": 0.7
    },
    "decals": [
-    {
-     "view": "front",
-     "ellipse": [
-      0.48,
-      0.52,
-      0.1,
-      0.055,
-      12
-     ],
-     "mat": "head",
-     "mirror": true
-    },
     {
      "view": "front",
      "rect": [
@@ -4142,18 +4243,20 @@
       0.36
      ],
      "mat": "grille",
-     "tag": "fbumper"
+     "tag": "fbumper",
+     "offset": 0.004
     },
     {
-     "view": "left",
+     "view": "front",
      "rect": [
-      2.36,
-      0.46,
-      2.6,
-      0.62
+      0.26,
+      0.29,
+      0.33,
+      0.35
      ],
-     "mat": "grille",
-     "mirror": true
+     "mat": "turn",
+     "mirror": true,
+     "offset": 0.006
     },
     {
      "view": "rear",
@@ -4165,18 +4268,69 @@
       12
      ],
      "mat": "tail",
-     "mirror": true
+     "mirror": true,
+     "offset": 0.006
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.42,
+      0.54,
+      0.54,
+      0.585
+     ],
+     "mat": "turn",
+     "mirror": true,
+     "tag": "turn_r",
+     "offset": 0.006
+    },
+    {
+     "view": "rear",
+     "circle": [
+      0.0,
+      0.4,
+      0.03,
+      10
+     ],
+     "mat": "head_off",
+     "tag": "reverse",
+     "offset": 0.006
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.27,
+      0.605,
+      0.27,
+      0.715
+     ],
+     "mat": "trim",
+     "tag": "plate_recess",
+     "offset": 0.004
     },
     {
      "view": "rear",
      "rect": [
       -0.5,
-      0.22,
+      0.29,
       0.5,
-      0.3
+      0.35
      ],
      "mat": "trim",
-     "tag": "rbumper"
+     "tag": "rbumper",
+     "offset": 0.004
+    },
+    {
+     "view": "left",
+     "rect": [
+      2.2,
+      0.49,
+      2.44,
+      0.63
+     ],
+     "mat": "grille",
+     "mirror": true,
+     "tag": "intake"
     }
    ],
    "parts": [
@@ -4186,11 +4340,27 @@
     },
     {
      "type": "rollhoops",
-     "s": 2.3,
+     "s": 2.0,
      "h": 1.0,
      "x": 0.3,
      "w": 0.26,
+     "s0": 1.95,
+     "s1": 2.4,
      "tag": "hoops"
+    },
+    {
+     "type": "popups",
+     "s0": 0.3,
+     "s1": 0.56,
+     "x0": 0.31,
+     "x1": 0.57,
+     "h": 0.08
+    },
+    {
+     "type": "flares",
+     "tag": "lips",
+     "band": 0.035,
+     "proud": 0.01
     }
    ],
    "sticker_slots": [
@@ -4206,14 +4376,14 @@
       0.6
      ],
      "center": [
-      -0.698,
+      -0.693,
       0.5,
       -0.01
      ],
      "normal": [
       -0.995,
       0.103,
-      -0.005
+      -0.001
      ],
      "size": [
       0.75,
@@ -4259,13 +4429,13 @@
      ],
      "center": [
       -0.0,
-      1.03,
+      0.969,
       -0.47
      ],
      "normal": [
-      -0.003,
-      0.704,
-      -0.71
+      -0.0,
+      0.777,
+      -0.63
      ],
      "size": [
       0.94,
@@ -4279,13 +4449,13 @@
      "note": "tail panel",
      "rect": [
       -0.34,
-      0.58,
+      0.45,
       0.34,
-      0.74
+      0.59
      ],
      "center": [
       -0.0,
-      0.66,
+      0.52,
       1.627
      ],
      "normal": [
@@ -4295,7 +4465,7 @@
      ],
      "size": [
       0.68,
-      0.16
+      0.14
      ]
     }
    ],
@@ -4357,11 +4527,11 @@
         "keys": [
          [
           1.3,
-          1.12
+          1.04
          ],
          [
           1.95,
-          1.13
+          1.05
          ],
          [
           2.34,
@@ -4510,7 +4680,7 @@
        {
         "op": "set",
         "path": "wheel.w",
-        "value": 0.195
+        "value": 0.185
        }
       ]
      }
@@ -4666,17 +4836,17 @@
    },
    "budget_tris": 10000,
    "proxy_tris": {
-    "stock": 2178,
-    "street": 2306,
-    "full": 2536
+    "stock": 2462,
+    "street": 2562,
+    "full": 2820
    },
    "exhaust_tips": {
     "stock": [
      {
       "pos": [
-       0.35,
-       0.22,
-       1.59
+       0.0,
+       0.24,
+       1.615
       ],
       "dir": [
        0,
@@ -4734,22 +4904,22 @@
   {
    "id": "p5_muscle",
    "role": "player",
-   "label": "Muscle sedan",
-   "refs": "Impala SS (1994-96), Chevelle SS, Caprice 9C1",
-   "silhouette_rule": "Long, low, wide land yacht: tall cowl scoop, chopped slit-window cabin, ducktail, coke-bottle hips; full-width tail bar.",
+   "label": "Muscle hardtop",
+   "refs": "Chevelle SS (1970), Charger R/T (1968), Torino GT (1970)",
+   "silhouette_rule": "Two-door 68-72 muscle hardtop: long hood, short deck, coke-bottle hips, tunnel-back roof with buttresses, full-width tail bar.",
    "dims": {
-    "length": 5.35,
-    "width_body": 2.02,
-    "height": 1.3,
-    "wheelbase": 2.95,
-    "front_overhang": 1.12,
-    "rear_overhang": 1.28,
-    "ground_clearance": 0.15
+    "length": 5.0,
+    "width_body": 1.93,
+    "height": 1.33,
+    "wheelbase": 2.84,
+    "front_overhang": 0.9,
+    "rear_overhang": 1.26,
+    "ground_clearance": 0.16
    },
    "physics_hint": {
-    "wheel_r": 0.345,
-    "wheel_x": 0.83,
-    "axle_z": 1.475,
+    "wheel_r": 0.35,
+    "wheel_x": 0.8,
+    "axle_z": 1.42,
     "tire_w_front": 0.255,
     "tire_w_rear": 0.32,
     "note": "CarSpec.build_wheels uses symmetric axle_z; this origin already sits midway between the axles."
@@ -4758,210 +4928,210 @@
     "top": [
      [
       0.0,
-      0.7
-     ],
-     [
-      0.04,
       0.79
      ],
      [
-      0.22,
+      0.05,
       0.84
      ],
      [
-      1.88,
-      0.95
+      0.3,
+      0.862
      ],
      [
-      2.55,
-      1.28
-     ],
-     [
-      3.28,
-      1.3
-     ],
-     [
-      3.92,
-      1.0
-     ],
-     [
-      5.06,
-      0.99
-     ],
-     [
-      5.22,
-      1.11
-     ],
-     [
-      5.28,
-      1.11
-     ],
-     [
-      5.32,
+      1.45,
       0.9
      ],
      [
-      5.35,
-      0.7
+      2.12,
+      1.305
+     ],
+     [
+      2.5,
+      1.33
+     ],
+     [
+      3.0,
+      1.33
+     ],
+     [
+      3.3,
+      1.31
+     ],
+     [
+      3.8,
+      0.965
+     ],
+     [
+      4.9,
+      0.935
+     ],
+     [
+      4.97,
+      0.925
+     ],
+     [
+      5.0,
+      0.9
      ]
     ],
     "floor": [
      [
       0,
-      0.28
+      0.3
      ],
      [
-      0.3,
-      0.15
+      0.25,
+      0.16
      ],
      [
-      5.0,
-      0.15
+      4.7,
+      0.16
      ],
      [
-      5.2,
+      4.88,
       0.22
      ],
      [
-      5.35,
-      0.36
+      5.0,
+      0.37
      ]
     ],
     "hw": [
      [
       0,
-      0.86
+      0.87
      ],
      [
       0.08,
-      0.95
+      0.93
      ],
      [
-      0.45,
-      0.975
+      0.4,
+      0.955
      ],
      [
-      1.12,
-      0.985
-     ],
-     [
-      1.7,
+      0.9,
       0.965
      ],
      [
-      2.4,
-      0.935
+      1.25,
+      0.965
      ],
      [
-      3.1,
-      0.94
+      1.9,
+      0.9
      ],
      [
-      3.7,
-      0.985
+      2.9,
+      0.9
      ],
      [
-      4.07,
-      1.01
+      3.45,
+      0.965
+     ],
+     [
+      4.1,
+      0.965
      ],
      [
       4.6,
-      1.005
+      0.95
      ],
      [
-      5.05,
-      0.96
+      4.9,
+      0.925
      ],
      [
-      5.25,
-      0.91
-     ],
-     [
-      5.35,
-      0.85
+      5.0,
+      0.9
      ]
     ],
     "waist": [
      [
       0,
-      0.48
+      0.7
      ],
      [
-      0.5,
-      0.6
+      0.3,
+      0.78
      ],
      [
-      4.0,
-      0.66
-     ],
-     [
-      5.35,
-      0.62
+      5.0,
+      0.78
      ]
     ],
     "belt": [
      [
       0,
-      0.66
+      0.76
      ],
      [
       0.3,
-      0.81
+      0.84
      ],
      [
-      1.88,
-      0.93
+      1.45,
+      0.86
      ],
      [
-      3.92,
-      0.99
+      3.8,
+      0.87
      ],
      [
-      5.35,
-      0.93
+      5.0,
+      0.87
      ]
     ]
    },
    "section": {
-    "tumble": 0.09,
+    "tumble": [
+     [
+      0,
+      0.07
+     ],
+     [
+      4.6,
+      0.07
+     ],
+     [
+      5.0,
+      0.03
+     ]
+    ],
     "sill_in": 0.04,
-    "rocker_h": 0.32
+    "rocker_h": 0.36
    },
    "cabin": {
-    "A": 1.88,
-    "W": 2.55,
-    "R": 3.28,
-    "C": 3.92,
-    "D": 3.62,
+    "A": 1.45,
+    "W": 2.12,
+    "R": 3.3,
+    "C": 3.8,
+    "D": 3.42,
     "roof_w": [
      [
-      2.55,
+      2.12,
+      0.64
+     ],
+     [
+      3.3,
       0.62
      ],
      [
-      3.28,
-      0.57
-     ],
-     [
-      3.92,
-      0.66
+      3.8,
+      0.7
      ]
     ],
     "roof_drop": 0.035,
-    "pillars": [
-     [
-      2.98,
-      3.08
-     ]
-    ]
+    "pillars": []
    },
    "open_top": [],
    "wheel": {
-    "r": 0.345,
+    "r": 0.35,
     "w": 0.255,
     "w_rear": 0.32,
-    "track": 1.66,
-    "arch_gap": 0.03,
+    "track": 1.6,
+    "arch_gap": 0.02,
     "rim": "dish",
     "rim_ratio": 0.68
    },
@@ -4969,20 +5139,20 @@
     {
      "view": "front",
      "rect": [
-      -0.48,
-      0.52,
-      0.48,
+      -0.8,
+      0.5,
+      0.8,
       0.66
      ],
      "mat": "grille"
     },
     {
      "view": "front",
-     "rect": [
-      0.5,
-      0.53,
-      0.86,
-      0.65
+     "circle": [
+      0.66,
+      0.58,
+      0.075,
+      12
      ],
      "mat": "head",
      "mirror": true
@@ -4990,68 +5160,53 @@
     {
      "view": "front",
      "rect": [
-      -0.6,
-      0.26,
-      0.6,
-      0.38
+      -0.84,
+      0.36,
+      0.84,
+      0.44
      ],
-     "mat": "grille",
-     "tag": "fbumper"
+     "mat": "chrome",
+     "tag": "fbumper",
+     "cell": 0.3
     },
     {
-     "view": "rear",
+     "view": "front",
      "rect": [
-      0.12,
-      0.8,
-      0.86,
-      0.88
+      0.5,
+      0.375,
+      0.66,
+      0.425
      ],
-     "mat": "tail",
+     "mat": "turn",
      "mirror": true
     },
     {
      "view": "rear",
      "rect": [
-      -0.12,
-      0.8,
-      0.12,
-      0.88
+      -0.85,
+      0.73,
+      0.85,
+      0.83
      ],
-     "mat": "trim"
+     "mat": "tail",
+     "cell": 0.3
     },
     {
      "view": "rear",
      "rect": [
-      -0.26,
-      0.5,
-      0.26,
-      0.64
+      -0.84,
+      0.39,
+      0.84,
+      0.55
      ],
-     "mat": "trim"
-    },
-    {
-     "view": "rear",
-     "rect": [
-      -0.8,
-      0.24,
-      0.8,
-      0.36
-     ],
-     "mat": "trim",
-     "tag": "rbumper"
+     "mat": "chrome",
+     "tag": "rbumper",
+     "cell": 0.3
     }
    ],
    "parts": [
     {
      "type": "mirrors"
-    },
-    {
-     "type": "scoop",
-     "tag": "hood",
-     "s0": 0.95,
-     "s1": 1.74,
-     "w": 0.7,
-     "h": 0.17
     }
    ],
    "sticker_slots": [
@@ -5061,24 +5216,24 @@
      "mirror": true,
      "note": "",
      "rect": [
-      2.0,
-      0.45,
-      3.6,
+      1.62,
+      0.42,
+      2.62,
       0.66
      ],
      "center": [
-      -0.953,
-      0.555,
-      0.205
+      -0.908,
+      0.54,
+      -0.2
      ],
      "normal": [
-      -1.0,
-      -0.011,
-      -0.016
+      -0.999,
+      -0.033,
+      0.028
      ],
      "size": [
-      1.6,
-      0.21
+      1.0,
+      0.24
      ]
     },
     {
@@ -5090,21 +5245,21 @@
       -0.32,
       0.4,
       0.32,
-      1.45
+      1.3
      ],
      "center": [
-      0.0,
-      0.897,
-      -1.67
+      -0.0,
+      0.89,
+      -1.47
      ],
      "normal": [
-      0.0,
-      0.998,
-      -0.067
+      -0.0,
+      1.0,
+      -0.031
      ],
      "size": [
       0.64,
-      1.05
+      0.9
      ]
     },
     {
@@ -5113,23 +5268,23 @@
      "mirror": false,
      "note": "windshield sun strip",
      "rect": [
-      -0.55,
-      2.4,
-      0.55,
-      2.53
+      -0.5700000000000001,
+      1.9700000000000002,
+      0.5700000000000001,
+      2.1
      ],
      "center": [
       0.0,
-      1.229,
-      -0.13
+      1.24,
+      -0.285
      ],
      "normal": [
-      0.004,
-      0.869,
-      -0.495
+      0.008,
+      0.825,
+      -0.565
      ],
      "size": [
-      1.1,
+      1.14,
       0.13
      ]
     },
@@ -5140,23 +5295,23 @@
      "note": "tail panel",
      "rect": [
       -0.55,
-      0.645,
+      0.58,
       0.55,
-      0.79
+      0.71
      ],
      "center": [
       0.0,
-      0.718,
-      2.767
+      0.645,
+      2.692
      ],
      "normal": [
       0.0,
-      -0.0,
+      0.0,
       1.0
      ],
      "size": [
       1.1,
-      0.145
+      0.13
      ]
     }
    ],
@@ -5167,20 +5322,20 @@
     ],
     "alts": [
      [
+      "Hugger orange",
+      "#D9541E"
+     ],
+     [
+      "Fathom green",
+      "#1F4D3A"
+     ],
+     [
       "Black",
       "#15171C"
      ],
      [
       "Silver",
       "#C9CED6"
-     ],
-     [
-      "Racing green",
-      "#1F4D3A"
-     ],
-     [
-      "Pearl",
-      "#E9E6DF"
      ]
     ],
     "trim": "#1A1D24",
@@ -5189,8 +5344,28 @@
    "options": {
     "hood": {
      "stock": {
-      "label": "Cowl scoop",
+      "label": "Power bulges",
       "ops": []
+     },
+     "cowl": {
+      "label": "Cowl scoop",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "hood"
+       },
+       {
+        "op": "add",
+        "part": {
+         "type": "scoop",
+         "tag": "hood",
+         "s0": 0.62,
+         "s1": 1.4,
+         "w": 0.56,
+         "h": 0.09
+        }
+       }
+      ]
      },
      "shaker": {
       "label": "Shaker scoop",
@@ -5204,20 +5379,11 @@
         "part": {
          "type": "scoop",
          "tag": "hood",
-         "s0": 0.98,
-         "s1": 1.42,
+         "s0": 0.74,
+         "s1": 1.16,
          "w": 0.44,
-         "h": 0.17
+         "h": 0.15
         }
-       }
-      ]
-     },
-     "flat": {
-      "label": "Flat hood (sleeper)",
-      "ops": [
-       {
-        "op": "remove",
-        "tag": "hood"
        }
       ]
      }
@@ -5236,8 +5402,8 @@
          "type": "splitter",
          "s0": -0.05,
          "s1": 0.3,
-         "y": 0.223,
-         "w": 1.697
+         "y": 0.228,
+         "w": 1.621
         }
        }
       ]
@@ -5245,8 +5411,31 @@
     },
     "spoiler": {
      "stock": {
-      "label": "Ducktail",
+      "label": "Plain deck",
       "ops": []
+     },
+     "ducktail": {
+      "label": "Ducktail",
+      "ops": [
+       {
+        "op": "remove",
+        "tag": "spoiler"
+       },
+       {
+        "op": "curve",
+        "curve": "top",
+        "keys": [
+         [
+          4.87,
+          0.961
+         ],
+         [
+          4.97,
+          0.975
+         ]
+        ]
+       }
+      ]
      },
      "drag": {
       "label": "Drag wing",
@@ -5260,34 +5449,15 @@
         "part": {
          "type": "wing",
          "tag": "spoiler",
-         "s0": 4.99,
-         "s1": 5.29,
-         "y": 1.29,
-         "span": 1.74,
+         "s0": 4.64,
+         "s1": 4.94,
+         "y": 1.178,
+         "span": 1.66,
          "uprights": [
-          0.44
+          0.42
          ],
          "kick": 0.04
         }
-       }
-      ]
-     },
-     "smooth": {
-      "label": "Smooth deck",
-      "ops": [
-       {
-        "op": "curve",
-        "curve": "top",
-        "keys": [
-         [
-          5.2,
-          1.0
-         ],
-         [
-          5.27,
-          0.99
-         ]
-        ]
        }
       ]
      }
@@ -5304,8 +5474,8 @@
         "op": "add",
         "part": {
          "type": "skirts",
-         "s0": 1.535,
-         "s1": 3.655
+         "s0": 1.31,
+         "s1": 3.33
         }
        }
       ]
@@ -5391,15 +5561,15 @@
          {
           "dir": "side",
           "side": "right",
-          "s": 3.535,
-          "y": 0.22,
+          "s": 3.21,
+          "y": 0.23,
           "r": 0.05
          },
          {
           "dir": "side",
           "side": "left",
-          "s": 3.535,
-          "y": 0.22,
+          "s": 3.21,
+          "y": 0.23,
           "r": 0.05
          }
         ]
@@ -5413,23 +5583,23 @@
         "op": "exhaust",
         "tips": [
          {
-          "x": 0.566,
-          "y": 0.367,
+          "x": 0.54,
+          "y": 0.345,
           "r": 0.041
          },
          {
-          "x": 0.727,
-          "y": 0.367,
+          "x": 0.695,
+          "y": 0.345,
           "r": 0.041
          },
          {
-          "x": -0.566,
-          "y": 0.367,
+          "x": -0.54,
+          "y": 0.345,
           "r": 0.041
          },
          {
-          "x": -0.727,
-          "y": 0.367,
+          "x": -0.695,
+          "y": 0.345,
           "r": 0.041
          }
         ]
@@ -5481,9 +5651,9 @@
    },
    "budget_tris": 10000,
    "proxy_tris": {
-    "stock": 2694,
-    "street": 2630,
-    "full": 2850
+    "stock": 2544,
+    "street": 2498,
+    "full": 2718
    },
    "exhaust_tips": {
     "stock": [
@@ -5491,7 +5661,7 @@
       "pos": [
        0.66,
        0.26,
-       2.698
+       2.642
       ],
       "dir": [
        0,
@@ -5504,7 +5674,7 @@
       "pos": [
        -0.66,
        0.26,
-       2.698
+       2.642
       ],
       "dir": [
        0,
@@ -5517,9 +5687,9 @@
     "side": [
      {
       "pos": [
-       0.973,
-       0.22,
-       0.94
+       0.937,
+       0.23,
+       0.89
       ],
       "dir": [
        1,
@@ -5530,9 +5700,9 @@
      },
      {
       "pos": [
-       -0.973,
-       0.22,
-       0.94
+       -0.937,
+       0.23,
+       0.89
       ],
       "dir": [
        -1,
@@ -5545,9 +5715,9 @@
     "quad": [
      {
       "pos": [
-       0.566,
-       0.367,
-       2.805
+       0.54,
+       0.345,
+       2.71
       ],
       "dir": [
        0,
@@ -5558,9 +5728,9 @@
      },
      {
       "pos": [
-       0.727,
-       0.367,
-       2.805
+       0.695,
+       0.345,
+       2.71
       ],
       "dir": [
        0,
@@ -5571,9 +5741,9 @@
      },
      {
       "pos": [
-       -0.566,
-       0.367,
-       2.805
+       -0.54,
+       0.345,
+       2.71
       ],
       "dir": [
        0,
@@ -5584,9 +5754,9 @@
      },
      {
       "pos": [
-       -0.727,
-       0.367,
-       2.805
+       -0.695,
+       0.345,
+       2.71
       ],
       "dir": [
        0,
@@ -6357,6 +6527,471 @@
        1
       ],
       "r": 0.072
+     }
+    ]
+   }
+  },
+  {
+   "id": "p7_wagon",
+   "role": "player",
+   "label": "Shop wagon",
+   "refs": "the boxy front-drive estate cars of the late 1980s (category only; no brand): a small four, an automatic, barn doors",
+   "silhouette_rule": "A shoebox on small wheels: snub nose, short flat bonnet, then ONE flat roof line from the top of the windscreen to a square tail; glass all round, three side windows, two barn doors, tall lamp columns at the rear corners.",
+   "dims": {
+    "length": 4.3,
+    "width_body": 1.74,
+    "height": 1.55,
+    "wheelbase": 2.6,
+    "front_overhang": 0.72,
+    "rear_overhang": 0.98,
+    "ground_clearance": 0.16
+   },
+   "physics_hint": {
+    "wheel_r": 0.305,
+    "wheel_x": 0.73,
+    "axle_z": 1.3,
+    "tire_w_front": 0.185,
+    "tire_w_rear": 0.185,
+    "note": "CarSpec.build_wheels uses symmetric axle_z; this origin already sits midway between the axles."
+   },
+   "curves": {
+    "top": [
+     [
+      0.0,
+      0.66
+     ],
+     [
+      0.04,
+      0.8
+     ],
+     [
+      0.14,
+      0.86
+     ],
+     [
+      1.05,
+      0.96
+     ],
+     [
+      1.55,
+      1.55
+     ],
+     [
+      4.22,
+      1.55
+     ],
+     [
+      4.27,
+      0.88
+     ],
+     [
+      4.3,
+      0.56
+     ]
+    ],
+    "floor": [
+     [
+      0,
+      0.34
+     ],
+     [
+      0.2,
+      0.16
+     ],
+     [
+      3.95,
+      0.16
+     ],
+     [
+      4.3,
+      0.3
+     ]
+    ],
+    "hw": [
+     [
+      0,
+      0.74
+     ],
+     [
+      0.06,
+      0.83
+     ],
+     [
+      0.2,
+      0.87
+     ],
+     [
+      1.1,
+      0.87
+     ],
+     [
+      1.25,
+      0.85
+     ],
+     [
+      2.8,
+      0.85
+     ],
+     [
+      2.95,
+      0.87
+     ],
+     [
+      3.75,
+      0.87
+     ],
+     [
+      4.24,
+      0.86
+     ],
+     [
+      4.3,
+      0.82
+     ]
+    ],
+    "waist": [
+     [
+      0,
+      0.56
+     ],
+     [
+      0.2,
+      0.6
+     ],
+     [
+      4.3,
+      0.6
+     ]
+    ],
+    "belt": [
+     [
+      0,
+      0.6
+     ],
+     [
+      0.05,
+      0.76
+     ],
+     [
+      0.14,
+      0.83
+     ],
+     [
+      1.05,
+      0.86
+     ],
+     [
+      4.3,
+      0.86
+     ]
+    ]
+   },
+   "section": {
+    "tumble": 0.04,
+    "sill_in": 0.03,
+    "rocker_h": 0.3
+   },
+   "cabin": {
+    "A": 1.05,
+    "W": 1.55,
+    "R": 4.22,
+    "C": 4.27,
+    "D": 4.22,
+    "roof_w": [
+     [
+      1.55,
+      0.72
+     ],
+     [
+      4.22,
+      0.74
+     ]
+    ],
+    "roof_drop": 0.02,
+    "pillars": [
+     [
+      2.1,
+      2.17
+     ],
+     [
+      3.15,
+      3.22
+     ]
+    ]
+   },
+   "open_top": [],
+   "wheel": {
+    "r": 0.305,
+    "w": 0.185,
+    "track": 1.46,
+    "arch_gap": 0.05,
+    "rim": "steel",
+    "rim_ratio": 0.6
+   },
+   "decals": [
+    {
+     "view": "front",
+     "rect": [
+      -0.45,
+      0.7,
+      0.45,
+      0.76
+     ],
+     "mat": "grille"
+    },
+    {
+     "view": "front",
+     "rect": [
+      0.5,
+      0.66,
+      0.68,
+      0.82
+     ],
+     "mat": "head",
+     "mirror": true
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.84,
+      0.36,
+      0.84,
+      0.54
+     ],
+     "mat": "trim",
+     "cell": 0.3,
+     "tag": "fbumper"
+    },
+    {
+     "view": "front",
+     "rect": [
+      0.52,
+      0.42,
+      0.66,
+      0.48
+     ],
+     "mat": "turn",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.7,
+      0.56,
+      0.82,
+      0.875
+     ],
+     "mat": "turn",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.7,
+      0.875,
+      0.82,
+      1.51
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.15,
+      1.495,
+      0.15,
+      1.535
+     ],
+     "mat": "tail",
+     "tag": "roof_brake"
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.84,
+      0.36,
+      0.84,
+      0.54
+     ],
+     "mat": "trim",
+     "cell": 0.3,
+     "tag": "rbumper"
+    },
+    {
+     "view": "left",
+     "rect": [
+      0.22,
+      0.58,
+      4.2,
+      0.62
+     ],
+     "mat": "trim",
+     "mirror": true,
+     "cell": 0.5,
+     "tag": "rub"
+    }
+   ],
+   "parts": [
+    {
+     "type": "mirrors"
+    }
+   ],
+   "sticker_slots": [
+    {
+     "id": "door",
+     "view": "left",
+     "mirror": true,
+     "note": "",
+     "rect": [
+      1.55,
+      0.545,
+      2.65,
+      0.895
+     ],
+     "center": [
+      -0.839,
+      0.72,
+      0.08
+     ],
+     "normal": [
+      -0.978,
+      0.209,
+      -0.0
+     ],
+     "size": [
+      1.1,
+      0.35
+     ]
+    },
+    {
+     "id": "hood",
+     "view": "top",
+     "mirror": false,
+     "note": "",
+     "rect": [
+      -0.3,
+      0.3,
+      0.3,
+      0.85
+     ],
+     "center": [
+      0.0,
+      0.914,
+      -1.445
+     ],
+     "normal": [
+      -0.001,
+      0.995,
+      -0.101
+     ],
+     "size": [
+      0.6,
+      0.55
+     ]
+    },
+    {
+     "id": "sun",
+     "view": "top",
+     "mirror": false,
+     "note": "windshield sun strip",
+     "rect": [
+      -0.6499999999999999,
+      1.4000000000000001,
+      0.6499999999999999,
+      1.53
+     ],
+     "center": [
+      0.0,
+      1.44,
+      -0.555
+     ],
+     "normal": [
+      0.009,
+      0.596,
+      -0.803
+     ],
+     "size": [
+      1.3,
+      0.13
+     ]
+    },
+    {
+     "id": "rear",
+     "view": "rear",
+     "mirror": false,
+     "note": "left barn door",
+     "rect": [
+      -0.62,
+      0.575,
+      -0.07,
+      1.025
+     ],
+     "center": [
+      -0.345,
+      0.8,
+      2.282
+     ],
+     "normal": [
+      -0.011,
+      0.096,
+      0.995
+     ],
+     "size": [
+      0.55,
+      0.45
+     ]
+    }
+   ],
+   "paint": {
+    "hero": [
+     "Shop white",
+     "#E4DDD0"
+    ],
+    "alts": [
+     [
+      "Primer grey",
+      "#7E7F82"
+     ],
+     [
+      "Fleet tan",
+      "#B89B6E"
+     ],
+     [
+      "Sodium",
+      "#FF8A1F"
+     ],
+     [
+      "Dusk navy",
+      "#1B2A4A"
+     ]
+    ],
+    "trim": "#1A1D24",
+    "rim": "#B9BEC6",
+    "extra": {
+     "chrome": "#C9CED6"
+    }
+   },
+   "options": {},
+   "builds": {},
+   "budget_tris": 10000,
+   "proxy_tris": {
+    "stock": 2378
+   },
+   "exhaust_tips": {
+    "stock": [
+     {
+      "pos": [
+       -0.45,
+       0.26,
+       2.23
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.035
      }
     ]
    }

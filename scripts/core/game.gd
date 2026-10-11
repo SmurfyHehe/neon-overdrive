@@ -67,17 +67,25 @@ var menu_sfx: MenuSfx   # clicks, ticks and the squelch for every menu (menu_sfx
 var sky: Sky  # tonight's sky (NightSky), driven by SkyDirector
 var night_clock: NightClock  # 8 p.m. to 6 a.m., saved (night_clock.gd); windows follow it
 var race: RaceController  # race core RC1 (race_controller.gd)
+var garage_flow: GarageFlow  # the garage plumbing (G0, garage_flow.gd)
 var _bands := false  # hour bands drive traffic and Dave (bands_on)
 var moments: MomentSpots  # roadside moment spots, dealt nightly (moment_spots.gd); null when off
 var world_mood: WorldMood  # tonight's events: rule-breaker share, bar close, meets, crackdowns
 var police_heat: PoliceHeat  # heat level + cop_can_see_player (police F0/F1)
+## Dave names the limits once, on night 1 (police step P3). He only speaks on
+## his own station, so it waits there until he can.
+var limit_line_said := false
+var _limit_line_wait := 40.0
 var police: PolicePatrol     # the stand-in patrol car; null with NEON_POLICE=0 or a benchmark
 var heat_icons: HeatIcons
 const TestMode := preload("res://scripts/core/test_mode.gd")
+const TestBuild := preload("res://scripts/core/test_build.gd")
 var perf_ladder: PerfLadder  # lowers the load when the PC falls behind (perf_ladder.gd); real play only
 var rescue: OffMapRescue  # off-map rescue (off_map_rescue.gd)
 const Weather := preload("res://scripts/world/weather.gd")
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
+
+const DiscordPresence := preload("res://scripts/core/discord_presence.gd")
 
 # Save system (run structure, 2026-10-09): auto-save into one of 3 slots, and a
 # resume puts the run back where it was (scripts/save/). road_seed is kept so a
@@ -86,6 +94,7 @@ var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust fl
 const SaveDirector := preload("res://scripts/save/save_director.gd")
 const UserDirMigration := preload("res://scripts/save/user_dir_migration.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
+const ColorGrade := preload("res://scripts/world/color_grade.gd")
 # The shared test driver and the F9 drive recorder (2026-10-10). `bot` is the
 # driver when the game was started with -- --bot=<mode> / NEON_BOT (watching
 # the bot in a window uses the same switch the headless tests do), with
@@ -99,17 +108,31 @@ var saver: SaveDirector
 ## Tonight's cash and the bank (F0, scripts/core/wallet.gd).
 var wallet: Node
 const Wallet := preload("res://scripts/core/wallet.gd")
+const ShopDay := preload("res://scripts/core/shop_day.gd")
+const WorkBoardScreen := preload("res://scripts/ui/work_board_screen.gd")
+## Walt's board for the day (W2); null-less: always exists, `enabled` says if it is live.
+var shop_day: Node
 ## A hard hit ends the run: rules, crash screen, morning (scripts/core/run_end.gd).
 var run_end: Node
 const RunEnd := preload("res://scripts/core/run_end.gd")
 ## Gas stations on the road and the pump menu (stops, first slice).
 var gas_station: Node3D
+var gas_station_onc: Node3D
 const GasStation := preload("res://scripts/world/gas_station.gd")
 const PumpPanel := preload("res://scripts/ui/pump_panel.gd")
 const WetReflections := preload("res://scripts/world/wet_reflections.gd")
 const WeatherPlan := preload("res://scripts/world/weather_plan.gd")
 ## Real seconds into a night before Dave reads the forecast.
 const FORECAST_DELAY := 8.0
+const SaveStore := preload("res://scripts/save/save_store.gd")
+## Seed every night's weather comes from (WeatherPlan.entry); picked once per
+## new game and kept in the slot's profile (save_store.gd). Tests, bots and the
+## benchmark use the road seed, as before WX0.
+var weather_seed := 0
+## Tonight's one mid-night change has landed (saved, so a resume does not say
+## its line again), and one is waiting for a race to end.
+var _change_done := false
+var _change_waits := false
 # Weather's wetness drives the wet-road reflections; this is the `version` of
 # Weather last pushed to them.
 var _weather_seen := -1
@@ -139,6 +162,7 @@ func _ready() -> void:
 	FxSettings.load_settings()   # cockpit mirrors on/off and quality ([fx] in settings.cfg)
 	ViewSettings.load_settings()
 	CabinMods.load_settings()   # interior mods: trinket, shift knob, short shifter, strut bar ([interior])
+	DiscordPresence.load_settings()   # Rich Presence on/off ([discord] in settings.cfg)
 	GraphicsSettings.load_settings()   # preset, edge smoothing, render scale ([graphics])
 	DisplaySettings.load_settings()    # fullscreen, window size ([display]); applied below in a play session
 	KeyBindings.load_settings()        # the player's rebound keys ([keys])
@@ -231,8 +255,16 @@ func _ready() -> void:
 	# Off the map (fell off, outside the walls): fade and put the car back.
 	rescue = OffMapRescue.new(self, player)
 	add_child(rescue)
+	_park_at_start()
+	if TestBuild.on():
+		# One line in the log, so a bug report shows the build was the sandbox.
+		var u := RoadFrame.unroll(player.global_position)
+		print("TEST BUILD sandbox on: money and fuel free, no run-ending, put_back key. Car %s at x %.1f, engine %s, fitted: %s + %d Workshop items" % [
+			PlayerCar.chassis_kind(), u.x, "on" if player.engine_running else "off (X starts it)",
+			", ".join(PackedStringArray(player.mod_build.get("nodes", []))), (player.mod_build.get("bolt_ons", []) as Array).size()])
 	_setup_game_state()
 	_setup_police(benchmark)
+	_wire_police()
 	# Dynamic resolution holds the frame rate inside the tier; benchmark runs
 	# keep a fixed scale (comparable numbers) unless --dynres=1.
 	var dynres: DynamicResolution = null
@@ -258,6 +290,7 @@ func _ready() -> void:
 		recorder = DriveRecorder.new(self)
 		add_child(recorder)
 	add_child(saver)
+	add_child(DiscordPresence.new(self))   # dormant until the app id is set, never in tests
 
 ## Wet-road reflections (wet_reflections.gd). How wet the road is drawn:
 ## --wet=<0..1> (benchmark args) or NEON_WET=<0..1> pins it; otherwise
@@ -357,6 +390,10 @@ func _setup_world() -> void:
 	env.glow_bloom = 0.0
 	env.glow_hdr_threshold = 1.0
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
+	# TONE MAPPING + GRADE (2026-10-10): rolls the bright end off so lamps keep a
+	# hot core instead of clipping to flat orange, and leans the picture toward
+	# Amber vs. Dusk. All in the post pass glow already runs (color_grade.gd).
+	ColorGrade.apply(env)
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)
@@ -485,6 +522,7 @@ func _setup_road_shape() -> void:
 	road_seed = int(seed_env) if seed_env.is_valid_int() else (Benchmark.SEED if Benchmark.requested() else randi())
 	var road := _pick_road()
 	RoadMap.use(road, road_act)
+	RoadMap.known_stops = {}
 	if RoadMap.is_loop() and not seed_env.is_valid_int():
 		road_seed = RoadMap.seed_of(RoadMap.road_id)
 	if resume_place:
@@ -496,6 +534,8 @@ func _setup_road_shape() -> void:
 		# On a loop only the place on the lap matters: laps driven are dropped.
 		origin_index = RoadMap.lap_chunk(int(run.origin_index))
 		recenter_count = int(run.get("recenter_count", 0))
+		for sid in run.get("known_stops", []):
+			RoadMap.known_stops[String(sid)] = true
 		# The save's "sections" are not read back. They held each chunk's barrier
 		# roll when that was random (true / false); since RoadBarriers (R1) the
 		# barrier type and its crossover gap follow from the road seed alone
@@ -735,6 +775,8 @@ func _physics_process(_delta: float) -> void:
 		toggle_mute()
 	if Input.is_action_just_pressed("radio_next") and radio != null:
 		request_next_station()
+	if Input.is_action_just_pressed("put_back") and game_state.state == GameState.State.PLAYING:
+		put_back()
 
 ## Next station (N): with the cockpit built the driver's hand reaches the touch
 ## screen and the station changes on the tap (CockpitFrame.request_radio), in
@@ -814,6 +856,24 @@ func _setup_player() -> void:
 	CabinMods.attach(player)
 	StrutBar.sync(player)
 
+## A run starts parked at the kerb with the engine off; X starts it (Roy,
+## 2026-10-10). A saved run comes back the same way, beside where it was
+## saved. Not in automated tests or bot runs (OffMapRescue.parked_start).
+func _park_at_start() -> void:
+	if not OffMapRescue.parked_start():
+		return
+	var s := 0.0
+	if resume_place:
+		s = RoadFrame.s_at(RoadFrame.unroll(player.global_position).z)
+	rescue.park_at(s)
+
+## "Put me back on the road" (the pause menu row and the put_back key): the
+## test build's way out of any stuck state. False when it is not on offer.
+func put_back() -> bool:
+	if not TestBuild.on() or rescue == null:
+		return false
+	return rescue.request()
+
 # ---------- traffic (milestone 3, stage B step 3) ----------
 # Lane-follow traffic: the same raycast Vehicle as the player, see
 # traffic_car.gd / traffic_manager.gd. Count and draw distance come from the
@@ -824,6 +884,7 @@ func _setup_traffic() -> void:
 		moments.player = player
 	traffic = TrafficManager.new()
 	traffic.player = player
+	traffic.night_clock = night_clock
 	traffic.own_lanes = OWN_LANES
 	traffic.onc_lanes = ONC_LANES
 	traffic.car_count = TrafficSettings.car_count
@@ -888,13 +949,40 @@ func _setup_game_state() -> void:
 	gas_station = GasStation.new()
 	gas_station.player = player
 	add_child(gas_station)
+	# the oncoming carriageway's stations (a loop road only; none elsewhere)
+	gas_station_onc = GasStation.new()
+	gas_station_onc.side = -1
+	gas_station_onc.player = player
+	add_child(gas_station_onc)
 	add_child(PumpPanel.new(game_state, player, wallet, night_clock))
 	gas_station.pulled_up.connect(func(_s: float) -> void: game_state.open_station())
+	gas_station_onc.pulled_up.connect(func(_s: float) -> void: game_state.open_station())
 	add_child(WashScreen.new(game_state))
+	# Garage G0: the dawn card, the garage behind it and the plumbing around them.
+	# Live in real play (or NEON_GARAGE=1); every other run never meets them.
+	game_state.garage_enabled = GameState.wants_garage()
+	var dawn_card := DawnCard.new(game_state)
+	dawn_card.night_clock = night_clock
+	add_child(dawn_card)
+	dawn_card.bind_wallet(wallet)
+	var garage_screen := GarageScreen.new(game_state, player)
+	add_child(garage_screen)
+	garage_flow = GarageFlow.new(game_state, player)
+	add_child(garage_flow)
+	# Work board W2: Walt's board between the dawn card and the garage. On with
+	# the garage (NEON_SHOP=1 / 0 override it).
+	shop_day = ShopDay.new(wallet, night_clock)
+	shop_day.enabled = ShopDay.wants_shop(game_state.garage_enabled)
+	add_child(shop_day)
+	if shop_day.enabled:
+		shop_day.reload()
+		game_state.workboard_gate = shop_day.want_board
+		garage_screen.shop_day = shop_day
+		add_child(WorkBoardScreen.new(game_state, shop_day, wallet))
 	# Special vehicles: a flip ends the run (SpecialRunEnd). A restart is the
 	# stand-in until the run loop (stage C) owns what "ends the night" means.
 	var kind := PlayerCar.chassis_kind()
-	if SpecialRunEnd.has_limit(kind):
+	if SpecialRunEnd.has_limit(kind) and not TestBuild.on():  # sandbox: a flip does not restart
 		var special_end := SpecialRunEnd.new(player, kind)
 		special_end.run_ended.connect(func(_why: String) -> void: game_state.restart())
 		add_child(special_end)
@@ -910,12 +998,15 @@ func _setup_game_state() -> void:
 		radio.tune_to(int(run.radio))
 	if GameState.wants_title():
 		game_state.enter_title()   # the title shows over the frozen world; Drive is instant
+	else:
+		game_state.enter_garage_boot()   # no title: the dawn card and garage first
 	game_state.state_changed.connect(saver.on_state_changed)
 	game_state.restarting.connect(saver.on_restart)
 	game_state.quitting.connect(saver.save_now)
 	# 6 a.m.: tonight's cash goes into the bank (F0).
 	night_clock.night_ended.connect(func(_n: int) -> void: wallet.bank_night())
 	night_clock.night_ended.connect(func(_n: int) -> void: saver.save_now.call_deferred())
+	night_clock.night_ended.connect(game_state.request_dawn)   # after the bank, so the card shows it
 	run_end = RunEnd.new()
 	run_end.player = player
 	run_end.camera = camera
@@ -958,16 +1049,45 @@ func _setup_police(benchmark: bool) -> void:
 		police.player = player
 		police.traffic = traffic
 		police.heat = police_heat
+		# no centre barrier here: an oncoming lane to meet (the danger number, P5)
+		police.undivided_at = func(z: float) -> bool:
+			return RoadMap.period > 0 and RoadMap.gap_in(floori(RoadFrame.s_at(z) / RoadChunkBuilder.CHUNK_LEN))
 		add_child(police)
+		heat_icons.patrol = police
+		police.busted.connect(func(_cop: Node3D) -> void: heat_icons.say("Busted."))
+
+## The rulebook's inputs (P1): tonight's crackdown, the crossing, the lane's
+## flow (matching it is never speeding), lit districts, and contacts from the
+## wreck sensor (a crash with traffic, a touch on a cop).
+func _wire_police() -> void:
+	police_heat.world_mood = world_mood
+	police_heat.junction = junction
+	if traffic != null:
+		police_heat.flow_kmh = func() -> float:
+			var u := RoadFrame.unroll(player.global_position)
+			var city := traffic.city_at(u.z)
+			if u.x < 0.0:
+				return traffic.lane_speed(clampi(RoadChunkBuilder.lane_at(-u.x), 0, traffic.onc_lanes - 1), true, city) * 3.6
+			return traffic.lane_speed(clampi(RoadChunkBuilder.lane_at(u.x), 0, traffic.own_lanes - 1), false, city) * 3.6
+	police_heat.lit_here = func(pos: Vector3) -> bool:
+		if RoadMap.period <= 0:
+			return false
+		var chunk := floori(RoadFrame.s_at(RoadFrame.unroll(pos).z) / RoadChunkBuilder.CHUNK_LEN)
+		var kind := RoadMap.district_kind(RoadMap.district_of(chunk))
+		return kind == "downtown" or kind == "strip"
+	run_end.sensor.touched.connect(police_heat.on_contact)
 
 ## Dave reads the hour out. 8 p.m. only ever comes from the roll into the next
 ## night, right after his 6 a.m. sign-off, so it is skipped.
 func _on_hour(hour24: int) -> void:
+	var weather_spoke := false
 	if hour24 == NightClock.START_HOUR:
 		_begin_night(false)  # the night has already counted up (night_clock.gd)
 	else:
-		_weather_change(hour24)
-	if hour24 != NightClock.START_HOUR:
+		weather_spoke = _weather_change(hour24)
+	# Dave reads the hour unless he just gave the weather change (that line
+	# would be overwritten in the same frame and never heard).
+	if hour24 != NightClock.START_HOUR and not weather_spoke:
 		if hour24 == 2 and world_mood.crackdown_until < 0.0:
 			radio.announce(WorldMood.BAR_CLOSE_LINE)  # bar close starts on the hour
 		else:
@@ -978,8 +1098,8 @@ func _on_hour(hour24: int) -> void:
 ## purpose and must not be restarted halfway. NEON_WRECK=0 turns it off in play.
 func wrecks_on() -> bool:
 	var env := OS.get_environment("NEON_WRECK")
-	if Benchmark.requested() or env == "0":
-		return false
+	if Benchmark.requested() or env == "0" or TestBuild.on():
+		return false  # the test build's sandbox: crashes just happen
 	return not TestMode.active() or env == "1"
 
 ## Tonight's weather (weather.gd, planned by weather_plan.gd): NEON_WEATHER
@@ -988,13 +1108,34 @@ func wrecks_on() -> bool:
 ## (Weather.ROLL_ON) and starts already wet if it was raining before you got
 ## in the car.
 func _start_weather() -> void:
+	_resolve_weather_seed()
+	if race != null and not race.race_ended.is_connected(_on_race_ended_weather):
+		race.race_ended.connect(_on_race_ended_weather)
 	var pinned := Weather.env_level()
 	if pinned >= 0:
-		Weather.set_level(pinned, true)
+		Weather.set_level(pinned, true, Weather.env_snow_roads())
 	elif _plan_active():
 		_begin_night(true)
 	else:
 		Weather.reset()
+
+## The seed for the night plan. With saving on it lives in the slot profile:
+## a fresh run (nothing to resume) picks a new one, a resumed run from before
+## WX0 falls back to its road seed once and saves that. With saving off
+## (tests, bots, benchmark) it is the road seed, so those runs repeat.
+func _resolve_weather_seed() -> void:
+	if not SaveDirector.enabled:
+		weather_seed = road_seed
+		return
+	var s := SaveStore.weather_seed()
+	if s == 0 or run.is_empty():
+		s = road_seed if not run.is_empty() else maxi(randi() & 0x7fffffff, 1)
+		SaveStore.set_weather_seed(s)
+	weather_seed = s
+
+## The run save's "weather" block (save_director.gd capture()).
+func weather_save() -> Dictionary:
+	return Weather.capture(_change_done)
 
 ## The deck runs when rolling is on, or NEON_WEATHER=plan asks for it (the
 ## tests, a look at the plan with rain still off). Pinned weather, the
@@ -1010,9 +1151,20 @@ func _plan_active() -> bool:
 func _begin_night(boot: bool) -> void:
 	if not _plan_active():
 		return
-	var e := WeatherPlan.entry(night_clock.night, road_seed)
+	var e := WeatherPlan.entry(night_clock.night, weather_seed)
 	Weather.tonight = e
-	Weather.set_level(WeatherPlan.level_at(e, night_clock.minutes), boot)
+	_change_waits = false
+	var saved: Variant = run.get("weather") if boot else null
+	if saved is Dictionary and _saved_weather_ok(saved):
+		# A resumed run: its stage and live values snap back, and a change that
+		# had already landed does not land (or speak) again.
+		Weather.set_level(int(saved.stage), true, float(saved.get("road_snow", 0.0)) >= 1.0)
+		Weather.restore(saved)
+		_change_done = saved.get("change_done", false) == true
+	else:
+		Weather.set_level(WeatherPlan.level_at(e, night_clock.minutes), boot, e.snow_roads)
+		_change_done = e.change_hour >= 0 and night_clock.minutes >= WeatherPlan.minutes_of(e.change_hour)
+	_refresh_frost()
 	# Dave gives the forecast a few seconds into the night (not over his own
 	# 6 a.m. sign-off), only when the night is just beginning.
 	if night_clock.minutes < 30.0:
@@ -1021,15 +1173,45 @@ func _begin_night(boot: bool) -> void:
 			if night_clock.night == night and radio != null:
 				radio.announce(WeatherPlan.forecast_line(e)))
 
-## The hour struck: the night's one mid-night change lands on its hour.
-func _weather_change(hour24: int) -> void:
+## A saved weather block is used only if its stage is one this build knows
+## (a save from a newer build has stages past SLUSH: the plan's stage is used).
+static func _saved_weather_ok(d: Dictionary) -> bool:
+	var s: Variant = d.get("stage")
+	return (s is int or s is float) and float(s) == floorf(float(s)) \
+		and int(s) >= Weather.Level.DRY and int(s) <= Weather.Level.SLUSH
+
+## Frost follows the clock and the stage (a flag only; nothing draws it yet).
+func _refresh_frost() -> void:
+	Weather.set_frost(WeatherPlan.frost_at(Weather.tonight, Weather.level, night_clock.minutes) \
+		if not Weather.tonight.is_empty() else false)
+
+## The hour struck: the night's one mid-night change lands on its hour, or
+## waits for the race to end if one is on.
+## True when Dave said the change (his hour read then waits for next hour).
+func _weather_change(hour24: int) -> bool:
 	var e: Dictionary = Weather.tonight
-	if e.is_empty() or not _plan_active() or int(e.change_hour) != hour24:
-		return
-	Weather.set_level(int(e.change_to))
+	if e.is_empty() or not _plan_active():
+		return false
+	var spoke := false
+	if not _change_done and int(e.change_hour) == hour24:
+		if race != null and race.is_racing():
+			_change_waits = true
+		else:
+			spoke = _apply_weather_change(e)
+	_refresh_frost()
+	return spoke
+
+func _apply_weather_change(e: Dictionary) -> bool:
+	_change_waits = false
+	_change_done = true
+	Weather.set_level(int(e.change_to), false, e.snow_roads)
+	_refresh_frost()
 	var line := WeatherPlan.change_line(e)
-	if line != "" and radio != null:
-		radio.announce(line)
+	return line != "" and radio != null and radio.announce(line)
+
+func _on_race_ended_weather(_result: int) -> void:
+	if _change_waits and not Weather.tonight.is_empty() and _plan_active():
+		_apply_weather_change(Weather.tonight)
 
 ## Hour bands (living world step 2, night_bands.gd): the clock sets how much
 ## of the Traffic slider is on the road and which lines Dave adds. Off in the
@@ -1062,6 +1244,11 @@ func _on_event(e: int) -> void:
 
 func _process(delta: float) -> void:
 	_update_bands()
+	if not limit_line_said and radio != null and night_clock != null and night_clock.night == 1:
+		_limit_line_wait -= delta
+		if _limit_line_wait <= 0.0:
+			_limit_line_wait = 5.0
+			limit_line_said = radio.announce(RadioStations.LIMIT_LINE)
 	var pz := RoadFrame.unroll(player.position).z
 	Junction.focus_z = pz
 	_update_chunk_pool(pz)

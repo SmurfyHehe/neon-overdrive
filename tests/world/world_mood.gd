@@ -181,6 +181,7 @@ func _end(msg: String) -> bool:
 func _spawned_fast(traffic: TrafficManager, car: TrafficCar) -> bool:
 	var oncoming := car.direction > 0.0
 	for l in (traffic.onc_lanes if oncoming else traffic.own_lanes):
-		if absf(car.target_speed - TrafficCar.RB_SPEED - traffic.lane_speed(l, oncoming)) <= TrafficManager.SPEED_JITTER + 0.01:
+		# the lane's speed for the area the car is paced for (P3: city or highway)
+		if absf(car.target_speed - TrafficCar.RB_SPEED - traffic.lane_speed(l, oncoming, car.pace_city)) <= TrafficManager.SPEED_JITTER + 0.01:
 			return true
 	return false

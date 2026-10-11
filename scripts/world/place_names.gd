@@ -9,17 +9,26 @@ extends RefCounted
 # Cost of the names themselves: none. Lettering is drawn once at boot into a
 # texture array (word_atlas.gd) with the "road" font role (Overpass).
 
+const Rules := preload("res://scripts/traffic/police_rules.gd")
+const RoadMap := preload("res://scripts/world/road_map.gd")
+
 ## One entry per district key in districts.gd.
 ##   name:  what the area sign and the head unit say, capitals.
-##   speed: the number painted on the road at the area's start (decoration
-##          only: nothing in the game enforces a limit).
 ##   bus:   whether the outer lane gets a painted BUS here now and then.
+## The number on the signs and the road is not here: it is the posted limit
+## the police act on (PoliceRules.POSTED_KMH), by the map's area class, so the
+## signs cannot say one thing and the cops another (police step P3).
 const AREAS := {
-	"downtown": {"name": "DOWNTOWN", "speed": 50, "bus": true},
-	"residential": {"name": "RESIDENTIAL", "speed": 30, "bus": false},
-	"strip": {"name": "THE STRIP", "speed": 40, "bus": false},
-	"industrial": {"name": "INDUSTRIAL", "speed": 60, "bus": false},
+	"downtown": {"name": "DOWNTOWN", "bus": true},
+	"residential": {"name": "RESIDENTIAL", "bus": false},
+	"strip": {"name": "THE STRIP", "bus": false},
+	"industrial": {"name": "INDUSTRIAL", "bus": false},
 }
+
+## How far apart the round repeater signs stand inside an area, in chunks
+## (8 x 50 m = 400 m), and which chunk of each stretch carries one.
+const REPEAT_CHUNKS := 8
+const REPEAT_AT := 3
 
 ## First line of the area gantry, and the distance line of the advance sign.
 const ENTERING := "ENTERING"
@@ -44,8 +53,17 @@ static func area_name(district: String) -> String:
 		return String(AREAS[district].name)
 	return district.to_upper()
 
-static func speed_of(district: String) -> int:
-	return int(AREAS[district].speed) if AREAS.has(district) else 50
+## The posted limit in chunk `chunk_index`, km/h: 60 in a city district, 100
+## on a highway stretch (a road with no map is city, as for the police).
+static func limit_at(chunk_index: int) -> int:
+	return int(Rules.posted_limit(RoadMap.area_at((float(chunk_index) + 0.5) * RoadMap.L)))
+
+## Every limit a sign or the road can show.
+static func limits() -> Array:
+	var out: Array = []
+	for v in Rules.POSTED_KMH.values():
+		out.append(int(v))
+	return out
 
 static func has_bus(district: String) -> bool:
 	return bool(AREAS[district].bus) if AREAS.has(district) else false
@@ -59,9 +77,8 @@ static func atlas_words() -> Array:
 	var out: Array = [ENTERING, ADVANCE, MAIN_STREET]
 	for k in AREAS:
 		out.append(area_name(k))
-		var sp := str(speed_of(k))
-		if not out.has(sp):
-			out.append(sp)
+	for v in limits():
+		out.append(str(v))
 	for s in CROSS_STREETS:
 		out.append(s)
 	for w in PAINT_WORDS:

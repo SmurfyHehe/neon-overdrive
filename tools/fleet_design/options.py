@@ -41,17 +41,22 @@ for p in P1['parts']:
 P2['options'] = {
     'front_bumper': {'stock': STOCK, 'lip': M.lip(P2), 'race': M.race_front(P2)},
     'rear_bumper': {'stock': STOCK, 'diffuser': M.diffuser(P2)},
-    'hood': {'stock': STOCK, 'vented': M.vented_hood(P2, 0.40, 1.10)},
-    'skirts': {'stock': STOCK, 'skirts': M.skirts(P2), 'widebody': M.widebody(P2, 0.07)},
+    'hood': {'stock': STOCK, 'vented': M.vented_hood(P2, 0.32, 1.02)},
+    'skirts': {'stock': {'label': 'Riveted box blisters', 'ops': []}, 'skirts': M.skirts(P2), 'widebody': M.widebody(P2, 0.07),
+               # Roy 291: both. The body-shop option blends the arches into the body instead of bolting boxes on.
+               'smooth': {'label': 'Smooth blended arches', 'ops': [
+                   {'op': 'remove', 'tag': 'flares'},
+                   {'op': 'curve', 'curve': 'hw', 'keys': [(0.32, 0.915), (1.16, 0.915), (1.26, 0.85), (2.80, 0.85),
+                                                           (2.90, 0.915), (3.72, 0.915)]}]}},
     'spoiler': {'stock': {'label': 'Roof spoiler', 'ops': []},
                 'big': {'label': 'Big roof wing', 'ops': [
                     {'op': 'remove', 'tag': 'spoiler'},
-                    {'op': 'add', 'part': {'type': 'roof_spoiler', 'tag': 'spoiler', 's0': 3.40, 's1': 3.98, 'y0': 1.35,
+                    {'op': 'add', 'part': {'type': 'roof_spoiler', 'tag': 'spoiler', 's0': 3.34, 's1': 3.92, 'y0': 1.35,
                                            'y1': 1.31, 'span': 1.32, 'thick': 0.055, 'brake_light': True}}]},
                 'none': M.no_spoiler()},
     'wheels': _wheel_set('6-spoke', ('turbofan', M.wheels('turbofan', 'Turbofan', 0.72)), ('mesh', M.wheels('mesh', 'Mesh', 0.74)),
                          ('split', M.wheels('split', 'Split 5-spoke', 0.76, 'rim_dark'))),
-    'exhaust': {'stock': {'label': 'Dual (one side)', 'ops': []}, 'center': M.exhaust(P2, 'center'), 'dual': M.exhaust(P2, 'dual', 0.04)},
+    'exhaust': {'stock': {'label': 'Single', 'ops': []}, 'center': M.exhaust(P2, 'center'), 'dual': M.exhaust(P2, 'dual', 0.04)},
     'stance': _stance(),
 }
 
@@ -78,7 +83,7 @@ P4['options'] = {
                  {'op': 'remove', 'tag': 'hoops'},
                  {'op': 'open', 'value': []},
                  {'op': 'cabin', 'values': {'R': 1.95, 'C': 2.34, 'D': 1.88, 'pillars': []}},
-                 {'op': 'curve', 'curve': 'top', 'keys': [(1.30, 1.12), (1.95, 1.13), (2.34, 0.81)]}]},
+                 {'op': 'curve', 'curve': 'top', 'keys': [(1.30, 1.04), (1.95, 1.05), (2.34, 0.81)]}]},
              'rollbar': {'label': 'Roll bar', 'ops': [
                  {'op': 'remove', 'tag': 'hoops'},
                  {'op': 'add', 'part': {'type': 'bedbar', 's': 2.20, 'h': 1.13, 'x': 0.44}}]}},
@@ -94,13 +99,13 @@ P4['options'] = {
 
 # ------------------------------------------------------------------ P5
 P5['options'] = {
-    'hood': {'stock': {'label': 'Cowl scoop', 'ops': []},
-             'shaker': M.scoop(P5, 0.98, 1.42, 0.44, 0.17, 'Shaker scoop'),
-             'flat': M.flat_hood('Flat hood (sleeper)')},
+    'hood': {'stock': {'label': 'Power bulges', 'ops': []},
+             'cowl': M.scoop(P5, 0.62, 1.40, 0.56, 0.09, 'Cowl scoop'),
+             'shaker': M.scoop(P5, 0.74, 1.16, 0.44, 0.15, 'Shaker scoop')},
     'front_bumper': {'stock': STOCK, 'chin': M.lip(P5)},
-    'spoiler': {'stock': {'label': 'Ducktail', 'ops': []},
-                'drag': M.gt_wing(P5, 0.24, chord=0.30, label='Drag wing'),
-                'smooth': {'label': 'Smooth deck', 'ops': [{'op': 'curve', 'curve': 'top', 'keys': [(5.20, 1.00), (5.27, 0.99)]}]}},
+    'spoiler': {'stock': {'label': 'Plain deck', 'ops': []},
+                'ducktail': M.ducktail(P5, 0.05),
+                'drag': M.gt_wing(P5, 0.24, chord=0.30, label='Drag wing')},
     'skirts': {'stock': STOCK, 'skirts': M.skirts(P5)},
     'wheels': _wheel_set('Deep dish', ('five', M.wheels('5spoke', '5-spoke', 0.74)), ('mono', M.wheels('mono', 'Monoblock black', 0.76, 'rim_dark')),
                          ('steel', M.wheels('steel', 'Steelies (sleeper)', 0.70))),

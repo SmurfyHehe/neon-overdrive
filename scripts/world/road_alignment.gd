@@ -366,7 +366,19 @@ func _new_vertical_segment(i: int) -> void:
 	# Enough chunks to reach the target grade, plus a little held after it.
 	_vseg_left = ceili(absf(target - g) * r / L) + _vrng.randi_range(1, 3)
 
+## Tests only: a road written out by hand instead of rolled. Each entry is
+## [radius in metres (+ = left, 0 = straight), chunks]; the list repeats. Set
+## it before the road is made and clear it after (tests/traffic/rival_*.gd).
+static var scripted: Array = []
+var _script_i := 0
+
 func _new_segment() -> void:
+	if not scripted.is_empty():
+		var seg: Array = scripted[_script_i % scripted.size()]
+		_script_i += 1
+		_seg_k = 0.0 if float(seg[0]) == 0.0 else 1.0 / float(seg[0])
+		_seg_left = int(seg[1])
+		return
 	if _rng.randf() >= curviness:
 		_seg_k = 0.0
 		_seg_left = _rng.randi_range(2, 6)

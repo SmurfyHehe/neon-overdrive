@@ -17,6 +17,7 @@ extends Node
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
+const TestBuild := preload("res://scripts/core/test_build.gd")
 
 signal changed(cash: int, bank: int)
 signal banked(amount: int)
@@ -24,8 +25,13 @@ signal banked(amount: int)
 const TEST_CASH := 250
 const TEST_ACTION := &"debug_add_cash"
 
+## The last shop payments ("day4:halloran_brakes"). pay_shop refuses a receipt
+## it has already seen, so a replayed or reloaded day can never pay twice.
+const RECEIPTS_KEPT := 10
+
 var cash := 0
 var bank := 0
+var receipts: Array[String] = []
 var _dirty := false
 
 ## Loads the slot's money at once (not in _ready, which can run after the
@@ -34,6 +40,7 @@ func _init() -> void:
 	var w := SaveStore.load_wallet()
 	cash = int(w.cash)
 	bank = int(w.bank)
+	receipts.assign(w.receipts)
 
 func _ready() -> void:
 	if OS.is_debug_build() and not InputMap.has_action(TEST_ACTION):
@@ -58,6 +65,8 @@ func add_cash(amount: int) -> void:
 
 ## Takes up to `amount` from tonight's cash; returns what it took.
 func take_cash(amount: int) -> int:
+	if TestBuild.on():
+		return 0  # sandbox: nothing is ever lost
 	var t := clampi(amount, 0, cash)
 	cash -= t
 	_changed()
@@ -65,6 +74,8 @@ func take_cash(amount: int) -> int:
 
 ## Takes up to `amount` from the bank; returns what it took.
 func take_bank(amount: int) -> int:
+	if TestBuild.on():
+		return maxi(amount, 0)  # sandbox: paid, and the bank is not touched
 	var t := clampi(amount, 0, bank)
 	bank -= t
 	_changed()
@@ -72,9 +83,25 @@ func take_bank(amount: int) -> int:
 
 ## Pays `amount` from the bank, all or nothing (the pump: FuelTank.refuel).
 func spend_bank(amount: int) -> bool:
+	if TestBuild.on():
+		return amount >= 0  # sandbox: every payment goes through, for free
 	if amount < 0 or amount > bank:
 		return false
 	bank -= amount
+	_changed()
+	return true
+
+## Shop pay (Walt's board): straight into the bank, never cash. One write for
+## the money and the receipt together, so a crash cannot pay without the
+## receipt or the receipt without the pay. A receipt already seen pays
+## nothing and returns false.
+func pay_shop(amount: int, receipt: String) -> bool:
+	if amount < 0 or receipt == "" or receipt in receipts:
+		return false
+	bank += amount
+	receipts.append(receipt)
+	while receipts.size() > RECEIPTS_KEPT:
+		receipts.remove_at(0)
 	_changed()
 	return true
 
@@ -91,7 +118,7 @@ func _changed() -> void:
 	_save()
 
 func _save() -> bool:
-	_dirty = not SaveStore.save_wallet(cash, bank)
+	_dirty = not SaveStore.save_wallet(cash, bank, receipts)
 	return not _dirty
 
 ## "$1,250"

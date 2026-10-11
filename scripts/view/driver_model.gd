@@ -28,11 +28,17 @@ extends Node3D
 #
 # Animations are a small state machine on the right hand, all procedural and
 # interruptible, driven by what the car and radio actually do (not by keys):
-#   - manual gear change: when the lever starts moving (CockpitFrame follows
-#     the vehicle's requested gear) the hand reaches the knob, rides it through
-#     the gate and returns to the rim;
-#   - automatic: a finger flick on the paddle (right on an upshift, left on a
-#     downshift), hands stay on the rim;
+#   - manual gear change (2026-10-09, Roy: the lever must travel the gate and
+#     the hand must not pass through the knob): the shift starts the lever's
+#     move (CockpitFrame, on the car's shift_time), the hand reaches the knob
+#     in a share of that time, wraps it (palm over the ball, fingers down the
+#     front, thumb inboard: the hand's grip tube is the knob, so nothing of
+#     the hand is inside it) and the lever only travels once the hand holds
+#     it; the hand is locked to the knob through the move, so it tilts with
+#     the lever and lands in gear as the box engages, then returns to the rim;
+#   - sequential stick (SEMI on a car with one): the same, a tap fore or aft;
+#   - automatic, and SEMI on a car with paddles: a finger flick on the paddle
+#     (right on an upshift, left on a downshift), hands stay on the rim;
 #   - radio (touch screen, 2026-10-07): the next-station key only asks
 #     (request_radio); the hand reaches the HeadUnit, taps the next tile (past
 #     the last one it presses the knob: off) and returns. The station changes
@@ -48,6 +54,12 @@ extends Node3D
 #     and rides it round as the glass moves, on a switch car it rests on the
 #     armrest with the thumb on the rocker; back to the rim once the window
 #     has stopped;
+#   - flip off (2026-10-11, the K key): the left hand leaves the rim, goes out
+#     of the open side window and up past the door mirror, back of the hand
+#     to whoever it is for, middle finger up, and comes back. A tap is one
+#     gesture; while the key is held the hand stays out and pumps. With the
+#     window shut it does the same behind the glass. Glove only, like every
+#     other hand (no arm, no sleeve), and it changes nothing but the hand;
 #   - idle: breathing, and a head bob from the road.
 # Hand contact: one mechanism for every reach. The moment the hand arrives (the
 # knob, the handbrake grip) or the finger lands (the screen, the radio knob),
@@ -93,6 +105,14 @@ const LINK_WIDE := 0.012       # across the chain
 const LINK_BAR := 0.0045
 const LINK_TILT_DEG := 35.0
 const THIGH := 0.47
+## The knees fall a little apart (2026-10-10): with them straight up, both
+## thighs ran through the bottom of the wheel rim in every car
+## (tests/fleet/driver_fit.gd). The IK pole leans this far outboard per leg.
+const KNEE_SPLAY := 0.35
+## The leg bones are scaled to the car (2026-10-10): full-length legs in a low
+## car's short footwell folded the knees up into the wheel rim. A car's legs
+## are as long as its furthest pedal needs, plus LEG_SLACK for the pedal's
+## travel, never under LEG_SCALE_MIN of the full THIGH + SHIN (leg_lengths).
 const SHIN := 0.45
 ## Where the hands hold the rim at rest, in degrees round the rim for the right
 ## hand (0 = 3 o'clock, up is positive; the left hand mirrors it about 12
@@ -127,11 +147,51 @@ const RECLINE_DEG := 12.0
 const HEAD_Y := 0.49
 const REACH_SECS := 0.22
 const RETURN_SECS := 0.22
+## A manual shift's reach is this share of the car's shift_time, between
+## REACH_MIN_SECS and REACH_SECS, so the lever has the rest of the shift to
+## travel and lands as the box engages.
+const REACH_SHARE := 0.45
+const REACH_MIN_SECS := 0.08
+const KNOB_LINGER_SECS := 0.08   # the hand stays on the knob this long after it lands
+const SHIFT_HOLD_MAX_SECS := 1.2 # and never longer than this in all
+## The hand on the knob: its grip tube (local y, see _hand_mesh) runs across
+## the car through the ball, the back of the hand up and a little back so
+## the fingers drape forward and down over the ball and the cuff stays low
+## (KNOB_BACK, car space for an upright lever: the sightline cap), the wrist
+## back and out toward the shoulder (KNOB_WRIST); the mitten's hollow is
+## not centred on its grip axis (the fingertips curl in under it), so the
+## ball sits KNOB_LIFT (negative: above) from the axis to clear the palm and
+## the fingertips alike. Leans with the lever by KNOB_TILT_FOLLOW.
+const KNOB_BACK := Vector3(-0.10, 0.92, 0.22)
+const KNOB_WRIST := Vector3(0.40, 0.0, 0.85)
+const KNOB_LIFT := -0.0035
+## How much of the lever's tilt the hand takes (1 = it leans with the lever).
+const KNOB_TILT_FOLLOW := 1.0
 const PRESS_SECS := 0.12
 const PADDLE_SECS := 0.25
 const BRAKE_REACH_SECS := 0.20
 const WINDOW_REACH_SECS := 0.25
 const WINDOW_LINGER_SECS := 0.3   # the hand stays this long after the window stops
+## Flip off (the left hand, K). The pose comes from the car's own cabin: the
+## hand sits on the ray GESTURE_YAW_DEG left of straight ahead from the eye, at
+## about eye height, GESTURE_OUT past the door line with the window open or
+## GESTURE_IN inside the pane with it shut. Outside the 20 degree road cone
+## (tests/view/gesture_flip_off.gd).
+const GESTURE_REACH_SECS := 0.25
+const GESTURE_RETURN_SECS := 0.25
+const GESTURE_MIN_HOLD_SECS := 0.8   # a tap keeps the hand up this long
+const GESTURE_PUMP_EVERY := 0.6      # while the key is held
+const GESTURE_PUMP_SECS := 0.26
+const GESTURE_PUMP := 0.035          # m, how far a pump jabs up
+const GESTURE_OUT := 0.13
+const GESTURE_IN := 0.085
+const GESTURE_BELOW_EYE := 0.04      # the fist's centre under the eye line
+const GESTURE_MIRROR_CLEAR := 0.13   # the fist's centre over the door mirror when it is right behind it
+const GESTURE_WINDOW_OPEN := 0.5     # the window counts as open from half way down
+const GESTURE_FINGER_IN := 0.35      # the fist takes over from the mitten this far into the reach
+enum { AIM_AHEAD, AIM_LEFT, AIM_BACK }
+## Degrees left of straight ahead, by aim (AIM_LEFT with look left held, AIM_BACK with look back).
+const GESTURE_YAW_DEG := [35.0, 80.0, 125.0]
 const HEAD_YAW_RAD := 0.20       # at full steer fraction
 const LEAN_RAD_PER_G := 0.08
 const HIP_HALF := 0.09
@@ -146,6 +206,8 @@ const MAX_RADIO_REQUESTS := 4
 
 ## The right hand touched something (one of the CONTACT_ names).
 signal hand_contact(target: StringName)
+## The flip-off reached the top: once per gesture (a hold's pumps do not repeat it).
+signal gesture_peak(window_open: bool)
 
 enum Act { GRIP, SHIFT_REACH, SHIFT_HOLD, SHIFT_RETURN, RADIO_REACH, RADIO_PRESS, RADIO_RETURN, BRAKE_REACH, BRAKE_HOLD, BRAKE_RETURN }
 
@@ -160,6 +222,8 @@ var bracelet: MeshInstance3D # on the right hand
 var legs := {}               # side -> {thigh, shin, foot}
 var glove_style := DEFAULT_GLOVE
 var grip_deg := DEFAULT_GRIP_DEG   # this car's rest grip, right hand
+var thigh_len := THIGH       # this car's leg bones (leg_lengths)
+var shin_len := SHIN
 ## Per hand (side -> {}): "w" the hand's angle round the rim in car space
 ## (degrees, 0 = 3 o'clock, up positive, unwrapped), "rim" its angle on the
 ## rim itself (turns with the wheel), "grip" true while it holds the rim,
@@ -174,11 +238,20 @@ var _still := 0.0                # seconds the wheel has been still
 var shuffle_count := 0           # hands that let go to shuffle (tests)
 var act := Act.GRIP
 var act_t := 0.0
-enum LeftAct { GRIP, WINDOW_REACH, WINDOW_HOLD, WINDOW_RETURN }
+enum LeftAct { GRIP, WINDOW_REACH, WINDOW_HOLD, WINDOW_RETURN, GESTURE_REACH, GESTURE_HOLD, GESTURE_RETURN }
 var left_act := LeftAct.GRIP
 var left_t := 0.0
 var _left_from := Transform3D()
 var _left_xf := Transform3D()
+var finger_hand: MeshInstance3D  # the left fist with the middle finger up, shown instead of the mitten mid-gesture
+var gesture_peaks := 0           # every top the hand reached, pumps included (tests)
+var _gesture_key := false        # the key is down
+var _gesture_wanted := false     # a press waiting for the window to stop
+var _gesture_aim := AIM_AHEAD
+var _gesture_open := false       # this gesture goes out of the window
+var _pump_t := 0.0               # seconds left of the current pump
+var _next_pump := 0.0
+var _pump_counted := true
 var _window_idle := 0.0          # seconds since the window last moved
 var radio_requests := 0          # next-station presses waiting for the hand
 var contact_count := 0
@@ -198,6 +271,9 @@ var _head_bob := 0.0
 var _prev_vy := 0.0
 var _breath := 0.0
 var _foot_target := Vector3.ZERO
+var _left_foot := Vector3.ZERO
+var _reach_secs := REACH_SECS      # this shift's reach
+var _linger := 0.0                 # time on the knob since the lever landed
 var _mat: StandardMaterial3D
 var tri_count := 0
 ## How far the shin ends fall short of the ankle targets (0 when the leg can
@@ -210,6 +286,9 @@ func _init(cockpit: CockpitFrame) -> void:
 	name = "Driver"
 	# the seat: pelvis 2 cm over the cushion, 2 cm ahead of its centre (the coupe's 0.50, 0.34)
 	pelvis = Vector3(float(cockpit.cab.seat_x), float(cockpit.cab.seat_h) + 0.02, float(cockpit.cab.seat_z) - 0.02)
+	var bones := leg_lengths(cockpit.cab)
+	thigh_len = bones.x
+	shin_len = bones.y
 
 func _ready() -> void:
 	_mat = CockpitKit.material(0.9, 0.0, 0.05)
@@ -223,6 +302,7 @@ func _ready() -> void:
 		hands[side] = _build_hand(side)
 		legs[side] = _build_leg(side)
 	_build_bracelet()
+	_build_finger_hand()
 	for n in find_children("*", "VisualInstance3D", true, false):
 		(n as VisualInstance3D).layers = CockpitFrame.DRIVER_BIT
 		if n is GeometryInstance3D:
@@ -231,6 +311,7 @@ func _ready() -> void:
 	_hand_xf = _grip_transform(1)
 	_left_xf = _grip_transform(-1)
 	_foot_target = _pedal_ankle("throttle")
+	_left_foot = _pedal_ankle("clutch") if player.realistic_clutch else _dead_pedal_ankle()
 
 ## Cockpit view: the camera is the head, so head and torso go.
 func set_cockpit(on: bool) -> void:
@@ -302,12 +383,8 @@ func _build_hand(side: int) -> MeshInstance3D:
 ## cuff band. Hand space: x outward from the hub, y up the rim, z toward the driver.
 static func _hand_mesh(k: CockpitKit, side: int, glove: Color, cuff: Color) -> void:
 	var sx := float(side)
-	k.box(Vector3(0.035, 0.085, 0.075), Vector3(sx * 0.038, 0.0, 0.01), glove)                 # palm
-	k.box(Vector3(0.06, 0.08, 0.03), Vector3(sx * 0.012, 0.0, -0.038), glove)                  # fingers over the far side
-	k.box(Vector3(0.03, 0.075, 0.03), Vector3(-sx * 0.028, 0.0, -0.030), glove)                # fingertips curling in
-	k.box(Vector3(0.05, 0.028, 0.028), Vector3(sx * 0.008, 0.03, 0.036), glove)                # thumb
-	k.box(Vector3(0.025, 0.028, 0.025), Vector3(-sx * 0.02, 0.03, 0.03), glove)                # thumb tip
-	k.box(Vector3(0.05, 0.03, 0.07), Vector3(sx * WRIST_X, 0.0, 0.06), glove)                  # wrist, toward the driver
+	for b in hand_boxes(side):
+		k.box(b[0], b[1], glove)
 	# the closed cuff: a capped cylinder along +z around the wrist, nothing past
 	# it, in the glove colour, with a thin accent band round it
 	k.cylinder(CUFF_R, CUFF_Z0, CUFF_Z1, Vector3(sx * WRIST_X, 0.0, 0.0), glove, 10, Basis(Vector3.RIGHT, PI / 2.0))
@@ -315,6 +392,42 @@ static func _hand_mesh(k: CockpitKit, side: int, glove: Color, cuff: Color) -> v
 	band.ring_sector(CUFF_R, CUFF_R + 0.003, 0.0, TAU, BAND_Z0, BAND_Z1, cuff, 10)
 	band.offset(Vector3(sx * WRIST_X, 0.0, 0.0))
 	k.merge(band)
+
+## The solid parts of a hand as [size, centre] boxes in hand space (the mesh
+## is built from these; tests check nothing it holds is inside one). The
+## grip tube along local y through the origin is the hollow between them.
+static func hand_boxes(side: int) -> Array:
+	var sx := float(side)
+	return [
+		[Vector3(0.035, 0.085, 0.075), Vector3(sx * 0.038, 0.0, 0.01)],     # palm
+		[Vector3(0.06, 0.08, 0.03), Vector3(sx * 0.012, 0.0, -0.038)],      # fingers over the far side
+		[Vector3(0.03, 0.075, 0.03), Vector3(-sx * 0.028, 0.0, -0.030)],    # fingertips curling in
+		[Vector3(0.05, 0.028, 0.028), Vector3(sx * 0.008, 0.03, 0.036)],    # thumb
+		[Vector3(0.025, 0.028, 0.025), Vector3(-sx * 0.02, 0.03, 0.03)],    # thumb tip
+		[Vector3(0.05, 0.03, 0.07), Vector3(sx * WRIST_X, 0.0, 0.06)],      # wrist, toward the driver
+	]
+
+## The flip-off fist, left hand, in the mitten's hand space so the two swap in
+## place: the back of the hand on -x, the wrist and the same closed cuff along
+## +z, the knuckles at -z with the middle finger standing straight out of them.
+static func _finger_mesh(k: CockpitKit, glove: Color, cuff: Color) -> void:
+	k.box(Vector3(0.04, 0.085, 0.075), Vector3(-0.03, 0.0, 0.01), glove)                       # the fist: back of the hand
+	k.box(Vector3(0.03, 0.085, 0.045), Vector3(0.005, 0.0, -0.012), glove)                     # curled fingers
+	k.box(Vector3(0.022, 0.06, 0.026), Vector3(0.031, -0.006, -0.008), glove)                  # thumb across them
+	k.box(Vector3(0.024, 0.021, 0.042), Vector3(-0.028, 0.0, -0.047), glove)                   # middle finger
+	k.box(Vector3(0.02, 0.018, 0.036), Vector3(-0.028, 0.0, -0.085), glove)                    # its tip
+	k.box(Vector3(0.05, 0.03, 0.07), Vector3(-WRIST_X, 0.0, 0.06), glove)                      # wrist
+	k.cylinder(CUFF_R, CUFF_Z0, CUFF_Z1, Vector3(-WRIST_X, 0.0, 0.0), glove, 10, Basis(Vector3.RIGHT, PI / 2.0))
+	var band := CockpitKit.new()
+	band.ring_sector(CUFF_R, CUFF_R + 0.003, 0.0, TAU, BAND_Z0, BAND_Z1, cuff, 10)
+	band.offset(Vector3(-WRIST_X, 0.0, 0.0))
+	k.merge(band)
+
+func _build_finger_hand() -> void:
+	var k := CockpitKit.new()
+	_finger_mesh(k, GLOVE_STYLES[glove_style].glove, GLOVE_STYLES[glove_style].cuff)
+	finger_hand = _part(k, "HandLFinger")
+	finger_hand.visible = false
 
 ## Gold Cuban-link bracelet round the right wrist (Roy, 2026-10-06): LINKS flat
 ## oblong links lying on the cuff, long side along the chain, each tilted the
@@ -345,9 +458,9 @@ func _build_bracelet() -> void:
 
 func _build_leg(side: int) -> Dictionary:
 	var th := CockpitKit.new()
-	_segment(th, THIGH, 0.075, 0.06, JEANS)
+	_segment(th, thigh_len, 0.075, 0.06, JEANS)
 	var sh := CockpitKit.new()
-	_segment(sh, SHIN, 0.055, 0.045, JEANS)
+	_segment(sh, shin_len, 0.055, 0.045, JEANS)
 	sh.box(Vector3(0.09, 0.05, 0.10), Vector3(0.0, 0.02, 0.0), JEANS)             # knee
 	var ft := CockpitKit.new()
 	# foot along -z from the ankle: boot and sole, toe up a little
@@ -360,6 +473,38 @@ func _build_leg(side: int) -> Dictionary:
 	return {"thigh": thigh, "shin": shin, "foot": foot}
 
 # ---------- IK ----------
+
+## Which way a knee bends: up, a little forward, and out to its own side.
+static func knee_pole(side: int) -> Vector3:
+	return Vector3(float(side) * KNEE_SPLAY, 1.0, -0.4)
+
+## Where each foot rests, by side (the right on the throttle or the brake, the
+## left on the clutch or the dead pedal): the ankle targets _pedal_ankle and
+## _dead_pedal_ankle give with the pedals up.
+static func rest_ankles(cab: Dictionary) -> Dictionary:
+	var at: Vector3 = cab.pedals
+	return {
+		1: [at + Vector3(0.0, -0.20, 0.114), at + Vector3(-0.12, -0.20, 0.114)],
+		-1: [at + Vector3(-0.24, -0.20, 0.114), at + Vector3(-0.27, -0.21, 0.17)],
+	}
+
+const LEG_SLACK := 0.07
+const LEG_SCALE_MIN := 0.80
+
+## This car's (thigh, shin): the full bones, scaled down to its footwell.
+static func leg_lengths(cab: Dictionary) -> Vector2:
+	var far := 0.0
+	var ankles := rest_ankles(cab)
+	for side in ankles:
+		for ankle in ankles[side]:
+			far = maxf(far, rest_hip(cab, side).distance_to(ankle))
+	return Vector2(THIGH, SHIN) * clampf((far + LEG_SLACK) / (THIGH + SHIN), LEG_SCALE_MIN, 1.0)
+
+## A leg's hip in car space for a cabin, as _hip() gives it at rest (the
+## torso's recline tips the hip joint 4 mm back). CockpitFrame opens the
+## footwell round the legs with it before the driver exists.
+static func rest_hip(cab: Dictionary, side: int) -> Vector3:
+	return Vector3(float(cab.seat_x) + float(side) * HIP_HALF, float(cab.seat_h) + 0.04, float(cab.seat_z) - 0.016)
 
 ## Two-bone IK: joint positions for a chain root -> elbow -> end reaching for
 ## `target`, bones l1 and l2, bending toward `pole`. Returns [elbow, end].
@@ -504,11 +649,27 @@ static func _grab(h: Dictionary, wheel_deg: float) -> void:
 func _wheel_to_car(local_xf: Transform3D) -> Transform3D:
 	return frame.wheel_mount.transform * frame.wheel.transform * local_xf
 
-## The right hand on the gear knob, car space.
+## The right hand wrapped round the gear knob, car space, riding the lever:
+## the grip tube through the ball (KNOB_LIFT up), the pose turned with the
+## lever's tilt so the wrist follows the knob through the gate.
 func _lever_hand_transform() -> Transform3D:
-	var knob := frame.lever.transform * frame.lever_knob.position
-	var b := Basis(Vector3.BACK, deg_to_rad(-90.0))   # palm down over the knob, fingers forward
-	return Transform3D(b, knob + Vector3(0.0, 0.035, 0.0))
+	var lever: Node3D = frame.lever
+	var b := Basis.IDENTITY.slerp(lever.basis, KNOB_TILT_FOLLOW) * _hand_basis(1, KNOB_BACK, KNOB_WRIST)
+	var p := lever.transform * (frame.lever_knob.position + Vector3(0.0, KNOB_LIFT, 0.0))
+	return Transform3D(b, p)
+
+## The hand holds the knob right now (CockpitFrame starts the lever on this).
+func hand_on_knob() -> bool:
+	return act == Act.SHIFT_HOLD
+
+## How far the hand's grip is from where it should sit on the knob, metres
+## (0 while it holds it; tests).
+func knob_grip_error() -> float:
+	return (hands[1] as Node3D).position.distance_to(_lever_hand_transform().origin)
+
+## The hand's grip pose on the knob for an upright lever (tests).
+static func knob_hand_basis() -> Basis:
+	return _hand_basis(1, KNOB_BACK, KNOB_WRIST)
 
 ## The right hand on the handbrake grip, car space: palm down over the lever,
 ## thumb inboard, riding the lever's lift.
@@ -554,6 +715,69 @@ func _switch_hand_transform(pressed: float) -> Transform3D:
 	var p := frame.switch_press_position() - b * thumb + Vector3(0.0, 0.012 * (1.0 - pressed), 0.0)
 	return Transform3D(b, p)
 
+## The door line: how far out (|x|) the driver's door and its glass reach at the belt.
+func door_line() -> float:
+	return maxf(float(frame.cab.door_x), float(frame.cab.glass_x))
+
+## The car has a pane in the driver's door (the open kei has none).
+func has_door_glass() -> bool:
+	return float(frame.cab.glass_x) > 0.0
+
+## |x| of the door pane at height y (it leans in toward the roof, as CockpitFrame builds it).
+func pane_x(y: float) -> float:
+	var cab := frame.cab
+	if not has_door_glass():
+		return float(cab.door_x)
+	var top: float = float(cab.belt_y) + 0.30 if cab.open_top else float(cab.get("glass_top", float(cab.roof_y) - 0.03))
+	var x_top := minf(float(cab.glass_x), float((cab.a_pillar[1] as Vector3).x) - 0.01)
+	var t := clampf((y - frame.glass_bottom) / maxf(top - frame.glass_bottom, 0.01), 0.0, 1.0)
+	return lerpf(float(cab.glass_x), x_top, t)
+
+## The flip-off pose, car space; pump 0..1 jabs it up.
+func _gesture_transform(pump: float) -> Transform3D:
+	var cab := frame.cab
+	var eye: Vector3 = cab.eye
+	var yaw := deg_to_rad(GESTURE_YAW_DEG[_gesture_aim])
+	var y := eye.y - GESTURE_BELOW_EYE
+	var x := 0.0
+	if _gesture_open:
+		x = -(door_line() + GESTURE_OUT)
+	else:
+		x = -(pane_x(y + 0.06) - GESTURE_IN)
+	var z := eye.z - absf(x - eye.x) / tan(yaw)
+	if _gesture_open:
+		# right behind the door mirror: up past it, not through it
+		var dm: Vector3 = cab.door_mirror
+		if absf(z - dm.z) < 0.16 and absf(-x - absf(dm.x)) < 0.16:
+			y = maxf(y, dm.y + GESTURE_MIRROR_CLEAR)
+	var aim := Vector3(-sin(yaw), 0.0, -cos(yaw))
+	return Transform3D(_hand_basis(-1, aim, Vector3.DOWN), Vector3(x, y + GESTURE_PUMP * pump, z))
+
+## From one hand transform to another for the gesture, e 0..1. The hand swings
+## wide (a curve pulled toward a point just outside the sill, or along the door
+## under it with the window shut) instead of cutting across the pillar and the view.
+func _gesture_path(from: Transform3D, to: Transform3D, e: float) -> Transform3D:
+	var eye: Vector3 = frame.cab.eye
+	var via := Vector3(-(door_line() + 0.05), frame.glass_bottom + 0.14, eye.z - 0.25)
+	if not _gesture_open:
+		via = Vector3(-(pane_x(frame.glass_bottom) - GESTURE_IN), frame.glass_bottom, eye.z - 0.25)   # along the door, under the sill
+	var p := from.origin.lerp(via, e).lerp(via.lerp(to.origin, e), e)
+	return Transform3D(Basis(from.basis.get_rotation_quaternion().slerp(to.basis.get_rotation_quaternion(), e)), p)
+
+## The flip-off key, from the camera each physics tick (tests call it too):
+## a press asks for one gesture, holding keeps the hand out. `aim` is where the
+## driver is looking when the key goes down (AIM_).
+func gesture_key(down: bool, aim: int = AIM_AHEAD) -> void:
+	if down and not _gesture_key and (left_act == LeftAct.GESTURE_RETURN or not is_gesturing()):
+		_gesture_wanted = true
+		_gesture_aim = clampi(aim, AIM_AHEAD, AIM_BACK)
+	_gesture_key = down
+
+func _begin_gesture() -> void:
+	_gesture_wanted = false
+	_gesture_open = frame.window >= GESTURE_WINDOW_OPEN or not has_door_glass()
+	_start_left(LeftAct.GESTURE_REACH)
+
 ## Ankle position for a pedal, car space: behind and a little below the pad.
 func _pedal_ankle(pedal: String) -> Vector3:
 	var pivot: Node3D = frame.pedals[pedal]
@@ -594,7 +818,8 @@ func _process(delta: float) -> void:
 func _update_events() -> void:
 	var p := player
 	if p.gear != _last_gear:
-		if p.automatic_transmission and p.has_paddles():
+		# AUTO flicks a paddle only on a paddle box; SEMI on a paddle car always does
+		if (p.automatic_transmission and p.has_paddles()) or (not p.automatic_transmission and not frame.lever_needs_hand()):
 			paddle_side = 1 if p.gear > _last_gear else -1
 			paddle_t = PADDLE_SECS
 		_last_gear = p.gear
@@ -603,8 +828,9 @@ func _update_events() -> void:
 	# on its way back goes straight back to the knob; the radio press is
 	# dropped (the station already changed), a shift under a held handbrake
 	# moves the lever on its own.
-	var moving := frame.lever_moving and not p.automatic_transmission
+	var moving := frame.lever_moving and frame.lever_needs_hand()
 	if moving and not _lever_was_moving and not _is_brake() and act != Act.SHIFT_REACH and act != Act.SHIFT_HOLD:
+		_reach_secs = clampf(REACH_SHARE * p.shift_time, REACH_MIN_SECS, REACH_SECS)
 		_start(Act.SHIFT_REACH)
 	_lever_was_moving = moving
 	var brake_on := p.handbrake_input > 0.5
@@ -664,14 +890,19 @@ func _step_act(delta: float) -> void:
 			elif player.handbrake_input > 0.5:
 				_start(Act.BRAKE_REACH)   # pulled while the hand was busy, still held
 		Act.SHIFT_REACH:
-			var t := clampf(act_t / REACH_SECS, 0.0, 1.0)
+			var t := clampf(act_t / _reach_secs, 0.0, 1.0)
 			_hand_xf = _hand_from.interpolate_with(_lever_hand_transform(), _ease(t))
 			if t >= 1.0:
 				_contact(CONTACT_GEAR)
 				_start(Act.SHIFT_HOLD)
 		Act.SHIFT_HOLD:
+			# locked to the knob: the lever moves under the hand (CockpitFrame
+			# waits for hand_on_knob, then travels), the hand goes with it
 			_hand_xf = _lever_hand_transform()
-			if (not frame.lever_moving) or act_t > 0.8:
+			if not frame.lever_moving:
+				_linger += delta
+			if (_linger >= KNOB_LINGER_SECS and not frame.lever_moving) or act_t > SHIFT_HOLD_MAX_SECS:
+				_linger = 0.0
 				_start(Act.SHIFT_RETURN)
 		Act.SHIFT_RETURN:
 			var t := clampf(act_t / RETURN_SECS, 0.0, 1.0)
@@ -690,7 +921,7 @@ func _step_act(delta: float) -> void:
 				_pressed = true
 				_contact(_radio_contact)   # the station changes here
 			if t >= 1.0:
-				if radio_requests > 0 and not (frame.lever_moving and not player.automatic_transmission):
+				if radio_requests > 0 and not (frame.lever_moving and frame.lever_needs_hand()):
 					_begin_radio()   # another press waiting: on to the next tile
 				else:
 					_start(Act.RADIO_RETURN)
@@ -722,7 +953,39 @@ func _step_left(delta: float) -> void:
 	var working := frame.window_direction != 0
 	_window_idle = 0.0 if working else _window_idle + delta
 	var crank := frame.window_control == "crank"
+	# a flip-off waits for the window to stop, then takes the hand from wherever it is
+	if _gesture_wanted and not working and (left_act == LeftAct.GESTURE_RETURN or not is_gesturing()):
+		_begin_gesture()
 	match left_act:
+		LeftAct.GESTURE_REACH:
+			var t := clampf(left_t / GESTURE_REACH_SECS, 0.0, 1.0)
+			_left_xf = _gesture_path(_left_from, _gesture_transform(0.0), _ease(t))
+			if t >= 1.0:
+				gesture_peaks += 1
+				gesture_peak.emit(_gesture_open)
+				_pump_t = 0.0
+				_next_pump = GESTURE_PUMP_EVERY
+				_start_left(LeftAct.GESTURE_HOLD)
+		LeftAct.GESTURE_HOLD:
+			if _gesture_key and left_t >= _next_pump and _pump_t <= 0.0:
+				_next_pump += GESTURE_PUMP_EVERY
+				_pump_t = GESTURE_PUMP_SECS
+				_pump_counted = false
+			var pump := 0.0
+			if _pump_t > 0.0:
+				_pump_t = maxf(_pump_t - delta, 0.0)
+				pump = sin((1.0 - _pump_t / GESTURE_PUMP_SECS) * PI)
+				if not _pump_counted and _pump_t <= GESTURE_PUMP_SECS * 0.5:
+					_pump_counted = true
+					gesture_peaks += 1
+			_left_xf = _gesture_transform(pump)
+			if not _gesture_key and left_t >= GESTURE_MIN_HOLD_SECS and _pump_t <= 0.0:
+				_start_left(LeftAct.GESTURE_RETURN)
+		LeftAct.GESTURE_RETURN:
+			var t := clampf(left_t / GESTURE_RETURN_SECS, 0.0, 1.0)
+			_left_xf = _gesture_path(_left_from, grip, _ease(t))
+			if t >= 1.0:
+				_start_left(LeftAct.GRIP)
 		LeftAct.GRIP:
 			_left_xf = grip
 			if working:
@@ -757,17 +1020,28 @@ func _place_hands() -> void:
 	for side in [-1, 1]:
 		var hand_xf: Transform3D = _hand_xf if side > 0 else _left_xf
 		(hands[side] as Node3D).transform = hand_xf
+	# the fist with the finger up stands in for the left mitten through the middle of a gesture
+	var fist := left_act == LeftAct.GESTURE_HOLD \
+		or (left_act == LeftAct.GESTURE_REACH and left_t >= GESTURE_REACH_SECS * GESTURE_FINGER_IN) \
+		or (left_act == LeftAct.GESTURE_RETURN and left_t < GESTURE_RETURN_SECS * (1.0 - GESTURE_FINGER_IN))
+	finger_hand.transform = _left_xf
+	finger_hand.visible = fist
+	(hands[-1] as Node3D).visible = not fist
 
 func _place_legs(delta: float) -> void:
 	var p := player
 	var want := _pedal_ankle("brake") if p.brake_amount > 0.05 else _pedal_ankle("throttle")
 	_foot_target = _foot_target.move_toward(want, 1.6 * delta)
-	var targets := {1: _foot_target, -1: _pedal_ankle("clutch") if p.realistic_clutch else _dead_pedal_ankle()}
+	# the left foot: on the clutch with the clutch model on, and for a shift on
+	# a stick car (the box opens its own clutch, the foot shows it), else the dead pedal
+	var clutching := p.realistic_clutch or (frame.lever_needs_hand() and (p.clutch_amount > 0.05 or frame.lever_moving))
+	_left_foot = _left_foot.move_toward(_pedal_ankle("clutch") if clutching else _dead_pedal_ankle(), 2.0 * delta)
+	var targets := {1: _foot_target, -1: _left_foot}
 	for side in [-1, 1]:
 		var l: Dictionary = legs[side]
 		var hip := _hip(side)
 		var ankle: Vector3 = targets[side]
-		var ik := two_bone(hip, ankle, THIGH, SHIN, Vector3(0.0, 1.0, -0.4))
+		var ik := two_bone(hip, ankle, thigh_len, shin_len, knee_pole(side))
 		_aim(l.thigh, hip, ik[0], Vector3.RIGHT)
 		_aim(l.shin, ik[0], ik[1], Vector3.RIGHT)
 		var foot: Node3D = l.foot
@@ -806,6 +1080,10 @@ func leg_gap(side: int) -> float:
 
 func is_busy() -> bool:
 	return act != Act.GRIP
+
+## The left hand is off the rim on a flip-off (reach, hold or the way back).
+func is_gesturing() -> bool:
+	return left_act >= LeftAct.GESTURE_REACH
 
 ## The left hand is off the rim, at the window (tests).
 func left_at_window() -> bool:

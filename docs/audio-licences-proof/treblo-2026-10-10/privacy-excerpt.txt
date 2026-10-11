@@ -1,0 +1,11 @@
+﻿SOURCE: https://treblo.com/privacy
+FETCHED: 2026-10-10 via built-in browser (15,616 chars; only keyword-matching lines inspected, not copied in full)
+PAGE DATE: Last updated September 22nd, 2026
+=====
+Lines matching train/watermark/output/commercial/public:
+- Content you post publicly is visible to others.
+- music and other outputs generated for you, and technical artifacts ...
+- Services to develop and improve the Services, including to train and ...
+- submitted to or generated through our developer API to train or ...   [context: API content NOT used to train, per API Terms s4]
+- Other users and the public. Content you publish (such as posted ...
+No match for: watermark, fingerprint, Content ID.

@@ -1,9 +1,13 @@
 extends SceneTree
 
 # One Tuner screen test: runs the real Game.tscn and checks that
-# - T opens the screen on the Setup page (Tuner redesign PR 3) with no key hints;
-#   E/Q change page, Down/Right move a notch and write the car, presets apply
-#   and Stock puts the car back; the raw gearing panel still works
+# - T opens the screen on the Quick page (tuner overhaul, 2026-10-10) with the
+#   car's own name in the header and no key hints; only Quick is listed until
+#   Detailed is on; a preset on show is previewed and only fitted on Enter; a
+#   dial moves its real settings; changed rows carry a dot; every row has a
+#   "You'll feel" line; Backspace undoes
+# - with Detailed on, E/Q change page, Down/Right move a notch and write the car,
+#   presets apply and Stock puts the car back; the raw gearing panel still works
 # - the four exhaust sliders show the car's exhaust tune and write the player's
 #   spec (spec.exhaust), and the live EngineSynth.tune follows at once even
 #   though the game is paused
@@ -65,14 +69,70 @@ func _run() -> void:
 	await _tap(KEY_T)
 	await _until(func(): return game.game_state.state == GameState.State.TUNING, 5.0)
 	_check(screen.visible and paused, "T should open the Tuner screen and pause")
-	_check(screen.current_page() == "setup" and screen.preset_buttons[0].has_focus(), "T should open on the Setup page with Stock focused")
+	_check(screen.current_page() == "quick", "T should open on the Quick page, on %s" % screen.current_page())
+	_check(screen.car_label.text.contains("Coupe - Sports coupe") and not screen.car_label.text.contains("P1"), "the header should name the car: %s" % screen.car_label.text)
 	_check(not screen.auto.is_visible_in_tree(), "the Mechanic (Auto-Tune) page should not show after T")
 	_check(is_equal_approx(screen.exhaust.sliders.loudness.value, preset.loudness) and is_equal_approx(screen.exhaust.sliders.flame.value, preset.flame), "exhaust sliders should start on the car's preset")
 	_check(not screen.car_label.text.contains("T or Y") and not screen.hint.text.contains("Esc"), "no key hints on the screen")
 
-	# --- keyboard navigation: E to Tyres, Down to front pressure, Right one notch ---
+	# --- Quick page: only page listed while Detailed is off (not saved: that is Roy's settings file) ---
+	screen.set_detailed(false, false)
+	_check(screen.visible_page_ids().size() == 1 and not screen.page_labels[2].visible, "only Quick should be listed while Detailed is off")
 	await _tap(KEY_E)
-	_check(screen.current_page() == "tyres", "E should go to the Tyres page, on %s" % screen.current_page())
+	_check(screen.current_page() == "quick", "E should stay on Quick while Detailed is off")
+	_check(screen.rows.size() == 6 and screen.hint.text.contains(TunerFeel.PREFIX), "the Quick page should have six rows and a feel line: %s" % screen.hint.text)
+	# preset on show: previewed, the car untouched until Enter
+	await _tap(KEY_RIGHT)
+	await _tap(KEY_RIGHT)
+	_check(screen.preset_show == 2 and screen.model.preset == "Stock" and is_equal_approx(player.spec.front_static_camber, 0.0), "looking at Grip should not fit it")
+	_check(screen.preview_label.visible and screen.preview_label.text.contains("GRIP") and screen.rows[0].value.text.contains("preview"), "Grip should be previewed: %s / %s" % [screen.preview_label.text, screen.rows[0].value.text])
+	await _tap(KEY_ENTER)
+	_check(screen.preset_label.text == "Setup: Grip" and player.spec.front_static_camber < 0.0, "Enter should fit Grip (label %s, camber %f)" % [screen.preset_label.text, player.spec.front_static_camber])
+	_check(not screen.preview_label.visible and screen.rows[0].name.text.contains(TunerScreen.CHANGED_DOT), "a fitted preset: no preview, a dot on the row (%s)" % screen.rows[0].name.text)
+	await _tap(KEY_BACKSPACE)
+	_check(screen.preset_label.text == "Setup: Stock" and is_equal_approx(player.spec.front_static_camber, 0.0), "Backspace should take Grip off again (label %s)" % screen.preset_label.text)
+	_check(not screen.rows[0].name.text.contains(TunerScreen.CHANGED_DOT), "no dot on the Preset row at Stock")
+	# Grip / Slide dial: one notch toward Slide moves the rear bar and marks the row
+	await _tap(KEY_DOWN)
+	var arb0: float = player.spec.rear_arb_ratio
+	_check(screen.hint.text.contains("One notch toward Slide"), "a dial should preview both ways: %s" % screen.hint.text)
+	await _tap(KEY_RIGHT)
+	_check(player.spec.rear_arb_ratio > arb0 and screen.model.dial("q_grip_slide") == 1, "Right should move Grip / Slide one notch (bar %f -> %f, dial %d)" % [arb0, player.spec.rear_arb_ratio, screen.model.dial("q_grip_slide")])
+	_check(screen.rows[1].name.text.contains(TunerScreen.CHANGED_DOT) and screen.rows[1].bar.now == 6, "the moved dial should show a dot and sit one right of the middle")
+	_check(screen.preset_label.text.contains("(modified)"), "a dial should mark the setup modified")
+	await _tap(KEY_BACKSPACE)
+	_check(is_equal_approx(player.spec.rear_arb_ratio, arb0) and screen.model.dial("q_grip_slide") == 0, "Backspace should put the dial back")
+	# Pull / Top speed dial: toward Pull shortens the final drive, on the car too
+	await _tap(KEY_DOWN)
+	await _tap(KEY_DOWN)
+	var fd0: float = player.spec.final_drive
+	await _tap(KEY_LEFT)
+	_check(player.spec.final_drive > fd0 and is_equal_approx(player.final_drive, player.spec.final_drive) and screen.model.dial("q_pull_top") == -1, "Left should shorten the gearing (%f -> %f)" % [fd0, player.spec.final_drive])
+	_check(screen.undo() and is_equal_approx(player.spec.final_drive, fd0) and not screen.undo(), "undo should put the gearing back, and then have nothing left")
+	# Ask Walt: Right picks the goal (not started here: a search launches a second Godot)
+	await _tap(KEY_DOWN)
+	await _tap(KEY_RIGHT)
+	_check(screen.walt_goal == 1 and screen.rows[4].value.text == "Top speed", "Right on Ask Walt should pick Top speed: %s" % screen.rows[4].value.text)
+	screen._walt_finish()
+	_check(screen.rows[4].value.text != "Top speed" and is_equal_approx(player.spec.final_drive, fd0), "Walt back with nothing: the row says so and the car is untouched")
+	# every row, here and on the full pages, has a feel line
+	for pg in [TunerModel.quick_page()] + TunerModel.pages():
+		for st in pg.settings:
+			_check(TunerFeel.for_setting(st) != "", "no feel line for %s" % st.id)
+	for k in TuningPanel.KNOBS:
+		_check(TunerFeel.for_path(k[2]) != "", "no feel line for the raw %s" % k[2])
+	for ep in TuneParams.exhaust_paths():
+		_check(TunerFeel.for_path(ep) != "", "no feel line for %s" % ep)
+
+	# --- Detailed on: the full pages are listed and Q/E reach them ---
+	screen.set_detailed(true, false)
+	_check(screen.visible_page_ids().size() == 13 and screen.page_labels[2].visible, "Detailed should list every page")
+	await _tap(KEY_E)
+	_check(screen.current_page() == "setup" and screen.preset_buttons[0].has_focus(), "E should go to Setup with Stock focused")
+
+	# --- keyboard navigation: E to Tires, Down to front pressure, Right one notch ---
+	await _tap(KEY_E)
+	_check(screen.current_page() == "tyres" and screen.page_title.text == "TIRES", "E should go to the Tires page, on %s" % screen.current_page())
 	var p0: float = player.spec.front_tyre_pressure
 	await _tap(KEY_DOWN)
 	await _tap(KEY_RIGHT)
@@ -82,6 +142,9 @@ func _run() -> void:
 	var prow: Dictionary = screen.rows[1]
 	_check(prow.line != null and prow.line.text.begins_with("High"), "front pressure up should say what it does: %s" % (prow.line.text if prow.line else "no line"))
 	_check(prow.bar.zones.size() == TunerModel.NOTCHES, "the pressure bar should carry a zone per notch")
+	_check(prow.name.text.contains(TunerScreen.CHANGED_DOT) and not screen.rows[2].name.text.contains(TunerScreen.CHANGED_DOT), "only the changed row should carry a dot")
+	_check(screen.page_labels[2].text.contains(TunerScreen.CHANGED_DOT) and not screen.page_labels[3].text.contains(TunerScreen.CHANGED_DOT), "the Tires page should carry a dot in the list")
+	_check(screen.hint.text.contains(TunerFeel.PREFIX), "a settings row should have a feel line: %s" % screen.hint.text)
 	var rp: Dictionary = screen.rows[2]  # rear pressure: amber at its ends on the simple page, never red
 	_check(rp.bar.zones[0] == SettingDanger.Level.AMBER and not rp.bar.zones.has(SettingDanger.Level.RED), "rear pressure zones: %s" % str(rp.bar.zones))
 	await _tap(KEY_Q)
@@ -94,8 +157,19 @@ func _run() -> void:
 	# --- the raw gearing panel (Advanced) still drives the Auto-Tune lock labels ---
 	var fd: HSlider = screen.manual.sliders.final_drive
 	fd.value = fd.value + 0.1
+	_check(screen.manual.name_labels.final_drive.text.begins_with(TuningPanel.CHANGED_DOT) and not screen.manual.name_labels.gear_1.text.begins_with(TuningPanel.CHANGED_DOT), "the raw panel should dot the changed row only")
 	_check(is_equal_approx(player.spec.final_drive, fd.value), "the Advanced final drive slider should write the spec")
 	_check(screen.auto.lock_boxes["final_drive"].text.contains("%.2f" % fd.value), "Auto-Tune lock label should follow the slider: %s" % screen.auto.lock_boxes["final_drive"].text)
+
+	# --- exhaust page: the focused slider's feel line; one slider dragged is one undo ---
+	screen.show_page("exhaust")
+	_check(screen.hint.text.contains("Only what you hear"), "the focused exhaust slider should have its feel line: %s" % screen.hint.text)
+	var undo0 := screen.undo_stack.size()
+	screen.exhaust.sliders.loudness.value = 0.5
+	screen.exhaust.sliders.loudness.value = 0.55
+	_check(screen.undo_stack.size() == undo0 + 1, "dragging one slider should be one undo step (%d -> %d)" % [undo0, screen.undo_stack.size()])
+	screen.undo()
+	_check(is_equal_approx(player.spec.exhaust.loudness, preset.loudness) and is_equal_approx(audio.synth.tune.loudness, preset.loudness), "undo should put the exhaust back, on the synth too")
 
 	# --- exhaust sliders: spec and the live synth, while paused ---
 	screen.exhaust.sliders.loudness.value = 0.9

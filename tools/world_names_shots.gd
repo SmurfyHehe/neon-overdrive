@@ -137,16 +137,18 @@ func _scan() -> void:
 			seen["sign_%d" % ci] = true
 			for k in signs.multimesh.visible_instance_count:
 				var cd := signs.multimesh.get_instance_custom_data(k)
-				if int(round(cd.a)) != RoadSigns.PANEL:
+				var st := int(round(cd.a))
+				# a repeater has no panel: its round limit plate is the thing to look at
+				if st != RoadSigns.PANEL and not (kind == "repeater" and st == RoadSigns.ROUND):
 					continue
 				var xf := signs.global_transform * signs.multimesh.get_instance_transform(k)
 				var n := -xf.basis.x.normalized()
 				var r := xf.basis.z.normalized()
-				var dists := [70.0, 28.0, 12.0] if kind == "gantry" else [60.0, 22.0]
+				var dists := [70.0, 28.0, 12.0] if kind == "gantry" else ([35.0, 12.0] if kind == "repeater" else [60.0, 22.0])
 				var lateral := 6.0 if kind == "gantry" else 8.5
 				for d in dists:
 					var at: Vector3 = xf.origin + n * float(d) - r * lateral
-					at.y = xf.origin.y - (4.7 if kind == "gantry" else 2.8)
+					at.y = xf.origin.y - (4.7 if kind == "gantry" else (1.6 if kind == "repeater" else 2.8))
 					queue.append(["%s_chunk%d_%03dm" % [kind, ci, int(d)], Transform3D(Basis(), at).looking_at(xf.origin, Vector3.UP), xf.origin])
 	var j: Variant = game.get("junction")
 	if j is Node3D and not seen.has("junction"):

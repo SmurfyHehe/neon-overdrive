@@ -70,8 +70,13 @@ func _on_state_changed(new_state: GameState.State, _old: GameState.State) -> voi
 
 func _enter() -> void:
 	active = true
-	free_cam.global_transform = chase.global_transform
-	free_cam.fov = chase.fov
+	# Start where the view is now: the chase camera while driving, the pause
+	# look's orbit when opened from the pause menu.
+	var seen := get_viewport().get_camera_3d()
+	if seen == null or seen == free_cam:
+		seen = chase
+	free_cam.global_transform = seen.global_transform
+	free_cam.fov = seen.fov
 	var e := free_cam.global_transform.basis.get_euler()
 	_pitch = e.x
 	_yaw = e.y
@@ -88,6 +93,7 @@ func _leave() -> void:
 		if is_instance_valid(layer):
 			layer.visible = true
 	hidden_layers.clear()
+	chase.reset_orbit()   # back from photo mode: straight behind the car
 	chase.current = true
 
 func _process(delta: float) -> void:

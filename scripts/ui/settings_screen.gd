@@ -19,6 +19,8 @@ signal closed
 
 const GameInfo := preload("res://scripts/core/game_info.gd")
 const LogFolder := preload("res://scripts/core/log_folder.gd")
+const DiscordPresence := preload("res://scripts/core/discord_presence.gd")
+const TestBuild := preload("res://scripts/core/test_build.gd")
 
 const PAGES: Array[String] = ["Sound", "Picture", "Driving", "Controls", "Game"]
 ## What a mixer channel is called on the Sound page (the rest use their own name).
@@ -38,11 +40,13 @@ const GROUPS := [
 		["steer_left", "Steer left"], ["steer_right", "Steer right"], ["reverse", "Reverse gear (when stopped)"]]],
 	["Gears & Engine", [
 		["shift_up", "Shift up (manual)"], ["shift_down", "Shift down (manual)"], ["toggle_gearbox", "Gearbox: auto / semi / manual"],
-		["clutch", "Clutch (hold, manual)"], ["starter", "Starter (hold, manual)"]]],
-	["Camera", [["camera_cycle", "Camera smoothing"], ["camera_view", "Chase / cockpit view"], ["look_back", "Look back (hold)"], ["look_left", "Look left (cockpit, hold)"], ["look_right", "Look right (cockpit, hold)"], ["look_up", "Look up (cockpit, hold)"], ["look_down", "Look down (cockpit, hold)"], ["window", "Side window (hold: down, tap: up)"]]],
-	["Audio & Radio", [["mute", "Mute"], ["radio_next", "Next radio station"]]],
+		["clutch", "Clutch (hold, manual)"], ["starter", "Start / stop the engine"]]],
+	["Camera", [["camera_cycle", "Camera smoothing"], ["camera_view", "Chase / cockpit view"], ["look_back", "Look back (hold)"], ["look_left", "Look left (hold)"], ["look_right", "Look right (hold)"], ["look_up", "Look up (hold)"], ["look_down", "Look down (hold)"], ["window", "Side window (hold: down, tap: up)"]]],
+	["Lights", [["turn_left", "Indicator left"], ["turn_right", "Indicator right"], ["hazard", "Hazard lights"]]],
+	["Driver", [["flip_off", "Flip off"], ["idle_action", "Idle action"]]],
+	["Audio & Radio", [["mute", "Mute"], ["map", "Map"], ["radio_next", "Next radio station"]]],
 	["Photo mode", [["photo_mode", "Photo mode"], ["photo_forward", "Forward"], ["photo_back", "Back"], ["photo_left", "Left"], ["photo_right", "Right"], ["photo_down", "Down"], ["photo_up", "Up"], ["photo_fast", "Faster (hold)"], ["photo_look_left", "Look left"], ["photo_look_right", "Look right"], ["photo_look_up", "Look up"], ["photo_look_down", "Look down"], ["photo_fov_narrow", "Zoom in"], ["photo_fov_wide", "Zoom out"], ["photo_shot", "Save photo"]]],
-	["Menus", [["pause", "Pause / back"], ["tuning_panel", "Tuning panel"], ["autotune_panel", "Auto-Tune panel"]]],
+	["Menus", [["pause", "Pause / back"], ["tuning_panel", "Tuning panel"], ["autotune_panel", "Auto-Tune panel"], ["put_back", "Put me back on the road (test build)"]]],
 ]
 
 var game_state: GameState   # null on the title screen
@@ -60,6 +64,7 @@ var gfx_aa: OptionButton
 var gfx_scale: HSlider
 var gfx_scale_label: Label
 var gfx_mirrors: OptionButton
+var gfx_car_paint: OptionButton
 var gfx_dynres: OptionButton
 var gfx_cap: OptionButton
 var gfx_auto_label: Label
@@ -83,15 +88,11 @@ var copy_log_button: Button
 var log_status: Label
 var car_option: OptionButton
 var car_restart_button: Button
-var service_button: Button
 var tow_button: Button
-## Garage stand-ins the pause menu hands over (they act on the running game).
-var service_action: Callable
+## Test stand-ins the pause menu hands over (they act on the running game).
 var tow_action: Callable
 var race_action: Callable   # start (or give up) a race against a test rival, until meet spots exist
-var wash_action: Callable   # the garage wash mini-game
 var race_button: Button
-var wash_button: Button
 var keys_dirty := false   # rebinds not saved yet
 
 var _capture := {}        # {action, slot, button} while waiting for a key
@@ -288,6 +289,31 @@ func _add_option(parent: Control, text: String, items: Array, on_select: Callabl
 	row.add_child(o)
 	return o
 
+## Cost dots (GraphicsSettings.COST) after a row's control: 1 to 3 of three
+## lit. Returns the dots' box (named "CostDots", lit count in its metadata).
+func _cost_dots(control: Control, key: String) -> Control:
+	var n: int = GraphicsSettings.COST.get(key, 0)
+	var box := HBoxContainer.new()
+	box.name = "CostDots"
+	box.set_meta("cost", n)
+	box.tooltip_text = GraphicsSettings.COST_NAMES[n]
+	box.mouse_filter = Control.MOUSE_FILTER_PASS
+	box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	box.add_theme_constant_override("separation", 4)
+	for i in 3:
+		var dot := Panel.new()
+		dot.custom_minimum_size = Vector2(9, 9)
+		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = AMBER if i < n else Color(AMBER, 0.18)
+		sb.set_corner_radius_all(5)
+		dot.add_theme_stylebox_override("panel", sb)
+		box.add_child(dot)
+	var row := control.get_parent()
+	row.add_child(box)
+	row.move_child(box, control.get_index() + 1)
+	return box
+
 func _add_check(parent: Control, text: String, on: bool, on_toggle: Callable) -> CheckButton:
 	var c := CheckButton.new()
 	c.text = text
@@ -324,6 +350,7 @@ func _sync_all() -> void:
 	gfx_scale.value = GraphicsSettings.render_scale
 	gfx_scale_label.text = "%d%%" % roundi(GraphicsSettings.render_scale * 100.0)
 	gfx_mirrors.select(FxSettings.mirror_quality)
+	gfx_car_paint.select(GraphicsSettings.car_paint)
 	gfx_dynres.select(0 if GraphicsSettings.dynamic_res else 1)
 	gfx_cap.select(maxi(GraphicsSettings.FPS_CAPS.find(GraphicsSettings.fps_cap), 0))
 	gfx_auto_label.visible = GraphicsSettings.auto_picked
@@ -363,6 +390,10 @@ func _build_picture_page(parent: Control) -> Control:
 		resolution_option.set_item_metadata(resolution_option.item_count - 1, r)
 
 	_heading(page, "Graphics")
+	var dots_note := Label.new()
+	dots_note.text = "Dots: how much a setting can cost in speed"
+	dots_note.modulate.a = 0.6
+	page.add_child(dots_note)
 	gfx_preset = _add_option(page, "Quality", ["Low", "Medium", "High", "Custom"], func(i: int) -> void:
 		if i < GraphicsSettings.PRESETS.size():
 			GraphicsSettings.set_preset(GraphicsSettings.PRESETS[i])
@@ -381,12 +412,21 @@ func _build_picture_page(parent: Control) -> Control:
 		FxSettings.set_mirror_quality(i)
 		GraphicsSettings.refresh_preset()
 		_graphics_changed())
+	gfx_car_paint = _add_option(page, "Car paint", GraphicsSettings.CAR_PAINT_NAMES, func(i: int) -> void:
+		GraphicsSettings.set_car_paint(i)
+		_graphics_changed())
 	gfx_dynres = _add_option(page, "Dynamic resolution", ["On", "Off"], func(i: int) -> void:
 		GraphicsSettings.set_dynamic_res(i == 0)
 		_graphics_changed())
-	gfx_cap = _add_option(page, "Frame cap", ["V-sync", "30 fps"], func(i: int) -> void:
+	gfx_cap = _add_option(page, "Frame cap", GraphicsSettings.FPS_CAP_NAMES, func(i: int) -> void:
 		GraphicsSettings.set_fps_cap(GraphicsSettings.FPS_CAPS[i])
 		_graphics_changed())
+	_cost_dots(gfx_aa, "aa")
+	_cost_dots(gfx_scale, "render_scale")
+	_cost_dots(gfx_mirrors, "mirrors")
+	_cost_dots(gfx_car_paint, "car_paint")
+	_cost_dots(gfx_dynres, "dynamic_res")
+	_cost_dots(gfx_cap, "fps_cap")
 	gfx_auto_label = Label.new()
 	gfx_auto_label.text = "Quality picked automatically on first launch"
 	gfx_auto_label.add_theme_color_override("font_color", AMBER)
@@ -417,6 +457,9 @@ func _build_picture_page(parent: Control) -> Control:
 		func(v: float) -> void:
 			TrafficSettings.set_light_glow(v)
 			TrafficSettings.save_settings())
+	_cost_dots(traffic_cars_slider, "cars")
+	_cost_dots(traffic_dist_slider, "draw_distance")
+	_cost_dots(night_lights_slider, "night_lights")
 	# City lights: the signalised crossing and red lights for traffic. The
 	# crossing is part of the road layout, so it appears (or goes) on Restart.
 	city_lights_check = _add_check(page, "City lights (on restart)", TrafficSettings.city_lights, func(on: bool) -> void:
@@ -481,6 +524,10 @@ func _build_game_page(parent: Control) -> Control:
 	tips_check = _add_check(page, "Tips", GameSettings.tips, func(on: bool) -> void:
 		GameSettings.set_tips(on)
 		GameSettings.save_settings())
+	# Discord Rich Presence (discord_presence.gd): dormant until the app id is set.
+	_add_check(page, "Show on Discord", DiscordPresence.enabled, func(on: bool) -> void:
+		DiscordPresence.set_enabled(on)
+		DiscordPresence.save_settings())
 	copy_log_button = _add_button(page, "Copy my log", _copy_log)
 	log_status = Label.new()
 	log_status.add_theme_color_override("font_color", AMBER)
@@ -507,6 +554,13 @@ func _build_game_page(parent: Control) -> Control:
 		CabinMods.set_trinket(DashTrinket.IDS[clampi(i, 0, DashTrinket.IDS.size() - 1)])
 		CabinMods.save_settings())
 	trinket.selected = DashTrinket.index_of(CabinMods.trinket)
+	# Bobble head (BobbleHead): one per car, passenger side of the dash. Every
+	# figure is pickable in the test build; the won / bought rules come later.
+	var bobble_kind := PlayerCar.chassis_kind()
+	var bobble := _add_option(page, "Bobble head", BobbleFigures.names(), func(i: int) -> void:
+		CabinMods.set_bobble(bobble_kind, BobbleFigures.IDS[clampi(i, 0, BobbleFigures.IDS.size() - 1)])
+		CabinMods.save_settings())
+	bobble.selected = BobbleFigures.index_of(CabinMods.bobble_for(bobble_kind))
 	var knob_names := []
 	for id in CabinMods.KNOB_IDS:
 		knob_names.append(CabinMods.KNOB_NAMES[id])
@@ -525,17 +579,20 @@ func _build_game_page(parent: Control) -> Control:
 		_sync_strut_bar())
 	strut.selected = 1 if CabinMods.strut_bar else 0
 
-	# Stand-ins until the garage exists; only usable from the pause screen.
-	_heading(page, "Garage stand-ins")
+	# Test stand-ins; only usable from the pause screen or the garage. Service car
+	# and Wash car are not here any more: they live in the garage (garage G0). The
+	# car picker is the test build's (TestBuild); the garage's key board replaces
+	# it later.
+	_heading(page, "Test stand-ins")
 	car_option = _add_option(page, "Car", [], func(_i: int) -> void:
 		pass)
 	for k in PlayerCars.KINDS:
 		car_option.add_item("%s   %d Nm / %d kg" % [PlayerCars.title(k.id), int(k.nm), int(k.kg)])
 		car_option.set_item_metadata(car_option.item_count - 1, String(k.id))
 	car_restart_button = _add_button(page, "Restart the run in this car", _pick_car)
-	service_button = _add_button(page, "Service car (reset wear and damage)", func() -> void:
-		if service_action.is_valid():
-			service_action.call())
+	if not TestBuild.on():
+		car_option.get_parent().visible = false
+		car_restart_button.visible = false
 	tow_button = _add_button(page, "Call a tow (engine dead)", func() -> void:
 		if tow_action.is_valid():
 			tow_action.call())
@@ -543,10 +600,6 @@ func _build_game_page(parent: Control) -> Control:
 		if race_action.is_valid():
 			close()
 			race_action.call())
-	wash_button = _add_button(page, "Wash car", func() -> void:
-		if wash_action.is_valid():
-			close()
-			wash_action.call())
 
 	return _page_of(page)
 
@@ -559,12 +612,11 @@ func _refresh_game_page() -> void:
 		if car_option.get_item_metadata(i) == now:
 			car_option.select(i)
 	var paused := game_state != null and game_state.state == GameState.State.PAUSED
-	car_option.disabled = not paused
-	car_restart_button.disabled = not paused
-	service_button.disabled = not paused or not service_action.is_valid()
+	var in_garage := game_state != null and game_state.state == GameState.State.GARAGE
+	car_option.disabled = not (paused or in_garage)
+	car_restart_button.disabled = not (paused or in_garage)
 	tow_button.disabled = not paused or not tow_action.is_valid()
 	race_button.disabled = not paused or not race_action.is_valid()
-	wash_button.disabled = not paused or not wash_action.is_valid()
 
 func _pick_car() -> void:
 	if car_option.selected < 0 or game_state == null:

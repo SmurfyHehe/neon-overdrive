@@ -22,7 +22,8 @@ class_name NpcCarBuilder
 #
 # Night lights (2026-10-07): the tail lamps glow at a running level and
 # brighten when the car brakes (instance uniform "brake", set by TrafficCar);
-# a wrecked or hazard-stopped car blinks its amber turn lamps ("hazard").
+# the amber turn lamps blink on one side before and during a lane change, on
+# both for a wrecked or hazard-stopped car (instance uniform "turn").
 # Each tail lamp also carries a camera-facing flare that never shrinks below
 # FLARE_MIN_SCREEN of the screen, so a car 200 m up the road is still two red points
 # instead of nothing. It only shows from behind (it fades out as the car turns
@@ -99,11 +100,13 @@ const KINDS := {
 		"builds": {"stock": 100},
 		"build_paint": {},
 		"sheet_paint": true,
+		## Rear-engined: the underside has no pipe running the length of the car.
+		"engine": "rear",
 	},
 	"p2_hothatch": {
 		"data": preload("res://scripts/car/p2_hothatch_data.gd"),
-		"length": 4.05, "width": 1.83, "height": 1.4, "clearance": 0.12,
-		"front_overhang": 0.82, "rear_overhang": 0.67,
+		"length": 3.97, "width": 1.83, "height": 1.4, "clearance": 0.12,
+		"front_overhang": 0.74, "rear_overhang": 0.67,
 		"wheel_r": 0.315, "wheel_x": 0.79, "axle_z": 1.28,
 		"rest_y": -0.12,
 		"builds": {"stock": 50, "street": 30, "full": 20},
@@ -122,7 +125,7 @@ const KINDS := {
 	},
 	"p4_kei": {
 		"data": preload("res://scripts/car/p4_kei_data.gd"),
-		"length": 3.30, "width": 1.40, "height": 1.13, "clearance": 0.12,
+		"length": 3.30, "width": 1.40, "height": 1.05, "clearance": 0.12,
 		"front_overhang": 0.55, "rear_overhang": 0.48,
 		"wheel_r": 0.28, "wheel_x": 0.615, "axle_z": 1.135,
 		"rest_y": -0.12,
@@ -132,9 +135,11 @@ const KINDS := {
 	},
 	"p5_muscle": {
 		"data": preload("res://scripts/car/p5_muscle_data.gd"),
-		"length": 5.35, "width": 2.02, "height": 1.3, "clearance": 0.15,
-		"front_overhang": 1.12, "rear_overhang": 1.28,
-		"wheel_r": 0.345, "wheel_x": 0.83, "axle_z": 1.475,
+		## The two-door hardtop (2026-10-11), built from its parts glb: 35 cm
+		## shorter, wheelbase 2.84, one long door a side.
+		"length": 5.00, "width": 1.93, "height": 1.33, "clearance": 0.16,
+		"front_overhang": 0.90, "rear_overhang": 1.26,
+		"wheel_r": 0.35, "wheel_x": 0.80, "axle_z": 1.42,
 		"rest_y": -0.12,
 		"builds": {"stock": 50, "street": 30, "full": 20},
 		"build_paint": {},
@@ -151,6 +156,19 @@ const KINDS := {
 		"sheet_paint": true,
 	},
 	# The work pickup (Camel, P17, 2026-10-10): the 4-door T2 truck Walt sells
+	# The shop wagon (sheet p7_wagon, 2026-10-11): front drive, built from
+	# its parts glb like the Bug; the sheet mesh is the NEON_PARTS_LEGACY body.
+	"p7_wagon": {
+		"data": preload("res://scripts/car/p7_wagon_data.gd"),
+		"length": 4.30, "width": 1.74, "height": 1.55, "clearance": 0.16,
+		"front_overhang": 0.72, "rear_overhang": 0.98,
+		"wheel_r": 0.305, "wheel_x": 0.73, "axle_z": 1.30,
+		"drive": "fwd",
+		"rest_y": -0.12,
+		"builds": {"stock": 100},
+		"build_paint": {},
+		"sheet_paint": true,
+	},
 	# after act 1. Its own sheet mesh (p17_work_pickup_data.gd), not the
 	# traffic pickup's, which stays as it is.
 	"p17_work_pickup": {
@@ -217,24 +235,9 @@ const FLARE_ENERGY := 1.1
 const PAINT_MATS := ["paint", "roof"]
 const RIM_MATS := ["rim", "rim_face"]
 
-## Same look as P1CoupeBuilder.BODY_SHADER, with the paint per instance.
-const BODY_SHADER := """
-shader_type spatial;
-render_mode cull_back;
-// Vertex alpha 0 marks paint (or rim) faces; they take the tint and a glossier finish.
-// Fixed slots: the body, lamp and flare shaders on one car share its instance
-// uniforms by slot, so unnumbered ones collide (brake lamps painted the body).
-instance uniform vec3 paint : source_color, instance_index(0) = vec3(0.79, 0.81, 0.84);
-uniform float paint_metallic = 0.45;
-uniform float paint_roughness = 0.45;
-void fragment() {
-	float p = 1.0 - COLOR.a;
-	ALBEDO = mix(COLOR.rgb, paint, p);
-	METALLIC = mix(0.1, paint_metallic, p);
-	ROUGHNESS = mix(0.75, paint_roughness, p);
-	SPECULAR = 0.5;
-}
-"""
+## CarPaint's shader with the paint per instance (one material, every car).
+static var BODY_SHADER: String:
+	get: return CarPaint.code("body_instance", CarPaint.tier())
 
 const GLOW_SHADER := """
 shader_type spatial;
@@ -242,17 +245,46 @@ render_mode unshaded, cull_disabled;
 uniform float energy = 2.5;
 uniform float tail_gain = 1.0;
 uniform float brake_gain = 2.2;
+const float FLASH_GAIN = 3.5;
 instance uniform float brake : instance_index(1) = 0.0;
-instance uniform float hazard : instance_index(2) = 0.0;
+// Turn lamps: 0 off, 1 left, 2 right, 3 both (hazard). Plus 4: the left tail
+// lamp is out (a weaving driver's tell).
+instance uniform float turn : instance_index(2) = 0.0;
+// 1 while the driver flashes the headlights (at a player who cut in).
+instance uniform float flash : instance_index(3) = 0.0;
+// 1 while the car is in reverse (player cars: the CarFittings reverse lens).
+instance uniform float reverse : instance_index(4) = 0.0;
+varying float v_side;
+void vertex() {
+	v_side = sign(VERTEX.x);  // + = the car's right (it faces -Z)
+}
 void fragment() {
 	vec3 c = COLOR.rgb;
+	// Vertex alpha tags the lenses CarFittings adds: 0.7 indicator, 0.8
+	// third brake light, 0.9 reverse. 1.0 is a sheet lamp, classed by colour.
+	float tag = COLOR.a;
+	float t_turn = step(0.65, tag) * (1.0 - step(0.75, tag));
+	float t_third = step(0.75, tag) * (1.0 - step(0.85, tag));
+	float t_rev = step(0.85, tag) * (1.0 - step(0.95, tag));
 	// Linear colours: the tail red is the only lamp with green and blue near 0,
 	// the amber turn lamp the only one with green between 0.3 and 0.7.
-	float tail = step(0.4, c.r) * step(c.g, 0.06) * step(c.b, 0.06);
-	float turn = step(0.8, c.r) * step(0.3, c.g) * step(c.g, 0.7) * step(c.b, 0.2);
+	float tail = step(0.4, c.r) * step(c.g, 0.06) * step(c.b, 0.06) * (1.0 - t_third);
+	float amber = max(step(0.8, c.r) * step(0.3, c.g) * step(c.g, 0.7) * step(c.b, 0.2), t_turn);
 	float k = mix(1.0, tail_gain * (1.0 + brake * brake_gain), tail);
+	// Third brake light: out until the brake is on.
+	k = mix(k, 0.12 + brake * 3.0, t_third);
+	// Reverse lamp: a dim lens until the car is in reverse.
+	k = mix(k, mix(0.25, 2.2, step(0.5, reverse)), t_rev);
+	// Indicators: one side blinks for a turn signal, both for the hazards.
 	float blink = step(0.5, fract(TIME * 1.4));
-	k *= mix(1.0, mix(0.15, 2.5, blink), turn * step(0.5, hazard));
+	float lamp_out = step(3.5, turn);
+	float sig = turn - 4.0 * lamp_out;
+	k *= mix(1.0, 0.03, tail * lamp_out * step(v_side, 0.0));
+	float lit = sig > 2.5 ? 1.0 : (sig > 1.5 ? step(0.0, v_side) : (sig > 0.5 ? step(v_side, 0.0) : 0.0));
+	k *= mix(1.0, mix(0.15, 2.5, blink), amber * lit);
+	// The head lamps (warm white: the only lamp with all three channels up).
+	float head = step(0.8, c.r) * step(0.7, c.g) * step(0.3, c.b);
+	k *= mix(1.0, FLASH_GAIN, head * flash);
 	ALBEDO = c;
 	EMISSION = c * energy * k;
 }
@@ -273,8 +305,11 @@ uniform float gain = 1.0;
 uniform float near_r = 0.14;
 uniform float min_screen = 0.006;
 instance uniform float brake : instance_index(1) = 0.0;
+instance uniform float turn : instance_index(2) = 0.0;
 varying float v_face;
 void vertex() {
+	// The left tail lamp is out (turn carries + 4): no flare on that side.
+	float lamp_out = step(3.5, turn) * step(VERTEX.x, 0.0);
 	vec3 c = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	float d = max(-c.z, 0.05);
 	vec3 rear = normalize((MODELVIEW_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
@@ -282,7 +317,7 @@ void vertex() {
 	// The view's height at distance d is 2d / |P[1][1]| (negative under
 	// Vulkan's flipped Y, hence the abs).
 	float far_r = min_screen * 2.0 * d / abs(PROJECTION_MATRIX[1][1]);
-	float r = max(near_r, far_r) * (1.0 + 0.6 * brake) * v_face * step(0.001, gain);
+	float r = max(near_r, far_r) * (1.0 + 0.6 * brake) * v_face * step(0.001, gain) * (1.0 - lamp_out);
 	c *= max(d - 0.25, 0.05) / d;
 	c.xy += UV * r;
 	VERTEX = c;
@@ -297,10 +332,14 @@ void fragment() {
 
 static var _body_meshes := {}   # "kind|build" -> ArrayMesh
 static var _wheel_meshes := {}  # "kind|build|front/rear" -> ArrayMesh
+static var _fit_counts := {}    # "kind|build" -> CarFittings counts
+static var _fit_points := {}    # "kind|build" -> CarFittings points
+static var _fit_frames := {}    # "kind|build" -> windscreen frame and fuel flap site
 static var _body_mat: ShaderMaterial
 static var _wheel_mat: ShaderMaterial
-static var _glass_mat: StandardMaterial3D
+static var _glass_mat: ShaderMaterial
 static var _glow_mat: ShaderMaterial
+static var _parts_glow_mat: ShaderMaterial
 static var _flare_mat: ShaderMaterial
 static var _light_glow := 1.0
 
@@ -310,16 +349,48 @@ static func set_light_glow(g: float) -> void:
 	_light_glow = g
 	if _glow_mat != null:
 		_glow_mat.set_shader_parameter("tail_gain", g)
+	if _parts_glow_mat != null:
+		_parts_glow_mat.set_shader_parameter("tail_gain", g)
 	if _flare_mat != null:
 		_flare_mat.set_shader_parameter("gain", g)
 
-## Brake (0..1) and hazard (on/off) for one car's lamps; `vis` is its
-## chassis_visual. Two instance uniforms on the body, no material change.
-static func set_lamps(vis: Node3D, brake: float, hazard: bool) -> void:
+## Head lamps on full for a flash (TrafficCar: flashing back at the player).
+## One instance uniform, written at the start and end of each flash.
+static func set_flash(vis: Node3D, on: bool) -> void:
+	var mi := vis.get_node_or_null(^"Body") as MeshInstance3D
+	if mi != null:
+		mi.set_instance_shader_parameter("flash", 1.0 if on else 0.0)
+
+## Turn lamp states for set_lamps.
+const TURN_OFF := 0
+const TURN_LEFT := 1
+const TURN_RIGHT := 2
+const TURN_BOTH := 3
+## Added to a turn state: the left tail lamp is out.
+const TAIL_OUT := 4
+
+## Brake (0..1) and turn lamps for one car's lamps; `vis` is its chassis_visual.
+## `turn` is TURN_OFF / LEFT / RIGHT / BOTH (= hazard) + TAIL_OUT for a dead
+## left tail lamp, or a bool (true = hazard). The player's cars (and the coupe)
+## also have reverse lamps and left/right indicators; the extra arguments
+## default to off so traffic's call is unchanged. Instance uniforms on the
+## body, no material change.
+static func set_lamps(vis: Node3D, brake: float, turn = 0, reverse := false,
+		turn_left := false, turn_right := false) -> void:
+	var state := 0
+	if typeof(turn) == TYPE_BOOL:
+		state = TURN_BOTH if turn else TURN_OFF
+	else:
+		state = int(turn)
+	if turn_left:
+		state |= TURN_LEFT
+	if turn_right:
+		state |= TURN_RIGHT
 	var mi := vis.get_node_or_null(^"Body") as MeshInstance3D
 	if mi != null:
 		mi.set_instance_shader_parameter("brake", brake)
-		mi.set_instance_shader_parameter("hazard", 1.0 if hazard else 0.0)
+		mi.set_instance_shader_parameter("turn", float(state))
+		mi.set_instance_shader_parameter("reverse", 1.0 if reverse else 0.0)
 
 static func is_npc(kind: String) -> bool:
 	return KINDS.has(kind)
@@ -400,14 +471,31 @@ static func chassis_visual(kind: String, build: String, paint: Color, role := ""
 	root.name = "NpcBody"
 	root.set_meta("kind", kind)
 	root.set_meta("build", build)
-	var mi := MeshInstance3D.new()
-	mi.name = "Body"
-	mi.position = lift
-	mi.mesh = body_mesh(kind, build)
-	mi.set_instance_shader_parameter("paint", paint)
-	# The tail flares grow past the body's box at a distance.
-	mi.extra_cull_margin = 2.0
-	root.add_child(mi)
+	if uses_parts(kind):
+		# Cars from parts: the body is assembled from the real parts in
+		# assets/cars/<kind>/body.glb (CarAssembler: one mesh, 4 surfaces).
+		var paint_mat := ShaderMaterial.new()
+		paint_mat.shader = CarAssembler.paint_shader(P1CoupeBuilder.PARTS_BODY_SHADER)
+		paint_mat.set_shader_parameter("paint", paint)
+		var body := CarAssembler.build(kind, parts_config(), paint_mat)
+		body.position = lift
+		# This builder's lamp shader on the glow surface, so brake and hazard
+		# (set_lamps) work on a parts car as they do on a sheet car.
+		var gi := CarAssembler.surface_index(body.mesh, "glow")
+		if gi >= 0:
+			body.set_surface_override_material(gi, _get_parts_glow_material())
+		root.add_child(body)
+		root.set_meta("body_mat", paint_mat)
+		root.set_meta("tail_lights", _parts_tail_lamps(kind, lift))
+	else:
+		var mi := MeshInstance3D.new()
+		mi.name = "Body"
+		mi.position = lift
+		mi.mesh = body_mesh(kind, build)
+		mi.set_instance_shader_parameter("paint", paint)
+		# The tail flares grow past the body's box at a distance.
+		mi.extra_cull_margin = 2.0
+		root.add_child(mi)
 	var tips := []
 	for t in b.tips:
 		tips.append({"pos": t.pos + lift, "dir": t.dir, "r": t.r})
@@ -419,8 +507,39 @@ static func chassis_visual(kind: String, build: String, paint: Color, role := ""
 	root.set_meta("sticker_slots", slots)
 	root.set_meta("half_w", float(k.width) / 2.0)
 	root.set_meta("half_l", float(k.length) / 2.0)
+	# Which small parts this body carries (CarSlots, tests/car/required_slots.gd).
+	root.set_meta("fittings", fittings(kind, build))
+	root.set_meta("fitting_points", _fit_points.get("%s|%s" % [kind, build], {}))
+	root.set_meta("windscreen", _fit_frames.get("%s|%s" % [kind, build], {}).get("screen", {}))
+	root.set_meta("fuel_flap_site", _fit_frames.get("%s|%s" % [kind, build], {}).get("flap", {}))
 	Undercarriage.attach(root, undercarriage_params(kind, build), role)
 	return root
+
+## True when this kind's body is assembled from a parts glb (the default once
+## the glb is in the project). NEON_PARTS_LEGACY=1 keeps every sheet car on
+## its one-piece sheet proxy (before-shots, comparisons).
+static func uses_parts(kind: String) -> bool:
+	return OS.get_environment("NEON_PARTS_LEGACY") != "1" and CarAssembler.has_car(kind)
+
+## What CarAssembler builds: the stock parts, panels closed. NEON_CAR_PANELS=open
+## opens the lids, the doors and the fuel flap (pictures; nothing in the game
+## opens them yet).
+static func parts_config() -> Dictionary:
+	return {"panels": "open"} if OS.get_environment("NEON_CAR_PANELS") == "open" else {}
+
+## Centres of the lit tail lamps of a parts car, car space (wet-road smears).
+static func _parts_tail_lamps(kind: String, lift: Vector3) -> Array:
+	var out := []
+	for pname in CarAssembler.part_names(kind):
+		var mats := CarAssembler.part_arrays(kind, pname)
+		if not mats.has("glow_tail"):
+			continue
+		var sum := Vector3.ZERO
+		var verts: PackedVector3Array = mats["glow_tail"].v
+		for v in verts:
+			sum += v
+		out.append(sum / maxi(verts.size(), 1) + lift)
+	return out
 
 ## What the underside is built from (Undercarriage.params), car space: the
 ## ground at rest is -rest_y above the origin, the floor the body's lowest
@@ -431,12 +550,13 @@ static func undercarriage_params(kind: String, build: String) -> Dictionary:
 	var b: Dictionary = k.data.BUILDS[build]
 	var lift := Vector3(0.0, -float(k.rest_y), 0.0)
 	var floor_y: float = body_mesh(kind, build).get_aabb().position.y + lift.y
+	var engine := String(k.get("engine", "front"))
 	var tips := []
 	for t in b.tips:
 		tips.append({"pos": t.pos + lift, "dir": t.dir, "r": t.r})
 	var variant := "interceptor" if kind.contains("interceptor") else ""
 	return Undercarriage.params(float(k.width) / 2.0, float(k.length) / 2.0, floor_y, lift.y,
-		float(k.wheel_r), float(k.wheel_x), float(k.axle_z), tips, String(k.get("drive", "rwd")), variant)
+		float(k.wheel_r), float(k.wheel_x), float(k.axle_z), tips, String(k.get("drive", "rwd")), variant, engine)
 
 ## Tyre and rim for one corner, to parent under its physics Wheel (the pivot
 ## is what the wheel moves and spins). `hub` is the wheel's position in car
@@ -446,27 +566,43 @@ static func wheel_visual(kind: String, build: String, hub: Vector3) -> Node3D:
 	pivot.name = "NpcWheel"
 	var mi := MeshInstance3D.new()
 	mi.name = "Mesh"
-	mi.mesh = wheel_mesh(kind, build, hub.z > 0.0)
-	if hub.x < 0.0:
-		mi.rotation.y = PI
+	var corner := ("r" if hub.z > 0.0 else "f") + ("l" if hub.x < 0.0 else "r")
+	var parts_wheel: ArrayMesh = CarAssembler.wheel_mesh(kind, corner) if uses_parts(kind) else null
+	if parts_wheel != null:
+		# A parts car's wheel carries its brake and hubcap, modelled per corner.
+		mi.mesh = parts_wheel
+		mi.set_surface_override_material(0, CarAssembler.trim_material())
+	else:
+		mi.mesh = wheel_mesh(kind, build, hub.z > 0.0)
+		if hub.x < 0.0:
+			mi.rotation.y = PI
 	pivot.add_child(mi)
 	return pivot
 
 ## Triangles of one car as drawn (body plus 4 wheels).
 static func triangle_count(kind: String, build: String) -> int:
+	if uses_parts(kind):
+		var total := CarAssembler.triangle_count(kind, parts_config())
+		for corner in ["fl", "fr", "rl", "rr"]:
+			total += CarAssembler.wheel_triangle_count(kind, corner)
+		return total
 	var n := 0
 	var m := body_mesh(kind, build)
 	for i in m.get_surface_count():
 		n += m.surface_get_array_len(i) / 3
 	for rear in [false, true]:
 		n += 2 * wheel_mesh(kind, build, rear).surface_get_array_len(0) / 3
-	return n
+	# The design's triangles: CarFittings' lenses and plates are counted apart
+	# (fittings(kind, build).tris) and cost no draw call.
+	return n - int(fittings(kind, build).get("tris", 0))
 
 ## Body surfaces, 4 wheels, plus the underside where the class has one
 ## (Undercarriage.draw_calls; traffic +0).
 static func draw_call_count(kind: String, build: String, role := "") -> int:
 	if role == "":
 		role = Undercarriage.role_for_kind(kind)
+	if uses_parts(kind):
+		return CarAssembler.draw_call_count(kind, parts_config()) + 4 + Undercarriage.draw_calls(role)
 	return body_mesh(kind, build).get_surface_count() + 4 + Undercarriage.draw_calls(role)
 
 # ---------- meshes ----------
@@ -476,9 +612,29 @@ static func body_mesh(kind: String, build: String) -> ArrayMesh:
 	if not _body_meshes.has(key):
 		var data: GDScript = KINDS[kind].data
 		var b: Dictionary = data.BUILDS[build]
-		_body_meshes[key] = _build_mesh(data, P1CoupeBuilder.decode_points(data.b64(b.body_pos)),
-			Marshalls.base64_to_raw(b.body_mat), true)
+		var k: Dictionary = KINDS[kind]
+		var hubs := []
+		for sx in [-1.0, 1.0]:
+			for sz in [-1.0, 1.0]:
+				hubs.append(Vector3(sx * float(k.wheel_x), float(k.wheel_r), sz * float(k.axle_z)))
+		var tris := P1CoupeBuilder.decode_points(data.b64(b.body_pos))
+		var mats := Marshalls.base64_to_raw(b.body_mat)
+		# Reverse and third brake lenses, indicators the sheet lacks and both
+		# plates, merged into this body's own surfaces (CarFittings).
+		var fit := CarFittings.build(key, tris, mats, data.NAMES, data.GLASS, data.EMISSIVE, data.COLORS)
+		_fit_counts[key] = fit.counts
+		_fit_points[key] = fit.points
+		_fit_frames[key] = {"screen": fit.get("screen", {}), "flap": fit.get("flap", {})}
+		var mesh := _build_mesh(data, tris, mats, true, {"wheels": hubs, "wheel_r": float(k.wheel_r), "fit": fit})
+		mesh.set_meta("paint_seams", CarPaint.cut_seams(data, tris, mats, int(CarPaint.DOORS.get(kind, 2))))
+		_body_meshes[key] = mesh
 	return _body_meshes[key]
+
+## What CarFittings added to a body, by slot (CarSlots reads it off the
+## chassis visual's "fittings" meta; this is the same dictionary).
+static func fittings(kind: String, build: String) -> Dictionary:
+	body_mesh(kind, build)
+	return _fit_counts["%s|%s" % [kind, build]]
 
 static func wheel_mesh(kind: String, build: String, rear: bool) -> ArrayMesh:
 	var key := "%s|%s|%s" % [kind, build, "rear" if rear else "front"]
@@ -488,47 +644,32 @@ static func wheel_mesh(kind: String, build: String, rear: bool) -> ArrayMesh:
 		_wheel_meshes[key] = _build_mesh(data, P1CoupeBuilder.decode_points(w.pos), Marshalls.base64_to_raw(w.mat), false)
 	return _wheel_meshes[key]
 
-## Same as P1CoupeBuilder._build_mesh: surfaces "body", "glass", "glow",
-## flat normals, linear vertex colours with alpha 0 on tinted faces, each
-## design triangle written a, c, b for Godot's clockwise front faces.
-static func _build_mesh(data: GDScript, tris: PackedVector3Array, mats: PackedByteArray, is_body: bool) -> ArrayMesh:
-	var groups := {}
-	var tint_mats: Array = PAINT_MATS if is_body else RIM_MATS
-	for t in mats.size():
-		var mname: String = data.NAMES[mats[t]]
-		var surf := "glow" if mname in data.EMISSIVE else ("glass" if mname in data.GLASS else "body")
-		if not groups.has(surf):
-			groups[surf] = [PackedVector3Array(), PackedVector3Array(), PackedColorArray()]
-		var g: Array = groups[surf]
-		var a := tris[t * 3]
-		var b := tris[t * 3 + 1]
-		var c := tris[t * 3 + 2]
-		var n := (b - a).cross(c - a)
-		if n.length_squared() < 1e-12:
-			continue
-		n = n.normalized()
-		var col := Color(data.COLORS[mname]).srgb_to_linear()
-		col.a = 0.0 if mname in tint_mats else 1.0
-		for p in [a, c, b]:
-			g[0].append(p)
-			g[1].append(n)
-			g[2].append(col)
+## Same as P1CoupeBuilder._build_mesh (CarPaint.build_groups): surfaces
+## "body", "glass", "glow", plus the tail "flare" quads on a body.
+static func _build_mesh(data: GDScript, tris: PackedVector3Array, mats: PackedByteArray, is_body: bool, opts := {}) -> ArrayMesh:
+	opts["is_wheel"] = not is_body
+	var groups := CarPaint.build_groups(data, tris, mats, PAINT_MATS if is_body else RIM_MATS, opts)
+	if is_body and opts.has("fit"):
+		_append_fittings(groups, opts.fit)
 	var mesh := ArrayMesh.new()
 	if is_body and "tail" in data.NAMES:
 		groups["flare"] = _flare_quads(data, tris, mats)
 	for surf in ["body", "glass", "glow", "flare"]:
 		if not groups.has(surf):
 			continue
-		var arrays := []
-		arrays.resize(Mesh.ARRAY_MAX)
-		arrays[Mesh.ARRAY_VERTEX] = groups[surf][0]
-		arrays[Mesh.ARRAY_NORMAL] = groups[surf][1]
-		arrays[Mesh.ARRAY_COLOR] = groups[surf][2]
+		var idx: int
 		if surf == "flare":
+			var arrays := []
+			arrays.resize(Mesh.ARRAY_MAX)
+			arrays[Mesh.ARRAY_VERTEX] = groups[surf][0]
+			arrays[Mesh.ARRAY_NORMAL] = groups[surf][1]
+			arrays[Mesh.ARRAY_COLOR] = groups[surf][2]
 			arrays[Mesh.ARRAY_TEX_UV] = groups[surf][3]
-		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-		var idx := mesh.get_surface_count() - 1
-		mesh.surface_set_name(idx, surf)
+			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+			idx = mesh.get_surface_count() - 1
+			mesh.surface_set_name(idx, surf)
+		else:
+			idx = CarPaint.add_surface(mesh, groups[surf], surf)
 		match surf:
 			"glass":
 				mesh.surface_set_material(idx, _get_glass_material())
@@ -539,6 +680,30 @@ static func _build_mesh(data: GDScript, tris: PackedVector3Array, mats: PackedBy
 			_:
 				mesh.surface_set_material(idx, _get_body_material() if is_body else _get_wheel_material(data))
 	return mesh
+
+## Adds CarFittings' lenses and plates to the body and glow surfaces (shared
+## with P1CoupeBuilder, same group layout: verts, normals, colours).
+static func _append_fittings(groups: Dictionary, fit: Dictionary) -> void:
+	for surf in ["body", "glow"]:
+		var ex: Array = fit[surf]
+		if (ex[0] as PackedVector3Array).is_empty():
+			continue
+		if not groups.has(surf):
+			groups[surf] = [PackedVector3Array(), PackedVector3Array(), PackedColorArray(),
+				PackedVector2Array(), PackedVector2Array(), PackedFloat32Array(), PackedFloat32Array()]
+		var g: Array = groups[surf]
+		for i in 3:
+			g[i].append_array(ex[i])
+		# CarPaint's groups also carry finish, occlusion and (body) edge arrays
+		# per vertex: the fittings get the default finish, no occlusion, no edges.
+		var n_v: int = (ex[0] as PackedVector3Array).size()
+		var fin: Array = CarPaint.FINISH_DEFAULT
+		for _v in n_v:
+			g[3].append(Vector2(fin[0], fin[1]))
+			g[4].append(Vector2.ZERO)
+			if surf == "body":
+				g[5].append_array(CarPaint._NO_EDGES)
+				g[6].append_array(CarPaint._NO_EDGES)
 
 ## One flare quad per side at the area-weighted centre of that side's tail
 ## lamp faces (two triangles, all corners at the centre, UV = the corner).
@@ -575,10 +740,8 @@ static func _flare_quads(data: GDScript, tris: PackedVector3Array, mats: PackedB
 
 static func _get_body_material() -> ShaderMaterial:
 	if _body_mat == null:
-		var sh := Shader.new()
-		sh.code = BODY_SHADER
 		_body_mat = ShaderMaterial.new()
-		_body_mat.shader = sh
+		_body_mat.shader = CarPaint.body_shader(true)
 	return _body_mat
 
 ## Wheels: the body shader with a plain uniform set to the rim colour, so the
@@ -586,22 +749,33 @@ static func _get_body_material() -> ShaderMaterial:
 ## traffic cars share the same rim colour (proxies.json).
 static func _get_wheel_material(data: GDScript) -> ShaderMaterial:
 	if _wheel_mat == null:
-		var sh := Shader.new()
-		sh.code = BODY_SHADER.replace("instance uniform vec3 paint : source_color, instance_index(0)", "uniform vec3 paint : source_color")
 		_wheel_mat = ShaderMaterial.new()
-		_wheel_mat.shader = sh
+		_wheel_mat.shader = CarPaint.body_shader(false)
 		_wheel_mat.set_shader_parameter("paint", Color(data.COLORS.rim))
 		_wheel_mat.set_shader_parameter("paint_metallic", 0.8)
 		_wheel_mat.set_shader_parameter("paint_roughness", 0.3)
 	return _wheel_mat
 
-static func _get_glass_material() -> StandardMaterial3D:
+static func _get_glass_material() -> ShaderMaterial:
 	if _glass_mat == null:
-		_glass_mat = StandardMaterial3D.new()
-		_glass_mat.albedo_color = Color("#151D2E")
-		_glass_mat.metallic = 0.6
-		_glass_mat.roughness = 0.08
+		_glass_mat = ShaderMaterial.new()
+		_glass_mat.shader = CarPaint.glass_shader(false)
+		_glass_mat.set_shader_parameter("glass", Color("#151D2E"))
 	return _glass_mat
+
+## The same lamp shader for a body assembled from parts, one-sided: a parts
+## lamp is wound outward, and a lamp laid on the rear glass (the wagon's tall
+## columns) must not shine into the cabin and the rear-view mirror.
+static func _get_parts_glow_material() -> ShaderMaterial:
+	if _parts_glow_mat == null:
+		var sh := Shader.new()
+		sh.code = GLOW_SHADER.replace("unshaded, cull_disabled", "unshaded, cull_back")
+		_parts_glow_mat = ShaderMaterial.new()
+		_parts_glow_mat.shader = sh
+		_parts_glow_mat.set_shader_parameter("energy", GLOW_ENERGY)
+		_parts_glow_mat.set_shader_parameter("tail_gain", _light_glow)
+		_parts_glow_mat.set_shader_parameter("brake_gain", BRAKE_GAIN)
+	return _parts_glow_mat
 
 static func _get_glow_material() -> ShaderMaterial:
 	if _glow_mat == null:

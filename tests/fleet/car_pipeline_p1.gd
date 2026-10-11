@@ -1,15 +1,22 @@
 extends SceneTree
 
-# Car pipeline step 1 (docs/planning/car-look-showcase-2026-10-09.md, section
-# 12): the P1 coupe exported by tools/car_pipeline/build_car.py loads in Godot
-# and is the car the design sheet shows.
+# Car pipeline (docs/planning/car-look-showcase-2026-10-09.md, section 12; the
+# parts build of 2026-10-10): the P1 coupe exported by
+# tools/car_pipeline/build_car.py loads in Godot, is the car the design sheet
+# shows, and is made of separate named parts.
 #   loads     assets/cars/p1_coupe/body.glb opens through GLTFDocument (so the
 #             test needs no import cache) and body.json beside it agrees with it
-#   nodes     every node body.json lists is in the scene; body, hood, door_l,
-#             door_r and trunk are separate meshes with triangles; the panels
-#             sit under their hinge empties
-#   budget    triangles within the player budget (10k) and at least the sheet's
-#             proxy minus the wheels we did not export twice (> 2000)
+#   nodes     every node body.json lists is in the scene; the shell parts
+#             (body, hood, doors, trunk, fenders, bumpers) are separate meshes
+#             with triangles; the panels sit under their hinge empties
+#   parts     the lamps, grille, mirrors, handles, glass pieces, seals, arch
+#             liners, plates, wipers, antenna, wing and exhaust are there by
+#             name; every material is one the assembler knows; the doors carry
+#             their glass, handle and mirror on the door hinge
+#   bake      every mesh has COLOR_0 (red = ao, green = shut); shut reaches 1
+#             on the cut panels and ao falls below 0.5 somewhere
+#   budget    body parts within 5,000-7,000 triangles (the pilot's budget; the
+#             wheels are counted apart), body.json agrees with the glb
 #   dims      length 4.42 and body width 1.80 within 3 cm, body height 1.24
 #             within 5 cm (mirrors and wing excluded from width/height)
 #   hinges    turning each hinge by its open angle moves the far edge of its
@@ -25,9 +32,20 @@ extends SceneTree
 
 const GLB := "res://assets/cars/p1_coupe/body.glb"
 const META := "res://assets/cars/p1_coupe/body.json"
-const PANELS := ["body", "hood", "door_l", "door_r", "trunk"]
-const BUDGET := 10000
-const MIN_TRIS := 2000
+const PANELS := ["body", "hood", "door_l", "door_r", "trunk", "fender_fl", "fender_fr", "bumper_f", "bumper_r"]
+## The outside of the car: the shell parts plus the glass (the sun strip slot is on the windshield).
+const SHELL := PANELS + ["underbody", "glass_windshield", "glass_backlight", "glass_door_l", "glass_door_r", "glass_quarter_l", "glass_quarter_r"]
+const FITTINGS := [
+	"grille", "popup_l", "popup_r", "tail_l", "tail_r", "tail_panel", "turn_l", "turn_r", "mirror_l", "mirror_r",
+	"handle_l", "handle_r", "seal_windshield", "seal_backlight", "seal_door_l", "seal_door_r", "seal_quarter_l", "seal_quarter_r",
+	"arch_liner_fl", "arch_liner_fr", "arch_liner_rl", "arch_liner_rr", "plate_f", "plate_r", "wiper_l", "wiper_r",
+	"antenna", "spoiler", "exhaust",
+]
+const ON_DOOR := ["door_%s", "glass_door_%s", "seal_door_%s", "handle_%s", "mirror_%s"]
+const BODY_MATERIALS := ["paint", "under_paint", "plastic", "chrome", "rubber", "plate", "mirror", "lens_red", "glass",
+	"glow_head", "glow_lens", "glow_tail", "glow_turn"]
+const CEILING := 7000
+const MIN_TRIS := 5000
 
 var _fails: Array[String] = []
 var _checks := 0
@@ -74,12 +92,47 @@ func _run() -> void:
 		var panel: Node = by_name.get(h.panel)
 		_check("nodes", hinge is Node3D and panel != null and panel.get_parent() == hinge,
 			"%s should be the parent of %s" % [hname, h.panel])
-	_check("budget", tri_total <= BUDGET, "%d triangles, budget %d" % [tri_total, BUDGET])
-	_check("budget", tri_total >= MIN_TRIS, "%d triangles, fewer than the sheet proxy (%d)" % [tri_total, MIN_TRIS])
+	var tri_body := 0
+	for n in by_name:
+		if by_name[n] is MeshInstance3D and not String(n).begins_with("wheel_"):
+			tri_body += _tris(by_name[n])
+	_check("budget", tri_body <= CEILING, "%d body triangles, ceiling %d" % [tri_body, CEILING])
+	_check("budget", tri_body >= MIN_TRIS, "%d body triangles, fewer than the parts build should have (%d)" % [tri_body, MIN_TRIS])
 	_check("budget", tri_total == int(meta.tris_total), "glb has %d triangles, body.json says %d" % [tri_total, int(meta.tris_total)])
+	_check("budget", tri_body == int(meta.tris_body), "glb has %d body triangles, body.json says %d" % [tri_body, int(meta.tris_body)])
+
+	# parts: the small ones by name, the doors' own parts on the door hinge, known materials
+	for p in FITTINGS:
+		var node: Node = by_name.get(p)
+		_check("parts", node is MeshInstance3D and _tris(node) > 0, "%s is not a mesh with triangles" % p)
+	for side in ["l", "r"]:
+		var hinge: Node = by_name.get("hinge_door_" + side)
+		for pat in ON_DOOR:
+			var node: Node = by_name.get(pat % side)
+			_check("parts", node != null and node.get_parent() == hinge, "%s should hang on hinge_door_%s" % [pat % side, side])
+	var shut_max := 0.0
+	var ao_min := 1.0
+	for n in by_name:
+		var mi := by_name[n] as MeshInstance3D
+		if mi == null or mi.mesh == null:
+			continue
+		for s in mi.mesh.get_surface_count():
+			var mat := mi.mesh.surface_get_material(s)
+			var mname := mat.resource_name if mat != null else ""
+			if not String(n).begins_with("wheel_"):
+				_check("parts", mname in BODY_MATERIALS, "%s uses material '%s', which the assembler does not know" % [n, mname])
+			var cols: Variant = mi.mesh.surface_get_arrays(s)[Mesh.ARRAY_COLOR]
+			_check("bake", cols != null and (cols as PackedColorArray).size() > 0, "%s surface %d has no COLOR_0 (ao, shut)" % [n, s])
+			if cols != null and String(n) in PANELS:
+				for c in (cols as PackedColorArray):
+					shut_max = maxf(shut_max, c.g)
+					ao_min = minf(ao_min, c.r)
+	_check("bake", shut_max > 0.98, "shut should reach 1 on the panel edges, max %.2f" % shut_max)
+	_check("bake", ao_min < 0.5, "ao should fall below 0.5 somewhere on the panels, min %.2f" % ao_min)
+	_check("bake", float(meta.shut.gap) >= 0.0035 and float(meta.shut.gap) <= 0.0045, "shut gap %.4f m, want 3.5-4.5 mm" % float(meta.shut.gap))
 
 	# dims from body plus the opening panels only
-	var aabb := _world_aabb(by_name, PANELS)
+	var aabb := _world_aabb(by_name, SHELL)
 	_near("dims", "length", aabb.size.z, float(meta.dims.L), 0.03)
 	_near("dims", "width", aabb.size.x, float(meta.dims.W), 0.03)
 	_near("dims", "height", aabb.end.y, float(meta.dims.H_body), 0.05)
@@ -106,7 +159,7 @@ func _run() -> void:
 			_check("hinges", after.end.y > before.end.y + 0.25, "%s did not rise (top %.2f -> %.2f)" % [h.panel, before.end.y, after.end.y])
 
 	# sticker slots sit on the body
-	var surface := _world_tris(by_name, PANELS)
+	var surface := _world_tris(by_name, SHELL)
 	for s in meta.slots:
 		var node: Node3D = by_name.get(s.node)
 		if node == null:

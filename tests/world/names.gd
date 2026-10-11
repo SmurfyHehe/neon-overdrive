@@ -127,6 +127,7 @@ func _signs() -> void:
 				var low := xf2.origin.y - xf2.basis.get_scale().y / 2.0
 				_check(low >= 2.5, "advance sign '%s' bottom is %.2f m up" % [area, low])
 				_check(xf2.basis.get_scale().z <= 8.0, "advance sign '%s' panel is %.1f m long" % [area, xf2.basis.get_scale().z])
+	_limits()
 	# a lettering plate is as long as its word needs for its height: letters keep their shape
 	var p := RoadSigns.text_plate("DOWNTOWN", Vector3.ZERO, Vector3.BACK, 1.0, RoadSigns.OFF_WHITE)
 	var want := float(WordAtlas.width_px("DOWNTOWN") + 2 * WordAtlas.PAD) / float(WordAtlas.BAND)
@@ -134,6 +135,54 @@ func _signs() -> void:
 	# a blade reads from the front: its front (local -x) faces the traffic it is built for
 	var bl := RoadSigns.blade("5TH ST", Vector3.ZERO, Vector3.BACK)
 	_check((bl.xf.basis.x.normalized() + Vector3.BACK).length() < 0.001, "blade front does not face +z")
+
+## Police step P3: the signs show the posted limits the police act on.
+func _limits() -> void:
+	_check(PlaceNames.limits().has(60) and PlaceNames.limits().has(100), "posted limits are %s (60 and 100 expected)" % [PlaceNames.limits()])
+	for v in PlaceNames.limits():
+		_check(WordAtlas.layer(str(v)) >= 0, "limit %d has no atlas layer" % v)
+		_check(int(PoliceRules.POSTED_KMH.values().count(float(v))) == 1, "limit %d is not a PoliceRules posted limit" % v)
+		for k in PlaceNames.AREAS:
+			var area := PlaceNames.area_name(k)
+			var g := RoadSigns.gantry(area, Vector3(17.5, 0.0, -42.0), 0.0, -1, v)
+			_check(g.size() == 9, "gantry '%s' with limit %d has %d parts (9 expected)" % [area, v, g.size()])
+			var plates := 0
+			var leftmost := 1e9
+			var panel_lo := 0.0
+			var panel_hi := 0.0
+			var panel_x0 := 0.0
+			var panel_x1 := 0.0
+			for it in g:
+				var xf: Transform3D = it.xf
+				var half := xf.basis.get_scale() / 2.0
+				if int(it.cd.a) == RoadSigns.PANEL:
+					panel_lo = xf.origin.y - half.y
+					panel_hi = xf.origin.y + half.y
+					panel_x0 = xf.origin.x - half.z
+					panel_x1 = xf.origin.x + half.z
+				if int(it.cd.a) != RoadSigns.METAL:
+					leftmost = minf(leftmost, xf.origin.x - half.z)
+			for it in g:
+				var xf: Transform3D = it.xf
+				var half := xf.basis.get_scale() / 2.0
+				if int(it.cd.a) == RoadSigns.ROUND:
+					plates += 1
+					_check(int(it.cd.r) == WordAtlas.layer(str(v)), "gantry '%s' limit plate does not show %d" % [area, v])
+					_check(absf(half.y - half.z) < 0.001, "gantry '%s' limit plate is not round (%.2f x %.2f)" % [area, half.z * 2.0, half.y * 2.0])
+					_check(xf.origin.y - half.y >= panel_lo and xf.origin.y + half.y <= panel_hi and xf.origin.x - half.z >= panel_x0 and xf.origin.x + half.z <= panel_x1, "gantry '%s' limit plate leaves its panel" % area)
+				elif int(it.cd.a) == RoadSigns.TEXT:
+					_check(xf.origin.x - half.z >= panel_x0 and xf.origin.x + half.z <= panel_x1, "gantry '%s' lettering leaves its panel with the limit plate on" % area)
+			_check(plates == 1, "gantry '%s' with limit %d has %d round plates" % [area, v, plates])
+			_check(17.5 - leftmost <= RoadSigns.MAX_PANEL_LEN + 1.5, "gantry '%s' with its limit reaches %.1f m from its post" % [area, 17.5 - leftmost])
+		var rp := RoadSigns.repeater(v, Vector3(17.5, 0.0, -25.0), 4.0)
+		_check(rp.size() == 2, "repeater has %d parts (post + plate)" % rp.size())
+		var plate: Transform3D = rp[1].xf
+		_check(int(rp[1].cd.a) == RoadSigns.ROUND and int(rp[1].cd.r) == WordAtlas.layer(str(v)), "repeater plate does not show %d" % v)
+		_check(plate.origin.y - plate.basis.get_scale().y / 2.0 >= 2.2, "repeater plate bottom is %.2f m up" % (plate.origin.y - plate.basis.get_scale().y / 2.0))
+		var post: Transform3D = rp[0].xf
+		_check(post.origin.y - post.basis.get_scale().y / 2.0 <= -3.9, "repeater post stops short of a 4 m hill foundation")
+	# a road with no map is city (as for the police): 60 everywhere
+	_check(PlaceNames.limit_at(5) == int(PoliceRules.posted_limit(PoliceRules.area_at(275.0))), "limit_at(5) = %d, the police say %d" % [PlaceNames.limit_at(5), int(PoliceRules.posted_limit(PoliceRules.area_at(275.0)))])
 
 func _schedule() -> void:
 	var gantries := 0
@@ -149,6 +198,13 @@ func _schedule() -> void:
 			advances += 1
 			_check(posmod(c + 1 + 8, Districts.RUN) == 0, "advance sign in chunk %d is not 8 chunks before a run" % c)
 	_check(gantries == 5 and advances == 5, "5 runs gave %d gantries and %d advance signs" % [gantries, advances])
+	# limit repeaters: every 400 m, never on a gantry's or an advance sign's chunk
+	var repeaters := 0
+	for c in range(0, Districts.RUN * 5):
+		if B.name_sign_kind(c) == "repeater":
+			repeaters += 1
+			_check(posmod(c, PlaceNames.REPEAT_CHUNKS) == PlaceNames.REPEAT_AT, "repeater in chunk %d is off its 400 m step" % c)
+	_check(repeaters == 10, "5 runs gave %d limit repeaters (10 expected)" % repeaters)
 	_check(B.name_sign_kind(Districts.RUN - 1) == "gantry", "chunk 15 (before the first run change) has no gantry")
 	_check(B.name_sign_kind(Districts.RUN - 8 - 1) == "advance", "chunk 7 has no advance sign")
 	_check(B.name_sign_kind(0) == "", "chunk 0 has a name sign")
@@ -164,9 +220,10 @@ func _built() -> void:
 		counts[c] = signs.visible_instance_count
 		root.free()
 	_check(counts[7] == 5, "chunk 7 draws %d name-sign parts (advance: 5)" % counts[7])
-	_check(counts[15] == 8, "chunk 15 draws %d name-sign parts (gantry: 8)" % counts[15])
-	_check(counts[23] == 5 and counts[31] == 8, "chunks 23 / 31 draw %d / %d" % [counts[23], counts[31]])
-	_check(counts[3] == 0 and counts[16] == 0 and counts[17] == 0, "an ordinary chunk draws name signs: %s" % [counts])
+	_check(counts[15] == 9, "chunk 15 draws %d name-sign parts (gantry with its limit plate: 9)" % counts[15])
+	_check(counts[23] == 5 and counts[31] == 9, "chunks 23 / 31 draw %d / %d" % [counts[23], counts[31]])
+	_check(counts[3] == 2, "chunk 3 draws %d name-sign parts (limit repeater: 2)" % counts[3])
+	_check(counts[16] == 0 and counts[17] == 0, "an ordinary chunk draws name signs: %s" % [counts])
 
 func _paint() -> void:
 	_check(RoadPaint.PAINT_COLOR.is_equal_approx(B.LANE_DASH_COLOR), "road paint colour is not the lane dashes' colour")
@@ -190,9 +247,10 @@ func _paint() -> void:
 	_check(biggest >= 4, "no chunk got the crossing's approach marks (biggest %d)" % biggest)
 	# nothing where the lane count tapers
 	_check(RoadPaint.marks(17, "residential", Districts.RUN, 3, true, float(17) * cl - 600.0, mg, lw, cl).is_empty(), "paint on a chunk where the lane count changes")
-	# an area's number: second chunk of a run, in that district's speed
+	# an area's number: second chunk of a run, the posted limit the police act on
 	var first := RoadPaint.marks(Districts.RUN + 1, "residential", Districts.RUN, 2, false, INF, mg, lw, cl)
-	_check(first.size() == 1 and int(first[0].cd.r) == WordAtlas.layer("30"), "the residential area's start has no painted 30")
+	var posted := str(PlaceNames.limit_at(Districts.RUN + 1))
+	_check(first.size() == 1 and int(first[0].cd.r) == WordAtlas.layer(posted), "the area's start has no painted %s" % posted)
 	var plain := RoadPaint.marks(Districts.RUN + 5, "residential", Districts.RUN, 2, false, INF, mg, lw, cl)
 	_check(plain.is_empty(), "an ordinary residential chunk has %d marks" % plain.size())
 	# a built chunk draws its marks: with the crossing on, the chunk 32 m + 75 m before it

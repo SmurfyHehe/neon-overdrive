@@ -5,12 +5,15 @@ extends SceneTree
 # - can_see: lit far ahead yes, dark far ahead no, dark close yes, behind
 #   only within mirror range, beside only up close;
 # - cop_can_see_player: a wall between them blocks it, gone = seen;
-# - heat: seen over the limit = level 1 at once and rising; under the limit
-#   holds; unseen cools only after COOL_DELAY; a bad cop never raises it;
+# - heat (P1 rulebook): seen over the offence line = a warning first, level 1
+#   after PoliceRules.WARN_SECS if ignored; +1 per 45 s seen offending; under
+#   the line holds; unseen drops one level per PoliceRules.UNSEEN_DROP_SECS; a
+#   bad cop never raises it;
 # - icons: a distinct icon for each of levels 1-5, none at 0; the HUD icon
 #   follows the level;
-# - night one: one warning when a patrol comes near, one jab when spotted;
-#   night two says nothing.
+# - night one: one warning when a patrol comes near, one jab at level 1;
+#   night two has neither (the loudspeaker line is the first warning of any
+#   night).
 #   <godot> --headless --path . -s res://tests/traffic/police_heat.gd
 
 var failures: Array[String] = []
@@ -39,6 +42,7 @@ func _initialize() -> void:
 	heat = PoliceHeat.new()
 	heat.player = player
 	heat.set_physics_process(false)   # stepped by hand below
+	heat.area_override = "city"
 	root.add_child(heat)
 	heat.line_said.connect(func(s: String) -> void: lines.append(s))
 	icons = HeatIcons.new(heat)
@@ -60,7 +64,7 @@ func _geometry() -> void:
 		[Vector3(0, 0, -15), false, true, "dark, 15 m ahead"],
 		[Vector3(0, 0, -150), true, false, "lit, 150 m ahead (past SEE_RANGE_LIT)"],
 		[Vector3(0, 0, 100), true, false, "lit, 100 m behind"],
-		[Vector3(0, 0, 40), true, true, "lit, 40 m behind (mirrors)"],
+		[Vector3(0, 0, 40), true, true, "lit, 40 m behind (mirrors, driving cop)"],
 		[Vector3(10, 0, 0), false, true, "dark, 10 m beside"],
 		[Vector3(30, 0, 0), true, false, "lit, 30 m straight out to the side"],
 		[Vector3(30, 0, -40), true, true, "lit, 50 m ahead-right (inside the cone)"],
@@ -124,26 +128,46 @@ func _physics_process(_delta: float) -> bool:
 			t = 0
 		2:
 			_check(heat.cop_can_see_player(cop), "not seen once the wall is gone")
-			# Night one (no clock = night one): the warning on approach, the jab when spotted.
-			_run(0.2)
-			_check(heat.level == PoliceHeat.ONE_CAR, "seen at 120 km/h: level %d, expected 1 at once" % heat.level)
-			_check(lines.size() == 2 and lines[0] == PoliceHeat.WARNING_LINE and lines[1] == PoliceHeat.MOCK_LINE,
+			# Night one (no clock = night one): the approach warning, then a
+			# warning step (110 km/h is over the city line of 85): no heat for
+			# the first second of judgement, a dim icon, the loudspeaker.
+			_place(-60.0, true, 110.0)
+			_run(0.5)
+			_check(heat.level == PoliceHeat.NONE and not heat.warning_active, "0.5 s in: level %d, warning %s" % [heat.level, heat.warning_active])
+			_run(1.0)
+			_check(heat.level == PoliceHeat.NONE and heat.warning_active, "1.5 s in: level %d, warning %s" % [heat.level, heat.warning_active])
+			_check(lines.size() == 2 and lines[0] == PoliceHeat.WARNING_LINE and lines[1] == PoliceRules.WARN_LINES["city"],
 				"night one lines: %s" % [lines])
-			_check(icons.icon.visible and icons.icon.kind == "car", "HUD icon after level 1: %s %s" % [icons.icon.visible, icons.icon.kind])
-			_run(12.0)
-			_check(heat.level >= PoliceHeat.TWO_CARS, "12 s seen at 120 km/h: still level %d" % heat.level)
+			_check(icons.icon.visible and icons.icon.kind == "car" and icons.icon.modulate.a < 1.0, "dim warning icon: %s %s %.2f" % [icons.icon.visible, icons.icon.kind, icons.icon.modulate.a])
+			_run(PoliceRules.WARN_SECS)
+			_check(heat.level == PoliceHeat.ONE_CAR and not heat.warning_active, "ignored warning: level %d" % heat.level)
+			_check(lines.size() == 3 and lines[2] == PoliceHeat.MOCK_LINE, "night one jab at level 1: %s" % [lines])
+			_check(icons.icon.visible and icons.icon.kind == "car" and icons.icon.modulate.a == 1.0, "HUD icon after level 1: %s %s" % [icons.icon.visible, icons.icon.kind])
+			# +1 per 45 s seen and still offending.
+			_run(40.0)
+			_check(heat.level == PoliceHeat.ONE_CAR, "40 s seen offending: level %d, expected still 1" % heat.level)
+			_run(8.0)
+			_check(heat.level == PoliceHeat.TWO_CARS, "48 s seen offending: level %d, expected 2" % heat.level)
 			_check(icons.icon.kind == PoliceHeat.icon_for(heat.level), "icon %s for level %d" % [icons.icon.kind, heat.level])
 			var held := heat.heat
 			_place(-60.0, true, 50.0)
 			_run(5.0)
-			_check(is_equal_approx(heat.heat, held), "seen under the limit changed heat %.2f -> %.2f" % [held, heat.heat])
-			# Lights off: unseen (after the next look, CHECK_EVERY); holds for COOL_DELAY, then cools.
+			_check(is_equal_approx(heat.heat, held), "seen under the line changed heat %.2f -> %.2f" % [held, heat.heat])
+			# Lights off: unseen (after the next look); holds for the level's
+			# time (60 s at level 2), then drops one level.
+			var lvl := heat.level
 			_place(-60.0, false, 120.0)
-			_run(PoliceHeat.COOL_DELAY - 1.0)
-			_check(not heat.seen and absf(heat.heat - held) < 0.05, "lights off: seen %s, heat %.2f (was %.2f)" % [heat.seen, heat.heat, held])
-			_run(60.0)
-			_check(heat.heat < held - 2.0, "unseen 60 s past the delay: heat only %.2f from %.2f" % [heat.heat, held])
-			_check(lines.size() == 2, "lines repeated: %d" % lines.size())
+			_run(PoliceRules.UNSEEN_DROP_SECS[lvl] - 5.0)
+			_check(not heat.seen and heat.level == lvl, "lights off: seen %s, level %d (was %d)" % [heat.seen, heat.level, lvl])
+			_run(10.0)
+			_check(heat.level == lvl - 1, "unseen past %.0f s: level %d from %d" % [PoliceRules.UNSEEN_DROP_SECS[lvl], heat.level, lvl])
+			_check(lines.size() == 3, "lines repeated: %d" % lines.size())
+			# A hiding pocket with lights off halves the time (30 s -> 15 s at level 1).
+			heat.in_hiding_pocket = true
+			var l2 := heat.level
+			_run(PoliceRules.UNSEEN_DROP_SECS[l2] * 0.5 + 1.0)
+			_check(heat.level == l2 - 1, "hiding pocket: level %d from %d after half the time" % [heat.level, l2])
+			heat.in_hiding_pocket = false
 			# All the way down: no icon.
 			_run(120.0)
 			_check(heat.level == PoliceHeat.NONE and not icons.icon.visible, "cooled to level %d, icon %s" % [heat.level, icons.icon.visible])
@@ -151,9 +175,10 @@ func _physics_process(_delta: float) -> bool:
 			heat.unregister_cop(cop)
 			heat.register_cop(cop, true)
 			_place(-60.0, true, 150.0)
-			_run(5.0)
-			_check(heat.level == PoliceHeat.NONE and not heat.seen, "a bad cop raised heat to %d" % heat.level)
-			# Night two: no warning, no jab.
+			_run(8.0)
+			_check(heat.level == PoliceHeat.NONE and not heat.seen and not heat.warning_active, "a bad cop raised heat to %d" % heat.level)
+			# Night two: no approach warning, no jab; the loudspeaker speaks
+			# once for the night (reset = a new run).
 			heat.unregister_cop(cop)
 			heat.register_cop(cop)
 			heat.reset()
@@ -161,8 +186,12 @@ func _physics_process(_delta: float) -> bool:
 			var clock := NightClock.new()
 			clock.night = 2
 			heat.night_clock = clock
-			_run(1.0)
-			_check(heat.level == PoliceHeat.ONE_CAR and lines.is_empty(), "night two: level %d, lines %s" % [heat.level, lines])
+			_place(-60.0, true, 110.0)
+			_run(7.0)
+			_check(heat.level == PoliceHeat.ONE_CAR and lines == [PoliceRules.WARN_LINES["city"]], "night two: level %d, lines %s" % [heat.level, lines])
+			# Dawn: heat to 0.
+			clock.night_ended.emit(2)
+			_check(heat.level == PoliceHeat.NONE and heat.heat == 0.0, "dawn left heat %.2f" % heat.heat)
 			clock.free()
 			heat.night_clock = null
 			step = 3

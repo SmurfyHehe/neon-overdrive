@@ -28,7 +28,10 @@ const DIM := Color(0.79, 0.81, 0.84, 0.38)
 
 const MARK_BODY := "res://assets/brand/logo_B4_mark_body.svg"
 const MARK_WHEEL := "res://assets/brand/logo_B4_mark_wheel.svg"
+const ShaderWarmup := preload("res://scripts/core/shader_warmup.gd")
 const WHISTLE := "res://assets/ui/sfx/splash_whistle.wav"
+const MENU_WHISTLE_LOOP := "res://assets/ui/sfx/menu_whistle_loop.wav"
+const MENU_WHISTLE_FLUTTER := "res://assets/ui/sfx/menu_whistle_flutter.wav"
 ## The wheel's centre inside the mark's 256 x 256 drawing (tools/build_brand.py).
 const WHEEL_AT := Vector2(105.0, 128.0)
 ## Where the mark sits inside that drawing.
@@ -41,13 +44,20 @@ const TICKER_H := 46.0
 const TICKER_SPEED := 64.0     # design px per second
 const TICKER_GAP := "      +++      "
 const SYNTHWAVE_DIR := "s4_synthwave"
-const DJ_NAME := "Dale"
-const DJ_OLD_NAME := "Dave"
 
 ## Splash timing, matched to the whistle (tools/render_splash_whistle.gd):
 ## the turbo spools for SPOOL seconds, then the valve flutters.
 const SPLASH_SOUND_AT := 0.2
 const SPLASH_SPOOL := 1.45
+const MENU_SPIN_MAX := 18.0    # rad/s, menu logo wheel while W is held
+const MENU_SPIN_UP := 12.0     # rad/s^2
+const MENU_SPIN_DOWN := 7.0
+const MENU_FLUTTER_MIN := 6.0  # rad/s: slower than this, letting go is just a fade
+const MENU_WHISTLE_DB := -8.0
+const MENU_WHISTLE_IN := 0.3   # s to fade the held whistle in
+const MENU_WHISTLE_OUT := 0.2  # s to fade it out on a slow release
+const MENU_SHAKE_PX := 1.5     # held, at full spin
+const MENU_SHAKE_RAD := 0.004
 const SPLASH_FLUTTER := 0.6
 const SPLASH_HOLD := 0.45
 const SPLASH_FADE := 0.35
@@ -70,6 +80,8 @@ var extras_button: Button
 var quit_button: Button
 var main_list: VBoxContainer
 var load_list: VBoxContainer
+var delete_list: VBoxContainer
+var delete_button: Button
 var extras_list: VBoxContainer
 var confirm: ConfirmBox
 var kerbside: TitleKerbside
@@ -84,8 +96,19 @@ var splash_name: Control
 
 var _splash_t := -1.0
 var _wheel_speed := 0.0
+var menu_wheel: TextureRect    # the menu lockup's wheel; spins while W is held
+var menu_spin := 0.0           # its speed, rad/s
+var _spin_held := false        # test hook: hold the throttle without a key event
 var _mark_y := 0.0             # the splash mark's resting place
 var _whistle: AudioStreamPlayer
+var menu_mark: Control         # the menu lockup's mark; shakes with the whistle
+var _mark_rest := Vector2.ZERO
+var _menu_whistle: AudioStreamPlayer   # steady whistle while W is held
+var _menu_flutter: AudioStreamPlayer   # valve chatter on letting go at speed
+var _whistle_gain := 0.0       # 0..1 fade of the held whistle
+var _was_live := false         # W was held (and the title listening) last frame
+var _shake_clock := 0.0
+var _flutter_t := -1.0         # >= 0 while the release shake runs
 var _ticker_w := 0.0
 var _lists: Array[VBoxContainer] = []
 
@@ -112,7 +135,12 @@ func _ready() -> void:
 	slide.set_anchors_preset(Control.PRESET_FULL_RECT)
 	slide.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	stage.add_child(slide)
-	_build_lockup(slide, Vector2(96.0, 84.0), 150.0)
+	var lockup := _build_lockup(slide, Vector2(96.0, 84.0), 150.0)
+	menu_mark = lockup[0]
+	menu_wheel = lockup[1]
+	_mark_rest = menu_mark.position
+	_menu_whistle = _menu_player(MENU_WHISTLE_LOOP)
+	_menu_flutter = _menu_player(MENU_WHISTLE_FLUTTER)
 	_build_menu()
 	_build_ticker()
 	_build_welcome()
@@ -164,6 +192,15 @@ func _build_shade() -> void:
 
 ## The mark with BOOST over a spaced SIMCADE beside it. Returns [mark, wheel,
 ## name block] so the splash can move them.
+func _menu_player(path: String) -> AudioStreamPlayer:
+	var p := AudioStreamPlayer.new()
+	p.bus = &"UI"
+	p.volume_db = MENU_WHISTLE_DB
+	if ResourceLoader.exists(path):
+		p.stream = load(path)
+	add_child(p)
+	return p
+
 func _build_lockup(parent: Control, at: Vector2, mark_px: float) -> Array:
 	# mark_px is the height of the mark itself; its drawing is a 256 box with
 	# the mark at MARK_BOX inside it.
@@ -258,6 +295,7 @@ func _build_menu() -> void:
 		confirm.ask("Quit to desktop?", "Quit", game_state.quit))
 
 	load_list = _new_list()
+	delete_list = _new_list()
 	extras_list = _new_list()
 	_add_row(extras_list, "ABOUT EARLY ACCESS", _show_welcome)
 	_add_row(extras_list, "OPEN PHOTO FOLDER", _open_photos)
@@ -319,6 +357,8 @@ func _add_row(list: VBoxContainer, text: String, action: Callable) -> Button:
 func _show_list(list: VBoxContainer, focus: Button = null) -> void:
 	if list == load_list:
 		_fill_load_list()
+	elif list == delete_list:
+		_fill_delete_list()
 	for l in _lists:
 		l.visible = l == list
 	if not is_inside_tree() or not visible:
@@ -373,7 +413,56 @@ func _fill_load_list() -> void:
 			text += "   IN USE"
 		var row := _add_row(load_list, text, _load_slot.bind(n))
 		row.disabled = s.empty and n != active
+	delete_button = _add_row(load_list, "DELETE A SAVE", func() -> void: _show_list(delete_list))
+	delete_button.disabled = not _any_save()
 	_add_row(load_list, "BACK", func() -> void: _show_list(main_list, load_button))
+
+func _any_save() -> bool:
+	for n in range(1, SaveStore.SLOTS + 1):
+		if not SaveStore.summary(n).empty:
+			return true
+	return false
+
+## What a slot holds, in plain words (the delete rows and their question).
+static func slot_text(n: int, s: Dictionary) -> String:
+	var text := "$%s" % _thousands(int(s.cash))
+	if int(s.saved_at) > 0:
+		text += ", last played %s" % Time.get_date_string_from_unix_time(int(s.saved_at))
+	return text
+
+## Load > Delete a save: one row per save that holds something. Picking one
+## asks first, and the question's focus starts on No (ConfirmBox).
+func _fill_delete_list() -> void:
+	for c in delete_list.get_children():
+		delete_list.remove_child(c)
+		c.queue_free()
+	for n in range(1, SaveStore.SLOTS + 1):
+		var s := SaveStore.summary(n)
+		if s.empty:
+			continue
+		_add_row(delete_list, "DELETE SAVE %d   %s" % [n, slot_text(n, s).to_upper()], _ask_delete.bind(n))
+	_add_row(delete_list, "BACK", func() -> void: _show_list(load_list))
+
+func _ask_delete(n: int) -> void:
+	var s := SaveStore.summary(n)
+	var text := "Delete save %d? It holds %s." % [n, slot_text(n, s)]
+	if n == SaveStore.active_slot():
+		text += " It is the save in use: the game starts over on it."
+	confirm.ask(text, "Delete save %d" % n, _delete_slot.bind(n))
+
+func _delete_slot(n: int) -> void:
+	var active := n == SaveStore.active_slot()
+	if not SaveStore.delete_slot(n):
+		return
+	if active:
+		# The world behind the title still holds the deleted save's run and
+		# money: load it again, empty, without saving first.
+		GameState.title_seen = false
+		get_tree().paused = false
+		get_tree().reload_current_scene()
+		return
+	_refresh_saves()
+	_show_list(delete_list if _any_save() else load_list)
 
 static func _thousands(v: int) -> String:
 	var s := str(absi(v))
@@ -458,17 +547,15 @@ func _build_ticker() -> void:
 	bar.add_child(ticker_speaker)
 
 ## The lines the news line runs: the talk station's own, then tonight's bands.
-## The DJ is Dale (decided 2026-10-10); the radio data still says Dave, so the
-## name is swapped here until that data is renamed.
 static func news_lines() -> PackedStringArray:
 	var out: PackedStringArray = []
 	for st: Dictionary in RadioStations.STATIONS:
 		if st.get("kind", "") == "talk":
 			for l: String in st.get("dj", []):
-				out.append(l.replace(DJ_OLD_NAME, DJ_NAME))
+				out.append(l)
 	for band: Array in NightBands.BAND_LINES:
 		if not band.is_empty():
-			out.append(str(band[0]).replace(DJ_OLD_NAME, DJ_NAME))
+			out.append(str(band[0]))
 	return out
 
 func _run_ticker(delta: float) -> void:
@@ -595,6 +682,9 @@ func _start_splash() -> void:
 	splash.visible = true
 	splash.modulate.a = 1.0
 	panel.visible = false
+	# Shader warm-up (shader_warmup.gd): compiles what the drive will need
+	# while the splash covers the screen.
+	get_parent().add_child.call_deferred(ShaderWarmup.new())
 
 func _end_splash() -> void:
 	_splash_t = -1.0
@@ -629,6 +719,8 @@ func _run_splash(delta: float) -> void:
 		_wheel_speed = move_toward(_wheel_speed, 0.6, delta * 20.0)
 	splash_wheel.rotation += _wheel_speed * delta
 	var end := SPLASH_SOUND_AT + vent_at + SPLASH_FLUTTER + SPLASH_HOLD
+	if _splash_t > end and ShaderWarmup.busy():
+		_splash_t = end   # hold the last pose until the shaders are ready (bounded there)
 	if _splash_t > end:
 		splash.modulate.a = 1.0 - clampf((_splash_t - end) / SPLASH_FADE, 0.0, 1.0)
 		panel.visible = true
@@ -650,6 +742,108 @@ func _process(delta: float) -> void:
 		_run_splash(delta)
 	if panel.visible:
 		_run_ticker(delta)
+		if not splash_running():
+			_run_menu_spin(delta)
+	_run_menu_voice(delta)
+
+# Hold W (the throttle) and the menu logo's wheel spools up; let go and it
+# eases to a stop. Polled, because the tree is paused behind the title and
+# no car is reading the throttle.
+func _run_menu_spin(delta: float) -> void:
+	var held := _throttle_held()
+	var rate := MENU_SPIN_UP if held else MENU_SPIN_DOWN
+	menu_spin = move_toward(menu_spin, MENU_SPIN_MAX if held else 0.0, rate * delta)
+	if menu_wheel != null and menu_spin != 0.0:
+		var speed := menu_spin
+		if _flutter_t >= 0.0 and not held:
+			# Throttle shut at speed: the wheel stalls in steps, as in the splash.
+			var beat := sin(_flutter_t * TAU * FLUTTER_HZ)
+			speed *= 0.45 + 0.55 * maxf(0.0, beat)
+		menu_wheel.rotation = wrapf(menu_wheel.rotation + speed * delta, -PI, PI)
+
+func _throttle_held() -> bool:
+	return _spin_held or Input.is_action_pressed("accelerate")
+
+## The title is listening to W: no splash, no Settings, Load list, welcome
+## card or confirm box in the way.
+func _menu_live() -> bool:
+	return visible and panel.visible and not splash_running() 			and not load_list.visible and not welcome.visible and not confirm.is_open()
+
+## The turbo whistle and the logo's shake that go with holding W. Held: a
+## steady whistle that rises in pitch with the wheel and the mark jitters
+## with it. Let go at speed: the valve flutters and the mark shakes out, as
+## the splash's does. A slow wheel just fades the whistle.
+func _run_menu_voice(delta: float) -> void:
+	if menu_mark == null:
+		return
+	var live := _menu_live()
+	var held := live and _throttle_held()
+	if not live:
+		if _was_live or _flutter_t >= 0.0 or _whistle_gain > 0.0:
+			_stop_menu_voice()
+		return
+	var k := clampf(menu_spin / MENU_SPIN_MAX, 0.0, 1.0)
+	if held:
+		if _flutter_t >= 0.0:
+			_end_flutter()
+			_menu_flutter.stop()   # W pressed again mid-chatter
+		_was_live = true
+		_shake_clock += delta
+		var beat := sin(_shake_clock * TAU * FLUTTER_HZ)
+		menu_mark.position = _mark_rest + Vector2(0.0, beat * MENU_SHAKE_PX * k)
+		menu_mark.rotation = beat * MENU_SHAKE_RAD * k
+		_whistle_gain = move_toward(_whistle_gain, 1.0, delta / MENU_WHISTLE_IN)
+		if not _menu_whistle.playing and _menu_whistle.stream != null:
+			_menu_whistle.play()
+		_menu_whistle.pitch_scale = lerpf(0.7, 1.0, k)
+		_menu_whistle.volume_db = MENU_WHISTLE_DB + linear_to_db(maxf(_whistle_gain, 0.0001))
+		return
+	if _was_live:
+		_was_live = false
+		_rest_mark()
+		if menu_spin > MENU_FLUTTER_MIN:
+			_menu_whistle.stop()
+			_whistle_gain = 0.0
+			if _menu_flutter.stream != null:
+				_menu_flutter.play()
+			_flutter_t = 0.0
+		else:
+			_flutter_t = -1.0
+	if _flutter_t >= 0.0:
+		var f := _flutter_t / SPLASH_FLUTTER
+		if f >= 1.0:
+			_end_flutter()
+		else:
+			var beat := sin(_flutter_t * TAU * FLUTTER_HZ)
+			menu_mark.position = _mark_rest + Vector2(0.0, beat * 5.0 * (1.0 - f))
+			menu_mark.rotation = beat * 0.012 * (1.0 - f)
+			_flutter_t += delta
+	# A slow release: fade the loop out, then let it go.
+	if _whistle_gain > 0.0:
+		_whistle_gain = move_toward(_whistle_gain, 0.0, delta / MENU_WHISTLE_OUT)
+		_menu_whistle.volume_db = MENU_WHISTLE_DB + linear_to_db(maxf(_whistle_gain, 0.0001))
+		if _whistle_gain <= 0.0:
+			_menu_whistle.stop()
+
+func _rest_mark() -> void:
+	menu_mark.position = _mark_rest
+	menu_mark.rotation = 0.0
+
+func _end_flutter() -> void:
+	_flutter_t = -1.0
+	_rest_mark()
+
+## Everything quiet and the mark home: Settings opened, the title left, or
+## the splash took over.
+func _stop_menu_voice() -> void:
+	_was_live = false
+	_whistle_gain = 0.0
+	_flutter_t = -1.0
+	if _menu_whistle != null:
+		_menu_whistle.stop()
+		_menu_flutter.stop()
+	if menu_mark != null:
+		_rest_mark()
 
 func _input(event: InputEvent) -> void:
 	if not visible:
@@ -670,6 +864,9 @@ func _input(event: InputEvent) -> void:
 		elif load_list.visible:
 			get_viewport().set_input_as_handled()
 			_show_list(main_list, load_button)
+		elif delete_list.visible:
+			get_viewport().set_input_as_handled()
+			_show_list(load_list)
 		elif extras_list.visible:
 			get_viewport().set_input_as_handled()
 			_show_list(main_list, extras_button)
@@ -719,6 +916,7 @@ func _enter_menu() -> void:
 
 ## Leaving for the road: the street goes, the radio and the frame cap come back.
 func _leave_title() -> void:
+	_stop_menu_voice()
 	if splash_running():
 		_end_splash()
 	if kerbside != null:
@@ -728,7 +926,7 @@ func _leave_title() -> void:
 	if radio != null:
 		radio.give_back()
 	if _caps_fps():
-		Engine.max_fps = GraphicsSettings.fps_cap
+		Engine.max_fps = GraphicsSettings.engine_fps()
 
 static func _synthwave_station() -> int:
 	for i in RadioStations.STATIONS.size():

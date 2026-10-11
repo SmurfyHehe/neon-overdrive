@@ -8,7 +8,7 @@ extends SceneTree
 # - clutch wear builds only with slip power and weakens the clutch with a floor;
 #   repair() resets everything
 # - the real game: driving on the limiter in 1st heats the driven tyres, the grip
-#   multipliers reach the wheels, the car still moves; the pause menu has a Service
+#   multipliers reach the wheels, the car still moves; the garage has a Service car
 #   button that resets wear
 # - load sensitivity: a stiffer load exponent lowers peak cornering grip a little,
 #   top speed is unchanged (TuneTrack)
@@ -97,14 +97,15 @@ func _physics_process(_delta: float) -> bool:
 			if waited == 5:
 				p.health.tyre_wear[2] = 0.5
 				p.health.clutch_wear = 0.5
-				var menu: PauseMenu = null
+				# Service car is the garage's button now (GarageScreen -> GarageService).
+				var garage: GarageScreen = null
 				for c in game.get_children():
-					if c is PauseMenu:
-						menu = c
-				_check(menu != null, "no pause menu")
-				if menu != null:
-					menu._service_car()
-				_check(p.health.tyre_wear[2] == 0.0 and p.health.clutch_wear == 0.0, "the Service button should reset wear")
+					if c is GarageScreen:
+						garage = c
+				_check(garage != null, "no garage screen")
+				if garage != null:
+					garage.service_button.pressed.emit()
+				_check(p.health.tyre_wear[2] == 0.0 and p.health.clutch_wear == 0.0, "Service car should reset wear")
 				_go(Step.DONE)
 				_run_tracks()
 	return false

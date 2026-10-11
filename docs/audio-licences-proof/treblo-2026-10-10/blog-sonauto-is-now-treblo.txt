@@ -1,0 +1,6 @@
+﻿SOURCE: https://treblo.com/blog/sonauto-is-now-treblo
+FETCHED: 2026-10-10 via built-in browser
+PAGE DATE: June 3, 2026
+=====
+Sonauto is now Treblo. We've changed our name from Sonauto to Treblo and moved to treblo.com. Your account, your songs, and your shared links all still work. [...] The domain. sonauto.ai is now treblo.com. [...] The API host: api.treblo.com. [...] The Treblo Team - Formerly Sonauto.
+(Confirms product/domain identity: Treblo = formerly Sonauto, operator Sonauto, Inc., same entity named in the ToS.)

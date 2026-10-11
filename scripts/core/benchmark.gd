@@ -51,6 +51,9 @@ const WARMUP_SECS := 2.0  # skip shader-compile hitches at startup
 ##          Default: legacy_bench (full throttle, never brakes), or weave when
 ##          weave=1. bot=legacy_bench with weave=1 is the old blind lane swap.
 ## seed     the fuzz mode's key seed.
+## warmup   1 = run the splash's shader warm-up first (shader_warmup.gd), as a
+##          normal launch does; the result line counts the pipelines still
+##          compiled mid-drive either way.
 ## Defaults reproduce the old benchmark exactly, so earlier lines still compare.
 ## The radio always plays (it is part of the game), so every run has it on.
 const DEFAULT_SECS := 45.0
@@ -177,6 +180,18 @@ func _setup_view() -> void:
 		cam.perspective.window = 0.5
 
 func _process(delta: float) -> void:
+	if not started and opt("warmup") == "1":
+		# The splash's shader warm-up, run here because the benchmark skips the
+		# title: the drive starts once it is done.
+		if not _warmup_made:
+			_warmup_made = true
+			game.add_child(ShaderWarmup.new())
+			return
+		if ShaderWarmup.busy():
+			return
+		if not _warmup_said:
+			_warmup_said = true
+			print("BENCHMARK warmup: %d stand-ins, %d pipelines, %.2f s" % [ShaderWarmup.last.proxies, ShaderWarmup.last.pipelines, ShaderWarmup.last.secs])
 	if not started:
 		started = true
 		_start_driver()
@@ -184,6 +199,7 @@ func _process(delta: float) -> void:
 		_diagnose()
 		return
 	t += delta
+	_count_pipelines(delta)
 	var ev := SpikeLog.take()
 	var tick := Engine.get_physics_frames()
 	if t > WARMUP_SECS:
@@ -213,6 +229,41 @@ func _process(delta: float) -> void:
 		set_process(false)
 		_report()
 		get_tree().quit()
+
+# Shader pipelines compiled while driving (graphics setup, 2026-10-10). Godot
+# builds a pipeline the first time a material is drawn in a new way; one built
+# at draw time stalls that frame. Counts the ones that land after the warm-up
+# seconds, and prints when each batch happened, so a run shows whether the
+# drive itself is still compiling (ShaderWarmup is meant to move them into
+# the splash).
+const ShaderWarmup := preload("res://scripts/core/shader_warmup.gd")
+var _warmup_made := false
+var _warmup_said := false
+const PIPELINE_MONITORS := {
+	"canvas": Performance.PIPELINE_COMPILATIONS_CANVAS, "mesh": Performance.PIPELINE_COMPILATIONS_MESH,
+	"surface": Performance.PIPELINE_COMPILATIONS_SURFACE, "draw": Performance.PIPELINE_COMPILATIONS_DRAW,
+	"specialization": Performance.PIPELINE_COMPILATIONS_SPECIALIZATION}
+var pipe_drive := 0     # compiled after WARMUP_SECS
+var pipe_hitches := 0   # of those frames, how many ran over 25 ms
+var _pipe_last := {}
+
+func _count_pipelines(delta: float) -> void:
+	var what := ""
+	var added := 0
+	for k: String in PIPELINE_MONITORS:
+		var v := int(Performance.get_monitor(PIPELINE_MONITORS[k]))
+		var d: int = v - int(_pipe_last.get(k, 0))
+		_pipe_last[k] = v
+		if d > 0:
+			what += " %s+%d" % [k, d]
+			added += d
+	if added == 0:
+		return
+	if t > WARMUP_SECS:
+		pipe_drive += added
+		if delta > 0.025:
+			pipe_hitches += 1
+	print("BENCHMARK pipelines t=%.2fs frame=%.1fms%s" % [t, delta * 1000.0, what])
 
 # The driver is the shared test driver (scripts/core/test_driver.gd). With no
 # options it is legacy_bench: the heading hold at full throttle this benchmark
@@ -273,6 +324,7 @@ func _report() -> void:
 		gpu_ms / n, cpu_ms / n, setup_ms / n, process_ms / n, physics_ms / n, TrafficSettings.car_count, roundi(TrafficSettings.detail_distance), roundi(dc_avg), dc_max,
 		objects_sum / n, prims_sum / n / 1000, int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)), max_speed, spikes33, spikes50]
 	line += "  gfx=%s scale_end=%.2f shimmer=%d" % [GraphicsSettings.preset, get_viewport().scaling_3d_scale, 1 if FxSettings.is_on("heat_shimmer") else 0]
+	line += "  pipelines_mid_drive=%d (hitch frames=%d)" % [pipe_drive, pipe_hitches]
 	line += "  opts=[%s]" % " ".join(OS.get_cmdline_user_args())
 	if bot != null and bot.mode != "legacy_bench":
 		line += "  bot=[%s]" % bot.summary()

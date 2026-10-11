@@ -1756,8 +1756,8 @@ static func _clear_at_junction(root: Node3D, index: int, info: Dictionary, chunk
 		return info
 	var z0 := float(info.z) + float(info.d) / 2.0
 	var z1 := float(info.z) - float(info.d) / 2.0
-	# a gas station (own side only) clears its lot the same way
-	if not Junction.cleared(chunk_index, z0, z1) and not (int(info.side) == 1 and GasStation.cleared(chunk_index, z0, z1)):
+	# a gas station (a building's own side of the road) clears its lot the same way
+	if not Junction.cleared(chunk_index, z0, z1) and not GasStation.cleared(chunk_index, z0, z1, int(info.side)):
 		return info
 	var mi: MeshInstance3D = root.get_node(NodePath("BuildingMesh%d" % index))
 	var body: StaticBody3D = root.get_node(NodePath("BuildingBody%d" % index))
@@ -1834,9 +1834,11 @@ const NAME_SIGN_SETBACK := 0.25
 ## whole number of chunks further back (PlaceNames.ADVANCE_M).
 const GANTRY_Z := -42.0
 const ADVANCE_Z := -2.0
+const REPEATER_Z := -25.0
 
 ## Which area sign, if any, belongs to chunk `chunk_index`: "" (none), "gantry"
-## or "advance"; the area it announces is Districts.name_of_run(run + 1).
+## or "advance" (the area they announce is Districts.name_of_run(run + 1)), or
+## "repeater": the round limit sign, every 400 m inside an area.
 static func name_sign_kind(chunk_index: int) -> String:
 	if chunk_index < 0:
 		return ""
@@ -1845,6 +1847,8 @@ static func name_sign_kind(chunk_index: int) -> String:
 		return "gantry"
 	if posmod(chunk_index + 1 + ahead, Districts.RUN) == 0:
 		return "advance"
+	if posmod(chunk_index, PlaceNames.REPEAT_CHUNKS) == PlaceNames.REPEAT_AT:
+		return "repeater"
 	return ""
 
 ## Area signs (world step 4, "Names you can read"): the gantry in the last
@@ -1860,7 +1864,13 @@ static func _update_names(root: Node3D, chunk_index: int, walk0: float, walk1: f
 		mm.visible_instance_count = 0
 		return
 	var area := PlaceNames.area_name(Districts.name_of_run(Districts.run_of(chunk_index) + 1))
-	var z := GANTRY_Z if kind == "gantry" else ADVANCE_Z
+	var z := GANTRY_Z if kind == "gantry" else (REPEATER_Z if kind == "repeater" else ADVANCE_Z)
+	# the gantry posts the limit of the area it leads into, a repeater its own
+	var limit := 0
+	if kind == "gantry":
+		limit = PlaceNames.limit_at(chunk_index + 1)
+	elif kind == "repeater":
+		limit = PlaceNames.limit_at(chunk_index)
 	var x := lerpf(walk0, walk1, -z / CHUNK_LEN) + NAME_SIGN_SETBACK
 	var foot := Vector3(x, 0.0, z)
 	var burnt := -1
@@ -1872,9 +1882,11 @@ static func _update_names(root: Node3D, chunk_index: int, walk0: float, walk1: f
 	var cached := RoadSigns.has_flag("cache")
 	var list: Array
 	if cached:
-		list = RoadSigns.parts_at_origin(kind, area, _foundation(), burnt)
+		list = RoadSigns.parts_at_origin(kind, area, _foundation(), burnt, limit)
 	elif kind == "gantry":
-		list = RoadSigns.gantry(area, foot, _foundation(), burnt)
+		list = RoadSigns.gantry(area, foot, _foundation(), burnt, limit)
+	elif kind == "repeater":
+		list = RoadSigns.repeater(limit, foot, _foundation())
 	else:
 		list = RoadSigns.advance(area, foot, _foundation())
 	var n := mini(list.size(), mm.instance_count)
@@ -2174,11 +2186,12 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var pt: float = -pz / CHUNK_LEN
 		var own_edge: float = lerp(start_own_shoulder, end_own_shoulder, pt)
 		var onc_edge: float = lerp(start_onc_shoulder, end_onc_shoulder, pt)
-		# a gas station bay: the own post is parked out of sight (the two sides
-		# share one instance count)
-		var own_y := -50.0 if GasStation.in_bay(chunk_index, pz) else PYLON_HEIGHT / 2.0
+		# a gas station bay: that side's post is parked out of sight (the two
+		# sides share one instance count)
+		var own_y := -50.0 if GasStation.in_bay(chunk_index, pz, 1) else PYLON_HEIGHT / 2.0
+		var onc_y := -50.0 if GasStation.in_bay(chunk_index, pz, -1) else PYLON_HEIGHT / 2.0
 		pylons_own.set_instance_transform(n_posts, _xf_up(own_edge, own_y, pz))
-		pylons_onc.set_instance_transform(n_posts, _xf_up(-onc_edge, PYLON_HEIGHT / 2.0, pz))
+		pylons_onc.set_instance_transform(n_posts, _xf_up(-onc_edge, onc_y, pz))
 		n_posts += 1
 	pylons_own.visible_instance_count = n_posts
 	pylons_onc.visible_instance_count = n_posts
@@ -2389,7 +2402,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			var lz := -float(i) * LAMP_SPACING - (LAMP_SPACING * 0.25 if side == 1 else LAMP_SPACING * 0.75)
 			if Junction.in_mouth(chunk_index, lz):
 				continue  # the signal masts stand there
-			if side == 1 and GasStation.in_bay(chunk_index, lz):
+			if GasStation.in_bay(chunk_index, lz, side):
 				continue  # the gas station canopy lights the bay
 			lamp_zs[side].append(lz)
 			var lt: float = -lz / CHUNK_LEN

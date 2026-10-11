@@ -58,42 +58,10 @@ const MIRROR_INSIDE := Color("#0B0E14")
 const PAINT_MATS := ["paint", "roof"]
 const RIM_MATS := ["rim", "rim_face"]
 
-const BODY_SHADER := """
-shader_type spatial;
-render_mode cull_back;
-// Vertex alpha 0 marks paint (or rim) faces; they take the tint and a glossier finish.
-uniform vec3 paint : source_color = vec3(1.0, 0.54, 0.12);
-uniform float paint_metallic = 0.5;
-uniform float paint_roughness = 0.38;
-// Road grime (car_dirt.gd): 0 clean .. 1 a full night's dirt. Thick on the sills,
-// thin on the roof, blotchy from a hash of the object-space position, so it
-// costs a few ALU ops per pixel and no texture (integrated graphics).
-uniform float dirt : hint_range(0.0, 1.0) = 0.0;
-uniform vec3 dirt_color : source_color = vec3(0.40, 0.35, 0.28);
-varying vec3 obj_pos;
-varying vec3 obj_nrm;
-float grime_hash(vec3 q) {
-	return fract(sin(dot(q, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
-}
-void vertex() {
-	obj_pos = VERTEX;
-	obj_nrm = NORMAL;
-}
-void fragment() {
-	float p = 1.0 - COLOR.a;
-	vec3 albedo = mix(COLOR.rgb, paint, p);
-	float metallic = mix(0.1, paint_metallic, p);
-	float roughness = mix(0.75, paint_roughness, p);
-	float low = 1.0 - smoothstep(0.08, 1.0, obj_pos.y);           // sills first, roof last
-	float side = 1.0 - 0.55 * max(obj_nrm.y, 0.0);                 // flat tops catch less
-	float blotch = mix(grime_hash(floor(obj_pos * 11.0)), grime_hash(floor(obj_pos * 3.5) + 7.0), 0.5);
-	float grime = clamp(dirt * (0.2 + 1.3 * low) * side * (0.35 + 0.65 * blotch), 0.0, 1.0);
-	ALBEDO = mix(albedo, dirt_color, grime * 0.95);
-	METALLIC = mix(metallic, 0.0, grime);
-	ROUGHNESS = mix(roughness, 0.92, grime);
-	SPECULAR = 0.5;
-}
-"""
+## The paint shader is CarPaint's (one for every car); the name stays for
+## the code that reads it.
+static var BODY_SHADER: String:
+	get: return CarPaint.code("body", CarPaint.tier())
 
 ## Lights are drawn from both sides: the lamp lenses are single quads laid on
 ## the body, and the design's left pop-up lens is wound the other way round
@@ -102,17 +70,21 @@ const GLOW_SHADER := """
 shader_type spatial;
 render_mode unshaded, cull_disabled;
 uniform float energy = 2.5;
+uniform float brake_gain = 2.2;
+instance uniform float brake : instance_index(1) = 0.0;
 void fragment() {
-	ALBEDO = COLOR.rgb;
-	EMISSION = COLOR.rgb * energy;
+	vec3 c = COLOR.rgb;
+	// Linear colours: the tail red is the only lamp with green and blue near 0.
+	float tail = step(0.4, c.r) * step(c.g, 0.06) * step(c.b, 0.06);
+	ALBEDO = c;
+	EMISSION = c * energy * (1.0 + tail * brake * brake_gain);
 }
 """
 
 static var _body_mesh: ArrayMesh
 static var _wheel_meshes := {}
-static var _body_shader: Shader
 static var _glow_shader: Shader
-static var _glass_mat: StandardMaterial3D
+static var _glass_mat: ShaderMaterial
 static var _glow_mat: ShaderMaterial
 static var _wheel_mat: ShaderMaterial
 
@@ -131,6 +103,8 @@ static func build_chassis_visual(paint: Color = PAINT) -> Node3D:
 	body.position = lift
 	var mesh := _get_body_mesh()
 	body.mesh = mesh
+	body.set_instance_shader_parameter("finish", CarPaint.finish_for(KIND))
+	body.set_instance_shader_parameter("seams", mesh.get_meta("paint_seams", Vector4.ZERO))
 	var paint_mat := _new_paint_material(paint)
 	for i in mesh.get_surface_count():
 		if mesh.surface_get_name(i) == "body":
@@ -290,44 +264,23 @@ static func _surface_of(mat: String) -> String:
 	return "body"
 
 ## One ArrayMesh from the packed triangles: surfaces "body", "glass", "glow"
-## (whichever exist), flat normals, vertex colours in linear space with the
-## alpha flag for tinted faces. The design's triangles are counter-clockwise
-## seen from outside; Godot's front faces are clockwise, so each one is
-## written a, c, b.
+## (whichever exist), built by CarPaint.build_groups (smooth normals, linear
+## vertex colours with the alpha flag for tinted faces, the finish, shade and
+## edge arrays the paint shader reads).
 static func _build_mesh(tris: PackedVector3Array, mats: PackedByteArray, is_body: bool) -> ArrayMesh:
-	var groups := {}
-	var tint_mats: Array = PAINT_MATS if is_body else RIM_MATS
-	for t in mats.size():
-		var mname: String = Data.NAMES[mats[t]]
-		var kind := _surface_of(mname)
-		if not groups.has(kind):
-			groups[kind] = [PackedVector3Array(), PackedVector3Array(), PackedColorArray()]
-		var g: Array = groups[kind]
-		var a := tris[t * 3]
-		var b := tris[t * 3 + 1]
-		var c := tris[t * 3 + 2]
-		var n := (b - a).cross(c - a)
-		if n.length_squared() < 1e-12:
-			continue
-		n = n.normalized()
-		var col := Color(Data.COLORS[mname]).srgb_to_linear()
-		col.a = 0.0 if mname in tint_mats else 1.0
-		for p in [a, c, b]:
-			g[0].append(p)
-			g[1].append(n)
-			g[2].append(col)
+	var opts := {"is_wheel": not is_body}
+	if is_body:
+		var hubs := []
+		for w in Data.WHEELS:
+			hubs.append(w.hub)
+		opts["wheels"] = hubs
+		opts["wheel_r"] = DESIGN_WHEEL_R
+	var groups := CarPaint.build_groups(Data, tris, mats, PAINT_MATS if is_body else RIM_MATS, opts)
 	var mesh := ArrayMesh.new()
 	for kind in ["body", "glass", "glow"]:
 		if not groups.has(kind):
 			continue
-		var arrays := []
-		arrays.resize(Mesh.ARRAY_MAX)
-		arrays[Mesh.ARRAY_VERTEX] = groups[kind][0]
-		arrays[Mesh.ARRAY_NORMAL] = groups[kind][1]
-		arrays[Mesh.ARRAY_COLOR] = groups[kind][2]
-		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-		var idx := mesh.get_surface_count() - 1
-		mesh.surface_set_name(idx, kind)
+		var idx := CarPaint.add_surface(mesh, groups[kind], kind)
 		match kind:
 			"glass":
 				mesh.surface_set_material(idx, _get_glass_material())
@@ -335,6 +288,8 @@ static func _build_mesh(tris: PackedVector3Array, mats: PackedByteArray, is_body
 				mesh.surface_set_material(idx, _get_glow_material())
 			_:
 				mesh.surface_set_material(idx, _new_paint_material(PAINT))
+	if is_body:
+		mesh.set_meta("paint_seams", CarPaint.cut_seams(Data, tris, mats, 2))
 	return mesh
 
 ## Centres of the head and tail lamp faces, left and right, from the glow
@@ -360,11 +315,8 @@ static func _lamp_centres() -> Dictionary:
 # ---------- materials ----------
 
 static func _new_paint_material(paint: Color) -> ShaderMaterial:
-	if _body_shader == null:
-		_body_shader = Shader.new()
-		_body_shader.code = BODY_SHADER
 	var m := ShaderMaterial.new()
-	m.shader = _body_shader
+	m.shader = CarPaint.body_shader(false)
 	m.set_shader_parameter("paint", paint)
 	return m
 
@@ -375,15 +327,14 @@ static func _get_wheel_material() -> ShaderMaterial:
 		_wheel_mat.set_shader_parameter("paint_roughness", 0.3)
 	return _wheel_mat
 
-static func _get_glass_material() -> StandardMaterial3D:
+static func _get_glass_material() -> ShaderMaterial:
 	if _glass_mat == null:
-		_glass_mat = StandardMaterial3D.new()
 		# See-through (cockpit milestone 2): the driver and cabin show through
 		# the windows in the chase view. Dark tint, so the outside look holds.
-		_glass_mat.albedo_color = Color(Color(Data.COLORS.glass), 0.5)
-		_glass_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		_glass_mat.metallic = 0.6
-		_glass_mat.roughness = 0.08
+		_glass_mat = ShaderMaterial.new()
+		_glass_mat.shader = CarPaint.glass_shader(true)
+		_glass_mat.set_shader_parameter("glass", Color(Data.COLORS.glass))
+		_glass_mat.set_shader_parameter("see", 0.5)
 	return _glass_mat
 
 static func _get_glow_material() -> ShaderMaterial:

@@ -93,6 +93,9 @@ func _physics_process(_delta: float) -> void:
 		return
 	if not car.global_transform.is_finite() or not car.linear_velocity.is_finite():
 		return  # the off-map rescue's case
+	if car.freeze:
+		hold_ticks = 0  # held in place by something else (a photo, a cutscene)
+		return
 	step(car.global_transform.basis.y.y, car.linear_velocity.length() * 3.6)
 
 ## One tick of the watch, from raw numbers. True on the tick the car is to be

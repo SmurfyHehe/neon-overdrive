@@ -199,6 +199,17 @@ func _check_lamp_life(set_node: TitleKerbside) -> void:
 	_check(LampLife.wind() > 1.2 and LampLife.wind() < 1.5, "wind is easing back after release, got %.2f" % LampLife.wind())
 	set_node._ease_wind(2.0)
 	_check(is_equal_approx(LampLife.wind(), TitleKerbside.WIND_REST), "wind is back at rest after 3 s, got %.2f" % LampLife.wind())
+	# the same wind number drives the moths and the bat (shader uniform)
+	var swarm := life.get_node_or_null(^"LampMoths") as MultiMeshInstance3D
+	var swarm_mat := swarm.material_override as ShaderMaterial if swarm != null else null
+	set_node.set_title_wind(2.0)
+	set_node._ease_wind(0.016)
+	_check(swarm_mat != null and is_equal_approx(float(swarm_mat.get_shader_parameter("wind")), 2.0),
+			"the moths and bat read the turbo wind (uniform %s)" % [swarm_mat.get_shader_parameter("wind") if swarm_mat != null else "-"])
+	set_node.set_title_wind(TitleKerbside.WIND_REST)
+	set_node._ease_wind(4.0)
+	_check(swarm_mat != null and is_equal_approx(float(swarm_mat.get_shader_parameter("wind")), TitleKerbside.WIND_REST),
+			"the moths and bat are back at the default breeze")
 	# the switch: off leaves every node empty
 	LampLife.enabled = false
 	var off := TitleKerbside.new(set_node.kind)

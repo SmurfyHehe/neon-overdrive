@@ -102,7 +102,7 @@ static func freeze_for_shots(u: float) -> void:
 
 static func set_wind(w: float) -> void:
 	_wind = clampf(w, 0.0, 2.0)
-	for m in [_banner_mat, _steam_mat, _litter_mat]:
+	for m in [_swarm_mat, _banner_mat, _steam_mat, _litter_mat]:
 		if m != null:
 			(m as ShaderMaterial).set_shader_parameter("wind", _wind)
 
@@ -304,37 +304,46 @@ render_mode unshaded, cull_disabled, fog_disabled;
 // INSTANCE_CUSTOM: x swarm seed, y bat period seed, z bat phase seed, w bat?
 uniform vec3 head = vec3(-1.7, 7.34, 0.0);
 uniform float freeze = -1.0;  // >= 0: every bat held at this point of its flight (screenshots)
+uniform float wind = 0.6;     // LampLife.wind(); above 0.6 the moths stream and thin, the bat is pushed
 varying vec3 col;
 
 void vertex() {
 	vec4 s = INSTANCE_CUSTOM;
 	float ph = COLOR.g;
+	float g = clamp((wind - 0.6) / 1.4, 0.0, 1.0);  // 0 at the default breeze, 1 in a gale
 	if (COLOR.r < 0.5) {
 		// a moth: erratic loops around the lamp head, a little below it
 		float t = TIME * (1.5 + 1.4 * ph) + ph * 40.0 + s.x * 30.0;
 		float a = t * 2.6;
-		float r = 0.30 + 0.16 * sin(t * 1.7 + ph * 9.0);
+		float r = (0.30 + 0.16 * sin(t * 1.7 + ph * 9.0)) * (1.0 + 0.6 * g);
 		vec3 c = head + vec3(cos(a) * r, -0.25 + 0.16 * sin(t * 3.1 + ph * 5.0), sin(a * 0.93) * r);
+		// the gale strings them downwind (+X) and sheds the later ones
+		float run = fract(TIME * 0.3 + ph * 3.0);
+		c.x += g * run * 3.0;
+		c.y -= g * run * 0.4;
+		float keep = step(ph, 1.0 - 0.7 * g);
 		c += 0.035 * vec3(sin(TIME * 23.0 + ph * 50.0), sin(TIME * 29.0 + ph * 70.0), sin(TIME * 31.0 + ph * 30.0));
 		float blink = 0.55 + 0.45 * step(0.0, sin(TIME * 17.0 + ph * 60.0));
 		vec4 vp = MODELVIEW_MATRIX * vec4(c, 1.0);
-		vp.xy += VERTEX.xy * 0.032 * blink;
+		vp.xy += VERTEX.xy * 0.032 * blink * keep * (1.0 - g * smoothstep(0.7, 1.0, run));
 		POSITION = PROJECTION_MATRIX * vp;
 		col = vec3(1.0, 0.86, 0.6);
 	} else {
 		float period = 14.0 + 20.0 * s.y;
-		float u = freeze >= 0.0 ? freeze : mod(TIME + s.z * period, period) / 2.6;
+		float u = freeze >= 0.0 ? freeze : mod(TIME + s.z * period, period) / (2.6 - 0.9 * g);
 		if (u > 1.0 || s.w < 0.5) {
 			POSITION = vec4(2.0, 2.0, 2.0, 1.0);  // outside the clip box: no pixels
 			col = vec3(0.0);
 		} else {
 			float dir = s.x > 0.5 ? 1.0 : -1.0;
 			vec3 p = VERTEX;
-			p.y += abs(p.x) * 1.0 * sin(TIME * 38.0);  // wing beat
+			p.y += abs(p.x) * (1.0 + 0.5 * g) * sin(TIME * 38.0);  // wing beat
 			p.xz *= -dir;                               // fly the other way
 			vec3 c = vec3(head.x + 1.6 * sin(u * 6.0 + s.x * 6.28),
 				4.6 + 1.1 * sin(u * 9.0 + s.z * 6.0),
 				dir * (u * 2.0 - 1.0) * 9.0);
+			c.x += 1.8 * g;       // pushed downwind
+			c.y -= 0.5 * g;
 			POSITION = PROJECTION_MATRIX * (MODELVIEW_MATRIX * vec4(p + c, 1.0));
 			col = vec3(0.34, 0.2, 0.1);  // warm brown: lit from the lamp above
 		}
@@ -352,6 +361,7 @@ static func _get_swarm_mat() -> ShaderMaterial:
 		sh.code = SWARM_SHADER
 		_swarm_mat = ShaderMaterial.new()
 		_swarm_mat.shader = sh
+		_swarm_mat.set_shader_parameter("wind", _wind)
 	return _swarm_mat
 
 # ---------- A6: banners ----------

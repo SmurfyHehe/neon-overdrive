@@ -54,7 +54,7 @@ func _run() -> void:
 	root.add_child(layer)
 	var label := Label.new()
 	label.position = Vector2(24.0, 16.0)
-	label.add_theme_font_size_override("font_size", 44)
+	UiTheme.apply(label, "menu", 44)
 	label.add_theme_color_override("font_color", Color(1.0, 0.75, 0.4))
 	label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0))
 	label.add_theme_constant_override("outline_size", 10)

@@ -270,7 +270,7 @@ func _setup_move_over() -> void:
 
 func _tick_move_over() -> void:
 	if scene_tick == RATE / 2:
-		p.beams.flash()   # traffic only moves over when flashed
+		Harness.flash(p.beams)   # traffic only moves over when flashed
 	_watch_player()
 	min_player_gap = minf(min_player_gap, absf(lead.global_position.z - p.global_position.z) - lead.half_l - TrafficManager.PLAYER_HALF_L)
 

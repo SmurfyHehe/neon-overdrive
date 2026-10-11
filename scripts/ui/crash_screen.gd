@@ -95,7 +95,7 @@ func _ready() -> void:
 	_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_line.add_theme_color_override("font_color", SODIUM)  # Dave's caption colour
-	_line.add_theme_font_size_override("font_size", 22)
+	UiTheme.apply(_line, "menu", 22)
 	_line.visible = false
 	add_child(_line)
 	_card = VBoxContainer.new()
@@ -200,7 +200,7 @@ func _text(text: String, font_size: int, colour: Color) -> Label:
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.add_theme_color_override("font_color", colour)
-	l.add_theme_font_size_override("font_size", font_size)
+	UiTheme.apply(l, "menu", font_size)
 	return l
 
 ## The ear ring: two close high tones beating against each other, dying away.

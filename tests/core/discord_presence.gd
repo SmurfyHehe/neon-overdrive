@@ -45,9 +45,10 @@ func _initialize() -> void:
 	_check(DP.build_activity(0, "", "Tarp", "", 0).details == "Night 1", "night is at least 1, no empty area")
 	for kind in ["downtown", "residential", "strip", "industrial"]:
 		_check(DP.AREA_NAMES.has(kind), "no area name for " + kind)
-	for e in Districts.PICK:
-		_check(DP.AREA_NAMES.has(e[0]), "Districts kind without a name: " + String(e[0]))
-	_check(DP.area_name("old_town") == "Old Town", "unknown kind falls back to a readable name")
+	for k in Districts.SPECS:
+		_check(DP.AREA_NAMES.has(k), "Districts kind without a name: " + String(k))
+	_check(DP.area_name("old_town") == "Old Town", "old town has a readable name")
+	_check(DP.area_name("back_lots") == "Back Lots", "unknown kind falls back to a readable name")
 
 	_check(not DP.wanted(), "must be dormant under tests / headless / empty app id")
 	var pipe := FileAccess.open("\\\\?\\pipe\\neon-no-such-pipe-for-test", FileAccess.READ_WRITE)

@@ -47,10 +47,12 @@ func _until_song(limit_ms := 20000) -> bool:
 ## one starts from its beginning (a tune-in mid-song would be past the 20 s).
 func _next_song() -> void:
 	var pos := radio.playlist_position(radio.station)
-	var length: float = radio._streams[radio.station][pos.track].get_length()
+	# songs are keyed by path since 507e27a (only the song on air and the next are loaded)
+	var length: float = radio._lengths[radio._paths[radio.station][pos.track]]
 	radio._clock += (length - pos.offset) + 0.3
 	radio._process(DT)
 	radio._process(DT)
+	_until_song()   # the next song may still be loading on its thread
 
 func _cap() -> String:
 	return radio._cap_label.text if radio._cap_label.visible else ""

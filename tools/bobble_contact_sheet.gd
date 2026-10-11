@@ -92,7 +92,7 @@ func _label(text: String, w: int) -> Image:
 	lv.add_child(bg)
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size", 15)
+	UiTheme.apply(l, "menu", 15)
 	l.add_theme_color_override("font_color", Color("#E9E6DF"))
 	l.position = Vector2(6.0, 2.0)
 	lv.add_child(l)

@@ -130,7 +130,7 @@ func _ready() -> void:
 	caption.position = Vector2(-360, -190)
 	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	caption.add_theme_font_size_override("font_size", 20)
+	UiTheme.apply(caption, "menu", 20)
 	caption.add_theme_color_override("font_color", Hud.AMBER)
 	caption.add_theme_color_override("font_outline_color", DUSK)
 	caption.add_theme_constant_override("outline_size", 4)

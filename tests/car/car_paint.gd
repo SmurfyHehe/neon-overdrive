@@ -126,12 +126,20 @@ func _run() -> void:
 				worst = who
 			var mi := vis.get_node(^"Body") as MeshInstance3D
 			var mesh := mi.mesh as ArrayMesh
-			_check_body_mesh(mesh, who)
-			_check((mesh.surface_get_material(_surface(mesh, "body")) as ShaderMaterial).shader == body, "%s: the body is the CarPaint shader" % who)
-			var gi := _surface(mesh, "glass")
-			_check(gi < 0 or (mesh.surface_get_material(gi) as ShaderMaterial).shader == glass, "%s: CarPaint glass" % who)
-			var wm := NpcCarBuilder.wheel_mesh(kind, build, false)
-			_check((wm.surface_get_material(0) as ShaderMaterial).shader == body_own, "%s: wheels use the CarPaint shader" % who)
+			if NpcCarBuilder.uses_parts(kind):
+				# Assembled from parts, as the coupe above: baked shade per
+				# vertex, the parts paint on the body surface.
+				var bi := _surface(mesh, "body")
+				_check(bi >= 0 and mesh.surface_get_arrays(bi)[Mesh.ARRAY_CUSTOM0] != null, "%s: baked shade per vertex" % who)
+				var pm := mi.get_surface_override_material(bi) as ShaderMaterial if bi >= 0 else null
+				_check(pm != null and pm.shader == CarAssembler.paint_shader(P1CoupeBuilder.PARTS_BODY_SHADER), "%s: the body is the parts paint shader" % who)
+			else:
+				_check_body_mesh(mesh, who)
+				_check((mesh.surface_get_material(_surface(mesh, "body")) as ShaderMaterial).shader == body, "%s: the body is the CarPaint shader" % who)
+				var gi := _surface(mesh, "glass")
+				_check(gi < 0 or (mesh.surface_get_material(gi) as ShaderMaterial).shader == glass, "%s: CarPaint glass" % who)
+				var wm := NpcCarBuilder.wheel_mesh(kind, build, false)
+				_check((wm.surface_get_material(0) as ShaderMaterial).shader == body_own, "%s: wheels use the CarPaint shader" % who)
 			var fin: Vector4 = mi.get_instance_shader_parameter("finish")
 			if kind == "p0_beater":
 				_check(fin.y > 0.5 and fin.x < 0.6, "the beater is rusty and dull")

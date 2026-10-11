@@ -7,7 +7,7 @@ extends SceneTree
 #   - every gear change is one the box made itself (its own shift count)
 #   - no paddle flick on the wheel or in the driver's hand (the coupe has no
 #     paddles), no upshift bang from the engine
-#   - the pause menu says so: "Shift up / down (semi and manual only)"
+#   - the Controls page says so: "Shift up / down (semi and manual only)"
 # Then, as a control, the same key in SEMI does shift, so the presses above
 # really reached the car.
 # Exit code 1 on failure. Run:
@@ -63,7 +63,7 @@ func _run() -> void:
 		return _end()
 
 	var labels := {}
-	for group in PauseMenu.GROUPS:
+	for group in SettingsScreen.GROUPS:
 		for row in group[1]:
 			labels[row[0]] = row[1]
 	_check(labels.get("shift_up") == "Shift up (semi and manual only)", "pause menu shift_up label is '%s'" % labels.get("shift_up"))

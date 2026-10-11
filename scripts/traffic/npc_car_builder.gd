@@ -155,7 +155,6 @@ const KINDS := {
 		"build_paint": {},
 		"sheet_paint": true,
 	},
-	# The work pickup (Camel, P17, 2026-10-10): the 4-door T2 truck Walt sells
 	# The shop wagon (sheet p7_wagon, 2026-10-11): front drive, built from
 	# its parts glb like the Bug; the sheet mesh is the NEON_PARTS_LEGACY body.
 	"p7_wagon": {
@@ -169,6 +168,7 @@ const KINDS := {
 		"build_paint": {},
 		"sheet_paint": true,
 	},
+	# The work pickup (Camel, P17, 2026-10-10): the 4-door T2 truck Walt sells
 	# after act 1. Its own sheet mesh (p17_work_pickup_data.gd), not the
 	# traffic pickup's, which stays as it is.
 	"p17_work_pickup": {
@@ -281,7 +281,8 @@ instance uniform float turn : instance_index(2) = 0.0;
 // 1 while the driver flashes the headlights (at a player who cut in).
 instance uniform float flash : instance_index(3) = 0.0;
 // 1 while the car is in reverse (player cars: the CarFittings reverse lens).
-instance uniform float reverse : instance_index(4) = 0.0;
+// Slot 6: the paint's finish holds slot 4 on the same body (CarPaint._BODY).
+instance uniform float reverse : instance_index(6) = 0.0;
 varying float v_side;
 void vertex() {
 	v_side = sign(VERTEX.x);  // + = the car's right (it faces -Z)
@@ -301,8 +302,11 @@ void fragment() {
 	float k = mix(1.0, tail_gain * (1.0 + brake * brake_gain), tail);
 	// Third brake light: out until the brake is on.
 	k = mix(k, 0.12 + brake * 3.0, t_third);
-	// Reverse lamp: a dim lens until the car is in reverse.
-	k = mix(k, mix(0.25, 2.2, step(0.5, reverse)), t_rev);
+	// Reverse lamp: a dim lens until the car is in reverse, then white (a
+	// parts body's reverse lens is dark grey when off).
+	float rev_on = step(0.5, reverse);
+	c = mix(c, vec3(0.95, 0.96, 1.0), t_rev * rev_on);
+	k = mix(k, mix(0.25, 2.2, rev_on), t_rev);
 	// Indicators: one side blinks for a turn signal, both for the hazards.
 	float blink = step(0.5, fract(TIME * 1.4));
 	float lamp_out = step(3.5, turn);
@@ -311,7 +315,7 @@ void fragment() {
 	float lit = sig > 2.5 ? 1.0 : (sig > 1.5 ? step(0.0, v_side) : (sig > 0.5 ? step(v_side, 0.0) : 0.0));
 	k *= mix(1.0, mix(0.15, 2.5, blink), amber * lit);
 	// The head lamps (warm white: the only lamp with all three channels up).
-	float head = step(0.8, c.r) * step(0.7, c.g) * step(0.3, c.b);
+	float head = step(0.8, c.r) * step(0.7, c.g) * step(0.3, c.b) * (1.0 - t_rev);
 	k *= mix(1.0, FLASH_GAIN, head * flash);
 	ALBEDO = c;
 	EMISSION = c * energy * k;
@@ -507,6 +511,9 @@ static func chassis_visual(kind: String, build: String, paint: Color, role := ""
 		paint_mat.set_shader_parameter("paint", paint)
 		var body := CarAssembler.build(kind, parts_config(), paint_mat)
 		body.position = lift
+		# Gloss, rust and flake (the Bug is rusty and dull), as the sheet body
+		# and the parts coupe get them.
+		body.set_instance_shader_parameter("finish", CarPaint.finish_for(kind))
 		# This builder's lamp shader on the glow surface, so brake and hazard
 		# (set_lamps) work on a parts car as they do on a sheet car.
 		var gi := CarAssembler.surface_index(body.mesh, "glow")
@@ -521,6 +528,10 @@ static func chassis_visual(kind: String, build: String, paint: Color, role := ""
 		mi.position = lift
 		mi.mesh = body_mesh(kind, build)
 		mi.set_instance_shader_parameter("paint", paint)
+		# Gloss, rust and flake per car, and the door shut lines (cad66a8; both
+		# lost in a later merge).
+		mi.set_instance_shader_parameter("finish", CarPaint.finish_for(kind))
+		mi.set_instance_shader_parameter("seams", mi.mesh.get_meta("paint_seams", Vector4.ZERO))
 		# The tail flares grow past the body's box at a distance.
 		mi.extra_cull_margin = 2.0
 		root.add_child(mi)

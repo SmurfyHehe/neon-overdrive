@@ -677,10 +677,42 @@ func _place(delta: float) -> void:
 	var aim_rs := Vector3(_follow.x + ahead.x, _follow.y + look_height, u.z + ahead.z)
 	var centre_t := smoothstep(ORBIT_AIM_LO_DEG, ORBIT_AIM_HI_DEG, absf(orbit_yaw))
 	if centre_t > 0.0:
-		aim_rs = aim_rs.lerp(Vector3(u.x, u.y + look_height, u.z), centre_t)
+		# the middle of the body, not the car's origin: the origin sits at the
+		# wheels' axle-line mid point, well behind and above the body's centre
+		# on most cars, which put the car off centre side-on (chase_orbit)
+		var centre := RoadFrame.unroll(target.get_global_transform_interpolated() * _body_centre())
+		aim_rs = aim_rs.lerp(centre, centre_t)
 	aim = RoadFrame.roll(aim_rs)
 	global_position = anchor
 	look_at(aim, Vector3.UP)
+
+## The middle of the car's drawn body in the car's own frame (the box round
+## every visible part of chassis_visual), for the orbit's aim. Worked out once
+## per body; the origin with look_height when there is no body yet.
+var _centre_of: Node3D = null
+var _centre_local := Vector3.ZERO
+
+func _body_centre() -> Vector3:
+	var vis := target.chassis_visual
+	if vis == null or not is_instance_valid(vis):
+		return Vector3(0.0, look_height, 0.0)
+	if vis == _centre_of:
+		return _centre_local
+	var to_car := target.global_transform.affine_inverse()
+	var box := AABB()
+	var first := true
+	for n in vis.find_children("*", "VisualInstance3D", true, false):
+		var vi := n as VisualInstance3D
+		if not vi.is_visible_in_tree():
+			continue
+		var b := (to_car * vi.global_transform) * vi.get_aabb()
+		box = b if first else box.merge(b)
+		first = false
+	if first:
+		return Vector3(0.0, look_height, 0.0)
+	_centre_of = vis
+	_centre_local = box.get_center()
+	return _centre_local
 
 ## Smooth noise shake applied on top of the chase transform. Amplitude adds
 ## the three sources; impact uses trauma^2 so small knocks stay small. In the

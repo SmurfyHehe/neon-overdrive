@@ -554,6 +554,7 @@ func _build() -> void:
 	var label := Label3D.new()
 	label.name = "SignText"
 	label.text = "FUEL"
+	label.font = UiTheme.font("menu")
 	label.font_size = 96
 	label.pixel_size = 0.006
 	label.modulate = NAVY
@@ -633,6 +634,7 @@ func _build_lot() -> void:
 	var label := Label3D.new()
 	label.name = "SignText"
 	label.text = "FUEL"
+	label.font = UiTheme.font("menu")
 	label.font_size = 96
 	label.pixel_size = 0.006
 	label.modulate = NAVY

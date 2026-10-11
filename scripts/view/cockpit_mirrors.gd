@@ -72,6 +72,12 @@ var cull_mask := 0
 
 func _ready() -> void:
 	add_to_group(GraphicsSettings.GROUP)
+	# _process asks whether each glass is on screen: run after ChaseCamera has
+	# placed itself this frame (priority 0), not against last frame's pose. In
+	# tree order the mirrors went first, so the first cockpit frame tested the
+	# glass against the chase camera 5 m behind and queued an off-screen door
+	# mirror, and a head turn queued the mirror it was turning away from.
+	process_priority = 1
 	enabled = FxSettings.is_on("mirrors")
 	var env: Environment = null
 	var world := get_viewport().find_world_3d()

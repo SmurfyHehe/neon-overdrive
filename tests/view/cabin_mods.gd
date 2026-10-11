@@ -51,15 +51,18 @@ static func _aabb(m: ArrayMesh) -> AABB:
 	return box
 
 func _spots() -> void:
+	# the coupe and the specials (which wear the coupe body until their body
+	# steps land, m1_monster_data.gd) are P1CoupeBuilder bodies; the rest are
+	# NpcCarBuilder.KINDS sheets
 	for kind in PlayerCars.ids():
 		_check(CabinSpots.has_car(kind), "%s has no CabinSpots entry" % kind)
 		var ends := CabinSpots.strut_bar(kind)
 		var l := ends[0]
 		var r := ends[1]
 		_check(l.x < 0.0 and r.x > 0.0 and is_equal_approx(-l.x, r.x), "%s strut bar should be symmetric about x, got %s %s" % [kind, l, r])
-		var half_w: float = P1CoupeBuilder.WIDTH / 2.0 if kind == P1CoupeBuilder.KIND else float(NpcCarBuilder.config(kind).main_w) / 2.0
+		var half_w: float = P1CoupeBuilder.WIDTH / 2.0 if not NpcCarBuilder.is_npc(kind) else float(NpcCarBuilder.config(kind).main_w) / 2.0
 		_check(r.x < half_w - 0.1, "%s strut bar end x %.2f should be inside the body (half width %.2f)" % [kind, r.x, half_w])
-		var height: float = P1CoupeBuilder.HEIGHT + P1CoupeBuilder.BODY_LIFT if kind == P1CoupeBuilder.KIND else float(NpcCarBuilder.KINDS[kind].height) - float(NpcCarBuilder.KINDS[kind].rest_y)
+		var height: float = P1CoupeBuilder.HEIGHT + P1CoupeBuilder.BODY_LIFT if not NpcCarBuilder.is_npc(kind) else float(NpcCarBuilder.KINDS[kind].height) - float(NpcCarBuilder.KINDS[kind].rest_y)
 		_check(r.y > 0.4 and r.y < height, "%s strut bar y %.2f should be under the roof (%.2f) and above the floor" % [kind, r.y, height])
 		_check(r.z < -0.8, "%s strut bar z %.2f should be ahead of the cabin" % [kind, r.z])
 	for spot in ["mirror_hang", "shifter", "handbrake", "dash_pod", "vent_left", "vent_right"]:

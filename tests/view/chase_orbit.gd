@@ -27,6 +27,11 @@ var base_y := 0.0
 var peak := 0.0
 var lowest := 0.0
 var look_back_pose := Transform3D.IDENTITY
+## The car's pose as the last frame was drawn (its interpolated transform in
+## that frame, the one ChaseCamera placed itself from). _step runs on the next
+## physics tick, when the car has already moved on by a tick (0.44 m at
+## 100 km/h and NEON_TICKS=60), so the screen checks project the car from here.
+var drawn_xf := Transform3D.IDENTITY
 
 func _init() -> void:
 	name_ = "chase_orbit"
@@ -54,6 +59,11 @@ func _parked(c: PlayerCar) -> void:
 func _go(next: S, n: int) -> void:
 	s = next
 	s_start = n
+
+func _process(_delta: float) -> bool:
+	if p != null and is_instance_valid(p):
+		drawn_xf = p.get_global_transform_interpolated()
+	return false
 
 ## The camera's place in the car's own frame: x < 0 is the car's left side.
 func _rel() -> Vector3:
@@ -94,7 +104,9 @@ func _step(tick_n: int) -> bool:
 			if t == SECOND:
 				var rel := _rel()
 				var centre := _body_centre()
-				var scr := cam.unproject_position(centre)
+				# where that centre was drawn: the camera has not moved since that frame
+				var drawn := drawn_xf * (p.global_transform.affine_inverse() * centre)
+				var scr := cam.unproject_position(drawn)
 				var size := Vector2(root.size)
 				var off := (scr - size * 0.5) / size
 				print("100 km/h, hold Left 1 s: orbit %.1f deg, camera in car frame %s, car centre %.1f%% / %.1f%% off screen centre (body centre %.2f m above the road, origin %.2f), %.1f m/s, dist %.2f" % [cam.orbit_yaw, rel, off.x * 100.0, off.y * 100.0, RoadFrame.unroll(centre).y, RoadFrame.unroll(p.global_position).y, p.current_speed(), cam.dist_now])

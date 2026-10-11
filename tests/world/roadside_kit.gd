@@ -79,12 +79,21 @@ func _initialize() -> void:
 	print("roadside_kit: %d chunks, %s" % [cases, "PASS" if fails == 0 else "%d failure(s)" % fails])
 	quit(0 if fails == 0 else 1)
 
-func _edges(prev: Dictionary, cfg: Dictionary, side: int, t: float) -> Dictionary:
+## The chunk's edges at fraction t along it. Shoulder and pavement widths are
+## the district's cross-section (Districts.cross_at, pavements step 2,
+## 75cbe4e), tapered from the previous chunk's like the lanes, as the builder
+## does; the old fixed SHOULDER_W / SIDEWALK_W no longer hold everywhere.
+func _edges(c: int, prev: Dictionary, cfg: Dictionary, side: int, t: float) -> Dictionary:
 	var key := "own_lanes" if side == 1 else "onc_lanes"
-	var road: float = lerpf(B._lane_w(prev[key]), B._lane_w(cfg[key]), t)
-	var curb_in := road + B.SHOULDER_W
+	var sec0 := Districts.cross_at(c - 1)
+	var sec1 := Districts.cross_at(c)
+	var road_0: float = B._lane_w(prev[key])
+	var road_1: float = B._lane_w(cfg[key])
+	var road := lerpf(road_0, road_1, t)
+	var curb_in := lerpf(road_0 + float(sec0.shoulder), road_1 + float(sec1.shoulder), t)
 	var curb_out := curb_in + B.CURB_W
-	return {"road": road, "curb_in": curb_in, "curb_out": curb_out, "walk": curb_out + B.SIDEWALK_W}
+	var walk := lerpf(road_0 + float(sec0.shoulder) + B.CURB_W + float(sec0.walk), road_1 + float(sec1.shoulder) + B.CURB_W + float(sec1.walk), t)
+	return {"road": road, "curb_in": curb_in, "curb_out": curb_out, "walk": walk}
 
 func _band(kind: String) -> String:
 	match kind:
@@ -108,7 +117,7 @@ func _check_record(chunk: Node3D, c: int, prev: Dictionary, cfg: Dictionary, rec
 			_fail("%s: %s at z %.2f is outside the chunk" % [label, kind, z])
 		if Junction.in_mouth(c, z):
 			_fail("%s: %s at z %.2f stands in the crossing's mouth" % [label, kind, z])
-		var e := _edges(prev, cfg, side, -z / B.CHUNK_LEN)
+		var e := _edges(c, prev, cfg, side, -z / B.CHUNK_LEN)
 		var half := float(r.len) / 2.0
 		match _band(kind):
 			"sidewalk":
@@ -171,7 +180,8 @@ func _check_body(body: Node, want: int, label: String) -> void:
 func _check_table(totals: Dictionary) -> void:
 	for d in totals:
 		var t: Dictionary = totals[d]
-		var spec: Dictionary = Kit.BY_DISTRICT[d]
+		# a district with no row of its own takes downtown's (RoadsideKit.apply)
+		var spec: Dictionary = Kit.BY_DISTRICT.get(d, Kit.BY_DISTRICT["downtown"])
 		print("%-12s hydrant %3d bin %3d dumpster %3d cone %3d jersey %3d rail %3d" % [d, t.hydrant, t.bin, t.dumpster, t.cone, t.jersey, t.rail])
 		if float(spec.rail) == 0.0 and int(t.rail) > 0:
 			_fail("%s has a guardrail; its table says none" % d)
@@ -183,7 +193,10 @@ func _check_table(totals: Dictionary) -> void:
 			_fail("%s has no dumpster over 32 chunks" % d)
 		if float(spec.hydrant) >= 0.4 and int(t.hydrant) == 0:
 			_fail("%s has no hydrant over 32 chunks" % d)
-		if float(spec.bin) >= 0.4 and int(t.bin) == 0:
+		# bins stand at lamp feet, so a dark road (street "every" 0, the canyon
+		# since W6, f468d5e) has none whatever the table says
+		var lit := int(Districts.street(d).get("every", 1)) > 0
+		if lit and float(spec.bin) >= 0.4 and int(t.bin) == 0:
 			_fail("%s has no bin over 32 chunks" % d)
 		if int(t.cone) != int(t.jersey) * Kit.CONES_IN_TAPER / Kit.JERSEY_RUN:
 			_fail("%s: %d cones for %d jersey pieces; a work zone is %d cones and %d pieces" % [d, t.cone, t.jersey, Kit.CONES_IN_TAPER, Kit.JERSEY_RUN])

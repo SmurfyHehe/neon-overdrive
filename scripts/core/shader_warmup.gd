@@ -80,7 +80,10 @@ func _process(delta: float) -> void:
 	for i in range(_live.size() - 1, -1, -1):
 		_live[i][1] -= 1
 		if _live[i][1] <= 0:
-			(_live[i][0] as Node).queue_free()
+			# a stand-in goes with its holder when the camera it hangs off is freed
+			var proxy: Variant = _live[i][0]
+			if is_instance_valid(proxy):
+				(proxy as Node).queue_free()
 			_live.remove_at(i)
 	if is_instance_valid(_holder):
 		for i in mini(PER_FRAME, _queue.size()):

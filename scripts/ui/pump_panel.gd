@@ -80,6 +80,7 @@ func _ready() -> void:
 
 	var title := Label.new()
 	title.text = "FUEL STOP"
+	UiTheme.apply(title, "menu")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_color_override("font_color", ORANGE)
 	box.add_child(title)
@@ -97,6 +98,7 @@ func _ready() -> void:
 func _label(box: Control, n: String) -> Label:
 	var l := Label.new()
 	l.name = n
+	UiTheme.apply(l, "menu")
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(l)
 	return l
@@ -104,6 +106,7 @@ func _label(box: Control, n: String) -> Label:
 func _button(box: Control, n: String, f: Callable) -> Button:
 	var b := Button.new()
 	b.name = n
+	UiTheme.apply(b, "menu")
 	b.pressed.connect(f)
 	box.add_child(b)
 	return b

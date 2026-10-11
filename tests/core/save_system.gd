@@ -5,9 +5,11 @@ extends SceneTree
 #   (torn .tmp, main file moved away, main file torn) still reads the newest
 #   good copy; backups stop at three
 # - 3 slots are separate; the active slot is remembered
-# - a mod tree whose every copy is broken loads empty, and money and bought
-#   parts are untouched; a fitted part that is not owned is dropped alone
-# - a broken wallet value falls back to the backup's, field by field
+# - a fitted part that is not owned is dropped alone; a torn career.json falls
+#   back to its .bak1 (the commit before), with money and bought parts as
+#   they were then, and saving over it works
+# - a broken money value falls back to the backup's, field by field (the bank
+#   from career.json, tonight's cash from night.json)
 # - nothing is written during a chase; a chase left open (quit/crash) is a bust
 #   on the next load, once, and the run is cleared
 # - the rename migration copies the old folder (never moves it), once, never
@@ -18,6 +20,7 @@ extends SceneTree
 
 const AtomicJson := preload("res://scripts/save/atomic_json.gd")
 const SaveStore := preload("res://scripts/save/save_store.gd")
+const SaveCore := preload("res://scripts/save/save_core.gd")
 const UserDirMigration := preload("res://scripts/save/user_dir_migration.gd")
 
 const ROOT := "user://test_save_system"
@@ -97,24 +100,33 @@ func _mod_tree_damage() -> void:
 	SaveStore.save_mod_tree({"p1_coupe": {"installed": ["exhaust_a", "turbo_s1", "not_bought"]}})
 	var t := SaveStore.load_mod_tree()
 	_check(t.cars.p1_coupe.installed == ["exhaust_a", "turbo_s1"], "a fitted part that is not owned should be dropped alone: %s" % str(t))
-	# Every copy of the mod tree broken.
-	for p in AtomicJson.candidates(SaveStore.file("mod_tree")):
-		if FileAccess.file_exists(p):
-			_put(p, "{ broken")
+	# The newest career.json torn (power off, bad disk): the next launch reads
+	# .bak1, the commit before it: parts bought, nothing fitted yet.
+	var f := SaveStore.file("career")
+	var text := FileAccess.get_file_as_string(f)
+	_put(f, text.left(text.length() - 3))
+	SaveCore.forget()  # as on a relaunch
 	t = SaveStore.load_mod_tree()
-	_check(t.damaged and t.cars.is_empty(), "a broken mod tree should load empty: %s" % str(t))
-	_check(SaveStore.load_garage().owned_parts == ["exhaust_a", "turbo_s1", "wheels_mesh"], "a broken mod tree lost bought parts")
+	_check(t.damaged and t.cars.is_empty(), "a torn career should load its backup: %s" % str(t))
+	_check(SaveStore.load_garage().owned_parts == ["exhaust_a", "turbo_s1", "wheels_mesh"], "a torn career lost bought parts")
 	var w := SaveStore.load_wallet()
-	_check(w.cash == 1500 and w.bank == 300, "a broken mod tree lost money: %s" % str(w))
-	_check(SaveStore.save_mod_tree({}) and not SaveStore.load_mod_tree().damaged, "mod tree did not save over a broken one")
+	_check(w.cash == 1500 and w.bank == 300, "a torn career lost money: %s" % str(w))
+	_check(SaveStore.save_mod_tree({}) and not SaveStore.load_mod_tree().damaged, "the career did not save over a torn one")
+	_check(FileAccess.file_exists(f + ".bad"), "the torn career was not kept aside")
 
 func _wallet_fallback() -> void:
 	SaveStore.save_wallet(700, 50)
 	SaveStore.save_wallet(800, 60)
-	# Newest copy has a checksum-valid but bad cash value (an older bug, say).
-	_put(SaveStore.file("wallet"), AtomicJson.encode({"cash": -5, "bank": 61}))
+	# Newest copies are checksum-valid but hold a bad value (an older bug, say).
+	var career: Dictionary = AtomicJson.read(SaveStore.file("career")).data
+	career.wallet.bank = -5
+	_put(SaveStore.file("career"), AtomicJson.encode(career))
+	var night: Dictionary = AtomicJson.read(SaveStore.file("night")).data
+	night.cash = 0.5
+	_put(SaveStore.file("night"), AtomicJson.encode(night))
+	SaveCore.forget()  # as on a relaunch
 	var w := SaveStore.load_wallet()
-	_check(w.cash == 700 and w.bank == 61, "wallet should fall back per field: %s" % str(w))
+	_check(w.cash == 700 and w.bank == 50, "money should fall back to the backup's, field by field: %s" % str(w))
 
 func _chase() -> void:
 	SaveStore.save_run({"version": 1, "where": "before"})

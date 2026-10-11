@@ -7,9 +7,11 @@ extends Node
 # screen shows the bank. Busts take from the bank and bad cops take tonight's
 # cash (F3, F7a); they will go through take_cash / take_bank.
 #
-# Saved in the slot's wallet.json (SaveStore) after every change, one write
-# for both numbers, so banking can never lose or double money even if the
-# game dies halfway. A save the store refuses (a chase is on) is retried every
+# Saved in the slot after every change (SaveStore): tonight's cash with the
+# night in progress, the bank in the career. Banking the night is one dawn
+# commit (SaveCore.commit): the bank and the closed night go into the career in
+# the same write, so banking can never lose or double money even if the game
+# dies halfway. A save the store refuses (a chase is on) is retried every
 # frame until it goes through.
 #
 # Test command: F8 adds TEST_CASH, debug builds only (keyboard only, no
@@ -27,6 +29,8 @@ const TEST_ACTION := &"debug_add_cash"
 var cash := 0
 var bank := 0
 var _dirty := false
+## A banked night the store has not taken yet: {"night": N} (0 = the story's).
+var _dawn := {}
 
 ## Loads the slot's money at once (not in _ready, which can run after the
 ## first add_cash and would overwrite it).
@@ -78,11 +82,15 @@ func spend_bank(amount: int) -> bool:
 	_changed()
 	return true
 
-## The night is over (6 a.m., or heading home): tonight's cash goes into the bank.
-func bank_night() -> void:
+## The night is over (6 a.m., or heading home): tonight's cash goes into the
+## bank. `night` is the night that ended (NightClock.night_ended); 0 when the
+## caller has no clock.
+func bank_night(night: int = 0) -> void:
 	var amount := cash
 	bank += cash
 	cash = 0
+	if amount > 0 or night > 0:
+		_dawn = {"night": maxi(night, int(_dawn.get("night", 0)))}
 	_changed()
 	banked.emit(amount)
 
@@ -91,7 +99,12 @@ func _changed() -> void:
 	_save()
 
 func _save() -> bool:
-	_dirty = not SaveStore.save_wallet(cash, bank)
+	if _dawn.is_empty():
+		_dirty = not SaveStore.save_wallet(cash, bank)
+	else:
+		_dirty = not SaveStore.commit("dawn", {"bank": bank, "cash": cash, "close_night": _dawn.night})
+		if not _dirty:
+			_dawn = {}
 	return not _dirty
 
 ## "$1,250"

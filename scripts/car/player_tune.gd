@@ -6,8 +6,14 @@ extends RefCounted
 # survives that, a quit, and a relaunch.
 #
 # What is kept: the value of every tunable path (TuneParams.all(), the same set
-# a tune slot holds) except the exhaust ones, which ExhaustTune already saves
-# in its own file. Stored as JSON {"version": 1, "values": {path: float}}.
+# a tune slot holds) except the exhaust ones, which ExhaustTune saves itself.
+#
+# Where (save core S1, 2026-10-11): in the save slot, per car, career block
+# tunes[car id].live (SaveCore.tune / set_tune), so each slot has its own tunes
+# and a new game starts with none. It used to be user://player_tune.json,
+# shared by every slot; that file is upgraded into the slot that was being
+# played and not read again. Only a test that points `path` at its own file
+# still gets a plain file: JSON {"version": 1, "values": {path: float}}.
 #
 # PlayerCar loads it in _ready() when it builds the default coupe, and saves it
 # when the tune has changed (checked once a second while driving, since the
@@ -21,7 +27,9 @@ extends RefCounted
 
 const DEFAULT_PATH := "user://player_tune.json"
 const TestMode := preload("res://scripts/core/test_mode.gd")
+const SaveCore := preload("res://scripts/save/save_core.gd")
 
+## DEFAULT_PATH means "in the save slot"; any other path is a plain file (tests).
 static var path := DEFAULT_PATH
 ## The car the tune belongs to (PlayerCar sets it). The coupe keeps `path`
 ## itself (Roy's existing tune file); every other car gets its own file next
@@ -33,6 +41,10 @@ static func file() -> String:
 		return path
 	return "%s_%s.%s" % [path.get_basename(), kind, path.get_extension()]
 static var enabled := not TestMode.active()
+
+## True when the tune lives in the save slot.
+static func in_slot() -> bool:
+	return path == DEFAULT_PATH
 
 ## The paths that are kept: every tunable one except the exhaust's.
 static func paths() -> Array[String]:
@@ -75,6 +87,9 @@ static func apply_saved(spec: Dictionary) -> int:
 	return n
 
 static func load_values() -> Dictionary:
+	if in_slot():
+		var live: Variant = SaveCore.tune(kind).get("live") if SaveCore.persist else null
+		return live if live is Dictionary else {}
 	if not FileAccess.file_exists(file()):
 		return {}
 	var json := JSON.new()  # parse() reports an error code; parse_string() prints an engine error
@@ -88,6 +103,8 @@ static func load_values() -> Dictionary:
 static func save(spec: Dictionary) -> bool:
 	if not enabled:
 		return false
+	if in_slot():
+		return SaveCore.persist and SaveCore.set_tune(kind, "live", values_from(spec))
 	var f := FileAccess.open(file(), FileAccess.WRITE)
 	if f == null:
 		push_error("PlayerTune: cannot write %s (%s)" % [file(), error_string(FileAccess.get_open_error())])

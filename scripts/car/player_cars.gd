@@ -9,8 +9,11 @@ extends RefCounted
 # `selected` is the car the player spawns in. The pause menu's Car page sets
 # it, saves it and restarts the run (GameState.restart reloads the scene, so
 # the car is rebuilt from scratch, the same way a tune change is). Kept in
-# the [player] section of the shared settings.cfg (AudioSettings.path, so
-# tests that redirect the settings file redirect this too).
+# the save slot (save core S1, 2026-10-11: the career's current_car), so each
+# slot remembers its own last-driven car. The old [player] car key in
+# settings.cfg is upgraded into every slot that has a save and not read again
+# by the game; only test mode still reads and writes it (AudioSettings.path,
+# so tests that redirect the settings file redirect this too).
 #
 # Tiers are the car ladder's arrival bands (docs: rival-and-car-ladder
 # proposal, PR #177; garage/mod trees, PR #197): T0 beater, T1 street,
@@ -18,6 +21,7 @@ extends RefCounted
 # pass, not measured.
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
+const SaveCore := preload("res://scripts/save/save_core.gd")
 const TestMode := preload("res://scripts/core/test_mode.gd")
 
 const DEFAULT := "p1_coupe"
@@ -103,18 +107,25 @@ static func select(kind: String) -> void:
 	selected = kind if is_player_kind(kind) else DEFAULT
 
 static func load_settings() -> void:
-	var cfg := ConfigFile.new()
-	if cfg.load(AudioSettings.path) != OK:
-		select(DEFAULT)
-		return
-	select(str(cfg.get_value("player", "car", DEFAULT)))
+	if SaveCore.persist:
+		select(SaveCore.current_car())
+	else:
+		var cfg := ConfigFile.new()
+		if cfg.load(AudioSettings.path) != OK:
+			select(DEFAULT)
+			return
+		select(str(cfg.get_value("player", "car", DEFAULT)))
 	# A special saved as the car but not unlocked (a new slot, a wiped save)
 	# spawns the default car instead.
 	if is_special(selected) and not TestMode.active() 			and not SaveStore.load_special().get("unlocked", {}).get(selected, false):
 		select(DEFAULT)
 
-## Keeps the other sections (audio, traffic, fx) as they are.
+## In the game: a commit of the slot's current_car (the Car page is a menu, the
+## game is paused). Test mode: settings.cfg, keeping its other sections.
 static func save_settings() -> void:
+	if SaveCore.persist:
+		SaveCore.commit("car", {"current_car": selected})
+		return
 	var cfg := ConfigFile.new()
 	cfg.load(AudioSettings.path)  # missing is fine: a new file
 	cfg.set_value("player", "car", selected)

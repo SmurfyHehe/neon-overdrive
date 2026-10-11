@@ -65,12 +65,19 @@ extends RefCounted
 # leaves them all neutral: lamps, steam, rattle and the repair bill are read
 # from the parts, so they stay.
 #
+# Tyres (brief LM, 2026-10-11): `pressure` is the share of air left in each
+# tyre. A very hard kerb strike (over RIM_STRIKE x KERB_FREE_MS) bursts it:
+# the wheel runs on its rim (flat_tyre.gd: less grip, rolling drag, a shake,
+# rim wear). The tyre brief (DP3) adds slow leaks that empty into the same
+# state.
+#
 # The state is plain numbers (to_dict / from_dict) so the save system and the
 # garage can keep it. Until the save system lands it lives as long as the car,
 # like FuelTank: Restart starts a fresh, undamaged car.
 
 const DamageOffsets := preload("res://scripts/car/damage_offsets.gd")
 const DamageDifficulty := preload("res://scripts/car/damage_difficulty.gd")
+const FlatTyre := preload("res://scripts/car/flat_tyre.gd")
 
 enum Part { RADIATOR, STEER_FL, STEER_FR, SUSP_RL, SUSP_RR, BODY }
 enum Lamp { HEAD_L, HEAD_R, TAIL_L, TAIL_R }
@@ -110,6 +117,10 @@ const KERB_FREE_MS := 5.0
 ## Damage per m/s above KERB_FREE_MS: 100 km/h at 30 degrees (13.9 m/s) puts
 ## about 0.4 on the corner, 100 km/h square on bends it fully.
 const KERB_DAMAGE_PER_MS := 0.045
+## A kerb met at more than this many times KERB_FREE_MS bursts that tyre.
+const RIM_STRIKE := 2.5
+## Grip left on a wheel that runs on its rim.
+const RIM_GRIP := 0.45
 ## A strike's cost to the body, as a share of the corner's.
 const KERB_BODY_SHARE := 0.25
 ## Spring rate lost on a fully broken rear corner.
@@ -125,6 +136,8 @@ const STEAM_RATE := 14.0
 ## Placeholder prices in Cred until the economy pass. Paid from the bank.
 const REPAIR_PRICE := {"radiator": 400, "steer_fl": 250, "steer_fr": 250, "susp_rl": 300, "susp_rr": 300, "body": 600}
 const LAMP_PRICE := 60
+const TYRE_PRICE := 120   # a burst tyre
+const RIM_PRICE := 200    # a rim worn right down; less for less wear
 const TOW_PRICE := 150
 ## A station's free patch brings the radiator back to here (no performance loss).
 const PATCH_TO := FREE_BELOW - 0.01
@@ -138,6 +151,10 @@ var parts: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 var lamps: Array[bool] = [false, false, false, false]   # true = broken
 ## Coolant left, 1 = full, 0 = none. A broken radiator drains it (step_coolant).
 var coolant := 1.0
+## Air left in each tyre (FL, FR, RL, RR), 1 = full, 0 = none.
+var pressure: Array[float] = [1.0, 1.0, 1.0, 1.0]
+## How far each rim has been ground down by running flat, 0..1.
+var rim_wear: Array[float] = [0.0, 0.0, 0.0, 0.0]
 ## The night number of the last free patch; one patch per night.
 var patched_night := -1
 ## 0..1, unused yet: a totalled car (the save core stores it).
@@ -171,10 +188,22 @@ static func effect(amount: float) -> float:
 func is_engine_dead() -> bool:
 	return false
 
-## The DMG lamp: any part past the free band, or a lamp out.
+## True if tyre i has no air left (before the Damage setting).
+func tyre_flat(i: int) -> bool:
+	return enabled and pressure[i] <= FlatTyre.RIM_PRESSURE
+
+func any_tyre_flat() -> bool:
+	for i in 4:
+		if tyre_flat(i):
+			return true
+	return false
+
+## The DMG lamp: any part past the free band, a lamp out, or a flat tyre.
 func warning() -> bool:
 	if not enabled:
 		return false
+	if any_tyre_flat():
+		return true
 	for i in Part.BODY:
 		if parts[i] >= FREE_BELOW:
 			return true
@@ -212,11 +241,12 @@ func _write_cooling() -> void:
 	var k: float = MODE_SCALE[clampi(mode, 0, MODE_SCALE.size() - 1)]
 	offsets.set_car(DamageOffsets.COOLING_MULT, 1.0 + (cooling_mult() - 1.0) * k)
 
-## The cap LimpMode.engine_damage_kmh takes. Always INF since the heat window
-## (brief DP4a): a radiator limps the car through engine heat only, never by
-## its size. Kept for the totalled meter, which will limp the engine here.
-func engine_cap_kmh() -> float:
-	return INF
+## Whether damage asks the engine for limp-home (LimpMode.engine_damaged).
+## Always false since the heat window (brief DP4a): a radiator limps the car
+## through engine heat only, never by its size. Kept for the totalled meter,
+## which will limp the engine from here.
+func engine_limp() -> bool:
+	return false
 
 ## Damage per hit on this difficulty.
 func damage_mult() -> float:
@@ -247,6 +277,9 @@ func rebuild_offsets() -> void:
 	for i in 4:
 		offsets.set_wheel(i, DamageOffsets.TOE_ADD, toe_offset(i))
 		offsets.set_wheel(i, DamageOffsets.SPRING_MULT, spring_mult(i))
+		offsets.set_wheel(i, DamageOffsets.PRESSURE_MULT, pressure[i] if enabled else 1.0)
+		if tyre_flat(i):
+			offsets.set_wheel(i, DamageOffsets.GRIP_MULT, RIM_GRIP)
 	offsets.set_car(DamageOffsets.COOLING_MULT, cooling_mult())
 	# the Damage setting comes last, after everything (and any caps) is in
 	offsets.scale_effects(MODE_SCALE[clampi(mode, 0, MODE_SCALE.size() - 1)])
@@ -334,6 +367,8 @@ func apply_kerb_strike(i: int, approach: float) -> void:
 	last_kerb_strike = approach
 	_add([Part.STEER_FL, Part.STEER_FR, Part.SUSP_RL, Part.SUSP_RR][clampi(i, 0, 3)], amount)
 	_add(Part.BODY, amount * KERB_BODY_SHARE)
+	if approach > KERB_FREE_MS * RIM_STRIKE:
+		pressure[clampi(i, 0, 3)] = 0.0
 	rebuild_offsets()
 
 ## Looks for a wheel that has just come onto the "Kerb" surface and, if it
@@ -381,8 +416,9 @@ func step_values(dt: float, vel: Vector3, basis: Basis, touching: bool) -> void:
 		_hit_left = HIT_WINDOW
 
 ## One step on the car: reads contacts (a hit or a kerb strike rebuilds the
-## offsets) and sets the engine's limp cap. The offsets themselves are applied
-## by the car (PlayerCar._apply_damage_offsets), on top of the tune.
+## offsets), wears a rim that runs flat and tells the limp whether the engine
+## is damaged. The offsets themselves are applied by the car
+## (PlayerCar._apply_damage_offsets), on top of the tune.
 func step(v: Vehicle, dt: float, health: PowertrainHealth, limp: LimpMode) -> void:
 	if not enabled:
 		return
@@ -393,7 +429,14 @@ func step(v: Vehicle, dt: float, health: PowertrainHealth, limp: LimpMode) -> vo
 		# fresh, cold coolant: the engine is back at working temperature at once
 		_refilled = false
 		health.engine_temp = minf(health.engine_temp, PowertrainHealth.THERMOSTAT_C)
-	limp.engine_damage_kmh = engine_cap_kmh()
+	for i in mini(4, v.wheel_array.size()):
+		if FlatTyre.on_rim(offsets, i) and v.wheel_array[i].is_colliding():
+			step_rim_wear(i, v.speed, dt)
+	limp.engine_damaged = engine_limp()
+
+## Rim wear for wheel i running flat at `speed` m/s for dt (testable without a car).
+func step_rim_wear(i: int, speed: float, dt: float) -> void:
+	rim_wear[i] = minf(rim_wear[i] + FlatTyre.wear_step(speed, dt), 1.0)
 
 ## Touching a wall, a building or another car (not the road under the body).
 static func _touching(v: Vehicle) -> bool:
@@ -420,6 +463,9 @@ func garage_repair(bank: Object) -> int:
 		lamps[i] = false
 	coolant = 1.0
 	_refilled = true
+	for i in 4:
+		pressure[i] = 1.0
+		rim_wear[i] = 0.0
 	rebuild_offsets()
 	return price
 
@@ -431,6 +477,10 @@ func repair_price() -> int:
 	for b in lamps:
 		if b:
 			total += LAMP_PRICE
+	for i in 4:
+		if pressure[i] <= FlatTyre.RIM_PRESSURE:
+			total += TYRE_PRICE
+		total += RIM_PRICE * rim_wear[i]
 	return roundi(total)
 
 ## A fuel station's free engine patch, once a night: the radiator comes back
@@ -460,7 +510,8 @@ func tow(bank: Object, in_chase: bool) -> bool:
 	return true
 
 func to_dict() -> Dictionary:
-	var d := {"lamps": lamps.duplicate(), "patched_night": patched_night, "totalled": totalled, "coolant": coolant}
+	var d := {"lamps": lamps.duplicate(), "patched_night": patched_night, "totalled": totalled, "coolant": coolant,
+		"pressure": pressure.duplicate(), "rim_wear": rim_wear.duplicate()}
 	for i in parts.size():
 		d[PART_NAMES[i]] = parts[i]
 	return d
@@ -472,6 +523,11 @@ func from_dict(d: Dictionary) -> void:
 	for i in lamps.size():
 		lamps[i] = bool(l[i]) if i < l.size() else false
 	coolant = clampf(float(d.get("coolant", 1.0)), 0.0, 1.0)
+	var pr: Array = d.get("pressure", [])
+	var rw: Array = d.get("rim_wear", [])
+	for i in 4:
+		pressure[i] = clampf(float(pr[i]), 0.0, 1.0) if i < pr.size() else 1.0
+		rim_wear[i] = clampf(float(rw[i]), 0.0, 1.0) if i < rw.size() else 0.0
 	patched_night = int(d.get("patched_night", -1))
 	totalled = clampf(float(d.get("totalled", 0.0)), 0.0, 1.0)
 	rebuild_offsets()

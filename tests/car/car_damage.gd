@@ -94,18 +94,18 @@ func _unit_tests() -> void:
 	e.parts[D.Part.RADIATOR] = 0.2
 	e.parts[D.Part.STEER_FL] = 0.2
 	e.parts[D.Part.SUSP_RR] = 0.2
-	_check(not e.step_coolant(60.0, 1.0, true) and e.cooling_mult() == 1.0 and e.toe_offset(0) == 0.0 and e.spring_mult(3) == 1.0 and e.engine_cap_kmh() == INF, "no effect under 25 %")
+	_check(not e.step_coolant(60.0, 1.0, true) and e.cooling_mult() == 1.0 and e.toe_offset(0) == 0.0 and e.spring_mult(3) == 1.0 and not e.engine_limp(), "no effect under 25 %")
 	_check(not e.warning(), "no DMG lamp under 25 %")
 	e.parts[D.Part.RADIATOR] = 0.5
-	_check(e.step_coolant(60.0, 1.0, true) and e.coolant < 1.0 and e.cooling_mult() < 1.0 and e.engine_cap_kmh() == INF and e.warning(), "a hurt radiator leaks and cools worse, no limp yet, DMG on")
+	_check(e.step_coolant(60.0, 1.0, true) and e.coolant < 1.0 and e.cooling_mult() < 1.0 and not e.engine_limp() and e.warning(), "a hurt radiator leaks and cools worse, no limp yet, DMG on")
 	# the heat window (brief DP4a): a radiator never limps by its size, only
 	# through engine heat (tests/car/damage_settings.gd times it)
 	e.parts[D.Part.RADIATOR] = 1.0
-	_check(not e.is_engine_dead() and e.engine_cap_kmh() == INF, "the front at 100 % sets no limp of its own and does not kill the engine")
+	_check(not e.is_engine_dead() and not e.engine_limp(), "the front at 100 % sets no limp of its own and does not kill the engine")
 	e.step_coolant(10000.0, 1.0, true)
 	_check(e.coolant == 0.0 and is_equal_approx(e.cooling_mult(), 1.0 - D.COOLING_LOSS), "a wrecked radiator drains dry and loses COOLING_LOSS of the cooling (%.2f left)" % e.cooling_mult())
 	var limp := LimpMode.new()
-	limp.engine_damage_kmh = e.engine_cap_kmh()
+	limp.engine_damaged = e.engine_limp()
 	limp.update(false, 90.0)
 	_check(not limp.is_limping(), "a wrecked radiator with a cool engine is not limping")
 	limp.update(false, PowertrainHealth.LIMP_C)
@@ -124,7 +124,7 @@ func _unit_tests() -> void:
 	print("engine after 90 s at 60 %% load, 90 km/h: healthy %.0f C, wrecked radiator (coolant gone) %.0f C" % temps)
 	_check(temps[1] > temps[0] + 5.0, "a hurt radiator runs the engine hotter")
 	# station patch: once a night
-	_check(e.station_patch(3) and e.engine_cap_kmh() == INF and e.part(D.Part.RADIATOR) < D.FREE_BELOW, "a station patch puts the radiator back in the free band")
+	_check(e.station_patch(3) and not e.engine_limp() and e.part(D.Part.RADIATOR) < D.FREE_BELOW, "a station patch puts the radiator back in the free band")
 	_check(e.coolant == 1.0 and e.cooling_mult() == 1.0, "and tops up the coolant")
 	e.parts[D.Part.RADIATOR] = 0.9
 	_check(not e.station_patch(3) and e.part(D.Part.RADIATOR) == 0.9, "only one patch a night")

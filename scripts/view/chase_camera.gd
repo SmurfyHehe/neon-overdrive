@@ -351,6 +351,8 @@ func _update_feel(delta: float) -> void:
 	var want_s := 0.0
 	if grounded > 0:
 		want_s = float(rough) / float(grounded) * clampf(speed / 15.0, 0.0, 1.0)
+	# a wheel on its rim shakes the car the same way (flat_tyre.gd)
+	want_s = maxf(want_s, target.wheel_shake)
 	surface_t = lerpf(surface_t, want_s, 1.0 - exp(-12.0 * delta))
 
 func _place(delta: float) -> void:

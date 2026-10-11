@@ -12,8 +12,8 @@ extends CanvasLayer
 # - the menu is locked while a cop sees you. There are no cops yet, so "a cop
 #   sees you" is the save system's chase flag (SaveStore.chase_active), which
 #   the police build sets;
-# - a dry tank is never a dead end: the car limps to the pump at
-#   LimpMode.FUEL_KMH, and if the bank can't pay, Ferris tows you in. The tow
+# - a dry tank is never a dead end: the car limps to the pump on a starved,
+#   stumbling engine (LimpMode), and if the bank can't pay, Ferris tows you in. The tow
 #   ends the night (6 a.m., so tonight's cash is banked, F0) and leaves the
 #   tank at the starting third. Press it twice: it ends the night.
 #

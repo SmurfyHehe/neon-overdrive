@@ -340,10 +340,11 @@ func _physics_process(delta: float) -> void:
 	if braking != _smear_brake_on and chassis_visual != null:
 		_smear_brake_on = braking
 		WetReflections.set_tail_brake(chassis_visual, 1.0 if braking else 0.0)
-	# Limp mode: the slowest active cause caps the speed by fading the throttle.
+	# Limp mode (brief LM): no speed cap; the engine and the gearbox are held back.
+	limp.engine_max_gear = int(get_meta(&"limp_max_gear", LimpMode.ENGINE_MAX_GEAR))
+	limp.fuel_share = float(get_meta(&"limp_fuel_share", LimpMode.FUEL_FLAT_SHARE))
 	limp.update(fuel.is_empty(), health.engine_temp if health.enabled else 0.0)
-	if limp.is_limping():
-		throttle_input *= limp.throttle_scale(current_speed() * 3.6)
+	_apply_limp(delta)
 	super._physics_process(delta)
 
 	# Aero (2026-09-13): applied AFTER the vendor's own _physics_process so
@@ -361,14 +362,60 @@ func _physics_process(delta: float) -> void:
 	if wet.step(self, delta):
 		wet.write_over(self)
 		wet.apply_drag(self)
+	wheel_shake = _apply_flat_tyres(delta)
 	fuel.step_values(delta, health.engine_load if health.enabled else throttle_amount, engine_running)
-	if limp.is_limping():
-		torque_mult = limp.torque_mult(health.torque_mult)
 	if _keeps_tune:
 		_tune_check_left -= delta
 		if _tune_check_left <= 0.0:
 			_tune_check_left = TUNE_CHECK_SECS
 			_save_tune_if_changed()
+
+## Gear changes limp mode has refused (a shift above LimpMode.max_gear).
+## TODO: one gear-grind sound per refusal; no grind or clunk sound exists yet.
+var limp_refused_shifts := 0
+## 0..1 for the camera: a wheel on its rim shakes the car (flat_tyre.gd).
+var wheel_shake := 0.0
+var _rim_phase := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
+var _limp_was_on := false
+
+## Limp mode on the engine and the gearbox, before the vendor's own step (it
+## reads torque_mult there). No cause sets a speed: the revs are held by a
+## bouncing fuel cut, the boost is closed, torque is the worse of the health
+## derate and the limp's, and the gearbox stays at or under limp.max_gear.
+func _apply_limp(delta: float) -> void:
+	var on := limp.is_limping()
+	if not on and not _limp_was_on:
+		return
+	_limp_was_on = on
+	set_meta(ForcedInduction.BOOST_MULT_META, limp.boost_mult)
+	if auto_box != null:
+		auto_box.limp_max_gear = limp.max_gear
+		auto_box.limp_rev_frac = limp.shift_frac
+	if not on:
+		limp.step_cut(delta, motor_rpm, max_rpm, 0.0, 0.0, 0.0)
+		return
+	var lat_g := absf(angular_velocity.y) * speed / 9.81
+	var grade := -global_transform.basis.z.y
+	var cut := limp.step_cut(delta, motor_rpm, max_rpm, clampf(throttle_input, 0.0, 1.0), lat_g, grade)
+	torque_mult = 0.0 if cut else limp.torque_for(health.torque_mult if health.enabled else 1.0)
+	# SEMI: the box drops to the limp's top gear as soon as the lower gear is
+	# safe for the engine; the fuel cut then slows the car to what it allows.
+	# (AUTO does the same inside AutoBox; in MANUAL the driver holds the stick,
+	# so a higher gear stays in until they shift down, and then cannot go back.)
+	if not automatic_transmission and not realistic_clutch and current_gear > limp.max_gear and not is_shifting:
+		var lower_rpm := gear_ratios[current_gear - 2] * final_drive * speed / average_drive_wheel_radius * ANGULAR_VELOCITY_TO_RPM
+		if lower_rpm < max_rpm * 0.9:
+			shift(-1)
+
+## Wheels on their rims: grip from the offsets (after health and the wet have
+## written theirs), then drag and shake. Returns the camera shake, 0..1.
+func _apply_flat_tyres(delta: float) -> float:
+	if not damage.enabled or damage.offsets.is_neutral():
+		return 0.0
+	var o := damage.offsets
+	for i in mini(4, wheel_array.size()):
+		wheel_array[i].grip_mult *= o.get_wheel(i, CarDamage.DamageOffsets.GRIP_MULT)
+	return CarDamage.FlatTyre.apply(self, o, damage.rim_wear, _rim_phase, delta)
 
 ## True while damage offsets are written into the wheels, so one tick of
 ## neutral writes the tuned values back (a repair) and then it goes quiet.
@@ -380,7 +427,8 @@ var _offsets_written := false
 ## spring rate is worked out from the suspension settings exactly as
 ## Vehicle.apply_suspension() does. A repair is the offsets going back to
 ## neutral; nothing guesses a base from what is in a Wheel.
-## Read today: toe (TOE_ADD), spring rate (SPRING_MULT), cooling (COOLING_MULT).
+## Read today: toe (TOE_ADD), spring rate (SPRING_MULT), cooling (COOLING_MULT),
+## and for a wheel on its rim GRIP_MULT and PRESSURE_MULT (_apply_flat_tyres).
 ## Neutral and unread for now (the brief that wires each, as I understand the
 ## plan; DP1 = suspension and geometry, DP3 = tyres and brakes, LM = limp mode
 ## and the engine's output):
@@ -654,6 +702,10 @@ func clutch_ready() -> bool:
 	return transmission_mode() != Transmission.MANUAL or clutch_input >= SHIFT_CLUTCH_MIN
 
 func manual_shift(count: int) -> void:
+	# limp-home holds the gearbox down: a shift above its top gear is refused
+	if count > 0 and not automatic_transmission and current_gear >= 1 and current_gear + count > limp.max_gear:
+		limp_refused_shifts += 1
+		return
 	if clutch_ready():
 		super.manual_shift(count)
 

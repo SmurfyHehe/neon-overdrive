@@ -30,6 +30,8 @@ const MARK_BODY := "res://assets/brand/logo_B4_mark_body.svg"
 const MARK_WHEEL := "res://assets/brand/logo_B4_mark_wheel.svg"
 const ShaderWarmup := preload("res://scripts/core/shader_warmup.gd")
 const WHISTLE := "res://assets/ui/sfx/splash_whistle.wav"
+const MENU_WHISTLE_LOOP := "res://assets/ui/sfx/menu_whistle_loop.wav"
+const MENU_WHISTLE_FLUTTER := "res://assets/ui/sfx/menu_whistle_flutter.wav"
 ## The wheel's centre inside the mark's 256 x 256 drawing (tools/build_brand.py).
 const WHEEL_AT := Vector2(105.0, 128.0)
 ## Where the mark sits inside that drawing.
@@ -47,6 +49,15 @@ const SYNTHWAVE_DIR := "s4_synthwave"
 ## the turbo spools for SPOOL seconds, then the valve flutters.
 const SPLASH_SOUND_AT := 0.2
 const SPLASH_SPOOL := 1.45
+const MENU_SPIN_MAX := 18.0    # rad/s, menu logo wheel while W is held
+const MENU_SPIN_UP := 12.0     # rad/s^2
+const MENU_SPIN_DOWN := 7.0
+const MENU_FLUTTER_MIN := 6.0  # rad/s: slower than this, letting go is just a fade
+const MENU_WHISTLE_DB := -8.0
+const MENU_WHISTLE_IN := 0.3   # s to fade the held whistle in
+const MENU_WHISTLE_OUT := 0.2  # s to fade it out on a slow release
+const MENU_SHAKE_PX := 1.5     # held, at full spin
+const MENU_SHAKE_RAD := 0.004
 const SPLASH_FLUTTER := 0.6
 const SPLASH_HOLD := 0.45
 const SPLASH_FADE := 0.35
@@ -85,8 +96,19 @@ var splash_name: Control
 
 var _splash_t := -1.0
 var _wheel_speed := 0.0
+var menu_wheel: TextureRect    # the menu lockup's wheel; spins while W is held
+var menu_spin := 0.0           # its speed, rad/s
+var _spin_held := false        # test hook: hold the throttle without a key event
 var _mark_y := 0.0             # the splash mark's resting place
 var _whistle: AudioStreamPlayer
+var menu_mark: Control         # the menu lockup's mark; shakes with the whistle
+var _mark_rest := Vector2.ZERO
+var _menu_whistle: AudioStreamPlayer   # steady whistle while W is held
+var _menu_flutter: AudioStreamPlayer   # valve chatter on letting go at speed
+var _whistle_gain := 0.0       # 0..1 fade of the held whistle
+var _was_live := false         # W was held (and the title listening) last frame
+var _shake_clock := 0.0
+var _flutter_t := -1.0         # >= 0 while the release shake runs
 var _ticker_w := 0.0
 var _lists: Array[VBoxContainer] = []
 
@@ -113,7 +135,12 @@ func _ready() -> void:
 	slide.set_anchors_preset(Control.PRESET_FULL_RECT)
 	slide.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	stage.add_child(slide)
-	_build_lockup(slide, Vector2(96.0, 84.0), 150.0)
+	var lockup := _build_lockup(slide, Vector2(96.0, 84.0), 150.0)
+	menu_mark = lockup[0]
+	menu_wheel = lockup[1]
+	_mark_rest = menu_mark.position
+	_menu_whistle = _menu_player(MENU_WHISTLE_LOOP)
+	_menu_flutter = _menu_player(MENU_WHISTLE_FLUTTER)
 	_build_menu()
 	_build_ticker()
 	_build_welcome()
@@ -165,6 +192,15 @@ func _build_shade() -> void:
 
 ## The mark with BOOST over a spaced SIMCADE beside it. Returns [mark, wheel,
 ## name block] so the splash can move them.
+func _menu_player(path: String) -> AudioStreamPlayer:
+	var p := AudioStreamPlayer.new()
+	p.bus = &"UI"
+	p.volume_db = MENU_WHISTLE_DB
+	if ResourceLoader.exists(path):
+		p.stream = load(path)
+	add_child(p)
+	return p
+
 func _build_lockup(parent: Control, at: Vector2, mark_px: float) -> Array:
 	# mark_px is the height of the mark itself; its drawing is a 256 box with
 	# the mark at MARK_BOX inside it.
@@ -706,6 +742,108 @@ func _process(delta: float) -> void:
 		_run_splash(delta)
 	if panel.visible:
 		_run_ticker(delta)
+		if not splash_running():
+			_run_menu_spin(delta)
+	_run_menu_voice(delta)
+
+# Hold W (the throttle) and the menu logo's wheel spools up; let go and it
+# eases to a stop. Polled, because the tree is paused behind the title and
+# no car is reading the throttle.
+func _run_menu_spin(delta: float) -> void:
+	var held := _throttle_held()
+	var rate := MENU_SPIN_UP if held else MENU_SPIN_DOWN
+	menu_spin = move_toward(menu_spin, MENU_SPIN_MAX if held else 0.0, rate * delta)
+	if menu_wheel != null and menu_spin != 0.0:
+		var speed := menu_spin
+		if _flutter_t >= 0.0 and not held:
+			# Throttle shut at speed: the wheel stalls in steps, as in the splash.
+			var beat := sin(_flutter_t * TAU * FLUTTER_HZ)
+			speed *= 0.45 + 0.55 * maxf(0.0, beat)
+		menu_wheel.rotation = wrapf(menu_wheel.rotation + speed * delta, -PI, PI)
+
+func _throttle_held() -> bool:
+	return _spin_held or Input.is_action_pressed("accelerate")
+
+## The title is listening to W: no splash, no Settings, Load list, welcome
+## card or confirm box in the way.
+func _menu_live() -> bool:
+	return visible and panel.visible and not splash_running() 			and not load_list.visible and not welcome.visible and not confirm.is_open()
+
+## The turbo whistle and the logo's shake that go with holding W. Held: a
+## steady whistle that rises in pitch with the wheel and the mark jitters
+## with it. Let go at speed: the valve flutters and the mark shakes out, as
+## the splash's does. A slow wheel just fades the whistle.
+func _run_menu_voice(delta: float) -> void:
+	if menu_mark == null:
+		return
+	var live := _menu_live()
+	var held := live and _throttle_held()
+	if not live:
+		if _was_live or _flutter_t >= 0.0 or _whistle_gain > 0.0:
+			_stop_menu_voice()
+		return
+	var k := clampf(menu_spin / MENU_SPIN_MAX, 0.0, 1.0)
+	if held:
+		if _flutter_t >= 0.0:
+			_end_flutter()
+			_menu_flutter.stop()   # W pressed again mid-chatter
+		_was_live = true
+		_shake_clock += delta
+		var beat := sin(_shake_clock * TAU * FLUTTER_HZ)
+		menu_mark.position = _mark_rest + Vector2(0.0, beat * MENU_SHAKE_PX * k)
+		menu_mark.rotation = beat * MENU_SHAKE_RAD * k
+		_whistle_gain = move_toward(_whistle_gain, 1.0, delta / MENU_WHISTLE_IN)
+		if not _menu_whistle.playing and _menu_whistle.stream != null:
+			_menu_whistle.play()
+		_menu_whistle.pitch_scale = lerpf(0.7, 1.0, k)
+		_menu_whistle.volume_db = MENU_WHISTLE_DB + linear_to_db(maxf(_whistle_gain, 0.0001))
+		return
+	if _was_live:
+		_was_live = false
+		_rest_mark()
+		if menu_spin > MENU_FLUTTER_MIN:
+			_menu_whistle.stop()
+			_whistle_gain = 0.0
+			if _menu_flutter.stream != null:
+				_menu_flutter.play()
+			_flutter_t = 0.0
+		else:
+			_flutter_t = -1.0
+	if _flutter_t >= 0.0:
+		var f := _flutter_t / SPLASH_FLUTTER
+		if f >= 1.0:
+			_end_flutter()
+		else:
+			var beat := sin(_flutter_t * TAU * FLUTTER_HZ)
+			menu_mark.position = _mark_rest + Vector2(0.0, beat * 5.0 * (1.0 - f))
+			menu_mark.rotation = beat * 0.012 * (1.0 - f)
+			_flutter_t += delta
+	# A slow release: fade the loop out, then let it go.
+	if _whistle_gain > 0.0:
+		_whistle_gain = move_toward(_whistle_gain, 0.0, delta / MENU_WHISTLE_OUT)
+		_menu_whistle.volume_db = MENU_WHISTLE_DB + linear_to_db(maxf(_whistle_gain, 0.0001))
+		if _whistle_gain <= 0.0:
+			_menu_whistle.stop()
+
+func _rest_mark() -> void:
+	menu_mark.position = _mark_rest
+	menu_mark.rotation = 0.0
+
+func _end_flutter() -> void:
+	_flutter_t = -1.0
+	_rest_mark()
+
+## Everything quiet and the mark home: Settings opened, the title left, or
+## the splash took over.
+func _stop_menu_voice() -> void:
+	_was_live = false
+	_whistle_gain = 0.0
+	_flutter_t = -1.0
+	if _menu_whistle != null:
+		_menu_whistle.stop()
+		_menu_flutter.stop()
+	if menu_mark != null:
+		_rest_mark()
 
 func _input(event: InputEvent) -> void:
 	if not visible:
@@ -778,6 +916,7 @@ func _enter_menu() -> void:
 
 ## Leaving for the road: the street goes, the radio and the frame cap come back.
 func _leave_title() -> void:
+	_stop_menu_voice()
 	if splash_running():
 		_end_splash()
 	if kerbside != null:

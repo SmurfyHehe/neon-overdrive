@@ -78,6 +78,10 @@ func _built_line() -> void:
 	_near(RoadFrame.curvature(19), -1.0 / 150.0, 1e-9, "written road: chunk 19 is the 150 m right")
 	var d := RivalDriver.new(RivalPersonality.row("docks"), 7)
 	var lane1 := TrafficManager.lane_centre(1, false)
+	# Crossing the road as hard as fits these 400 m straights, so the line gets
+	# all the way out before each bend (a real car's rate comes from its top
+	# speed, setup(), and may get only part of the way).
+	d.k_move = 1.0 / 600.0
 	d.start_line(0.0, lane1)
 	var lo := INF
 	var hi := -INF

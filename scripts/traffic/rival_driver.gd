@@ -45,6 +45,13 @@ extends RefCounted
 # bend straight after another) the line degrades to holding its x, and the
 # speed plan uses the road's own curvature there.
 #
+# The line is for a clear road. With any car on its side of the road within
+# TRAFFIC_AHEAD metres ahead or TRAFFIC_BEHIND behind (the player counts only
+# inside PLAYER_NEAR), it holds the x it is on and plans its speed on the
+# road's own bends: sweeping the width of the road through traffic needs the
+# corridor scoring and overtaking of a later step. Until then a rival that
+# catches slower traffic in its path follows it at the racing gap.
+#
 # Everything is in absolute road distance S (RoadFrame.s_at), so the line
 # survives floating-origin shifts.
 
@@ -71,6 +78,8 @@ const LOOK_AHEAD := 150.0           # m searched for a car in the way
 ## The player counts as a car in the way only this close (see the header).
 const PLAYER_NEAR := 30.0
 const LEAD_MARGIN := 0.25           # m either side of the body
+const TRAFFIC_AHEAD := 250.0        # m: a car this close on its side of the road, no racing line
+const TRAFFIC_BEHIND := 30.0
 const LOOKAHEAD_SECONDS := 0.8
 const LOOKAHEAD_MIN := 10.0
 const LOOKAHEAD_MAX := 60.0
@@ -145,6 +154,9 @@ var _lead_k := -1
 
 ## The measured understeer (see G_START).
 var steer_g := G_START
+
+## True while a car near it has the racing line switched off (see the header).
+var in_traffic := false
 
 ## What the last drive tick decided (tests and the no-rubber-band log).
 var target_speed := 0.0
@@ -423,9 +435,15 @@ func profile() -> PackedFloat32Array:
 
 func _plan(car: TrafficCar, u: Vector3, s: float) -> void:
 	var t0 := Time.get_ticks_usec()
-	if not _started:
-		start_line(s, u.x)
-	extend_line(s)
+	var near := car.traffic != null and _traffic_near(car, u)
+	if near:
+		if not in_traffic or not _started:
+			start_line(s, line_x(s) if _started else u.x)   # hold this x
+	else:
+		if in_traffic or not _started:
+			start_line(s, line_x(s) if _started else u.x)
+		extend_line(s)
+	in_traffic = near
 	plan_speeds(s)
 	# The road narrowing ahead (a lane drop) caps where it may aim.
 	_x_cap = _edge_x(_lanes_between(s, s + 150.0))
@@ -445,6 +463,18 @@ func _plan(car: TrafficCar, u: Vector3, s: float) -> void:
 		_lead_k = traffic.q_idx
 	plan_us += Time.get_ticks_usec() - t0
 	plan_runs += 1
+
+## Whether a car is near enough on this side of the road to put the racing
+## line away (see the header).
+func _traffic_near(car: TrafficCar, u: Vector3) -> bool:
+	var t := car.traffic
+	var hi := x_hi + EDGE + RoadChunkBuilder.SHOULDER_W
+	var g := t.scan(u.z, car.direction, 0.0, hi, true, car._idx, car.half_l, TRAFFIC_AHEAD, false)
+	if g < INF and t.q_player and g > PLAYER_NEAR:
+		g = t.scan(u.z, car.direction, 0.0, hi, true, car._idx, car.half_l, TRAFFIC_AHEAD, true)
+	if g < INF:
+		return true
+	return t.scan(u.z, car.direction, 0.0, hi, false, car._idx, car.half_l, TRAFFIC_BEHIND, false) < INF
 
 # ---------- the drive tick (every traffic AI stride) ----------
 

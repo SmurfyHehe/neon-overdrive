@@ -110,7 +110,7 @@ func _run() -> void:
 	var radio: RadioManager = game.radio
 	var synth := TitleScreen._synthwave_station()
 	var own := radio.player_station()
-	_check(radio.station == synth, "the title plays the synthwave station")
+	_check(radio.station == -1 and title.theme_playing(), "the title's radio is off and the theme song plays")
 	radio.give_back()
 	radio.tune_to(1)
 	radio.borrow(synth)

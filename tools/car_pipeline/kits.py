@@ -581,3 +581,4 @@ KITS = {
     'p2_hothatch': kit_p2_hothatch.KIT,
     'p4_kei': kit_p4_kei.KIT,
 }
+KITS['p5_muscle'] = __import__('kit_p5_muscle').KIT     # the muscle hardtop: its own file

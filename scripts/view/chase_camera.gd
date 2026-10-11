@@ -53,6 +53,9 @@ const SURFACE_SHAKE_ROT := 0.008 # kerb/sidewalk rumble ("Kerb" surface)
 const SURFACE_SHAKE_POS := 0.02
 const IMPACT_SHAKE_ROT := 0.035  # ~2 deg at full trauma
 const IMPACT_SHAKE_POS := 0.12
+const START_SHAKE_ROT := 0.006   # ~0.35 deg: the engine rocking as it cranks and catches (PlayerCar.start_shake)
+const START_SHAKE_POS := 0.008
+const START_SHAKE_CHASE := 0.5   # from behind the car it is half what the driver feels
 const TRAUMA_DECAY := 1.6        # 1/s
 ## Velocity change in one physics tick (m/s) above which it counts as a hit.
 ## Hard braking peaks well under this (see tests/view/camera_feel.gd); a wall at
@@ -686,12 +689,13 @@ func _place(delta: float) -> void:
 ## cabin on a hit.
 func _shake(delta: float, with_position: bool, strength := 1.0) -> void:
 	var buzz := pow(speed_t, 1.5)
-	var rot := (SPEED_SHAKE_ROT * buzz + SURFACE_SHAKE_ROT * surface_t + IMPACT_SHAKE_ROT * trauma * trauma) * strength
-	var pos := (SPEED_SHAKE_POS * buzz + SURFACE_SHAKE_POS * surface_t + IMPACT_SHAKE_POS * trauma * trauma) * strength
+	var start := target.start_shake * (START_SHAKE_CHASE if with_position else 1.0)
+	var rot := (SPEED_SHAKE_ROT * buzz + SURFACE_SHAKE_ROT * surface_t + IMPACT_SHAKE_ROT * trauma * trauma + START_SHAKE_ROT * start) * strength
+	var pos := (SPEED_SHAKE_POS * buzz + SURFACE_SHAKE_POS * surface_t + IMPACT_SHAKE_POS * trauma * trauma + START_SHAKE_POS * start) * strength
 	if rot <= 0.0 and pos <= 0.0:
 		return
 	# Faster wobble for rough surface and hits than for the speed buzz.
-	_t += delta * (6.0 + 10.0 * surface_t + 14.0 * trauma)
+	_t += delta * (6.0 + 10.0 * surface_t + 14.0 * trauma + 12.0 * start)
 	rotate_object_local(Vector3.RIGHT, rot * _noise.get_noise_2d(_t, 0.0))
 	rotate_object_local(Vector3.UP, rot * 0.6 * _noise.get_noise_2d(_t, 100.0))
 	rotate_object_local(Vector3.BACK, rot * 0.8 * _noise.get_noise_2d(_t, 200.0))

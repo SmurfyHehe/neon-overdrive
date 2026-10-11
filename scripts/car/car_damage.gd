@@ -107,13 +107,23 @@ const LAMP_PRICE := 60
 const TOW_PRICE := 150
 ## A station's free patch brings the radiator back to here (no performance loss).
 const PATCH_TO := FREE_BELOW - 0.01
+## The same patch takes a meter at or over TOTALLED_PATCH_AT down to
+## TOTALLED_PATCH_TO (it gets you home, it is not a repair).
+const TOTALLED_PATCH_AT := 0.90
+const TOTALLED_PATCH_TO := 0.60
+## The tow is offered from this meter on (or while the car limps).
+const TOW_AT := 0.60
 
 var enabled := true
 var parts: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 var lamps: Array[bool] = [false, false, false, false]   # true = broken
 ## The night number of the last free patch; one patch per night.
 var patched_night := -1
-## 0..1, unused yet: a totalled car (the save core stores it).
+## The totalled meter, 0..1 (TM1, scripts/car/totalled_meter.gd): big crashes
+## fill it, 1.0 is a totalled car. It is saved with the car (to_dict) and a
+## restart keeps it (carry_over / take_carried): a quit is not a free repair.
+## Only the garage (garage_repair), Walt's free first-total fix and a station
+## patch bring it down.
 var totalled := 0.0
 ## What the sim reads on top of the tune; rebuilt only when damage changes.
 var offsets := DamageOffsets.new()
@@ -323,6 +333,20 @@ static func _touching(v: Vehicle) -> bool:
 			return true
 	return false
 
+## The meter a restart keeps. The scene reload makes a new car, so the
+## number waits here, in the session, until the new car takes it. When the
+## save core stores the car (CarDamage.to_dict) this goes away.
+static var _carried := -1.0
+
+static func carry_over(d: CarDamage) -> void:
+	_carried = d.totalled
+
+## Takes the meter a restart carried over (once).
+func take_carried() -> void:
+	if _carried >= 0.0:
+		totalled = clampf(_carried, 0.0, 1.0)
+		_carried = -1.0
+
 ## The garage: everything fixed, paid from the bank. Returns the price paid;
 ## nothing changes if the bank can't cover it. `bank` is anything with an int
 ## `bank` and spend_bank(int) -> bool (as FuelTank.refuel); null = free (the
@@ -335,6 +359,7 @@ func garage_repair(bank: Object) -> int:
 		parts[i] = 0.0
 	for i in lamps.size():
 		lamps[i] = false
+	totalled = 0.0
 	rebuild_offsets()
 	return price
 
@@ -348,18 +373,32 @@ func repair_price() -> int:
 			total += LAMP_PRICE
 	return roundi(total)
 
-## A fuel station's free engine patch, once a night: the radiator comes back
-## to the no-loss band (the limp ends). Returns true if it patched.
+## A fuel station's free patch, once a night: the radiator comes back to the
+## no-loss band (the limp ends), and a meter at or over TOTALLED_PATCH_AT drops
+## to TOTALLED_PATCH_TO. Returns true if it patched anything.
+## Nothing calls it yet: TM4 adds the station button.
 func station_patch(night: int) -> bool:
-	if not enabled or night == patched_night or parts[Part.RADIATOR] < FREE_BELOW:
+	if not enabled or night == patched_night:
 		return false
-	parts[Part.RADIATOR] = PATCH_TO
-	patched_night = night
-	rebuild_offsets()
-	return true
+	var did := false
+	if parts[Part.RADIATOR] >= FREE_BELOW:
+		parts[Part.RADIATOR] = PATCH_TO
+		did = true
+	if totalled >= TOTALLED_PATCH_AT:
+		totalled = TOTALLED_PATCH_TO
+		did = true
+	if did:
+		patched_night = night
+		rebuild_offsets()
+	return did
 
-## Ferris's tow: kept for a totalled car (the engine never dies from damage
-## now, so nothing calls it yet). Never during a chase. Paid from the bank, as much as it holds
+## The tow row (pause menu) is offered while the car limps or the meter is at
+## TOW_AT or over, and never in a chase.
+func tow_offered(limping: bool, in_chase: bool) -> bool:
+	return not in_chase and (limping or totalled >= TOW_AT - 0.0001)
+
+## Ferris's tow: for a car in limp or past TOW_AT on the meter (tow_offered).
+## Never during a chase. Paid from the bank, as much as it holds
 ## (a tow is never refused for money). The caller ends the night and puts the
 ## car home. Returns false if refused.
 func tow(bank: Object, in_chase: bool) -> bool:

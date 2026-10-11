@@ -133,6 +133,7 @@ call :run audio/driveline_audio --headless
 call :run audio/sound_fixes --headless
 call :run audio/road_sounds --headless
 call :run audio/crash_variety --headless
+call :run audio/cabin_life --headless
 call :run audio/audio_mix --headless
 call :run audio/radio --headless
 call :run world/person_body --headless

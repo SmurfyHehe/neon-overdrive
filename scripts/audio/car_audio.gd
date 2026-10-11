@@ -143,6 +143,7 @@ var joint_count := 0       # every axle crossing, so a da-dum counts 2
 var manhole_count := 0
 var deck_level := 0.0
 var odometer := 0.0        # m driven, for the joint spacing
+var rough_share := 0.0     # share of wheels off the road surface (kerb, grass); CabinLifeAudio's coins
 
 # Set by PerspectiveAudio every frame: 0 chase .. 1 cockpit, and the window.
 var cabin := 0.0
@@ -195,6 +196,7 @@ func _ready() -> void:
 		p.max_polyphony = 4
 		_players[layer] = p
 	_players.deck = _add_player("deck", &"Tires")
+	add_child(CabinLifeAudio.new())  # cooling ticks, a can, coins, the glovebox (MA1)
 	if _vehicle != null:
 		_wheelbase = maxf(1.5, absf(_vehicle.front_axle_position.z - _vehicle.rear_axle_position.z))
 
@@ -260,6 +262,7 @@ func _process(delta: float) -> void:
 	for k in forced:
 		st[k] = forced[k]
 	var speed: float = st.speed
+	rough_share = float(st.on_rough)
 
 	wind_level = _approach(wind_level, minf(1.0, pow(speed / WIND_FULL, WIND_EXP)), delta)
 	road_level = _approach(road_level, pow(clampf(speed / ROAD_FULL, 0.0, 1.0), 1.2) * st.on_road, delta)

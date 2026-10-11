@@ -76,6 +76,9 @@ const ATTACK := 25.0
 const RELEASE := 10.0
 const PLAY_LOG := 256
 
+## A hit at the crunch level or above (CabinLifeAudio's glovebox listens).
+signal big_hit(dv: float)
+
 ## One-shot pools and their gain. Every take's peak is normalised, so gain
 ## sets the pool's level against the others (the old tiers' gains carried over).
 ## The sounds themselves are CrashSfx's recipes.
@@ -350,6 +353,8 @@ func _process(delta: float) -> void:
 func impact(dv: float, surface := "concrete") -> void:
 	if dv < MIN_DV or _wait > 0.0:
 		return
+	if dv >= CRUNCH_DV:
+		big_hit.emit(dv)
 	if not (surface in SURFACES):
 		surface = "concrete"
 	_wait = COOLDOWN

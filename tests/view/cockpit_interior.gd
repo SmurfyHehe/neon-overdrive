@@ -28,8 +28,8 @@ var lever_moved := false
 ## The most of the view the dash trinket may cover (it is measured apart from the cabin).
 const CHARM_MAX_VIEW_SHARE := 0.015
 ## Interior mods batch 1 (2026-10-09): the view is checked with every part
-## fitted (the charm, a knob, the short stick) and the strut bar on.
-const MODS := "trinket=dice;knob=ball;short=1;strut=1"
+## fitted (the charm, a knob, the short stick, a bobble head) and the strut bar on.
+const MODS := "trinket=dice;knob=ball;short=1;strut=1;bobble=pike"
 
 func _initialize() -> void:
 	ExhaustTune.save_path = "user://autotune/test_cockpit_interior_exhaust.json"

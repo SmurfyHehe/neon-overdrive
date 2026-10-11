@@ -19,7 +19,7 @@ extends SceneTree
 # - districts: the drive starts downtown, all four districts appear, and
 #   wherever the setback changes a cross wall closes the step between the
 #   two out-of-bounds lines; every building type (special ones included)
-#   turns up
+#   turns up, except gas, which never does (eac968f)
 # - budget: roadside buildings and furniture stay under 5,000 triangles
 #   per 50 m chunk (worst case over many chunks)
 #
@@ -223,7 +223,13 @@ func _check_districts() -> void:
 	for n in D.SPECS:
 		if not seen.has(n):
 			_fail("district %s never appears in 400 chunks" % n)
+	# "gas" is left out on purpose since eac968f (2026-10-11): the generated
+	# GAS buildings became shops and the only stations are gas_station.gd's,
+	# so it must never turn up (shop_fronts.gd checks Loop 1 the same way).
 	for t in B.BuildingKit.TYPES.keys() + ["lot"]:
-		if not types.has(t):
+		if t == "gas":
+			if types.has(t):
+				_fail("a building of type gas appears (the real station is gas_station.gd)")
+		elif not types.has(t):
 			_fail("building type %s never appears in 400 chunks" % t)
 	print("districts: %s over 400 chunks, %d step walls; types %s" % [seen.keys(), steps, types.keys()])

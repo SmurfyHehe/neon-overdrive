@@ -14,7 +14,8 @@ extends RefCounted
 #               the stretch it searches grows 50 m a second.
 #   Called off  honest cops only: the danger number over the line for 3 s.
 #               Lights off, back to Patrol at once, and it stays out of this
-#               chase until the heat is gone.
+#               chase until the heat is gone: it does not watch you for the
+#               heat either (PoliceHeat.stood_down), so the heat can cool.
 #
 # Heat is PoliceHeat's (events, and cooling while nobody sees you); the brain
 # only reads it. Sight is PoliceHeat.cop_can_see_player, the one hook.
@@ -87,6 +88,7 @@ func step(dt: float) -> void:
 		_note_seen()
 	if stood_down_at >= 0 and heat.level == PoliceHeat.NONE:
 		stood_down_at = -1   # that chase is over: it is free for the next one
+		heat.stood_down.erase(car)
 	match state:
 		State.PATROL:
 			if heat.level >= PoliceHeat.ONE_CAR and stood_down_at < 0:
@@ -156,7 +158,7 @@ func _danger_step(dt: float) -> void:
 		return
 	var u := RoadFrame.unroll(player.global_position)
 	var kmh := heat._kmh_of(player)
-	var cars_near := traffic.count_near(u.z, PoliceRules.DANGER_CARS_M, car) if traffic != null else 0
+	var cars_near := traffic.count_ahead(u.z, last_dir, PoliceRules.DANGER_CARS_M, u.x < 0.0, car) if traffic != null else 0
 	var undivided: bool = undivided_at.is_valid() and bool(undivided_at.call(u.z))
 	var junction := Junction.enabled and absf(Junction.centre_z_near(u.z) - u.z) < PoliceRules.DANGER_JUNCTION_M
 	danger = PoliceRules.danger(kmh, cars_near, undivided, junction)
@@ -201,6 +203,8 @@ func _enter(to: int) -> void:
 		State.CALLED_OFF:
 			called_off += 1
 			stood_down_at = heat.level
+			if not heat.stood_down.has(car):
+				heat.stood_down.append(car)
 			car.lights_on = false
 			radio.emit("Pursuit terminated. Copy.")
 	state_changed.emit(from, to)

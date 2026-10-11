@@ -246,6 +246,7 @@ func _physics_process(delta: float) -> bool:
 			if t > 3.0:
 				_check(heat.level >= PoliceHeat.ONE_CAR, "D: heat already gone 3 s after the call-off (cannot tell if it stays out)")
 				_check(brain.state == S.PATROL, "D: 3 s after calling off the cop is in %s" % brain.state_name())
+				_check(heat.stood_down.has(police.car) and not heat.seen, "D: the called-off cop is still watching for the heat (stood down %s, seen %s)" % [heat.stood_down.has(police.car), heat.seen])
 				return _finish()
 	return false
 

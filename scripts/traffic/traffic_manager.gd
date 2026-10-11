@@ -538,14 +538,17 @@ func disown(car: TrafficCar) -> void:
 	car._idx = -1
 	_build_index()
 
-## Traffic cars within `reach` m of road z (either side of the road), not
-## counting `skip`. For the police danger number, at 10 Hz.
-func count_near(z: float, reach: float, skip: TrafficCar = null) -> int:
+## Traffic cars up to `reach` m ahead of road z along `dir`, on the -x
+## carriageway (`far`) or the +x one, not counting `skip`. For the police
+## danger number, at 10 Hz.
+func count_ahead(z: float, dir: float, reach: float, far: bool, skip: TrafficCar = null) -> int:
 	var n := 0
 	for car in cars:
-		if car == skip or car.benched or car.race_pinned or car._idx < 0 or car._idx >= _z.size():
+		var k := car._idx
+		if car == skip or car.benched or car.race_pinned or k < 0 or k >= _z.size():
 			continue
-		if absf(_z[car._idx] - z) <= reach:
+		var d: float = (_z[k] - z) * dir
+		if d >= 0.0 and d <= reach and ((_lo[k] + _hi[k]) < 0.0) == far:
 			n += 1
 	return n
 

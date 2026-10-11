@@ -19,6 +19,7 @@ signal closed
 
 const GameInfo := preload("res://scripts/core/game_info.gd")
 const LogFolder := preload("res://scripts/core/log_folder.gd")
+const DiscordPresence := preload("res://scripts/core/discord_presence.gd")
 
 const PAGES: Array[String] = ["Sound", "Picture", "Driving", "Controls", "Game"]
 ## What a mixer channel is called on the Sound page (the rest use their own name).
@@ -481,6 +482,10 @@ func _build_game_page(parent: Control) -> Control:
 	tips_check = _add_check(page, "Tips", GameSettings.tips, func(on: bool) -> void:
 		GameSettings.set_tips(on)
 		GameSettings.save_settings())
+	# Discord Rich Presence (discord_presence.gd): dormant until the app id is set.
+	_add_check(page, "Show on Discord", DiscordPresence.enabled, func(on: bool) -> void:
+		DiscordPresence.set_enabled(on)
+		DiscordPresence.save_settings())
 	copy_log_button = _add_button(page, "Copy my log", _copy_log)
 	log_status = Label.new()
 	log_status.add_theme_color_override("font_color", AMBER)

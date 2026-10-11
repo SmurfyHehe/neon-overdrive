@@ -80,6 +80,8 @@ var rescue: OffMapRescue  # off-map rescue (off_map_rescue.gd)
 const Weather := preload("res://scripts/world/weather.gd")
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
+const DiscordPresence := preload("res://scripts/core/discord_presence.gd")
+
 # Save system (run structure, 2026-10-09): auto-save into one of 3 slots, and a
 # resume puts the run back where it was (scripts/save/). road_seed is kept so a
 # saved run rebuilds the same road; run is what read_run() gave back ({} =
@@ -140,6 +142,7 @@ func _ready() -> void:
 	FxSettings.load_settings()   # cockpit mirrors on/off and quality ([fx] in settings.cfg)
 	ViewSettings.load_settings()
 	CabinMods.load_settings()   # interior mods: trinket, shift knob, short shifter, strut bar ([interior])
+	DiscordPresence.load_settings()   # Rich Presence on/off ([discord] in settings.cfg)
 	GraphicsSettings.load_settings()   # preset, edge smoothing, render scale ([graphics])
 	DisplaySettings.load_settings()    # fullscreen, window size ([display]); applied below in a play session
 	KeyBindings.load_settings()        # the player's rebound keys ([keys])
@@ -266,6 +269,7 @@ func _ready() -> void:
 		recorder = DriveRecorder.new(self)
 		add_child(recorder)
 	add_child(saver)
+	add_child(DiscordPresence.new(self))   # dormant until the app id is set, never in tests
 
 ## Wet-road reflections (wet_reflections.gd). How wet the road is drawn:
 ## --wet=<0..1> (benchmark args) or NEON_WET=<0..1> pins it; otherwise

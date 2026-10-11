@@ -93,6 +93,7 @@ func _leave() -> void:
 		if is_instance_valid(layer):
 			layer.visible = true
 	hidden_layers.clear()
+	chase.reset_orbit()   # back from photo mode: straight behind the car
 	chase.current = true
 
 func _process(delta: float) -> void:

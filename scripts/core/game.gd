@@ -92,6 +92,8 @@ const DiscordPresence := preload("res://scripts/core/discord_presence.gd")
 # saved run rebuilds the same road; run is what read_run() gave back ({} =
 # a fresh start at the beginning of the road).
 const SaveDirector := preload("res://scripts/save/save_director.gd")
+const SaveCore := preload("res://scripts/save/save_core.gd")
+const Freemode := preload("res://scripts/core/freemode.gd")
 const UserDirMigration := preload("res://scripts/save/user_dir_migration.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
 const ColorGrade := preload("res://scripts/world/color_grade.gd")
@@ -487,6 +489,7 @@ func _setup_ground_collision() -> void:
 ## a loop is fixed by the map; its bends and hills come from the night's road
 ## seed, new each night and the same on every pass that night.
 func _pick_road() -> int:
+	Freemode.refresh(SaveCore.career())   # also for a resumed run: later systems ask Freemode.is_active()
 	if not run.is_empty():
 		var saved: Variant = run.road.get("id")
 		if (saved is float or saved is int) and float(saved) == floorf(saved) and RoadMap.knows(int(saved)):
@@ -495,7 +498,11 @@ func _pick_road() -> int:
 			return int(saved)
 		print("save: this run was on road '%s', which this build does not have; starting at the top of road %d" % [saved, RoadMap.DEFAULT])
 	var act_env := OS.get_environment("NEON_ACT")
-	road_act = int(act_env) if act_env.is_valid_int() else 1
+	if act_env.is_valid_int():
+		road_act = int(act_env)
+	else:
+		# Free mode opens the whole city; otherwise the story's act (1 until it sets it).
+		road_act = maxi(Freemode.road_act(), 1)
 	var env := OS.get_environment("NEON_ROAD")
 	if env == "endless":
 		return RoadMap.ENDLESS

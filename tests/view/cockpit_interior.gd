@@ -115,6 +115,7 @@ func _physics_process(_delta: float) -> bool:
 				var shown := w.lcd_text()
 				_check(shown.begins_with(SevenSeg.gear_char(p.gear) + " ") and not shown.contains("rpm") and absi(int(shown.substr(2)) - Hud.kmh(p.current_speed())) <= 30, "the screen shows the gear and a km/h close to the live speed, got '%s' (gear %d, %d km/h)" % [shown, p.gear, Hud.kmh(p.current_speed())])
 				_check(w.find_children("*", "Label3D", true, false).is_empty(), "no Label3D under the wheel")
+				_check_gear_window(p, frame)
 				# flash on the shift cue: manual, gear 1 of several, past the shift point
 				p.automatic_transmission = false
 				var cue := Hud.shift_cue(p, 0.95)
@@ -161,6 +162,22 @@ func _physics_process(_delta: float) -> bool:
 				print("cockpit triangles: %d (wheel %d)" % [frame.triangle_count(), frame.wheel.triangle_count()])
 				return _end("")
 	return false
+
+## Roy 2026-10-11: the coupe shows its gear in the tach face too; every gear
+## (r, n, 1-6) reads the same there as on the wheel screen.
+func _check_gear_window(p: PlayerCar, frame: CockpitFrame) -> void:
+	_check(frame.cab.get("gear_window", false), "the coupe's cabin asks for the tach gear window")
+	var keep: int = p.current_gear
+	var segs := {"r": "eg", "n": "ceg", "1": "bc", "2": "abdeg", "3": "abcdg", "4": "bcfg", "5": "acdfg", "6": "acdefg"}
+	for g in [-1, 0, 1, 2, 3, 4, 5, 6]:
+		p.current_gear = g
+		frame._process(0.25)
+		var ch := SevenSeg.gear_char(g)
+		_check(frame.gear_window_char() == ch and frame.gear_window_lit() == segs[ch], "gear %d: the tach window should show %s (%s), got '%s' (%s)" % [g, ch, segs[ch], frame.gear_window_char(), frame.gear_window_lit()])
+		_check(frame.wheel.lcd_text().begins_with(ch + " "), "gear %d: the wheel screen should show the same gear, got '%s'" % [g, frame.wheel.lcd_text()])
+	p.current_gear = keep
+	frame._process(0.25)
+	_check(frame.lamps.multimesh.instance_count == 4 + SevenSeg.SEG_COUNT, "the gear digit lives in the lamp MultiMesh (4 lamps + 7 segments)")
 
 ## Roy (2026-10-06): the cluster must not block the road. Rays from the cockpit
 ## eye across +-20 degrees, from the horizon down to the ground 10 m ahead of

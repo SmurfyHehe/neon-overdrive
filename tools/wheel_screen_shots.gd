@@ -3,7 +3,7 @@ extends SceneTree
 # Renders the wheel screen (seven-segment gear and speed) in the cockpit at
 # about 240 km/h in 4th, wheel straight and at quarter lock: the game's own
 # cockpit view, the same eye pitched down so the whole wheel shows, a close-up
-# of the screen, and one with the instrument cluster over the rim. Needs the
+# of the screen, and the instrument cluster (tach with its gear window) over the rim. Needs the
 # real renderer (no --headless). Writes PNGs to user://wheel_screen_shots/.
 #
 #   <godot> --path . --resolution 1280x720 -s res://tools/wheel_screen_shots.gd
@@ -82,4 +82,10 @@ func _shoot(shot: Camera3D, cam: ChaseCamera, p: PlayerCar, frame: CockpitFrame,
 	shot.global_position = wxf * Vector3(0.0, 0.078, 0.40)
 	shot.look_at(wxf * Vector3(0.0, 0.078, 0.0), wxf.basis.y)
 	await _snap(shot, "%s/%s_screen.png" % [dir, mark])
+	# the instrument cluster over the rim: the tach face with its gear window
+	var tach: Vector3 = frame.dial_centres()[0]
+	shot.fov = 20.0
+	shot.global_transform = eye
+	shot.look_at(p.global_transform * tach, p.global_transform.basis.y)
+	await _snap(shot, "%s/%s_cluster.png" % [dir, mark])
 	print("%s: screen '%s', %d km/h, gear %d, wheel %.0f deg" % [mark, frame.wheel.lcd_text(), Hud.kmh(p.current_speed()), p.gear, rad_to_deg(frame.wheel_angle)])

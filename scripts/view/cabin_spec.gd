@@ -25,6 +25,7 @@ extends RefCounted
 #   shelf {y, z0, z1, half_w} the parcel shelf, {} for none
 #   wheel, wheel_tilt_deg    the steering wheel's hub
 #   cluster (y, z), cluster_style, speedo_max_kmh
+#   gear_window (optional, bool)  a seven-segment gear digit in the tach face
 #   head_unit, lever, handbrake, pedals (throttle pivot; brake and clutch step left)
 #   crank, switch            the window controls
 #   rear_mirror, door_mirror (right side; mirrored)

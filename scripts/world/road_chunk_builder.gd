@@ -2313,6 +2313,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var flat := maxf(kh0, kh1) < FLAT_BELOW  # a freeway's verge: no hydrants, paint or drains
 	var verge := not bool(sec1.kerb)
 	var all_types := drop_types.has("*")
+	var pave_tops := {}  # side -> [hs, ts]: the pavement's drawn top, for StreetAnimals
 	for side in [1, -1]:
 		var drops: Array = []
 		var paint: Array = []
@@ -2365,6 +2366,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var suffix := "Own" if side == 1 else "Onc"
 		_update_profile_strip(root, "Curb" + suffix, sh0 * sx, sh1 * sx, cb0 * sx, cb1 * sx, _kerb_profile(), ts, hs, cols)
 		_update_profile_strip(root, "Sidewalk" + suffix, cb0 * sx, cb1 * sx, wk0 * sx, wk1 * sx, _walk_profile(), ts, hs)
+		pave_tops[side] = [hs, ts]
 		_update_sidewalk_collision(root, "SidewalkCol" + suffix, cb0, cb1, wk0, wk1, side, ts, ch, &"Grass" if verge else &"Kerb")
 		if hydrant_ok:
 			var ht: float = -hz / CHUNK_LEN
@@ -2511,7 +2513,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		-(start_onc_w + end_onc_w) * 0.5, (start_own_w + end_own_w) * 0.5)
 	# animals at shop fronts and alley mouths (A1): placed now, their eyes
 	# shine per frame from StreetAnimals.step (game.gd)
-	StreetAnimals.update(root, chunk_index, infos, mouths, [start_own_walk, end_own_walk, start_onc_walk, end_onc_walk], setback)
+	StreetAnimals.update(root, chunk_index, infos, mouths, [start_own_walk, end_own_walk, start_onc_walk, end_onc_walk], setback, pave_tops)
 
 	if job != null:
 		job.keep(_curve_k, _vert, _strip_n)

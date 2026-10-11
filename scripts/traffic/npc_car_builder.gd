@@ -155,7 +155,6 @@ const KINDS := {
 		"build_paint": {},
 		"sheet_paint": true,
 	},
-	# The work pickup (Camel, P17, 2026-10-10): the 4-door T2 truck Walt sells
 	# The shop wagon (sheet p7_wagon, 2026-10-11): front drive, built from
 	# its parts glb like the Bug; the sheet mesh is the NEON_PARTS_LEGACY body.
 	"p7_wagon": {
@@ -169,6 +168,7 @@ const KINDS := {
 		"build_paint": {},
 		"sheet_paint": true,
 	},
+	# The work pickup (Camel, P17, 2026-10-10): the 4-door T2 truck Walt sells
 	# after act 1. Its own sheet mesh (p17_work_pickup_data.gd), not the
 	# traffic pickup's, which stays as it is.
 	"p17_work_pickup": {

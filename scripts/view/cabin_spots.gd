@@ -53,6 +53,14 @@ const CARS := {
 	"p6_crossover": {"strut_bar": {"x": 0.61, "y": 1.00, "z": -1.16}},
 	"p8_driftcoupe": {"strut_bar": {"x": 0.60, "y": 0.76, "z": -1.18}},
 	"p10_truck": {"strut_bar": {"x": 0.70, "y": 0.92, "z": -1.45}},
+	# the shop wagon and the work pickup: towers by the same rule, y from
+	# their built bodies' hood top over the tower (2026-10-11)
+	"p7_wagon": {"strut_bar": {"x": 0.56, "y": 0.89, "z": -1.15}},
+	"p17_work_pickup": {"strut_bar": {"x": 0.605, "y": 0.92, "z": -1.44}},
+	# the specials wear the P1 coupe body until their body steps land
+	# (m1_monster_data.gd / l1_lowrider_data.gd), so they brace its towers
+	"m1_monster": {"strut_bar": {"x": 0.595, "y": 0.71, "z": -1.11}},
+	"l1_lowrider": {"strut_bar": {"x": 0.595, "y": 0.71, "z": -1.11}},
 }
 
 ## A cabin spot for a car (CockpitFrame space). Unknown spot: Vector3.ZERO.

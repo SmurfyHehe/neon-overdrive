@@ -85,6 +85,31 @@ const CARS := {
 			["barn_l", "barn_r", Vector3.RIGHT, Vector3.BACK, 1, 0.57, 0.0049, 0.0050],
 		],
 	},
+	"p2_hothatch": {
+		## no deck lid: the tail is one glass hatch on the roof's rear edge, its glass goes up with it
+		"without": ["trunk"],
+		"parts": ["hatch", "handle_hatch", "wiper_rear", "plate_lamp", "spoiler", "grille", "mirror_l", "mirror_r",
+			"blister_fl", "blister_fr", "blister_rl", "blister_rr", "rub_strip_l", "rub_strip_r", "rub_door_l", "rub_door_r",
+			"bumper_f_insert", "bumper_r_insert", "lamp_block_l", "lamp_block_r", "caliper_fl", "caliper_fr",
+			"engine", "cargo", "susp_fl", "susp_fr", "susp_rl", "susp_rr"],
+		"lamps": {"head_l": "glow_head", "head_r": "glow_head", "turn_fl": "glow_turn", "turn_fr": "glow_turn",
+			"turn_rl": "glow_turn", "turn_rr": "glow_turn", "tail_l": "glow_tail", "tail_r": "glow_tail",
+			"brake_l": "glow_brake", "brake_r": "glow_brake", "brake_c": "glow_brake",
+			"reverse_l": "glow_reverse", "reverse_r": "glow_reverse",
+			"fog_l": "glow_lens", "fog_r": "glow_lens", "plate_lamp": "glow_lens"},
+		"anchors": ["bay_engine", "tank", "torsion_beam_r", "strut_top_fl", "strut_top_fr"],
+		"hinges": ["hinge_hood", "hinge_door_l", "hinge_door_r", "hinge_hatch"],
+		"on_hinge": {"hinge_hatch": ["hatch", "glass_backlight", "seal_backlight", "plate_r", "plate_lamp", "wiper_rear"]},
+		## 262 mm discs in front, 200 mm drums at the rear; alloy wheels, a centre cap on all four
+		"brakes": {"fl": 0.131, "fr": 0.131, "rl": 0.10, "rr": 0.10},
+		"no_hubcap": [],
+		"gaps": [
+			["hood", "fender_fr", Vector3.RIGHT, Vector3.UP, 2, -1.69],
+			["fender_fr", "door_r", Vector3.BACK, Vector3.RIGHT, 1, 0.60],
+			["door_r", "body", Vector3.BACK, Vector3.RIGHT, 1, 0.60],
+			["hatch", "body", Vector3.RIGHT, Vector3.BACK, 1, 0.58],
+		],
+	},
 }
 
 var fails := 0
@@ -182,6 +207,9 @@ func _car(id: String, want: Dictionary) -> void:
 		_check(turned.x * side > far.x * side + 0.03, "%s: the fuel flap should swing outward" % id)
 	for hname in want.get("hinges", ["hinge_hood", "hinge_trunk", "hinge_door_l", "hinge_door_r"]):
 		_check(hinges.has(hname), "%s: %s missing" % [id, hname])
+	for hname in want.get("on_hinge", {}):
+		for p in want.on_hinge[hname]:
+			_check(p in hinges.get(hname, {}).get("parts", []), "%s: %s should hang on %s" % [id, p, hname])
 
 	# ---- gaps
 	var gap_txt := PackedStringArray()

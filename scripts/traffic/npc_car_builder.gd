@@ -105,8 +105,8 @@ const KINDS := {
 	},
 	"p2_hothatch": {
 		"data": preload("res://scripts/car/p2_hothatch_data.gd"),
-		"length": 4.05, "width": 1.83, "height": 1.4, "clearance": 0.12,
-		"front_overhang": 0.82, "rear_overhang": 0.67,
+		"length": 3.97, "width": 1.83, "height": 1.4, "clearance": 0.12,
+		"front_overhang": 0.74, "rear_overhang": 0.67,
 		"wheel_r": 0.315, "wheel_x": 0.79, "axle_z": 1.28,
 		"rest_y": -0.12,
 		"builds": {"stock": 50, "street": 30, "full": 20},

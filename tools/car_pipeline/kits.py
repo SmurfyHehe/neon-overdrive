@@ -572,7 +572,10 @@ WAGON = {
     'wheel': _wagon_wheel, 'anchors': _wagon_anchors,
 }
 
+import kit_p2_hothatch  # noqa: E402  (a kit file uses the helpers above)
+
 KITS = {
     'p0_beater': BUG,
     'p7_wagon': WAGON,
+    'p2_hothatch': kit_p2_hothatch.KIT,
 }

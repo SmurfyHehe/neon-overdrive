@@ -201,6 +201,27 @@ the door. Small discs in the front wheels with the caliper on the body,
 torsion beam ends in the wheel wells, the spare in its cradle under the floor,
 a transverse engine under the bonnet.
 
+**P2, the hot hatch** (`p2_hothatch`, kit in `kit_p2_hothatch.py`): 4,400 body
+triangles in 86 parts, 948 more in the wheels; 0.000 mm over 48 mirrored parts
+and pairs. Three doors. No deck lid (`no_trunk`): the tail is one hatch cut out
+of the deck and the tail panel (`cuts`), hinged on the roof's rear edge, and
+its glass, plate, plate lamp, handle and rear wiper go up with it (`hinge_of`);
+the roof spoiler stays on the roof with the third brake lamp (`brake_c`) in
+its trailing edge. Four bolted-on box blisters (`blister_*`): a flat outer
+face 6.5 cm proud of the doors, a bevel all round, a flat top, a rubber edge
+round the arch, seven rivets each. Tall lamp blocks at the rear corners (tail,
+brake and reversing lamp as three parts a side, an amber blinker down the
+outer edge), slim headlamps with amber corners, two fog lamps, a rub strip
+whose door length opens with the door. `alloy_face` opens the sheet's
+painted-on spokes into real ones, so the 262 mm discs and the rear drums show
+between them; the caliper is a body part on the upright (in a wheel's mesh it
+would turn with the wheel). `body.json` carries `required_slots` (the kit's
+`slots`): the lamp, brake, plate, wiper and flap counts, readable without the
+game.
+
+A new car's kit goes in a file of its own (`kit_<id>.py`, a dict `KIT`) with
+one import line in `kits.py`.
+
 In the game a kit car is built by `NpcCarBuilder` like any sheet car; when its
 glb is there the body comes from `CarAssembler` instead. `NEON_PARTS_LEGACY=1`
 keeps the one-piece sheet body, `NEON_CAR_PANELS=open` opens the lids, the

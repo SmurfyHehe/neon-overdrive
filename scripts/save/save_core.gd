@@ -17,7 +17,8 @@ extends RefCounted
 # (bank, receipts), cars (per car id: parts_owned, fitted, wear, damage, fuel,
 # dirt), current_car, tunes (per car id: live, exhaust, slots), story (night,
 # act, night_closed), special (unlocked), walt (first_total_used), stats
-# (play_secs). A block this build does not know is kept and written back
+# (play_secs), freemode (unlocked, entered_night; scripts/core/freemode.gd).
+# A block this build does not know is kept and written back
 # untouched: a new system adds its own block, it does not get a new file.
 #
 # night.json: where the run is (SaveDirector.capture), plus base_gen (the
@@ -54,6 +55,7 @@ extends RefCounted
 const AtomicJson := preload("res://scripts/save/atomic_json.gd")
 const SaveUpgrade := preload("res://scripts/save/save_upgrade.gd")
 const TestMode := preload("res://scripts/core/test_mode.gd")
+const Freemode := preload("res://scripts/core/freemode.gd")
 
 const SLOTS := 3
 const DEFAULT_ROOT := "user://saves"
@@ -334,6 +336,7 @@ static func commit(reason: String, changes: Dictionary = {}, edit: Callable = Ca
 	if edit.is_valid():
 		edit.call(c)
 	var dawn := changes.has("close_night")
+	var entered_night := 0
 	var cash_now := maxi(int(changes.get("cash", _int(nt.get("cash")))), 0)
 	if dawn:
 		if not changes.has("bank"):
@@ -345,6 +348,9 @@ static func commit(reason: String, changes: Dictionary = {}, edit: Callable = Ca
 			closing = _int(c.story.get("night", 1))
 		c.story.night_closed = maxi(_int(c.story.get("night_closed")), closing)
 		c.story.night = int(c.story.night_closed) + 1
+		# Stand-in for the credits screen: the dawn that ends night 30 enters
+		# free mode, in the same write that banks the night.
+		entered_night = Freemode.dawn_stand_in(c, closing)
 	c.gen = _int(c.get("gen")) + 1
 	c.save_version = SAVE_VERSION
 	if test_stop_after == 1:
@@ -353,6 +359,9 @@ static func commit(reason: String, changes: Dictionary = {}, edit: Callable = Ca
 	if not _put(file("career"), c):
 		push_error("SaveCore: the %s commit could not write the career" % reason)
 		return false
+	Freemode.refresh(c)
+	if entered_night > 0:
+		Freemode.fire_entered(entered_night)
 	if test_stop_after == 2:
 		return false
 	# Step 3: the night on the new gen.
@@ -393,6 +402,7 @@ static func fill_career(c: Dictionary) -> void:
 		for k in defaults[block]:
 			if not c[block].has(k):
 				c[block][k] = defaults[block][k]
+	Freemode.fill(c, maxi(_int(c.story.get("night", 1)), 1))
 	if not c.get("current_car") is String or c.current_car == "":
 		c.current_car = DEFAULT_CAR
 	if not _is_num(c.get("gen")):
@@ -414,12 +424,15 @@ static func plate(c: Dictionary, nt: Dictionary) -> Dictionary:
 	var story := _block(c, "story")
 	var world := _block(c, "world")
 	var car: Variant = c.get("current_car")
-	return {"mode": "story", "car": car if car is String and car != "" else DEFAULT_CAR,
-		"night": maxi(_int(story.get("night", 1)), 1), "act": maxi(_int(story.get("act", 1)), 1),
+	var night_no := maxi(_int(story.get("night", 1)), 1)
+	var free := Freemode.active(c)
+	return {"mode": "free" if free else "story", "car": car if car is String and car != "" else DEFAULT_CAR,
+		"night": night_no, "act": maxi(_int(story.get("act", 1)), 1),
 		"nights_total": NIGHTS_TOTAL,
 		"cash": _int(nt.get("cash")), "bank": _int(_block(c, "wallet").get("bank")),
 		"play_secs": maxi(_int(_block(c, "stats").get("play_secs")), _int(nt.get("play_secs"))),
-		"difficulty": str(world.get("difficulty", DEFAULT_DIFFICULTY)), "freemode_season": null}
+		"difficulty": str(world.get("difficulty", DEFAULT_DIFFICULTY)),
+		"freemode_season": Freemode.season_name(night_no) if free else null}
 
 # ---------- meta: chases, busts, the free wreck ----------
 

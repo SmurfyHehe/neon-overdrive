@@ -141,6 +141,8 @@ func capture() -> Dictionary:
 		run.clock = {"minutes": game.night_clock.minutes, "night": game.night_clock.night}
 	if game.radio != null:
 		run.radio = game.radio.player_station()
+		run.radio_on = game.radio.player_on()
+		run.radio_id = RadioStations.STATIONS[game.radio.player_station()].id
 	# Weather (WX0): the stage and its live values, so a resume at 1:30 a.m.
 	# on a night whose rain began at 1 is still raining, wipers and all.
 	# Tonight's plan is not saved: weather_seed (the profile) and the night
@@ -152,8 +154,6 @@ func capture() -> Dictionary:
 	var live := car_live()
 	if not live.is_empty():
 		run.car_live = live
-		run.radio_on = game.radio.player_on()
-		run.radio_id = RadioStations.STATIONS[game.radio.player_station()].id
 	return run
 
 ## The car's part of a run save. "box" is PlayerCar.Transmission (the gearbox

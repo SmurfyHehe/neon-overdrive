@@ -95,9 +95,9 @@ const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Veh
 ## full brake flare: the chase camera sits right behind them.
 const PLAYER_BRAKE_GLOW := 0.35
 var chassis_visual: Node3D
-## H toggles them (set_headlights); police heat reads this.
+## H switches them (set_headlights, lights_key_down); police heat reads this.
 var headlights_on := true
-## Low / high beam, flash and auto-dip (J; scripts/car/headlight_beams.gd).
+## Low / high beam, flash and auto-dip (all on H; scripts/car/headlight_beams.gd).
 var beams := HeadlightBeams.new()
 var _steer_smooth := 0.0
 ## Heat and wear (Phase B). Off for sim_only cars so TuneTrack stays clean.
@@ -359,9 +359,13 @@ func set_headlights(on: bool) -> void:
 	headlights_on = on
 	beams.set_lights(on)
 
-## J: high beam on / off; twice quickly is a flash (HeadlightBeams).
-func toggle_high_beam() -> void:
-	beams.press_high()
+## H went down / came up: tap, hold (flash) and double tap are HeadlightBeams'.
+func lights_key_down() -> void:
+	beams.press_key()
+	headlights_on = beams.lights_on()
+
+func lights_key_up() -> void:
+	beams.release_key()
 	headlights_on = beams.lights_on()
 
 ## The beam cops and the HUD see: HeadlightBeams.Mode OFF / LOW / HIGH.
@@ -571,9 +575,9 @@ func apply_keys(k: int) -> void:
 	if k & KEY_REVERSE:
 		toggle_reverse()
 	if Input.is_action_just_pressed("headlights"):
-		set_headlights(not headlights_on)
-	if Input.is_action_just_pressed("high_beam"):
-		toggle_high_beam()
+		lights_key_down()
+	if Input.is_action_just_released("headlights"):
+		lights_key_up()
 	clutch_input = 1.0 if k & KEY_CLUTCH else 0.0
 	# X: starts a stopped engine, switches a running one off (key_off). The
 	# press that switched it off is spent: it cranks again only once X has

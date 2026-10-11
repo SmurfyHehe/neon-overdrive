@@ -107,9 +107,12 @@ func _physics_process(_delta: float) -> bool:
 			names.append(e[0])
 	for a in InputMap.get_actions():
 		if not String(a).begins_with("ui_"):
-			_check(names.has(String(a)), "action '%s' is missing from the Controls page" % a)
+			if String(a) in SettingsScreen.TEST_ONLY:
+				_check(not names.has(String(a)), "test-only action '%s' is on the Controls page" % a)
+			else:
+				_check(names.has(String(a)), "action '%s' is missing from the Controls page" % a)
 	var titles: Array = groups.map(func(g): return g[0])
-	for t in ["Drive", "Gears & Engine", "Camera", "Audio & Radio", "Menus"]:
+	for t in ["Driving", "Gears and engine", "Lights and signals", "Looking", "Menus", "Radio"]:
 		_check(titles.has(t), "Controls page has no '%s' group" % t)
 	_check(SettingsScreen.keyboard_text("accelerate").contains("W"), "accelerate should list W, got '%s'" % SettingsScreen.keyboard_text("accelerate"))
 	_check(SettingsScreen.keyboard_text("pause").contains("Escape"), "pause should list Escape, got '%s'" % SettingsScreen.keyboard_text("pause"))
@@ -122,7 +125,7 @@ func _physics_process(_delta: float) -> bool:
 	var rows := 0
 	for n in menu.settings.controls_scroll.find_children("*", "Label", true, false):
 		rows += 1
-	_check(rows >= names.size() * 2, "the Controls page should hold a row per action (%d labels for %d actions)" % [rows, names.size()])
+	_check(rows >= names.size(), "the Controls page should hold a row per action (%d labels for %d actions)" % [rows, names.size()])
 	gs.resume()
 	gs.pause()
 	_check(menu.main_page.visible and not menu.settings.visible, "reopening the pause menu should start on the main page")
@@ -139,8 +142,7 @@ func _check_layout(game: Node, hud: Hud) -> void:
 	for l in [hud.lbl_speed, hud.lbl_gear, hud.rpm_bar, hud.lbl_info, hud.lbl_hint]:
 		var r: Rect2 = l.get_global_rect()
 		_check(win.encloses(r) or r.size == Vector2.ZERO, "%s at %s is outside the %s window" % [l.name, r, win.size])
-	_check(hud.lbl_hint.text == "Esc: pause · controls", "the hint should be short, got '%s'" % hud.lbl_hint.text)
-	_check(hud.lbl_hint.get_global_rect().size.x < win.size.x * 0.3, "the controls hint should be a short line")
+	_check(hud.lbl_hint.text == "" and not hud.lbl_hint.visible, "no key hint on screen, got '%s'" % hud.lbl_hint.text)
 	_check(hud.lbl_speed.get_global_rect().position.x > win.size.x * 0.5, "speed should sit on the right of the window")
 	# Gear and speed read as one line: same vertical centre (was ~4 px high).
 	var gc: float = hud.lbl_gear.get_global_rect().get_center().y

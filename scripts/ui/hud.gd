@@ -215,7 +215,8 @@ func _ready() -> void:
 	rear_frame.add_child(rear_strip)
 
 	lbl_hint = _label(root, 14, Color(SILVER.r, SILVER.g, SILVER.b, 0.7))
-	lbl_hint.text = "Esc: pause · controls"
+	lbl_hint.text = ""   # no key hints on screen: the Controls page lists the keys
+	lbl_hint.visible = false
 	lbl_hint.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 	lbl_hint.offset_left = 16.0
 	lbl_hint.offset_top = -34.0   # relative to the bottom edge
@@ -418,10 +419,10 @@ func _refresh() -> void:
 	rpm_bar.queue_redraw()
 
 	if engine_off:
-		lbl_status.text = "ENGINE OFF · press X to start"
+		lbl_status.text = "ENGINE OFF"
 		Hud.set_font_color(lbl_status, RED)
 	elif player.damage.is_engine_dead():
-		lbl_status.text = "ENGINE DEAD · tow in the pause menu"
+		lbl_status.text = "ENGINE DEAD"
 		Hud.set_font_color(lbl_status, RED)
 	elif player.limp.is_limping():
 		lbl_status.text = "LIMP · " + LimpMode.cause_name(player.limp.cause)

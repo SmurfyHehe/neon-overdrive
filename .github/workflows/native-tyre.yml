@@ -1,0 +1,43 @@
+# Builds the GevpTyreNative GDExtension (native/gevp_tyre) for Windows, debug
+# and release, and uploads the two DLLs as an artifact. The laptop has no C++
+# compiler, so this is the only place the library is built.
+name: Native tyre library
+
+on:
+  push:
+    paths:
+      - "native/**"
+      - ".github/workflows/native-tyre.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install SCons
+        run: python -m pip install scons
+
+      - name: Fetch godot-cpp
+        shell: pwsh
+        run: git clone --depth 1 -b 4.4 https://github.com/godotengine/godot-cpp native/gevp_tyre/godot-cpp
+
+      - name: Build release
+        working-directory: native/gevp_tyre
+        run: scons platform=windows target=template_release arch=x86_64
+
+      - name: Build debug
+        working-directory: native/gevp_tyre
+        run: scons platform=windows target=template_debug arch=x86_64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gevp_tyre_native-windows
+          path: addons/gevp_tyre_native/*.dll
+          if-no-files-found: error

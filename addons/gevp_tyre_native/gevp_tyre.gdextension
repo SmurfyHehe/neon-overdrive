@@ -1,0 +1,9 @@
+[configuration]
+
+entry_symbol = "gevp_tyre_init"
+compatibility_minimum = "4.4"
+
+[libraries]
+
+windows.debug.x86_64 = "res://addons/gevp_tyre_native/gevp_tyre.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://addons/gevp_tyre_native/gevp_tyre.windows.template_release.x86_64.dll"

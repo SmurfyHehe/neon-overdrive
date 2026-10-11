@@ -6,9 +6,11 @@ extends Node
 # A race is the player against one rival car on the same endless road, in the
 # same traffic, first to a finish line a fixed distance down the road. The
 # rival is a full-sim TrafficCar pinned by the TrafficManager (never recycled,
-# never frozen into the kinematic cruise). In RC1 it is a scripted dummy: the
-# ordinary traffic controller at a fixed cruise speed. RC2 swaps in the racing
-# driver; nothing here reads the gap to drive the rival (no rubber-banding).
+# never frozen into the kinematic cruise) with a racing driver at the wheel
+# (RivalDriver, scripts/traffic/rival_driver.gd: racing line, late braking,
+# flat out on the straights). Nothing here or there reads the gap to drive the
+# rival (no rubber-banding): the driver never sees the player's progress or
+# the finish line. The pause menu's "Race a test rival" starts the same race.
 #
 # Endings (plan section 3):
 #   WIN     the player crosses the line first
@@ -34,8 +36,18 @@ signal race_started(distance: float)
 signal race_ended(result: Result)
 
 const DEFAULT_DISTANCE := 1500.0   # m: a 60-120 s sprint at 50-90 km/h average
-const DUMMY_KIND := "n2_cityhatch"
-const DUMMY_SPEED := 30.0          # m/s, ~108 km/h: the scripted rival's cruise
+const DUMMY_KIND := "n2_cityhatch"   # the RC1 dummy's car; tests still race it
+const DUMMY_SPEED := 30.0          # m/s, ~108 km/h: what the rival cruises at once the race is over
+## The rival's car until crews have their own: the hot hatch (the AI car
+## numbers, CarSpec.npc_spec). Difficulty will change this build, never the
+## driving.
+const RIVAL_KIND := "p2_hothatch"
+## While racing the rival keeps the full sim this far from the player, so it
+## races the whole way instead of dropping to the traffic rails (far-mode rails
+## are a later step). Only as far as the road is built when the road has hills:
+## past the chunk pool there is no ground under a sim car.
+const RACE_SIM_DISTANCE := 2000.0
+const RACE_SIM_DISTANCE_HILLS := 180.0
 const DUMMY_PAINT := Color("#C9CED6")  # silver
 const NIGHT_MINUTES_PER_RACE := 15.0   # living-world rule: a race = +15 min
 const CAPTION_SECONDS := 4.0
@@ -56,6 +68,13 @@ var phase := Phase.IDLE
 var result := Result.NONE
 var distance := DEFAULT_DISTANCE
 var rival: TrafficCar
+## Which car and crew the next race's rival gets.
+var rival_kind := RIVAL_KIND
+var rival_crew := RivalPersonality.DOCKS
+## Seed of the last race: the rival's one random stream. NEON_RACE_SEED=<n>
+## fixes it (tests); otherwise each race rolls its own.
+var race_seed := 0
+var _pinned_before := TrafficManager.PINNED_DISTANCE_DEFAULT
 ## Absolute road distance (m) where the race started and where the line is.
 var start_d := 0.0
 var finish_d := 0.0
@@ -128,8 +147,13 @@ func start_race(dist: float = DEFAULT_DISTANCE) -> bool:
 	var v := 0.0
 	if player is RigidBody3D:
 		v = maxf(-RoadFrame.dir_to_road(u.z, (player as RigidBody3D).linear_velocity).z, 0.0)
-	rival = traffic.add_rival(DUMMY_KIND, rival_lane_x(u.x, traffic.own_lanes), u.z, maxf(v, 1.0), DUMMY_PAINT)
-	rival.target_speed = DUMMY_SPEED
+	var seed_env := OS.get_environment("NEON_RACE_SEED")
+	race_seed = int(seed_env) if seed_env.is_valid_int() else int(randi())
+	rival = traffic.add_rival(rival_kind, rival_lane_x(u.x, traffic.own_lanes), u.z, maxf(v, 1.0), DUMMY_PAINT)
+	rival.racer = RivalDriver.new(RivalPersonality.row(rival_crew), race_seed)
+	rival.racer.setup(rival)
+	_pinned_before = traffic.pinned_distance
+	traffic.pinned_distance = RACE_SIM_DISTANCE_HILLS if RoadFrame.has_hills() else RACE_SIM_DISTANCE
 	phase = Phase.RACING
 	races_run += 1
 	if game_state != null:
@@ -169,6 +193,9 @@ func end_race(r: Result) -> void:
 		stub_pay += PAY_WIN_NIGHTS
 	if night_clock != null:
 		night_clock.add_minutes(NIGHT_MINUTES_PER_RACE)
+	# The driver gets out: the car drives off as traffic.
+	RivalDriver.release(rival, DUMMY_SPEED)
+	traffic.pinned_distance = _pinned_before
 	traffic.release_rival(rival)
 	rival = null
 	if game_state != null:

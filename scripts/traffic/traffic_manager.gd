@@ -351,9 +351,10 @@ func _physics_process(_delta: float) -> void:
 ## Races (RC1): one extra full-sim car, in the index like any other car so
 ## traffic sees it and it sees traffic. Pinned: never recycled, never frozen,
 ## until release_rival() hands it back.
-func add_rival(kind_name: String, lane_x: float, z: float, speed: float, paint: Color) -> TrafficCar:
+func add_rival(kind_name: String, lane_x: float, z: float, speed: float, paint: Color, car_spec := {}) -> TrafficCar:
 	var car := TrafficCar.new()
 	car.kind = kind_name
+	car.spec = car_spec  # empty = the kind's own AI numbers (CarSpec.npc_spec)
 	car.traffic = self
 	car.race_pinned = true
 	car.color = paint

@@ -132,6 +132,7 @@ const PRESETS := {
 	"p6_crossover":   [0.50, 0.55, 0.40, 0.20],
 	"p7_wagon":       [0.28, 0.30, 0.12, 0.00],  # one small pipe on the left, no flames
 	"p17_work_pickup": [0.45, 0.40, 0.25, 0.05],  # one pipe out the rear corner, no turbo
+	"p8_driftcoupe":  [0.55, 0.65, 0.40, 0.10],  # one big oval on the right, raspy, pops on the overrun, no turbo
 	"n1_commuter":    [0.12, 0.10, 0.02, 0.00],
 	"n2_cityhatch":   [0.20, 0.35, 0.05, 0.00],
 	"n3_pickup":      [0.30, 0.35, 0.05, 0.00],

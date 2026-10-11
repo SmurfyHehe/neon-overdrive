@@ -252,6 +252,26 @@ in all four wheels with the caliper on the body, the fuel flap on the left
 rear quarter, the mast on the right front fender. Under the hood: a dark floor
 and the radiator, no engine yet.
 
+**P8, the drift coupe** (`p8_driftcoupe`, kit in `kit_p8_driftcoupe.py`,
+imported by `kits.KITS`): 4,485 body triangles in 77 parts, 1,224 more in
+the wheels; 0.000 mm over 43 mirrored parts and pairs. A 1983-91 style
+rear-drive box coupe on the kei's pop-up recipe (slim lids, 21 degrees on
+`hinge_popup_l/r`), four bolt-on overfenders laid on the skin (`flare_*`: a
+chrome rolled lip as the inner wall, a painted face with 14 dark rivet heads,
+a top wall back to the flank), a thin chrome drip rail a side, three-bar tail
+clusters (`tail_*` the top bar and the outer end of the bottom bar, `brake_*`
+the middle bar, `turn_r*` its amber outer end, `reverse_*` the white inner end
+of the bottom bar) on a dark satin `tail_panel`, no high brake lamp (era), the
+plate lamp over the rear plate, the fuel flap on the left rear quarter, one
+big oval tip on the right, 260 mm vented discs in all four deep-dish wheels
+(a bronze `rim` face behind a polished chrome lip, the spokes well inboard)
+with black single-pot calipers on the uprights, a strut and arm in the front
+wells, the solid axle's tube, a link and a shock in the rear ones. One-sided
+on purpose: the primer-grey front-left fender (`panel_mats`), so the right
+front fender is written as it is too; the rear bumper's corners are scuffed
+(`paint_regions` in primer, both sides). `_primer_lip` rolls the primer
+fender's arch edge, which `parts.add_arch_lips` only does for `paint`.
+
 A new car's kit goes in a file of its own (`kit_<id>.py`, a dict `KIT`) with
 one import line in `kits.py`.
 

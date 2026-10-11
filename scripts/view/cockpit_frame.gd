@@ -162,6 +162,8 @@ const DIAL_FACE := Color("#0B0E14")
 ##   retro    the kei roadster: tan seats, a painted navy dash
 ##   wood     the muscle sedan: oxblood bench, a wood-grain dash face, chrome trim
 ##   utility  the crossover: two-tone grey cloth, hard grey plastics
+##   drift    the drift coupe: hard dark-grey plastics, a black cloth bucket with a red-stitched
+##            centre beside the old brown velour passenger seat, an amber strip
 const TRIMS := {
 	"stock": {"plastic": PLASTIC, "plastic_light": PLASTIC_LIGHT, "trim": TRIM, "seat": SEAT, "seat_pass": SEAT, "seat_panel": SEAT_PANEL,
 		"leather": LEATHER, "carpet": CARPET, "strip": Color("#FFC06659"), "dash": PLASTIC, "dash_face": PLASTIC_LIGHT},
@@ -177,6 +179,8 @@ const TRIMS := {
 		"leather": Color("#2A1612"), "carpet": Color("#120D0B"), "strip": Color("#C9CED640"), "dash": Color("#201A16"), "dash_face": Color("#5A3A22")},
 	"utility": {"plastic": Color("#24272B"), "plastic_light": Color("#33373C"), "trim": Color("#44484E"), "seat": Color("#2B2E33"), "seat_pass": Color("#2B2E33"), "seat_panel": Color("#50545A"),
 		"leather": Color("#1D1F23"), "carpet": Color("#111214"), "strip": Color("#FFC06633"), "dash": Color("#24272B"), "dash_face": Color("#2E3136")},
+	"drift": {"plastic": Color("#2A2C30"), "plastic_light": Color("#383B40"), "trim": Color("#3C3F45"), "seat": Color("#141518"), "seat_pass": Color("#6E5238"), "seat_panel": Color("#8A1F22"),
+		"leather": Color("#121318"), "carpet": Color("#17181B"), "strip": Color("#FFC06640"), "dash": Color("#2A2C30"), "dash_face": Color("#34373C")},
 }
 const BACKLIGHT_ENERGY := 1.6
 
@@ -577,6 +581,9 @@ func _build_static() -> void:
 ##           its left (the muscle sedan); the needles sweep STRIP_SWEEP degrees
 ##   wide    a wide square binnacle, the dials apart with an info panel
 ##           between them (the crossover)
+##   centre  a big tach dead centre with a small speedo to its right and two
+##           small fuel / temp cans to its left, plus a low three-pod holder on
+##           the centre stack under the cluster's top (the drift coupe)
 ## tach and speedo needle pivots come from dial_centres(). Nothing here stands
 ## above the sight line, 8 degrees below the eye (tests/fleet/sight_line.gd).
 func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vector2) -> void:
@@ -606,6 +613,24 @@ func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vec
 			# the info panel between the dials (the warning lamps light in it)
 			k.box(Vector3(0.096, 0.062, 0.004), Vector3(seat_x, cl.x + 0.004, cl.y - 0.003), TRIM)
 			lit.box(Vector3(0.086, 0.052, 0.002), Vector3(seat_x, cl.x + 0.004, cl.y), Color(DIAL_FACE, 0.15))
+		"centre":
+			_binnacle(k, seat_x + 0.02, 0.40, cl, 0.052, 0.09)
+			for i in 2:   # fuel and temp, two small cans stacked left of the tach
+				var cc := Vector3(seat_x - 0.118, cl.x + 0.022 - 0.044 * i, cl.y)
+				lit.cylinder(0.015, -0.004, 0.0, cc, Color(DIAL_FACE, 0.15), 10, flat)
+				k.cylinder(0.020, -0.008, -0.002, cc + Vector3(0, 0, -0.001), TRIM, 10, flat)
+				lit.box(Vector3(0.002, 0.010, 0.002), cc + Vector3(0.0, -0.002, 0.001), Color(SODIUM, 0.7), Basis(Vector3.BACK, deg_to_rad(-20.0 + 40.0 * i)))
+			# the three-pod holder: on the centre stack, under the dash top, turned to the driver
+			var eye_c: Vector3 = cab.eye
+			var mid_c := Vector3(0.0, cl.x - 0.075, float(cab.dash_face_z) - 0.035)
+			var turn_c := Basis(Vector3.UP, atan2(eye_c.x - mid_c.x, eye_c.z - mid_c.z))
+			k.box(Vector3(0.20, 0.052, 0.06), mid_c, PLASTIC, turn_c)
+			var tilt_c := turn_c * Basis(Vector3.RIGHT, deg_to_rad(80.0))
+			for i in 3:
+				var c := mid_c + turn_c * Vector3(-0.062 + 0.062 * i, 0.002, 0.031)
+				lit.cylinder(0.020, -0.004, 0.0, c, Color(DIAL_FACE, 0.15), 12, tilt_c)
+				k.cylinder(0.025, -0.008, -0.002, c + turn_c * Vector3(0, 0, 0.001), TRIM, 12, tilt_c)
+				lit.box(Vector3(0.003, 0.014, 0.002), c + tilt_c * Vector3(0.0, 0.0, -0.010), Color(SODIUM, 0.6), tilt_c)
 		"triple":
 			_binnacle(k, seat_x, 0.34, cl)
 			# three aux gauges in a low hood in the middle of the dash top, turned to the driver
@@ -711,6 +736,8 @@ func dial_centres() -> Array:
 			return [Vector3(seat_x - 0.062, cl.x, cl.y), Vector3(seat_x + 0.062, cl.x, cl.y)]
 		"wide":
 			return [Vector3(seat_x - 0.125, cl.x, cl.y), Vector3(seat_x + 0.125, cl.x, cl.y)]
+		"centre":   # the big tach dead ahead, the small speedo to its right
+			return [Vector3(seat_x - 0.010, cl.x, cl.y), Vector3(seat_x + 0.118, cl.x - 0.008, cl.y)]
 		_:
 			return [Vector3(seat_x - 0.085, cl.x, cl.y), Vector3(seat_x + 0.085, cl.x, cl.y)]
 
@@ -740,6 +767,8 @@ func dial_radii() -> Array:
 			return [0.052, 0.040]
 		"cans":
 			return [0.046, 0.046]
+		"centre":
+			return [0.060, 0.034]
 		_:
 			return [DIAL_R, DIAL_R]
 

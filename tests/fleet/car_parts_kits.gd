@@ -158,6 +158,33 @@ const CARS := {
 			["trunk", "body", Vector3.RIGHT, Vector3.UP, 2, 2.28],
 		],
 	},
+	"p8_driftcoupe": {
+		## slim pop-ups on hinges, not head_*; no high brake lamp (era); the right front fender is painted, the
+		## left one primer, so neither is a mirror image (body.json lists both)
+		"without": ["head_l", "head_r", "brake_c"],
+		"parts": ["popup_l", "popup_r", "flare_fl", "flare_fr", "flare_rl", "flare_rr", "drip_rail_l", "drip_rail_r",
+			"tail_panel", "plate_lamp", "grille", "bumper_f_insert", "bumper_r_insert", "mirror_l", "mirror_r", "antenna",
+			"glass_quarter_l", "glass_quarter_r", "pillar_b_l", "pillar_b_r",
+			"caliper_fl", "caliper_fr", "caliper_rl", "caliper_rr", "susp_fl", "susp_fr", "susp_rl", "susp_rr",
+			"bay_floor", "bay_radiator_core",
+			"brake_c"],   # listed so that `without` is checked
+		"lamps": {"popup_l": "glow_head", "popup_r": "glow_head", "turn_fl": "glow_turn", "turn_fr": "glow_turn",
+			"turn_rl": "glow_turn", "turn_rr": "glow_turn", "tail_l": "glow_tail", "tail_r": "glow_tail",
+			"brake_l": "glow_brake", "brake_r": "glow_brake", "reverse_l": "glow_reverse", "reverse_r": "glow_reverse",
+			"plate_lamp": "glow_lens"},
+		"anchors": ["bay_engine", "bay_radiator", "tank", "diff", "subframe_f", "fuel_filler", "strut_top_fl", "strut_top_fr"],
+		"hinges": ["hinge_hood", "hinge_trunk", "hinge_door_l", "hinge_door_r", "hinge_popup_l", "hinge_popup_r"],
+		"on_hinge": {"hinge_popup_l": ["popup_l"], "hinge_popup_r": ["popup_r"]},
+		## 260 mm vented discs on all four, deep-dish rims with a polished lip and a chrome centre cap
+		"brakes": {"fl": 0.13, "fr": 0.13, "rl": 0.13, "rr": 0.13},
+		"no_hubcap": [],
+		"gaps": [
+			["hood", "fender_fr", Vector3.RIGHT, Vector3.UP, 2, -1.35],
+			["fender_fr", "door_r", Vector3.BACK, Vector3.RIGHT, 1, 0.51],
+			["door_r", "body", Vector3.BACK, Vector3.RIGHT, 1, 0.51],
+			["trunk", "body", Vector3.RIGHT, Vector3.UP, 2, 1.65],
+		],
+	},
 }
 
 var fails := 0

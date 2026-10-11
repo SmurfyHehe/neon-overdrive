@@ -214,6 +214,8 @@ call :run core/drive_crash "--headless --fixed-fps 120"
 call :run core/drive_fuzz "--headless --fixed-fps 120"
 call :run core/drive_spawn "--headless --fixed-fps 120"
 call :run core/drive_replay "--headless --fixed-fps 120"
+rem F9 saves one bug-report folder: the four files, the recording loads, the 21st folder removes the oldest.
+call :run core/bug_bundle "--headless --fixed-fps 120"
 if /i not "%~1"=="quick" (
 	rem The long driving set, for before a big merge: the same tests with more of everything.
 	set "DRIVE_SECS=90"

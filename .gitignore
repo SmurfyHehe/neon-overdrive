@@ -23,3 +23,9 @@ bench-results/
 
 # Written by tools/gevp-tick-matrix.ps1 (machine-local project overrides)
 override.cfg
+
+# godot-cpp checkout for building native/neon_sim (tools/setup-native.ps1)
+native/godot-cpp/
+native/neon_sim/godot-cpp/
+native/neon_sim/src/*.obj
+native/neon_sim/.sconsign.dblite

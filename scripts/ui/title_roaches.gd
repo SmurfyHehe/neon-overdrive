@@ -552,15 +552,17 @@ void fragment() {
 		ROUGHNESS = 1.0;
 		SPECULAR = 0.0;
 	} else if (part < 0.1) {
-		ALBEDO = shell;            // glossy shell: the lamp leaves a glint
-		ROUGHNESS = 0.22;
-		SPECULAR = 0.7;
+		// glossy shell: little diffuse (under the sodium lamp the full #2A1A10
+		// read as a bright orange chip), the lamp's glint is what shows
+		ALBEDO = shell * 0.4;
+		ROUGHNESS = 0.45;   // 0.22 made the whole half flash under the lamp
+		SPECULAR = 0.3;
 	} else if (part < 0.3) {
-		ALBEDO = shell * 0.75;     // head
-		ROUGHNESS = 0.35;
-		SPECULAR = 0.5;
+		ALBEDO = shell * 0.3;      // head
+		ROUGHNESS = 0.55;
+		SPECULAR = 0.25;
 	} else {
-		ALBEDO = vec3(0.12, 0.075, 0.045);   // legs, antennae
+		ALBEDO = vec3(0.05, 0.03, 0.02);     // legs, antennae
 		ROUGHNESS = 0.7;
 		SPECULAR = 0.2;
 	}

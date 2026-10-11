@@ -93,6 +93,7 @@ call :run ui/hud_rear_strip --headless
 call :run view/look_back --headless
 call :run view/look_around --headless
 call :run view/chase_orbit "--headless --fixed-fps 60"
+call :run view/hood_view "--headless --fixed-fps 60"
 call :run view/cockpit_horizon --headless
 call :run view/cockpit_eye_inside --headless
 call :run view/cockpit_shake_rotation_only --headless

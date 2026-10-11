@@ -43,7 +43,7 @@ const GROUPS := [
 		["reverse", "Reverse gear (when stopped)"]]],
 	["Gears and engine", [
 		["starter", "Engine on / off"], ["toggle_gearbox", "Gearbox automatic / manual"],
-		["shift_up", "Shift up"], ["shift_down", "Shift down"], ["clutch", "Clutch (hold)"]]],
+		["shift_up", "Shift up (semi and manual only)"], ["shift_down", "Shift down (semi and manual only)"], ["clutch", "Clutch (hold)"]]],
 	["Lights and signals", [
 		["headlights", "Lights (hold to flash)"], ["horn", "Horn"], ["turn_left", "Blinker left"],
 		["turn_right", "Blinker right"], ["hazard", "Hazards"]]],

@@ -62,8 +62,85 @@ func _run() -> void:
 	var r1 := title.menu_wheel.rotation
 	await _frames(30)
 	_check(is_equal_approx(title.menu_wheel.rotation, r1), "wheel stays put after it settles")
+	await _hold_six_seconds(title)
 	await _whistle_and_shake(game, title)
 	_finish("")
+
+# Holding W: the whistle climbs while the wheel spools and then stays put for
+# as long as W is held (a menu that "loses boost" while held is the bug), and
+# the loop it plays has no dip at its seam to pulse once per cycle.
+func _hold_six_seconds(title: TitleScreen) -> void:
+	var loop: AudioStreamPlayer = title.get("_menu_whistle")
+	if loop == null:
+		return
+	Input.action_press("accelerate")
+	var t := 0.0
+	var last_pitch := 0.0
+	var last_db := -INF
+	var dropped := ""
+	var stopped := false
+	var held_pitch := 0.0
+	var held_db := 0.0
+	while t < 6.0:
+		await process_frame
+		t += _dt()
+		if t < 0.1:
+			continue
+		if not loop.playing:
+			stopped = true
+		if loop.pitch_scale < last_pitch - 0.0005:
+			dropped = "pitch fell to %.3f from %.3f at %.2f s" % [loop.pitch_scale, last_pitch, t]
+		if loop.volume_db < last_db - 0.01 and dropped == "":
+			dropped = "level fell to %.2f dB from %.2f dB at %.2f s" % [loop.volume_db, last_db, t]
+		last_pitch = loop.pitch_scale
+		last_db = loop.volume_db
+		if t > 2.0 and held_pitch == 0.0:
+			held_pitch = loop.pitch_scale
+			held_db = loop.volume_db
+	_check(not stopped, "the whistle never stops or restarts while W is held 6 s")
+	_check(dropped == "", "pitch and level never fall while W is held (%s)" % dropped)
+	_check(is_equal_approx(loop.pitch_scale, held_pitch) and is_equal_approx(loop.volume_db, held_db),
+			"whistle is steady from 2 s to 6 s (pitch %.3f, %.2f dB)" % [loop.pitch_scale, loop.volume_db])
+	_check(loop.pitch_scale > 0.99, "whistle is at full pitch after 6 s (%.3f)" % loop.pitch_scale)
+	Input.action_release("accelerate")
+	for i in 240:
+		await process_frame
+		if title.menu_spin == 0.0:
+			break
+	_check_loop_level(TitleScreen.MENU_WHISTLE_LOOP)
+
+# 20 ms RMS windows over the loop, wrapped once so the seam is inside a
+# window: none may sit more than 2 dB under the median.
+# Read from the source file: the imported stream is compressed.
+func _check_loop_level(path: String) -> void:
+	var wav := AudioStreamWAV.load_from_file(path)
+	_check(wav != null and wav.format == AudioStreamWAV.FORMAT_16_BITS and wav.stereo,
+			"the whistle loop is a 16-bit stereo WAV")
+	if wav == null or wav.format != AudioStreamWAV.FORMAT_16_BITS or not wav.stereo:
+		return
+	var d := wav.data
+	var frames := d.size() / 4
+	var left := PackedFloat32Array()
+	for i in frames:
+		left.append(float(d.decode_s16(i * 4)) / 32768.0)
+	var win := int(wav.mix_rate * 0.02)
+	var wrapped := left + left.slice(0, win)
+	var levels: Array[float] = []
+	var pos := 0
+	while pos + win <= wrapped.size():
+		var e := 0.0
+		for i in win:
+			e += wrapped[pos + i] * wrapped[pos + i]
+		levels.append(sqrt(e / win))
+		pos += win / 2
+	var sorted := levels.duplicate()
+	sorted.sort()
+	var median: float = sorted[sorted.size() / 2]
+	var lowest: float = sorted[0]
+	_check(median > 0.02, "the whistle loop is not silent (median %.3f)" % median)
+	_check(lowest >= median * 0.794,
+			"no dip in the loop, seam included (lowest %.3f vs median %.3f = %.1f dB)"
+			% [lowest, median, 20.0 * log(lowest / median) / log(10.0)])
 
 # The whistle and the logo shake that go with holding W.
 func _whistle_and_shake(game: Node, title: TitleScreen) -> void:

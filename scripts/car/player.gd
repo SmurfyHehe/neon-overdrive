@@ -307,6 +307,11 @@ func _ready() -> void:
 			if kind == P1CoupeBuilder.KIND:
 				parts_cfg["hub_x"] = P1CoupeBuilder.DESIGN_WHEEL_X
 			CarParts.attach(self, parts_cfg)
+		# Wipers that sweep in rain and the fuel flap + nozzle (Roy 1175, 1177):
+		# before CarFx, so they land on the car layer too.
+		if kind != TestCarBuilder.KIND:
+			CarWipers.attach(self)
+			CarFuelFlap.attach(self, fuel)
 		CarFx.attach(self, chassis_visual.get_meta("half_l", 2.2))
 		# Brake, reverse, indicator and hazard lamps (Roy 1173).
 		CarLamps.attach(self)

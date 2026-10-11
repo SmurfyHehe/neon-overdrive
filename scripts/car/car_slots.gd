@@ -27,9 +27,9 @@ const PLATES := ["plate_front", "plate_rear"]
 ## it still wears plates and every lamp function (Roy 1174).
 const REQUIRED := {
 	CLASS_PLAYER: ["brake_front", "brake_rear", "lamp_brake", "lamp_third_brake", "lamp_reverse",
-		"lamp_blinker_front", "lamp_blinker_rear", "lamp_hazard", "plate_front", "plate_rear"],
+		"lamp_blinker_front", "lamp_blinker_rear", "lamp_hazard", "plate_front", "plate_rear", "wipers", "fuel_flap"],
 	CLASS_COP: ["brake_front", "brake_rear", "lamp_brake", "lamp_third_brake", "lamp_reverse",
-		"lamp_blinker_front", "lamp_blinker_rear", "lamp_hazard", "plate_front", "plate_rear"],
+		"lamp_blinker_front", "lamp_blinker_rear", "lamp_hazard", "plate_front", "plate_rear", "wipers"],
 	CLASS_TRAFFIC: ["lamp_brake", "lamp_third_brake", "lamp_reverse",
 		"lamp_blinker_front", "lamp_blinker_rear", "lamp_hazard", "plate_front", "plate_rear"],
 }
@@ -66,6 +66,11 @@ static func report(vehicle: Node, kind: String, visual: Node3D) -> Dictionary:
 	out["lamp_hazard"] = hz
 	out["plate_front"] = _count_slot(fit, "plate_front", kind, "plate_front", 1)
 	out["plate_rear"] = _count_slot(fit, "plate_rear", kind, "plate_rear", 1)
+	# Wipers (a sweeping pair on the glass) and the fuel flap over its recess.
+	var wp := vehicle.get_node_or_null("CarWipers") as CarWipers
+	out["wipers"] = "" if wp != null and wp.blade_count() == CarWipers.BLADES else "MISSING"
+	var flap := _count_slot(fit, "fuel_flap", kind, "fuel_flap", 1)
+	out["fuel_flap"] = flap if flap != "" or vehicle.get_node_or_null("CarFuelFlap") != null else "MISSING"
 	return out
 
 ## The slots a car is missing for its class: an array of "slot (why)".

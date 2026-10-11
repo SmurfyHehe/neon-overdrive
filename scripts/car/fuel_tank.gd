@@ -36,6 +36,19 @@ const PRICE_PER_LITRE := 3
 var enabled := true
 var litres := CAPACITY_L * START_FRACTION
 
+## The car stands at a pump with the pump menu up, and the gauge is rising.
+## The pump menu (pump_panel.gd) sets them; the fuel flap and the nozzle
+## (CarFuelFlap) follow them.
+var at_pump := false
+var filling := false
+## A refuel keeps the flap open for this long (real ms) even when nobody set
+## the flags, so any station gets the animation.
+const FLAP_HOLD_MS := 2500
+var _flap_until_msec := 0
+
+func is_filling() -> bool:
+	return filling or Time.get_ticks_msec() < _flap_until_msec
+
 func _init() -> void:
 	if TestMode.active():
 		litres = CAPACITY_L
@@ -73,6 +86,7 @@ func refuel(bank: Object, max_litres := INF) -> float:
 		return 0.0
 	var got := minf(float(buy), CAPACITY_L - litres)
 	litres += got
+	_flap_until_msec = Time.get_ticks_msec() + FLAP_HOLD_MS
 	return got
 
 func to_dict() -> Dictionary:

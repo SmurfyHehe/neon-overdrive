@@ -32,7 +32,10 @@ const TAG_REVERSE := 0.9
 
 ## Slots declared empty on purpose: kind -> {slot: reason}. An empty slot
 ## with no entry here fails tests/car/required_slots.gd.
-const NONE := {}
+const NONE := {
+	# The Bug's sheet has its right tail lamp missing (one of its four missing bits).
+	"p0_beater": {"lamp_brake": "the sheet is missing one tail lamp"},
+}
 
 ## Brakes per car: "disc" or "drum" per axle, "none" for the traffic cars
 ## (decided: wheels only). rim is a CarParts.RIM_STYLES name, caliper a
@@ -47,6 +50,8 @@ const BRAKES := {
 	# Era muscle: drums at the back from the factory, discs as the upgrade.
 	"p5_muscle": {"front": "disc", "rear": "drum", "rim": "five", "caliper": Color("#C9CED6")},
 	"p6_crossover": {"front": "disc", "rear": "disc", "rim": "dish", "caliper": Color("#4A505B")},
+	# Camel work pickup: 300 mm front discs, drums at the back (the sheet).
+	"p17_work_pickup": {"front": "disc", "rear": "drum", "rim": "steel", "caliper": Color("#4A505B")},
 	"c1_patrol": {"front": "disc", "rear": "disc", "rim": "steel", "caliper": Color("#1B1D22")},
 	"c2_patrolsuv": {"front": "disc", "rear": "disc", "rim": "steel", "caliper": Color("#1B1D22")},
 	"c3_interceptor": {"front": "disc", "rear": "disc", "rim": "five", "caliper": Color("#B5261E")},

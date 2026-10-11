@@ -389,6 +389,9 @@ func _ready() -> void:
 			if spec.has("rim"):
 				pcfg["rim"] = CarParts.rim_for_style(String(spec.get("rim", "")))
 			CarParts.attach(self, pcfg)
+			# Wipers and the fuel flap (no fuel tank: the flap never opens).
+			CarWipers.attach(self)
+			CarFuelFlap.attach(self)
 		# Blob shadow only: 80 spotlights would be a rendering bill of their own.
 		CarFx.attach(self, half_l, false)
 		# Crew and cops carry an underside and maybe parts: the CarDetail node

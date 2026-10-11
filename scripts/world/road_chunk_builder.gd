@@ -274,7 +274,7 @@ static var _own_mat: ShaderMaterial
 static var _onc_mat: ShaderMaterial
 static var _shoulder_mat: ShaderMaterial
 static var _curb_mat: StandardMaterial3D
-static var _sidewalk_mat: StandardMaterial3D
+static var _sidewalk_mat: ShaderMaterial
 static var _edge_line_mat: StandardMaterial3D
 static var _pylon_mat_own: StandardMaterial3D
 static var _pylon_mat_onc: StandardMaterial3D
@@ -401,9 +401,8 @@ static func _get_gutter_mat() -> ShaderMaterial:
 ## slab lines run with the kerb and across it.
 ## TEST BUILD: stays a plain material, so the slabs do not take the wet-road
 ## look (S1a made the pavement an asphalt shader; the two need one owner).
-static func _get_sidewalk_mat() -> StandardMaterial3D:
+static func _get_sidewalk_mat() -> ShaderMaterial:
 	if _sidewalk_mat == null:
-		var m := StandardMaterial3D.new()
 		var size := 64
 		var noise := FastNoiseLite.new()
 		noise.seed = 4242
@@ -421,11 +420,9 @@ static func _get_sidewalk_mat() -> StandardMaterial3D:
 				elif x == 2 or y == 2:
 					c = c.darkened(0.2)
 				img.set_pixel(x, y, c)
-		m.albedo_texture = ImageTexture.create_from_image(img)
-		m.uv1_scale = Vector3(2.0, CHUNK_LEN, 1.0)
-		m.roughness = 0.92
-		m.metallic = 0.0
-		_sidewalk_mat = m
+		# the slab texture through the wet-road shader (S1a: sidewalks darken and
+		# sheen like the road; the pavements step's slabs kept as the albedo)
+		_sidewalk_mat = RoadWet.textured_mat(ImageTexture.create_from_image(img), Vector2(2.0, CHUNK_LEN), 0.92)
 	return _sidewalk_mat
 
 ## Hydrant: a dull painted red-orange (the palette's sodium side, no neon),

@@ -279,7 +279,7 @@ func _ready() -> void:
 	# the columns the same separation, so the two share one vertical centre.
 	var digit_h := 0.0
 	for l in [lbl_gear, lbl_speed]:
-		var font: Font = l.get_theme_font("font")
+		var font: Font = UiTheme.font("display")   # both labels take the display role
 		digit_h = maxf(digit_h, font.get_height(l.get_theme_font_size("font_size")))
 	for l in [lbl_gear, lbl_speed]:
 		l.custom_minimum_size.y = ceilf(digit_h)

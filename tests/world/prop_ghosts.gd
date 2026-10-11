@@ -86,7 +86,7 @@ func _census() -> void:
 			# near() must find it with a box centred on it
 			out.clear()
 			var here := Transform3D(Basis(), -(rec.pos[i] as Vector3))
-			Props.near(rec, here, road[i].y, 0.5, 0.5, 0.5, PackedByteArray(), out)
+			Props.near(rec, here, road[i].x, road[i].y, 0.5, 0.5, 0.5, PackedByteArray(), out)
 			if not out.has(i):
 				_fail("chunk %d: near() misses prop %d (%s)" % [c, i, Props.NAMES[kind[i]]])
 		if c % 70 == 0:
@@ -152,7 +152,7 @@ func _physics_process(_delta: float) -> bool:
 		var root_c: Node3D = by[c]
 		var rec: Dictionary = Props.of(root_c)
 		out.clear()
-		Props.near(rec, car_inv * root_c.global_transform, -(s - float(c) * Props.CHUNK_LEN), half.x, half.z, half.z, PackedByteArray(), out)
+		Props.near(rec, car_inv * root_c.global_transform, u.x, -(s - float(c) * Props.CHUNK_LEN), half.x, half.z, half.z, PackedByteArray(), out)
 		for i in out:
 			var key := "%d:%d" % [c, i]
 			now[key] = true
@@ -196,7 +196,7 @@ func _post_line(by: Dictionary, here: int, car_z: float, fallback: float) -> flo
 		for i in rec.kind.size():
 			if rec.kind[i] != Props.POST or rec.side[i] != 1:
 				continue
-			var ahead := (float(c - here) * Props.CHUNK_LEN - rec.road[i].y) + car_z
+			var ahead: float = (float(c - here) * Props.CHUNK_LEN - rec.road[i].y) + car_z
 			if ahead > 8.0 and ahead < best:
 				best = ahead
 				x = rec.road[i].x + 0.45

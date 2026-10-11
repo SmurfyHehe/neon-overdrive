@@ -55,25 +55,33 @@ func _initialize() -> void:
 	var n_props: int = Props.of(a).kind.size() + Props.of(b).kind.size()
 	var out := PackedInt32Array()
 	var none := PackedByteArray()
-	off.clear()
-	on.clear()
-	var found := 0
-	for r in ROUNDS:
-		for mode in [false, true]:
-			var t0 := Time.get_ticks_usec()
-			for i in TICKS:
-				# the car runs down the kerb line, where the props are
-				var z := -fmod(float(i) * 0.37, Props.CHUNK_LEN)
-				var car_inv := Transform3D(Basis(), Vector3(-15.0, 0.0, -z))
-				out.clear()
-				if mode:
-					Props.near(Props.of(a), car_inv * a.transform, z, 0.9, 3.2, 2.2, none, out)
-					Props.near(Props.of(b), car_inv * b.transform, z + Props.CHUNK_LEN, 0.9, 3.2, 2.2, none, out)
-					found += out.size()
-			(on if mode else off).append(float(Time.get_ticks_usec() - t0) / float(TICKS))
-	m_off = _median(off)
-	m_on = _median(on)
-	print("touch: one tick against %d props in two chunks, median over %d rounds x %d: %.2f us (%.4f ms), loop alone %.2f us; %d props touched in all" % [
-		n_props, ROUNDS, TICKS, m_on - m_off, (m_on - m_off) / 1000.0, m_off, found])
+	# the own-side post line: where the car meets the most props
+	var kerb_x := 12.0
+	var ra: Dictionary = Props.of(a)
+	for i in ra.kind.size():
+		if ra.kind[i] == Props.POST and ra.side[i] == 1:
+			kerb_x = ra.road[i].x
+			break
+	for where in [["in a lane", 5.0], ["on the kerb line", kerb_x]]:
+		var car_x: float = where[1]
+		off.clear()
+		on.clear()
+		var found := 0
+		for r in ROUNDS:
+			for mode in [false, true]:
+				var t0 := Time.get_ticks_usec()
+				for i in TICKS:
+					var z := -fmod(float(i) * 0.37, Props.CHUNK_LEN)
+					var car_inv := Transform3D(Basis(), Vector3(-car_x, 0.0, -z))
+					out.clear()
+					if mode:
+						Props.near(Props.of(a), car_inv * a.transform, car_x, z, 0.9, 3.2, 2.2, none, out)
+						Props.near(Props.of(b), car_inv * b.transform, car_x, z + Props.CHUNK_LEN, 0.9, 3.2, 2.2, none, out)
+						found += out.size()
+				(on if mode else off).append(float(Time.get_ticks_usec() - t0) / float(TICKS))
+		m_off = _median(off)
+		m_on = _median(on)
+		print("touch %s: one tick against %d props in two chunks, median over %d rounds x %d: %.2f us (%.4f ms), loop alone %.2f us; %d props touched in all" % [
+			where[0], n_props, ROUNDS, TICKS, m_on - m_off, (m_on - m_off) / 1000.0, m_off, found])
 	print("budget: normal driving 0.01-0.02 ms a tick, hard ceiling 0.3 ms")
 	quit(0)

@@ -81,14 +81,17 @@ static func count(root: Node3D, kind: int) -> int:
 ## of the car's origin (pass the nose plus this tick's travel, so nothing is
 ## skipped at speed) to `back` metres behind it. `car_z` is the car's place
 ## along the chunk on the straight road (0 .. -CHUNK_LEN), which picks the
-## buckets; `skip` (same size as the record) marks props that are gone.
-static func near(rec: Dictionary, to_car: Transform3D, car_z: float, half_w: float, front: float, back: float,
+## buckets, and `car_x` its place across it, which throws out everything on
+## the far kerb before any vector maths; `skip` (same size as the record)
+## marks props that are gone.
+static func near(rec: Dictionary, to_car: Transform3D, car_x: float, car_z: float, half_w: float, front: float, back: float,
 		skip: PackedByteArray, out: PackedInt32Array) -> void:
 	if rec.is_empty():
 		return
 	var buckets: Array = rec.buckets
 	var pos: PackedVector3Array = rec.pos
 	var kind: PackedInt32Array = rec.kind
+	var road: PackedVector2Array = rec.road
 	var reach := maxf(front, back) + 1.0
 	var b0 := clampi(int((-car_z - reach) / BUCKET), 0, N_BUCKETS - 1)
 	var b1 := clampi(int((-car_z + reach) / BUCKET), 0, N_BUCKETS - 1)
@@ -97,6 +100,8 @@ static func near(rec: Dictionary, to_car: Transform3D, car_z: float, half_w: flo
 	for b in range(b0, b1 + 1):
 		var list: PackedInt32Array = buckets[b]
 		for i in list:
+			if absf(road[i].x - car_x) > reach:
+				continue  # across the road from the car, however it is turned
 			if not skip.is_empty() and skip[i] != 0:
 				continue
 			var p := to_car * pos[i]

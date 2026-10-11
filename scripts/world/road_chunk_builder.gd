@@ -2196,12 +2196,15 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		# sides share one instance count)
 		var own_y := -50.0 if GasStation.in_bay(chunk_index, pz, 1) else PYLON_HEIGHT / 2.0
 		var onc_y := -50.0 if GasStation.in_bay(chunk_index, pz, -1) else PYLON_HEIGHT / 2.0
-		pylons_own.set_instance_transform(n_posts, _xf_up(own_edge, own_y, pz))
-		pylons_onc.set_instance_transform(n_posts, _xf_up(-onc_edge, onc_y, pz))
+		var own_post := _xf_up(own_edge, own_y, pz)
+		var onc_post := _xf_up(-onc_edge, onc_y, pz)
+		pylons_own.set_instance_transform(n_posts, own_post)
+		pylons_onc.set_instance_transform(n_posts, onc_post)
+		# the foot is straight below (_xf_up raises y straight up)
 		if own_y > 0.0:
-			Props.add(props, Props.POST, _xf_up(own_edge, 0.0, pz).origin, n_posts, 1, own_edge, pz)
+			Props.add(props, Props.POST, own_post.origin - Vector3(0.0, own_y, 0.0), n_posts, 1, own_edge, pz)
 		if onc_y > 0.0:
-			Props.add(props, Props.POST, _xf_up(-onc_edge, 0.0, pz).origin, n_posts, -1, -onc_edge, pz)
+			Props.add(props, Props.POST, onc_post.origin - Vector3(0.0, onc_y, 0.0), n_posts, -1, -onc_edge, pz)
 		n_posts += 1
 	pylons_own.visible_instance_count = n_posts
 	pylons_onc.visible_instance_count = n_posts
@@ -2476,7 +2479,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			continue  # rails, dumpsters and jersey blocks are solid
 		var kx := float(r.x) * float(r.side)
 		# Kit hydrants get ids above the kerb hydrants' (two MultiMeshes)
-		Props.add(props, pk, _xf_up(kx, 0.0, float(r.z)).origin, ks + (KIT_SLOT if pk == Props.HYDRANT else 0), int(r.side), kx, float(r.z))
+		Props.add(props, pk, r.p, ks + (KIT_SLOT if pk == Props.HYDRANT else 0), int(r.side), kx, float(r.z))
 	var sign_kind := "" if RoadSigns.off() else name_sign_kind(chunk_index)
 	if sign_kind != "":
 		var sz := GANTRY_Z if sign_kind == "gantry" else (REPEATER_Z if sign_kind == "repeater" else ADVANCE_Z)

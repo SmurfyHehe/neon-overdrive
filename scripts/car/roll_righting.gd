@@ -13,9 +13,9 @@ extends Node
 # - one roll costs once. A roll starts when the car first goes past TIP_UP and
 #   is over only when it has been upright (over UPRIGHT_UP) for UPRIGHT_SECS;
 #   until then nothing is charged again, however many times it goes over.
-#   The step is charged when the car is righted (CHARGE_ON_TIP flips that to
-#   "the moment it goes over", so a barrel roll that lands on its wheels costs
-#   too; the brief reads either way, see the PR).
+#   The step is charged when the car is righted: a roll that lands back on
+#   its wheels costs nothing (Roy, 2026-10-11, answer 1466). CHARGE_ON_TIP
+#   would charge the moment it goes over instead.
 # - righting never launches the car: the body is frozen, moved over LIFT_SECS
 #   to the same spot and heading with its wheels CLEAR above the ground, level
 #   with the ground under it, both speeds zeroed, then let go to drop onto its

@@ -596,6 +596,22 @@ func _rail_tier(car: TrafficCar, d: float) -> int:
 		return TrafficCar.RAIL_FAR
 	return TrafficCar.RAIL_NEAR
 
+## Race retry (race_controller.gd): every pool car within `half` m of road-space
+## z is parked out of sight, like a deferred spawn, and takes a slot again when
+## its retry frame comes. The pinned rival is left alone. Returns how many.
+func clear_zone(z: float, half: float) -> int:
+	var n := 0
+	for car in cars:
+		if car.race_pinned or absf(RoadFrame.unroll(car.global_position).z - z) > half:
+			continue
+		car.set_shown(false)
+		car.set_detailed(false)
+		car.place(car.lane_x, car.direction, z - flow * PARK_BEHIND, car.rest_y, 0.0)
+		car.retry_frame = Engine.get_physics_frames() + DEFER_TICKS
+		_put(car)
+		n += 1
+	return n
+
 ## The same show/hide and physics band for a car that is not in the pool (the
 ## patrol car): d is its distance from the player along the road.
 func tier(car: TrafficCar, d: float) -> void:

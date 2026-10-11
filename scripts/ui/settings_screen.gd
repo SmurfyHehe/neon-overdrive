@@ -128,6 +128,7 @@ var tow_offered: Callable
 var wrecks_changed: Callable
 var wrecks_option: OptionButton
 var race_action: Callable   # start (or give up) a race against a test rival, until meet spots exist
+var race_label: Callable    # its label: Race a test rival / Give up race / Retry race
 var race_button: Button
 var clean_button: Button      # Walt's free cabin clean (CabinDirt)
 var keys_dirty := false   # rebinds not saved yet
@@ -711,6 +712,8 @@ func _refresh_game_page() -> void:
 	car_restart_button.disabled = not (paused or in_garage)
 	tow_button.disabled = not paused or not tow_action.is_valid() or (tow_offered.is_valid() and not tow_offered.call())
 	race_button.disabled = not paused or not race_action.is_valid()
+	if race_label.is_valid():
+		race_button.text = race_label.call()
 	var dirt := CabinDirt.level(now)
 	clean_button.text = "Clean the car (Walt, free)" if dirt > CabinDirt.CLEAN or CabinDirt.cans(now) > 0 else "Clean the car (already clean)"
 	clean_button.disabled = not paused

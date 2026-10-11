@@ -10,14 +10,13 @@ extends SceneTree
 
 const Harness := preload("res://tests/traffic/traffic_harness.gd")
 const CRUISE := 27.0
-const MIN_CURVATURE := 1.0 / 1000.0   # 1/m; the road's bends are 300-1500 m radius
+const MIN_CURVATURE := 1.0 / 1600.0   # 1/m; every bend the road rolls (300-1500 m radius)
 
 var game: Node
 
 func _initialize() -> void:
 	OS.set_environment("NEON_CURVES", "1")
 	OS.set_environment("NEON_HILLS", "0")
-	OS.set_environment("NEON_ROAD", "endless")
 	OS.set_environment("NEON_ROAD_SEED", "7")
 	RoadBarriers.force_kind = RoadBarriers.GUARDRAIL
 	game = Harness.boot(self, 0, 150.0, 7, 1.0e6)

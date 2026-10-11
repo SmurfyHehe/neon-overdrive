@@ -98,6 +98,10 @@ var sim_only := false
 ## released it drives on and is removed when out of range instead of respawning.
 var race_pinned := false
 var race_released := false
+## The racing driver (rival_driver.gd). Set on a pinned rival: _drive() then
+## hands the wheel and pedals to it instead of the traffic controller below.
+## Null on every traffic car, which is untouched.
+var racer: RivalDriver
 ## The spawner, for the occupancy queries. Null = plain lane follow at
 ## target_speed (nothing to brake for, no lane changes).
 var traffic: TrafficManager
@@ -453,6 +457,9 @@ func _drive(delta: float) -> void:
 	delta = _ai_owed
 	_ai_owed = 0.0
 	_ai_last = frame
+	if racer != null:
+		racer.drive(self, delta)
+		return
 	var v := current_speed()
 	if changing:
 		_lc_t += delta
@@ -740,8 +747,9 @@ const VELOCITY_FRAME_MIN_SPEED := 3.0
 ## road at every gain from 0.03 down to 0.0001 per metre-second: at 65 m/s a
 ## thousandth of lock is 1 m/s^2 sideways. With the velocity frame the car is
 ## on the lane whenever it is moving along it, whatever its nose does.
-static func lane_steer(v: Vehicle, lane: float, dir: float, wb: float, understeer_ff: float = UNDERSTEER_FF) -> float:
-	var lookahead := clampf(v.speed * LOOKAHEAD_SECONDS, LOOKAHEAD_MIN, LOOKAHEAD_MAX)
+static func lane_steer(v: Vehicle, lane: float, dir: float, wb: float, understeer_ff: float = UNDERSTEER_FF, look_m: float = -1.0) -> float:
+	# look_m: the caller's own lookahead in metres (the racing driver's is shorter).
+	var lookahead := look_m if look_m > 0.0 else clampf(v.speed * LOOKAHEAD_SECONDS, LOOKAHEAD_MIN, LOOKAHEAD_MAX)
 	var u := RoadFrame.unroll(v.global_position)
 	var target := RoadFrame.roll(Vector3(lane, u.y, u.z + dir * lookahead))
 	target.y = v.global_position.y

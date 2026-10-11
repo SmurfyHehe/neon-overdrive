@@ -211,6 +211,10 @@ rem Test build sandbox: free money and fuel, no run-ending, parked start, X star
 call :run core/test_build_sandbox "--headless --fixed-fps 120"
 rem The key: X starts the engine and switches it off; starter, catch and shutdown sounds.
 call :run car/engine_key "--headless --fixed-fps 120"
+rem The start itself: per-engine starter rendered offline (length, coughs, catch, level, weight), fast idle curve.
+call :run audio/starter_render "--headless"
+rem After the key start in the game: cabin shake, coughs, rev blip, 20 s fast idle.
+call :run car/fast_idle "--headless --fixed-fps 120"
 rem Delete a save: the store, and the title's Load > Delete a save with its question.
 call :run core/save_delete --headless
 rem Test build: every player car with everything its mod tree offers fitted.

@@ -14,6 +14,9 @@ extends Node
 #                  (shift_time x SHORT_SHIFT_TIME)
 #   strut_bar      a brace between the front strut towers: looks, plus a
 #                  stiffer front end (front anti-roll ratio + STRUT_BAR_ARB)
+#   bobble         the passenger-side dash bobble head, one per car
+#                  (BobbleHead, figures in BobbleFigures); default none.
+#                  Saved as bobble_<car kind> = figure id.
 #
 # The sim effects go on the live Vehicle, never on the spec, so the Tuner
 # shows and the saved tune (PlayerTune) keeps the stock values. The raw tuner
@@ -27,6 +30,7 @@ extends Node
 # (tests and the screenshot tool).
 
 const SECTION := "interior"
+const BOBBLE_PREFIX := "bobble_"
 
 const KNOB_STOCK := "stock"
 ## Pick order in the pause menu.
@@ -46,6 +50,8 @@ static var trinket := DashTrinket.DEFAULT_ID
 static var shift_knob := KNOB_STOCK
 static var short_shifter := false
 static var strut_bar := false
+## Car kind -> BobbleFigures id (a car missing here has none).
+static var bobbles := {}
 ## Bumped on every change; the cockpit parts poll it.
 static var version := 0
 
@@ -65,6 +71,16 @@ static func set_strut_bar(on: bool) -> void:
 	strut_bar = on
 	version += 1
 
+static func bobble_for(kind: String) -> String:
+	return str(bobbles.get(kind, BobbleFigures.NONE))
+
+static func set_bobble(kind: String, id: String) -> void:
+	if not BobbleFigures.IDS.has(id) or id == BobbleFigures.NONE:
+		bobbles.erase(kind)
+	else:
+		bobbles[kind] = id
+	version += 1
+
 static func knob_index() -> int:
 	return maxi(KNOB_IDS.find(shift_knob), 0)
 
@@ -77,9 +93,15 @@ static func load_settings() -> void:
 	set_shift_knob(str(cfg.get_value(SECTION, "shift_knob", KNOB_STOCK)) if ok else KNOB_STOCK)
 	set_short_shifter(bool(cfg.get_value(SECTION, "short_shifter", false)) if ok else false)
 	set_strut_bar(bool(cfg.get_value(SECTION, "strut_bar", false)) if ok else false)
+	bobbles.clear()
+	if ok and cfg.has_section(SECTION):
+		for key in cfg.get_section_keys(SECTION):
+			if key.begins_with(BOBBLE_PREFIX):
+				set_bobble(key.substr(BOBBLE_PREFIX.length()), str(cfg.get_value(SECTION, key, "")))
 	apply_override(OS.get_environment("NEON_CABIN_MODS"))
 
-## "trinket=dice;knob=ball;short=1;strut=1" (any subset, any order).
+## "trinket=dice;knob=ball;short=1;strut=1;bobble=pike" (any subset, any
+## order). bobble sets the figure for the car being driven (PlayerCar.chassis_kind).
 static func apply_override(text: String) -> void:
 	for item in text.split(";", false):
 		var kv := item.split("=", false)
@@ -96,6 +118,8 @@ static func apply_override(text: String) -> void:
 				set_short_shifter(val == "1" or val == "true")
 			"strut":
 				set_strut_bar(val == "1" or val == "true")
+			"bobble":
+				set_bobble(PlayerCar.chassis_kind(), val)
 
 ## Rewrites only the [interior] section; the other sections stay.
 static func save_settings() -> bool:
@@ -105,6 +129,11 @@ static func save_settings() -> bool:
 	cfg.set_value(SECTION, "shift_knob", shift_knob)
 	cfg.set_value(SECTION, "short_shifter", short_shifter)
 	cfg.set_value(SECTION, "strut_bar", strut_bar)
+	for key in cfg.get_section_keys(SECTION):
+		if key.begins_with(BOBBLE_PREFIX):
+			cfg.erase_section_key(SECTION, key)
+	for kind in bobbles:
+		cfg.set_value(SECTION, BOBBLE_PREFIX + str(kind), bobbles[kind])
 	return cfg.save(AudioSettings.path) == OK
 
 ## Keeps the fitted parts' effects on a player car: a child node that holds

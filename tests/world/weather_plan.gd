@@ -21,10 +21,18 @@ extends SceneTree
 
 const Weather := preload("res://scripts/world/weather.gd")
 const Plan := preload("res://scripts/world/weather_plan.gd")
+const Cal := preload("res://scripts/world/season_calendar.gd")
 
 const SEEDS := 300
-## Acts: the three story acts, then free-mode acts across a year of months.
-const ACTS := [[1, 10], [11, 22], [23, 30], [31, 42], [43, 54], [91, 102], [259, 270], [295, 306]]
+## Acts: the three story acts, then free-mode acts across a year of 28-night
+## seasons (112 nights). Each free-mode act is wholly inside one season:
+## 31-42 and 43-54 winter, 67-78 spring, 91-102 and 103-114 summer, 115-126
+## and 127-138 autumn. (12-night acts and 28-night seasons only line up some
+## of the time, so acts such as 55-66 that straddle a season are left out.)
+const ACTS := [[1, 10], [11, 22], [23, 30], [31, 42], [43, 54], [67, 78], [91, 102], [103, 114], [115, 126], [127, 138]]
+## Group 4 picks, the same number of acts each side.
+const WINTER_ACTS := [[31, 42], [43, 54]]
+const SUMMER_ACTS := [[91, 102], [103, 114]]
 const BUDGET_MS := 2.0
 
 var fails := 0
@@ -94,19 +102,42 @@ func _initialize() -> void:
 	check(same and differs, "3 repeatable: same seed same deck %s, other seeds differ %s" % [same, differs])
 	check(str(Plan.entry(15, 99)) == str(Plan.entry(15, 99)) and Plan.entry(15, 99).night == 15, "3 entry(): cached lookup returns the night asked for")
 
-	# 4 season: act 91-102 is January, 259-270 is June (START_MONTH October)
+	# 4 season: winter acts 31-54 against summer acts 91-114, same number of
+	# acts each side, seasons from the 28-night calendar
 	var wet_winter := 0
 	var wet_summer := 0
 	for sd in SEEDS:
-		for e in Plan.generate(91, 102, sd):
-			if e.level != Plan.DRY:
-				wet_winter += 1
-		for e in Plan.generate(259, 270, sd):
-			if e.level != Plan.DRY:
-				wet_summer += 1
-	check(Plan.season_name(91) == "winter" and Plan.season_name(265) == "summer", "4 season: night 91 is %s, night 265 is %s" % [Plan.season_name(91), Plan.season_name(265)])
+		for a in WINTER_ACTS:
+			for e in Plan.generate(a[0], a[1], sd):
+				if e.level != Plan.DRY:
+					wet_winter += 1
+		for a in SUMMER_ACTS:
+			for e in Plan.generate(a[0], a[1], sd):
+				if e.level != Plan.DRY:
+					wet_summer += 1
+	check(Plan.season_name(31) == "winter" and Plan.season_name(91) == "summer", "4 season: night 31 is %s, night 91 is %s" % [Plan.season_name(31), Plan.season_name(91)])
 	check(wet_winter > 1.5 * wet_summer and wet_summer > 0, "4 season: wet nights winter %d vs summer %d over %d seeds" % [wet_winter, wet_summer, SEEDS])
-
+	var acts_whole := true
+	for a in ACTS:
+		if a[0] > Plan.STORY_NIGHTS and Cal.season_number(a[0]) != Cal.season_number(a[1]):
+			acts_whole = false
+	var picks_ok := true
+	for a in WINTER_ACTS:
+		picks_ok = picks_ok and Cal.season_index(a[0]) == 0 and Cal.season_index(a[1]) == 0
+	for a in SUMMER_ACTS:
+		picks_ok = picks_ok and Cal.season_index(a[0]) == 2 and Cal.season_index(a[1]) == 2
+	check(acts_whole and picks_ok, "4 season: every free-mode act is inside one season, winter picks are winter, summer picks summer")
+	# story nights keep the month calendar (season_at is the old season_of(month_of))
+	var story_same := true
+	for n in range(1, Plan.STORY_NIGHTS + 1):
+		if Plan.season_at(n) != Plan.season_of(Plan.month_of(n)):
+			story_same = false
+	check(story_same, "4 season: story nights 1-30 take their season from the month calendar exactly as before")
+	var free_same := true
+	for n in range(31, 400):
+		if Plan.season_at(n) != Cal.season_index(n):
+			free_same = false
+	check(free_same, "4 season: free-mode nights take theirs from the 28-night calendar")
 	# 5 mid-night change
 	check(changes_wrong == 0, "5 mid-night: clock reads start before the change hour and the new level from it (%d wrong)" % changes_wrong)
 	var share := float(changes) / float(nights)

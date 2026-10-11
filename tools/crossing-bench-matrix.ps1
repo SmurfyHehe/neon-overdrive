@@ -2,7 +2,7 @@
 # over a matrix of
 #   build    debug (the editor .exe) | release (the release export template)
 #   physics  godot | jolt
-#   cars     one run per car count (full-sim cars, --detail=1000)
+#   cars     one run per car count (full-sim cars, --detail=300)
 # headless, several rounds, the order reversed every other round so a busy
 # laptop hits every combination alike. One Godot at a time. Cars drive on GDScript
 # tyres (NEON_NATIVE_TYRES=0), as the game does today.
@@ -13,15 +13,16 @@
 # Physics engine and (for release) the tool itself are chosen through
 # override.cfg next to project.godot, rewritten before each run and left empty
 # at the end. A release template cannot take --path or -s, so it is copied
-# into the project folder (*.exe is gitignored) and started from there.
+# into the project folder (*.exe is gitignored, as release_console.exe next to
+# release.exe) and started from there.
 # Raw results: bench-results/crossing-matrix-<timestamp>.jsonl, one JSON per
 # run, with "combo" added.
 param(
 	[string[]] $Builds = @("debug", "release"),
 	[string[]] $Physics = @("godot", "jolt"),
-	[string[]] $Cars = @("22", "40"),
+	[string[]] $Cars = @("30", "54"),
 	[int] $Rounds = 3,
-	[int] $Secs = 34,
+	[int] $Secs = 38,
 	[string] $Godot = "$HOME/Documents/Godot_v4.7.2-stable_win64_console.exe",
 	[string] $Template = "$env:APPDATA/Godot/export_templates/4.7.2.stable/windows_release_x86_64_console.exe",
 	[int] $TimeoutSec = 300
@@ -38,7 +39,11 @@ $out = Join-Path $dir ("crossing-matrix-{0}.jsonl" -f (Get-Date -Format "yyyy-MM
 $override = Join-Path $root "override.cfg"
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 $releaseExe = Join-Path $root "release_console.exe"
+# The console template starts "<its own name minus _console>.exe", so the
+# non-console template is copied next to it as release.exe.
 if (($Builds -contains "release") -and -not (Test-Path $releaseExe)) { Copy-Item $Template $releaseExe }
+$releaseMain = Join-Path $root "release.exe"
+if (($Builds -contains "release") -and -not (Test-Path $releaseMain)) { Copy-Item ($Template -replace "_console", "") $releaseMain }
 
 $combos = @()
 foreach ($b in $Builds) { foreach ($p in $Physics) { foreach ($n in $Cars) { $combos += ,@($b, $p, $n) } } }
@@ -53,7 +58,7 @@ for ($r = 1; $r -le $Rounds; $r++) {
 		[IO.File]::WriteAllText($override, $cfg, $utf8)
 		$a = @("--headless", "--fixed-fps", "60", "--audio-driver", "Dummy")
 		if ($build -eq "debug") { $a += @("--path", "`"$root`"", "-s", "res://tools/crossing_bench.gd") }
-		$a += @("--", "--benchmark", "--secs=$Secs", "--traffic=$n", "--detail=1000")
+		$a += @("--", "--benchmark", "--secs=$Secs", "--traffic=$n", "--detail=300")
 		$psi = New-Object System.Diagnostics.ProcessStartInfo
 		$psi.FileName = $(if ($build -eq "debug") { $Godot } else { $releaseExe })
 		$psi.Arguments = ($a -join " ")

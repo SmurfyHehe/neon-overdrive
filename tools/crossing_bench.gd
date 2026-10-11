@@ -27,14 +27,14 @@ extends SceneTree
 # per tick, minus the cost of the timer reads taken inside it.
 #
 # Run (debug editor binary):
-#   <godot> --headless --fixed-fps 60 --path . --audio-driver Dummy -s res://tools/crossing_bench.gd -- --benchmark --secs=34 --traffic=40 --detail=1000
+#   <godot> --headless --fixed-fps 60 --path . --audio-driver Dummy -s res://tools/crossing_bench.gd -- --benchmark --secs=38 --traffic=54 --detail=300
 # Release template: copy it into the project folder, put this in override.cfg
 # and run it from there (tools/crossing-bench-matrix.ps1 does all of it):
 #   [application]
 #   run/main_loop_type="CrossingBenchTool"
 # Output: one line "CBENCH_JSON {...}" on stdout, also appended to --out=<file>.
 
-const WARMUP := 4.0       # s of game time skipped (spawn-in, shader compiles)
+const WARMUP := 8.0       # s of game time skipped (traffic spawns in from the edge of the draw distance)
 const PHASE_TICKS := 120  # ticks per phase (1 s at 120 Hz)
 const LAST := 1000000     # process priority of the marker node: after everything
 const PHASES := [
@@ -171,6 +171,11 @@ func _on_process_frame() -> void:
 		acc[PHASES[_last_tick_phase].name].engine_us += now - _t_mark
 	_after_mark = false
 	game_t += root.get_process_delta_time()
+	# Every car in the sim, not just the 60 m near-band: the question is the
+	# cost per full-sim car, at 22 and 40 of them.
+	var tm: Object = game.get("traffic")
+	if tm != null:
+		tm.set("physics_distance", 1000.0)
 	if not measuring and not done and game_t >= WARMUP:
 		measuring = true
 		_set_phase(0)

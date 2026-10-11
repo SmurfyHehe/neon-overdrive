@@ -107,7 +107,8 @@ static var _material: ShaderMaterial
 static var _verts := PackedVector3Array()
 static var _norms := PackedVector3Array()
 static var _cols := PackedColorArray()
-static var _faces := PackedVector3Array()
+static var _faces_own := PackedVector3Array()   # deck collision, own side
+static var _faces_onc := PackedVector3Array()   # and the oncoming side
 static var _boxes: Array = []   # [Transform3D, Vector3 size]
 static var _pools: Array = []   # Transform3D
 static var _k := 0
@@ -209,13 +210,16 @@ static func new_nodes(root: Node3D, pool_mesh: Mesh, pool_mat: Material) -> void
 	var deck := StaticBody3D.new()
 	deck.name = "RampDeck"
 	deck.add_to_group("Road")
-	var col := CollisionShape3D.new()
-	col.name = "Shape"
-	var tri := ConcavePolygonShape3D.new()
-	tri.backface_collision = true
-	col.shape = tri
-	col.disabled = true
-	deck.add_child(col)
+	# One shape per side: a single shape's bounds would span the road between
+	# them, and every car on it would be tested against the deck each tick.
+	for shape_name in ["Shape", "ShapeOnc"]:
+		var col := CollisionShape3D.new()
+		col.name = shape_name
+		var tri := ConcavePolygonShape3D.new()
+		tri.backface_collision = true
+		col.shape = tri
+		col.disabled = true
+		deck.add_child(col)
 	root.add_child(deck)
 	var walls := StaticBody3D.new()
 	walls.name = "RampWalls"
@@ -233,9 +237,11 @@ static func counts(root: Node3D) -> Dictionary:
 	for c in root.get_node(^"RampWalls").get_children():
 		if not (c as CollisionShape3D).disabled:
 			boxes += 1
-	var tri: ConcavePolygonShape3D = (root.get_node(^"RampDeck/Shape") as CollisionShape3D).shape
-	@warning_ignore("integer_division")
-	var faces := tri.get_faces().size() / 3
+	var faces := 0
+	for shape_name in ["Shape", "ShapeOnc"]:
+		var tri: ConcavePolygonShape3D = (root.get_node(NodePath("RampDeck/" + shape_name)) as CollisionShape3D).shape
+		@warning_ignore("integer_division")
+		faces += tri.get_faces().size() / 3
 	return {"verts": verts, "faces": faces, "boxes": boxes,
 		"pools": (root.get_node(^"RampPools") as MultiMeshInstance3D).multimesh.visible_instance_count}
 
@@ -254,7 +260,8 @@ static func apply(root: Node3D, chunk_index: int) -> void:
 	_verts = PackedVector3Array()
 	_norms = PackedVector3Array()
 	_cols = PackedColorArray()
-	_faces = PackedVector3Array()
+	_faces_own = PackedVector3Array()
+	_faces_onc = PackedVector3Array()
 	_boxes = []
 	_pools = []
 	_k = RoadMap.ring_k(chunk_index)
@@ -276,13 +283,14 @@ static func _write(root: Node3D, on: bool) -> void:
 	var mi := root.get_node(^"Ramps") as MeshInstance3D
 	var mesh: ArrayMesh = mi.mesh
 	mesh.clear_surfaces()
-	var col: CollisionShape3D = root.get_node(^"RampDeck/Shape")
+	var decks: Array[CollisionShape3D] = [root.get_node(^"RampDeck/Shape"), root.get_node(^"RampDeck/ShapeOnc")]
 	var walls: StaticBody3D = root.get_node(^"RampWalls")
 	var mm: MultiMesh = (root.get_node(^"RampPools") as MultiMeshInstance3D).multimesh
 	if not on:
 		mi.visible = false
-		col.disabled = true
-		(col.shape as ConcavePolygonShape3D).set_faces(PackedVector3Array())
+		for col in decks:
+			col.disabled = true
+			(col.shape as ConcavePolygonShape3D).set_faces(PackedVector3Array())
 		for c in walls.get_children():
 			(c as CollisionShape3D).disabled = true
 		mm.visible_instance_count = 0
@@ -294,8 +302,10 @@ static func _write(root: Node3D, on: bool) -> void:
 	arrays[Mesh.ARRAY_COLOR] = _cols
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	mi.visible = true
-	(col.shape as ConcavePolygonShape3D).set_faces(_faces)
-	col.disabled = _faces.is_empty()
+	for i in 2:
+		var f := _faces_own if i == 0 else _faces_onc
+		(decks[i].shape as ConcavePolygonShape3D).set_faces(f)
+		decks[i].disabled = f.is_empty()
 	# Boxes are added the first time a chunk needs them and kept (switched
 	# off) after that, like the barrier's.
 	while walls.get_child_count() < _boxes.size():
@@ -345,7 +355,13 @@ static func _quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3, col: Color, wa
 ## A drivable quad: drawn and in the deck's collision.
 static func _deck_quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
 	_quad(a, b, c, d, C_DECK, Vector3.UP)
-	_faces.append_array([a, b, c, b, d, c])
+	_deck_faces([a, b, c, b, d, c])
+
+static func _deck_faces(pts: Array) -> void:
+	if _side > 0.0:
+		_faces_own.append_array(pts)
+	else:
+		_faces_onc.append_array(pts)
 
 ## A box given in the site's own description: centre (x, y, v), size (across,
 ## up, along).
@@ -410,24 +426,25 @@ static func _edge(pts: Array[Vector3], out: Array[Vector2], hs: PackedFloat32Arr
 static func _paint(x0: float, x1: float, v0: float, v1: float, y0: float, y1: float) -> void:
 	_quad(_p(x0, y0 + PAINT_LIFT, v0), _p(x1, y0 + PAINT_LIFT, v0), _p(x0, y1 + PAINT_LIFT, v1), _p(x1, y1 + PAINT_LIFT, v1), C_PAINT, Vector3.UP)
 
-static func _lamp(x: float, v: float, y: float, toward: Vector2) -> void:
+static func _lamp(x: float, v: float, y: float, toward: Vector2, arm: float = LAMP_ARM) -> void:
 	# pole outside the barrier, arm back over the deck, head and its pool
 	var top := y + LAMP_H
 	_box(Vector3(x, (top - SKIRT) * 0.5, v), Vector3(0.16, top + SKIRT, 0.16), C_POLE)
-	var hx := x + toward.x * LAMP_ARM
-	var hv := v + toward.y * LAMP_ARM
+	var hx := x + toward.x * arm
+	var hv := v + toward.y * arm
 	_box(Vector3((x + hx) * 0.5, top, (v + hv) * 0.5), Vector3(absf(hx - x) + 0.1, 0.1, absf(hv - v) + 0.1), C_POLE)
 	_box(Vector3(hx, top - 0.1, hv), Vector3(0.45, 0.12, 0.7), C_HEAD)
 	# the pool lies on the deck under the head, tilted with the climb
-	var px := x + toward.x * (LAMP_ARM + 1.2)
-	var pv := v + toward.y * (LAMP_ARM + 1.2)
+	var px := x + toward.x * (arm + 1.2)
+	var pv := v + toward.y * (arm + 1.2)
 	var o := _p(px, y_at(pv) + LIFT + 0.03, pv)
 	var ahead := _p(px, y_at(pv + 1.0) + LIFT + 0.03, pv + 1.0) - o
 	var across := _p(px + 1.0, y_at(pv) + LIFT + 0.03, pv) - o
 	var bz := ahead.normalized()
 	var bx := across.normalized()
 	var by := bz.cross(bx).normalized()
-	if by.y < 0.0:
+	if by.y < 0.0:   # the mirrored quarters: keep the pool face up and right-handed
+		bx = -bx
 		by = -by
 	_pools.append(Transform3D(Basis(bx * POOL_SIZE.x, by, bz * POOL_SIZE.y), o))
 
@@ -533,7 +550,7 @@ static func _pad() -> void:
 		var a := _p(rim[i].x, y, rim[i].y)
 		var b := _p(rim[i + 1].x, y, rim[i + 1].y)
 		_tri(c, a, b, C_DECK, Vector3.UP)
-		_faces.append_array([c, a, b])
+		_deck_faces([c, a, b])
 	var full := PackedFloat32Array()
 	full.resize(maxi(outer.size(), inner.size()))
 	full.fill(BARRIER_H)
@@ -542,7 +559,8 @@ static func _pad() -> void:
 	for deg in LAMP_PAD_DEG:
 		var a := deg_to_rad(deg)
 		var r := PAD_R + BARRIER_W + 0.15
-		_lamp(PAD_X + r * cos(a), r * sin(a), RAMP_H, Vector2(-cos(a), -sin(a)))
+		# a short arm: the box that draws it is square to the road, not to the rim
+		_lamp(PAD_X + r * cos(a), r * sin(a), RAMP_H, Vector2(-cos(a), -sin(a)), 0.5)
 
 ## The broken line between the outside lane and the slip lane, on a chunk
 ## where the slip lane is at least half open.

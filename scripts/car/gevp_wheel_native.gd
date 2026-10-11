@@ -1,6 +1,6 @@
 extends Wheel
 
-# A Wheel whose tyre maths runs in C++ (GevpTyreNative, native/gevp_tyre).
+# A Wheel whose tyre maths runs in C++ (GevpTyreNative, native/neon_sim).
 # Experiment, 2026-10-10. Everything else is the vendored GDScript wheel.
 # No class_name on purpose: this file only parses when the native library is
 # loaded, so it is loaded by path, and only by NativeTyres.new_wheel().

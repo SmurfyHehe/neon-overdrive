@@ -1,0 +1,48 @@
+# Builds the neon_sim GDExtension (native/neon_sim: GevpTyreNative and
+# CrossingBench) for Windows, debug and release, and uploads the two DLLs as an
+# artifact. The laptop has no C++ compiler, so this is the only place the
+# library is built. Take the DLLs from the run's artifact into
+# addons/neon_sim/ (gh run download).
+name: Native sim library
+
+on:
+  push:
+    paths:
+      - "native/**"
+      - ".github/workflows/native-sim.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install SCons
+        run: python -m pip install scons
+
+      # godot-cpp 10.0.0-stable, pinned to the exact commit (tag 10.0.0-stable).
+      - name: Fetch godot-cpp
+        shell: pwsh
+        run: |
+          git clone --no-checkout https://github.com/godotengine/godot-cpp native/neon_sim/godot-cpp
+          git -C native/neon_sim/godot-cpp checkout 507ed9d840c01a3c5b2a39af8bb4000bfac30bf5
+
+      - name: Build release
+        working-directory: native/neon_sim
+        run: scons platform=windows target=template_release arch=x86_64
+
+      - name: Build debug
+        working-directory: native/neon_sim
+        run: scons platform=windows target=template_debug arch=x86_64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: neon_sim-windows
+          path: addons/neon_sim/*.dll
+          if-no-files-found: error

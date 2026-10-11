@@ -1,0 +1,19 @@
+#!/usr/bin/env python
+# Builds the neon_sim GDExtension: GevpTyreNative (the C++ tyre maths) and
+# CrossingBench (engine-call cost measurement). Needs godot-cpp checked out
+# next to this file; the "Native library" workflow does that, nothing is built
+# on the laptop:
+#   git clone https://github.com/godotengine/godot-cpp && git -C godot-cpp checkout 507ed9d840c01a3c5b2a39af8bb4000bfac30bf5   # 10.0.0-stable
+#   scons platform=windows target=template_release
+#   scons platform=windows target=template_debug
+# Output: addons/neon_sim/neon_sim.<platform>.<target>.<arch>.dll
+# api_version is pinned here so the library asks for Godot 4.7 or later.
+
+env = SConscript("godot-cpp/SConstruct", {"api_version": "4.7"})
+env.Append(CPPPATH=["src/"])
+sources = Glob("src/*.cpp")
+library = env.SharedLibrary(
+    "../../addons/neon_sim/neon_sim{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
+    source=sources,
+)
+Default(library)

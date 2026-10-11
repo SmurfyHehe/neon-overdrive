@@ -2,7 +2,7 @@ class_name GevpTickBreakdown
 extends SceneTree
 
 # Where one full-sim traffic car's 120 Hz tick goes, piece by piece, and what
-# the C++ tyre maths (GevpTyreNative, native/gevp_tyre) changes (2026-10-10).
+# the C++ tyre maths (GevpTyreNative, native/neon_sim) changes (2026-10-10).
 # Measurement only. Companion to tools/traffic_profile.gd, same options.
 #
 # It boots the real game in benchmark mode, lets traffic settle, then at the

@@ -1004,6 +1004,8 @@ func _blow_off(boost: float) -> void:
 	if _menu_blowoff.stream != null:
 		_menu_blowoff.volume_db = BLOWOFF_DB + linear_to_db(boost)
 		_menu_blowoff.play()
+	if kerbside != null:
+		kerbside.blow_off(boost)   # a second big one in 20 s wakes the neighbour (M8)
 	_puff.restart()
 	_puff.emitting = true
 	_spark_cooldown = SPARK_COOLDOWN

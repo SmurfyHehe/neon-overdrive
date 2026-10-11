@@ -15,6 +15,16 @@ extends SceneTree
 # - roaches (menu roaches M7): ten in one MultiMesh, the lid ajar off the
 #   hole, first out ~6 s in, never more than 3, none on the car, scare 1
 #   clears them inside a second and holds them in for 3 s of calm
+# - street life (M8): the neighbour, pigeons, cat, bin bags + flies and the
+#   wire exist under the set; no event before 10 s and one at a time; a 4 s
+#   boost wakes the neighbour (then the cooldown holds), a boost lifts the
+#   pigeons and they are back one by one, a boost drops the cat and it is
+#   back 45-90 s on, the bags and flies read the wind, a gale wraps the shoes
+#   and they unwind; each returns to rest
+# - rats (M9): three in one MultiMesh on the wall seam, one every 20-40 s,
+#   never more than two, one sits up in the lamp light; scare 1 bolts the one
+#   out and none start until 3 s of calm; Settings' "Roaches and rats" off
+#   hides roaches, rats and flies and leaves the moths
 # - the menu has Continue, New Game, Load, Settings, Extras, Quit; Load lists
 #   one row per save slot plus Back; Esc comes back to the main list
 # - the news line has text; the Early Access tag is on the title
@@ -200,6 +210,8 @@ func _check_lamp_life(set_node: TitleKerbside) -> void:
 	_check(cam.is_position_in_frustum(head), "the lamp head with its moths is in frame")
 	_check(_mm_of(life, "LampBanners").visible_instance_count == 0, "no banner on the title lamp")
 	_check_roaches(set_node)
+	_check_street_life(set_node)
+	_check_rats(set_node)
 	# wind: up at once, back down over 3 s
 	set_node.set_title_wind(2.0)
 	set_node._ease_wind(0.016)
@@ -224,8 +236,10 @@ func _check_lamp_life(set_node: TitleKerbside) -> void:
 	LampLife.enabled = false
 	var off := TitleKerbside.new(set_node.kind)
 	LampLife.enabled = true
-	for n in ["LampMoths", "LampBanners", "SteamVents", "VentCovers", "WindLitter", "Roaches"]:
+	for n in ["LampMoths", "LampBanners", "SteamVents", "VentCovers", "WindLitter", "Roaches", "Rats"]:
 		_check(_mm_of(off.life_root, n).visible_instance_count == 0, "NEON_LAMP_LIFE=0 empties %s on the title" % n)
+	for n in ["Neighbour", "Pigeons", "Cat", "BinBags", "Flies", "Wire"]:
+		_check(not (off.life_root.get_node(NodePath(n)) as Node3D).visible, "NEON_LAMP_LIFE=0 hides %s on the title" % n)
 	off.free()
 
 ## Roaches (M7): ten in one MultiMesh, their runs mirrored in GDScript
@@ -291,6 +305,207 @@ func _check_roaches(set_node: TitleKerbside) -> void:
 	var m := TitleRoaches.get_mat()
 	_check(is_equal_approx(float(m.get_shader_parameter("origin")), set_node.roach_origin), "the origin uniform follows the set")
 	_check(float(m.get_shader_parameter("scare_t")) < 0.0, "the scare_t uniform is cleared")
+	set_node.freeze_roaches(was_frozen)
+
+## Street life (M8): one node per part; the events are driven through the
+## set's own scheduler (_run_street) with the clock set by hand, and read
+## back through the GDScript mirrors of the shaders.
+func _check_street_life(set_node: TitleKerbside) -> void:
+	var life := set_node.life_root
+	for n in ["Neighbour", "Pigeons", "Cat", "BinBags", "Flies", "Wire"]:
+		var node := life.get_node_or_null(NodePath(n)) as Node3D
+		_check(node != null and node.visible, "street life node %s exists under the set" % n)
+	var pigeons := _mm_of(life, "Pigeons")
+	_check(pigeons != null and pigeons.instance_count == TitleStreetLife.PIGEON_COUNT, "four pigeons in one MultiMesh")
+	var was_frozen := set_node.roach_frozen
+	set_node.freeze_roaches(false)
+	# nothing in the first 10 s, however hard the turbo is held
+	set_node.set_roach_clock(5.0)
+	set_node.set_scare(0.95)
+	set_node._run_street(4.5)
+	_check(not set_node.event_free(5.0), "no event in the first 10 s")
+	_check(set_node.neighbour_wake_t < 0.0 and set_node.pigeon_lift_t < 0.0 and set_node.cat_leave_t < 0.0,
+		"a held turbo at 5 s wakes nothing")
+	# the neighbour: 4 s over 0.85 wakes the window; the blind goes up and the
+	# shape stands there; it is dark again after WAKE_LEN
+	set_node.set_roach_clock(12.0)
+	set_node._run_street(0.1)
+	_check(is_equal_approx(set_node.neighbour_wake_t, 12.0), "4 s of hard boost wakes the neighbour at 12 s, got %.1f" % set_node.neighbour_wake_t)
+	_check(is_equal_approx(float(TitleStreetLife.uniform("neighbour", "wake_t")), 12.0), "the wake_t uniform is written")
+	var mid := TitleStreetLife.neighbour_at(1.2)
+	_check(mid.light > 0.95 and mid.blind > 0.95 and mid.head, "1.2 s in the light is on, the blind up, the shape there")
+	var done := TitleStreetLife.neighbour_at(TitleStreetLife.WAKE_LEN + 0.2)
+	_check(done.light == 0.0 and done.blind == 0.0 and not done.head, "after %.1f s the window is dark and the blind down" % TitleStreetLife.WAKE_LEN)
+	# one event at a time: the pigeons wait while the window is busy
+	set_node.set_roach_clock(13.0)
+	set_node.set_scare(0.7)
+	set_node._run_street(0.1)
+	_check(set_node.pigeon_lift_t < 0.0, "the pigeons do not lift while the neighbour's window is busy")
+	# ... and lift once it is free; back one by one, 20-40 s on
+	set_node.set_roach_clock(20.0)
+	set_node._run_street(0.1)
+	_check(is_equal_approx(set_node.pigeon_lift_t, 20.0), "a 0.7 boost lifts the pigeons at 20 s, got %.1f" % set_node.pigeon_lift_t)
+	_check(is_equal_approx(float(TitleStreetLife.uniform("pigeon", "lift_t")), 20.0), "the lift_t uniform is written")
+	_check(TitleStreetLife.pigeon_state(0, 21.0, 20.0, set_node.pigeon_ret[0]) == "out", "a second in the first pigeon is in the air")
+	_check(not set_node.pigeons_settled(21.0), "the flock is not settled in the air")
+	var rets: Array[float] = set_node.pigeon_ret
+	_check(rets.size() == TitleStreetLife.PIGEON_COUNT, "every pigeon has a return clock")
+	var one_by_one := true
+	var in_range := true
+	for i in rets.size():
+		if i > 0 and rets[i] - rets[i - 1] < 2.9:
+			one_by_one = false
+		if rets[i] < 20.0 + TitleStreetLife.LIFT_FLY + TitleStreetLife.RETURN_MIN or rets[i] > 20.0 + 1.0 + TitleStreetLife.LIFT_FLY + TitleStreetLife.RETURN_MAX + 15.0:
+			in_range = false
+	_check(one_by_one, "the pigeons come back one by one, got %s" % [rets])
+	_check(in_range, "the pigeons come back 20-40 s on, got %s" % [rets])
+	var last_back: float = rets[rets.size() - 1] + TitleStreetLife.RETURN_FLY + 0.1
+	_check(set_node.pigeons_settled(last_back), "after the last return the flock is at rest")
+	_check(TitleStreetLife.pigeon_state(0, rets[0] + 1.0, 20.0, rets[0]) == "back", "a pigeon on its way back reads as back")
+	# the cat: it waits out the pigeons' lift-off, then a 0.8 boost drops it
+	set_node.set_roach_clock(21.0)
+	set_node.set_scare(0.8)
+	set_node._run_street(0.1)
+	_check(set_node.cat_leave_t < 0.0, "the cat sits tight while the pigeons' lift-off is the event")
+	set_node.set_roach_clock(30.0)
+	set_node._run_street(0.1)
+	_check(is_equal_approx(set_node.cat_leave_t, 30.0), "a 0.8 boost drops the cat at 30 s, got %.1f" % set_node.cat_leave_t)
+	_check(TitleStreetLife.cat_state(30.2, 30.0, set_node.cat_back_t) == "drop", "0.2 s in the cat is dropping")
+	_check(TitleStreetLife.cat_state(31.5, 30.0, set_node.cat_back_t) == "run", "1.5 s in the cat is running off")
+	var gone_at := 30.0 + TitleStreetLife.CAT_DROP + TitleStreetLife.CAT_RUN
+	_check(TitleStreetLife.cat_state(gone_at + 1.0, 30.0, set_node.cat_back_t) == "gone", "then it is out of frame")
+	_check(set_node.cat_back_t >= gone_at + TitleStreetLife.CAT_BACK_MIN and set_node.cat_back_t <= gone_at + TitleStreetLife.CAT_BACK_MAX,
+		"the cat is back 45-90 s later, got %.1f s" % (set_node.cat_back_t - gone_at))
+	var home_at: float = set_node.cat_back_t + TitleStreetLife.CAT_RUN_IN + TitleStreetLife.CAT_JUMP
+	_check(TitleStreetLife.cat_state(home_at - 0.1, 30.0, set_node.cat_back_t) == "jump", "it jumps back up onto the box")
+	_check(TitleStreetLife.cat_state(home_at + 0.1, 30.0, set_node.cat_back_t) == "sit", "and sits again")
+	# the neighbour's cooldown: two big blow-offs inside 60 s of the wake do nothing
+	set_node.set_roach_clock(40.0)
+	set_node.set_scare(0.0)
+	set_node.blow_off(0.9)
+	set_node.set_roach_clock(41.0)
+	set_node.blow_off(0.9)
+	set_node._run_street(0.1)
+	_check(is_equal_approx(set_node.neighbour_wake_t, 12.0), "the neighbour does not wake again inside the 60 s cooldown")
+	set_node.set_roach_clock(home_at + 0.5)
+	set_node._run_street(0.1)
+	_check(set_node.cat_leave_t < 0.0 and float(TitleStreetLife.uniform("cat", "leave_t")) < 0.0, "once home the cat's event clears")
+	# ... and after the cooldown a second big blow-off within 20 s wakes it
+	set_node.set_roach_clock(home_at + 1.0)
+	set_node.blow_off(0.9)
+	set_node.set_roach_clock(home_at + 2.0)
+	set_node.blow_off(0.9)
+	set_node._run_street(0.1)
+	_check(is_equal_approx(set_node.neighbour_wake_t, home_at + 2.0), "two big blow-offs in 20 s wake the neighbour, got %.1f" % set_node.neighbour_wake_t)
+	# the bags and the flies read the wind uniform; the shoes wrap at a gale
+	set_node.set_title_wind(2.0)
+	set_node._ease_wind(0.016)
+	_check(is_equal_approx(float(TitleStreetLife.uniform("bags", "wind")), 2.0), "the bin bags read the gale")
+	_check(is_equal_approx(float(TitleStreetLife.uniform("flies", "wind")), 2.0), "the flies read the gale")
+	var gale_at := home_at + 10.0
+	set_node.set_roach_clock(gale_at)
+	set_node._run_street(0.016)
+	_check(is_equal_approx(set_node.shoes_wrap_t, gale_at), "a gale wraps the shoes round the wire, got %.1f" % set_node.shoes_wrap_t)
+	_check(TitleStreetLife.wrap_at(TitleStreetLife.WRAP_UP) > 0.99, "they are wound up after %.1f s" % TitleStreetLife.WRAP_UP)
+	_check(TitleStreetLife.wrap_at(TitleStreetLife.WRAP_LEN + 0.1) == 0.0, "and hang free again after %.1f s" % TitleStreetLife.WRAP_LEN)
+	set_node.set_title_wind(TitleKerbside.WIND_REST)
+	set_node._ease_wind(5.0)
+	_check(is_equal_approx(float(TitleStreetLife.uniform("flies", "wind")), TitleKerbside.WIND_REST), "the flies gather again at the default breeze")
+	set_node.set_scare(0.0)
+	set_node.freeze_roaches(was_frozen)
+
+## Rats (M9): three in one MultiMesh, their runs mirrored in GDScript
+## (TitleRats.positions is the shader's top level).
+func _check_rats(set_node: TitleKerbside) -> void:
+	var mm := _mm_of(set_node.life_root, "Rats")
+	_check(mm != null and mm.instance_count == TitleRats.COUNT and mm.visible_instance_count == TitleRats.COUNT,
+		"the Rats MultiMesh has %d instances" % TitleRats.COUNT)
+	_check(set_node.rat_sched.size() == TitleRats.COUNT, "every rat has a schedule")
+	# over five minutes from a fresh origin: entries 1.5-45 s apart, never
+	# more than two out, one sits up in the lamp light at the wall seam
+	var was_frozen := set_node.roach_frozen
+	set_node.freeze_roaches(true)
+	var origin := set_node.rat_origin
+	var scare_t := set_node.rat_scare_t
+	var entries := []
+	var most := 0
+	var sat_in_light := false
+	var off_seam := false
+	var was_out := [false, false, false]
+	var t := origin
+	while t < origin + 300.0:
+		var rows := TitleRats.positions(set_node.rat_sched, t, origin, -1.0)
+		var n := 0
+		for i in rows.size():
+			var r: Dictionary = rows[i]
+			if r.out:
+				n += 1
+				if not was_out[i]:
+					entries.append(t)
+				var p: Vector2 = r.pos
+				if absf(p.y - TitleRats.SEAM_Z) > TitleRats.INTO_WALL + 0.01:
+					off_seam = true
+				if r.sit > 0.5 and p.x >= TitleRats.STOP_X0 - 0.01 and p.x <= TitleRats.STOP_X1 + 0.01:
+					sat_in_light = true
+			was_out[i] = r.out
+		most = maxi(most, n)
+		t += 0.1
+	_check(entries.size() >= 8 and entries.size() <= 18, "about one rat every 20-40 s: %d in 5 min" % entries.size())
+	var gaps_ok := entries.size() >= 2
+	var pair := false
+	for i in range(1, entries.size()):
+		var g: float = entries[i] - entries[i - 1]
+		if g < 1.0 or g > 46.0:
+			gaps_ok = false
+		if g < 8.0:
+			pair = true
+	_check(gaps_ok, "rats come 1-46 s apart, got %s" % [entries])
+	_check(pair, "sometimes two come in a row")
+	_check(most <= 2, "never more than two rats out, most %d" % most)
+	_check(sat_in_light, "a rat sits up in the lamp light")
+	_check(not off_seam, "every rat stays on the wall seam")
+	# scare 1 with a rat out: it bolts on and none start until 3 s of calm
+	var busy := -1.0
+	t = origin
+	while t < origin + 300.0 and busy < 0.0:
+		var rows := TitleRats.positions(set_node.rat_sched, t, origin, -1.0)
+		for r in rows:
+			if r.out and r.pos.x < TitleRats.STOP_X0 - 2.0:
+				busy = t
+		t += 0.1
+	_check(busy >= 0.0, "a moment with a rat running in exists")
+	set_node.set_roach_clock(busy)
+	set_node.set_scare(1.0)
+	_check(set_node.rat_scare_t >= 0.0, "scare 1 starts the bolt")
+	var before: Vector2 = TitleRats.positions(set_node.rat_sched, busy, origin, -1.0).filter(func(r): return r.out)[0].pos
+	var calm_after: Vector2 = TitleRats.positions(set_node.rat_sched, busy + 1.0, origin, -1.0).filter(func(r): return r.out)[0].pos
+	var bolted := set_node.rat_positions(busy + 1.0).filter(func(r): return r.out)
+	_check(bolted.size() <= 1, "no new rat starts while scared, %d out" % bolted.size())
+	if not bolted.is_empty():
+		var bp: Vector2 = bolted[0].pos
+		_check(bp.x - before.x > (calm_after.x - before.x) * 1.5, "the bolting rat runs on at twice its speed")
+	_check(set_node.rat_positions(busy + 40.0).filter(func(r): return r.out).is_empty(), "40 s into a scare nothing is out")
+	set_node.set_roach_clock(busy + 40.0)
+	set_node.set_scare(0.0)
+	_check(set_node.rat_scare_t >= 0.0, "the scare does not end the moment the value drops")
+	set_node.set_roach_clock(busy + 40.0 + TitleRats.CALM_SECS + 0.1)
+	set_node.set_scare(0.0)
+	_check(set_node.rat_scare_t < 0.0 and set_node.rat_origin > busy, "after 3 s of calm the cycles start over")
+	_check(set_node.rat_positions(set_node.rat_origin + 0.5).filter(func(r): return r.out).is_empty(), "nothing starts straight after the calm-down")
+	_check(is_equal_approx(float(TitleRats.get_mat().get_shader_parameter("origin")), set_node.rat_origin), "the rats' origin uniform follows the set")
+	_check(float(TitleRats.get_mat().get_shader_parameter("scare_t")) < 0.0, "the rats' scare_t uniform is cleared")
+	# the setting: off hides the roaches, the rats and the flies, not the moths
+	var life := set_node.life_root
+	GameSettings.set_critters(false)
+	set_node._process(0.016)
+	for n in ["Roaches", "Rats", "Flies"]:
+		_check(not (life.get_node(NodePath(n)) as Node3D).visible, "Roaches and rats off hides %s" % n)
+	for n in ["LampMoths", "Pigeons", "Cat"]:
+		_check((life.get_node(NodePath(n)) as Node3D).visible, "Roaches and rats off leaves %s" % n)
+	GameSettings.set_critters(true)
+	set_node._process(0.016)
+	_check((life.get_node(^"Rats") as Node3D).visible and (life.get_node(^"Roaches") as Node3D).visible, "Roaches and rats on shows them again")
+	set_node.rat_scare_t = scare_t
 	set_node.freeze_roaches(was_frozen)
 
 ## The picture sizes inside a Windows .ico, smallest first.

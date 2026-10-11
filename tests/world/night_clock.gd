@@ -17,7 +17,7 @@ extends SceneTree
 #   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/world/night_clock.gd
 
 const TIMEOUT_TICKS := 1800
-const TALK := 2   # The Dave Show
+const TALK := 0   # Graveyard Radio, Dave's talk station
 
 enum Step { BOOT, RUN, MIDNIGHT, MUSIC_HOUR, PAUSE, DAWN, DONE, EXIT }
 

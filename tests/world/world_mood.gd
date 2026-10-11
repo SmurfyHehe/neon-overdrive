@@ -17,7 +17,7 @@ extends SceneTree
 #   Godot_v4.7.2-stable_win64_console.exe --headless --fixed-fps 60 --path . -s res://tests/world/world_mood.gd
 
 const TIMEOUT_TICKS := 1800
-const TALK := 2
+const TALK := 0   # Graveyard Radio, Dave's talk station
 const SAMPLE_SPAWNS := 150
 const SAMPLE_TICKS := 20000
 

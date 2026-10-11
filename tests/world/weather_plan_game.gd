@@ -9,7 +9,7 @@ extends SceneTree
 
 const Weather := preload("res://scripts/world/weather.gd")
 const Plan := preload("res://scripts/world/weather_plan.gd")
-const TALK := 2
+const TALK := 0   # Graveyard Radio, Dave's talk station
 const TIMEOUT_TICKS := 1800
 
 enum Step { BOOT, ROLL, CHANGE, TRAFFIC, FORECAST, DONE }

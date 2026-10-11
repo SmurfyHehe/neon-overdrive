@@ -66,7 +66,7 @@ func _process(_delta: float) -> bool:
 			state.pause()
 			_check(menu.visible and menu.main_page.visible, "pausing opens the pause menu")
 			_check(menu.main_page.find_children("*", "HSlider", true, false).is_empty(), "the pause column has no sliders left")
-			_check(menu.main_page.find_children("*", "Button", true, false).filter(func(b: Button) -> bool: return b.visible and b.text != "Put me back on the road").size() == 5, "the pause column is the five rows")
+			_check(menu.main_page.find_children("*", "Button", true, false).filter(func(b: Button) -> bool: return b.visible and b.text != "Put me back on the road").size() == 6, "the pause column is the six rows (Fix the car added; Map needs a map)")
 			_check(menu.settings != null and not menu.settings.visible and menu.settings_button != null, "Settings starts closed, with a button")
 			menu.settings_button.pressed.emit()
 			_check(menu.settings.visible and menu.settings.current_page == 0, "the Settings button opens the Sound page")

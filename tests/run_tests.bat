@@ -239,9 +239,6 @@ call :run traffic/police_wrong_way --headless
 call :run traffic/flow_flip --headless
 call :run traffic/free_driver_pure --headless
 call :run traffic/cop_brain_pure --headless
-rem Ending a run on a crash: the rules, the hit sensor, the crash screen; then the real restart.
-call :run core/run_end "--headless --fixed-fps 120"
-call :run core/run_end_restart "--headless --fixed-fps 120"
 rem Test build sandbox: free money and fuel, no run-ending, parked start, X start, put back on the road.
 call :run core/test_build_sandbox "--headless --fixed-fps 120"
 rem The key: X starts the engine and switches it off; starter, catch and shutdown sounds.

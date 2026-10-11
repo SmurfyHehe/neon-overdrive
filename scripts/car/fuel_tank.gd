@@ -3,6 +3,7 @@ extends RefCounted
 
 # Fuel, v1 (Stage C, 2026-10-09). Roy's decisions (damage/fuel design notes):
 # - the tank starts about a third full, so the first stop for fuel comes early
+#   (2026-10-10: START_FULL_TANK below makes every start full for this test build)
 # - one fill-up lasts most of a night (sized when a night was 20 real minutes; it is 40 since
 #   2026-10-09, so a tank now covers under half: recalibrate if wanted)
 # - a dry tank never ends the run: the car limps at LimpMode.FUEL_KMH
@@ -13,8 +14,9 @@ extends RefCounted
 # lasts hours); the litres are only for the gauge and the price.
 #
 # Off (enabled = false) for sim_only cars and traffic, like PowertrainHealth.
-# Tests start with a full tank (TestMode) so long drive tests never hit limp by
-# accident; tests that want the real start set `litres` themselves.
+# Tests start from the same place as a new game (no TestMode split), so with
+# START_FULL_TANK on, long drive tests never hit limp by accident; tests that
+# want low fuel set `litres` themselves.
 #
 # The state is one number so a stop or the garage can save it later.
 
@@ -22,7 +24,11 @@ const TestMode := preload("res://scripts/core/test_mode.gd")
 const TestBuild := preload("res://scripts/core/test_build.gd")
 
 const CAPACITY_L := 50.0
-const START_FRACTION := 1.0 / 3.0
+## Roy's build switch (2026-10-10): true = every start is a full tank (a new
+## game, each night after a tow, the testing ground). One line to revert for the
+## shipped build: set false. Off, the start is the third the 2026-10-09 design asked for.
+const START_FULL_TANK := true
+const START_FRACTION := 1.0 if START_FULL_TANK else 1.0 / 3.0
 ## Seconds a full tank lasts at full engine load (8 min flat out). The rest is
 ## idle burn, so the tank is part clock: ~27 min idling, ~16.6 min in a city
 ## cycle with stops (tests/car/fuel_limp.gd: most of the old 20-minute night).
@@ -36,10 +42,6 @@ const PRICE_PER_LITRE := 3
 
 var enabled := true
 var litres := CAPACITY_L * START_FRACTION
-
-func _init() -> void:
-	if TestMode.active():
-		litres = CAPACITY_L
 
 func fraction() -> float:
 	return litres / CAPACITY_L

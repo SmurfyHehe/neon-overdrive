@@ -31,6 +31,7 @@ const CABIN := {
 	"shelf": {"y": 1.011, "z0": 0.920, "z1": 1.622, "half_w": 0.736},
 	"wheel": Vector3(-0.360, 0.770, -0.180), "wheel_tilt_deg": -25.0,
 	"cluster": Vector2(0.930, -0.349), "cluster_style": "dials", "speedo_max_kmh": 300.0,
+	"gear_window": true,
 	"head_unit": Vector3(0.0, 0.832, -0.254),
 	"lever": Vector3(0.0, 0.615, -0.020), "handbrake": Vector3(0.0, 0.615, 0.440),
 	"pedals": Vector3(-0.260, 0.540, -0.500),

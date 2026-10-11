@@ -57,7 +57,11 @@ func _step(n: int) -> bool:
 				_go(S.TURN, n)
 		S.TURN:
 			peak_g = maxf(peak_g, absf(w) * p.current_speed() / 9.81)
-			if t == 60 * 3:
+			# Judged 0.75 s into the turn, while the car is still turning on the
+			# road: at -0.6 lock it reaches the out-of-bounds wall about 1.8 s in,
+			# and with tyre and surface feel (#498) the grit and kerb on the way
+			# slow the turn, so the old 3 s mark landed after the wall hit.
+			if t == 45:
 				var sign_ok := cam.corner_yaw < 0.0   # right turn: view turns right (- = right)
 				print("right turn: %.1f m/s, yaw rate %.2f rad/s, peak %.2f g, corner look %.2f deg" % [p.current_speed(), w, peak_g, cam.corner_yaw])
 				_check(sign_ok, "a right turn looks right (%.2f)" % cam.corner_yaw)

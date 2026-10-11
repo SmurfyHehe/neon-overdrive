@@ -71,6 +71,12 @@ func _initialize() -> void:
 	OS.set_environment("NEON_HILLS", "1.0" if hills else "0")
 	OS.set_environment("NEON_CURVES", "1.0" if hills else "0")
 	OS.set_environment("NEON_ROAD_SEED", "37")
+	# Nothing around means nothing to crash into: the median barrier (R1) and
+	# its crossover cushions are visual only here, as in tests/car/wall_hit.gd.
+	# The brake-in-turn phase slides the car toward the median; since the
+	# cushions it could end in one at 10 m/s (seed 37, chunk 28), and the hit
+	# pitched the nose into the road: a crash, which barrier_hit covers.
+	RoadBarriers.collide = false
 	game = Harness.boot(self, 0, 300.0, 777, 1.0e6)
 	_run.call_deferred()
 
@@ -148,10 +154,18 @@ func _sample(v: Vehicle, label: String) -> void:
 ## crash, not a scrape). The barriers (R1, #303) stand 1 m left of the inner
 ## lane's edge; a swerve from lane 1 drifts onto them (car centre at x 1.0,
 ## barrier face at 0.17, measured 2026-10-09).
+## Anything built as a wall (CarSpec.make_wall: WALL_LAYER only) is a crash,
+## not a scrape, whatever it is called: since this list was names, the world
+## has gained the gas station lots (eac968f) and the roadside kit's rails,
+## dumpsters and jersey barriers (KitColMetal/KitColConcrete), and the tuned
+## brake-in-turn runs slide into them. The road (the ground plane and chunk
+## road collision, WORLD_LAYER) and cars still fail on any touch.
 func _touches_road(v: Vehicle) -> bool:
+	var wall_only := 1 << (CarSpec.WALL_LAYER - 1)
 	for b in v.get_colliding_bodies():
 		var n := String(b.name)
-		if not (n.begins_with("Boundary") or n.begins_with("Building") or n == "BarrierCol"):
+		var wall := b is CollisionObject3D and (b as CollisionObject3D).collision_layer == wall_only
+		if not (n.begins_with("Boundary") or n.begins_with("Building") or n == "BarrierCol" or wall):
 			return true
 	return false
 

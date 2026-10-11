@@ -125,16 +125,41 @@ func _next_phase() -> void:
 		# Launched no faster than the bends just ahead allow.
 		launch = minf(minf(speeds[phase], LAUNCH_MAX) / 3.6, bot.bend_speed(p, TestDriver.CLEAN_LAT_ACCEL, speeds[phase] / 3.6))
 		TestDriver.place(p, Harness.lane_x(1), 0.0, 0.0, launch)
+		_clear_ahead(launch * launch / (2.0 * 6.0) + 140.0, false)
 	elif phase == speeds.size():
 		# Spin recovery: alone on the road, going backwards at 90 km/h.
+		# Lane 2: the 0.24 rad yaw carries it ~3 m sideways toward the median
+		# while it brakes, and since R1 barriers (f45e4cd) the median is a real
+		# wall 2.7 m from lane 1, too close for any driver to miss.
 		traffic.set_car_count(0)
 		bot = TestDriver.start(game, "clean", {"speed": 100.0})
-		TestDriver.place(p, Harness.lane_x(1), 0.0, 2.9, 25.0)
+		TestDriver.place(p, Harness.lane_x(2), 0.0, 2.9, 25.0)
 		p.linear_velocity = -p.linear_velocity
+		_clear_ahead(400.0, true)
 	else:
 		# Turn round: parked in lane 2 pointing back up the road.
 		bot = TestDriver.start(game, "clean", {"speed": 100.0})
 		TestDriver.place(p, Harness.lane_x(2), 0.0, 3.0, 0.0)
+
+## The traffic is carried over from the run before, so the car can be dropped
+## in at 300 km/h with the 150 km/h run's lead car 130 m ahead, closer than
+## 300 km/h can stop in (it hit it at 172 km/h); and a car left in view is
+## not freed by set_car_count(0), so the spin run was not alone. Every car in
+## `reach` ahead (own carriageway, or every car within `reach` either way
+## when `all`) goes on past it, keeping its lane and speed; out there it is
+## out of view, so a count of 0 can free it.
+func _clear_ahead(reach: float, all: bool) -> void:
+	var traffic: TrafficManager = game.get("traffic")
+	var pz := RoadFrame.unroll(p.global_position).z
+	var n := 0
+	for car: TrafficCar in traffic.cars:
+		if car.benched:
+			continue
+		var ahead := pz - RoadFrame.unroll(car.global_position).z
+		if (all and absf(ahead) < reach) or (not all and car.direction < 0.0 and ahead > -10.0 and ahead < reach):
+			n += 1
+			var far := reach + 60.0 * n + (1200.0 if all else 0.0)
+			car.place(car.lane_x, car.direction, pz - far, car.rest_y, 0.0 if all else car.linear_velocity.length())
 
 func _close_phase() -> void:
 	var n := _name()

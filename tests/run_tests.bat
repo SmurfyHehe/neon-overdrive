@@ -154,9 +154,12 @@ rem F0: cash and bank through reloads, chases and 6 a.m. (and the HUD and pause 
 call :run core/wallet --headless
 rem Police F0/F1: heat levels and icons, cop_can_see_player, headlights off hides, night one lines.
 call :run traffic/police_heat --headless
-rem Ending a run on a crash: the rules, the hit sensor, the crash screen; then the real restart.
+rem Hard hits and the end of the night: the rules, the hit sensor, the crash screen; then the real restart.
 call :run core/run_end "--headless --fixed-fps 120"
 call :run core/run_end_restart "--headless --fixed-fps 120"
+rem Totalled meter (TM1): no single hit ends a run; the meter, the free first total, bad cops, the tow row, the test build setting.
+call :run car/totalled_meter --headless
+call :run core/totalled_run_end "--headless --fixed-fps 120"
 call :run world/gas_station --headless
 call :run traffic/traffic_spawn "--headless --fixed-fps 60"
 rem Near-band traffic: hand-overs between the 60 m physics band and the rails, both ways, no visible jump.

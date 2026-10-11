@@ -3,17 +3,19 @@ extends SceneTree
 # Ending a run, end to end, as the game itself is wired (game.gd), with the
 # game as the current scene so the restart is the real one:
 # - NEON_WRECK=1 turns the game's own wreck sensor on in a test;
-# - the car drives into a wall at 80 km/h: the first wreck of the save, free;
+# - the car (meter set to 0.8) drives into a wall at 80 km/h: 0.30 more totals
+#   it, and it is the first total of the save, free;
 # - the crash screen runs to the morning card, S is held, and the scene reloads;
 # - the new run is a plain drive again: next night, playing, sound back, no
-#   black screen, the money banked, the free wreck used up;
-# - a second 80 km/h wall hit is a paid wreck: half of tonight's cash goes,
-#   the scene reloads on the same night.
+#   black screen, the money banked, the free total used up, the meter at 0;
+# - a second 80 km/h wall hit (meter set to 0.8 again) is a paid total: half
+#   of tonight's cash goes, the other half is banked, the night ends, and the
+#   meter (1.0, no Walt) is still there in the new run: a restart is not a
+#   free repair.
 #   <godot> --headless --fixed-fps 120 --path . -s res://tests/core/run_end_restart.gd
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
 const RunEnd := preload("res://scripts/core/run_end.gd")
-const WreckRules := preload("res://scripts/car/wreck_rules.gd")
 
 const ROOT := "user://test_run_end_restart"
 
@@ -62,6 +64,7 @@ static func _coast(c: Vehicle) -> void:
 ## A wall 14 m ahead, and the car sent at it at 80 km/h. The wall belongs to
 ## the game, so the restart takes it away.
 func _crash(game: Node, p: PlayerCar, cash: int) -> void:
+	p.damage.totalled = 0.8
 	game.wallet.take_cash(game.wallet.cash)
 	game.wallet.add_cash(cash)
 	var body := StaticBody3D.new()
@@ -77,7 +80,7 @@ func _crash(game: Node, p: PlayerCar, cash: int) -> void:
 	p.reset_physics_interpolation()
 	p.driver = _coast
 	started.clear()
-	game.run_end.wreck_started.connect(func(o: int, loss: int, free: bool) -> void: started.append([o, loss, free]))
+	game.run_end.totalled_started.connect(func(loss: int, free: bool) -> void: started.append([loss, free]))
 	game_id = game.get_instance_id()
 	night = game.night_clock.night
 	t = 0
@@ -119,32 +122,34 @@ func _physics_process(_delta: float) -> bool:
 			if game == null or game.get_instance_id() != game_id:
 				Input.action_release(&"brake")
 				print("first wreck: %s, then the scene reloaded after %.1f s" % [started, float(t) / hz])
-				_check(started == [[WreckRules.Outcome.WRECK, 0, true]], "the first wreck is a free one")
+				_check(started == [[0, true]], "the first total is a free one")
 				t = 0
 				step = Step.REBOOT
 		Step.REBOOT:
 			game = _fresh_game()
 			if game != null:
 				print("new run: night %d (was %d), cash %d, bank %d" % [game.night_clock.night, night, game.wallet.cash, game.wallet.bank])
-				_check_fresh(game, "after the first wreck")
-				_check(game.night_clock.night == night + 1, "the first wreck moved on to the next night")
+				_check_fresh(game, "after the first total")
+				_check(game.night_clock.night == night + 1, "the first total moved on to the next night")
+				_check(is_equal_approx(game.player.damage.totalled, 0.0), "Walt's fix: the new car's meter is 0")
 				_check(game.wallet.cash == 0 and game.wallet.bank == 500, "tonight's cash was banked whole")
-				_check(SaveStore.first_wreck_used(), "the free wreck is used up")
+				_check(SaveStore.first_wreck_used(), "the free total is used up")
 				_crash(game, game.player, 500)
 				step = Step.SECOND
 		Step.SECOND:
 			if game == null or game.get_instance_id() != game_id:
 				print("second wreck: %s, then the scene reloaded after %.1f s" % [started, float(t) / hz])
-				_check(started == [[WreckRules.Outcome.WRECK, 250, false]], "the second wreck costs half")
+				_check(started == [[250, false]], "the second total costs half")
 				t = 0
 				step = Step.REBOOT_2
 		Step.REBOOT_2:
 			game = _fresh_game()
 			if game != null:
 				print("new run: night %d (was %d), cash %d, bank %d" % [game.night_clock.night, night, game.wallet.cash, game.wallet.bank])
-				_check_fresh(game, "after the second wreck")
-				_check(game.night_clock.night == night, "a plain wreck keeps the same night")
-				_check(game.wallet.cash == 250 and game.wallet.bank == 500, "half of tonight's cash is left, the bank untouched")
+				_check_fresh(game, "after the second total")
+				_check(game.night_clock.night == night + 1, "a total always ends the night")
+				_check(game.wallet.cash == 0 and game.wallet.bank == 750, "the other half is banked at dawn")
+				_check(is_equal_approx(game.player.damage.totalled, 1.0), "the restart kept the meter: no free repair")
 				return _end("")
 	return false
 

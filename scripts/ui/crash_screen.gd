@@ -5,8 +5,10 @@ extends CanvasLayer
 #
 #   crack()  the windscreen cracks and the ears ring (the camera shake is the
 #            chase camera's own trauma, set by run_end.gd)
+#   ring()   the ears ring, nothing else: the dazed beat of a big hit that
+#            did not total the car (the glass can be put back with clear_glass)
 #   black()  hard cut to black, with the tail of a scrape still sounding
-#   say()    Dale's line on the black
+#   say()    Dave's line on the black
 #   card()   the morning card (who picked you up, what it cost)
 #
 # No slow motion and no outside view: nothing here moves a camera or touches
@@ -92,7 +94,7 @@ func _ready() -> void:
 	_line.position = Vector2(-380, -40)
 	_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_line.add_theme_color_override("font_color", SODIUM)  # Dale's caption colour
+	_line.add_theme_color_override("font_color", SODIUM)  # Dave's caption colour
 	_line.add_theme_font_size_override("font_size", 22)
 	_line.visible = false
 	add_child(_line)
@@ -131,8 +133,16 @@ func crack(seed_value: int = 1) -> void:
 	_glass.seed_value = seed_value
 	_glass.visible = true
 	_glass.queue_redraw()
+	ring()
+
+## The ears ring.
+func ring() -> void:
 	_ring.stream = ring_stream()
 	_ring.play()
+
+## The glass is whole again (a cracked screen that did not end the run).
+func clear_glass() -> void:
+	_glass.visible = false
 
 ## Hard cut to black: no fade. The scrape carries on for a moment and dies.
 func black() -> void:
@@ -143,7 +153,7 @@ func black() -> void:
 	_scrape.play()
 	_scrape_left = SCRAPE_TAIL_SECS
 
-## Dale's line on the black. "" clears it.
+## Dave's line on the black. "" clears it.
 func say(text: String) -> void:
 	_line.text = text
 	_line.visible = text != ""

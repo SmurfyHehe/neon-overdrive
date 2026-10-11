@@ -89,6 +89,7 @@ var tow_button: Button
 var service_action: Callable
 var tow_action: Callable
 var race_action: Callable   # start (or give up) a race against a test rival, until meet spots exist
+var race_label: Callable    # its label: Race a test rival / Give up race / Retry race
 var wash_action: Callable   # the garage wash mini-game
 var race_button: Button
 var wash_button: Button
@@ -564,6 +565,8 @@ func _refresh_game_page() -> void:
 	service_button.disabled = not paused or not service_action.is_valid()
 	tow_button.disabled = not paused or not tow_action.is_valid()
 	race_button.disabled = not paused or not race_action.is_valid()
+	if race_label.is_valid():
+		race_button.text = race_label.call()
 	wash_button.disabled = not paused or not wash_action.is_valid()
 
 func _pick_car() -> void:

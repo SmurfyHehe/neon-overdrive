@@ -117,6 +117,7 @@ func _ready() -> void:
 	settings.service_action = _service_car
 	settings.tow_action = _call_tow
 	settings.race_action = _race_pressed
+	settings.race_label = _race_text
 	settings.wash_action = game_state.open_wash
 	add_child(settings)
 	settings.closed.connect(_on_settings_closed)
@@ -166,14 +167,24 @@ func _race_pressed() -> void:
 		return
 	if race.is_racing():
 		race.give_up()
+	elif race.can_retry():
+		race.request_retry()
 	else:
 		race.start_race()
 	game_state.resume()
 
-func _refresh_race_button() -> void:
+## The race button's label: Give up mid-race, Retry after a loss or a give-up.
+func _race_text() -> String:
 	var race: Variant = get_parent().get("race")
-	if race != null:
-		race_button.text = "Give up race" if race.is_racing() else "Race a test rival"
+	if race != null and race.is_racing():
+		return "Give up race"
+	if race != null and race.can_retry():
+		return "Retry race"
+	return "Race a test rival"
+
+func _refresh_race_button() -> void:
+	if get_parent().get("race") != null:
+		race_button.text = _race_text()
 
 
 ## The refusal toast lives on its own layer beside this one, because this layer

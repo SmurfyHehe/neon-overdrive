@@ -59,6 +59,7 @@ call :run fleet/car_loft_normals --headless
 call :run fleet/test_car --headless
 call :run fleet/p1_coupe --headless
 call :run car/undercarriage --headless
+call :run car/cabin_dirt "--headless --fixed-fps 60 --audio-driver Dummy"
 call :run world/road_strip_winding --headless
 call :run world/sidewalk_collision_taper --headless
 call :run world/kerb_profile --headless

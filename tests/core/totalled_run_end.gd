@@ -26,6 +26,7 @@ const SaveStore := preload("res://scripts/save/save_store.gd")
 const RunEnd := preload("res://scripts/core/run_end.gd")
 const TotalledMeter := preload("res://scripts/car/totalled_meter.gd")
 const Harness := preload("res://tests/traffic/traffic_harness.gd")
+const TestBuild := preload("res://scripts/core/test_build.gd")
 
 const ROOT := "user://test_totalled_run_end"
 
@@ -238,7 +239,7 @@ func _physics_process(_delta: float) -> bool:
 ## The test build's "Wrecks" row: Meter turns the game's sensor on; money is
 ## never taken there. The settings go to a scratch file (AudioSettings.path).
 func _test_build() -> void:
-	ProjectSettings.set_setting("neon/test_build", true)
+	TestBuild.forced = 1   # TestBuild ignores the project setting under TestMode
 	_check(GameSettings.test_build(), "the test build is on")
 	GameSettings.reset_defaults()
 	_check(GameSettings.wrecks_meter and GameSettings.wrecks_enabled(), "Meter is the default in the test build")
@@ -267,7 +268,7 @@ func _test_build() -> void:
 	run_end = null
 	_settle()
 	OS.set_environment("NEON_WRECK", "")
-	ProjectSettings.set_setting("neon/test_build", false)
+	TestBuild.forced = -1
 	_check(not GameSettings.test_build() and GameSettings.wrecks_enabled(), "outside the test build the sensor is always on")
 	GameSettings.reset_defaults()
 

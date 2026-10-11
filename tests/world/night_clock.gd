@@ -168,7 +168,7 @@ func _physics_process(_delta: float) -> bool:
 			if hours.has(0) and waited >= 2:
 				_check(game.radio.dj_active and game.radio.dj_text == RadioStations.time_line(0), "Dave reads midnight out (%s)" % game.radio.dj_text)
 				_check(WindowLights.uploads > uploads_at, "windows changed as the time moved")
-				game.radio.station = 0   # a music station: no time check
+				game.radio.station = 1   # a music station: no time check
 				_go(Step.MUSIC_HOUR)
 			elif waited > 600:
 				return _end("midnight never struck (%s)" % clock.text())

@@ -233,7 +233,7 @@ func _initialize() -> void:
 	_check(car.get_child(0) == cbody, "the body should be the first child (before the effects attach)")
 	var paint_m := car.get_meta("body_mat") as ShaderMaterial
 	_check(paint_m != null and cbody.get_surface_override_material(0) == paint_m, "body_mat should be the material on the body surface")
-	_check(paint_m != null and paint_m.shader == CarAssembler.paint_shader(P1CoupeBuilder.PARTS_BODY_SHADER), "the body paint should use the hooked shader")
+	_check(paint_m != null and paint_m.shader == CarPaint.parts_body_shader(), "the body paint should use CarPaint's parts shader")
 	P1CoupeBuilder.recolor(car, Color.WHITE)
 	_check(paint_m.get_shader_parameter("paint") == Color.WHITE, "recolor should set the paint uniform")
 	for key in ["kind", "half_w", "half_l", "exhaust_tips", "sticker_slots", "headlights", "tail_lights"]:

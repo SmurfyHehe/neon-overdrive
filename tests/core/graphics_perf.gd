@@ -20,7 +20,7 @@ const BLOCK_FRAMES := 40
 const SKIP := 10         # frames dropped after each switch
 
 ## Each setup: GraphicsSettings values on top of BASE. Presets take PRESET_VALUES.
-const BASE := {"aa": "off", "render_scale": 1.0}
+const BASE := {"aa": "off", "render_scale": 1.0, "car_paint": 0}
 const SETUPS := {
 	"base": {},
 	"fxaa": {"aa": "fxaa"},
@@ -28,6 +28,11 @@ const SETUPS := {
 	"msaa2_fxaa": {"aa": "msaa2_fxaa"},
 	"msaa4": {"aa": "msaa4"},
 	"scale75": {"render_scale": 0.75},
+	# Car paint tiers at Medium's edge smoothing (look upgrade, 2026-10-11):
+	# GFX_SETUPS=paint0,paint1,paint2 gives the cost of the city and the lamps.
+	"paint0": {"aa": "msaa2", "car_paint": 0},
+	"paint1": {"aa": "msaa2", "car_paint": 1},
+	"paint2": {"aa": "msaa2", "car_paint": 2},
 	"low": "low",
 	"medium": "medium",
 	"high": "high",
@@ -68,6 +73,7 @@ func _apply(setup: String) -> void:
 		v.merge(s, true)
 		GraphicsSettings.aa = v.aa
 		GraphicsSettings.render_scale = v.render_scale
+		GraphicsSettings.car_paint = v.car_paint
 	GraphicsSettings.apply(self)
 
 func _process(_delta: float) -> bool:

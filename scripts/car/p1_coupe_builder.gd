@@ -72,9 +72,11 @@ const RIM_MATS := ["rim", "rim_face"]
 static var BODY_SHADER: String:
 	get: return CarPaint.code("body", CarPaint.tier())
 
-## The paint shader of the body assembled from parts (CarAssembler): its mesh
-## carries baked occlusion and shut lines in CUSTOM0, where CarPaint's sheet
-## meshes carry crease distances, so the two cannot share a shader yet.
+## The plain paint shader the body assembled from parts (CarAssembler) wore
+## until the look upgrade (2026-10-11). The body now wears CarPaint's
+## "body_parts" variant (_new_parts_paint_material), which reads the same
+## baked occlusion and shut lines from CUSTOM0; this stays for the tests and
+## tools that read it.
 const PARTS_BODY_SHADER := """
 shader_type spatial;
 render_mode cull_back;
@@ -142,6 +144,7 @@ static func build_chassis_visual(paint: Color = PAINT) -> Node3D:
 		paint_mat = _new_parts_paint_material(paint)
 		var body := CarAssembler.build(KIND, parts_config(), paint_mat)
 		body.position = lift
+		body.set_instance_shader_parameter("finish", CarPaint.finish_for(KIND))
 		var gi := CarAssembler.surface_index(body.mesh, "glass")
 		if gi >= 0:
 			body.set_surface_override_material(gi, _get_glass_material())
@@ -411,7 +414,7 @@ static func _new_paint_material(paint: Color) -> ShaderMaterial:
 ## by the baked ambient occlusion and along the shut lines.
 static func _new_parts_paint_material(paint: Color) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
-	m.shader = CarAssembler.paint_shader(PARTS_BODY_SHADER)
+	m.shader = CarPaint.parts_body_shader()
 	m.set_shader_parameter("paint", paint)
 	return m
 

@@ -95,10 +95,19 @@ func _run() -> void:
 	var p1 := P1CoupeBuilder.build_chassis_visual()
 	var p1_body := p1.get_node(^"Body") as MeshInstance3D
 	var p1_mesh := p1_body.mesh as ArrayMesh
-	_check_body_mesh(p1_mesh, "p1_coupe")
 	var mat := p1.get_meta("body_mat") as ShaderMaterial
-	_check(mat != null and mat.shader == body_own, "p1_coupe: the body is the CarPaint shader")
-	_check((p1_mesh.surface_get_material(_surface(p1_mesh, "glass")) as ShaderMaterial).shader == glass_see, "p1_coupe: see-through CarPaint glass")
+	var p1_glass := _surface(p1_mesh, "glass")
+	if P1CoupeBuilder.uses_parts():
+		# Assembled from parts: baked shade and shut lines in CUSTOM0, its own
+		# CarPaint variant, the glass set on the instance.
+		var pi := _surface(p1_mesh, "body")
+		_check(pi >= 0 and p1_mesh.surface_get_arrays(pi)[Mesh.ARRAY_CUSTOM0] != null, "p1_coupe: baked shade per vertex")
+		_check(mat != null and mat.shader == CarPaint.parts_body_shader(), "p1_coupe: the body is the CarPaint parts shader")
+		_check((p1_body.get_surface_override_material(p1_glass) as ShaderMaterial).shader == glass_see, "p1_coupe: see-through CarPaint glass")
+	else:
+		_check_body_mesh(p1_mesh, "p1_coupe")
+		_check(mat != null and mat.shader == body_own, "p1_coupe: the body is the CarPaint shader")
+		_check((p1_mesh.surface_get_material(p1_glass) as ShaderMaterial).shader == glass_see, "p1_coupe: see-through CarPaint glass")
 	var w1 := P1CoupeBuilder.build_wheel_visual(0.32, Vector3(0.765, 0.32, -1.26))
 	_check(((w1.get_node(^"Mesh") as MeshInstance3D).get_surface_override_material(0) as ShaderMaterial).shader == body_own, "p1_coupe: wheels use the CarPaint shader")
 	_check(is_equal_approx(float((p1_body.get_instance_shader_parameter("finish") as Vector4).x), 1.0), "p1_coupe: gloss by default")
@@ -151,6 +160,24 @@ func _run() -> void:
 	_check(body.code.contains("#define LAMPS") and glass.code.contains("#define LAMPS"), "the High preset turns the lamps on")
 	_check(CarFx._soft, "Medium and High use the soft contact shadow")
 	_check(CarPaint.tier_of("custom") == CarPaint.TIER_MEDIUM, "a custom preset is Medium")
+	CarPaint.set_tier(CarPaint.TIER_MEDIUM)
+	_check(body.code.contains("#define PANO") and not body.code.contains("#define LAMPS"), "set_tier picks the tier by number")
+	CarPaint.set_tier(99)
+	_check(CarPaint.tier() == CarPaint.TIER_HIGH, "an out-of-range tier clamps")
+
+	# The coupe assembled from parts wears the same paint (look upgrade).
+	var parts_body := CarPaint.code("body_parts", CarPaint.TIER_HIGH)
+	_check(parts_body.contains("ao_shut = CUSTOM0.rg") and parts_body.contains("city(") and parts_body.contains("lamps("),
+		"the parts body reads its baked shade from CUSTOM0 and mirrors the city and the lamps")
+	var trim := CarPaint.code("trim_parts", CarPaint.TIER_HIGH)
+	_check(trim.contains("city(") and trim.contains("lamps("), "the parts trim mirrors the city and the lamps")
+	_check(CarPaint.code("body", CarPaint.TIER_MEDIUM).contains("moon_rim(n, v, f)"), "the paint takes the moon's rim light")
+	if P1CoupeBuilder.uses_parts():
+		var coupe := P1CoupeBuilder.build_chassis_visual()
+		var cm := coupe.get_meta("body_mat") as ShaderMaterial
+		_check(cm != null and cm.shader == CarPaint.parts_body_shader(), "the parts coupe is painted by CarPaint")
+		_check(CarAssembler.trim_material().shader == CarPaint.parts_trim_shader(), "its trim is CarPaint's too")
+		coupe.free()
 
 	# Compile check (real renderer only).
 	if DisplayServer.get_name() == "headless":
@@ -163,7 +190,7 @@ func _run() -> void:
 				var names := []
 				for u in sh.get_shader_uniform_list():
 					names.append(u.name)
-				var want := "glass" if variant.begins_with("glass") else "paint_roughness"
+				var want := "glass" if variant.begins_with("glass") else ("trim_shine" if variant == "trim_parts" else "paint_roughness")
 				_check(want in names, "%s does not compile at tier %d" % [variant, t])
 		for i in 3:
 			await process_frame

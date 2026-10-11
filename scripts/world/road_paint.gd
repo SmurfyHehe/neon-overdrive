@@ -17,6 +17,9 @@ extends RefCounted
 #   - in districts with a bus lane, BUS in the outer lane every fourth chunk,
 #   - on the cross street at the crossing, STOP in each approach lane (the
 #     cross street flashes red after 1 a.m.). That one is placed by Junction.
+#   - before a signed U-turn (a map gap, RoadBarriers.uturn_at): a U-arrow in
+#     the inner lane (next to the median) ~100 m and ~40 m before the opening,
+#     on both carriageways, the oncoming one turned round.
 # None of it is on a chunk where the lane count changes.
 #
 # Letters are drawn tall (STRETCH) as real road paint is, so they read from a
@@ -38,6 +41,13 @@ const ARROW_SCALE := 1.45
 ## PAINT_ENERGY); a test keeps them equal.
 const PAINT_COLOR := Color(0.82, 0.82, 0.78)
 const PAINT_ENERGY := 0.28
+## The U-turn arrows' places (see marks()): `own_ahead` chunks before the gap
+## chunk at chunk-local `own_z` for own-side traffic; `onc_behind` chunks past
+## it at `onc_z` for oncoming traffic.
+const UTURN_ARROWS := [
+	{"own_ahead": 2, "own_z": -15.0, "onc_behind": 2, "onc_z": -40.0},
+	{"own_ahead": 1, "own_z": -25.0, "onc_behind": 1, "onc_z": -30.0},
+]
 
 const SHADER := """
 shader_type spatial;
@@ -176,4 +186,15 @@ static func marks(chunk_index: int, district: String, run_len: int, own_lanes: i
 	# a bus lane's word, every fourth chunk, away from a crossing
 	if PlaceNames.has_bus(district) and own_lanes >= 2 and posmod(chunk_index, 4) == 2 and not near_crossing:
 		out.append(item("BUS", median_gap + (float(own_lanes) - 0.5) * lane_w, -25.0, 0.0, wear))
+	# U-turn arrows, inner lane. Own side drives toward -z and meets the
+	# opening (z -15 .. -40 of its chunk G) from chunk G - 1: 40 m before its
+	# start is (G - 1, z -25), 100 m before is (G - 2, z -15). Oncoming drives
+	# toward +z and enters from chunk G + 1: 40 m before the far end is
+	# (G + 1, z -30), 100 m before is (G + 2, z -40).
+	var inner := median_gap + 0.5 * lane_w
+	for k in UTURN_ARROWS:
+		if RoadBarriers.uturn_at(chunk_index + int(k.own_ahead)):
+			out.append(item("#UTURN", inner, float(k.own_z), 0.0, wear))
+		if RoadBarriers.uturn_at(chunk_index - int(k.onc_behind)):
+			out.append(item("#UTURN", -inner, float(k.onc_z), PI, wear))
 	return out

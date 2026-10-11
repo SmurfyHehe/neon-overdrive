@@ -18,8 +18,12 @@ class_name RoadBarriers
 #   chunk (GAP_MAX_K), clear of the district's first and blend chunks and of
 #   any planned lane change, exit or split.
 #   Both barrier ends at the opening get a crash cushion facing the traffic
-#   that runs toward it. Cops will use the gaps to turn round (F2); the
+#   that runs toward it. A crossover is emergency, cops only: it carries a
+#   "no U-turn" sign, and a cop that sees you use one adds heat (F2); the
 #   chunk data says where they are (gap_chunk / gap_s).
+# - The map's own gaps (RoadMap.gaps, two per district) are the signed,
+#   legal U-turns. They open the barrier the same way, so gap_kind() says
+#   which kind a chunk's opening is: "uturn", "emergency" or "".
 # - Every type is real collision on the wall layer (one box per centreline
 #   station, like the out-of-bounds walls), and each hits differently. The
 #   surface does most of it (PhysicsMaterial per type); PlayerCar adds what a
@@ -39,11 +43,15 @@ class_name RoadBarriers
 # two cushion boxes; pieces in a gap are disabled, not freed.
 
 const Districts := preload("res://scripts/world/districts.gd")
+const RoadMap := preload("res://scripts/world/road_map.gd")
 
 const CONCRETE := "concrete"
 const GUARDRAIL := "guardrail"
 const CABLE := "cable"
 const NONE := ""
+## Kinds of opening in the barrier (gap_kind).
+const KIND_UTURN := "uturn"
+const KIND_EMERGENCY := "emergency"
 
 ## District -> barrier type.
 const BY_DISTRICT := {
@@ -158,6 +166,22 @@ static func gap_chunk(run: int) -> int:
 
 static func has_gap(chunk_index: int) -> bool:
 	return gap_chunk(Districts.run_of(chunk_index)) == chunk_index
+
+## Whether a chunk holds a signed U-turn (a map gap; only on a loop).
+static func uturn_at(chunk_index: int) -> bool:
+	return RoadMap.is_loop() and RoadMap.gap_in(chunk_index)
+
+## What kind of opening a chunk's barrier has: "uturn" (a map gap on a loop:
+## signed, legal), "emergency" (a crossover: cops only) or "" (none). A chunk
+## that holds both is a "uturn". Pure function of the chunk number and the
+## road, so a pooled chunk rebuilt later gets the same answer.
+static func gap_kind(chunk_index: int) -> String:
+	chunk_index = RoadMap.lap_chunk(chunk_index)
+	if uturn_at(chunk_index):
+		return KIND_UTURN
+	if has_gap(chunk_index):
+		return KIND_EMERGENCY
+	return NONE
 
 ## Distance along the road of run `run`'s crossover centre, or -1.
 static func gap_s(run: int) -> float:

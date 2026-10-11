@@ -581,7 +581,10 @@ func _section_at(idx: int) -> Dictionary:
 		var p := lay.lanes_pair(float(idx) * RoadChunkBuilder.CHUNK_LEN)
 		own = p.x
 		onc = p.y
-	var cfg := {"own_lanes": own, "onc_lanes": onc, "barrier": RoadBarriers.kind_at(idx), "gap": RoadBarriers.has_gap(idx) or (RoadMap.is_loop() and RoadMap.gap_in(idx))}   # the map's gaps too (loop 1)
+	# gap: the barrier opens here. gap_kind: "uturn" (a map gap, signed and
+	# legal), "emergency" (a crossover, cops only) or "" (RoadBarriers.gap_kind).
+	var gap_kind := RoadBarriers.gap_kind(idx)
+	var cfg := {"own_lanes": own, "onc_lanes": onc, "barrier": RoadBarriers.kind_at(idx), "gap": gap_kind != "", "gap_kind": gap_kind}
 	section_cache[key] = cfg
 	return cfg
 

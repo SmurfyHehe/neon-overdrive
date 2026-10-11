@@ -46,7 +46,9 @@ const CROSS_STREETS := ["5TH ST", "ELM ST", "DOCK RD", "HIGH ST"]
 const PAINT_WORDS := ["SLOW", "BUS", "STOP"]
 ## Painted arrows are drawn into the atlas as shapes, not text; the "#" marks
 ## them. Order matters: the atlas row follows it.
-const ARROWS := ["#STRAIGHT", "#LEFT", "#RIGHT"]
+## "#UTURN" is the turn-round arrow (up the lane, over toward the median, back
+## down); "#NOUTURN" is the red ring and slash drawn over it on a no-U-turn sign.
+const ARROWS := ["#STRAIGHT", "#LEFT", "#RIGHT", "#UTURN", "#NOUTURN"]
 
 static func area_name(district: String) -> String:
 	if AREAS.has(district):

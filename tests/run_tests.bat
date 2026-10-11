@@ -153,6 +153,8 @@ rem Save core S1: one save per slot (career + night + meta), the commit order, a
 call :run save/save_core --headless
 rem Save core S2: old saves upgrade (frozen fixtures in tests/save/fixtures); fails when the save version is bumped without an upgrade step.
 call :run save/save_upgrade --headless
+rem Free mode F0: the flag, the night 30 dawn, whole city open, plate lines.
+call :run core/freemode --headless
 rem F0: cash and bank through reloads, chases and 6 a.m. (and the HUD and pause screen).
 call :run core/wallet --headless
 rem Police F0/F1: heat levels and icons, cop_can_see_player, headlights off hides, night one lines.

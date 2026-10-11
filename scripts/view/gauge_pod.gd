@@ -75,7 +75,8 @@ const MOUNTS := {
 	# its own pillar, (-0.773, 0.875, -0.91) to (-0.512, 1.435, -0.25): 40% up, the coupe's bracket offset, faces to its own eye
 	"p2_hothatch":  {"pos": Vector3(-0.581, 1.107, -0.561), "yaw": 23.3, "pitch": 3.1, "along": Vector3(0.261, 0.560, 0.660)},
 	"p3_tuner":     {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
-	"p4_kei":       {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
+	# its own pillar, (-0.50, 0.756, -0.775) to (-0.56, 1.165, -0.375): 40% up, the coupe's bracket offset, faces to its own eye
+	"p4_kei":       {"pos": Vector3(-0.436, 0.928, -0.530), "yaw": 28.8, "pitch": 11.4, "along": Vector3(-0.060, 0.409, 0.400)},
 	"p5_muscle":    {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
 	"p6_crossover": {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
 }

@@ -133,6 +133,8 @@ static func _draw_text(data: PackedByteArray, font: Font, text: String) -> int:
 ## Arrows: a stem and a head, drawn as filled shapes. The layer's text width
 ## is the arrow's width.
 static func _draw_arrow(data: PackedByteArray, which: String) -> int:
+	if which == "#NOUTURN":
+		return _draw_no_uturn(data)
 	var aw := 36
 	var top := Y0 + 1
 	var bot := Y0 + BAND - 1
@@ -145,11 +147,51 @@ static func _draw_arrow(data: PackedByteArray, which: String) -> int:
 			polys.append(PackedVector2Array([Vector2(cx - 4, bot), Vector2(cx + 4, bot), Vector2(cx + 4, top + 22), Vector2(cx - 4, top + 22)]))
 			polys.append(PackedVector2Array([Vector2(cx - 4, top + 14), Vector2(cx + s * 12, top + 14), Vector2(cx + s * 12, top + 22), Vector2(cx - 4, top + 22)]))
 			polys.append(PackedVector2Array([Vector2(cx + s * 10, top + 5), Vector2(cx + s * 18, top + 18), Vector2(cx + s * 10, top + 31)]))
+		"#UTURN":
+			# Up the right-hand stem, over a half ring toward the left (the
+			# median, for own-side paint and signs), and down the left stem
+			# to a head. The glyph is symmetric enough that a sign reads it
+			# the same way as the paint.
+			var arc_y := top + 15
+			polys.append(PackedVector2Array([Vector2(cx + 6, bot), Vector2(cx + 14, bot), Vector2(cx + 14, arc_y), Vector2(cx + 6, arc_y)]))
+			var outer := PackedVector2Array()
+			var inner := PackedVector2Array()
+			for k in 13:
+				var a2 := PI * float(k) / 12.0
+				outer.append(Vector2(cx + 14.0 * cos(a2), arc_y - 14.0 * sin(a2)))
+				inner.append(Vector2(cx + 6.0 * cos(a2), arc_y - 6.0 * sin(a2)))
+			inner.reverse()
+			outer.append_array(inner)
+			polys.append(outer)
+			polys.append(PackedVector2Array([Vector2(cx - 14, arc_y), Vector2(cx - 6, arc_y), Vector2(cx - 6, bot - 14), Vector2(cx - 14, bot - 14)]))
+			polys.append(PackedVector2Array([Vector2(cx - 18, bot - 15), Vector2(cx - 2, bot - 15), Vector2(cx - 10, bot)]))
 		_:
 			polys.append(PackedVector2Array([Vector2(cx - 4, bot), Vector2(cx + 4, bot), Vector2(cx + 4, top + 16), Vector2(cx - 4, top + 16)]))
 			polys.append(PackedVector2Array([Vector2(cx, top), Vector2(cx + 16, top + 22), Vector2(cx - 16, top + 22)]))
 	for p: PackedVector2Array in polys:
 		_fill(data, p)
+	return aw
+
+## The no-U-turn ring and slash, to sit over a "#UTURN" arrow drawn at about
+## half its size: a ring as tall as the band, and a slash from top left to
+## bottom right inside it.
+static func _draw_no_uturn(data: PackedByteArray) -> int:
+	var aw := BAND - 2
+	var cx := float(PAD) + float(aw) / 2.0
+	var cy := float(Y0) + float(BAND) / 2.0
+	var r_out := float(aw) / 2.0
+	var r_in := r_out - 4.0
+	for k in 32:
+		var a0 := TAU * float(k) / 32.0
+		var a1 := TAU * float(k + 1) / 32.0
+		_fill(data, PackedVector2Array([
+			Vector2(cx + r_out * cos(a0), cy + r_out * sin(a0)), Vector2(cx + r_out * cos(a1), cy + r_out * sin(a1)),
+			Vector2(cx + r_in * cos(a1), cy + r_in * sin(a1)), Vector2(cx + r_in * cos(a0), cy + r_in * sin(a0))]))
+	var d := Vector2(1.0, 1.0).normalized()
+	var n := Vector2(-d.y, d.x) * 2.0
+	var p0 := Vector2(cx, cy) - d * (r_in + 0.5)
+	var p1 := Vector2(cx, cy) + d * (r_in + 0.5)
+	_fill(data, PackedVector2Array([p0 + n, p1 + n, p1 - n, p0 - n]))
 	return aw
 
 static func _fill(data: PackedByteArray, poly: PackedVector2Array) -> void:

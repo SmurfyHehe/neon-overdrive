@@ -85,6 +85,8 @@ const CLUSTER_Z := -0.349
 ## and through the top of the rim (centres 1 degree above the rim top).
 const CLUSTER_Y := 0.93
 const DIAL_R := 0.05
+## How far each dial of the "panel" cluster sits from the steering axis.
+const PANEL_DX := 0.13
 ## Everything the cockpit adds is visual only; this switch (and NEON_COCKPIT=0)
 ## leaves it out, for the isolation test and for A/B frame-cost runs.
 static var enabled := true
@@ -587,6 +589,9 @@ func _build_static() -> void:
 ##   centre  a big tach dead centre with a small speedo to its right and two
 ##           small fuel / temp cans to its left, plus a low three-pod holder on
 ##           the centre stack under the cluster's top (the drift coupe)
+##   panel   a flat full-width face with no hood: the tach and speedo each in
+##           a square bezel, the warning-lamp row between them and two small
+##           fuel / temp windows under it (the street truck)
 ## tach and speedo needle pivots come from dial_centres(). Nothing here stands
 ## above the sight line, 8 degrees below the eye (tests/fleet/sight_line.gd).
 func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vector2) -> void:
@@ -616,6 +621,20 @@ func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vec
 			# the info panel between the dials (the warning lamps light in it)
 			k.box(Vector3(0.096, 0.062, 0.004), Vector3(seat_x, cl.x + 0.004, cl.y - 0.003), TRIM)
 			lit.box(Vector3(0.086, 0.052, 0.002), Vector3(seat_x, cl.x + 0.004, cl.y), Color(DIAL_FACE, 0.15))
+		"panel":
+			# the flat face, a little proud of the dash, no hood over it
+			var pt := trim_colours()
+			k.box(Vector3(0.44, 0.15, 0.03), Vector3(seat_x, cl.x - 0.005, cl.y - 0.017), pt.plastic)
+			for i in 2:   # the square bezels
+				var bc: Vector3 = centres[i]
+				var br := float(radii[i]) + 0.012
+				k.box(Vector3(br * 2.0, br * 2.0, 0.006), bc + Vector3(0.0, 0.0, -0.004), TRIM)
+			# fuel and temp: two small windows under the lamp row
+			for i in 2:
+				var wc := Vector3(seat_x - 0.026 + 0.052 * i, cl.x - 0.038, cl.y)
+				k.box(Vector3(0.040, 0.026, 0.004), wc + Vector3(0, 0, -0.003), TRIM)
+				lit.box(Vector3(0.034, 0.020, 0.002), wc, Color(DIAL_FACE, 0.15))
+				lit.box(Vector3(0.002, 0.014, 0.002), wc + Vector3(0.0, -0.002, 0.001), Color(SODIUM, 0.7), Basis(Vector3.BACK, deg_to_rad(-30.0 + 60.0 * i)))
 		"centre":
 			_binnacle(k, seat_x + 0.02, 0.40, cl, 0.052, 0.09)
 			for i in 2:   # fuel and temp, two small cans stacked left of the tach
@@ -739,6 +758,8 @@ func dial_centres() -> Array:
 			return [Vector3(seat_x - 0.062, cl.x, cl.y), Vector3(seat_x + 0.062, cl.x, cl.y)]
 		"wide":
 			return [Vector3(seat_x - 0.125, cl.x, cl.y), Vector3(seat_x + 0.125, cl.x, cl.y)]
+		"panel":
+			return [Vector3(seat_x - PANEL_DX, cl.x, cl.y), Vector3(seat_x + PANEL_DX, cl.x, cl.y)]
 		"centre":   # the big tach dead ahead, the small speedo to its right
 			return [Vector3(seat_x - 0.010, cl.x, cl.y), Vector3(seat_x + 0.118, cl.x - 0.008, cl.y)]
 		_:
@@ -955,6 +976,8 @@ func _build_cluster() -> void:
 		lamp_c = tach_c + Vector3(0.0, 0.022, 0.0)
 	elif cab.cluster_style == "wide":   # in the info panel
 		lamp_c = (tach_c + speedo_c) * 0.5 + Vector3(0.0, 0.012, 0.0)
+	elif cab.cluster_style == "panel":   # the row between the square dials
+		lamp_c = (tach_c + speedo_c) * 0.5 + Vector3(0.0, 0.016, 0.0)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true

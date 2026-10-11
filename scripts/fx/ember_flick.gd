@@ -117,10 +117,10 @@ func _build() -> void:
 	add_child(slab)
 
 ## Throws one cigarette end from `origin` (world) with world velocity `vel`.
-func flick(origin: Vector3, vel: Vector3) -> void:
+func flick(origin: Vector3, vel: Vector3, exclude: Array[RID] = []) -> void:
 	flicks += 1
 	last_origin = origin
-	last_ground = _road_height(origin)
+	last_ground = _road_height(origin, exclude)
 	var speed := maxf(vel.length(), 0.1)
 	_mat.direction = vel / speed
 	_mat.initial_velocity_min = speed * 0.7
@@ -138,9 +138,14 @@ func flick_from_player(car: Node3D, local: Vector3, car_vel: Vector3) -> void:
 	var xf := car.global_transform
 	var out := (xf.basis * Vector3.LEFT).normalized()
 	player_flicks += 1
-	flick(xf * local, car_vel * 0.9 + out * FLICK_OUT + Vector3.UP * FLICK_UP)
+	# the ray down to the road skips the player's own body: from a low open
+	# car (the kei) it starts inside the collision box and found its roof
+	var own: Array[RID] = []
+	if car is CollisionObject3D:
+		own.append((car as CollisionObject3D).get_rid())
+	flick(xf * local, car_vel * 0.9 + out * FLICK_OUT + Vector3.UP * FLICK_UP, own)
 
-func _road_height(origin: Vector3) -> float:
+func _road_height(origin: Vector3, exclude: Array[RID] = []) -> float:
 	var fallback := origin.y - 0.9
 	if not is_inside_tree():
 		return fallback
@@ -148,6 +153,7 @@ func _road_height(origin: Vector3) -> float:
 	if space == null:
 		return fallback
 	var q := PhysicsRayQueryParameters3D.create(origin + Vector3.UP * 0.3, origin + Vector3.DOWN * 3.0)
+	q.exclude = exclude
 	var hit := space.intersect_ray(q)
 	return float(hit.position.y) if not hit.is_empty() else fallback
 

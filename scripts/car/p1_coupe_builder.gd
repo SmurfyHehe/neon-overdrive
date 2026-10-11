@@ -205,6 +205,9 @@ static func build_chassis_visual(paint: Color = PAINT) -> Node3D:
 	root.set_meta("half_w", WIDTH / 2.0)
 	root.set_meta("half_l", LENGTH / 2.0)
 	# Which small parts this body carries (CarSlots, tests/car/required_slots.gd).
+	# From parts the frames come from the sheet mesh's CarFittings pass, as
+	# NpcCarBuilder does for its parts cars: build it once before reading them.
+	_get_body_mesh()
 	root.set_meta("fittings", _fit_counts)
 	root.set_meta("fitting_points", _fit_points)
 	root.set_meta("windscreen", _fit_frames.get("screen", {}))
@@ -280,7 +283,9 @@ static func triangle_count() -> int:
 			n += b.surface_get_array_len(i) / 3
 	for rear in [false, true]:
 		n += 2 * _get_wheel_mesh(rear).surface_get_array_len(0) / 3
-	return n - fittings_triangle_count()
+	# From parts the body glb carries no CarFittings triangles (they are merged
+	# into the one-piece sheet mesh only), so there is nothing to take off.
+	return n if uses_parts() else n - fittings_triangle_count()
 
 ## Triangles CarFittings merged into the body (lenses and plates), on top of
 ## the design's TRIS_TOTAL. No extra draw call: they sit in the body's surfaces.

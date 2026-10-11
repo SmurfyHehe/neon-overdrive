@@ -584,6 +584,9 @@ P8 = {
     # the belt: 0.80 dead straight from the A-pillar back; it drops with the wedge ahead of it
     'belt': [(0, 0.44), (0.06, 0.56), (0.28, 0.64), (0.78, 0.70), (1.45, 0.80), (4.30, 0.80)],
     'tumble': 0.03, 'sill_in': 0.03, 'rocker_h': 0.24,
+    # front, rear and top decals land as exact mirror pairs (car._project_tris): the tail panel's corners
+    # landed 2 mm apart left and right, so the trim was never mirrored and the full build lit unevenly
+    'sym_decals': True,
     # thin pillars, a 6 cm blacked B-pillar, the roof 0.60 to 0.59 half wide
     'cabin': {'A': 1.45, 'W': 2.05, 'R': 3.05, 'C': 3.45, 'D': 3.35,
               'roof_w': [(2.05, 0.60), (3.05, 0.59)], 'roof_drop': 0.03, 'pillars': [(2.52, 2.58)]},

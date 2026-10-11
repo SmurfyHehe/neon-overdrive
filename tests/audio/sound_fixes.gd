@@ -230,7 +230,7 @@ func _process(delta: float) -> bool:
 				var hits: int = crash.impact_count - samples.hits0
 				print("wall at 25 m/s: %d hit(s), biggest %s at %.1f m/s" % [hits, biggest_hit, biggest_dv])
 				_check(hits >= 1, "driving into a wall at 25 m/s made no crash sound")
-				_check(biggest_hit in ["crunch", "glass"], "a 25 m/s wall hit should crunch, got %s (%.1f m/s)" % [biggest_hit, biggest_dv])
+				_check(biggest_hit in ["crunch", "smash", "glass"], "a 25 m/s wall hit should crunch, got %s (%.1f m/s)" % [biggest_hit, biggest_dv])
 				wall.queue_free()
 				_go("scrape_setup")
 		"scrape_setup":

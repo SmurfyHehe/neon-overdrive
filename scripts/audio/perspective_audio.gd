@@ -17,9 +17,11 @@ class_name PerspectiveAudio
 # the cabin sounds the same whatever is playing.
 #
 # Two kinds of bus:
-# - outside sources (engine, tyres and road, wind, traffic, sirens): open in the
-#   chase view; in the cockpit low-passed and a little quieter by the cabin. The
-#   open window lets most of it back in (WINDOW_OPEN_SHARE).
+# - outside sources (engine, tyres and road, crashes, wind, traffic, sirens): open
+#   in the chase view; in the cockpit low-passed and a little quieter by the cabin.
+#   The open window lets most of it back in (WINDOW_OPEN_SHARE). A crash is the
+#   exception (2026-10-11): it happens to the car you sit in, so the Crash bus
+#   keeps its level and most of its top in the cockpit.
 # - inside sources (the radio's Music and the Scanner): clear in the cockpit; from
 #   the chase cam you hear the car's stereo from outside, thin and far. The open
 #   window lets some of it out (WINDOW_LEAK_SHARE).
@@ -35,8 +37,8 @@ class_name PerspectiveAudio
 const BLEND_SECS := 0.3
 const OPEN_HZ := 20000.0
 ## Outside sources: cutoff_hz and volume offset (dB) in the cockpit, window up.
-const COCKPIT_HZ := {&"Engine": 3600.0, &"Turbo": 3200.0, &"Tires": 2800.0, &"World": 1800.0, &"Traffic": 1400.0, &"Sirens": 2400.0}
-const COCKPIT_DB := {&"Engine": -2.0, &"Turbo": -2.5, &"Tires": -3.0, &"World": 0.0, &"Traffic": -8.0, &"Sirens": -5.0}
+const COCKPIT_HZ := {&"Engine": 3600.0, &"Turbo": 3200.0, &"Tires": 2800.0, &"Crash": 6000.0, &"World": 1800.0, &"Traffic": 1400.0, &"Sirens": 2400.0}
+const COCKPIT_DB := {&"Engine": -2.0, &"Turbo": -2.5, &"Tires": -3.0, &"Crash": 0.0, &"World": 0.0, &"Traffic": -8.0, &"Sirens": -5.0}
 ## Inside sources: [cockpit cutoff, heard-from-outside cutoff, heard-from-outside dB].
 const INSIDE := {&"Music": [7500.0, 3200.0, -7.0], &"Scanner": [3400.0, 1800.0, -10.0]}
 const MUSIC_COCKPIT_HZ := 7500.0   # RadioManager's speaker filter
@@ -57,7 +59,7 @@ const HEAD_BEHIND_HZ := 4500.0    # the radio's cutoff with your head turned rig
 const WINDOW_AZIMUTH_DEG := 90.0  # the driver's window, + = left (left-hand drive)
 const WIND_PAN := 0.4             # how far the open window pulls the wind to its side
 
-const OUTSIDE_BUSES: Array[StringName] = [&"Engine", &"Turbo", &"Tires", &"World", &"Traffic", &"Sirens"]
+const OUTSIDE_BUSES: Array[StringName] = [&"Engine", &"Turbo", &"Tires", &"Crash", &"World", &"Traffic", &"Sirens"]
 const INSIDE_BUSES: Array[StringName] = [&"Music", &"Scanner"]
 const PANNED_BUSES: Array[StringName] = [&"World", &"Music", &"Scanner"]
 

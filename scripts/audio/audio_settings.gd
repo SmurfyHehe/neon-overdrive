@@ -3,7 +3,7 @@ extends RefCounted
 
 # Volume settings (Phase B, 2026-10-05; stage B step 4's "Settings tab" starts
 # here): one slider each for Master, Engine, Turbo (the spool and the valve, B1),
-# Effects (tyres, wind, UI, traffic, sirens) and Music (the radio and the scanner),
+# Effects (tyres, crashes, wind, UI, traffic, sirens) and Music (the radio and the scanner),
 # applied to the audio buses and saved in user://settings.cfg. The pause menu
 # shows the sliders; Game applies the saved values at start. 1.0 is the buses'
 # own level, so the defaults change nothing.
@@ -18,7 +18,7 @@ const CHANNELS := {
 	"Master": [&"Master"],
 	"Engine": [&"Engine"],
 	"Turbo": [&"Turbo"],
-	"Effects": [&"Tires", &"World", &"Traffic", &"Sirens"],
+	"Effects": [&"Tires", &"Crash", &"World", &"Traffic", &"Sirens"],
 	"Music": [&"Music", &"Scanner"],
 	# Spoken lines (Dale, people). No voice audio plays on the bus yet; the
 	# slider is ready for when the first one does.

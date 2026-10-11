@@ -30,7 +30,14 @@ class_name CrashAudio
 #   + sparks (5 m/s and up on concrete or metal, most of the time);
 #   + debris (6 m/s and up): trim and plastic bits bouncing on the road;
 # - crunch (7 m/s and up): crumpling metal on top;
-# - glass  (10 m/s and up, most of the time): breaking glass on top.
+# - smash  (14 m/s and up, a highway-speed hit): a bigger, longer crumple
+#   instead of the crunch, growing up to 25 m/s;
+# - glass  (10 m/s and up, most of the time; nearly always on a smash):
+#   breaking glass on top;
+#   + tail (after a crunch or a smash): loose trim and exhaust rattling.
+# The layers of one hit don't start together (STAGGER): the thump first, the
+# crumple a moment behind it, then glass, then bits landing, then the rattle.
+# Each waits its turn in a small pending list, ticked in _process.
 # The body slamming down on the road (a big upward velocity change while the
 # underbody touches) is a grounding hit of its own.
 #
@@ -42,8 +49,13 @@ class_name CrashAudio
 # screech, and sparks crackle on top while the body grinds concrete, metal or
 # road fast enough.
 #
+# Everything here plays on the Crash bus (2026-10-11), so the cockpit can
+# muffle tyres without muffling a crash (PerspectiveAudio).
+#
 # impact_count / last_tier / last_dv / last_surface / scrape_level /
-# scrape_kind / ground_hits / plays are for tests (silent driver).
+# scrape_kind / ground_hits / plays are for tests (silent driver). `plays`
+# logs a layer when it sounds, so a test lets the stagger pass (or calls
+# flush_pending()) before it reads it.
 
 const VARIANTS := 8              # takes per one-shot pool
 const LOOP_TAKES := 6            # takes per scrape loop
@@ -56,6 +68,10 @@ const DEBRIS_DV := 6.0
 const CRUNCH_DV := 7.0
 const GLASS_DV := 10.0
 const GLASS_CHANCE := 0.65
+const SMASH_DV := 14.0           # m/s: a highway-speed hit
+const SMASH_FULL := 25.0         # the smash is at full level from here
+const SMASH_GLASS_CHANCE := 0.85
+const TAIL_COOLDOWN := 1.0       # s between two rattles
 const GROUND_DV := 2.5           # m/s upward, summed over a hit window: the body slamming down
 const HIT_WINDOW := 0.12         # s: one hit gathers everything this long after it starts
 const CONTACT_GRACE := 4         # ticks a contact counts after it ends (reports lag a tick)
@@ -63,7 +79,19 @@ const COOLDOWN := 0.12           # s between two hits
 const GROUND_COOLDOWN := 0.3
 const PITCH_JITTER := 0.06       # +-6 % per play
 const VOLUME_JITTER_DB := 1.5    # +-1.5 dB per play
-const VOICES := 10               # one-shot players, reused oldest first
+const VOICES := 12               # one-shot players, reused oldest first
+const BUS := &"Crash"
+## How long after the hit each layer starts, s: [from, to], then +-30 %.
+const STAGGER := {
+	"thud": [0.0, 0.015],
+	"sparks": [0.01, 0.05],
+	"crunch": [0.01, 0.05],
+	"smash": [0.01, 0.05],
+	"glass": [0.02, 0.08],
+	"debris": [0.08, 0.4],
+	"tail": [0.3, 0.6],
+}
+const STAGGER_JITTER := 0.3
 const SURFACES := ["concrete", "metal", "car"]
 const SCRAPE_KINDS := ["concrete", "metal", "car", "underbody"]
 const SPARK_KINDS := ["concrete", "metal", "underbody"]
@@ -77,18 +105,23 @@ const RELEASE := 10.0
 const PLAY_LOG := 256
 
 ## One-shot pools and their gain. Every take's peak is normalised, so gain
-## sets the pool's level against the others (the old tiers' gains carried over).
-## The sounds themselves are CrashSfx's recipes.
+## sets the pool's level against the others. The sounds themselves are
+## CrashSfx's recipes. Set with the listen pack's bus probe (2026-10-11): a
+## thud and a full crunch together peak about +1 to +2 dB on the Crash bus,
+## 2-3 dB over the engine at full throttle and under 3 dB into the Master
+## limiter; only a smash goes further in.
 const POOLS := {
 	"tap_concrete": 0.45,
 	"tap_metal": 0.42,
 	"tap_car": 0.45,
-	"thud_concrete": 0.75,
-	"thud_metal": 0.7,
-	"thud_car": 0.75,
-	"crunch": 0.8,
+	"thud_concrete": 0.66,
+	"thud_metal": 0.6,
+	"thud_car": 0.66,
+	"crunch": 0.7,
+	"smash": 0.88,
 	"glass": 0.45,
 	"debris": 0.32,
+	"tail": 0.3,
 	"sparks": 0.3,
 	"ground_hit": 0.7,
 	"scrape_bite": 0.4,
@@ -126,6 +159,8 @@ var _grace := {}                 # kind -> ticks left
 var _rel_speed := {}             # kind -> m/s sliding speed against it
 var _wait := 0.0
 var _ground_wait := 0.0
+var _tail_wait := 0.0
+var _pending: Array[Dictionary] = []   # staggered layers: {wait, pool, level, pitch}
 var _rng := RandomNumberGenerator.new()
 
 ## A set of takes played at random, never the same take twice in a row.
@@ -219,7 +254,7 @@ func _ready() -> void:
 	for i in VOICES:
 		var p := AudioStreamPlayer.new()
 		p.name = "HitVoice%d" % i
-		p.bus = &"Tires"
+		p.bus = BUS
 		add_child(p)
 		_voices.append(p)
 	for kind in LOOPS:
@@ -229,7 +264,7 @@ func _ready() -> void:
 		for side in ["A", "B"]:
 			var p := AudioStreamPlayer.new()
 			p.name = "Scrape%s%sAudio" % [String(kind).capitalize(), side]
-			p.bus = &"Tires"
+			p.bus = BUS
 			p.volume_db = -80.0
 			add_child(p)
 			layer.players.append(p)
@@ -241,6 +276,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_wait = maxf(_wait - delta, 0.0)
 	_ground_wait = maxf(_ground_wait - delta, 0.0)
+	_tail_wait = maxf(_tail_wait - delta, 0.0)
 	var v := _vehicle.linear_velocity
 	var dv := v - _prev_vel
 	_prev_vel = v
@@ -315,6 +351,7 @@ func _dominant_surface() -> String:
 	return "concrete"   # only the underbody touching: asphalt hits sound like concrete
 
 func _process(delta: float) -> void:
+	_tick_pending(delta)
 	var targets := {}
 	var speeds := {}
 	for kind in SCRAPE_KINDS:
@@ -362,18 +399,25 @@ func impact(dv: float, surface := "concrete") -> void:
 		return
 	# bigger hits sit a little lower
 	var weight := 1.0 - 0.08 * clampf((dv - CRUNCH_DV) / 10.0, 0.0, 1.0)
-	_fire("thud_" + surface, clampf(dv / CRUNCH_DV, 0.5, 1.0), weight)
+	_fire("thud_" + surface, clampf(dv / CRUNCH_DV, 0.5, 1.0), weight, _stagger("thud"))
 	last_tier = "thud"
 	if dv >= SPARK_DV and surface != "car" and _rng.randf() < SPARK_CHANCE:
-		_fire("sparks", clampf(dv / 12.0, 0.5, 1.0))
+		_fire("sparks", clampf(dv / 12.0, 0.5, 1.0), 1.0, _stagger("sparks"))
 	if dv >= DEBRIS_DV:
-		_fire("debris", clampf(dv / 14.0, 0.45, 1.0))
-	if dv >= CRUNCH_DV:
+		_fire("debris", clampf(dv / 14.0, 0.45, 1.0), 1.0, _stagger("debris"))
+	var smash := dv >= SMASH_DV
+	if smash:
+		last_tier = "smash"
+		_fire("smash", lerpf(0.8, 1.0, clampf((dv - SMASH_DV) / (SMASH_FULL - SMASH_DV), 0.0, 1.0)), weight, _stagger("smash"))
+	elif dv >= CRUNCH_DV:
 		last_tier = "crunch"
-		_fire("crunch", clampf(dv / 15.0, 0.55, 1.0), weight)
-	if dv >= GLASS_DV and _rng.randf() < GLASS_CHANCE:
+		_fire("crunch", clampf(dv / 15.0, 0.55, 1.0), weight, _stagger("crunch"))
+	if dv >= GLASS_DV and _rng.randf() < (SMASH_GLASS_CHANCE if smash else GLASS_CHANCE):
 		last_tier = "glass"
-		_fire("glass", clampf(dv / 18.0, 0.6, 1.0))
+		_fire("glass", clampf(dv / 18.0, 0.6, 1.0), 1.0, _stagger("glass"))
+	if dv >= CRUNCH_DV and _tail_wait <= 0.0:
+		_tail_wait = TAIL_COOLDOWN
+		_fire("tail", clampf(dv / 20.0, 0.5, 1.0), 1.0, _stagger("tail"))
 
 ## The body slamming onto the road, `dv` m/s upward change.
 func ground_hit(dv: float) -> void:
@@ -385,7 +429,16 @@ func ground_hit(dv: float) -> void:
 	if _vehicle != null and _vehicle.linear_velocity.length() > SPARKS_FROM and _rng.randf() < 0.5:
 		_fire("sparks", clampf(dv / 10.0, 0.4, 0.8))
 
-func _fire(pool_name: String, level: float, pitch := 1.0) -> void:
+## A layer's start after the hit, s.
+func _stagger(layer: String) -> float:
+	var span: Array = STAGGER[layer]
+	return _rng.randf_range(span[0], span[1]) * _rng.randf_range(1.0 - STAGGER_JITTER, 1.0 + STAGGER_JITTER)
+
+## Plays one take from a pool, now or `delay` s from now.
+func _fire(pool_name: String, level: float, pitch := 1.0, delay := 0.0) -> void:
+	if delay > 0.0:
+		_pending.append({"wait": delay, "pool": pool_name, "level": level, "pitch": pitch})
+		return
 	var pl: Pool = _pools[pool_name]
 	var k := pl.pick(_rng)
 	var p := _voices[_next_voice]
@@ -397,6 +450,25 @@ func _fire(pool_name: String, level: float, pitch := 1.0) -> void:
 	plays.append({"pool": pool_name, "take": k, "db": p.volume_db, "pitch": p.pitch_scale})
 	if plays.size() > PLAY_LOG:
 		plays.pop_front()
+
+## Starts the staggered layers whose time has come, in the order they were
+## asked for.
+func _tick_pending(delta: float) -> void:
+	if _pending.is_empty():
+		return
+	var later: Array[Dictionary] = []
+	for e in _pending:
+		e.wait -= delta
+		if e.wait <= 0.0:
+			_fire(e.pool, e.level, e.pitch)
+		else:
+			later.append(e)
+	_pending = later
+
+## Starts every waiting layer at once. Tests that fire many hits in one frame
+## call this instead of waiting out each stagger.
+func flush_pending() -> void:
+	_tick_pending(INF)
 
 ## A pool by name ("thud_metal", "loop_car", ...): its takes, generated on
 ## first use.

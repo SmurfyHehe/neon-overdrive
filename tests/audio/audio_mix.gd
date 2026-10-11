@@ -27,7 +27,7 @@ const WINDOWS := [0.0, 0.25, 0.5, 1.0]
 const RADIO := ["off", "on", "quiet", "scanner"]
 const YAWS := [0.0, 90.0, -90.0, 180.0]
 const SETTLE := 3   # ticks per combination
-const ALL_BUSES: Array[StringName] = [&"Engine", &"Turbo", &"Tires", &"World", &"Traffic", &"Sirens", &"Music", &"Scanner"]
+const ALL_BUSES: Array[StringName] = [&"Engine", &"Turbo", &"Tires", &"Crash", &"World", &"Traffic", &"Sirens", &"Music", &"Scanner"]
 
 var tick := 0
 var failures: Array[String] = []
@@ -206,6 +206,8 @@ func _assert_sweep() -> void:
 	for b in PerspectiveAudio.OUTSIDE_BUSES:
 		_check(absf(closed[b].hz - PerspectiveAudio.COCKPIT_HZ[b]) < 1.0, "cockpit closed: %s cutoff should be %.0f" % [b, PerspectiveAudio.COCKPIT_HZ[b]])
 	_check(_r(1.0, 1.0, "on", 0.0)[&"Engine"].hz > 10000.0, "cockpit open: the engine should be nearly outside-bright")
+	# a crash happens to the car you sit in: full level and most of its top
+	_check(closed[&"Crash"].hz > closed[&"Tires"].hz * 2.0 and absf(closed[&"Crash"].db) < 0.01, "cockpit closed: a crash should stay bright and at full level (%.0f Hz, %.1f dB)" % [closed[&"Crash"].hz, closed[&"Crash"].db])
 	# head direction
 	_check(_r(1.0, 0.0, "on", 90.0)[&"Music"].pan > 0.3, "head left: the radio should be in the right ear")
 	_check(_r(1.0, 0.0, "on", -90.0)[&"Music"].pan < -0.3, "head right: the radio should be in the left ear")

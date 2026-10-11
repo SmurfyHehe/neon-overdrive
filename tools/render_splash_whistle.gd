@@ -11,13 +11,16 @@ extends SceneTree
 # shuts. All three share one gain so they sit at the same level.
 #
 #   godot --headless --path . -s tools/render_splash_whistle.gd
+#   godot --headless --path . -s tools/render_splash_whistle.gd -- --loop-only
+#
+# --loop-only rewrites menu_whistle_loop.wav and leaves the other two alone.
 
 const OUT := "res://assets/ui/sfx/splash_whistle.wav"
 const OUT_LOOP := "res://assets/ui/sfx/menu_whistle_loop.wav"
 const OUT_FLUTTER := "res://assets/ui/sfx/menu_whistle_flutter.wav"
 const LOOP_FROM := 1.9      # s into the render: the spool is over by 1.45
-const LOOP_SECS := 1.6
-const LOOP_XFADE := 0.2
+const LOOP_SECS := 1.7
+const LOOP_XFADE := 0.4     # equal-power: the whistle is mostly noise
 const FLUTTER_SECS := 0.8
 const RATE := 44100
 const BLOCK := 441          # 10 ms
@@ -60,9 +63,10 @@ func _init() -> void:
 		var g := 0.7 / peak * minf(1.0, float(i) / fade) * minf(1.0, float(n - 1 - i) / (fade * 4))
 		left[i] *= g
 		right[i] *= g
-	var wav := AudioDsp.to_wav(left, RATE, false, right)
-	wav.save_to_wav(ProjectSettings.globalize_path(OUT))
-	print("wrote %s: %.2f s, raw peak %.3f" % [OUT, float(n) / RATE, peak])
+	if not "--loop-only" in OS.get_cmdline_user_args():
+		var wav := AudioDsp.to_wav(left, RATE, false, right)
+		wav.save_to_wav(ProjectSettings.globalize_path(OUT))
+		print("wrote %s: %.2f s, raw peak %.3f" % [OUT, float(n) / RATE, peak])
 	_render_menu(0.7 / peak)
 	quit()
 
@@ -90,10 +94,15 @@ func _render_menu(gain: float) -> void:
 			left.append(v.x * gain)
 			right.append(v.y * gain)
 	# Loop: LOOP_SECS long, the last LOOP_XFADE of audio past its end faded
-	# into its start, so the join is the same sound and no click.
+	# into its start, so the join is the same sound and no click. Equal
+	# power (sin/cos), not linear: the two ends are different noise, and a
+	# linear fade of uncorrelated sound dips ~2 dB at the seam - a pulse
+	# every loop that read as the boost letting go while W was held.
 	var from := int(LOOP_FROM * RATE)
-	var len := int(LOOP_SECS * RATE)
 	var xf := int(LOOP_XFADE * RATE)
+	var best := _best_loop_len(left, from, xf)
+	var len: int = best[0]
+	var rho: float = best[1]
 	var ll := PackedFloat32Array()
 	var lr := PackedFloat32Array()
 	for i in len:
@@ -102,12 +111,17 @@ func _render_menu(gain: float) -> void:
 		var r := right[a]
 		if i < xf:
 			var t := float(i) / xf
-			l = l * t + left[a + len] * (1.0 - t)
-			r = r * t + right[a + len] * (1.0 - t)
+			# Linear weights, scaled so the power stays level for however
+			# alike the two ends are (rho 1: plain linear, 0: equal power).
+			var g := 1.0 / sqrt(t * t + (1.0 - t) * (1.0 - t) + 2.0 * rho * t * (1.0 - t))
+			l = (l * t + left[a + len] * (1.0 - t)) * g
+			r = (r * t + right[a + len] * (1.0 - t)) * g
 		ll.append(l)
 		lr.append(r)
 	AudioDsp.to_wav(ll, RATE, true, lr).save_to_wav(ProjectSettings.globalize_path(OUT_LOOP))
 	print("wrote %s: %.2f s" % [OUT_LOOP, float(len) / RATE])
+	if "--loop-only" in OS.get_cmdline_user_args():
+		return
 	# Flutter: from the moment the throttle shuts.
 	var vent := (spool_blocks + hold_blocks) * BLOCK
 	var fl := PackedFloat32Array()
@@ -120,3 +134,29 @@ func _render_menu(gain: float) -> void:
 		fr.append(right[vent + i] * g)
 	AudioDsp.to_wav(fl, RATE, false, fr).save_to_wav(ProjectSettings.globalize_path(OUT_FLUTTER))
 	print("wrote %s: %.2f s" % [OUT_FLUTTER, float(m) / RATE])
+
+## The loop length whose end lines up best with its start. The whistle has a
+## steady tone under the noise; if the two ends of the crossfade hold that
+## tone in opposite phase they cancel and the loop breathes once per cycle.
+## Searches around LOOP_SECS for the length where the audio past the end
+## correlates best with the start. Returns [length, how alike (0..1)].
+func _best_loop_len(left: PackedFloat32Array, from: int, xf: int) -> Array:
+	var centre := int(LOOP_SECS * RATE)
+	var span := int(0.12 * RATE)
+	var best := centre
+	var best_c := -INF
+	for len in range(centre - span, centre + span, 4):
+		var c := 0.0
+		for i in range(0, xf, 4):
+			c += left[from + i] * left[from + len + i]
+		if c > best_c:
+			best_c = c
+			best = len
+	var ea := 0.0
+	var eb := 0.0
+	for i in range(0, xf, 4):
+		ea += left[from + i] * left[from + i]
+		eb += left[from + best + i] * left[from + best + i]
+	var rho := clampf(best_c / maxf(sqrt(ea * eb), 0.000001), 0.0, 1.0)
+	print("loop length %.3f s, ends alike %.2f" % [float(best) / RATE, rho])
+	return [best, rho]

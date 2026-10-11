@@ -553,7 +553,8 @@ func dial_centres() -> Array:
 	var cl: Vector2 = cab.cluster
 	match String(cab.cluster_style):
 		"pod":
-			return [Vector3(seat_x - 0.075, cl.x - 0.045, cl.y + 0.002), Vector3(seat_x, cl.x, cl.y)]
+			# the tach inset sits upper left of the pod: lower left it was hidden behind the rim
+			return [Vector3(seat_x - 0.075, cl.x + 0.045, cl.y + 0.002), Vector3(seat_x, cl.x, cl.y)]
 		"strip":
 			return [Vector3(seat_x - 0.20, cl.x, cl.y), Vector3(seat_x + 0.11, cl.x - 0.03, cl.y)]
 		_:

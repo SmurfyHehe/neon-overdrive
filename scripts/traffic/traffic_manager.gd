@@ -321,6 +321,26 @@ var _horns_live := false
 ## tests and the benchmark keep the placements they had before.
 var _own_rng := RandomNumberGenerator.new()
 
+## More-alive traffic (MA2, 2026-10-11): a tailgater for a slow player in the
+## fast lane, and phone drivers. Drawn from their own generator so the game's
+## random sequence and _own_rng stay exactly as they were.
+const PHONE_SHARE := 1.0 / 12.0
+const TG_SLOW_KMH := 15.0        # the player this far under the lane's flow ...
+const TG_SLOW_S := 6.0           # ... for this long
+const TG_EVERY := 90.0           # at most one tailgater this often
+const TG_BEHIND := Vector2(8.0, 140.0)   # m behind the player a car can be picked from
+const PHONE_HONK_RANGE := 25.0   # the car behind a waiting phone driver taps its horn
+var tailgate_enabled := true
+var phone_share := PHONE_SHARE
+var tailgater: TrafficCar
+var tailgate_count := 0
+var phone_spawns := 0
+var phone_honk_count := 0
+var _life_rng := RandomNumberGenerator.new()
+var _tg_slow_since := -1.0
+var _tg_last := -1000.0
+var _phone_honks: Array = []     # [{car, at}]
+
 # Occupancy index: entry 0 is the player, entry i + 1 is cars[i].
 var _lo := PackedFloat32Array()
 var _hi := PackedFloat32Array()
@@ -338,6 +358,7 @@ func _ready() -> void:
 	if NearMissLog.enabled():
 		near_miss = NearMissLog.new(self)
 	_own_rng.seed = 90817
+	_life_rng.seed = 40117
 	if not sim_only:
 		TrafficHorns.warm()
 	target_count = car_count
@@ -402,6 +423,7 @@ func _physics_process(_delta: float) -> void:
 	if _vz[0] * flow < -FLOW_FLIP:
 		flow = -flow
 		flow_flips += 1
+	_life_step()
 	var pv := _player_speed()
 	var band_hi := _spawn_band().y
 	var frame := Engine.get_physics_frames()
@@ -707,6 +729,11 @@ func _respawn(car: TrafficCar) -> void:
 	car.pace_far = slot.pace_far
 	car.pace_city = slot.pace_city
 	car.set_rule_breaker(breaker, weave_m if breaker and weave_share > 0.0 and randf() < weave_share else 0.0)
+	var phone := not breaker and phone_share > 0.0 and _life_rng.randf() < phone_share
+	car.set_phone(phone, _life_rng.randf_range(TrafficCar.PHONE_DELAY.x, TrafficCar.PHONE_DELAY.y),
+		_life_rng.randf_range(TrafficCar.PHONE_PERIOD.x, TrafficCar.PHONE_PERIOD.y), _life_rng.randf() * TAU)
+	if phone:
+		phone_spawns += 1
 	if breaker:
 		rule_breaker_spawns += 1
 	car.set_detailed(absf(slot.dist) <= minf(physics_distance, detail_distance))
@@ -905,6 +932,94 @@ func flash_ahead() -> TrafficCar:
 		flash_count += 1
 		flashed_car = best
 	return best
+
+# ---------- more alive (MA2) ----------
+
+func life_randf_range(from: float, to: float) -> float:
+	return _life_rng.randf_range(from, to)
+
+## The lane the player drives in, and the fastest lane of its carriageway
+## (the lowest one traffic may use), as {lane, fastest, lanes, oncoming}.
+func _player_lane() -> Dictionary:
+	var px := (_lo[0] + _hi[0]) * 0.5
+	var onc := px < 0.0
+	var lanes := onc_lanes if onc else own_lanes
+	var fastest := -1
+	for i in lanes:
+		if lane_allowed(i, onc):
+			fastest = i
+			break
+	return {"lane": RoadChunkBuilder.lane_at(absf(px)), "fastest": fastest, "lanes": lanes, "oncoming": onc, "x": px}
+
+## At the bookkeeping rate: picks a tailgater when the player has been crawling
+## in the fast lane, and runs the phone drivers' honks.
+func _life_step() -> void:
+	if not _phone_honks.is_empty():
+		_phone_honk_step()
+	if tailgater != null and (not is_instance_valid(tailgater) or tailgater.tg_phase == TrafficCar.TG_NONE):
+		tailgater = null
+	if not tailgate_enabled or not react_to_player or tailgater != null or _index_cars != cars.size():
+		return
+	var pl := _player_lane()
+	var slow := false
+	if pl.fastest >= 0 and pl.lane == pl.fastest and pl.lanes >= 2 and lane_allowed(pl.lane + 1, pl.oncoming) and _vz[0] * flow > 0.0:
+		var flow_v := lane_speed(pl.lane, pl.oncoming, city_at(_z[0]))
+		slow = absf(_vz[0]) < flow_v - TG_SLOW_KMH / 3.6
+	if not slow:
+		_tg_slow_since = -1.0
+		return
+	if _tg_slow_since < 0.0:
+		_tg_slow_since = now
+		return
+	if now - _tg_slow_since < TG_SLOW_S or now - _tg_last < TG_EVERY:
+		return
+	# The next car that comes up behind in the player's lane.
+	var best: TrafficCar = null
+	var best_d := INF
+	var pv := absf(_vz[0])
+	for car in cars:
+		if car.benched or car.direction != flow or car.rule_breaker or car.phone or car.changing or car.wrecked \
+				or car.racer != null or car.free_driver != null or car.is_in_group("patrol_cars") or car.lane_i != pl.lane:
+			continue
+		var k := car._idx
+		var behind := (_z[0] - _z[k]) * flow
+		if behind < TG_BEHIND.x or behind > TG_BEHIND.y or car.lane_speed() < pv + 2.0:
+			continue
+		if behind < best_d:
+			best_d = behind
+			best = car
+	if best != null:
+		tailgater = best
+		tailgate_count += 1
+		_tg_last = now
+		best.tg_begin()
+
+## A phone driver is sitting through a green light: the car right behind it in
+## its lane gives one short tap once its own reaction time has passed.
+func note_phone_wait(car: TrafficCar) -> void:
+	var k := car._idx
+	if k < 0 or k >= _lo.size():
+		return
+	var gap := scan(_z[k], car.direction, _lo[k], _hi[k], false, k, car._hl_self(), PHONE_HONK_RANGE, true)
+	if gap == INF or q_idx < 1 or q_player:
+		return
+	var follower := cars[q_idx - 1]
+	if follower.direction != car.direction or follower.benched:
+		return
+	_phone_honks.append({"car": follower, "at": now + follower.reaction_s + 0.4, "until": car._ph_until})
+
+func _phone_honk_step() -> void:
+	var keep: Array = []
+	for e in _phone_honks:
+		var car: TrafficCar = e.car
+		if not is_instance_valid(car) or now > float(e.until):
+			continue
+		if now >= float(e.at):
+			if honk(car, false):
+				phone_honk_count += 1
+			continue
+		keep.append(e)
+	_phone_honks = keep
 
 # ---------- sirens ----------
 

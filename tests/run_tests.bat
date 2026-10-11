@@ -276,6 +276,8 @@ if /i not "%~1"=="quick" (
 	rem ~1 min: limp by physics: multipliers per cause, worst wins, the stumble pattern, a wheel on its rim, and each cause's top speed (50 km/h or more).
 	rem This runs the selected car; for the per-car table set NEON_CAR=<kind> and run it once per car.
 	call :run car/limp_physics "--headless --fixed-fps 60"
+	rem ~40 s: tyres (DP3): slow leaks and their timing, the air machine, bent rims, flat spots, the pull and the wobble on the car.
+	call :run car/tyre_damage "--headless --fixed-fps 120"
 	rem ~25 s: damage slice 1: hits by direction, crash pull, rear sag, dead engine, lamps, steam, rattle, garage/station/tow.
 	call :run car/car_damage "--headless --fixed-fps 120"
 	rem ~2 min: the Damage setting (Full / Light / Looks only), difficulty, and the radiator heat window per difficulty.

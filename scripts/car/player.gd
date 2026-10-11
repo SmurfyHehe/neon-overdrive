@@ -428,12 +428,14 @@ var _offsets_written := false
 ## Vehicle.apply_suspension() does. A repair is the offsets going back to
 ## neutral; nothing guesses a base from what is in a Wheel.
 ## Read today: toe (TOE_ADD), spring rate (SPRING_MULT), cooling (COOLING_MULT),
-## and for a wheel on its rim GRIP_MULT and PRESSURE_MULT (_apply_flat_tyres).
+## tyre pressure (PRESSURE_MULT: stiffness, grip, rolling resistance, radius),
+## and in _apply_flat_tyres GRIP_MULT (a wheel on its rim), RUNOUT (the
+## wobble) and the drag of a soft or flat tyre.
 ## Neutral and unread for now (the brief that wires each, as I understand the
 ## plan; DP1 = suspension and geometry, DP3 = tyres and brakes, LM = limp mode
 ## and the engine's output):
 ##   DP1: CAMBER_ADD, DAMPER_MULT, RIDE_DROP, STEER_CENTRE
-##   DP3: PRESSURE_MULT, GRIP_MULT, RUNOUT, BRAKE_MULT
+##   DP3: BRAKE_MULT (nothing sets it yet)
 ##   LM:  STEER_LOCK_MULT, TORQUE_MULT, BOOST_MULT, DRAG_ADD, DOWNFORCE_REAR_MULT
 func _apply_damage_offsets() -> void:
 	if not damage.enabled:
@@ -452,8 +454,13 @@ func _apply_damage_offsets() -> void:
 	var tuned_rate := [front_rate, front_rate, rear_rate, rear_rate]
 	for i in mini(4, wheel_array.size()):
 		var w: Wheel = wheel_array[i]
+		var front := i < 2
 		w.toe = tuned_toe[i] + o.get_wheel(i, CarDamage.DamageOffsets.TOE_ADD)
 		w.spring_rate = tuned_rate[i] * o.get_wheel(i, CarDamage.DamageOffsets.SPRING_MULT)
+		# a soft tyre (DP3): the tuned pressure x what is left of it, and the radius
+		CarDamage.FlatTyre.write_pressure(w, o.get_wheel(i, CarDamage.DamageOffsets.PRESSURE_MULT),
+			front_tyre_pressure if front else rear_tyre_pressure, tyre_pressure_stock,
+			front_tire_radius if front else rear_tire_radius)
 
 ## A broken head lamp takes its half of the beam (CarFx's one spot light).
 func _apply_lamp_damage() -> void:

@@ -41,6 +41,7 @@ var tank_label: Label
 var money_label: Label
 var message: Label
 var fill_button: Button
+var air_button: Button
 var tow_button: Button
 var leave_button: Button
 
@@ -84,6 +85,7 @@ func _ready() -> void:
 	message = _label(box, "Message")
 	message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	fill_button = _button(box, "FillUp", fill)
+	air_button = _button(box, "Air", air)
 	tow_button = _button(box, "Tow", tow)
 	leave_button = _button(box, "DriveOff", func() -> void: game_state.close_station())
 	leave_button.text = "Drive off"
@@ -154,6 +156,13 @@ func refresh() -> void:
 		fill_button.text = "Fill up: %d L for %s" % [q.can, Wallet.money(q.cost)]
 	fill_button.disabled = busy or locked() or q.can <= 0
 	tow_button.text = ("Sure? Ends the night now, banks %s" % Wallet.money(wallet.cash)) if _tow_armed else "Call Ferris: tow, ends the night"
+	# the air machine (DP3): free, and it does not mend a leak
+	var soft := 0
+	for i in 4:
+		if player.damage.pressure[i] < 1.0:
+			soft += 1
+	air_button.text = "Air machine: tyres are fine" if soft == 0 else ("Air machine: pump up %d tyre%s" % [soft, "" if soft == 1 else "s"])
+	air_button.disabled = busy or soft == 0
 	tow_button.disabled = busy or locked()
 	leave_button.disabled = busy
 
@@ -189,6 +198,22 @@ func _process(delta: float) -> void:
 			message.text = "Filled %.0f L. %d minutes gone, it's %s." % [_fill_litres, int(FILL_GAME_MINUTES), night_clock.text() if night_clock != null else ""]
 			leave_button.grab_focus()
 	refresh()
+
+## The air machine: every tyre back to full pressure. A leak is still a leak:
+## it goes down again over about five minutes until the garage fixes it.
+func air() -> void:
+	if _fill_t >= 0.0:
+		return
+	_tow_armed = false
+	var leaking := 0
+	for i in 4:
+		if player.damage.leak[i] > 0.0 or player.damage.tyre_flat(i):
+			leaking += 1
+	if player.damage.air_refill() > 0:
+		message.text = "Tyres pumped up." if leaking == 0 else "Tyres pumped up. The leak is still there: it will go down again."
+		message.add_theme_color_override("font_color", AMBER)
+	refresh()
+	leave_button.grab_focus()
 
 ## Real seconds of clock time a fill-up takes.
 static func clock_seconds() -> float:

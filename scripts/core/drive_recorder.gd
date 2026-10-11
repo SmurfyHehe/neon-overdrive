@@ -10,9 +10,13 @@ extends Node
 #   drive.json   the recording
 #   screen.png   the game view as it was on the press
 #   log.txt      a copy of Godot's log so far (user://logs/godot.log)
+#   errors.txt   this run's errors and warnings (error_log.gd), with call stacks
 #   info.txt     game version, git branch and commit (a run from the project
 #                folder only; an exported build has no .git), car, night and
-#                act, graphics preset, and the [keys] section of settings.cfg
+#                act, graphics preset, the [keys] section of settings.cfg, and
+#                the last seconds of game state (error_log.gd)
+# Text files have the player's home and user folders scrubbed out
+# (ErrorLog.scrub), so no account name is in a report.
 # Nothing is drawn on screen (HUD rule): a short camera click says it saved.
 # The newest KEEP_REPORTS folders stay; older ones go to the recycle bin.
 #
@@ -38,6 +42,7 @@ const TestMode := preload("res://scripts/core/test_mode.gd")
 const SaveDirector := preload("res://scripts/save/save_director.gd")
 const GameInfo := preload("res://scripts/core/game_info.gd")
 const LogFolder := preload("res://scripts/core/log_folder.gd")
+const ErrorLog := preload("res://scripts/core/error_log.gd")
 const ACTION := "record_drive"
 const KEEP_SECS := 60.0
 const SNAP_SECS := 5.0
@@ -126,10 +131,11 @@ func save() -> String:
 	f.close()
 	last_file = path
 	last_dir = dir
-	print("DriveRecorder: %.1f s saved to %s" % [float(data.keys.size()) / Engine.physics_ticks_per_second, ProjectSettings.globalize_path(dir)])
+	print("DriveRecorder: %.1f s saved to %s" % [float(data.keys.size()) / Engine.physics_ticks_per_second, ErrorLog.scrub(ProjectSettings.globalize_path(dir))])
 	_write_screen(dir.path_join("screen.png"))
-	_write_text(dir.path_join("info.txt"), info_text())
-	_write_text(dir.path_join("log.txt"), _log_text())
+	_write_text(dir.path_join("info.txt"), ErrorLog.scrub(info_text()))
+	_write_text(dir.path_join("log.txt"), ErrorLog.scrub(_log_text()))
+	_write_text(dir.path_join("errors.txt"), ErrorLog.errors_text())
 	prune(root, KEEP_REPORTS)
 	return path
 
@@ -223,6 +229,11 @@ func info_text() -> String:
 			lines.append("%s=%s" % [k, var_to_str(cfg.get_value("keys", k))])
 	else:
 		lines.append("no keys are rebound (all defaults)")
+	var log: Node = ErrorLog.instance()
+	if log != null:
+		lines.append("")
+		lines.append("[game state, the last seconds before F9]")
+		lines.append(log.state_text().strip_edges())
 	return "\n".join(lines) + "\n"
 
 ## {branch, commit} of the checkout at `project_dir`, read from its .git (a

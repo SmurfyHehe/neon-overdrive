@@ -156,6 +156,8 @@ rem F0: cash and bank through reloads, chases and 6 a.m. (and the HUD and pause 
 call :run core/wallet --headless
 rem Work board W0: pay rules, the daily draw, shop pay into the bank once.
 call :run core/work_orders --headless
+rem Work board W4: lint for data/work_orders.json.
+call :run core/work_orders_data --headless
 rem Work board W1: the timing bar (4 styles, miss + redo, one press per key).
 call :run ui/timing_bar --headless
 rem Work board W2: the day step (shop_day: S1-S8) and the board screens (work_board).

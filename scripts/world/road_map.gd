@@ -121,12 +121,18 @@ const ROADS := {
 }
 
 ## Places to stop: rest areas off an exit, and real side streets. `exit` is an
-## exit id on `road`. Placeholders until the stops are designed. `known`: on the map from the start
-## (the three placeholders); a later stop is found in play (learn_stop).
+## exit id on `road`; a stop with `s` and `side` instead opens straight off the
+## road (no exit): side +1 is the own carriageway, -1 the oncoming one.
+## Placeholders until the stops are designed. `known`: on the map from the start
+## (the placeholders); a later stop is found in play (learn_stop).
+## The four fuel stops are staggered, never opposite one another: own side at
+## 2,225 and 5,425, oncoming side at 1,825 and 5,025 (the median gaps).
 const STOPS := [
 	{"id": "shop", "name": "The Shop", "kind": "shop", "road": 0, "exit": "x1a", "known": true},
-	{"id": "fuel_1", "name": "Fuel 1", "kind": "station", "road": 0, "exit": "x3a", "known": true},
-	{"id": "fuel_2", "name": "Fuel 2", "kind": "station", "road": 0, "exit": "x7b", "known": true},
+	{"id": "fuel_3a", "name": "Fuel 3A", "kind": "station", "road": 0, "s": 2225.0, "side": 1, "known": true},
+	{"id": "fuel_3b", "name": "Fuel 3B", "kind": "station", "road": 0, "s": 1825.0, "side": -1, "known": true},
+	{"id": "fuel_7a", "name": "Fuel 7A", "kind": "station", "road": 0, "s": 5425.0, "side": 1, "known": true},
+	{"id": "fuel_7b", "name": "Fuel 7B", "kind": "station", "road": 0, "s": 5025.0, "side": -1, "known": true},
 ]
 
 ## Joins between loops: [{id, a: {road, s}, b: {road, s}, kind}]. Empty until
@@ -311,10 +317,13 @@ static func exit_of(id: int, exit_id: String) -> Dictionary:
 				return e
 	return {}
 
-## Where a stop is: {road, s, side} of its exit ({} for an unknown stop).
+## Where a stop is: {road, s, side} of its own place, or of its exit ({} for an
+## unknown stop).
 static func stop_place(stop_id: String) -> Dictionary:
 	for st in STOPS:
 		if st.id == stop_id:
+			if st.has("s") and st.has("side"):
+				return {"road": int(st.road), "s": float(st.s), "side": int(st.side)}
 			var e := exit_of(int(st.road), String(st.exit))
 			return {"road": int(st.road), "s": float(e.s), "side": int(e.side)} if not e.is_empty() else {}
 	return {}

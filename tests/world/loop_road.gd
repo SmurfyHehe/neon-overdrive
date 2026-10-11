@@ -317,7 +317,7 @@ func _map_data() -> void:
 	for st in RoadMap.STOPS:
 		var at := RoadMap.stop_place(st.id)
 		if at.is_empty() or not RoadMap.knows(int(st.road)):
-			_fail("stop %s points at exit %s, which road %s does not have" % [st.id, st.exit, st.road])
+			_fail("stop %s has no place on road %s (exit %s)" % [st.id, st.road, st.get("exit", "none, it has its own s")])
 	if not RoadMap.INTERCHANGES.is_empty():
 		_fail("interchanges before there is a second loop")
 	for st in RoadMap.STOPS:

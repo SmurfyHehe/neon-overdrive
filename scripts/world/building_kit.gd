@@ -532,6 +532,7 @@ const TYPES := {
 	"warehouse": {"tiles": [[T_WAREHOUSE, 60], [T_CORRUGATED, 40]], "h": [7.0, 12.0], "sign": 0.0},
 	# Special buildings (step 5). A gas station is a kiosk at the back of its
 	# lot under a lit canopy; a diner is a glass box behind a tall pole sign.
+	# unused since 2026-10-11: the real station is scripts/world/gas_station.gd
 	"gas": {"tiles": [[T_SHOP, 100]], "h": [3.4, 3.4], "sign": 1.0, "word": "GAS"},
 	"diner": {"tiles": [[T_SHOP, 100]], "h": [4.4, 4.4], "sign": 1.0, "word": "DINER"},
 	# World step 3 (W6): the new district kinds' own buildings.

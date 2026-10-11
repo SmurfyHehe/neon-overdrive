@@ -213,6 +213,7 @@ call :run core/save_delete --headless
 rem Test build: every player car with everything its mod tree offers fitted.
 call :run car/test_build_mods --headless
 call :run world/gas_station --headless
+call :run world/gas_station_sides --headless
 call :run traffic/traffic_spawn "--headless --fixed-fps 60"
 rem Near-band traffic: hand-overs between the 60 m physics band and the rails, both ways, no visible jump.
 call :run traffic/traffic_near_band "--headless --fixed-fps 120"

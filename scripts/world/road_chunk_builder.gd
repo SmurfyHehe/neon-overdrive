@@ -1756,8 +1756,8 @@ static func _clear_at_junction(root: Node3D, index: int, info: Dictionary, chunk
 		return info
 	var z0 := float(info.z) + float(info.d) / 2.0
 	var z1 := float(info.z) - float(info.d) / 2.0
-	# a gas station (own side only) clears its lot the same way
-	if not Junction.cleared(chunk_index, z0, z1) and not (int(info.side) == 1 and GasStation.cleared(chunk_index, z0, z1)):
+	# a gas station (a building's own side of the road) clears its lot the same way
+	if not Junction.cleared(chunk_index, z0, z1) and not GasStation.cleared(chunk_index, z0, z1, int(info.side)):
 		return info
 	var mi: MeshInstance3D = root.get_node(NodePath("BuildingMesh%d" % index))
 	var body: StaticBody3D = root.get_node(NodePath("BuildingBody%d" % index))
@@ -2186,11 +2186,12 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var pt: float = -pz / CHUNK_LEN
 		var own_edge: float = lerp(start_own_shoulder, end_own_shoulder, pt)
 		var onc_edge: float = lerp(start_onc_shoulder, end_onc_shoulder, pt)
-		# a gas station bay: the own post is parked out of sight (the two sides
-		# share one instance count)
-		var own_y := -50.0 if GasStation.in_bay(chunk_index, pz) else PYLON_HEIGHT / 2.0
+		# a gas station bay: that side's post is parked out of sight (the two
+		# sides share one instance count)
+		var own_y := -50.0 if GasStation.in_bay(chunk_index, pz, 1) else PYLON_HEIGHT / 2.0
+		var onc_y := -50.0 if GasStation.in_bay(chunk_index, pz, -1) else PYLON_HEIGHT / 2.0
 		pylons_own.set_instance_transform(n_posts, _xf_up(own_edge, own_y, pz))
-		pylons_onc.set_instance_transform(n_posts, _xf_up(-onc_edge, PYLON_HEIGHT / 2.0, pz))
+		pylons_onc.set_instance_transform(n_posts, _xf_up(-onc_edge, onc_y, pz))
 		n_posts += 1
 	pylons_own.visible_instance_count = n_posts
 	pylons_onc.visible_instance_count = n_posts
@@ -2401,7 +2402,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			var lz := -float(i) * LAMP_SPACING - (LAMP_SPACING * 0.25 if side == 1 else LAMP_SPACING * 0.75)
 			if Junction.in_mouth(chunk_index, lz):
 				continue  # the signal masts stand there
-			if side == 1 and GasStation.in_bay(chunk_index, lz):
+			if GasStation.in_bay(chunk_index, lz, side):
 				continue  # the gas station canopy lights the bay
 			lamp_zs[side].append(lz)
 			var lt: float = -lz / CHUNK_LEN

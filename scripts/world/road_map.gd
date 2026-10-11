@@ -84,40 +84,22 @@ const ROADS := {
 			Vector2(0.86, 0.66), Vector2(0.70, 0.84), Vector2(0.50, 0.90), Vector2(0.30, 0.86),
 			Vector2(0.13, 0.70), Vector2(0.08, 0.48), Vector2(0.14, 0.26), Vector2(0.30, 0.13),
 		],
-		# Exits, one pair per district, 400 m in: s = the gore, side +1 = the
-		# carriageway going the way the chunks count, -1 = the other one.
-		# `number` is what the sign says.
-		"exits": [
-			{"id": "x1a", "s": 400.0, "side": 1, "number": 1}, {"id": "x1b", "s": 400.0, "side": -1, "number": 1},
-			{"id": "x2a", "s": 1200.0, "side": 1, "number": 2}, {"id": "x2b", "s": 1200.0, "side": -1, "number": 2},
-			{"id": "x3a", "s": 2000.0, "side": 1, "number": 3}, {"id": "x3b", "s": 2000.0, "side": -1, "number": 3},
-			{"id": "x4a", "s": 2800.0, "side": 1, "number": 4}, {"id": "x4b", "s": 2800.0, "side": -1, "number": 4},
-			{"id": "x5a", "s": 3600.0, "side": 1, "number": 5}, {"id": "x5b", "s": 3600.0, "side": -1, "number": 5},
-			{"id": "x6a", "s": 4400.0, "side": 1, "number": 6}, {"id": "x6b", "s": 4400.0, "side": -1, "number": 6},
-			{"id": "x7a", "s": 5200.0, "side": 1, "number": 7}, {"id": "x7b", "s": 5200.0, "side": -1, "number": 7},
-			{"id": "x8a", "s": 6000.0, "side": 1, "number": 8}, {"id": "x8b", "s": 6000.0, "side": -1, "number": 8},
-			{"id": "x9a", "s": 6800.0, "side": 1, "number": 9}, {"id": "x9b", "s": 6800.0, "side": -1, "number": 9},
-			{"id": "x10a", "s": 7600.0, "side": 1, "number": 10}, {"id": "x10b", "s": 7600.0, "side": -1, "number": 10},
-			{"id": "x11a", "s": 8400.0, "side": 1, "number": 11}, {"id": "x11b", "s": 8400.0, "side": -1, "number": 11},
-			{"id": "x12a", "s": 9200.0, "side": 1, "number": 12}, {"id": "x12b", "s": 9200.0, "side": -1, "number": 12},
-			{"id": "x13a", "s": 10000.0, "side": 1, "number": 13}, {"id": "x13b", "s": 10000.0, "side": -1, "number": 13},
-			{"id": "x14a", "s": 10800.0, "side": 1, "number": 14}, {"id": "x14b", "s": 10800.0, "side": -1, "number": 14},
-			{"id": "x15a", "s": 11600.0, "side": 1, "number": 15}, {"id": "x15b", "s": 11600.0, "side": -1, "number": 15},
-			{"id": "x16a", "s": 12400.0, "side": 1, "number": 16}, {"id": "x16b", "s": 12400.0, "side": -1, "number": 16},
-		],
-		# Gaps in the centre barrier: signed U-turns, legal for everyone (a
-		# sign 200 m before, painted arrows, a lamp over the opening), two
-		# per district, 225 m and 625 m in. The emergency crossovers
-		# (RoadBarriers) are a different kind: cops only.
-		"gaps": [
-			{"id": "g1a", "s": 225.0}, {"id": "g1b", "s": 625.0}, {"id": "g2a", "s": 1025.0}, {"id": "g2b", "s": 1425.0},
-			{"id": "g3a", "s": 1825.0}, {"id": "g3b", "s": 2225.0}, {"id": "g4a", "s": 2625.0}, {"id": "g4b", "s": 3025.0},
-			{"id": "g5a", "s": 3425.0}, {"id": "g5b", "s": 3825.0}, {"id": "g6a", "s": 4225.0}, {"id": "g6b", "s": 4625.0},
-			{"id": "g7a", "s": 5025.0}, {"id": "g7b", "s": 5425.0}, {"id": "g8a", "s": 5825.0}, {"id": "g8b", "s": 6225.0},
-			{"id": "g9a", "s": 6625.0}, {"id": "g9b", "s": 7025.0}, {"id": "g10a", "s": 7425.0}, {"id": "g10b", "s": 7825.0},
-			{"id": "g11a", "s": 8225.0}, {"id": "g11b", "s": 8625.0}, {"id": "g12a", "s": 9025.0}, {"id": "g12b", "s": 9425.0},
-			{"id": "g13a", "s": 9825.0}, {"id": "g13b", "s": 10225.0}, {"id": "g14a", "s": 10625.0}, {"id": "g14b", "s": 11025.0},
-			{"id": "g15a", "s": 11425.0}, {"id": "g15b", "s": 11825.0}, {"id": "g16a", "s": 12225.0}, {"id": "g16b", "s": 12625.0},
+		# Ring sites, one per district, 400 m in: s = the ring's centre (a raised
+		# roundabout over the highway, R2; in R1 a turning pad either side).
+		# `number` is what the exit signs say. `kind` is what the ring leads to:
+		# "stop" (a spur to a stop, see STOPS), "lot", "landmark" (something on
+		# the island), "plain", or "tunnel" (no ring and no exits: the road goes
+		# under, built separately). The exits and the gaps are worked out from
+		# these (exits(), gaps()).
+		"rings": [
+			{"id": "x1", "s": 400.0, "number": 1, "kind": "stop"}, {"id": "x2", "s": 1200.0, "number": 2, "kind": "landmark"},
+			{"id": "x3", "s": 2000.0, "number": 3, "kind": "stop"}, {"id": "x4", "s": 2800.0, "number": 4, "kind": "plain"},
+			{"id": "x5", "s": 3600.0, "number": 5, "kind": "lot"}, {"id": "x6", "s": 4400.0, "number": 6, "kind": "tunnel"},
+			{"id": "x7", "s": 5200.0, "number": 7, "kind": "stop"}, {"id": "x8", "s": 6000.0, "number": 8, "kind": "plain"},
+			{"id": "x9", "s": 6800.0, "number": 9, "kind": "plain"}, {"id": "x10", "s": 7600.0, "number": 10, "kind": "plain"},
+			{"id": "x11", "s": 8400.0, "number": 11, "kind": "plain"}, {"id": "x12", "s": 9200.0, "number": 12, "kind": "plain"},
+			{"id": "x13", "s": 10000.0, "number": 13, "kind": "plain"}, {"id": "x14", "s": 10800.0, "number": 14, "kind": "plain"},
+			{"id": "x15", "s": 11600.0, "number": 15, "kind": "plain"}, {"id": "x16", "s": 12400.0, "number": 16, "kind": "plain"},
 		],
 	},
 }
@@ -136,8 +118,44 @@ const INTERCHANGES := []
 
 ## Crossing centre, metres inside the city area from its edge.
 const JUNCTION_INSET := 75.0
-## Chunks kept straight and level either side of a crossing's or an exit's own.
+## Chunks kept straight and level either side of a crossing's own.
 const PIN_APPROACH := 1
+
+# ---------- ring sites (R1) ----------
+#
+# Everything about a ring site is the same on both sides of the road and
+# either way along it, so it is described by `k`, a chunk's offset from the
+# ring chunk (the chunk that STARTS at the ring's centre; the centre is on a
+# chunk join):
+#
+#   k -8 .. -5   the slip lane before the ring: an extra lane outside the
+#                outside lane, opening over two chunks (AUX_W wide by k = -6);
+#   k -4 .. -1   ramps: the lane leaves the road at the gore (the start of
+#                k = -4, RING_GORE before the centre) and climbs to the pad;
+#   k  0 ..  3   ramps down again, joining the road at the end of k = 3;
+#   k  4 ..  7   the slip lane after, closing over the last two chunks.
+#
+# On the +1 carriageway (driven the way the chunks count) the first half is
+# the exit and the second the way back on; on the -1 carriageway it is the
+# other way round. So each exit comes RING_GORE before the ring in its own
+# direction, and each side's two ramps stand on that side of the road.
+
+## The gore (where a ramp leaves or joins the road), metres from the ring's centre.
+const RING_GORE := 200.0
+## Chunks either side of the centre with ramps beside the road.
+const RAMP_CHUNKS := 4
+## Chunks of slip lane beyond those, and how many of them it opens over.
+const AUX_CHUNKS := 4
+const AUX_TAPER := 2
+## Width of the slip lane (and of a ramp's deck), m.
+const AUX_W := 4.4
+## A signed U-turn at the start of every district, this far in, except where
+## a crossing stands within GAP_CLEAR_OF_CROSSING of it.
+const GAP_INSET := 25.0
+const GAP_CLEAR_OF_CROSSING := 100.0
+## Pin values (pins()): straight and level, or level only (the road may bend).
+const PIN_STRAIGHT := 1
+const PIN_LEVEL := 2
 
 ## The road this run is on: ENDLESS = the road from before the map.
 static var road_id := ENDLESS
@@ -149,6 +167,11 @@ static var _kinds := PackedStringArray()
 static var _junctions := PackedFloat64Array()  # crossing centres, metres round the loop
 static var _exits: Array = []
 static var _gaps: Array = []
+static var _rings: Array = []
+static var _ring_of := PackedInt32Array()   # per lap chunk: index into _rings, -1 = none
+static var _ring_k := PackedInt32Array()    # per lap chunk: its offset k from that ring's chunk
+static var _held := PackedByteArray()       # per lap chunk: a crossing's chunk or a neighbour
+static var _exit_signs := {}                # lap chunk -> [{side, ring, far}]
 static var _gap_chunk := PackedByteArray()
 static var _pins := PackedByteArray()
 static var _map_len := PackedFloat32Array()  # distance along the drawn line to each point
@@ -169,6 +192,11 @@ static func use(id: int, act_value: int = 1) -> void:
 	_junctions = PackedFloat64Array()
 	_exits = []
 	_gaps = []
+	_rings = []
+	_ring_of = PackedInt32Array()
+	_ring_k = PackedInt32Array()
+	_held = PackedByteArray()
+	_exit_signs = {}
 	_gap_chunk = PackedByteArray()
 	_pins = PackedByteArray()
 	_map_len = PackedFloat32Array()
@@ -190,21 +218,53 @@ static func use(id: int, act_value: int = 1) -> void:
 			_junctions.append(float(_starts[n]) * L + JUNCTION_INSET)
 		if next.area != "city":
 			_junctions.append(float(_starts[n] + int(ds[n].chunks)) * L - JUNCTION_INSET)
-	# Exits and gaps on the part of the road this act has; straight, level
-	# road at each and at the crossings.
+	# Rings, exits and gaps on the part of the road this act has; straight,
+	# level road at each and at the crossings.
 	_pins.resize(period)
 	_gap_chunk.resize(period)
-	for e in road.exits:
-		if float(e.s) < length():
-			_exits.append(e)
-			_pin(floori(float(e.s) / L), PIN_APPROACH)
-	for g in road.gaps:
-		if float(g.s) < length():
-			_gaps.append(g)
-			_gap_chunk[floori(float(g.s) / L)] = 1
-			_pin(floori(float(g.s) / L), 0)
+	_held.resize(period)
+	_ring_of.resize(period)
+	_ring_k.resize(period)
+	_ring_of.fill(-1)
 	for c in _junctions:
 		_pin(floori(c / L), PIN_APPROACH)
+		for i in range(-1, 2):
+			_held[posmod(floori(c / L) + i, period)] = 1
+	for r in road.rings:
+		if float(r.s) >= length() or String(r.kind) == "tunnel":
+			continue
+		var ri := _rings.size()
+		_rings.append(r)
+		var rc := floori(float(r.s) / L)
+		for k in range(-RAMP_CHUNKS - AUX_CHUNKS, RAMP_CHUNKS + AUX_CHUNKS):
+			_ring_of[posmod(rc + k, period)] = ri
+			_ring_k[posmod(rc + k, period)] = k
+		# the pad (the ring, from R2) on straight, level road; the ramps on level road
+		for k in range(-2, 2):
+			_pins[posmod(rc + k, period)] = PIN_STRAIGHT
+		for k in [-4, -3, 2, 3]:
+			if _pins[posmod(rc + k, period)] == 0:
+				_pins[posmod(rc + k, period)] = PIN_LEVEL
+		for side in [1, -1]:
+			_exits.append({"id": "%s%s" % [r.id, "a" if side > 0 else "b"], "s": float(r.s) - float(side) * RING_GORE,
+				"side": side, "number": int(r.number), "ring": String(r.id), "centre": float(r.s)})
+			# its two gantries stand 400 m and 1 km before the gore
+			for far in [false, true]:
+				var chunks := roundi((1000.0 if far else 400.0) / L)
+				var at := posmod(rc - RAMP_CHUNKS - chunks if side > 0 else rc + RAMP_CHUNKS + chunks - 1, period)
+				if not _exit_signs.has(at):
+					_exit_signs[at] = []
+				_exit_signs[at].append({"side": side, "ring": ri, "far": far})
+	for n in ds.size():
+		var gs := float(_starts[n]) * L + GAP_INSET
+		var clear := true
+		for c in _junctions:
+			if absf(fposmod(c - gs + length() * 0.5, length()) - length() * 0.5) < GAP_CLEAR_OF_CROSSING:
+				clear = false
+		if clear:
+			_gaps.append({"id": "g%d" % (n + 1), "s": gs})
+			_gap_chunk[floori(gs / L)] = 1
+			_pin(floori(gs / L), 0)
 	var pts: Array = road.map
 	_map_len.append(0.0)
 	for i in pts.size():
@@ -212,7 +272,7 @@ static func use(id: int, act_value: int = 1) -> void:
 
 static func _pin(chunk: int, approach: int) -> void:
 	for i in range(chunk - approach, chunk + approach + 1):
-		_pins[posmod(i, period)] = 1
+		_pins[posmod(i, period)] = PIN_STRAIGHT
 
 ## The fixed seed for what stands on the road (buildings, centre barrier).
 static func seed_of(id: int) -> int:
@@ -287,29 +347,105 @@ static func left_in_district(chunk_index: int) -> int:
 static func junctions() -> PackedFloat64Array:
 	return _junctions
 
-## Exits on the road in this act: [{id, s, side, number}].
+## Exits on the road in this act: [{id, s, side, number, ring, centre}], two
+## per ring site. s = the gore: RING_GORE before the ring's centre on the +1
+## carriageway (side 1, id "<ring>a"), RING_GORE after it on the -1 one (side
+## -1, id "<ring>b"), which is "before" for the traffic on that side.
 static func exits() -> Array:
 	return _exits
 
-## Gaps in the centre barrier in this act: [{id, s}].
+## Gaps in the centre barrier in this act: [{id, s}]: signed U-turns, legal
+## for everyone, one at the start of each district.
 static func gaps() -> Array:
 	return _gaps
+
+## Ring sites on the road in this act: [{id, s, number, kind}] (no tunnels).
+static func rings() -> Array:
+	return _rings
+
+## The ring site whose ramps or slip lanes run beside this chunk: an index
+## into rings(), or -1.
+static func ring_at(chunk_index: int) -> int:
+	return _ring_of[lap_chunk(chunk_index)] if period > 0 else -1
+
+## That chunk's offset k from the ring's own chunk (see "ring sites" above).
+## Only meaningful where ring_at() is not -1.
+static func ring_k(chunk_index: int) -> int:
+	return _ring_k[lap_chunk(chunk_index)] if period > 0 else 0
+
+## What the ring leads to: "stop", "lot", "landmark" or "plain".
+static func ring_kind(ring: int) -> String:
+	return String(_rings[ring].kind)
+
+## Whether ramps (or the pad) stand beside this chunk: no buildings, no kerb,
+## and the out-of-bounds wall moves out past them.
+static func ramp_zone(chunk_index: int) -> bool:
+	if period <= 0:
+		return false
+	var m := lap_chunk(chunk_index)
+	return _ring_of[m] >= 0 and _ring_k[m] >= -RAMP_CHUNKS and _ring_k[m] < RAMP_CHUNKS
+
+## Width of the slip lane at the join `offset` chunks from a ring's chunk
+## (the join at the START of chunk k is offset k), before crossings are
+## taken into account.
+static func _aux_plan(offset: int) -> float:
+	var d := absi(offset)
+	if d < RAMP_CHUNKS or d >= RAMP_CHUNKS + AUX_CHUNKS:
+		return 0.0
+	return AUX_W * clampf(float(RAMP_CHUNKS + AUX_CHUNKS - d) / float(AUX_TAPER), 0.0, 1.0)
+
+## Width of the slip lane at the start and at the end of a chunk, m (x, y);
+## the same on both carriageways. Zero through a crossing's chunk and its
+## neighbours (the crossing is built for the plain road), so where a crossing
+## stands on a slip lane's length the lane opens after it, in one chunk.
+## The ramp chunks themselves have none: the lane has left the road.
+static func aux(chunk_index: int) -> Vector2:
+	if period <= 0:
+		return Vector2.ZERO
+	var m := lap_chunk(chunk_index)
+	if _ring_of[m] < 0 or _held[m] == 1:
+		return Vector2.ZERO
+	var k := _ring_k[m]
+	if k >= -RAMP_CHUNKS and k < RAMP_CHUNKS:
+		return Vector2.ZERO
+	var a := _aux_plan(k)
+	var b := _aux_plan(k + 1)
+	if _held[posmod(m - 1, period)] == 1:
+		a = 0.0
+	if _held[posmod(m + 1, period)] == 1:
+		b = 0.0
+	return Vector2(a, b)
+
+## The exit gantries that stand in this chunk: [{side, ring, far}], side +1
+## for the carriageway driven the way the chunks count; far = the 1 km one
+## (else 400 m). Empty on most chunks.
+static func exit_signs(chunk_index: int) -> Array:
+	return _exit_signs.get(lap_chunk(chunk_index), []) if period > 0 else []
+
+## Whether a stop (STOPS) hangs off this ring.
+static func ring_has_stop(ring: int) -> bool:
+	for st in STOPS:
+		if int(st.road) == road_id and String(st.exit).trim_suffix("a").trim_suffix("b") == String(_rings[ring].id):
+			return true
+	return false
 
 ## Whether the centre barrier is open for the whole of this chunk (a gap).
 static func gap_in(chunk_index: int) -> bool:
 	return period > 0 and _gap_chunk[lap_chunk(chunk_index)] == 1
 
-## One byte per chunk of the lap: 1 = straight and level whatever the night's
-## seed (RoadAlignment).
+## One byte per chunk of the lap: PIN_STRAIGHT = straight and level whatever
+## the night's seed, PIN_LEVEL = level, but free to bend (RoadAlignment).
 static func pins() -> PackedByteArray:
 	return _pins
 
 ## An exit of road `id` by its exit id ({} if there is none).
 static func exit_of(id: int, exit_id: String) -> Dictionary:
 	if ROADS.has(id):
-		for e in ROADS[id].exits:
-			if e.id == exit_id:
-				return e
+		for r in ROADS[id].rings:
+			for side in [1, -1]:
+				if "%s%s" % [r.id, "a" if side > 0 else "b"] == exit_id and String(r.kind) != "tunnel":
+					return {"id": exit_id, "s": float(r.s) - float(side) * RING_GORE, "side": side,
+						"number": int(r.number), "ring": String(r.id), "centre": float(r.s)}
 	return {}
 
 ## Where a stop is: {road, s, side} of its exit ({} for an unknown stop).

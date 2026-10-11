@@ -106,7 +106,8 @@ func _shape() -> void:
 			if a.curvature(i) != 0.0:
 				turned += 1
 			# Pinned: straight, no vertical curve, and level but for the lap's tilt.
-			if pins[i] != 0 and (a.curvature(i) != 0.0 or absf(a.vcurve(i)) > 1e-12 or absf(a.start_grade(i) - a.start_grade(0)) > 1e-9):
+			# (Pinned 2, a ramp beside the road: level, but it may bend.)
+			if pins[i] != 0 and ((pins[i] == RoadMap.PIN_STRAIGHT and a.curvature(i) != 0.0) or absf(a.vcurve(i)) > 1e-12 or absf(a.start_grade(i) - a.start_grade(0)) > 1e-9):
 				_fail("seed %d: pinned chunk %d is not straight and level (k %.5f, vcurve %.6f, grade %.4f)" % [road_seed, i, a.curvature(i), a.vcurve(i), a.start_grade(i)])
 				break
 		if absf(a.start_grade(0)) > 0.01:

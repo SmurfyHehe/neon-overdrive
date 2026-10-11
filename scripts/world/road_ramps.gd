@@ -232,6 +232,113 @@ static func bound(chunk_index: int) -> float:
 static func deck_point(side: int, u: float) -> Vector2:
 	return Vector2(float(side) * x_at(absf(u)), y_at(absf(u)) + LIFT)
 
+# ---------- off the main road (R3) ----------
+#
+# A car on a ramp, the ring or a spur is "off the main road". place_of() says
+# so from its position alone, against the site's footprint; game.gd keeps the
+# player's in `player_place` every physics tick for traffic (which holds its
+# flow while the player is up there), the police, the save and the put-back.
+#
+# A place: {} on the main road, else
+#   site   index into RoadMap.rings()
+#   id     the ring's id ("x3"): what the save writes
+#   s      the ring's centre, metres along the road (the lap the car is on)
+#   part   "ramp", "ring" or "spur"
+#   side   +1 / -1: which side of the road (ramps and spurs)
+#   leg    -1 the ramp before the centre the way the chunks count, +1 after
+#   v      ramps: metres from the ring's centre along the road
+#   angle  ring: radians anticlockwise from the +x point (seen from above)
+#   wrong_way  moving against the one way that part is driven (see wrong_way())
+
+## How far over or under a deck a car's own height may read and still be on it.
+const ON_DECK := 1.5
+## Where the player is off the main road ({} on it). Written by game.gd.
+static var player_place := {}
+
+## The place of a point: `u` in road space (RoadFrame.unroll), `s` its metres
+## along the road (RoadFrame.s_at(u.z)).
+static func place_of(u: Vector3, s: float) -> Dictionary:
+	if not enabled or not RoadMap.is_loop():
+		return {}
+	var near := RoadMap.ring_near(s)
+	if int(near.index) < 0:
+		return {}
+	var w := s - float(near.s)
+	var v := absf(w)
+	if v > V_GORE:
+		return {}
+	var out := {"site": int(near.index), "id": String(RoadMap.rings()[int(near.index)].id), "s": float(near.s),
+		"side": 1 if u.x >= 0.0 else -1, "leg": 1 if w >= 0.0 else -1, "v": v, "angle": 0.0, "wrong_way": false}
+	if ring and absf(u.y - RAMP_H) < ON_DECK:
+		var r := Vector2(u.x, w).length()
+		if r > RING_IN - 0.5 and r < RING_OUT + 0.5:
+			out["part"] = "ring"
+			out["angle"] = fposmod(atan2(w, u.x), TAU)
+			return out
+		var spur := RoadMap.ring_spur_side(int(near.index))
+		if spur != 0 and u.x * float(spur) > RING_OUT and u.x * float(spur) < SPUR_REACH and v < 4.0:
+			out["part"] = "spur"
+			return out
+	if absf(absf(u.x) - x_at(v)) < HALF + 0.6 and absf(u.y - y_at(v)) < ON_DECK:
+		out["part"] = "ramp"
+		return out
+	return {}
+
+## How far out a spur's stub reaches (RingSite.SPUR_END, plus its barrier).
+const SPUR_REACH := 50.5
+
+## Whether a car at `place` moving at `vel` (road space: RoadFrame.dir_to_road)
+## is going the wrong way: clockwise on the ring, or against a ramp (each
+## side's ramps are driven the way that carriageway flows). The same rule as
+## on the highway; anticlockwise round the ring is the right way.
+static func wrong_way(place: Dictionary, vel: Vector3, slack: float = 2.0) -> bool:
+	if place.is_empty():
+		return false
+	var vw := -vel.z   # along the road, the way the chunks count
+	match String(place.part):
+		"ring":
+			var a: float = place.angle
+			return vel.x * -sin(a) + vw * cos(a) < -slack
+		"ramp":
+			return vw * float(place.side) < -slack
+	return false
+
+## Where to stand a car at `place`: on the ring's lane facing anticlockwise, on
+## a ramp's centre line facing the way it is driven, on a spur facing the ring.
+## World space, for the floating origin as it is now.
+static func pose_of(place: Dictionary) -> Transform3D:
+	var cz := float(RoadFrame.origin_index) * L - float(place.s)
+	var ride := 0.5
+	match String(place.part):
+		"ring":
+			var a: float = place.angle
+			return RoadFrame.pose(X_TOP * cos(a), RAMP_H + ride, cz - X_TOP * sin(a), a)
+		"spur":
+			var sd: float = float(place.side)
+			return RoadFrame.pose(sd * (RING_OUT + 7.0), RAMP_H + ride, cz, PI * 0.5 * sd)
+	var side: float = float(place.side)
+	var v: float = clampf(float(place.v), 0.0, V_GORE)
+	return RoadFrame.pose(side * x_at(v), y_at(v) + LIFT + ride, cz - float(place.leg) * v, 0.0 if side > 0.0 else PI)
+
+## A place as the save writes it (plain values), and back. from_save() gives
+## {} for a record this map no longer has a ring for.
+static func to_save(place: Dictionary) -> Dictionary:
+	if place.is_empty():
+		return {}
+	return {"id": place.id, "part": place.part, "side": place.side, "leg": place.leg, "v": place.v, "angle": place.angle}
+
+static func from_save(rec: Dictionary, near_s: float) -> Dictionary:
+	if not RoadMap.is_loop() or not (rec.get("id") is String) or not (rec.get("part") is String):
+		return {}
+	var rings := RoadMap.rings()
+	for i in rings.size():
+		if String(rings[i].id) == String(rec.id):
+			var lap := RoadMap.length()
+			var s := float(rings[i].s) + roundf((near_s - float(rings[i].s)) / lap) * lap
+			return {"site": i, "id": String(rec.id), "s": s, "part": String(rec.part), "side": int(rec.get("side", 1)),
+				"leg": int(rec.get("leg", 1)), "v": float(rec.get("v", 0.0)), "angle": float(rec.get("angle", 0.0)), "wrong_way": false}
+	return {}
+
 # ---------- nodes ----------
 
 static func material() -> ShaderMaterial:

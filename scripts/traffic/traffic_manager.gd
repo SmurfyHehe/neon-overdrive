@@ -50,6 +50,7 @@ class_name TrafficManager
 
 const LANE_W := RoadChunkBuilder.LANE_W
 const Weather := preload("res://scripts/world/weather.gd")
+const RoadRamps := preload("res://scripts/world/road_ramps.gd")
 
 var player: Node3D
 var own_lanes := 4
@@ -124,6 +125,8 @@ var flow := -1.0
 const FLOW_FLIP := 6.0
 ## Times the flow has turned round (tests).
 var flow_flips := 0
+## The player is (or was until now) off the main road: no flip until it rejoins.
+var _flow_held := false
 ## Own-direction / oncoming lanes traffic may use, for spawns and lane
 ## changes; empty = all. Tests keep the player's lane clear with this.
 var own_lanes_used: Array[int] = []
@@ -278,7 +281,18 @@ func _physics_process(_delta: float) -> void:
 		return
 	_build_index()
 	var pz := _player_z()
-	if _vz[0] * flow < -FLOW_FLIP:
+	# Off the main road (a ramp, the ring, a spur: ring sites R3) the flow is
+	# held: round the ring the player drives every way there is. It is decided
+	# once on rejoining, from the carriageway the player came down onto.
+	if not RoadRamps.player_place.is_empty():
+		_flow_held = true
+	elif _flow_held:
+		_flow_held = false
+		var joined := -1.0 if RoadFrame.unroll(player.global_position).x > 0.0 else 1.0
+		if joined != flow:
+			flow = joined
+			flow_flips += 1
+	elif _vz[0] * flow < -FLOW_FLIP:
 		flow = -flow
 		flow_flips += 1
 	var pv := _player_speed()

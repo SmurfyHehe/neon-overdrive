@@ -58,6 +58,8 @@ var traffic: TrafficManager
 ## switch is off.
 var junction: Junction
 var ring_site: Node3D
+## Where the player is off the main road ({} on it): RoadRamps.place_of.
+var off_main := {}
 var game_state: GameState
 
 # Chase camera, its three smoothing modes (#31, C to cycle) and the stage A
@@ -88,6 +90,7 @@ const SaveDirector := preload("res://scripts/save/save_director.gd")
 const UserDirMigration := preload("res://scripts/save/user_dir_migration.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
 const RingSite := preload("res://scripts/world/ring_site.gd")
+const RoadRamps := preload("res://scripts/world/road_ramps.gd")
 # The shared test driver and the F9 drive recorder (2026-10-10). `bot` is the
 # driver when the game was started with -- --bot=<mode> / NEON_BOT (watching
 # the bot in a window uses the same switch the headless tests do), with
@@ -735,7 +738,14 @@ func _physics_process(_delta: float) -> void:
 	# shifted consistently.
 	# Road-space z (RoadFrame, #37): distance along the road, which is what
 	# the whole-chunk shift counts in.
-	var z := RoadFrame.unroll(player.global_position).z
+	var ru := RoadFrame.unroll(player.global_position)
+	var z := ru.z
+	# Off the main road (ring sites R3): on a ramp, the ring or a spur. Kept
+	# for traffic, the police, the save and the put-back.
+	off_main = RoadRamps.place_of(ru, RoadFrame.s_at(z))
+	if not off_main.is_empty():
+		off_main["wrong_way"] = RoadRamps.wrong_way(off_main, RoadFrame.dir_to_road(z, player.linear_velocity))
+	RoadRamps.player_place = off_main
 	if absf(z) >= recenter_dist:
 		var t0 := Time.get_ticks_usec()
 		_shift_origin(int(floor(-z / RoadChunkBuilder.CHUNK_LEN)))
@@ -820,6 +830,18 @@ func _setup_player() -> void:
 	add_child(player)
 	if resume_place:
 		saver.restore_car(player, run.car)
+		# Saved on a ramp, the ring or a spur: the save names the place, and if
+		# the car's saved position is not on it any more (the site was
+		# rebuilt since), the car is stood on it.
+		var rec: Variant = run.road.get("off")
+		if rec is Dictionary and not (rec as Dictionary).is_empty():
+			var ru := RoadFrame.unroll(player.global_position)
+			var saved_place := RoadRamps.from_save(rec, RoadFrame.s_at(ru.z))
+			var now_place := RoadRamps.place_of(ru, RoadFrame.s_at(ru.z))
+			if not saved_place.is_empty() and (now_place.is_empty() or now_place.part != saved_place.part or now_place.site != saved_place.site):
+				player.global_transform = RoadRamps.pose_of(saved_place)
+				player.linear_velocity = Vector3.ZERO
+				player.angular_velocity = Vector3.ZERO
 	# Interior mods batch 1 (2026-10-09): the fitted parts' sim effects (short
 	# shifter, strut bar) held on the built car, and the bar itself under the hood.
 	CabinMods.attach(player)
@@ -851,6 +873,9 @@ func _setup_traffic() -> void:
 		add_child(junction)
 		traffic.junction = junction
 	# The raised ring at the nearest ring site (R2), moved like the crossing.
+	# (Placed for where the car is now: a run resumed on a ring needs it
+	# under the wheels on the first tick.)
+	RingSite.focus_s = RoadFrame.s_at(RoadFrame.unroll(player.global_position).z)
 	ring_site = RingSite.new()
 	add_child(ring_site)
 

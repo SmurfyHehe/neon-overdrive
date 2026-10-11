@@ -35,6 +35,7 @@ extends Node
 const SaveStore := preload("res://scripts/save/save_store.gd")
 const TestMode := preload("res://scripts/core/test_mode.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
+const RoadRamps := preload("res://scripts/world/road_ramps.gd")
 
 const RUN_VERSION := 1
 const AUTOSAVE_SECS := 30.0
@@ -130,6 +131,11 @@ func capture() -> Dictionary:
 			"ang_vel": [p.angular_velocity.x, p.angular_velocity.y, p.angular_velocity.z],
 			"gear": p.current_gear, "rpm": p.motor_rpm},
 	}
+	# On a ramp, the ring or a spur (ring sites R3): which, and where on it,
+	# beside the road id and s.
+	var off: Dictionary = RoadRamps.to_save(RoadRamps.place_of(RoadFrame.unroll(p.global_position), RoadFrame.s_at(RoadFrame.unroll(p.global_position).z)))
+	if not off.is_empty():
+		run.road["off"] = off
 	if game.night_clock != null:
 		run.clock = {"minutes": game.night_clock.minutes, "night": game.night_clock.night}
 	if game.radio != null:

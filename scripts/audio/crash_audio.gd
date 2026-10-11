@@ -105,16 +105,19 @@ const RELEASE := 10.0
 const PLAY_LOG := 256
 
 ## One-shot pools and their gain. Every take's peak is normalised, so gain
-## sets the pool's level against the others (the old tiers' gains carried over).
-## The sounds themselves are CrashSfx's recipes.
+## sets the pool's level against the others. The sounds themselves are
+## CrashSfx's recipes. Set with the listen pack's bus probe (2026-10-11): a
+## thud and a full crunch together peak about +1 to +2 dB on the Crash bus,
+## 2-3 dB over the engine at full throttle and under 3 dB into the Master
+## limiter; only a smash goes further in.
 const POOLS := {
 	"tap_concrete": 0.45,
 	"tap_metal": 0.42,
 	"tap_car": 0.45,
-	"thud_concrete": 0.75,
-	"thud_metal": 0.7,
-	"thud_car": 0.75,
-	"crunch": 0.8,
+	"thud_concrete": 0.66,
+	"thud_metal": 0.6,
+	"thud_car": 0.66,
+	"crunch": 0.7,
 	"smash": 0.88,
 	"glass": 0.45,
 	"debris": 0.32,

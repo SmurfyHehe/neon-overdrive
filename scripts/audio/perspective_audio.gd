@@ -21,13 +21,11 @@ class_name PerspectiveAudio
 #   in the chase view; in the cockpit low-passed and a little quieter by the cabin.
 #   The open window lets most of it back in (WINDOW_OPEN_SHARE). A crash is the
 #   exception (2026-10-11): it happens to the car you sit in, so the Crash bus
-#   keeps its level and most of its top in the cockpit, and gains a little low
-#   end (COCKPIT_SHELF_DB: the cabin booms).
+#   keeps its level and most of its top in the cockpit.
 # - inside sources (the radio's Music and the Scanner): clear in the cockpit; from
 #   the chase cam you hear the car's stereo from outside, thin and far. The open
 #   window lets some of it out (WINDOW_LEAK_SHARE).
-# Each bus carries one always-on low-pass (never toggled, so it can't click;
-# the Crash bus's low shelf is the same: always on, flat in the chase view);
+# Each bus carries one always-on low-pass (never toggled, so it can't click);
 # Music, Scanner and World also carry a panner for the head direction: turn your
 # head left and the radio moves to your right ear; the driver's window (left-hand
 # drive) is on your left.
@@ -41,9 +39,6 @@ const OPEN_HZ := 20000.0
 ## Outside sources: cutoff_hz and volume offset (dB) in the cockpit, window up.
 const COCKPIT_HZ := {&"Engine": 3600.0, &"Turbo": 3200.0, &"Tires": 2800.0, &"Crash": 6000.0, &"World": 1800.0, &"Traffic": 1400.0, &"Sirens": 2400.0}
 const COCKPIT_DB := {&"Engine": -2.0, &"Turbo": -2.5, &"Tires": -3.0, &"Crash": 0.0, &"World": 0.0, &"Traffic": -8.0, &"Sirens": -5.0}
-## Low shelf in the cockpit, dB under COCKPIT_SHELF_HZ, on these outside buses.
-const COCKPIT_SHELF_DB := {&"Crash": 3.0}
-const COCKPIT_SHELF_HZ := 250.0
 ## Inside sources: [cockpit cutoff, heard-from-outside cutoff, heard-from-outside dB].
 const INSIDE := {&"Music": [7500.0, 3200.0, -7.0], &"Scanner": [3400.0, 1800.0, -10.0]}
 const MUSIC_COCKPIT_HZ := 7500.0   # RadioManager's speaker filter
@@ -89,7 +84,6 @@ var _window_closing := false
 var _window_pressed := false
 var _filters := {}   # bus name -> AudioEffectLowPassFilter
 var _panners := {}   # bus name -> AudioEffectPanner
-var _shelves := {}   # bus name -> AudioEffectLowShelfFilter
 
 ## The side window, 0 closed .. 1 open, for anything that shows or plays it.
 ## 0 before the game has a camera.
@@ -105,8 +99,6 @@ func _ready() -> void:
 		_filters[bus_name] = _filter_on(bus_name, INSIDE[bus_name][1])
 	for bus_name in PANNED_BUSES:
 		_panners[bus_name] = _panner_on(bus_name)
-	for bus_name in COCKPIT_SHELF_DB:
-		_shelves[bus_name] = _shelf_on(bus_name)
 	_apply()
 
 func _exit_tree() -> void:
@@ -126,21 +118,6 @@ func _filter_on(bus_name: StringName, hz: float) -> AudioEffectLowPassFilter:
 	lp.cutoff_hz = hz
 	AudioServer.add_bus_effect(bus, lp)
 	return lp
-
-## The bus's low shelf, added flat if the bus has none yet.
-func _shelf_on(bus_name: StringName) -> AudioEffectLowShelfFilter:
-	var bus := AudioServer.get_bus_index(bus_name)
-	if bus < 0:
-		return null
-	for i in AudioServer.get_bus_effect_count(bus):
-		var e := AudioServer.get_bus_effect(bus, i)
-		if e is AudioEffectLowShelfFilter:
-			return e
-	var shelf := AudioEffectLowShelfFilter.new()
-	shelf.cutoff_hz = COCKPIT_SHELF_HZ
-	shelf.gain = 1.0
-	AudioServer.add_bus_effect(bus, shelf)
-	return shelf
 
 func _panner_on(bus_name: StringName) -> AudioEffectPanner:
 	var bus := AudioServer.get_bus_index(bus_name)
@@ -187,9 +164,8 @@ func window_direction() -> int:
 func cabin_amount() -> float:
 	return blend * (1.0 - WINDOW_OPEN_SHARE * window)
 
-## The mix for one moment, as plain numbers: bus -> {hz, db, pan} (and shelf_db
-## on a bus with a cockpit low shelf). `db` is the offset on top of the volume
-## slider. Pure, so tests can sweep it.
+## The mix for one moment, as plain numbers: bus -> {hz, db, pan}. `db` is the
+## offset on top of the volume slider. Pure, so tests can sweep it.
 static func mix(view: float, win: float, yaw_deg: float, duck: float) -> Dictionary:
 	var out := {}
 	var cabin := view * (1.0 - WINDOW_OPEN_SHARE * win)
@@ -199,8 +175,6 @@ static func mix(view: float, win: float, yaw_deg: float, duck: float) -> Diction
 			"db": COCKPIT_DB[bus_name] * cabin,
 			"pan": 0.0,
 		}
-		if COCKPIT_SHELF_DB.has(bus_name):
-			out[bus_name]["shelf_db"] = COCKPIT_SHELF_DB[bus_name] * cabin
 	# heard from outside: the chase cam, less what the open window lets out
 	var outside := (1.0 - view) * (1.0 - WINDOW_LEAK_SHARE * win)
 	var yaw := deg_to_rad(yaw_deg)
@@ -247,9 +221,6 @@ func _apply() -> void:
 		var pn: AudioEffectPanner = _panners.get(bus_name)
 		if pn != null:
 			pn.pan = m[bus_name].pan
-		var shelf: AudioEffectLowShelfFilter = _shelves.get(bus_name)
-		if shelf != null:
-			shelf.gain = db_to_linear(m[bus_name].shelf_db)
 		var b := AudioServer.get_bus_index(bus_name)
 		if b >= 0:
 			AudioServer.set_bus_volume_db(b, AudioSettings.volume_db_for(AudioSettings.channel_of(bus_name)) + m[bus_name].db)
@@ -257,11 +228,6 @@ func _apply() -> void:
 func cutoff(bus_name: StringName) -> float:
 	var lp: AudioEffectLowPassFilter = _filters.get(bus_name)
 	return lp.cutoff_hz if lp != null else -1.0
-
-## The bus's cockpit low shelf right now, dB (0 on a bus without one).
-func shelf_db(bus_name: StringName) -> float:
-	var shelf: AudioEffectLowShelfFilter = _shelves.get(bus_name)
-	return linear_to_db(shelf.gain) if shelf != null else 0.0
 
 func pan(bus_name: StringName) -> float:
 	var p: AudioEffectPanner = _panners.get(bus_name)

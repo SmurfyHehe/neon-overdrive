@@ -226,7 +226,11 @@ func _on_chunk_event(chunk_root: Node3D, gap: int) -> void:
 func _end() -> bool:
 	_check(seen_violations == 0, "%d car events happened in view" % seen_violations)
 	_check(chunk_seen_violations == 0, "%d chunk rebuilds happened in view" % chunk_seen_violations)
-	_check(events.spawn >= 3 and traffic.spawn_count >= 120, "only %d visible spawns, %d spawns" % [events.spawn, traffic.spawn_count])
+	# Spawns inside the draw distance are the ones behind the player, and since
+	# the near-miss fix (2026-10-10) those are rare on purpose (2+ lanes away,
+	# one per 5 s, none while the player moves sideways): 1 in this run, against
+	# 3 or more before. Any that happen are still checked against the cameras.
+	_check(traffic.spawn_count >= 120, "only %d spawns (%d inside the draw distance)" % [traffic.spawn_count, events.spawn])
 	_check(events.despawn >= 80, "only %d despawns" % events.despawn)
 	_check(events.show >= 50, "only %d show events" % events.show)
 	_check(show_min >= traffic.reveal_distance() - 3.0, "a car was shown at %.1f m, inside the reveal distance %.0f" % [show_min, traffic.reveal_distance()])

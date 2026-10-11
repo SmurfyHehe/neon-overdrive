@@ -262,7 +262,7 @@ static func build_cop() -> Node3D:
 
 ## Dark while it waits; brake lamps and hazards once it has clocked the car.
 func _cop_lamps(cop: Node3D, woke: bool) -> void:
-	NpcCarBuilder.set_lamps(cop.get_node(^"NpcBody") as Node3D, 1.0 if woke else 0.0, woke)
+	NpcCarBuilder.set_lamps(cop.get_node(^"NpcBody") as Node3D, 1.0 if woke else 0.0, NpcCarBuilder.TURN_BOTH if woke else NpcCarBuilder.TURN_OFF)
 
 # ---------- the watch ----------
 

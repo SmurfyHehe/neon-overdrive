@@ -157,11 +157,16 @@ func _check_stagger() -> void:
 	for n in per_tick_runs:
 		worst = maxi(worst, n)
 		total += n
-	var busy := 0
-	for n in per_tick_runs:
-		if n > 0:
-			busy += 1
-	_check(busy > per_tick_runs.size() * 9 / 10, "controller runs landed on only %d of %d ticks" % [busy, per_tick_runs.size()])
+	# Both halves of the ticks carry runs. (This used to ask for a run on 90% of
+	# the ticks; since the near-miss fix, 2026-10-10, far fewer cars are placed
+	# behind the player, so only 2-3 are in the sim around it and many ticks
+	# rightly have none. The split between alternate ticks is what staggering
+	# is about.)
+	var even := 0
+	for k in per_tick_runs.size():
+		if k % 2 == 0:
+			even += per_tick_runs[k]
+	_check(total > 0 and even * 4 >= total and (total - even) * 4 >= total, "controller runs are not split over alternate ticks: %d on even ticks, %d on odd" % [even, total - even])
 	var mean := float(total) / float(maxi(per_tick_runs.size(), 1))
 	_check(float(worst) <= mean * 2.0 + 2.0, "one tick ran %d controllers, mean %.1f: not spread" % [worst, mean])
 	print("stagger: stride %d, cars sampled %d, max gap %d ticks, controller runs per tick mean %.1f worst %d" % [stride, cars_sampled, max_gap, mean, worst])

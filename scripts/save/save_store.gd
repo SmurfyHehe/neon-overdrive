@@ -193,7 +193,8 @@ static func load_mod_tree(n: int = 0) -> Dictionary:
 				continue
 			var fitted: Array[String] = []
 			for id in _string_list(entry.get("installed", [])):
-				if id in owned and not id in fitted:
+				# The garage keeps a car's own parts as "<car>/<id>" (GarageMods).
+				if (id in owned or ("%s/%s" % [car_id, id]) in owned) and not id in fitted:
 					fitted.append(id)
 			cars[str(car_id)] = {"installed": fitted}
 	return {"cars": cars, "damaged": r.get("damaged", false)}

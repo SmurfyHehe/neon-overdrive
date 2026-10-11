@@ -14,7 +14,7 @@
 	"cred_per_night": 1000,
 
 	"workshop": {
-		"_note": "The Workshop (bolt-on) row: the 26 items of data/bolt_ons/bolt_ons.json, any order, any car. The ECU unlock lives here, not in a car's slots. Only prices are added here; a stepped item is priced per step. All guesses.",
+		"_note": "The Workshop (bolt-on) row: the 29 items of data/bolt_ons/bolt_ons.json, any order, any car. The ECU unlock lives here, not in a car's slots. Only prices are added here; a stepped item is priced per step. All guesses.",
 		"source": "res://data/bolt_ons/bolt_ons.json",
 		"default_nights": 0.3,
 		"nights": {

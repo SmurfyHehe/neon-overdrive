@@ -10,6 +10,11 @@ extends SceneTree
 #   own start and end corners (so the pieces trace the old tapered quad),
 #   at the strip's height, normals up, and the triangles add up to the old
 #   trapezoid's area
+# - the kerb and pavement (raised profile strips since pavements step 1,
+#   387f5c5; their cross-section is checked in kerb_profile.gd): every
+#   vertex inside the chunk and between the strip's own tapered edges, no
+#   face pointing down, and seen from above the triangles still cover the
+#   old trapezoid
 # - the out-of-bounds walls: STATIONS boxes at one x, covering the chunk
 #   end to end with no gap
 # - the barrier: STATIONS pieces (their positions: roadside_detail.gd)
@@ -20,8 +25,9 @@ const B := preload("res://scripts/world/road_chunk_builder.gd")
 const EPS := 0.001
 const STRIPS := [
 	"RoadOwn", "RoadOnc", "EdgeLineOwn", "EdgeLineOnc", "ShoulderOwn",
-	"ShoulderOnc", "CurbOwn", "CurbOnc", "SidewalkOwn", "SidewalkOnc",
+	"ShoulderOnc",
 ]
+const PROFILE_STRIPS := ["CurbOwn", "CurbOnc", "SidewalkOwn", "SidewalkOnc"]
 
 var fails := 0
 
@@ -40,6 +46,8 @@ func _initialize() -> void:
 							_check_frames(chunk)
 						for strip_name in STRIPS:
 							_check_strip(chunk.get_node(NodePath(strip_name)), "%s %s" % [strip_name, label])
+						for strip_name in PROFILE_STRIPS:
+							_check_profile_strip(chunk.get_node(NodePath(strip_name)), "%s %s" % [strip_name, label])
 						for wall_name in ["BoundaryOwn", "BoundaryOnc"]:
 							_check_wall(chunk.get_node(NodePath(wall_name)), "%s %s" % [wall_name, label])
 						var bar := chunk.get_node(^"Barrier") as MultiMeshInstance3D
@@ -95,6 +103,42 @@ func _check_strip(mi: MeshInstance3D, label: String) -> void:
 		area += (verts[k * 3 + 1] - verts[k * 3]).cross(verts[k * 3 + 2] - verts[k * 3]).length() / 2.0
 	var want := ((start_x[1] - start_x[0]) + (end_x[1] - end_x[0])) / 2.0 * B.CHUNK_LEN
 	_check(absf(area - want) < 0.01, "%s: area %.3f, the old quad was %.3f" % [label, area, want])
+
+func _check_profile_strip(mi: MeshInstance3D, label: String) -> void:
+	var arrays := (mi.mesh as ArrayMesh).surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	_check(verts.size() > 0 and verts.size() % 6 == 0, "%s: %d vertices, want a multiple of 6" % [label, verts.size()])
+	if verts.is_empty():
+		return
+	# The strip's own edges: its outermost x values at the start and the end.
+	var start_x := [INF, -INF]
+	var end_x := [INF, -INF]
+	for v in verts:
+		if absf(v.z) < EPS:
+			start_x = [minf(start_x[0], v.x), maxf(start_x[1], v.x)]
+		if absf(v.z + B.CHUNK_LEN) < EPS:
+			end_x = [minf(end_x[0], v.x), maxf(end_x[1], v.x)]
+	if not (is_finite(start_x[0]) and is_finite(end_x[0])):
+		_check(false, "%s: no vertices at the chunk's ends" % label)
+		return
+	for i in verts.size():
+		var v := verts[i]
+		var t := -v.z / B.CHUNK_LEN
+		var lo := lerpf(start_x[0], end_x[0], t)
+		var hi := lerpf(start_x[1], end_x[1], t)
+		_check(t > -EPS and t < 1.0 + EPS, "%s: vertex %d outside the chunk (z %.3f)" % [label, i, v.z])
+		_check(v.x > lo - EPS and v.x < hi + EPS, "%s: vertex %d x %.4f is outside the strip's edges %.4f / %.4f" % [label, i, v.x, lo, hi])
+		_check(normals[i].y > -EPS, "%s: normal %d points down: %s" % [label, i, normals[i]])
+	# Seen from above (y dropped); the kerb's vertical face covers nothing.
+	var area := 0.0
+	for k in verts.size() / 3:
+		var a := Vector2(verts[k * 3].x, verts[k * 3].z)
+		var b := Vector2(verts[k * 3 + 1].x, verts[k * 3 + 1].z)
+		var c := Vector2(verts[k * 3 + 2].x, verts[k * 3 + 2].z)
+		area += absf((b - a).cross(c - a)) / 2.0
+	var want: float = ((start_x[1] - start_x[0]) + (end_x[1] - end_x[0])) / 2.0 * B.CHUNK_LEN
+	_check(absf(area - want) < 0.01, "%s: area from above %.3f, the old quad was %.3f" % [label, area, want])
 
 func _check_wall(body: StaticBody3D, label: String) -> void:
 	var shapes: Array[CollisionShape3D] = []

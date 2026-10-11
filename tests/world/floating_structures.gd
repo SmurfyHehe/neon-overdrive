@@ -54,7 +54,6 @@ const SHAPE_AABB := {
 	RoofProps.SHAPE_BOX: [Vector3(-0.5, 0.0, -0.5), Vector3(1.0, 1.0, 1.0)],
 	RoofProps.SHAPE_TANK: [Vector3(-0.75, 0.0, -0.75), Vector3(1.5, 3.6, 1.5)],
 	RoofProps.SHAPE_ANTENNA: [Vector3(-0.8, 0.0, -0.6), Vector3(1.6, 6.14, 1.2)],
-	RoofProps.SHAPE_CANOPY: [Vector3(-0.5, 0.0, -0.5), Vector3(1.0, 1.0, 1.0)],
 	RoofProps.SHAPE_FLOOD: [Vector3(-0.25, 0.0, -0.35), Vector3(0.5, 5.15, 0.7)],
 }
 const GROUND_NAMES := ["RoadOwn", "RoadOnc", "EdgeLineOwn", "EdgeLineOnc", "ShoulderOwn", "ShoulderOnc", "CurbOwn", "CurbOnc", "SidewalkOwn", "SidewalkOnc"]

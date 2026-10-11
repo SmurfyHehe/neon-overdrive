@@ -118,7 +118,7 @@ func _physics_process(delta: float) -> void:
 	for i in _player.wheel_array.size():
 		var w: Wheel = _player.wheel_array[i]
 		var strength := 0.0
-		if w.is_colliding() and w.surface_type == "Road":
+		if w.is_colliding() and w.surface_type == "Road" and _player.surface_feel.lays_rubber(i):
 			var lat := smoothstep(CarAudio.LAT_START, CarAudio.LAT_FULL, absf(w.slip_vector.x))
 			var lon := smoothstep(CarAudio.LON_START, CarAudio.LON_FULL, absf(w.slip_vector.y))
 			var load := clampf(w.spring_force / static_load, 0.0, 1.0)

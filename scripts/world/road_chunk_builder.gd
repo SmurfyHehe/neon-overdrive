@@ -871,6 +871,7 @@ const ROAD_COL_MARGIN := 2.0
 static func _new_road_collision() -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = "RoadCol"
+	body.set_meta(SurfaceMap.BANDS_META, true)
 	body.add_to_group("Road")
 	var col := CollisionShape3D.new()
 	col.name = "Shape"

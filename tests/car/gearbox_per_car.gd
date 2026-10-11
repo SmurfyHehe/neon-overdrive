@@ -18,14 +18,14 @@ extends SceneTree
 const GEARS := {
 	"p0_beater": 5, "p1_coupe": 5, "p2_hothatch": 5, "p3_tuner": 5,
 	"p4_kei": 5, "p5_muscle": 4, "p6_crossover": 5,
-	"p7_wagon": 4, "p10_truck": 4, "p17_work_pickup": 5,
+	"p7_wagon": 4, "p8_driftcoupe": 5, "p10_truck": 4, "p17_work_pickup": 5,
 	# the specials drive the coupe's spec until their own (S0 stand-ins)
 	"m1_monster": 5, "l1_lowrider": 5,
 }
 ## [0-100 km/h ceiling s, top speed floor km/h, top speed ceiling km/h].
 ## The hot hatch, tuner sedan and crossover were re-measured on 2026-10-11 after
 ## they lost their factory turbo (28a5e92, the 40-minute night): 185.8, 221.8
-## and 220.7 km/h. The wagon and pickup were measured the same day.
+## and 220.7 km/h. The wagon, pickup and drift coupe were measured the same day.
 const SPEED := {
 	"p0_beater": [13.5, 140.0, 168.0],
 	"p1_coupe": [6.4, 235.0, 250.0],
@@ -35,6 +35,7 @@ const SPEED := {
 	"p5_muscle": [5.8, 257.0, 300.0],
 	"p6_crossover": [7.3, 208.0, 242.0],
 	"p7_wagon": [12.0, 158.0, 185.0],
+	"p8_driftcoupe": [6.4, 225.0, 255.0],
 	"p17_work_pickup": [7.3, 212.0, 245.0],
 	"m1_monster": [6.4, 235.0, 250.0],
 	"l1_lowrider": [6.4, 235.0, 250.0],

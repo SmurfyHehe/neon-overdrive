@@ -3,24 +3,24 @@
   "p0_beater": {
    "builds": {
     "stock": {
-     "tris": 3232,
+     "tris": 4572,
      "draw_calls": 7,
      "budget": 10000,
      "slots": {
       "door": {
        "placements": 2,
-       "max_gap_m": 0.004,
-       "area_m2": 0.142
+       "max_gap_m": 0.008,
+       "area_m2": 0.151
       },
       "hood": {
        "placements": 1,
-       "max_gap_m": 0.006,
-       "area_m2": 0.32
+       "max_gap_m": 0.019,
+       "area_m2": 0.34
       },
       "sun": {
        "placements": 1,
-       "max_gap_m": 0.018,
-       "area_m2": 0.187
+       "max_gap_m": 0.016,
+       "area_m2": 0.275
       },
       "rear": {
        "placements": 1,
@@ -32,10 +32,10 @@
      "orbit_views": 96,
      "orbit_blind_views": [],
      "slot_view_counts": {
-      "rear": 32,
+      "rear": 30,
       "door": 78,
-      "sun": 52,
-      "hood": 59
+      "sun": 48,
+      "hood": 58
      },
      "chase_cam_slots": [
       "rear"
@@ -207,14 +207,14 @@
   "p2_hothatch": {
    "builds": {
     "stock": {
-     "tris": 2816,
+     "tris": 2878,
      "draw_calls": 7,
      "budget": 10000,
      "slots": {
       "door": {
        "placements": 2,
-       "max_gap_m": 0.01,
-       "area_m2": 0.217
+       "max_gap_m": 0.012,
+       "area_m2": 0.22
       },
       "hood": {
        "placements": 1,
@@ -223,13 +223,13 @@
       },
       "sun": {
        "placements": 1,
-       "max_gap_m": 0.007,
-       "area_m2": 0.16
+       "max_gap_m": 0.002,
+       "area_m2": 0.156
       },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
-       "area_m2": 0.2
+       "area_m2": 0.12
       }
      },
      "orbit_views_with_slot": 96,
@@ -237,28 +237,28 @@
      "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 32,
-      "door": 68,
-      "sun": 59,
+      "door": 84,
+      "sun": 60,
       "hood": 61
      },
      "chase_cam_slots": [
       "rear"
      ],
-     "chase_rear_readable_m2": 0.19,
+     "chase_rear_readable_m2": 0.114,
      "tips": {
-      "count": 2,
-      "clear_tips": 2
+      "count": 1,
+      "clear_tips": 1
      }
     },
     "street": {
-     "tris": 2966,
+     "tris": 3058,
      "draw_calls": 7,
      "budget": 10000,
      "slots": {
       "door": {
        "placements": 2,
-       "max_gap_m": 0.01,
-       "area_m2": 0.217
+       "max_gap_m": 0.012,
+       "area_m2": 0.22
       },
       "hood": {
        "placements": 1,
@@ -267,13 +267,13 @@
       },
       "sun": {
        "placements": 1,
-       "max_gap_m": 0.007,
-       "area_m2": 0.16
+       "max_gap_m": 0.002,
+       "area_m2": 0.156
       },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
-       "area_m2": 0.2
+       "area_m2": 0.12
       }
      },
      "orbit_views_with_slot": 96,
@@ -281,43 +281,43 @@
      "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 32,
-      "door": 68,
-      "sun": 59,
+      "door": 84,
+      "sun": 60,
       "hood": 61
      },
      "chase_cam_slots": [
       "rear"
      ],
-     "chase_rear_readable_m2": 0.19,
+     "chase_rear_readable_m2": 0.114,
      "tips": {
       "count": 1,
       "clear_tips": 1
      }
     },
     "full": {
-     "tris": 3318,
+     "tris": 3474,
      "draw_calls": 7,
      "budget": 10000,
      "slots": {
       "door": {
        "placements": 2,
-       "max_gap_m": 0.01,
-       "area_m2": 0.217
+       "max_gap_m": 0.012,
+       "area_m2": 0.22
       },
       "hood": {
        "placements": 1,
-       "max_gap_m": 0.005,
+       "max_gap_m": 0.004,
        "area_m2": 0.426
       },
       "sun": {
        "placements": 1,
-       "max_gap_m": 0.007,
-       "area_m2": 0.16
+       "max_gap_m": 0.002,
+       "area_m2": 0.156
       },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
-       "area_m2": 0.2
+       "area_m2": 0.12
       }
      },
      "orbit_views_with_slot": 96,
@@ -325,14 +325,14 @@
      "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 32,
-      "door": 68,
-      "sun": 59,
+      "door": 84,
+      "sun": 61,
       "hood": 61
      },
      "chase_cam_slots": [
       "rear"
      ],
-     "chase_rear_readable_m2": 0.189,
+     "chase_rear_readable_m2": 0.114,
      "tips": {
       "count": 2,
       "clear_tips": 2
@@ -341,8 +341,8 @@
    },
    "exhaust_options": {
     "stock": {
-     "count": 2,
-     "clear_tips": 2
+     "count": 1,
+     "clear_tips": 1
     },
     "center": {
      "count": 1,
@@ -511,7 +511,7 @@
   "p4_kei": {
    "builds": {
     "stock": {
-     "tris": 2394,
+     "tris": 2648,
      "draw_calls": 7,
      "budget": 10000,
      "slots": {
@@ -528,12 +528,12 @@
       "sun": {
        "placements": 1,
        "max_gap_m": 0.003,
-       "area_m2": 0.174
+       "area_m2": 0.158
       },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
-       "area_m2": 0.109
+       "area_m2": 0.095
       }
      },
      "orbit_views_with_slot": 96,
@@ -542,20 +542,20 @@
      "slot_view_counts": {
       "rear": 32,
       "door": 77,
-      "sun": 56,
+      "sun": 59,
       "hood": 64
      },
      "chase_cam_slots": [
       "rear"
      ],
-     "chase_rear_readable_m2": 0.103,
+     "chase_rear_readable_m2": 0.089,
      "tips": {
       "count": 1,
       "clear_tips": 1
      }
     },
     "street": {
-     "tris": 2522,
+     "tris": 2748,
      "draw_calls": 7,
      "budget": 10000,
      "slots": {
@@ -572,12 +572,12 @@
       "sun": {
        "placements": 1,
        "max_gap_m": 0.003,
-       "area_m2": 0.174
+       "area_m2": 0.158
       },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
-       "area_m2": 0.109
+       "area_m2": 0.095
       }
      },
      "orbit_views_with_slot": 96,
@@ -585,21 +585,21 @@
      "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 32,
-      "door": 78,
-      "sun": 56,
+      "door": 77,
+      "sun": 59,
       "hood": 64
      },
      "chase_cam_slots": [
       "rear"
      ],
-     "chase_rear_readable_m2": 0.103,
+     "chase_rear_readable_m2": 0.089,
      "tips": {
       "count": 1,
       "clear_tips": 1
      }
     },
     "full": {
-     "tris": 2752,
+     "tris": 3006,
      "draw_calls": 7,
      "budget": 10000,
      "slots": {
@@ -616,12 +616,12 @@
       "sun": {
        "placements": 1,
        "max_gap_m": 0.003,
-       "area_m2": 0.174
+       "area_m2": 0.158
       },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
-       "area_m2": 0.109
+       "area_m2": 0.095
       }
      },
      "orbit_views_with_slot": 96,
@@ -629,14 +629,14 @@
      "orbit_blind_views": [],
      "slot_view_counts": {
       "rear": 32,
-      "door": 78,
-      "sun": 56,
+      "door": 77,
+      "sun": 59,
       "hood": 64
      },
      "chase_cam_slots": [
       "rear"
      ],
-     "chase_rear_readable_m2": 0.103,
+     "chase_rear_readable_m2": 0.089,
      "tips": {
       "count": 2,
       "clear_tips": 2
@@ -661,29 +661,29 @@
   "p5_muscle": {
    "builds": {
     "stock": {
-     "tris": 2996,
+     "tris": 2736,
      "draw_calls": 7,
      "budget": 10000,
      "slots": {
       "door": {
        "placements": 2,
-       "max_gap_m": 0.018,
-       "area_m2": 0.337
+       "max_gap_m": 0.016,
+       "area_m2": 0.24
       },
       "hood": {
        "placements": 1,
        "max_gap_m": 0.01,
-       "area_m2": 0.674
+       "area_m2": 0.576
       },
       "sun": {
        "placements": 1,
-       "max_gap_m": 0.008,
-       "area_m2": 0.166
+       "max_gap_m": 0.012,
+       "area_m2": 0.181
       },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
-       "area_m2": 0.16
+       "area_m2": 0.143
       }
      },
      "orbit_views_with_slot": 96,
@@ -692,42 +692,42 @@
      "slot_view_counts": {
       "rear": 28,
       "door": 68,
-      "sun": 61,
-      "hood": 61
+      "sun": 59,
+      "hood": 63
      },
      "chase_cam_slots": [
       "rear"
      ],
-     "chase_rear_readable_m2": 0.145,
+     "chase_rear_readable_m2": 0.129,
      "tips": {
       "count": 2,
       "clear_tips": 2
      }
     },
     "street": {
-     "tris": 2932,
+     "tris": 2690,
      "draw_calls": 7,
      "budget": 10000,
      "slots": {
       "door": {
        "placements": 2,
-       "max_gap_m": 0.018,
-       "area_m2": 0.337
+       "max_gap_m": 0.016,
+       "area_m2": 0.24
       },
       "hood": {
        "placements": 1,
-       "max_gap_m": 0.01,
-       "area_m2": 0.674
+       "max_gap_m": 0.0,
+       "area_m2": 0.576
       },
       "sun": {
        "placements": 1,
-       "max_gap_m": 0.008,
-       "area_m2": 0.166
+       "max_gap_m": 0.012,
+       "area_m2": 0.181
       },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
-       "area_m2": 0.16
+       "area_m2": 0.143
       }
      },
      "orbit_views_with_slot": 96,
@@ -736,42 +736,42 @@
      "slot_view_counts": {
       "rear": 28,
       "door": 68,
-      "sun": 61,
-      "hood": 61
+      "sun": 59,
+      "hood": 52
      },
      "chase_cam_slots": [
       "rear"
      ],
-     "chase_rear_readable_m2": 0.144,
+     "chase_rear_readable_m2": 0.128,
      "tips": {
       "count": 2,
       "clear_tips": 2
      }
     },
     "full": {
-     "tris": 3152,
+     "tris": 2910,
      "draw_calls": 7,
      "budget": 10000,
      "slots": {
       "door": {
        "placements": 2,
-       "max_gap_m": 0.018,
-       "area_m2": 0.337
+       "max_gap_m": 0.016,
+       "area_m2": 0.24
       },
       "hood": {
        "placements": 1,
-       "max_gap_m": 0.01,
-       "area_m2": 0.674
+       "max_gap_m": 0.0,
+       "area_m2": 0.576
       },
       "sun": {
        "placements": 1,
-       "max_gap_m": 0.008,
-       "area_m2": 0.166
+       "max_gap_m": 0.012,
+       "area_m2": 0.181
       },
       "rear": {
        "placements": 1,
        "max_gap_m": 0.012,
-       "area_m2": 0.16
+       "area_m2": 0.143
       }
      },
      "orbit_views_with_slot": 96,
@@ -780,13 +780,13 @@
      "slot_view_counts": {
       "rear": 28,
       "door": 68,
-      "sun": 61,
-      "hood": 61
+      "sun": 59,
+      "hood": 52
      },
      "chase_cam_slots": [
       "rear"
      ],
-     "chase_rear_readable_m2": 0.143,
+     "chase_rear_readable_m2": 0.128,
      "tips": {
       "count": 4,
       "clear_tips": 4
@@ -949,6 +949,114 @@
      "clear_tips": 2
     },
     "center": {
+     "count": 1,
+     "clear_tips": 1
+    }
+   }
+  },
+  "p7_wagon": {
+   "builds": {
+    "stock": {
+     "tris": 2546,
+     "draw_calls": 7,
+     "budget": 10000,
+     "slots": {
+      "door": {
+       "placements": 2,
+       "max_gap_m": 0.008,
+       "area_m2": 0.401
+      },
+      "hood": {
+       "placements": 1,
+       "max_gap_m": 0.006,
+       "area_m2": 0.332
+      },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.006,
+       "area_m2": 0.285
+      },
+      "rear": {
+       "placements": 1,
+       "max_gap_m": 0.002,
+       "area_m2": 0.252
+      }
+     },
+     "orbit_views_with_slot": 96,
+     "orbit_views": 96,
+     "orbit_blind_views": [],
+     "slot_view_counts": {
+      "rear": 34,
+      "door": 84,
+      "sun": 50,
+      "hood": 58
+     },
+     "chase_cam_slots": [
+      "rear"
+     ],
+     "chase_rear_readable_m2": 0.242,
+     "tips": {
+      "count": 1,
+      "clear_tips": 1
+     }
+    }
+   },
+   "exhaust_options": {
+    "stock": {
+     "count": 1,
+     "clear_tips": 1
+    }
+   }
+  },
+  "p10_truck": {
+   "builds": {
+    "stock": {
+     "tris": 2350,
+     "draw_calls": 7,
+     "budget": 10000,
+     "slots": {
+      "door": {
+       "placements": 2,
+       "max_gap_m": 0.011,
+       "area_m2": 0.308
+      },
+      "hood": {
+       "placements": 1,
+       "max_gap_m": 0.009,
+       "area_m2": 0.792
+      },
+      "sun": {
+       "placements": 1,
+       "max_gap_m": 0.009,
+       "area_m2": 0.321
+      },
+      "rear": {
+       "placements": 1,
+       "max_gap_m": 0.012,
+       "area_m2": 0.338
+      }
+     },
+     "orbit_views_with_slot": 96,
+     "orbit_views": 96,
+     "orbit_blind_views": [],
+     "slot_view_counts": {
+      "rear": 28,
+      "door": 68,
+      "sun": 48,
+      "hood": 58
+     },
+     "chase_cam_slots": [
+      "rear"
+     ],
+     "chase_rear_readable_m2": 0.311,
+     "tips": {
+      "count": 1,
+      "clear_tips": 1
+     }
+    }
+   },
+   "exhaust_options": {
+    "stock": {
      "count": 1,
      "clear_tips": 1
     }
@@ -1909,7 +2017,7 @@
   "min_traffic": 0.065
  },
  "palette": {
-  "checked": 111,
+  "checked": 125,
   "flagged": []
  }
 }

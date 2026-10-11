@@ -223,7 +223,7 @@ def _fittings(ctx):
         P.obox(dc, c0 + np.array([0, (k - 1) * 0.07, 0.17]), (0.26, 0.012, 0.03), np.eye(3), 'steel')
     ds = part('driveshaft', bevel=0)
     K.cyl(ds, (0.0, 0.30, z(1.95)), (0.0, r_w - 0.02, z(axles[1] - 0.12)), 0.035, 6, 'steel', caps=(True, False))
-    tk = part('tank', bevel=0)
+    tk = part('fuel_tank', bevel=0)
     P.obox(tk, (-0.35, 0.215, z(axles[1] - 0.62)), (0.50, 0.15, 0.70), np.eye(3), 'plastic')
     tip = D['exhaust'][0]
     pipe = part('exhaust_pipe', bevel=0)
@@ -280,7 +280,7 @@ KIT = {
         'fuel_recess': 'one filler, on the left bed side behind the cab',
         'fuel_flap': 'one filler, on the left bed side behind the cab',
         'antenna': 'one mast, on the right front fender',
-        'tank': 'the tank hangs ahead of the rear axle on the left',
+        'fuel_tank': 'the tank hangs ahead of the rear axle on the left',
         'exhaust': 'one oval tip, out the right rear corner',
         'exhaust_pipe': 'one pipe, down the right side to the rear corner',
         'muffler': 'one muffler, on the right ahead of the rear axle',

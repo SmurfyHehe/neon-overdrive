@@ -199,7 +199,7 @@
    "antenna": "one mast, on the right front fender",
    "fuel_recess": "one filler, on the left bed side behind the cab",
    "fuel_flap": "one filler, on the left bed side behind the cab",
-   "tank": "the tank hangs ahead of the rear axle on the left",
+   "fuel_tank": "the tank hangs ahead of the rear axle on the left",
    "exhaust": "one oval tip, out the right rear corner",
    "exhaust_pipe": "one pipe, down the right side to the rear corner",
    "muffler": "one muffler, on the right ahead of the rear axle"
@@ -307,7 +307,7 @@
    "pos": [
     0.68,
     0.3,
-    2.304
+    2.654
    ],
    "dir": [
     0,
@@ -397,6 +397,7 @@
   "exhaust_pipe": null,
   "frame": null,
   "fuel_recess": null,
+  "fuel_tank": null,
   "glass_backlight": null,
   "glass_quarter_r": null,
   "glass_quarter_l": null,
@@ -428,7 +429,6 @@
   "susp_fl": null,
   "tail_r": null,
   "tail_l": null,
-  "tank": null,
   "turn_fr": null,
   "turn_fl": null,
   "turn_rr": null,
@@ -459,7 +459,7 @@
   12.0
  ],
  "bevelled_edges": 188,
- "source_commit": "fa4c642",
+ "source_commit": "91c173a",
  "nodes": [
   "p10_truck",
   "hinge_hood",
@@ -509,6 +509,7 @@
   "exhaust_pipe",
   "frame",
   "fuel_recess",
+  "fuel_tank",
   "glass_backlight",
   "glass_quarter_r",
   "glass_quarter_l",
@@ -540,7 +541,6 @@
   "susp_fl",
   "tail_r",
   "tail_l",
-  "tank",
   "turn_fr",
   "turn_fl",
   "turn_rr",
@@ -639,6 +639,7 @@
   "exhaust_pipe": 50,
   "frame": 108,
   "fuel_recess": 10,
+  "fuel_tank": 12,
   "glass_backlight": 8,
   "glass_quarter_r": 15,
   "glass_quarter_l": 15,
@@ -670,7 +671,6 @@
   "susp_fl": 30,
   "tail_r": 2,
   "tail_l": 2,
-  "tank": 12,
   "turn_fr": 2,
   "turn_fl": 2,
   "turn_rr": 2,

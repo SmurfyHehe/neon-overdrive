@@ -490,8 +490,8 @@ P10 = {
     'parts': [
         MIRRORS,
     ],
-    # one oval tip at the right rear corner, tucked under the roll pan 30 cm ahead of the tail
-    'exhaust': [{'x': 0.68, 'y': 0.30, 'r': 0.05, 'squash': 0.6, 'out': -0.30}],
+    # one oval tip out the right rear corner, through the roll pan (the design check wants 0.6 m clear behind a tip)
+    'exhaust': [{'x': 0.68, 'y': 0.30, 'r': 0.05, 'squash': 0.6}],
     'stickers': [
         {'id': 'door', 'view': 'left', 'rect': (1.32, 0.58, 2.42, 0.86), 'mirror': True},
         {'id': 'hood', 'view': 'top', 'rect': (-0.40, 0.14, 0.40, 1.12)},

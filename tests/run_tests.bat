@@ -105,8 +105,15 @@ call :run view/cockpit_window --headless
 call :run view/gauge_pod --headless
 call :run view/gauge_layout --headless
 call :run view/cockpit_steering_hands --headless
-call :run view/cockpit_shifter --headless
-call :run view/cockpit_shifter_rnd --headless
+call :run view/cockpit_shifter "--headless --fixed-fps 60"
+call :run view/cockpit_shifter_rnd "--headless --fixed-fps 60"
+rem the shift animation runs on the frame clock, so the gate test (every
+rem player car) and the shifter tests get a fixed 60 fps headless
+for %%c in (p0_beater p1_coupe p2_hothatch p3_tuner p4_kei p5_muscle p6_crossover) do (
+	set "NEON_CAR=%%c"
+	call :run view/cockpit_shift_gate "--headless --fixed-fps 60"
+)
+set "NEON_CAR="
 call :run ui/touch_radio --headless
 call :run car/tyres "--headless --fixed-fps 60"
 call :run car/clutch_model --headless
@@ -196,6 +203,10 @@ set "TEST_TIMEOUT=%TT_SAVED%"
 rem Player cars (stage D): every PlayerCars.KINDS car boots as the player and gets a drive test.
 call :run fleet/player_cars "--headless --fixed-fps 120"
 call :run fleet/interior_fit --headless
+rem every player car's cabin: its own look, the road band clear, the driver fits
+call :run fleet/interior_unique --headless
+call :run fleet/sight_line --headless
+call :run fleet/driver_fit --headless
 call :run car/special_s0 "--headless --fixed-fps 120"
 rem ~17 s: full throttle at ~245 km/h across floating-origin recenters (the old ground-slab kick), at the game's 120 Hz.
 call :run world/recenter_kick "--headless --fixed-fps 120"

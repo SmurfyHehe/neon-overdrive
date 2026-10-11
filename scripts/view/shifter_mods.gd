@@ -25,6 +25,8 @@ const INK := Color("#15171C")
 const GRAPHITE := Color("#2A2E36")
 const AMBER := Color("#FFC066")
 const SODIUM := Color("#FF8A1F")
+## The knob designs that replace the car's own.
+const FITTED := ["ball", "weighted", "amber"]
 
 var frame: CockpitFrame
 var knob_id := ""
@@ -32,6 +34,7 @@ var short := false
 var _version := -1
 var _shaft: MeshInstance3D
 var _mat: Material
+var _stock_head: Mesh   # the car's own MANUAL knob (CockpitFrame._build_lever, per-car shifter)
 
 func _init(cockpit: CockpitFrame) -> void:
 	frame = cockpit
@@ -42,6 +45,9 @@ func _ready() -> void:
 	for c in frame.lever.get_children():
 		if c is MeshInstance3D:
 			_shaft = c   # the stick (CockpitFrame._build_lever adds one shaft mesh)
+	var own := frame.get_node_or_null(^"Lever/Knob/KnobH") as MeshInstance3D
+	if own != null:
+		_stock_head = own.mesh
 	apply()
 
 func _physics_process(_delta: float) -> void:
@@ -50,7 +56,7 @@ func _physics_process(_delta: float) -> void:
 
 ## The lever's length now (m), stock or short.
 func lever_length() -> float:
-	return CockpitFrame.LEVER_LEN * (CabinMods.SHORT_LEVER_SCALE if short else 1.0)
+	return frame.lever_len * (CabinMods.SHORT_LEVER_SCALE if short else 1.0)
 
 ## Fits the current CabinMods picks.
 func apply() -> void:
@@ -63,7 +69,8 @@ func apply() -> void:
 		_shaft.mesh = shaft_mesh(len, _shaft.mesh.surface_get_material(0) if _shaft.mesh is ArrayMesh and (_shaft.mesh as ArrayMesh).get_surface_count() > 0 else null)
 	var head := frame.get_node_or_null(^"Lever/Knob/KnobH") as MeshInstance3D
 	if head != null:
-		head.mesh = knob_mesh(knob_id, _mat)
+		# no knob fitted: the car's own (the ball the hand wraps, or its tee)
+		head.mesh = knob_mesh(knob_id, _mat) if knob_id in FITTED or _stock_head == null else _stock_head
 
 ## The stick: a silver rod up to the knob and a leather boot collar.
 static func shaft_mesh(len: float, mat: Material) -> ArrayMesh:

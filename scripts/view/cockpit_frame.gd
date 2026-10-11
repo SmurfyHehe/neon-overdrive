@@ -201,6 +201,7 @@ var _limit_wait := 0.0
 var lamps: MultiMeshInstance3D
 var lamp_text: Label3D
 var trinket: DashTrinket        # the charm on the rear-view mirror (CabinMods.trinket)
+var bobble: BobbleHead          # the bobble head on the passenger-side dash (CabinMods.bobble_for)
 var head_unit: HeadUnit         # the touch-screen radio on the centre stack
 var lever: Node3D
 var lever_knob: Node3D
@@ -274,6 +275,8 @@ func _ready() -> void:
 	# knob / short shifter, both reading CabinMods; before the layer pass.
 	trinket = DashTrinket.new(player, PlayerCar.chassis_kind())
 	add_child(trinket)
+	bobble = BobbleHead.new(player, PlayerCar.chassis_kind())
+	add_child(bobble)
 	add_child(ShifterMods.new(self))
 	mirrors = CockpitMirrors.new()
 	mirrors.name = "Mirrors"
@@ -300,6 +303,8 @@ func _ready() -> void:
 func set_cockpit(on: bool) -> void:
 	cockpit = on
 	mirrors.set_active(on)
+	if bobble != null:
+		bobble.set_active(on)   # built and bobbing only in this view
 	driver.set_cockpit(on)
 	var bit := MIRROR_ONLY_BIT if on else CAR_BIT
 	if player.chassis_visual != null:

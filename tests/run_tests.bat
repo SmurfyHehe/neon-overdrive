@@ -27,6 +27,8 @@ if "%NEON_TICKS%"=="" set "NEON_TICKS=60"
 if "%SOUND%"=="1" set "AUDIO="
 rem No traffic for the older drive-bot tests (they steer across lanes blind); the traffic_* tests ignore this and spawn their own.
 if "%NEON_TRAFFIC%"=="" set "NEON_TRAFFIC=0"
+rem No work board (Walt's orders at 6 a.m.) in the older tests that cross dawn; tests/core/shop_day.gd and tests/ui/work_board.gd set their own.
+if "%NEON_SHOP%"=="" set "NEON_SHOP=0"
 rem No patrol car (police F1) in the older drive tests; tests/traffic/police_*.gd set their own.
 if "%NEON_POLICE%"=="" set "NEON_POLICE=0"
 rem Straight road for the older drive tests (they steer blind down -Z); the curve tests set their own.
@@ -156,6 +158,9 @@ rem Work board W0: pay rules, the daily draw, shop pay into the bank once.
 call :run core/work_orders --headless
 rem Work board W1: the timing bar (4 styles, miss + redo, one press per key).
 call :run ui/timing_bar --headless
+rem Work board W2: the day step (shop_day: S1-S8) and the board screens (work_board).
+call :run core/shop_day "--headless --audio-driver Dummy"
+call :run ui/work_board --headless
 rem Police F0/F1: heat levels and icons, cop_can_see_player, headlights off hides, night one lines.
 call :run traffic/police_heat --headless
 rem Ending a run on a crash: the rules, the hit sensor, the crash screen; then the real restart.

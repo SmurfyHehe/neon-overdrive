@@ -100,6 +100,10 @@ var saver: SaveDirector
 ## Tonight's cash and the bank (F0, scripts/core/wallet.gd).
 var wallet: Node
 const Wallet := preload("res://scripts/core/wallet.gd")
+const ShopDay := preload("res://scripts/core/shop_day.gd")
+const WorkBoardScreen := preload("res://scripts/ui/work_board_screen.gd")
+## Walt's board for the day (W2); null-less: always exists, `enabled` says if it is live.
+var shop_day: Node
 ## A hard hit ends the run: rules, crash screen, morning (scripts/core/run_end.gd).
 var run_end: Node
 const RunEnd := preload("res://scripts/core/run_end.gd")
@@ -899,9 +903,20 @@ func _setup_game_state() -> void:
 	dawn_card.night_clock = night_clock
 	add_child(dawn_card)
 	dawn_card.bind_wallet(wallet)
-	add_child(GarageScreen.new(game_state, player))
+	var garage_screen := GarageScreen.new(game_state, player)
+	add_child(garage_screen)
 	garage_flow = GarageFlow.new(game_state, player)
 	add_child(garage_flow)
+	# Work board W2: Walt's board between the dawn card and the garage. On with
+	# the garage (NEON_SHOP=1 / 0 override it).
+	shop_day = ShopDay.new(wallet, night_clock)
+	shop_day.enabled = ShopDay.wants_shop(game_state.garage_enabled)
+	add_child(shop_day)
+	if shop_day.enabled:
+		shop_day.reload()
+		game_state.workboard_gate = shop_day.want_board
+		garage_screen.shop_day = shop_day
+		add_child(WorkBoardScreen.new(game_state, shop_day, wallet))
 	# Special vehicles: a flip ends the run (SpecialRunEnd). A restart is the
 	# stand-in until the run loop (stage C) owns what "ends the night" means.
 	var kind := PlayerCar.chassis_kind()

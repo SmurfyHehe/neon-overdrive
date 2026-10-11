@@ -35,7 +35,10 @@ extends Node
 # boot) and the garage behind it. Both are paused, neither is ever auto-paused
 # (a slow frame in the garage never opens the pause screen) and Esc does nothing
 # in them: "Go out" is the way back to the road (scripts/ui/garage_screen.gd).
-enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO, TITLE, WRECKED, STATION, WASH, DAWN, GARAGE }
+# WORKBOARD (work board W2, 2026-10-11): Walt's board, between the dawn card
+# and the garage. Paused, never auto-paused, Esc does nothing (like DAWN and
+# GARAGE); it reports as the garage (in_garage) for the frame cap and the rest.
+enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO, TITLE, WRECKED, STATION, WASH, DAWN, GARAGE, WORKBOARD }
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
 const TestMode := preload("res://scripts/core/test_mode.gd")
@@ -353,6 +356,25 @@ func _enter_dawn(entry: String) -> void:
 ## The dawn card is dismissed: on into the garage (no second entering signal).
 func dawn_continue() -> void:
 	if state == State.DAWN:
+		# A real dawn goes through Walt's board first, when the shop is on and
+		# today is not settled (workboard_gate is set by Game; unset = no board).
+		if garage_entry == ENTRY_DAWN and workboard_gate.is_valid() and workboard_gate.call(dawn_night):
+			_set_state(State.WORKBOARD)
+		else:
+			_set_state(State.GARAGE)
+
+## Asked on the dawn card's Continue: should the work board open? Takes the
+## night that just ended, returns a bool. Set by Game (ShopDay.want_board).
+var workboard_gate: Callable = Callable()
+
+## The garage's "Walt's board" row: back onto the board.
+func open_workboard() -> void:
+	if state == State.GARAGE:
+		_set_state(State.WORKBOARD)
+
+## The board is done (Head out, or the garage tag): on into the garage.
+func close_workboard() -> void:
+	if state == State.WORKBOARD:
 		_set_state(State.GARAGE)
 
 ## A mid-night visit: the car is stopped at the garage forecourt. Refused while
@@ -375,7 +397,7 @@ func open_garage(entry: String = ENTRY_FORECOURT) -> bool:
 
 ## True on the dawn card, in the garage, and in the wash opened from it.
 func in_garage() -> bool:
-	return state == State.DAWN or state == State.GARAGE \
+	return state == State.DAWN or state == State.GARAGE or state == State.WORKBOARD \
 			or (state == State.WASH and _wash_from_garage)
 
 ## "Go out": back to the road, the car parked outside with the engine off.
@@ -390,7 +412,7 @@ func leave_garage() -> void:
 func toggle_pause() -> void:
 	if state == State.WASH:
 		close_wash()  # Esc leaves the wash
-	elif state == State.DAWN or state == State.GARAGE:
+	elif state == State.DAWN or state == State.GARAGE or state == State.WORKBOARD:
 		pass          # no pause screen here: Continue and Go out are the way on
 	elif state == State.TUNING:
 		close_tuning()  # Esc backs out of the tuning panel

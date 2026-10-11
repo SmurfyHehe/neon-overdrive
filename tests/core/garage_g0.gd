@@ -43,6 +43,7 @@ var game: Node
 func _initialize() -> void:
 	OS.set_environment("NEON_TRAFFIC", "0")
 	OS.set_environment("NEON_GARAGE", "1")
+	OS.set_environment("NEON_SHOP", "0")   # no work board: this test walks the dawn card straight into the garage
 	OS.set_environment("NEON_CURVES", "0")
 	OS.set_environment("NEON_HILLS", "0")
 	SaveStore.root = "user://test_garage_g0"

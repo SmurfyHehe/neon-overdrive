@@ -271,8 +271,11 @@ if /i not "%~1"=="quick" (
 	call :run world/water_drive "--headless --fixed-fps 120"
 	rem ~8 s: brake + throttle from a stop holds the fronts only (line lock burnout).
 	call :run car/burnout_line_lock "--headless --fixed-fps 120"
-	rem ~3 min: fuel burn calibration, a dry tank in every gearbox, limp causes (slowest wins), refuel from the bank.
+	rem ~3 min: fuel burn calibration, a dry tank in every gearbox (the engine starves, 50 km/h or more), dry + hot, refuel from the bank.
 	call :run car/fuel_limp "--headless --fixed-fps 60"
+	rem ~1 min: limp by physics: multipliers per cause, worst wins, the stumble pattern, a wheel on its rim, and each cause's top speed (50 km/h or more).
+	rem This runs the selected car; for the per-car table set NEON_CAR=<kind> and run it once per car.
+	call :run car/limp_physics "--headless --fixed-fps 60"
 	rem ~25 s: damage slice 1: hits by direction, crash pull, rear sag, dead engine, lamps, steam, rattle, garage/station/tow.
 	call :run car/car_damage "--headless --fixed-fps 120"
 	rem ~2 min: the Damage setting (Full / Light / Looks only), difficulty, and the radiator heat window per difficulty.

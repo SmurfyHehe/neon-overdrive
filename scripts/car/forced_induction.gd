@@ -20,6 +20,8 @@ extends RefCounted
 class_name ForcedInduction
 
 const META := &"forced_induction"
+## Meta the car sets to scale the boost (limp-home: 0 = wastegate wide open).
+const BOOST_MULT_META := &"boost_mult"
 const KIND_NAMES := ["single", "twin", "roots", "sequential", "twincharger"]
 ## Each kind's stages, [name, type], in the order `stages` lists them.
 const STAGE_DEFS := {
@@ -87,6 +89,16 @@ static func step(v: Vehicle, delta: float) -> float:
 	var fi := of(v, true)
 	var mult := fi._step(v, delta)
 	v._prev_throttle = v.throttle_amount
+	# limp-home opens the wastegate (LimpMode.boost_mult, set by the car): the
+	# boost and what it adds to the torque are scaled, 0 = none at all
+	var cut := float(v.get_meta(BOOST_MULT_META, 1.0))
+	if cut < 1.0:
+		cut = maxf(cut, 0.0)
+		v.boost *= cut
+		fi.boost = v.boost
+		fi.boost_frac *= cut
+		mult = 1.0 + (mult - 1.0) * cut
+		fi.torque_mult = mult
 	return mult
 
 ## The car's ForcedInduction, or null on a naturally aspirated car (make = true

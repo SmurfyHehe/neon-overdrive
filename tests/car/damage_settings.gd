@@ -146,7 +146,7 @@ func _unit_tests() -> void:
 		rad.difficulty = k
 		rad.parts[D.Part.RADIATOR] = 1.0
 		rad.rebuild_offsets()
-		_check(rad.engine_cap_kmh() == INF and not rad.is_engine_dead(), "%s: a 100 %% radiator sets no limp of its own" % name)
+		_check(not rad.engine_limp() and not rad.is_engine_dead(), "%s: a 100 %% radiator sets no limp of its own" % name)
 		_check(rad.cooling_mult() == 1.0, "%s: a 100 %% radiator cools fully until its coolant has leaked" % name)
 		rad.step_coolant(10000.0, 1.0, true)
 		_check(rad.coolant == 0.0 and rad.cooling_mult() > 0.0 and rad.cooling_mult() < 0.1, "%s: with the coolant gone a little cooling is left (%.3f)" % [name, rad.cooling_mult()])

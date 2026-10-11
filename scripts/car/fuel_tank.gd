@@ -5,7 +5,8 @@ extends RefCounted
 # - the tank starts about a third full, so the first stop for fuel comes early
 # - one fill-up lasts most of a night (sized when a night was 20 real minutes; it is 40 since
 #   2026-10-09, so a tank now covers under half: recalibrate if wanted)
-# - a dry tank never ends the run: the car limps at LimpMode.FUEL_KMH
+# - a dry tank never ends the run: the engine starves and stumbles (LimpMode,
+#   the FUEL cause: it cuts out for a moment again and again), it never stops
 # - fuel is paid from the BANK, never the night's pot
 #
 # Burn follows engine power: a little at idle, the rest in proportion to load,

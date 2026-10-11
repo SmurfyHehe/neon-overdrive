@@ -27,7 +27,7 @@ const L := RoadChunkBuilder.CHUNK_LEN
 ## Where the first station is and how far apart they are, metres of road.
 ## A third of a tank (the start) lasts about 9 km of mixed driving and the
 ## FUEL light leaves about 3-4 km (FuelTank), so a station is always in reach
-## of the light; a dry tank still limps there at LimpMode.FUEL_KMH.
+## of the light; a dry tank still limps there (LimpMode: the engine starves, it never stops).
 const DEFAULT_FIRST_S := 1500.0
 const SPACING := 3000.0
 ## The bay, relative to the station centre: car centre within BAY_HALF_S

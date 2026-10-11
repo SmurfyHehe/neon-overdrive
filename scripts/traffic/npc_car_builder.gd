@@ -323,6 +323,7 @@ static var _body_meshes := {}   # "kind|build" -> ArrayMesh
 static var _wheel_meshes := {}  # "kind|build|front/rear" -> ArrayMesh
 static var _fit_counts := {}    # "kind|build" -> CarFittings counts
 static var _fit_points := {}    # "kind|build" -> CarFittings points
+static var _fit_frames := {}    # "kind|build" -> windscreen frame and fuel flap site
 static var _body_mat: ShaderMaterial
 static var _wheel_mat: ShaderMaterial
 static var _glass_mat: StandardMaterial3D
@@ -454,6 +455,8 @@ static func chassis_visual(kind: String, build: String, paint: Color, role := ""
 	# Which small parts this body carries (CarSlots, tests/car/required_slots.gd).
 	root.set_meta("fittings", fittings(kind, build))
 	root.set_meta("fitting_points", _fit_points["%s|%s" % [kind, build]])
+	root.set_meta("windscreen", _fit_frames["%s|%s" % [kind, build]].screen)
+	root.set_meta("fuel_flap_site", _fit_frames["%s|%s" % [kind, build]].flap)
 	Undercarriage.attach(root, undercarriage_params(kind, build), role)
 	return root
 
@@ -520,6 +523,7 @@ static func body_mesh(kind: String, build: String) -> ArrayMesh:
 		var fit := CarFittings.build(key, tris, mats, data.NAMES, data.GLASS, data.EMISSIVE, data.COLORS)
 		_fit_counts[key] = fit.counts
 		_fit_points[key] = fit.points
+		_fit_frames[key] = {"screen": fit.get("screen", {}), "flap": fit.get("flap", {})}
 		_body_meshes[key] = _build_mesh(data, tris, mats, true, fit)
 	return _body_meshes[key]
 

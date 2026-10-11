@@ -107,6 +107,7 @@ static var _wheel_mat: ShaderMaterial
 ## CarFittings' counts and points for this body (see NpcCarBuilder.fittings).
 static var _fit_counts := {}
 static var _fit_points := {}
+static var _fit_frames := {}
 
 ## Body, glass, lights and the sticker slot markers -- no wheels, those hang
 ## under the physics wheel nodes (build_wheel_visual). Metas, read by CarFx
@@ -163,6 +164,8 @@ static func build_chassis_visual(paint: Color = PAINT) -> Node3D:
 	# Which small parts this body carries (CarSlots, tests/car/required_slots.gd).
 	root.set_meta("fittings", _fit_counts)
 	root.set_meta("fitting_points", _fit_points)
+	root.set_meta("windscreen", _fit_frames.screen)
+	root.set_meta("fuel_flap_site", _fit_frames.flap)
 	# The real underside (car-parts plan, section 5b): one more draw call.
 	Undercarriage.attach(root, undercarriage_params(), Undercarriage.ROLE_PLAYER)
 	return root
@@ -323,6 +326,7 @@ static func _build_mesh(tris: PackedVector3Array, mats: PackedByteArray, is_body
 		var fit := CarFittings.build(KIND + "|" + Data.BUILD, tris, mats, Data.NAMES, Data.GLASS, Data.EMISSIVE, Data.COLORS)
 		_fit_counts = fit.counts
 		_fit_points = fit.points
+		_fit_frames = {"screen": fit.get("screen", {}), "flap": fit.get("flap", {})}
 		NpcCarBuilder._append_fittings(groups, fit)
 	var mesh := ArrayMesh.new()
 	for kind in ["body", "glass", "glow"]:

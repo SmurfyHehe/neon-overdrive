@@ -109,7 +109,7 @@ static func build(key: String, tris: PackedVector3Array, mats: PackedByteArray, 
 		return _cache[key]
 	var out := {"body": _group(), "glow": _group(), "counts": {}, "points": {}}
 	var counts: Dictionary = out.counts
-	for k in ["brake_lamp", "third_brake", "reverse", "blinker_front", "blinker_rear", "plate_front", "plate_rear"]:
+	for k in ["brake_lamp", "third_brake", "reverse", "blinker_front", "blinker_rear", "plate_front", "plate_rear", "fuel_flap"]:
 		counts[k] = 0
 	var points: Dictionary = out.points
 
@@ -218,6 +218,53 @@ static func build(key: String, tris: PackedVector3Array, mats: PackedByteArray, 
 		_lens(out.glow, p, third.n, 0.30, 0.035, tail_col, TAG_THIRD)
 		counts["third_brake"] = 1
 		points["third_brake"] = [p]
+	# The windscreen's frame, for the wipers: the glass at the centre line seen
+	# from the front, lowest to highest point, and its outward normal.
+	var low := {}
+	var high := {}
+	var yy := top
+	while yy > top * 0.30:
+		var h := _ray_z(tris, mats, 0.0, yy, -1)
+		if not h.is_empty() and glass_ids[h.mat] != 0 and h.n.z < -0.15:
+			if high.is_empty():
+				high = h
+			low = h
+		yy -= 0.02
+	if not low.is_empty():
+		out["screen"] = {"base": low.p, "top": high.p, "normal": low.n, "half_w": half_w}
+		points["screen"] = [low.p]
+
+	# The fuel filler: a dark recess and a cap on the right rear quarter, just
+	# above the belt line. The flap (CarFuelFlap) closes over it.
+	var z_rear := 0.0
+	for p in tris:
+		z_rear = maxf(z_rear, p.z)
+	var flap_hit := {}
+	for dz in [-0.95, -1.15, -0.75, -1.35, -0.55]:
+		for fy in [0.72, 0.66, 0.78, 0.60, 0.86]:
+			var h := _ray_x(tris, mats, float(fy), z_rear + float(dz))
+			if h.is_empty() or bad[h.mat] != 0 or h.n.x < 0.6:
+				continue
+			flap_hit = h
+			break
+		if not flap_hit.is_empty():
+			break
+	if not flap_hit.is_empty():
+		var recess := Color("#0B0E14").srgb_to_linear()
+		var cap := Color("#9AA0AA").srgb_to_linear()
+		var fa := _axes(flap_hit.n)
+		var fu: Vector3 = fa[0] * 0.085
+		var fv: Vector3 = fa[1] * 0.06
+		var fc: Vector3 = flap_hit.p + flap_hit.n * 0.004
+		_emit_quad(out.body, fc - fu - fv, fc + fu - fv, fc + fu + fv, fc - fu + fv, flap_hit.n, recess)
+		var cu: Vector3 = fa[0] * 0.025
+		var cv: Vector3 = fa[1] * 0.025
+		var cc: Vector3 = flap_hit.p + flap_hit.n * 0.007
+		_emit_quad(out.body, cc - cu - cv, cc + cu - cv, cc + cu + cv, cc - cu + cv, flap_hit.n, cap)
+		counts["fuel_flap"] = 1
+		points["fuel_flap"] = [flap_hit.p]
+		out["flap"] = {"p": flap_hit.p, "n": flap_hit.n}
+
 	# Never grow the sheet's own box: a lens on a sloped corner would stick out
 	# past the design's extents (the fleet check holds length and width to the sheet).
 	var lo := Vector3(INF, INF, INF)
@@ -359,3 +406,34 @@ static func _plate(g: Array, p: Vector3, n: Vector3, w: float, h: float, seed_ke
 		var cu: Vector3 = ax[0] * (cw * 0.5)
 		var cv: Vector3 = ax[1] * (ch * 0.5)
 		_emit_quad(g, c - cu - cv, c + cu - cv, c + cu + cv, c - cu + cv, n, ink)
+
+## Nearest surface along x from the car's right: the largest x among
+## triangles facing +x at (y, z). Returns {"p", "n", "mat"} or {}.
+static func _ray_x(tris: PackedVector3Array, mats: PackedByteArray, y: float, z: float) -> Dictionary:
+	var best_x := -INF
+	var best := {}
+	for t in mats.size():
+		var a := tris[t * 3]
+		var b := tris[t * 3 + 1]
+		var c := tris[t * 3 + 2]
+		if y < minf(a.y, minf(b.y, c.y)) or y > maxf(a.y, maxf(b.y, c.y)):
+			continue
+		if z < minf(a.z, minf(b.z, c.z)) or z > maxf(a.z, maxf(b.z, c.z)):
+			continue
+		var n := (b - a).cross(c - a)
+		if n.x <= 0.0:
+			continue
+		var d := (b.z - c.z) * (a.y - c.y) + (c.y - b.y) * (a.z - c.z)
+		if absf(d) < 1e-12:
+			continue
+		var w0 := ((b.z - c.z) * (y - c.y) + (c.y - b.y) * (z - c.z)) / d
+		var w1 := ((c.z - a.z) * (y - c.y) + (a.y - c.y) * (z - c.z)) / d
+		var w2 := 1.0 - w0 - w1
+		if w0 < 0.0 or w1 < 0.0 or w2 < 0.0:
+			continue
+		var x := w0 * a.x + w1 * b.x + w2 * c.x
+		if x <= best_x:
+			continue
+		best_x = x
+		best = {"p": Vector3(x, y, z), "n": n.normalized(), "mat": mats[t]}
+	return best

@@ -154,10 +154,14 @@ func _sample(v: Vehicle, label: String) -> void:
 ## crash, not a scrape). The barriers (R1, #303) stand 1 m left of the inner
 ## lane's edge; a swerve from lane 1 drifts onto them (car centre at x 1.0,
 ## barrier face at 0.17, measured 2026-10-09).
+## A gas station's walls, islands and shop (GasStation "Lot"/"Island", the
+## four fixed stations on Loop 1 since eac968f) are buildings too: the tuned
+## brake-in-turn runs can slide across into the oncoming side's lot.
 func _touches_road(v: Vehicle) -> bool:
 	for b in v.get_colliding_bodies():
 		var n := String(b.name)
-		if not (n.begins_with("Boundary") or n.begins_with("Building") or n == "BarrierCol"):
+		var station := b.get_parent() != null and String(b.get_parent().name).begins_with("GasStation")
+		if not (n.begins_with("Boundary") or n.begins_with("Building") or n == "BarrierCol" or station):
 			return true
 	return false
 

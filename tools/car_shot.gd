@@ -16,7 +16,7 @@ extends SceneTree
 # shoots its one-piece sheet body, NEON_CAR_PANELS=open the lids, doors and
 # fuel flap open.
 #
-# Writes user://car_shots/<kind>_chase.png, _front.png, _side.png and _rear.png (the
+# Writes user://car_shots/<kind>_chase.png, _front.png, _side.png, _rear.png and _far.png (the
 # path is printed at the end). Any NpcCarBuilder kind works, traffic and
 # police included, so a new car can be shot next to the one it replaces.
 
@@ -45,7 +45,8 @@ func _run() -> void:
 		# car space: X right, -Z forward
 		# the car may be rolling (the harness boots it driving), so the camera
 		# follows it every frame until the shot is taken
-		for shot in [["front", Vector3(3.6, 1.4, -6.2)], ["side", Vector3(7.0, 1.2, 0.0)], ["rear", Vector3(-3.4, 1.5, 6.0)]]:
+		for shot in [["front", Vector3(3.6, 1.4, -6.2)], ["side", Vector3(7.0, 1.2, 0.0)], ["rear", Vector3(-3.4, 1.5, 6.0)],
+				["far", Vector3(0.0, 1.5, 100.0)]]:   # what the car behind sees at 100 m
 			cam.make_current()
 			for i in 12:
 				cam.global_position = car.global_transform * Vector3(shot[1])

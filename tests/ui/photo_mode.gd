@@ -37,6 +37,12 @@ func _visible_layers() -> int:
 			n += 1
 	return n
 
+func _all_layers_kept() -> bool:
+	for l in root.find_children("*", "CanvasLayer", true, false):
+		if l.visible and not PhotoMode._keeps(l):
+			return false
+	return true
+
 func _physics_process(_delta: float) -> bool:
 	tick += 1
 	game = current_scene
@@ -107,6 +113,48 @@ func _physics_process(_delta: float) -> bool:
 			_check(not paused, "the tree should run again")
 			_check(cam.current and not photo.free_cam.current, "the chase camera should be current again")
 			_check(_visible_layers() == layers_before, "HUD layers should be restored (%d vs %d)" % [_visible_layers(), layers_before])
+			# Second route: the pause menu's "Photo mode" row. The pause look's
+			# orbit camera is current there and must hand over to the free camera.
+			gs.pause()
+			start_tick = tick
+			phase = 4
+		4:
+			if tick - start_tick < 5:
+				return false
+			_check(gs.state == GameState.State.PAUSED, "pause should pause, state %d" % gs.state)
+			gs.open_photo_from_pause()
+			start_tick = tick
+			phase = 5
+		5:
+			if tick - start_tick < 5:
+				return false
+			var look: PauseLook
+			for c in game.get_children():
+				if c is PauseLook:
+					look = c
+			_check(gs.state == GameState.State.PHOTO, "the pause row should enter photo mode, state %d" % gs.state)
+			_check(photo.free_cam.current, "from the pause menu the free camera should be current")
+			_check(not cam.current, "from the pause menu the game camera must not take the view back")
+			_check(look != null and not look.orbit.current, "from the pause menu the orbit camera must not be current")
+			_check(_visible_layers() == 0 or _all_layers_kept(), "from the pause menu all HUD layers should be hidden")
+			_press("pause", true)
+			start_tick = tick
+			phase = 6
+		6:
+			if tick - start_tick < 3:
+				return false
+			_press("pause", false)
+			_check(gs.state == GameState.State.PAUSED, "Esc in photo mode from the pause menu goes back to pause, state %d" % gs.state)
+			_check(not photo.free_cam.current, "the free camera should let go on leaving")
+			gs.resume()
+			start_tick = tick
+			phase = 7
+		7:
+			if tick - start_tick < 5:
+				return false
+			_check(gs.state == GameState.State.PLAYING and not paused, "resume should run the game again")
+			_check(cam.current and not photo.free_cam.current, "the chase camera should be current after resume")
+			_check(_visible_layers() == layers_before, "HUD layers should be back after resume (%d vs %d)" % [_visible_layers(), layers_before])
 			return _end("")
 	return tick > TIMEOUT_TICKS and _end("timed out in phase %d" % phase)
 

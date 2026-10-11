@@ -13,6 +13,12 @@ extends SceneTree
 #   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/audio/sound_listen_pack.gd
 # Set LISTEN_DIR=<folder> to choose where the clips go
 # (default user://listen_pack_sound_fixes).
+# Set LISTEN_ONLY=11,12,25 to render only the clips whose number is listed.
+#
+# Crash clips (CRASH_CLIPS) also get a "_laptop" copy, high-passed at 200 Hz:
+# roughly what laptop speakers play of it. For those clips the run prints the
+# crash bus's own peak, before the Master limiter: over -1 dB is what the
+# limiter takes off.
 
 const GAP := 0.6   # s of unrecorded settling between clips
 
@@ -42,7 +48,12 @@ const CLIPS := [
 	["22_manholes", 5.0, "Road at 90 km/h, two manhole covers (front then rear wheel each)."],
 	["23_radio_tunnel_and_bridge", 14.0, "Radio only, cockpit: clear 3 s, into a tunnel (signal fades, drops, hiss), out again, then under a bridge (breaking up)."],
 	["24_engine_cooling_ticks", 25.0, "Hot engine switched off: 15 s just after stopping, then 10 s from 40 s later (slower, quieter)."],
+	["25_smash_concrete", 10.0, "Highway-speed wall hits, 3 s apart: 15, 20 and 25 m/s (54, 72, 90 km/h of speed lost)."],
+	["26_same_hit_x5", 8.5, "The same 9 m/s wall hit five times, 1.5 s apart: five different crashes."],
+	["27_hits_cockpit", 9.0, "Clip 11's hits off a wall, heard from the cockpit with the window up."],
 ]
+const CRASH_CLIPS := ["11", "12", "13", "14", "25", "26", "27"]
+const LAPTOP_HZ := 200.0
 
 var game: Node
 var p: PlayerCar
@@ -52,6 +63,8 @@ var persp: PerspectiveAudio
 var radio: RadioManager
 var drive: DrivelineAudio
 var record: AudioEffectRecord
+var crash_record: AudioEffectRecord   # on the crash sounds' own bus, before the Master limiter
+var only := PackedStringArray()
 var dir := ""
 var clip := -1
 var clip_t := 0.0
@@ -71,6 +84,8 @@ func _initialize() -> void:
 	if dir == "":
 		dir = "user://listen_pack_sound_fixes"
 	DirAccess.make_dir_recursive_absolute(dir)
+	if OS.get_environment("LISTEN_ONLY") != "":
+		only = OS.get_environment("LISTEN_ONLY").split(",")
 	record = AudioEffectRecord.new()
 	AudioServer.add_bus_effect(0, record)
 	game = (load("res://Game.tscn") as PackedScene).instantiate()
@@ -85,7 +100,7 @@ func _drive(c: PlayerCar) -> void:
 ## Mutes these buses and unmutes the rest; the radio (Music) stays muted
 ## unless `radio` is true.
 func _mute(buses: Array, radio_on := false) -> void:
-	for b in [&"Engine", &"Tires", &"World", &"Music", &"UI"]:
+	for b in [&"Engine", &"Tires", &"Crash", &"World", &"Music", &"UI"]:
 		var i := AudioServer.get_bus_index(b)
 		if i >= 0:
 			AudioServer.set_bus_mute(i, (b == &"Music" and not radio_on) or b in buses)
@@ -110,6 +125,9 @@ func _process(delta: float) -> bool:
 		persp = (game.get("camera") as ChaseCamera).perspective
 		radio = game.get("radio")
 		radio.next_station()   # tune now, so the tracks have loaded by the radio clip
+		# after PerspectiveAudio's filter, so it hears the bus as the Master does
+		crash_record = AudioEffectRecord.new()
+		AudioServer.add_bus_effect(AudioServer.get_bus_index((crash.get_child(0) as AudioStreamPlayer).bus), crash_record)
 		gap_t = 1.5   # let the game settle first
 		return false
 	if not recording:
@@ -124,6 +142,8 @@ func _process(delta: float) -> bool:
 	return false
 
 func _start(i: int) -> void:
+	while i < CLIPS.size() and not only.is_empty() and not (String(CLIPS[i][0]).substr(0, 2) in only):
+		i += 1
 	if i >= CLIPS.size():
 		_done()
 		return
@@ -132,6 +152,7 @@ func _start(i: int) -> void:
 	fired.clear()
 	recording = true
 	record.set_recording_active(true)
+	crash_record.set_recording_active(true)
 
 func _stop() -> void:
 	record.set_recording_active(false)
@@ -139,7 +160,13 @@ func _stop() -> void:
 	var wav := record.get_recording()
 	var path := dir.path_join(CLIPS[clip][0] + ".wav")
 	var err := wav.save_to_wav(path) if wav != null else FAILED
-	print("%-36s %4.1f s -> %s" % [CLIPS[clip][0], CLIPS[clip][1], "ok" if err == OK else "error %d" % err])
+	print("%-36s %4.1f s -> %s, peak %.1f dB" % [CLIPS[clip][0], CLIPS[clip][1], "ok" if err == OK else "error %d" % err, _peak_db(wav)])
+	crash_record.set_recording_active(false)
+	if String(CLIPS[clip][0]).substr(0, 2) in CRASH_CLIPS and wav != null:
+		print("    crash bus alone, before the limiter: peak %.1f dB" % _peak_db(crash_record.get_recording()))
+		var thin := _high_passed(wav, LAPTOP_HZ)
+		if thin != null:
+			thin.save_to_wav(dir.path_join(CLIPS[clip][0] + "_laptop.wav"))
 	manifest.append("%s.wav  (%.0f s)  %s" % [CLIPS[clip][0], CLIPS[clip][1], CLIPS[clip][2]])
 	# back to neutral for the next clip
 	car.forced = {"speed": 0.0, "on_road": 0.0}
@@ -193,14 +220,30 @@ func _run(name: String, t: float, dur: float) -> void:
 			car.forced = {}
 			throttle = 1.0 if t < 10.0 else 0.0
 			brake = 0.0 if t < 10.0 else 0.8
-		"11", "12", "13":
+		"11", "12", "13", "27":
 			_mute([&"Engine", &"World"])
 			car.forced = {"speed": 0.0, "on_road": 0.0}
-			var hits := [2.0, 2.0, 4.0, 5.0, 6.5, 8.0, 12.0, 14.0]
+			persp.set_cockpit(name.begins_with("27"))
+			# the last one stays just under the smash size (14 m/s; clip 25 is those)
+			var hits := [2.0, 2.0, 4.0, 5.0, 6.5, 8.0, 12.0, 13.5]
 			var i := int(t)
 			if t >= 0.5 and i < hits.size() and not fired.has(i):
 				fired[i] = true
-				crash.impact(hits[i], {"11": "concrete", "12": "metal", "13": "car"}[name.substr(0, 2)])
+				crash.impact(hits[i], {"11": "concrete", "12": "metal", "13": "car", "27": "concrete"}[name.substr(0, 2)])
+		"25":
+			_mute([&"Engine", &"World"])
+			car.forced = {"speed": 0.0, "on_road": 0.0}
+			var i := int(t / 3.0)
+			if t >= 0.5 and i < 3 and not fired.has(i):
+				fired[i] = true
+				crash.impact([15.0, 20.0, 25.0][i], "concrete")
+		"26":
+			_mute([&"Engine", &"World"])
+			car.forced = {"speed": 0.0, "on_road": 0.0}
+			var i := int((t - 0.5) / 1.5)
+			if t >= 0.5 and i < 5 and not fired.has(i):
+				fired[i] = true
+				crash.impact(9.0, "concrete")
 		"14":
 			_mute([&"Engine", &"World"])
 			car.forced = {"speed": 0.0, "on_road": 0.0}
@@ -253,13 +296,45 @@ func _run(name: String, t: float, dur: float) -> void:
 				fired.later = true
 				drive.cooling = 40.0
 
+## Peak of a 16-bit recording, dB (0 = full scale).
+func _peak_db(wav: AudioStreamWAV) -> float:
+	if wav == null or wav.format != AudioStreamWAV.FORMAT_16_BITS:
+		return -100.0
+	var d := wav.data
+	var peak := 0
+	for i in d.size() / 2:
+		peak = maxi(peak, absi(d.decode_s16(i * 2)))
+	return linear_to_db(maxf(peak / 32768.0, 1e-5))
+
+## A copy of a 16-bit recording with everything under `hz` taken out (24 dB an
+## octave), each channel on its own.
+func _high_passed(wav: AudioStreamWAV, hz: float) -> AudioStreamWAV:
+	if wav.format != AudioStreamWAV.FORMAT_16_BITS:
+		return null
+	var ch := 2 if wav.stereo else 1
+	var src := wav.data
+	var out := PackedByteArray()
+	out.resize(src.size())
+	for c in ch:
+		var a := AudioDsp.hp(float(wav.mix_rate), hz)
+		var b := AudioDsp.hp(float(wav.mix_rate), hz)
+		for i in src.size() / (2 * ch):
+			var at := (i * ch + c) * 2
+			out.encode_s16(at, int(clampf(b.step(a.step(src.decode_s16(at) / 32768.0)), -1.0, 1.0) * 32767.0))
+	var copy := AudioStreamWAV.new()
+	copy.format = wav.format
+	copy.mix_rate = wav.mix_rate
+	copy.stereo = wav.stereo
+	copy.data = out
+	return copy
+
 func _done() -> void:
 	var f := FileAccess.open(dir.path_join("listen_pack.txt"), FileAccess.WRITE)
 	if f != null:
 		f.store_string("Sound fixes listen pack (2026-10-08). Every sound is generated in code; nothing recorded.\n\n" + "\n".join(manifest) + "\n")
 		f.close()
 	print("listen pack: %d clips in %s" % [manifest.size(), ProjectSettings.globalize_path(dir)])
-	for b in [&"Engine", &"Tires", &"World", &"Music", &"UI"]:
+	for b in [&"Engine", &"Tires", &"Crash", &"World", &"Music", &"UI"]:
 		var i := AudioServer.get_bus_index(b)
 		if i >= 0:
 			AudioServer.set_bus_mute(i, false)

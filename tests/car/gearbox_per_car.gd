@@ -17,7 +17,7 @@ extends SceneTree
 ## Forward gears each car carries.
 const GEARS := {
 	"p0_beater": 5, "p1_coupe": 5, "p2_hothatch": 5, "p3_tuner": 5,
-	"p4_kei": 5, "p5_muscle": 4, "p6_crossover": 5, "p10_truck": 4,
+	"p4_kei": 5, "p5_muscle": 4, "p6_crossover": 5, "p10_truck": 4, "p8_driftcoupe": 5,
 	"p7_wagon": 4, "p17_work_pickup": 5,
 	# the specials drive the coupe's spec until their own (S0 stand-ins)
 	"m1_monster": 5, "l1_lowrider": 5,
@@ -33,8 +33,9 @@ const SPEED := {
 	"p3_tuner": [7.5, 210.0, 245.0],
 	"p4_kei": [12.5, 170.0, 200.0],
 	"p5_muscle": [5.8, 257.0, 300.0],
-	"p6_crossover": [6.5, 225.0, 262.0],
+	"p6_crossover": [7.3, 208.0, 242.0],
 	"p10_truck": [7.5, 205.0, 248.0],
+	"p8_driftcoupe": [6.5, 228.0, 250.0],   # measured 5.73 s, 238.5 km/h (#487)
 	"p7_wagon": [12.0, 158.0, 185.0],
 	"p17_work_pickup": [7.3, 212.0, 245.0],
 	"m1_monster": [6.4, 235.0, 250.0],

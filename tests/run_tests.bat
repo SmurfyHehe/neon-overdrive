@@ -255,6 +255,7 @@ call :run fx/exhaust_flames --headless
 call :run world/boundary_walls --headless
 rem Roadside kit: where hydrants, bins, dumpsters, cones, jersey runs and kerb rails land, per district; collision; determinism.
 call :run world/roadside_kit --headless
+call :run world/prop_ghosts "--headless --fixed-fps 60"
 rem ~1 min: the player into the out-of-bounds wall at 16 speeds and angles, at the game's 120 Hz.
 call :run car/wall_hit "--headless --fixed-fps 120"
 rem ~4 min: off the map (under the road, outside or over the walls, off the road's end): faded and put back, free.

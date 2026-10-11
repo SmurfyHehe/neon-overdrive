@@ -296,6 +296,23 @@ func _wall_shots(b: HeadlightBeams) -> void:
 	_check(l_lo > d_lo + 0.03, "low beam does not light the wall below the lamp (%.3f vs %.3f)" % [l_lo, d_lo])
 	_check(l_hi < d_hi + 0.015, "low beam lights the wall above the cut-off (%.3f vs %.3f dark)" % [l_hi, d_hi])
 	_check(h_hi > d_hi + 0.03, "high beam does not light the wall above the lamp (%.3f vs %.3f)" % [h_hi, d_hi])
+	# Range: the same wall 70 m out. Lit by the low beam (100 m) and not by
+	# the dark frame, below the lamp's height. (Bare asphalt cannot show this:
+	# the beam meets the ground about 35 m out and lights it at a graze after
+	# that, and an earlier version of the road check below only passed because
+	# a traffic car left standing ahead was lit instead, #561.)
+	wall.global_position = Vector3(lane, 3.0, pz - 70.0)
+	cam.global_position = Vector3(lane + 4.0, 1.4, pz - 52.0)
+	cam.look_at(Vector3(lane, 1.6, pz - 70.0))
+	player.set_headlights(false)
+	var far_dark := await _shot("wall_70_lights_off")
+	player.set_headlights(true)
+	var far_low := await _shot("wall_70_low_beam")
+	var far_b := Vector3(lane, 0.25, pz - 70.0)
+	var fd := _lum(far_dark, far_b)
+	var fl := _lum(far_low, far_b)
+	print("headlight_beams: wall 70 m out, below the lamp: lights off %.3f, low %.3f" % [fd, fl])
+	_check(fl > fd + 0.02, "low beam does not reach a wall 70 m out (%.3f vs %.3f dark)" % [fl, fd])
 	wall.queue_free()
 	await _road_shots(b, lane, pz)
 	cam.queue_free()
@@ -377,6 +394,9 @@ func _road_shots(b: HeadlightBeams, lane: float, pz: float) -> void:
 	# a single draw call or triangle over the old one.
 	_check(calls["low"] <= calls["before"], "low beam draws more calls than the old lamp (%d vs %d)" % [calls["low"], calls["before"]])
 	_check(prims["low"] <= prims["before"], "low beam draws more primitives than the old lamp (%d vs %d)" % [prims["low"], prims["before"]])
+	# The road itself, where the beam lands on it: 15 and 30 m out. (Not 60 m:
+	# see the wall at 70 m above, and #561.)
 	var low_row: Array = rows[2][1]
 	var off_row: Array = rows[0][1]
-	_check(low_row[2] > off_row[2] + 0.02, "low beam adds nothing to the road at 60 m (%.3f vs %.3f)" % [low_row[2], off_row[2]])
+	_check(low_row[0] > off_row[0] + 0.1, "low beam adds nothing to the road at 15 m (%.3f vs %.3f)" % [low_row[0], off_row[0]])
+	_check(low_row[1] > off_row[1] + 0.1, "low beam adds nothing to the road at 30 m (%.3f vs %.3f)" % [low_row[1], off_row[1]])

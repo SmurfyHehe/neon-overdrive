@@ -8,10 +8,12 @@ extends RefCounted
 #
 #   deck per act    acts are nights 1-10, 11-22, 23-30 (run-structure doc);
 #                   after the story, free mode runs in 12-night acts.
-#   season by date  the night's calendar month sets how often a front comes.
-#                   There is no story calendar yet, so a night's month is
-#                   START_MONTH plus 30 nights per month; one function
-#                   (month_of) to swap when the calendar lands.
+#   season by date  the night's season sets how often a front comes. Story
+#                   nights (1-30) take it from the calendar month: there is
+#                   no story calendar yet, so a night's month is START_MONTH
+#                   plus 30 nights per month (month_of). Free-mode nights
+#                   (31 on) take it from the 28-night season calendar
+#                   (SeasonCalendar, winter first), not from a month.
 #   fronts          rain comes as 1-3 night fronts, a dry night between them.
 #   storms          about 1 night in 20, never in nights 1-3, never two in a
 #                   row, always with a rain night before (the front arriving).
@@ -23,6 +25,7 @@ extends RefCounted
 # A storm is Weather.Level.DOWNPOUR. No class_name: preload it.
 
 const Weather := preload("res://scripts/world/weather.gd")
+const SeasonCalendar := preload("res://scripts/world/season_calendar.gd")
 
 const DRY := Weather.Level.DRY
 const RAIN := Weather.Level.RAIN
@@ -81,8 +84,15 @@ static func season_of(month: int) -> int:
 			return 2
 	return 3
 
+## Season of a night: 0 winter ... 3 autumn. Free-mode nights follow the
+## 28-night season calendar, story nights the placeholder month calendar.
+static func season_at(night: int) -> int:
+	if SeasonCalendar.is_free(night):
+		return SeasonCalendar.season_index(night)
+	return season_of(month_of(night))
+
 static func season_name(night: int) -> String:
-	return SEASON_NAMES[season_of(month_of(night))]
+	return SEASON_NAMES[season_at(night)]
 
 ## First and last night of the act this night belongs to.
 static func act_range(night: int) -> Vector2i:
@@ -121,7 +131,7 @@ static func generate(first: int, last: int, seed: int) -> Array:
 	# the next, and a dry night follows every front.
 	var i := 0
 	while i < n - 1:
-		var p: float = FRONT_CHANCE[season_of(month_of(first + i))]
+		var p: float = FRONT_CHANCE[season_at(first + i)]
 		if rng.randf() < p:
 			var roll := rng.randf()
 			var flen := 1 if roll < FRONT_LEN_CUM[0] else (2 if roll < FRONT_LEN_CUM[1] else 3)

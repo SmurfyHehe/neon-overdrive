@@ -119,6 +119,9 @@ var shop_day: Node
 ## A hard hit ends the run: rules, crash screen, morning (scripts/core/run_end.gd).
 var run_end: Node
 const RunEnd := preload("res://scripts/core/run_end.gd")
+## A car on its side or roof rights itself (scripts/car/roll_righting.gd).
+var roll_righting: Node
+const RollRighting := preload("res://scripts/car/roll_righting.gd")
 ## Gas stations on the road and the pump menu (stops, first slice).
 var gas_station: Node3D
 var gas_station_onc: Node3D
@@ -1015,13 +1018,6 @@ func _setup_game_state() -> void:
 		game_state.workboard_gate = shop_day.want_board
 		garage_screen.shop_day = shop_day
 		add_child(WorkBoardScreen.new(game_state, shop_day, wallet))
-	# Special vehicles: a flip ends the run (SpecialRunEnd). A restart is the
-	# stand-in until the run loop (stage C) owns what "ends the night" means.
-	var kind := PlayerCar.chassis_kind()
-	if SpecialRunEnd.has_limit(kind) and not TestBuild.on():  # sandbox: a flip does not restart
-		var special_end := SpecialRunEnd.new(player, kind)
-		special_end.run_ended.connect(func(_why: String) -> void: game_state.restart())
-		add_child(special_end)
 	radio = RadioManager.new()
 	radio.listener = player  # reception follows the car (tunnels, bridges)
 	radio.process_mode = Node.PROCESS_MODE_ALWAYS   # plays on, muffled, while paused (PauseLook)
@@ -1055,6 +1051,15 @@ func _setup_game_state() -> void:
 	run_end.game_state = game_state
 	add_child(run_end)
 	run_end.sensor.enabled = wrecks_on()
+	# No roll ends a run (TM2): any vehicle left on its side or roof rights
+	# itself, and the roll costs meter (roll_righting.gd). On in the test build
+	# too; the meter step follows the Wrecks setting like the hits do.
+	roll_righting = RollRighting.new(player, PlayerCar.chassis_kind())
+	roll_righting.run_end = run_end
+	roll_righting.counts = wrecks_on
+	roll_righting.rescue = rescue
+	roll_righting.camera = camera
+	add_child(roll_righting)
 	# The totalled meter survives a restart: the new car takes it back (a
 	# quit is not a free repair). TODO(save core): the saved car replaces this.
 	player.damage.take_carried()

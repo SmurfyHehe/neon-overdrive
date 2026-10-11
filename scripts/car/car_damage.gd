@@ -9,8 +9,8 @@ extends RefCounted
 #   the body (cost only).
 # - no performance loss under 25 % in a part (FREE_BELOW).
 # - the engine never dies from damage (the fun test, 2026-10-11): a wrecked
-#   radiator limps at ENGINE_LIMP_KMH, it does not stop the car. The tow is
-#   kept for a totalled car (`totalled`, unused for now).
+#   radiator overheats the engine into limp mode, it does not stop the car.
+#   The tow is kept for a totalled car (`totalled`, unused for now).
 # - parts break instead of the hood popping: nothing ever covers the view,
 #   and there are no dents until the car redesign (week of 2026-10-12). For
 #   now the signs are a DMG lamp, steam off a hurt radiator, a crash pull,
@@ -32,10 +32,18 @@ extends RefCounted
 # corners, an oblique one lands on one corner, and the shares add up to one.
 #
 # Effects (each only past FREE_BELOW, scaled from 0 there to full at 1.0):
-# - radiator: the engine cools worse (PowertrainHealth.cooling_mult), so it
-#   runs hot and the existing derate and OVERHEAT limp take over; from
-#   ENGINE_LIMP_AT the engine limps on its own (LimpMode.ENGINE), at
-#   ENGINE_LIMP_KMH, also at 1.0: it never dies.
+# - radiator: it leaks. The coolant drains while the engine runs, faster the
+#   more the radiator is broken and the wider the throttle; as it goes the
+#   engine cools worse (PowertrainHealth.cooling_mult), runs hot, and the
+#   existing derate and OVERHEAT limp take over. That heat is the only way a
+#   radiator limps the car (the heat window, brief DP4a, 2026-10-11): a 100 %
+#   radiator gives about heat_window_s of full-throttle driving
+#   (DamageDifficulty) before LIMP_C, and gentle driving lasts at least twice
+#   as long. A patch or a repair refills it. It never dies.
+#   (Why a leak and not a fixed cooling loss: measured on the coupe, a fixed
+#   loss has a cliff. Cooling x0.22 limps in 16 s, x0.24 never does, because
+#   the derate lowers the heat as fast as the loss raises it. No fixed number
+#   gives a 75 s window.)
 # - front corner: the wheel's toe is bent toward the hit, so the car pulls to
 #   that side (the "crash pull").
 # - rear corner: that spring is softer, the corner sags and the rear wallows.
@@ -50,11 +58,19 @@ extends RefCounted
 # a rear corner's spring. The body takes a quarter of it as cost. A
 # shallow, slow mount - a normal drive up a dropped kerb - does nothing.
 #
+# Difficulty and the Damage setting (brief DP7, 2026-10-11): `difficulty`
+# scales the damage per hit and the radiator's cooling loss (and holds the
+# auto-trim share and effects-at-once numbers for the handling work); `mode`
+# is the Settings > Game "Damage" row. Light halves every offset, Looks only
+# leaves them all neutral: lamps, steam, rattle and the repair bill are read
+# from the parts, so they stay.
+#
 # The state is plain numbers (to_dict / from_dict) so the save system and the
 # garage can keep it. Until the save system lands it lives as long as the car,
 # like FuelTank: Restart starts a fresh, undamaged car.
 
 const DamageOffsets := preload("res://scripts/car/damage_offsets.gd")
+const DamageDifficulty := preload("res://scripts/car/damage_difficulty.gd")
 
 enum Part { RADIATOR, STEER_FL, STEER_FR, SUSP_RL, SUSP_RR, BODY }
 enum Lamp { HEAD_L, HEAD_R, TAIL_L, TAIL_R }
@@ -74,11 +90,16 @@ const DV_FREE := 3.0
 const DAMAGE_PER_DV := 0.06
 ## Below this a part is cosmetic (Roy: no performance loss under 25 %).
 const FREE_BELOW := 0.25
-## The radiator from here makes the engine limp at ENGINE_LIMP_KMH.
-const ENGINE_LIMP_AT := 0.75
-const ENGINE_LIMP_KMH := 70.0   # the cap stays up at 100 %: the engine never dies
-## Engine cooling lost with a wrecked radiator (1.0 = no cooling at all).
-const COOLING_LOSS := 0.7
+## Engine cooling lost once the coolant is gone (1.0 = no cooling at all; some
+## always stays, so the heat sum never divides by zero). On the way there the
+## loss follows the cube of the share drained: the engine runs a little hot
+## for most of the window, then the lamp, the derate and the limp come close
+## together at the end.
+const COOLING_LOSS := 0.95
+## Share of the full-throttle drain an idling engine still has.
+const COOLANT_IDLE_DRAIN := 0.1
+## How much of each offset the Damage setting lets through, by GameSettings.Damage.
+const MODE_SCALE := [1.0, 0.5, 0.0]
 ## Toe (rad) a fully bent front arm adds. The Tuner's toe range is +-0.02;
 ## "slightly" (Roy) keeps this inside it.
 const MAX_TOE_BEND := 0.004
@@ -109,8 +130,14 @@ const TOW_PRICE := 150
 const PATCH_TO := FREE_BELOW - 0.01
 
 var enabled := true
+## GameSettings.Damage (Full / Light / Looks only) and the DamageDifficulty
+## index. The car copies both from GameSettings every tick (sync_settings).
+var mode: int = GameSettings.damage
+var difficulty: int = GameSettings.difficulty
 var parts: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 var lamps: Array[bool] = [false, false, false, false]   # true = broken
+## Coolant left, 1 = full, 0 = none. A broken radiator drains it (step_coolant).
+var coolant := 1.0
 ## The night number of the last free patch; one patch per night.
 var patched_night := -1
 ## 0..1, unused yet: a totalled car (the save core stores it).
@@ -126,6 +153,7 @@ var kerb_strikes := 0
 var last_kerb_strike := 0.0
 
 var _on_kerb: Array[bool] = [false, false, false, false]
+var _refilled := false
 var _prev_vel := Vector3.ZERO
 var _hit_dv := Vector3.ZERO
 var _hit_left := -1.0
@@ -152,16 +180,64 @@ func warning() -> bool:
 			return true
 	return lamps.has(true)
 
-## Engine cooling multiplier for PowertrainHealth.
+## Engine cooling multiplier for PowertrainHealth (before the Damage setting):
+## what is left with this much coolant gone.
 func cooling_mult() -> float:
-	return 1.0 - COOLING_LOSS * effect(parts[Part.RADIATOR]) if enabled else 1.0
-
-## The cap LimpMode.engine_damage_kmh takes: INF healthy, ENGINE_LIMP_KMH from
-## ENGINE_LIMP_AT up to 100 % (never 0).
-func engine_cap_kmh() -> float:
 	if not enabled:
-		return INF
-	return ENGINE_LIMP_KMH if parts[Part.RADIATOR] >= ENGINE_LIMP_AT else INF
+		return 1.0
+	var drained := 1.0 - coolant
+	return 1.0 - COOLING_LOSS * drained * drained * drained
+
+## Seconds of full-throttle driving a 100 % radiator lasts on this difficulty.
+func heat_window_s() -> float:
+	return float(DamageDifficulty.row(difficulty)["heat_window_s"])
+
+## The radiator's leak for one step, from raw numbers (testable without a
+## car): throttle 0..1, and whether the engine is running. The drain follows
+## the square of the throttle, so 60 % throttle lasts more than twice as long
+## as flat out. Returns true if the coolant level changed.
+func step_coolant(dt: float, throttle: float, running: bool) -> bool:
+	var leak := effect(parts[Part.RADIATOR])
+	if not enabled or not running or leak <= 0.0 or coolant <= 0.0:
+		return false
+	var th := clampf(throttle, 0.0, 1.0)
+	var demand := COOLANT_IDLE_DRAIN + (1.0 - COOLANT_IDLE_DRAIN) * th * th
+	coolant = maxf(coolant - leak * demand * dt / heat_window_s(), 0.0)
+	_write_cooling()
+	return true
+
+## Puts the cooling into the offsets on its own (the coolant level moves every
+## tick; a full rebuild is for when damage changes), with the Damage setting.
+func _write_cooling() -> void:
+	var k: float = MODE_SCALE[clampi(mode, 0, MODE_SCALE.size() - 1)]
+	offsets.set_car(DamageOffsets.COOLING_MULT, 1.0 + (cooling_mult() - 1.0) * k)
+
+## The cap LimpMode.engine_damage_kmh takes. Always INF since the heat window
+## (brief DP4a): a radiator limps the car through engine heat only, never by
+## its size. Kept for the totalled meter, which will limp the engine here.
+func engine_cap_kmh() -> float:
+	return INF
+
+## Damage per hit on this difficulty.
+func damage_mult() -> float:
+	return float(DamageDifficulty.row(difficulty)["damage_mult"])
+
+## Share of a steering pull the car trims out by itself on this difficulty.
+func auto_trim_share() -> float:
+	return float(DamageDifficulty.row(difficulty)["auto_trim"])
+
+## How many handling effects can act at once on this difficulty.
+func effects_at_once() -> int:
+	return int(DamageDifficulty.row(difficulty)["effects_at_once"])
+
+## Takes the Damage setting and the difficulty (the car calls this every tick
+## with GameSettings' values); a change rebuilds the offsets at once.
+func sync_settings(new_mode: int, new_difficulty: int) -> void:
+	if new_mode == mode and new_difficulty == difficulty:
+		return
+	mode = new_mode
+	difficulty = new_difficulty
+	rebuild_offsets()
 
 ## Rebuilds `offsets` from the parts. Called when damage changes (a hit, a
 ## kerb strike, a repair, a load); a test or tool that sets `parts` directly
@@ -172,6 +248,8 @@ func rebuild_offsets() -> void:
 		offsets.set_wheel(i, DamageOffsets.TOE_ADD, toe_offset(i))
 		offsets.set_wheel(i, DamageOffsets.SPRING_MULT, spring_mult(i))
 	offsets.set_car(DamageOffsets.COOLING_MULT, cooling_mult())
+	# the Damage setting comes last, after everything (and any caps) is in
+	offsets.scale_effects(MODE_SCALE[clampi(mode, 0, MODE_SCALE.size() - 1)])
 
 ## Toe added to wheel i (FL, FR, RL, RR): bent toward the hit side, so the
 ## car pulls that way (a wheel's rotation.y turns it left when positive).
@@ -225,7 +303,7 @@ func apply_hit(dv_local: Vector3) -> void:
 	last_hit_dv = size
 	d /= size
 	last_hit_dir = d
-	var amount := (size - DV_FREE) * DAMAGE_PER_DV
+	var amount := (size - DV_FREE) * DAMAGE_PER_DV * damage_mult()
 	# corner shares: projection of the hit on each corner's diagonal, squared
 	# (from the front = +z, from the left = +x)
 	var k := 0.70710678
@@ -251,7 +329,7 @@ func apply_hit(dv_local: Vector3) -> void:
 func apply_kerb_strike(i: int, approach: float) -> void:
 	if not enabled or approach <= KERB_FREE_MS:
 		return
-	var amount := (approach - KERB_FREE_MS) * KERB_DAMAGE_PER_MS
+	var amount := (approach - KERB_FREE_MS) * KERB_DAMAGE_PER_MS * damage_mult()
 	kerb_strikes += 1
 	last_kerb_strike = approach
 	_add([Part.STEER_FL, Part.STEER_FR, Part.SUSP_RL, Part.SUSP_RR][clampi(i, 0, 3)], amount)
@@ -305,11 +383,16 @@ func step_values(dt: float, vel: Vector3, basis: Basis, touching: bool) -> void:
 ## One step on the car: reads contacts (a hit or a kerb strike rebuilds the
 ## offsets) and sets the engine's limp cap. The offsets themselves are applied
 ## by the car (PlayerCar._apply_damage_offsets), on top of the tune.
-func step(v: Vehicle, dt: float, _health: PowertrainHealth, limp: LimpMode) -> void:
+func step(v: Vehicle, dt: float, health: PowertrainHealth, limp: LimpMode) -> void:
 	if not enabled:
 		return
 	step_values(dt, v.linear_velocity, v.global_transform.basis, _touching(v))
 	_kerb_step(v)
+	step_coolant(dt, v.throttle_input, v.engine_running)  # the pedal, not the throttle body: a gear change is not a lift
+	if _refilled:
+		# fresh, cold coolant: the engine is back at working temperature at once
+		_refilled = false
+		health.engine_temp = minf(health.engine_temp, PowertrainHealth.THERMOSTAT_C)
 	limp.engine_damage_kmh = engine_cap_kmh()
 
 ## Touching a wall, a building or another car (not the road under the body).
@@ -335,6 +418,8 @@ func garage_repair(bank: Object) -> int:
 		parts[i] = 0.0
 	for i in lamps.size():
 		lamps[i] = false
+	coolant = 1.0
+	_refilled = true
 	rebuild_offsets()
 	return price
 
@@ -349,11 +434,14 @@ func repair_price() -> int:
 	return roundi(total)
 
 ## A fuel station's free engine patch, once a night: the radiator comes back
-## to the no-loss band (the limp ends). Returns true if it patched.
+## to the no-loss band and is topped up (the overheat limp ends). Returns true
+## if it patched.
 func station_patch(night: int) -> bool:
 	if not enabled or night == patched_night or parts[Part.RADIATOR] < FREE_BELOW:
 		return false
 	parts[Part.RADIATOR] = PATCH_TO
+	coolant = 1.0
+	_refilled = true
 	patched_night = night
 	rebuild_offsets()
 	return true
@@ -372,7 +460,7 @@ func tow(bank: Object, in_chase: bool) -> bool:
 	return true
 
 func to_dict() -> Dictionary:
-	var d := {"lamps": lamps.duplicate(), "patched_night": patched_night, "totalled": totalled}
+	var d := {"lamps": lamps.duplicate(), "patched_night": patched_night, "totalled": totalled, "coolant": coolant}
 	for i in parts.size():
 		d[PART_NAMES[i]] = parts[i]
 	return d
@@ -383,6 +471,7 @@ func from_dict(d: Dictionary) -> void:
 	var l: Array = d.get("lamps", [])
 	for i in lamps.size():
 		lamps[i] = bool(l[i]) if i < l.size() else false
+	coolant = clampf(float(d.get("coolant", 1.0)), 0.0, 1.0)
 	patched_night = int(d.get("patched_night", -1))
 	totalled = clampf(float(d.get("totalled", 0.0)), 0.0, 1.0)
 	rebuild_offsets()

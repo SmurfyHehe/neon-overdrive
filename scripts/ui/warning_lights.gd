@@ -47,7 +47,8 @@ func _process(_delta: float) -> void:
 	_apply_light(tyre_label, h.is_warning(PowertrainHealth.Warn.TYRE), false)
 	_apply_light(clt_label, h.is_warning(PowertrainHealth.Warn.CLUTCH), false)
 	# Damage (Stage C): a part past the free band or a lamp out; red once the
-	# engine limps on its own or is dead.
+	# engine limps on its own (nothing does since the heat window, DP4a: a
+	# wrecked radiator shows as the ENG lamp when the engine runs hot).
 	var d := player.damage
 	_apply_light(dmg_label, d.warning(), d.engine_cap_kmh() < INF)
 

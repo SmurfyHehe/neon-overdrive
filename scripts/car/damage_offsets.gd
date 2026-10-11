@@ -67,6 +67,21 @@ func get_car(index: int) -> float:
 func set_car(index: int, v: float) -> void:
 	data[index] = v
 
+## The no-effect value of a slot: 1 for a multiplier, 0 for an add.
+static func neutral_value(index: int) -> float:
+	if index >= CAR_BASE:
+		return 1.0 if _CAR_MULTS.has(index) else 0.0
+	return 1.0 if _WHEEL_MULTS.has(index % WHEEL_FIELDS) else 0.0
+
+## Pulls every slot toward neutral: k = 1 leaves it, 0.5 halves each effect,
+## 0 is neutral(). The Damage setting (Light / Looks only) uses it.
+func scale_effects(k: float) -> void:
+	if k >= 1.0:
+		return
+	for i in SIZE:
+		var n := neutral_value(i)
+		data[i] = n + (data[i] - n) * k
+
 func is_neutral() -> bool:
 	for w in WHEELS:
 		for f in WHEEL_FIELDS:

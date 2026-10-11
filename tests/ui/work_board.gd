@@ -56,6 +56,7 @@ func _check(ok: bool, msg: String) -> void:
 func _run() -> void:
 	_rig()
 	await _walk()
+	await _scrap()
 	await _frames_budget()
 	await _shots()
 	for m in failures:
@@ -188,6 +189,80 @@ func _walk() -> void:
 		if re.search(t) != null:
 			failures.append("a label names a single key: '%s'" % t)
 	print("work_board: %d labels read, no key names" % texts.size())
+
+# ---------- W3: the scrap yard and the outlines ----------
+
+func _scrap() -> void:
+	# Every car in the data has an outline picture the cards can load.
+	for o in WorkOrders.load_orders():
+		var ids: Array = [o.car]
+		if o.has("donor"):
+			ids.append(o.donor.want)
+			ids.append_array(o.donor.decoys)
+		for id in ids:
+			_check(FileAccess.file_exists("res://assets/ui/outlines/%s.png" % id), "no outline PNG for %s" % id)
+			_check(BoardScreen.outline_texture(str(id)) != null, "outline for %s does not load (import it)" % id)
+	var sample := BoardScreen.outline_texture("n1_commuter")
+	if sample != null:
+		_check(sample.get_width() == 256 and sample.get_height() == 128, "outline is %dx%d, expected 256x128" % [sample.get_width(), sample.get_height()])
+	# A scrap board on night 3: card 0 is the alternator.
+	gs.close_workboard()   # (no-op unless the board is open)
+	shop.data = {"day": 3, "night": 3, "cards": ["scrap_alternator", "moose_gearbox", "pilar_bushings"],
+			"stage": "board", "taken": null, "stay_late": false, "recent": []}
+	shop._save()
+	gs.open_workboard()
+	await process_frame
+	_check(gs.state == GameState.State.WORKBOARD and screen.mode == "board", "scrap: the board did not open (mode %s)" % screen.mode)
+	var order := WorkOrders.find("scrap_alternator")
+	_check(order.kind == "scrap" and order.has("donor"), "scrap_alternator is not a scrap order with a donor")
+	var floor_pay := WorkOrders.pay_for(order, 0.0, 1)
+	var bank0: int = wallet.bank
+	screen.press(&"accept")   # card 0
+	await process_frame
+	_check(screen.mode == "donor" and shop.stage() == "job", "scrap: a scrap card opened '%s', expected the donor panel" % screen.mode)
+	_check(screen._items.size() == 3 and screen.donor_options.size() == 3, "scrap: %d wrecks on the panel" % screen._items.size())
+	_check(screen.donor_options.has(order.donor.want), "scrap: the wanted car is not among the wrecks")
+	_collect()
+	# Wrong picks: Ferris's line, pick again, no timer, no pay lost.
+	var wrong := -1
+	var right := -1
+	for i in screen.donor_options.size():
+		if screen.donor_options[i] == order.donor.want:
+			right = i
+		elif wrong < 0:
+			wrong = i
+	for n in 2:
+		while screen._sel != wrong:
+			screen.press(&"right" if screen._sel < wrong else &"left")
+		screen.press(&"accept")
+		await process_frame
+		_check(screen.mode == "donor" and screen.donor_misses == n + 1, "scrap: a wrong pick left mode %s (misses %d)" % [screen.mode, screen.donor_misses])
+		_check(screen.donor_line.text == "That's a wagon, kid.", "scrap: wrong pick said '%s'" % screen.donor_line.text)
+	# The right pick goes on to the bar as a bench job.
+	while screen._sel != right:
+		screen.press(&"right" if screen._sel < right else &"left")
+	screen.press(&"accept")
+	await process_frame
+	_check(screen.mode == "job" and screen.bar.running, "scrap: the right donor did not start the bar (mode %s)" % screen.mode)
+	# Steps at the zone edge (0.7) all the way: pay is the plain score, nothing taken off for the wrong picks.
+	var bar: Control = screen.bar
+	bar.auto = false
+	for i in order.steps.size():
+		bar.advance(0.3)
+		bar.center = bar.needle - (bar.zone * 0.5 - 0.005)
+		bar.press()
+	await process_frame
+	_check(screen.mode == "slip" and shop.stage() == "slip", "scrap: the job did not end on a slip (stage %s)" % shop.stage())
+	var want_pay := WorkOrders.pay_for(order, 0.7, 1)
+	var paid: int = int(shop.data.get("paid", -1))
+	_check(paid == want_pay and paid >= floor_pay, "scrap: paid $%d, expected $%d (floor $%d)" % [paid, want_pay, floor_pay])
+	_check(wallet.bank == bank0 + paid, "scrap: bank %d, expected %d" % [wallet.bank, bank0 + paid])
+	_collect()
+	# Walk out of the slip.
+	screen.press(&"right")
+	screen.press(&"accept")   # Head out
+	await process_frame
+	_check(gs.state == GameState.State.GARAGE, "scrap: Head out left state %d" % gs.state)
 
 # ---------- frame cost ----------
 

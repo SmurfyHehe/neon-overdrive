@@ -241,6 +241,30 @@ var benched := false
 ## PLAYER_GAP_T in front of you, follows you no closer than RB_T_GAP_PLAYER,
 ## and a weaver does not drift your way within WEAVE_CLEAR_M.
 var rule_breaker := false
+## Tailgater state (see TG_*): the manager picks it, the car runs it.
+var tg_phase := TG_NONE
+var tg_since := 0.0
+var tg_pass_at := 0.0
+var tg_honked := false
+var tg_flashes := 0       # tests
+var tg_passes := 0
+var tg_returns := 0
+var tg_honk_count := 0
+var tg_min_gap := INF     # tests: closest bumper gap to the player while behind it
+## Phone driver: set at every spawn (set_phone), so the pool handing the car
+## out again as an ordinary driver clears it.
+var phone := false
+var phone_delay := 2.0
+var phone_waits := 0
+var phone_wait_s := 0.0     # tests: how long the last green-light wait was
+var _phone_t := 0.0
+var _phone_period := 8.0
+var _phone_phase := 0.0
+var _ph_sg := INF           # gap to the stop line while held at a red
+var _ph_held_t := -1000.0
+var _ph_until := -1.0
+var _ph_start := 0.0
+var _phone_glow: MeshInstance3D
 ## Drifts this many metres either side of its lane (bar close); 0 = holds it.
 var weave := 0.0
 var _weave_t := 0.0
@@ -358,6 +382,38 @@ const DO_RB_CUT_IN := "rule_breaker_cut_in"
 const DO_SPAWNED_BEHIND := "spawned_behind"   # derived: under 5 s since the spawn
 const DO_SPAWNED_AHEAD := "spawned_ahead"     # derived
 const DO_RED_LIGHT_STOP := "red_light_stop"
+const DO_TAILGATING := "tailgating"          # more alive MA2: sat on a slow player's bumper
+const DO_TG_PASS := "tailgater_pass"
+const DO_TG_RETURN := "tailgater_return"
+
+## More-alive traffic (MA2, 2026-10-11).
+## The tailgater (T3): TrafficManager picks one car behind a player who sits in
+## the fast lane well under the flow (TrafficManager._life_step). It closes to
+## TG_GAP_T seconds of its speed, flashes its headlights twice, waits 3-5 s,
+## passes on the right through the normal lane-change checks (_merge_safe),
+## leans on the horn alongside, and pulls back in at the normal gap. Nothing
+## happens to the player: no heat, no penalty. While it is one it does only
+## this (every other lane-change idea of its own waits).
+const TG_NONE := 0
+const TG_CLOSE := 1     # coming up to the bumper
+const TG_WAIT := 2      # flashed, waiting to pass
+const TG_PASS := 3      # signalling / changing / alongside
+const TG_RETURN := 4    # ahead, signalling back in
+const TG_GAP_T := 0.8   # s of its own speed kept behind the player
+const TG_FLASH_T := 1.3 # flashes once the gap is under S0 + this * v (the law settles in slowly)
+const TG_PASS_AFTER := Vector2(3.0, 5.0)
+const TG_GIVE_UP := 40.0   # s in one phase (60 for the approach)
+const TG_GIVE_UP_CLOSE := 60.0
+const TG_SIGNAL_GIVE_UP := 3.0
+const TG_ALONGSIDE_M := 3.0
+## Phone drivers (T1): about one car in twelve. Drifts inside its lane by up to
+## PHONE_DRIFT_M (period PHONE_PERIOD seconds), starts 1.5-3 s late at a green
+## light (the car behind taps its horn once) and never changes lane toward the
+## player. A pale white-blue glow on the driver's face (PHONE_GLOW).
+const PHONE_DRIFT_M := 0.35
+const PHONE_PERIOD := Vector2(6.0, 10.0)
+const PHONE_DELAY := Vector2(1.5, 3.0)
+const PHONE_GLOW := Color(0.812, 0.847, 0.902)   # #CFD8E6, not cyan
 var doing := DO_CRUISING
 ## Physics frame of the last spawn and whether it was behind the player
 ## (TrafficManager._respawn); the near-miss log tags a car for 5 s after it.
@@ -550,6 +606,7 @@ func _ready() -> void:
 	if not sim_only:
 		chassis_visual = NpcCarBuilder.chassis_visual(kind, build, color, role) if npc else CarBuilder.shared_chassis_visual(kind, color)
 		add_child(chassis_visual)
+		_apply_phone_glow()
 		# Wet-road tail smears (wet_reflections.gd): ride with the visual.
 		var tail: Dictionary = WetReflections.tail_info(chassis_visual)
 		if not tail.is_empty():
@@ -706,6 +763,12 @@ func _drive(delta: float) -> void:
 				and drift * ((traffic._lo[0] + traffic._hi[0]) * 0.5 - _my_x) > 0.0:
 			drift = 0.0   # not toward a player this close
 		steer_x += drift
+	if phone and not changing and traffic != null:
+		_phone_t += delta
+		var drift := PHONE_DRIFT_M * sin(TAU * _phone_t / _phone_period + _phone_phase)
+		if absf(traffic._z[0] - _my_z) < WEAVE_CLEAR_M and drift * ((traffic._lo[0] + traffic._hi[0]) * 0.5 - _my_x) > 0.0:
+			drift = 0.0   # never toward a player this close
+		steer_x += drift
 	if tail_dark:
 		_tap_step(delta)
 	steering_input = lane_steer(self, steer_x, direction, wheelbase)
@@ -757,7 +820,28 @@ func _accel_command(v: float) -> float:
 		var sg := traffic.junction.stop_gap(road_z(), direction, half_l, v)
 		if sg < INF:
 			signal_held = true
+			if phone:
+				_ph_sg = sg
+				_ph_held_t = traffic.now
 			a = minf(a, follow_accel(v, v0, sg + S0 - Junction.STOP_SHORT, 0.0, _t_gap()))
+		elif phone and _ph_sg < INF and _ph_until < 0.0:
+			# The light just went green on a driver stopped at the line: eyes on the phone.
+			if traffic.now - _ph_held_t < 0.6 and absf(v) < 3.0:
+				_ph_until = traffic.now + phone_delay
+				_ph_start = traffic.now
+				phone_waits += 1
+				traffic.note_phone_wait(self)
+			else:
+				_ph_sg = INF
+		if phone and _ph_until > 0.0:
+			if traffic.now < _ph_until:
+				signal_held = true
+				a = minf(a, follow_accel(v, v0, _ph_sg + S0 - Junction.STOP_SHORT, 0.0, _t_gap()))
+				phone_wait_s = traffic.now - _ph_start
+			else:
+				phone_wait_s = _ph_until - _ph_start
+				_ph_sg = INF
+				_ph_until = -1.0
 	return a
 
 ## Fastest this car takes the road from here to BEND_LOOK m ahead: no more
@@ -809,6 +893,8 @@ func _apply_accel(v: float, a: float) -> void:
 ## How fast this car could go behind something `gap` ahead at vl (the
 ## follower's speed command), for comparing lanes.
 func _t_gap() -> float:
+	if tg_phase == TG_CLOSE or tg_phase == TG_WAIT:
+		return TG_GAP_T if lead_is_player else T_GAP
 	if not rule_breaker:
 		return T_GAP
 	return RB_T_GAP_PLAYER if lead_is_player and not TrafficSettings.cut_in_player else RB_T_GAP
@@ -834,6 +920,48 @@ func set_rule_breaker(on: bool, weave_m: float) -> void:
 	tail_dark = weave > 0.0
 	_tap_left = 0.0
 
+## Set at every spawn (TrafficManager._respawn), true or false, so a car the
+## pool hands out again never keeps the last driver's phone.
+func set_phone(on: bool, delay: float, period: float, phase: float) -> void:
+	phone = on
+	phone_delay = delay
+	_phone_period = maxf(period, 1.0)
+	_phone_phase = phase
+	_phone_t = 0.0
+	_ph_sg = INF
+	_ph_until = -1.0
+	_apply_phone_glow()
+
+## The driver's face lit by a screen: a small emissive quad inside the cabin,
+## built the first time a car becomes a phone driver and shown only while it
+## is one. Placed from the body's own bounds (the NPC body is one baked mesh).
+func _apply_phone_glow() -> void:
+	if chassis_visual == null:
+		return
+	if _phone_glow == null:
+		if not phone:
+			return
+		var body := chassis_visual.get_node_or_null(^"Body") as MeshInstance3D
+		var box := body.get_aabb() if body != null else AABB(Vector3(-half_w, 0.0, -half_l), Vector3(half_w * 2.0, 1.45, half_l * 2.0))
+		var quad := QuadMesh.new()
+		quad.size = Vector2(0.14, 0.09)
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.albedo_color = PHONE_GLOW
+		m.emission_enabled = true
+		m.emission = PHONE_GLOW
+		m.emission_energy_multiplier = 1.6
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		quad.material = m
+		_phone_glow = MeshInstance3D.new()
+		_phone_glow.name = "PhoneGlow"
+		_phone_glow.mesh = quad
+		_phone_glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		# the driver's side (-x), at face height under the roof, mid cabin
+		_phone_glow.position = Vector3(-minf(0.4, box.size.x * 0.22), box.end.y - 0.3, box.position.z + box.size.z * 0.5)
+		chassis_visual.add_child(_phone_glow)
+	_phone_glow.visible = phone
+
 func _potential(v: float, gap: float, vl: float) -> float:
 	if gap == INF:
 		return target_speed
@@ -849,6 +977,8 @@ func _consider_lane_change(v: float) -> void:
 	_decide_doing(v)
 	if _sig_lane >= 0:
 		_signal_step(v)
+		return
+	if tg_phase != TG_NONE and _tailgate_step(v):
 		return
 	if _siren_seen >= 0.0:
 		return   # pulling over: no passing, no drifting back
@@ -898,6 +1028,8 @@ func _consider_lane_change(v: float) -> void:
 			continue
 		if not _merge_safe(TrafficManager.lane_centre(lane, oncoming), v):
 			continue
+		if phone and absf(TrafficManager.lane_centre(lane, oncoming) - (traffic._lo[0] + traffic._hi[0]) * 0.5) < absf(lane_x - (traffic._lo[0] + traffic._hi[0]) * 0.5):
+			continue   # a phone driver never changes lane toward the player
 		var pot := _potential(v, _m_gap, _m_speed)
 		var score := pot
 		var ok := false
@@ -924,6 +1056,91 @@ func _consider_lane_change(v: float) -> void:
 			why = DO_PASSING
 		# Blinker first: the change itself starts in _signal_step.
 		_signal(best, SIGNAL_T_OBSTACLE if obstacle else SIGNAL_T, why)
+
+## Tailgater picked by TrafficManager: starts closing on the player.
+## Half the car's length, for the manager's scans.
+func _hl_self() -> float:
+	return half_l
+
+func tg_begin() -> void:
+	tg_phase = TG_CLOSE
+	tg_since = traffic.now
+	tg_honked = false
+	tg_min_gap = INF
+
+func tg_end() -> void:
+	tg_phase = TG_NONE
+
+## One step of the tailgater at the decision rate. Always true while it is one:
+## the normal lane-change logic skips the round (it would pass at once, or
+## keep right, and ruin the wait).
+func _tailgate_step(_v: float) -> bool:
+	var tm := traffic
+	var now := tm.now
+	var oncoming := direction > 0.0
+	if now - tg_since > (TG_GIVE_UP_CLOSE if tg_phase == TG_CLOSE else TG_GIVE_UP) or wrecked or rule_breaker:
+		tg_end()
+		return false
+	var d := (tm._z[0] - _my_z) * direction     # + = the player is ahead
+	var px := (tm._lo[0] + tm._hi[0]) * 0.5
+	var pgap := d - half_l - tm._hl[0]          # bumper to bumper
+	var plane := RoadChunkBuilder.lane_at(absf(px))
+	match tg_phase:
+		TG_CLOSE, TG_WAIT:
+			if plane != lane_i or d < 0.0 or tm.flow != direction:
+				tg_end()        # the player moved out of the lane, or sped off
+				return false
+			tg_min_gap = minf(tg_min_gap, pgap)
+			if tg_phase == TG_CLOSE:
+				if lead_is_player and lead_gap <= S0 + TG_FLASH_T * maxf(current_speed(), 1.0):
+					_flash_t = 0.0
+					tg_flashes += 1
+					tg_phase = TG_WAIT
+					tg_since = now
+					tg_pass_at = now + tm.life_randf_range(TG_PASS_AFTER.x, TG_PASS_AFTER.y)
+			elif now >= tg_pass_at and _lc_cooldown <= 0.0 and not changing:
+				var lane := lane_i + 1
+				if not tm.lane_allowed(lane, oncoming):
+					tg_end()    # nowhere to pass: it just stays behind
+					return false
+				_signal(lane, SIGNAL_T, DO_TG_PASS, TG_SIGNAL_GIVE_UP)
+				tg_phase = TG_PASS
+				tg_since = now
+			return true
+		TG_PASS:
+			if changing:
+				return true
+			if lane_i == plane:
+				# still behind: the signal gave up (the lane was not safe), ask again
+				tg_phase = TG_WAIT
+				tg_pass_at = now + 0.5
+				return true
+			var ahead := -d    # + = this car is ahead of the player
+			if not tg_honked and absf(ahead) < half_l + tm._hl[0] + TG_ALONGSIDE_M:
+				tg_honked = true
+				tg_honk_count += 1
+				tm.honk(self, true)
+			if ahead - half_l - tm._hl[0] >= maxf(PLAYER_MIN_GAP, PLAYER_GAP_T * absf(tm._vz[0])) + 4.0:
+				tg_passes += 1
+				tg_phase = TG_RETURN
+				tg_since = now
+			return true
+		TG_RETURN:
+			if changing:
+				return true
+			if lane_i == plane:
+				tg_returns += 1   # back in front of the player's lane at the normal gap: done
+				tg_end()
+				return false
+			if _lc_cooldown <= 0.0:
+				var back := lane_i - 1
+				if tm.lane_allowed(back, oncoming):
+					_signal(back, SIGNAL_T, DO_TG_RETURN, 4.0)
+				else:
+					tg_end()
+					return false
+			return true
+	return false
 
 ## Sirens, at the decision rate (see the header).
 func _siren_step(v: float) -> void:
@@ -1036,7 +1253,9 @@ func _set_flash(on: bool) -> void:
 ## The label for a car that is not changing lane: runs at the decision rate,
 ## which also ends the label of a lane change that has just finished.
 func _decide_doing(v: float) -> void:
-	if signal_held:
+	if tg_phase == TG_CLOSE or tg_phase == TG_WAIT:
+		doing = DO_TAILGATING
+	elif signal_held:
 		doing = DO_RED_LIGHT_STOP
 	elif _siren_seen >= 0.0 and _speed_k < 1.0:
 		doing = DO_PULL_OVER_SIREN
@@ -1350,6 +1569,11 @@ func place(lane: float, dir: float, z: float, y: float, speed: float) -> void:
 	_edge_want = 0.0
 	_react_at = INF
 	_flash_t = -1.0
+	tg_phase = TG_NONE
+	tg_honked = false
+	_ph_sg = INF
+	_ph_until = -1.0
+	_ph_held_t = -1000.0
 	_lead_was_player = false
 	_siren_seen = -1.0
 	_siren_edge = 0.0

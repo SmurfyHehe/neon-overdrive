@@ -908,6 +908,12 @@ func _setup_traffic() -> void:
 		junction.t = randf() * Junction.CYCLE
 		add_child(junction)
 		traffic.junction = junction
+	# cigarette ends out of windows: one pooled burst, a car ahead now and then
+	# and the player's own cigarette (IdleActions.CIGARETTE) both use it
+	var flicks := EmberFlick.new()
+	flicks.player = player
+	flicks.traffic = traffic
+	add_child(flicks)
 
 # ---------- camera ----------
 func _setup_camera() -> void:

@@ -46,6 +46,7 @@ const MUSIC_CHASE_DB := -7.0       # and quieter
 const WINDOW_DOWN_SECS := 2.5     # closed to fully open while Z is held
 const WINDOW_UP_SECS := 1.2       # a tap rolls it all the way up in this long
 const WINDOW_TAP_SECS := 0.25     # a press shorter than this is a tap
+const ASSIST_SPEED := 2.0         # the driver's own roll (a cigarette), times the key's pace
 const WINDOW_OPEN_SHARE := 0.85   # fully open is this much of the way to outside sound
 const WINDOW_LEAK_SHARE := 0.5    # fully open, the stereo is this much less "outside" from the chase cam
 const WINDOW_MUSIC_DB := -2.0     # the radio against the wind, window fully down (cockpit)
@@ -77,6 +78,8 @@ var scanner_open := false
 var scanner_duck := 0.0   # eased 0..1
 ## The car's CarAudio: gets `cabin` and `window` every frame (set by the camera).
 var car_audio: CarAudio
+var _assist_target := -1.0        # a level the driver is rolling the window to, -1 none
+var _assist_closing := false
 var _window_held := 0.0
 var _window_closing := false
 var _window_pressed := false
@@ -139,7 +142,12 @@ func window_key(pressed: bool, delta: float) -> void:
 	if pressed:
 		_window_held += delta
 		_window_closing = false
+		_assist_target = -1.0   # the key takes the window back from the driver
+		_assist_closing = false
 		window = minf(1.0, window + delta / WINDOW_DOWN_SECS)
+		return
+	if _assist_target >= 0.0:
+		_assist_step(delta)
 		return
 	if _window_held > 0.0 and _window_held < WINDOW_TAP_SECS:
 		_window_closing = true
@@ -147,6 +155,32 @@ func window_key(pressed: bool, delta: float) -> void:
 	if _window_closing:
 		window = maxf(0.0, window - delta / WINDOW_UP_SECS)
 		_window_closing = window > 0.0
+
+## The driver rolls the window down by himself to `level` (a cigarette, MA5),
+## fast and only if it is lower than that now. The hand is busy, so the
+## cockpit's crank or switch does not animate for it (window_direction stays 0).
+## release_assist() rolls it back up, but only if the driver opened it.
+func assist_open(level: float) -> void:
+	if window >= level - 0.01 or _assist_target >= 0.0:
+		return
+	_assist_target = level
+	_assist_closing = false
+
+func release_assist() -> void:
+	if _assist_target >= 0.0:
+		_assist_closing = true
+
+func assist_active() -> bool:
+	return _assist_target >= 0.0
+
+func _assist_step(delta: float) -> void:
+	if _assist_closing:
+		window = maxf(0.0, window - delta * ASSIST_SPEED / WINDOW_DOWN_SECS)
+		if window <= 0.0:
+			_assist_target = -1.0
+			_assist_closing = false
+	else:
+		window = minf(_assist_target, window + delta * ASSIST_SPEED / WINDOW_DOWN_SECS)
 
 ## Which way the window is being worked this tick, for the cockpit animation:
 ## +1 rolling down (the key is held, even at the stop), -1 rolling up after a

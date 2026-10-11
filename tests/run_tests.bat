@@ -112,6 +112,7 @@ call :run view/camera_rate_independent --headless
 call :run view/fov_step_limit --headless
 call :run view/cockpit_driver --headless
 call :run view/cockpit_window --headless
+call :run view/gesture_flip_off "--headless --fixed-fps 60"
 call :run view/gauge_pod --headless
 call :run view/gauge_layout --headless
 call :run view/cockpit_steering_hands --headless

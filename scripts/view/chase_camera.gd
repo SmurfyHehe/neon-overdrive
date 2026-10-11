@@ -259,9 +259,14 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("camera_view"):
 		set_view(View.CHASE if view == View.COCKPIT else View.COCKPIT)
 	look_back = Input.is_action_pressed("look_back")
-	perspective.window_key(Input.is_action_pressed("window"), delta)
+	# the left hand does one thing at a time: the window key waits while it is out on a gesture
+	var gesturing := frame != null and frame.driver != null and frame.driver.is_gesturing()
+	perspective.window_key(Input.is_action_pressed("window") and not gesturing, delta)
 	if frame != null:
 		frame.set_window(perspective.window, perspective.window_direction())
+		if frame.driver != null:
+			var aim := DriverModel.AIM_BACK if look_back else (DriverModel.AIM_LEFT if Input.is_action_pressed("look_left") else DriverModel.AIM_AHEAD)
+			frame.driver.gesture_key(Input.is_action_pressed("flip_off"), aim)
 	# where the driver's head points, for the radio and the window's wind
 	perspective.head_yaw_deg = look_yaw + (180.0 if look_back else 0.0) if view == View.COCKPIT else 0.0
 	if perspective.car_audio == null:

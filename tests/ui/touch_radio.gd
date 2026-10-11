@@ -6,8 +6,11 @@ extends SceneTree
 #   four tiles, and on the P1 an aftermarket unit with a physical knob
 # - pressing N (the radio_next action) does NOT change the station on the key:
 #   the driver's right hand reaches the screen and the station changes on the
-#   finger's contact with the next tile (hand_contact), with the tap tick, and
-#   the hand is at the tile when it happens
+#   finger's contact with the glass (hand_contact), with the tap tick, and
+#   the hand is on the glass when it happens
+# - the contact comes at the start of a swipe (2026-10-11): the finger lands
+#   right of the glass centre and drags left while pressed; two quick N: the
+#   hand stays over the glass between the swipes
 # - N during a manual shift waits: no change while the hand is on the gear
 #   knob, the tap comes after the shift
 # - V (radio_power): the hand presses the knob, the radio turns off, screen dimmed;
@@ -41,6 +44,12 @@ var touch_pos := Vector3.ZERO
 var shift_seen := false
 var changed_during_shift := false
 var cycle_left := 0
+var second_at := -1              # tick of the second press of the queued pair
+var left_glass := false          # the hand went back to the rim between queued swipes
+var reach_seen := false          # the hand set off for the screen after the key
+var swipe_seen := false          # the hand swiped after the first contact
+var swipe_min_x := 1e9           # how far left the finger got, car space
+var swipe_z_off := 0.0           # how far it lifted off the glass mid-swipe
 var shot_dir := ""
 var shot_taken := 0
 
@@ -74,8 +83,10 @@ func _press(power := false) -> void:
 func _on_contact(target: StringName) -> void:
 	if target != DriverModel.CONTACT_RADIO_TILE and target != DriverModel.CONTACT_RADIO_KNOB:
 		return
-	var touch := touch_pos + Vector3(0.0, -0.005, 0.055)   # hand origin with the fingertips on the glass
-	contacts.append([tick, target, radio.card, radio.toast_text, frame.head_unit.taps, d.hand_position(1).distance_to(touch), radio.station])
+	# hand origin with the fingertips on the glass, at the start of the swipe for a station change
+	var dx := DriverModel.SWIPE_M * 0.5 if target == DriverModel.CONTACT_RADIO_TILE else 0.0
+	var touch := touch_pos + Vector3(dx, -0.005, 0.055)
+	contacts.append([tick, target, radio.card, radio.toast_text, frame.head_unit.taps, d.hand_position(1).distance_to(touch), radio.station, d.act])
 
 func _physics_process(_delta: float) -> bool:
 	tick += 1
@@ -121,19 +132,29 @@ func _physics_process(_delta: float) -> bool:
 		Step.KEY:
 			if contacts.is_empty():
 				_check(radio.card == key_station and radio.station == -1, "the radio changed before the finger touched the screen (tick %d after the key)" % (tick - key_tick))
+				if d.act == DriverModel.Act.RADIO_REACH:
+					reach_seen = true
 				if waited == 3:
-					_check(d.act == DriverModel.Act.RADIO_REACH, "N sends the right hand toward the screen (act %s)" % DriverModel.Act.keys()[d.act])
 					_check(radio.toast_left <= 0.0, "the HUD radio card waits for the tap")
 				return false
 			var c: Array = contacts[0]
-			if tick != c[0] + 40:
-				return false
+			if d.act == DriverModel.Act.RADIO_SWIPE:
+				swipe_seen = true
+				var hp := d.hand_position(1)
+				swipe_min_x = minf(swipe_min_x, hp.x)
+				swipe_z_off = maxf(swipe_z_off, absf(hp.z - (touch_pos.z + 0.055)))
+			if d.act != DriverModel.Act.RADIO_RETURN and d.act != DriverModel.Act.GRIP:
+				return false   # the swipe is still going (the hand runs on render frames, not ticks)
+			_check(reach_seen, "N sends the right hand toward the screen")
 			print("key to tap: %d ticks (%.2f s)" % [c[0] - key_tick, float(c[0] - key_tick) / Engine.physics_ticks_per_second])
 			_check(c[0] - key_tick >= 6, "the tap should come a moment after the key, not on it (%d ticks)" % (c[0] - key_tick))
 			_check(c[1] == DriverModel.CONTACT_RADIO_TILE and c[2] == DEFAULT_CARD and c[6] == DEFAULT_CARD, "the first tap lands on the glass and turns the radio on at the card (%s, card %d, station %d)" % [c[1], c[2], c[6]])
 			_check(c[3] == "%s %s." % [RadioStations.STATIONS[DEFAULT_CARD].dial, RadioStations.STATIONS[DEFAULT_CARD].name], "the caption names the station on the tap (%s)" % c[3])
 			_check(c[4] == 1, "one tap tick on contact (%d)" % c[4])
 			_check(c[5] < 0.03, "the hand is on the glass when the radio turns on (%.3f m off)" % c[5])
+			_check(c[7] == DriverModel.Act.RADIO_PRESS, "the contact comes as the finger lands, before the swipe (%s)" % DriverModel.Act.keys()[c[7]])
+			_check(swipe_seen, "after the contact the finger swipes across the glass")
+			_check(swipe_min_x < touch_pos.x - 0.015 and swipe_z_off < 0.006, "the finger drags left on the glass while pressed (%.3f m left of the centre, %.3f m off the glass)" % [touch_pos.x - swipe_min_x, swipe_z_off])
 			if true:
 				_check(not frame.head_unit.is_dimmed() and frame.head_unit.station == DEFAULT_CARD, "the screen shows the station lit")
 				throttle = 1.0
@@ -161,14 +182,23 @@ func _physics_process(_delta: float) -> bool:
 					cycle_left = 2
 					_go(Step.CYCLE)
 		Step.CYCLE:
-			if not d.is_busy() and contacts.size() == 4 - cycle_left and waited > 10:
-				if cycle_left == 0:
-					_check(radio.card == (DEFAULT_CARD + 3) % 5, "three slides land three cards on (%d)" % radio.card)
-					_press(true)
-					_go(Step.OFF)
-				else:
-					cycle_left -= 1
-					_press()
+			# two quick N: the second waits for the hand, which stays over the glass
+			if cycle_left == 2 and not d.is_busy() and contacts.size() == 2 and waited > 10:
+				_press()
+				cycle_left = 1
+				second_at = tick + 4
+			elif tick == second_at:
+				_press()
+				cycle_left = 0
+				second_at = -1
+			if cycle_left == 0 and contacts.size() == 3 and d.act in [DriverModel.Act.RADIO_RETURN, DriverModel.Act.GRIP]:
+				left_glass = true
+			if cycle_left == 0 and contacts.size() == 4 and not d.is_busy():
+				_check(radio.card == (DEFAULT_CARD + 3) % 5, "three slides land three cards on (%d)" % radio.card)
+				_check(not left_glass, "between two queued presses the hand stays over the glass and swipes again")
+				_check(contacts[3][5] < 0.03, "the second queued swipe starts with the finger on the glass (%.3f m off)" % contacts[3][5])
+				_press(true)
+				_go(Step.OFF)
 		Step.OFF:
 			if contacts.size() == 5 and not d.is_busy():
 				var c: Array = contacts[4]

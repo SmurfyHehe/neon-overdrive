@@ -39,12 +39,15 @@ extends Node3D
 #   - sequential stick (SEMI on a car with one): the same, a tap fore or aft;
 #   - automatic, and SEMI on a car with paddles: a finger flick on the paddle
 #     (right on an upshift, left on a downshift), hands stay on the rim;
-#   - radio (touch screen, 2026-10-07): the next-station key only asks
-#     (request_radio); the hand reaches the HeadUnit, taps the next tile (past
-#     the last one it presses the knob: off) and returns. The station changes
-#     on the finger's contact, not on the key: CockpitFrame runs
-#     RadioManager.next_station() from hand_contact. Requests wait while a
-#     shift or handbrake pull has the hand;
+#   - radio (touch screen, 2026-10-07; swipe 2026-10-11): the next-station
+#     key only asks (request_radio); the hand reaches the HeadUnit, the finger
+#     lands right of the glass centre and drags SWIPE_M right to left while
+#     pressed (the way the cards go), lifts and returns. The station changes
+#     on the finger's contact at the start of the swipe, not on the key:
+#     CockpitFrame runs RadioManager.next_station() from hand_contact. With
+#     more presses waiting the hand stays over the glass and swipes again.
+#     The power press (V) is a plain tap on the knob or the power spot.
+#     Requests wait while a shift or handbrake pull has the hand;
 #   - handbrake: while the handbrake is pulled the hand holds the lever and
 #     rides it up and down, then returns to the rim;
 #   - steering: a small head yaw into the turn and a body lean from lateral g;
@@ -174,6 +177,13 @@ const KNOB_LIFT := -0.0035
 ## How much of the lever's tilt the hand takes (1 = it leans with the lever).
 const KNOB_TILT_FOLLOW := 1.0
 const PRESS_SECS := 0.12
+## The station swipe: the finger lands SWIPE_M/2 right of the glass centre in
+## LAND_SECS, drags SWIPE_M to the left in SWIPE_SECS, and for a queued press
+## lifts back to the start in LIFT_SECS.
+const SWIPE_M := 0.05
+const LAND_SECS := 0.06
+const SWIPE_SECS := 0.15
+const LIFT_SECS := 0.10
 const PADDLE_SECS := 0.25
 const BRAKE_REACH_SECS := 0.20
 const WINDOW_REACH_SECS := 0.25
@@ -241,7 +251,7 @@ signal gesture_peak(window_open: bool)
 ## The idle item reached the mouth: once per use ("vape" or "beer").
 signal idle_used(item: String)
 
-enum Act { GRIP, SHIFT_REACH, SHIFT_HOLD, SHIFT_RETURN, RADIO_REACH, RADIO_PRESS, RADIO_RETURN, BRAKE_REACH, BRAKE_HOLD, BRAKE_RETURN }
+enum Act { GRIP, SHIFT_REACH, SHIFT_HOLD, SHIFT_RETURN, RADIO_REACH, RADIO_PRESS, RADIO_RETURN, BRAKE_REACH, BRAKE_HOLD, BRAKE_RETURN, RADIO_SWIPE, RADIO_LIFT }
 
 var frame: CockpitFrame
 var player: PlayerCar
@@ -304,6 +314,7 @@ var last_contact := &""
 var _radio_target := Vector3.ZERO  # car space, where the finger lands this reach
 var _radio_contact := &""
 var _pressed := false              # the finger has landed this press
+var _swipe := false                # this press drags across the glass (a station change)
 var _brake_was_on := false
 var paddle_t := 0.0
 var paddle_side := 0
@@ -751,9 +762,11 @@ func _brake_hand_transform() -> Transform3D:
 	return lever.transform * Transform3D(b, Vector3(0.0, 0.047, -0.21))
 
 ## The right hand pressing the head unit at _radio_target, car space: at
-## pressed = 1 the fingertips touch the glass (or the knob face).
-func _radio_hand_transform(pressed: float) -> Transform3D:
-	var p := _radio_target + Vector3(0.0, -0.005, 0.075 - 0.02 * pressed)
+## pressed = 1 the fingertips touch the glass (or the knob face). For a swipe,
+## along runs 0..1 from the start of the drag (right of the target) to its end.
+func _radio_hand_transform(pressed: float, along := 0.0) -> Transform3D:
+	var dx := SWIPE_M * (0.5 - along) if _swipe else 0.0
+	var p := _radio_target + Vector3(dx, -0.005, 0.075 - 0.02 * pressed)
 	var b := Basis(Vector3.BACK, deg_to_rad(-90.0)) * Basis(Vector3.RIGHT, deg_to_rad(15.0))   # palm down, fingers at the buttons
 	return Transform3D(b, p)
 
@@ -967,16 +980,23 @@ func request_radio(kind := RADIO_NEXT) -> void:
 	radio_requests += 1
 	_radio_kinds.append(kind)
 
-## Starts a reach for the screen: picks the touch point now (the next tile, or
-## the knob past the last one) so the hand flies to where the tap will land.
-func _begin_radio() -> void:
+## Starts a reach for the screen: picks the touch point now (the glass, or
+## the knob for a power press) so the hand flies to where the finger will
+## land. on_glass: the hand is already over the glass (a queued swipe), so it
+## lands again without a reach.
+func _begin_radio(on_glass := false) -> void:
 	radio_requests -= 1
 	var kind: int = _radio_kinds.pop_front() if not _radio_kinds.is_empty() else RADIO_NEXT
 	var touch := frame.radio_touch(kind)
 	_radio_target = touch.pos
 	_radio_contact = touch.contact
 	_pressed = false
-	_start(Act.RADIO_REACH)
+	_swipe = touch.contact == CONTACT_RADIO_TILE
+	_start(Act.RADIO_PRESS if on_glass and _swipe else Act.RADIO_REACH)
+
+## A radio press is waiting and the hand may take it (not during a manual shift).
+func _more_radio() -> bool:
+	return radio_requests > 0 and not (frame.lever_moving and frame.lever_needs_hand())
 
 ## The hand touched target: the one place contacts are announced.
 func _contact(target: StringName) -> void:
@@ -985,7 +1005,7 @@ func _contact(target: StringName) -> void:
 	hand_contact.emit(target)
 
 func _is_radio() -> bool:
-	return act == Act.RADIO_REACH or act == Act.RADIO_PRESS or act == Act.RADIO_RETURN
+	return act in [Act.RADIO_REACH, Act.RADIO_PRESS, Act.RADIO_SWIPE, Act.RADIO_LIFT, Act.RADIO_RETURN]
 
 func _is_brake() -> bool:
 	return act == Act.BRAKE_REACH or act == Act.BRAKE_HOLD
@@ -1041,14 +1061,40 @@ func _step_act(delta: float) -> void:
 			if t >= 1.0:
 				_start(Act.RADIO_PRESS)
 		Act.RADIO_PRESS:
-			var t := clampf(act_t / PRESS_SECS, 0.0, 1.0)
-			_hand_xf = _radio_hand_transform(sin(t * PI))
-			if t >= 0.5 and not _pressed:
-				_pressed = true
-				_contact(_radio_contact)   # the station changes here
+			if _swipe:
+				# the finger lands right of the glass centre; the ring starts moving on contact
+				var t := clampf(act_t / LAND_SECS, 0.0, 1.0)
+				_hand_xf = _radio_hand_transform(_ease(t))
+				if t >= 1.0:
+					_pressed = true
+					_contact(_radio_contact)
+					_start(Act.RADIO_SWIPE)
+			else:
+				# a plain tap: the knob, or the power spot
+				var t := clampf(act_t / PRESS_SECS, 0.0, 1.0)
+				_hand_xf = _radio_hand_transform(sin(t * PI))
+				if t >= 0.5 and not _pressed:
+					_pressed = true
+					_contact(_radio_contact)   # the radio switches here
+				if t >= 1.0:
+					if _more_radio():
+						_begin_radio()   # another press waiting: on to its point
+					else:
+						_start(Act.RADIO_RETURN)
+		Act.RADIO_SWIPE:
+			# still pressed, SWIPE_M right to left, the way the cards go
+			var t := clampf(act_t / SWIPE_SECS, 0.0, 1.0)
+			_hand_xf = _radio_hand_transform(1.0, _ease(t))
 			if t >= 1.0:
-				if radio_requests > 0 and not (frame.lever_moving and frame.lever_needs_hand()):
-					_begin_radio()   # another press waiting: on to the next tile
+				_start(Act.RADIO_LIFT if _more_radio() else Act.RADIO_RETURN)
+		Act.RADIO_LIFT:
+			# another press waiting: the finger lifts and comes back over the start
+			var t := clampf(act_t / LIFT_SECS, 0.0, 1.0)
+			_hand_xf = _hand_from.interpolate_with(_radio_hand_transform(0.0), _ease(t))
+			if t >= 1.0:
+				if _more_radio():
+					var next_kind: int = _radio_kinds[0] if not _radio_kinds.is_empty() else RADIO_NEXT
+					_begin_radio(next_kind == RADIO_NEXT)   # a power press reaches for its own point
 				else:
 					_start(Act.RADIO_RETURN)
 		Act.RADIO_RETURN:

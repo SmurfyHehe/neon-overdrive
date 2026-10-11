@@ -18,7 +18,8 @@ extends SceneTree
 # Crash clips (CRASH_CLIPS) also get a "_laptop" copy, high-passed at 200 Hz:
 # roughly what laptop speakers play of it. For those clips the run prints the
 # crash bus's own peak, before the Master limiter: over -1 dB is what the
-# limiter takes off.
+# limiter takes off. Clip 10 prints the engine bus's peak the same way, to set
+# crash levels against the engine at full throttle.
 
 const GAP := 0.6   # s of unrecorded settling between clips
 
@@ -54,6 +55,7 @@ const CLIPS := [
 ]
 const CRASH_CLIPS := ["11", "12", "13", "14", "25", "26", "27"]
 const LAPTOP_HZ := 200.0
+const PROBE_DB := 12.0   # a probe can read peaks this far over full scale
 
 var game: Node
 var p: PlayerCar
@@ -64,6 +66,7 @@ var radio: RadioManager
 var drive: DrivelineAudio
 var record: AudioEffectRecord
 var crash_record: AudioEffectRecord   # on the crash sounds' own bus, before the Master limiter
+var engine_record: AudioEffectRecord
 var only := PackedStringArray()
 var dir := ""
 var clip := -1
@@ -126,8 +129,8 @@ func _process(delta: float) -> bool:
 		radio = game.get("radio")
 		radio.next_station()   # tune now, so the tracks have loaded by the radio clip
 		# after PerspectiveAudio's filter, so it hears the bus as the Master does
-		crash_record = AudioEffectRecord.new()
-		AudioServer.add_bus_effect(AudioServer.get_bus_index((crash.get_child(0) as AudioStreamPlayer).bus), crash_record)
+		crash_record = _probe((crash.get_child(0) as AudioStreamPlayer).bus)
+		engine_record = _probe(&"Engine")
 		gap_t = 1.5   # let the game settle first
 		return false
 	if not recording:
@@ -153,6 +156,7 @@ func _start(i: int) -> void:
 	recording = true
 	record.set_recording_active(true)
 	crash_record.set_recording_active(true)
+	engine_record.set_recording_active(true)
 
 func _stop() -> void:
 	record.set_recording_active(false)
@@ -162,8 +166,11 @@ func _stop() -> void:
 	var err := wav.save_to_wav(path) if wav != null else FAILED
 	print("%-36s %4.1f s -> %s, peak %.1f dB" % [CLIPS[clip][0], CLIPS[clip][1], "ok" if err == OK else "error %d" % err, _peak_db(wav)])
 	crash_record.set_recording_active(false)
+	engine_record.set_recording_active(false)
+	if String(CLIPS[clip][0]).begins_with("10"):
+		print("    engine bus alone, before the limiter: peak %.1f dB" % (_peak_db(engine_record.get_recording()) + PROBE_DB))
 	if String(CLIPS[clip][0]).substr(0, 2) in CRASH_CLIPS and wav != null:
-		print("    crash bus alone, before the limiter: peak %.1f dB" % _peak_db(crash_record.get_recording()))
+		print("    crash bus alone, before the limiter: peak %.1f dB" % (_peak_db(crash_record.get_recording()) + PROBE_DB))
 		var thin := _high_passed(wav, LAPTOP_HZ)
 		if thin != null:
 			thin.save_to_wav(dir.path_join(CLIPS[clip][0] + "_laptop.wav"))
@@ -295,6 +302,21 @@ func _run(name: String, t: float, dur: float) -> void:
 			if t >= 15.0 and not fired.has("later"):
 				fired.later = true
 				drive.cooling = 40.0
+
+## A recorder on a bus that can read peaks over full scale (a recording clips
+## there): the bus is turned down PROBE_DB into it and back up after it, so the
+## bus itself is unchanged.
+func _probe(bus_name: StringName) -> AudioEffectRecord:
+	var bus := AudioServer.get_bus_index(bus_name)
+	var down := AudioEffectAmplify.new()
+	down.volume_db = -PROBE_DB
+	var up := AudioEffectAmplify.new()
+	up.volume_db = PROBE_DB
+	var rec := AudioEffectRecord.new()
+	AudioServer.add_bus_effect(bus, down)
+	AudioServer.add_bus_effect(bus, rec)
+	AudioServer.add_bus_effect(bus, up)
+	return rec
 
 ## Peak of a 16-bit recording, dB (0 = full scale).
 func _peak_db(wav: AudioStreamWAV) -> float:

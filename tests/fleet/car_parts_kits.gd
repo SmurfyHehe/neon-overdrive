@@ -83,6 +83,30 @@ const CARS := {
 			["barn_l", "barn_r", Vector3.RIGHT, Vector3.BACK, 1, 0.57],
 		],
 	},
+	"p5_muscle": {
+		## a two-door hardtop: no B-pillar; no high brake lamp (era), so no brake_c
+		"without": ["pillar_b_l", "pillar_b_r", "brake_c"],
+		"parts": ["grille", "tail_panel", "bumper_blade_f", "bumper_blade_r", "hood_bulge", "buttress_l", "buttress_r",
+			"glass_quarter_l", "glass_quarter_r", "belt_trim_l", "belt_trim_r", "belt_trim_door_l", "belt_trim_door_r",
+			"mirror_l", "mirror_r", "antenna", "plate_lamp", "caliper_fl", "caliper_fr", "caliper_rl", "caliper_rr",
+			"bay_floor", "bay_radiator_core",
+			"pillar_b_l", "pillar_b_r", "brake_c"],   # listed so that `without` is checked
+		## the blinkers at the rear are the red ends of the one tail bar (era)
+		"lamps": {"head_l": "glow_head", "head_r": "glow_head", "turn_fl": "glow_turn", "turn_fr": "glow_turn",
+			"turn_rl": "glow_tail", "turn_rr": "glow_tail", "tail_l": "glow_tail", "tail_r": "glow_tail",
+			"brake_l": "glow_brake", "brake_r": "glow_brake", "reverse_l": "glow_reverse", "reverse_r": "glow_reverse",
+			"plate_lamp": "glow_lens"},
+		"anchors": ["bay_engine", "bay_radiator", "tank", "fuel_filler", "diff"],
+		## 280 mm vented discs on all four
+		"brakes": {"fl": 0.14, "fr": 0.14, "rl": 0.14, "rr": 0.14},
+		"no_hubcap": [],
+		"gaps": [
+			["hood", "fender_fr", Vector3.RIGHT, Vector3.UP, 2, -1.42],
+			["fender_fr", "door_r", Vector3.BACK, Vector3.RIGHT, 1, 0.77],
+			["door_r", "body", Vector3.BACK, Vector3.RIGHT, 1, 0.77],
+			["trunk", "body", Vector3.RIGHT, Vector3.UP, 2, 2.28],
+		],
+	},
 }
 
 var fails := 0

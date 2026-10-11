@@ -94,13 +94,13 @@ P4['options'] = {
 
 # ------------------------------------------------------------------ P5
 P5['options'] = {
-    'hood': {'stock': {'label': 'Cowl scoop', 'ops': []},
-             'shaker': M.scoop(P5, 0.98, 1.42, 0.44, 0.17, 'Shaker scoop'),
-             'flat': M.flat_hood('Flat hood (sleeper)')},
+    'hood': {'stock': {'label': 'Power bulges', 'ops': []},
+             'cowl': M.scoop(P5, 0.62, 1.40, 0.56, 0.09, 'Cowl scoop'),
+             'shaker': M.scoop(P5, 0.74, 1.16, 0.44, 0.15, 'Shaker scoop')},
     'front_bumper': {'stock': STOCK, 'chin': M.lip(P5)},
-    'spoiler': {'stock': {'label': 'Ducktail', 'ops': []},
-                'drag': M.gt_wing(P5, 0.24, chord=0.30, label='Drag wing'),
-                'smooth': {'label': 'Smooth deck', 'ops': [{'op': 'curve', 'curve': 'top', 'keys': [(5.20, 1.00), (5.27, 0.99)]}]}},
+    'spoiler': {'stock': {'label': 'Plain deck', 'ops': []},
+                'ducktail': M.ducktail(P5, 0.05),
+                'drag': M.gt_wing(P5, 0.24, chord=0.30, label='Drag wing')},
     'skirts': {'stock': STOCK, 'skirts': M.skirts(P5)},
     'wheels': _wheel_set('Deep dish', ('five', M.wheels('5spoke', '5-spoke', 0.74)), ('mono', M.wheels('mono', 'Monoblock black', 0.76, 'rim_dark')),
                          ('steel', M.wheels('steel', 'Steelies (sleeper)', 0.70))),

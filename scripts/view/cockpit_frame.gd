@@ -387,7 +387,7 @@ func _build_static() -> void:
 		lit.box(Vector3(0.004, 0.004, door_len - 0.25), Vector3(side * (door_x - 0.002), card_top, door_zc), Color(strip, strip.a * 0.86))
 		k.box(Vector3(0.14, 0.12, door_len + 0.10), Vector3(side * (minf(door_x, door_x_f) - 0.04), floor_y + 0.04, door_zc + 0.05), c_plastic)   # sill
 		# B-pillar inner face and the rear quarter trim behind the door
-		if open_top:
+		if open_top or bool(cab.get("hardtop", false)):   # a pillarless hardtop: only the stub at the belt
 			k.box(Vector3(0.06, 0.08, 0.08), Vector3(side * (door_x_r - 0.05), belt + 0.02, b_z), c_plastic)
 		else:   # up the tumblehome to the roof's edge
 			_bar(k, Vector3(side * (door_x_r - 0.05), belt, b_z), Vector3(side * (pillar_top.x - 0.04), roof_y - 0.05, b_z), 0.07, c_plastic)

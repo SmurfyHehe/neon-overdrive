@@ -8,6 +8,8 @@ extends Node3D
 # This script owns the world (chunks, ground collision, camera)
 # and the player instance.
 
+const FixCar := preload("res://scripts/car/fix_car.gd")
+
 const CHUNKS_AHEAD := 6
 const CHUNKS_BEHIND := 4
 ## Road behind the player is rebuilt (it vanishes) only once no camera can see
@@ -781,6 +783,9 @@ func _physics_process(_delta: float) -> void:
 	_sync_wetness()
 	if Input.is_action_just_pressed("mute"):
 		toggle_mute()
+	# F6: fix the car while driving (same as the pause row). Shown in every build for now.
+	if Input.is_action_just_pressed("fix_car") and FixCar.FIX_CAR_ENABLED and game_state.state == GameState.State.PLAYING:
+		FixCar.fix(player)
 	if Input.is_action_just_pressed("radio_next") and radio != null:
 		request_next_station()
 	if Input.is_action_just_pressed("put_back") and game_state.state == GameState.State.PLAYING:

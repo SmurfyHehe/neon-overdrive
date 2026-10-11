@@ -23,6 +23,7 @@ const GameInfo := preload("res://scripts/core/game_info.gd")
 const TestBuild := preload("res://scripts/core/test_build.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
 const MapView := preload("res://scripts/ui/map_view.gd")
+const FixCar := preload("res://scripts/car/fix_car.gd")
 
 const SILVER := Color("#C9CED6")
 const AMBER := Color("#FFC066")
@@ -34,6 +35,7 @@ var map_button: Button
 ## The Map page: null unless it is up.
 var map_view: Control
 var _map_modal := false
+var fix_car_button: Button
 var lower_look_button: Button
 var restart_button: Button
 var settings_button: Button
@@ -105,6 +107,9 @@ func _ready() -> void:
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	map_button = _add_button(box, "Map", show_map)
 	map_button.visible = RoadMap.is_loop()
+	# Fix the car: free and total, one press (scripts/car/fix_car.gd). Shown in every build for now.
+	fix_car_button = _add_button(box, "Fix the car", _fix_car)
+	fix_car_button.visible = FixCar.FIX_CAR_ENABLED
 	restart_button = _add_button(box, "Restart night", _ask_restart)
 	# TEST BUILD (TestBuild): the sandbox's way out of any stuck state. Hidden
 	# when the switch is off, so the release screen keeps its five rows.
@@ -251,6 +256,11 @@ func _ask_quit_to_title() -> void:
 	if GameState.chase_locked():
 		text = "Quit to the title mid-chase? That counts as a bust."
 	confirm.ask(text, "Quit", game_state.quit_to_title)
+
+## Fix the car from the pause screen, then carry on driving.
+func _fix_car() -> void:
+	FixCar.fix(get_parent().get("player"))
+	game_state.resume()
 
 ## Ferris's tow (damage slice 1): only for a dead engine, never in a chase.
 ## The car goes home, the night ends, and the garage at home fixes it; the

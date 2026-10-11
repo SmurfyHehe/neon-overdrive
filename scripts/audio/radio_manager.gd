@@ -158,6 +158,11 @@ func _ready() -> void:
 	add_child(_player)
 	_player.play()
 	_playback = _player.get_stream_playback()
+	# The playback keeps its generator alive (Godot's generator playback only has
+	# a raw pointer to it): the audio thread mixes a stopped player once more
+	# after the node is freed, and a freed generator there hangs or crashes the
+	# game, at quit too (#539).
+	_playback.set_meta(&"generator", gen)
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	# The caption for a station change or a new song, outside view only: the

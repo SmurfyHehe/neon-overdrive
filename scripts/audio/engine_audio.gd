@@ -88,6 +88,11 @@ func _ready() -> void:
 	bus = &"Engine"
 	play()
 	_playback = get_stream_playback()
+	# The playback keeps its generator alive (Godot's generator playback only has
+	# a raw pointer to it): the audio thread mixes a stopped player once more
+	# after the node is freed, and a freed generator there hangs or crashes the
+	# game, at quit too (#539).
+	_playback.set_meta(&"generator", gen)
 	turbo.mix_rate = synth.mix_rate
 	# Per-part turbo voice (B1) under the car's boost setup: C1's ForcedInduction
 	# keeps the kind in the boost_kind meta ("single" when unset or before C1).
@@ -103,6 +108,7 @@ func _ready() -> void:
 	add_child(_turbo_player)
 	_turbo_player.play()
 	_turbo_playback = _turbo_player.get_stream_playback()
+	_turbo_playback.set_meta(&"generator", tgen)   # as above (#539)
 	bank = EngineLoopPlayer.new()
 	bank.name = "Loops"
 	bank.wander = float(_spec.get("engine_voice", {}).get("wander", 0.6))

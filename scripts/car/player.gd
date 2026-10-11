@@ -319,6 +319,7 @@ func _ready() -> void:
 		add_child(CrashAudio.new())  # crashes and scrapes (2026-10-08)
 		add_child(DamageAudio.new())  # rattle once parts are broken (damage slice 1)
 		add_child(StarterAudio.new())  # the starter motor while X cranks a stopped engine
+		add_child(PlayerHorn.new())  # the horn on J (key map K2)
 
 		# Stage A (2026-10-04): headlights + blob shadow, since the world is dark
 		# on purpose now (Look Board B). After the body and wheels exist, because

@@ -31,6 +31,7 @@ const PlaceNames := preload("res://scripts/world/place_names.gd")
 const Districts := preload("res://scripts/world/districts.gd")
 
 const Weather := preload("res://scripts/world/weather.gd")
+const WheelStyles := preload("res://scripts/view/wheel_styles.gd")
 const INTERIOR_LAYER := 3
 const DRIVER_LAYER := 4
 const MIRROR_ONLY_LAYER := 5
@@ -229,6 +230,9 @@ var crank: Node3D                # the crank's hub pivot (crank cars), else null
 var window_switch: Node3D        # the rocker's pivot (switch cars), else null
 var _window_parts: Node3D        # whatever set_window_control() built
 var _area_run := -1              # the district run the car was last in (area name on the head unit)
+var _wheel_kind := ""            # the car the wheel picks are read for
+var _wheel_sig := ""             # CabinMods.wheel_signature the wheel was built from
+var _mods_version := -1
 var wheel_angle := 0.0           # the drawn wheel, radians, + = right (chases steering)
 var _wheel_vel := 0.0            # rad/s
 var cockpit := false
@@ -865,19 +869,32 @@ func _build_wheel() -> void:
 	add_child(wheel_mount)
 	wheel = SteeringWheel.new()
 	wheel.name = "Wheel"
-	if String(cab.get("trim", "stock")) == "worn":
-		# the beater: a thin ivory rim, grey seam, painted spokes to match the dash
-		wheel.rim_colour = Color("#D9D2BC")
-		wheel.seam_colour = Color("#9A947F")
-		wheel.spoke_colour = Color("#6B7668")
-		wheel.carbon_colour = Color("#7E8A7B")
-		wheel.carbon_alt_colour = Color("#6B7668")
+	# The shape, grip and stitching are the car's picks (CabinMods, saved per
+	# car); the beater's worn ivory colourway is WheelStyles.apply's default.
+	_wheel_kind = PlayerCar.chassis_kind()
+	_wheel_sig = CabinMods.wheel_signature(_wheel_kind)
+	_mods_version = CabinMods.version
+	WheelStyles.apply(wheel, _wheel_kind, CabinMods.wheel_picks(_wheel_kind))
 	wheel_mount.add_child(wheel)
 	# A short column stub behind the hub (the long pole down the middle of the
 	# view is gone, Roy 2026-10-06); the shroud is on the dash face, under the cluster.
 	var k := CockpitKit.new()
 	k.cylinder(0.024, -0.09, -0.03, Vector3.ZERO, PLASTIC_LIGHT, 8, Basis(Vector3.RIGHT, -PI / 2.0))
 	wheel_mount.add_child(k.instance(CockpitKit.material(), "Column"))
+
+## Rebuilds the wheel when the car's shape, grip or stitching pick changed
+## (CabinMods.version moved and the signature differs). The node stays, so the
+## hands and the tests keep their reference.
+func _refresh_wheel() -> void:
+	var sig := CabinMods.wheel_signature(_wheel_kind)
+	if sig == _wheel_sig:
+		return
+	_wheel_sig = sig
+	WheelStyles.apply(wheel, _wheel_kind, CabinMods.wheel_picks(_wheel_kind))
+	wheel.rebuild()
+	_set_layers(wheel, INTERIOR_BIT)
+	for n in wheel.find_children("*", "GeometryInstance3D", true, false):
+		(n as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 # ---------- instrument cluster ----------
 
@@ -1362,6 +1379,9 @@ func _process(delta: float) -> void:
 	var frac := clampf(p.motor_rpm / max_rpm, 0.0, 1.0)
 	var cue := Hud.shift_cue(p, frac)
 	var blink := Hud.blink()
+	if CabinMods.version != _mods_version:
+		_mods_version = CabinMods.version
+		_refresh_wheel()
 	_step_wheel(delta)
 	wheel.update(frac, cue, blink, Hud.kmh(p.current_speed()), p.gear, delta)
 	var rest := dial_sweep * 0.5   # the needle points at the first tick (lower left, or the band's left end)
@@ -1519,5 +1539,5 @@ func triangle_count() -> int:
 				n += (mesh as ArrayMesh).surface_get_array_len(s) / 3
 		elif mesh is QuadMesh:
 			n += 2
-	n += 12 * (SteeringWheel.LED_COUNT + 4 + SteeringWheel.SCREEN_SEGS + 4 + (SevenSeg.SEG_COUNT if cab.get("gear_window", false) else 0))
+	n += wheel.screen_triangles() + 12 * (4 + (SevenSeg.SEG_COUNT if cab.get("gear_window", false) else 0))
 	return n

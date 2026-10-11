@@ -21,6 +21,7 @@ const GameInfo := preload("res://scripts/core/game_info.gd")
 const LogFolder := preload("res://scripts/core/log_folder.gd")
 const DiscordPresence := preload("res://scripts/core/discord_presence.gd")
 const TestBuild := preload("res://scripts/core/test_build.gd")
+const WheelStyles := preload("res://scripts/view/wheel_styles.gd")
 
 const PAGES: Array[String] = ["Sound", "Picture", "Driving", "Controls", "Game"]
 ## What a mixer channel is called on the Sound page (the rest use their own name).
@@ -576,6 +577,24 @@ func _build_game_page(parent: Control) -> Control:
 		CabinMods.set_bobble(bobble_kind, BobbleFigures.IDS[clampi(i, 0, BobbleFigures.IDS.size() - 1)])
 		CabinMods.save_settings())
 	bobble.selected = BobbleFigures.index_of(CabinMods.bobble_for(bobble_kind))
+	# Steering wheel (W1): shape, grip and stitching, saved per car. The race
+	# wheel is the default; a car with nothing stored shows its own grip and
+	# stitching colour in the lists.
+	var wheel_kind := PlayerCar.chassis_kind()
+	var wheel_shape := _add_option(page, "Steering wheel", WheelStyles.shape_names(), func(i: int) -> void:
+		CabinMods.set_wheel_shape(wheel_kind, WheelStyles.SHAPE_IDS[clampi(i, 0, WheelStyles.SHAPE_IDS.size() - 1)])
+		CabinMods.save_settings())
+	wheel_shape.selected = maxi(WheelStyles.SHAPE_IDS.find(CabinMods.wheel_shape_for(wheel_kind)), 0)
+	var wheel_grip := _add_option(page, "Wheel grip", WheelStyles.grip_names(), func(i: int) -> void:
+		CabinMods.set_wheel_grip(wheel_kind, WheelStyles.GRIP_IDS[clampi(i, 0, WheelStyles.GRIP_IDS.size() - 1)])
+		CabinMods.save_settings())
+	var grip_id := CabinMods.wheel_grip_for(wheel_kind)
+	wheel_grip.selected = maxi(WheelStyles.GRIP_IDS.find(grip_id if grip_id != "" else WheelStyles.default_grip(wheel_kind)), 0)
+	var wheel_stitch := _add_option(page, "Stitching", WheelStyles.stitch_names(), func(i: int) -> void:
+		CabinMods.set_wheel_stitch(wheel_kind, WheelStyles.STITCH_IDS[clampi(i, 0, WheelStyles.STITCH_IDS.size() - 1)])
+		CabinMods.save_settings())
+	var stitch_id := CabinMods.wheel_stitch_for(wheel_kind)
+	wheel_stitch.selected = maxi(WheelStyles.STITCH_IDS.find(stitch_id if stitch_id != "" else WheelStyles.default_stitch(wheel_kind)), 0)
 	var knob_names := []
 	for id in CabinMods.KNOB_IDS:
 		knob_names.append(CabinMods.KNOB_NAMES[id])

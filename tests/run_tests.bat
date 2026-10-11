@@ -53,6 +53,7 @@ call :run ui/settings_screen --headless
 call :run ui/title_and_pause --headless
 call :run ui/title_kerbside --headless
 call :run ui/pause_look --headless
+call :run ui/mod_tree_panel --headless
 call :run audio/menu_sfx --headless
 call :run core/key_bindings --headless
 call :run fleet/car_loft_normals --headless

@@ -33,9 +33,11 @@
 			"feel": "Boost from low revs. A flat, wide pull.", "cost_nights": 3.5, "band_min": "T2"},
 
 		{"id": "grip", "level": 3, "parent": ["A1", "A2", "B1", "B2"], "template": "capstone_grip", "name": "Grip",
-			"feel": "Planted. A wing that works; it goes where you point it.", "cost_nights": 6.0, "band_min": "T3"},
+			"feel": "Planted. A wing that works; it goes where you point it.", "cost_nights": 6.0, "band_min": "T3",
+			"needs": ["suspension_2"]},
 		{"id": "slide", "level": 3, "parent": ["A1", "A2", "B1", "B2"], "template": "capstone_slide", "name": "Slide",
-			"feel": "Loose on purpose. The back steps out and stays out.", "cost_nights": 6.0, "band_min": "T3"}
+			"feel": "Loose on purpose. The back steps out and stays out.", "cost_nights": 6.0, "band_min": "T3",
+			"needs": ["diff_2"]}
 	],
 
 	"side": [

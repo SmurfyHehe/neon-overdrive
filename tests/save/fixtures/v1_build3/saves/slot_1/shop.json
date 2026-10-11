@@ -1,0 +1,23 @@
+NEONSAVE1 e5e57d23b98fa318a8894448c1084ca0cbc64b8bed92eee0d28d41897a12ae59
+{
+	"cards": [
+		"walt_regular_2",
+		"scrap_alternator",
+		"dave_old_car"
+	],
+	"day": 6,
+	"late_taken": "scrap_alternator",
+	"marks": [
+		1.0,
+		0.5,
+		0.75
+	],
+	"night": 6,
+	"paid": 470,
+	"recent": [
+		"walt_regular_2"
+	],
+	"stage": "late_job",
+	"stay_late": true,
+	"taken": "walt_regular_2"
+}

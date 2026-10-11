@@ -10,7 +10,12 @@ extends Node
 #
 # It grows with distance driven (speed x time, so a floating-origin shift does
 # not matter), faster off the tarmac, and is saved so it survives a restart and
-# a quit; only the wash (wash_screen.gd) takes it back down. The FxSettings
+# a quit; only the wash (wash_screen.gd) takes it back down. In the game it is
+# saved with the car in the save slot (save core S1, 2026-10-11: the night's
+# car_live.dirt, folded into the career's cars[car id].dirt; SaveDirector reads
+# `level`), so each slot's car has its own dirt. The old shared
+# user://car_dirt.cfg is upgraded into the slot and not read again; test mode
+# and tests that set `path` still use a .cfg file. The FxSettings
 # "dirt" flag (pause menu) turns both the build-up and the drawing off; the
 # saved level is kept, so turning it back on shows the car as it was.
 
@@ -19,6 +24,8 @@ const OFF_ROAD_RATE := 4.0           # kerbs, verges and dirt shoulders coat it 
 const SAVE_EVERY_SECS := 5.0
 const DEFAULT_PATH := "user://car_dirt.cfg"
 const TestMode := preload("res://scripts/core/test_mode.gd")
+const SaveCore := preload("res://scripts/save/save_core.gd")
+## DEFAULT_PATH means "in the save slot"; any other path is a .cfg file (tests).
 static var path := TestMode.path(DEFAULT_PATH)
 
 ## 0..1, the stored amount of grime.
@@ -85,17 +92,23 @@ func apply() -> void:
 		_shown = v
 
 func load_state() -> void:
-	var cfg := ConfigFile.new()
-	if cfg.load(path) != OK:
-		return
-	var v: Variant = cfg.get_value("dirt", "level", 0.0)
+	var v: Variant
+	if path == DEFAULT_PATH:
+		if not SaveCore.persist:
+			return
+		v = SaveCore.car_state(PlayerCar.chassis_kind()).get("dirt", 0.0)
+	else:
+		var cfg := ConfigFile.new()
+		if cfg.load(path) != OK:
+			return
+		v = cfg.get_value("dirt", "level", 0.0)
 	var f: float = float(v) if (v is float or v is int) else 0.0
 	level = clampf(f, 0.0, 1.0) if is_finite(f) else 0.0
 	_saved_level = level
 
 func save_state() -> bool:
-	if is_equal_approx(level, _saved_level):
-		return true
+	if is_equal_approx(level, _saved_level) or path == DEFAULT_PATH:
+		return true   # in the slot the level goes with the night save (SaveDirector)
 	var cfg := ConfigFile.new()
 	cfg.load(path)  # a missing file is fine
 	cfg.set_value("dirt", "level", level)

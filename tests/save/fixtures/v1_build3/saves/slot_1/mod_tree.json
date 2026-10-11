@@ -1,0 +1,11 @@
+NEONSAVE1 6dfe982c074b73e97ecc86a77c2847b231eb52da44ce1d2582d95953ed1fd511
+{
+	"cars": {
+		"p1_coupe": {
+			"installed": [
+				"exhaust_a",
+				"turbo_s1"
+			]
+		}
+	}
+}

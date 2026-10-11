@@ -21,6 +21,8 @@ extends SceneTree
 # - a visit from the forecourt opens the garage, saves the run in under 16 ms;
 #   refused (toast signal) while a cop sees the player
 # - a 6 a.m. during a chase waits for the chase to end, then the dawn card opens
+# - a real 6 a.m.: the card shows the banked amount, and the night save that
+#   follows the dawn commit is the new night's (save core)
 # - the Polaroid writer scales to 320x180 and lands in the slot's folder
 # Old rows
 # - no Service car / Wash car button on the pause screen or on Settings, and the
@@ -30,6 +32,8 @@ extends SceneTree
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/core/garage_g0.gd
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
+const AtomicJson := preload("res://scripts/save/atomic_json.gd")
+const SaveCore := preload("res://scripts/save/save_core.gd")
 const SaveDirector := preload("res://scripts/save/save_director.gd")
 const TestBuild := preload("res://scripts/core/test_build.gd")
 const Presence := preload("res://scripts/core/presence.gd")
@@ -185,6 +189,34 @@ func _run() -> void:
 	gs.leave_garage()
 	await physics_frame
 	_check(gs.state == GameState.State.PLAYING, "back on the road after the dawn visit")
+
+	# ---------- a real 6 a.m.: the bank, then the card, then the night save ----------
+	# The dawn commit closes the night; the night save that follows it must be
+	# the new night's, or a reload would drop it as already banked.
+	var w: Node = game.wallet
+	var clock: NightClock = game.night_clock
+	var ended: int = clock.night
+	var bank0: int = w.bank
+	w.add_cash(730)
+	clock.advance((NightClock.NIGHT_MINUTES - clock.minutes + 1.0) * NightClock.REAL_SECONDS_PER_HOUR / 60.0)
+	_check(gs.state == GameState.State.DAWN and gs.dawn_night == ended, "6 a.m. opens the dawn card for night %d (state %d, night %d)" % [ended, gs.state, gs.dawn_night])
+	await process_frame
+	await process_frame   # the deferred night save
+	var card3: DawnCard = _node("DawnCard")
+	_check(card3.banked_label.visible and card3.banked_label.text == "Banked $730", "the dawn card shows what was banked: '%s'" % card3.banked_label.text)
+	_check(w.cash == 0 and w.bank == bank0 + 730, "6 a.m. banked the cash (cash %d, bank %d, was %d)" % [w.cash, w.bank, bank0])
+	SaveCore.forget()   # read it as a relaunch would
+	var story: Dictionary = SaveCore.career().get("story", {})
+	_check(SaveCore.bank() == bank0 + 730 and SaveCore.cash() == 0, "on disk after dawn: bank %d cash %d" % [SaveCore.bank(), SaveCore.cash()])
+	_check(int(story.get("night_closed", 0)) == ended and int(story.get("night", 0)) == ended + 1, "the career closed night %d: %s" % [ended, str(story)])
+	var raw: Dictionary = AtomicJson.read(SaveCore.file("night")).get("data", {})
+	_check(int(raw.get("night", 0)) == ended + 1 and int(raw.get("base_gen", -1)) == SaveCore.gen() and int(raw.get("cash", -1)) == 0,
+		"the night save after the dawn commit is night %d on the new career (night %s, base_gen %s, gen %d, cash %s)" % [ended + 1, str(raw.get("night")), str(raw.get("base_gen")), SaveCore.gen(), str(raw.get("cash"))])
+	_check(SaveDirector.valid_run(SaveStore.load_run()), "the run saved after dawn resumes (it is not dropped as a banked night)")
+	gs.dawn_continue()
+	gs.leave_garage()
+	await physics_frame
+	_check(gs.state == GameState.State.PLAYING, "back on the road after the real dawn")
 
 	# Forecourt: opens, and the entry (save + polaroid hook) is cheap.
 	var saves_before: int = game.saver.saves

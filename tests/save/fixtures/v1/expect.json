@@ -1,0 +1,7 @@
+{
+	"about": "A version 1 save (2026-10-11, before save core S1): slot 1 was being played, slot 2 was not. What must still be true of the active slot after it is upgraded and loaded.",
+	"bank": 1830,
+	"cash": 240,
+	"owned_parts": ["exhaust_a", "turbo_s1", "wheels_mesh"],
+	"night_resumes": true
+}

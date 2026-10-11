@@ -1,0 +1,7 @@
+{
+	"about": "A build 3 save (2026-10-11, playtest/build-3 before save core): version 1 files plus shop.json (shop day 6: the day's order paid, staying late, a second card taken), 3 wallet receipts, meta weather_seed 12345, and a run on night 7 with a rain weather block, 2 known stops and a manual gearbox in 3rd. One part is owned as \"p1_coupe/exhaust_a\". What must still be true of the slot after it is upgraded and loaded.",
+	"bank": 2470,
+	"cash": 310,
+	"owned_parts": ["p1_coupe/exhaust_a", "turbo_s1", "wheels_mesh", "p2_hothatch/seat_b"],
+	"night_resumes": true
+}

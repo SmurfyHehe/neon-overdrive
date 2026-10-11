@@ -1,7 +1,8 @@
 extends SceneTree
 
-# Weather in the run save (WX0): the stage and its live values go into run.json
-# ("weather"), the seed lives in the slot profile, and a resume puts both back.
+# Weather in the run save (WX0): the stage and its live values go into the
+# night ("weather"), the seed lives in the slot's career (world.weather_seed),
+# and a resume puts both back.
 #   1 mid-rain    rain begins at 1 a.m. (a night whose plan has that change);
 #                 saved at 1:30 a.m. while the road is still wetting
 #   2 resume      stage, wetness and wipers match what was saved (the wetness
@@ -11,14 +12,16 @@ extends SceneTree
 #                 weather seed, so the road seed is used once and saved
 #   4 newer save  a stage number this build does not know falls back to the
 #                 plan's stage
-#   5 new game    with no run to resume a new weather seed is picked and saved
+#   5 new game    a slot with no weather seed picks one and saves it
 #   6 repeatable  the plan comes back from seed + night alone
+#   7 once a game with no run to resume (a restart) the seed stays; two dawns
+#                 in a row keep the same seed; another slot picks its own
 # Exit code 1 on failure. Run (headless, one Godot):
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/world/weather_save.gd
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
 const SaveDirector := preload("res://scripts/save/save_director.gd")
-const AtomicJson := preload("res://scripts/save/atomic_json.gd")
+const SaveCore := preload("res://scripts/save/save_core.gd")
 const Weather := preload("res://scripts/world/weather.gd")
 const Plan := preload("res://scripts/world/weather_plan.gd")
 const TALK := 2
@@ -56,6 +59,7 @@ func _initialize() -> void:
 	NightClock.path = "user://test_weather_save.cfg"
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(NightClock.path))
 	SaveStore.root = "user://test_weather_save"
+	_wipe(ProjectSettings.globalize_path(SaveStore.root))
 	SaveStore.slot = 0
 	SaveStore.chase_active = false
 	SaveDirector.enabled = true
@@ -148,7 +152,7 @@ func _physics_process(_delta: float) -> bool:
 				var run := SaveStore.load_run()
 				run.erase("weather")
 				SaveStore.save_run(run)
-				AtomicJson.write(SaveStore.file("meta"), {"chase_open": false, "pending_busts": 0, "saved_at": 1})
+				SaveCore.commit("test", {}, func(c: Dictionary) -> void: c.world.erase("weather_seed"))
 				_check(SaveStore.weather_seed() == 0, "3 old save: the profile has no weather seed now")
 				phase = 2
 				_boot()
@@ -177,19 +181,42 @@ func _physics_process(_delta: float) -> bool:
 				# 6 repeatable: the same plan from seed and night alone
 				_check(str(Plan.entry(night, game.weather_seed)) == str(Plan.generate(Plan.act_range(night).x, Plan.act_range(night).y, game.weather_seed)[night - Plan.act_range(night).x]),
 					"6 repeatable: tonight's plan comes back from seed + night")
-				# 5 new game: no run to resume, so a new seed is picked
-				var before: int = game.weather_seed
+				# 7 once a game: no run to resume (a restart), the seed stays
+				seed_s = game.weather_seed
 				SaveStore.clear_run()
 				phase = 4
 				_boot()
-				seed_s = before
-		4:
+		4, 5, 6:
+			if ticks == 3:
+				var what: String = ["a restart (no run to resume)", "the first dawn", "the second dawn in a row"][phase - 4]
+				_check(SaveStore.load_run().is_empty() or phase == 4, "7 once a game: after %s the night has no run" % what)
+				_check(game.weather_seed == seed_s and SaveStore.weather_seed() == seed_s,
+					"7 once a game: after %s the weather seed is still %d (%d)" % [what, seed_s, game.weather_seed])
+				if phase < 6:
+					# Dawn: the night is banked and closed, night.json is left without a run.
+					_check(SaveCore.commit("dawn", {"close_night": 0}), "7 once a game: the dawn commit went through")
+				else:
+					# A new game in another slot picks its own seed; slot 1 keeps its.
+					SaveStore.select_slot(2)
+				phase += 1
+				_boot()
+		7:
 			if ticks == 3:
 				var picked: int = game.weather_seed
-				_check(picked != 0 and picked != seed_s and SaveStore.weather_seed() == picked,
-					"5 new game: with no run to resume a new seed is picked and saved (%d -> %d)" % [seed_s, picked])
+				_check(picked != 0 and SaveStore.weather_seed() == picked and SaveStore.weather_seed(1) == seed_s,
+					"5 new game: an empty slot picked and saved its own seed (%d); slot 1 kept %d" % [picked, SaveStore.weather_seed(1)])
 				_finish()
 	return false
+
+## Clears this test's own save folder from a previous run.
+func _wipe(dir: String) -> void:
+	if not DirAccess.dir_exists_absolute(dir):
+		return
+	for sub in DirAccess.get_directories_at(dir):
+		_wipe(dir.path_join(sub))
+	for f in DirAccess.get_files_at(dir):
+		DirAccess.remove_absolute(dir.path_join(f))
+	DirAccess.remove_absolute(dir)
 
 func _finish() -> void:
 	SaveDirector.enabled = false

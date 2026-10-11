@@ -39,13 +39,16 @@ func _initialize() -> void:
 	change_scene_to_file("res://Game.tscn")
 	_run.call_deferred()
 
+## A save in slot n, written the way the game writes it (career + night + meta).
 func _seed(n: int, cash: int, bank: int) -> void:
-	AtomicJson.write(SaveStore.file("wallet", n), {"cash": cash, "bank": bank})
-	AtomicJson.write(SaveStore.file("meta", n), {"saved_at": 1791590400})
+	SaveStore.select_slot(n)
+	SaveStore.save_wallet(cash, bank + 1)   # the bank changes: a career commit
+	SaveStore.save_wallet(cash, bank)
 
 func _store() -> void:
 	_check(not SaveStore.summary(2).empty and int(SaveStore.summary(2).cash) == 55, "seeded slot 2 reads back")
-	_check(FileAccess.file_exists(SaveStore.file("wallet", 2) + ".bak1"), "slot 2 has a backup file")
+	_check(FileAccess.file_exists(SaveStore.file("career", 2) + ".bak1"), "slot 2 has a backup file")
+	_check(int(SaveStore.summary(2).bank) == 1250 and not FileAccess.file_exists(SaveStore.slot_dir(2).path_join("wallet.json")), "slot 2 is in the one-save layout")
 	SaveStore.chase_active = true
 	_check(not SaveStore.delete_slot(2) and not SaveStore.summary(2).empty, "a delete is refused during a chase")
 	SaveStore.chase_active = false
@@ -55,7 +58,7 @@ func _store() -> void:
 	_check(not DirAccess.dir_exists_absolute(SaveStore.slot_dir(3)), "slot 3's folder is gone from the saves")
 	_check(not SaveStore.summary(1).empty and not SaveStore.summary(2).empty, "the other slots are untouched")
 	var kept := DirAccess.get_directories_at(ROOT.path_join("deleted"))
-	_check(kept.size() == 1 and FileAccess.file_exists(ROOT.path_join("deleted").path_join(kept[0]).path_join("wallet.json")),
+	_check(kept.size() == 1 and FileAccess.file_exists(ROOT.path_join("deleted").path_join(kept[0]).path_join("career.json")),
 		"the deleted save is kept under deleted/")
 	_check(SaveStore.delete_slot(3), "deleting an empty slot is fine")
 	_check(SaveStore.active_slot() == 1, "the slot in use did not change")

@@ -1119,16 +1119,19 @@ func _start_weather() -> void:
 	else:
 		Weather.reset()
 
-## The seed for the night plan. With saving on it lives in the slot profile:
-## a fresh run (nothing to resume) picks a new one, a resumed run from before
-## WX0 falls back to its road seed once and saves that. With saving off
-## (tests, bots, benchmark) it is the road seed, so those runs repeat.
+## The seed for the night plan. With saving on it lives in the slot's career
+## (world.weather_seed) and is picked once per game: only when the slot has
+## none (a new game, or a save from before WX0). A night with no run to resume
+## (every dawn leaves one) keeps the seed, so the weather is not rolled again
+## each night. A resumed run from before WX0 falls back to its road seed once
+## and saves that. With saving off (tests, bots, benchmark) it is the road
+## seed, so those runs repeat.
 func _resolve_weather_seed() -> void:
 	if not SaveDirector.enabled:
 		weather_seed = road_seed
 		return
 	var s := SaveStore.weather_seed()
-	if s == 0 or run.is_empty():
+	if s == 0:
 		s = road_seed if not run.is_empty() else maxi(randi() & 0x7fffffff, 1)
 		SaveStore.set_weather_seed(s)
 	weather_seed = s

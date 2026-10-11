@@ -11,12 +11,16 @@ extends SceneTree
 # - take_cash / take_bank never go below 0 and say what they took;
 # - during a chase the save is refused and the wallet keeps the change, then
 #   writes it on its own once the chase ends; a reload sees it;
+# - shop pay (Wallet.pay_shop): the bank and the receipt are one career write.
+#   A game killed right after that write comes back with both; killed before
+#   it, with neither; the same receipt twice pays once, also after a reload;
 # - money() formats "$0", "$999", "$1,250", "$1,000,000".
 # Part 2, the real game: cash added in the game shows on the HUD, the clock
 # rolled past 6 a.m. moves it into the bank, and the pause screen shows it.
 #   <godot> --headless --path . -s res://tests/core/wallet.gd
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
+const SaveCore := preload("res://scripts/save/save_core.gd")
 const Wallet := preload("res://scripts/core/wallet.gd")
 const Harness := preload("res://tests/traffic/traffic_harness.gd")
 
@@ -36,6 +40,7 @@ func _initialize() -> void:
 	_sweep()
 	_take()
 	_chase()
+	_pay_shop()
 	# Part 2 boots the game on a fresh slot of the same folder.
 	SaveStore.select_slot(2)
 	game = Harness.boot(self, 0, 300.0, 5)
@@ -113,6 +118,43 @@ func _chase() -> void:
 	w._process(0.0)  # the next frame writes the held change
 	_check(int(SaveStore.load_wallet().cash) == 150, "the held cash was not written after the chase (%d)" % int(SaveStore.load_wallet().cash))
 	_drop(w)
+
+func _pay_shop() -> void:
+	_clear_slot()
+	SaveCore.forget()
+	var w := _wallet()
+	w.add_cash(40)
+	_check(w.pay_shop(450, "day4:brakes") and w.bank == 450, "pay_shop did not pay (bank %d)" % w.bank)
+	_check(not w.pay_shop(450, "day4:brakes") and w.bank == 450, "the same receipt paid twice (bank %d)" % w.bank)
+	var saved := SaveStore.load_wallet()
+	_check(saved.bank == 450 and saved.cash == 40 and saved.receipts == ["day4:brakes"], "the pay was not saved with its receipt: %s" % str(saved))
+	_check(SaveCore._block(SaveCore.career(), "wallet").get("receipts") == ["day4:brakes"] and not FileAccess.file_exists(SaveStore.slot_dir().path_join("wallet.json")),
+		"the receipt is not in the career's wallet block")
+	# Killed right after the commit wrote the career (the night and the plate not yet).
+	SaveCore.test_stop_after = 2
+	w.pay_shop(300, "day5:clutch")
+	SaveCore.test_stop_after = 0
+	_drop(w)
+	SaveCore.forget()   # as a relaunch
+	var r := _wallet()
+	_check(r.bank == 750 and "day5:clutch" in r.receipts and "day4:brakes" in r.receipts and r.cash == 40,
+		"killed after the career write: bank %d cash %d receipts %s (want 750, 40, both receipts)" % [r.bank, r.cash, str(r.receipts)])
+	_check(not r.pay_shop(300, "day5:clutch") and r.bank == 750, "after the reload the same receipt paid again (bank %d)" % r.bank)
+	# Killed before the career write: neither the pay nor the receipt.
+	SaveCore.test_stop_after = 1
+	r.pay_shop(200, "day6:tyres")
+	SaveCore.test_stop_after = 0
+	_drop(r)
+	SaveCore.forget()
+	var q := _wallet()
+	_check(q.bank == 750 and not "day6:tyres" in q.receipts, "killed before the career write: bank %d receipts %s (want 750 and no day6 receipt)" % [q.bank, str(q.receipts)])
+	_check(q.pay_shop(200, "day6:tyres") and int(SaveStore.load_wallet().bank) == 950, "the pay that was lost could not be made again")
+	# A dawn with a receipt still held keeps both.
+	q.add_cash(60)
+	q.bank_night(3)
+	saved = SaveStore.load_wallet()
+	_check(saved.bank == 1050 and saved.cash == 0 and "day6:tyres" in saved.receipts, "dawn after shop pay: %s" % str(saved))
+	_drop(q)
 
 # ---------- part 2 ----------
 

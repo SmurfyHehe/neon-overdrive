@@ -176,6 +176,7 @@ func _wallet() -> void:
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	f.store_string(AtomicJson.encode({"cash": 7, "bank": 90}))  # no receipts key, as before W0
 	f.close()
+	SaveStore.SaveCore.forget()   # as a relaunch: the old slot is upgraded on load
 	var old := SaveStore.load_wallet()
 	_check(old.cash == 7 and old.bank == 90 and old.receipts == [], "W2 old wallet loaded as %s" % str(old))
 	print("work_orders W1/W2: pay once, reload, old file")

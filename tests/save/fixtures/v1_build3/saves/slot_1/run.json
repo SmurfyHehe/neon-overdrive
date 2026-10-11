@@ -1,0 +1,151 @@
+NEONSAVE1 e61224159d255c7bf7d0f904df82fb63a706bb2234aaccbab843c8e8557ad46e
+{
+	"car": {
+		"ang_vel": [
+			-0.01919209212064743,
+			-0.00012030212383251,
+			-4.525858457782306e-05
+		],
+		"box": 2,
+		"demand": 0.0,
+		"gear": 3,
+		"lin_vel": [
+			0.00086116068996489,
+			-0.02816398069262504,
+			-13.083953857421877
+		],
+		"rpm": 4672.519038853472,
+		"xform": [
+			1.0,
+			-8.839955626172014e-06,
+			4.243995135766454e-05,
+			8.24385915620951e-06,
+			0.9999016523361206,
+			0.01402516663074493,
+			-4.255976091371849e-05,
+			-0.01402516663074493,
+			0.9999016523361206,
+			5.196218013763428,
+			-0.2061910778284073,
+			-41.5547981262207
+		]
+	},
+	"clock": {
+		"minutes": 136.49583333333197,
+		"night": 7.0
+	},
+	"known_stops": [
+		"g2a",
+		"g5b"
+	],
+	"origin_index": 0.0,
+	"radio": 1.0,
+	"recenter_count": 0.0,
+	"road": {
+		"act": 1.0,
+		"curviness": 0.5,
+		"dir": 1.0,
+		"hilliness": 0.5,
+		"id": 0.0,
+		"kicker_chance": 0.0,
+		"s": 41.5547981262207,
+		"seed": 4242.0
+	},
+	"sections": {
+		"0": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4.0,
+			"own_lanes": 4.0
+		},
+		"1": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4.0,
+			"own_lanes": 4.0
+		},
+		"121": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4.0,
+			"own_lanes": 4.0
+		},
+		"122": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4.0,
+			"own_lanes": 4.0
+		},
+		"123": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4.0,
+			"own_lanes": 4.0
+		},
+		"124": {
+			"barrier": "concrete",
+			"gap": true,
+			"onc_lanes": 4.0,
+			"own_lanes": 4.0
+		},
+		"125": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4.0,
+			"own_lanes": 4.0
+		},
+		"126": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4.0,
+			"own_lanes": 4.0
+		},
+		"127": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4.0,
+			"own_lanes": 4.0
+		},
+		"2": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4.0,
+			"own_lanes": 4.0
+		},
+		"3": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4.0,
+			"own_lanes": 4.0
+		},
+		"4": {
+			"barrier": "concrete",
+			"gap": true,
+			"onc_lanes": 4.0,
+			"own_lanes": 4.0
+		},
+		"5": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4.0,
+			"own_lanes": 4.0
+		},
+		"6": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4.0,
+			"own_lanes": 4.0
+		}
+	},
+	"version": 1.0,
+	"weather": {
+		"change_done": true,
+		"fog": 0.1,
+		"rain": 0.7,
+		"road_snow": false,
+		"snow_cover": 0.0,
+		"snow_fall": 0.0,
+		"stage": 1,
+		"wet": 0.8
+	}
+}

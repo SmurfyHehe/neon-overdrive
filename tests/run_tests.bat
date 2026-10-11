@@ -191,6 +191,8 @@ rem Save core S1: one save per slot (career + night + meta), the commit order, a
 call :run save/save_core --headless
 rem Save core S2: old saves upgrade (frozen fixtures in tests/save/fixtures); fails when the save version is bumped without an upgrade step.
 call :run save/save_upgrade --headless
+rem Build 3 + save core: a fresh slot boots, and the frozen build 3 save (shop day, receipts, weather seed, known stops, gearbox) boots into its night.
+call :run save/save_build3_boot --headless
 rem F0: cash and bank through reloads, chases and 6 a.m. (and the HUD and pause screen).
 call :run core/wallet --headless
 rem Work board W0: pay rules, the daily draw, shop pay into the bank once.

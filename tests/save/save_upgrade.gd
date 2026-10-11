@@ -16,7 +16,13 @@ extends SceneTree
 #   pre_v1/ holds the old files byte for byte and the old files outside the
 #   slots are untouched; the slot that was not being played gets no tunes;
 #   nothing is upgraded twice; later commits rotate career.json.bak1..3
+# - a build 3 save in detail (fixtures/v1_build3: version 1 files plus
+#   shop.json, wallet receipts, meta weather_seed, and a run with weather,
+#   known stops and the gearbox fields): the receipts, the shop day, the
+#   weather seed, the owned and fitted parts (both id forms), the known stops
+#   and the gearbox are all carried over; pre_v1/ holds shop.json too
 # - the game boots from the upgraded save, in the saved car at the saved place
+#   (the build 3 save's boot is tests/save/save_build3_boot.gd)
 #
 # When the save format changes: add the step to save_upgrade.gd, bump
 # CURRENT_SAVE_VERSION, and freeze a save of the old version as a new fixture
@@ -53,6 +59,9 @@ func _initialize() -> void:
 		_end()   # the detail checks below assume the fixtures loaded
 		return
 	_v1_details()
+	if folders.has("v1_build3"):
+		_b3_details()
+	_open("v1", false)   # part 2 boots the version 1 save
 	# Part 2: the game boots from the upgraded version 1 save.
 	SaveCore.persist = true
 	SaveDirector.enabled = true
@@ -164,6 +173,52 @@ func _v1_details() -> void:
 	_check(FileAccess.file_exists(f + ".bak1") and FileAccess.file_exists(f + ".bak3") and not FileAccess.file_exists(f + ".bak4"), "career.json.bak1..3 should rotate after the upgrade")
 	_check(int(AtomicJson.decode(FileAccess.get_file_as_string(f + ".bak1")).gen) == 4 and DirAccess.get_files_at(pre) == pre_files, "the backups or pre_v1 are wrong after later commits")
 	_check(SaveCore.bank() == 1830 and SaveCore.cash() == 240 and SaveDirector.valid_run(SaveStore.load_run()), "later commits changed the money or dropped the night")
+
+# ---------- a build 3 save in detail ----------
+
+func _b3_details() -> void:
+	var src := FIXTURES.path_join("v1_build3/saves/slot_1")
+	_open("v1_build3", false)   # as _fixture left it: upgraded once
+	var c := SaveCore.career()
+	var old_wallet: Dictionary = AtomicJson.read(src.path_join("wallet.json")).data
+	var old_shop: Dictionary = AtomicJson.read(src.path_join("shop.json")).data
+	var old_run: Dictionary = AtomicJson.read(src.path_join("run.json")).data
+	# Money and receipts.
+	var w := SaveStore.load_wallet()
+	_check(w.bank == int(old_wallet.bank) and w.cash == int(old_wallet.cash), "build 3: bank %d cash %d" % [w.bank, w.cash])
+	_check(old_wallet.receipts.size() == 3 and str(w.receipts) == str(old_wallet.receipts) and str(c.wallet.receipts) == str(old_wallet.receipts), "build 3: the receipts: %s" % str(w.receipts))
+	_check(not c.wallet.has("cash"), "build 3: tonight's cash should not be in the career wallet")
+	# Walt's board.
+	_check(not old_shop.is_empty() and str(SaveStore.load_shop()) == str(old_shop), "build 3: the shop day changed: %s" % str(SaveStore.load_shop()))
+	_check(int(c.shop.day) == 6 and str(c.shop.stage) == "late_job" and c.shop.cards.size() == 3 and c.shop.taken is String and c.shop.late_taken is String,
+		"build 3: the shop block: %s" % str(c.get("shop")))
+	# The weather seed: in the career, out of meta.json.
+	_check(SaveStore.weather_seed() == 12345 and int(c.world.weather_seed) == 12345, "build 3: the weather seed: %d" % SaveStore.weather_seed())
+	_check(not AtomicJson.read(SaveCore.file("meta")).data.has("weather_seed") and c.world.has("seed") and c.world.has("difficulty"), "build 3: meta.json still has the weather seed, or the world block is not whole: %s" % str(c.world))
+	# Parts: owned as "id" or "<car>/id", fitted either way.
+	_check(SaveStore.load_mod_tree().cars.get("p1_coupe", {}).get("installed") == ["exhaust_a", "turbo_s1"], "build 3: fitted parts: %s" % str(SaveStore.load_mod_tree()))
+	_check(c.cars.p1_coupe.parts_owned == ["p1_coupe/exhaust_a", "turbo_s1", "wheels_mesh"] and c.cars.p1_coupe.fitted == ["exhaust_a", "turbo_s1"], "build 3: the coupe's parts: %s" % str(c.cars.p1_coupe))
+	_check(c.cars.get("p2_hothatch", {}).get("parts_owned") == ["p2_hothatch/seat_b"], "build 3: a car's own unfitted part should stay with that car: %s" % str(c.cars.get("p2_hothatch")))
+	# The run: weather, known stops and the gearbox, as they were.
+	var run := SaveStore.load_run()
+	_check(str(run.get("weather")) == str(old_run.weather) and int(run.weather.stage) == 1, "build 3: the run's weather block: %s" % str(run.get("weather")))
+	_check(run.get("known_stops") == ["g2a", "g5b"], "build 3: the known stops: %s" % str(run.get("known_stops")))
+	_check(int(run.car.get("box", -1)) == 2 and int(run.car.gear) == 3 and run.car.has("demand"), "build 3: the gearbox fields: %s" % str([run.car.get("box"), run.car.get("gear"), run.car.get("demand")]))
+	_check(str(run.car) == str(old_run.car) and str(run.road) == str(old_run.road) and SaveCore.clock().night == 7, "build 3: the run changed in the upgrade")
+	# pre_v1 holds every old file, shop.json too, and the old files are in place.
+	var pre := SaveCore.slot_dir(1).path_join("pre_v1")
+	_check(FileAccess.file_exists(pre.path_join("shop.json")), "build 3: pre_v1/ has no shop.json")
+	for f in DirAccess.get_files_at(src):
+		var old := FileAccess.get_file_as_bytes(src.path_join(f))
+		_check(FileAccess.get_file_as_bytes(pre.path_join(f)) == old, "build 3: pre_v1/%s is not the old file" % f)
+		if f != "meta.json":
+			_check(FileAccess.get_file_as_bytes(SaveCore.slot_dir(1).path_join(f)) == old, "build 3: the old %s was changed or moved" % f)
+	# Later commits keep all of it; a relaunch does not upgrade again.
+	_check(SaveCore.commit("test") and SaveCore.commit("dawn", {"close_night": 0}), "build 3: commits after the upgrade")
+	SaveCore.forget()
+	_check(SaveCore.gen() == 3 and SaveStore.weather_seed() == 12345 and str(SaveStore.load_wallet().receipts) == str(old_wallet.receipts)
+		and str(SaveStore.load_shop()) == str(old_shop) and SaveCore.bank() == int(old_wallet.bank) + int(old_wallet.cash),
+		"build 3: after two commits and a relaunch: gen %d, seed %d, bank %d, receipts %s" % [SaveCore.gen(), SaveStore.weather_seed(), SaveCore.bank(), str(SaveStore.load_wallet().receipts)])
 
 # ---------- part 2: the game on the upgraded save ----------
 

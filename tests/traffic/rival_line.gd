@@ -79,8 +79,8 @@ func _physics_process(_delta: float) -> bool:
 		on_shoulder += 1
 	# NEON_RIVAL_DUMP=1: a line of telemetry every 0.1 s, for tuning.
 	if ticks % 12 == 0 and OS.get_environment("NEON_RIVAL_DUMP") == "1":
-		print("T s=%.0f x=%.2f line=%.2f v=%.1f want=%.1f thr=%.2f brk=%.2f steer=%.3f slip=%.3f k=%.5f" % [s, u.x, u.x - rival.racer.line_error, v,
-			rival.racer.target_speed, rival.throttle_input, rival.brake_input, rival.steering_input, RivalDriver._slip(rival), RoadFrame.curvature(floori(s / 50.0))])
+		print("T s=%.0f x=%.2f line=%.2f v=%.1f want=%.1f thr=%.2f brk=%.2f steer=%.3f slip=%.3f k=%.5f g=%.5f" % [s, u.x, u.x - rival.racer.line_error, v,
+			rival.racer.target_speed, rival.throttle_input, rival.brake_input, rival.steering_input, RivalDriver._slip(rival), RoadFrame.curvature(floori(s / 50.0)), rival.racer.steer_g])
 	var e := absf(rival.racer.line_error)
 	worst_err = maxf(worst_err, e)
 	err_sum += e

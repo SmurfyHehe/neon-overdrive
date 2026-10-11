@@ -18,7 +18,7 @@ const SECONDS := 60
 ## game only builds the road 200 m behind and 300 m ahead of the player, and a
 ## rival past that drives on bare ground (no kerbs, drains or puddles), which
 ## is a different road, not a different driver.
-const OFFSETS: Array[float] = [-150.0, -150.0]
+const OFFSETS: Array[float] = [-150.0, 150.0]
 const START_S := 200.0
 const LANE := 1
 

@@ -74,10 +74,22 @@ const LEAD_MARGIN := 0.25           # m either side of the body
 const LOOKAHEAD_SECONDS := 0.8
 const LOOKAHEAD_MIN := 10.0
 const LOOKAHEAD_MAX := 60.0
-## The rival's bend feed-forward (see TrafficCar.lane_steer), scaled each tick
-## by how much of the road's bend its line leaves it to turn. NEON_RIVAL_FF
-## overrides it for tuning runs.
-static var UNDERSTEER_FF := float(OS.get_environment("NEON_RIVAL_FF")) if OS.get_environment("NEON_RIVAL_FF").is_valid_float() else 0.0004
+## Understeer. Pure pursuit asks for the wheel angle the geometry needs
+## (wheelbase x curvature); at speed the tyres need more: the hot hatch at
+## 175 km/h and 5 m/s^2 wanted 1.3 degrees where the geometry says 0.3, and
+## without the difference ran 3 m wide of its apex. The usual model is
+## angle = wheelbase x curvature x (1 + g v^2), so the driver multiplies
+## everything it asks of the wheel by (1 + g v^2): the line's arc and its
+## corrections alike. g differs per car, so it starts at G_START and is
+## measured as it drives: whenever the car is turning, the wheel angle it has
+## on against the curvature it is actually getting gives g, low-passed over
+## G_SECONDS and kept inside G_MAX. It reads the car only (never the line
+## error), so it cannot chase itself. NEON_RIVAL_G overrides the start.
+static var G_START := float(OS.get_environment("NEON_RIVAL_G")) if OS.get_environment("NEON_RIVAL_G").is_valid_float() else 0.0012
+const G_MAX := 0.004
+const G_SECONDS := 1.5
+const G_MIN_SPEED := 15.0           # m/s
+const G_MIN_K := 0.0007             # 1/m of actual turning before it measures
 const SLIP_LIFT := 0.12             # rad of sideslip before it eases the throttle
 
 const EDGE := 1.2                   # m kept from either edge of its side, at the car's middle
@@ -130,6 +142,9 @@ var _x_cap := INF
 var _gap := INF
 var _lead_v := 0.0
 var _lead_k := -1
+
+## The measured understeer (see G_START).
+var steer_g := G_START
 
 ## What the last drive tick decided (tests and the no-rubber-band log).
 var target_speed := 0.0
@@ -449,7 +464,6 @@ func drive(car: TrafficCar, delta: float) -> void:
 		_plan_at = frame + _plan_every
 		_plan(car, u, s)
 	var v := car.current_speed()
-
 	# Steering: at the line, LOOKAHEAD_SECONDS ahead.
 	var look := clampf(car.speed * LOOKAHEAD_SECONDS, LOOKAHEAD_MIN, LOOKAHEAD_MAX)
 	var here_x := minf(line_x(s), _x_cap)
@@ -458,13 +472,9 @@ func drive(car: TrafficCar, delta: float) -> void:
 	car.lane_x = here_x
 	car.lane_i = clampi(RoadChunkBuilder.lane_at(here_x), 0, own_lanes - 1)
 	car.changing = false
-	# The feed-forward in lane_steer is for the road's bend; the car turns the
-	# line's arc, which is flatter (or, turning in on the straight, not the
-	# road's at all).
-	var k_road := RoadFrame.curvature(floori(s / L))
-	var k_path := k_road - line_accel(s)
-	var ff := UNDERSTEER_FF * clampf(k_path / k_road, 0.0, 1.5) if absf(k_road) > 1e-7 else 0.0
-	car.steering_input = TrafficCar.lane_steer(car, minf(line_x(s + look), _x_cap), car.direction, car.wheelbase, ff, look)
+	var k_path := RoadFrame.curvature(floori(s / L)) - line_accel(s)
+	_measure_understeer(car, v, delta)
+	car.steering_input = TrafficCar.lane_steer(car, minf(line_x(s + look), _x_cap), car.direction, car.wheelbase, 0.0, look, 1.0 + steer_g * v * v)
 	car.handbrake_input = 0.0
 
 	# Speed: the profile under the car.
@@ -505,6 +515,18 @@ func drive(car: TrafficCar, delta: float) -> void:
 			car.throttle_input *= 0.3
 	_tock(t0)
 
+## One sample of g (see G_START) from what the car is doing now.
+func _measure_understeer(car: TrafficCar, v: float, delta: float) -> void:
+	if v < G_MIN_SPEED:
+		return
+	var k_act := car.angular_velocity.y / v
+	# Only while wheel and car turn the same way, steadily enough to read.
+	if absf(k_act) < G_MIN_K or k_act * car.steering_amount <= 0.0:
+		return
+	var angle := pow(absf(car.steering_amount), car.steering_exponent) * car.max_steering_angle
+	var g := (angle / (car.wheelbase * absf(k_act)) - 1.0) / (v * v)
+	steer_g = clampf(steer_g + (g - steer_g) * minf(delta / G_SECONDS, 1.0), 0.0, G_MAX)
+
 func _tock(t0: int) -> void:
 	drive_us += Time.get_ticks_usec() - t0
 	drive_runs += 1
@@ -526,6 +548,6 @@ func cost_ms_per_tick() -> float:
 
 ## One line for a test's log.
 func cost_summary() -> String:
-	return "race brain %.4f ms per physics tick (plan %.3f ms x %d runs, drive %.4f ms x %d runs)" % [
+	return "race brain %.4f ms per physics tick (plan %.3f ms x %d runs, drive %.4f ms x %d runs), understeer g %.5f" % [
 		cost_ms_per_tick(), float(plan_us) / 1000.0 / maxf(float(plan_runs), 1.0), plan_runs,
-		float(drive_us) / 1000.0 / maxf(float(drive_runs), 1.0), drive_runs]
+		float(drive_us) / 1000.0 / maxf(float(drive_runs), 1.0), drive_runs, steer_g]

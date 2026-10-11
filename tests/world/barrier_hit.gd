@@ -58,7 +58,14 @@ var run_tick := 0
 var rest_y := 0.0
 var prev_speed := 0.0
 var s := {}
-var concrete_end := {}  # "speed,angle" -> end speed against concrete
+var concrete_end := {}  # "speed,angle" -> speed AFTER_HIT_SECS after the hit, against concrete
+## The cable-vs-concrete check reads the speed this long after first contact:
+## what the barrier itself took. The end of the run (3 s at full throttle)
+## measured the re-acceleration instead: at 45 m/s and 60 deg the cable cuts
+## the car to 13 m/s (concrete 22) but leaves it pointing down the road, so it
+## had driven back up to 10 m/s by the end while the concrete car, spun off,
+## coasted down to 7.
+const AFTER_HIT_SECS := 0.25
 var cushion_root: Node3D
 
 func _initialize() -> void:
@@ -102,9 +109,11 @@ func _check_rules() -> void:
 		if CrashAudio.classify(wall, Vector3(0.1, 0.99, 0.0)) != "underbody":
 			_fail("crash sounds: the underside on %s is not underbody" % kind)
 		wall.free()
-	# Districts -> types.
+	# Districts -> types. The district kinds added after R1 (old town, lofts,
+	# hillside, canyon, freeway, airport, docks: f468d5e, W6) are not in
+	# BY_DISTRICT and take kind_at's concrete.
 	for c in range(0, 400):
-		var want: String = RoadBarriers.BY_DISTRICT[Districts.name_at(c)]
+		var want: String = RoadBarriers.BY_DISTRICT.get(Districts.name_at(c), RoadBarriers.CONCRETE)
 		if RoadBarriers.kind_at(c) != want:
 			_fail("rules: chunk %d (%s) has %s, expected %s" % [c, Districts.name_at(c), RoadBarriers.kind_at(c), want])
 			break
@@ -235,9 +244,11 @@ func _start(p: PlayerCar) -> void:
 		pos.y = rest_y
 	else:
 		# One lane-width run-up across the gap between lane 0 and the barrier,
-		# arriving about 0.6 s after launch.
+		# arriving about 0.6 s after launch, on a closed stretch of barrier: the
+		# signed U-turns (87a37b5, two per district on the loop) and the
+		# crossovers are openings a car is meant to pass through.
 		var gap := clampf(v * sin(deg_to_rad(a)) * 0.6, 1.4, Harness.lane_x(1))
-		pos = Vector3(gap, rest_y, p.global_position.z)
+		pos = Vector3(gap, rest_y, _closed_z(p.global_position.z))
 		basis = Basis(Vector3.UP, deg_to_rad(a))  # yawed toward -x, the barrier
 	p.global_transform = Transform3D(basis, pos)
 	p.angular_velocity = Vector3.ZERO
@@ -246,8 +257,23 @@ func _start(p: PlayerCar) -> void:
 	run_tick = 0
 	prev_speed = v
 	s = {"kind": kind, "speed": v, "angle": a, "hit": false, "through": false, "rise": 0.0, "tilt": 0.0,
-		"kick": 0.0, "end_tilt": 0.0, "end_wheels": 0, "finite": true, "end_speed": 0.0,
+		"kick": 0.0, "end_tilt": 0.0, "end_wheels": 0, "finite": true, "end_speed": 0.0, "hit_tick": -1, "after_hit": -1.0,
 		"dents": _count(RoadBarriers.dents), "crumpled": _count(RoadBarriers.crumpled), "x0": pos.x, "z0": pos.z}
+
+## The first z at or ahead of `z` (the road runs toward -z) from which the
+## next CLOSED_CHUNKS chunks have no opening in the barrier.
+const CLOSED_CHUNKS := 3
+func _closed_z(z: float) -> float:
+	for tries in 12:
+		var c := int(floor(-z / RoadChunkBuilder.CHUNK_LEN)) + int(game.origin_index)
+		var open := false
+		for i in CLOSED_CHUNKS:
+			open = open or RoadBarriers.gap_kind(c + i) != RoadBarriers.NONE
+		if not open:
+			return z
+		z -= RoadChunkBuilder.CHUNK_LEN
+	_fail("no closed stretch of barrier within 12 chunks of z %.0f" % z)
+	return z
 
 func _count(d: Dictionary) -> int:
 	var n := 0
@@ -287,7 +313,10 @@ func _physics_process(_delta: float) -> bool:
 			for i in p.get_colliding_bodies():
 				if (i as Node).has_meta("barrier"):
 					s.hit = true
+					s.hit_tick = run_tick
 		prev_speed = speed
+		if s.hit and s.after_hit < 0.0 and run_tick - int(s.hit_tick) >= int(AFTER_HIT_SECS * rate):
+			s.after_hit = speed
 		if s.kind != "cushion" and p.global_position.x < -0.3:
 			s.through = true
 		if s.kind == "cushion" and cushion_root != null:
@@ -333,11 +362,11 @@ func _report() -> void:
 	var key := "%d,%d" % [s.speed, s.angle]
 	match s.kind:
 		RoadBarriers.CONCRETE:
-			concrete_end[key] = s.end_speed
+			concrete_end[key] = s.after_hit
 		RoadBarriers.CABLE:
 			# Concrete that stopped the car dead (a wedge, not a rank to beat) is no yardstick.
-			if concrete_end.has(key) and concrete_end[key] > 3.0 and s.end_speed >= concrete_end[key] - 0.5:
-				bad.append("the cable did not slow it (%.1f m/s, concrete %.1f)" % [s.end_speed, concrete_end[key]])
+			if concrete_end.has(key) and concrete_end[key] > 3.0 and s.after_hit >= concrete_end[key] - 0.5:
+				bad.append("the cable did not slow it (%.1f m/s %.2f s after the hit, concrete %.1f)" % [s.after_hit, AFTER_HIT_SECS, concrete_end[key]])
 		RoadBarriers.GUARDRAIL:
 			var sideways: float = s.speed * sin(deg_to_rad(s.angle))
 			if sideways > RoadBarriers.DENT_FROM + 2.0 and _count(RoadBarriers.dents) <= s.dents:
@@ -347,7 +376,7 @@ func _report() -> void:
 				bad.append("not stopped (%.1f m/s)" % s.end_speed)
 			if s.speed > RoadBarriers.CRUMPLE_FROM + 2.0 and _count(RoadBarriers.crumpled) <= s.crumpled:
 				bad.append("the cushion did not crumple")
-	var extra := "end %4.1f m/s" % s.end_speed
+	var extra := "after hit %4.1f, end %4.1f m/s" % [s.after_hit, s.end_speed]
 	print("%s: peak tilt %5.1f deg, rise %4.2f m, kick %4.2f m/s, %s, end tilt %4.1f deg, %d wheels down  %s" % [name, s.tilt, s.rise, s.kick, extra, s.end_tilt, s.end_wheels, "ok" if bad.is_empty() else "FAIL " + ", ".join(bad)])
 	for b in bad:
 		fails.append("%s: %s" % [name, b])

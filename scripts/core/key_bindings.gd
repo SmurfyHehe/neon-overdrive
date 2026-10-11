@@ -74,6 +74,14 @@ static func ensure_defaults() -> void:
 
 static func default_keys(action: StringName) -> Array[int]:
 	ensure_defaults()
+	if not _defaults.has(action) and InputMap.has_action(action):
+		# An action a script added after the snapshot (special keys, the recorder,
+		# the wash): the keys it was added with are its defaults.
+		var events: Array = []
+		for ev in InputMap.action_get_events(action):
+			if ev is InputEventKey:
+				events.append(ev.duplicate())
+		_defaults[action] = events
 	var out: Array[int] = []
 	for ev in _defaults.get(action, []):
 		out.append(ev.keycode if ev.keycode != 0 else ev.physical_keycode)

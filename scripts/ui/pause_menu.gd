@@ -17,6 +17,7 @@ extends CanvasLayer
 #     player (the pause is refused, the menu never opens).
 
 const GameInfo := preload("res://scripts/core/game_info.gd")
+const FixCar := preload("res://scripts/car/fix_car.gd")
 
 const SILVER := Color("#C9CED6")
 const AMBER := Color("#FFC066")
@@ -24,6 +25,7 @@ const TOAST_SECS := 1.0
 
 var game_state: GameState
 var resume_button: Button
+var fix_car_button: Button
 var lower_look_button: Button
 var restart_button: Button
 var settings_button: Button
@@ -92,6 +94,9 @@ func _ready() -> void:
 	lower_look_button = _add_button(box, "Lower the look", _lower_look)
 	lower_look_button.visible = false
 	resume_button = _add_button(box, "Resume", game_state.resume)
+	# Fix the car: free and total, one press (scripts/car/fix_car.gd). Shown in every build for now.
+	fix_car_button = _add_button(box, "Fix the car", _fix_car)
+	fix_car_button.visible = FixCar.FIX_CAR_ENABLED
 	restart_button = _add_button(box, "Restart night", _ask_restart)
 	settings_button = _add_button(box, "Settings", show_settings)
 	# TEST BUILD: "Race a test rival" and "Wash car" are on Settings > Game (stand-ins),
@@ -230,6 +235,11 @@ func _ask_quit_to_title() -> void:
 	if GameState.chase_locked():
 		text = "Quit to the title mid-chase? That counts as a bust."
 	confirm.ask(text, "Quit", game_state.quit_to_title)
+
+## Fix the car from the pause screen, then carry on driving.
+func _fix_car() -> void:
+	FixCar.fix(get_parent().get("player"))
+	game_state.resume()
 
 ## Resets temperatures, tyre, clutch and brake wear (the garage will own this later).
 ## Reached from the Settings Game tab while the garage does not exist.

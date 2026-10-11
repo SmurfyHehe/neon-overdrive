@@ -122,6 +122,8 @@ call :run core/view_settings --headless
 call :run view/camera_smoothing_setting --headless
 call :run core/log_folder --headless
 call :run car/powertrain_health "--headless --fixed-fps 60"
+call :run car/fix_car "--headless --fixed-fps 60"
+call :run ui/fix_car_button --headless
 call :run car/car_parts --headless
 call :run car/car_detail --headless
 call :run car/turbo "--headless --fixed-fps 60"

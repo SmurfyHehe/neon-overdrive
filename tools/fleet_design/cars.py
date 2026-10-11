@@ -505,6 +505,73 @@ P7 = {
 # NPC FLEET: taller, softer, small wheels in big arch gaps, tyres tucked in,
 # no aero, plain paints. They recede so the player's car always pops.
 # ----------------------------------------------------------------------------
+P8 = {
+    'id': 'p8_driftcoupe', 'role': 'player', 'label': 'Drift coupe',
+    'refs': 'the 1983-91 rear-drive box coupes (category only; no brand): a 1.6 twin-cam notchback',
+    'rule': 'A low flat-sided box with a wedge nose, thin pillars and a long flat trunk, on bolt-on arches '
+            'with no air. "Sideways is where it is comfortable."',
+    'tier': "T2 drift coupe (Ashida Levant, placeholder name; Kasumi Run's car, for sale once you beat Kasumi Run), "
+            'sheet notes/car-sheets/p8_driftcoupe, built from parts 2026-10-11 (tools/car_pipeline/kit_p8_driftcoupe.py). '
+            'Flat slab flanks (no shoulder crease, belt a dead-straight hard fold at 0.80), a 52 degree screen, a 48 '
+            'degree backlight onto a flat trunk (notchback, not a hatch), slim pop-ups in a flat wedge, four bolt-on '
+            'riveted arches 6 cm proud of the 1.68 body (1.80 over them), three-bar tail clusters, one primer front-left '
+            'fender. Differs from P1: no fastback, no hoop wing, upright glass, bolt-ons, flat trunk.',
+    'L': 4.30, 'WB': 2.64, 'OHf': 0.78, 'W': 1.68,
+    # 15 x 8 deep dish on 205/50 front, 195/50 rear (0.60 m), arch gap 1 cm, the bronze face with a polished lip
+    'wheel': {'r': 0.30, 'w': 0.205, 'w_rear': 0.195, 'track': 1.50, 'arch_gap': 0.01, 'rim': 'dish', 'rim_ratio': 0.72},
+    # wedge nose with a chin lip, flat hood (10 mm crown), screen 1.45-2.05, roof flat 2.05-3.05, backlight to the
+    # C-pillar foot at 3.45, then a flat trunk to 4.22 and a square tail edge
+    'top': [(0.0, 0.50), (0.04, 0.60), (0.22, 0.66), (0.78, 0.74), (1.45, 0.84), (2.05, 1.31), (2.20, 1.34), (2.90, 1.34),
+            (3.05, 1.32), (3.45, 0.98), (4.20, 0.965), (4.26, 0.945), (4.30, 0.88)],
+    'floor': [(0, 0.30), (0.18, 0.10), (4.12, 0.10), (4.30, 0.30)],
+    # the body is 0.84 half wide the whole way (flat slab flanks); the bolt-on arches carry it out to 0.90
+    'hw': [(0, 0.64), (0.06, 0.76), (0.28, 0.84), (4.10, 0.84), (4.24, 0.80), (4.30, 0.76)],
+    'waist': [(0, 0.40), (0.28, 0.50), (4.30, 0.52)],
+    # the belt: 0.80 dead straight from the A-pillar back; it drops with the wedge ahead of it
+    'belt': [(0, 0.44), (0.06, 0.56), (0.28, 0.64), (0.78, 0.70), (1.45, 0.80), (4.30, 0.80)],
+    'tumble': 0.03, 'sill_in': 0.03, 'rocker_h': 0.24,
+    # thin pillars, a 6 cm blacked B-pillar, the roof 0.60 to 0.59 half wide
+    'cabin': {'A': 1.45, 'W': 2.05, 'R': 3.05, 'C': 3.45, 'D': 3.35,
+              'roof_w': [(2.05, 0.60), (3.05, 0.59)], 'roof_drop': 0.03, 'pillars': [(2.52, 2.58)]},
+    'decals': [
+        # nose and tail decals pin their own offset, so the car measures its sheet length.
+        # nose: a slot grille in the wedge, amber corner markers fixed in the nose corners, a black strip
+        # under the chin; the head lamps are slim pop-ups (parts)
+        {'view': 'front', 'rect': (-0.36, 0.43, 0.36, 0.49), 'mat': 'grille', 'tag': 'fbumper', 'offset': 0.004},
+        {'view': 'front', 'rect': (0.58, 0.42, 0.70, 0.50), 'mat': 'turn', 'mirror': True, 'offset': 0.006},
+        {'view': 'front', 'rect': (-0.70, 0.355, 0.70, 0.395), 'mat': 'trim', 'tag': 'fstrip', 'cell': 0.4, 'offset': 0.004},
+        # tail: a dark satin panel with a three-bar cluster a side (0.30 x 0.22), the plate between them, no high
+        # brake lamp (era); the parts build cuts the bars into tail / brake / blinker / reverse parts
+        {'view': 'rear', 'rect': (-0.74, 0.56, 0.74, 0.82), 'mat': 'trim', 'tag': 'tail_panel', 'cell': 0.2, 'offset': 0.004},
+        {'view': 'rear', 'rect': (0.40, 0.58, 0.70, 0.80), 'mat': 'tail', 'mirror': True, 'tag': 'cluster', 'offset': 0.006},
+        {'view': 'rear', 'rect': (-0.27, 0.59, 0.27, 0.72), 'mat': 'trim', 'tag': 'plate_recess', 'offset': 0.005},
+        {'view': 'rear', 'rect': (-0.68, 0.34, 0.68, 0.44), 'mat': 'trim', 'tag': 'rbumper', 'offset': 0.004},
+    ],
+    'parts': [
+        # small black door mirrors
+        {'type': 'mirrors', 's': 1.60, 'mat': 'trim'},
+        # slim pop-ups: a 0.36 x 0.09 face when up; the parts build hangs each on its own hinge, modelled down
+        {'type': 'popups', 'tag': 'popups', 's0': 0.32, 's1': 0.58, 'x0': 0.31, 'x1': 0.67, 'h': 0.09},
+        # four bolt-on riveted arches, 6 cm proud, a polished rolled lip (the highlight line), 14 rivets each
+        {'type': 'flares', 'tag': 'bolt_on', 'band': 0.09, 'proud': 0.06, 'lip_mat': 'chrome', 'rivets': 14},
+    ],
+    # one big oval tip on the right, behind the axle (0.09 x 0.06)
+    'exhaust': [{'x': 0.42, 'y': 0.26, 'r': 0.045, 'squash': 0.67}],
+    'stickers': [
+        {'id': 'door', 'view': 'left', 'rect': (1.80, 0.44, 2.70, 0.72), 'mirror': True},
+        {'id': 'hood', 'view': 'top', 'rect': (-0.25, 0.45, 0.25, 1.05)},
+        # the rear slot is the left rear quarter panel (the trunk stays clear); one placement, so the car keeps
+        # the fleet's five
+        {'id': 'rear', 'view': 'left', 'rect': (3.15, 0.80, 3.55, 1.10), 'note': 'rear quarter panel, left'},
+    ],
+    'paint': {'hero': ('Dusty silver', '#AAB0B8'),
+              'alts': [('Chalk', '#E6E2D6'), ('Sodium', '#FF8A1F'), ('Dusk navy', '#1B2A4A'), ('Primer grey', '#6E6B68')],
+              'trim': '#1A1D24', 'rim': '#9C6B3A', 'extra': {'primer': '#5F5B58', 'chrome': '#C9CED6'}},
+    # T2 (0.2-0.35): a used drift car, one primer fender, scuffed rear bumper corners. Read by the paint work when wear lands.
+    'condition': 0.3,
+    'options': {},
+}
+
 N1 = {
     'id': 'n1_commuter', 'role': 'npc', 'label': 'Commuter sedan',
     'refs': 'Camry, Accord, Sentra',
@@ -739,7 +806,7 @@ C3 = {
     'options': {},
 }
 
-FLEET = [P0, P1, P2, P3, P4, P5, P6, P7, P17, N1, N2, N3, C1, C2, C3]
+FLEET = [P0, P1, P2, P3, P4, P5, P6, P7, P17, P8, N1, N2, N3, C1, C2, C3]
 
 
 def _add_sun_strips():

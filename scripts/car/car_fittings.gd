@@ -64,6 +64,8 @@ const BRAKES := {
 	"p6_crossover": {"front": "disc", "rear": "disc", "rim": "dish", "caliper": Color("#4A505B")},
 	# Camel work pickup: 300 mm front discs, drums at the back (the sheet).
 	"p17_work_pickup": {"front": "disc", "rear": "drum", "rim": "steel", "caliper": Color("#4A505B")},
+	# Drift coupe: 260 mm vented discs on all four, black single-pot calipers (the parts glb models them).
+	"p8_driftcoupe": {"front": "disc", "rear": "disc", "rim": "dish", "caliper": Color("#1B1D22")},
 	"c1_patrol": {"front": "disc", "rear": "disc", "rim": "steel", "caliper": Color("#1B1D22")},
 	"c2_patrolsuv": {"front": "disc", "rear": "disc", "rim": "steel", "caliper": Color("#1B1D22")},
 	"c3_interceptor": {"front": "disc", "rear": "disc", "rim": "five", "caliper": Color("#B5261E")},

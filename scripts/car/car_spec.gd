@@ -445,6 +445,7 @@ const PLAYER_AUTO := {
 	"p5_muscle": {"family": "old"},
 	"p6_crossover": {"family": "90s"},
 	"p7_wagon": {"family": "old"},
+	"p8_driftcoupe": {"family": "90s"},
 }
 
 static func player_spec(kind: String) -> Dictionary:
@@ -656,6 +657,41 @@ static func player_spec(kind: String) -> Dictionary:
 			s["rear_damping_ratio"] = 0.35
 			s["front_arb_ratio"] = 0.18
 			s["rear_arb_ratio"] = 0.08
+			s["turbo_boost_max"] = 0.0
+		"p8_driftcoupe":
+			# Ashida Levant (placeholder name), T2, MC1 2026-10-11: a 1.6 twin-cam
+			# four, rear drive, 5-speed manual, about 1050 kg (a guess until the
+			# sheet weighs it), 52% on the nose. The coupe's spec (coupe_default)
+			# with the box coupe's numbers: 0.30 Nm/kg on the game's torque scale,
+			# set at 335 Nm so the test driver lands near 225 km/h and 0-100 in
+			# about 6.5 s (tests/fleet/player_cars.gd reports them), a lumpy
+			# 1100 idle, a 7800 redline with the torque high up, short close
+			# gears, 205/50 front and 195/50 rear, and the most steering lock of
+			# any stock car (44 degrees, the kei's 42, the coupe's 38). The
+			# drift-angle quirk and the hydraulic handbrake are MC10's.
+			s["shifter"] = shifter("h5_short")   # short stick, close gate
+			s["window_control"] = "crank"
+			var gears: Array[float] = [3.58, 2.20, 1.55, 1.20, 0.98]
+			s["vehicle_mass"] = 1050.0
+			s["front_weight_distribution"] = 0.52
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 335.0
+			s["max_rpm"] = 7800.0
+			s["idle_rpm"] = 1100.0
+			s["torque_shape"] = {"low_end": 0.40, "peak_pos": 0.68, "plateau": 0.15, "falloff": 0.7}
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.3
+			s["coefficient_of_drag"] = 0.36
+			s["frontal_area"] = 1.95
+			s["front_tire_width"] = 205.0
+			s["rear_tire_width"] = 195.0
+			s["max_steering_angle"] = deg_to_rad(44.0)
+			s["front_damping_ratio"] = 0.45
+			s["rear_damping_ratio"] = 0.42
+			s["front_arb_ratio"] = 0.22
+			s["rear_arb_ratio"] = 0.14
+			s["aero_downforce_coefficient_front"] = 0.05
+			s["aero_downforce_coefficient_rear"] = 0.05
 			s["turbo_boost_max"] = 0.0
 		_:
 			return s  # p1_coupe, or an unknown kind: the coupe
@@ -882,6 +918,15 @@ static func npc_spec(kind: String) -> Dictionary:
 					"idle_rpm", "torque_shape", "gear_ratios", "final_drive", "coefficient_of_drag", "frontal_area",
 					"front_tire_width", "rear_tire_width", "coefficient_of_friction", "front_damping_ratio",
 					"rear_damping_ratio", "front_arb_ratio", "rear_arb_ratio", "center_of_gravity_height_offset"]:
+				s[k] = ps[k]
+		"p8_driftcoupe":
+			# Drift coupe (Ashida Levant) as an AI car: the player's own numbers,
+			# so Kasumi Run's car drives like the one you buy.
+			var ps := player_spec("p8_driftcoupe")
+			for k in ["vehicle_mass", "front_weight_distribution", "front_torque_split", "max_torque", "max_rpm",
+					"idle_rpm", "torque_shape", "gear_ratios", "final_drive", "coefficient_of_drag", "frontal_area",
+					"front_tire_width", "rear_tire_width", "max_steering_angle", "front_damping_ratio",
+					"rear_damping_ratio", "front_arb_ratio", "rear_arb_ratio", "engine_voice", "turbo_voice", "exhaust"]:
 				s[k] = ps[k]
 		"p17_work_pickup":
 			# Work pickup (Camel): the player_spec numbers, so a rival or a

@@ -582,3 +582,4 @@ KITS = {
     'p4_kei': kit_p4_kei.KIT,
 }
 KITS['p5_muscle'] = __import__('kit_p5_muscle').KIT     # the muscle hardtop: its own file
+KITS['p8_driftcoupe'] = __import__('kit_p8_driftcoupe').KIT   # the drift coupe: its own file

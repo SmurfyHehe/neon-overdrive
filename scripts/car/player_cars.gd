@@ -36,6 +36,8 @@ const KINDS := [
 	{"id": "p6_crossover", "label": "Perf. crossover", "name": "Cairn", "tier": "T2", "nm": 400, "kg": 1450},
 	# The 4-door work pickup Walt sells after act 1 (Roy, 2026-10-10).
 	{"id": "p17_work_pickup", "label": "Work pickup", "name": "Camel", "tier": "T2", "nm": 640, "kg": 1780},
+	# The drift coupe, Kasumi Run's car, for sale once you beat Kasumi Run (MC1, 2026-10-11).
+	{"id": "p8_driftcoupe", "label": "Drift coupe", "name": "Ashida Levant", "tier": "T2", "nm": 335, "kg": 1050},
 	# Special vehicles (S0): story-end unlocks, not sprint-race cars. nm / kg are
 	# the coupe's, which they borrow until their body steps (see their data files).
 	{"id": "m1_monster", "label": "Monster truck", "name": "Brute", "tier": "S", "nm": 460, "kg": 1300},

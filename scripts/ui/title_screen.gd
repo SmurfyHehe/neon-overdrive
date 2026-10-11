@@ -823,7 +823,8 @@ func _process(delta: float) -> void:
 			_run_menu_spin(delta)
 	_run_menu_voice(delta)
 	if kerbside != null:
-		# the turbo's boost is the street's wind and the roaches' scare (M2, M7)
+		# the turbo's boost is the street's wind (litter, moths, bat) and the
+		# roaches' scare (M2, M7); 0 boost = the default breeze
 		kerbside.set_title_wind(lerpf(TitleKerbside.WIND_REST, TitleKerbside.WIND_MAX, menu_boost))
 		kerbside.set_scare(menu_boost)
 

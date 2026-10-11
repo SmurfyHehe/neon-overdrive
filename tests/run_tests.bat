@@ -159,7 +159,7 @@ call :run core/work_orders --headless
 rem Work board W1: the timing bar (4 styles, miss + redo, one press per key).
 call :run ui/timing_bar --headless
 rem Work board W2: the day step (shop_day: S1-S8) and the board screens (work_board).
-call :run core/shop_day "--headless --audio-driver Dummy"
+call :run core/shop_day --headless
 call :run ui/work_board --headless
 rem Police F0/F1: heat levels and icons, cop_can_see_player, headlights off hides, night one lines.
 call :run traffic/police_heat --headless

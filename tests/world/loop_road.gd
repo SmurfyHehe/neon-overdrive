@@ -187,7 +187,8 @@ func _districts() -> void:
 	# Far enough apart that a car is only ever near one (Junction.NEAR_FOCUS).
 	for a in js.size():
 		var gap := fposmod(js[(a + 1) % js.size()] - js[a], RoadMap.length())
-		if gap < 1450.0:
+		# (Two ring sites' crossings are 800 m apart since they moved under the rings.)
+		if gap < 2.0 * Junction.NEAR_FOCUS:
 			_fail("crossings at %.0f m and %.0f m are only %.0f m apart" % [js[a], js[(a + 1) % js.size()], gap])
 	for s in js:
 		if RoadMap.district_info(RoadMap.district_of(floori(s / L))).area != "city":

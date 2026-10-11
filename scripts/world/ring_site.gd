@@ -102,7 +102,8 @@ static func look_of(ring: int) -> Dictionary:
 		style = "rust"
 	elif String(info.zone) == "The Docks":
 		style = "steel"
-	return {"style": style, "spur": RoadMap.ring_spur_side(ring), "landmark": String(r.kind) == "landmark"}
+	return {"style": style, "spur": RoadMap.ring_spur_side(ring), "landmark": String(r.kind) == "landmark",
+		"crossing": RoadMap.ring_has_crossing(ring)}
 
 func _ready() -> void:
 	name = "RingSite"
@@ -171,7 +172,7 @@ func _place() -> void:
 			(c as Node3D).force_update_transform()
 
 func _dress(look: Dictionary) -> void:
-	var key := "%s|%d|%s" % [look.style, look.spur, look.landmark]
+	var key := "%s|%d|%s|%s" % [look.style, look.spur, look.landmark, look.get("crossing", false)]
 	if not _looks.has(key):
 		_looks[key] = build(look)
 	var made: Dictionary = _looks[key]
@@ -219,6 +220,8 @@ func counts() -> Dictionary:
 static func build(look: Dictionary) -> Dictionary:
 	R.begin_flat()
 	R.wall_colour = WALLS[look.style]
+	# a crossing under the ring: its cross street runs out under both sides
+	_arch = ARCH_HALF if bool(look.get("crossing", false)) else 0.0
 	var y: float = R.RAMP_H
 	var spur: int = look.spur
 	var step := TAU / float(SEGS)
@@ -279,6 +282,12 @@ static func build(look: Dictionary) -> Dictionary:
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, made.arrays)
 	return {"mesh": mesh, "faces": made.faces, "boxes": made.boxes, "pools": made.pools}
 
+## Half-width of the opening under each side of the ring for a cross street
+## (Junction's street and its pavements are 10.7 m either side of its centre
+## line), and the opening in the look being laid out (0 = walls all round).
+const ARCH_HALF := 11.0
+static var _arch := 0.0
+
 ## Kerb, barrier and wall along the rim at radius r, pieces from..to (to may
 ## run past SEGS). side +1 = the outside edge, -1 the inside one.
 static func _rim(r: float, side: float, from: int, to: int, y: float) -> void:
@@ -293,7 +302,7 @@ static func _rim(r: float, side: float, from: int, to: int, y: float) -> void:
 		pts.append(Vector3(r * cos(a), r * sin(a), y))
 		out.append(Vector2(cos(a), sin(a)) * side)
 		hs.append(R.BARRIER_H)
-		bottoms.append(y - SLAB if absf(r * cos(a)) < BRIDGE_HALF else -R.SKIRT)
+		bottoms.append(y - SLAB if absf(r * cos(a)) < BRIDGE_HALF or absf(r * sin(a)) < _arch else -R.SKIRT)
 		# the splitter between a way in and a way out: amber and white, to catch the lamps
 		var d := posmod(i, HALF_SEGS)
 		var splitter := side > 0.0 and (d < 3 or d >= HALF_SEGS - 3)
@@ -345,22 +354,25 @@ static func _spur(side: float, y: float) -> void:
 	for e in [-1.0, 1.0]:
 		var pts: Array[Vector3] = [Vector3(side * (R.RING_OUT + 0.1), e * SPUR_HALF, y), Vector3(side * x1, e * SPUR_HALF, y)]
 		var out: Array[Vector2] = [Vector2(0.0, e), Vector2(0.0, e)]
-		R._edge(pts, out, full)
+		R._edge(pts, out, full, PackedFloat32Array([y - SLAB, y - SLAB]) if _arch > 0.0 else PackedFloat32Array())
+		if _arch > 0.0:
+			_pier(side * (x1 - 0.5), e * (SPUR_HALF + 0.15), 0.8, 0.6, y)
 	var end_pts: Array[Vector3] = [Vector3(side * x1, -SPUR_HALF, y), Vector3(side * x1, SPUR_HALF, y)]
 	var end_out: Array[Vector2] = [Vector2(side, 0.0), Vector2(side, 0.0)]
-	R._edge(end_pts, end_out, full, PackedFloat32Array(), [C_SPLIT_A])
+	R._edge(end_pts, end_out, full, PackedFloat32Array([y - SLAB, y - SLAB]) if _arch > 0.0 else PackedFloat32Array(), [C_SPLIT_A])
 	R._box(Vector3(side * (x1 - 0.2), y + R.BARRIER_H + 0.2, 0.0), Vector3(0.3, 0.4, 0.3), C_NOSE)
 
 ## The shared placeholder landmark: a dead tree and a shopping trolley on the
-## ground inside the ring, on the +x side.
+## ground inside the ring, on the +x side, clear of a cross street.
 static func _landmark() -> void:
-	R._box(Vector3(24.0, 2.3, 0.0), Vector3(0.45, 4.6, 0.45), C_TREE)
-	R._box(Vector3(24.9, 3.9, 0.15), Vector3(1.9, 0.2, 0.2), C_TREE)
-	R._box(Vector3(25.8, 4.5, 0.15), Vector3(0.16, 1.2, 0.16), C_TREE)
-	R._box(Vector3(23.4, 4.4, -0.6), Vector3(0.2, 0.2, 1.5), C_TREE)
-	R._box(Vector3(23.4, 5.0, -1.3), Vector3(0.14, 1.3, 0.14), C_TREE)
-	R._box(Vector3(24.0, 5.4, 0.0), Vector3(0.25, 1.7, 0.25), C_TREE)
-	R._box(Vector3(24.3, 6.0, 0.5), Vector3(0.12, 0.12, 1.1), C_TREE)
+	var o := Vector3(-2.5, 0.0, 15.0)
+	R._box(o + Vector3(24.0, 2.3, 0.0), Vector3(0.45, 4.6, 0.45), C_TREE)
+	R._box(o + Vector3(24.9, 3.9, 0.15), Vector3(1.9, 0.2, 0.2), C_TREE)
+	R._box(o + Vector3(25.8, 4.5, 0.15), Vector3(0.16, 1.2, 0.16), C_TREE)
+	R._box(o + Vector3(23.4, 4.4, -0.6), Vector3(0.2, 0.2, 1.5), C_TREE)
+	R._box(o + Vector3(23.4, 5.0, -1.3), Vector3(0.14, 1.3, 0.14), C_TREE)
+	R._box(o + Vector3(24.0, 5.4, 0.0), Vector3(0.25, 1.7, 0.25), C_TREE)
+	R._box(o + Vector3(24.3, 6.0, 0.5), Vector3(0.12, 0.12, 1.1), C_TREE)
 	# the trolley, on its side
-	R._box(Vector3(25.6, 0.3, 1.6), Vector3(0.9, 0.5, 0.55), C_TROLLEY)
-	R._box(Vector3(26.15, 0.62, 1.6), Vector3(0.06, 0.2, 0.6), C_TROLLEY)
+	R._box(o + Vector3(22.6, 0.3, 1.6), Vector3(0.9, 0.5, 0.55), C_TROLLEY)
+	R._box(o + Vector3(23.15, 0.62, 1.6), Vector3(0.06, 0.2, 0.6), C_TROLLEY)

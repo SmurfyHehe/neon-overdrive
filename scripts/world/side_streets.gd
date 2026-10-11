@@ -111,6 +111,9 @@ static func mouths_at(chunk_index: int) -> Array:
 		# nor into a gas station's lot
 		if GasStation.in_lot(chunk_index, bz, side):
 			continue
+		# nor through the run's landmark (world step 1 pins it to one slot)
+		if Districts.landmark_at(chunk_index, slot * 2 + (0 if side == 1 else 1)) != "":
+			continue
 		taken[[side, slot]] = true
 		var roll := float(posmod(hash([run, k, "mouth_len"]), 1000)) / 1000.0
 		out.append({

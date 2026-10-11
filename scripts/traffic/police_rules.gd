@@ -113,6 +113,26 @@ const BUST_BODY := 4.0          # m taken off the centre distance for the bodies
 const BUST_SECS := 3.0
 const BUST_DRAIN_SECS := 1.5
 
+## Dispatcher and roles (P6, spec section 3).
+const MAX_COPS := 3             # driving cops, never more
+const DISPATCH_HZ := 4.0
+const SPAWN_GAP := 8.0          # s between two cops joining a chase
+const PATROL_TOP_KMH := 220.0   # the patrol sedan's working top speed (its gearing alone gives 285)
+const BLOCK_AHEAD := 18.0       # the blocker's spot: this far in front of you, in your lane
+const BLOCK_IN_PLACE := 6.0     # within this of its spot (and in your lane) it starts to slow
+const BLOCK_SLOW_KMH := 15.0    # ...to this much under your speed
+const BLOCK_MIN_KMH := 30.0     # but it never brake-checks you below this
+const BOX_KMH := 40.0           # under this the cops close right in (box-in)
+const BOX_AHEAD := 6.5
+const FLANK_BACK := 2.8         # the flanker's nose by your rear wheel
+const FLANK_SIDE := 2.4         # m to your side
+const RAM_GAP := 3.0            # the chaser nudges your tail inside this, if you are slower
+const RAM_DV := 3.0             # m/s it closes at when it does
+
+## Driving cops a chase at this heat level gets (the icons: one car, two cars, then three).
+static func cops_wanted(level: int) -> int:
+	return clampi(level, 0, MAX_COPS)
+
 ## The danger number of a chase (spec section 2): up with your speed, the
 ## traffic near you, oncoming cars on an undivided road, a junction near.
 static func danger(kmh: float, cars_near: int, oncoming_undivided: bool, junction_near: bool) -> float:

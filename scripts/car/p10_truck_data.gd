@@ -33,21 +33,28 @@ const GLASS := ["glass"]
 ## electric windows (switch); the tow-hook keychain hangs from the mirror.
 ## Sight line: the cluster top is 22 degrees below the eye, the mirror 25
 ## degrees right, the bobble spot on the passenger dash top past 20 degrees.
+## Build 4 merge (2026-10-11): "dash_face_z" had stayed at -0.45 when the seat
+## moved 0.22 forward (95e45e1), so the wheel hub and the radio sat inside the
+## dash; it is 0.55 ahead of the H-point again (-0.67), the radio 7 cm proud of
+## it. The dials are read over the rim, not through it (the four-spoke wheels'
+## spokes covered most of the tach, tests/view/cabin_clearance.gd): the wheel
+## 4 cm lower and 4 cm back, its top 20 degrees under the eye, the cluster 10.5
+## cm higher, its top 14 degrees under the eye (tests/view/gauge_layout.gd).
 const CABIN := {
 	"seat_x": -0.360, "seat_h": 0.740, "seat_z": -0.120,
 	"eye": Vector3(-0.360, 1.360, -0.180),
 	"floor_y": 0.560, "belt_y": 1.165,
-	"cowl": Vector2(1.019, -1.050), "dash_face_z": -0.450,
+	"cowl": Vector2(1.019, -1.050), "dash_face_z": -0.670,
 	"header": Vector2(1.715, -0.685), "roof_y": 1.700, "roof_z1": 0.150, "open_top": false,
 	"door_x": 0.840, "door_x_rear": 0.820, "door_x_front": 0.840, "glass_x": 0.860, "glass_top": 1.685,
 	"a_pillar": [Vector3(0.902, 1.019, -1.103), Vector3(0.706, 1.715, -0.685)],
 	"b_pillar_z": 0.075, "rear_z": 0.150,
 	"shelf": {},
-	"wheel": Vector3(-0.360, 1.060, -0.560), "wheel_tilt_deg": -22.0,
+	"wheel": Vector3(-0.360, 1.020, -0.520), "wheel_tilt_deg": -22.0,
 	"wheel_fit": {"factory_cm": 39.0, "range_cm": [35.0, 40.0], "max_dish_cm": 5.0},
 	"wheel_factory": "a fat four-spoke factory wheel, 39 cm, soft black plastic rim",
-	"cluster": Vector2(1.060, -0.700), "cluster_style": "panel", "speedo_max_kmh": 200.0,
-	"head_unit": Vector3(0.0, 1.040, -0.540),
+	"cluster": Vector2(1.165, -0.700), "cluster_style": "panel", "speedo_max_kmh": 200.0,
+	"head_unit": Vector3(0.0, 1.040, -0.590),
 	"lever": Vector3(0.0, 0.900, -0.360), "handbrake": Vector3(0.0, 0.900, 0.060),
 	"pedals": Vector3(-0.260, 0.720, -0.840),
 	"crank": Vector3(-0.800, 0.980, -0.420), "switch": Vector3(-0.780, 1.120, -0.200),

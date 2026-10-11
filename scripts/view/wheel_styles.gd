@@ -90,6 +90,9 @@ const FIT := {
 	"p17_work_pickup": {"factory": 39.0, "lo": 35.0, "hi": 35.0, "dish": 4.0},
 	# its CABIN wheel_fit (35 factory, 33-36, 8 cm dish), the top capped to 35
 	"p8_driftcoupe": {"factory": 35.0, "lo": 33.0, "hi": 35.0, "dish": 8.0},
+	# its CABIN wheel_fit (39 factory, 35-40, 5 cm dish), capped to what
+	# cabin_clearance passes: 38 cm, a 4 cm dish
+	"p10_truck": {"factory": 39.0, "lo": 35.0, "hi": 38.0, "dish": 4.0},
 }
 
 ## The race wheel's diameter, the same on every car (cm).

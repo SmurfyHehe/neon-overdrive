@@ -25,6 +25,18 @@ static func stale_entries(found: Dictionary) -> Array[String]:
 
 # BEGIN TABLE
 const LENGTHS := {
+	"res://assets/radio/afterglow/01_harlow-drive_dusk.ogg": 202.736,
+	"res://assets/radio/afterglow/02_night-overpass_late.ogg": 168.847,
+	"res://assets/radio/afterglow/04_orange-skyline_late.ogg": 179.204,
+	"res://assets/radio/afterglow/05_orange-lamps_dusk.ogg": 168.366,
+	"res://assets/radio/afterglow/06_canyon-lights_late.ogg": 152.675,
+	"res://assets/radio/afterglow/09_empty-car-park_dead.ogg": 166.605,
+	"res://assets/radio/afterglow/10_first-light_dawn.ogg": 217.432,
+	"res://assets/radio/greyhour/01_wet-road_late.ogg": 197.995,
+	"res://assets/radio/greyhour/03_home-before-light_dawn.ogg": 202.5,
+	"res://assets/radio/greyhour/04_wipers_late.ogg": 126.6,
+	"res://assets/radio/greyhour/05_slow-lane_dead.ogg": 175.7,
+	"res://assets/radio/greyhour/07_salt-on-the-bridge_dawn.ogg": 163.135,
 	"res://assets/radio/s1_drift/01_apex_hour.ogg": 71.6,
 	"res://assets/radio/s1_drift/02_tire_smoke.ogg": 59.7,
 	"res://assets/radio/s1_drift/03_late_shift.ogg": 58.7,
@@ -46,5 +58,16 @@ const LENGTHS := {
 	"res://assets/radio/s4_synthwave/05_dusk_pursuit.ogg": 86.3,
 	"res://assets/radio/s4_synthwave/06_canyon_lights.ogg": 76.0,
 	"res://assets/radio/s4_synthwave/07_midnight_garage.ogg": 77.7,
+	"res://assets/radio/slipstream/02_hairpin-heat_late.ogg": 146.08,
+	"res://assets/radio/slipstream/03_last-lap_dawn.ogg": 157.905,
+	"res://assets/radio/slipstream/04_midnight-laps_late.ogg": 165.313,
+	"res://assets/radio/slipstream/05_open-tarmac_dusk.ogg": 165.031,
+	"res://assets/radio/slipstream/08_cold-apex_dead.ogg": 143.607,
+	"res://assets/radio/undertow/01_cold-asphalt_dead.ogg": 135.7,
+	"res://assets/radio/undertow/02_dead-lights_dead.ogg": 156.458,
+	"res://assets/radio/undertow/04_black-water_late.ogg": 209.281,
+	"res://assets/radio/undertow/05_low-tide_dusk.ogg": 141.2,
+	"res://assets/radio/undertow/07_undercurrent_dead.ogg": 130.907,
+	"res://assets/radio/undertow/09_fog-bank_dawn.ogg": 134.658,
 }
 # END TABLE

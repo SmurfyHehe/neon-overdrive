@@ -196,6 +196,9 @@ func _watch() -> void:
 	_check(Engine.time_scale == 1.0, "no slow motion")
 	_check(not paused, "the tree is never paused")
 	_check(game.camera.current and (game.camera as ChaseCamera).view == ChaseCamera.View.COCKPIT, "the view stays in the driver's seat")
+	if ph == RunEnd.Phase.TOTALLED and seen.has(ph):
+		# the driver stub reaches the car on the next physics tick: keep the biggest
+		seen[ph].brake = maxf(seen[ph].brake, (game.get("player") as PlayerCar).brake_input)
 	if not seen.has(ph):
 		seen[ph] = {"cracked": s.is_cracked(), "black": s.is_black(), "line": s.line_text(), "card": s.card_texts(),
 			"scrape": s.scrape_playing(), "trauma": (game.camera as ChaseCamera).trauma,
@@ -341,7 +344,7 @@ func _physics_process(_delta: float) -> bool:
 				_new_run_end(p, 400)
 				run_end.bad_cops = true
 				_check(run_end.begin_total(), "a total with bad cops starts")
-				seen["bank"] = bank
+				seen["bank"] = game.wallet.bank  # the paid total banked its half at dawn
 				step = Step.BAD_COPS
 		Step.BAD_COPS:
 			_watch()
@@ -351,7 +354,7 @@ func _physics_process(_delta: float) -> bool:
 				_report("total with bad cops")
 				_check(started.size() == 1 and started[0] == [400, false], "bad cops take all of tonight's cash")
 				_check(game.wallet.cash == 0 and game.wallet.bank == bank, "and never the bank")
-				_check(seen.get(RunEnd.Phase.LINE, {}).get("line", "").begins_with(RunEnd.BAD_COP_LINE), "Dave says who took it")
+				_check(seen.get(RunEnd.Phase.LINE, {}).get("line", "").begins_with(str(JSON.parse_string(FileAccess.get_file_as_string(RunEnd.LINES_PATH))["Dave"]["bad_cops"][0])), "Dave says who took it")
 				_new_run_end(p, 300)
 				_check(not run_end.hit(30.0) and is_equal_approx(p.damage.totalled, 0.0), "a bump adds nothing to the meter")
 				game.game_state.pause()

@@ -51,7 +51,10 @@ func _damage() -> void:
 	_near(d.part(CarDamage.Part.SUSP_RL), 7.0 * CarDamage.KERB_DAMAGE_PER_MS, "RL spring after a rear strike")
 	_check(d.spring_mult(2) < 1.0 or d.part(CarDamage.Part.SUSP_RL) < CarDamage.FREE_BELOW, "rear spring mult")
 
-	# a hard strike bends the arm all the way: toe at MAX_TOE_BEND, clamped at 1.0
+	# one strike adds at most MAX_PER_HIT (DP1); two hard ones bend the arm all
+	# the way: toe at MAX_TOE_BEND, clamped at 1.0
+	d.apply_kerb_strike(1, 40.0)
+	_near(d.part(CarDamage.Part.STEER_FR), CarDamage.MAX_PER_HIT, "one strike is capped")
 	d.apply_kerb_strike(1, 40.0)
 	_near(d.part(CarDamage.Part.STEER_FR), 1.0, "FR arm clamps at 1")
 	_near(d.toe_offset(1), -CarDamage.MAX_TOE_BEND, "bent right wheel's toe")

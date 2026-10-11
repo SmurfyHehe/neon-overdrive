@@ -84,6 +84,7 @@ var controls_save_button: Button
 var controls_reset_button: Button
 var back_button: Button
 var tips_check: CheckButton
+var critters_check: CheckButton
 var copy_log_button: Button
 var log_status: Label
 var idle_item_option: OptionButton    # Driver: what the L key does
@@ -342,6 +343,7 @@ func _sync_all() -> void:
 	for channel in volume_sliders:
 		volume_sliders[channel].value = AudioSettings.volumes[channel]
 	tips_check.button_pressed = GameSettings.tips
+	critters_check.button_pressed = GameSettings.critters
 	fullscreen_check.button_pressed = DisplaySettings.fullscreen
 	for i in resolution_option.item_count:
 		if resolution_option.get_item_metadata(i) == DisplaySettings.resolution:
@@ -531,6 +533,11 @@ func _build_game_page(parent: Control) -> Control:
 	_add_check(page, "Show on Discord", DiscordPresence.enabled, func(on: bool) -> void:
 		DiscordPresence.set_enabled(on)
 		DiscordPresence.save_settings())
+	# the roaches, the rats and the flies on the title (and wherever they turn
+	# up later); the title set polls GameSettings.critters, so this applies live
+	critters_check = _add_check(page, "Roaches and rats", GameSettings.critters, func(on: bool) -> void:
+		GameSettings.set_critters(on)
+		GameSettings.save_settings())
 	copy_log_button = _add_button(page, "Copy my log", _copy_log)
 	log_status = Label.new()
 	log_status.add_theme_color_override("font_color", AMBER)

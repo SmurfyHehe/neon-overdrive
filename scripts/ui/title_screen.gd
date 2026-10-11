@@ -904,7 +904,8 @@ func _process(delta: float) -> void:
 	_run_menu_voice(delta)
 	_run_theme(delta)
 	if kerbside != null:
-		# the turbo's boost is the street's wind and the roaches' scare (M2, M7)
+		# the turbo's boost is the street's wind (litter, moths, bat) and the
+		# roaches' scare (M2, M7); 0 boost = the default breeze
 		kerbside.set_title_wind(lerpf(TitleKerbside.WIND_REST, TitleKerbside.WIND_MAX, menu_boost))
 		kerbside.set_scare(menu_boost)
 
@@ -1084,6 +1085,8 @@ func _blow_off(boost: float) -> void:
 	if _menu_blowoff.stream != null:
 		_menu_blowoff.volume_db = BLOWOFF_DB + linear_to_db(boost)
 		_menu_blowoff.play()
+	if kerbside != null:
+		kerbside.blow_off(boost)   # a second big one in 20 s wakes the neighbour (M8)
 	_puff.restart()
 	_puff.emitting = true
 	_spark_cooldown = SPARK_COOLDOWN

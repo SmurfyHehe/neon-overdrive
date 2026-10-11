@@ -74,6 +74,9 @@ const TRAFFIC_PHRASE := {
 	"abort": "was steering back out of your way",
 	"swerve": "swerved round you",
 	"pull_over_siren": "was pulling over for a siren next to you",
+	"tailgating": "was tailgating you",
+	"tailgater_pass": "pulled out to pass you after tailgating",
+	"tailgater_return": "pulled back in ahead of you after passing",
 }
 
 var tm: Node

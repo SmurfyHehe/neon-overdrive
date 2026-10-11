@@ -51,22 +51,32 @@ const CLASS_CHROME := 3
 const CLASS_PLATE := 4
 const CLASS_MIRROR := 5
 const CLASS_LENS := 6
+const CLASS_STEEL := 7
 ## glTF material name -> [surface, class]. On the body surface class 0 is
 ## paint (tinted at runtime), 8 is a fixed colour; on trim it picks the finish.
 const MATERIALS := {
 	"paint": ["body", 0],
 	"under_paint": ["body", 8],
+	# a panel that is not the car's colour: primer, rust, filler (the Bug)
+	"paint_primer": ["body", 8],
+	"paint_rust": ["body", 8],
+	"paint_bondo": ["body", 8],
 	"plastic": ["trim", CLASS_PLASTIC],
 	"rubber": ["trim", CLASS_RUBBER],
 	"chrome": ["trim", CLASS_CHROME],
 	"plate": ["trim", CLASS_PLATE],
 	"mirror": ["trim", CLASS_MIRROR],
 	"lens_red": ["trim", CLASS_LENS],
+	"steel": ["trim", CLASS_STEEL],
+	"rim": ["trim", CLASS_STEEL],
 	"glass": ["glass", 8],
 	"glow_head": ["glow", 8],
 	"glow_lens": ["glow", 8],
 	"glow_tail": ["glow", 8],
 	"glow_turn": ["glow", 8],
+	# lamps of their own, dark until the game lights them
+	"glow_brake": ["glow", 8],
+	"glow_reverse": ["glow", 8],
 }
 const GLOW_ENERGY := 2.5
 const CUSTOM0_FLAGS := Mesh.ARRAY_CUSTOM_RGBA8_UNORM << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
@@ -75,9 +85,9 @@ const CUSTOM0_FLAGS := Mesh.ARRAY_CUSTOM_RGBA8_UNORM << Mesh.ARRAY_FORMAT_CUSTOM
 const TRIM_SHADER := """
 shader_type spatial;
 render_mode cull_back;
-// COLOR.a * 8 is the class: 1 plastic, 2 rubber, 3 chrome, 4 plate, 5 mirror glass, 6 red lamp lens.
+// COLOR.a * 8 is the class: 1 plastic, 2 rubber, 3 chrome, 4 plate, 5 mirror glass, 6 red lamp lens, 7 bare steel.
 const vec3 FINISH[8] = vec3[](vec3(0.6, 0.0, 0.5), vec3(0.55, 0.0, 0.5), vec3(0.9, 0.0, 0.3), vec3(0.2, 1.0, 0.5),
-	vec3(0.45, 0.0, 0.5), vec3(0.06, 1.0, 0.5), vec3(0.12, 0.0, 0.8), vec3(0.6, 0.0, 0.5));
+	vec3(0.45, 0.0, 0.5), vec3(0.06, 1.0, 0.5), vec3(0.12, 0.0, 0.8), vec3(0.5, 0.7, 0.5));
 varying vec2 ao_shut;
 varying flat vec3 finish;
 void vertex() {
@@ -105,6 +115,7 @@ void fragment() {
 """
 
 static var _cars := {}          # car id -> what the glb holds, in car space
+static var _wheels := {}        # "car id|corner" -> ArrayMesh
 static var _meshes := {}        # cache key -> {"body": ArrayMesh, "panels": {hinge: ArrayMesh}}
 static var _paint_shaders := {} # base shader code -> Shader with the ao/shut hook
 static var _trim_mat: ShaderMaterial
@@ -192,6 +203,43 @@ static func part_names(car_id: String) -> PackedStringArray:
 ## hinge name -> {origin, axis, open_sign, open_deg, parts}
 static func hinges(car_id: String) -> Dictionary:
 	return _load(car_id).hinges
+
+## One wheel as the glb has it (tyre, rim, brake, hubcap or wheel nuts), hub at
+## the origin, for the corner "fl", "fr", "rl" or "rr": ONE surface drawn with
+## trim_material(), so a wheel stays one draw call with its brake in it. Each
+## corner is modelled where it sits, so a left wheel is not turned round. Null
+## if the glb has no such wheel. The baked ao is left out: a wheel turns.
+static func wheel_mesh(car_id: String, corner: String) -> ArrayMesh:
+	var key := car_id + "|" + corner
+	if _wheels.has(key):
+		return _wheels[key]
+	var mats: Dictionary = _load(car_id).wheels.get(corner, {})
+	var mesh: ArrayMesh = null
+	if not mats.is_empty():
+		var b := _builder()
+		for mname in mats:
+			var m: Dictionary = mats[mname]
+			var info: Array = MATERIALS[mname]
+			var col := (m.albedo as Color).srgb_to_linear()
+			col.a = float(info[1] if info[0] == "trim" else CLASS_PLASTIC) / 8.0
+			var open := (m.ao as PackedByteArray).duplicate()
+			for k in range(0, open.size(), 4):
+				open[k] = 255
+				open[k + 1] = 0
+			_append(b, {"v": m.v, "n": m.n, "ao": open, "i": m.i}, col, Vector3.ZERO)
+		mesh = ArrayMesh.new()
+		_add_surface(mesh, b, "trim")
+	_wheels[key] = mesh
+	return mesh
+
+## Triangles in one wheel_mesh().
+static func wheel_triangle_count(car_id: String, corner: String) -> int:
+	var m := wheel_mesh(car_id, corner)
+	return _mesh_tris(m) if m != null else 0
+
+## The corners the glb has a wheel mesh for.
+static func wheel_corners(car_id: String) -> PackedStringArray:
+	return PackedStringArray(_load(car_id).wheels.keys())
 
 ## Car-space transform of a named empty in the glb (slot_*, tip_*, mount_*, ...).
 static func anchor(car_id: String, anchor_name: String) -> Transform3D:
@@ -308,6 +356,7 @@ static func glass_material() -> StandardMaterial3D:
 static func clear_cache() -> void:
 	_cars.clear()
 	_meshes.clear()
+	_wheels.clear()
 
 # ---------- loading ----------
 
@@ -316,7 +365,7 @@ static func clear_cache() -> void:
 static func _load(car_id: String) -> Dictionary:
 	if _cars.has(car_id):
 		return _cars[car_id]
-	var car := {"parts": {}, "hinges": {}, "anchors": {}}
+	var car := {"parts": {}, "hinges": {}, "anchors": {}, "wheels": {}}
 	_cars[car_id] = car
 	if not has_car(car_id):
 		return car
@@ -337,7 +386,11 @@ static func _walk(node: Node, xf: Transform3D, hinge: String, car: Dictionary) -
 		var nm := String(n3.name)
 		var under := hinge
 		if nm.begins_with("wheel_"):
+			# the hub, and the wheel's own mesh in the hub's frame
 			car.anchors[nm] = t
+			for w in n3.get_children():
+				if w is MeshInstance3D and (w as MeshInstance3D).mesh != null and _known((w as MeshInstance3D).mesh):
+					car.wheels[nm.trim_prefix("wheel_")] = read_mesh((w as MeshInstance3D).mesh, (w as Node3D).transform)
 			continue
 		if nm.begins_with("hinge_"):
 			car.hinges[nm] = _hinge(n3, t)
@@ -349,6 +402,16 @@ static func _walk(node: Node, xf: Transform3D, hinge: String, car: Dictionary) -
 		else:
 			car.anchors[nm] = t
 		_walk(n3, t, under, car)
+
+## True when every surface of the mesh wears a material the assembler knows.
+## The pilot coupe's wheel meshes keep the design sheet's names (the game
+## draws its own wheels there), so they are left alone.
+static func _known(mesh: Mesh) -> bool:
+	for si in mesh.get_surface_count():
+		var mat := mesh.surface_get_material(si)
+		if mat == null or not MATERIALS.has(mat.resource_name):
+			return false
+	return true
 
 static func _hinge(node: Node3D, t: Transform3D) -> Dictionary:
 	# the pipeline writes axis, open_sign and open_deg as glTF extras

@@ -69,11 +69,15 @@ static func role_for_kind(kind: String) -> String:
 ##   tips             [{pos, dir, r}] the body's exhaust tips (metas "exhaust_tips")
 ##   drive            "rwd", "fwd" or "awd"
 ##   variant          "" or "interceptor" (cop: straight pipe, no muffler)
+##   engine           "front" or "rear" (the Bug: engine and transaxle behind
+##                    the rear axle, so no pipe or shaft runs the length of
+##                    the car, and the tank is up front)
 static func params(half_w: float, half_l: float, floor_y: float, ground_y: float,
-		wheel_r: float, wheel_x: float, axle_z: float, tips: Array, drive := "rwd", variant := "") -> Dictionary:
+		wheel_r: float, wheel_x: float, axle_z: float, tips: Array, drive := "rwd", variant := "",
+		engine := "front") -> Dictionary:
 	return {"half_w": half_w, "half_l": half_l, "floor_y": floor_y, "ground_y": ground_y,
 		"wheel_r": wheel_r, "wheel_x": wheel_x, "axle_z": axle_z, "tips": tips,
-		"drive": drive, "variant": variant}
+		"drive": drive, "variant": variant, "engine": engine}
 
 ## Adds the underside to a chassis visual (before CarFx.attach, which moves
 ## every mesh present to the car's render layer). Traffic gets nothing.
@@ -138,6 +142,7 @@ static func build_kit(p: Dictionary, role: String) -> CockpitKit:
 	var wheel_r: float = p.wheel_r
 	var wheel_x: float = p.wheel_x
 	var axle_z: float = p.axle_z
+	var rear_engine := String(p.get("engine", "front")) == "rear"
 	# Depth available below the floor before the parts touch the road.
 	var room: float = maxf(floor_y - ground - GROUND_MARGIN, 0.04)
 	var d := func(f: float) -> float: return floor_y - minf(room, f)   # f metres below the floor, clamped
@@ -179,7 +184,10 @@ static func build_kit(p: Dictionary, role: String) -> CockpitKit:
 	var drive: String = p.get("drive", "rwd")
 	var diff_r := Vector3(0.0, hub_y + 0.02, axle_z)
 	var diff_f := Vector3(0.0, hub_y + 0.02, -axle_z)
-	if drive == "rwd" or drive == "awd":
+	if rear_engine:
+		# Swing axles straight out of the transaxle, nothing down the tunnel.
+		_half_shafts(k, diff_r, wheel_x, hub_y, 0.03)
+	elif drive == "rwd" or drive == "awd":
 		# Gearbox tail under the tunnel, the shaft back to the diff with a
 		# centre bearing, the diff itself, half-shafts out to the hubs.
 		var tail := Vector3(0.0, d.call(0.04), -axle_z + 0.95)
@@ -188,7 +196,7 @@ static func build_kit(p: Dictionary, role: String) -> CockpitKit:
 		k.box(Vector3(0.14, 0.10, 0.08), (tail + diff_r) * 0.5, COL_PART)
 		_diff(k, diff_r, 0.17)
 		_half_shafts(k, diff_r, wheel_x, hub_y, 0.028)
-	if drive == "fwd" or drive == "awd":
+	if not rear_engine and (drive == "fwd" or drive == "awd"):
 		# A transverse box behind the front axle, half-shafts to the hubs.
 		var box := diff_f + Vector3(0.18, 0.03, 0.22)
 		k.box(Vector3(0.62, 0.22, 0.34), box, COL_PART)
@@ -201,14 +209,27 @@ static func build_kit(p: Dictionary, role: String) -> CockpitKit:
 	# Fuel tank: a flat box ahead of the rear axle, off to one side (the
 	# exhaust takes the other), plus the spare wheel well behind the axle.
 	var tank_x := -0.22 if _exhaust_side(p) > 0.0 else 0.22
-	k.box(Vector3(0.80, 0.13, 0.50), Vector3(tank_x, d.call(0.07), axle_z - 0.68), COL_PART)
+	if rear_engine:
+		# The tank is in the front trunk: only its floor shows, behind the front axle.
+		k.box(Vector3(0.70, 0.04, 0.30), Vector3(0.0, d.call(0.02), -axle_z + 0.34), COL_PART)
+	else:
+		k.box(Vector3(0.80, 0.13, 0.50), Vector3(tank_x, d.call(0.07), axle_z - 0.68), COL_PART)
 	# The spare-wheel well behind the axle stays inside the rear overhang: on the
 	# kei (0.49 m overhang) and the hatch it reached past the bumper (interior
 	# pass, 2026-10-09; tests/fleet/interior_fit.gd).
 	var well_room: float = float(p.half_l) - 0.10 - axle_z
 	var well_r := clampf(well_room * 0.5, 0.12, 0.30)
 	var well_z := minf(axle_z + 0.5, float(p.half_l) - 0.10 - well_r)
-	k.cylinder(well_r, -0.05, 0.0, Vector3(0.0, floor_y, well_z), COL_PART, 10)
+	if rear_engine:
+		# The engine sits where the spare would: its sump and the two heads
+		# show under the tail, the transaxle ahead of it on the axle line.
+		var ez: float = minf(axle_z + 0.46, float(p.half_l) - 0.32)
+		k.box(Vector3(0.40, 0.10, 0.40), Vector3(0.0, d.call(0.05), ez), COL_PART)
+		for side: float in [-1.0, 1.0]:
+			k.box(Vector3(0.16, 0.08, 0.34), Vector3(side * 0.31, d.call(0.035), ez), COL_STEEL)
+		k.box(Vector3(0.24, 0.12, 0.46), Vector3(0.0, d.call(0.045), axle_z - 0.12), COL_PART)
+	else:
+		k.cylinder(well_r, -0.05, 0.0, Vector3(0.0, floor_y, well_z), COL_PART, 10)
 	# Crossover-style skid plate under the front, when there is room.
 	if room > 0.14:
 		k.box(Vector3(2.0 * wheel_x - 0.6, 0.02, 0.5), Vector3(0.0, d.call(0.10), -axle_z - 0.1), COL_PART)
@@ -252,6 +273,17 @@ static func _exhaust(k: CockpitKit, p: Dictionary, role: String, d: Callable) ->
 	var r := 0.028
 	var pipe_y: float = d.call(0.05)
 	var x := side * 0.30
+	if String(p.get("engine", "front")) == "rear":
+		# Rear engine: a short pipe from each head into a muffler lying across
+		# the tail, and out to the tips. Nothing runs under the cabin.
+		var mz: float = minf(axle_z + 0.72, float(p.half_l) - 0.14)
+		for hs: float in [-1.0, 1.0]:
+			_pipe(k, Vector3(hs * 0.31, pipe_y + 0.02, mz - 0.20), Vector3(hs * 0.24, pipe_y, mz), r, COL_STEEL, 6)
+		k.box(Vector3(0.62, 0.13, 0.15), Vector3(0.0, pipe_y, mz), COL_PART)
+		for t in tips:
+			var tip_at := _tip_pos(t)
+			_pipe(k, Vector3(tip_at.x, pipe_y, mz), tip_at - Vector3(0.0, 0.0, 0.06), minf(r, t.r if t is Dictionary else r), COL_STEEL, 6)
+		return
 	# Down-pipe: drops from the engine (under the hood, ahead of the floor)
 	# to the pipe line.
 	var manifold := Vector3(side * 0.22, floor_y + 0.16, -axle_z + 0.30)

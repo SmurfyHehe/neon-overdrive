@@ -152,6 +152,45 @@ tests do not care which one ran; `body.json` says (`backend`, `bevel`). Both
 were run and pass `symmetry_check.py`, `car_pipeline_p1.gd`,
 `car_assembler.gd` and `p1_coupe.gd` (2026-10-10).
 
+## Kits: the cars after the pilot
+
+The coupe is the common recipe (`parts.py`). What one more car adds is its
+KIT in `kits.py`: where its panels are cut, its lamps as parts of their own,
+its brakes, its fuel flap, what is under its lids, and what on it is one-sided
+on purpose. `body.json` lists those under `symmetry.not_mirrored`, and
+`symmetry_check.py` and `tests/fleet/car_parts_kits.gd` read them from there.
+
+    blender -b --factory-startup --python tools/car_pipeline/build_car.py -- p0_beater
+    python tools/car_pipeline/symmetry_check.py p0_beater
+    python tools/car_pipeline/parts_sheet.py p0_beater
+    godot --headless --path . --import
+    godot --headless --path . -s res://tests/fleet/car_parts_kits.gd
+
+What a kit car has that the pilot does not:
+
+| What | How |
+|---|---|
+| Brakes | part of each wheel's own mesh (`wheel_fl_mesh`...), so a wheel stays one draw call: `kits.drum` (240 mm), `kits.disc_brake`, `kits.hubcap`, `kits.lug_nuts`. The game draws a kit car's wheels from the glb (`CarAssembler.wheel_mesh`), one mesh per corner |
+| Lamps | one part and one glow material each: `head_*`, `turn_f*`, `turn_r*`, `tail_*`, `brake_*` (`glow_brake`), `reverse_*` (`glow_reverse`). The last two are dark until something lights them |
+| Fuel flap | `fuel_recess` (dark, with the cap) and `fuel_flap` on `hinge_fuel_flap`. It lies ON the skin: a flap cut into one side would have to be cut into the other to keep the body a mirror image |
+| Plates | 520 x 110 mm in a dark recess (`plates` in the kit) |
+| Other paints | `paint_primer`, `paint_rust`, `paint_bondo`: fixed colours on the body surface. `panel_mats` paints a whole cut panel, `paint_regions` a stretch of the side skin, split on the region's edges |
+| Fewer triangles | `merge_flat`: runs of flat quads along the loft (a wheel arch puts nine stations across the roof and the floor) become one quad when the fourth corner stays within 3 mm of the plane of the other three. Outline and long edges do not move |
+
+**P0, the Bug** (`p0_beater`): 6,080 body triangles in 69 parts with the
+Blender backend, 782 more in the four wheels; worst mirror deviation 0.000 mm
+over 39 mirrored parts and pairs. Rear engine under the lid (`engine`), spare
+and tank under the front lid (`bay_spare`, `bay_tank`), torsion bar tubes and
+swing axles in the wheel wells (`susp_*`), drums on all four wheels, hubcaps
+on three (front right shows its wheel nuts). One-sided on purpose, as the
+sheet decided: the driver's mirror, the left tail lamp (the right lens is
+gone), the filler on the right front quarter.
+
+In the game a kit car is built by `NpcCarBuilder` like any sheet car; when its
+glb is there the body comes from `CarAssembler` instead. `NEON_PARTS_LEGACY=1`
+keeps the one-piece sheet body, `NEON_CAR_PANELS=open` opens the lids, the
+doors and the flap (pictures).
+
 ## Not done here
 
 UVs and the wear-mask channel, per-option body-shop parts, the other cars,

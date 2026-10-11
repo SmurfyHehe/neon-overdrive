@@ -142,6 +142,12 @@ def check_glb(car_id):
         one_sided = dict(fparts.ASYMMETRIC)
     except Exception:
         one_sided = {}
+    # the car's own exceptions (its kit), as the build wrote them down
+    try:
+        with open(os.path.join(ROOT, 'assets', 'cars', car_id, 'body.json')) as f:
+            one_sided.update(json.load(f)['symmetry']['not_mirrored'])
+    except (OSError, KeyError, ValueError):
+        pass
     meshes = {k: v for k, v in read_glb(os.path.join(ROOT, 'assets', 'cars', car_id, 'body.glb')).items()
               if not k.startswith('wheel_')}
     names = set(meshes)
@@ -151,7 +157,7 @@ def check_glb(car_id):
             continue
         other = twin(name, names)
         d = deviation(meshes[name], meshes[other] if other else meshes[name])
-        judged = name not in one_sided
+        judged = name not in one_sided and other not in one_sided
         n = len(meshes[name]) + (len(meshes[other]) if other else 0)
         tris += n
         rows.append((name + (' / ' + other if other else ''), n, d, judged))
@@ -160,7 +166,7 @@ def check_glb(car_id):
     print('%s body.glb: %d parts, %d triangles' % (car_id, len(names), tris))
     for label, n, d, judged in rows:
         if not judged:
-            print('  %-34s %5d tris  %9.3f mm   one-sided on purpose: %s' % (label, n, d * 1000, one_sided[label.split(' / ')[0]]))
+            print('  %-34s %5d tris  %9.3f mm   one-sided on purpose: %s' % (label, n, d * 1000, one_sided.get(label.split(' / ')[0]) or one_sided[label.split(' / ')[1]]))
     bad = [(label, d) for label, n, d, judged in rows if judged and d > TOL]
     for label, d in bad:
         print('  NOT SYMMETRIC %-24s %9.4f mm' % (label, d * 1000))

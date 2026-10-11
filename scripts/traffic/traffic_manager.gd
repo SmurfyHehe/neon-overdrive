@@ -50,6 +50,7 @@ class_name TrafficManager
 
 const LANE_W := RoadChunkBuilder.LANE_W
 const Weather := preload("res://scripts/world/weather.gd")
+const RoadMapScript := preload("res://scripts/world/road_map.gd")
 
 var player: Node3D
 var own_lanes := 4
@@ -566,6 +567,10 @@ func _find_slot(car: TrafficCar, pz: float, extra_speed := 0.0) -> Dictionary:
 		var z := pz - flow * randf_range(spawn_behind_min, spawn_behind_max) if behind else pz + flow * randf_range(band.x, band.y)
 		var seen := in_view(RoadFrame.roll(Vector3(lane_x, car.rest_y, z)))
 		if seen:
+			continue
+		# Not under cover (TN1): a car appearing in a lit tunnel is in plain
+		# sight of anyone looking in at the mouth. Traffic drives in instead.
+		if RoadMapScript.tunnel_at(floori(RoadFrame.s_at(z) / RoadChunkBuilder.CHUNK_LEN)):
 			continue
 		var check := _slot_check(car, lane_x, z, dir, speed)
 		if check.is_empty():

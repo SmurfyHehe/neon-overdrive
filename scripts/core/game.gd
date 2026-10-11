@@ -115,12 +115,15 @@ const FORECAST_DELAY := 8.0
 var _weather_seen := -1
 var _wet_pinned := false
 const StreetAnimals := preload("res://scripts/world/street_animals.gd")
+const TunnelAudio := preload("res://scripts/audio/tunnel_audio.gd")
 var road_seed := 0
 var run := {}
 ## Whether `run` puts the car back where it was: false for a fresh run, and for
 ## a save from a road this build does not have (or from before the map), which
 ## starts at the top of the default road and keeps only the clock and the radio.
 var resume_place := false
+## Metres into the origin chunk a fresh run starts at (NEON_START_S).
+var start_in_chunk := 0.0
 ## The act the road is in (road_map.gd: the loop grows by act).
 var road_act := 1
 
@@ -484,6 +487,11 @@ func _setup_road_shape() -> void:
 	# A benchmark run with --curves or --hills gets a fixed road, so runs compare.
 	road_seed = int(seed_env) if seed_env.is_valid_int() else (Benchmark.SEED if Benchmark.requested() else randi())
 	var road := _pick_road()
+	# Tunnels (TN1): the dip needs the per-chunk road surface of a hilly road,
+	# so a road rolled flat (the older drive tests, the default benchmark) has
+	# none and keeps the exit the tunnel replaces. NEON_TUNNEL=0 also turns it off.
+	var hills_now := float(run.road.hilliness) if resume_place else hilliness
+	RoadMap.tunnel_live = OS.get_environment("NEON_TUNNEL") != "0" and hills_now > 0.0
 	RoadMap.use(road, road_act)
 	if RoadMap.is_loop() and not seed_env.is_valid_int():
 		road_seed = RoadMap.seed_of(RoadMap.road_id)
@@ -502,8 +510,15 @@ func _setup_road_shape() -> void:
 		# (_section_at), and a save from either time may hold a bool or a type
 		# name there. Comparing a type name with true was a script error that
 		# stopped this function before the road was set up.
+	# NEON_START_S=<metres round the loop>: a fresh run starts there instead of
+	# at the top of the road (tests and screenshot tools of a far-off place).
+	var start_env := OS.get_environment("NEON_START_S")
+	if start_env.is_valid_float() and not resume_place and RoadMap.is_loop():
+		var start_s := RoadMap.wrap_s(float(start_env))
+		origin_index = floori(start_s / RoadChunkBuilder.CHUNK_LEN)
+		start_in_chunk = start_s - float(origin_index) * RoadChunkBuilder.CHUNK_LEN
 	RoadFrame.origin_index = origin_index
-	RoadFrame.align = RoadAlignment.new(road_seed, curviness, hilliness, kicker_chance, RoadMap.period, RoadMap.pins()) if curviness > 0.0 or hilliness > 0.0 else null
+	RoadFrame.align = RoadAlignment.new(road_seed, curviness, hilliness, kicker_chance, RoadMap.period, RoadMap.pins(), RoadMap.dip_vcurves()) if curviness > 0.0 or hilliness > 0.0 else null
 	# Lane adds and drops, median splits and exits (road lane proposal): a
 	# third stream from the same seed. NEON_LAYOUT=0 keeps the plain 4+4,
 	# NEON_LAYOUT=<metres> forces a change that often (the tests' sweep).
@@ -803,7 +818,7 @@ const PLAYER_SPAWN_LANE := 1
 
 func _setup_player() -> void:
 	player = PlayerCar.new()
-	player.position = RoadFrame.roll(Vector3(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, 0))
+	player.position = RoadFrame.roll(Vector3(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, -start_in_chunk))
 	if resume_place:
 		player.transform = SaveDirector.array_to_xform(run.car.xform)
 	add_child(player)
@@ -902,6 +917,11 @@ func _setup_game_state() -> void:
 	radio.listener = player  # reception follows the car (tunnels, bridges)
 	radio.process_mode = Node.PROCESS_MODE_ALWAYS   # plays on, muffled, while paused (PauseLook)
 	add_child(radio)
+	# Tunnels (TN1): the car's own sounds echo while it is under cover.
+	var tunnel_audio := TunnelAudio.new()
+	tunnel_audio.name = "TunnelAudio"
+	tunnel_audio.listener = player
+	add_child(tunnel_audio)
 	add_child(PauseLook.new(game_state, player, camera))
 	add_child(TitleScreen.new(game_state))
 	menu_sfx = MenuSfx.new()

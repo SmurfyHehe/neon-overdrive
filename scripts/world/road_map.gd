@@ -117,6 +117,14 @@ const ROADS := {
 			{"id": "g13a", "s": 9825.0}, {"id": "g13b", "s": 10225.0}, {"id": "g14a", "s": 10625.0}, {"id": "g14b", "s": 11025.0},
 			{"id": "g15a", "s": 11425.0}, {"id": "g15b", "s": 11825.0}, {"id": "g16a", "s": 12225.0}, {"id": "g16b", "s": 12625.0},
 		],
+		# Tunnels (TN1): s0 to s1 is under cover, whole chunks. `dip` is how far
+		# the road drops below the street on the way in and `ramp` the length of
+		# the open trench at each end, whole chunks too. An exit inside a
+		# tunnel's reach (ramps included) is left off the road while tunnels
+		# are live.
+		"tunnels": [
+			{"id": "t1", "s0": 4250.0, "s1": 4550.0, "district": 6, "dip": 6.0, "ramp": 150.0},
+		],
 	},
 }
 
@@ -149,6 +157,16 @@ static var _exits: Array = []
 static var _gaps: Array = []
 static var _gap_chunk := PackedByteArray()
 static var _pins := PackedByteArray()
+## Tunnels (TN1). Live = the road has them: on unless NEON_TUNNEL=0, and
+## game.gd turns it off for a road rolled without hills (the dip needs the
+## per-chunk road surface a hilly road has).
+static var tunnel_live := OS.get_environment("NEON_TUNNEL") != "0"
+const DIP_NONE := 0
+const DIP_RAMP := 1    # the open trench either side of a tunnel
+const DIP_TUNNEL := 2  # under cover
+static var _tunnels: Array = []
+static var _dip := PackedByteArray()   # per chunk of the lap: DIP_*
+static var _dip_vc := {}               # lap chunk -> vertical curvature the dip forces there
 static var _map_len := PackedFloat32Array()  # distance along the drawn line to each point
 
 static func knows(id: int) -> bool:
@@ -169,6 +187,9 @@ static func use(id: int, act_value: int = 1) -> void:
 	_gaps = []
 	_gap_chunk = PackedByteArray()
 	_pins = PackedByteArray()
+	_tunnels = []
+	_dip = PackedByteArray()
+	_dip_vc = {}
 	_map_len = PackedFloat32Array()
 	if not ROADS.has(id):
 		return
@@ -192,7 +213,14 @@ static func use(id: int, act_value: int = 1) -> void:
 	# road at each and at the crossings.
 	_pins.resize(period)
 	_gap_chunk.resize(period)
+	_dip.resize(period)
+	if tunnel_live:
+		for t in road.get("tunnels", []):
+			if float(t.s1) <= length():
+				_tunnels.append(t)
 	for e in road.exits:
+		if _in_tunnel_reach(float(e.s)):
+			continue  # the tunnel replaces it
 		if float(e.s) < length():
 			_exits.append(e)
 			_pin(floori(float(e.s) / L), PIN_APPROACH)
@@ -203,6 +231,10 @@ static func use(id: int, act_value: int = 1) -> void:
 			_pin(floori(float(g.s) / L), 0)
 	for c in _junctions:
 		_pin(floori(c / L), PIN_APPROACH)
+	# Last, so a ramp that shares a chunk with a crossing's approach keeps its
+	# profile: straight from the top of one ramp to the top of the other.
+	for t in _tunnels:
+		_lay_dip(t)
 	var pts: Array = road.map
 	_map_len.append(0.0)
 	for i in pts.size():
@@ -211,6 +243,82 @@ static func use(id: int, act_value: int = 1) -> void:
 static func _pin(chunk: int, approach: int) -> void:
 	for i in range(chunk - approach, chunk + approach + 1):
 		_pins[posmod(i, period)] = 1
+
+# ---------- tunnels (TN1) ----------
+# A tunnel's road goes down a ramp in an open trench, runs under cover, and
+# climbs out the same way. The whole reach is pinned straight, and instead of
+# level it has a forced height profile (RoadAlignment takes dip_vcurves()):
+# a crest over the first ramp chunk, a steady grade, and a sag over the first
+# covered chunk; mirrored at the far end. With the road's 50 m chunks that
+# gives grade = dip / ramp (6 m over 150 m: 4 %) and a vertical radius of
+# chunk x ramp / dip (1250 m), and the mouth sits one sag (grade x 25 m,
+# 1 m) above the tunnel floor.
+
+static func _ramp_chunks(t: Dictionary) -> int:
+	return maxi(1, roundi(float(t.get("ramp", 0.0)) / L))
+
+static func _in_tunnel_reach(s: float) -> bool:
+	for t in _tunnels:
+		var r := float(_ramp_chunks(t)) * L
+		if s >= float(t.s0) - r and s < float(t.s1) + r:
+			return true
+	return false
+
+static func _lay_dip(t: Dictionary) -> void:
+	var c0 := floori(float(t.s0) / L)       # first covered chunk
+	var c1 := floori(float(t.s1) / L) - 1   # last covered chunk
+	var n := _ramp_chunks(t)
+	for c in range(c0 - n, c1 + n + 1):
+		var m := posmod(c, period)
+		_pins[m] = 1
+		_dip[m] = DIP_TUNNEL if c >= c0 and c <= c1 else DIP_RAMP
+	var a := float(t.get("dip", 0.0)) / (float(n) * L * L)
+	if a > 0.0:
+		_dip_vc[posmod(c0 - n, period)] = -a
+		_dip_vc[posmod(c0, period)] = a
+		_dip_vc[posmod(c1, period)] = a
+		_dip_vc[posmod(c1 + n, period)] = -a
+
+## The tunnels on the road in this act: [{id, s0, s1, district, dip, ramp}].
+static func tunnels() -> Array:
+	return _tunnels
+
+## Whether this chunk is under cover.
+static func tunnel_at(chunk_index: int) -> bool:
+	return period > 0 and _dip[lap_chunk(chunk_index)] == DIP_TUNNEL
+
+## DIP_NONE, DIP_RAMP (the open trench) or DIP_TUNNEL for this chunk.
+static func dip_at(chunk_index: int) -> int:
+	return _dip[lap_chunk(chunk_index)] if period > 0 else DIP_NONE
+
+## The first chunk of the dip this chunk is in and how many chunks it is long
+## (ramp, tunnel, ramp), in the same lap as chunk_index: Vector2i(first, count).
+## count is 0 off a dip.
+static func dip_span(chunk_index: int) -> Vector2i:
+	if dip_at(chunk_index) == DIP_NONE:
+		return Vector2i(chunk_index, 0)
+	var first := chunk_index
+	while dip_at(first - 1) != DIP_NONE and chunk_index - first < period:
+		first -= 1
+	var last := chunk_index
+	while dip_at(last + 1) != DIP_NONE and last - chunk_index < period:
+		last += 1
+	return Vector2i(first, last - first + 1)
+
+## Lap chunk -> the vertical curvature (1/m, + = sag) the dips force there.
+static func dip_vcurves() -> Dictionary:
+	return _dip_vc
+
+## How far inside a tunnel s metres along the road is: metres from the nearer
+## mouth; 0 or less outside (minus the distance to the nearest mouth).
+static func tunnel_depth(s: float) -> float:
+	var best := -INF
+	if period <= 0:
+		return best
+	var m := wrap_s(s)
+	for t in _tunnels:
+		best = maxf(best, minf(m - float(t.s0), float(t.s1) - m))
+	return best
 
 ## The fixed seed for what stands on the road (buildings, centre barrier).
 static func seed_of(id: int) -> int:

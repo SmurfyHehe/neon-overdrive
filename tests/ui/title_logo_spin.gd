@@ -138,11 +138,23 @@ func _hold_six_seconds(title: TitleScreen) -> void:
 	var ring: Control = title.get("_ring")
 	_check(ring != null and ring.modulate.g > 0.3 and ring.modulate.b > 0.5,
 			"the hot ring is near white at full boost (%s)" % [ring.modulate if ring != null else "-"])
+	# the turbo's wind: near 2.0 at full boost, then eases down after release
+	var k: TitleKerbside = title.kerbside
+	_check(k != null and k.wind_now() > 1.9, "title wind is near 2.0 at full boost (%.2f)" % (k.wind_now() if k != null else -1.0))
 	Input.action_release("accelerate")
+	await process_frame
+	_check(k != null and k.wind_now() > 1.5 and k.wind_now() <= 2.0,
+			"wind eases down after release, not a snap (%.2f)" % (k.wind_now() if k != null else -1.0))
 	for i in 240:
 		await process_frame
 		if title.menu_spin == 0.0:
 			break
+	for i in 600:
+		if k == null or is_equal_approx(k.wind_now(), TitleKerbside.WIND_REST):
+			break
+		await process_frame
+	_check(k != null and is_equal_approx(k.wind_now(), TitleKerbside.WIND_REST),
+			"wind is back at the default breeze once boost is gone (%.2f)" % (k.wind_now() if k != null else -1.0))
 	_check_loop_level(TitleScreen.MENU_WHISTLE_LOOP)
 
 # 20 ms RMS windows over the loop, wrapped once so the seam is inside a

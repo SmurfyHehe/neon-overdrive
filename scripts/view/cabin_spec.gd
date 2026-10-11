@@ -29,6 +29,15 @@ extends RefCounted
 #   crank, switch            the window controls
 #   rear_mirror, door_mirror (right side; mirrored)
 #   console, seats           "tunnel" | "flat"; "bucket" | "bench" | "flat"
+#
+# Optional keys (hood view, 2026-10-11; computed here when a car has none):
+#   hood_cam      Vector3   the hood camera, on the bonnet ahead of the windscreen
+#   roof_back_cam Vector3   the roof camera that looks straight back (B in hood view)
+
+## Defaults for the hood camera: above and ahead of the cowl.
+const HOOD_CAM_UP := 0.18
+const HOOD_CAM_FORWARD := 0.35
+const ROOF_CAM_UP := 0.12
 
 const REQUIRED := ["seat_x", "seat_h", "seat_z", "eye", "floor_y", "belt_y", "cowl", "dash_face_z", "header", "roof_y",
 	"open_top", "door_x", "door_x_rear", "glass_x", "a_pillar", "b_pillar_z", "rear_z", "shelf", "wheel", "wheel_tilt_deg",
@@ -55,3 +64,22 @@ static func missing(cab: Dictionary) -> Array:
 		if not cab.has(k):
 			out.append(k)
 	return out
+
+## Hood view's camera point (car space): the car's own `hood_cam`, or just ahead
+## of the windscreen base and a hand above the dash lip (cowl is (y, z)).
+static func hood_cam(cab: Dictionary) -> Vector3:
+	if cab.has("hood_cam"):
+		return cab.hood_cam
+	var cowl: Vector2 = cab.cowl
+	return Vector3(0.0, cowl.x + HOOD_CAM_UP, cowl.y - HOOD_CAM_FORWARD)
+
+## The roof camera that looks back (B in hood view): over the rear of the roof,
+## or just above the header bar at the rear deck of an open car.
+static func roof_back_cam(cab: Dictionary) -> Vector3:
+	if cab.has("roof_back_cam"):
+		return cab.roof_back_cam
+	var y: float = float(cab.roof_y) + ROOF_CAM_UP
+	if cab.open_top:
+		var header: Vector2 = cab.header
+		y = header.x + 0.1
+	return Vector3(0.0, y, float(cab.rear_z) + 0.1)

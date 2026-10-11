@@ -36,7 +36,7 @@ const SKIP_ACTION := &"brake"  # S
 
 ## Everything in the world goes quiet at the cut; the crash screen's own
 ## sounds are on the UI bus.
-const CUT_BUSES := [&"Engine", &"Turbo", &"Music", &"Tires", &"World", &"Traffic", &"Sirens", &"Scanner"]
+const CUT_BUSES := [&"Engine", &"Turbo", &"Music", &"Tires", &"Crash", &"World", &"Traffic", &"Sirens", &"Scanner"]
 
 # Placeholder lines (the story is Roy's to write).
 const WRECK_LINES := [

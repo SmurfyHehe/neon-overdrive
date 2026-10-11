@@ -126,6 +126,9 @@ var race_released := false
 ## hands the wheel and pedals to it instead of the traffic controller below.
 ## Null on every traffic car, which is untouched.
 var racer: RivalDriver
+## The free driver (police P4): chases a target off the lane grid while the
+## car is in the full sim. On the rails the car is plain traffic.
+var free_driver: FreeDriver
 ## The spawner, for the occupancy queries. Null = plain lane follow at
 ## target_speed (nothing to brake for, no lane changes).
 var traffic: TrafficManager
@@ -654,6 +657,9 @@ func _drive(delta: float) -> void:
 	_ai_last = frame
 	if racer != null:
 		racer.drive(self, delta)
+		return
+	if free_driver != null:
+		free_driver.drive(self, delta)
 		return
 	var v := current_speed()
 	if changing:

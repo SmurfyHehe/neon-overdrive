@@ -4,14 +4,17 @@ extends RefCounted
 # Seven-segment digits for the cockpit's glowing displays (wheel screen, dial
 # gear window). Pure data: which segments a character lights, and where each
 # of the 7 sits in a digit's own plane. The users put the segments in a
-# MultiMesh (instance colour alpha = lit) so a whole display is no extra draw call.
+# MultiMesh (instance colour from colour()) so a whole display is no extra draw call.
 #
 # Segment order is the usual a..g: top, upper right, lower right, bottom,
 # lower left, upper left, middle.
 
 const SEG_COUNT := 7
-## Unlit segments stay faintly visible, like a real LCD (share of full glow).
-const UNLIT_ALPHA := 0.08
+## Unlit segments stay faintly visible, like a real LCD: this share of the lit
+## brightness (Roy: about 8 %).
+const UNLIT_SHARE := 0.08
+## The glow shader's brightness with alpha 0 (GLOW_SHADER, cockpit_kit.gd).
+const SHADER_FLOOR := 0.12
 
 const A := 1
 const B := 2
@@ -73,6 +76,21 @@ static func segment_rects(w: float, h: float, t: float) -> Array:
 		Rect2(Vector2(0.0, 0.0), Vector2(hl, t)),       # g
 	]
 
-## Instance colour for a segment: glow colour at alpha 1 lit, faint when not.
+## What CockpitKit.glow_material() draws for an instance colour. The shader is
+## unshaded, so only ALBEDO = rgb * mix(0.12, 1, a) shows (EMISSION is ignored
+## in unshaded mode). Mirrors GLOW_SHADER (cockpit_kit.gd); the tests use it.
+static func rendered(c: Color) -> Color:
+	var k := lerpf(SHADER_FLOOR, 1.0, c.a)
+	return Color(c.r * k, c.g * k, c.b * k, 1.0)
+
+## Instance colour for a segment under the glow material. Lit: the glow colour
+## at alpha 1. Unlit: alpha 0 with the colour scaled so the face renders at
+## UNLIT_SHARE of the lit one, the faint ghost of a real LCD's off segments.
 static func colour(glow: Color, lit: bool) -> Color:
-	return Color(glow.r, glow.g, glow.b, 1.0 if lit else UNLIT_ALPHA)
+	if lit:
+		return Color(glow.r, glow.g, glow.b, 1.0)
+	var f := UNLIT_SHARE / SHADER_FLOOR
+	return Color(glow.r * f, glow.g * f, glow.b * f, 0.0)
+
+static func is_lit(c: Color) -> bool:
+	return c.a > 0.5

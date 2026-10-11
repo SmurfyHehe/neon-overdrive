@@ -44,15 +44,19 @@ func _lit(w: SteeringWheel, d: int) -> String:
 	var out := ""
 	for s in 7:
 		var c: Color = w.seg_colours[d * 7 + s]
-		if c.a > 0.99:
+		if SevenSeg.is_lit(c):
 			out += "abcdefg"[s]
 	return out
 
+## Every segment renders as amber #FFC066: full when lit, 8% when not.
 func _all_faint_or_lit(w: SteeringWheel) -> bool:
+	var amber := SteeringWheel.AMBER
 	for c: Color in w.seg_colours:
-		if not (is_equal_approx(c.a, 1.0) or is_equal_approx(c.a, SevenSeg.UNLIT_ALPHA)):
-			return false
-		if not (is_equal_approx(c.r, SteeringWheel.AMBER.r) and is_equal_approx(c.g, SteeringWheel.AMBER.g) and is_equal_approx(c.b, SteeringWheel.AMBER.b)):
+		var r := SevenSeg.rendered(c)
+		var share := r.r / amber.r
+		var hue_ok := absf(r.g / amber.g - share) < 0.01 and absf(r.b / amber.b - share) < 0.01
+		var want := 1.0 if SevenSeg.is_lit(c) else SevenSeg.UNLIT_SHARE
+		if not (hue_ok and absf(share - want) < 0.01):
 			return false
 	return true
 
@@ -67,7 +71,7 @@ func _patterns(w: SteeringWheel) -> void:
 	for g in range(1, 7):
 		_show(w, 0, g)
 		_check(_lit(w, 0) == GEAR[str(g)] and w.lcd_text().begins_with("%d " % g), "gear %d pattern, got '%s' (want %s)" % [g, _lit(w, 0), GEAR[str(g)]])
-	_check(_all_faint_or_lit(w), "every segment is amber, lit at alpha 1 or faint at 0.08")
+	_check(_all_faint_or_lit(w), "every segment renders amber: full when lit, 8%% when not")
 
 func _speeds(w: SteeringWheel) -> void:
 	_show(w, 0, 1)

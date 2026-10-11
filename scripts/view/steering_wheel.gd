@@ -79,7 +79,7 @@ var angle := 0.0          # radians, + = right
 var lit_count := 0
 var flashing := false
 var led_colours := PackedColorArray()   # per LED, alpha 1 = lit
-var seg_colours := PackedColorArray()   # per screen segment (gear then speed), alpha 1 = lit
+var seg_colours := PackedColorArray()   # per screen segment (gear then speed), see SevenSeg.colour
 var seg_rects: Array[Rect2] = []        # per screen segment, wheel plane, metres (headless can't read transforms back)
 var _paddle_t := {-1: 0.0, 1: 0.0}
 var _gear_ch := "n"

@@ -1866,6 +1866,7 @@ static func _update_names(root: Node3D, chunk_index: int, walk0: float, walk1: f
 		mmi.visible = kind != ""
 	if kind == "":
 		mm.visible_instance_count = 0
+		root.set_meta("name_sign_xfs", [])
 		return
 	var area := PlaceNames.area_name(Districts.name_of_run(Districts.run_of(chunk_index) + 1))
 	var z := GANTRY_Z if kind == "gantry" else (REPEATER_Z if kind == "repeater" else ADVANCE_Z)
@@ -1904,7 +1905,8 @@ static func _update_names(root: Node3D, chunk_index: int, walk0: float, walk1: f
 		anchors.append(z)
 		mm.set_instance_custom_data(k, list[k].cd)
 	mm.visible_instance_count = n
-	_bend_instances(mm, 0, xfs, anchors)
+	# kept for a sign that gets knocked over (prop_break.gd bends these)
+	root.set_meta("name_sign_xfs", _bend_instances(mm, 0, xfs, anchors))
 
 ## Painted road words and arrows (RoadPaint.marks decides which): flat decals
 ## laid on the road surface through the centreline frame, so they follow a
@@ -1938,11 +1940,15 @@ static func _update_paint(root: Node3D, chunk_index: int, lanes_changed: bool, o
 ## pooled chunk rebuilt in the game is the previous occupant's. The old
 ## read-modify-write here put those stale props back, so office roof tanks
 ## hung 40 m over a one-floor lot (floating structures, 2026-10-09).
-static func _bend_instances(mm: MultiMesh, from: int, xfs: Array, anchors: PackedFloat32Array) -> void:
+static func _bend_instances(mm: MultiMesh, from: int, xfs: Array, anchors: PackedFloat32Array) -> Array:
+	var written := []
 	for k in xfs.size():
 		var t: Transform3D = xfs[k]
 		var a := float(anchors[k])
-		mm.set_instance_transform(from + k, _xf_up(0.0, 0.0, a) * Transform3D(t.basis, Vector3(t.origin.x, t.origin.y, t.origin.z - a)))
+		var xf := _xf_up(0.0, 0.0, a) * Transform3D(t.basis, Vector3(t.origin.x, t.origin.y, t.origin.z - a))
+		mm.set_instance_transform(from + k, xf)
+		written.append(xf)
+	return written
 
 # ---------- build / rebuild ----------
 

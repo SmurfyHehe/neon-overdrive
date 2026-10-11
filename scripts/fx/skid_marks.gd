@@ -148,6 +148,12 @@ func _physics_process(delta: float) -> void:
 		_peak[i] = strength
 	_reap_expired()
 
+## One dark quad from a to b that is not a skid: wet tyre tracks after a
+## burst hydrant's water (hydrant_water.gd). Same pool, same fade.
+func lay_track(a: Vector3, b: Vector3, strength: float) -> void:
+	if enabled and a.distance_squared_to(b) > 0.0025:
+		_lay(a, b, strength)
+
 func _lay(a: Vector3, b: Vector3, strength: float) -> void:
 	var dir := b - a
 	var len := dir.length()

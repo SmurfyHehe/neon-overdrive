@@ -32,6 +32,14 @@ const LINE_B := 3400.0
 const TIMEOUT_TICKS := 120 * 200
 const RUNS := ["grip bot", "rival 0.97", "rival 0.84"]
 const COMMITS := [0.0, 0.97, 0.84]
+## The reference workload (_ref_work): REF_LOOPS iterations, timed every
+## REF_EVERY ticks; REF_US is what it takes on the unloaded machine the 0.05 ms
+## budget was measured on (the fastest seen on the test container). Every 3
+## ticks, not 30: sampled every 30 it missed the load in 1 of 6 runs under 8
+## busy CPU loops (brain 0.047 ms as measured, machine read as 1.00x).
+const REF_LOOPS := 400
+const REF_EVERY := 3
+const REF_US := 65.0
 
 var failures: Array[String] = []
 var game: Node
@@ -50,6 +58,10 @@ var costs: Array[String] = []
 var off_road := 0
 var over_centre := 0
 var worst_err := 0.0
+## The machine's speed, sampled through the run (see REF_US).
+var ref_us := 0
+var ref_runs := 0
+var _ref_sink := 0.0
 
 func _initialize() -> void:
 	R.env(ROAD)
@@ -79,6 +91,8 @@ func _physics_process(_delta: float) -> bool:
 				off_road = 0
 				over_centre = 0
 				worst_err = 0.0
+				ref_us = 0
+				ref_runs = 0
 				wait = 0
 				state = 1
 		1:
@@ -93,6 +107,11 @@ func _physics_process(_delta: float) -> bool:
 				if x + rival.half_w > RoadChunkBuilder.MEDIAN_GAP + 4.0 * RoadChunkBuilder.LANE_W + RoadChunkBuilder.SHOULDER_W:
 					off_road += 1
 				worst_err = maxf(worst_err, absf(rival.racer.line_error))
+				if wait % REF_EVERY == 0:
+					var r0 := Time.get_ticks_usec()
+					_ref_work()
+					ref_us += Time.get_ticks_usec() - r0
+					ref_runs += 1
 			var now := float(wait) / 120.0
 			# The crossing time, to a fraction of a tick.
 			if t_a < 0.0 and s >= LINE_A:
@@ -131,8 +150,16 @@ func _report(t: float) -> void:
 		if over_centre > 0 or off_road > 0:
 			_fail("%s left its side of the road (centre line %d ticks, off road %d ticks)" % [RUNS[run], over_centre, off_road])
 		costs.append("%s: %s" % [RUNS[run], extra])
-		if rival.racer.cost_ms_per_tick() >= 0.05:
-			_fail("%s: race brain %.4f ms per tick, budget 0.05" % [RUNS[run], rival.racer.cost_ms_per_tick()])
+		# The budget is for an unloaded machine. The brain is timed by the wall
+		# clock, so other processes sharing the CPU made the check fail at two
+		# or three times the real cost (flaky on a busy test machine). Scale
+		# by a fixed reference workload timed alongside it: what the brain
+		# would cost when the reference takes REF_US.
+		var speed := (float(ref_us) / maxf(float(ref_runs), 1.0)) / REF_US
+		var cost := rival.racer.cost_ms_per_tick() / maxf(speed, 0.01)
+		print("%s: race brain %.4f ms per tick as measured, %.4f at reference speed (the machine ran at %.2fx the reference's time)" % [RUNS[run], rival.racer.cost_ms_per_tick(), cost, speed])
+		if cost >= 0.05:
+			_fail("%s: race brain %.4f ms per tick at reference speed, budget 0.05" % [RUNS[run], cost])
 	print("pace %s: %.2f s over %.0f m (%.0f km/h average, slowest %.0f, top %.0f)  %s" % [
 		RUNS[run], t, LINE_B - LINE_A, (LINE_B - LINE_A) / t * 3.6, slowest * 3.6, top * 3.6, extra])
 
@@ -157,6 +184,21 @@ func _finish() -> bool:
 	print("rival_pace: ", "PASS" if failures.is_empty() else "FAIL (%d)" % failures.size())
 	quit(0 if failures.is_empty() else 1)
 	return true
+
+## A fixed piece of GDScript work (vector maths, array reads, calls), timed
+## every REF_EVERY ticks of a rival run to tell how fast the machine is going
+## right now.
+func _ref_work() -> void:
+	var acc := Vector3.ZERO
+	var arr := PackedFloat32Array()
+	arr.resize(64)
+	for i in 64:
+		arr[i] = float(i) * 0.37
+	for i in REF_LOOPS:
+		var v := Vector3(arr[i & 63], arr[(i * 7) & 63], 1.0)
+		acc += v.normalized() * clampf(sin(float(i) * 0.01), -0.5, 0.5)
+		acc = acc.lerp(v, 0.01)
+	_ref_sink += acc.length()
 
 func _fail(what: String) -> void:
 	failures.append(what)

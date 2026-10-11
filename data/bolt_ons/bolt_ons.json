@@ -1,6 +1,6 @@
 {
 	"version": 1,
-	"_note": "Bolt-on row, step B1 of the mod tree (2026-10-10). 26 cheap items, each changes one number or one sound, any order, fits every car (deltas are relative: mul/add on whatever the car has). Ops: [\"mul\", k], [\"add\", d], [\"set\", v] on a CarSpec key. 'effects' are levers the track sim cannot see (lamps, tow, heat, wear, fuel, sound): the worth sweep prices them from the 'street_model' below. 'est_worth' is the design estimate for the Bug (0-10); 'flair' (0-1) is the authored sound/info value that cannot be measured headless. Worth is measured by BoltOnWorth: Pace (0-5, 1 pt = 0.5 s on a 90 s reference loop) + Control (0-3, 1 pt = 10% fewer mistakes or 2 m in 100-0) + Street (0-3, 1 pt = 5% of an act-1 night's earnings) + flair, capped at 10. 'giftable' false = sound-only, never offered as a gift.",
+	"_note": "Bolt-on row, step B1 of the mod tree (2026-10-10). 29 cheap items, each changes one number or one sound, any order, fits every car (deltas are relative: mul/add on whatever the car has). Ops: [\"mul\", k], [\"add\", d], [\"set\", v] on a CarSpec key. 'effects' are levers the track sim cannot see (lamps, tow, heat, wear, fuel, sound): the worth sweep prices them from the 'street_model' below. 'est_worth' is the design estimate for the Bug (0-10); 'flair' (0-1) is the authored sound/info value that cannot be measured headless. Worth is measured by BoltOnWorth: Pace (0-5, 1 pt = 0.5 s on a 90 s reference loop) + Control (0-3, 1 pt = 10% fewer mistakes or 2 m in 100-0) + Street (0-3, 1 pt = 5% of an act-1 night's earnings) + flair, capped at 10. 'giftable' false = sound-only, never offered as a gift.",
 
 	"service": {
 		"label": "Service",
@@ -104,6 +104,12 @@
 		{"id": "oil_cooler", "label": "Oil cooler", "notice": "The engine wears 20% less", "kind": "Street", "est_worth": 2.0, "flair": 0.0,
 			"effects": {"engine_wear_mul": 0.8}},
 		{"id": "gauge_pod", "label": "Gauge pod", "notice": "Boost and AFR readings, free with the first boost", "kind": "Info", "est_worth": 0.5, "flair": 0.5, "giftable": true,
-			"effects": {"gauge_pod": true}}
+			"effects": {"gauge_pod": true}},
+		{"id": "subwoofer", "label": "Subwoofer", "notice": "The radio gets a low end you can feel", "kind": "Sound", "est_worth": 0.5, "flair": 0.5, "giftable": true,
+			"effects": {"subwoofer": true}},
+		{"id": "amp", "label": "Amp", "notice": "The radio plays louder and cleaner", "kind": "Sound", "est_worth": 0.5, "flair": 0.5, "giftable": true,
+			"effects": {"amp": true}},
+		{"id": "sat_nav", "label": "Sat-nav", "notice": "A map on the dash, fitted once per car", "kind": "Info", "est_worth": 0.5, "flair": 0.5, "giftable": true,
+			"effects": {"sat_nav": true}}
 	]
 }

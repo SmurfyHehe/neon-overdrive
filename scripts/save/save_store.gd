@@ -62,6 +62,25 @@ static func select_slot(n: int) -> bool:
 	slot = n
 	return AtomicJson.write(root.path_join("active_slot.json"), {"slot": n})
 
+## Deletes slot n's save (the title's Load > Delete a save; Roy, 2026-10-10).
+## To the game the slot is empty afterwards. The folder is not destroyed: it is
+## moved whole, backups included, to <root>/deleted/slot_<n>_<unix time>, where
+## nothing reads it, so a save deleted by mistake can still be put back by
+## hand. Refused during a chase. True when the slot is empty afterwards.
+static func delete_slot(n: int) -> bool:
+	if chase_active or n < 1 or n > SLOTS:
+		return false
+	var dir := slot_dir(n)
+	if not DirAccess.dir_exists_absolute(dir):
+		return true
+	var bin := root.path_join("deleted")
+	DirAccess.make_dir_recursive_absolute(bin)
+	var to := bin.path_join("slot_%d_%d" % [n, int(Time.get_unix_time_from_system())])
+	var k := 1
+	while DirAccess.dir_exists_absolute(to if k == 1 else "%s_%d" % [to, k]):
+		k += 1
+	return DirAccess.rename_absolute(dir, to if k == 1 else "%s_%d" % [to, k]) == OK
+
 ## {"empty": bool, "saved_at": int, "cash": int} per slot, for a slot menu.
 static func summary(n: int) -> Dictionary:
 	var empty := true
@@ -129,7 +148,19 @@ static func load_meta_raw() -> Dictionary:
 	return {"chase_open": m.get("chase_open", false) == true,
 		"pending_busts": maxi(0, int(m.get("pending_busts", 0))) if _is_whole(m.get("pending_busts", 0)) else 0,
 		"saved_at": int(m.get("saved_at", 0)) if _is_whole(m.get("saved_at", 0)) else 0,
-		"first_wreck_used": m.get("first_wreck_used", false) == true}
+		"first_wreck_used": m.get("first_wreck_used", false) == true,
+		"weather_seed": int(m.get("weather_seed", 0)) if _is_whole(m.get("weather_seed", 0)) else 0}
+
+# ---------- the weather seed (WX0) ----------
+
+## The slot's weather seed (weather_plan.gd draws every night's weather from
+## it plus the night number), 0 = none picked yet. Lives in the profile next
+## to the night clock's night, so each slot has its own weather.
+static func weather_seed() -> int:
+	return maxi(load_meta_raw().weather_seed, 0)
+
+static func set_weather_seed(s: int) -> bool:
+	return _touch_meta({"weather_seed": maxi(s, 1)})
 
 # ---------- the first wreck ----------
 

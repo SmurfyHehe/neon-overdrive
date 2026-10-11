@@ -18,24 +18,24 @@ const GLASS := ["glass"]
 ## body by tools/fleet_design/cabin_measure.gd (2026-10-09) and hand-tuned.
 ## CockpitFrame builds the interior from these; nothing in it is the coupe's.
 const CABIN := {
-	"seat_x": -0.231, "seat_h": 0.446, "seat_z": -0.025,
-	"eye": Vector3(-0.191, 1.066, -0.085),
+	"seat_x": -0.250, "seat_h": 0.446, "seat_z": -0.025,
+	"eye": Vector3(-0.210, 1.066, -0.085),
 	"floor_y": 0.256, "belt_y": 0.842,
 	"cowl": Vector2(0.756, -0.775), "dash_face_z": -0.715,
 	"header": Vector2(1.245, -0.375), "roof_y": 1.245, "roof_z1": 0.475, "open_top": true,
-	"door_x": 0.470, "door_x_rear": 0.470, "door_x_front": 0.470, "glass_x": 0.0, "glass_top": 1.205,
+	"door_x": 0.520, "door_x_rear": 0.520, "door_x_front": 0.520, "glass_x": 0.0, "glass_top": 1.205,
 	"a_pillar": [Vector3(0.500, 0.756, -0.775), Vector3(0.560, 1.245, -0.375)],
 	"b_pillar_z": 0.075, "rear_z": 0.475,
 	"shelf": {},
-	"wheel": Vector3(-0.231, 0.736, -0.565), "wheel_tilt_deg": -25.0,
-	"cluster": Vector2(0.896, -0.734), "cluster_style": "dials", "speedo_max_kmh": 180.0,
+	"wheel": Vector3(-0.250, 0.736, -0.565), "wheel_tilt_deg": -25.0,
+	"cluster": Vector2(0.896, -0.734), "cluster_style": "cans", "speedo_max_kmh": 180.0,
 	"head_unit": Vector3(0.0, 0.798, -0.639),
 	"lever": Vector3(0.0, 0.581, -0.405), "handbrake": Vector3(0.0, 0.581, 0.055),
-	"pedals": Vector3(-0.131, 0.526, -0.885),
-	"crank": Vector3(-0.450, 0.616, -0.565), "switch": Vector3(-0.424, 0.753, -0.365),
-	"rear_mirror": Vector3(0.0, 1.120, -0.433),
+	"pedals": Vector3(-0.150, 0.526, -0.885),
+	"crank": Vector3(-0.500, 0.616, -0.565), "switch": Vector3(-0.474, 0.753, -0.365),
+	"rear_mirror": Vector3(0.0, 1.175, -0.433),
 	"door_mirror": Vector3(0.741, 0.892, -0.635),
-	"console": "tunnel", "seats": "bucket",
+	"console": "tunnel", "console_w": 0.16, "seats": "bucket", "trim": "retro",
 }
 ## Build name -> body_tris, tris_total, body_pos (chunks), body_mat, wheels
 ## (front and rear right-hand wheel, hub-relative), slots, tips. Car space.

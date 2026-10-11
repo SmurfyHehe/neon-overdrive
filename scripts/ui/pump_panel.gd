@@ -21,6 +21,7 @@ extends CanvasLayer
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
+const TestBuild := preload("res://scripts/core/test_build.gd")
 const Wallet := preload("res://scripts/core/wallet.gd")
 
 const FILL_GAME_MINUTES := 10.0
@@ -129,6 +130,8 @@ func quote() -> Dictionary:
 	var want := int(ceil(_room() - 0.001))
 	var bank: int = wallet.bank
 	var can := mini(want, floori(float(bank) / FuelTank.PRICE_PER_LITRE))
+	if TestBuild.on():
+		return {"want": want, "can": want, "cost": 0}  # sandbox: free, always
 	return {"want": want, "can": can, "cost": can * FuelTank.PRICE_PER_LITRE}
 
 func refresh() -> void:
@@ -198,7 +201,7 @@ func _finish_fill() -> void:
 	_fill_t = -1.0
 
 ## Ferris tows you in: the night ends (tonight's cash is banked by game.gd's
-## 6 a.m. hook) and the tank is left at the starting third. First press arms.
+## 6 a.m. hook) and the tank is left at FuelTank.START_FRACTION. First press arms.
 func tow() -> void:
 	if _fill_t >= 0.0 or locked():
 		return
@@ -212,7 +215,8 @@ func tow() -> void:
 		night_clock.advance((NightClock.NIGHT_MINUTES - night_clock.minutes) * NightClock.REAL_SECONDS_PER_HOUR / 60.0 + 0.01)
 	var start := FuelTank.CAPACITY_L * FuelTank.START_FRACTION
 	player.fuel.litres = maxf(player.fuel.litres, start)
-	message.text = "Ferris towed you in. Night over, %s banked. He left you a third of a tank." % Wallet.money(cash)
+	var left := "a full tank" if FuelTank.START_FULL_TANK else "a third of a tank"
+	message.text = "Ferris towed you in. Night over, %s banked. He left you %s." % [Wallet.money(cash), left]
 	message.add_theme_color_override("font_color", AMBER)
 	refresh()
 	leave_button.grab_focus()

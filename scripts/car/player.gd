@@ -91,6 +91,9 @@ const STEER_GRIP_FULL := 8.0     # m/s: it applies in full from here up
 
 const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Vehicle's own shift_time below
 
+## How far the player's own tail lamps and flares go toward a traffic car's
+## full brake flare: the chase camera sits right behind them.
+const PLAYER_BRAKE_GLOW := 0.35
 var chassis_visual: Node3D
 ## H toggles them (set_headlights); police heat reads this.
 var headlights_on := true
@@ -105,6 +108,8 @@ var limp := LimpMode.new()
 ## Rain and puddles on each tyre (wet_grip.gd), applied over health's grip.
 var wet := WetGrip.new()
 const WetGrip := preload("res://scripts/car/wet_grip.gd")
+const StarterAudio := preload("res://scripts/audio/starter_audio.gd")
+const TestBuild := preload("res://scripts/core/test_build.gd")
 ## Broken parts (Stage C damage, slice 1). Off for sim_only cars, like health.
 var damage := CarDamage.new()
 var _head_share := 1.0
@@ -236,6 +241,15 @@ func _ready() -> void:
 		# per car). A car built from a given spec (test track, Auto-Tune
 		# worker) keeps it as is.
 		PlayerTune.kind = kind
+		# TEST BUILD (TestBuild): the car comes with everything its mod tree
+		# offers already fitted (ModTree.everything_fit), as if bought. The
+		# tune made on the modded car is kept in its own file, so it never
+		# lands on the stock car when the switch goes off.
+		if TestBuild.on():
+			TuneParams.set_gear_count((spec.gear_ratios as Array).size())  # the build reads the Tuner's windows
+			mod_build = ModTree.build(spec, ModTree.everything_fit(kind))
+			spec = mod_build.spec
+			PlayerTune.kind = kind + "_modded"
 		TuneParams.set_gear_count((spec.gear_ratios as Array).size())  # before the saved tune is read: it walks the registry
 		PlayerTune.apply_saved(spec)
 		_keeps_tune = true
@@ -293,6 +307,7 @@ func _ready() -> void:
 		add_child(DrivelineAudio.new())
 		add_child(CrashAudio.new())  # crashes and scrapes (2026-10-08)
 		add_child(DamageAudio.new())  # rattle once parts are broken (damage slice 1)
+		add_child(StarterAudio.new())  # the starter motor while X cranks a stopped engine
 
 		# Stage A (2026-10-04): headlights + blob shadow, since the world is dark
 		# on purpose now (Look Board B). After the body and wheels exist, because
@@ -303,6 +318,9 @@ func _ready() -> void:
 		if kind == P1CoupeBuilder.KIND:
 			CarParts.attach(self, {"hub_x": P1CoupeBuilder.DESIGN_WHEEL_X})
 		CarFx.attach(self, chassis_visual.get_meta("half_l", 2.2))
+		# Street-lamp light on car paint (High preset): the player feeds the
+		# lamp row to every car shader.
+		add_child(CarLampSweep.new())
 		# Detail parts policy (shocks, later the engine bay and panel contents)
 		# and the undercarriage's Low-preset switch. After CarFx, so the node
 		# finds the underside on its layer.
@@ -334,12 +352,17 @@ func _physics_process(delta: float) -> void:
 		driver.call(self)
 	else:
 		_read_keyboard()
+	_step_ignition(delta)
 	_update_line_lock()
 	# Tail smears brighten with the brakes; one instance-colour write per flip.
 	var braking := brake_input > 0.05
 	if braking != _smear_brake_on and chassis_visual != null:
 		_smear_brake_on = braking
 		WetReflections.set_tail_brake(chassis_visual, 1.0 if braking else 0.0)
+		# The tail lamps themselves flare on the brake (both body paths).
+		var body := chassis_visual.get_node_or_null(^"Body") as MeshInstance3D
+		if body != null:
+			body.set_instance_shader_parameter("brake", PLAYER_BRAKE_GLOW if braking else 0.0)
 	# Limp mode: the slowest active cause caps the speed by fading the throttle.
 	limp.update(fuel.is_empty(), health.engine_temp if health.enabled else 0.0)
 	if limp.is_limping():
@@ -491,7 +514,20 @@ func apply_keys(k: int) -> void:
 	if Input.is_action_just_pressed("high_beam"):
 		toggle_high_beam()
 	clutch_input = 1.0 if k & KEY_CLUTCH else 0.0
-	starter_input = k & KEY_STARTER != 0
+	# X: starts a stopped engine, switches a running one off (key_off). The
+	# press that switched it off is spent: it cranks again only once X has
+	# been let go and pressed anew.
+	var x_down := k & KEY_STARTER != 0
+	if x_down and not _x_held and engine_running and key_off():
+		_x_spent = true
+	elif not x_down:
+		_x_spent = false
+	_x_held = x_down
+	starter_input = x_down and not _x_spent
+	if starter_input and not engine_running:
+		if _crank_left <= 0.0:
+			_begin_crank()
+		_crank_left = CRANK_LATCH_S
 	var throttle := k & KEY_ACCEL != 0
 	var braking := k & KEY_BRAKE != 0
 	var handbrake := k & KEY_HANDBRAKE != 0
@@ -586,11 +622,16 @@ const TRANSMISSION_LETTERS := ["A", "S", "M"]
 const SHIFT_CLUTCH_MIN := 0.6
 
 func transmission_mode() -> int:
+	if _ignition_mode >= 0:
+		return _ignition_mode
 	if automatic_transmission:
 		return Transmission.AUTO
 	return Transmission.MANUAL if realistic_clutch else Transmission.SEMI
 
 func set_transmission_mode(mode: int) -> void:
+	if _ignition_mode >= 0 and not engine_running:
+		_ignition_mode = mode  # switched off: the box is picked for when it starts
+		return
 	automatic_transmission = mode == Transmission.AUTO
 	realistic_clutch = mode == Transmission.MANUAL
 	# Same reset the old V toggle did: never hand over a stalled engine or a
@@ -599,6 +640,138 @@ func set_transmission_mode(mode: int) -> void:
 	clutch_pedal = 0.0
 	if auto_box != null:
 		auto_box.reset()
+
+## Ignition (2026-10-10, Roy: "i want you to need to actually start the car.
+## theres a reason why we made X. use it."). A run starts, and a put-back ends,
+## with the engine off; the starter key (X) cranks it.
+##
+## GEVP only knows a stopped engine in the realistic clutch model (MANUAL), so
+## while it is off the car is held in that model whatever box is picked: no
+## firing, the clutch open, the starter spinning the engine up to
+## Vehicle.STARTER_RPM where it catches. The box the player picked is kept in
+## _ignition_mode (transmission_mode() goes on reporting it) and put back the
+## tick the engine runs. A tap of X is enough: the starter stays in for
+## CRANK_LATCH_S or until it fires.
+const CRANK_LATCH_S := 2.5
+## X with the engine running switches it off, but only below this speed (m/s,
+## about 7 km/h). Faster than that the press does nothing.
+const ENGINE_OFF_MAX_SPEED := 2.0
+## A start with the key turns the engine over for a while before it fires:
+## this long on a warm engine, this long on a cold one (a four-cylinder; a
+## bigger engine turns slower, see StarterAudio.pace), give or take
+## CRANK_SPREAD. GEVP's own starter would have it running in a few ticks.
+const CRANK_WARM_S := 0.6
+const CRANK_COLD_S := 1.25
+const CRANK_SPREAD := 0.12
+## What the starter turns the engine at (a four-cylinder), under STARTER_RPM.
+const CRANK_RPM := 230.0
+## Seconds of running that warm a cold engine through, and of standing
+## switched off that let it go cold again.
+const WARM_UP_S := 25.0
+const COOL_DOWN_S := 120.0
+## The revs the engine flares to as it catches, over idle.
+const START_FLARE := 1.45
+## How many times the key has switched the engine off, and how long the last
+## key start cranked for (StarterAudio, tests).
+var key_offs := 0
+var crank_hold := 0.0
+var _crank_hold_left := 0.0
+var _warmth := 0.0
+var _x_held := false
+var _x_spent := false
+## Test build: what ModTree.build fitted to this car ({} when nothing was).
+var mod_build := {}
+var _ignition_mode := -1
+var _crank_left := 0.0
+
+## True from ignition_off() until the engine runs again.
+func is_switched_off() -> bool:
+	return _ignition_mode >= 0
+
+## True while the starter is turning a stopped engine.
+func is_cranking() -> bool:
+	return not engine_running and starter_input
+
+func ignition_off() -> void:
+	if _ignition_mode < 0:
+		_ignition_mode = transmission_mode()
+	automatic_transmission = false
+	realistic_clutch = true
+	engine_running = false
+	motor_rpm = 0.0
+	throttle_amount = 0.0
+	clutch_pedal = 0.0
+	_crank_left = 0.0
+	_crank_hold_left = 0.0
+	if auto_box != null:
+		auto_box.reset()
+
+## X on a running engine: switches it off, as ignition_off() does, but the
+## engine spins down by its own drag (the tach falls, StarterAudio plays the
+## shutdown). False, and nothing happens, above ENGINE_OFF_MAX_SPEED. Radio and
+## lights are not the engine's: they stay as they are.
+func key_off() -> bool:
+	if not engine_running or linear_velocity.length() > ENGINE_OFF_MAX_SPEED:
+		return false
+	var rpm := motor_rpm
+	ignition_off()
+	motor_rpm = rpm
+	boost = 0.0
+	key_offs += 1
+	return true
+
+## 0 on an engine that has run a while, 1 on one that has not run yet or has
+## stood switched off: a cold one cranks for longer.
+func coldness() -> float:
+	return 1.0 - _warmth
+
+func crank_pace() -> float:
+	return StarterAudio.pace(int((spec.get("engine_voice", {}) as Dictionary).get("cylinders", 4)))
+
+## A key start begins: picks how long it turns over before it fires.
+func _begin_crank() -> void:
+	crank_hold = lerpf(CRANK_WARM_S, CRANK_COLD_S, coldness()) / crank_pace() * randf_range(1.0 - CRANK_SPREAD, 1.0 + CRANK_SPREAD)
+	_crank_hold_left = crank_hold
+
+## Runs the engine at once, in the box that was picked (no cranking).
+func ignition_on() -> void:
+	var mode := _ignition_mode if _ignition_mode >= 0 else transmission_mode()
+	_ignition_mode = -1
+	_crank_left = 0.0
+	set_transmission_mode(mode)
+	motor_rpm = maxf(motor_rpm, idle_rpm)
+
+## Each tick, before the sim: holds the starter in after a tap, and hands the
+## car back to its own box once the engine has caught.
+func _step_ignition(delta: float) -> void:
+	_warmth = clampf(_warmth + (delta / WARM_UP_S if engine_running else -delta / COOL_DOWN_S), 0.0, 1.0)
+	if engine_running:
+		_crank_left = 0.0
+		_crank_hold_left = 0.0
+		if _ignition_mode >= 0:
+			var mode := _ignition_mode
+			_ignition_mode = -1
+			set_transmission_mode(mode)
+			if mode == Transmission.MANUAL:
+				current_gear = 0  # in gear with the pedal up it would stall at once
+			motor_rpm = maxf(motor_rpm, idle_rpm * START_FLARE)
+		return
+	if _crank_left > 0.0:
+		_crank_left -= delta
+		starter_input = true
+	if _crank_hold_left > 0.0:
+		# A key start: turning over, not yet firing. Held under STARTER_RPM
+		# until the time is up, then let through it.
+		if not starter_input:
+			_crank_hold_left = 0.0
+		else:
+			_crank_hold_left -= delta
+			if _crank_hold_left > 0.0:
+				motor_rpm = minf(motor_rpm, CRANK_RPM * crank_pace())
+			else:
+				motor_rpm = maxf(motor_rpm, STARTER_RPM + 30.0)
+	if _ignition_mode >= 0:
+		handbrake_input = 1.0  # parked: it does not roll off down a hill
 
 ## Shift paddles behind the wheel: only a car built with a paddle box has them
 ## (none yet; the mid-engine exotic will). They flick on the box's own shifts.
@@ -615,6 +788,11 @@ func clutch_ready() -> bool:
 	return transmission_mode() != Transmission.MANUAL or clutch_input >= SHIFT_CLUTCH_MIN
 
 func manual_shift(count: int) -> void:
+	# The box that is picked, not GEVP's own flag: with the engine switched off
+	# the car is held in the manual model whatever was picked, and Q and E
+	# walked a switched-off automatic into 3rd, neutral or reverse.
+	if transmission_mode() == Transmission.AUTO:
+		return
 	if clutch_ready():
 		super.manual_shift(count)
 

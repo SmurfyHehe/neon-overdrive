@@ -9,9 +9,8 @@ extends Node3D
 ##
 ## Every car gets its own pod (STYLES, by PlayerCar.chassis_kind()): the bezel,
 ## the face, its backlight, the needle and the holder's finish, and where on
-## the dash it is screwed (MOUNTS, cabin space, with the face turned to the
-## driver's eye). The per-car cabins work can move a pod by editing MOUNTS
-## or by handing `GaugePod.new(kind, boost_max, mount)` its own transform.
+## the car it is clamped (mount_of, from the car's own CABIN, with the face
+## turned to the driver's eye). A pod can also be placed by handing `GaugePod.new(kind, boost_max, mount)` its own transform.
 ##
 ## Geometry: each gauge is a flat backlit face, a bezel ring, ticks, zone
 ## sectors and a needle on a pivot, the same parts as the main cluster's
@@ -56,28 +55,30 @@ const STYLES := {
 const DEFAULT_STYLE := "p1_coupe"
 
 ## Where the pod is clamped, in cabin space (the CockpitFrame's): on the
-## driver's A-pillar, the classic spot, 40% of the way up, on a bracket that
-## holds the faces 4.5 cm proud of the pillar (its bar is 9 cm deep) and 3 cm
-## inboard of it, so no part of the bar is in front of a face (Roy,
-## 2026-10-09: "pillars might be blocking out the gauges"), the two gauges
-## stacked along the pillar ("along": the pillar's direction, so the pair
-## follows it however the pillar leans in the driver's view) with each face
-## turned to the driver's eye (yaw turns the faces to the right, pitch tips
-## them up). The pillar zone (|x| > 0.55) is outside the dash-line rule
-## tests/view/cockpit_interior.gd enforces, and the pod overlaps the pillar's
-## own silhouette, so it costs little glass. The P1 pillar runs from
-## (-0.78, 0.83, -0.69) to (-0.62, 1.345, -0.03) (CockpitFrame); the per-car
-## cabins work can give each car its own entry here.
-const P1_PILLAR := Vector3(0.16, 0.515, 0.66)
-const MOUNTS := {
-	"p0_beater":    {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
-	"p1_coupe":     {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
-	"p2_hothatch":  {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
-	"p3_tuner":     {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
-	"p4_kei":       {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
-	"p5_muscle":    {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
-	"p6_crossover": {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
-}
+## driver's windscreen pillar, the classic spot. Every car's pod sits on its
+## own pillar (2026-10-10; before, all seven used the coupe's coordinates,
+## which put the faces behind the pillar's inner trim on every car: Roy,
+## 2026-10-09, "pillars might be blocking out the gauges"). The place comes
+## from the car's CABIN (a_pillar and eye, CabinSpec): UP_PILLAR of the way up
+## the pillar trim's centre line (CockpitFrame tucks the trim in from the
+## skin), then straight toward the driver's eye until the pair is CLEAR off
+## the pillar's line. A raked pillar (the coupe's, the muscle car's) runs
+## almost at the eye, so its pod stands further off on a longer bracket; an
+## upright one keeps its pod close. Seen from the seat the pod stays in front
+## of the pillar, and nothing of the pillar is in front of a face
+## (tests/fleet/sight_line.gd checks the eye sees both).
+## The two gauges are stacked along the pillar ("along": the
+## pillar's direction, so the pair follows it however the pillar leans in the
+## driver's view) with each face turned square to the driver's eye. The pod
+## overlaps the pillar's own silhouette, so it costs little glass, and it
+## stays outside the road band (tests/fleet/sight_line.gd): where a narrow
+## car's pillar is close to straight ahead the pod slides outboard along x
+## until its inner edge is MIN_YAW_DEG off the eye's centre line.
+const UP_PILLAR := 0.40
+const CLEAR := 0.10
+const MIN_YAW_DEG := 23.5
+## Half the pod's width as the eye sees it (the bezel and the holder).
+const HALF_W := 0.046
 
 var kind := DEFAULT_STYLE
 var style: Dictionary
@@ -89,14 +90,39 @@ var psi_needle: Node3D
 var along := Vector3.UP   # the pillar in the pod's frame; the pair is stacked along it
 var roll := 0.0           # radians, the pair axis seen face-on, from +x (each face stays upright)
 
+## {"pos", "along", "yaw", "pitch"} for a car's cabin (CabinSpec.for_kind).
+static func mount_of(cab: Dictionary) -> Dictionary:
+	var foot: Vector3 = cab.a_pillar[0]
+	var top: Vector3 = cab.a_pillar[1]
+	foot.x = -foot.x   # the driver's side
+	top.x = -top.x
+	# the inner trim's centre line, as CockpitFrame._build_static builds it
+	foot += Vector3(0.04, 0.0, 0.02)
+	top += Vector3(0.13, -0.09, 0.03)
+	var along_v := top - foot
+	var eye: Vector3 = cab.eye
+	var on_trim := foot + along_v * UP_PILLAR
+	var to_eye := eye - on_trim
+	var axis := along_v.normalized()
+	# how far off the pillar's line a step toward the eye gets: all of it for
+	# an upright pillar, little for a raked one that runs at the eye
+	var off_axis := (to_eye - axis * to_eye.dot(axis)).length() / maxf(to_eye.length(), 0.01)
+	var pos := on_trim + to_eye.normalized() * minf(CLEAR / maxf(off_axis, 0.2), to_eye.length() * 0.6)
+	# out of the road band: the inner edge at least MIN_YAW_DEG left of straight ahead
+	var ahead := maxf(eye.z - pos.z, 0.05)
+	var inner_limit := eye.x - tan(deg_to_rad(MIN_YAW_DEG)) * ahead - HALF_W
+	pos.x = minf(pos.x, inner_limit)
+	var d := eye - pos
+	return {"pos": pos, "along": along_v, "yaw": rad_to_deg(atan2(d.x, d.z)), "pitch": rad_to_deg(atan2(d.y, Vector2(d.x, d.z).length()))}
+
 static func mount(for_kind: String) -> Transform3D:
-	var m: Dictionary = MOUNTS.get(for_kind, MOUNTS[DEFAULT_STYLE])
+	var m := mount_of(CabinSpec.for_kind(for_kind))
 	var b := Basis(Vector3.UP, deg_to_rad(m.yaw)) * Basis(Vector3.RIGHT, -deg_to_rad(m.pitch))   # +pitch tips the faces up
 	return Transform3D(b, m.pos)
 
 ## The pillar's direction in the pod's own frame (the faces look along +z).
 static func mount_along(for_kind: String) -> Vector3:
-	var m: Dictionary = MOUNTS.get(for_kind, MOUNTS[DEFAULT_STYLE])
+	var m := mount_of(CabinSpec.for_kind(for_kind))
 	return (mount(for_kind).basis.inverse() * (m.along as Vector3)).normalized()
 
 ## The PSI face runs -15 .. psi_max, where psi_max covers the setup's boost
@@ -111,7 +137,7 @@ func _init(car_kind: String, boost_bar: float, at: Transform3D = Transform3D.IDE
 	psi_max = psi_face_max(boost_bar)
 	name = "GaugePod"
 	transform = at if at != Transform3D.IDENTITY else mount(car_kind)
-	along = (basis.inverse() * (MOUNTS.get(car_kind, MOUNTS[DEFAULT_STYLE]).along as Vector3)).normalized()
+	along = (basis.inverse() * (mount_of(CabinSpec.for_kind(car_kind)).along as Vector3)).normalized()
 	roll = atan2(along.y, along.x)
 
 func _ready() -> void:

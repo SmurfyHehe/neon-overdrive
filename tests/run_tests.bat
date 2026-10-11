@@ -71,6 +71,7 @@ call :run audio/car_audio --headless
 call :run fleet/fleet_design_check --headless
 rem Car pipeline step 1: the P1 body.glb from tools/car_pipeline/build_car.py loads, splits into panels, sits on the sheet's numbers.
 call :run fleet/car_pipeline_p1 --headless
+call :run car/car_assembler --headless
 call :run audio/exhaust_tune --headless
 call :run audio/exhaust_pops --headless
 rem Engine loops: baked rpm x load bank is seamless, the player stays under its voice cap and never swaps a stream under a sounding voice, events stay live, in-game hand-over.
@@ -92,13 +93,27 @@ call :run view/cockpit_head_motion --headless
 call :run ui/hud_rear_strip --headless
 call :run view/look_back --headless
 call :run view/look_around --headless
+call :run view/cockpit_horizon --headless
+call :run view/cockpit_eye_inside --headless
+call :run view/cockpit_shake_rotation_only --headless
+call :run view/look_into_corner --headless
+call :run view/look_tap_hold "--headless --fixed-fps 60"
+call :run view/camera_rate_independent --headless
+call :run view/fov_step_limit --headless
 call :run view/cockpit_driver --headless
 call :run view/cockpit_window --headless
 call :run view/gauge_pod --headless
 call :run view/gauge_layout --headless
 call :run view/cockpit_steering_hands --headless
-call :run view/cockpit_shifter --headless
-call :run view/cockpit_shifter_rnd --headless
+call :run view/cockpit_shifter "--headless --fixed-fps 60"
+call :run view/cockpit_shifter_rnd "--headless --fixed-fps 60"
+rem the shift animation runs on the frame clock, so the gate test (every
+rem player car) and the shifter tests get a fixed 60 fps headless
+for %%c in (p0_beater p1_coupe p2_hothatch p3_tuner p4_kei p5_muscle p6_crossover) do (
+	set "NEON_CAR=%%c"
+	call :run view/cockpit_shift_gate "--headless --fixed-fps 60"
+)
+set "NEON_CAR="
 call :run ui/touch_radio --headless
 call :run car/tyres "--headless --fixed-fps 60"
 call :run car/clutch_model --headless
@@ -119,11 +134,14 @@ rem Weather plan (W1): deck per act, storms, fronts, mid-night change, numbers.
 call :run world/weather_plan --headless
 call :run world/weather_plan_game "--headless --fixed-fps 60"
 call :run core/view_settings --headless
+call :run core/discord_presence --headless
 call :run view/camera_smoothing_setting --headless
 call :run core/log_folder --headless
 call :run car/powertrain_health "--headless --fixed-fps 60"
 call :run car/car_parts --headless
 call :run car/car_detail --headless
+call :run car/car_paint --headless
+call :run fleet/car_symmetry --headless
 call :run car/turbo "--headless --fixed-fps 60"
 call :run car/forced_induction "--headless --fixed-fps 60"
 call :run car/bolt_ons --headless
@@ -138,6 +156,8 @@ rem the converter: creep, flare, power-on shift, lock-up, hill (~3 min); the shi
 call :run car/auto_ignores_shift_keys "--headless --fixed-fps 120"
 call :run car/auto_converter "--headless --fixed-fps 120"
 call :run car/auto_shift_brain "--headless --fixed-fps 120"
+rem ~1 min: a speed held by tapping the throttle key does not make the box hunt.
+call :run car/auto_key_hold "--headless --fixed-fps 120"
 call :run tuning/auto_tune_worker_mode --headless
 call :run tuning/tune_params --headless
 call :run tuning/gear_count --headless
@@ -149,19 +169,39 @@ call :run core/settings_safety --headless
 call :run core/setting_danger --headless
 rem Save system: atomic files, 3 slots, chases, rename migration (scripts/save/).
 call :run core/save_system --headless
+rem ~15 s: a saved run brings back the gearbox mode, the gear, and the automatic as it was.
+call :run core/save_gearbox "--headless --fixed-fps 120"
 rem F0: cash and bank through reloads, chases and 6 a.m. (and the HUD and pause screen).
 call :run core/wallet --headless
 rem Police F0/F1: heat levels and icons, cop_can_see_player, headlights off hides, night one lines.
 call :run traffic/police_heat --headless
+rem Police P1/P2: the rulebook table, sight, offences, warning step, heat times.
+call :run traffic/police_rules --headless
 rem Ending a run on a crash: the rules, the hit sensor, the crash screen; then the real restart.
 call :run core/run_end "--headless --fixed-fps 120"
 call :run core/run_end_restart "--headless --fixed-fps 120"
+rem Test build sandbox: free money and fuel, no run-ending, parked start, X start, put back on the road.
+call :run core/test_build_sandbox "--headless --fixed-fps 120"
+rem The key: X starts the engine and switches it off; starter, catch and shutdown sounds.
+call :run car/engine_key "--headless --fixed-fps 120"
+rem Delete a save: the store, and the title's Load > Delete a save with its question.
+call :run core/save_delete --headless
+rem Test build: every player car with everything its mod tree offers fitted.
+call :run car/test_build_mods --headless
 call :run world/gas_station --headless
 call :run traffic/traffic_spawn "--headless --fixed-fps 60"
 rem Near-band traffic: hand-overs between the 60 m physics band and the rails, both ways, no visible jump.
 call :run traffic/traffic_near_band "--headless --fixed-fps 120"
 rem ~45 s: race core (RC1): win across a recenter, lose, give up from the pause menu.
 call :run core/race_core "--headless --fixed-fps 60"
+rem Rival driver (step 1): the plan and line maths; then, each a few minutes on the real game at 120 Hz:
+rem same inputs whether the player is behind or ahead, the racing line through four bends, pace against the grip bot.
+call :run traffic/rival_plan_pure --headless
+call :run traffic/rival_no_rubber_band "--headless --fixed-fps 120"
+call :run traffic/rival_line "--headless --fixed-fps 120"
+call :run traffic/rival_pace "--headless --fixed-fps 120"
+rem The race as the game runs it: traffic, bends and hills, the rival handed back to traffic at the end.
+call :run traffic/rival_race "--headless --fixed-fps 120"
 rem ~40 s: the traffic cars (stage B step 5) against their sheets, then a drive each at the game's 120 Hz.
 rem npc_cars drives every kind (14 since the player and cop cars joined), about 16 min: give it 20.
 set "TT_SAVED=%TEST_TIMEOUT%"
@@ -171,6 +211,10 @@ set "TEST_TIMEOUT=%TT_SAVED%"
 rem Player cars (stage D): every PlayerCars.KINDS car boots as the player and gets a drive test.
 call :run fleet/player_cars "--headless --fixed-fps 120"
 call :run fleet/interior_fit --headless
+rem every player car's cabin: its own look, the road band clear, the driver fits
+call :run fleet/interior_unique --headless
+call :run fleet/sight_line --headless
+call :run fleet/driver_fit --headless
 call :run car/special_s0 "--headless --fixed-fps 120"
 rem ~17 s: full throttle at ~245 km/h across floating-origin recenters (the old ground-slab kick), at the game's 120 Hz.
 call :run world/recenter_kick "--headless --fixed-fps 120"
@@ -178,6 +222,7 @@ call :run fx/fx_pack --headless
 call :run fx/tyre_smoke --headless
 call :run core/graphics_settings --headless
 call :run core/graphics_tiers --headless
+call :run core/shader_warmup --headless
 call :run fx/exhaust_flames --headless
 call :run world/boundary_walls --headless
 rem Roadside kit: where hydrants, bins, dumpsters, cones, jersey runs and kerb rails land, per district; collision; determinism.
@@ -250,6 +295,10 @@ if /i not "%~1"=="quick" (
 	rem Traffic (stage B step 3) at the game's 120 Hz tick: ~1 min of dense traffic, then the perf sweep.
 	call :run traffic/traffic_stability "--headless --fixed-fps 120"
 	call :run traffic/traffic_behaviour "--headless --fixed-fps 120"
+	rem ~15 s: the near-miss log (kinds, who moved, what the car was doing, the file, cost per tick). The weave baseline (near_miss_weave, 90 s a seed) is run by hand, one seed at a time.
+	call :run traffic/near_miss_log "--headless --fixed-fps 120"
+	rem ~60 s: the near-miss fix's staged cases (pull-out, no flash, flash, blind spot, abort, edge away, rule breakers, cut-off, swerve, horns, siren). The flow checks (near_miss_flow: spawn safety 5 min, blinker 60 s), the before/after bots (near_miss_scenarios) and the script-cost check (near_miss_cost) are run by hand, one at a time.
+	call :run traffic/near_miss_cases "--headless --fixed-fps 120"
 	rem ~50 s: staggered traffic controller (every 2nd tick, cars alternate) and hidden cars skip wheel visuals.
 	call :run traffic/ai_stagger "--headless --fixed-fps 120"
 	rem ~70 s: City lights, the signalised crossing (J0/J1a): red queue, amber, 1 a.m. flash.
@@ -272,6 +321,8 @@ if /i not "%~1"=="quick" (
 	call :run car/burnout_line_lock "--headless --fixed-fps 120"
 	rem ~3 min: fuel burn calibration, a dry tank in every gearbox, limp causes (slowest wins), refuel from the bank.
 	call :run car/fuel_limp "--headless --fixed-fps 60"
+	rem ~5 s: every start is a full tank (START_FULL_TANK), two player cars.
+	call :run car/fuel_start "--headless --fixed-fps 60"
 	rem ~25 s: damage slice 1: hits by direction, crash pull, rear sag, dead engine, lamps, steam, rattle, garage/station/tow.
 	call :run car/car_damage "--headless --fixed-fps 120"
 	rem No car or road chunk pops in or out where a camera can see it (Roy, 2026-10-09): flat road, then the hilly one.
@@ -295,6 +346,8 @@ if /i not "%~1"=="quick" (
 	call :run core/save_resume --headless
 	rem Police F1 in the game: the stand-in patrol car spawns unseen, spots a lit car, not a dark one.
 	call :run traffic/police_patrol --headless
+	rem P1 proof in the real game: 10 min at the traffic flow = 0 heat (about 3 min of test).
+	call :run traffic/police_flow "--headless --fixed-fps 60"
 	call :run tuning/tuning_panel --headless
 	call :run tuning/auto_tune_panel --headless
 	call :run tuning/tuner_screen --headless

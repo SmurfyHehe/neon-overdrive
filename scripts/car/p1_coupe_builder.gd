@@ -24,6 +24,15 @@ class_name P1CoupeBuilder
 #
 # The neutral #63 test box is still there for comparison: run with
 # NEON_TEST_CAR=1 (see PlayerCar.chassis_kind).
+#
+# Cars from parts (pilot, 2026-10-10): when assets/cars/p1_coupe/body.glb is
+# there the body is no longer the one-piece sheet proxy above but the same
+# shape cut into real parts (hood, doors, fenders, bumpers, glass, lamps,
+# mirrors...), merged by CarAssembler into one mesh with 4 surfaces (body,
+# trim, glass, glow), so the draw calls stay at 9: the door mirrors are parts
+# of that mesh now instead of a mesh of their own. NEON_COUPE_LEGACY=1 keeps
+# the old proxy (before-shots, comparisons); NEON_CAR_PANELS=open builds it
+# with the hood, doors and trunk open (+4 draw calls, for pictures).
 
 const Data := preload("res://scripts/car/p1_coupe_data.gd")
 
@@ -58,7 +67,15 @@ const MIRROR_INSIDE := Color("#0B0E14")
 const PAINT_MATS := ["paint", "roof"]
 const RIM_MATS := ["rim", "rim_face"]
 
-const BODY_SHADER := """
+## The paint shader is CarPaint's (one for every car); the name stays for
+## the code that reads it.
+static var BODY_SHADER: String:
+	get: return CarPaint.code("body", CarPaint.tier())
+
+## The paint shader of the body assembled from parts (CarAssembler): its mesh
+## carries baked occlusion and shut lines in CUSTOM0, where CarPaint's sheet
+## meshes carry crease distances, so the two cannot share a shader yet.
+const PARTS_BODY_SHADER := """
 shader_type spatial;
 render_mode cull_back;
 // Vertex alpha 0 marks paint (or rim) faces; they take the tint and a glossier finish.
@@ -102,17 +119,21 @@ const GLOW_SHADER := """
 shader_type spatial;
 render_mode unshaded, cull_disabled;
 uniform float energy = 2.5;
+uniform float brake_gain = 2.2;
+instance uniform float brake : instance_index(1) = 0.0;
 void fragment() {
-	ALBEDO = COLOR.rgb;
-	EMISSION = COLOR.rgb * energy;
+	vec3 c = COLOR.rgb;
+	// Linear colours: the tail red is the only lamp with green and blue near 0.
+	float tail = step(0.4, c.r) * step(c.g, 0.06) * step(c.b, 0.06);
+	ALBEDO = c;
+	EMISSION = c * energy * (1.0 + tail * brake * brake_gain);
 }
 """
 
 static var _body_mesh: ArrayMesh
 static var _wheel_meshes := {}
-static var _body_shader: Shader
 static var _glow_shader: Shader
-static var _glass_mat: StandardMaterial3D
+static var _glass_mat: ShaderMaterial
 static var _glow_mat: ShaderMaterial
 static var _wheel_mat: ShaderMaterial
 
@@ -126,20 +147,36 @@ static func build_chassis_visual(paint: Color = PAINT) -> Node3D:
 	root.set_meta("kind", KIND)
 
 	var lift := Vector3(0.0, BODY_LIFT, 0.0)
-	var body := MeshInstance3D.new()
-	body.name = "Body"
-	body.position = lift
-	var mesh := _get_body_mesh()
-	body.mesh = mesh
-	var paint_mat := _new_paint_material(paint)
-	for i in mesh.get_surface_count():
-		if mesh.surface_get_name(i) == "body":
-			body.set_surface_override_material(i, paint_mat)
-	root.add_child(body)
-	var mirrors := _build_mirrors()
-	mirrors.position = lift
-	mirrors.set_surface_override_material(0, paint_mat)   # same paint, recolours with the body
-	root.add_child(mirrors)
+	var paint_mat: ShaderMaterial
+	var lamps: Dictionary
+	if uses_parts():
+		# the body from its parts: one mesh, 4 surfaces, door mirrors included
+		paint_mat = _new_parts_paint_material(paint)
+		var body := CarAssembler.build(KIND, parts_config(), paint_mat)
+		body.position = lift
+		var gi := CarAssembler.surface_index(body.mesh, "glass")
+		if gi >= 0:
+			body.set_surface_override_material(gi, _get_glass_material())
+		root.add_child(body)
+		lamps = CarAssembler.lamp_centres(KIND)
+	else:
+		var body := MeshInstance3D.new()
+		body.name = "Body"
+		body.position = lift
+		var mesh := _get_body_mesh()
+		body.mesh = mesh
+		body.set_instance_shader_parameter("finish", CarPaint.finish_for(KIND))
+		body.set_instance_shader_parameter("seams", mesh.get_meta("paint_seams", Vector4.ZERO))
+		paint_mat = _new_paint_material(paint)
+		for i in mesh.get_surface_count():
+			if mesh.surface_get_name(i) == "body":
+				body.set_surface_override_material(i, paint_mat)
+		root.add_child(body)
+		var mirrors := _build_mirrors()
+		mirrors.position = lift
+		mirrors.set_surface_override_material(0, paint_mat)   # same paint, recolours with the body
+		root.add_child(mirrors)
+		lamps = _lamp_centres()
 
 	var slots := []
 	for s in Data.STICKER_SLOTS:
@@ -161,7 +198,6 @@ static func build_chassis_visual(paint: Color = PAINT) -> Node3D:
 	for t in Data.EXHAUST_TIPS:
 		tips.append({"pos": t.pos + lift, "dir": t.dir, "r": t.r})
 	root.set_meta("exhaust_tips", tips)
-	var lamps := _lamp_centres()
 	root.set_meta("headlights", [lamps.head[0] + lift, lamps.head[1] + lift])
 	root.set_meta("tail_lights", [lamps.tail[0] + lift, lamps.tail[1] + lift])
 
@@ -182,6 +218,16 @@ static func undercarriage_params() -> Dictionary:
 		tips.append({"pos": t.pos + Vector3(0.0, BODY_LIFT, 0.0), "dir": t.dir, "r": t.r})
 	return Undercarriage.params(WIDTH / 2.0, LENGTH / 2.0, floor_y, BODY_LIFT,
 		DESIGN_WHEEL_R, DESIGN_WHEEL_X, absf(Data.WHEELS[0].hub.z), tips, "rwd")
+
+## True when the body is assembled from the parts glb (the default once the
+## glb is in the project); NEON_COUPE_LEGACY=1 keeps the one-piece sheet proxy.
+static func uses_parts() -> bool:
+	return OS.get_environment("NEON_COUPE_LEGACY") != "1" and CarAssembler.has_car(KIND)
+
+## What CarAssembler builds: the stock parts, panels closed. NEON_CAR_PANELS=open
+## opens the hood, doors and trunk (pictures; nothing in the game opens them yet).
+static func parts_config() -> Dictionary:
+	return {"panels": "open"} if OS.get_environment("NEON_CAR_PANELS") == "open" else {}
 
 static func recolor(car: Node3D, color: Color) -> void:
 	var m: ShaderMaterial = car.get_meta("body_mat")
@@ -221,16 +267,22 @@ static func build_wheel_visual(radius: float, hub: Vector3) -> Node3D:
 ## Triangle count of one car as drawn: body plus 4 wheels.
 static func triangle_count() -> int:
 	var n := 0
-	var b := _get_body_mesh()
-	for i in b.get_surface_count():
-		n += b.surface_get_array_len(i) / 3
+	if uses_parts():
+		n = CarAssembler.triangle_count(KIND)
+	else:
+		var b := _get_body_mesh()
+		for i in b.get_surface_count():
+			n += b.surface_get_array_len(i) / 3
 	for rear in [false, true]:
 		n += 2 * _get_wheel_mesh(rear).surface_get_array_len(0) / 3
 	return n
 
 ## Draw calls of one car: body surfaces, the door mirrors, the underside,
-## plus one per wheel.
+## plus one per wheel. From parts the mirrors are in the body mesh (its trim
+## surface is the call they used to cost).
 static func draw_call_count() -> int:
+	if uses_parts():
+		return CarAssembler.draw_call_count(KIND) + 1 + 4
 	return _get_body_mesh().get_surface_count() + 1 + 1 + 4
 
 ## Triangles in the underside (on top of triangle_count()).
@@ -239,6 +291,8 @@ static func undercarriage_triangle_count() -> int:
 
 ## Triangles in the two door mirror cups (on top of triangle_count()).
 static func mirror_triangle_count() -> int:
+	if uses_parts():
+		return CarAssembler.triangle_count(KIND) - CarAssembler.triangle_count(KIND, {"mirror_l": false, "mirror_r": false})
 	var mi := _build_mirrors()
 	var n := (mi.mesh as ArrayMesh).surface_get_array_len(0) / 3
 	mi.free()
@@ -290,44 +344,23 @@ static func _surface_of(mat: String) -> String:
 	return "body"
 
 ## One ArrayMesh from the packed triangles: surfaces "body", "glass", "glow"
-## (whichever exist), flat normals, vertex colours in linear space with the
-## alpha flag for tinted faces. The design's triangles are counter-clockwise
-## seen from outside; Godot's front faces are clockwise, so each one is
-## written a, c, b.
+## (whichever exist), built by CarPaint.build_groups (smooth normals, linear
+## vertex colours with the alpha flag for tinted faces, the finish, shade and
+## edge arrays the paint shader reads).
 static func _build_mesh(tris: PackedVector3Array, mats: PackedByteArray, is_body: bool) -> ArrayMesh:
-	var groups := {}
-	var tint_mats: Array = PAINT_MATS if is_body else RIM_MATS
-	for t in mats.size():
-		var mname: String = Data.NAMES[mats[t]]
-		var kind := _surface_of(mname)
-		if not groups.has(kind):
-			groups[kind] = [PackedVector3Array(), PackedVector3Array(), PackedColorArray()]
-		var g: Array = groups[kind]
-		var a := tris[t * 3]
-		var b := tris[t * 3 + 1]
-		var c := tris[t * 3 + 2]
-		var n := (b - a).cross(c - a)
-		if n.length_squared() < 1e-12:
-			continue
-		n = n.normalized()
-		var col := Color(Data.COLORS[mname]).srgb_to_linear()
-		col.a = 0.0 if mname in tint_mats else 1.0
-		for p in [a, c, b]:
-			g[0].append(p)
-			g[1].append(n)
-			g[2].append(col)
+	var opts := {"is_wheel": not is_body}
+	if is_body:
+		var hubs := []
+		for w in Data.WHEELS:
+			hubs.append(w.hub)
+		opts["wheels"] = hubs
+		opts["wheel_r"] = DESIGN_WHEEL_R
+	var groups := CarPaint.build_groups(Data, tris, mats, PAINT_MATS if is_body else RIM_MATS, opts)
 	var mesh := ArrayMesh.new()
 	for kind in ["body", "glass", "glow"]:
 		if not groups.has(kind):
 			continue
-		var arrays := []
-		arrays.resize(Mesh.ARRAY_MAX)
-		arrays[Mesh.ARRAY_VERTEX] = groups[kind][0]
-		arrays[Mesh.ARRAY_NORMAL] = groups[kind][1]
-		arrays[Mesh.ARRAY_COLOR] = groups[kind][2]
-		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-		var idx := mesh.get_surface_count() - 1
-		mesh.surface_set_name(idx, kind)
+		var idx := CarPaint.add_surface(mesh, groups[kind], kind)
 		match kind:
 			"glass":
 				mesh.surface_set_material(idx, _get_glass_material())
@@ -335,6 +368,8 @@ static func _build_mesh(tris: PackedVector3Array, mats: PackedByteArray, is_body
 				mesh.surface_set_material(idx, _get_glow_material())
 			_:
 				mesh.surface_set_material(idx, _new_paint_material(PAINT))
+	if is_body:
+		mesh.set_meta("paint_seams", CarPaint.cut_seams(Data, tris, mats, 2))
 	return mesh
 
 ## Centres of the head and tail lamp faces, left and right, from the glow
@@ -360,11 +395,17 @@ static func _lamp_centres() -> Dictionary:
 # ---------- materials ----------
 
 static func _new_paint_material(paint: Color) -> ShaderMaterial:
-	if _body_shader == null:
-		_body_shader = Shader.new()
-		_body_shader.code = BODY_SHADER
 	var m := ShaderMaterial.new()
-	m.shader = _body_shader
+	m.shader = CarPaint.body_shader(false)
+	m.set_shader_parameter("paint", paint)
+	return m
+
+## The paint material for a body assembled from parts: the same shader and
+## uniforms (paint, dirt, ...) with CarAssembler's two-line hook that darkens
+## by the baked ambient occlusion and along the shut lines.
+static func _new_parts_paint_material(paint: Color) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = CarAssembler.paint_shader(PARTS_BODY_SHADER)
 	m.set_shader_parameter("paint", paint)
 	return m
 
@@ -375,15 +416,14 @@ static func _get_wheel_material() -> ShaderMaterial:
 		_wheel_mat.set_shader_parameter("paint_roughness", 0.3)
 	return _wheel_mat
 
-static func _get_glass_material() -> StandardMaterial3D:
+static func _get_glass_material() -> ShaderMaterial:
 	if _glass_mat == null:
-		_glass_mat = StandardMaterial3D.new()
 		# See-through (cockpit milestone 2): the driver and cabin show through
 		# the windows in the chase view. Dark tint, so the outside look holds.
-		_glass_mat.albedo_color = Color(Color(Data.COLORS.glass), 0.5)
-		_glass_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		_glass_mat.metallic = 0.6
-		_glass_mat.roughness = 0.08
+		_glass_mat = ShaderMaterial.new()
+		_glass_mat.shader = CarPaint.glass_shader(true)
+		_glass_mat.set_shader_parameter("glass", Color(Data.COLORS.glass))
+		_glass_mat.set_shader_parameter("see", 0.5)
 	return _glass_mat
 
 static func _get_glow_material() -> ShaderMaterial:

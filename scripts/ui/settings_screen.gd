@@ -19,6 +19,7 @@ signal closed
 
 const GameInfo := preload("res://scripts/core/game_info.gd")
 const LogFolder := preload("res://scripts/core/log_folder.gd")
+const DiscordPresence := preload("res://scripts/core/discord_presence.gd")
 
 const PAGES: Array[String] = ["Sound", "Picture", "Driving", "Controls", "Game"]
 ## What a mixer channel is called on the Sound page (the rest use their own name).
@@ -38,11 +39,11 @@ const GROUPS := [
 		["steer_left", "Steer left"], ["steer_right", "Steer right"], ["reverse", "Reverse gear (when stopped)"]]],
 	["Gears & Engine", [
 		["shift_up", "Shift up (manual)"], ["shift_down", "Shift down (manual)"], ["toggle_gearbox", "Gearbox: auto / semi / manual"],
-		["clutch", "Clutch (hold, manual)"], ["starter", "Starter (hold, manual)"]]],
+		["clutch", "Clutch (hold, manual)"], ["starter", "Start / stop the engine"]]],
 	["Camera", [["camera_cycle", "Camera smoothing"], ["camera_view", "Chase / cockpit view"], ["look_back", "Look back (hold)"], ["look_left", "Look left (cockpit, hold)"], ["look_right", "Look right (cockpit, hold)"], ["look_up", "Look up (cockpit, hold)"], ["look_down", "Look down (cockpit, hold)"], ["window", "Side window (hold: down, tap: up)"]]],
 	["Audio & Radio", [["mute", "Mute"], ["radio_next", "Next radio station"]]],
 	["Photo mode", [["photo_mode", "Photo mode"], ["photo_forward", "Forward"], ["photo_back", "Back"], ["photo_left", "Left"], ["photo_right", "Right"], ["photo_down", "Down"], ["photo_up", "Up"], ["photo_fast", "Faster (hold)"], ["photo_look_left", "Look left"], ["photo_look_right", "Look right"], ["photo_look_up", "Look up"], ["photo_look_down", "Look down"], ["photo_fov_narrow", "Zoom in"], ["photo_fov_wide", "Zoom out"], ["photo_shot", "Save photo"]]],
-	["Menus", [["pause", "Pause / back"], ["tuning_panel", "Tuning panel"], ["autotune_panel", "Auto-Tune panel"]]],
+	["Menus", [["pause", "Pause / back"], ["tuning_panel", "Tuning panel"], ["autotune_panel", "Auto-Tune panel"], ["put_back", "Put me back on the road (test build)"]]],
 ]
 
 var game_state: GameState   # null on the title screen
@@ -288,6 +289,31 @@ func _add_option(parent: Control, text: String, items: Array, on_select: Callabl
 	row.add_child(o)
 	return o
 
+## Cost dots (GraphicsSettings.COST) after a row's control: 1 to 3 of three
+## lit. Returns the dots' box (named "CostDots", lit count in its metadata).
+func _cost_dots(control: Control, key: String) -> Control:
+	var n: int = GraphicsSettings.COST.get(key, 0)
+	var box := HBoxContainer.new()
+	box.name = "CostDots"
+	box.set_meta("cost", n)
+	box.tooltip_text = GraphicsSettings.COST_NAMES[n]
+	box.mouse_filter = Control.MOUSE_FILTER_PASS
+	box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	box.add_theme_constant_override("separation", 4)
+	for i in 3:
+		var dot := Panel.new()
+		dot.custom_minimum_size = Vector2(9, 9)
+		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = AMBER if i < n else Color(AMBER, 0.18)
+		sb.set_corner_radius_all(5)
+		dot.add_theme_stylebox_override("panel", sb)
+		box.add_child(dot)
+	var row := control.get_parent()
+	row.add_child(box)
+	row.move_child(box, control.get_index() + 1)
+	return box
+
 func _add_check(parent: Control, text: String, on: bool, on_toggle: Callable) -> CheckButton:
 	var c := CheckButton.new()
 	c.text = text
@@ -363,6 +389,10 @@ func _build_picture_page(parent: Control) -> Control:
 		resolution_option.set_item_metadata(resolution_option.item_count - 1, r)
 
 	_heading(page, "Graphics")
+	var dots_note := Label.new()
+	dots_note.text = "Dots: how much a setting can cost in speed"
+	dots_note.modulate.a = 0.6
+	page.add_child(dots_note)
 	gfx_preset = _add_option(page, "Quality", ["Low", "Medium", "High", "Custom"], func(i: int) -> void:
 		if i < GraphicsSettings.PRESETS.size():
 			GraphicsSettings.set_preset(GraphicsSettings.PRESETS[i])
@@ -384,9 +414,14 @@ func _build_picture_page(parent: Control) -> Control:
 	gfx_dynres = _add_option(page, "Dynamic resolution", ["On", "Off"], func(i: int) -> void:
 		GraphicsSettings.set_dynamic_res(i == 0)
 		_graphics_changed())
-	gfx_cap = _add_option(page, "Frame cap", ["V-sync", "30 fps"], func(i: int) -> void:
+	gfx_cap = _add_option(page, "Frame cap", GraphicsSettings.FPS_CAP_NAMES, func(i: int) -> void:
 		GraphicsSettings.set_fps_cap(GraphicsSettings.FPS_CAPS[i])
 		_graphics_changed())
+	_cost_dots(gfx_aa, "aa")
+	_cost_dots(gfx_scale, "render_scale")
+	_cost_dots(gfx_mirrors, "mirrors")
+	_cost_dots(gfx_dynres, "dynamic_res")
+	_cost_dots(gfx_cap, "fps_cap")
 	gfx_auto_label = Label.new()
 	gfx_auto_label.text = "Quality picked automatically on first launch"
 	gfx_auto_label.add_theme_color_override("font_color", AMBER)
@@ -417,6 +452,9 @@ func _build_picture_page(parent: Control) -> Control:
 		func(v: float) -> void:
 			TrafficSettings.set_light_glow(v)
 			TrafficSettings.save_settings())
+	_cost_dots(traffic_cars_slider, "cars")
+	_cost_dots(traffic_dist_slider, "draw_distance")
+	_cost_dots(night_lights_slider, "night_lights")
 	# City lights: the signalised crossing and red lights for traffic. The
 	# crossing is part of the road layout, so it appears (or goes) on Restart.
 	city_lights_check = _add_check(page, "City lights (on restart)", TrafficSettings.city_lights, func(on: bool) -> void:
@@ -481,6 +519,10 @@ func _build_game_page(parent: Control) -> Control:
 	tips_check = _add_check(page, "Tips", GameSettings.tips, func(on: bool) -> void:
 		GameSettings.set_tips(on)
 		GameSettings.save_settings())
+	# Discord Rich Presence (discord_presence.gd): dormant until the app id is set.
+	_add_check(page, "Show on Discord", DiscordPresence.enabled, func(on: bool) -> void:
+		DiscordPresence.set_enabled(on)
+		DiscordPresence.save_settings())
 	copy_log_button = _add_button(page, "Copy my log", _copy_log)
 	log_status = Label.new()
 	log_status.add_theme_color_override("font_color", AMBER)

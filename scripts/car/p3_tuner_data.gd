@@ -35,7 +35,7 @@ const CABIN := {
 	"crank": Vector3(-0.736, 0.646, -0.360), "switch": Vector3(-0.710, 0.783, -0.160),
 	"rear_mirror": Vector3(0.0, 1.300, -0.300),
 	"door_mirror": Vector3(0.919, 1.022, -0.680),
-	"console": "tunnel", "seats": "bucket",
+	"console": "tunnel", "seats": "bucket", "trim": "carbon",
 }
 ## Build name -> body_tris, tris_total, body_pos (chunks), body_mat, wheels
 ## (front and rear right-hand wheel, hub-relative), slots, tips. Car space.

@@ -40,7 +40,7 @@ var _night := 0
 func _ready() -> void:
 	name = "SkyDirector"
 	_night = night_clock.night
-	var g: Dictionary = NightSky.GLOW[_district]
+	var g: Dictionary = NightSky.GLOW.get(_district, NightSky.GLOW["downtown"])
 	_from_color = g.color
 	_to_color = g.color
 	_from_height = g.height_deg
@@ -77,7 +77,8 @@ func _process(delta: float) -> void:
 	var d := current_district()
 	if d != _district:
 		_district = d
-		var g: Dictionary = NightSky.GLOW[d]
+		# A district kind with no glow of its own yet (W6 added seven) keeps downtown's.
+		var g: Dictionary = NightSky.GLOW.get(d, NightSky.GLOW["downtown"])
 		_from_color = _from_color.lerp(_to_color, _blend)
 		_from_height = lerpf(_from_height, _to_height, _blend)
 		_to_color = g.color

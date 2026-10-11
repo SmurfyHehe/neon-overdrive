@@ -71,8 +71,10 @@ func _layout(kind: String) -> void:
 	var to_car := p.global_transform.affine_inverse()
 	var gauges := []
 	var frame_n: Vector3 = (to_car.basis * frame.global_basis * Vector3.BACK).normalized()
-	for dx in [-0.085, 0.085]:
-		gauges.append({"name": "tach" if dx < 0.0 else "speedo", "centre": to_car * frame.to_global(Vector3(CockpitFrame.SEAT_X + dx, CockpitFrame.CLUSTER_Y, CockpitFrame.CLUSTER_Z)), "r": CockpitFrame.DIAL_R, "cluster": true, "normal": frame_n})
+	# this car's own dials (each car has its own cluster; the coupe's constants were used for all before)
+	var faces := frame.dial_faces()
+	for i in 2:
+		gauges.append({"name": "tach" if i == 0 else "speedo", "centre": to_car * frame.to_global(faces[i].centre), "r": float(faces[i].r), "cluster": true, "normal": frame_n})
 	if pod != null:
 		var cs := pod.gauge_centres()
 		var pod_n: Vector3 = (to_car.basis * pod.global_basis * Vector3.BACK).normalized()

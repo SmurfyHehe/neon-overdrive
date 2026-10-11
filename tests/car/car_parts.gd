@@ -182,10 +182,15 @@ func _player() -> void:
 	_check(shocks != null and shocks.visible and player.get_node_or_null("Shocks") == shocks, "detail on again shows the same node, no rebuild")
 
 	# Budgets: the P1 test's numbers plus what we add, in detail (the most).
-	var tris := P1CoupeBuilder.triangle_count() + P1CoupeBuilder.mirror_triangle_count() + parts.triangle_count()
+	# From parts (cars from parts, 2026-10-10) the door mirrors are in the body
+	# count already, and the body alone is 5,000-7,000 triangles (the pilot's
+	# budget), so the whole car no longer fits the sheet proxy's 10,000.
+	var from_parts := P1CoupeBuilder.uses_parts()
+	var tris := P1CoupeBuilder.triangle_count() + (0 if from_parts else P1CoupeBuilder.mirror_triangle_count()) + parts.triangle_count()
 	var draws := P1CoupeBuilder.draw_call_count() + CarParts.extra_draw_calls(true)
+	var budget := 13500 if from_parts else 10000
 	print("car_parts: player %d triangles as drawn (parts %d), %d draw calls in detail" % [tris, parts.triangle_count(), draws])
-	_check(tris <= 10000, "the player with parts should stay inside the 10,000 triangle budget, got %d" % tris)
+	_check(tris <= budget, "the player with parts should stay inside the %d triangle budget, got %d" % [budget, tris])
 	_check(draws == 11, "the player in detail should be 11 draw calls (8 + underside + calipers + shocks), got %d" % draws)
 
 	# Settle on the floor, then the shock follows the spring and the caliper the hub.

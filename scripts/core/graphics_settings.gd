@@ -12,7 +12,8 @@ extends RefCounted
 #
 # Edge smoothing on the Mobile renderer: MSAA (smooths geometry edges, the
 # road lines and car silhouettes) and FXAA (a cheap screen blur on edges, also
-# catches thin emissive lines MSAA misses). TAA and SMAA are Forward+ only.
+# catches thin emissive lines MSAA misses). TAA is Forward+ only. (SMAA does
+# run on Mobile in Godot 4.7; it is not a menu choice yet.)
 # Render scale below 1 draws the 3D view at fewer pixels and stretches it back
 # up (bilinear: FSR 1 is Forward+ only, Godot warns and ignores it on Mobile);
 # the HUD is drawn after, so it stays sharp.
@@ -30,11 +31,12 @@ extends RefCounted
 # those sliders by hand shows "Custom" here too.
 #
 # Not in any preset: dynamic resolution (DynamicResolution, on by default,
-# lowers the render scale while the GPU is over budget), the frame cap (V-sync
-# or 30 fps) and whether the preset was the first-launch automatic pick
+# lowers the render scale while the GPU is over budget), the frame cap (V-sync,
+# 30 to 144 fps, or none) and whether the preset was the first-launch automatic pick
 # (GraphicsAutoPick).
 
 const RoadWet := preload("res://scripts/world/road_wet.gd")
+const TestMode := preload("res://scripts/core/test_mode.gd")
 
 const PRESETS := ["low", "medium", "high"]
 const PRESET_DEFAULT := "medium"
@@ -46,8 +48,23 @@ const AA_NAMES := ["Off", "FXAA", "MSAA 2x", "MSAA 2x + FXAA", "MSAA 4x"]
 const SCALE_MIN := 0.5
 const SCALE_MAX := 1.0
 
-## Frame cap: 0 = V-sync only (the display's rate), 30 = 30 fps.
-const FPS_CAPS := [0, 30]
+## Frame cap, in menu order: 0 = V-sync only (the display's rate), a number =
+## that many frames a second, CAP_NONE = no cap and no V-sync (as fast as the
+## PC goes; the picture can tear).
+const CAP_NONE := -1
+const FPS_CAPS := [0, 30, 60, 120, 144, CAP_NONE]
+const FPS_CAP_NAMES := ["V-sync", "30 fps", "60 fps", "120 fps", "144 fps", "No cap"]
+
+## Cost dots on the Picture page, 1 to 3: how much a setting can cost in speed
+## on the i5-1235U / Iris Xe. From the measured numbers: render scale is the
+## biggest graphics-chip lever (75% saves 1.7 ms of ~5), the traffic count the
+## biggest processor one (traffic is about half the processor frame), edge
+## smoothing costs 0 to 1.9 ms by mode, the mirrors redraw the road up to three
+## more times, draw distance moves how many cars run the full sim. Dynamic
+## resolution, the frame cap and the lamp glow strength are close to free.
+const COST := {"aa": 2, "render_scale": 3, "mirrors": 2, "dynamic_res": 1, "fps_cap": 1,
+	"cars": 3, "draw_distance": 2, "night_lights": 1}
+const COST_NAMES := ["", "Low cost", "Medium cost", "High cost"]
 
 ## Every value per preset. Measured on the i5-1235U (Iris Xe, 1920x1080,
 ## tests/core/graphics_perf.gd, GPU median vs no smoothing): MSAA 2x ~0 ms, FXAA
@@ -102,6 +119,20 @@ static func set_dynamic_res(on: bool) -> void:
 static func set_fps_cap(cap: int) -> void:
 	fps_cap = cap if cap in FPS_CAPS else 0
 
+## What Engine.max_fps gets: the cap, or 0 (none) for V-sync and No cap.
+static func engine_fps() -> int:
+	return maxi(fps_cap, 0)
+
+## V-sync stays on for "V-sync" and for any cap the screen can show anyway (30
+## or 60 on a 60 Hz screen: no tearing, nothing lost). A cap above the screen's
+## rate only means something with V-sync off, and so does No cap.
+static func wants_vsync(cap: int, refresh_hz: float) -> bool:
+	if cap == 0:
+		return true
+	if cap < 0:
+		return false
+	return float(cap) <= (refresh_hz if refresh_hz > 1.0 else 60.0) + 1.0
+
 ## After a hand change (here, or a traffic or mirror slider): still the named
 ## preset if every value matches it, else "custom".
 static func refresh_preset() -> void:
@@ -118,10 +149,17 @@ static func matching_preset() -> String:
 ## (the traffic manager, the mirrors, dynamic resolution).
 static func apply(tree: SceneTree) -> void:
 	apply_viewport(tree.root)
-	Engine.max_fps = fps_cap
+	Engine.max_fps = engine_fps()
+	# Tests and the benchmark set V-sync themselves (off, for real frame times).
+	if not TestMode.active() and not Benchmark.requested():
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED
+			if wants_vsync(fps_cap, DisplayServer.screen_get_refresh_rate()) else DisplayServer.VSYNC_DISABLED)
 	# Wet-road mirrors (road_wet.gd) are off on Low; a hand-tuned "custom"
 	# set keeps them, like every other Medium default.
 	RoadWet.set_reflections(preset != "low")
+	# Car paint (car_paint.gd): Low plain, Medium mirrors the city, High adds
+	# the street lamps.
+	CarPaint.set_preset(preset)
 	tree.call_group(GROUP, "apply_graphics")
 
 static func apply_viewport(vp: Viewport) -> void:

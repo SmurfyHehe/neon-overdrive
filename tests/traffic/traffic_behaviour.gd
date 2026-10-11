@@ -13,10 +13,12 @@ extends SceneTree
 # C "round": the same, with lane 2 free. It must change lane and drive past
 #   without touching anything.
 # D "move over": the player at 150 km/h closes on a 90 km/h car 150 m ahead in
-#   its lane (lane 1) with lane 2 free. The car must move over before the player gets
-#   there; nothing touches the player.
+#   its lane (lane 1) with lane 2 free, and FLASHES it once (near-miss fix,
+#   2026-10-10: a car no longer moves over unasked). The car must move over
+#   before the player gets there; nothing touches the player.
 # E "highway": Roy's case from the 2026-10-06 audit. The player at ~240 km/h,
-#   full throttle, holding a middle own lane (lane 1) for 60 s, 16 cars (the
+#   holding a middle own lane (lane 1) for 60 s, flashing the car ahead and
+#   braking behind it until it moves (near-miss fix, 2026-10-10), 16 cars (the
 #   new default) with every lane open and the default 150 m draw distance.
 #   Asserts 0 contacts with the player, no two cars touching, lane changes
 #   happen, and no car ever crosses the centre line or targets a lane on the
@@ -267,13 +269,15 @@ func _setup_move_over() -> void:
 	_put(follower, 2, 400.0, 25.0, 25.0)  # far away, out of the way
 
 func _tick_move_over() -> void:
+	if scene_tick == RATE / 2:
+		p.beams.flash()   # traffic only moves over when flashed
 	_watch_player()
 	min_player_gap = minf(min_player_gap, absf(lead.global_position.z - p.global_position.z) - lead.half_l - TrafficManager.PLAYER_HALF_L)
 
 func _end_move_over() -> void:
 	var passed := p.global_position.z < lead.global_position.z
-	lines.append("D move over: player 150 km/h behind a 90 km/h car in its lane, car lane changes %d (now lane %d), player passed it %s, contacts %d" % [
-		lead.lane_changes, lead.lane_i, passed, player_contacts])
+	lines.append("D move over: player 150 km/h behind a 90 km/h car in its lane, flashed once (%d flash reached a car), car lane changes %d (now lane %d), player passed it %s, contacts %d, player now %.0f km/h" % [
+		traffic.flash_count, lead.lane_changes, lead.lane_i, passed, player_contacts, Harness.kmh(p.current_speed())])
 	_check(player_contacts == 0, "D: the player hit the car (%s)" % first_contact)
 	_check(lead.lane_changes >= 1 and lead.lane_i == 2, "D: the car did not move over (changes %d, lane %d)" % [lead.lane_changes, lead.lane_i])
 
@@ -281,6 +285,8 @@ func _end_move_over() -> void:
 
 func _setup_highway() -> void:
 	_drive_player(1, 230.0 * KMH, INF)
+	# Flash and brake (Harness.flash_brake_driver): nobody clears the lane unasked now.
+	p.driver = Harness.flash_brake_driver(traffic, Harness.lane_x(1))
 	traffic.detail_distance = TrafficSettings.DETAIL_DEFAULT
 	traffic.log_spawns = true
 	spawns_start = traffic.spawn_log.size()
@@ -356,7 +362,10 @@ func _end_highway() -> void:
 	_check(changes > 0, "E: no lane changes in 60 s")
 	_check(crossings == 0, "E: %d car-ticks with a lane or path across the centre line" % crossings)
 	_check(body_crossings == 0, "E: %d car-ticks with a car centre across the centre line" % body_crossings)
-	_check(Harness.kmh(speed_sum / maxi(speed_n, 1)) > 220.0, "E: the player averaged under 220 km/h")
+	# Was 220 km/h while traffic cleared the lane on its own. Since the near-miss
+	# fix the player flashes and brakes behind a car until it has moved over
+	# (about 4 s a car), and averaged 200 km/h on this seed (2026-10-10).
+	_check(Harness.kmh(speed_sum / maxi(speed_n, 1)) > 180.0, "E: the player averaged under 180 km/h")
 
 func _nearest_note() -> String:
 	var near: TrafficCar = null

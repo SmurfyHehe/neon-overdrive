@@ -14,7 +14,9 @@ extends Node
 #
 # A run save is enough to put the car back exactly: the road (seed, shape,
 # floating-origin index, the barrier roll of the chunks around the car), the
-# car's transform, velocity, spin, gear and rpm, the night clock and the radio.
+# car's transform, velocity, spin, gear and rpm, the gearbox mode that was
+# picked (automatic, semi, manual) and how hard the automatic was being asked,
+# the night clock and the radio.
 # Traffic is not saved; it respawns around the car as on a fresh start.
 #
 # Which road (the map, 2026-10-10): road.id is the number of the road the car
@@ -125,30 +127,73 @@ func capture() -> Dictionary:
 		"origin_index": game.origin_index,
 		"recenter_count": game.recenter_count,
 		"sections": sections,
-		"car": {"xform": xform_to_array(p.global_transform),
-			"lin_vel": [p.linear_velocity.x, p.linear_velocity.y, p.linear_velocity.z],
-			"ang_vel": [p.angular_velocity.x, p.angular_velocity.y, p.angular_velocity.z],
-			"gear": p.current_gear, "rpm": p.motor_rpm},
+		"car": car_state(p),
 	}
 	if game.night_clock != null:
 		run.clock = {"minutes": game.night_clock.minutes, "night": game.night_clock.night}
 	if game.radio != null:
 		run.radio = game.radio.player_station()
+	# Weather (WX0): the stage and its live values, so a resume at 1:30 a.m.
+	# on a night whose rain began at 1 is still raining, wipers and all.
+	# Tonight's plan is not saved: weather_seed (the profile) and the night
+	# give it back. Optional on read: older saves have no block.
+	if game.has_method("weather_save"):
+		run.weather = game.weather_save()
 	return run
 
+## The car's part of a run save. "box" is PlayerCar.Transmission (the gearbox
+## mode picked with G), "demand" the automatic's smoothed throttle; both are
+## optional on the way back in, so older saves keep opening.
+static func car_state(p: Node3D) -> Dictionary:
+	var car := {"xform": xform_to_array(p.global_transform),
+		"lin_vel": [p.linear_velocity.x, p.linear_velocity.y, p.linear_velocity.z],
+		"ang_vel": [p.angular_velocity.x, p.angular_velocity.y, p.angular_velocity.z],
+		"gear": p.current_gear, "rpm": p.motor_rpm}
+	if p.has_method("transmission_mode"):
+		car["box"] = p.transmission_mode()
+	if p.get("auto_box") != null:
+		car["demand"] = p.auto_box.demand
+	return car
+
+## Under this speed (m/s) a manual car comes back in neutral: in gear with the
+## clutch pedal up (no key is held as the game loads) it would stall at once.
+const MANUAL_NEUTRAL_SPEED := 3.0
+
 ## Puts the car's motion back once it is in the tree (Vehicle._ready has run).
-func restore_car(p: Node3D, car: Dictionary) -> void:
+static func restore_car(p: Node3D, car: Dictionary) -> void:
 	p.global_transform = array_to_xform(car.xform)
 	p.linear_velocity = v3(car.lin_vel)
 	p.angular_velocity = v3(car.ang_vel)
+	# The gearbox mode first: it used to come back as the automatic whatever
+	# had been picked.
+	var manual := false
+	if (car.get("box") is float or car.get("box") is int) and p.has_method("set_transmission_mode"):
+		var box := clampi(int(car.box), 0, PlayerCar.Transmission.size() - 1)
+		p.set_transmission_mode(box)
+		manual = box == PlayerCar.Transmission.MANUAL
 	if car.get("gear") is float or car.get("gear") is int:
 		p.current_gear = int(car.gear)
+		p.requested_gear = p.current_gear
+		if manual and p.linear_velocity.length() < MANUAL_NEUTRAL_SPEED:
+			p.current_gear = 0
+			p.requested_gear = 0
+	# The automatic picks up where it was: a box that woke up believing the
+	# pedal was lifted changed gear on the first tick of a floored resume.
+	if p.get("auto_box") != null:
+		var demand = car.get("demand")
+		p.auto_box.resume(p, float(demand) if demand is float or demand is int else 0.0)
 	if car.get("rpm") is float or car.get("rpm") is int:
 		p.motor_rpm = float(car.rpm)
-	# GEVP reads speed off the last step's positions (see Game._shift_origin).
-	p.previous_global_position = p.global_position
+	# GEVP reads speed off the last step's positions (see Game._shift_origin),
+	# so the step before is put where the car would have been. Left on the
+	# spot, a car resumed at speed read 0 km/h on its first tick, and the
+	# automatic dropped it into first gear ("gear 1, saved 2").
+	var step: Vector3 = p.linear_velocity / Engine.physics_ticks_per_second
+	p.previous_global_position = p.global_position - step
+	p.local_velocity = p.linear_velocity * p.global_transform.basis
+	p.speed = p.local_velocity.length()
 	for w in p.wheel_array:
-		w.previous_global_position = w.global_position
+		w.previous_global_position = w.global_position - step
 	p.reset_physics_interpolation()
 
 # ---------- when to save ----------

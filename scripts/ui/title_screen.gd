@@ -28,6 +28,7 @@ const DIM := Color(0.79, 0.81, 0.84, 0.38)
 
 const MARK_BODY := "res://assets/brand/logo_B4_mark_body.svg"
 const MARK_WHEEL := "res://assets/brand/logo_B4_mark_wheel.svg"
+const ShaderWarmup := preload("res://scripts/core/shader_warmup.gd")
 const WHISTLE := "res://assets/ui/sfx/splash_whistle.wav"
 ## The wheel's centre inside the mark's 256 x 256 drawing (tools/build_brand.py).
 const WHEEL_AT := Vector2(105.0, 128.0)
@@ -41,8 +42,6 @@ const TICKER_H := 46.0
 const TICKER_SPEED := 64.0     # design px per second
 const TICKER_GAP := "      +++      "
 const SYNTHWAVE_DIR := "s4_synthwave"
-const DJ_NAME := "Dale"
-const DJ_OLD_NAME := "Dave"
 
 ## Splash timing, matched to the whistle (tools/render_splash_whistle.gd):
 ## the turbo spools for SPOOL seconds, then the valve flutters.
@@ -70,6 +69,8 @@ var extras_button: Button
 var quit_button: Button
 var main_list: VBoxContainer
 var load_list: VBoxContainer
+var delete_list: VBoxContainer
+var delete_button: Button
 var extras_list: VBoxContainer
 var confirm: ConfirmBox
 var kerbside: TitleKerbside
@@ -258,6 +259,7 @@ func _build_menu() -> void:
 		confirm.ask("Quit to desktop?", "Quit", game_state.quit))
 
 	load_list = _new_list()
+	delete_list = _new_list()
 	extras_list = _new_list()
 	_add_row(extras_list, "ABOUT EARLY ACCESS", _show_welcome)
 	_add_row(extras_list, "OPEN PHOTO FOLDER", _open_photos)
@@ -319,6 +321,8 @@ func _add_row(list: VBoxContainer, text: String, action: Callable) -> Button:
 func _show_list(list: VBoxContainer, focus: Button = null) -> void:
 	if list == load_list:
 		_fill_load_list()
+	elif list == delete_list:
+		_fill_delete_list()
 	for l in _lists:
 		l.visible = l == list
 	if not is_inside_tree() or not visible:
@@ -373,7 +377,56 @@ func _fill_load_list() -> void:
 			text += "   IN USE"
 		var row := _add_row(load_list, text, _load_slot.bind(n))
 		row.disabled = s.empty and n != active
+	delete_button = _add_row(load_list, "DELETE A SAVE", func() -> void: _show_list(delete_list))
+	delete_button.disabled = not _any_save()
 	_add_row(load_list, "BACK", func() -> void: _show_list(main_list, load_button))
+
+func _any_save() -> bool:
+	for n in range(1, SaveStore.SLOTS + 1):
+		if not SaveStore.summary(n).empty:
+			return true
+	return false
+
+## What a slot holds, in plain words (the delete rows and their question).
+static func slot_text(n: int, s: Dictionary) -> String:
+	var text := "$%s" % _thousands(int(s.cash))
+	if int(s.saved_at) > 0:
+		text += ", last played %s" % Time.get_date_string_from_unix_time(int(s.saved_at))
+	return text
+
+## Load > Delete a save: one row per save that holds something. Picking one
+## asks first, and the question's focus starts on No (ConfirmBox).
+func _fill_delete_list() -> void:
+	for c in delete_list.get_children():
+		delete_list.remove_child(c)
+		c.queue_free()
+	for n in range(1, SaveStore.SLOTS + 1):
+		var s := SaveStore.summary(n)
+		if s.empty:
+			continue
+		_add_row(delete_list, "DELETE SAVE %d   %s" % [n, slot_text(n, s).to_upper()], _ask_delete.bind(n))
+	_add_row(delete_list, "BACK", func() -> void: _show_list(load_list))
+
+func _ask_delete(n: int) -> void:
+	var s := SaveStore.summary(n)
+	var text := "Delete save %d? It holds %s." % [n, slot_text(n, s)]
+	if n == SaveStore.active_slot():
+		text += " It is the save in use: the game starts over on it."
+	confirm.ask(text, "Delete save %d" % n, _delete_slot.bind(n))
+
+func _delete_slot(n: int) -> void:
+	var active := n == SaveStore.active_slot()
+	if not SaveStore.delete_slot(n):
+		return
+	if active:
+		# The world behind the title still holds the deleted save's run and
+		# money: load it again, empty, without saving first.
+		GameState.title_seen = false
+		get_tree().paused = false
+		get_tree().reload_current_scene()
+		return
+	_refresh_saves()
+	_show_list(delete_list if _any_save() else load_list)
 
 static func _thousands(v: int) -> String:
 	var s := str(absi(v))
@@ -458,17 +511,15 @@ func _build_ticker() -> void:
 	bar.add_child(ticker_speaker)
 
 ## The lines the news line runs: the talk station's own, then tonight's bands.
-## The DJ is Dale (decided 2026-10-10); the radio data still says Dave, so the
-## name is swapped here until that data is renamed.
 static func news_lines() -> PackedStringArray:
 	var out: PackedStringArray = []
 	for st: Dictionary in RadioStations.STATIONS:
 		if st.get("kind", "") == "talk":
 			for l: String in st.get("dj", []):
-				out.append(l.replace(DJ_OLD_NAME, DJ_NAME))
+				out.append(l)
 	for band: Array in NightBands.BAND_LINES:
 		if not band.is_empty():
-			out.append(str(band[0]).replace(DJ_OLD_NAME, DJ_NAME))
+			out.append(str(band[0]))
 	return out
 
 func _run_ticker(delta: float) -> void:
@@ -595,6 +646,9 @@ func _start_splash() -> void:
 	splash.visible = true
 	splash.modulate.a = 1.0
 	panel.visible = false
+	# Shader warm-up (shader_warmup.gd): compiles what the drive will need
+	# while the splash covers the screen.
+	get_parent().add_child.call_deferred(ShaderWarmup.new())
 
 func _end_splash() -> void:
 	_splash_t = -1.0
@@ -629,6 +683,8 @@ func _run_splash(delta: float) -> void:
 		_wheel_speed = move_toward(_wheel_speed, 0.6, delta * 20.0)
 	splash_wheel.rotation += _wheel_speed * delta
 	var end := SPLASH_SOUND_AT + vent_at + SPLASH_FLUTTER + SPLASH_HOLD
+	if _splash_t > end and ShaderWarmup.busy():
+		_splash_t = end   # hold the last pose until the shaders are ready (bounded there)
 	if _splash_t > end:
 		splash.modulate.a = 1.0 - clampf((_splash_t - end) / SPLASH_FADE, 0.0, 1.0)
 		panel.visible = true
@@ -670,6 +726,9 @@ func _input(event: InputEvent) -> void:
 		elif load_list.visible:
 			get_viewport().set_input_as_handled()
 			_show_list(main_list, load_button)
+		elif delete_list.visible:
+			get_viewport().set_input_as_handled()
+			_show_list(load_list)
 		elif extras_list.visible:
 			get_viewport().set_input_as_handled()
 			_show_list(main_list, extras_button)
@@ -728,7 +787,7 @@ func _leave_title() -> void:
 	if radio != null:
 		radio.give_back()
 	if _caps_fps():
-		Engine.max_fps = GraphicsSettings.fps_cap
+		Engine.max_fps = GraphicsSettings.engine_fps()
 
 static func _synthwave_station() -> int:
 	for i in RadioStations.STATIONS.size():

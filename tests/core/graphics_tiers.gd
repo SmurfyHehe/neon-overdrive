@@ -201,6 +201,28 @@ func _process(_delta: float) -> bool:
 			_check(GraphicsSettings.fps_cap == 30 and Engine.max_fps == 30, "the 30 fps cap reaches the engine")
 			menu.settings.gfx_cap.item_selected.emit(0)
 			_check(Engine.max_fps == 0, "V-sync only clears the cap")
+			# Frame caps (graphics setup, 2026-10-10): V-sync, 30, 60, 120, 144, none.
+			_check(menu.settings.gfx_cap.item_count == 6, "six frame cap choices")
+			for i in GraphicsSettings.FPS_CAPS.size():
+				menu.settings.gfx_cap.item_selected.emit(i)
+				var want: int = maxi(GraphicsSettings.FPS_CAPS[i], 0)
+				_check(GraphicsSettings.fps_cap == GraphicsSettings.FPS_CAPS[i] and Engine.max_fps == want,
+					"frame cap %s reaches the engine" % GraphicsSettings.FPS_CAP_NAMES[i])
+			menu.settings.gfx_cap.item_selected.emit(0)
+			_check(GraphicsSettings.wants_vsync(0, 60.0) and GraphicsSettings.wants_vsync(30, 60.0) and GraphicsSettings.wants_vsync(60, 59.94),
+				"V-sync stays on for caps the screen can show")
+			_check(not GraphicsSettings.wants_vsync(120, 60.0) and not GraphicsSettings.wants_vsync(GraphicsSettings.CAP_NONE, 144.0)
+				and GraphicsSettings.wants_vsync(120, 144.0), "V-sync goes off for No cap and caps above the screen's rate")
+			_check(is_equal_approx(DynamicResolution.budget_for(144, 144.0), 1000.0 / 60.0) and is_equal_approx(DynamicResolution.budget_for(30, 60.0), 1000.0 / 30.0),
+				"a cap above 60 is a ceiling, not a dynamic resolution target")
+			# Cost dots: each graded setting's row carries its dots.
+			var dotted := {"aa": menu.settings.gfx_aa, "render_scale": menu.settings.gfx_scale, "mirrors": menu.settings.gfx_mirrors,
+				"dynamic_res": menu.settings.gfx_dynres, "fps_cap": menu.settings.gfx_cap, "cars": menu.settings.traffic_cars_slider,
+				"draw_distance": menu.settings.traffic_dist_slider, "night_lights": menu.settings.night_lights_slider}
+			for k: String in dotted:
+				var dots: Node = (dotted[k] as Control).get_parent().get_node_or_null("CostDots")
+				_check(dots != null and dots.get_child_count() == 3 and int(dots.get_meta("cost")) == GraphicsSettings.COST[k]
+					and GraphicsSettings.COST[k] >= 1 and GraphicsSettings.COST[k] <= 3, "cost dots on %s" % k)
 			for v in [GraphicsSettings.SCALE_MIN, GraphicsSettings.SCALE_MAX]:
 				menu.settings.gfx_scale.value = v
 				_check(is_equal_approx(root.scaling_3d_scale, v), "resolution slider at %.2f reaches the viewport" % v)

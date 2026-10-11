@@ -4,19 +4,22 @@ extends SceneTree
 # - the stations: Drift Phonk, Dark Phonk, The Dave Show (Dave, talk only), Synthwave,
 #   with 7 .ogg tracks in each music folder, and Dave lines
 # - the playlist: deterministic, every track once per round, never the same track
-#   twice in a row, positions line up end to end
+#   twice in a row, positions line up end to end; with an overlap the next track
+#   starts under the tail of the last (never silent between songs)
 # - the manager in the real game: N cycles the stations then off, a switch starts
 #   static and a toast, every station clock keeps running while another is tuned,
 #   tuning in starts the track the clock says, partway through, the next track
 #   starts when one ends, Dave has no music but captions + a chime (and nothing to
 #   duck; the duck target is unit-tested), the
 #   Music bus has the speaker low-pass, and pausing mutes the Music bus
+# - memory (2026-10-10): only the song on air and the next one stay loaded; the
+#   songs blend into each other on two players; RadioLengths matches the files
 # Exit code 1 on failure. Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/audio/radio.gd
 
 const TIMEOUT_TICKS := 60 * 40
 
-enum Step { BOOT, CYCLE, RUN, AWAY, NEXT, NEXT2, DJ, DJ_OUT, PAUSE, DONE }
+enum Step { BOOT, CYCLE, RUN, AWAY, NEXT, NEXT2, XFADE_END, DJ, DJ_OUT, PAUSE, DONE }
 
 var step := Step.BOOT
 var step_start := 0
@@ -35,17 +38,24 @@ func _initialize() -> void:
 	change_scene_to_file("res://Game.tscn")
 
 func _station_tests() -> void:
-	_check(RadioStations.station_count() == 4, "expected 4 stations, got %d" % RadioStations.station_count())
-	var want_counts := [7, 7, 0, 7]
+	_check(RadioStations.station_count() == 8, "expected 8 stations, got %d" % RadioStations.station_count())
+	# Drift, Dark, Dave (talk), Synthwave, then the Treblo API stations (Afterglow,
+	# Undertow, Slipstream, Grey Hour; counts from the 2026-10-11 import).
+	var want_counts := [7, 7, 0, 7, 7, 6, 5, 5]
+	var found := {}
 	for s in RadioStations.station_count():
 		var paths := RadioStations.track_paths(s)
 		_check(paths.size() == want_counts[s], "station %d should have %d tracks, has %d" % [s, want_counts[s], paths.size()])
 		for p in paths:
 			var stream := load(p) as AudioStream
 			_check(stream != null and stream.get_length() > 30.0, "%s should load as a track over 30 s" % p)
+			if stream != null:
+				found[p] = stream.get_length()
+	for m in RadioLengths.stale_entries(found):
+		_check(false, "song length table is stale (run tools/radio_lengths.gd): %s" % m)
 	_check(not RadioStations.has_music(2), "The Dave Show should be talk only")
 	_check(RadioStations.STATIONS[2].dj.size() >= 4, "Dave needs lines")
-	for s in [0, 1, 3]:
+	for s in [0, 1, 3, 4, 5, 6, 7]:
 		_check(not RadioStations.break_state(s, 5.0).in_break, "music station %d has no breaks" % s)
 	_check(RadioStations.break_state(2, 3.0).in_break, "Dave should talk at the start of his period")
 	_check(not RadioStations.break_state(2, RadioStations.BREAK_SECS + 5.0).in_break, "Dave should be quiet between lines")
@@ -80,6 +90,30 @@ func _playlist_tests() -> void:
 	_check(RadioPlaylist.new(PackedFloat32Array(), 1).locate(5.0).track == -1, "an empty playlist has no track")
 	var one := RadioPlaylist.new(PackedFloat32Array([50.0]), 1)
 	_check(one.locate(120.0).track == 0 and absf(one.locate(120.0).offset - 20.0) < 0.01, "a one-track playlist just repeats")
+	# overlap: each track starts 3 s before the last one ends, and is never silent
+	var c := RadioPlaylist.new(lengths, 1, 3.0)
+	var overlaps := 0
+	var last_c_entry := -1
+	var tt := 0.0
+	while tt < 3000.0:
+		var pos := c.locate(tt)
+		_check(pos.offset >= 0.0 and pos.offset < lengths[pos.track], "overlap: offset %.2f outside track %d" % [pos.offset, pos.track])
+		_check(pos.entry >= last_c_entry and pos.entry <= last_c_entry + 1, "overlap: entries should count up one at a time")
+		_check(pos.blend >= 0.0 and pos.blend <= 1.0, "overlap: blend %.2f out of range" % pos.blend)
+		_check(c.entry_track(pos.entry) == pos.track, "overlap: entry_track should agree with locate")
+		if pos.prev_track >= 0:
+			overlaps += 1
+			_check(pos.prev_track != pos.track, "overlap: the song before should be a different track")
+			_check(pos.prev_offset >= 0.0 and pos.prev_offset < lengths[pos.prev_track], "overlap: the old song should still be playing (%.2f of %.1f)" % [pos.prev_offset, lengths[pos.prev_track]])
+			_check(pos.blend < 1.0 and pos.offset < 3.0 + 0.001, "overlap: only the first 3 s of a track blend")
+		else:
+			_check(pos.blend == 1.0, "overlap: no old song, no blend")
+		last_c_entry = pos.entry
+		tt += 0.25
+	_check(overlaps > 100, "overlap: expected many crossfades, saw %d samples" % overlaps)
+	var d := RadioPlaylist.new(PackedFloat32Array([50.0, 50.0]), 1, 3.0)
+	_check(absf(d.locate(0.0).offset) < 0.001 and d.locate(0.0).prev_track == -1, "overlap: the first track has nothing before it")
+	_check(d.locate(47.5).entry == 1 and absf(d.locate(47.5).prev_offset - 47.5) < 0.01, "overlap: the second track should start 3 s early (prev_offset %.2f)" % d.locate(47.5).prev_offset)
 
 func _physics_process(_delta: float) -> bool:
 	tick += 1
@@ -118,8 +152,10 @@ func _physics_process(_delta: float) -> bool:
 			if radio.now_playing != "" or waited >= 180:
 				var pos := radio.playlist_position(0)
 				_check(radio.now_playing != "", "a music station should have a track on air")
-				_check(radio._music.playing, "the music player should be playing")
-				_check(radio._music.stream == radio._streams[0][pos.track], "the player should hold the track the playlist says")
+				var slot: int = radio._slot_key.find(Vector2i(0, pos.entry))
+				_check(slot >= 0 and radio._slots[slot].playing, "the track on air should be on a playing player")
+				_check(slot >= 0 and radio._slots[slot].stream == radio._streams[radio._paths[0][pos.track]], "the player should hold the track the playlist says")
+				_check(radio._streams.size() <= 3, "only the song on air and the next should stay loaded, %d are" % radio._streams.size())
 				_check(radio.now_playing.begins_with("0"), "should be playing a numbered track file, got %s" % radio.now_playing)
 				entry_before = pos.entry
 				t_station0 = radio.station_time(0)
@@ -135,20 +171,32 @@ func _physics_process(_delta: float) -> bool:
 				_go(Step.NEXT)
 		Step.NEXT:
 			if waited >= 3:
-				# put the clock 2 s before the end of the track on air, then past it
+				# put the clock 5 s before the end of the track on air (2 s before the
+				# crossfade starts), then 4 s on: 1 s into the crossfade
 				var pos := radio.playlist_position(0)
-				var length: float = radio._streams[0][pos.track].get_length()
-				radio._clock += (length - pos.offset) - 2.0
+				var length: float = radio._lengths[radio._paths[0][pos.track]]
+				radio._clock += (length - pos.offset) - 5.0
 				entry_before = radio.playlist_position(0).entry
 				track_name_before = radio.now_playing
-				_check(radio.playlist_position(0).offset > length - 2.5, "the clock should now be near the end of the track")
+				_check(radio.playlist_position(0).offset > length - 5.5, "the clock should now be near the end of the track")
+				_check(radio.playlist_position(0).prev_track == -1, "the crossfade should not have started yet")
 				radio._clock += 4.0
 				_go(Step.NEXT2)
 		Step.NEXT2:
 			if radio.now_playing != track_name_before or waited >= 180:
 				_check(radio.playlist_position(0).entry == entry_before + 1, "the next track should be on")
 				_check(radio.now_playing != track_name_before, "the next track should differ from the last (%s)" % radio.now_playing)
-				_check(radio._music.playing, "the music should still be playing")
+				var pos := radio.playlist_position(0)
+				_check(pos.prev_track >= 0, "the clock should be inside the crossfade")
+				_check(radio._music.playing and radio._music_b.playing, "both players should be on during the crossfade")
+				_check(radio._streams.size() <= 3, "at most the two songs of the crossfade and the next should be loaded, %d are" % radio._streams.size())
+				radio._clock += 4.0   # out of the crossfade (3 s long)
+				_go(Step.XFADE_END)
+		Step.XFADE_END:
+			if waited >= 3:
+				_check(radio._music.playing != radio._music_b.playing, "after the crossfade one player should be left")
+				_check(radio._streams.size() <= 2, "after the crossfade only the song on air and the next stay loaded, %d are" % radio._streams.size())
+				_check(radio.now_playing != "", "the music should still be playing")
 				# Dave: tune station 2 (talk only), a second into one of his lines
 				radio.station = 2
 				radio._clock = RadioStations.DAVE_PERIOD * 3.0 - radio._offsets[2] + 1.0
@@ -156,7 +204,8 @@ func _physics_process(_delta: float) -> bool:
 				_go(Step.DJ)
 		Step.DJ:
 			if waited == 40:
-				_check(not radio._music.playing, "The Dave Show has no music")
+				_check(not radio._music.playing and not radio._music_b.playing, "The Dave Show has no music")
+				_check(radio._streams.is_empty(), "no music station is tuned, so no song should stay loaded (%d are)" % radio._streams.size())
 				_check(radio.now_playing == "", "nothing should be on air on the talk station")
 				_check(radio.dj_active, "Dave's line should be showing")
 				_check(radio.dj_text.begins_with("Dave:"), "the caption should be Dave's, got '%s'" % radio.dj_text)

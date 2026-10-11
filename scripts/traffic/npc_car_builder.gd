@@ -22,7 +22,8 @@ class_name NpcCarBuilder
 #
 # Night lights (2026-10-07): the tail lamps glow at a running level and
 # brighten when the car brakes (instance uniform "brake", set by TrafficCar);
-# a wrecked or hazard-stopped car blinks its amber turn lamps ("hazard").
+# the amber turn lamps blink on one side before and during a lane change, on
+# both for a wrecked or hazard-stopped car (instance uniform "turn").
 # Each tail lamp also carries a camera-facing flare that never shrinks below
 # FLARE_MIN_SCREEN of the screen, so a car 200 m up the road is still two red points
 # instead of nothing. It only shows from behind (it fades out as the car turns
@@ -217,24 +218,9 @@ const FLARE_ENERGY := 1.1
 const PAINT_MATS := ["paint", "roof"]
 const RIM_MATS := ["rim", "rim_face"]
 
-## Same look as P1CoupeBuilder.BODY_SHADER, with the paint per instance.
-const BODY_SHADER := """
-shader_type spatial;
-render_mode cull_back;
-// Vertex alpha 0 marks paint (or rim) faces; they take the tint and a glossier finish.
-// Fixed slots: the body, lamp and flare shaders on one car share its instance
-// uniforms by slot, so unnumbered ones collide (brake lamps painted the body).
-instance uniform vec3 paint : source_color, instance_index(0) = vec3(0.79, 0.81, 0.84);
-uniform float paint_metallic = 0.45;
-uniform float paint_roughness = 0.45;
-void fragment() {
-	float p = 1.0 - COLOR.a;
-	ALBEDO = mix(COLOR.rgb, paint, p);
-	METALLIC = mix(0.1, paint_metallic, p);
-	ROUGHNESS = mix(0.75, paint_roughness, p);
-	SPECULAR = 0.5;
-}
-"""
+## CarPaint's shader with the paint per instance (one material, every car).
+static var BODY_SHADER: String:
+	get: return CarPaint.code("body_instance", CarPaint.tier())
 
 const GLOW_SHADER := """
 shader_type spatial;
@@ -242,17 +228,33 @@ render_mode unshaded, cull_disabled;
 uniform float energy = 2.5;
 uniform float tail_gain = 1.0;
 uniform float brake_gain = 2.2;
+const float FLASH_GAIN = 3.5;
 instance uniform float brake : instance_index(1) = 0.0;
-instance uniform float hazard : instance_index(2) = 0.0;
+// Turn lamps: 0 off, 1 left, 2 right, 3 both (hazard). Plus 4: the left tail
+// lamp is out (a weaving driver's tell).
+instance uniform float turn : instance_index(2) = 0.0;
+// 1 while the driver flashes the headlights (at a player who cut in).
+instance uniform float flash : instance_index(3) = 0.0;
+varying float v_side;
+void vertex() {
+	v_side = sign(VERTEX.x);  // + = the car's right (it faces -Z)
+}
 void fragment() {
 	vec3 c = COLOR.rgb;
 	// Linear colours: the tail red is the only lamp with green and blue near 0,
 	// the amber turn lamp the only one with green between 0.3 and 0.7.
 	float tail = step(0.4, c.r) * step(c.g, 0.06) * step(c.b, 0.06);
-	float turn = step(0.8, c.r) * step(0.3, c.g) * step(c.g, 0.7) * step(c.b, 0.2);
+	float amber = step(0.8, c.r) * step(0.3, c.g) * step(c.g, 0.7) * step(c.b, 0.2);
 	float k = mix(1.0, tail_gain * (1.0 + brake * brake_gain), tail);
 	float blink = step(0.5, fract(TIME * 1.4));
-	k *= mix(1.0, mix(0.15, 2.5, blink), turn * step(0.5, hazard));
+	float lamp_out = step(3.5, turn);
+	float sig = turn - 4.0 * lamp_out;
+	k *= mix(1.0, 0.03, tail * lamp_out * step(v_side, 0.0));
+	float lit = sig > 2.5 ? 1.0 : (sig > 1.5 ? step(0.0, v_side) : (sig > 0.5 ? step(v_side, 0.0) : 0.0));
+	k *= mix(1.0, mix(0.15, 2.5, blink), amber * lit);
+	// The head lamps (warm white: the only lamp with all three channels up).
+	float head = step(0.8, c.r) * step(0.7, c.g) * step(0.3, c.b);
+	k *= mix(1.0, FLASH_GAIN, head * flash);
 	ALBEDO = c;
 	EMISSION = c * energy * k;
 }
@@ -273,8 +275,11 @@ uniform float gain = 1.0;
 uniform float near_r = 0.14;
 uniform float min_screen = 0.006;
 instance uniform float brake : instance_index(1) = 0.0;
+instance uniform float turn : instance_index(2) = 0.0;
 varying float v_face;
 void vertex() {
+	// The left tail lamp is out (turn carries + 4): no flare on that side.
+	float lamp_out = step(3.5, turn) * step(VERTEX.x, 0.0);
 	vec3 c = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	float d = max(-c.z, 0.05);
 	vec3 rear = normalize((MODELVIEW_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
@@ -282,7 +287,7 @@ void vertex() {
 	// The view's height at distance d is 2d / |P[1][1]| (negative under
 	// Vulkan's flipped Y, hence the abs).
 	float far_r = min_screen * 2.0 * d / abs(PROJECTION_MATRIX[1][1]);
-	float r = max(near_r, far_r) * (1.0 + 0.6 * brake) * v_face * step(0.001, gain);
+	float r = max(near_r, far_r) * (1.0 + 0.6 * brake) * v_face * step(0.001, gain) * (1.0 - lamp_out);
 	c *= max(d - 0.25, 0.05) / d;
 	c.xy += UV * r;
 	VERTEX = c;
@@ -299,7 +304,7 @@ static var _body_meshes := {}   # "kind|build" -> ArrayMesh
 static var _wheel_meshes := {}  # "kind|build|front/rear" -> ArrayMesh
 static var _body_mat: ShaderMaterial
 static var _wheel_mat: ShaderMaterial
-static var _glass_mat: StandardMaterial3D
+static var _glass_mat: ShaderMaterial
 static var _glow_mat: ShaderMaterial
 static var _flare_mat: ShaderMaterial
 static var _light_glow := 1.0
@@ -313,13 +318,29 @@ static func set_light_glow(g: float) -> void:
 	if _flare_mat != null:
 		_flare_mat.set_shader_parameter("gain", g)
 
-## Brake (0..1) and hazard (on/off) for one car's lamps; `vis` is its
-## chassis_visual. Two instance uniforms on the body, no material change.
-static func set_lamps(vis: Node3D, brake: float, hazard: bool) -> void:
+## Head lamps on full for a flash (TrafficCar: flashing back at the player).
+## One instance uniform, written at the start and end of each flash.
+static func set_flash(vis: Node3D, on: bool) -> void:
+	var mi := vis.get_node_or_null(^"Body") as MeshInstance3D
+	if mi != null:
+		mi.set_instance_shader_parameter("flash", 1.0 if on else 0.0)
+
+## Turn lamp states for set_lamps.
+const TURN_OFF := 0
+const TURN_LEFT := 1
+const TURN_RIGHT := 2
+const TURN_BOTH := 3
+## Added to a turn state: the left tail lamp is out.
+const TAIL_OUT := 4
+
+## Brake (0..1) and turn lamps (TURN_OFF / LEFT / RIGHT / BOTH = hazard,
+## + TAIL_OUT for a dead left tail lamp) for one car's lamps; `vis` is its chassis_visual. Two instance uniforms on the body,
+## no material change.
+static func set_lamps(vis: Node3D, brake: float, turn: int) -> void:
 	var mi := vis.get_node_or_null(^"Body") as MeshInstance3D
 	if mi != null:
 		mi.set_instance_shader_parameter("brake", brake)
-		mi.set_instance_shader_parameter("hazard", 1.0 if hazard else 0.0)
+		mi.set_instance_shader_parameter("turn", float(turn))
 
 static func is_npc(kind: String) -> bool:
 	return KINDS.has(kind)
@@ -405,6 +426,8 @@ static func chassis_visual(kind: String, build: String, paint: Color, role := ""
 	mi.position = lift
 	mi.mesh = body_mesh(kind, build)
 	mi.set_instance_shader_parameter("paint", paint)
+	mi.set_instance_shader_parameter("finish", CarPaint.finish_for(kind))
+	mi.set_instance_shader_parameter("seams", mi.mesh.get_meta("paint_seams", Vector4.ZERO))
 	# The tail flares grow past the body's box at a distance.
 	mi.extra_cull_margin = 2.0
 	root.add_child(mi)
@@ -476,8 +499,16 @@ static func body_mesh(kind: String, build: String) -> ArrayMesh:
 	if not _body_meshes.has(key):
 		var data: GDScript = KINDS[kind].data
 		var b: Dictionary = data.BUILDS[build]
-		_body_meshes[key] = _build_mesh(data, P1CoupeBuilder.decode_points(data.b64(b.body_pos)),
-			Marshalls.base64_to_raw(b.body_mat), true)
+		var k: Dictionary = KINDS[kind]
+		var hubs := []
+		for sx in [-1.0, 1.0]:
+			for sz in [-1.0, 1.0]:
+				hubs.append(Vector3(sx * float(k.wheel_x), float(k.wheel_r), sz * float(k.axle_z)))
+		var tris := P1CoupeBuilder.decode_points(data.b64(b.body_pos))
+		var mats := Marshalls.base64_to_raw(b.body_mat)
+		var mesh := _build_mesh(data, tris, mats, true, {"wheels": hubs, "wheel_r": float(k.wheel_r)})
+		mesh.set_meta("paint_seams", CarPaint.cut_seams(data, tris, mats, int(CarPaint.DOORS.get(kind, 2))))
+		_body_meshes[key] = mesh
 	return _body_meshes[key]
 
 static func wheel_mesh(kind: String, build: String, rear: bool) -> ArrayMesh:
@@ -488,47 +519,30 @@ static func wheel_mesh(kind: String, build: String, rear: bool) -> ArrayMesh:
 		_wheel_meshes[key] = _build_mesh(data, P1CoupeBuilder.decode_points(w.pos), Marshalls.base64_to_raw(w.mat), false)
 	return _wheel_meshes[key]
 
-## Same as P1CoupeBuilder._build_mesh: surfaces "body", "glass", "glow",
-## flat normals, linear vertex colours with alpha 0 on tinted faces, each
-## design triangle written a, c, b for Godot's clockwise front faces.
-static func _build_mesh(data: GDScript, tris: PackedVector3Array, mats: PackedByteArray, is_body: bool) -> ArrayMesh:
-	var groups := {}
-	var tint_mats: Array = PAINT_MATS if is_body else RIM_MATS
-	for t in mats.size():
-		var mname: String = data.NAMES[mats[t]]
-		var surf := "glow" if mname in data.EMISSIVE else ("glass" if mname in data.GLASS else "body")
-		if not groups.has(surf):
-			groups[surf] = [PackedVector3Array(), PackedVector3Array(), PackedColorArray()]
-		var g: Array = groups[surf]
-		var a := tris[t * 3]
-		var b := tris[t * 3 + 1]
-		var c := tris[t * 3 + 2]
-		var n := (b - a).cross(c - a)
-		if n.length_squared() < 1e-12:
-			continue
-		n = n.normalized()
-		var col := Color(data.COLORS[mname]).srgb_to_linear()
-		col.a = 0.0 if mname in tint_mats else 1.0
-		for p in [a, c, b]:
-			g[0].append(p)
-			g[1].append(n)
-			g[2].append(col)
+## Same as P1CoupeBuilder._build_mesh (CarPaint.build_groups): surfaces
+## "body", "glass", "glow", plus the tail "flare" quads on a body.
+static func _build_mesh(data: GDScript, tris: PackedVector3Array, mats: PackedByteArray, is_body: bool, opts := {}) -> ArrayMesh:
+	opts["is_wheel"] = not is_body
+	var groups := CarPaint.build_groups(data, tris, mats, PAINT_MATS if is_body else RIM_MATS, opts)
 	var mesh := ArrayMesh.new()
 	if is_body and "tail" in data.NAMES:
 		groups["flare"] = _flare_quads(data, tris, mats)
 	for surf in ["body", "glass", "glow", "flare"]:
 		if not groups.has(surf):
 			continue
-		var arrays := []
-		arrays.resize(Mesh.ARRAY_MAX)
-		arrays[Mesh.ARRAY_VERTEX] = groups[surf][0]
-		arrays[Mesh.ARRAY_NORMAL] = groups[surf][1]
-		arrays[Mesh.ARRAY_COLOR] = groups[surf][2]
+		var idx: int
 		if surf == "flare":
+			var arrays := []
+			arrays.resize(Mesh.ARRAY_MAX)
+			arrays[Mesh.ARRAY_VERTEX] = groups[surf][0]
+			arrays[Mesh.ARRAY_NORMAL] = groups[surf][1]
+			arrays[Mesh.ARRAY_COLOR] = groups[surf][2]
 			arrays[Mesh.ARRAY_TEX_UV] = groups[surf][3]
-		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-		var idx := mesh.get_surface_count() - 1
-		mesh.surface_set_name(idx, surf)
+			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+			idx = mesh.get_surface_count() - 1
+			mesh.surface_set_name(idx, surf)
+		else:
+			idx = CarPaint.add_surface(mesh, groups[surf], surf)
 		match surf:
 			"glass":
 				mesh.surface_set_material(idx, _get_glass_material())
@@ -575,10 +589,8 @@ static func _flare_quads(data: GDScript, tris: PackedVector3Array, mats: PackedB
 
 static func _get_body_material() -> ShaderMaterial:
 	if _body_mat == null:
-		var sh := Shader.new()
-		sh.code = BODY_SHADER
 		_body_mat = ShaderMaterial.new()
-		_body_mat.shader = sh
+		_body_mat.shader = CarPaint.body_shader(true)
 	return _body_mat
 
 ## Wheels: the body shader with a plain uniform set to the rim colour, so the
@@ -586,21 +598,18 @@ static func _get_body_material() -> ShaderMaterial:
 ## traffic cars share the same rim colour (proxies.json).
 static func _get_wheel_material(data: GDScript) -> ShaderMaterial:
 	if _wheel_mat == null:
-		var sh := Shader.new()
-		sh.code = BODY_SHADER.replace("instance uniform vec3 paint : source_color, instance_index(0)", "uniform vec3 paint : source_color")
 		_wheel_mat = ShaderMaterial.new()
-		_wheel_mat.shader = sh
+		_wheel_mat.shader = CarPaint.body_shader(false)
 		_wheel_mat.set_shader_parameter("paint", Color(data.COLORS.rim))
 		_wheel_mat.set_shader_parameter("paint_metallic", 0.8)
 		_wheel_mat.set_shader_parameter("paint_roughness", 0.3)
 	return _wheel_mat
 
-static func _get_glass_material() -> StandardMaterial3D:
+static func _get_glass_material() -> ShaderMaterial:
 	if _glass_mat == null:
-		_glass_mat = StandardMaterial3D.new()
-		_glass_mat.albedo_color = Color("#151D2E")
-		_glass_mat.metallic = 0.6
-		_glass_mat.roughness = 0.08
+		_glass_mat = ShaderMaterial.new()
+		_glass_mat.shader = CarPaint.glass_shader(false)
+		_glass_mat.set_shader_parameter("glass", Color("#151D2E"))
 	return _glass_mat
 
 static func _get_glow_material() -> ShaderMaterial:

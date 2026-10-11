@@ -26,6 +26,9 @@ const CABIN := {
 	"door_x": 0.771, "door_x_rear": 0.804, "door_x_front": 0.771, "glass_x": 0.699, "glass_top": 1.360,
 	"a_pillar": [Vector3(0.876, 0.857, -0.725), Vector3(0.551, 1.405, -0.035)],
 	"b_pillar_z": 0.475, "rear_z": 0.935,
+	# Hood view (2026-10-11, judged on screenshots): the fitted point on the long hood
+	# showed a quarter of the screen as bonnet; a hand higher keeps it in the bottom fifth.
+	"hood_cam": Vector3(0.0, 1.17, -1.90),
 	"shelf": {"y": 0.996, "z0": 0.935, "z1": 1.555, "half_w": 0.818},
 	"wheel": Vector3(-0.360, 0.806, -0.165), "wheel_tilt_deg": -25.0,
 	"cluster": Vector2(0.966, -0.334), "cluster_style": "strip", "speedo_max_kmh": 260.0,

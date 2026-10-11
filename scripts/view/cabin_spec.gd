@@ -54,8 +54,22 @@ static func for_kind(kind: String) -> Dictionary:
 	elif NpcCarBuilder.KINDS.has(kind):
 		data = NpcCarBuilder.KINDS[kind].data
 	if data == null or not "CABIN" in data:
-		return P1CoupeBuilder.Data.CABIN
+		var cab: Dictionary = P1CoupeBuilder.Data.CABIN
+		if HOOD_POINTS.has(kind):
+			# a car with no cabin of its own but its own bonnet (the pickup's
+			# data file is generated, so its points cannot live there)
+			cab = cab.duplicate()
+			cab.merge(HOOD_POINTS[kind], true)
+		return cab
 	return data.CABIN
+
+## Hood-view points for kinds whose data file has no CABIN (they wear the
+## coupe's cabin): hood_cam / roof_back_cam, car space. The monster and the
+## lowrider still wear the coupe's body, so they take the coupe's points.
+const HOOD_POINTS := {
+	# tall bonnet: the fitted point showed a quarter of the screen as bonnet (2026-10-11)
+	"p17_work_pickup": {"hood_cam": Vector3(0.0, 1.33, -1.80)},
+}
 
 ## Which keys a cabin is missing (tests).
 static func missing(cab: Dictionary) -> Array:

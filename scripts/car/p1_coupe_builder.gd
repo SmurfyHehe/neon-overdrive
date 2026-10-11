@@ -280,7 +280,8 @@ static func triangle_count() -> int:
 			n += b.surface_get_array_len(i) / 3
 	for rear in [false, true]:
 		n += 2 * _get_wheel_mesh(rear).surface_get_array_len(0) / 3
-	return n - fittings_triangle_count()
+	# a body from parts models its own lamps and plates: nothing was merged into it
+	return n if uses_parts() else n - fittings_triangle_count()
 
 ## Triangles CarFittings merged into the body (lenses and plates), on top of
 ## the design's TRIS_TOTAL. No extra draw call: they sit in the body's surfaces.

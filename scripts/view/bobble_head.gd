@@ -88,6 +88,8 @@ static var _shader: Shader
 
 var player: Node3D            # the PlayerCar
 var kind := ""                # the car's chassis kind (CabinSpots, CabinMods)
+## The lean cap (rad): TILT_MAX, or less where the head would reach the glass (CabinSpots bobble "tilt").
+var tilt_max := TILT_MAX
 var figure := NONE            # the id currently built
 ## The spring's output: x leans toward +x, y toward +z (rad). The shader's pair.
 var bob := Vector2.ZERO
@@ -107,6 +109,7 @@ func _init(car: Node3D = null, car_kind: String = "") -> void:
 	name = "Bobble"
 	position = CabinSpots.dash_pass(kind) if kind != "" else CabinSpots.dash_pass(CabinSpots.DEFAULT_KIND)
 	scale = Vector3.ONE * CabinSpots.dash_pass_scale(kind if kind != "" else CabinSpots.DEFAULT_KIND)
+	tilt_max = minf(TILT_MAX, float(CabinSpots.bobble_fit(kind).get("tilt", TILT_MAX)))
 	set_physics_process(false)
 
 func _ready() -> void:
@@ -421,11 +424,11 @@ func step(delta: float, accel: Vector3) -> void:
 	var target := Vector2(
 		-accel.x * LEAN_GAIN,
 		-accel.z * LEAN_GAIN - accel.y * NOD_GAIN)
-	target = target.limit_length(TILT_MAX)
+	target = target.limit_length(tilt_max)
 	var w := TAU * SPRING_HZ
 	bob_rate += ((target - bob) * (w * w) - bob_rate * (2.0 * ZETA * w)) * delta
 	bob += bob_rate * delta
-	bob = bob.limit_length(TILT_MAX)
+	bob = bob.limit_length(tilt_max)
 	if _mat != null:
 		_mat.set_shader_parameter("bob", bob)
 

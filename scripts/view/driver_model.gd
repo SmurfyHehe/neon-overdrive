@@ -94,6 +94,9 @@ const LINK_BAR := 0.0045
 const LINK_TILT_DEG := 35.0
 const THIGH := 0.47
 const SHIN := 0.45
+## How far the knees fall outward (the pole of the leg IK, side x this, 0.45 up):
+## the straight-up pole put the right knee under the rim (cabin_clearance, 2026-10-11).
+const KNEE_SPLAY := 0.9
 ## Where the hands hold the rim at rest, in degrees round the rim for the right
 ## hand (0 = 3 o'clock, up is positive; the left hand mirrors it about 12
 ## o'clock). Per car: the spec's "driver_grip_deg" (CarSpec), DEFAULT_GRIP_DEG
@@ -767,7 +770,7 @@ func _place_legs(delta: float) -> void:
 		var l: Dictionary = legs[side]
 		var hip := _hip(side)
 		var ankle: Vector3 = targets[side]
-		var ik := two_bone(hip, ankle, THIGH, SHIN, Vector3(0.0, 1.0, -0.4))
+		var ik := two_bone(hip, ankle, THIGH, SHIN, Vector3(float(side) * KNEE_SPLAY, 0.45, -0.3))
 		_aim(l.thigh, hip, ik[0], Vector3.RIGHT)
 		_aim(l.shin, ik[0], ik[1], Vector3.RIGHT)
 		var foot: Node3D = l.foot

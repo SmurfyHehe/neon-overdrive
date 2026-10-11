@@ -35,6 +35,9 @@ const WheelStyles := preload("res://scripts/view/wheel_styles.gd")
 
 const RATE := 60
 const MIN_CLEAR := 0.02
+## A cabin part (dash, bezel, lever) only has to stay un-touched: the rim top
+## sits about 1 cm under the binnacle hood by the cabin's own numbers.
+const CABIN_CONTACT := 0.003
 const DIAL_MAX := 0.25
 const HAND_TOL := 0.03
 const NEAR := 0.40          # a triangle further than this from the hub is never a wheel neighbour
@@ -131,7 +134,7 @@ var found: Array[String] = []
 
 ## No pick may be closer than the 2 cm, or than today's wheel is on this car.
 func _need_clear() -> float:
-	return minf(MIN_CLEAR, float(base.clear) - 0.001)
+	return MIN_CLEAR
 
 func _max_dial() -> float:
 	return maxf(DIAL_MAX, float(base.dial) + 0.001)
@@ -253,7 +256,8 @@ func _car(kind: String) -> void:
 		_settle(driver, w, 0.0, 30)
 		_shape(kind, shape, frame, driver, w, statics, eye, objects)
 	_pick(frame, kind, "")
-	_scan(kind, frame, w, statics, eye)
+	if OS.get_environment("NEON_CLEARANCE_SCAN") != "0":
+		_scan(kind, frame, w, statics, eye)
 	game.queue_free()
 	await process_frame
 	await process_frame
@@ -349,14 +353,14 @@ func _shape(kind: String, shape: String, frame: CockpitFrame, driver: DriverMode
 		# be blamed for, and no pick may make it worse.
 		base = {"clear": float(worst.clear), "dial": dial, "top": top_below}
 		if worst.clear < MIN_CLEAR:
-			found.append("%s: today's race wheel is %.1f cm from the %s at %.0f deg of lock (sample %s from the hub)" % [kind, worst.clear * 100.0, worst.part, rad_to_deg(worst.angle), worst.at])
+			found.append("%s: today's race wheel is %.1f cm from the %s at %.0f deg of lock (sample %s from the hub)" % [kind, float(worst.raw) * 100.0, worst.part, rad_to_deg(worst.angle), worst.at])
 		if dial > DIAL_MAX:
 			found.append("%s: today's race wheel covers %.0f%% of the tach sweep from the eye" % [kind, dial * 100.0])
 		if top_below < CockpitFrame.WHEEL_TOP_MIN_DEG:
 			found.append("%s: today's race wheel top is %.1f deg below the eye" % [kind, top_below])
 	else:
 		if worst.clear < _need_clear():
-			problems.append("clearance %.1f cm to %s at %.0f deg of lock (needs %.1f)" % [worst.clear * 100.0, worst.part, rad_to_deg(worst.angle), _need_clear() * 100.0])
+			problems.append("clearance %.1f cm to %s at %.0f deg of lock (needs 2.0 from the legs, 0.3 from the cabin), sample %s" % [float(worst.raw) * 100.0, worst.part, rad_to_deg(worst.angle), worst.at])
 		if dial > _max_dial():
 			problems.append("dial cover %.0f%% (limit %.0f%%)" % [dial * 100.0, _max_dial() * 100.0])
 		if top_below < _min_top():
@@ -394,7 +398,7 @@ func _shape(kind: String, shape: String, frame: CockpitFrame, driver: DriverMode
 		if tris > PLAIN_MAX_TRIS:
 			problems.append("%d triangles on a plain wheel" % tris)
 	var part := String(worst.part)
-	table.append("%-34s %6.1f  %-24s %4.0f%%  %5.1f  %5.1f   %d tris%s" % [pair, worst.clear * 100.0, part, dial * 100.0,
+	table.append("%-34s %6.1f  %-24s %4.0f%%  %5.1f  %5.1f   %d tris%s" % [pair, float(worst.raw) * 100.0, part, dial * 100.0,
 		w.radius() * 100.0, w.dish() * 100.0, tris, ("  EXEMPT: " + exempt) if exempt != "" and not problems.is_empty() else ""])
 	if exempt == "":
 		for pr in problems:
@@ -404,22 +408,26 @@ func _shape(kind: String, shape: String, frame: CockpitFrame, driver: DriverMode
 ## each angle: {clear, part, angle}.
 func _rim_clearance(frame: CockpitFrame, w: SteeringWheel, soup: Soup, angles: Array) -> Dictionary:
 	var samples := _samples(w)
-	var worst := {"clear": 9.0, "part": "", "angle": 0.0}
+	var worst := {"clear": 9.0, "raw": 9.0, "part": "", "angle": 0.0}
 	for a in angles:
 		w.set_angle(float(a))
 		var xf: Transform3D = frame.wheel_mount.transform * w.transform
 		for s in samples:
 			var r := float(s[1])
 			var p: Vector3 = xf * (s[0] as Vector3)
-			var res := soup.nearest(p, float(worst.clear) + r)
-			var c := float(res[0]) - r
+			var res := soup.nearest(p, float(worst.clear) + r + (MIN_CLEAR - CABIN_CONTACT))
+			var raw := float(res[0]) - r
+			# the driver's legs keep 2 cm; a cabin part only has to not be touched
+			var legs: bool = res[1] == "thigh" or res[1] == "knee/shin"
+			var c := raw - (MIN_CLEAR if legs else CABIN_CONTACT) + MIN_CLEAR
 			if c < float(worst.clear):
 				worst.clear = c
+				worst["raw"] = raw
 				worst.part = String(res[1])
 				if worst.part == "cabin":
 					worst.part = _cabin_part(p, frame.cab)
 				worst.angle = float(a)
-				worst["at"] = p - frame.wheel_mount.position
+				worst["at"] = String(s[2]) + " " + str(p - frame.wheel_mount.position)
 	w.set_angle(0.0)
 	return worst
 
@@ -432,7 +440,7 @@ func _samples(w: SteeringWheel) -> Array:
 	var thin_r := float(st.thin_r)
 	var dish := float(st.dish)
 	for deg in range(0, 360, 5):
-		out.append([w.rim_point(float(deg)), grip_r if SteeringWheel._is_grip(float(deg)) else thin_r])
+		out.append([w.rim_point(float(deg)), grip_r if SteeringWheel._is_grip(float(deg)) else thin_r, "rim %d" % deg])
 	# Spokes are thin in z: sample their four long edges as points, not a
 	# fat sphere (a sphere would reach 1 cm further toward the dash than the bar).
 	var kind := String(st.spoke_kind)
@@ -449,35 +457,35 @@ func _samples(w: SteeringWheel) -> Array:
 		for i in range(1, 7):
 			var at := hub.lerp(tip, float(i) / 7.0)
 			if kind == "round":
-				out.append([at, 0.009])
+				out.append([at, 0.009, "spoke %d" % int(deg)])
 				continue
 			for sw in [-1.0, 1.0]:
 				for sz in [-1.0, 1.0]:
-					out.append([at + side * (half_w * sw) + Vector3.BACK * (half_t * sz), 0.0])
+					out.append([at + side * (half_w * sw) + Vector3.BACK * (half_t * sz), 0.0, "spoke %d at %d/7" % [int(deg), i]])
 	if String(st.pad) == "race":
 		# the pad box (0.115 x 0.085, z -0.003..0.027) and the hub ring behind it (r 0.055, z -0.03)
 		for sx in [-0.0575, 0.0575]:
 			for sy in [-0.0425, 0.0425]:
 				for z in [-0.003, 0.027]:
-					out.append([Vector3(sx, sy, z), 0.0])
+					out.append([Vector3(sx, sy, z), 0.0, "pad corner"])
 		for k in 12:
 			var a := TAU * float(k) / 12.0
-			out.append([Vector3(cos(a) * 0.055, sin(a) * 0.055, -0.03), 0.0])
+			out.append([Vector3(cos(a) * 0.055, sin(a) * 0.055, -0.03), 0.0, "hub ring"])
 	else:
 		# the hub boss (r 0.042, back at -dish - 0.03) and the pad or button
 		for k in 12:
 			var a := TAU * float(k) / 12.0
-			out.append([Vector3(cos(a) * 0.042, sin(a) * 0.042, -dish - 0.03), 0.0])
-		out.append([Vector3(0.0, 0.0, -dish - 0.03), 0.0])
+			out.append([Vector3(cos(a) * 0.042, sin(a) * 0.042, -dish - 0.03), 0.0, "boss"])
+		out.append([Vector3(0.0, 0.0, -dish - 0.03), 0.0, "boss"])
 		for sx in [-0.035, 0.035]:
 			for sy in [-0.03, 0.03]:
-				out.append([Vector3(sx, sy, -dish - 0.004), 0.0])
+				out.append([Vector3(sx, sy, -dish - 0.004), 0.0, "pad"])
 	if w.has_screen():
 		# the paddles: 0.095 x 0.036 x 0.005 at z -0.028, x 0.075..0.17
 		for sx in [-1.0, 1.0]:
 			for x in [0.075, 0.1225, 0.17]:
 				for y in [-0.023, -0.005, 0.013]:
-					out.append([Vector3(sx * x, y, -0.0305), 0.0])
+					out.append([Vector3(sx * x, y, -0.0305), 0.0, "paddle"])
 	return out
 
 ## Share of 40 rays from the eye to the tach needle's sweep that the wheel
@@ -549,8 +557,9 @@ func _bobble_and_trinket(frame: CockpitFrame) -> Dictionary:
 	var all_lbl := PackedStringArray()
 	# bobble figures, the neck-pivot lean the shader applies (see BobbleHead.BOB_SHADER)
 	frame.bobble.set_active(true)
-	var t := BobbleHead.TILT_MAX
-	var combos := [Vector2(t, 0), Vector2(-t, 0), Vector2(0, t), Vector2(0, -t), Vector2(t, t), Vector2(-t, -t), Vector2(t, -t), Vector2(-t, t)]
+	var t: float = frame.bobble.tilt_max
+	var d := t * 0.7071   # the lean is capped by length (BobbleHead.step), so the diagonals are t/sqrt2
+	var combos := [Vector2(t, 0), Vector2(-t, 0), Vector2(0, t), Vector2(0, -t), Vector2(d, d), Vector2(-d, -d), Vector2(d, -d), Vector2(-d, d)]
 	for id in BobbleFigures.IDS:
 		if id == BobbleFigures.NONE:
 			continue

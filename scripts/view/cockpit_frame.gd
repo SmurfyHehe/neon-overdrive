@@ -192,6 +192,12 @@ var pod: GaugePod                # the bolt-on AFR/PSI pod; fitted with the firs
 var mirrors: CockpitMirrors
 var tach_needle: Node3D
 var speedo_needle: Node3D
+## The amber mark on the speedo's rim at the speed the police act on here
+## (PoliceRules' offence line: 85 in the city, 125 on the highway). It moves
+## when the car drives into another area (police step P3).
+var limit_tick: Node3D
+var limit_kmh := 0.0
+var _limit_wait := 0.0
 var lamps: MultiMeshInstance3D
 var lamp_text: Label3D
 var trinket: DashTrinket        # the charm on the rear-view mirror (CabinMods.trinket)
@@ -862,6 +868,13 @@ func _build_cluster() -> void:
 	tach_needle = _needle(tach_c + Vector3(0.0, 0.0, 0.004), "TachNeedle", float(radii[0]))
 	var strip: bool = cab.cluster_style == "strip"
 	speedo_needle = _needle(speedo_c + Vector3(0.0, 0.0, 0.004), "SpeedoNeedle", float(radii[1]), float(radii[1]) * STRIP_INNER if strip else 0.0)
+	limit_tick = Node3D.new()
+	limit_tick.name = "LimitTick"
+	limit_tick.position = speedo_c + Vector3(0.0, 0.0, 0.003)
+	var lk := CockpitKit.new()
+	lk.box(Vector3(0.005, 0.008, 0.002), Vector3(0.0, float(radii[1]) - 0.005, 0.0), Color(SODIUM, 1.0))
+	limit_tick.add_child(lk.instance(CockpitKit.glow_material(SteeringWheel.LED_ENERGY)))
+	add_child(limit_tick)
 	# The warning lamps sit between the dials (under the speedo pod's tach on the beater).
 	var lamp_c := (tach_c + speedo_c) * 0.5 + Vector3(0.0, 0.03, 0.0)
 	if cab.cluster_style == "pod":   # in the speedo's face, over its hub
@@ -1322,6 +1335,13 @@ func _process(delta: float) -> void:
 	tach_needle.rotation = Vector3(0.0, 0.0, deg_to_rad(rest - dial_sweep * frac))
 	var kmh := clampf(absf(p.current_speed()) * Hud.KMH_PER_MS / float(cab.speedo_max_kmh), 0.0, 1.0)
 	speedo_needle.rotation = Vector3(0.0, 0.0, deg_to_rad(rest - dial_sweep * kmh))
+	_limit_wait -= delta
+	if _limit_wait <= 0.0:
+		_limit_wait = 0.5
+		limit_kmh = PoliceRules.offence_line(PoliceRules.area_at(RoadFrame.s_at(RoadFrame.unroll(p.global_position).z)), false)
+		var lt := limit_kmh / float(cab.speedo_max_kmh)
+		limit_tick.visible = lt <= 1.0
+		limit_tick.rotation = Vector3(0.0, 0.0, deg_to_rad(rest - dial_sweep * lt))
 	_update_lamps()
 	_update_pod(delta)
 	var inputs := pedal_inputs()

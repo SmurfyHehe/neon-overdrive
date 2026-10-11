@@ -90,6 +90,7 @@ rem Dirt and wash (pre-reorganisation branch: its files still sit in the tests\ 
 call :run car_dirt --headless
 call :run car_wash_scene --headless
 call :run view/cockpit --headless
+call :run view/limit_tick --headless
 call :run view/cockpit_interior --headless
 call :run view/dash_trinket --headless
 call :run view/cabin_mods --headless
@@ -365,6 +366,8 @@ if /i not "%~1"=="quick" (
 	call :run traffic/police_patrol --headless
 	rem P1 proof in the real game: 10 min at the traffic flow = 0 heat (about 3 min of test).
 	call :run traffic/police_flow "--headless --fixed-fps 60"
+	rem P3 proof in the real game: city traffic keeps the city pace, cars change pace at the area line (about 1 min).
+	call :run traffic/city_pace "--headless --fixed-fps 60"
 	call :run tuning/tuning_panel --headless
 	call :run tuning/auto_tune_panel --headless
 	call :run tuning/tuner_screen --headless

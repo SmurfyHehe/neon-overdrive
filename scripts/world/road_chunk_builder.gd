@@ -1834,9 +1834,11 @@ const NAME_SIGN_SETBACK := 0.25
 ## whole number of chunks further back (PlaceNames.ADVANCE_M).
 const GANTRY_Z := -42.0
 const ADVANCE_Z := -2.0
+const REPEATER_Z := -25.0
 
 ## Which area sign, if any, belongs to chunk `chunk_index`: "" (none), "gantry"
-## or "advance"; the area it announces is Districts.name_of_run(run + 1).
+## or "advance" (the area they announce is Districts.name_of_run(run + 1)), or
+## "repeater": the round limit sign, every 400 m inside an area.
 static func name_sign_kind(chunk_index: int) -> String:
 	if chunk_index < 0:
 		return ""
@@ -1845,6 +1847,8 @@ static func name_sign_kind(chunk_index: int) -> String:
 		return "gantry"
 	if posmod(chunk_index + 1 + ahead, Districts.RUN) == 0:
 		return "advance"
+	if posmod(chunk_index, PlaceNames.REPEAT_CHUNKS) == PlaceNames.REPEAT_AT:
+		return "repeater"
 	return ""
 
 ## Area signs (world step 4, "Names you can read"): the gantry in the last
@@ -1860,7 +1864,13 @@ static func _update_names(root: Node3D, chunk_index: int, walk0: float, walk1: f
 		mm.visible_instance_count = 0
 		return
 	var area := PlaceNames.area_name(Districts.name_of_run(Districts.run_of(chunk_index) + 1))
-	var z := GANTRY_Z if kind == "gantry" else ADVANCE_Z
+	var z := GANTRY_Z if kind == "gantry" else (REPEATER_Z if kind == "repeater" else ADVANCE_Z)
+	# the gantry posts the limit of the area it leads into, a repeater its own
+	var limit := 0
+	if kind == "gantry":
+		limit = PlaceNames.limit_at(chunk_index + 1)
+	elif kind == "repeater":
+		limit = PlaceNames.limit_at(chunk_index)
 	var x := lerpf(walk0, walk1, -z / CHUNK_LEN) + NAME_SIGN_SETBACK
 	var foot := Vector3(x, 0.0, z)
 	var burnt := -1
@@ -1872,9 +1882,11 @@ static func _update_names(root: Node3D, chunk_index: int, walk0: float, walk1: f
 	var cached := RoadSigns.has_flag("cache")
 	var list: Array
 	if cached:
-		list = RoadSigns.parts_at_origin(kind, area, _foundation(), burnt)
+		list = RoadSigns.parts_at_origin(kind, area, _foundation(), burnt, limit)
 	elif kind == "gantry":
-		list = RoadSigns.gantry(area, foot, _foundation(), burnt)
+		list = RoadSigns.gantry(area, foot, _foundation(), burnt, limit)
+	elif kind == "repeater":
+		list = RoadSigns.repeater(limit, foot, _foundation())
 	else:
 		list = RoadSigns.advance(area, foot, _foundation())
 	var n := mini(list.size(), mm.instance_count)

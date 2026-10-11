@@ -141,6 +141,12 @@ var lane_i := 0
 var direction := -1.0
 ## Cruise speed, m/s.
 var target_speed := 25.0
+## Which lane's cruise speed target_speed was dealt from, on which
+## carriageway, and whether at the city pace (TrafficManager.pace moves it
+## when the car drives into another area). -1 = not paced by area.
+var pace_lane := -1
+var pace_far := false
+var pace_city := false
 
 ## Aero, same two plain vars PlayerCar declares: CarSpec.apply() sets them
 ## through v.set() and AeroModel reads them. Traffic gets small values from

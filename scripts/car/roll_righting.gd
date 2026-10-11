@@ -197,11 +197,11 @@ func _stand_still() -> void:
 ## How high the car's origin sits over the ground with its springs hanging
 ## free and its tyres just touching.
 func ride_height() -> float:
-	var h := 0.0
+	var h := -INF
 	if car is Vehicle:
 		for w in (car as Vehicle).wheel_array:
 			h = maxf(h, -w.position.y + w.spring_length + w.tire_radius)
-	return h if h > 0.0 else 0.5
+	return h if is_finite(h) else 0.5
 
 ## The car upright at `at`: heading kept, level with the ground under it, tyres
 ## CLEAR above it.

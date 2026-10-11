@@ -762,24 +762,26 @@ func _build_radio() -> void:
 ## Next station: the key only asks; the driver's right hand reaches the screen
 ## and RadioManager.next_station() runs on the finger's contact
 ## (_on_hand_contact). Waits for the hand if it is busy (a shift, the handbrake).
-func request_radio() -> void:
-	driver.request_radio()
+func request_radio(kind := DriverModel.RADIO_NEXT) -> void:
+	driver.request_radio(kind)
 
-## Where the finger lands for the next station, car space, and which contact
-## that is: the next tile, or past the last one the knob (radio off).
-func radio_touch() -> Dictionary:
-	var count := RadioStations.station_count()
-	var s := _find_radio().station if _find_radio() != null else -1
-	if s + 1 < count:
-		return {"pos": head_unit.transform * head_unit.tile_point(s + 1), "contact": DriverModel.CONTACT_RADIO_TILE}
-	return {"pos": head_unit.transform * head_unit.off_point(), "contact": DriverModel.CONTACT_RADIO_KNOB}
+## Where the finger lands, car space, and which contact that is. Next station
+## (N): the centre of the glass, the ring's card. Power (V): the knob (older
+## cars) or the power spot (modern screens).
+func radio_touch(kind := DriverModel.RADIO_NEXT) -> Dictionary:
+	if kind == DriverModel.RADIO_POWER:
+		return {"pos": head_unit.transform * head_unit.off_point(), "contact": DriverModel.CONTACT_RADIO_KNOB}
+	return {"pos": head_unit.transform * head_unit.centre_point(), "contact": DriverModel.CONTACT_RADIO_TILE}
 
 ## The one place a hand touching something has an effect.
 func _on_hand_contact(target: StringName) -> void:
 	if target == DriverModel.CONTACT_RADIO_TILE or target == DriverModel.CONTACT_RADIO_KNOB:
 		var r := _find_radio()
 		if r != null:
-			r.next_station()
+			if target == DriverModel.CONTACT_RADIO_KNOB:
+				r.toggle_power()
+			else:
+				r.next_station()
 		head_unit.tap(target == DriverModel.CONTACT_RADIO_KNOB and head_unit.has_knob)
 		_update_radio(0.0)
 
@@ -1114,7 +1116,9 @@ func _update_radio(delta: float) -> void:
 	if bus >= 0 and r.station >= 0:
 		var db := maxf(AudioServer.get_bus_peak_volume_left_db(bus, 0), AudioServer.get_bus_peak_volume_right_db(bus, 0))
 		lvl = clampf((db + 36.0) / 36.0, 0.0, 1.0)
-	head_unit.show_state(r.station, r.now_playing, lvl, delta)
+	r.view_is_cockpit = cockpit
+	head_unit.show_state(r.station if r.station >= 0 else (r.shown_card() if r.lit() else -1), r.now_playing, lvl, delta)
+	head_unit.show_ring(r.shown_card(), r.slide_count, r.slide_secs, delta, r.lit(), r.band)
 
 ## Triangles drawn by the cabin (static meshes, wheel, moving parts, mirrors).
 func triangle_count() -> int:

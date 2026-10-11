@@ -10,8 +10,9 @@ extends Node3D
 # Node space: origin at the centre of the screen face, the screen faces +z
 # (toward the driver), +x to the car's right (CockpitFrame only translates it).
 #
-# The screen: four station tiles, a now-playing line, a small level meter, a
-# sodium frame on the playing tile only. Navy, sodium, amber and silver; no
+# The screen: a ring of station cards (centre card framed in sodium, neighbours
+# smaller and dimmer; at rest the song title and artist under it), a small
+# three-bar level meter. Navy, sodium, amber and silver; no
 # scanlines (it reads newer than the car). Drawn by a Control in a SubViewport,
 # redrawn only when something on it changes (the meter at METER_HZ). Radio off:
 # the screen dims. The car clock (NightClock) is the exception: it sits on its
@@ -52,18 +53,31 @@ const AREA_SECS := 4.0
 ## Keyed by PlayerCar.chassis_kind(); DEFAULT_STYLE for anything unlisted.
 ##   aftermarket: printed bezel, tablet proud of the stack
 ##   knob: a physical volume knob beside the screen (old-car screens only)
-##   brightness: screen gain (>1: the cheap tablet is a touch too bright)
+##   brightness: screen gain (>1: the cheap tablet is a touch too bright; capped
+##   at 1.1, more bloomed the amber text)
 const STYLES := {
-	"p1_coupe": {"aftermarket": true, "knob": true, "brightness": 1.3},
+	"p1_coupe": {"aftermarket": true, "knob": true, "brightness": 1.1},
 	"test": {"aftermarket": false, "knob": false, "brightness": 1.0},
 }
 const DEFAULT_STYLE := "p1_coupe"
 
-## Tile rects and the header, screen pixels.
-const TILE_Y := 112.0
-const TILE_H := 180.0
-const TILE_GAP := 14.0
+## The ring of station cards (R2, 2026-10-11), screen pixels. The top strip
+## (y 0-56) keeps the clock, weather, level meter and the area banner.
 const MARGIN := 18.0
+const STRIP_H := 56.0
+const CARD_MOVING := Vector2(180, 214)   # centre card while the ring is in use
+const CARD_REST := Vector2(160, 186)     # shrunk, 4 s after the last change
+const CARD_CENTRE_Y := 171.0             # moving card's middle
+const CARD_REST_Y := 154.0
+const REST_AFTER := 4.0                  # s of quiet before the side cards fade
+const REST_FADE := 0.4
+const SONG_FADE := 0.1
+const NEAR_SCALE := 0.62
+## Ring anchors by |distance| from the centre: x offset, scale, brightness.
+const RING_X := [0.0, 154.0, 254.0, 354.0]
+const RING_SCALE := [1.0, 0.62, 0.5, 0.5]
+const RING_BRIGHT := [1.0, 0.5, 0.25, 0.0]
+const LINE_MAX_W := 440.0
 const POWER_SPOT := Vector2(322, 40)   # touch-only units: tap here for off (left of the clock)
 
 var style: Dictionary
@@ -75,6 +89,23 @@ var clock_text := ""     # the car clock, drawn top right (NightClock)
 var area_name := ""      # the area just entered, shown for AREA_SECS (world step 4)
 var area_t := 0.0
 var weather_level := 0   # Weather.Level: 1 rain, 2 storm get an icon, else none
+## The ring: ring_pos is the card in the middle (in card units, it keeps
+## counting up and wraps), animating is true while anything moves (the
+## viewport then renders every frame, else once).
+var ring_pos := 0.0
+var ring_target := 0
+var rest := 0.0          # 0 in use .. 1 at rest (side cards gone, song lines up)
+var card_station := RadioStations.DEFAULT_STATION
+var lit := false
+var band := -1
+var animating := false
+var ring_slides := 0     # slides started (tests)
+var _ring_from := 0.0
+var _ring_t := 0.0
+var _ring_dur := 0.0
+var _quiet := 0.0
+var _slides_seen := 0
+var _first_ring := true
 var taps := 0
 var knob_presses := 0
 var viewport: SubViewport
@@ -194,21 +225,15 @@ func _build_tick() -> void:
 
 # ---------- touch points (node space; CockpitFrame maps them to car space) ----------
 
-## Centre of tile i on the glass.
-func tile_point(i: int) -> Vector3:
-	var r := tile_rect(i)
-	return _px_to_local(r.get_center())
+## Where the finger lands for a station change: the middle of the glass.
+func centre_point() -> Vector3:
+	return _px_to_local(Vector2(PX.x * 0.5, CARD_CENTRE_Y))
 
 ## Where the finger presses for "off": the knob's face, or the power spot.
 func off_point() -> Vector3:
 	if has_knob:
 		return _knob_base() + Vector3(0.0, 0.0, KNOB_DEPTH)
 	return _px_to_local(POWER_SPOT)
-
-static func tile_rect(i: int) -> Rect2:
-	var n := RadioStations.station_count()
-	var w := (PX.x - 2.0 * MARGIN - TILE_GAP * (n - 1)) / n
-	return Rect2(MARGIN + i * (w + TILE_GAP), TILE_Y, w, TILE_H)
 
 static func _px_to_local(p: Vector2) -> Vector3:
 	return Vector3((p.x / PX.x - 0.5) * SCREEN_W, (0.5 - p.y / PX.y) * SCREEN_H, 0.0)
@@ -234,6 +259,71 @@ func show_state(s: int, track: String, lvl: float, delta: float) -> void:
 	if knob != null and _knob_t > 0.0:
 		_knob_t = maxf(_knob_t - delta, 0.0)
 		knob.position = _knob_base() - Vector3(0.0, 0.0, KNOB_PRESS * sin(_knob_t / 0.15 * PI))
+
+## The ring, every frame: the card to rest on, how many slides the radio has
+## started and how long each takes, whether the radio is lit and the night band
+## (Dave's segment). Drives the slide and the rest fade; the viewport renders
+## every frame only while something moves.
+func show_ring(card: int, slides: int, slide_secs: float, delta: float, is_lit: bool, night_band := -1) -> void:
+	var n := RadioStations.station_count()
+	var changed := false
+	if _first_ring:
+		_first_ring = false
+		ring_target = card
+		ring_pos = float(card)
+		_ring_from = ring_pos
+		changed = true
+	if slides != _slides_seen:
+		ring_target += maxi(slides - _slides_seen, 1)
+		_slides_seen = slides
+		ring_slides += 1
+		_ring_from = ring_pos
+		_ring_dur = maxf(slide_secs, 0.01)
+		_ring_t = 0.0
+		_quiet = 0.0
+		changed = true
+	if posmod(ring_target, n) != card:   # a jump (power on, a restore): no slide
+		ring_target = card
+		ring_pos = float(card)
+		_ring_from = ring_pos
+		_ring_t = _ring_dur
+		_quiet = 0.0
+		changed = true
+	if is_lit != lit or card != card_station or night_band != band:
+		changed = true
+		if is_lit != lit:
+			_quiet = 0.0
+	lit = is_lit
+	card_station = card
+	band = night_band
+	var moving := _ring_t < _ring_dur
+	if moving:
+		_ring_t = minf(_ring_t + delta, _ring_dur)
+		var k := _ring_t / _ring_dur
+		ring_pos = lerpf(_ring_from, float(ring_target), 1.0 - pow(1.0 - k, 3.0))   # ease-out cubic
+		changed = true
+	else:
+		ring_pos = float(ring_target)
+	# rest: 4 s after the last change the side cards fade out (0.4 s) and the
+	# centre card shrinks; any change brings it back in SONG_FADE
+	var want := 0.0
+	if lit and not moving:
+		_quiet += delta
+		if _quiet >= REST_AFTER:
+			want = 1.0
+	else:
+		_quiet = 0.0
+	var step := delta / (REST_FADE if want > rest else SONG_FADE)
+	var before := rest
+	rest = move_toward(rest, want, step)
+	if rest != before:
+		changed = true
+	var anim := _ring_t < _ring_dur or rest != want
+	if anim != animating:
+		animating = anim
+		changed = true
+	if changed:
+		_redraw()
 
 ## The car clock (NightClock text), top right of the screen; redraws on change.
 func show_clock(t: String) -> void:
@@ -269,12 +359,16 @@ func tap(on_knob: bool) -> void:
 func is_dimmed() -> bool:
 	return station < 0
 
+## The ring's centre card, ring_pos rounded: which station it shows.
+func centre_card() -> int:
+	return posmod(roundi(ring_pos), RadioStations.station_count())
+
 func _redraw() -> void:
 	if canvas == null:
 		return
 	canvas.modulate = OFF_DIM if station < 0 else Color.WHITE
 	canvas.queue_redraw()
-	viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS if animating else SubViewport.UPDATE_ONCE
 
 ## The clock, on its own layer so the radio-off dimming (ScreenCanvas.modulate)
 ## leaves it lit. Big enough to read from the seat: 32 px on a 512 px screen
@@ -313,77 +407,146 @@ class ScreenCanvas extends Control:
 		var w := float(HeadUnit.PX.x)
 		var h := float(HeadUnit.PX.y)
 		draw_rect(Rect2(0, 0, w, h), HeadUnit.NAVY_DEEP)
-		# header: now playing on the left, level meter on the right
 		var on := unit.station >= 0
-		draw_string(font, Vector2(HeadUnit.MARGIN, 34), "NOW PLAYING", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, HeadUnit.SILVER.darkened(0.25))
-		var title := "RADIO OFF"
-		var sub := "press the knob to turn on" if unit.has_knob else ""
-		if on:
-			title = RadioStations.STATIONS[unit.station].name.to_upper()
-			sub = unit.now_playing.replace("_", " ") if unit.now_playing != "" else ("ON AIR" if not RadioStations.has_music(unit.station) else "TUNING")
+		# top strip: the area just entered takes the left
 		if unit.area_t > 0.0:
-			# the area just entered, in place of the radio's header
-			draw_rect(Rect2(HeadUnit.MARGIN - 8, 12, 344, 80), HeadUnit.NAVY)
-			draw_rect(Rect2(HeadUnit.MARGIN - 8, 12, 5, 80), HeadUnit.SODIUM)
-			draw_string(font, Vector2(HeadUnit.MARGIN + 6, 34), HeadUnit.PlaceNames.ENTERING, HORIZONTAL_ALIGNMENT_LEFT, 320, 14, HeadUnit.SILVER.darkened(0.25))
-			draw_string(font, Vector2(HeadUnit.MARGIN + 6, 78), unit.area_name, HORIZONTAL_ALIGNMENT_LEFT, 320, 38, HeadUnit.SODIUM)
-		else:
-			draw_string(font, Vector2(HeadUnit.MARGIN, 66), title, HORIZONTAL_ALIGNMENT_LEFT, 330, 26, HeadUnit.AMBER)
-			if not on:
-				sub = ""
-			draw_string(font, Vector2(HeadUnit.MARGIN, 92), sub, HORIZONTAL_ALIGNMENT_LEFT, 330, 15, HeadUnit.SILVER)
+			draw_rect(Rect2(10, 6, 250, 48), HeadUnit.NAVY)
+			draw_rect(Rect2(10, 6, 5, 48), HeadUnit.SODIUM)
+			draw_string(font, Vector2(22, 22), HeadUnit.PlaceNames.ENTERING, HORIZONTAL_ALIGNMENT_LEFT, 230, 12, HeadUnit.SILVER.darkened(0.25))
+			draw_string(font, Vector2(22, 48), unit.area_name, HORIZONTAL_ALIGNMENT_LEFT, 230, _fit(font, unit.area_name, 230.0, 26), HeadUnit.SODIUM)
 		if unit.weather_level > 0:
 			_draw_weather(unit.weather_level)
-		# the clock is drawn by ClockCanvas, over this; the meter sits under it
-		var bars := 10
-		for i in bars:
-			var x := 372.0 + i * 12.0
-			var lit := on and float(i) / bars < unit.level
-			var col := (HeadUnit.SODIUM if i >= 7 else HeadUnit.AMBER) if lit else HeadUnit.NAVY
-			draw_rect(Rect2(x, 64, 8, 30), col)
+		# the clock is drawn by ClockCanvas, over this; three short level bars sit beside it
+		for i in 3:
+			var bar_on := on and unit.level > (float(i) + 0.5) / 3.5
+			var bh := 10.0 + 8.0 * i
+			draw_rect(Rect2(272 + i * 11, 46.0 - bh, 7, bh), (HeadUnit.SODIUM if i == 2 else HeadUnit.AMBER) if bar_on else HeadUnit.NAVY)
 		if not unit.has_knob:
 			draw_circle(HeadUnit.POWER_SPOT, 14.0, HeadUnit.NAVY)
 			draw_arc(HeadUnit.POWER_SPOT, 8.0, -PI * 0.35, PI * 1.35, 16, HeadUnit.SILVER, 2.0)
 			draw_line(HeadUnit.POWER_SPOT - Vector2(0, 11), HeadUnit.POWER_SPOT - Vector2(0, 3), HeadUnit.SILVER, 2.0)
-		# tiles
-		for i in RadioStations.station_count():
-			var r := HeadUnit.tile_rect(i)
-			var playing := i == unit.station
-			draw_rect(r, HeadUnit.NAVY)
-			_art(r, i)
-			var name_s: String = RadioStations.STATIONS[i].name.to_upper()
-			draw_multiline_string(font, Vector2(r.position.x + 6, r.position.y + r.size.y - 44), name_s,
-					HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 12, 15, 2, HeadUnit.AMBER if playing else HeadUnit.SILVER)
-			if playing:
-				draw_rect(r.grow(-2.0), HeadUnit.SODIUM, false, 4.0)
+		# the ring: far cards first, the centre card on top
+		var n := RadioStations.station_count()
+		var order: Array = []
+		for i in n:
+			var d := fposmod(float(i) - unit.ring_pos + n * 0.5, float(n)) - n * 0.5
+			order.append([absf(d), d, i])
+		order.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
+		var rest := unit.rest
+		for o in order:
+			_card(font, o[1], o[2], rest, on)
+		# at rest: song title and artist (or Dave's segment) under the card
+		if rest > 0.01 and on:
+			var lines := _song_lines()
+			var cy := lerpf(HeadUnit.CARD_CENTRE_Y, HeadUnit.CARD_REST_Y, rest)
+			var base := cy + lerpf(HeadUnit.CARD_MOVING.y, HeadUnit.CARD_REST.y, rest) * 0.5
+			var t1 := _ellipsize(font, lines[0], 24, HeadUnit.LINE_MAX_W)
+			var t2 := _ellipsize(font, lines[1], 20, HeadUnit.LINE_MAX_W)
+			draw_string(font, Vector2(0, base + 26), t1, HORIZONTAL_ALIGNMENT_CENTER, w, 24, _dim(HeadUnit.AMBER, rest))
+			draw_string(font, Vector2(0, base + 50), t2, HORIZONTAL_ALIGNMENT_CENTER, w, 20, _dim(HeadUnit.SILVER, rest))
 		# a little glare across the glass, and a thumb smudge where it gets tapped
 		draw_colored_polygon(PackedVector2Array([Vector2(w * 0.55, 0), Vector2(w * 0.72, 0), Vector2(w * 0.40, h), Vector2(w * 0.23, h)]), Color(1, 1, 1, 0.035))
 		draw_circle(Vector2(w * 0.62, h * 0.62), 22.0, Color(1, 1, 1, 0.025))
 
+	## Title and artist for the lines under the resting card.
+	func _song_lines() -> Array:
+		if not RadioStations.has_music(unit.station):
+			var seg := NightBands.band_name(unit.band) if unit.band >= 0 else "On air"
+			return ["with Dave", seg]
+		if unit.now_playing == "":
+			return ["Tuning", RadioStations.STATIONS[unit.station].name]
+		var info := RadioStations.song_info(unit.station, unit.now_playing)
+		return [info.title, info.artist]
+
+	static func _fit(font: Font, text: String, max_w: float, size: int) -> int:
+		while size > 10 and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > max_w:
+			size -= 1
+		return size
+
+	static func _ellipsize(font: Font, text: String, size: int, max_w: float) -> String:
+		if font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x <= max_w:
+			return text
+		var t := text
+		while t.length() > 1 and font.get_string_size(t + "...", HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > max_w:
+			t = t.substr(0, t.length() - 1)
+		return t.strip_edges() + "..."
+
+	static func _lerp_anchors(arr: Array, d: float) -> float:
+		var i := clampi(int(floor(d)), 0, arr.size() - 2)
+		return lerpf(float(arr[i]), float(arr[i + 1]), clampf(d - float(i), 0.0, 1.0))
+
+	static func _dim(col: Color, b: float) -> Color:
+		return HeadUnit.NAVY_DEEP.lerp(col, clampf(b, 0.0, 1.0))
+
+	## One card of the ring: d = its distance from the centre (signed cards).
+	func _card(font: Font, d: float, idx: int, rest: float, on: bool) -> void:
+		var ad := absf(d)
+		var near := _lerp_anchors(HeadUnit.RING_SCALE, ad)
+		var bright := _lerp_anchors(HeadUnit.RING_BRIGHT, ad)
+		# at rest the side cards fade out; the middle one shrinks and moves up
+		var centre_w := clampf(1.0 - ad, 0.0, 1.0)   # 1 on the centre card, 0 a card away
+		var cs := HeadUnit.CARD_MOVING.lerp(HeadUnit.CARD_REST, rest)
+		var cy := lerpf(HeadUnit.CARD_CENTRE_Y, HeadUnit.CARD_REST_Y, rest)
+		var size := (HeadUnit.CARD_MOVING * near).lerp(cs, centre_w)
+		bright = lerpf(bright * (1.0 - rest), 1.0, centre_w)
+		if bright <= 0.01:
+			return
+		var x := 256.0 + signf(d) * _lerp_anchors(HeadUnit.RING_X, ad)
+		var c := Vector2(x, lerpf(HeadUnit.CARD_CENTRE_Y, cy, centre_w))
+		var r := Rect2(c - size * 0.5, size)
+		var k := size.y / HeadUnit.CARD_MOVING.y
+		var st: Dictionary = RadioStations.STATIONS[idx]
+		draw_rect(r, _dim(HeadUnit.NAVY, bright))
+		var is_centre := ad < 0.5
+		if ad < 1.0:
+			var art_b := bright * clampf(1.0 - ad * 1.6, 0.0, 1.0)
+			if art_b > 0.02:
+				_art(Rect2(r.position + Vector2(10, 10) * k, Vector2(r.size.x - 20.0 * k, 100.0 * k)), st.id, art_b)
+		var name_s: String = str(st.name) if (on or not is_centre) else "OFF"
+		if not is_centre:
+			var nsz := _fit(font, name_s, r.size.x - 12.0, 20)
+			draw_string(font, Vector2(r.position.x, c.y + 6.0), name_s, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, nsz, _dim(HeadUnit.SILVER, bright))
+		else:
+			var ncol := _dim(HeadUnit.AMBER if on else HeadUnit.SILVER, bright)
+			var nsz2 := _fit(font, name_s, r.size.x - 12.0, int(round(34.0 * k)))
+			draw_string(font, Vector2(r.position.x, r.position.y + 150.0 * k), name_s, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, nsz2, ncol)
+			if on:
+				var lcd := UiTheme.font("lcd")
+				draw_string(lcd, Vector2(r.position.x, r.position.y + 192.0 * k), str(st.dial), HORIZONTAL_ALIGNMENT_CENTER, r.size.x, int(round(30.0 * k)), _dim(HeadUnit.SODIUM, bright))
+			draw_rect(r.grow(-2.0), _dim(HeadUnit.SODIUM, bright), false, 4.0)
+
 	## Track art generated from the palette, one motif per station.
-	func _art(r: Rect2, i: int) -> void:
-		var a := Rect2(r.position + Vector2(10, 10), Vector2(r.size.x - 20, r.size.y - 70))
+	func _art(a: Rect2, id: String, b: float) -> void:
 		draw_rect(a, HeadUnit.NAVY_DEEP)
 		var c := a.get_center()
-		match i % 4:
-			0:   # drift: three slanted streaks
+		var amb := _dim(HeadUnit.AMBER, b)
+		var sod := _dim(HeadUnit.SODIUM, b)
+		var sil := _dim(HeadUnit.SILVER.darkened(0.2), b)
+		var nav := _dim(HeadUnit.NAVY, b)
+		match id:
+			"slipstream":   # drift: three slanted streaks
 				for k in 3:
 					var y := a.position.y + a.size.y * (0.3 + 0.2 * k)
-					draw_line(Vector2(a.position.x + 8, y + 10), Vector2(a.end.x - 8, y - 10), HeadUnit.SODIUM if k == 1 else HeadUnit.AMBER.darkened(0.3), 4.0)
-			1:   # dark: a low sodium moon behind a skyline
-				draw_circle(c + Vector2(0, -6), a.size.y * 0.28, HeadUnit.SODIUM.darkened(0.45))
+					draw_line(Vector2(a.position.x + 8, y + 10), Vector2(a.end.x - 8, y - 10), sod if k == 1 else amb.darkened(0.3), 4.0)
+			"undertow":   # dark: a low sodium moon behind a skyline
+				draw_circle(c + Vector2(0, -6), a.size.y * 0.28, sod.darkened(0.45))
 				for k in 5:
 					var bw := a.size.x / 5.0
 					var bh := a.size.y * (0.25 + 0.12 * ((k * 7) % 3))
-					draw_rect(Rect2(a.position.x + k * bw, a.end.y - bh, bw - 2, bh), HeadUnit.NAVY)
-			2:   # talk: a microphone
-				draw_rect(Rect2(c.x - 8, c.y - 26, 16, 30), HeadUnit.SILVER.darkened(0.2))
-				draw_arc(c + Vector2(0, -4), 15.0, 0.0, PI, 10, HeadUnit.SILVER.darkened(0.2), 2.0)
-				draw_line(c + Vector2(0, 11), c + Vector2(0, 24), HeadUnit.SILVER.darkened(0.2), 2.0)
-			3:   # synthwave: a striped sun over a horizon grid
-				draw_circle(c + Vector2(0, -4), a.size.y * 0.3, HeadUnit.AMBER)
+					draw_rect(Rect2(a.position.x + k * bw, a.end.y - bh, bw - 2, bh), nav)
+			"graveyard":   # talk: a microphone
+				draw_rect(Rect2(c.x - 8, c.y - 26, 16, 30), sil)
+				draw_arc(c + Vector2(0, -4), 15.0, 0.0, PI, 10, sil, 2.0)
+				draw_line(c + Vector2(0, 11), c + Vector2(0, 24), sil, 2.0)
+			"afterglow":   # synthwave: a striped sun over a horizon grid
+				draw_circle(c + Vector2(0, -4), a.size.y * 0.3, amb)
 				for k in 3:
 					draw_rect(Rect2(c.x - a.size.y * 0.3, c.y + 2 + 6 * k, a.size.y * 0.6, 2), HeadUnit.NAVY_DEEP)
 				for k in 4:
 					var y := c.y + a.size.y * 0.18 + k * 5
-					draw_line(Vector2(a.position.x, y), Vector2(a.end.x, y), HeadUnit.SODIUM.darkened(0.3), 1.0)
+					draw_line(Vector2(a.position.x, y), Vector2(a.end.x, y), sod.darkened(0.3), 1.0)
+			_:   # grey hour: a wet horizon, slanted rain
+				draw_line(Vector2(a.position.x, c.y + 14), Vector2(a.end.x, c.y + 14), sil, 2.0)
+				for k in 6:
+					var x := a.position.x + a.size.x * (0.12 + 0.15 * k)
+					draw_line(Vector2(x, a.position.y + 8 + (k % 2) * 10), Vector2(x - 6, c.y + 8), amb.darkened(0.35), 1.5)

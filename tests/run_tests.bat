@@ -411,6 +411,7 @@ if /i not "%~1"=="quick" (
 	call :run world/sky_probe
 	call :run world/sky_dawn
 	call :run world/sky_clouds --headless
+	call :run world/moon_path --headless
 	call :run audio/mute --headless
 	call :run car/feel_pass_1 --headless
 )

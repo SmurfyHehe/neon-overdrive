@@ -25,7 +25,8 @@ extends RefCounted
 # buildings and the centre barrier (the road's own `seed`). New each night,
 # from the night's road seed, and the same on every pass that night: bends
 # and hills. pins() marks the chunks that must be straight and level whatever
-# the night's seed (the approaches to crossings, exits and median gaps).
+# the night's seed (the approaches to crossings, exits and median gaps, and
+# the station lots).
 #
 # Growing by act: a district has the `act` it first appears in. use(id, act)
 # takes the districts of that act and earlier, in order, so an act's new
@@ -126,12 +127,19 @@ const ROADS := {
 ## Placeholders until the stops are designed.
 ## The four fuel stops are staggered, never opposite one another: own side at
 ## 2,225 and 5,425, oncoming side at 1,825 and 5,025 (the median gaps).
+## A station's `lot` is its compound's recipe (GasStation lays it out):
+## `pumps` dispensers (4 or 6, a car each side), where the `store` stands
+## ("back_centre", "back_left", "corner") and the `wash` ("bay" or "tunnel").
 const STOPS := [
 	{"id": "shop", "name": "The Shop", "kind": "shop", "road": 0, "exit": "x1a"},
-	{"id": "fuel_3a", "name": "Fuel 3A", "kind": "station", "road": 0, "s": 2225.0, "side": 1},
-	{"id": "fuel_3b", "name": "Fuel 3B", "kind": "station", "road": 0, "s": 1825.0, "side": -1},
-	{"id": "fuel_7a", "name": "Fuel 7A", "kind": "station", "road": 0, "s": 5425.0, "side": 1},
-	{"id": "fuel_7b", "name": "Fuel 7B", "kind": "station", "road": 0, "s": 5025.0, "side": -1},
+	{"id": "fuel_3a", "name": "Fuel 3A", "kind": "station", "road": 0, "s": 2225.0, "side": 1,
+		"lot": {"pumps": 4, "store": "corner", "wash": "bay"}},
+	{"id": "fuel_3b", "name": "Fuel 3B", "kind": "station", "road": 0, "s": 1825.0, "side": -1,
+		"lot": {"pumps": 4, "store": "back_centre", "wash": "bay"}},
+	{"id": "fuel_7a", "name": "Fuel 7A", "kind": "station", "road": 0, "s": 5425.0, "side": 1,
+		"lot": {"pumps": 6, "store": "back_centre", "wash": "tunnel"}},
+	{"id": "fuel_7b", "name": "Fuel 7B", "kind": "station", "road": 0, "s": 5025.0, "side": -1,
+		"lot": {"pumps": 4, "store": "back_left", "wash": "bay"}},
 ]
 
 ## Joins between loops: [{id, a: {road, s}, b: {road, s}, kind}]. Empty until
@@ -209,6 +217,10 @@ static func use(id: int, act_value: int = 1) -> void:
 			_pin(floori(float(g.s) / L), 0)
 	for c in _junctions:
 		_pin(floori(c / L), PIN_APPROACH)
+	# A station's lot is flat: its own chunk and one either side (150 m).
+	for st in STOPS:
+		if String(st.kind) == "station" and int(st.road) == id and st.has("s") and float(st.s) < length():
+			_pin(floori(float(st.s) / L), PIN_APPROACH)
 	var pts: Array = road.map
 	_map_len.append(0.0)
 	for i in pts.size():
@@ -325,6 +337,13 @@ static func stop_place(stop_id: String) -> Dictionary:
 				return {"road": int(st.road), "s": float(st.s), "side": int(st.side)}
 			var e := exit_of(int(st.road), String(st.exit))
 			return {"road": int(st.road), "s": float(e.s), "side": int(e.side)} if not e.is_empty() else {}
+	return {}
+
+## The station stop of `side` at lap metres `s` on this road ({} if none).
+static func station_at(s: float, side: int) -> Dictionary:
+	for st in STOPS:
+		if String(st.kind) == "station" and int(st.road) == road_id and st.has("s") 				and is_equal_approx(float(st.s), s) and int(st.side) == side:
+			return st
 	return {}
 
 ## The crossing nearest to `s` metres along the road, as metres along the road

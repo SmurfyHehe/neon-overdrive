@@ -158,6 +158,8 @@ call :run core/run_end "--headless --fixed-fps 120"
 call :run core/run_end_restart "--headless --fixed-fps 120"
 call :run world/gas_station --headless
 call :run world/gas_station_sides --headless
+rem ~4-5 min: the four compound station lots driven for real (in, every spot kind, out) at 60 and 120 km/h.
+call :run world/station_lot "--headless --fixed-fps 60"
 call :run traffic/traffic_spawn "--headless --fixed-fps 60"
 rem Near-band traffic: hand-overs between the 60 m physics band and the rails, both ways, no visible jump.
 call :run traffic/traffic_near_band "--headless --fixed-fps 120"

@@ -912,6 +912,8 @@ func _setup_traffic() -> void:
 		moments.player = player
 	traffic = TrafficManager.new()
 	traffic.player = player
+	if moments != null:
+		moments.traffic = traffic
 	traffic.night_clock = night_clock
 	traffic.own_lanes = OWN_LANES
 	traffic.onc_lanes = ONC_LANES

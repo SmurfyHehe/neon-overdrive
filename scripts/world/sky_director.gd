@@ -2,7 +2,7 @@ class_name SkyDirector
 extends Node
 
 # Drives the night sky from the game (night pass, 2026-10-10):
-# - the moon climbs along tonight's path as the clock runs (NightSky.moon_path),
+# - the moon crosses the sky as the clock runs (NightSky.moon_direction),
 # - the glow dome follows the district the player is in, blending over a few
 #   seconds when the road changes district,
 # - a new night (6 a.m. rollover) re-seeds the stars, phase and moon path.
@@ -14,7 +14,7 @@ extends Node
 
 const Districts := preload("res://scripts/world/districts.gd")
 
-const MOON_STEP_SECS := 2.0
+const MOON_STEP_SECS := 5.0   # the moon turns 15 degrees an hour: 0.3 degrees a step (its disc is 2.5)
 const BLEND_SECS := 4.0
 const BLEND_STEP_SECS := 0.1
 const DISTRICT_CHECK_SECS := 0.25

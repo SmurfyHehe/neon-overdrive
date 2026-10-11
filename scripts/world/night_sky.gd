@@ -13,8 +13,9 @@ class_name NightSky
 #   from NightClock is the seed). They fade into the glow dome and dim a
 #   little under a bright moon.
 # - Moon: assets/sky/moon.png lit by a terminator mask on a sphere. Phase runs
-#   on a 29.5-night cycle (phase_for_night); the moon hangs up and to one side
-#   on a path picked per night (moon_path), rising through the night.
+#   on a 29.5-night cycle (phase_for_night); the moon crosses the sky through
+#   the night (moon_direction): low in the east at 8 p.m., about 50-55 degrees up
+#   between 1 and 2 a.m., low in the west by 6 a.m., about 15 degrees an hour.
 #   The wide amber haze is gone; a tight silver halo is all that is left.
 # - Dither: interleaved gradient noise, one 8-bit step, so the navy gradient
 #   does not band.
@@ -68,19 +69,25 @@ const MOON_SIZE_DEG := 2.5
 const PHASE_CYCLE_NIGHTS := 29.53
 const PHASE_NIGHT_1 := 0.18
 
-## Where the moon can hang: about 22 degrees up and 25 degrees to one side of
-## the road's mean direction (world -Z), drifting up and outward with the
-## clock. It is fixed in the world (Roy, 2026-10-10): the road wanders up to
-## 30 degrees either way, so on bends the moon slides across the frame and
-## at times out of it. The parked chase
-## camera's frame tops out near 25 degrees (it is wider at speed), so the
-## path ends under 22.5; from 17 degrees aside the moon is clear of the
-## mirror at the top of the screen. tests/world/moon_sightline.gd measures
-## how often buildings leave that spot of sky open, per district.
-const MOON_EL_RISE := Vector2(20.5, 21.0)   # degrees at 8 p.m., min/max
-const MOON_EL_CLIMB := Vector2(1.0, 1.5)    # degrees gained by 6 a.m.
-const MOON_AZ := Vector2(22.0, 26.0)        # degrees off straight ahead
-const MOON_AZ_DRIFT := 3.0                  # degrees it slides outward by 6 a.m.
+## The moon's path (more-alive MA3, 2026-10-11; Roy: the moon moves, 1377).
+## A real sky, for an observer at MOON_LAT_DEG: the moon turns MOON_DEG_PER_HOUR
+## of hour angle an hour, crosses the meridian (the south, its highest point)
+## between 1 and 2 a.m., and its peak is 90 - latitude + declination, which the
+## declination range keeps at 50-55 degrees (never overhead, where it would be
+## out of every view). A positive declination keeps it above the horizon for
+## the whole of the 10 hours (it rises a few degrees north of east at 8 p.m.).
+## East is a fixed world direction, MOON_EAST_DEG to the right of the road's
+## mean direction (world -Z): with the road within 30 degrees of -Z the moon
+## is ahead and to the right in the evening, high and to the right-behind
+## around 1 a.m., and in the mirror by dawn; going the other way it is the
+## other way round. Phase is untouched. The offset keeps the low evening moon
+## 28-40 degrees off straight ahead, out of the 20 degree cone where it would
+## sit on the road's vanishing point (tests/world/moon_path.gd, sky_shots).
+const MOON_LAT_DEG := 42.0
+const MOON_DEG_PER_HOUR := 15.0
+const MOON_DECL := Vector2(2.0, 7.0)         # degrees, per night: peak altitude 50..55
+const MOON_TRANSIT_H := Vector2(5.0, 6.0)    # hours after 8 p.m.: 1-2 a.m.
+const MOON_EAST_DEG := 30.0                  # east, right of straight ahead
 
 ## Cloud cover per night type, 0 (none) to 1 (solid).
 const CLOUD_TYPES := ["clear", "scattered", "broken", "overcast"]
@@ -252,10 +259,15 @@ void sky() {
 		col += stars(EYEDIR, elev) * clear * (1.0 - 0.45 * lit_frac) * (1.0 - smoothstep(0.1, 0.75, sky_dawn));
 		vec3 m = normalize(sky_moon_dir);
 		float ang = acos(clamp(dot(EYEDIR, m), -1.0, 1.0));
+		// Low in the haze the moon goes amber (the glow dome's own colour)
+		// and dims: full effect on the horizon, gone by about 23 degrees.
+		float haze = 1.0 - smoothstep(0.0, 0.40, asin(clamp(m.y, -1.0, 1.0)));
+		vec3 haze_tint = mix(vec3(1.0), clamp(normalize(sky_glow_color.rgb + vec3(1e-3)) * 1.55, 0.0, 1.0), haze);
+		float extinct = 1.0 - 0.3 * haze;
 		// A tight silver halo, two moon-widths wide, scaled by the lit face.
 		float h = ang / moon_radius;
 		float wash = 1.0 - 0.6 * sky_dawn;  // the moon fades as the sky lifts
-			col += halo_color * halo_energy * lit_frac * exp(-h * 0.9) * wash;
+			col += halo_color * haze_tint * halo_energy * lit_frac * exp(-h * 0.9) * wash * extinct;
 		if (ang < moon_radius * 1.05) {
 			// Disc coordinates: right/up across the face, -1..1.
 			vec3 right = normalize(cross(m, vec3(0.0, 1.0, 0.0)));
@@ -270,7 +282,7 @@ void sky() {
 			vec3 l = vec3(sin(a) * cos(tilt), sin(a) * sin(tilt), -cos(a));
 			float lit = smoothstep(-0.06, 0.06, dot(n, l));
 			float albedo = texture(moon_tex, uv * vec2(0.5, -0.5) + 0.5).r;
-			vec3 face = moon_color * albedo * moon_energy * wash * mix(earthshine, 1.0, lit);
+			vec3 face = moon_color * haze_tint * albedo * moon_energy * wash * extinct * mix(earthshine, 1.0, lit);
 			// The disc covers the stars behind it: blend from the plain
 			// gradient, not from the starry sky.
 			col = mix(col, max(base, face), edge);
@@ -366,32 +378,50 @@ static func set_night(sky: Sky, night: int) -> void:
 	mat.set_shader_parameter("cloud_cover", float(CLOUD_COVER[cloud_type(night)]))
 	mat.set_shader_parameter("cloud_seed", Vector2(float(posmod(hash([night, "cloud_noise"]), 997)), float(posmod(hash([night, "cloud_pos"]), 53))))
 	mat.set_shader_parameter("skyline_seed", float(posmod(hash([night, "skyline"]), 9973)))
-	# First light comes from the side the moon is not on, 35-65 degrees off the road.
-	var off := 35.0 + 30.0 * float(posmod(hash([night, "dawn"]), 100)) / 100.0
-	var a := deg_to_rad(-float(moon_path(night).side) * off)
-	mat.set_shader_parameter("dawn_dir", Vector3(-sin(a), 0.0, -cos(a)))
+	# First light comes up in the east, where the moon rose, a few degrees
+	# either way from night to night.
+	var off := -10.0 + 20.0 * float(posmod(hash([night, "dawn"]), 100)) / 100.0
+	var a := deg_to_rad(MOON_EAST_DEG + off)
+	mat.set_shader_parameter("dawn_dir", Vector3(sin(a), 0.0, -cos(a)))
 
-## The moon's path tonight: {side, el0, el1, az0, az1} in degrees, from a
-## hash of the night number. side is -1 (right of the road) or +1 (left).
+## The moon's path tonight, from a hash of the night number: declination
+## (peak altitude), when it crosses the meridian (hours after 8 p.m.), and for
+## the tables and tests where it is at 8 p.m. and 6 a.m. as {el, az}, az in
+## degrees right of straight ahead (the road's mean direction). `side` is -1:
+## the moon rises on the right (kept for the tables that print it).
 static func moon_path(night: int) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([night, "moon_path"])
-	var side := 1.0 if rng.randf() < 0.5 else -1.0
-	var el0 := rng.randf_range(MOON_EL_RISE.x, MOON_EL_RISE.y)
-	var az0 := rng.randf_range(MOON_AZ.x, MOON_AZ.y)
+	var decl := rng.randf_range(MOON_DECL.x, MOON_DECL.y)
+	var transit := rng.randf_range(MOON_TRANSIT_H.x, MOON_TRANSIT_H.y)
+	var start := _moon_altaz(decl, transit, 0.0)
+	var end := _moon_altaz(decl, transit, 10.0)
 	return {
-		"side": side,
-		"el0": el0, "el1": el0 + rng.randf_range(MOON_EL_CLIMB.x, MOON_EL_CLIMB.y),
-		"az0": az0 * side, "az1": (az0 + MOON_AZ_DRIFT) * side,
+		"side": -1.0, "decl": decl, "transit_h": transit,
+		"el0": start.x, "el1": end.x, "az0": start.y, "az1": end.y,
 	}
+
+## {x: altitude, y: azimuth right of straight ahead} in degrees, at `hours`
+## after 8 p.m. for a declination and a meridian crossing time.
+static func _moon_altaz(decl_deg: float, transit_h: float, hours: float) -> Vector2:
+	var lat := deg_to_rad(MOON_LAT_DEG)
+	var dec := deg_to_rad(decl_deg)
+	var h := deg_to_rad((hours - transit_h) * MOON_DEG_PER_HOUR)   # hour angle, - before the crossing
+	var sin_alt := sin(lat) * sin(dec) + cos(lat) * cos(dec) * cos(h)
+	var alt := asin(clampf(sin_alt, -1.0, 1.0))
+	# Azimuth from north, clockwise through east (north is world 90 degrees
+	# left of east).
+	var az := atan2(sin(h), cos(h) * sin(lat) - tan(dec) * cos(lat)) + PI
+	return Vector2(rad_to_deg(alt), rad_to_deg(az) - 90.0 + MOON_EAST_DEG)
 
 ## Where the moon is at `t` (0 at 8 p.m., 1 at 6 a.m.) on a night's path.
 static func moon_direction(night: int, t: float) -> Vector3:
 	var p := moon_path(night)
-	t = clampf(t, 0.0, 1.0)
-	var el := deg_to_rad(lerpf(p.el0, p.el1, t))
-	var az := deg_to_rad(lerpf(p.az0, p.az1, t))  # positive = left of straight ahead
-	return Vector3(-sin(az) * cos(el), sin(el), -cos(az) * cos(el))
+	var hours := clampf(t, 0.0, 1.0) * NightClock.NIGHT_MINUTES / 60.0
+	var v := _moon_altaz(p.decl, p.transit_h, hours)
+	var el := deg_to_rad(v.x)
+	var r := deg_to_rad(v.y)    # positive = right of straight ahead
+	return Vector3(sin(r) * cos(el), sin(el), -cos(r) * cos(el))
 
 ## Moon direction and glow dome are global shader parameters (see the shader
 ## header): there is one sky, and changing them must not dirty its material.

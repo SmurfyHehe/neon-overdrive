@@ -34,6 +34,18 @@ const TAG_REVERSE := 0.9
 ## with no entry here fails tests/car/required_slots.gd.
 const NONE := {}
 
+## Kinds whose body is assembled from parts (a glb with named parts: head_l/r,
+## tail_l/r, brake_l/r, reverse_l/r, turn_*, plate lamp, flap) and so already
+## models these itself. For them this class adds NO meshes: build() returns
+## nothing, and the assembler sets the chassis visual's "fittings" meta from
+## the parts it has, which CarSlots reads. Lamp state still goes through
+## NpcCarBuilder.set_lamps / CarLamps, which a parts body maps onto its named
+## lamp parts. Empty until the parts-built bodies land (coupe PR #414, Bug).
+static var PARTS_BUILT: Array[String] = []
+
+static func parts_built(kind: String) -> bool:
+	return kind in PARTS_BUILT
+
 ## Brakes per car: "disc" or "drum" per axle, "none" for the traffic cars
 ## (decided: wheels only). rim is a CarParts.RIM_STYLES name, caliper a
 ## generic colour (no branded look-alikes, Roy 1171).
@@ -44,8 +56,8 @@ const BRAKES := {
 	"p2_hothatch": {"front": "disc", "rear": "drum", "rim": "five", "caliper": Color("#1B1D22")},
 	"p3_tuner": {"front": "disc", "rear": "disc", "rim": "mesh", "caliper": Color("#FF8A1F")},
 	"p4_kei": {"front": "disc", "rear": "drum", "rim": "steel", "caliper": Color("#4A505B")},
-	# Era muscle: drums at the back from the factory, discs as the upgrade.
-	"p5_muscle": {"front": "disc", "rear": "drum", "rim": "five", "caliper": Color("#C9CED6")},
+	# Muscle (and the big sedan when it lands): discs on all four, Roy 1223.
+	"p5_muscle": {"front": "disc", "rear": "disc", "rim": "five", "caliper": Color("#C9CED6")},
 	"p6_crossover": {"front": "disc", "rear": "disc", "rim": "dish", "caliper": Color("#4A505B")},
 	"c1_patrol": {"front": "disc", "rear": "disc", "rim": "steel", "caliper": Color("#1B1D22")},
 	"c2_patrolsuv": {"front": "disc", "rear": "disc", "rim": "steel", "caliper": Color("#1B1D22")},
@@ -108,6 +120,11 @@ static func build(key: String, tris: PackedVector3Array, mats: PackedByteArray, 
 	if _cache.has(key):
 		return _cache[key]
 	var out := {"body": _group(), "glow": _group(), "counts": {}, "points": {}}
+	if parts_built(key.get_slice("|", 0)):
+		# A body assembled from parts models its own lamps, plates and flap:
+		# add no meshes here (the assembler sets the "fittings" meta).
+		_cache[key] = out
+		return out
 	var counts: Dictionary = out.counts
 	for k in ["brake_lamp", "third_brake", "reverse", "blinker_front", "blinker_rear", "plate_front", "plate_rear"]:
 		counts[k] = 0

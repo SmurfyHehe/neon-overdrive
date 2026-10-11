@@ -10,7 +10,7 @@ extends SceneTree
 #   indicator + hazard lamps, plates front and back; traffic: all but brakes)
 # - the check really fails: a car with no parts (the #63 test box) reports
 #   its missing slots
-# - brakes: the Bug has drums on all four, the hatch/kei/muscle drums behind,
+# - brakes: the Bug has drums on all four, the hatch/kei drums behind,
 #   discs everywhere else; the first brake upgrade leaves no drum
 # - lamp lenses sit where they should: plates on the centre line at the rear
 #   and front, reverse lamps one each side of the rear, the third brake light
@@ -56,6 +56,7 @@ func _run() -> void:
 	await _ai_cars()
 	await _negative()
 	_brake_rules()
+	_parts_built_rule()
 	await _lamps_light()
 	_check(logger.errors.is_empty(), "errors were logged: %s" % [logger.errors])
 	print("required_slots: %d cars checked" % checked)
@@ -175,10 +176,10 @@ func _negative() -> void:
 func _brake_rules() -> void:
 	var bug := CarFittings.brakes_for("p0_beater")
 	_check(bug.front == "drum" and bug.rear == "drum", "the Bug keeps drums on all four, got %s" % [bug])
-	for kind in ["p2_hothatch", "p4_kei", "p5_muscle"]:
+	for kind in ["p2_hothatch", "p4_kei"]:
 		var b := CarFittings.brakes_for(kind)
 		_check(b.front == "disc" and b.rear == "drum", "%s has front discs and rear drums, got %s" % [kind, b])
-	for kind in ["p1_coupe", "p3_tuner", "p6_crossover", "c1_patrol", "c2_patrolsuv", "c3_interceptor"]:
+	for kind in ["p1_coupe", "p3_tuner", "p5_muscle", "p6_crossover", "c1_patrol", "c2_patrolsuv", "c3_interceptor"]:
 		var b := CarFittings.brakes_for(kind)
 		_check(b.front == "disc" and b.rear == "disc", "%s has discs all round, got %s" % [kind, b])
 	for kind in CarFittings.BRAKES:
@@ -243,3 +244,14 @@ func _lamps_light() -> void:
 		_check(not lamps.turn_right and _param(v, "turn_r") == 0.0, "%s: the indicator cancels once straight" % kind)
 		p.free()
 	PlayerCars.selected = PlayerCars.DEFAULT
+
+## A kind whose body is built from parts gets no generated meshes.
+func _parts_built_rule() -> void:
+	var kind := "p9_test_parts"
+	CarFittings.PARTS_BUILT.append(kind)
+	var tris := PackedVector3Array([Vector3(0, 0, 0), Vector3(1, 0, 0), Vector3(0, 1, 0)])
+	var out := CarFittings.build(kind + "|stock", tris, PackedByteArray([0]), ["paint"], [], [], {})
+	CarFittings.PARTS_BUILT.erase(kind)
+	_check(out.body[0].is_empty() and out.glow[0].is_empty() and int(out.counts.get("plate_rear", 0)) == 0,
+		"a parts-built body should get no generated lenses or plates")
+	_check(not CarFittings.parts_built("p2_hothatch"), "the proxy bodies are not parts-built")

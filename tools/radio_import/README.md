@@ -35,3 +35,5 @@ answers. It only reads the game's files and never writes into the repo.
 
 Tempo targets per station live in `stations.json` (set by Roy 2026-10-10).
 Test: `python tests/audio/test_import_treblo.py` (needs ffmpeg, no Godot).
+
+New songs: run `tools/radio_lengths.gd` (see its header) to add them to the length table in `scripts/audio/radio_lengths.gd`. Until then the radio measures an unknown song in the background; `tests/audio/radio.gd` fails on a stale table.

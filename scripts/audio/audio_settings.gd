@@ -29,6 +29,8 @@ const CHANNELS := {
 
 ## Tests point this at a scratch file.
 static var path := default_path()
+## Settings > Sound: the song caption outside the cockpit ("Title · Artist").
+static var song_names := true
 static var volumes := {"Master": 1.0, "Engine": 1.0, "Turbo": 1.0, "Effects": 1.0, "Music": 1.0, "Voices": 1.0, "Menus": 1.0}
 
 static func set_volume(channel: String, value: float) -> void:
@@ -69,6 +71,7 @@ static func load_settings() -> void:
 	for channel in CHANNELS:
 		var v := float(cfg.get_value("audio", channel.to_lower(), 1.0)) if ok else 1.0
 		volumes[channel] = clampf(v, 0.0, 1.0) if is_finite(v) else 1.0  # a hand-edited "nan" loads as NaN
+	song_names = bool(cfg.get_value("radio", "song_names", true)) if ok else true
 	apply_all()
 
 static func save_settings() -> bool:
@@ -76,4 +79,5 @@ static func save_settings() -> bool:
 	cfg.load(path)  # keep the other sections (TrafficSettings); a missing file is fine
 	for channel in CHANNELS:
 		cfg.set_value("audio", channel.to_lower(), volumes[channel])
+	cfg.set_value("radio", "song_names", song_names)
 	return cfg.save(path) == OK

@@ -35,6 +35,7 @@ enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO, TITLE, WRECKED, STATION, 
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
 const TestMode := preload("res://scripts/core/test_mode.gd")
+const RoadMap := preload("res://scripts/world/road_map.gd")
 
 signal state_changed(new_state: State, old_state: State)
 ## Just before a restart reloads the scene / before the game quits (the save
@@ -73,6 +74,12 @@ signal race_quit_requested
 ## the save system tracks); the pause screen shows this for a second instead.
 const CHASE_LOCK_TEXT := "Not while they're on you."
 signal pause_refused
+## M while paused on the pause list: the pause menu shows its Map page.
+signal map_requested
+## Set by M from the road: the pause that follows opens on the Map page.
+var open_on_map := false
+## True while the pause menu's Map page is up (the menu sets it).
+var map_open := false
 
 ## Title screen at boot: in a real play session, or when a test sets NEON_TITLE=1.
 static func wants_title() -> bool:
@@ -99,7 +106,7 @@ signal special_unlocked_changed
 # name) would also switch tabs or close the tuner. _input() runs before the GUI
 # sees the key, so it can tell whether a text control had focus when the key went
 # down; the poll then skips that press.
-const TEXT_GUARDED := [&"pause", &"tuning_panel", &"autotune_panel", &"photo_mode"]
+const TEXT_GUARDED := [&"pause", &"map", &"tuning_panel", &"photo_mode"]
 var _typed_into_text: Dictionary = {}
 
 # The Settings screen (scripts/ui/settings_screen.gd) sits on top of the pause
@@ -132,6 +139,7 @@ func _ready() -> void:
 	PhotoMode.ensure_actions()
 	SpecialKeys.ensure_actions()
 	special_unlocked = SaveStore.load_special().unlocked
+	_unmute_for_play()
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	# Not in test mode either: windowed tests and shot tools on a busy machine
 	# were being paused mid-run (the stall guard next to it is play-only too).
@@ -218,12 +226,12 @@ func _physics_process(_delta: float) -> void:
 		get_tree().paused = true
 	if Input.is_action_just_pressed("pause") and not blocked.has(&"pause"):
 		toggle_pause()
+	elif Input.is_action_just_pressed("map") and not blocked.has(&"map"):
+		toggle_map()
 	elif Input.is_action_just_pressed("tuning_panel") and not blocked.has(&"tuning_panel"):
 		toggle_tuning()
 	elif Input.is_action_just_pressed("photo_mode") and not blocked.has(&"photo_mode"):
 		toggle_photo()
-	elif Input.is_action_just_pressed("autotune_panel") and not blocked.has(&"autotune_panel"):
-		toggle_autotune()
 
 ## P: free-camera photo mode (scripts/ui/photo_mode.gd). Paused like the other screens.
 func toggle_photo() -> void:
@@ -280,6 +288,25 @@ func toggle_pause() -> void:
 			pause_refused.emit()   # the menu stays shut while a cop sees you
 		else:
 			pause()
+
+## M: the pause screen, straight onto the Map page. Refused while a cop sees you,
+## like Esc. Nothing on the endless road (it has no map). While paused it brings
+## the page up from the list, or closes the pause when the page is already up.
+func toggle_map() -> void:
+	if RoadMap.road_id == RoadMap.ENDLESS or not RoadMap.is_loop():
+		return
+	if state == State.PLAYING:
+		if chase_locked():
+			pause_refused.emit()
+		else:
+			open_on_map = true
+			pause()
+			open_on_map = false
+	elif state == State.PAUSED:
+		if map_open:
+			resume()
+		else:
+			map_requested.emit()
 
 ## `notice` is the amber line the pause screen shows ("" for the player's own Esc).
 func pause(notice := "") -> void:
@@ -388,6 +415,18 @@ func start_drive() -> void:
 	_title_freeze_at = -1
 	get_tree().paused = false
 	_set_state(State.PLAYING)
+
+## The audio buses outlive a scene reload, and _set_state is the only thing
+## that unmutes Engine and Turbo. A restart from the pause menu, Settings or
+## the title reloads the scene while they are muted, and the new game starts
+## PLAYING without a state change: the car was silent until the next pause
+## (Roy, 2026-10-10: "spawning in sometimes doesnt spawn you in with your
+## vehicle making sound"). So every new game starts with them open.
+func _unmute_for_play() -> void:
+	for bus_name in [&"Engine", &"Turbo", &"Music"]:
+		var bus := AudioServer.get_bus_index(bus_name)
+		if bus >= 0:
+			AudioServer.set_bus_mute(bus, false)
 
 func _set_state(new_state: State) -> void:
 	var old := state

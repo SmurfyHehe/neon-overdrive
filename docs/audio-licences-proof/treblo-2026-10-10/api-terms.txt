@@ -1,0 +1,166 @@
+SOURCE: https://treblo.com/api-terms
+FETCHED: 2026-10-10 via built-in browser (page text, main element), full text, nothing abridged
+PAGE DATE: Dated August 20th, 2026.
+=====
+TREBLO API TERMS
+Dated August 20th, 2026.
+
+1. AGREEMENT
+These API Terms are an agreement between you ("you," "Customer") and
+Sonauto, Inc. ("Company," "we," "us," "our") and govern your access to
+and use of the Treblo developer application programming interface,
+including its endpoints, documentation, keys, and credits (the "API").
+The Treblo Terms of Service (the "Legal Terms," available at
+https://treblo.com/tos) are incorporated into these API Terms and apply
+to your use of the API, except that in the event of a conflict between
+the Legal Terms and these API Terms with respect to the API, these API
+Terms control. By creating an API key, purchasing API credits, or using
+the API, you agree to these API Terms. If you use the API on behalf of
+an entity, you represent that you have authority to bind that entity.
+
+2. API LICENSE AND COMMERCIAL USE
+Subject to these API Terms, we grant you a non-exclusive,
+non-transferable, revocable license to access and use the API in
+accordance with our documentation, including in commercial products,
+applications, and services you offer to your own end users. The
+prohibitions in the Legal Terms on automated access, scripts, and
+commercial use of the Services do not apply to your authorized use of
+the API or of the musical and/or audio content generated for you
+through the API ("API Outputs").
+
+3. API OUTPUTS
+Ownership of API Outputs is as set forth in Section 8 (OUTPUT) of the
+Legal Terms: as between you and us, and to the extent permitted by
+applicable law, you own any right, title, or interest that may exist in
+your API Outputs, and we assign to you all our right, title, and
+interest, if any, in and to them. Except as set out in Section 9 below
+and in the PROHIBITED ACTIVITIES section of the Legal Terms (as
+modified by Section 2), nothing in these API Terms restricts your or
+your end users' use, publication, distribution, public performance, or
+monetization of API Outputs. Our
+rights in your API inputs and API Outputs are limited to the license in
+Section 4 below. You are solely responsible for API Outputs
+and your use of them, and we make no warranties or representations
+regarding API Outputs, including as to their copyrightability or
+legality. Due to the nature of machine learning, API Outputs may not
+be unique, and the Services may generate the same or similar output
+for other users.
+
+4. YOUR CONTENT; NO MODEL TRAINING
+You grant us a non-exclusive, worldwide, royalty-free license to host,
+store, reproduce, process, transmit, and display the prompts, lyrics,
+tags, audio, and other content you submit to the API ("API Inputs") and
+your API Outputs solely as necessary to (a) provide, secure, and
+support the API and related services, (b) enforce these API Terms and
+our policies, including content moderation, and
+(c) comply with applicable law.
+WE DO NOT USE YOUR API INPUTS OR API OUTPUTS TO TRAIN OR FINE-TUNE
+GENERATIVE ARTIFICIAL INTELLIGENCE MODELS.
+We do not publish API Inputs or API Outputs to the public areas of the
+Services. In
+providing the API we use third-party service providers (for example,
+cloud hosting and storage providers, and AI providers that may process
+text inputs for prompt assistance and moderation). Our
+Privacy Policy (https://treblo.com/privacy) describes our processing of
+personal information. We retain API request and output records to
+operate the service and for billing.
+
+5. YOUR END USERS
+If you make the API available through your own application or service,
+you are solely responsible for your application, your end users, and
+the content they submit through your application, including providing
+any legally required terms and privacy disclosures to them, obtaining
+any necessary rights and consents, handling their support requests, and
+ensuring their use complies with these API Terms. You may not represent
+that we sponsor or endorse your application.
+
+6. ATTRIBUTION
+When implementing the API in any user-facing application or service,
+you must prominently display an attribution link to Treblo, such as the
+text "Powered By Treblo." The attribution must be clearly visible to
+end users, displayed in a prominent location within the application or
+service, maintain legible font size and contrast, and link to
+https://treblo.com. We reserve the right to suspend or terminate any
+account in violation of this requirement. The attribution requirement
+may be waived through a separate commercial agreement; contact us at
+api@treblo.com.
+
+7. API KEYS AND SECURITY
+API keys are confidential. You are responsible for safeguarding your
+API keys and for all activity under them, and you must notify us
+promptly at api@treblo.com if you believe a key has been compromised.
+You may not share, sell, or transfer API keys, or use another
+customer's keys. We may suspend or revoke keys to protect the Services.
+
+8. CREDITS, FEES, AND BILLING
+API usage is billed through prepaid credits, purchased individually
+(pay-as-you-go) or included with a subscription plan, as described on
+our pricing page. Credits are not money or a monetary equivalent, do
+not constitute a deposit, stored value, or account balance, have no
+cash value, are non-transferable, and, except as required by
+applicable law, are non-refundable.
+Credits included with a subscription plan are set to the plan's
+allowance at the start of each billing period and do not roll over:
+unused plan credits lapse when the billing period renews, when you
+change plans, and when your plan is canceled, lapses, or is
+terminated. Purchased pay-as-you-go credits do not expire and are not
+affected by plan changes or cancellation. When credits are deducted,
+credits included with your subscription plan are consumed before
+pay-as-you-go credits.
+If you enable automatic top-up, you authorize us to charge your
+payment method on file when your balance falls below your configured
+threshold.
+We may change the prices at which credits and plans are sold
+prospectively; such changes do not affect credits you already hold.
+The number of credits consumed by particular features or models may
+also change prospectively as our costs and offerings change.
+
+9. RESTRICTIONS
+You may not: (a) resell, sublicense, or provide raw access to the API
+itself (as opposed to your own application built on it) without our
+written permission; (b) circumvent or attempt to circumvent rate
+limits, credit accounting, moderation, or other technical controls;
+(c) use the API to generate content that is unlawful or that infringes
+the rights of any third party, or submit API Inputs you do not have the
+rights to use; (d) use the API or API Outputs to train, or create
+datasets for training, machine-learning models that generate music;
+(e) use the API in a manner that imposes unreasonable load on the
+Services; (f) use the API in violation of the PROHIBITED ACTIVITIES
+section of the Legal Terms (as modified by Section 2 above); or
+(g) submit API Inputs containing the voice, image, or likeness of an
+identifiable individual without that individual's consent, or claim or
+suggest that API Outputs were created, performed, or endorsed by an
+identifiable individual when they were not, or use an identifiable
+individual's name or identity to title, describe, advertise, or
+promote API Outputs without that individual's consent.
+
+10. AVAILABILITY AND CHANGES
+The API is provided on an as-is and as-available basis. We may modify,
+deprecate, or discontinue API features at any time. Features, models, or
+endpoints designated as alpha, beta, preview, or experimental are
+provided as-is, may be modified or discontinued at any time without
+notice, and may be subject to additional terms. We may update these API
+Terms as described in the Legal Terms; material changes will be
+notified as provided there, and your continued use of the API after
+the effective date constitutes acceptance.
+
+11. DISCLAIMERS; LIABILITY; INDEMNIFICATION; DISPUTES
+The DISCLAIMER, LIMITATIONS OF LIABILITY, INDEMNIFICATION, GOVERNING
+LAW, and DISPUTE RESOLUTION sections of the Legal Terms apply to your
+use of the API, and your indemnification obligations extend to claims
+arising out of your application and your end users' use of it.
+
+12. TERM AND TERMINATION
+These API Terms apply while you use the API. We may suspend or
+terminate your API access as described in the Legal Terms, including
+for breach of these API Terms. Upon termination, your license to
+access the API ends, but any right, title, or interest you may have in
+API Outputs generated prior to termination is unaffected. Sections 3,
+4, 5, 7, 8, 9, 11, and 12 survive termination.
+
+13. CONTACT
+Sonauto, Inc.
+246 28th Street, Apartment 1
+San Francisco, CA 94131
+United States
+api@treblo.com

@@ -50,7 +50,10 @@ call :run ui/fonts --headless
 call :run world/names --headless
 call :run ui/hud --headless
 call :run ui/settings_screen --headless
+call :run ui/key_map --headless
+call :run ui/key_map_drive --headless
 call :run ui/title_and_pause --headless
+call :run ui/pause_map --headless
 call :run ui/title_kerbside --headless
 call :run ui/pause_look --headless
 call :run audio/menu_sfx --headless
@@ -94,6 +97,8 @@ call :run view/look_back --headless
 call :run view/look_around --headless
 call :run view/cockpit_driver --headless
 call :run view/cockpit_window --headless
+call :run view/gesture_flip_off "--headless --fixed-fps 60"
+call :run view/idle_actions "--headless --fixed-fps 60"
 call :run view/gauge_pod --headless
 call :run view/gauge_layout --headless
 call :run view/cockpit_steering_hands --headless
@@ -108,6 +113,9 @@ call :run audio/road_sounds --headless
 call :run audio/crash_variety --headless
 call :run audio/audio_mix --headless
 call :run audio/radio --headless
+call :run audio/radio_power --headless
+call :run audio/song_names --headless
+call :run ui/radio_carousel --headless
 call :run world/person_body --headless
 call :run world/night_clock --headless
 call :run world/night_bands "--headless --fixed-fps 60"
@@ -124,6 +132,8 @@ call :run core/log_folder --headless
 call :run car/powertrain_health "--headless --fixed-fps 60"
 call :run car/car_parts --headless
 call :run car/car_detail --headless
+call :run car/required_slots --headless
+call :run car/wipers_and_flap --headless
 call :run car/turbo "--headless --fixed-fps 60"
 call :run car/forced_induction "--headless --fixed-fps 60"
 call :run car/bolt_ons --headless
@@ -156,6 +166,14 @@ call :run traffic/police_heat --headless
 rem Ending a run on a crash: the rules, the hit sensor, the crash screen; then the real restart.
 call :run core/run_end "--headless --fixed-fps 120"
 call :run core/run_end_restart "--headless --fixed-fps 120"
+rem Test build sandbox: free money and fuel, no run-ending, parked start, X start, put back on the road.
+call :run core/test_build_sandbox "--headless --fixed-fps 120"
+rem The key: X starts the engine and switches it off; starter, catch and shutdown sounds.
+call :run car/engine_key "--headless --fixed-fps 120"
+rem Delete a save: the store, and the title's Load > Delete a save with its question.
+call :run core/save_delete --headless
+rem Test build: every player car with everything its mod tree offers fitted.
+call :run car/test_build_mods --headless
 call :run world/gas_station --headless
 call :run traffic/traffic_spawn "--headless --fixed-fps 60"
 rem Near-band traffic: hand-overs between the 60 m physics band and the rails, both ways, no visible jump.

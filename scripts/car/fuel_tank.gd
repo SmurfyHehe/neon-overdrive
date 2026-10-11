@@ -19,6 +19,7 @@ extends RefCounted
 # The state is one number so a stop or the garage can save it later.
 
 const TestMode := preload("res://scripts/core/test_mode.gd")
+const TestBuild := preload("res://scripts/core/test_build.gd")
 
 const CAPACITY_L := 50.0
 const START_FRACTION := 1.0 / 3.0
@@ -35,6 +36,15 @@ const PRICE_PER_LITRE := 3
 
 var enabled := true
 var litres := CAPACITY_L * START_FRACTION
+
+## The car stands at a pump with the pump menu up, and the gauge is rising.
+## The pump menu (pump_panel.gd) sets them; the fuel flap and the nozzle
+## (CarFuelFlap) follow them.
+var at_pump := false
+var filling := false
+
+func is_filling() -> bool:
+	return filling
 
 func _init() -> void:
 	if TestMode.active():
@@ -68,6 +78,8 @@ func refuel(bank: Object, max_litres := INF) -> float:
 	var room := minf(CAPACITY_L - litres, max_litres)
 	var want := int(ceil(room - 0.001))
 	var can := floori(float(bank.get("bank")) / PRICE_PER_LITRE) if PRICE_PER_LITRE > 0 else want
+	if TestBuild.on():
+		can = want  # sandbox: the pump always fills, whatever the bank holds
 	var buy := clampi(mini(want, can), 0, want)
 	if buy <= 0 or not bank.call("spend_bank", buy * PRICE_PER_LITRE):
 		return 0.0

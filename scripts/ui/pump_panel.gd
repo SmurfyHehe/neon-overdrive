@@ -21,6 +21,7 @@ extends CanvasLayer
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
+const TestBuild := preload("res://scripts/core/test_build.gd")
 const Wallet := preload("res://scripts/core/wallet.gd")
 
 const FILL_GAME_MINUTES := 10.0
@@ -110,6 +111,8 @@ func _on_state_changed(new_state: GameState.State, _old: GameState.State) -> voi
 		_tow_armed = false
 		message.text = ""
 	visible = on
+	# The flap opens and the nozzle plugs in while the menu is up (CarFuelFlap).
+	player.fuel.at_pump = on
 	if on:
 		refresh()
 		var first := fill_button if not fill_button.disabled else (tow_button if not tow_button.disabled else leave_button)
@@ -129,6 +132,8 @@ func quote() -> Dictionary:
 	var want := int(ceil(_room() - 0.001))
 	var bank: int = wallet.bank
 	var can := mini(want, floori(float(bank) / FuelTank.PRICE_PER_LITRE))
+	if TestBuild.on():
+		return {"want": want, "can": want, "cost": 0}  # sandbox: free, always
 	return {"want": want, "can": can, "cost": can * FuelTank.PRICE_PER_LITRE}
 
 func refresh() -> void:
@@ -174,6 +179,7 @@ func fill() -> void:
 	message.text = "Filling: %.0f L for %s" % [_fill_litres, Wallet.money(bank_before - wallet.bank)]
 	message.add_theme_color_override("font_color", AMBER)
 	_fill_t = 0.0
+	player.fuel.filling = true
 	refresh()
 
 func _process(delta: float) -> void:
@@ -195,6 +201,10 @@ static func clock_seconds() -> float:
 	return FILL_GAME_MINUTES * NightClock.REAL_SECONDS_PER_HOUR / 60.0
 
 func _finish_fill() -> void:
+	# Full: the nozzle backs out and the flap closes while the menu is still up.
+	if _fill_t >= 0.0:
+		player.fuel.at_pump = false
+	player.fuel.filling = false
 	_fill_t = -1.0
 
 ## Ferris tows you in: the night ends (tonight's cash is banked by game.gd's

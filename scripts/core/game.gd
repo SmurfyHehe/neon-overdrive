@@ -74,6 +74,7 @@ var police_heat: PoliceHeat  # heat level + cop_can_see_player (police F0/F1)
 var police: PolicePatrol     # the stand-in patrol car; null with NEON_POLICE=0 or a benchmark
 var heat_icons: HeatIcons
 const TestMode := preload("res://scripts/core/test_mode.gd")
+const TestBuild := preload("res://scripts/core/test_build.gd")
 var perf_ladder: PerfLadder  # lowers the load when the PC falls behind (perf_ladder.gd); real play only
 var rescue: OffMapRescue  # off-map rescue (off_map_rescue.gd)
 const Weather := preload("res://scripts/world/weather.gd")
@@ -139,6 +140,7 @@ func _ready() -> void:
 	FxSettings.load_settings()   # cockpit mirrors on/off and quality ([fx] in settings.cfg)
 	ViewSettings.load_settings()
 	CabinMods.load_settings()   # interior mods: trinket, shift knob, short shifter, strut bar ([interior])
+	IdleActions.load_settings() # what the L key does: vape, beer or nothing ([driver])
 	GraphicsSettings.load_settings()   # preset, edge smoothing, render scale ([graphics])
 	DisplaySettings.load_settings()    # fullscreen, window size ([display]); applied below in a play session
 	KeyBindings.load_settings()        # the player's rebound keys ([keys])
@@ -231,6 +233,13 @@ func _ready() -> void:
 	# Off the map (fell off, outside the walls): fade and put the car back.
 	rescue = OffMapRescue.new(self, player)
 	add_child(rescue)
+	_park_at_start()
+	if TestBuild.on():
+		# One line in the log, so a bug report shows the build was the sandbox.
+		var u := RoadFrame.unroll(player.global_position)
+		print("TEST BUILD sandbox on: money and fuel free, no run-ending, put_back key. Car %s at x %.1f, engine %s, fitted: %s + %d Workshop items" % [
+			PlayerCar.chassis_kind(), u.x, "on" if player.engine_running else "off (X starts it)",
+			", ".join(PackedStringArray(player.mod_build.get("nodes", []))), (player.mod_build.get("bolt_ons", []) as Array).size()])
 	_setup_game_state()
 	_setup_police(benchmark)
 	# Dynamic resolution holds the frame rate inside the tier; benchmark runs
@@ -485,6 +494,7 @@ func _setup_road_shape() -> void:
 	road_seed = int(seed_env) if seed_env.is_valid_int() else (Benchmark.SEED if Benchmark.requested() else randi())
 	var road := _pick_road()
 	RoadMap.use(road, road_act)
+	RoadMap.known_stops = {}
 	if RoadMap.is_loop() and not seed_env.is_valid_int():
 		road_seed = RoadMap.seed_of(RoadMap.road_id)
 	if resume_place:
@@ -496,6 +506,8 @@ func _setup_road_shape() -> void:
 		# On a loop only the place on the lap matters: laps driven are dropped.
 		origin_index = RoadMap.lap_chunk(int(run.origin_index))
 		recenter_count = int(run.get("recenter_count", 0))
+		for sid in run.get("known_stops", []):
+			RoadMap.known_stops[String(sid)] = true
 		# The save's "sections" are not read back. They held each chunk's barrier
 		# roll when that was random (true / false); since RoadBarriers (R1) the
 		# barrier type and its crossover gap follow from the road seed alone
@@ -731,10 +743,12 @@ func _physics_process(_delta: float) -> void:
 		recenter_us_max = maxi(recenter_us_max, Time.get_ticks_usec() - t0)
 	Weather.step(_delta)  # before the cars: they read this tick's wetness
 	_sync_wetness()
-	if Input.is_action_just_pressed("mute"):
-		toggle_mute()
 	if Input.is_action_just_pressed("radio_next") and radio != null:
 		request_next_station()
+	if Input.is_action_just_pressed("put_back") and game_state.state == GameState.State.PLAYING:
+		put_back()
+	if Input.is_action_just_pressed("radio_power") and radio != null:
+		request_radio_power()
 
 ## Next station (N): with the cockpit built the driver's hand reaches the touch
 ## screen and the station changes on the tap (CockpitFrame.request_radio), in
@@ -745,6 +759,15 @@ func request_next_station() -> void:
 		f.request_radio()
 	else:
 		radio.next_station()
+
+## Radio on/off (V): the hand presses the knob or the power spot and the radio
+## switches on the finger's contact; with no cockpit it switches at once.
+func request_radio_power() -> void:
+	var f: CockpitFrame = camera.frame if camera != null else null
+	if f != null and f.driver != null:
+		f.request_radio(DriverModel.RADIO_POWER)
+	else:
+		radio.toggle_power()
 
 ## Moves the world back by shift_chunks whole chunks (positive = the car had
 ## driven forward, -z). Whole chunks keep chunk positions exact integers x 50.
@@ -813,6 +836,24 @@ func _setup_player() -> void:
 	# shifter, strut bar) held on the built car, and the bar itself under the hood.
 	CabinMods.attach(player)
 	StrutBar.sync(player)
+
+## A run starts parked at the kerb with the engine off; X starts it (Roy,
+## 2026-10-10). A saved run comes back the same way, beside where it was
+## saved. Not in automated tests or bot runs (OffMapRescue.parked_start).
+func _park_at_start() -> void:
+	if not OffMapRescue.parked_start():
+		return
+	var s := 0.0
+	if resume_place:
+		s = RoadFrame.s_at(RoadFrame.unroll(player.global_position).z)
+	rescue.park_at(s)
+
+## "Put me back on the road" (the pause menu row and the put_back key): the
+## test build's way out of any stuck state. False when it is not on offer.
+func put_back() -> bool:
+	if not TestBuild.on() or rescue == null:
+		return false
+	return rescue.request()
 
 # ---------- traffic (milestone 3, stage B step 3) ----------
 # Lane-follow traffic: the same raycast Vehicle as the player, see
@@ -894,20 +935,23 @@ func _setup_game_state() -> void:
 	# Special vehicles: a flip ends the run (SpecialRunEnd). A restart is the
 	# stand-in until the run loop (stage C) owns what "ends the night" means.
 	var kind := PlayerCar.chassis_kind()
-	if SpecialRunEnd.has_limit(kind):
+	if SpecialRunEnd.has_limit(kind) and not TestBuild.on():  # sandbox: a flip does not restart
 		var special_end := SpecialRunEnd.new(player, kind)
 		special_end.run_ended.connect(func(_why: String) -> void: game_state.restart())
 		add_child(special_end)
 	radio = RadioManager.new()
 	radio.listener = player  # reception follows the car (tunnels, bridges)
 	radio.process_mode = Node.PROCESS_MODE_ALWAYS   # plays on, muffled, while paused (PauseLook)
+	# No song captions during a chase or a race (R4): the checks read what exists by then.
+	radio.busy_check = func() -> bool:
+		return (race != null and race.is_racing()) or (police_heat != null and police_heat.level > PoliceHeat.NONE)
 	add_child(radio)
 	add_child(PauseLook.new(game_state, player, camera))
 	add_child(TitleScreen.new(game_state))
 	menu_sfx = MenuSfx.new()
 	add_child(menu_sfx)
 	if run.get("radio") is float or run.get("radio") is int:
-		radio.tune_to(int(run.radio))
+		radio.restore(run)
 	if GameState.wants_title():
 		game_state.enter_title()   # the title shows over the frozen world; Drive is instant
 	game_state.state_changed.connect(saver.on_state_changed)
@@ -925,7 +969,7 @@ func _setup_game_state() -> void:
 	add_child(run_end)
 	run_end.sensor.enabled = wrecks_on()
 	if moments != null:
-		moments.announce = radio.announce
+		moments.announce = func(text: String) -> bool: return radio.announce(text, true)
 	world_mood = WorldMood.new()
 	add_child(world_mood)
 	_start_weather()
@@ -949,7 +993,7 @@ func _setup_police(benchmark: bool) -> void:
 	heat_icons = HeatIcons.new(police_heat)
 	add_child(heat_icons)
 	police_heat.line_said.connect(func(text: String) -> void:
-		if not radio.announce(text):
+		if not radio.announce(text, true):
 			heat_icons.say(text))
 	game_state.restarting.connect(police_heat.reset)
 	if PolicePatrol.enabled(benchmark):
@@ -969,7 +1013,7 @@ func _on_hour(hour24: int) -> void:
 		_weather_change(hour24)
 	if hour24 != NightClock.START_HOUR:
 		if hour24 == 2 and world_mood.crackdown_until < 0.0:
-			radio.announce(WorldMood.BAR_CLOSE_LINE)  # bar close starts on the hour
+			radio.announce(WorldMood.BAR_CLOSE_LINE, true)  # bar close starts on the hour
 		else:
 			radio.announce_hour(hour24)
 
@@ -978,8 +1022,8 @@ func _on_hour(hour24: int) -> void:
 ## purpose and must not be restarted halfway. NEON_WRECK=0 turns it off in play.
 func wrecks_on() -> bool:
 	var env := OS.get_environment("NEON_WRECK")
-	if Benchmark.requested() or env == "0":
-		return false
+	if Benchmark.requested() or env == "0" or TestBuild.on():
+		return false  # the test build's sandbox: crashes just happen
 	return not TestMode.active() or env == "1"
 
 ## Tonight's weather (weather.gd, planned by weather_plan.gd): NEON_WEATHER
@@ -1019,7 +1063,7 @@ func _begin_night(boot: bool) -> void:
 		var night := night_clock.night
 		get_tree().create_timer(FORECAST_DELAY, false).timeout.connect(func() -> void:
 			if night_clock.night == night and radio != null:
-				radio.announce(WeatherPlan.forecast_line(e)))
+				radio.announce(WeatherPlan.forecast_line(e), true))
 
 ## The hour struck: the night's one mid-night change lands on its hour.
 func _weather_change(hour24: int) -> void:
@@ -1029,7 +1073,7 @@ func _weather_change(hour24: int) -> void:
 	Weather.set_level(int(e.change_to))
 	var line := WeatherPlan.change_line(e)
 	if line != "" and radio != null:
-		radio.announce(line)
+		radio.announce(line, true)
 
 ## Hour bands (living world step 2, night_bands.gd): the clock sets how much
 ## of the Traffic slider is on the road and which lines Dave adds. Off in the
@@ -1058,7 +1102,7 @@ func _on_event(e: int) -> void:
 	if e == WorldMood.Event.CRACKDOWN:
 		traffic.reform_all()
 	if WorldMood.EVENT_LINES.has(e):
-		radio.announce(WorldMood.EVENT_LINES[e])
+		radio.announce(WorldMood.EVENT_LINES[e], true)
 
 func _process(delta: float) -> void:
 	_update_bands()

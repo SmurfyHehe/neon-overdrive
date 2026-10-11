@@ -1,0 +1,16 @@
+﻿SOURCE: https://treblo.com/  (home page; marketing copy, not a contract)
+FETCHED: 2026-10-10 via built-in browser
+PAGE DATE: comparison table says "as of September 25, 2026"
+=====
+[Excerpts only; lyrics/tag lists omitted]
+Hit songs by you, in any style. An actually free AI music generator.
+Unlimited songs: Make as many songs as you could possibly want. No daily limits, and no 'first three free' trials.
+Share with the world: Publish to your profile, post to your group, or download your track in any format. Your songs, your call. [OGG MP3 WAV FLAC M4A]
+$0.00 Truly free. Unlimited songs with our latest model.
+Comparison (Treblo vs Suno): Free generations: Unlimited | Models: Latest model, Melodia v3 | Features: Generation, inpainting, extending, stem separation | Usage restrictions: None | Downloads: All formats (OGG, MP3, WAV, FLAC, M4A)
+Comparison reflects each provider's public pricing page as of September 25, 2026.
+Is Treblo really free? Yes. You can make unlimited songs with our latest model for free.
+Can I use my songs outside Treblo? Yes, even on the free tier. We place no usage restrictions on songs you create, and whatever rights may exist in them belong to you, not us. As long as what you put into them is yours, the rest is your call: post them, share them, put them in your videos. See Section 8 (Output) of our Terms of Service.
+Do I have to publish my songs? No. Keep tracks private, download them without ever publishing, or share them as unlisted.
+Can I make instrumental music? Yes. Switch the lyrics option to instrumental [...] Great for backing tracks, lo-fi study mixes, podcast intros, video game scores [...]
+Wasn't your name Sonauto? Yes. We changed our name to Treblo [...]. Same team, same songs, same account.

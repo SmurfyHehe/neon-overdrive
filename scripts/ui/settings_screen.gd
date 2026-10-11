@@ -33,19 +33,43 @@ const AMBER := Color("#FFC066")
 # the plain-words labels; an action missing from it still shows up, under
 # "Other", so a new binding is never silently left off the page.
 const GROUPS := [
-	["Drive", [
-		["accelerate", "Throttle"], ["brake", "Brake / reverse"], ["handbrake", "Handbrake"],
-		["steer_left", "Steer left"], ["steer_right", "Steer right"], ["reverse", "Reverse gear (when stopped)"]]],
-	["Gears & Engine", [
-		["shift_up", "Shift up (manual)"], ["shift_down", "Shift down (manual)"], ["toggle_gearbox", "Gearbox: auto / semi / manual"],
-		["clutch", "Clutch (hold, manual)"], ["starter", "Start / stop the engine"]]],
-	["Camera", [["camera_cycle", "Camera smoothing"], ["camera_view", "Chase / cockpit view"], ["look_back", "Look back (hold)"], ["look_left", "Look left (cockpit, hold)"], ["look_right", "Look right (cockpit, hold)"], ["look_up", "Look up (cockpit, hold)"], ["look_down", "Look down (cockpit, hold)"], ["window", "Side window (hold: down, tap: up)"]]],
-	["Lights", [["turn_left", "Indicator left"], ["turn_right", "Indicator right"], ["hazard", "Hazard lights"]]],
+	["Driving", [
+		["accelerate", "Gas"], ["brake", "Brake / reverse"], ["steer_left", "Steer left"],
+		["steer_right", "Steer right"], ["handbrake", "Handbrake"],
+		["reverse", "Reverse gear (when stopped)"]]],
+	["Gears and engine", [
+		["starter", "Engine on / off"], ["toggle_gearbox", "Gearbox automatic / manual"],
+		["shift_up", "Shift up"], ["shift_down", "Shift down"], ["clutch", "Clutch (hold)"]]],
+	["Lights and signals", [
+		["headlights", "Lights (hold to flash)"], ["horn", "Horn"], ["turn_left", "Blinker left"],
+		["turn_right", "Blinker right"], ["hazard", "Hazards"]]],
+	["Looking", [
+		["look_left", "Look left (hold)"], ["look_right", "Look right (hold)"],
+		["look_up", "Look up (hold)"], ["look_down", "Look down (hold)"],
+		["look_back", "Look back (hold)"], ["camera_view", "Change camera"],
+		["window", "Side window (hold down, tap up)"]]],
+	["Menus", [["pause", "Pause / back"], ["map", "Map"], ["tuning_panel", "Tuner"]]],
+	["Radio", [["radio_next", "Next station"], ["radio_power", "Radio on / off"]]],
+	["Car", [["hood_trunk", "Hood / trunk"]]],
 	["Driver", [["flip_off", "Flip off"], ["idle_action", "Idle action"]]],
-	["Audio & Radio", [["mute", "Mute"], ["map", "Map"], ["radio_next", "Next radio station"], ["radio_power", "Radio on/off"]]],
-	["Photo mode", [["photo_mode", "Photo mode"], ["photo_forward", "Forward"], ["photo_back", "Back"], ["photo_left", "Left"], ["photo_right", "Right"], ["photo_down", "Down"], ["photo_up", "Up"], ["photo_fast", "Faster (hold)"], ["photo_look_left", "Look left"], ["photo_look_right", "Look right"], ["photo_look_up", "Look up"], ["photo_look_down", "Look down"], ["photo_fov_narrow", "Zoom in"], ["photo_fov_wide", "Zoom out"], ["photo_shot", "Save photo"]]],
-	["Menus", [["pause", "Pause / back"], ["tuning_panel", "Tuning panel"], ["autotune_panel", "Auto-Tune panel"], ["put_back", "Put me back on the road (test build)"]]],
+	["Special vehicles", [
+		["special", "Special move (truck: crab steer, hold / lowrider: dance, tap)"],
+		["hyd_pump_left", "Lowrider: pump left up (hold)"], ["hyd_pump_front", "Lowrider: pump front up (hold)"],
+		["hyd_pump_back", "Lowrider: pump back up (hold)"], ["hyd_pump_right", "Lowrider: pump right up (hold)"],
+		["hyd_dump_left", "Lowrider: dump left down (hold)"], ["hyd_dump_front", "Lowrider: dump front down (hold)"],
+		["hyd_dump_back", "Lowrider: dump back down (hold)"], ["hyd_dump_right", "Lowrider: dump right down (hold)"],
+		["hyd_three", "Lowrider: three-wheel pose (tap on / off)"], ["hyd_dump_all", "Lowrider: drop all four"]]],
+	["Photo mode", [
+		["photo_mode", "Photo mode"], ["photo_forward", "Forward"], ["photo_back", "Back"],
+		["photo_left", "Left"], ["photo_right", "Right"], ["photo_down", "Down"], ["photo_up", "Up"],
+		["photo_fast", "Faster (hold)"], ["photo_look_left", "Look left"], ["photo_look_right", "Look right"],
+		["photo_look_up", "Look up"], ["photo_look_down", "Look down"], ["photo_fov_narrow", "Zoom in"],
+		["photo_fov_wide", "Zoom out"], ["photo_shot", "Save photo"]]],
 ]
+
+## Actions that exist only in the test build: never on the Controls page, not
+## even under "Other".
+const TEST_ONLY := ["put_back", "fix_car", "debug_add_cash", "record_drive"]
 
 var game_state: GameState   # null on the title screen
 var tab_buttons: Array[Button] = []
@@ -214,7 +238,7 @@ func _input(event: InputEvent) -> void:
 		return
 	if not _capture.is_empty():
 		get_viewport().set_input_as_handled()   # before the GUI: Enter / Space can be bound
-		_finish_capture(event.keycode if event.keycode != 0 else event.physical_keycode)
+		_finish_capture(event.physical_keycode if event.physical_keycode != 0 else event.keycode)
 		return
 	if event.is_action_pressed(&"ui_cancel") and not _popup_open():
 		get_viewport().set_input_as_handled()
@@ -634,7 +658,7 @@ func _refresh_controls() -> void:
 	for group in controls_groups():
 		_heading(inner, String(group[0]).to_upper())
 		var grid := GridContainer.new()
-		grid.columns = 2 + KeyBindings.SLOTS
+		grid.columns = 1 + KeyBindings.SLOTS
 		grid.add_theme_constant_override("h_separation", 16)
 		inner.add_child(grid)
 		for entry in group[1]:
@@ -649,7 +673,6 @@ func _refresh_controls() -> void:
 				b.set_meta("bind", [StringName(entry[0]), slot])
 				b.pressed.connect(_start_capture.bind(StringName(entry[0]), slot, b))
 				grid.add_child(b)
-			_grid_label(grid, gamepad_text(entry[0]), SILVER, 140)
 		var gap := Control.new()
 		gap.custom_minimum_size = Vector2(0, 8)
 		inner.add_child(gap)
@@ -727,13 +750,13 @@ static func controls_groups() -> Array:
 		var rows: Array = []
 		for entry in g[1]:
 			known[entry[0]] = true
-			if InputMap.has_action(entry[0]):
+			if InputMap.has_action(entry[0]) and not (entry[0] in TEST_ONLY):
 				rows.append(entry)
 		groups.append([g[0], rows])
 	var other: Array = []
 	for a in InputMap.get_actions():
 		var name := String(a)
-		if not known.has(name) and not name.begins_with("ui_"):
+		if not known.has(name) and not name.begins_with("ui_") and not (name in TEST_ONLY):
 			other.append([name, name.capitalize()])
 	if not other.is_empty():
 		groups.append(["Other", other])
@@ -744,8 +767,7 @@ static func keyboard_text(action: String) -> String:
 	var parts: Array[String] = []
 	for ev in InputMap.action_get_events(action):
 		if ev is InputEventKey:
-			var t: String = ev.as_text_keycode() if ev.keycode != 0 else ev.as_text_physical_keycode()
-			parts.append(t)
+			parts.append(KeyBindings.key_name(KeyBindings.code_of(ev)))
 	return " / ".join(parts) if not parts.is_empty() else "-"
 
 ## Gamepad bindings of an action, e.g. "RT".

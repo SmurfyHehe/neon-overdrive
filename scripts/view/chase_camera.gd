@@ -211,10 +211,7 @@ func mode_name() -> String:
 # Polled on the physics tick like all game input (#30), and the impact check
 # needs exactly one velocity sample per tick.
 func _physics_process(delta: float) -> void:
-	if Input.is_action_just_pressed("camera_cycle"):
-		ViewSettings.set_camera_smoothing((ViewSettings.camera_smoothing + 1) % MODE_NAMES.size())
-		ViewSettings.save_settings()
-	if ViewSettings.camera_smoothing != _seen_smoothing:   # menu or C key changed it
+	if ViewSettings.camera_smoothing != _seen_smoothing:   # the Settings slider changed it
 		_seen_smoothing = ViewSettings.camera_smoothing
 		mode = _seen_smoothing
 	if Input.is_action_just_pressed("camera_view"):

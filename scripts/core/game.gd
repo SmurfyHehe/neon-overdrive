@@ -743,8 +743,6 @@ func _physics_process(_delta: float) -> void:
 		recenter_us_max = maxi(recenter_us_max, Time.get_ticks_usec() - t0)
 	Weather.step(_delta)  # before the cars: they read this tick's wetness
 	_sync_wetness()
-	if Input.is_action_just_pressed("mute"):
-		toggle_mute()
 	if Input.is_action_just_pressed("radio_next") and radio != null:
 		request_next_station()
 	if Input.is_action_just_pressed("put_back") and game_state.state == GameState.State.PLAYING:

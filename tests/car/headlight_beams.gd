@@ -5,14 +5,11 @@ extends SceneTree
 # renderer draws no light, so the cut-off could not be seen).
 #
 #   - defaults: lights on at the low beam (100 m, 1 deg down, cut-off
-#     projector), auto-dip armed, J is an action with a key on the Controls
+#     projector), auto-dip armed, H is the lights action with a key on the Controls
 #     page;
-#   - J toggles the high beam (150 m, level, no projector); J J flashes and
-#     leaves J where it was; flash works with the lights off; J with the
-#     lights off turns them on, high;
-#   - auto-dip: a car coming at you inside 150 m, or one you follow inside
-#     80 m, holds the high beam at low (J stays on), the real traffic list
-#     decides; without a car it is high again;
+#   - H does it all (K1): a tap switches low <-> high (or turns the lights on),
+#     a hold lights the high beam while down and counts ONE flash, a double
+#     tap puts the lights out and undoes the first tap's switch
 #   - cops: dark 18 m, low beam 140 m, high beam or flash 200 m; a dark
 #     driver seen by a cop gains a little heat standing still, a lit one none;
 #   - on a wall 30 m ahead the low beam lights the wall below the lamp height
@@ -37,6 +34,11 @@ func _initialize() -> void:
 	game = Harness.boot(self, 1, 300.0, 11)   # one managed car: the dip scan reads the manager's list
 	_run.call_deferred()
 
+## One H tap: down and up with no time between.
+func _tap() -> void:
+	player.lights_key_down()
+	player.lights_key_up()
+
 func _spot() -> SpotLight3D:
 	return player.get_node("Headlights") as SpotLight3D
 
@@ -55,37 +57,55 @@ func _run() -> void:
 	_check(spot.light_projector != null, "low beam has no cut-off projector")
 	# The projector needs shadows on; nothing may be a caster (CPU).
 	_check(spot.shadow_enabled and spot.shadow_caster_mask == HeadlightBeams.NO_CASTERS, "low beam shadow pass has casters")
-	_check(InputMap.has_action("high_beam") and not InputMap.action_get_events("high_beam").is_empty(), "no key for the high beam")
-	_check(PauseMenu.GROUPS[0][1].any(func(a: Array) -> bool: return a[0] == "high_beam"), "high beam missing from the Controls page")
+	_check(InputMap.has_action("headlights") and not InputMap.has_action("high_beam"), "H is the only lights key")
+	_check(SettingsScreen.GROUPS.any(func(g: Array) -> bool: return g[1].any(func(a: Array) -> bool: return a[0] == "headlights")), "lights missing from the Controls page")
 
-	# --- J, J J, H ----------------------------------------------------------
-	player.toggle_high_beam()
-	_check(b.mode == HeadlightBeams.Mode.HIGH and is_equal_approx(spot.spot_range, 150.0), "J: not high (%d, %.0f m)" % [b.mode, spot.spot_range])
+	# --- tap, hold, double tap: all on H ------------------------------------
+	_tap()   # lights on: tap switches low -> high
+	_check(b.mode == HeadlightBeams.Mode.HIGH and is_equal_approx(spot.spot_range, 150.0), "tap: not high (%d, %.0f m)" % [b.mode, spot.spot_range])
 	_check(spot.light_projector == null and is_equal_approx(spot.rotation_degrees.x, 0.0), "high beam keeps the cut-off or the dip")
 	_check(not spot.shadow_enabled, "high beam has shadows on")
-	player.toggle_high_beam()   # inside the double window: this is a flash
-	_check(b.flashes == 1, "second J did not flash")
-	_check(not b.high_on, "J J left the high beam on (was off before)")
-	_check(b.mode == HeadlightBeams.Mode.HIGH, "flash is not high")
-	b.step(HeadlightBeams.FLASH_SECONDS + 0.05)
-	_check(b.mode == HeadlightBeams.Mode.LOW, "flash did not end (mode %d)" % b.mode)
+	_check(b.flashes == 0, "a tap counted as a flash")
 	b.step(1.0)
-	player.toggle_high_beam()   # a slow second press is a toggle again
-	_check(b.high_on and b.mode == HeadlightBeams.Mode.HIGH, "J after a pause did not toggle high on")
+	_tap()
+	_check(not b.high_on and b.mode == HeadlightBeams.Mode.LOW, "second tap did not go back to low")
 	b.step(1.0)
-	player.toggle_high_beam()
-	_check(not b.high_on and b.mode == HeadlightBeams.Mode.LOW, "J did not toggle high off")
+	# double tap: lights off, and the first tap's switch is undone
+	_tap()
+	b.step(0.1)
+	_tap()
+	_check(b.mode == HeadlightBeams.Mode.OFF and not spot.visible and not player.headlights_on, "double tap did not put the lights out (mode %d)" % b.mode)
+	_check(not b.high_on, "double tap left the high beam selected")
 	b.step(1.0)
+	_tap()   # lights off: a tap is the low beam
+	_check(b.mode == HeadlightBeams.Mode.LOW and player.headlights_on and not b.high_on, "tap with the lights off: mode %d" % b.mode)
+	b.step(1.0)
+	# hold: high while down, one flash, back to what it was on release
+	var before := b.flashes
+	player.lights_key_down()
+	b.step(0.1)
+	_check(b.mode == HeadlightBeams.Mode.LOW and b.flashes == before, "a press under the hold time was already a flash")
+	b.step(0.15)
+	_check(b.mode == HeadlightBeams.Mode.HIGH and b.flashes == before + 1, "hold: mode %d flashes %d" % [b.mode, b.flashes - before])
+	b.step(0.5)
+	_check(b.flashes == before + 1, "one hold counted %d flashes" % (b.flashes - before))
+	player.lights_key_up()
+	_check(b.mode == HeadlightBeams.Mode.LOW and not b.high_on, "release did not go back to low (mode %d)" % b.mode)
+	_check(b.flashes == before + 1, "release counted a flash")
+	b.step(1.0)
+	# hold with the lights off lights the high beam only while it is down
 	player.set_headlights(false)
 	_check(b.mode == HeadlightBeams.Mode.OFF and not spot.visible and not player.headlights_on, "H off: lamp still lit")
-	b.flash()
-	_check(b.mode == HeadlightBeams.Mode.HIGH and spot.visible, "flash with the lights off did not light")
+	player.lights_key_down()
+	b.step(0.3)
+	_check(b.mode == HeadlightBeams.Mode.HIGH and spot.visible, "hold with the lights off did not light")
+	player.lights_key_up()
+	_check(b.mode == HeadlightBeams.Mode.OFF and not spot.visible, "hold left the lamp on")
 	b.step(1.0)
-	_check(b.mode == HeadlightBeams.Mode.OFF and not spot.visible, "flash left the lamp on")
-	player.toggle_high_beam()   # J with the lights off
-	_check(player.headlights_on and b.high_on and b.mode == HeadlightBeams.Mode.HIGH, "J with lights off: lights %s high %s mode %d" % [player.headlights_on, b.high_on, b.mode])
+	_tap()
+	_check(player.headlights_on and b.mode == HeadlightBeams.Mode.LOW, "tap with lights off: lights %s mode %d" % [player.headlights_on, b.mode])
 	b.step(1.0)
-	player.toggle_high_beam()
+	_tap()
 	b.step(1.0)
 
 	# --- cops see by beam ---------------------------------------------------
@@ -93,10 +113,10 @@ func _run() -> void:
 	_check(is_equal_approx(PoliceHeat.see_reach_for(player), PoliceHeat.SEE_RANGE_DARK), "dark reach %.0f" % PoliceHeat.see_reach_for(player))
 	player.set_headlights(true)
 	_check(is_equal_approx(PoliceHeat.see_reach_for(player), PoliceHeat.SEE_RANGE_LIT), "low beam reach %.0f" % PoliceHeat.see_reach_for(player))
-	player.toggle_high_beam()
+	_tap()
 	_check(is_equal_approx(PoliceHeat.see_reach_for(player), PoliceHeat.SEE_RANGE_HIGH), "high beam reach %.0f" % PoliceHeat.see_reach_for(player))
 	b.step(1.0)
-	player.toggle_high_beam()
+	_tap()
 	b.step(1.0)
 	_check(PoliceHeat.SEE_RANGE_HIGH >= 190.0 and PoliceHeat.SEE_RANGE_LIT >= 100.0, "see ranges off the decision list")
 	var heat: PoliceHeat = game.get("police_heat")
@@ -147,7 +167,7 @@ func _auto_dip(b: HeadlightBeams) -> void:
 	Harness.move_player_to_lane(player, Harness.lane_x(3))
 	var pz := player.global_position.z
 	b.dip_probe = traffic.beam_blocked
-	player.toggle_high_beam()
+	_tap()
 	b.step(1.0)
 	var onc: TrafficCar = traffic.cars[0]
 	onc.target_speed = 0.0
@@ -194,7 +214,7 @@ func _auto_dip(b: HeadlightBeams) -> void:
 	b.auto_dip = true
 	b.dip_probe = Callable()
 	b.step(1.0)
-	player.toggle_high_beam()
+	_tap()
 	b.step(1.0)
 
 func _wall_shots(b: HeadlightBeams) -> void:
@@ -224,10 +244,10 @@ func _wall_shots(b: HeadlightBeams) -> void:
 	var dark := await _shot("wall_lights_off")
 	player.set_headlights(true)
 	var low := await _shot("wall_low_beam")
-	player.toggle_high_beam()
+	_tap()
 	var high := await _shot("wall_high_beam")
 	b.step(1.0)
-	player.toggle_high_beam()
+	_tap()
 	# Before this change: the old lamp's numbers on the same spot.
 	var spot := _spot()
 	spot.spot_range = CarFx.HEADLIGHT_RANGE
@@ -307,7 +327,7 @@ func _road_shots(b: HeadlightBeams, lane: float, pz: float) -> void:
 				player.set_headlights(false)
 				player.set_headlights(true)
 			"high":
-				player.toggle_high_beam()
+				_tap()
 		var img := await _shot("road_" + m)
 		calls[m] = int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
 		prims[m] = int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))

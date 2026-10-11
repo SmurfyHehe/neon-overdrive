@@ -12,7 +12,7 @@ extends RefCounted
 # The lowrider's hydraulics are four toggle switches, one per corner or end.
 # Each column is one switch: the number key is up, the letter under it is down.
 #   pump (up):  7 left   8 front   9 back   0 right
-#   dump (down) U left   I front   O back   P right
+#   dump (down) U left   I front   O back   [ right   (P is photo mode, K1)
 # plus 6 (three-wheel pose, tap on / tap off) and minus (drop all four, pancake).
 # K and L belong to the driver in every car (flip off, idle action: project.godot).
 # In every other vehicle these keys do nothing: owner_kind() says which
@@ -21,7 +21,7 @@ extends RefCounted
 const KEYS := {
 	"special": KEY_CTRL,
 	"hyd_pump_left": KEY_7, "hyd_pump_front": KEY_8, "hyd_pump_back": KEY_9, "hyd_pump_right": KEY_0,
-	"hyd_dump_left": KEY_U, "hyd_dump_front": KEY_I, "hyd_dump_back": KEY_O, "hyd_dump_right": KEY_P,
+	"hyd_dump_left": KEY_U, "hyd_dump_front": KEY_I, "hyd_dump_back": KEY_O, "hyd_dump_right": KEY_BRACKETLEFT,
 	"hyd_three": KEY_6, "hyd_dump_all": KEY_MINUS,
 }
 

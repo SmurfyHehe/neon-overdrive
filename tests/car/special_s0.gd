@@ -65,7 +65,7 @@ func _keys() -> void:
 		_check(InputMap.has_action(action), "action %s is not registered" % action)
 	_check(SpecialKeys.KEYS.special == KEY_CTRL, "special is not Ctrl")
 	var want := {"hyd_pump_left": KEY_7, "hyd_pump_front": KEY_8, "hyd_pump_back": KEY_9, "hyd_pump_right": KEY_0,
-		"hyd_dump_left": KEY_U, "hyd_dump_front": KEY_I, "hyd_dump_back": KEY_O, "hyd_dump_right": KEY_P,
+		"hyd_dump_left": KEY_U, "hyd_dump_front": KEY_I, "hyd_dump_back": KEY_O, "hyd_dump_right": KEY_BRACKETLEFT,
 		"hyd_three": KEY_6, "hyd_dump_all": KEY_MINUS}
 	for a in want:
 		_check(SpecialKeys.KEYS[a] == want[a], "%s is not on its column key" % a)

@@ -134,9 +134,11 @@ const KINDS := {
 	},
 	"p5_muscle": {
 		"data": preload("res://scripts/car/p5_muscle_data.gd"),
-		"length": 5.35, "width": 2.02, "height": 1.3, "clearance": 0.15,
-		"front_overhang": 1.12, "rear_overhang": 1.28,
-		"wheel_r": 0.345, "wheel_x": 0.83, "axle_z": 1.475,
+		## The two-door hardtop (2026-10-11), built from its parts glb: 35 cm
+		## shorter, wheelbase 2.84, one long door a side.
+		"length": 5.00, "width": 1.93, "height": 1.33, "clearance": 0.16,
+		"front_overhang": 0.90, "rear_overhang": 1.26,
+		"wheel_r": 0.35, "wheel_x": 0.80, "axle_z": 1.42,
 		"rest_y": -0.12,
 		"builds": {"stock": 50, "street": 30, "full": 20},
 		"build_paint": {},

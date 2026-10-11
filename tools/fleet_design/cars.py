@@ -272,42 +272,49 @@ P4 = {
 }
 
 P5 = {
-    'id': 'p5_muscle', 'role': 'player', 'label': 'Muscle sedan',
-    'refs': 'Impala SS (1994-96), Chevelle SS, Caprice 9C1',
-    'rule': 'Long, low, wide land yacht: tall cowl scoop, chopped slit-window cabin, ducktail, coke-bottle hips; full-width tail bar.',
-    'L': 5.35, 'WB': 2.95, 'OHf': 1.12, 'W': 2.02,
-    'wheel': {'r': 0.345, 'w': 0.255, 'w_rear': 0.32, 'track': 1.66, 'arch_gap': 0.03, 'rim': 'dish', 'rim_ratio': 0.68},
-    'top': [(0.0, 0.70), (0.04, 0.79), (0.22, 0.84), (1.88, 0.95), (2.55, 1.28), (3.28, 1.30), (3.92, 1.00),
-            (5.06, 0.99), (5.22, 1.11), (5.28, 1.11), (5.32, 0.90), (5.35, 0.70)],
-    'floor': [(0, 0.28), (0.30, 0.15), (5.00, 0.15), (5.20, 0.22), (5.35, 0.36)],
-    'hw': [(0, 0.86), (0.08, 0.95), (0.45, 0.975), (1.12, 0.985), (1.70, 0.965), (2.40, 0.935), (3.10, 0.94),
-           (3.70, 0.985), (4.07, 1.01), (4.60, 1.005), (5.05, 0.96), (5.25, 0.91), (5.35, 0.85)],
-    'waist': [(0, 0.48), (0.50, 0.60), (4.00, 0.66), (5.35, 0.62)],
-    'belt': [(0, 0.66), (0.30, 0.81), (1.88, 0.93), (3.92, 0.99), (5.35, 0.93)],
-    'tumble': 0.09, 'sill_in': 0.04, 'rocker_h': 0.32,
-    'cabin': {'A': 1.88, 'W': 2.55, 'R': 3.28, 'C': 3.92, 'D': 3.62,
-              'roof_w': [(2.55, 0.62), (3.28, 0.57), (3.92, 0.66)], 'roof_drop': 0.035, 'pillars': [(2.98, 3.08)]},
+    'id': 'p5_muscle', 'role': 'player', 'label': 'Muscle hardtop',
+    'refs': 'Chevelle SS (1970), Charger R/T (1968), Torino GT (1970)',
+    'rule': 'Two-door 68-72 muscle hardtop: long hood, short deck, coke-bottle hips, tunnel-back roof with buttresses, full-width tail bar.',
+    # Rebuilt 2026-10-11 (Roy 191-192, 1218): 5.00 x 1.93 x 1.33, wheelbase 2.84, overhangs 0.90 / 1.26.
+    # The physics has one wheel radius and one track per car, so the 0.72 m rear wheel and the wider
+    # rear track of the decision are not here: 0.70 m all round, the fat rear tyre flush with its arch.
+    'L': 5.00, 'WB': 2.84, 'OHf': 0.90, 'W': 1.93,
+    'wheel': {'r': 0.35, 'w': 0.255, 'w_rear': 0.32, 'track': 1.60, 'arch_gap': 0.02, 'rim': 'dish', 'rim_ratio': 0.68},
+    # long flat roof (2.12 to 3.30), fast backlight, a deck that stays high to a square tail
+    'top': [(0.0, 0.79), (0.05, 0.84), (0.30, 0.862), (1.45, 0.90), (2.12, 1.305), (2.50, 1.33), (3.00, 1.33), (3.30, 1.31),
+            (3.80, 0.965), (4.90, 0.935), (4.97, 0.925), (5.00, 0.90)],
+    'floor': [(0, 0.30), (0.25, 0.16), (4.70, 0.16), (4.88, 0.22), (5.00, 0.37)],
+    # coke bottle: 0.965 over both arches, 0.90 at the doors (7% a side)
+    'hw': [(0, 0.87), (0.08, 0.93), (0.40, 0.955), (0.90, 0.965), (1.25, 0.965), (1.90, 0.90), (2.90, 0.90),
+           (3.45, 0.965), (4.10, 0.965), (4.60, 0.95), (4.90, 0.925), (5.00, 0.90)],
+    # the shoulder crease: the widest point of the section, 0.78 up, nose to tail
+    'waist': [(0, 0.70), (0.30, 0.78), (5.00, 0.78)],
+    'belt': [(0, 0.76), (0.30, 0.84), (1.45, 0.86), (3.80, 0.87), (5.00, 0.87)],
+    'tumble': [(0, 0.07), (4.60, 0.07), (5.00, 0.03)], 'sill_in': 0.04, 'rocker_h': 0.36,
+    # hardtop: no B-pillar, the side glass runs from the A-pillar to the sail panel
+    'cabin': {'A': 1.45, 'W': 2.12, 'R': 3.30, 'C': 3.80, 'D': 3.42,
+              'roof_w': [(2.12, 0.64), (3.30, 0.62), (3.80, 0.70)], 'roof_drop': 0.035, 'pillars': []},
     'decals': [
-        {'view': 'front', 'rect': (-0.48, 0.52, 0.48, 0.66), 'mat': 'grille'},
-        {'view': 'front', 'rect': (0.50, 0.53, 0.86, 0.65), 'mat': 'head', 'mirror': True},
-        {'view': 'front', 'rect': (-0.60, 0.26, 0.60, 0.38), 'mat': 'grille', 'tag': 'fbumper'},
-        {'view': 'rear', 'rect': (0.12, 0.80, 0.86, 0.88), 'mat': 'tail', 'mirror': True},
-        {'view': 'rear', 'rect': (-0.12, 0.80, 0.12, 0.88), 'mat': 'trim'},
-        {'view': 'rear', 'rect': (-0.26, 0.50, 0.26, 0.64), 'mat': 'trim'},
-        {'view': 'rear', 'rect': (-0.80, 0.24, 0.80, 0.36), 'mat': 'trim', 'tag': 'rbumper'},
+        {'view': 'front', 'rect': (-0.80, 0.50, 0.80, 0.66), 'mat': 'grille'},
+        {'view': 'front', 'circle': (0.66, 0.58, 0.075, 12), 'mat': 'head', 'mirror': True},
+        {'view': 'front', 'rect': (-0.84, 0.36, 0.84, 0.44), 'mat': 'chrome', 'tag': 'fbumper', 'cell': 0.3},
+        {'view': 'front', 'rect': (0.50, 0.375, 0.66, 0.425), 'mat': 'turn', 'mirror': True},
+        {'view': 'rear', 'rect': (-0.85, 0.73, 0.85, 0.83), 'mat': 'tail', 'cell': 0.3},
+        {'view': 'rear', 'rect': (-0.84, 0.39, 0.84, 0.55), 'mat': 'chrome', 'tag': 'rbumper', 'cell': 0.3},
     ],
     'parts': [
         MIRRORS,
-        {'type': 'scoop', 'tag': 'hood', 's0': 0.95, 's1': 1.74, 'w': 0.70, 'h': 0.17},
     ],
     'exhaust': [{'x': 0.66, 'y': 0.26, 'r': 0.05}, {'x': -0.66, 'y': 0.26, 'r': 0.05}],
     'stickers': [
-        {'id': 'door', 'view': 'left', 'rect': (2.00, 0.45, 3.60, 0.66), 'mirror': True},
-        {'id': 'hood', 'view': 'top', 'rect': (-0.32, 0.40, 0.32, 1.45)},
-        {'id': 'rear', 'view': 'rear', 'rect': (-0.55, 0.645, 0.55, 0.79), 'note': 'tail panel'},
+        {'id': 'door', 'view': 'left', 'rect': (1.62, 0.42, 2.62, 0.66), 'mirror': True},
+        {'id': 'hood', 'view': 'top', 'rect': (-0.32, 0.40, 0.32, 1.30)},
+        {'id': 'rear', 'view': 'rear', 'rect': (-0.55, 0.58, 0.55, 0.71), 'note': 'tail panel'},
     ],
-    'paint': {'hero': ('Cherry', '#6A1620'), 'alts': [('Black', '#15171C'), ('Silver', '#C9CED6'), ('Racing green', '#1F4D3A'), ('Pearl', '#E9E6DF')],
+    'paint': {'hero': ('Cherry', '#6A1620'), 'alts': [('Hugger orange', '#D9541E'), ('Fathom green', '#1F4D3A'), ('Black', '#15171C'), ('Silver', '#C9CED6')],
               'trim': '#1A1D24', 'rim': '#C9CED6'},
+    # T3: clean, polished, chrome bright (Roy 1212). Read by the paint work when wear lands.
+    'condition': 0.1,
     'options': {},
 }
 

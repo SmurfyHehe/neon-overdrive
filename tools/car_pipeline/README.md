@@ -201,6 +201,21 @@ the door. Small discs in the front wheels with the caliper on the body,
 torsion beam ends in the wheel wells, the spare in its cradle under the floor,
 a transverse engine under the bonnet.
 
+**P5, the muscle hardtop** (`p5_muscle`, kit in `kit_p5_muscle.py`, imported
+by `kits.KITS`): 4,642 body triangles in 72 parts, 1,016 more in the wheels;
+0.000 mm over 43 mirrored parts and pairs. One long door a side and no
+B-pillar, a rear window between two flying buttresses (`buttress_l/r`, laid
+over the loft), two power bulges on the hood (`hood_bulge`, opens with it), a
+full-width grille mouth 30 mm deep in a chrome surround with one round lamp a
+side, chrome blade bumpers (`bumper_blade_f/r`: flat under the plate, proud
+outboard of it), ONE tail lamp bar 1.70 x 0.10 m: `tail_l/r` the lens,
+`brake_l/r` a core strip in it, `turn_rl/rr` its red ends; no high brake lamp
+(era). Reversing lamps in the rear blade, a lamp over the rear plate
+(`plate_lamp`), chrome belt mouldings and bullet mirrors, 280 mm vented discs
+in all four wheels with the caliper on the body, the fuel flap on the left
+rear quarter, the mast on the right front fender. Under the hood: a dark floor
+and the radiator, no engine yet.
+
 In the game a kit car is built by `NpcCarBuilder` like any sheet car; when its
 glb is there the body comes from `CarAssembler` instead. `NEON_PARTS_LEGACY=1`
 keeps the one-piece sheet body, `NEON_CAR_PANELS=open` opens the lids, the

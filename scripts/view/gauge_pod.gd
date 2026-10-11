@@ -75,7 +75,8 @@ const MOUNTS := {
 	"p2_hothatch":  {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
 	"p3_tuner":     {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
 	"p4_kei":       {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
-	"p5_muscle":    {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
+	# the hardtop's own A-pillar, (-0.892, 0.867, -0.880) to (-0.568, 1.430, -0.190): 40% up, same bracket
+	"p5_muscle":    {"pos": Vector3(-0.674, 1.099, -0.525), "yaw": 27.3, "pitch": 3.5, "along": Vector3(0.324, 0.563, 0.690)},
 	"p6_crossover": {"pos": Vector3(-0.628, 1.043, -0.347), "yaw": 25.1, "pitch": 4.6, "along": P1_PILLAR},
 }
 

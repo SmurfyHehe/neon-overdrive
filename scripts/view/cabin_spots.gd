@@ -44,7 +44,7 @@ const CARS := {
 	"p2_hothatch": {"strut_bar": {"x": 0.62, "y": 0.85, "z": -1.13}},
 	"p3_tuner": {"strut_bar": {"x": 0.59, "y": 0.79, "z": -1.16}},
 	"p4_kei": {"strut_bar": {"x": 0.445, "y": 0.67, "z": -0.98}},
-	"p5_muscle": {"strut_bar": {"x": 0.66, "y": 0.87, "z": -1.33}},
+	"p5_muscle": {"strut_bar": {"x": 0.66, "y": 0.87, "z": -1.42}},
 	"p6_crossover": {"strut_bar": {"x": 0.61, "y": 1.00, "z": -1.16}},
 }
 

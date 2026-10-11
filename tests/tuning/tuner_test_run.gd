@@ -78,6 +78,12 @@ func _run() -> void:
 	print("stock vs stock 0-100 delta: '%s'" % d0)
 	_check(not d0.contains("▲") and not d0.contains("▼"), "stock against stock should read level: %s" % d0)
 
+	# Change a tyre setting from the Tyres page, as a player would. Left on the
+	# Quick page, the Preset row (row 0, focused on open since the Quick page of
+	# 757318b) would preview Stock against the now modified setup and hold the
+	# panel on that preview instead of the result (_preview_preset).
+	screen.set_detailed(true, false)
+	screen.show_page("tyres")
 	screen.model.nudge(TunerModel.page("tyres").settings[1], 1)
 	screen._refresh()
 	_check(screen.stats.labels.top.text.contains("~"), "a change should put the estimates back: %s" % screen.stats.labels.top.text)

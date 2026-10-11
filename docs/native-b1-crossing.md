@@ -33,8 +33,8 @@ godot-cpp 10.0.0-stable (507ed9d), `api_version=4.7`.
 | release Jolt ~42 | 0.0222 | 0.0127 | 0.0255 | 4.8 / 2.4 |
 
 All 24 runs: A between 0.013 and 0.048 ms (median 0.028), B between 0.007 and
-0.024 ms (median 0.016). The 0.048 outlier ran with 4 other Godot processes
-on the laptop.
+0.024 ms (median 0.016). The 0.048 outlier (release Godot, round 1) ran with 2 other Godot
+processes on the laptop; across the runs there were 0-6 (median 2).
 
 Where it goes (median, A): resolve 0.5 us, state 1.0 us, 4 rays 25.7 us,
 force + torque 0.6 us. The rays are the cost: about 6 us per `intersect_ray`

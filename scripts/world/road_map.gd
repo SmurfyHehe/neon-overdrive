@@ -119,11 +119,12 @@ const ROADS := {
 		],
 		# Tunnels (TN1): s0 to s1 is under cover, whole chunks. `dip` is how far
 		# the road drops below the street on the way in and `ramp` the length of
-		# the open trench at each end, whole chunks too. An exit inside a
-		# tunnel's reach (ramps included) is left off the road while tunnels
-		# are live.
+		# the open trench at each end, whole chunks too. `sag` is the length of
+		# the curve at the bottom of each ramp, an odd number of chunks (see
+		# _lay_dip). An exit inside a tunnel's reach (ramps included) is left
+		# off the road while tunnels are live.
 		"tunnels": [
-			{"id": "t1", "s0": 4250.0, "s1": 4550.0, "district": 6, "dip": 6.0, "ramp": 150.0},
+			{"id": "t1", "s0": 4250.0, "s1": 4550.0, "district": 6, "dip": 6.0, "ramp": 150.0, "sag": 150.0},
 		],
 	},
 }
@@ -248,11 +249,17 @@ static func _pin(chunk: int, approach: int) -> void:
 # A tunnel's road goes down a ramp in an open trench, runs under cover, and
 # climbs out the same way. The whole reach is pinned straight, and instead of
 # level it has a forced height profile (RoadAlignment takes dip_vcurves()):
-# a crest over the first ramp chunk, a steady grade, and a sag over the first
-# covered chunk; mirrored at the far end. With the road's 50 m chunks that
-# gives grade = dip / ramp (6 m over 150 m: 4 %) and a vertical radius of
-# chunk x ramp / dip (1250 m), and the mouth sits one sag (grade x 25 m,
-# 1 m) above the tunnel floor.
+# a crest over the first ramp chunk, a steady grade, and a sag `sag` metres
+# long centred on the end of the ramp's steady part, so it runs on under
+# cover; mirrored at the far end. With the road's 50 m chunks that gives
+# grade = dip / ramp (6 m over 150 m: 4 %), a crest radius of chunk / grade
+# (1250 m) and a sag radius of sag / grade (3750 m).
+#
+# The sag is the long one on purpose (stress test, 2026-10-11): a sag presses
+# the car into its springs by speed^2 / radius, and with a 1250 m sag the
+# stock coupe, whose body rides 7 cm off the road, touched down at 250 km/h
+# and lost the car at 300. At 3750 m it has room left at 300. The crest only
+# makes a car light, and nothing leaves the road over 1250 m at 300.
 
 static func _ramp_chunks(t: Dictionary) -> int:
 	return maxi(1, roundi(float(t.get("ramp", 0.0)) / L))
@@ -272,12 +279,20 @@ static func _lay_dip(t: Dictionary) -> void:
 		var m := posmod(c, period)
 		_pins[m] = 1
 		_dip[m] = DIP_TUNNEL if c >= c0 and c <= c1 else DIP_RAMP
-	var a := float(t.get("dip", 0.0)) / (float(n) * L * L)
-	if a > 0.0:
-		_dip_vc[posmod(c0 - n, period)] = -a
-		_dip_vc[posmod(c0, period)] = a
-		_dip_vc[posmod(c1, period)] = a
-		_dip_vc[posmod(c1 + n, period)] = -a
+	var grade := float(t.get("dip", 0.0)) / (float(n) * L)
+	if grade <= 0.0:
+		return
+	# Chunks of sag (odd), and of steady grade between the crest and the sag:
+	# crest L / 2 + steady + sag / 2 of full grade must come to the ramp's length.
+	var ns := maxi(1, roundi(float(t.get("sag", L)) / L))
+	ns = mini(ns if ns % 2 == 1 else ns - 1, 2 * n - 1)
+	@warning_ignore("integer_division")
+	var steady := n - 1 - (ns - 1) / 2
+	_dip_vc[posmod(c0 - n, period)] = -grade / L
+	_dip_vc[posmod(c1 + n, period)] = -grade / L
+	for k in ns:
+		_dip_vc[posmod(c0 - n + 1 + steady + k, period)] = grade / (float(ns) * L)
+		_dip_vc[posmod(c1 + n - 1 - steady - k, period)] = grade / (float(ns) * L)
 
 ## The tunnels on the road in this act: [{id, s0, s1, district, dip, ramp}].
 static func tunnels() -> Array:

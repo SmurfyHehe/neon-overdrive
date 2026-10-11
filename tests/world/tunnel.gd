@@ -11,8 +11,8 @@ extends SceneTree
 #   crossing stay
 # - chunks 82-93 are pinned and straight for every road seed; the road is
 #   level with the street at both ends of the dip, 6 m under it through the
-#   middle of the tunnel (level there), never steeper than 4 %, and no crest
-#   or sag is tighter than the road's own limits
+#   middle of the tunnel (level there), never steeper than 4 %, the crests
+#   no tighter than 1200 m and the sags no tighter than 3500 m
 # - the lap still closes (ends at the height it began)
 # - nothing repeats bright enough to flicker (the strip's housing joints and
 #   the wall grime stay under TunnelKit.FLICKER_MAX)
@@ -203,7 +203,7 @@ func _shape() -> void:
 					var street := lerpf(h0, h1, (float(c - first) * L + s) / (float(count) * L))
 					var depth := street - a.height_at(c, s)
 					_check(depth > -0.02, "seed %d: chunk %d is %.3f m above the street %.0f m in" % [road_seed, c, -depth, s])
-					if c >= FIRST + 1 and c <= LAST - 1:
+					if c >= FIRST + 2 and c <= LAST - 2:
 						worst_mid = maxf(worst_mid, absf(depth - DIP))
 					if c == FIRST and k == 0:
 						mouth_depth = depth
@@ -213,8 +213,9 @@ func _shape() -> void:
 	_check(worst_mid < 0.03, "the tunnel floor is up to %.3f m off %.0f m under the street" % [worst_mid, DIP])
 	_check(worst_end < 0.003, "the road is not level with the street at the ends of the dip (grade off by %.4f)" % worst_end)
 	_check(worst_close < 0.001, "the lap no longer ends at the height it began (%.4f m)" % worst_close)
-	_check(tightest_crest >= RoadAlignment.CREST_MIN_RADIUS and tightest_sag >= RoadAlignment.SAG_MIN_RADIUS,
-		"vertical radius under the road's limit: crest %.0f m, sag %.0f m" % [tightest_crest, tightest_sag])
+	# The sag is long on purpose: the stock coupe touched the road at 250 km/h on a 1250 m one (tools/tunnel_stress.gd).
+	_check(tightest_crest >= 1200.0 and tightest_sag >= 3500.0,
+		"vertical radius too tight for a low car at speed: crest %.0f m, sag %.0f m" % [tightest_crest, tightest_sag])
 	print("shape: steepest %.2f %%, floor within %.0f mm of %.0f m down, %.2f m down at the mouth, crest %.0f m, sag %.0f m, lap closes to %.2f mm" % [
 		worst_grade * 100.0, worst_mid * 1000.0, DIP, mouth_depth, tightest_crest, tightest_sag, worst_close * 1000.0])
 
@@ -385,7 +386,7 @@ func _look_at_chunks() -> void:
 			_check(has_deck == (m == FIRST - 1 or m == LAST + 1), "chunk %d: cross-street deck %s" % [m, has_deck])
 			var d: Array = rec.get("depth", [0.0, 0.0])
 			if m == FIRST - 1:
-				_check(absf(float(d[1]) - 5.0) < 0.1, "chunk %d ends %.2f m under the street at the mouth (5 m)" % [m, float(d[1])])
+				_check(absf(float(d[1]) - 4.67) < 0.1, "chunk %d ends %.2f m under the street at the mouth (4.67 m)" % [m, float(d[1])])
 			if m == FIRST - RAMP:
 				_check(absf(float(d[0])) < 0.05, "chunk %d starts %.2f m under the street" % [m, float(d[0])])
 		else:

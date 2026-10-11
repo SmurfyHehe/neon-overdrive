@@ -51,7 +51,7 @@ const PARAPET_W := 0.35
 ## reaches out from the mouth, its thickness, and how far the street is drawn
 ## to either side of the trench.
 const DECK_LEN := 10.0
-const DECK_T := 0.7
+const DECK_T := 0.5
 const CROSS_REACH := 45.0
 ## The light strip: its height on the wall, how far it stands off it, and
 ## its housings (a joint every JOINT_EVERY m, JOINT_W wide, at JOINT_DIM of

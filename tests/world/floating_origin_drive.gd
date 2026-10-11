@@ -51,6 +51,7 @@ var prev_phys_frame := 0
 var worst_frame_step := 0.0
 var worst_cam_err := 0.0
 var max_speed := 0.0
+var drawn_frames := 0
 
 func _initialize() -> void:
 	OS.set_environment("NEON_TRAFFIC", "0")  # an empty road, whatever run_tests.bat or the saved settings say
@@ -60,11 +61,12 @@ func _initialize() -> void:
 	game = (load("res://Game.tscn") as PackedScene).instantiate()
 	game.set("recenter_dist", TEST_RECENTER_DIST)
 	root.add_child(game)
-	# Game's _ready (camera, chunk pool) runs only once the tree starts, so
-	# shake-off and the far teleport wait for the first frame (#559).
-	# Render checks run right before drawing, after every node's _process
-	# (the camera moves in game.gd's _process), so they see the drawn frame.
-	RenderingServer.frame_pre_draw.connect(_check_drawn_frame)
+	# The game is not ready yet (a node added in _initialize gets _ready on the
+	# first frame): no camera, no player, no chunk pool. The shake switch, the
+	# teleport and the render hook are set in the first _process. This used to
+	# assign the camera's shake here, a SCRIPT ERROR on null that ended
+	# _initialize: the car never went 500 km out and the drawn-frame checks
+	# never ran, and the test still printed PASS (#559).
 
 func _teleport_far() -> void:
 	# Relabel every pooled chunk FAR_CHUNKS further on and move the origin by
@@ -123,11 +125,19 @@ func _physics_process(delta: float) -> bool:
 
 func _process(delta: float) -> bool:
 	if not started:
-		started = true
-		(game.get("camera") as ChaseCamera).shake_enabled = false
-		if (game.get("chunk_pool") as Array).is_empty():
-			_fail("no chunks to relabel on the first frame")
+		var chase := game.get("camera") as ChaseCamera
+		if chase == null or game.get("player") == null or game.get("chunk_pool").is_empty():
+			return false
+		chase.shake_enabled = false
+		# Hard snap (mode A, "tests may override"): the checks below want the
+		# camera exactly at its chase offset; the smoothing modes lag it a few
+		# centimetres at speed by design.
+		chase.mode = 0
 		_teleport_far()
+		# Render checks run right before drawing, after every node's _process
+		# (the camera moves in game.gd's _process), so they see the drawn frame.
+		RenderingServer.frame_pre_draw.connect(_check_drawn_frame)
+		started = true
 		_press(KEY_W, true)
 		return false
 	t += delta
@@ -151,6 +161,7 @@ func _process(delta: float) -> bool:
 func _check_drawn_frame() -> void:
 	if not started:
 		return
+	drawn_frames += 1
 	var p: PlayerCar = game.get("player")
 	# What is actually drawn: the interpolated car, the camera, the chunks.
 	var origin: int = game.get("origin_index")
@@ -172,7 +183,15 @@ func _check_drawn_frame() -> void:
 	var back := -cam.dist_now if p.gear == -1 else cam.dist_now
 	var want := Vector3(ip.x, ip.y + cam.height_now, ip.z + back)
 	worst_cam_err = max(worst_cam_err, cam.global_position.distance_to(want))
+	# A recycled chunk takes its new index at once and is rebuilt and moved a
+	# few stages a frame (staged rebuilds, #314), so until its job finishes it
+	# is a chunk about to be moved, not one in the wrong place.
+	var in_flight := {}
+	for j in game.get("_rebuild_jobs"):
+		in_flight[j.root] = true
 	for c in game.get("chunk_pool"):
+		if in_flight.has(c.root):
+			continue
 		var want_z := -float(c.index - origin) * RoadChunkBuilder.CHUNK_LEN
 		if absf(c.root.position.z - want_z) > 0.0001:
 			_fail("chunk %d at z=%.3f, expected %.3f" % [c.index, c.root.position.z, want_z])
@@ -190,6 +209,11 @@ func _report(p: PlayerCar) -> void:
 	print("per-tick change, recenter ticks: speed=%.3f lin=%.3f spring=%.4f" % [shift_max.speed, shift_max.lin, shift_max.spring])
 	print("worst travel-vs-velocity error=%.4f m  worst frame overshoot=%.3f m  worst camera offset error=%.4f m" % [worst_travel_err, worst_frame_step, worst_cam_err])
 
+	print("drawn frames checked: %d" % drawn_frames)
+	if origin < FAR_CHUNKS:
+		_fail("never got 500 km out: origin_index %d, wanted at least %d" % [origin, FAR_CHUNKS])
+	if drawn_frames < 100:
+		_fail("only %d drawn frames were checked" % drawn_frames)
 	if recenters < MIN_RECENTERS:
 		_fail("only %d recenters -- not enough driving to test anything" % recenters)
 	for k in ["speed", "lin", "spring"]:

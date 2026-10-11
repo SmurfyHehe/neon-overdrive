@@ -44,7 +44,7 @@ func _physics_process(_delta: float) -> bool:
 			_check(InputMap.has_action("reverse"), "no 'reverse' action")
 			var is_r := false
 			for e in InputMap.action_get_events("reverse"):
-				if e is InputEventKey and e.keycode == KEY_R:
+				if e is InputEventKey and KeyBindings.code_of(e) == KEY_R:
 					is_r = true
 			_check(is_r, "'reverse' is not bound to R")
 			_go(Step.SETTLE)

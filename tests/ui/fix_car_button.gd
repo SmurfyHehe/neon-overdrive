@@ -65,7 +65,7 @@ func _go(next: Step) -> void:
 
 func _f6_bound() -> bool:
 	for ev in InputMap.action_get_events("fix_car"):
-		if ev is InputEventKey and ev.keycode == KEY_F6:
+		if ev is InputEventKey and KeyBindings.code_of(ev) == KEY_F6:
 			return true
 	return false
 

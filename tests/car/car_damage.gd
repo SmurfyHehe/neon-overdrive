@@ -5,7 +5,7 @@ extends SceneTree
 # - small hits do nothing; a straight front hit shares the two front corners
 #   and the radiator; an oblique one lands on its corner and breaks its lamp;
 #   a rear hit leaves the front alone
-# - no effect below FREE_BELOW; the engine limps from ENGINE_LIMP_AT and keeps
+# - no effect below FREE_BELOW; a wrecked radiator sets no limp of its own and keeps
 #   limping at 1.0 (damage never kills it); a hurt radiator runs the engine
 #   hotter
 # - offsets (DP0): a hit gives the toe and spring numbers it always did, a
@@ -98,14 +98,17 @@ func _unit_tests() -> void:
 	_check(not e.warning(), "no DMG lamp under 25 %")
 	e.parts[D.Part.RADIATOR] = 0.5
 	_check(e.cooling_mult() < 1.0 and e.engine_cap_kmh() == INF and e.warning(), "a hurt radiator cools worse, no limp yet, DMG on")
-	e.parts[D.Part.RADIATOR] = D.ENGINE_LIMP_AT
-	_check(e.engine_cap_kmh() == D.ENGINE_LIMP_KMH, "the engine limps from ENGINE_LIMP_AT")
+	# the heat window (brief DP4a): a radiator never limps by its size, only
+	# through engine heat (tests/car/damage_settings.gd times it)
 	e.parts[D.Part.RADIATOR] = 1.0
-	_check(not e.is_engine_dead() and e.engine_cap_kmh() == D.ENGINE_LIMP_KMH, "the front at 100 % limps, it does not kill the engine")
+	_check(not e.is_engine_dead() and e.engine_cap_kmh() == INF, "the front at 100 % sets no limp of its own and does not kill the engine")
+	_check(is_equal_approx(e.cooling_mult(), 1.0 - D.COOLING_LOSS), "a wrecked radiator loses COOLING_LOSS of the cooling (%.2f left)" % e.cooling_mult())
 	var limp := LimpMode.new()
 	limp.engine_damage_kmh = e.engine_cap_kmh()
 	limp.update(false, 90.0)
-	_check(limp.cause == LimpMode.Cause.ENGINE and limp.throttle_scale(0.0) > 0.0, "a wrecked radiator still gets throttle")
+	_check(not limp.is_limping(), "a wrecked radiator with a cool engine is not limping")
+	limp.update(false, PowertrainHealth.LIMP_C)
+	_check(limp.cause == LimpMode.Cause.OVERHEAT, "it limps once the engine is at LIMP_C")
 	# heat: same drive, healthy against half-broken radiator
 	var temps := []
 	for rad in [0.0, 0.6]:
@@ -119,7 +122,7 @@ func _unit_tests() -> void:
 	print("engine after 60 s at 60 %% load, 90 km/h: healthy %.0f C, radiator 0.6 %.0f C" % temps)
 	_check(temps[1] > temps[0] + 5.0, "a hurt radiator runs the engine hotter")
 	# station patch: once a night
-	_check(e.station_patch(3) and e.engine_cap_kmh() == INF and e.part(D.Part.RADIATOR) < D.FREE_BELOW, "a station patch ends the limp")
+	_check(e.station_patch(3) and e.engine_cap_kmh() == INF and e.part(D.Part.RADIATOR) < D.FREE_BELOW, "a station patch puts the radiator back in the free band")
 	e.parts[D.Part.RADIATOR] = 0.9
 	_check(not e.station_patch(3) and e.part(D.Part.RADIATOR) == 0.9, "only one patch a night")
 	_check(e.station_patch(4), "a new night, a new patch")
@@ -295,7 +298,7 @@ func _physics_process(_delta: float) -> bool:
 		Step.LIMP:
 			if t >= hz * 3:
 				var kmh := p.current_speed() * 3.6
-				print("wrecked radiator, 3 s full throttle: %.1f km/h (limp cap %.0f)" % [kmh, CarDamage.ENGINE_LIMP_KMH])
+				print("wrecked radiator, 3 s full throttle: %.1f km/h" % kmh)
 				_check(kmh > 10.0, "a wrecked radiator limps, it does not stop the car (%.1f km/h)" % kmh)
 				_check(not p.damage.is_engine_dead(), "damage never kills the engine")
 				_fresh(p)

@@ -275,6 +275,8 @@ if /i not "%~1"=="quick" (
 	call :run car/fuel_limp "--headless --fixed-fps 60"
 	rem ~25 s: damage slice 1: hits by direction, crash pull, rear sag, dead engine, lamps, steam, rattle, garage/station/tow.
 	call :run car/car_damage "--headless --fixed-fps 120"
+	rem ~2 min: the Damage setting (Full / Light / Looks only), difficulty, and the radiator heat window per difficulty.
+	call :run car/damage_settings "--headless --fixed-fps 60"
 	rem No car or road chunk pops in or out where a camera can see it (Roy, 2026-10-09): flat road, then the hilly one.
 	call :run traffic/no_visible_spawn "--headless --fixed-fps 60"
 	set "NEON_HILLS=1"

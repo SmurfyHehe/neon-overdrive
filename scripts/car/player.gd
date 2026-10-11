@@ -351,6 +351,7 @@ func _physics_process(delta: float) -> void:
 	# applied this frame. See aero.gd for the actual force math.
 	AeroModel.apply(self)
 	heat = HeatShimmer.next_heat(heat, self, delta)
+	damage.sync_settings(GameSettings.damage, GameSettings.difficulty)
 	damage.step(self, delta, health, limp)
 	_apply_damage_offsets()
 	_apply_lamp_damage()

@@ -175,6 +175,7 @@ var lane_speeds_onc_city: Array[float] = [18.9, 16.7, 14.4, 12.8]
 ## A car takes the city pace this far before the city starts (it slows ahead
 ## of the sign, not on it) and keeps it to the city's last metre.
 const PACE_AHEAD := 150.0
+var _pace_i := 0
 const SPEED_JITTER := 2.5
 ## Spawns, merges and moving over take the player into account as a car that
 ## may not brake. Tests turn it off to force rear-end crashes.
@@ -469,7 +470,10 @@ func _physics_process(_delta: float) -> void:
 	if _pool_size() > target_count:
 		_trim_cars()
 	if not cars.is_empty():
-		var paced := cars[_tick % cars.size()]
+		# its own counter: this point is reached every other tick, so _tick
+		# would only ever land on every other car
+		_pace_i = (_pace_i + 1) % cars.size()
+		var paced := cars[_pace_i]
 		if not paced.benched and paced._idx >= 0 and paced._idx < _z.size():
 			pace(paced, _z[paced._idx])
 	if near_miss != null:

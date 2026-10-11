@@ -48,6 +48,9 @@ const DJ_OLD_NAME := "Dave"
 ## the turbo spools for SPOOL seconds, then the valve flutters.
 const SPLASH_SOUND_AT := 0.2
 const SPLASH_SPOOL := 1.45
+const MENU_SPIN_MAX := 18.0    # rad/s, menu logo wheel while W is held
+const MENU_SPIN_UP := 12.0     # rad/s^2
+const MENU_SPIN_DOWN := 7.0
 const SPLASH_FLUTTER := 0.6
 const SPLASH_HOLD := 0.45
 const SPLASH_FADE := 0.35
@@ -84,6 +87,9 @@ var splash_name: Control
 
 var _splash_t := -1.0
 var _wheel_speed := 0.0
+var menu_wheel: TextureRect    # the menu lockup's wheel; spins while W is held
+var menu_spin := 0.0           # its speed, rad/s
+var _spin_held := false        # test hook: hold the throttle without a key event
 var _mark_y := 0.0             # the splash mark's resting place
 var _whistle: AudioStreamPlayer
 var _ticker_w := 0.0
@@ -112,7 +118,7 @@ func _ready() -> void:
 	slide.set_anchors_preset(Control.PRESET_FULL_RECT)
 	slide.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	stage.add_child(slide)
-	_build_lockup(slide, Vector2(96.0, 84.0), 150.0)
+	menu_wheel = _build_lockup(slide, Vector2(96.0, 84.0), 150.0)[1]
 	_build_menu()
 	_build_ticker()
 	_build_welcome()
@@ -650,6 +656,18 @@ func _process(delta: float) -> void:
 		_run_splash(delta)
 	if panel.visible:
 		_run_ticker(delta)
+		if not splash_running():
+			_run_menu_spin(delta)
+
+# Hold W (the throttle) and the menu logo's wheel spools up; let go and it
+# eases to a stop. Polled, because the tree is paused behind the title and
+# no car is reading the throttle.
+func _run_menu_spin(delta: float) -> void:
+	var held := _spin_held or Input.is_action_pressed("accelerate")
+	var rate := MENU_SPIN_UP if held else MENU_SPIN_DOWN
+	menu_spin = move_toward(menu_spin, MENU_SPIN_MAX if held else 0.0, rate * delta)
+	if menu_wheel != null and menu_spin != 0.0:
+		menu_wheel.rotation = wrapf(menu_wheel.rotation + menu_spin * delta, -PI, PI)
 
 func _input(event: InputEvent) -> void:
 	if not visible:

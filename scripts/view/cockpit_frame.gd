@@ -165,6 +165,8 @@ const DIAL_FACE := Color("#0B0E14")
 ##   drift    the drift coupe: hard dark-grey plastics, a black cloth bucket with a red-stitched
 ##            centre beside the old brown velour passenger seat, an amber strip
 ##   truck    the street truck: charcoal cloth bench, grey-black plastics, a sodium strip
+##   estate   the shop wagon: beige vinyl bench, cream plastics, a brown carpet, no strip
+##   work     the work pickup: grey vinyl bench, rubber mats, hard black plastics, no strip
 const TRIMS := {
 	"stock": {"plastic": PLASTIC, "plastic_light": PLASTIC_LIGHT, "trim": TRIM, "seat": SEAT, "seat_pass": SEAT, "seat_panel": SEAT_PANEL,
 		"leather": LEATHER, "carpet": CARPET, "strip": Color("#FFC06659"), "dash": PLASTIC, "dash_face": PLASTIC_LIGHT},
@@ -184,6 +186,10 @@ const TRIMS := {
 		"leather": Color("#121318"), "carpet": Color("#17181B"), "strip": Color("#FFC06640"), "dash": Color("#2A2C30"), "dash_face": Color("#34373C")},
 	"truck": {"plastic": Color("#202226"), "plastic_light": Color("#2C2F34"), "trim": Color("#3A3D43"), "seat": Color("#2A2B2E"), "seat_pass": Color("#2A2B2E"), "seat_panel": Color("#3C3E42"),
 		"leather": Color("#1E1F22"), "carpet": Color("#121316"), "strip": Color("#FF8A1F4D"), "dash": Color("#202226"), "dash_face": Color("#2A2D32")},
+	"estate": {"plastic": Color("#4E473C"), "plastic_light": Color("#6A6152"), "trim": Color("#7A7060"), "seat": Color("#8C7B60"), "seat_pass": Color("#8C7B60"), "seat_panel": Color("#9C8A6C"),
+		"leather": Color("#5C5040"), "carpet": Color("#2E241B"), "strip": Color("#FFC06600"), "dash": Color("#4E473C"), "dash_face": Color("#3E3830")},
+	"work": {"plastic": Color("#1C1D20"), "plastic_light": Color("#2A2C30"), "trim": Color("#3A3C40"), "seat": Color("#3E4248"), "seat_pass": Color("#3E4248"), "seat_panel": Color("#4A4E55"),
+		"leather": Color("#18191C"), "carpet": Color("#0D0E10"), "strip": Color("#FFC06600"), "dash": Color("#1C1D20"), "dash_face": Color("#26282C")},
 }
 const BACKLIGHT_ENERGY := 1.6
 
@@ -587,6 +593,10 @@ func _build_static() -> void:
 ##   centre  a big tach dead centre with a small speedo to its right and two
 ##           small fuel / temp cans to its left, plus a low three-pod holder on
 ##           the centre stack under the cluster's top (the drift coupe)
+##   estate  a flat wide binnacle, a big speedo left of centre and a small tach
+##           low to its right (the shop wagon)
+##   quad    two plain dials in a wide binnacle with a small fuel and a small
+##           temp can at its outer ends (the work pickup)
 ## tach and speedo needle pivots come from dial_centres(). Nothing here stands
 ## above the sight line, 8 degrees below the eye (tests/fleet/sight_line.gd).
 func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vector2) -> void:
@@ -634,6 +644,15 @@ func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vec
 				lit.cylinder(0.020, -0.004, 0.0, c, Color(DIAL_FACE, 0.15), 12, tilt_c)
 				k.cylinder(0.025, -0.008, -0.002, c + turn_c * Vector3(0, 0, 0.001), TRIM, 12, tilt_c)
 				lit.box(Vector3(0.003, 0.014, 0.002), c + tilt_c * Vector3(0.0, 0.0, -0.010), Color(SODIUM, 0.6), tilt_c)
+		"estate":   # a short hood: the wagon's screen comes down close over the dash
+			_binnacle(k, seat_x + 0.03, 0.36, cl, 0.060, 0.07)
+		"quad":
+			_binnacle(k, seat_x, 0.50, cl)
+			for i in 2:   # fuel and temp, a small can at each end of the binnacle
+				var cc := Vector3(seat_x + (-0.205 if i == 0 else 0.205), cl.x - 0.012, cl.y)
+				lit.cylinder(0.017, -0.004, 0.0, cc, Color(DIAL_FACE, 0.15), 10, flat)
+				k.cylinder(0.022, -0.008, -0.002, cc + Vector3(0, 0, -0.001), TRIM, 10, flat)
+				lit.box(Vector3(0.002, 0.011, 0.002), cc + Vector3(0.0, -0.002, 0.001), Color(SODIUM, 0.7), Basis(Vector3.BACK, deg_to_rad(-25.0 + 50.0 * i)))
 		"triple":
 			_binnacle(k, seat_x, 0.34, cl)
 			# three aux gauges in a low hood in the middle of the dash top, turned to the driver
@@ -741,6 +760,10 @@ func dial_centres() -> Array:
 			return [Vector3(seat_x - 0.125, cl.x, cl.y), Vector3(seat_x + 0.125, cl.x, cl.y)]
 		"centre":   # the big tach dead ahead, the small speedo to its right
 			return [Vector3(seat_x - 0.010, cl.x, cl.y), Vector3(seat_x + 0.118, cl.x - 0.008, cl.y)]
+		"estate":   # the big speedo left of centre, the small tach on its right
+			return [Vector3(seat_x + 0.105, cl.x + 0.006, cl.y), Vector3(seat_x - 0.030, cl.x, cl.y)]
+		"quad":
+			return [Vector3(seat_x - 0.080, cl.x, cl.y), Vector3(seat_x + 0.080, cl.x, cl.y)]
 		_:
 			return [Vector3(seat_x - 0.085, cl.x, cl.y), Vector3(seat_x + 0.085, cl.x, cl.y)]
 
@@ -772,6 +795,10 @@ func dial_radii() -> Array:
 			return [0.046, 0.046]
 		"centre":
 			return [0.060, 0.034]
+		"estate":
+			return [0.034, 0.056]
+		"quad":
+			return [0.046, 0.046]
 		_:
 			return [DIAL_R, DIAL_R]
 

@@ -14,6 +14,31 @@ const NAMES := ["chrome", "exh_hole", "glass", "grille", "head", "paint", "pilla
 const COLORS := {"chrome": "#C9CED6", "exh_hole": "#050608", "glass": "#151D2E", "grille": "#0D1017", "head": "#FFE7BD", "paint": "#E4DDD0", "pillar": "#10141C", "rim": "#B9BEC6", "rim_dark": "#22252C", "roof": "#E4DDD0", "tail": "#E5262B", "tire": "#15171C", "tire_side": "#1C1F26", "trim": "#1A1D24", "turn": "#FFC066", "under": "#0B0E14"}
 const EMISSIVE := ["head", "pol_b", "pol_r", "tail", "turn"]
 const GLASS := ["glass"]
+## The cabin, car space (the car at rest, lift included). Hand-set on 2026-10-11
+## from the wagon's sheet (lift 0.132: windshield base z -0.97 y 1.06, top
+## z -0.47 y 1.67, belt 0.99, floor pan 0.29, B-pillar z 0.08, C-pillar z 1.13);
+## cabin_measure.gd reads only sheet bodies, and this body is built from parts.
+## CockpitFrame builds the interior from these; nothing in it is the coupe's.
+const CABIN := {
+	"seat_x": -0.360, "seat_h": 0.700, "seat_z": -0.020,
+	"eye": Vector3(-0.320, 1.320, -0.080),
+	"floor_y": 0.340, "belt_y": 0.992,
+	"cowl": Vector2(1.060, -0.860), "dash_face_z": -0.696,
+	"header": Vector2(1.600, -0.450), "roof_y": 1.600, "roof_z1": 1.900, "open_top": false,
+	"door_x": 0.720, "door_x_rear": 0.720, "door_x_front": 0.720, "glass_x": 0.760, "glass_top": 1.620,
+	"a_pillar": [Vector3(0.630, 1.060, -0.880), Vector3(0.640, 1.600, -0.450)],
+	"b_pillar_z": 0.100, "rear_z": 0.800,
+	"shelf": {},
+	"wheel": Vector3(-0.360, 0.990, -0.560), "wheel_tilt_deg": -25.0,
+	"cluster": Vector2(1.150, -0.715), "cluster_style": "estate", "speedo_max_kmh": 200.0,
+	"head_unit": Vector3(0.0, 1.052, -0.634),
+	"lever": Vector3(0.0, 0.835, -0.400), "handbrake": Vector3(0.0, 0.835, 0.060),
+	"pedals": Vector3(-0.260, 0.610, -0.760),
+	"crank": Vector3(-0.716, 0.870, -0.560), "switch": Vector3(-0.690, 1.007, -0.360),
+	"rear_mirror": Vector3(0.0, 1.470, -0.530),
+	"door_mirror": Vector3(0.950, 1.040, -0.840),
+	"console": "flat", "seats": "bench", "trim": "estate",
+}
 ## Build name -> body_tris, tris_total, body_pos (chunks), body_mat, wheels
 ## (front and rear right-hand wheel, hub-relative), slots, tips. Car space.
 const BUILDS := {

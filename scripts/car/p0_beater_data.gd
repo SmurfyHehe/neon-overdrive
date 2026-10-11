@@ -28,7 +28,7 @@ const CABIN := {
 	"b_pillar_z": 0.115, "rear_z": 0.575,
 	"shelf": {"y": 1.064, "z0": 0.575, "z1": 1.425, "half_w": 0.616},
 	"wheel": Vector3(-0.291, 0.912, -0.525), "wheel_tilt_deg": -25.0,
-	"cluster": Vector2(1.072, -0.694), "cluster_style": "pod", "speedo_max_kmh": 160.0,
+	"cluster": Vector2(1.072, -0.664), "cluster_style": "pod", "speedo_max_kmh": 160.0,
 	"head_unit": Vector3(0.0, 0.974, -0.599),
 	"lever": Vector3(0.0, 0.757, -0.365), "handbrake": Vector3(0.0, 0.757, 0.095),
 	"pedals": Vector3(-0.191, 0.592, -0.845),

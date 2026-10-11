@@ -25,6 +25,7 @@ const SEAT := {
 	"p6_crossover": {"seat_h": 0.31, "eye_back": 0.38, "console": "tunnel", "seats": "bucket", "cluster": "dials",  "speedo": 260.0},
 	"p8_driftcoupe": {"seat_h": 0.24, "eye_back": 0.36, "console": "tunnel", "seats": "bucket", "cluster": "centre", "speedo": 240.0},
 	"p10_truck":    {"seat_h": 0.34, "eye_back": 0.40, "console": "flat",   "seats": "bench",  "cluster": "wide",   "speedo": 200.0},
+	"p17_work_pickup": {"seat_h": 0.34, "eye_back": 0.40, "console": "flat", "seats": "bench", "cluster": "wide",   "speedo": 240.0},
 }
 
 var skin: Array = []   # [a, b, c, n]
@@ -67,7 +68,8 @@ func _measure(kind: String) -> void:
 	var wind := _pane(glass, func(t: Array) -> bool: return t[3].z < -0.35 and t[3].y > 0.2 and absf(_cx(t)) < 0.45)
 	var rear := _pane(glass, func(t: Array) -> bool: return t[3].z > 0.35 and t[3].y > 0.1 and absf(_cx(t)) < 0.45)
 	var side := _pane(glass, func(t: Array) -> bool: return t[3].x < -0.6)
-	var open_top := rear.size.z < 0.12 or rear.position.z < wind.end.z + 0.2
+	# no rear pane, or none behind the windshield: an open car (an upright cab-back window is short in z but tall)
+	var open_top := (rear.size.z < 0.12 and rear.size.y < 0.12) or rear.position.z < wind.end.z + 0.2
 	var hand: Dictionary = SEAT[kind]
 	var floor_y := _floor()
 	var roof_y := _roof(side)

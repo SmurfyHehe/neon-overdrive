@@ -134,6 +134,16 @@ const POOL_ACROSS := 13.0   # light pool size on the road, m
 const POOL_ALONG := 17.0
 const POOL_Y := 0.045       # just above the lane dashes (top at 0.035)
 const SODIUM := Color(1.0, 0.55, 0.2)
+# NIGHT LIGHTING PASS (2026-10-11): the pools measured RGB 58,34,21 at their
+# brightest on the road (tools/night_shots.gd), a tint you had to brighten a
+# screenshot 4x to find. Hotter centre, more of it. And a wet-road streak
+# under each lamp head: the long smear a lamp leaves on damp asphalt, the
+# same additive quad stretched along the road, which reads as a reflection
+# from the driver's low view. Still no lights: two quads per lamp.
+const POOL_GAIN := 0.8      # was 0.42
+const STREAK_ACROSS := 1.3
+const STREAK_ALONG := 30.0
+const STREAK_GAIN := 0.5
 
 const WALL_H := 2.2         # gap walls between buildings
 const WALL_T := 0.3
@@ -190,6 +200,7 @@ static var _barrier_mesh: BoxMesh
 static var _lamp_mesh: ArrayMesh
 static var _pool_mesh: PlaneMesh
 static var _pool_mat: StandardMaterial3D
+static var _streak_mat: StandardMaterial3D
 static var _wall_mesh: BoxMesh
 static var _reflector_mesh: ArrayMesh
 static var _reflector_mat: ShaderMaterial
@@ -224,7 +235,11 @@ static func _asphalt_mat(color: Color) -> StandardMaterial3D:
 	tex.color_ramp = grad
 	m.albedo_texture = tex
 	m.uv1_scale = Vector3(2.0, 6.0, 1.0)
-	m.roughness = 0.9
+	# NIGHT LIGHTING PASS (2026-10-11): roughness 0.9 -> 0.6. The asphalt now
+	# picks up a dim mirror of the sky's horizon glow at grazing angles (the
+	# damp sheen on a city road at night) from the radiance map that is already
+	# there, so it costs nothing extra.
+	m.roughness = 0.6
 	m.metallic = 0.0
 	return m
 
@@ -459,8 +474,8 @@ static func _get_pool_mesh() -> PlaneMesh:
 static func _get_pool_mat() -> StandardMaterial3D:
 	if _pool_mat == null:
 		var grad := Gradient.new()
-		grad.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
-		grad.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.42), Color(1, 1, 1, 0)])
+		grad.offsets = PackedFloat32Array([0.0, 0.3, 1.0])
+		grad.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.5), Color(1, 1, 1, 0)])
 		var tex := GradientTexture2D.new()
 		tex.gradient = grad
 		tex.fill = GradientTexture2D.FILL_RADIAL
@@ -473,13 +488,21 @@ static func _get_pool_mat() -> StandardMaterial3D:
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 		m.albedo_texture = tex
-		m.albedo_color = Color(SODIUM.r * 0.42, SODIUM.g * 0.42, SODIUM.b * 0.42, 1.0)
+		m.albedo_color = Color(SODIUM.r * POOL_GAIN, SODIUM.g * POOL_GAIN, SODIUM.b * POOL_GAIN, 1.0)
 		m.disable_fog = true
 		m.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
 		m.distance_fade_min_distance = 170.0  # min > max: fade OUT with distance
 		m.distance_fade_max_distance = 110.0
 		_pool_mat = m
 	return _pool_mat
+
+## The wet-road streak: the pool material at a lower gain (its own copy, so
+## the two can be tuned apart).
+static func _get_streak_mat() -> StandardMaterial3D:
+	if _streak_mat == null:
+		_streak_mat = _get_pool_mat().duplicate() as StandardMaterial3D
+		_streak_mat.albedo_color = Color(SODIUM.r * STREAK_GAIN, SODIUM.g * STREAK_GAIN, SODIUM.b * STREAK_GAIN, 1.0)
+	return _streak_mat
 
 static func _get_wall_mesh() -> BoxMesh:
 	if _wall_mesh == null:
@@ -1141,6 +1164,7 @@ static func _create_nodes(root: Node3D) -> void:
 	# allocated once, like the dashes and pylons above.
 	root.add_child(_new_multimesh("Lamps", _get_lamp_mesh(), null, _lamp_slots() * 2))
 	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2))
+	root.add_child(_new_multimesh("LampStreaks", _get_pool_mesh(), _get_streak_mat(), _lamp_slots() * 2))
 	# Per side: a gap either side of each building, +1 for the district step
 	# wall, +1 more
 	# where a crossing's mouth (Junction) splits a gap in two
@@ -1327,6 +1351,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# arm over the road; the oncoming side is the same mesh turned 180 deg.
 	var lamps: MultiMesh = (root.get_node(^"Lamps") as MultiMeshInstance3D).multimesh
 	var pools: MultiMesh = (root.get_node(^"LampPools") as MultiMeshInstance3D).multimesh
+	var streaks: MultiMesh = (root.get_node(^"LampStreaks") as MultiMeshInstance3D).multimesh
 	var n_lamps := 0
 	for i in range(_lamp_slots()):
 		for side in [1, -1]:
@@ -1341,9 +1366,11 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			lamps.set_instance_transform(n_lamps, _xf_up(pole_x, 0.0, lz, turn))
 			var head_x := pole_x - (LAMP_ARM - 0.2) * float(side)
 			pools.set_instance_transform(n_lamps, _xf(head_x, POOL_Y, lz, Basis.from_scale(Vector3(POOL_ACROSS, 1.0, POOL_ALONG))))
+			streaks.set_instance_transform(n_lamps, _xf(head_x, POOL_Y + 0.002, lz, Basis.from_scale(Vector3(STREAK_ACROSS, 1.0, STREAK_ALONG))))
 			n_lamps += 1
 	lamps.visible_instance_count = n_lamps
 	pools.visible_instance_count = n_lamps
+	streaks.visible_instance_count = n_lamps
 
 	# center line / barrier -- snapped to this chunk's own end-of-chunk
 	# config, not tapered (see file header). Both the wall and the dash

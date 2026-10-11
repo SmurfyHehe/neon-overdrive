@@ -121,7 +121,9 @@ func _signs() -> void:
 		if int(it.cd.b) == RoadSigns.RED:
 			red = true
 	_check(red, "the no-U-turn sign has no red ring")
-	_check(WordAtlas.layer_count() <= 32, "the atlas has %d layers (32 max)" % WordAtlas.layer_count())
+	# 48 since the exit gantries (ring sites): "EXIT 1" .. "EXIT 16", "SERVICES"
+	# and "1 km" joined the lettering (a layer is 512 x 64 px).
+	_check(WordAtlas.layer_count() <= 48, "the atlas has %d layers (48 max)" % WordAtlas.layer_count())
 
 func _paint() -> void:
 	var n := RoadMap.period

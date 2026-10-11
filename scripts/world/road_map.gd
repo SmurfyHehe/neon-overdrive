@@ -422,6 +422,36 @@ static func aux(chunk_index: int) -> Vector2:
 static func exit_signs(chunk_index: int) -> Array:
 	return _exit_signs.get(lap_chunk(chunk_index), []) if period > 0 else []
 
+## The ring site nearest `s` metres along the road: {index (into rings()), s
+## (its centre, on the same lap as s or the one before or after)}. index -1
+## when there is none.
+static func ring_near(s: float) -> Dictionary:
+	if _rings.is_empty():
+		return {"index": -1, "s": INF}
+	var lap := length()
+	var m := fposmod(s, lap)
+	var best := INF
+	var which := -1
+	for i in _rings.size():
+		var d := fposmod(float(_rings[i].s) - m + lap * 0.5, lap) - lap * 0.5
+		if absf(d) < absf(best):
+			best = d
+			which = i
+	return {"index": which, "s": s + best}
+
+## Which side a ring's spur leaves on: +1 / -1 for a "stop" (its STOPS exit's
+## side) or +1 for a "lot"; 0 = no spur.
+static func ring_spur_side(ring: int) -> int:
+	var kind := String(_rings[ring].kind)
+	if kind == "lot":
+		return 1
+	if kind != "stop":
+		return 0
+	for st in STOPS:
+		if int(st.road) == road_id and String(st.exit).trim_suffix("a").trim_suffix("b") == String(_rings[ring].id):
+			return 1 if String(st.exit).ends_with("a") else -1
+	return 1
+
 ## Whether a stop (STOPS) hangs off this ring.
 static func ring_has_stop(ring: int) -> bool:
 	for st in STOPS:

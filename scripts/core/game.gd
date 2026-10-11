@@ -57,6 +57,7 @@ var traffic: TrafficManager
 ## City lights (junction.gd): the one signalised crossing, or null when the
 ## switch is off.
 var junction: Junction
+var ring_site: Node3D
 var game_state: GameState
 
 # Chase camera, its three smoothing modes (#31, C to cycle) and the stage A
@@ -86,6 +87,7 @@ var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust fl
 const SaveDirector := preload("res://scripts/save/save_director.gd")
 const UserDirMigration := preload("res://scripts/save/user_dir_migration.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
+const RingSite := preload("res://scripts/world/ring_site.gd")
 # The shared test driver and the F9 drive recorder (2026-10-10). `bot` is the
 # driver when the game was started with -- --bot=<mode> / NEON_BOT (watching
 # the bot in a window uses the same switch the headless tests do), with
@@ -848,6 +850,9 @@ func _setup_traffic() -> void:
 		junction.t = randf() * Junction.CYCLE
 		add_child(junction)
 		traffic.junction = junction
+	# The raised ring at the nearest ring site (R2), moved like the crossing.
+	ring_site = RingSite.new()
+	add_child(ring_site)
 
 # ---------- camera ----------
 func _setup_camera() -> void:
@@ -1073,6 +1078,7 @@ func _process(delta: float) -> void:
 	_update_bands()
 	var pz := RoadFrame.unroll(player.position).z
 	Junction.focus_z = pz
+	RingSite.focus_s = RoadFrame.s_at(pz)
 	_update_chunk_pool(pz)
 	# eyes in the headlights (world step 6, A1): one angle check per animal
 	# on the chunks round the car

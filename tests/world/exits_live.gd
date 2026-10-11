@@ -1,6 +1,7 @@
 extends SceneTree
 
-# Live exits (ring sites R1): every exit can be taken and rejoined, both ways.
+# Live exits and the raised ring (ring sites R1 + R2): every exit can be
+# taken and rejoined, both ways, by way of the ring.
 #
 # 1. The map: every act-1 ring site (not the tunnel district) has an exit per
 #    carriageway, each RING_GORE before the ring in its own direction; the
@@ -13,10 +14,13 @@ extends SceneTree
 #    chunk, the ramps are gone. Exit gantries stand 400 m and 1 km before each
 #    gore.
 # 3. Driving, on the curved, hilly loop with no traffic: at every site and on
-#    both carriageways a bot leaves the outside lane, drives up the ramp, turns
-#    a full circle on the pad, comes down the other ramp and rejoins, heading
-#    the way that carriageway flows. It never touches a wall, is never off the
-#    deck, and the grade it climbs is never above 6 %.
+#    both carriageways a bot leaves the outside lane, drives up the ramp, goes
+#    once round the ring (anticlockwise), comes down the other ramp of its own
+#    side and rejoins, heading the way that carriageway flows. At two sites it
+#    also goes half round and down onto the OTHER carriageway. It never
+#    touches a wall, is never off the deck, and the grade it climbs is never
+#    above 6 %. The ring node stands at the site being driven, in 2 draw
+#    calls.
 #
 # Exit code 1 on failure. Run (headless):
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --fixed-fps 60 --path . -s res://tests/world/exits_live.gd
@@ -24,6 +28,7 @@ extends SceneTree
 const RoadMap := preload("res://scripts/world/road_map.gd")
 const RoadRamps := preload("res://scripts/world/road_ramps.gd")
 const SaveDirector := preload("res://scripts/save/save_director.gd")
+const RingSite := preload("res://scripts/world/ring_site.gd")
 const B := preload("res://scripts/world/road_chunk_builder.gd")
 
 const L := 50.0
@@ -31,9 +36,8 @@ const START_V := 260.0      # the bot starts this far before the ring's centre
 const END_V := 330.0        # and is done this far after it
 const LANE_X := 11.6        # the outside lane's centre
 const SLIP_X := RoadRamps.X_LANE + RoadRamps.HALF
-const LOOP_R := RoadRamps.PAD_X - RoadRamps.X_TOP   # the circle on the pad
 const RAMP_SPEED := 13.0
-const PAD_SPEED := 6.5
+const RING_SPEED := 10.0
 const MAX_GRADE := 0.06
 ## The grade the bot is measured climbing, over 8 m at a time, may read this
 ## much over (its springs move a centimetre or two in 8 m).
@@ -45,12 +49,14 @@ var fails: Array[String] = []
 var checks := 0
 
 # the run in hand
-var runs: Array = []        # [ring index, side]
+var runs: Array = []        # [ring index, side, cross to the other carriageway]
 var run_i := -1
 var path: Array[Vector3] = []   # (x across, u along from the ring's centre, target speed)
 var path_i := 0
 var site_s := 0.0
 var side := 1
+var cross := false
+var ring_wrong := 0
 var run_ticks := 0
 var top_y := 0.0
 var wall_hits := 0
@@ -199,7 +205,7 @@ func _chunks() -> void:
 		_check(str(_census(pooled)) == str(want), "chunk %d (k %d) rebuilt twice differs" % [c, k])
 		var ramp := k >= -RoadMap.RAMP_CHUNKS and k < RoadMap.RAMP_CHUNKS
 		if ramp:
-			_check(want.verts > 0 and want.faces > 0 and want.boxes > 0 and want.pools > 0, "ramp chunk %d (k %d) is missing parts: %s" % [c, k, want])
+			_check(want.verts > 0 and want.faces > 0 and want.boxes > 0, "ramp chunk %d (k %d) is missing parts: %s" % [c, k, want])
 			_check(want.buildings == 0, "ramp chunk %d (k %d) still has %d buildings" % [c, k, want.buildings])
 			_check((want.bounds as Vector2).x == RoadRamps.bound(c) and (want.bounds as Vector2).y == RoadRamps.bound(c), "ramp chunk %d: walls at %s, expected %.0f" % [c, want.bounds, RoadRamps.bound(c)])
 		else:
@@ -218,6 +224,21 @@ func _chunks() -> void:
 		sign_root.free()
 		break
 	pooled.free()
+	# the ring: every look builds, and its rim is open exactly at the ramps and the spur
+	for r in RoadMap.rings().size():
+		var look := RingSite.look_of(r)
+		var made := RingSite.build(look)
+		var open := 0
+		for i in RingSite.SEGS:
+			if RingSite.rim_open(i, int(look.spur)):
+				open += 1
+		_check(open == (14 if int(look.spur) != 0 else 12), "ring %s: %d rim pieces open (spur %d)" % [RoadMap.rings()[r].id, open, look.spur])
+		_check((made.faces as PackedVector3Array).size() >= RingSite.SEGS * 6 and (made.boxes as Array).size() > RingSite.SEGS and (made.pools as Array).size() >= 7,
+			"ring %s is missing parts: %d face points, %d boxes, %d pools" % [RoadMap.rings()[r].id, (made.faces as PackedVector3Array).size(), (made.boxes as Array).size(), (made.pools as Array).size()])
+		_check((RoadMap.ring_kind(r) in ["stop", "lot"]) == (int(look.spur) != 0), "ring %s (%s) has spur %d" % [RoadMap.rings()[r].id, RoadMap.ring_kind(r), look.spur])
+	# the ramps end on the rim pieces the mouths are cut at
+	_check(absf(RoadRamps.V_RING_OUT - RoadRamps.RING_OUT * sin(deg_to_rad(3.0 * RoadRamps.RING_SEG_DEG))) < 0.01
+		and absf(RoadRamps.V_RING_IN - RoadRamps.RING_OUT * sin(deg_to_rad(6.0 * RoadRamps.RING_SEG_DEG))) < 0.01, "the ramps do not end on the rim pieces of the ring")
 
 # ---------- 3. driving ----------
 
@@ -233,18 +254,22 @@ func _line() -> Array[Vector3]:
 		w += 2.0
 	w = -RoadRamps.V_GORE
 	while w < 0.0:
-		out.append(Vector3(RoadRamps.x_at(-w), w, PAD_SPEED if w > -40.0 else RAMP_SPEED))
+		out.append(Vector3(RoadRamps.x_at(-w), w, RING_SPEED if w > -40.0 else RAMP_SPEED))
 		w += 2.0
-	# a full circle on the pad, starting and ending on the ramps' line
-	for i in range(0, 48):
-		var a := TAU * float(i) / 48.0
-		out.append(Vector3(RoadRamps.PAD_X - LOOP_R * cos(a), LOOP_R * sin(a), PAD_SPEED))
+	# round the ring, anticlockwise, from the point the ramps touch it: once
+	# round and off on the same side, or half round to the other side
+	var n := 48 if cross else 96
+	for i in range(0, n):
+		var a := TAU * float(i) / 96.0
+		out.append(Vector3(RoadRamps.X_TOP * cos(a), RoadRamps.X_TOP * sin(a), RING_SPEED))
+	# down: the same shape, mirrored through the centre of the ring when crossing
+	var m := -1.0 if cross else 1.0
 	w = 0.0
 	while w <= RoadRamps.V_GORE:
-		out.append(Vector3(RoadRamps.x_at(w), w, PAD_SPEED if w < 30.0 else RAMP_SPEED))
+		out.append(Vector3(m * RoadRamps.x_at(w), m * w, RING_SPEED if w < 30.0 else RAMP_SPEED))
 		w += 2.0
 	while w < END_V:
-		out.append(Vector3(lerpf(SLIP_X, LANE_X, smoothstep(205.0, 250.0, w)), w, RAMP_SPEED))
+		out.append(Vector3(m * lerpf(SLIP_X, LANE_X, smoothstep(205.0, 250.0, w)), m * w, RAMP_SPEED))
 		w += 2.0
 	return out
 
@@ -262,6 +287,7 @@ func _next_run(p: PlayerCar) -> bool:
 		return false
 	var ring: Dictionary = RoadMap.rings()[int(runs[run_i][0])]
 	side = int(runs[run_i][1])
+	cross = bool(runs[run_i][2])
 	# the lap the car is on now, so the pool only has to move, not jump laps
 	var here := RoadFrame.s_at(RoadFrame.unroll(p.global_position).z)
 	site_s = float(ring.s) + roundf((here - float(ring.s)) / RoadMap.length()) * RoadMap.length()
@@ -324,7 +350,10 @@ func _watch(p: PlayerCar) -> void:
 				_fail("exit %s: touched a wall (%s) %.0f m from the ring's centre, %.1f m out, %.1f m up" % [_name(), body.name, w, u.x * float(side), u.y])
 	# on the ramps and the pad the car rides the deck: its height is the deck's
 	if absf(w) < RoadRamps.V_NOSE - 5.0:
-		var deck := RoadRamps.RAMP_H if u.x * float(side) > RoadRamps.X_TOP + RoadRamps.HALF else RoadRamps.y_at(absf(w))
+		var on_ring := Vector2(u.x, w).length() < RoadRamps.RING_OUT + 1.0
+		var deck := RoadRamps.RAMP_H if on_ring else RoadRamps.y_at(absf(w))
+		if on_ring and (game.ring_site.site != int(runs[run_i][0]) or not game.ring_site.visible):
+			ring_wrong += 1
 		if absf(u.y - deck) > 0.9 or p.global_basis.y.y < 0.8:
 			off_deck += 1
 			if off_deck <= 3:
@@ -339,15 +368,16 @@ func _watch(p: PlayerCar) -> void:
 		_grade_from = p.global_position
 
 func _name() -> String:
-	return "%s%s" % [RoadMap.rings()[int(runs[run_i][0])].id, "a" if side > 0 else "b"]
+	return "%s%s%s" % [RoadMap.rings()[int(runs[run_i][0])].id, "a" if side > 0 else "b", " (across)" if cross else ""]
 
 func _end_run(p: PlayerCar) -> void:
 	var u := RoadFrame.unroll(p.global_position)
 	var at := RoadMap.where(u.z, -p.global_transform.basis.z)
 	_check(top_y > RoadRamps.RAMP_H - 0.3, "exit %s: the bot only got %.1f m up" % [_name(), top_y])
 	_check(absf(u.y) < 0.6, "exit %s: the bot ends %.1f m above the road" % [_name(), u.y])
-	_check(int(at.dir) == side, "exit %s: the bot rejoined heading %d on the %d carriageway" % [_name(), at.dir, side])
-	_check(u.x * float(side) > 0.4 and u.x * float(side) < RoadRamps.X_LANE + RoadMap.AUX_W, "exit %s: the bot rejoined %.1f m out" % [_name(), u.x * float(side)])
+	var end_side := -side if cross else side
+	_check(int(at.dir) == end_side, "exit %s: the bot rejoined heading %d on the %d carriageway" % [_name(), at.dir, end_side])
+	_check(u.x * float(end_side) > 0.4 and u.x * float(end_side) < RoadRamps.X_LANE + RoadMap.AUX_W, "exit %s: the bot rejoined %.1f m out" % [_name(), u.x * float(end_side)])
 	_check(p.linear_velocity.length() > 5.0, "exit %s: the bot is stopped at the end" % _name())
 	done_runs += 1
 	print("exit %s: up %.2f m, rejoined at %.0f m heading %d, %.1f s" % [_name(), top_y, at.s, at.dir, float(run_ticks) / float(Engine.physics_ticks_per_second)])
@@ -367,8 +397,14 @@ func _physics_process(_delta: float) -> bool:
 		_check(RoadRamps.max_grade() + tilt <= MAX_GRADE, "the ramp's %.2f %% on the lap's %.2f %% tilt is over 6 %%" % [RoadRamps.max_grade() * 100.0, tilt * 100.0])
 		print("exits_live: ramp %.2f %%, lap tilt %.2f %%" % [RoadRamps.max_grade() * 100.0, tilt * 100.0])
 		for r in RoadMap.rings().size():
-			runs.append([r, 1])
-			runs.append([r, -1])
+			runs.append([r, 1, false])
+			runs.append([r, -1, false])
+		for r in [1, 5]:
+			runs.append([r, 1, true])
+			runs.append([r, -1, true])
+		var rc: Dictionary = game.ring_site.counts()
+		_check(int(rc.draws) > 0 and int(rc.draws) < 12 and int(rc.verts) > 0, "the ring node draws %d things (%s)" % [rc.draws, rc])
+		print("exits_live: ring node %s" % [rc])
 		_drive(p)
 		if not _next_run(p):
 			_finish()
@@ -395,6 +431,7 @@ func _finish() -> void:
 	_check(done_runs == runs.size(), "%d of %d exits were driven to the end" % [done_runs, runs.size()])
 	_check(wall_hits == 0, "the bot touched a wall on %d ticks" % wall_hits)
 	_check(off_deck == 0, "the bot was off the deck on %d ticks" % off_deck)
+	_check(ring_wrong == 0, "the ring node was not at the site being driven on %d ticks" % ring_wrong)
 	print("exits_live: %d of %d exits driven, steepest grade driven %.2f %%, %d wall ticks, %d off-deck ticks" % [done_runs, runs.size(), worst_grade * 100.0, wall_hits, off_deck])
 	print("exits_live: %d checks, %d failed" % [checks, fails.size()])
 	quit(1 if not fails.is_empty() else 0)

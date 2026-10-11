@@ -1943,7 +1943,7 @@ static func _update_names(root: Node3D, chunk_index: int, walk0: float, walk1: f
 			var ew := lerpf(walk0, walk1, -rz / CHUNK_LEN) if eside > 0.0 else lerpf(onc0, onc1, -rz / CHUNK_LEN)
 			var ring: Dictionary = RoadMap.rings()[int(r.ring)]
 			var leads := PlaceNames.SERVICES if RoadMap.ring_has_stop(int(r.ring)) else PlaceNames.area_name(RoadMap.district_kind(RoadMap.district_of(floori(float(ring.s) / CHUNK_LEN))))
-			list = RoadSigns.exit_gantry(PlaceNames.EXIT, leads, PlaceNames.EXIT_FAR if bool(r.far) else PlaceNames.ADVANCE,
+			list = RoadSigns.exit_gantry(PlaceNames.exit_word(int(ring.number)), leads, PlaceNames.EXIT_FAR if bool(r.far) else PlaceNames.ADVANCE,
 				Vector3((ew + NAME_SIGN_SETBACK) * eside, 0.0, rz), _foundation(), eside)
 		else:
 			var moved: Array = RoadSigns.median_parts(String(r.kind), float(r.dir), bool(r.lamp))
@@ -2484,8 +2484,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			var lz := -float(i) * LAMP_SPACING - (LAMP_SPACING * 0.25 if side == 1 else LAMP_SPACING * 0.75)
 			if Junction.in_mouth(chunk_index, lz):
 				continue  # the signal masts stand there
-			if RoadRamps.nose(chunk_index):
-				continue  # the ramp's lane crosses the pole line; its own lamps light it
+			if RoadRamps.nose(chunk_index) or RoadRamps.under_ring(chunk_index, lz):
+				continue  # the ramp's lane crosses the pole line, or the ring's bridge is overhead
 			if side == 1 and GasStation.in_bay(chunk_index, lz):
 				continue  # the gas station canopy lights the bay
 			lamp_zs[side].append(lz)

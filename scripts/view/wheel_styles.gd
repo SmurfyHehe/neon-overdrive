@@ -75,16 +75,19 @@ const STITCHES := {
 ## uses the coupe's row. tests/view/cabin_clearance.gd prints what really
 ## passes; numbers here are capped to that. The first design values (lo..hi,
 ## dish) were 33-37 / 34-39 / 31-34 / 35-40 cm; the 15 degree sight line
-## (CockpitFrame.WHEEL_TOP_MIN_DEG) caps every car's rim at 36 cm.
+## (CockpitFrame.WHEEL_TOP_MIN_DEG) caps every car's rim at 36 cm. With the
+## cabins as merged for build 4 (2026-10-11) a 36 cm rim comes 1.9 cm
+## from the coupe's, the wagon's and the pickup's shins (2.0 needed), and covers
+## 38-40% of the hot hatch's tach (30% allowed): those rows stop at 35 cm.
 const FIT := {
 	"p0_beater": {"factory": 39.0, "lo": 34.0, "hi": 36.0, "dish": 4.0},
-	"p1_coupe": {"factory": 36.0, "lo": 33.0, "hi": 36.0, "dish": 4.0},
-	"p2_hothatch": {"factory": 36.0, "lo": 33.0, "hi": 36.0, "dish": 4.0},
+	"p1_coupe": {"factory": 36.0, "lo": 33.0, "hi": 35.0, "dish": 4.0},
+	"p2_hothatch": {"factory": 36.0, "lo": 33.0, "hi": 35.0, "dish": 4.0},
 	"p3_tuner": {"factory": 36.0, "lo": 33.0, "hi": 36.0, "dish": 4.0},
 	"p4_kei": {"factory": 33.0, "lo": 31.0, "hi": 33.0, "dish": 4.0},
 	"p5_muscle": {"factory": 40.0, "lo": 35.0, "hi": 36.0, "dish": 4.0},
 	"p6_crossover": {"factory": 37.0, "lo": 34.0, "hi": 36.0, "dish": 4.0},
-	"p17_work_pickup": {"factory": 39.0, "lo": 35.0, "hi": 36.0, "dish": 4.0},
+	"p17_work_pickup": {"factory": 39.0, "lo": 35.0, "hi": 35.0, "dish": 4.0},
 }
 
 ## The race wheel's diameter, the same on every car (cm).

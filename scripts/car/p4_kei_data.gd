@@ -18,11 +18,19 @@ const GLASS := ["glass"]
 ## body by tools/fleet_design/cabin_measure.gd (2026-10-09; again 2026-10-11 for
 ## the parts body: the screen top is 8 cm lower, so the header, the pillar tops,
 ## the mirror and the seat came down with it; the eye sits 13.5 cm under the
-## header) and hand-tuned.
+## header) and hand-tuned. Build 4 merge (2026-10-11): the seat and eye came
+## down 2.5 cm more (the header bar's underside, 10 cm under the header, and the
+## mirror mount stood in the road band, tests/fleet/sight_line.gd), and the
+## wheel, which had stayed where it was when the seat came down, 5.5 cm lower
+## and 2.6 cm inboard: the race wheel's top 15 degrees under the eye, the cans
+## seen over it, the left hand off the door card. The cluster 0.8 cm lower, the
+## head unit 3 cm right and 3.3 cm lower (between the rim and the speedo), the
+## tunnel 10 cm wide and 1.6 cm lower under the rim (tests/view/gauge_layout.gd,
+## tests/view/cabin_clearance.gd, tests/fleet/driver_fit.gd).
 ## CockpitFrame builds the interior from these; nothing in it is the coupe's.
 const CABIN := {
-	"seat_x": -0.231, "seat_h": 0.410, "seat_z": -0.025,
-	"eye": Vector3(-0.191, 1.030, -0.085),
+	"seat_x": -0.231, "seat_h": 0.385, "seat_z": -0.025,
+	"eye": Vector3(-0.191, 1.005, -0.085),
 	"floor_y": 0.256, "belt_y": 0.842,
 	"cowl": Vector2(0.756, -0.775), "dash_face_z": -0.715,
 	"header": Vector2(1.165, -0.375), "roof_y": 1.165, "roof_z1": 0.475, "open_top": true,
@@ -30,15 +38,15 @@ const CABIN := {
 	"a_pillar": [Vector3(0.500, 0.756, -0.775), Vector3(0.560, 1.165, -0.375)],
 	"b_pillar_z": 0.075, "rear_z": 0.475,
 	"shelf": {},
-	"wheel": Vector3(-0.231, 0.736, -0.565), "wheel_tilt_deg": -25.0,
-	"cluster": Vector2(0.850, -0.734), "cluster_style": "cans", "speedo_max_kmh": 180.0,
-	"head_unit": Vector3(0.0, 0.798, -0.639),
-	"lever": Vector3(0.0, 0.581, -0.405), "handbrake": Vector3(0.0, 0.581, 0.055),
+	"wheel": Vector3(-0.205, 0.681, -0.565), "wheel_tilt_deg": -25.0,
+	"cluster": Vector2(0.842, -0.734), "cluster_style": "cans", "speedo_max_kmh": 180.0,
+	"head_unit": Vector3(0.030, 0.765, -0.639),
+	"lever": Vector3(0.0, 0.565, -0.405), "handbrake": Vector3(0.0, 0.565, 0.055),
 	"pedals": Vector3(-0.131, 0.526, -0.885),
 	"crank": Vector3(-0.450, 0.616, -0.565), "switch": Vector3(-0.424, 0.753, -0.365),
 	"rear_mirror": Vector3(0.0, 1.105, -0.433),
 	"door_mirror": Vector3(0.741, 0.892, -0.635),
-	"console": "tunnel", "console_w": 0.16, "seats": "bucket", "trim": "retro",
+	"console": "tunnel", "console_w": 0.10, "seats": "bucket", "trim": "retro",
 }
 ## Build name -> body_tris, tris_total, body_pos (chunks), body_mat, wheels
 ## (front and rear right-hand wheel, hub-relative), slots, tips. Car space.

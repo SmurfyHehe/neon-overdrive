@@ -427,7 +427,10 @@ func _cigarette_cases() -> void:
 		_check(cig_paper_last < cig_paper_first * 0.4, "%s: the paper is %.4f m of %.4f m, want under 40%%" % [what, cig_paper_last, cig_paper_first])
 		# the window: a little by itself from shut, none of the crank or switch, untouched if already down
 		_check(not window_hand_seen, "%s: the window's crank or switch animated (the hand was busy)" % what)
-		if start_open:
+		if not d.has_door_glass():
+			# no pane to roll (the open kei, DriverModel.has_door_glass): the arm goes over the door
+			_check(win_max - win_min < 0.01, "%s: a car with no door glass moved its window (%.2f..%.2f)" % [what, win_min, win_max])
+		elif start_open:
 			_check(is_equal_approx(frame.window, 1.0) and win_min > 0.99, "%s: the window moved from fully down (%.2f)" % [what, win_min])
 		else:
 			_check(win_max >= 0.5 and win_max <= 0.7, "%s: the window rolled to %.2f, want a little past half" % [what, win_max])

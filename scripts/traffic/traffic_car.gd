@@ -382,7 +382,16 @@ func _ready() -> void:
 		# Cop, ally and rival specs ask for the parts set with parts = "full"
 		# (CarParts.wants_parts); traffic never does and pays nothing.
 		if CarParts.wants_parts(spec):
-			CarParts.attach(self, {"lod": true, "rim": CarParts.rim_for_style(String(spec.get("rim", "")))})
+			var pcfg := {"lod": true}
+			if CarFittings.has_brakes(kind):
+				# Discs or drums, rim and caliper from the car's own entry.
+				pcfg.merge(CarFittings.parts_cfg(kind, float(get("front_tire_width"))), true)
+			if spec.has("rim"):
+				pcfg["rim"] = CarParts.rim_for_style(String(spec.get("rim", "")))
+			CarParts.attach(self, pcfg)
+			# Wipers and the fuel flap (no fuel tank: the flap never opens).
+			CarWipers.attach(self)
+			CarFuelFlap.attach(self)
 		# Blob shadow only: 80 spotlights would be a rendering bill of their own.
 		CarFx.attach(self, half_l, false)
 		# Crew and cops carry an underside and maybe parts: the CarDetail node

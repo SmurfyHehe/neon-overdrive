@@ -300,9 +300,21 @@ func _ready() -> void:
 		# Real wheels and brakes (car parts plan 2026-10-09, session 1): open
 		# rims, glowing discs, calipers and springs. Before CarFx so they land on
 		# the car layer. Not on the test car (its wheels are a diagnostic).
-		if kind == P1CoupeBuilder.KIND:
-			CarParts.attach(self, {"hub_x": P1CoupeBuilder.DESIGN_WHEEL_X})
+		# Every car you drive has brakes behind its wheels (Roy 1171): discs or
+		# drums per axle from CarFittings.BRAKES, not just the coupe.
+		if kind != TestCarBuilder.KIND:
+			var parts_cfg := CarFittings.parts_cfg(kind, float(get("front_tire_width")))
+			if kind == P1CoupeBuilder.KIND:
+				parts_cfg["hub_x"] = P1CoupeBuilder.DESIGN_WHEEL_X
+			CarParts.attach(self, parts_cfg)
+		# Wipers that sweep in rain and the fuel flap + nozzle (Roy 1175, 1177):
+		# before CarFx, so they land on the car layer too.
+		if kind != TestCarBuilder.KIND:
+			CarWipers.attach(self)
+			CarFuelFlap.attach(self, fuel)
 		CarFx.attach(self, chassis_visual.get_meta("half_l", 2.2))
+		# Brake, reverse, indicator and hazard lamps (Roy 1173).
+		CarLamps.attach(self)
 		# Detail parts policy (shocks, later the engine bay and panel contents)
 		# and the undercarriage's Low-preset switch. After CarFx, so the node
 		# finds the underside on its layer.

@@ -60,6 +60,11 @@ const DEFAULT_CFG := {
 	"shock_z": 0.42,  # the unit stands this far behind the hub, in the arch, clear of the tyre
 	"shock_top": 0.12, # its top mount sits this far above the Wheel origin (the strut is longer than the raycast travel)
 	"lod": false,    # true: parts only within LOD_RANGE (cops, rivals, allies)
+	# "disc" or "drum" per axle (CarFittings.BRAKES). A drum axle gets a drum
+	# shell behind the spokes and no caliper; cheap old cars keep drums at the
+	# back, the Bug on all four (Roy 1172).
+	"brake_front": "disc",
+	"brake_rear": "disc",
 }
 
 const COL_TYRE := Color("#15171C")
@@ -114,6 +119,8 @@ var _shocks: MultiMeshInstance3D
 var _disc_x: float = 0.0
 var _disc_r := 0.0
 var _last_heat: Array[float] = [-1.0, -1.0, -1.0, -1.0]
+## "disc" or "drum" at FL FR RL RR, as built (tests/car/required_slots.gd reads it).
+var brake_kinds: Array[String] = []
 ## The transforms last written to the two MultiMeshes, FL FR RL RR in car
 ## space (the server does not read them back headless; tests and debugging do).
 var caliper_xf: Array[Transform3D] = [Transform3D(), Transform3D(), Transform3D(), Transform3D()]
@@ -163,7 +170,9 @@ func _build() -> void:
 		var mi := MeshInstance3D.new()
 		mi.name = "Parts"
 		var rear := i >= 2
-		mi.mesh = wheel_mesh(radius, tyre_w, rim_r, style, rear)
+		var brake := String(cfg.brake_rear if rear else cfg.brake_front)
+		brake_kinds.append(brake)
+		mi.mesh = wheel_mesh(radius, tyre_w, rim_r, style, rear, brake)
 		mi.set_surface_override_material(0, mat)
 		mi.position = Vector3(side * hub_x - w.position.x, 0.0, 0.0)
 		if side < 0.0:
@@ -274,7 +283,11 @@ func _update_transforms() -> void:
 			# behind the hub.
 			cal_local.basis = Basis(Vector3.RIGHT, -2.0 * CALIPER_ANGLE) * Basis(Vector3.BACK, PI)
 		caliper_xf[i] = w.transform * cal_local
-		cal.set_instance_transform(i, caliper_xf[i])
+		if brake_kinds[i] == "drum":
+			# A drum has no caliper: the instance collapses to a point.
+			cal.set_instance_transform(i, Transform3D(Basis().scaled(Vector3.ZERO), caliper_xf[i].origin))
+		else:
+			cal.set_instance_transform(i, caliper_xf[i])
 		if not shocks_on:
 			continue
 		# Spring and damper: from the top mount height (the Wheel origin) down to
@@ -348,8 +361,8 @@ static func _spoke_depth(style: String) -> float:
 
 ## Tyre, rim and brake disc as one surface. The wheel axis is +x (outboard for
 ## a right-hand wheel); the left wheel is the same mesh turned round.
-static func wheel_mesh(radius: float, tyre_w: float, rim_r: float, style: String, rear: bool) -> ArrayMesh:
-	var key := "%.3f|%.3f|%.3f|%s|%s" % [radius, tyre_w, rim_r, style, "r" if rear else "f"]
+static func wheel_mesh(radius: float, tyre_w: float, rim_r: float, style: String, rear: bool, brake := "disc") -> ArrayMesh:
+	var key := "%.3f|%.3f|%.3f|%s|%s|%s" % [radius, tyre_w, rim_r, style, "r" if rear else "f", brake]
 	if _wheel_meshes.has(key):
 		return _wheel_meshes[key]
 	var st := SurfaceTool.new()
@@ -409,9 +422,19 @@ static func wheel_mesh(radius: float, tyre_w: float, rim_r: float, style: String
 	var dr := _disc_radius(rim_r, rear)
 	var dt := _disc_thickness()
 	var dx := _disc_offset(tyre_w, style)
-	_revolve(st, [[Vector2(dx - dt * 0.5 - 0.03, 0.0), hub_c], [Vector2(dx - dt * 0.5 - 0.03, dr * 0.45), hub_c],
-		[Vector2(dx - dt * 0.5, dr * 0.45), disc_c], [Vector2(dx - dt * 0.5, dr), disc_c],
-		[Vector2(dx + dt * 0.5, dr), disc_c], [Vector2(dx + dt * 0.5, 0.0), disc_c]], 24, true)
+	if brake == "drum":
+		# A drum: a backing plate, then the drum itself (a cup, its outside and
+		# its outboard face glow like a disc does) and a dust cap on the hub.
+		# Wider than a disc, so it sits a little further in from the spokes.
+		var xo := dx - dt * 0.5 - 0.012   # outboard face
+		# Each segment takes the colour of the point it starts from.
+		_revolve(st, [[Vector2(xo - 0.07, 0.0), hub_c], [Vector2(xo - 0.07, dr * 1.04), disc_c],
+			[Vector2(xo, dr * 1.04), disc_c], [Vector2(xo, dr * 0.30), hub_c],
+			[Vector2(xo + 0.018, dr * 0.30), hub_c], [Vector2(xo + 0.018, 0.0), hub_c]], 24, true)
+	else:
+		_revolve(st, [[Vector2(dx - dt * 0.5 - 0.03, 0.0), hub_c], [Vector2(dx - dt * 0.5 - 0.03, dr * 0.45), hub_c],
+			[Vector2(dx - dt * 0.5, dr * 0.45), disc_c], [Vector2(dx - dt * 0.5, dr), disc_c],
+			[Vector2(dx + dt * 0.5, dr), disc_c], [Vector2(dx + dt * 0.5, 0.0), disc_c]], 24, true)
 	st.generate_normals()
 	var mesh := st.commit()
 	_wheel_meshes[key] = mesh

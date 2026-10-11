@@ -36,6 +36,15 @@ const PRICE_PER_LITRE := 3
 var enabled := true
 var litres := CAPACITY_L * START_FRACTION
 
+## The car stands at a pump with the pump menu up, and the gauge is rising.
+## The pump menu (pump_panel.gd) sets them; the fuel flap and the nozzle
+## (CarFuelFlap) follow them.
+var at_pump := false
+var filling := false
+
+func is_filling() -> bool:
+	return filling
+
 func _init() -> void:
 	if TestMode.active():
 		litres = CAPACITY_L

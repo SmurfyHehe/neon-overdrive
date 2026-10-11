@@ -357,6 +357,8 @@ if /i not "%~1"=="quick" (
 	call :run traffic/free_driver_chase "--headless --fixed-fps 60"
 	rem P5: the cop brain in the game: warning to pursuit, the bust ring, lost and search, called off (about 2 min).
 	call :run traffic/police_chase "--headless --fixed-fps 60"
+	rem P6 proof: never more than 3 cops, no cop put on the road in view, blocker and flanker get into place, box-in busts (about 1.5 min).
+	call :run traffic/police_dispatch "--headless --fixed-fps 60"
 	rem (traffic/police_escape_rate is a measurement, about 2 min a trial: run it by hand.)
 	call :run tuning/tuning_panel --headless
 	call :run tuning/auto_tune_panel --headless

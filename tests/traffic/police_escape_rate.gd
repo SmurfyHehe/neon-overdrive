@@ -161,6 +161,10 @@ func _physics_process(delta: float) -> bool:
 func _next() -> void:
 	trial += 1
 	heat.reset()
+	# every trial starts with fresh cops: none left in place from the last one
+	while not police.units.is_empty():
+		police.drop()
+	police.set("_wait", 2.0)
 	phase = 2
 	t = 0.0
 	if trial >= trials:

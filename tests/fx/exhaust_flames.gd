@@ -165,7 +165,10 @@ func _run() -> void:
 			if not await _until(func(): return p.current_gear >= 2, 10.0):
 				_check(false, "AUTO never shifted out of first")
 		else:
-			if not await _until(func(): return _rpm_norm(p) > 0.75 and not p.is_shifting, 10.0):
+			# wait for the driver to have put the throttle down too: the revs can
+			# still be above 75% from the run before, and a shift on that very
+			# frame would be a lifted-throttle upshift (no bang, rightly)
+			if not await _until(func(): return _rpm_norm(p) > 0.75 and not p.is_shifting and p.throttle_input > 0.6, 10.0):
 				_check(false, "mode %d: first gear never reached 75%% rpm" % mode)
 			p.shift(1)
 		await create_timer(0.3).timeout

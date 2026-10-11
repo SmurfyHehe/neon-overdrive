@@ -224,7 +224,7 @@ class View:
 			return
 		var vp := get_viewport_rect().size
 		draw_rect(Rect2(Vector2.ZERO, vp), NAVY)
-		var font := ThemeDB.fallback_font
+		var font := UiTheme.font("menu")
 		var title := "GARAGE WASH"
 		draw_string(font, Vector2(vp.x / 2.0 - font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 28).x / 2.0, 54.0), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 28, AMBER)
 

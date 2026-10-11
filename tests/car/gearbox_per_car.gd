@@ -17,18 +17,29 @@ extends SceneTree
 ## Forward gears each car carries.
 const GEARS := {
 	"p0_beater": 5, "p1_coupe": 5, "p2_hothatch": 5, "p3_tuner": 5,
-	"p4_kei": 5, "p5_muscle": 4, "p6_crossover": 5, "p10_truck": 4,
+	"p4_kei": 5, "p5_muscle": 4, "p6_crossover": 5, "p10_truck": 4, "p8_driftcoupe": 5,
+	"p7_wagon": 4, "p17_work_pickup": 5,
+	# the specials drive the coupe's spec until their own (S0 stand-ins)
+	"m1_monster": 5, "l1_lowrider": 5,
 }
 ## [0-100 km/h ceiling s, top speed floor km/h, top speed ceiling km/h].
+## The hot hatch, tuner sedan and crossover were re-measured on 2026-10-11 after
+## they lost their factory turbo (28a5e92, the 40-minute night): 185.8, 221.8
+## and 220.7 km/h. The wagon and pickup were measured the same day.
 const SPEED := {
 	"p0_beater": [13.5, 140.0, 168.0],
 	"p1_coupe": [6.4, 235.0, 250.0],
-	"p2_hothatch": [9.5, 200.0, 236.0],
-	"p3_tuner": [6.6, 245.0, 285.0],
+	"p2_hothatch": [9.5, 175.0, 205.0],
+	"p3_tuner": [7.5, 210.0, 245.0],
 	"p4_kei": [12.5, 170.0, 200.0],
 	"p5_muscle": [5.8, 257.0, 300.0],
-	"p6_crossover": [6.5, 225.0, 262.0],
+	"p6_crossover": [7.3, 208.0, 242.0],
 	"p10_truck": [7.5, 205.0, 248.0],
+	"p8_driftcoupe": [6.5, 228.0, 250.0],   # measured 5.73 s, 238.5 km/h (#487)
+	"p7_wagon": [12.0, 158.0, 185.0],
+	"p17_work_pickup": [7.3, 212.0, 245.0],
+	"m1_monster": [6.4, 235.0, 250.0],
+	"l1_lowrider": [6.4, 235.0, 250.0],
 }
 ## Cars whose top gear is an overdrive: flat out they stop pulling one gear
 ## below it, so the run never revs out into top (the kei tops out in fourth).
@@ -49,7 +60,10 @@ func _run() -> void:
 		var id: String = k.id
 		var spec := CarSpec.player_spec(id)
 		var box: Array = spec.gear_ratios
-		_check(box.size() == GEARS[id], "%s has %d gears, wanted %d" % [id, box.size(), GEARS[id]])
+		# A car added to PlayerCars without its row here is a failure, not a
+		# script error that leaves the test hanging.
+		_check(GEARS.has(id) and SPEED.has(id), "%s has no row in GEARS / SPEED: measure it and add one" % id)
+		_check(box.size() == GEARS.get(id, -1), "%s has %d gears, wanted %d" % [id, box.size(), GEARS.get(id, -1)])
 		_check(box.size() <= TuneParams.MAX_GEARS, "%s has more than %d gears" % [id, TuneParams.MAX_GEARS])
 		for i in range(1, box.size()):
 			_check(box[i] < box[i - 1], "%s gear %d (%.2f) is not shorter than gear %d (%.2f)" % [id, i + 1, box[i], i, box[i - 1]])
@@ -62,9 +76,10 @@ func _run() -> void:
 		print("%s: %d gears %s, 0-100 %.2f s, top %.1f km/h, reached gear %d" % [id, box.size(), str(box), t100, top, top_gear])
 		var need := box.size() - (1 if id in OVERDRIVE else 0)
 		_check(top_gear >= need, "%s only reached gear %d of %d" % [id, top_gear, box.size()])
-		var want: Array = SPEED[id]
-		_check(t100 <= want[0], "%s 0-100 %.2f s, ceiling %.1f" % [id, t100, want[0]])
-		_check(top >= want[1] and top <= want[2], "%s top speed %.1f outside %.0f-%.0f" % [id, top, want[1], want[2]])
+		if SPEED.has(id):
+			var want: Array = SPEED[id]
+			_check(t100 <= want[0], "%s 0-100 %.2f s, ceiling %.1f" % [id, t100, want[0]])
+			_check(top >= want[1] and top <= want[2], "%s top speed %.1f outside %.0f-%.0f" % [id, top, want[1], want[2]])
 		if id == "p6_crossover":
 			_check(is_zero_approx(float(spec.front_torque_split)), "the crossover should drive the rear wheels only")
 			var slip: float = m.get("max_slip_deg", 0.0)

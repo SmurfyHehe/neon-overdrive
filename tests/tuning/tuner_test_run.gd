@@ -78,6 +78,12 @@ func _run() -> void:
 	print("stock vs stock 0-100 delta: '%s'" % d0)
 	_check(not d0.contains("▲") and not d0.contains("▼"), "stock against stock should read level: %s" % d0)
 
+	# Change a tyre setting from the Tyres page, as a player would. Left on the
+	# Quick page, the Preset row (row 0, focused on open since the Quick page of
+	# 757318b) would preview Stock against the now modified setup and hold the
+	# panel on that preview instead of the result (_preview_preset).
+	screen.set_detailed(true, false)
+	screen.show_page("tyres")
 	screen.model.nudge(TunerModel.page("tyres").settings[1], 1)
 	screen._refresh()
 	_check(screen.stats.labels.top.text.contains("~"), "a change should put the estimates back: %s" % screen.stats.labels.top.text)
@@ -86,8 +92,9 @@ func _run() -> void:
 	# A second run on the changed setup: stock is not driven again.
 	var stock_before: Dictionary = screen.stock_run
 	screen.start_test_run()
+	_check(screen.test_running(), "the second test run should be running")
 	t0 = Time.get_ticks_msec()
-	while screen.test_button.disabled and Time.get_ticks_msec() - t0 < TIMEOUT_S * 1000.0:
+	while screen.test_running() and Time.get_ticks_msec() - t0 < TIMEOUT_S * 1000.0:
 		await process_frame
 	_check(screen.stock_run == stock_before, "the second test run should reuse the stock run")
 	_check(screen.pit_wall.visible, "the second test run should show the pit-wall result")

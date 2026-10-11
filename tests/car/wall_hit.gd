@@ -47,7 +47,16 @@ const SPEEDS := [8.0, 20.0, 35.0, 55.0]  # m/s (29 to 198 km/h)
 const ANGLES := [10.0, 30.0, 60.0, 89.0]  # degrees toward the wall
 const RUN_SECS := 4.0
 const RUN_MAX_SECS := 8.0  # the run goes on this long while the car is not yet upright
-const START_GAP := 4.6  # m from the wall: on the shoulder, clear of the curb and sidewalk
+## m from the wall at least. Since the cross-section table (caa716a, pavements
+## K2) the pavement is 1.2 to 3.6 m wide by district, so _start also keeps the
+## car's side KERB_CLEAR off the kerb face it measures, on the shoulder.
+const START_GAP := 4.6
+const KERB_CLEAR := 0.3  # m between the car's nearest corner and the kerb face
+## A start this far along the road on either side of the car must see the same
+## kerb: the chunk where one district's section tapers into the next (the run
+## boots in one, freeway into downtown) raises the kerb from nothing under a
+## shallow approach, which is a different test from a wall hit.
+const SECTION_LOOK := 40.0
 ## Peak tilt, degrees from upright. It was 30 when every scenario peaked under
 ## 13. Since the per-station wall boxes and the kerb ramp (#37) the hardest
 ## scenarios peak at 20 to 35 on some road draws (issue #265): at 55 m/s and
@@ -105,7 +114,9 @@ func _find(n: Node, name: String, out: Array) -> void:
 		_find(c, name, out)
 
 ## The inner face of the right-hand wall nearest the car's z.
-func _wall_face(p: PlayerCar) -> float:
+func _wall_face(p: PlayerCar, z: float = NAN) -> float:
+	if is_nan(z):
+		z = p.global_position.z
 	var found := []
 	_find(game, "BoundaryOwn", found)
 	var best := INF
@@ -118,21 +129,56 @@ func _wall_face(p: PlayerCar) -> float:
 			if col == null:
 				continue
 			var box := col.shape as BoxShape3D
-			var dz := absf(col.global_position.z - p.global_position.z)
+			var dz := absf(col.global_position.z - z)
 			if dz < box.size.z / 2.0 + 1.0 and dz < best_dz:
 				best_dz = dz
 				best = col.global_position.x - box.size.x / 2.0
 	return best
+
+## Height of the ground (road, kerb or pavement) at x, z; -INF if none.
+func _ground(p: PlayerCar, x: float, z: float) -> float:
+	var q := PhysicsRayQueryParameters3D.create(Vector3(x, rest_y + 3.0, z), Vector3(x, rest_y - 3.0, z))
+	q.collision_mask = (1 << (CarSpec.WORLD_LAYER - 1)) | (1 << (CarSpec.KERB_LAYER - 1))
+	q.exclude = [p.get_rid()]
+	var hit := p.get_world_3d().direct_space_state.intersect_ray(q)
+	return float(hit.position.y) if hit else -INF
+
+## The kerb face nearest the road between the road and the wall at z: the first
+## x (0.1 m steps, outward) standing 3 cm above the road. The wall's x if none.
+func _kerb_face(p: PlayerCar, z: float, wall: float) -> float:
+	var road := _ground(p, Harness.lane_x(0), z)
+	var x := Harness.lane_x(0)
+	while x < wall:
+		if _ground(p, x, z) > road + 0.03:
+			return x
+		x += 0.1
+	return wall
 
 func _start(p: PlayerCar) -> void:
 	var v: float = scenarios[index][0]
 	var a: float = scenarios[index][1]
 	# Arrive about 0.8 s after the launch: up to speed in a straight line, and a
 	# shallow angle does not need a 100 m run-up. Always start on the road, so
-	# the car crosses the curb and sidewalk on the way, as it does in the game.
-	wall_x = _wall_face(p)
-	var gap := clampf(v * sin(deg_to_rad(a)) * 0.8, START_GAP, wall_x - Harness.lane_x(0))
-	var pos := Vector3(wall_x - gap, rest_y, p.global_position.z)
+	# the car crosses the curb and sidewalk on the way, as it does in the game,
+	# on a stretch with one kerb (see SECTION_LOOK): move on a chunk at a time
+	# until the kerb face here and SECTION_LOOK ahead and behind agree.
+	var z := p.global_position.z
+	for tries in 6:
+		var faces: Array[float] = []
+		for dz in [SECTION_LOOK, 0.0, -SECTION_LOOK]:
+			var w := _wall_face(p, z + dz)
+			faces.append(w - _kerb_face(p, z + dz, w))
+		if absf(faces[0] - faces[1]) < 0.2 and absf(faces[2] - faces[1]) < 0.2:
+			break
+		z -= RoadChunkBuilder.CHUNK_LEN
+	wall_x = _wall_face(p, z)
+	var kerb := _kerb_face(p, z, wall_x)
+	# The nearest corner of the 1.6 x 3.4 m footprint, yawed `a`, is this far
+	# out from the centre.
+	var reach := 0.8 * cos(deg_to_rad(a)) + 1.7 * sin(deg_to_rad(a))
+	var clear := wall_x - kerb + reach + KERB_CLEAR
+	var gap := clampf(v * sin(deg_to_rad(a)) * 0.8, maxf(START_GAP, clear), wall_x - Harness.lane_x(0))
+	var pos := Vector3(wall_x - gap, rest_y, z)
 	p.global_transform = Transform3D(Basis(Vector3.UP, -deg_to_rad(a)), pos)
 	p.angular_velocity = Vector3.ZERO
 	TrafficCar.set_moving(p, v)

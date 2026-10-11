@@ -18,7 +18,8 @@ const BuildingSigns := preload("res://scripts/world/building_signs.gd")
 const SHAPE_BOX := 0
 const SHAPE_TANK := 1
 const SHAPE_ANTENNA := 2
-const SHAPE_CANOPY := 3  # gas station canopy slab, lit underside
+# 3 was the gas station canopy, retired with the generated GAS buildings
+# (eac968f; the real stations are gas_station.gd's).
 const SHAPE_FLOOD := 4   # pole with a floodlight head (yards, car park roofs)
 # Roof shapes (world step 1): unit footprint, bottom at y = 0, rise 1, scaled
 # per instance to the roof. The gable's ridge runs along z (along the road).
@@ -174,9 +175,7 @@ static func update(mm: MultiMesh, infos: Array, signs: MultiMesh, first_sign: in
 		var landmark: String = info.get("landmark", "")
 		if landmark != "":
 			props = _landmark(landmark, info, cx, cz) + props
-		if kind == "gas":
-			props.append_array(_gas_station(info))
-		elif kind == "diner":
+		if kind == "diner":
 			# the sign pole, at the front of the lot (absolute position)
 			props.append([SHAPE_BOX, Vector3(0.3, 7.4, 0.3), _abs(info, 1.2, float(info.d) * 0.35, 0.0), 0.35])
 		elif (kind == "warehouse" or kind == "hangar") and rng.randf() < 0.7:
@@ -216,19 +215,6 @@ static func update(mm: MultiMesh, infos: Array, signs: MultiMesh, first_sign: in
 ## lot from its front line and `dz` along the road from its centre.
 static func _abs(info: Dictionary, x_in: float, dz: float, y: float) -> Vector3:
 	return Vector3((float(info.lot_front_x_abs) + x_in) * float(info.side), y, float(info.z) + dz)
-
-## Canopy over the forecourt on four columns, with two pump islands under
-## it. 7 props.
-static func _gas_station(info: Dictionary) -> Array:
-	var length := minf(float(info.d), 14.0)
-	var out := []
-	out.append([SHAPE_CANOPY, Vector3(8.0, 0.6, length), _abs(info, 4.5, 0.0, 4.6), 0.55])
-	for cx in [1.5, 7.5]:
-		for cz in [-0.35, 0.35]:
-			out.append([SHAPE_BOX, Vector3(0.35, 4.6, 0.35), _abs(info, cx, cz * length, 0.0), 0.7])
-	for pz in [-0.2, 0.2]:
-		out.append([SHAPE_BOX, Vector3(0.7, 1.5, 1.1), _abs(info, 4.5, pz * length, 0.0), 0.9])
-	return out
 
 ## A random spot on a w x d roof, kept `keep` of the way in from the edges.
 static func _spot(rng: RandomNumberGenerator, w: float, d: float, keep: float) -> Vector2:
@@ -281,19 +267,17 @@ static func mesh() -> ArrayMesh:
 		var leg := Color(0.22, 0.21, 0.2)
 		for sx in [-0.55, 0.55]:
 			for sz in [-0.55, 0.55]:
-				_box(st, SHAPE_TANK, Vector3(sx, 0.65, sz), Vector3(0.12, 1.3, 0.12), leg)
+				_box(st, SHAPE_TANK, Vector3(sx, 0.65, sz), Vector3(0.12, 1.3, 0.12), leg, 0.0, 0.0, true)
 		_box(st, SHAPE_TANK, Vector3(0, 1.35, 0), Vector3(1.5, 0.1, 1.5), leg)
 		_cylinder(st, SHAPE_TANK, Vector3(0, 1.4, 0), 0.75, 1.8, 0.4, 6, Color(0.42, 0.3, 0.2))
 		# antenna mast (~6 m) with two cross arms and a red light on top
 		var steel := Color(0.4, 0.4, 0.42)
-		_box(st, SHAPE_ANTENNA, Vector3(0, 3.0, 0), Vector3(0.1, 6.0, 0.1), steel)
+		_box(st, SHAPE_ANTENNA, Vector3(0, 3.0, 0), Vector3(0.1, 6.0, 0.1), steel, 0.0, 0.0, true)
 		_box(st, SHAPE_ANTENNA, Vector3(0, 4.2, 0), Vector3(1.6, 0.06, 0.06), steel)
 		_box(st, SHAPE_ANTENNA, Vector3(0, 5.2, 0), Vector3(0.06, 0.06, 1.2), steel)
 		_box(st, SHAPE_ANTENNA, Vector3(0, 6.05, 0), Vector3(0.18, 0.18, 0.18), Color(0.3, 0.05, 0.03), GLOW_RED)
-		# canopy: unit slab (scaled per station), the underside is the light
-		_box(st, SHAPE_CANOPY, Vector3(0, 0.5, 0), Vector3.ONE, Color(0.62, 0.6, 0.56), 0.0, GLOW_TUBE)
 		# floodlight: 5 m pole, a head leaning over the yard
-		_box(st, SHAPE_FLOOD, Vector3(0, 2.5, 0), Vector3(0.14, 5.0, 0.14), steel)
+		_box(st, SHAPE_FLOOD, Vector3(0, 2.5, 0), Vector3(0.14, 5.0, 0.14), steel, 0.0, 0.0, true)
 		_box(st, SHAPE_FLOOD, Vector3(0, 5.0, 0), Vector3(0.5, 0.3, 0.7), Color(0.25, 0.2, 0.12), GLOW_FLOOD)
 		# roof shapes (world step 1): pitched and hipped, unit footprint, rise 1;
 		# 16 triangles between them, so the budget per instance barely moves
@@ -356,12 +340,18 @@ static func _quad(st: SurfaceTool, shape: int, a: Vector3, b: Vector3, c: Vector
 	_tri(st, shape, a, c, d, centre, col, glow)
 
 ## bottom_glow, when set, lights only the bottom face (a canopy's tubes).
-static func _box(st: SurfaceTool, shape: int, c: Vector3, s: Vector3, col: Color, glow: float = 0.0, bottom_glow: float = 0.0) -> void:
+## open_ends leaves out the top and bottom faces, for a leg or pole whose
+## foot stands on the roof and whose top is buried in the part above it:
+## every instance draws the whole mesh, so a hidden face still costs its
+## triangles once per prop (chunk budget, chunk_builder_equivalence.gd).
+static func _box(st: SurfaceTool, shape: int, c: Vector3, s: Vector3, col: Color, glow: float = 0.0, bottom_glow: float = 0.0, open_ends: bool = false) -> void:
 	var h := s / 2.0
 	var p := []
 	for i in 8:
 		p.append(c + Vector3(h.x if i & 1 else -h.x, h.y if i & 2 else -h.y, h.z if i & 4 else -h.z))
 	for f in [[0, 1, 5, 4], [2, 3, 7, 6], [0, 1, 3, 2], [4, 5, 7, 6], [0, 2, 6, 4], [1, 3, 7, 5]]:
+		if open_ends and (f == [0, 1, 5, 4] or f == [2, 3, 7, 6]):
+			continue
 		var g := glow
 		if f == [0, 1, 5, 4] and bottom_glow > 0.0:
 			g = bottom_glow  # vertices 0, 1, 4, 5 all have y = -h.y: the bottom

@@ -189,6 +189,11 @@ var _rail_z := NAN
 ## On rails: ticks until the next think, and the acceleration held meanwhile.
 var _think_in := 0
 var _rail_a := 0.0
+## What the last _accel_command braked for: bumper gap (m) and its speed along
+## this car's direction. A red light counts as a stopped car (see junction.gd).
+## The rails' final stop (_rail_stop_accel) reads them.
+var _bind_gap := INF
+var _bind_vl := 0.0
 ## Hidden on rails, or shown in the far tier: ticks of travel not yet applied
 ## to the car (it moves once per think). rail_z_now() counts them in; being
 ## shown pays them at once.
@@ -813,6 +818,8 @@ func _accel_command(v: float) -> float:
 	# Rain: drivers ease off, and take bends slower on wet tyres (weather.gd).
 	var v0 := minf(target_speed * _speed_k * Weather.ai_speed_factor(), bend_speed() * Weather.ai_bend_factor())
 	var a := follow_accel(v, v0, lead_gap, lead_speed, _t_gap())
+	_bind_gap = lead_gap
+	_bind_vl = lead_speed
 	signal_held = false
 	if traffic != null and traffic.junction != null:
 		# The red light is an invisible stopped car at the stop line (see
@@ -823,7 +830,11 @@ func _accel_command(v: float) -> float:
 			if phone:
 				_ph_sg = sg
 				_ph_held_t = traffic.now
-			a = minf(a, follow_accel(v, v0, sg + S0 - Junction.STOP_SHORT, 0.0, _t_gap()))
+			var a_sg := follow_accel(v, v0, sg + S0 - Junction.STOP_SHORT, 0.0, _t_gap())
+			if a_sg < a:
+				a = a_sg
+				_bind_gap = sg + S0 - Junction.STOP_SHORT
+				_bind_vl = 0.0
 		elif phone and _ph_sg < INF and _ph_until < 0.0:
 			# The light just went green on a driver stopped at the line: eyes on the phone.
 			if traffic.now - _ph_held_t < 0.6 and absf(v) < 3.0:
@@ -836,7 +847,11 @@ func _accel_command(v: float) -> float:
 		if phone and _ph_until > 0.0:
 			if traffic.now < _ph_until:
 				signal_held = true
-				a = minf(a, follow_accel(v, v0, _ph_sg + S0 - Junction.STOP_SHORT, 0.0, _t_gap()))
+				var a_ph := follow_accel(v, v0, _ph_sg + S0 - Junction.STOP_SHORT, 0.0, _t_gap())
+				if a_ph < a:
+					a = a_ph
+					_bind_gap = _ph_sg + S0 - Junction.STOP_SHORT
+					_bind_vl = 0.0
 				phone_wait_s = traffic.now - _ph_start
 			else:
 				phone_wait_s = _ph_until - _ph_start
@@ -1730,7 +1745,7 @@ func _cruise(delta: float) -> void:
 	_owed = 0
 	if think:
 		_think_in = every
-		_rail_a = clampf(_accel_command(_cruise_speed), -A_BRAKE_FULL, 2.0)
+		_rail_a = _rail_stop_accel(clampf(_accel_command(_cruise_speed), -A_BRAKE_FULL, 2.0))
 	_cruise_speed = maxf(_cruise_speed + _rail_a * dt, 0.0)
 	if changing:
 		_lc_t += dt
@@ -1779,6 +1794,23 @@ func _cruise(delta: float) -> void:
 		for w in wheel_array:
 			w.spin = _cruise_speed / w.tire_radius
 		_update_lamps()
+
+## On rails: the last few metres of a stop. The sim car ends a stop on the
+## brake (_apply_accel: at least CREEP_BRAKE below LOW_SPEED, then HOLD_BRAKE),
+## so it stands still once it has slowed. The rails have no pedals, and the
+## follower law alone only creeps up on its standstill gap: its slow mode is a
+## ~6 s time constant, so a car that went onto rails while stopping for a red
+## was still rolling at 0.8 km/h 3.4 m short of the line 13 s later (#551,
+## tests/world/junction_lights.gd amber). Below LOW_SPEED, slowing for
+## something stopped, it brakes evenly to stand S0 behind it instead.
+func _rail_stop_accel(a: float) -> float:
+	var v := _cruise_speed
+	if a >= 0.0 or v >= LOW_SPEED or v <= 0.0 or _bind_gap == INF or _bind_vl > 0.5:
+		return a
+	var room := _bind_gap - S0
+	if room < 0.1:
+		return -A_BRAKE_FULL  # there (or a touch past): stand still
+	return -minf(v * v / (2.0 * room), A_BRAKE_FULL)
 
 ## Collisions back on after the step that carried a rail car over an origin shift.
 func _end_ghost() -> void:

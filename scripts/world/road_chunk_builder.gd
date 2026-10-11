@@ -274,7 +274,7 @@ static var _own_mat: ShaderMaterial
 static var _onc_mat: ShaderMaterial
 static var _shoulder_mat: ShaderMaterial
 static var _curb_mat: StandardMaterial3D
-static var _sidewalk_mat: StandardMaterial3D
+static var _sidewalk_mat: ShaderMaterial
 static var _edge_line_mat: StandardMaterial3D
 static var _pylon_mat_own: StandardMaterial3D
 static var _pylon_mat_onc: StandardMaterial3D
@@ -401,9 +401,8 @@ static func _get_gutter_mat() -> ShaderMaterial:
 ## slab lines run with the kerb and across it.
 ## TEST BUILD: stays a plain material, so the slabs do not take the wet-road
 ## look (S1a made the pavement an asphalt shader; the two need one owner).
-static func _get_sidewalk_mat() -> StandardMaterial3D:
+static func _get_sidewalk_mat() -> ShaderMaterial:
 	if _sidewalk_mat == null:
-		var m := StandardMaterial3D.new()
 		var size := 64
 		var noise := FastNoiseLite.new()
 		noise.seed = 4242
@@ -421,11 +420,9 @@ static func _get_sidewalk_mat() -> StandardMaterial3D:
 				elif x == 2 or y == 2:
 					c = c.darkened(0.2)
 				img.set_pixel(x, y, c)
-		m.albedo_texture = ImageTexture.create_from_image(img)
-		m.uv1_scale = Vector3(2.0, CHUNK_LEN, 1.0)
-		m.roughness = 0.92
-		m.metallic = 0.0
-		_sidewalk_mat = m
+		# the slab texture through the wet-road shader (S1a: sidewalks darken and
+		# sheen like the road; the pavements step's slabs kept as the albedo)
+		_sidewalk_mat = RoadWet.textured_mat(ImageTexture.create_from_image(img), Vector2(2.0, CHUNK_LEN), 0.92)
 	return _sidewalk_mat
 
 ## Hydrant: a dull painted red-orange (the palette's sodium side, no neon),
@@ -2316,6 +2313,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var flat := maxf(kh0, kh1) < FLAT_BELOW  # a freeway's verge: no hydrants, paint or drains
 	var verge := not bool(sec1.kerb)
 	var all_types := drop_types.has("*")
+	var pave_tops := {}  # side -> [hs, ts]: the pavement's drawn top, for StreetAnimals
 	for side in [1, -1]:
 		var drops: Array = []
 		var paint: Array = []
@@ -2368,6 +2366,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var suffix := "Own" if side == 1 else "Onc"
 		_update_profile_strip(root, "Curb" + suffix, sh0 * sx, sh1 * sx, cb0 * sx, cb1 * sx, _kerb_profile(), ts, hs, cols)
 		_update_profile_strip(root, "Sidewalk" + suffix, cb0 * sx, cb1 * sx, wk0 * sx, wk1 * sx, _walk_profile(), ts, hs)
+		pave_tops[side] = [hs, ts]
 		_update_sidewalk_collision(root, "SidewalkCol" + suffix, cb0, cb1, wk0, wk1, side, ts, ch, &"Grass" if verge else &"Kerb")
 		if hydrant_ok:
 			var ht: float = -hz / CHUNK_LEN
@@ -2514,7 +2513,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		-(start_onc_w + end_onc_w) * 0.5, (start_own_w + end_own_w) * 0.5)
 	# animals at shop fronts and alley mouths (A1): placed now, their eyes
 	# shine per frame from StreetAnimals.step (game.gd)
-	StreetAnimals.update(root, chunk_index, infos, mouths, [start_own_walk, end_own_walk, start_onc_walk, end_onc_walk], setback)
+	StreetAnimals.update(root, chunk_index, infos, mouths, [start_own_walk, end_own_walk, start_onc_walk, end_onc_walk], setback, pave_tops)
 
 	if job != null:
 		job.keep(_curve_k, _vert, _strip_n)

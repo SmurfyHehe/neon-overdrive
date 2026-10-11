@@ -96,13 +96,21 @@ static func flash_brake_driver(traffic: TrafficManager, lane_x: float, max_speed
 			a = minf(a, TrafficCar.follow_accel(v, max_speed, gap, lead_v, 1.0))
 			if gap < TrafficManager.FLASH_REACH - 10.0 and v > lead_v + 2.0 and traffic.now - float(last_flash[0]) > 1.0:
 				last_flash[0] = traffic.now
-				c.beams.flash()
+				flash(c.beams)
 		if a < -0.3:
 			c.throttle_input = 0.0
 			c.brake_input = clampf(-a / 9.0, 0.0, 1.0)
 		else:
 			c.throttle_input = clampf(a, 0.0, 1.0)
 			c.brake_input = 0.0
+
+## One headlight flash the way the player gives it since key map K1
+## (b455e6f removed HeadlightBeams.flash()): H held past HOLD_SECONDS counts
+## one flash, which traffic reads from `flashes`, then H comes up.
+static func flash(beams: HeadlightBeams) -> void:
+	beams.press_key()
+	beams.step(HeadlightBeams.HOLD_SECONDS + 0.01)
+	beams.release_key()
 
 ## Own-direction lane centre, lane 0 nearest the centre line (the fast lane).
 static func lane_x(i: int) -> float:

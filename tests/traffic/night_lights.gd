@@ -8,10 +8,11 @@ extends SceneTree
 # player, 25, 90 and 200 m away in lanes 0-2 (so none hides another), plus
 # the barrier on every chunk. Checks:
 #   - the lamp and reflector shaders compile (no logged errors);
-#   - each car's tail lamps make at least twice the red light of the same
+#   - each car's tail lamps make at least twice the light of the same
 #     spot with the night-lights setting at 0 at 90 and 200 m (at 0 a car
-#     out there is a pixel or nothing), 1.3x at 25 m;
-#   - brake lamps on make 20% more red light than running lamps, at 90 m;
+#     out there is a pixel or nothing), 1.3x at 25 m; light is the lamp's
+#     brightness over the same frame without the cars (_red);
+#   - brake lamps on make 20% more light than running lamps, at 90 m;
 #   - the reflectors add amber to the barrier's line at 60 m.
 # Writes the frames to user://night_lights/ for judging by eye.
 #
@@ -69,33 +70,53 @@ func _run() -> void:
 	cam.make_current()
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://night_lights"))
 
+	var spots: Array = []
+	for car in cars:
+		spots.append(_tail_spot(car))
+	# The scene without the cars, at each setting: what the median's
+	# reflectors do on their own (their tail flares would sit in the same few
+	# pixels as the dots 60 m out).
+	for car in cars:
+		car.visible = false
+	TrafficSettings.set_light_glow(0.0)
+	var off := await _shot("empty0")
+	TrafficSettings.set_light_glow(1.0)
+	var on := await _shot("empty1")
+	for car in cars:
+		car.visible = true
+
 	# Stopped cars hold the brake: lamps on. Running level first.
 	for car in cars:
 		NpcCarBuilder.set_lamps(car.chassis_visual, 0.0, NpcCarBuilder.TURN_OFF)
 	TrafficSettings.set_light_glow(0.0)
-	var off := await _shot("glow0")
+	await _shot("glow0")
+	var at0 := await _pairs(spots, cars)
 	TrafficSettings.set_light_glow(1.0)
-	var on := await _shot("glow1")
+	await _shot("glow1")
+	var at1 := await _pairs(spots, cars)
 	for k in cars.size():
-		var spot := _tail_spot(cars[k])
-		var a := _red(off, spot)
-		var b := _red(on, spot)
-		print("night_lights: car at %3.0f m, tail red %.3f with the setting at 0, %.3f at 1" % [DISTS[k], a, b])
+		var a := _red(at0.lit[k], at0.ref[k])
+		var b := _red(at1.lit[k], at1.ref[k])
+		print("night_lights: car at %3.0f m, tail light %.3f with the setting at 0, %.3f at 1" % [DISTS[k], a, b])
 		_check(b > a + 0.05, "car at %.0f m: tail lamps no brighter with night lights on (%.3f vs %.3f)" % [DISTS[k], b, a])
 		# Up close the lamp itself shows at 0 too; past 50 m it is a pixel or nothing.
 		var want := 1.3 if DISTS[k] < 50.0 else 2.0
-		_check(b > a * want, "car at %.0f m: tail lamps under %.1fx the red light they make without night lights (%.3f vs %.3f)" % [DISTS[k], want, b, a])
+		_check(b > a * want, "car at %.0f m: tail lamps under %.1fx the light they make without night lights (%.3f vs %.3f)" % [DISTS[k], want, b, a])
 
 	NpcCarBuilder.set_lamps(cars[1].chassis_visual, 1.0, NpcCarBuilder.TURN_OFF)
-	var brake := await _shot("brake")
-	var spot1 := _tail_spot(cars[1])
-	var r0 := _red(on, spot1)
-	var r1 := _red(brake, spot1)
-	print("night_lights: car at 90 m, tail red %.3f running, %.3f braking" % [r0, r1])
+	await _shot("brake")
+	var braking := await _pairs(spots, cars)
+	var r0 := _red(at1.lit[1], at1.ref[1])
+	var r1 := _red(braking.lit[1], braking.ref[1])
+	print("night_lights: car at 90 m, tail light %.3f running, %.3f braking" % [r0, r1])
 	_check(r1 > r0 * 1.2, "brake lamps at 90 m not 20%% brighter than running lamps (%.3f vs %.3f)" % [r1, r0])
 
 	NpcCarBuilder.set_lamps(cars[1].chassis_visual, 1.0, NpcCarBuilder.TURN_BOTH)
 	await _shot("hazard")
+
+	# The reflector shots are the cars-out frames from above.
+	for car in cars:
+		car.visible = false
 
 	# A reflector 60 m out: the dot nearest that distance on the barrier.
 	var z := p.global_position.z - 60.0
@@ -149,19 +170,56 @@ func _shot(name: String) -> Image:
 	print("night_lights: ", ProjectSettings.globalize_path(path))
 	return img
 
-## Red light in a 9x9 box round `at`: the sum over its pixels of how far red
-## stands above the other two (a bigger or brighter lamp both raise it).
-func _red(img: Image, at: Vector2) -> float:
+## Light a car's lamps add in a 9x9 box: the sum over its pixels of how much
+## brighter the box is than `ref`, the same boxes with the cars out of the
+## frame (both from _boxes). Area and brightness both raise it, and neither
+## the road or the horizon glow behind a far car nor what the tone mapper does
+## to a hot lamp's tint (AgX, color_grade.gd, 2026-10-10, turns a flare from
+## red to pale amber) can raise or lower it: the first version of this metric
+## summed how far red stood above both other channels, which scored a flare
+## as less light than the plain lamp it was added to.
+func _red(box: PackedFloat32Array, ref: PackedFloat32Array) -> float:
 	var sum := 0.0
-	for dx in range(-4, 5):
-		for dy in range(-4, 5):
-			var x := int(at.x) + dx
-			var y := int(at.y) + dy
-			if x < 0 or y < 0 or x >= img.get_width() or y >= img.get_height():
-				continue
-			var c := img.get_pixel(x, y)
-			sum += maxf(c.r - maxf(c.g, c.b), 0.0)
+	for i in box.size():
+		sum += maxf(box[i] - ref[i], 0.0)
 	return sum
+
+## Frame pairs averaged per measure: the far horizon drifts and flickers a
+## few units between frames (cloud drift, lamp flicker), and a car 200 m out
+## at setting 0 is a pixel or nothing.
+const SAMPLES := 4
+
+## The mean luma of the 9x9 box round each spot with the cars out of the frame
+## ("ref") and in it ("lit"), taken a frame or two apart so nothing behind a
+## car has drifted between them: {ref, lit}, each one PackedFloat32Array of 81
+## per spot.
+func _pairs(spots: Array, cars: Array[TrafficCar]) -> Dictionary:
+	var out := {"ref": [], "lit": []}
+	for key in out:
+		for _s in spots:
+			var z := PackedFloat32Array()
+			z.resize(81)
+			out[key].append(z)
+	for n in SAMPLES:
+		for key in ["ref", "lit"]:
+			for car in cars:
+				car.visible = key == "lit"
+			for i in 2:
+				await process_frame
+			var img := root.get_viewport().get_texture().get_image()
+			for k in spots.size():
+				var at: Vector2 = spots[k]
+				var j := 0
+				for dx in range(-4, 5):
+					for dy in range(-4, 5):
+						var x := clampi(int(at.x) + dx, 0, img.get_width() - 1)
+						var y := clampi(int(at.y) + dy, 0, img.get_height() - 1)
+						var c := img.get_pixel(x, y)
+						out[key][k][j] += (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / float(SAMPLES)
+						j += 1
+	for car in cars:
+		car.visible = true
+	return out
 
 ## Brightest amber-ish value (red and green up, blue down) in a 7x7 box.
 func _amber(img: Image, at: Vector2) -> float:

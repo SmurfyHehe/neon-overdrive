@@ -138,6 +138,24 @@ static func asphalt_mat(color: Color) -> ShaderMaterial:
 	_asphalt_mats.append(m)
 	return m
 
+## The same wet-road look over a ready-made albedo texture (the pavement slabs,
+## whose groove lines a noise ramp cannot give): `tex` tiled `uv_scale` over a
+## strip's UV, dry roughness `dry_rough`. Follows set_wetness and
+## set_reflections like asphalt_mat does.
+static func textured_mat(tex: Texture2D, uv_scale: Vector2, dry_rough: float) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = asphalt_shader()
+	m.set_shader_parameter("grain", tex)
+	m.set_shader_parameter("grain_scale", uv_scale)
+	m.set_shader_parameter("sheen", SHEEN)
+	m.set_shader_parameter("wet_darken", WET_DARKEN)
+	m.set_shader_parameter("dry_roughness", dry_rough)
+	m.set_shader_parameter("wet_roughness", WET_ROUGHNESS)
+	m.set_shader_parameter("wetness", wetness)
+	m.set_shader_parameter("sheen_gain", 1.0 if reflections else 0.0)
+	_asphalt_mats.append(m)
+	return m
+
 ## The one asphalt shader every asphalt material shares.
 static func asphalt_shader() -> Shader:
 	if _asphalt_shader == null:

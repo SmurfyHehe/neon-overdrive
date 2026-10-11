@@ -64,6 +64,8 @@ const CHANGE_GAIN := 3.0         # m/s a lane must be faster by to be worth movi
 ## Spin recovery.
 const SPIN_SLIP := 0.45          # rad between nose and travel = spinning
 const SPIN_MIN_SPEED := 6.0
+const SLIDE_LIFT := 0.07          # rad (4 deg) of sideslip: lift, ease the brake, countersteer
+const SLIDE_BRAKE := 0.3          # most brake pedal while sliding
 const WRONG_WAY := 1.2           # rad off the road's heading at low speed = turn round
 const TURN_LEG_SECS := 2.5
 const TURN_DONE := 0.8           # rad: the lane keeper can take it from here
@@ -224,7 +226,20 @@ func steer_to(c: PlayerCar, lane_x: float) -> float:
 	# Less damping while it is moving over on purpose, or a lane change at
 	# town speed takes five seconds.
 	var damp := CHANGE_DAMP_T if _changing and c.speed < 60.0 else LAT_DAMP_T
-	return TrafficCar.lane_steer(c, lane_x - side_v * damp, -1.0, wheelbase, UNDERSTEER_FF)
+	var steer := TrafficCar.lane_steer(c, lane_x - side_v * damp, -1.0, wheelbase, UNDERSTEER_FF)
+	# Countersteer (#550): lane_steer aims the car's travel, but the wheels turn
+	# from the nose. Sliding, the nose is off the travel by the slip angle, so
+	# the wheels need that much more lock the other way to point where the car
+	# goes. Without it the bot held ~0.08 of lock 23 deg sideways and spun.
+	# Faded in from SLIDE_LIFT / 2 to SLIDE_LIFT, so it does not kick.
+	var slip := slip_angle(c)
+	var share := clampf((absf(slip) - SLIDE_LIFT * 0.5) / (SLIDE_LIFT * 0.5), 0.0, 1.0)
+	if share == 0.0:
+		return steer
+	var e := maxf(c.steering_exponent, 0.1)
+	var lock := signf(steer) * pow(absf(steer), e) + share * slip / c.max_steering_angle  # + = left (GEVP)
+	lock = clampf(lock, -1.0, 1.0)
+	return signf(lock) * pow(absf(lock), 1.0 / e)
 
 ## 1. Pedals for `v0` m/s behind something `gap` m ahead doing `lead_v` (INF =
 ## clear road). Brakes as hard as the gap needs; reuses the traffic follower law.
@@ -237,13 +252,22 @@ func pedals_for(c: PlayerCar, v0: float, gap := INF, lead_v := 0.0) -> void:
 	if gap < INF:
 		a = minf(a, TrafficCar.follow_accel(v, v0, gap, lead_v, T_GAP))
 	c.handbrake_input = 0.0
+	# Sliding (#550): a driver lifts until the tyres grip again. Flooring it
+	# 9 deg sideways at 160 km/h spun the car on a 0.2 g bend.
+	var sliding := absf(slip_angle(c)) > SLIDE_LIFT
 	if a < -0.3:
-		# Grip is shared: the harder the car is cornering, the less brake it gets.
+		# Grip is shared: the harder the car is cornering, the less brake it
+		# gets, and none once the bend alone takes all of it (#550: a 0.39
+		# floor on a 0.94 g bend started the slide).
 		var lat := v * v * _bend_here / BRAKE_FULL
 		c.throttle_input = 0.0
-		c.brake_input = clampf(-a / BRAKE_FULL, 0.0, sqrt(maxf(0.15, 1.0 - lat * lat)))
+		c.brake_input = clampf(-a / BRAKE_FULL, 0.0, sqrt(maxf(0.0, 1.0 - lat * lat)))
+		# Brake-induced oversteer: ease off as the slide grows, to SLIDE_BRAKE
+		# at SLIDE_LIFT, until the rear grips again.
+		var slide := clampf((absf(slip_angle(c)) - SLIDE_LIFT * 0.5) / (SLIDE_LIFT * 0.5), 0.0, 1.0)
+		c.brake_input = minf(c.brake_input, lerpf(1.0, SLIDE_BRAKE, slide))
 	else:
-		c.throttle_input = clampf(a, 0.0, 1.0)
+		c.throttle_input = 0.0 if sliding else clampf(a, 0.0, 1.0)
 		c.brake_input = 0.0
 
 ## 2. Whether lane `lane_i` has room for the car right now: nothing alongside,

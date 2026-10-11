@@ -10,8 +10,9 @@ extends SceneTree
 #   - H does it all (K1): a tap switches low <-> high (or turns the lights on),
 #     a hold lights the high beam while down and counts ONE flash, a double
 #     tap puts the lights out and undoes the first tap's switch
-#   - cops: dark 18 m, low beam 140 m, high beam or flash 200 m; a dark
-#     driver seen by a cop gains a little heat standing still, a lit one none;
+#   - cops: dark 18 m, low beam 140 m, high beam or flash 200 m, by the real
+#     sight pass (PoliceRules reach); heat comes from offences seen (P1), so a
+#     car standing still gains none whatever its lamps;
 #   - on a wall 30 m ahead the low beam lights the wall below the lamp height
 #     and not above it (the cut-off), the high beam lights above it too.
 # Writes the frames to user://headlights/ for judging by eye.
@@ -120,7 +121,7 @@ func _run() -> void:
 	b.step(1.0)
 	_check(PoliceHeat.SEE_RANGE_HIGH >= 190.0 and PoliceHeat.SEE_RANGE_LIT >= 100.0, "see ranges off the decision list")
 	var heat: PoliceHeat = game.get("police_heat")
-	_dark_heat(heat)
+	_cop_sight(heat)
 
 	# --- auto-dip against the real traffic list -----------------------------
 	await _auto_dip(b)
@@ -133,34 +134,50 @@ func _run() -> void:
 	print("headlight_beams: %s" % ("PASS" if fails.is_empty() else "FAIL (%d)" % fails.size()))
 	quit(0 if fails.is_empty() else 1)
 
-## A cop at 8 m facing the car, car standing still: lights off adds heat, a
-## low beam adds none.
-func _dark_heat(heat: PoliceHeat) -> void:
+## A cop d m behind the car, facing it, the car standing still: it sees the
+## car only inside the reach of the beam (dark 18 m, low 140, high 200; the
+## 12 m all-round sees any car), and a car standing still gains no heat in any
+## case (heat is offences seen, PoliceHeat header rule 2 and 4).
+func _cop_sight(heat: PoliceHeat) -> void:
 	if heat == null:
 		_check(false, "no police_heat in the game")
 		return
 	var cop := Node3D.new()
 	game.add_child(cop)
-	cop.global_position = player.global_position + Vector3(0.0, 0.0, 8.0)   # behind the car; the car faces -Z
-	cop.look_at(player.global_position, Vector3.UP)
 	heat.player = player
 	heat.reset()
 	heat.register_cop(cop)
-	player.set_headlights(false)
-	heat._look()
-	_check(heat.seen, "cop 8 m away did not see the dark car")
-	for i in 20:
-		heat._update_heat(0.1)
-	_check(heat.heat > 0.05 and heat.heat < 0.3, "dark heat after 2 s seen: %.3f, wanted a little (0.05..0.3)" % heat.heat)
-	heat.reset()
-	player.set_headlights(true)
-	heat._look()
-	for i in 20:
-		heat._update_heat(0.1)
-	_check(heat.seen and heat.heat == 0.0, "lit car standing still gained heat %.3f" % heat.heat)
+	var b := player.beams
+	# [label, lights, high, distance, seen]: well inside and well outside each reach
+	var cases := [
+		["dark", false, false, 10.0, true],
+		["dark", false, false, 60.0, false],
+		["low", true, false, 100.0, true],
+		["low", true, false, 170.0, false],
+		["high", true, true, 170.0, true],
+		["high", true, true, 230.0, false],
+	]
+	for c in cases:
+		player.set_headlights(bool(c[1]))
+		if bool(c[2]):
+			_tap()   # lights on: a tap is the high beam
+		b.step(1.0)
+		var d: float = c[3]
+		cop.global_position = player.global_position + Vector3(0.0, 0.0, d)   # behind the car; the car faces -Z
+		cop.look_at(player.global_position, Vector3.UP)
+		heat.reset()
+		heat._look(0.1)
+		_check(heat.seen == bool(c[4]), "%s beam, cop %.0f m behind: seen %s, wanted %s" % [c[0], d, heat.seen, c[4]])
+		for i in 20:
+			heat._update_heat(0.1, false)
+		_check(heat.heat == 0.0, "%s beam, cop %.0f m behind: standing still gained heat %.3f" % [c[0], d, heat.heat])
+		if bool(c[2]):
+			_tap()   # back to low
+			b.step(1.0)
 	heat.unregister_cop(cop)
 	cop.queue_free()
 	heat.reset()
+	player.set_headlights(true)
 
 func _auto_dip(b: HeadlightBeams) -> void:
 	var traffic: TrafficManager = game.get("traffic")
@@ -170,19 +187,23 @@ func _auto_dip(b: HeadlightBeams) -> void:
 	_tap()
 	b.step(1.0)
 	var onc: TrafficCar = traffic.cars[0]
-	onc.target_speed = 0.0
-	onc.place(TrafficManager.lane_centre(1, true), 1.0, pz - 250.0, onc.rest_y, 0.0)
+	# A car that really comes at you: the manager reads an oncoming car's
+	# approach from its z-velocity (a car on rails: direction x cruise speed),
+	# so a standing car is not oncoming however it faces.
+	const CLOSING := 15.0
+	onc.target_speed = CLOSING
+	onc.place(TrafficManager.lane_centre(1, true), 1.0, pz - 250.0, onc.rest_y, CLOSING)
 	await physics_frame
 	await physics_frame
 	b.step(HeadlightBeams.DIP_EVERY + 0.01)
 	_check(b.mode == HeadlightBeams.Mode.HIGH, "oncoming car at 250 m: not high (beam %d)" % b.mode)
-	onc.place(onc.lane_x, 1.0, pz - 120.0, onc.rest_y, 0.0)
+	onc.place(onc.lane_x, 1.0, pz - 120.0, onc.rest_y, CLOSING)
 	await physics_frame
 	await physics_frame
 	b.step(HeadlightBeams.DIP_EVERY + 0.01)
 	_check(b.mode == HeadlightBeams.Mode.LOW and b.high_on and b.dipped, "oncoming car at 120 m: beam %d, J %s" % [b.mode, b.high_on])
 	_check(traffic.beam_blocked(), "traffic.beam_blocked false with a car at 120 m")
-	onc.place(onc.lane_x, 1.0, pz - 190.0, onc.rest_y, 0.0)
+	onc.place(onc.lane_x, 1.0, pz - 190.0, onc.rest_y, CLOSING)
 	await physics_frame
 	await physics_frame
 	b.step(HeadlightBeams.DIP_EVERY + 0.01)
@@ -206,13 +227,19 @@ func _auto_dip(b: HeadlightBeams) -> void:
 	_check(b.mode == HeadlightBeams.Mode.HIGH, "car behind dips the beam")
 	# Auto-dip off: never dips.
 	b.auto_dip = false
-	onc.place(onc.lane_x, 1.0, pz - 60.0, onc.rest_y, 0.0)
+	onc.place(onc.lane_x, 1.0, pz - 60.0, onc.rest_y, CLOSING)
 	await physics_frame
 	await physics_frame
 	b.step(HeadlightBeams.DIP_EVERY + 0.01)
 	_check(b.mode == HeadlightBeams.Mode.HIGH, "auto-dip off but the beam dipped")
 	b.auto_dip = true
 	b.dip_probe = Callable()
+	# No traffic for the shots after this: a car's own lamps would light the
+	# wall above the cut-off and the road at 60 m, and its lamps count towards
+	# the cap on lights per mesh.
+	traffic.set_car_count(0)
+	for i in 4:
+		await physics_frame
 	b.step(1.0)
 	_tap()
 	b.step(1.0)
@@ -269,6 +296,23 @@ func _wall_shots(b: HeadlightBeams) -> void:
 	_check(l_lo > d_lo + 0.03, "low beam does not light the wall below the lamp (%.3f vs %.3f)" % [l_lo, d_lo])
 	_check(l_hi < d_hi + 0.015, "low beam lights the wall above the cut-off (%.3f vs %.3f dark)" % [l_hi, d_hi])
 	_check(h_hi > d_hi + 0.03, "high beam does not light the wall above the lamp (%.3f vs %.3f)" % [h_hi, d_hi])
+	# Range: the same wall 70 m out. Lit by the low beam (100 m) and not by
+	# the dark frame, below the lamp's height. (Bare asphalt cannot show this:
+	# the beam meets the ground about 35 m out and lights it at a graze after
+	# that, and an earlier version of the road check below only passed because
+	# a traffic car left standing ahead was lit instead, #561.)
+	wall.global_position = Vector3(lane, 3.0, pz - 70.0)
+	cam.global_position = Vector3(lane + 4.0, 1.4, pz - 52.0)
+	cam.look_at(Vector3(lane, 1.6, pz - 70.0))
+	player.set_headlights(false)
+	var far_dark := await _shot("wall_70_lights_off")
+	player.set_headlights(true)
+	var far_low := await _shot("wall_70_low_beam")
+	var far_b := Vector3(lane, 0.25, pz - 70.0)
+	var fd := _lum(far_dark, far_b)
+	var fl := _lum(far_low, far_b)
+	print("headlight_beams: wall 70 m out, below the lamp: lights off %.3f, low %.3f" % [fd, fl])
+	_check(fl > fd + 0.02, "low beam does not reach a wall 70 m out (%.3f vs %.3f dark)" % [fl, fd])
 	wall.queue_free()
 	await _road_shots(b, lane, pz)
 	cam.queue_free()
@@ -329,8 +373,15 @@ func _road_shots(b: HeadlightBeams, lane: float, pz: float) -> void:
 			"high":
 				_tap()
 		var img := await _shot("road_" + m)
-		calls[m] = int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
-		prims[m] = int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
+		# The mirrors draw on alternate frames (a second view of the scene, 2
+		# calls and ~1.7k triangles), so one frame's count is the steady cost
+		# or that plus the mirrors depending on the frame parity the wait ended
+		# on. The lower of two successive frames is the steady cost.
+		var c0 := int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
+		var p0 := int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
+		await process_frame
+		calls[m] = mini(c0, int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)))
+		prims[m] = mini(p0, int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)))
 		var line: Array = []
 		for d in [15.0, 30.0, 60.0, 90.0, 130.0]:
 			line.append(_lum(img, Vector3(lane, 0.0, pz - d)))
@@ -343,6 +394,9 @@ func _road_shots(b: HeadlightBeams, lane: float, pz: float) -> void:
 	# a single draw call or triangle over the old one.
 	_check(calls["low"] <= calls["before"], "low beam draws more calls than the old lamp (%d vs %d)" % [calls["low"], calls["before"]])
 	_check(prims["low"] <= prims["before"], "low beam draws more primitives than the old lamp (%d vs %d)" % [prims["low"], prims["before"]])
+	# The road itself, where the beam lands on it: 15 and 30 m out. (Not 60 m:
+	# see the wall at 70 m above, and #561.)
 	var low_row: Array = rows[2][1]
 	var off_row: Array = rows[0][1]
-	_check(low_row[2] > off_row[2] + 0.02, "low beam adds nothing to the road at 60 m (%.3f vs %.3f)" % [low_row[2], off_row[2]])
+	_check(low_row[0] > off_row[0] + 0.1, "low beam adds nothing to the road at 15 m (%.3f vs %.3f)" % [low_row[0], off_row[0]])
+	_check(low_row[1] > off_row[1] + 0.1, "low beam adds nothing to the road at 30 m (%.3f vs %.3f)" % [low_row[1], off_row[1]])

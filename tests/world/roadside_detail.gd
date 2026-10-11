@@ -70,8 +70,21 @@ func _check_chunk(chunk: Node3D, prev: Dictionary, cfg: Dictionary, label: Strin
 	# World step 6 (W7): a side-street mouth adds one lamp and pool of its own
 	# after the street's four; those stand on the side street, not the pavement
 	var n_mouths: int = (chunk.get_meta("side_streets") as Array).size()
-	var every := int(B.Districts.street_at(int(chunk.get_meta("chunk_index"))).every)
+	var ci := int(chunk.get_meta("chunk_index"))
+	var every := int(B.Districts.street_at(ci).every)
 	var want_lamps: int = {0: 0, 1: 4, 2: 2, 4: 1}[every]
+	# A pole is left out where a signalled junction's masts stand (Junction.in_mouth)
+	# or a gas station's canopy lights the bay (GasStation.in_bay, eac968f): same
+	# slot positions as the builder, so the street kit's count minus those.
+	for i in B._lamp_slots():
+		for side in [1, -1]:
+			if every == 0 or (every == 2 and (i == 0) != (side == 1)):
+				continue
+			if every == 4 and (i != 0 or (side == 1) != (posmod(ci, 2) == 0)):
+				continue
+			var lz := -float(i) * B.LAMP_SPACING - (B.LAMP_SPACING * 0.25 if side == 1 else B.LAMP_SPACING * 0.75)
+			if Junction.in_mouth(ci, lz) or B.GasStation.in_bay(ci, lz, side):
+				want_lamps -= 1
 	if lamps.visible_instance_count != want_lamps + n_mouths or pools.visible_instance_count != want_lamps + n_mouths:
 		_fail("%s: %d lamps / %d pools, expected %d of each" % [label, lamps.visible_instance_count, pools.visible_instance_count, want_lamps + n_mouths])
 		return

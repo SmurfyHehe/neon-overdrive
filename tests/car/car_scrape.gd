@@ -71,6 +71,12 @@ func _initialize() -> void:
 	OS.set_environment("NEON_HILLS", "1.0" if hills else "0")
 	OS.set_environment("NEON_CURVES", "1.0" if hills else "0")
 	OS.set_environment("NEON_ROAD_SEED", "37")
+	# Nothing around means nothing to crash into: the median barrier (R1) and
+	# its crossover cushions are visual only here, as in tests/car/wall_hit.gd.
+	# The brake-in-turn phase slides the car toward the median; since the
+	# cushions it could end in one at 10 m/s (seed 37, chunk 28), and the hit
+	# pitched the nose into the road: a crash, which barrier_hit covers.
+	RoadBarriers.collide = false
 	game = Harness.boot(self, 0, 300.0, 777, 1.0e6)
 	_run.call_deferred()
 

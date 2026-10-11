@@ -822,6 +822,10 @@ func _process(delta: float) -> void:
 		if not splash_running():
 			_run_menu_spin(delta)
 	_run_menu_voice(delta)
+	if kerbside != null:
+		# the turbo's boost is the street's wind and the roaches' scare (M2, M7)
+		kerbside.set_title_wind(lerpf(TitleKerbside.WIND_REST, TitleKerbside.WIND_MAX, menu_boost))
+		kerbside.set_scare(menu_boost)
 
 # Hold W (the throttle) and the menu logo's wheel spools up; let go and it
 # eases to a stop. Polled, because the tree is paused behind the title and
@@ -1093,6 +1097,8 @@ func _arrive() -> void:
 
 func _enter_menu() -> void:
 	slide.visible = true
+	if kerbside != null:
+		kerbside.start_roaches()
 	_show_list(main_list)
 	MenuMotion.slide_in(slide, Vector2.LEFT)
 	var sfx: Variant = get_parent().get("menu_sfx")

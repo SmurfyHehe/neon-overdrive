@@ -12,6 +12,9 @@ extends SceneTree
 #   is inside the camera frustum between the camera and the car, the lamp has
 #   moths and a bat in frame, wind eases back down over 3 s, and
 #   LampLife.enabled = false leaves every node empty
+# - roaches (menu roaches M7): ten in one MultiMesh, the lid ajar off the
+#   hole, first out ~6 s in, never more than 3, none on the car, scare 1
+#   clears them inside a second and holds them in for 3 s of calm
 # - the menu has Continue, New Game, Load, Settings, Extras, Quit; Load lists
 #   one row per save slot plus Back; Esc comes back to the main list
 # - the news line has text; the Early Access tag is on the title
@@ -176,7 +179,13 @@ func _check_lamp_life(set_node: TitleKerbside) -> void:
 	_check(d.get("vent_round", false), "the vent is a round manhole, not a drain")
 	var vxf: Transform3D = d.get("vent_xf", Transform3D.IDENTITY)
 	var hole := vxf.origin
-	_check(vxf.basis.is_equal_approx(Basis()) and hole.is_equal_approx(TitleKerbside.VENT_AT), "the manhole cover is unsquashed (round) at the forced spot")
+	_check(vxf.basis.is_equal_approx(Basis()) and hole.is_equal_approx(TitleKerbside.VENT_AT), "the manhole is round at the forced spot")
+	# the lid sits ajar: shifted off the hole, away from the camera
+	var cxf: Transform3D = d.get("cover_xf", Transform3D.IDENTITY)
+	var shift := cxf.origin - TitleKerbside.VENT_AT
+	_check(absf(shift.length() - TitleRoaches.LID_SHIFT) < 0.01, "the lid is %.0f cm off the hole" % (TitleRoaches.LID_SHIFT * 100.0))
+	_check(shift.dot(cam.position - TitleKerbside.VENT_AT) < 0.0, "the lid slid away from the camera, so the crescent faces it")
+	_check(life.get_node_or_null(^"VentHole") != null, "the hole's black disc is under the lid")
 	_check(cam.is_position_in_frustum(set_node.to_global(hole)), "the manhole is inside the camera frustum")
 	_check(cam.is_position_in_frustum(set_node.to_global(hole + Vector3(0.0, 1.5, 0.0))), "the steam above it is in frame")
 	_check(hole.z > set_node.car.position.z and hole.z < cam.position.z, "the manhole is on the road between the camera and the car")
@@ -190,6 +199,7 @@ func _check_lamp_life(set_node: TitleKerbside) -> void:
 	var head := set_node.to_global(mxf.origin + mxf.basis * LampLife.HEAD)
 	_check(cam.is_position_in_frustum(head), "the lamp head with its moths is in frame")
 	_check(_mm_of(life, "LampBanners").visible_instance_count == 0, "no banner on the title lamp")
+	_check_roaches(set_node)
 	# wind: up at once, back down over 3 s
 	set_node.set_title_wind(2.0)
 	set_node._ease_wind(0.016)
@@ -203,9 +213,74 @@ func _check_lamp_life(set_node: TitleKerbside) -> void:
 	LampLife.enabled = false
 	var off := TitleKerbside.new(set_node.kind)
 	LampLife.enabled = true
-	for n in ["LampMoths", "LampBanners", "SteamVents", "VentCovers", "WindLitter"]:
+	for n in ["LampMoths", "LampBanners", "SteamVents", "VentCovers", "WindLitter", "Roaches"]:
 		_check(_mm_of(off.life_root, n).visible_instance_count == 0, "NEON_LAMP_LIFE=0 empties %s on the title" % n)
 	off.free()
+
+## Roaches (M7): ten in one MultiMesh, their runs mirrored in GDScript
+## (TitleRoaches.positions is the shader's top level) so the test can ask
+## where each one is at any clock.
+func _check_roaches(set_node: TitleKerbside) -> void:
+	var mm := _mm_of(set_node.life_root, "Roaches")
+	_check(mm != null and mm.instance_count == TitleRoaches.COUNT and mm.visible_instance_count == TitleRoaches.COUNT,
+		"the Roaches MultiMesh has %d instances" % TitleRoaches.COUNT)
+	_check(set_node.roach_sched.size() == TitleRoaches.COUNT, "every roach has a schedule")
+	_check(set_node.roach_running, "the roach clock runs once the menu is up")
+	# at scare 0: one out within 10 s, never more than 3, and never on the car
+	var first_out := -1.0
+	var most := 0
+	var on_car := false
+	var half_l: float = set_node.car.get_meta("half_l")
+	var half_w: float = set_node.car.get_meta("half_w")
+	var t := 0.0
+	while t < 120.0:
+		var n := 0
+		for r in set_node.roach_positions(t):
+			if r.out:
+				n += 1
+				var p: Vector2 = r.pos
+				if absf(p.x) < half_l and absf(p.y - set_node.car.position.z) < half_w:
+					on_car = true
+		if n > 0 and first_out < 0.0:
+			first_out = t
+		most = maxi(most, n)
+		t += 0.05
+	_check(first_out >= 0.0 and first_out <= 10.0, "at scare 0 a roach is out within 10 s, first at %.1f" % first_out)
+	_check(first_out >= 5.0, "the first roach waits about 6 s, got %.1f" % first_out)
+	_check(most >= 2 and most <= 3, "never more than 3 out at once (and at least 2 some time), most %d" % most)
+	_check(not on_car, "no roach on the car body")
+	# scare 1 at a moment with roaches out: a second later none is outside the gap
+	var busy := -1.0
+	t = 0.0
+	while t < 120.0 and busy < 0.0:
+		if set_node.roach_positions(t).filter(func(r): return r.out).size() >= 2:
+			busy = t
+		t += 0.05
+	_check(busy >= 0.0, "a moment with 2+ roaches out exists")
+	var was_frozen := set_node.roach_frozen
+	set_node.freeze_roaches(true)
+	set_node.set_roach_clock(busy)
+	set_node.set_scare(1.0)
+	_check(set_node.roach_scare_t >= 0.0, "scare 1 starts the flight")
+	var out_after := 0
+	for r in set_node.roach_positions(busy + 1.0):
+		if r.out:
+			out_after += 1
+	_check(out_after == 0, "1 s after scare 1 no roach is outside the gap, %d still out" % out_after)
+	# and none come out again until the scare has been low for 3 s
+	set_node.set_roach_clock(busy + 1.0)
+	set_node.set_scare(0.0)
+	_check(set_node.roach_scare_t >= 0.0, "the scare does not end the moment the value drops")
+	set_node.set_roach_clock(busy + 1.0 + TitleRoaches.CALM_SECS + 0.1)
+	set_node.set_scare(0.0)
+	_check(set_node.roach_scare_t < 0.0 and set_node.roach_origin > busy, "after 3 s calm the runs start over")
+	_check(set_node.roach_positions(set_node.roach_origin + 0.5).filter(func(r): return r.out).is_empty(),
+		"nothing is out straight after the calm-down")
+	# the shader's own uniforms were written
+	var m := TitleRoaches.get_mat()
+	_check(is_equal_approx(float(m.get_shader_parameter("origin")), set_node.roach_origin), "the origin uniform follows the set")
+	_check(float(m.get_shader_parameter("scare_t")) < 0.0, "the scare_t uniform is cleared")
+	set_node.freeze_roaches(was_frozen)
 
 ## The picture sizes inside a Windows .ico, smallest first.
 func _ico_sizes(path: String) -> Array:

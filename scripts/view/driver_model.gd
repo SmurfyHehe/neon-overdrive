@@ -169,14 +169,19 @@ const IDLE_REACH_SECS := 0.30
 const IDLE_LIFT_SECS := 0.40
 const IDLE_LOWER_SECS := 0.45
 const IDLE_RETURN_SECS := 0.30
-const IDLE_HOLD_SECS := {IdleActions.VAPE: 0.85, IdleActions.BEER: 0.95}
+const IDLE_HOLD_SECS := {IdleActions.VAPE: 0.85, IdleActions.BEER: 0.95, IdleActions.CIGARETTE: 2.7}
 ## From the eye. A hand's width to the left of the mouth, so the hand comes up beside the gauges, not over them.
-const IDLE_MOUTH := {IdleActions.VAPE: Vector3(-0.07, -0.10, -0.19), IdleActions.BEER: Vector3(-0.07, -0.14, -0.18)}
+const IDLE_MOUTH := {IdleActions.VAPE: Vector3(-0.07, -0.10, -0.19), IdleActions.BEER: Vector3(-0.07, -0.14, -0.18), IdleActions.CIGARETTE: Vector3(-0.07, -0.10, -0.19)}
 const IDLE_YAW_DEG := 20.0     # the item turned in toward the mouth
-const IDLE_TILT_DEG := {IdleActions.VAPE: 80.0, IdleActions.BEER: 20.0}   # the item's lean toward the driver at the mouth
+const IDLE_TILT_DEG := {IdleActions.VAPE: 80.0, IdleActions.BEER: 20.0, IdleActions.CIGARETTE: 80.0}   # the item's lean toward the driver at the mouth
 const SIP_TILT_DEG := 40.0     # more, at the top of the sip
 const SIP_HEAD_DEG := 14.0     # the head tips back with it (seen from the chase view)
-const HOLD_R := {IdleActions.VAPE: 0.012, IdleActions.BEER: IdleProps.CAN_R}
+const HOLD_R := {IdleActions.VAPE: 0.012, IdleActions.BEER: IdleProps.CAN_R, IdleActions.CIGARETTE: 0.008}
+## The cigarette's hold, from the hand arriving at the mouth: the lighter first
+## (a click and a flame), then CIG_DRAGS drags, each one a breath out.
+const CIG_LIGHT_SECS := 0.4
+const CIG_DRAGS := 3
+const CIG_WINDOW := 0.55   # how far the window rolls down by itself for a cigarette
 enum { AIM_AHEAD, AIM_LEFT, AIM_BACK }
 ## Degrees left of straight ahead, by aim (AIM_LEFT with look left held, AIM_BACK with look back).
 const GESTURE_YAW_DEG := [35.0, 80.0, 125.0]
@@ -249,6 +254,8 @@ var _idle_item := ""             # what this use is
 var _idle_holding := false       # the item is in the hand
 var _idle_counted := false
 var _idle_exhaled := false
+var _idle_lit := false           # the cigarette has been lit this use
+var _idle_drags := 0             # drags already breathed out this use
 var _draw := 0.0                 # 0..1 through the draw or the sip
 var _window_idle := 0.0          # seconds since the window last moved
 var radio_requests := 0          # next-station presses waiting for the hand
@@ -755,6 +762,13 @@ func _begin_idle() -> void:
 		return   # switched to None while the press waited
 	_idle_counted = false
 	_idle_exhaled = false
+	_idle_lit = false
+	_idle_drags = 0
+	if _idle_item == IdleActions.CIGARETTE:
+		props.cigarette_reset()
+		# the window rolls down a little by itself, so there is a window to flick it out of
+		if has_door_glass() and PerspectiveAudio.current != null:
+			PerspectiveAudio.current.assist_open(CIG_WINDOW)
 	_start_left(LeftAct.IDLE_REACH)
 
 ## The hand with the item, car space: e 0 at the pocket .. 1 at the mouth,
@@ -770,6 +784,10 @@ func _idle_transform(e: float, draw: float) -> Transform3D:
 		tilt += SIP_TILT_DEG * draw
 	var b := Basis(Vector3.UP, deg_to_rad(IDLE_YAW_DEG) * e) * Basis(Vector3.RIGHT, deg_to_rad(tilt))
 	return Transform3D(b, from.lerp(via, e).lerp(via.lerp(to, e), e))
+
+## The side window counts as open from half way down, or when the car has no glass there.
+func _window_is_open() -> bool:
+	return frame.window >= GESTURE_WINDOW_OPEN or not has_door_glass()
 
 func _begin_gesture() -> void:
 	_gesture_wanted = false
@@ -962,7 +980,21 @@ func _step_left(delta: float) -> void:
 			var hold: float = IDLE_HOLD_SECS[_idle_item]
 			var up := clampf(left_t / IDLE_LIFT_SECS, 0.0, 1.0)
 			var down := clampf((left_t - IDLE_LIFT_SECS - hold) / IDLE_LOWER_SECS, 0.0, 1.0)
-			_draw = sin(clampf((left_t - IDLE_LIFT_SECS) / hold, 0.0, 1.0) * PI)
+			var into := left_t - IDLE_LIFT_SECS   # seconds into the hold
+			if _idle_item == IdleActions.CIGARETTE:
+				# lighter first, then CIG_DRAGS humps of draw, a breath out after each
+				if into >= 0.0 and not _idle_lit:
+					_idle_lit = true
+					props.light_up()
+				var v := clampf((into - CIG_LIGHT_SECS) / (hold - CIG_LIGHT_SECS), 0.0, 1.0)
+				_draw = absf(sin(v * PI * CIG_DRAGS)) if into > CIG_LIGHT_SECS else 0.0
+				props.set_burn(1.0 - (1.0 - IdleProps.BURN_END) * v)   # shorter with every drag
+				var done := CIG_DRAGS if v >= 1.0 else int(v * CIG_DRAGS)
+				while _idle_drags < done:
+					_idle_drags += 1
+					props.exhale(_window_is_open(), IdleProps.CIG_PUFFS)
+			else:
+				_draw = sin(clampf(into / hold, 0.0, 1.0) * PI)
 			_left_xf = _idle_transform(_ease(up) - _ease(down), _draw)
 			if up >= 1.0 and not _idle_counted:
 				_idle_counted = true
@@ -971,7 +1003,11 @@ func _step_left(delta: float) -> void:
 			if down > 0.0 and not _idle_exhaled:
 				_idle_exhaled = true
 				if _idle_item == IdleActions.VAPE:
-					props.exhale(frame.window >= GESTURE_WINDOW_OPEN or not has_door_glass())
+					props.exhale(_window_is_open())
+				elif _idle_item == IdleActions.CIGARETTE:
+					props.flick_butt()
+					if PerspectiveAudio.current != null:
+						PerspectiveAudio.current.release_assist()   # back up, if the driver opened it
 			if down >= 1.0:
 				_idle_holding = false
 				_draw = 0.0
@@ -1056,7 +1092,7 @@ func _place_hands() -> void:
 		hand.transform = _left_xf
 		hand.visible = _idle_holding and item == _idle_item
 	(hands[-1] as Node3D).visible = not fist and not _idle_holding
-	props.place(_idle_item if _idle_holding else "", _left_xf, _draw if _idle_item == IdleActions.VAPE else 0.0)
+	props.place(_idle_item if _idle_holding else "", _left_xf, _draw if _idle_item == IdleActions.VAPE or _idle_item == IdleActions.CIGARETTE else 0.0)
 
 func _place_legs(delta: float) -> void:
 	var p := player

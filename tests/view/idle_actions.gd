@@ -12,6 +12,15 @@ extends SceneTree
 #   either side of straight ahead;
 # - beer: with "beer while driving" on, L works at 80 km/h; off, nothing at
 #   80 km/h and it works parked;
+# - cigarette (MA5), from a shut window and from a down one: the window rolls
+#   down a little by itself (about 0.55) and back up after, and not at all if
+#   it was down; the lighter clicks once and its flame and light are up about
+#   0.4 s; three drags each with a breath out and a brighter tip; the
+#   cigarette gets shorter with every drag and never longer (its length is the
+#   only health bar); the butt is flicked out of the window by itself through
+#   the pooled ember burst, always; three fast presses are at most two uses;
+# - traffic flicks (once, driven by hand): a car 24 m ahead flicks no more than
+#   once per 120 s, none from 60 m ahead or from behind;
 # - None: L does nothing;
 # - one hand, one job: L during a window roll or a flip-off waits and then runs
 #   once; three fast presses are at most two uses; K and the window key (held,
@@ -36,6 +45,7 @@ const TAP_TICKS := 3
 const BACK_SECS := 3.0
 const CLOUD_SECS := 3.0
 const MOUTH_TOL := 0.03
+const CIG_BACK_SECS := 4.6     # reach, light, three drags, lower, back to the rim
 const USES := 10
 const DRIVE_SECS := 27.0
 const DRIVE_SPEED := 22.3      # m/s, 80 km/h
@@ -62,6 +72,18 @@ var puff_out := -INF         # the furthest out (-x) any puff got
 var cone_worst := ""
 var right_off := false
 var hands_wrong := false
+var flame_ticks := 0         # ticks the lighter's flame was up
+var flame_light_ok := true
+var tip_peak := 0.0          # the brightest the cigarette tip got
+var cig_first := -1.0        # how much cigarette was left at the first sample of a use, and the last
+var cig_last := -1.0
+var cig_mono := true         # it never got longer
+var cig_paper_first := -1.0  # the paper's drawn length, m
+var cig_paper_last := -1.0
+var win_max := 0.0           # the window's range during the watch
+var win_min := 1.0
+var window_hand_seen := false   # the crank or switch animated (window_direction != 0)
+var traffic_checked := false # the traffic flick check runs once, on the first car
 
 func _check(ok: bool, msg: String) -> void:
 	if not ok:
@@ -117,6 +139,17 @@ func _watch() -> void:
 	cone_worst = ""
 	right_off = false
 	hands_wrong = false
+	flame_ticks = 0
+	flame_light_ok = true
+	tip_peak = 0.0
+	cig_first = -1.0
+	cig_last = -1.0
+	cig_mono = true
+	cig_paper_first = -1.0
+	cig_paper_last = -1.0
+	win_max = 0.0
+	win_min = 1.0
+	window_hand_seen = false
 
 func _in_view(c: Vector3, what: String) -> void:
 	var rel: Vector3 = c - (frame.cab.eye as Vector3)
@@ -147,10 +180,39 @@ func _sample() -> void:
 			shown += 1
 			hand = h
 			saw_hold = String(item)
-			_corners(d.props.vape if item == IdleActions.VAPE else d.props.can, "the " + String(item))
+			var held_node: MeshInstance3D = d.props.vape
+			if item == IdleActions.BEER:
+				held_node = d.props.can
+			elif item == IdleActions.CIGARETTE:
+				held_node = d.props.cig
+			_corners(held_node, "the " + String(item))
+			for ch in held_node.get_children():   # the cigarette's paper and tip hang off it
+				if ch is MeshInstance3D and ch.visible:
+					var bb := (ch as MeshInstance3D).mesh.get_aabb()
+					for i in 8:
+						_in_view(held_node.transform * (ch as Node3D).transform * bb.get_endpoint(i), "the " + String(item))
 			mouth_gap = minf(mouth_gap, h.position.distance_to((frame.cab.eye as Vector3) + DriverModel.IDLE_MOUTH[item]))
 	hands_wrong = hands_wrong or shown != 1
 	saw_idle = saw_idle or d.is_idling()
+	if d.props.flame_up():
+		flame_ticks += 1
+		flame_light_ok = flame_light_ok and d.props.flame_light.visible and d.props.lighter.visible
+	elif d.props.flame_light.visible or d.props.lighter.visible:
+		flame_light_ok = false   # the flame's light must go out with the flame
+	tip_peak = maxf(tip_peak, d.props.tip_energy())
+	win_max = maxf(win_max, frame.window)
+	win_min = minf(win_min, frame.window)
+	window_hand_seen = window_hand_seen or frame.window_direction != 0
+	if saw_hold == IdleActions.CIGARETTE and d.hold_hands[IdleActions.CIGARETTE].visible:
+		var left: float = d.props.burn_left()
+		var len: float = d.props.paper.scale.y
+		if cig_first < 0.0:
+			cig_first = left
+			cig_paper_first = len
+		if cig_last >= 0.0 and left > cig_last + 0.0001:
+			cig_mono = false
+		cig_last = left
+		cig_paper_last = len
 	_corners(hand, "the left hand")
 	var puffs := d.props.puffs()
 	most_puffs = maxi(most_puffs, puffs.size())
@@ -247,6 +309,10 @@ func _car(k: String) -> void:
 	await _vape_case(true)
 	cam.set_view(ChaseCamera.View.COCKPIT)
 	await _beer_cases()
+	await _cigarette_cases()
+	if not traffic_checked:
+		traffic_checked = true
+		_traffic_flicks()
 	await _none_case()
 	await _wait_cases()
 	print("idle_actions: %s ok so far: %d failure(s)" % [k, failures.size()])
@@ -316,6 +382,127 @@ func _beer_cases() -> void:
 	_on_rim("beer parked")
 	_always("beer parked")
 	IdleActions.set_beer_while_moving(true)
+
+## The cigarette (MA5): the same states as the vape, from a shut window and an
+## open one. The window rolls down a little by itself for the light (and back
+## up after, if it opened it); lighter first (a click, a flame for about 0.4 s
+## and the one extra light, the tip catching); three drags with a breath out
+## after each and the tip brighter on each, the cigarette itself shorter with
+## every drag (its length is the only "health bar"); then the butt is flicked
+## out of the window by itself as an ember behind the car.
+func _cigarette_cases() -> void:
+	for start_open in [false, true]:
+		var what := "cigarette, window starts %s" % ("down" if start_open else "shut")
+		IdleActions.set_item(IdleActions.CIGARETTE)
+		cam.set_view(ChaseCamera.View.CHASE if start_open else ChaseCamera.View.COCKPIT)
+		await _set_window(1.0 if start_open else 0.0)
+		var pr: IdleProps = d.props
+		_check(pr.cig.visible and not pr.vape.visible and not pr.can.visible, "with Cigarette picked only the cigarette should be in the car")
+		var ember: EmberFlick = EmberFlick.current
+		_check(ember != null and is_instance_valid(ember), "%s: no EmberFlick in the game" % what)
+		var uses := d.idle_uses
+		var clicks := pr.lighter_clicks
+		var exhales := pr.exhales
+		var flicked := pr.butts_flicked
+		var player_flicks := ember.player_flicks if ember != null else 0
+		_check(is_equal_approx(pr.burn_left(), 1.0), "%s: a fresh cigarette is not whole (%.2f)" % [what, pr.burn_left()])
+		_watch()
+		await _tap()
+		await _secs(CIG_BACK_SECS - float(TAP_TICKS) / RATE)
+		_check(saw_idle and saw_hold == IdleActions.CIGARETTE, "%s: L did not bring the cigarette up" % what)
+		_check(mouth_gap < MOUTH_TOL, "%s: the hand got no nearer than %.3f m to the mouth" % [what, mouth_gap])
+		_check(d.idle_uses - uses == 1, "%s: %d uses for one press" % [what, d.idle_uses - uses])
+		_on_rim(what)
+		_check(pr.lighter_clicks - clicks == 1, "%s: %d lighter clicks, want 1" % [what, pr.lighter_clicks - clicks])
+		var flame_s := float(flame_ticks) / RATE
+		_check(flame_s > 0.3 and flame_s < 0.5, "%s: the flame was up %.2f s, want about 0.4" % [what, flame_s])
+		_check(flame_light_ok and not pr.flame_light.visible and not pr.lighter.visible, "%s: the flame's light did not go out with the flame" % what)
+		_check(pr.exhales - exhales == DriverModel.CIG_DRAGS, "%s: %d breaths, want %d drags" % [what, pr.exhales - exhales, DriverModel.CIG_DRAGS])
+		_check(tip_peak >= IdleProps.TIP_DRAG * 0.9, "%s: the tip peaked at %.1f, want about %.1f on a drag" % [what, tip_peak, IdleProps.TIP_DRAG])
+		_check(pr.tip_energy() == IdleProps.TIP_UNLIT and not pr.is_lit(), "%s: the tip is still glowing at the end" % what)
+		_check(most_puffs > 0 and most_puffs <= IdleProps.MAX_PUFFS, "%s: %d puffs at once" % [what, most_puffs])
+		# it shortens with every drag, never grows back, and is a butt at the end
+		_check(cig_first > 0.99 and cig_last <= IdleProps.BURN_END + 0.02, "%s: the cigarette went from %.2f to %.2f of its length" % [what, cig_first, cig_last])
+		_check(cig_mono, "%s: the cigarette got longer during the use" % what)
+		_check(cig_paper_last < cig_paper_first * 0.4, "%s: the paper is %.4f m of %.4f m, want under 40%%" % [what, cig_paper_last, cig_paper_first])
+		# the window: a little by itself from shut, none of the crank or switch, untouched if already down
+		_check(not window_hand_seen, "%s: the window's crank or switch animated (the hand was busy)" % what)
+		if start_open:
+			_check(is_equal_approx(frame.window, 1.0) and win_min > 0.99, "%s: the window moved from fully down (%.2f)" % [what, win_min])
+		else:
+			_check(win_max >= 0.5 and win_max <= 0.7, "%s: the window rolled to %.2f, want a little past half" % [what, win_max])
+			_check(await _wait_for(func() -> bool: return frame.window < 0.01, 3.0), "%s: the window did not roll back up (%.2f)" % [what, frame.window])
+		# the smoke and the butt went out of the window
+		_check(puff_out > d.door_line(), "%s: the smoke never got out of the window (%.2f out, the door line is %.2f)" % [what, puff_out, d.door_line()])
+		_check(pr.butts_flicked - flicked == 1, "%s: the butt was not flicked out" % what)
+		if ember != null:
+			_check(ember.player_flicks - player_flicks == 1, "%s: the ember effect did not play (%d flicks)" % [what, ember.player_flicks - player_flicks])
+			var side := p.to_local(ember.last_origin)
+			_check(side.x < -d.door_line(), "%s: the ember left from %.2f m, inside the door line %.2f" % [what, side.x, d.door_line()])
+			_check(ember.last_ground < ember.last_origin.y, "%s: the road slab is not under the flick" % what)
+		await _secs(CLOUD_SECS)
+		_check(pr.puff_count() == 0, "%s: %d puffs still there %.0f s after the hand was back" % [what, pr.puff_count(), CLOUD_SECS])
+		_always(what)
+	cam.set_view(ChaseCamera.View.COCKPIT)
+	await _set_window(0.0)
+	# the rules the vape and the beer follow: a press during a use queues one more, no more
+	var uses := d.idle_uses
+	for i in 3:
+		await _tap()
+		await _ticks(6)
+	await _secs(CIG_BACK_SECS * 2.0 + 1.0)
+	_check(d.idle_uses - uses == 2, "three fast cigarette presses made %d uses, want 2" % (d.idle_uses - uses))
+	_on_rim("three fast cigarette presses")
+	await _secs(CLOUD_SECS)
+	IdleActions.set_item(IdleActions.VAPE)
+
+## T9: a car ahead flicks one now and then. Driven by hand with a big step
+## (no waiting 120 s): a car 24 m ahead, then one 60 m ahead and one behind.
+func _traffic_flicks() -> void:
+	var cars: Array = game.traffic.cars
+	if cars.is_empty():   # the harness boots with no traffic: add one
+		game.traffic.add_rival("n1_commuter", p.global_position.x, p.global_position.z - 24.0, 0.0, Color(0.5, 0.5, 0.55))
+		cars = game.traffic.cars
+	_check(not cars.is_empty(), "the test needs a traffic car")
+	if cars.is_empty():
+		return
+	var game_ember: EmberFlick = EmberFlick.current
+	var e := EmberFlick.new()
+	e.player = p
+	e.traffic = game.traffic
+	e.set_physics_process(false)   # only the manual steps below drive it
+	root.add_child(e)
+	var car: Node3D = cars[0]
+	var fwd := -p.global_transform.basis.z
+	var t0 := Time.get_ticks_usec()
+	var steps := 0
+	# a car 24 m ahead, 2000 s in 0.05 s steps
+	car.global_position = p.global_position + fwd * 24.0
+	for i in 40000:
+		e._physics_process(0.05)
+		steps += 1
+	var per_step_us := float(Time.get_ticks_usec() - t0) / steps
+	_check(e.traffic_flicks >= 5 and e.traffic_flicks <= 14, "2000 s with a car ahead made %d flicks, want about 6 to 13" % e.traffic_flicks)
+	_check(e.traffic_flicks >= 1 and e.flick_log[0] >= EmberFlick.FIRST_MIN - 0.1 and e.flick_log[0] <= EmberFlick.FIRST_MAX + 2.1, "the first flick came at %s s" % (str(e.flick_log[0]) if not e.flick_log.is_empty() else "never"))
+	var worst_gap := INF
+	for i in range(1, e.flick_log.size()):
+		worst_gap = minf(worst_gap, e.flick_log[i] - e.flick_log[i - 1])
+	_check(worst_gap >= 120.0, "two traffic flicks %.0f s apart, want 120 s or more" % worst_gap)
+	_check(e.last_origin.distance_to(car.global_position) < 3.0, "the ember left %.1f m from the car" % e.last_origin.distance_to(car.global_position))
+	_check(e.flicks == e.traffic_flicks, "flick counters disagree: %d vs %d" % [e.flicks, e.traffic_flicks])
+	# a car too far ahead, and one behind: nothing, however long we wait
+	var before := e.traffic_flicks
+	car.global_position = p.global_position + fwd * 60.0
+	for i in 12000:
+		e._physics_process(0.05)
+	_check(e.traffic_flicks == before, "a car 60 m ahead flicked")
+	car.global_position = p.global_position - fwd * 24.0
+	for i in 12000:
+		e._physics_process(0.05)
+	_check(e.traffic_flicks == before, "a car behind the player flicked")
+	print("idle_actions: traffic flicks %d in 2000 s (first at %.0f s, closest pair %.0f s apart), %.1f us per step" % [before, e.flick_log[0] if not e.flick_log.is_empty() else -1.0, worst_gap, per_step_us])
+	e.free()
+	EmberFlick.current = game_ember
 
 func _none_case() -> void:
 	IdleActions.set_item(IdleActions.NONE)
@@ -517,10 +704,13 @@ func _settings_rows() -> void:
 	var names := []
 	for i in screen.idle_item_option.item_count:
 		names.append(screen.idle_item_option.get_item_text(i))
-	_check(names == ["Vape", "Beer", "None"], "the In the car row offers %s" % [names])
+	_check(names == ["Vape", "Beer", "Cigarette", "None"], "the In the car row offers %s" % [names])
 	_check(screen.idle_item_option.selected == 0 and screen.beer_moving_option.selected == 1, "the rows should show Vape and On")
 	screen.idle_item_option.select(2)
 	screen.idle_item_option.item_selected.emit(2)
+	_check(IdleActions.item == IdleActions.CIGARETTE, "Cigarette was not picked from the row")
+	screen.idle_item_option.select(3)
+	screen.idle_item_option.item_selected.emit(3)
 	screen.beer_moving_option.select(0)
 	screen.beer_moving_option.item_selected.emit(0)
 	_check(IdleActions.item == IdleActions.NONE and not IdleActions.beer_while_moving, "the rows did not change the setting")

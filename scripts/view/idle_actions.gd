@@ -7,7 +7,9 @@ extends RefCounted
 # garage's "You" tab will own it later, so it has its own [driver] section of
 # the shared settings.cfg (AudioSettings.path, like CabinMods).
 #
-#   item               "vape" (default) | "beer" | "none" (the key does nothing)
+#   item               "vape" (default) | "beer" | "cigarette" (a light, three
+#                      drags, a flick out of the open window) | "none" (the
+#                      key does nothing)
 #   beer_while_moving  on (default): a sip any time. Off: only when parked
 #                      (engine off, or under PARKED_KMH)
 #
@@ -17,10 +19,11 @@ const SECTION := "driver"
 
 const VAPE := "vape"
 const BEER := "beer"
+const CIGARETTE := "cigarette"
 const NONE := "none"
 ## Pick order in the settings row.
-const IDS: Array[String] = [VAPE, BEER, NONE]
-const NAMES := {VAPE: "Vape", BEER: "Beer", NONE: "None"}
+const IDS: Array[String] = [VAPE, BEER, CIGARETTE, NONE]
+const NAMES := {VAPE: "Vape", BEER: "Beer", CIGARETTE: "Cigarette", NONE: "None"}
 const DEFAULT_ITEM := VAPE
 ## Under this speed the car counts as parked for the beer.
 const PARKED_KMH := 5.0

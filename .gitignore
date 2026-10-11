@@ -29,3 +29,5 @@ native/godot-cpp/
 native/neon_sim/godot-cpp/
 native/neon_sim/src/*.obj
 native/neon_sim/.sconsign.dblite
+addons/neon_sim/*.exp
+addons/neon_sim/*.lib

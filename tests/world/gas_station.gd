@@ -32,6 +32,7 @@ var ticks := 0
 var phase := 0
 var wait := 0
 var clock_before := 0.0
+var pump_wait := 0
 
 func _initialize() -> void:
 	_wipe(ProjectSettings.globalize_path(ROOT))
@@ -120,6 +121,14 @@ func _physics_process(_delta: float) -> bool:
 					return _end()
 				return false
 			_check(panel.visible, "pump menu not shown")
+			# The flap opens and the nozzle plugs in while the menu is up (CarFuelFlap).
+			var flap := player.get_node_or_null("CarFuelFlap") as CarFuelFlap
+			_check(flap != null, "the player car has no fuel flap")
+			if flap != null and pump_wait < 90:
+				pump_wait += 1
+				return false
+			if flap != null:
+				_check(player.fuel.at_pump and flap.is_open() and flap.is_plugged(), "at the pump the flap should be open and the nozzle in (open %.2f, plug %.2f)" % [flap.open, flap.plug])
 			_check(get_tree_paused(), "game not paused at the pump")
 			var fill_b := _find(panel, "FillUp") as Button
 			var tow_b := _find(panel, "Tow") as Button
@@ -159,6 +168,8 @@ func _physics_process(_delta: float) -> bool:
 			wait += 1
 			if wait < int((PumpPanel.FILL_SHOW_SECONDS + 0.5) * Engine.physics_ticks_per_second):
 				return false
+			var flap3 := player.get_node_or_null("CarFuelFlap") as CarFuelFlap
+			_check(flap3 != null and flap3.open > 0.0, "the flap should still be open or closing right after the fill")
 			var gone := clock.minutes - clock_before
 			_check(absf(gone - PumpPanel.FILL_GAME_MINUTES) < 0.5, "the fill took %.1f in-game minutes" % gone)
 			_check(not (_find(panel, "DriveOff") as Button).disabled, "drive off still disabled after the fill")
@@ -172,6 +183,9 @@ func _physics_process(_delta: float) -> bool:
 			if gs.state != GameState.State.PLAYING:
 				failures.append("the pump menu opened again while the car sat in the bay")
 				return _end()
+			if wait > 85 and wait < 90:
+				var flap4 := player.get_node_or_null("CarFuelFlap") as CarFuelFlap
+				_check(flap4 != null and flap4.open == 0.0 and flap4.plug == 0.0, "after the fill the nozzle backs out and the flap shuts")
 			if wait > 90:
 				return _end()
 	return false

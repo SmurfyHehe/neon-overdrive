@@ -51,7 +51,7 @@ func _initialize() -> void:
 	for r in rows:
 		by[r.id] = r
 	if only.is_empty():
-		_check(rows.size() == 28, "expected 28 rows, got %d" % rows.size())
+		_check(rows.size() == 31, "expected 31 rows, got %d" % rows.size())
 		_check(by.has("cabin_strip_3") and float(by.cabin_strip_3.pace_s) > float(by.cabin_strip_1.pace_s) - 0.0001,
 			"cabin strip 3 should save at least as much as step 1")
 		_check(float(by.short_shifter.pace_s) > 0.0, "short shifter should save time")

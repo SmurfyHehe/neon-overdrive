@@ -1,7 +1,7 @@
 class_name BoltOns
 extends RefCounted
 
-# The bolt-on row (mod tree step B1, 2026-10-10): 26 cheap parts that each
+# The bolt-on row (mod tree step B1, 2026-10-10): 29 cheap parts that each
 # change one number or one sound, in any order, on any car. The data is
 # data/bolt_ons/bolt_ons.json; this file only reads it and applies it.
 #

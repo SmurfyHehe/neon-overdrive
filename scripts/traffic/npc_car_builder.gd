@@ -509,9 +509,9 @@ static func chassis_visual(kind: String, build: String, paint: Color, role := ""
 	root.set_meta("half_l", float(k.length) / 2.0)
 	# Which small parts this body carries (CarSlots, tests/car/required_slots.gd).
 	root.set_meta("fittings", fittings(kind, build))
-	root.set_meta("fitting_points", _fit_points["%s|%s" % [kind, build]])
-	root.set_meta("windscreen", _fit_frames["%s|%s" % [kind, build]].screen)
-	root.set_meta("fuel_flap_site", _fit_frames["%s|%s" % [kind, build]].flap)
+	root.set_meta("fitting_points", _fit_points.get("%s|%s" % [kind, build], {}))
+	root.set_meta("windscreen", _fit_frames.get("%s|%s" % [kind, build], {}).get("screen", {}))
+	root.set_meta("fuel_flap_site", _fit_frames.get("%s|%s" % [kind, build], {}).get("flap", {}))
 	Undercarriage.attach(root, undercarriage_params(kind, build), role)
 	return root
 

@@ -1,6 +1,6 @@
 """Per-car swappable parts (slots -> options) and example builds."""
 import mods as M
-from cars import P1, P2, P3, P4, P5, P6, P17, N1, N2, N3, C1, C2, C3
+from cars import P1, P2, P3, P4, P5, P6, P8, P17, N1, N2, N3, C1, C2, C3
 
 STOCK = {'label': 'Stock', 'ops': []}
 
@@ -141,6 +141,24 @@ P6['options'] = {
     'stance': {'stock': STOCK, 'lowered': M.stance(0.045, 'Street-lowered 4.5 cm'), 'raised': M.stance(-0.03, 'Gravel-raised 3 cm')},
 }
 
+# ------------------------------------------------------------------ P8
+# The drift coupe's slots (the sheet): hood stock / vented, bumpers stock / street / race, a wide-body over the
+# bolt-ons, no wing stock, tips stock (one oval) / twin / cannon, all behind the axle. The parts build is the stock car.
+P8['options'] = {
+    'front_bumper': {'stock': STOCK, 'street': M.lip(P8), 'race': M.race_front(P8)},
+    'rear_bumper': {'stock': STOCK, 'diffuser': M.diffuser(P8)},
+    'hood': {'stock': STOCK, 'vented': M.vented_hood(P8, 0.60, 1.30)},
+    'skirts': {'stock': {'label': 'Bolt-on arches', 'ops': []}, 'widebody': M.widebody(P8, 0.06)},
+    'spoiler': {'stock': {'label': 'None (flat trunk)', 'ops': []}, 'ducktail': M.ducktail(P8, 0.04), 'gt': M.gt_wing(P8, 0.28)},
+    'wheels': _wheel_set('Deep dish bronze', ('mesh', M.wheels('mesh', 'Mesh', 0.72)), ('six', M.wheels('6spoke', '6-spoke', 0.72)),
+                         ('turbofan', M.wheels('turbofan', 'Turbofan', 0.72))),
+    'exhaust': {'stock': {'label': 'Single oval (right)', 'ops': []},
+                'twin': {'label': 'Twin ovals (right)', 'ops': [{'op': 'exhaust', 'tips': [
+                    {'x': 0.48, 'y': 0.26, 'r': 0.04, 'squash': 0.7}, {'x': 0.34, 'y': 0.26, 'r': 0.04, 'squash': 0.7}]}]},
+                'cannon': {'label': 'Cannon (right)', 'ops': [{'op': 'exhaust', 'tips': [{'x': 0.45, 'y': 0.30, 'r': 0.055, 'out': 0.08}]}]}},
+    'stance': _stance(),
+}
+
 # ------------------------------------------------------------------ P17
 P17['options'] = {
     'trim': {'stock': {'label': 'Open bed', 'ops': []},
@@ -228,6 +246,11 @@ BUILDS = {
     'p6_crossover': {
         'street': {'kit': 'street', 'front_bumper': 'lip', 'hood': 'scoop', 'wheels': 'mesh', 'stance': 'lowered'},
         'full': {'kit': 'rally', 'skirts': 'mudflaps', 'hood': 'scoop', 'spoiler': 'big', 'wheels': 'rally', 'exhaust': 'center', 'stance': 'raised'},
+    },
+    'p8_driftcoupe': {
+        'street': {'front_bumper': 'street', 'wheels': 'mesh', 'exhaust': 'twin', 'stance': 'lowered'},
+        'full': {'front_bumper': 'race', 'rear_bumper': 'diffuser', 'hood': 'vented', 'skirts': 'widebody', 'spoiler': 'gt',
+                 'wheels': 'turbofan', 'exhaust': 'cannon', 'stance': 'slammed'},
     },
     'p17_work_pickup': {
         'street': {'wheels': 'six', 'exhaust': 'dual', 'stance': 'lowered'},

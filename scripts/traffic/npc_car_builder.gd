@@ -182,6 +182,20 @@ const KINDS := {
 		"build_paint": {},
 		"sheet_paint": true,
 	},
+	# The drift coupe (Ashida Levant, P8, MC1 2026-10-11): built from its parts
+	# glb (tools/car_pipeline/kit_p8_driftcoupe.py); the sheet mesh is the
+	# NEON_PARTS_LEGACY body. 1.80 wide over the bolt-on arches.
+	"p8_driftcoupe": {
+		"data": preload("res://scripts/car/p8_driftcoupe_data.gd"),
+		"length": 4.30, "width": 1.80, "height": 1.34, "clearance": 0.10,
+		"front_overhang": 0.78, "rear_overhang": 0.88,
+		"wheel_r": 0.30, "wheel_x": 0.75, "axle_z": 1.32,
+		"drive": "rwd",
+		"rest_y": -0.12,
+		"builds": {"stock": 50, "street": 30, "full": 20},
+		"build_paint": {},
+		"sheet_paint": true,
+	},
 	"c1_patrol": {
 		"data": preload("res://scripts/car/c1_patrol_data.gd"),
 		"length": 5.30, "width": 1.96, "height": 1.6, "clearance": 0.16,

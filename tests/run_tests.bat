@@ -231,7 +231,7 @@ call :run traffic/rival_pace "--headless --fixed-fps 120"
 rem The race as the game runs it: traffic, bends and hills, the rival handed back to traffic at the end.
 call :run traffic/rival_race "--headless --fixed-fps 120"
 rem ~40 s: the traffic cars (stage B step 5) against their sheets, then a drive each at the game's 120 Hz.
-rem npc_cars drives every kind (14 since the player and cop cars joined), about 16 min: give it 20.
+rem npc_cars drives every kind (15 since the player and cop cars joined), about 17 min: give it 20.
 set "TT_SAVED=%TEST_TIMEOUT%"
 if %TEST_TIMEOUT% LSS 1200 set "TEST_TIMEOUT=1200"
 call :run traffic/npc_cars "--headless --fixed-fps 120"

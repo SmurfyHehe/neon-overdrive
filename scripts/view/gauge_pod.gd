@@ -51,6 +51,8 @@ const STYLES := {
 	"p4_kei":       {"bezel": CHROME, "alt": Color(0, 0, 0, 0), "face": NAVY, "face_glow": 0.35, "needle": AMBER, "marks": AMBER, "label": SILVER, "holder": PLASTIC, "label_size": 16},
 	"p5_muscle":    {"bezel": CHROME, "alt": Color(0, 0, 0, 0), "face": Color("#3A2E14"), "face_glow": 0.45, "needle": CREAM, "marks": AMBER, "label": AMBER, "holder": Color("#979AA0"), "label_size": 17},
 	"p6_crossover": {"bezel": PLASTIC, "alt": Color(0, 0, 0, 0), "face": NAVY_DEEP, "face_glow": 0.40, "needle": AMBER, "marks": AMBER, "label": SILVER, "holder": PLASTIC, "label_size": 16},
+	# the drift coupe: black bezels, orange needles like its cluster, a dark-grey plastic holder on its own A-pillar
+	"p8_driftcoupe": {"bezel": PLASTIC, "alt": Color(0, 0, 0, 0), "face": Color("#1A1A18"), "face_glow": 0.45, "needle": SODIUM, "marks": AMBER, "label": AMBER, "holder": Color("#2E3136"), "label_size": 16},
 }
 const DEFAULT_STYLE := "p1_coupe"
 

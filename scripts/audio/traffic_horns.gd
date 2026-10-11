@@ -36,7 +36,7 @@ const DEFAULT := "two_tone"
 const BY_KIND := {
 	"n1_commuter": "two_tone", "n2_cityhatch": "beep", "n3_pickup": "blare",
 	"p0_beater": "sour", "p2_hothatch": "sharp", "p3_tuner": "sharp", "p4_kei": "beep",
-	"p5_muscle": "blare", "p6_crossover": "blare", "p17_work_pickup": "air",
+	"p5_muscle": "blare", "p6_crossover": "blare", "p17_work_pickup": "air", "p8_driftcoupe": "sharp",
 	"c1_patrol": "two_tone", "c2_patrolsuv": "blare", "c3_interceptor": "sharp",
 }
 

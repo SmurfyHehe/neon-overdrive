@@ -199,6 +199,16 @@ var limit_tick: Node3D
 var limit_kmh := 0.0
 var _limit_wait := 0.0
 var lamps: MultiMeshInstance3D
+## The gear digit in the tach face (cab.gear_window): 7 more instances in the
+## lamp MultiMesh after the 4 lamps. gear_window_colours is what they were given
+## (headless can't read a MultiMesh back).
+## Left of the needle hub at hub level: the lower part of the face is behind the
+## dash lip from the eye, and the needle only crosses this spot at 15-20% revs.
+const GEAR_WIN_AT := Vector2(-0.027, 0.011)
+const GEAR_WIN_SIZE := Vector2(0.016, 0.020)
+const GEAR_DIGIT := Vector3(0.0075, 0.012, 0.0018)   # w, h, stroke
+var gear_window_colours := PackedColorArray()
+var _gear_window_ch := ""
 var lamp_text: Label3D
 var trinket: DashTrinket        # the charm on the rear-view mirror (CabinMods.trinket)
 var bobble: BobbleHead          # the bobble head on the passenger-side dash (CabinMods.bobble_for)
@@ -626,6 +636,9 @@ func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vec
 		else:
 			lit.cylinder(r, -0.004, 0.0, c, Color(DIAL_FACE, 0.15), 16, flat)
 			k.cylinder(r + 0.008, -0.008, -0.002, c + Vector3(0, 0, -0.001), ring_col, 16, flat)
+		if i == 0 and cab.get("gear_window", false):
+			# the black square the gear digit sits on, left of the needle hub
+			k.box(Vector3(GEAR_WIN_SIZE.x, GEAR_WIN_SIZE.y, 0.002), c + Vector3(GEAR_WIN_AT.x, GEAR_WIN_AT.y, 0.0005), Color("#050608"))
 		var ticks := 9 if i == 0 else 7
 		for t in ticks:
 			var a := deg_to_rad(a_start - dial_sweep * float(t) / (ticks - 1))
@@ -899,10 +912,20 @@ func _build_cluster() -> void:
 	var box := BoxMesh.new()
 	box.size = Vector3(0.018, 0.009, 0.003)
 	mm.mesh = box
-	mm.instance_count = 4
+	var has_gear_window: bool = cab.get("gear_window", false)
+	mm.instance_count = 4 + (SevenSeg.SEG_COUNT if has_gear_window else 0)
 	for i in 4:
 		mm.set_instance_transform(i, Transform3D(Basis().scaled(Vector3(0.7, 0.7, 1.0)), lamp_c + Vector3(-0.027 + 0.018 * i, 0.0, 0.002)))
 		mm.set_instance_color(i, Color(AMBER, 0.0))
+	if has_gear_window:
+		var rects := SevenSeg.segment_rects(GEAR_DIGIT.x, GEAR_DIGIT.y, GEAR_DIGIT.z)
+		gear_window_colours.resize(SevenSeg.SEG_COUNT)
+		for s in SevenSeg.SEG_COUNT:
+			var r: Rect2 = rects[s]
+			var sc := Vector3(r.size.x / box.size.x, r.size.y / box.size.y, 0.001 / box.size.z)
+			mm.set_instance_transform(4 + s, Transform3D(Basis().scaled(sc), tach_c + Vector3(GEAR_WIN_AT.x + r.position.x, GEAR_WIN_AT.y + r.position.y, 0.0022)))
+			gear_window_colours[s] = SevenSeg.colour(AMBER, false)
+			mm.set_instance_color(4 + s, gear_window_colours[s])
 	lamps = MultiMeshInstance3D.new()
 	lamps.name = "Lamps"
 	lamps.multimesh = mm
@@ -1340,7 +1363,7 @@ func _process(delta: float) -> void:
 	var cue := Hud.shift_cue(p, frac)
 	var blink := Hud.blink()
 	_step_wheel(delta)
-	wheel.update(frac, cue, blink, p.motor_rpm, Hud.kmh(p.current_speed()), Hud.cluster_gear(p))
+	wheel.update(frac, cue, blink, Hud.kmh(p.current_speed()), p.gear, delta)
 	var rest := dial_sweep * 0.5   # the needle points at the first tick (lower left, or the band's left end)
 	tach_needle.rotation = Vector3(0.0, 0.0, deg_to_rad(rest - dial_sweep * frac))
 	var kmh := clampf(absf(p.current_speed()) * Hud.KMH_PER_MS / float(cab.speedo_max_kmh), 0.0, 1.0)
@@ -1353,6 +1376,7 @@ func _process(delta: float) -> void:
 		limit_tick.visible = lt <= 1.0
 		limit_tick.rotation = Vector3(0.0, 0.0, deg_to_rad(rest - dial_sweep * lt))
 	_update_lamps()
+	_update_gear_window()
 	_update_pod(delta)
 	var inputs := pedal_inputs()
 	for key in pedals:
@@ -1391,6 +1415,32 @@ func _process(delta: float) -> void:
 			move_lever_to(p.gear, p.shift_time)
 	_step_lever(delta)
 	_update_radio(delta)
+
+## The tach-face gear digit follows the car's gear the instant it changes
+## (colours are only set on a change). Same code as the wheel screen.
+func _update_gear_window() -> void:
+	if gear_window_colours.is_empty():
+		return
+	var ch := SevenSeg.gear_char(player.gear)
+	if ch == _gear_window_ch:
+		return
+	_gear_window_ch = ch
+	var mask := SevenSeg.mask_for(ch)
+	for s in SevenSeg.SEG_COUNT:
+		gear_window_colours[s] = SevenSeg.colour(AMBER, (mask & (1 << s)) != 0)
+		lamps.multimesh.set_instance_color(4 + s, gear_window_colours[s])
+
+## What the gear window shows ("" before its first update or on a car without
+## one), and which of its segments are lit as letters a..g (tests).
+func gear_window_char() -> String:
+	return _gear_window_ch
+
+func gear_window_lit() -> String:
+	var out := ""
+	for s in gear_window_colours.size():
+		if SevenSeg.is_lit(gear_window_colours[s]):
+			out += "abcdefg"[s]
+	return out
 
 func _update_lamps() -> void:
 	var h := player.health
@@ -1469,5 +1519,5 @@ func triangle_count() -> int:
 				n += (mesh as ArrayMesh).surface_get_array_len(s) / 3
 		elif mesh is QuadMesh:
 			n += 2
-	n += 12 * (SteeringWheel.LED_COUNT + 4 + 4)
+	n += 12 * (SteeringWheel.LED_COUNT + 4 + SteeringWheel.SCREEN_SEGS + 4 + (SevenSeg.SEG_COUNT if cab.get("gear_window", false) else 0))
 	return n

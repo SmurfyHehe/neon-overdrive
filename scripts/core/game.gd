@@ -819,6 +819,9 @@ const PLAYER_SPAWN_LANE := 1
 func _setup_player() -> void:
 	player = PlayerCar.new()
 	player.position = RoadFrame.roll(Vector3(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, -start_in_chunk))
+	if start_in_chunk > 0.0 or origin_index != 0:
+		# Away from the top of the road it does not run down world -Z: face along it.
+		player.transform = RoadFrame.pose(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, -start_in_chunk, 0.0)
 	if resume_place:
 		player.transform = SaveDirector.array_to_xform(run.car.xform)
 	add_child(player)

@@ -1871,6 +1871,8 @@ const ADVANCE_Z := -2.0
 ## Which area sign, if any, belongs to chunk `chunk_index`: "" (none), "gantry"
 ## or "advance"; the area it announces is Districts.name_of_run(run + 1).
 static func name_sign_kind(chunk_index: int) -> String:
+	if RoadMap.dip_at(chunk_index) != RoadMap.DIP_NONE:
+		return ""  # no sign posts in a tunnel or its trench (TN1)
 	if chunk_index < 0:
 		return ""
 	var ahead := int(round(PlaceNames.ADVANCE_M / CHUNK_LEN))

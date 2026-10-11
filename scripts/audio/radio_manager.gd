@@ -280,15 +280,15 @@ static func duck_target(in_break: bool, has_music: bool) -> float:
 
 ## Metres inside a tunnel's mouth over which the signal goes (TN1).
 const TUNNEL_FADE := 40.0
+const TunnelMap := preload("res://scripts/world/road_map.gd")
 
 ## Reception in a map tunnel (road_map.gd): clear at the mouth, gone
 ## TUNNEL_FADE metres in, and back over the last TUNNEL_FADE before the far
 ## mouth. 1 anywhere else.
 static func tunnel_reception(world_pos: Vector3) -> float:
-	var map := preload("res://scripts/world/road_map.gd")
-	if map.tunnels().is_empty():
+	if TunnelMap.tunnels().is_empty():
 		return 1.0
-	return reception_at_depth(map.tunnel_depth(RoadFrame.s_at(RoadFrame.unroll(world_pos).z)))
+	return reception_at_depth(TunnelMap.tunnel_depth(RoadFrame.s_at(RoadFrame.unroll(world_pos).z)))
 
 static func reception_at_depth(depth: float) -> float:
 	return 1.0 - clampf(depth / TUNNEL_FADE, 0.0, 1.0)

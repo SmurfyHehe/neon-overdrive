@@ -58,7 +58,7 @@ const CROSS_REACH := 45.0
 ## the strip's brightness).
 const STRIP_Y := Vector2(3.8, 4.1)
 const STRIP_OUT := 0.06
-const STRIP_ENERGY := 2.2
+const STRIP_ENERGY := 1.45
 const JOINT_EVERY := 10.0
 const JOINT_W := 0.16
 const JOINT_DIM := 0.95
@@ -80,15 +80,15 @@ const SPILL := 15.0
 ## The lamp either side of a mouth: post height above the parapet, head size.
 const LAMP_POST := 2.6
 const LAMP_HEAD := Vector3(0.6, 0.22, 0.34)
-const LAMP_GLOW := 2.4
+const LAMP_GLOW := 1.7
 
 const SODIUM := Color(1.0, 0.55, 0.2)
 ## Concrete at night with no light of its own on it (the trench).
-const TRENCH := Color(0.082, 0.076, 0.067)
-const PAVEMENT := Color(0.07, 0.068, 0.064)
-const ASPHALT := Color(0.04, 0.04, 0.044)
+const TRENCH := Color(0.105, 0.098, 0.088)
+const PAVEMENT := Color(0.09, 0.088, 0.084)
+const ASPHALT := Color(0.05, 0.05, 0.055)
 ## Concrete under the strip, at its brightest.
-const LIT := Color(0.6, 0.39, 0.185)
+const LIT := Color(0.78, 0.53, 0.27)
 const POOL := Color(0.2, 0.108, 0.04)
 
 static var _concrete_mat: StandardMaterial3D
@@ -100,6 +100,8 @@ static func concrete_mat() -> StandardMaterial3D:
 		_concrete_mat = StandardMaterial3D.new()
 		_concrete_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		_concrete_mat.vertex_color_use_as_albedo = true
+		# The colours in this file are what the eye sees (sRGB), like a paint chip.
+		_concrete_mat.vertex_color_is_srgb = true
 		# Faces are few and seen from one side or the other as the car goes
 		# in, through and out: both sides drawn, no winding to get wrong.
 		_concrete_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -425,7 +427,7 @@ static func _deck(concrete: Buf, strip: Buf, pool: Buf, wall: PackedFloat32Array
 	var xm := _across(wall, s_mouth)
 	var own_out := lerpf(out[0], out[1], s_face / L)
 	var onc_out := lerpf(out[2], out[3], s_face / L)
-	var lamp_wash := Color(0.3, 0.185, 0.085)
+	var lamp_wash := Color(0.36, 0.22, 0.1)
 	var face_cols: Array[Color] = [lamp_wash, _mul(TRENCH, 1.5), _mul(TRENCH, 1.3), _mul(TRENCH, 1.5), lamp_wash]
 	var under_face: Array[float] = [0.34, 0.22, 0.14, 0.22, 0.34]
 	for j in 4:
@@ -453,9 +455,9 @@ static func _deck(concrete: Buf, strip: Buf, pool: Buf, wall: PackedFloat32Array
 		var glow := Color(0.5, 0.275, 0.1)
 		var dark := Color(0.0, 0.0, 0.0)
 		var gz := Vector3(0.0, 0.0, 0.2 * toward)   # just on the approach side of the head
-		for q in 4:
-			var a0 := float(q) * PI * 0.5
-			var a1 := a0 + PI * 0.5
+		for q in 8:
+			var a0 := float(q) * PI * 0.25
+			var a1 := a0 + PI * 0.25
 			pool.v.append(head + gz)
 			pool.v.append(head + gz + Vector3(cos(a0), sin(a0), 0.0) * LAMP_GLOW)
 			pool.v.append(head + gz + Vector3(cos(a1), sin(a1), 0.0) * LAMP_GLOW)

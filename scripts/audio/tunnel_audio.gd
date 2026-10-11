@@ -65,8 +65,8 @@ static func ensure_bus() -> AudioEffectReverb:
 		rv.wet = 0.0
 		AudioServer.add_bus_effect(bus, rv)
 		AudioServer.set_bus_effect_enabled(bus, 0, false)
-	for name in SENDS:
-		var b := AudioServer.get_bus_index(name)
+	for bus_name in SENDS:
+		var b := AudioServer.get_bus_index(bus_name)
 		if b >= 0:
 			AudioServer.set_bus_send(b, BUS)
 	return AudioServer.get_bus_effect(bus, 0) as AudioEffectReverb
@@ -76,7 +76,7 @@ static func amount_at(depth: float) -> float:
 	return smoothstep(0.0, WET_RAMP, depth)
 
 ## Metres inside a tunnel the listener is (0 or less outside).
-func depth() -> float:
+func listener_depth() -> float:
 	if forced_depth >= 0.0:
 		return forced_depth
 	if not is_instance_valid(listener) or RoadMap.tunnels().is_empty():
@@ -84,7 +84,7 @@ func depth() -> float:
 	return RoadMap.tunnel_depth(RoadFrame.s_at(RoadFrame.unroll(listener.global_position).z))
 
 func _process(delta: float) -> void:
-	var want := amount_at(depth())
+	var want := amount_at(listener_depth())
 	amount = lerpf(amount, want, 1.0 - exp(-RATE * delta))
 	if absf(amount - want) < 0.002:
 		amount = want

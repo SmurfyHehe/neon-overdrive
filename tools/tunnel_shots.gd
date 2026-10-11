@@ -50,6 +50,30 @@ func _run() -> void:
 	var s := RoadMap.wrap_s(RoadFrame.s_at(u.z))
 	print("tunnel_shots: %s at %.0f m (tunnel %s, %.0f m inside) -> %s" % [error_string(err), s,
 		"live" if RoadMap.tunnel_live else "off", RoadMap.tunnel_depth(s), ProjectSettings.globalize_path(path)])
+	if OS.get_environment("TUNNEL_SHOT_DEBUG") == "1":
+		# what the chunk under the car is drawing
+		for entry in game.get("chunk_pool"):
+			if int(entry.index) != floori(RoadFrame.s_at(u.z) / 50.0):
+				continue
+			for c in (entry.root as Node3D).get_children():
+				if c is MultiMeshInstance3D and (c as MultiMeshInstance3D).multimesh.visible_instance_count != 0 and (c as Node3D).visible:
+					print("  mm %s x%d" % [c.name, (c as MultiMeshInstance3D).multimesh.visible_instance_count])
+				elif c is MeshInstance3D and (c as Node3D).visible and (c as MeshInstance3D).mesh != null:
+					var bb := (c as MeshInstance3D).get_aabb()
+					print("  mesh %s x %.1f..%.1f y %.1f..%.1f" % [c.name, bb.position.x, bb.end.x, bb.position.y, bb.end.y])
+	if OS.get_environment("TUNNEL_SHOT_DEBUG") == "2":
+		# everything drawn above head height within 30 m of the car
+		var stack: Array = [root]
+		while not stack.is_empty():
+			var n: Node = stack.pop_back()
+			for c in n.get_children():
+				stack.append(c)
+			if n is GeometryInstance3D and (n as Node3D).is_visible_in_tree():
+				var g := n as GeometryInstance3D
+				var bb := g.global_transform * g.get_aabb()
+				var near := bb.grow(30.0).has_point(player.global_position)
+				if near and bb.end.y > player.global_position.y + 3.0 and bb.size.length() < 200.0:
+					print("  high %s size %s at %s" % [n.get_path(), bb.size, bb.get_center() - player.global_position])
 	if OS.get_environment("TUNNEL_SHOT_STREET") == "1":
 		var chunk := floori(RoadFrame.s_at(u.z) / 50.0)
 		var dep := TunnelKit.depths(chunk)

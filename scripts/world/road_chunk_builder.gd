@@ -189,6 +189,12 @@ const POOL_ACROSS := 13.0   # light pool size on the road, m
 const POOL_ALONG := 17.0
 const POOL_Y := 0.045       # just above the lane dashes (top at 0.035)
 const SODIUM := Color(1.0, 0.55, 0.2)
+# NIGHT LIGHTING PASS (2026-10-11): the pools measured RGB 58,34,21 at their
+# brightest on the road (tools/night_shots.gd), a tint you had to brighten a
+# screenshot 4x to find. Hotter centre, more of it: every light's pool gain
+# (Districts.LIGHTS) times this, sodium 0.42 -> 0.8. The pass's wet-road
+# streak is not added here: LampSmears (WetReflections) already does it.
+const POOL_BOOST := 0.8 / 0.42
 
 # World step 3b: the street kit a district picks from (Districts.street_at).
 # What tells two districts apart at night is light, so each kind of street
@@ -330,7 +336,11 @@ static func _plain_asphalt_mat(color: Color, freq: float = 0.6, uv: Vector2 = Ve
 	tex.color_ramp = grad
 	m.albedo_texture = tex
 	m.uv1_scale = Vector3(uv.x, uv.y, 1.0)
-	m.roughness = 0.9
+	# NIGHT LIGHTING PASS (2026-10-11): roughness 0.9 -> 0.6. The asphalt now
+	# picks up a dim mirror of the sky's horizon glow at grazing angles (the
+	# damp sheen on a city road at night) from the radiance map that is already
+	# there, so it costs nothing extra.
+	m.roughness = 0.6
 	m.metallic = 0.0
 	return m
 
@@ -776,8 +786,8 @@ static func _get_pool_mesh() -> PlaneMesh:
 static func _get_pool_mat(light: String = "sodium") -> StandardMaterial3D:
 	if not _pool_mats.has(light):
 		var grad := Gradient.new()
-		grad.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
-		grad.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.42), Color(1, 1, 1, 0)])
+		grad.offsets = PackedFloat32Array([0.0, 0.3, 1.0])
+		grad.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.5), Color(1, 1, 1, 0)])
 		var tex := GradientTexture2D.new()
 		tex.gradient = grad
 		tex.fill = GradientTexture2D.FILL_RADIAL
@@ -791,7 +801,7 @@ static func _get_pool_mat(light: String = "sodium") -> StandardMaterial3D:
 		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 		m.albedo_texture = tex
 		var lc: Color = LIGHTS[light].color
-		var k: float = LIGHTS[light].pool
+		var k: float = LIGHTS[light].pool * POOL_BOOST
 		m.albedo_color = Color(lc.r * k, lc.g * k, lc.b * k, 1.0)
 		m.disable_fog = true
 		m.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA

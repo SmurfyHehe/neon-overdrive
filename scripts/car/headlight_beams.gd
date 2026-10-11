@@ -183,6 +183,12 @@ func _refresh() -> void:
 	_applied = mode
 	_applied_share = damage_share
 	_spot.visible = mode != Mode.OFF and damage_share > 0.0
+	# The painted beam on the road (CarFx "HeadlightBeam") goes with the lamp.
+	var car := _spot.get_parent()
+	var beam: Decal = car.get_node_or_null(^"HeadlightBeam") as Decal if car != null else null
+	if beam != null:
+		beam.visible = _spot.visible
+		beam.emission_energy = CarFx.BEAM_ENERGY * damage_share
 	if not rewrite:
 		_spot.light_energy = _energy_for(mode) * damage_share
 		return

@@ -466,10 +466,7 @@ func _apply_lamp_damage() -> void:
 	if share == _head_share:
 		return
 	_head_share = share
-	var spot := get_node_or_null("Headlights") as SpotLight3D
-	if spot != null:
-		spot.light_energy = CarFx.HEADLIGHT_ENERGY * share
-		spot.visible = share > 0.0
+	CarFx.set_headlight_share(self, share)
 
 ## The median's reflectors shine only in this car's beam (RoadChunkBuilder).
 func _light_reflectors() -> void:

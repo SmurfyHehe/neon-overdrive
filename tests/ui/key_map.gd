@@ -3,7 +3,7 @@ extends SceneTree
 # The key map (Roy's decided table, key map K1), headless:
 # - no two actions of one context share a physical key
 # - Esc is on pause and nothing else; pause has Esc
-# - every action has a key (horn and hood_trunk may be missing while unbuilt)
+# - every action has a key (hood_trunk may be missing while unbuilt)
 # - mute, high_beam, camera_cycle and autotune_panel are gone
 # - every default matches the table below
 # - every key is bound by position (physical_keycode), never by letter
@@ -18,13 +18,13 @@ extends SceneTree
 const DriveRecorder := preload("res://scripts/core/drive_recorder.gd")
 const Wallet := preload("res://scripts/core/wallet.gd")
 
-const MAY_BE_MISSING := [&"horn", &"hood_trunk"]
+const MAY_BE_MISSING := [&"hood_trunk"]
 const GONE := [&"mute", &"high_beam", &"camera_cycle", &"autotune_panel"]
 
 const TABLE := {
 	&"accelerate": KEY_W, &"brake": KEY_S, &"steer_left": KEY_A, &"steer_right": KEY_D,
 	&"handbrake": KEY_SPACE, &"reverse": KEY_R, &"starter": KEY_X, &"toggle_gearbox": KEY_G,
-	&"shift_up": KEY_E, &"shift_down": KEY_Q, &"clutch": KEY_SHIFT, &"headlights": KEY_H,
+	&"shift_up": KEY_E, &"shift_down": KEY_Q, &"clutch": KEY_SHIFT, &"headlights": KEY_H, &"horn": KEY_J,
 	&"turn_left": KEY_COMMA, &"turn_right": KEY_PERIOD, &"hazard": KEY_SLASH,
 	&"look_left": KEY_LEFT, &"look_right": KEY_RIGHT, &"look_up": KEY_UP, &"look_down": KEY_DOWN,
 	&"look_back": KEY_B, &"camera_view": KEY_F, &"window": KEY_Z, &"pause": KEY_ESCAPE,
@@ -151,8 +151,8 @@ func _saved_checks() -> void:
 	cfg.set_value("keys", "photo_mode", PackedInt32Array([KEY_F12]))  # old default: dropped
 	cfg.set_value("keys", "mute", PackedInt32Array([KEY_J]))          # action is gone: ignored
 	cfg.set_value("keys", "radio_next", PackedInt32Array([KEY_V]))    # the player's choice wins V
-	cfg.set_value("keys", "horn", PackedInt32Array([KEY_J]))          # (unbuilt: ignored when missing)
-	cfg.set_value("keys", "handbrake", PackedInt32Array([KEY_J]))     # a free key: stays
+	cfg.set_value("keys", "horn", PackedInt32Array([KEY_J]))          # its default: stays
+	cfg.set_value("keys", "handbrake", PackedInt32Array([KEY_U]))     # a free key: stays
 	cfg.set_value("keys", "hyd_pump_left", PackedInt32Array([KEY_7]))  # the old digit-row default: moves to the numpad
 	_check(cfg.save(AudioSettings.path) == OK, "could not write the test settings.cfg")
 	KeyBindings.load_settings()
@@ -162,7 +162,8 @@ func _saved_checks() -> void:
 	_check(KeyBindings.keys(&"radio_power").is_empty(), "radio_power should be unbound (its V is taken): %s" % [KeyBindings.keys(&"radio_power")])
 	_check(_keys_are(&"hyd_pump_left", [KEY_KP_4]), "hyd_pump_left kept the old 7: %s" % [KeyBindings.keys(&"hyd_pump_left")])
 	_check(_keys_are(&"photo_mode", [KEY_P]), "photo_mode lost P")
-	_check(_keys_are(&"handbrake", [KEY_J]), "handbrake lost its saved J: %s" % [KeyBindings.keys(&"handbrake")])
+	_check(_keys_are(&"handbrake", [KEY_U]), "handbrake lost its saved U: %s" % [KeyBindings.keys(&"handbrake")])
+	_check(_keys_are(&"horn", [KEY_J]), "horn lost J: %s" % [KeyBindings.keys(&"horn")])
 	for ctx in KeyBindings.CONTEXTS:
 		var seen := {}
 		for a in KeyBindings.game_actions():

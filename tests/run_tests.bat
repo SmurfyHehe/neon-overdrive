@@ -57,6 +57,7 @@ call :run ui/pause_map --headless
 call :run ui/title_kerbside --headless
 call :run ui/pause_look --headless
 call :run audio/menu_sfx --headless
+call :run audio/player_horn --headless
 call :run core/key_bindings --headless
 call :run fleet/car_loft_normals --headless
 call :run fleet/test_car --headless

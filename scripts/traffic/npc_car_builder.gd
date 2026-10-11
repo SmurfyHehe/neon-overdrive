@@ -125,7 +125,7 @@ const KINDS := {
 	},
 	"p4_kei": {
 		"data": preload("res://scripts/car/p4_kei_data.gd"),
-		"length": 3.30, "width": 1.40, "height": 1.13, "clearance": 0.12,
+		"length": 3.30, "width": 1.40, "height": 1.05, "clearance": 0.12,
 		"front_overhang": 0.55, "rear_overhang": 0.48,
 		"wheel_r": 0.28, "wheel_x": 0.615, "axle_z": 1.135,
 		"rest_y": -0.12,

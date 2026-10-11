@@ -219,6 +219,23 @@ would turn with the wheel). `body.json` carries `required_slots` (the kit's
 `slots`): the lamp, brake, plate, wiper and flap counts, readable without the
 game.
 
+**P4, the kei roadster** (`p4_kei`, kit in `kit_p4_kei.py`): 4,790 body
+triangles in 62 parts, 932 more in the wheels; 0.000 mm over 37 mirrored parts
+and pairs. The first open car. The fleet loft already leaves the cockpit open
+(a tub: inner walls and a floor, material `interior`, drawn as `plastic`); the
+kit makes the rest of an open top out of it: the loft's glass wedge is the
+windscreen front and back (no `glass_backlight`), its header and A-pillars are
+chrome (the one silver line), the short side pane is fixed to the frame
+(`hinge_of: None`), and a rubber seal runs round the opening (`seal_cockpit`).
+Two smooth headrest humps (`hump_l/r`), no hoop. Pop-up lamps modelled DOWN,
+each on its own hinge (`hinge_popup_l/r`, 18 degrees): the lid lies flush on
+the hood and the lamp face hangs under it; `lamps.head` in `body.json` is the
+bulb when up. A side intake cut into each rear quarter (`cuts` makes the hole,
+the kit builds the recess: four walls, a slatted floor 4 cm in, a lip). Oval
+tail lamps with the brake lamp as their core, an amber lamp under each, one
+reversing lamp in the bumper centre (`reverse_c`), a third brake lamp in a pod
+on the deck's rear edge, 230 mm discs and 180 mm drums behind real spokes.
+
 A new car's kit goes in a file of its own (`kit_<id>.py`, a dict `KIT`) with
 one import line in `kits.py`.
 

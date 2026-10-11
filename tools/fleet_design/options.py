@@ -83,7 +83,7 @@ P4['options'] = {
                  {'op': 'remove', 'tag': 'hoops'},
                  {'op': 'open', 'value': []},
                  {'op': 'cabin', 'values': {'R': 1.95, 'C': 2.34, 'D': 1.88, 'pillars': []}},
-                 {'op': 'curve', 'curve': 'top', 'keys': [(1.30, 1.12), (1.95, 1.13), (2.34, 0.81)]}]},
+                 {'op': 'curve', 'curve': 'top', 'keys': [(1.30, 1.04), (1.95, 1.05), (2.34, 0.81)]}]},
              'rollbar': {'label': 'Roll bar', 'ops': [
                  {'op': 'remove', 'tag': 'hoops'},
                  {'op': 'add', 'part': {'type': 'bedbar', 's': 2.20, 'h': 1.13, 'x': 0.44}}]}},

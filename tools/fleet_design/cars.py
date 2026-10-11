@@ -254,35 +254,54 @@ P3 = {
 P4 = {
     'id': 'p4_kei', 'role': 'player', 'label': 'Kei roadster',
     'refs': 'Honda Beat, Suzuki Cappuccino, Autozam AZ-1',
-    'rule': 'Tiny open two-seater: no roof, twin headrest humps, wheels at the very corners.',
+    'rule': 'Tiny open two-seater with the wheels at the very corners, a low screen and two headrest humps '
+            'that run back into the engine lid.',
+    'tier': 'T1 kei roadster (Pilar), sheet p4_kei (Roy 317-320), rebuilt from parts 2026-10-11: the screen top is down '
+            'from 1.13 to 1.05, two smooth humps instead of the hoops, kei-sized pop-ups, a real side intake, thinner '
+            'sidewalls (rim ratio 0.70) and arch lips. The cockpit opening ends at 2.18 (was 2.32), just behind the '
+            "cabin's rear bulkhead, so the humps stand on the deck.",
     'L': 3.30, 'WB': 2.27, 'OHf': 0.55, 'W': 1.40,
-    'wheel': {'r': 0.28, 'w': 0.175, 'w_rear': 0.185, 'track': 1.23, 'arch_gap': 0.025, 'rim': '5spoke', 'rim_ratio': 0.66},
-    'top': [(0.0, 0.48), (0.05, 0.57), (0.22, 0.63), (0.92, 0.74), (1.30, 1.12), (1.36, 1.13), (1.42, 0.82),
+    'wheel': {'r': 0.28, 'w': 0.165, 'w_rear': 0.175, 'track': 1.23, 'arch_gap': 0.025, 'rim': '5spoke', 'rim_ratio': 0.70},
+    'top': [(0.0, 0.48), (0.05, 0.57), (0.22, 0.63), (0.92, 0.74), (1.30, 1.04), (1.36, 1.05), (1.42, 0.80),
             (2.32, 0.80), (3.05, 0.82), (3.22, 0.79), (3.30, 0.62)],
     'floor': [(0, 0.24), (0.16, 0.12), (3.10, 0.12), (3.30, 0.28)],
-    'hw': [(0, 0.52), (0.08, 0.63), (0.30, 0.69), (3.00, 0.70), (3.20, 0.66), (3.30, 0.60)],
+    # pinched 1 cm at the doors: 0.69 there, 0.70 over the arches
+    'hw': [(0, 0.52), (0.08, 0.63), (0.30, 0.70), (0.86, 0.70), (0.96, 0.69), (2.40, 0.69), (2.50, 0.70), (3.00, 0.70),
+           (3.20, 0.66), (3.30, 0.60)],
     'waist': [(0, 0.36), (0.30, 0.46), (3.30, 0.48)],
     'belt': [(0, 0.46), (0.30, 0.60), (0.92, 0.71), (2.32, 0.77), (3.30, 0.74)],
     'tumble': 0.05, 'sill_in': 0.03, 'rocker_h': 0.26,
     'cabin': {'A': 0.92, 'W': 1.30, 'R': 1.36, 'C': 1.42, 'D': 1.40,
-              'roof_w': 0.54, 'roof_drop': 0.02, 'pillars': [], 'roof_h': 1.13},
-    'open': [{'s0': 1.42, 's1': 2.32, 'floor': 0.42, 'wall': 0.06, 'mat': 'interior'}],
+              'roof_w': 0.54, 'roof_drop': 0.02, 'pillars': [], 'roof_h': 1.05},
+    'open': [{'s0': 1.42, 's1': 2.18, 'floor': 0.40, 'wall': 0.06, 'mat': 'interior'}],
     'decals': [
-        {'view': 'front', 'ellipse': (0.48, 0.52, 0.10, 0.055, 12), 'mat': 'head', 'mirror': True},
-        {'view': 'front', 'rect': (-0.25, 0.28, 0.25, 0.36), 'mat': 'grille', 'tag': 'fbumper'},
-        {'view': 'left', 'rect': (2.36, 0.46, 2.60, 0.62), 'mat': 'grille', 'mirror': True},
-        {'view': 'rear', 'ellipse': (0.48, 0.66, 0.09, 0.05, 12), 'mat': 'tail', 'mirror': True},
-        {'view': 'rear', 'rect': (-0.50, 0.22, 0.50, 0.30), 'mat': 'trim', 'tag': 'rbumper'},
+        # nose and tail decals pin their own offset, so the car measures its sheet length
+        # a single slot grille in the bumper with an amber turn lamp at each end (the lamps are pop-ups: parts)
+        {'view': 'front', 'rect': (-0.25, 0.28, 0.25, 0.36), 'mat': 'grille', 'tag': 'fbumper', 'offset': 0.004},
+        {'view': 'front', 'rect': (0.26, 0.29, 0.33, 0.35), 'mat': 'turn', 'mirror': True, 'offset': 0.006},
+        # round_twin rear: two ovals, a small amber lamp under each, one reversing lamp in the bumper centre (era)
+        {'view': 'rear', 'ellipse': (0.48, 0.66, 0.09, 0.05, 12), 'mat': 'tail', 'mirror': True, 'offset': 0.006},
+        {'view': 'rear', 'rect': (0.42, 0.54, 0.54, 0.585), 'mat': 'turn', 'mirror': True, 'tag': 'turn_r', 'offset': 0.006},
+        {'view': 'rear', 'circle': (0.0, 0.40, 0.03, 10), 'mat': 'head_off', 'tag': 'reverse', 'offset': 0.006},
+        {'view': 'rear', 'rect': (-0.27, 0.605, 0.27, 0.715), 'mat': 'trim', 'tag': 'plate_recess', 'offset': 0.004},
+        {'view': 'rear', 'rect': (-0.50, 0.29, 0.50, 0.35), 'mat': 'trim', 'tag': 'rbumper', 'offset': 0.004},
+        # the side intake behind each door (Roy 319: a real scooped-in intake; the parts build cuts it in)
+        {'view': 'left', 'rect': (2.20, 0.49, 2.44, 0.63), 'mat': 'grille', 'mirror': True, 'tag': 'intake'},
     ],
     'parts': [
         {'type': 'mirrors', 's': 1.10},
-        {'type': 'rollhoops', 's': 2.30, 'h': 1.00, 'x': 0.30, 'w': 0.26},
+        # two smooth headrest fairings (Roy 317), no hoop: 0.26 wide, up to 1.00, tapering back into the engine lid
+        {'type': 'rollhoops', 's': 2.00, 'h': 1.00, 'x': 0.30, 'w': 0.26, 's0': 1.95, 's1': 2.40},
+        # kei-sized pop-ups (Roy 320); the sheet draws them up
+        {'type': 'popups', 's0': 0.30, 's1': 0.56, 'x0': 0.31, 'x1': 0.57, 'h': 0.08},
+        # arch lips, so the wheels read as fitted
+        {'type': 'flares', 'tag': 'lips', 'band': 0.035, 'proud': 0.01},
     ],
-    'exhaust': [{'x': 0.35, 'y': 0.22, 'r': 0.035}],
+    'exhaust': [{'x': 0.0, 'y': 0.24, 'r': 0.035}],
     'stickers': [
         {'id': 'door', 'view': 'left', 'rect': (1.30, 0.40, 2.05, 0.60), 'mirror': True},
         {'id': 'hood', 'view': 'top', 'rect': (-0.25, 0.15, 0.25, 0.80)},
-        {'id': 'rear', 'view': 'rear', 'rect': (-0.34, 0.58, 0.34, 0.74), 'note': 'tail panel'},
+        {'id': 'rear', 'view': 'rear', 'rect': (-0.34, 0.45, 0.34, 0.59), 'note': 'tail panel'},
     ],
     'paint': {'hero': ('Signal yellow', '#F2B53A'), 'alts': [('Signal red', '#B3191E'), ('Cream', '#E8DCC0'), ('Racing green', '#1F4D3A'), ('Silver', '#C9CED6')],
               'trim': '#1A1D24', 'rim': '#C9CED6'},

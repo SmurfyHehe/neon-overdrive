@@ -73,7 +73,8 @@ MATMAP = {'paint': 'paint', 'roof': 'paint', 'under': 'under_paint', 'glass': 'g
           'pillar': 'plastic', 'trim': 'plastic', 'grille': 'rubber', 'chrome': 'chrome',
           'exh_hole': 'rubber', 'head': 'glow_head', 'tail': 'glow_tail', 'turn': 'glow_turn',
           'primer': 'paint_primer', 'paint2': 'paint_primer', 'rust': 'paint_rust', 'bondo': 'paint_bondo',
-          'tire': 'rubber', 'tire_side': 'rubber', 'rim': 'rim', 'rim_dark': 'steel'}
+          'tire': 'rubber', 'tire_side': 'rubber', 'rim': 'rim', 'rim_dark': 'steel',
+          'interior': 'plastic'}    # the tub of an open car (the kei): its walls and floor
 COLOURS = {
     'paint': None,                 # the car's own paint
     'under_paint': '#0B0D12',      # behind the shut lines, the underbody

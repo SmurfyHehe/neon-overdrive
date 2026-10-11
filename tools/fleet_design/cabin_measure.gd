@@ -20,7 +20,7 @@ const SEAT := {
 	"p1_coupe":     {"seat_h": 0.21, "eye_back": 0.34, "console": "tunnel", "seats": "bucket", "cluster": "dials",  "speedo": 300.0},
 	"p2_hothatch":  {"seat_h": 0.27, "eye_back": 0.36, "console": "tunnel", "seats": "bucket", "cluster": "dials",  "speedo": 240.0},
 	"p3_tuner":     {"seat_h": 0.22, "eye_back": 0.36, "console": "tunnel", "seats": "bucket", "cluster": "triple", "speedo": 280.0},
-	"p4_kei":       {"seat_h": 0.19, "eye_back": 0.30, "console": "tunnel", "seats": "bucket", "cluster": "dials",  "speedo": 180.0},
+	"p4_kei":       {"seat_h": 0.154, "eye_back": 0.30, "console": "tunnel", "seats": "bucket", "cluster": "dials",  "speedo": 180.0},
 	"p5_muscle":    {"seat_h": 0.23, "eye_back": 0.36, "console": "tunnel", "seats": "bench",  "cluster": "strip",  "speedo": 260.0},
 	"p6_crossover": {"seat_h": 0.31, "eye_back": 0.38, "console": "tunnel", "seats": "bucket", "cluster": "dials",  "speedo": 260.0},
 }

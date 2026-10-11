@@ -134,6 +134,7 @@ func capture() -> Dictionary:
 		run.clock = {"minutes": game.night_clock.minutes, "night": game.night_clock.night}
 	if game.radio != null:
 		run.radio = game.radio.player_station()
+	run.known_stops = RoadMap.known_stops.keys()
 	return run
 
 ## Puts the car's motion back once it is in the tree (Vehicle._ready has run).

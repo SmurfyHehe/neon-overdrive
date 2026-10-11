@@ -6,7 +6,9 @@ extends RefCounted
 # Three slots, user://saves/slot_1..3. Each slot is separate files, each one
 # written crash-safely with three backups (atomic_json.gd), so one damaged file
 # can never take the others with it:
-#   wallet.json    {"cash": int, "bank": int}
+#   wallet.json    {"cash": int, "bank": int, "receipts": [id, ...]}
+#                  receipts: the last shop payments, so a pay is never doubled
+#   shop.json      Walt's board for the day (ShopDay); see load_shop()
 #   garage.json    {"owned_parts": [part id, ...]}         every part ever bought
 #   mod_tree.json  {"cars": {car_id: {"installed": [node id, ...]}}}
 #   run.json       where the run is, to resume it exactly (SaveDirector)
@@ -34,7 +36,7 @@ const TestMode := preload("res://scripts/core/test_mode.gd")
 
 const SLOTS := 3
 const DEFAULT_ROOT := "user://saves"
-const SECTIONS := ["wallet", "garage", "mod_tree", "run", "meta", "special"]
+const SECTIONS := ["wallet", "garage", "mod_tree", "run", "meta", "special", "shop"]
 
 static var root := TestMode.path(DEFAULT_ROOT)
 ## The slot being played, 1..SLOTS. Kept in <root>/active_slot.json.
@@ -154,6 +156,8 @@ static func take_pending_bust() -> int:
 static func load_wallet(n: int = 0) -> Dictionary:
 	var out := {"cash": 0, "bank": 0}
 	var left := out.keys()
+	var receipts_found := false
+	out["receipts"] = []
 	for p in AtomicJson.candidates(file("wallet", n)):
 		if left.is_empty():
 			break
@@ -166,10 +170,22 @@ static func load_wallet(n: int = 0) -> Dictionary:
 			if _is_whole(d.get(k)) and float(d[k]) >= 0.0:
 				out[k] = int(d[k])
 				left.erase(k)
+		# Old files have no receipts: they load as an empty list.
+		if not receipts_found and d.get("receipts") is Array:
+			out["receipts"] = _string_list(d["receipts"])
+			receipts_found = true
 	return out
 
-static func save_wallet(cash: int, bank: int) -> bool:
-	return save("wallet", {"cash": maxi(cash, 0), "bank": maxi(bank, 0)})
+static func save_wallet(cash: int, bank: int, receipts: Array = []) -> bool:
+	return save("wallet", {"cash": maxi(cash, 0), "bank": maxi(bank, 0),
+		"receipts": _string_list(receipts)})
+
+## Walt's board state for the day (ShopDay). {} when there is none yet.
+static func load_shop(n: int = 0) -> Dictionary:
+	return AtomicJson.read(file("shop", n)).get("data", {})
+
+static func save_shop(data: Dictionary) -> bool:
+	return save("shop", data)
 
 static func load_garage(n: int = 0) -> Dictionary:
 	var d: Dictionary = AtomicJson.read(file("garage", n)).get("data", {})

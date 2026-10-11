@@ -8,7 +8,7 @@ extends CanvasLayer
 #
 #   Resume, Restart night (Quit race in a race), Settings, Photo mode, Quit to title
 #
-# Sliders, keys and the garage stand-ins live on the Settings screen
+# Sliders, keys and the test stand-ins live on the Settings screen
 # (settings_screen.gd). Top-right, on a plate: the night, the clock, the cash.
 #
 # Two things can show with it:
@@ -94,9 +94,9 @@ func _ready() -> void:
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	restart_button = _add_button(box, "Restart night", _ask_restart)
 	settings_button = _add_button(box, "Settings", show_settings)
-	# TEST BUILD: "Race a test rival" and "Wash car" are on Settings > Game (stand-ins),
-	# not here: the pause screen keeps to its spec rows. The hidden button stays for
-	# tests/core/race_core.gd, which presses it.
+	# TEST BUILD: "Race a test rival" is on Settings > Game (a stand-in), and Service car /
+	# Wash car are in the garage (G0): the pause screen keeps to its spec rows. The
+	# hidden button stays for tests/core/race_core.gd, which presses it.
 	race_button = _add_button(box, "Race a test rival", _race_pressed)
 	race_button.visible = false
 	photo_button = _add_button(box, "Photo mode", game_state.open_photo_from_pause)
@@ -114,10 +114,8 @@ func _ready() -> void:
 	confirm = ConfirmBox.new(game_state)
 	add_child(confirm)
 	settings = SettingsScreen.new(game_state)
-	settings.service_action = _service_car
 	settings.tow_action = _call_tow
 	settings.race_action = _race_pressed
-	settings.wash_action = game_state.open_wash
 	add_child(settings)
 	settings.closed.connect(_on_settings_closed)
 	game_state.state_changed.connect(_on_state_changed)
@@ -230,14 +228,6 @@ func _ask_quit_to_title() -> void:
 	if GameState.chase_locked():
 		text = "Quit to the title mid-chase? That counts as a bust."
 	confirm.ask(text, "Quit", game_state.quit_to_title)
-
-## Resets temperatures, tyre, clutch and brake wear (the garage will own this later).
-## Reached from the Settings Game tab while the garage does not exist.
-func _service_car() -> void:
-	var player: Variant = get_parent().get("player")
-	if player != null and player.get("health") != null:
-		player.health.repair()
-		player.damage.garage_repair(null)  # free until the garage and the bank exist
 
 ## Ferris's tow (damage slice 1): only for a dead engine, never in a chase.
 ## The car goes home, the night ends, and the garage at home fixes it; the

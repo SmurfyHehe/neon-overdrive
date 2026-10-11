@@ -3,9 +3,9 @@ extends SceneTree
 # Gas station test (stops, first slice, 2026-10-09). Roy: "there is no way to
 # fill gas now". End to end in the real game, first station moved next to the
 # spawn (GasStation.first_s):
-# - where the stations are: s_of / nearest / next_after;
+# - where the stations are: s_of / nearest / next_after, and on Loop 1 the four
+#   fixed ones (2,225 and 5,425 own side, 1,825 and 5,025 oncoming, every lap);
 # - the station's lot is cleared (own-side buildings there are empty lots);
-# - a low tank shows "GAS x km" on the HUD fuel line, a full one does not;
 # - a dry car put in the bay and stopped opens the pump menu (State.STATION);
 # - with an empty bank the fill-up is refused, nothing is paid;
 # - while a cop sees you (the chase flag) fill-up and tow are locked;
@@ -20,7 +20,6 @@ extends SceneTree
 const SaveStore := preload("res://scripts/save/save_store.gd")
 const GasStation := preload("res://scripts/world/gas_station.gd")
 const PumpPanel := preload("res://scripts/ui/pump_panel.gd")
-const Hud := preload("res://scripts/ui/hud.gd")
 const Harness := preload("res://tests/traffic/traffic_harness.gd")
 
 const ROOT := "user://test_gas_station"
@@ -40,6 +39,7 @@ func _initialize() -> void:
 	SaveStore.chase_active = false
 	GasStation.first_s = FIRST
 	_static()
+	_loop_static()
 	game = Harness.boot(self, 0, 300.0, 5)
 
 func _check(ok: bool, msg: String) -> void:
@@ -53,6 +53,40 @@ func _static() -> void:
 	_check(is_equal_approx(GasStation.next_after(FIRST + 2.0), FIRST), "a car in the bay should still be at this station")
 	_check(is_equal_approx(GasStation.next_after(FIRST + 50.0), FIRST + GasStation.SPACING), "past the station, the next one is %.0f" % GasStation.next_after(FIRST + 50.0))
 	_check(is_equal_approx(GasStation.nearest(FIRST + GasStation.SPACING * 0.4), FIRST), "nearest station wrong")
+
+## Loop 1, act 1: the four fixed stations, one side each, never opposite.
+func _loop_static() -> void:
+	var RM := GasStation.RoadMap
+	RM.use(0, 1)
+	GasStation.first_s = GasStation.DEFAULT_FIRST_S
+	var lap := RM.length()
+	_check(is_equal_approx(lap, 6400.0), "Loop 1 act 1 is %.0f m, expected 6400" % lap)
+	var cases := [
+		# [s, side, expected next_after]
+		[0.0, 1, 2225.0], [2225.0, 1, 2225.0], [2300.0, 1, 5425.0], [6500.0, 1, 8625.0],
+		[0.0, -1, 1825.0], [1900.0, -1, 5025.0], [5100.0, -1, 8225.0],
+		[12900.0, 1, 12800.0 + 2225.0],
+	]
+	for c in cases:
+		var got := GasStation.next_after(float(c[0]), int(c[1]))
+		_check(is_equal_approx(got, float(c[2])), "next_after(%.0f, side %d) = %.0f, expected %.0f" % [c[0], c[1], got, c[2]])
+	for st in [2225.0, 5425.0]:
+		_check(is_equal_approx(GasStation.nearest(st + 30.0, 1), st), "side +1 nearest to %.0f is %.0f" % [st + 30.0, GasStation.nearest(st + 30.0, 1)])
+		_check(absf(GasStation.nearest(st, -1) - st) > 300.0, "a side -1 station within 300 m of the side +1 one at %.0f" % st)
+	for st in [1825.0, 5025.0]:
+		_check(is_equal_approx(GasStation.nearest(st - 30.0, -1), st), "side -1 nearest to %.0f is %.0f" % [st - 30.0, GasStation.nearest(st - 30.0, -1)])
+		_check(absf(GasStation.nearest(st, 1) - st) > 300.0, "a side +1 station within 300 m of the side -1 one at %.0f" % st)
+	var l := GasStation.L
+	for c in [[2225.0, 1, true], [2225.0, -1, false], [1825.0, -1, true], [1825.0, 1, false]]:
+		var ci := int(float(c[0]) / l)
+		var z := -fmod(float(c[0]), l)
+		_check(GasStation.in_bay(ci, z, int(c[1])) == bool(c[2]), "in_bay at %.0f side %d should be %s" % [c[0], c[1], c[2]])
+	# the bay is on its own side
+	_check(GasStation.in_spot(Vector2(GasStation.own_edge(2225.0, 1) + 1.6, 2225.0), 2225.0, 1), "a car in the +1 bay is not in the spot")
+	_check(GasStation.in_spot(Vector2(-(GasStation.own_edge(1825.0, -1) + 1.6), 1825.0), 1825.0, -1), "a car in the -1 bay is not in the spot")
+	_check(not GasStation.in_spot(Vector2(GasStation.own_edge(1825.0, -1) + 1.6, 1825.0), 1825.0, -1), "a +1 car counted in the -1 bay")
+	RM.use(RM.ENDLESS)
+	GasStation.first_s = FIRST
 
 func _physics_process(_delta: float) -> bool:
 	ticks += 1
@@ -72,7 +106,6 @@ func _physics_process(_delta: float) -> bool:
 			if panel == null:
 				return _end()
 			_check(_lot_cleared(), "no cleared lot at the station")
-			_check(Hud.station_hint(player) == "", "full tank shows a station hint '%s'" % Hud.station_hint(player))
 			player.fuel.litres = 3.0
 			phase = 1
 			wait = 0
@@ -86,10 +119,7 @@ func _physics_process(_delta: float) -> bool:
 			if wait < 10:
 				return false
 			var fuel_lbl := _find(game, "Fuel") as Label
-			var hint := Hud.station_hint(player)
-			_check(hint.contains("GAS"), "low tank shows no station hint ('%s')" % hint)
-			_check(fuel_lbl != null and fuel_lbl.text.contains("GAS"), "HUD fuel reads '%s'" % (fuel_lbl.text if fuel_lbl != null else "<none>"))
-			print("gas_station: low tank HUD reads '%s'" % (fuel_lbl.text if fuel_lbl != null else ""))
+			_check(fuel_lbl == null or not fuel_lbl.text.contains("GAS"), "HUD fuel reads '%s'" % (fuel_lbl.text if fuel_lbl != null else ""))
 			# Dry, no bank, some cash, into the bay.
 			player.fuel.litres = 0.0
 			w.take_bank(w.bank)

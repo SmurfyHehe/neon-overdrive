@@ -136,7 +136,7 @@ const SPECS := {
 		"signs": [[1, 70], [0, 30]],
 	},
 	"strip": {
-		"mix": [["shop", 45], ["garage", 25], ["gas", 15], ["diner", 15]],
+		"mix": [["shop", 60], ["garage", 25], ["diner", 15]],
 		"h": {"shop": [3.4, 7.0]},
 		"d": [12.0, 22.0], "w": [8.0, 14.0], "setback": 8.0, "gap": 0.2, "lit": 1.0,
 		"low": "garage", "billboard": 1.0,
@@ -226,7 +226,7 @@ const SPECS := {
 	# Route 9 freeway: more open verge than buildings; gas stations, diners,
 	# motels and sheds far apart, billboards on most of them, a high sign.
 	"freeway": {
-		"mix": [["gas", 22], ["diner", 13], ["shop", 20], ["warehouse", 25], ["office", 20]],
+		"mix": [["diner", 13], ["shop", 42], ["warehouse", 25], ["office", 20]],
 		"h": {"shop": [3.4, 7.0], "office": [12.0, 22.0]},
 		"d": [14.0, 22.0], "w": [10.0, 16.0], "setback": 8.0, "gap": 0.6, "lit": 0.75,
 		"low": "garage", "billboard": 2.5,
@@ -239,7 +239,7 @@ const SPECS := {
 	# Canyon: almost nothing. A lone cabin, a shack garage or a roadhouse
 	# every few hundred metres, and a radio mast with its red light.
 	"canyon": {
-		"mix": [["house", 45], ["garage", 25], ["diner", 20], ["gas", 10]],
+		"mix": [["house", 45], ["garage", 35], ["diner", 20]],
 		"h": {"house": [5.6, 5.6]},
 		"d": [8.0, 12.0], "w": [7.0, 10.0], "setback": 6.0, "gap": 0.85, "lit": 0.6,
 		"low": "garage", "billboard": 0.4,

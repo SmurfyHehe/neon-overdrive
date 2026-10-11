@@ -104,6 +104,7 @@ var run_end: Node
 const RunEnd := preload("res://scripts/core/run_end.gd")
 ## Gas stations on the road and the pump menu (stops, first slice).
 var gas_station: Node3D
+var gas_station_onc: Node3D
 const GasStation := preload("res://scripts/world/gas_station.gd")
 const PumpPanel := preload("res://scripts/ui/pump_panel.gd")
 const WetReflections := preload("res://scripts/world/wet_reflections.gd")
@@ -888,8 +889,14 @@ func _setup_game_state() -> void:
 	gas_station = GasStation.new()
 	gas_station.player = player
 	add_child(gas_station)
+	# the oncoming carriageway's stations (a loop road only; none elsewhere)
+	gas_station_onc = GasStation.new()
+	gas_station_onc.side = -1
+	gas_station_onc.player = player
+	add_child(gas_station_onc)
 	add_child(PumpPanel.new(game_state, player, wallet, night_clock))
 	gas_station.pulled_up.connect(func(_s: float) -> void: game_state.open_station())
+	gas_station_onc.pulled_up.connect(func(_s: float) -> void: game_state.open_station())
 	add_child(WashScreen.new(game_state))
 	# Special vehicles: a flip ends the run (SpecialRunEnd). A restart is the
 	# stand-in until the run loop (stage C) owns what "ends the night" means.

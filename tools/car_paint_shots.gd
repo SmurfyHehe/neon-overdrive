@@ -8,6 +8,7 @@ extends SceneTree
 #   <kind>_<view>.png       the Medium preset, with the work light (as before)
 #   <kind>_<view>_high.png  the High preset, no work light: only what the
 #                           game itself puts on the car
+#   <kind>_chase_<preset>.png  the game's own chase camera, no work light
 # Real renderer (no --headless): a window opens for a few seconds. One car
 # per run, so only one Godot is ever open:
 #
@@ -98,4 +99,13 @@ func _run() -> void:
 			var path := "%s/%s_%s%s.png" % [dir, kind, view, "" if lit else "_high"]
 			root.get_viewport().get_texture().get_image().save_png(path)
 			print("car_paint_shots: ", path)
+		# The game's own chase camera, no work light: what the player sees.
+		fill.visible = false
+		cam.make_current()
+		for i in 20:
+			await process_frame
+		await RenderingServer.frame_post_draw
+		var chase_path := "%s/%s_chase_%s.png" % [dir, kind, tier]
+		root.get_viewport().get_texture().get_image().save_png(chase_path)
+		print("car_paint_shots: ", chase_path)
 	quit(0)

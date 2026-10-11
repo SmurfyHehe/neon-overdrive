@@ -61,6 +61,7 @@ var gfx_aa: OptionButton
 var gfx_scale: HSlider
 var gfx_scale_label: Label
 var gfx_mirrors: OptionButton
+var gfx_car_paint: OptionButton
 var gfx_dynres: OptionButton
 var gfx_cap: OptionButton
 var gfx_auto_label: Label
@@ -350,6 +351,7 @@ func _sync_all() -> void:
 	gfx_scale.value = GraphicsSettings.render_scale
 	gfx_scale_label.text = "%d%%" % roundi(GraphicsSettings.render_scale * 100.0)
 	gfx_mirrors.select(FxSettings.mirror_quality)
+	gfx_car_paint.select(GraphicsSettings.car_paint)
 	gfx_dynres.select(0 if GraphicsSettings.dynamic_res else 1)
 	gfx_cap.select(maxi(GraphicsSettings.FPS_CAPS.find(GraphicsSettings.fps_cap), 0))
 	gfx_auto_label.visible = GraphicsSettings.auto_picked
@@ -411,6 +413,9 @@ func _build_picture_page(parent: Control) -> Control:
 		FxSettings.set_mirror_quality(i)
 		GraphicsSettings.refresh_preset()
 		_graphics_changed())
+	gfx_car_paint = _add_option(page, "Car paint", GraphicsSettings.CAR_PAINT_NAMES, func(i: int) -> void:
+		GraphicsSettings.set_car_paint(i)
+		_graphics_changed())
 	gfx_dynres = _add_option(page, "Dynamic resolution", ["On", "Off"], func(i: int) -> void:
 		GraphicsSettings.set_dynamic_res(i == 0)
 		_graphics_changed())
@@ -420,6 +425,7 @@ func _build_picture_page(parent: Control) -> Control:
 	_cost_dots(gfx_aa, "aa")
 	_cost_dots(gfx_scale, "render_scale")
 	_cost_dots(gfx_mirrors, "mirrors")
+	_cost_dots(gfx_car_paint, "car_paint")
 	_cost_dots(gfx_dynres, "dynamic_res")
 	_cost_dots(gfx_cap, "fps_cap")
 	gfx_auto_label = Label.new()

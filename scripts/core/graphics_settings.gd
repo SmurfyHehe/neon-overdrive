@@ -62,8 +62,10 @@ const FPS_CAP_NAMES := ["V-sync", "30 fps", "60 fps", "120 fps", "144 fps", "No 
 ## smoothing costs 0 to 1.9 ms by mode, the mirrors redraw the road up to three
 ## more times, draw distance moves how many cars run the full sim. Dynamic
 ## resolution, the frame cap and the lamp glow strength are close to free.
+## Car paint (2026-10-11, busy laptop, 1080p, MSAA 2x, coupe in the chase
+## view): reflections about +0.5 ms over plain, lamp light about +0.5 ms more.
 const COST := {"aa": 2, "render_scale": 3, "mirrors": 2, "dynamic_res": 1, "fps_cap": 1,
-	"cars": 3, "draw_distance": 2, "night_lights": 1}
+	"cars": 3, "draw_distance": 2, "night_lights": 1, "car_paint": 2}
 const COST_NAMES := ["", "Low cost", "Medium cost", "High cost"]
 
 ## Every value per preset. Measured on the i5-1235U (Iris Xe, 1920x1080,
@@ -73,11 +75,14 @@ const COST_NAMES := ["", "Low cost", "Medium cost", "High cost"]
 ## CPU side: traffic = car count, detail = traffic sim/draw distance (m),
 ## mirror_q = FxSettings mirror quality (0 low, 1 medium, 2 high). Medium is
 ## today's defaults, so Roy's laptop plays exactly as before at Medium.
+## car_paint = the car paint tier (CarPaint: 0 plain, 1 mirrors the city,
+## 2 + street-lamp light and metal flake).
 const PRESET_VALUES := {
-	"low": {"aa": "msaa2", "render_scale": 0.75, "traffic": 10, "detail": 100.0, "mirror_q": 0},
-	"medium": {"aa": "msaa2", "render_scale": 1.0, "traffic": 16, "detail": 150.0, "mirror_q": 1},
-	"high": {"aa": "msaa4", "render_scale": 1.0, "traffic": 25, "detail": 200.0, "mirror_q": 2},
+	"low": {"aa": "msaa2", "render_scale": 0.75, "traffic": 10, "detail": 100.0, "mirror_q": 0, "car_paint": 0},
+	"medium": {"aa": "msaa2", "render_scale": 1.0, "traffic": 16, "detail": 150.0, "mirror_q": 1, "car_paint": 1},
+	"high": {"aa": "msaa4", "render_scale": 1.0, "traffic": 25, "detail": 200.0, "mirror_q": 2, "car_paint": 2},
 }
+const CAR_PAINT_NAMES := ["Plain", "Reflections", "Reflections + lamp light"]
 
 ## Nodes that switch with these settings join this group and implement
 ## apply_graphics().
@@ -88,6 +93,9 @@ static var aa := "msaa2"
 static var render_scale := 1.0
 static var dynamic_res := true
 static var fps_cap := 0
+## Car paint tier, 0..2 (CAR_PAINT_NAMES). NEON_CAR_PAINT=<0|1|2> forces it
+## for one run (benchmarks, pictures).
+static var car_paint := 1
 ## True when the preset came from the first-launch benchmark, not the menu.
 static var auto_picked := false
 ## False until the file has a [graphics] preset: GraphicsAutoPick runs then.
@@ -100,6 +108,7 @@ static func set_preset(p: String) -> void:
 	var v: Dictionary = PRESET_VALUES[p]
 	aa = v.aa
 	render_scale = v.render_scale
+	car_paint = v.car_paint
 	TrafficSettings.set_car_count(v.traffic)
 	TrafficSettings.set_detail_distance(v.detail)
 	FxSettings.set_mirror_quality(v.mirror_q)
@@ -111,6 +120,10 @@ static func set_aa(mode: String) -> void:
 
 static func set_render_scale(s: float) -> void:
 	render_scale = clampf(s, SCALE_MIN, SCALE_MAX) if is_finite(s) else 1.0  # clampf passes NaN through
+	refresh_preset()
+
+static func set_car_paint(tier: int) -> void:
+	car_paint = clampi(tier, 0, CAR_PAINT_NAMES.size() - 1)
 	refresh_preset()
 
 static func set_dynamic_res(on: bool) -> void:
@@ -141,7 +154,7 @@ static func refresh_preset() -> void:
 static func matching_preset() -> String:
 	for p in PRESETS:
 		var v: Dictionary = PRESET_VALUES[p]
-		if v.aa == aa and is_equal_approx(v.render_scale, render_scale) 				and TrafficSettings.car_count == v.traffic 				and is_equal_approx(TrafficSettings.detail_distance, v.detail) 				and FxSettings.mirror_quality == v.mirror_q:
+		if v.aa == aa and is_equal_approx(v.render_scale, render_scale) and v.car_paint == car_paint				and TrafficSettings.car_count == v.traffic 				and is_equal_approx(TrafficSettings.detail_distance, v.detail) 				and FxSettings.mirror_quality == v.mirror_q:
 			return p
 	return "custom"
 
@@ -157,9 +170,9 @@ static func apply(tree: SceneTree) -> void:
 	# Wet-road mirrors (road_wet.gd) are off on Low; a hand-tuned "custom"
 	# set keeps them, like every other Medium default.
 	RoadWet.set_reflections(preset != "low")
-	# Car paint (car_paint.gd): Low plain, Medium mirrors the city, High adds
-	# the street lamps.
-	CarPaint.set_preset(preset)
+	# Car paint (car_paint.gd): plain, mirrors the city, or the street lamps
+	# too. Its own row on the Picture page; each preset picks one.
+	CarPaint.set_tier(car_paint)
 	tree.call_group(GROUP, "apply_graphics")
 
 static func apply_viewport(vp: Viewport) -> void:
@@ -189,6 +202,7 @@ static func apply_viewport(vp: Viewport) -> void:
 static func load_settings() -> void:
 	aa = PRESET_VALUES[PRESET_DEFAULT].aa
 	render_scale = PRESET_VALUES[PRESET_DEFAULT].render_scale
+	car_paint = PRESET_VALUES[PRESET_DEFAULT].car_paint
 	dynamic_res = true
 	fps_cap = 0
 	auto_picked = false
@@ -203,11 +217,20 @@ static func load_settings() -> void:
 		var cap: Variant = cfg.get_value("graphics", "fps_cap", 0)
 		set_fps_cap(int(cap) if (cap is float or cap is int) else 0)
 		auto_picked = FxSettings._to_bool(cfg.get_value("graphics", "auto", false))
+		# A file from before the row existed: what its preset showed then
+		# (Low plain, High with the lamps, anything else the city).
+		var saved := str(cfg.get_value("graphics", "preset", PRESET_DEFAULT))
+		var was: int = PRESET_VALUES[saved if PRESET_VALUES.has(saved) else PRESET_DEFAULT].car_paint
+		var cp: Variant = cfg.get_value("graphics", "car_paint", was)
+		set_car_paint(int(cp) if (cp is float or cp is int) else was)
 	refresh_preset()
 	var forced := OS.get_environment("NEON_GFX")
 	if PRESET_VALUES.has(forced):
 		set_preset(forced)
 		has_saved_preset = true  # a forced run never auto-picks
+	var forced_paint := OS.get_environment("NEON_CAR_PAINT")
+	if forced_paint.is_valid_int():
+		set_car_paint(int(forced_paint))
 
 ## True on a first launch: no preset in the file and none forced.
 static func needs_auto_pick() -> bool:
@@ -225,6 +248,7 @@ static func save_settings() -> bool:
 	cfg.set_value("graphics", "render_scale", render_scale)
 	cfg.set_value("graphics", "dynamic_res", dynamic_res)
 	cfg.set_value("graphics", "fps_cap", fps_cap)
+	cfg.set_value("graphics", "car_paint", car_paint)
 	cfg.set_value("graphics", "auto", auto_picked)
 	has_saved_preset = true
 	return cfg.save(AudioSettings.path) == OK

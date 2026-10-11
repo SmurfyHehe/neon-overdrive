@@ -279,10 +279,10 @@ static func paint_shader_code(base: String) -> String:
 
 static func trim_material() -> ShaderMaterial:
 	if _trim_mat == null:
-		var s := Shader.new()
-		s.code = TRIM_SHADER
+		# CarPaint's trim variant: TRIM_SHADER plus the city and the lamps on
+		# chrome and mirror glass (look upgrade, 2026-10-11).
 		_trim_mat = ShaderMaterial.new()
-		_trim_mat.shader = s
+		_trim_mat.shader = CarPaint.parts_trim_shader()
 	return _trim_mat
 
 static func glow_material() -> ShaderMaterial:

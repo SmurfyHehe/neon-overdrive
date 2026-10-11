@@ -55,6 +55,13 @@ func _unit_checks() -> void:
 	_check(GraphicsSettings.preset == "custom", "a hand change makes the preset custom")
 	GraphicsSettings.set_aa(GraphicsSettings.PRESET_VALUES.high.aa)
 	_check(GraphicsSettings.preset == "high", "changing back names the preset again")
+	_check(GraphicsSettings.PRESET_VALUES.low.car_paint == 0 and GraphicsSettings.car_paint == GraphicsSettings.PRESET_VALUES.high.car_paint,
+		"a preset picks its car paint tier, plain on Low")
+	GraphicsSettings.set_car_paint(0)
+	_check(GraphicsSettings.preset == "custom" and GraphicsSettings.car_paint == 0, "changing the car paint makes the preset custom")
+	GraphicsSettings.set_car_paint(99)
+	_check(GraphicsSettings.car_paint == GraphicsSettings.CAR_PAINT_NAMES.size() - 1, "the car paint tier clamps")
+	GraphicsSettings.set_preset("high")
 	GraphicsSettings.set_render_scale(0.1)
 	_check(is_equal_approx(GraphicsSettings.render_scale, GraphicsSettings.SCALE_MIN), "render scale clamps low")
 	GraphicsSettings.set_render_scale(NAN)
@@ -73,12 +80,14 @@ func _unit_checks() -> void:
 	GraphicsSettings.set_preset("medium")
 	GraphicsSettings.set_aa("msaa4")
 	GraphicsSettings.set_render_scale(0.65)
+	GraphicsSettings.set_car_paint(2)
 	GraphicsSettings.save_settings()
 	GraphicsSettings.set_preset("low")
 	TrafficSettings.load_settings()
 	FxSettings.load_settings()
 	GraphicsSettings.load_settings()
 	_check(GraphicsSettings.preset == "custom" and GraphicsSettings.aa == "msaa4" and is_equal_approx(GraphicsSettings.render_scale, 0.65), "a custom set loads back")
+	_check(GraphicsSettings.car_paint == 2, "the car paint tier loads back")
 
 	# Damaged file: the default preset.
 	var f := FileAccess.open(AudioSettings.path, FileAccess.WRITE)

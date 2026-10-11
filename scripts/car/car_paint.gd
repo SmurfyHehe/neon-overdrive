@@ -21,9 +21,16 @@ class_name CarPaint
 #   the player is driving under light the body and slide across it as
 #   highlights (CarLampSweep feeds four global uniforms once a frame).
 #
-# Tiers follow GraphicsSettings.preset: Low = paint only, Medium = + city
-# reflection (and CarFx's soft contact shadow), High = + lamp light and
-# metal flake. A change of preset rewrites the shader code once.
+# Tiers follow GraphicsSettings.car_paint (the "Car paint" row on the Picture
+# page; each Quality preset picks one): Plain = paint only, Reflections =
+# + city reflection and the moon's rim light (and CarFx's soft contact
+# shadow), Lamp light = + the street lamps and metal flake. A change of tier
+# rewrites the shader code once.
+#
+# Look upgrade (2026-10-11): the coupe assembled from parts (CarAssembler)
+# wears the same shader now ("body_parts" and "trim_parts": its baked shade
+# and shut lines come in CUSTOM0 instead of UV2 and the edge distances), and
+# every car gets a cool rim from the moon's side.
 
 const TIER_LOW := 0
 const TIER_MEDIUM := 1
@@ -79,6 +86,17 @@ float soft_noise(vec3 q) {
 }
 #ifdef PANO
 global uniform vec4 car_lamp_light;
+global uniform vec3 sky_moon_dir;
+// The moon's cool rim (research item 9): a navy edge on the side of the car
+// that faces the moon, stronger the higher it hangs. Glancing angles only.
+vec3 moon_rim(vec3 n, vec3 v, float f) {
+	vec3 m = normalize(sky_moon_dir + vec3(0.0, 1e-4, 0.0));
+	float side = clamp(dot(n, m) * 0.6 + 0.4, 0.0, 1.0);
+	float back = clamp(0.6 - 0.4 * dot(v, m), 0.0, 1.0);
+	// f^5 and weak: a broad wash turned red paint mauve (pictures, 2026-10-11).
+	float f2 = f * f;
+	return vec3(0.10, 0.15, 0.30) * f2 * f2 * f * side * back * (0.25 + 0.75 * clamp(m.y * 2.5, 0.0, 1.0));
+}
 // The night city a car mirrors: asphalt below, a warm band of lit windows
 // and far lamps on the horizon, dusk sky above, sodium light from overhead.
 // `blur` 0 is a mirror, 1 a matte smear.
@@ -103,30 +121,36 @@ vec3 city(vec3 r, float blur) {
 global uniform vec3 car_lamp_origin;
 global uniform vec3 car_lamp_fwd;
 global uniform vec4 car_lamp_grid;
-// The two nearest lamps of the row (one each side): x = light on a matte
-// surface, y = the highlight. `shine` is the highlight's tightness.
-vec2 lamps(vec3 wp, vec3 n, vec3 v, float shine) {
+// The two nearest lamps of the row (one each side). Where each lamp is and
+// how strong is worked out per vertex (lamp_vec: xyz = direction to the lamp,
+// w = strength); the lamps hang metres away, so it barely changes across a
+// panel, and the pixels only pay for the highlight (measured 2026-10-11).
+varying vec4 lamp_a;
+varying vec4 lamp_b;
+vec4 lamp_vec(vec3 wp, int i) {
 	vec3 rel = wp - car_lamp_origin;
 	vec3 right = normalize(cross(car_lamp_fwd, vec3(0.0, 1.0, 0.0)));
 	float s = dot(rel, car_lamp_fwd);
 	float x = dot(rel, right) + car_lamp_grid.w;
-	float up = 7.3 - rel.y;
 	float period = car_lamp_grid.x;
 	float reach = min(period * 0.5, 16.0);
-	vec2 sum = vec2(0.0);
-	for (int i = 0; i < 2; i++) {
-		float at = (i == 0) ? car_lamp_grid.y : car_lamp_grid.z;
-		float hx = (i == 0) ? car_lamp_light.w : -car_lamp_light.w;
-		float da = mod(at - s + period * 0.5, period) - period * 0.5;
-		vec3 l = right * (hx - x) + vec3(0.0, up, 0.0) + car_lamp_fwd * da;
-		float d2 = dot(l, l);
-		l *= inversesqrt(d2);
-		float w = clamp(1.0 - da * da / (reach * reach), 0.0, 1.0);
-		float att = w * w * 250.0 / (250.0 + d2);
-		sum.x += max(dot(n, l), 0.0) * att;
-		sum.y += pow(max(dot(n, normalize(l + v)), 0.0), shine) * att;
-	}
-	return sum * (1.0 - smoothstep(45.0, 70.0, length(rel)));
+	float at = (i == 0) ? car_lamp_grid.y : car_lamp_grid.z;
+	float hx = (i == 0) ? car_lamp_light.w : -car_lamp_light.w;
+	float da = mod(at - s + period * 0.5, period) - period * 0.5;
+	vec3 l = right * (hx - x) + vec3(0.0, 7.3 - rel.y, 0.0) + car_lamp_fwd * da;
+	float d2 = dot(l, l);
+	float w = clamp(1.0 - da * da / (reach * reach), 0.0, 1.0);
+	float att = w * w * 250.0 / (250.0 + d2) * (1.0 - smoothstep(45.0, 70.0, length(rel)));
+	return vec4(l * inversesqrt(d2), att);
+}
+// x = light on a matte surface, y = the highlight. `shine` is the
+// highlight's tightness.
+vec2 lamps(vec3 n, vec3 v, float shine) {
+	vec3 la = normalize(lamp_a.xyz);
+	vec3 lb = normalize(lamp_b.xyz);
+	vec2 sum = vec2(max(dot(n, la), 0.0), pow(max(dot(n, normalize(la + v)), 0.0), shine)) * lamp_a.w;
+	sum += vec2(max(dot(n, lb), 0.0), pow(max(dot(n, normalize(lb + v)), 0.0), shine)) * lamp_b.w;
+	return sum;
 }
 #endif
 """
@@ -151,14 +175,28 @@ uniform float paint_roughness = 0.26;
 // sills, thin on the roof, in soft patches.
 uniform float dirt : hint_range(0.0, 1.0) = 0.0;
 uniform vec3 dirt_color : source_color = vec3(0.40, 0.35, 0.28);
+#ifdef PARTS
+// A body assembled from parts: x = baked light (1 open, 0 shut in), y = 1 on
+// a shut line fading to 0 six millimetres either side.
+varying vec2 ao_shut;
+#else
 varying vec3 e_crease;
 varying vec3 e_seam;
+#endif
 void vertex() {
 	obj_pos = VERTEX;
 	obj_nrm = NORMAL;
 	w_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+#ifdef LAMPS
+	lamp_a = lamp_vec(w_pos, 0);
+	lamp_b = lamp_vec(w_pos, 1);
+#endif
+#ifdef PARTS
+	ao_shut = CUSTOM0.rg;
+#else
 	e_crease = CUSTOM0.rgb;
 	e_seam = CUSTOM1.rgb;
+#endif
 }
 float line_at(float d, float w, float px) {
 	float wl = max(w, 0.5 * px);
@@ -166,13 +204,27 @@ float line_at(float d, float w, float px) {
 }
 void fragment() {
 	float p = 1.0 - COLOR.a;
-	float gloss = mix(UV.y, finish.x, p);
-	vec3 base = mix(COLOR.rgb, paint, p);
-	float metallic = mix(UV.x, paint_metallic, p);
-	float rough = mix(1.0 - UV.y, mix(0.85, paint_roughness, finish.x), p);
+#ifdef PARTS
+	vec2 fin = vec2(0.1, 0.25);
+	float occ = 1.0 - ao_shut.x;
+#else
+	vec2 fin = UV;
 	float occ = UV2.x;
+#endif
+	float gloss = mix(fin.y, finish.x, p);
+	vec3 base = mix(COLOR.rgb, paint, p);
+	float metallic = mix(fin.x, paint_metallic, p);
+	float rough = mix(1.0 - fin.y, mix(0.85, paint_roughness, finish.x), p);
 	float px = max(length(dFdx(w_pos)), length(dFdy(w_pos))) + 1e-5;
 
+#ifdef PARTS
+	// Shut lines are real gaps between the parts, baked per vertex.
+	float d_seam = EDGE_W * (1.0 - ao_shut.y);
+	float d_crease = EDGE_W;
+	float gap = ao_shut.y * 0.88;
+	float bevel = 4.0 * ao_shut.y * (1.0 - ao_shut.y) * clamp(0.02 / px, 0.0, 1.0);
+	float crease = 0.0;
+#else
 	// Shut lines: where paint meets trim or glass (baked), and the door cuts.
 	float d_seam = EDGE_W * (1.0 - max(e_seam.x, max(e_seam.y, e_seam.z)));
 	if (seams.w > 0.0) {
@@ -185,6 +237,7 @@ void fragment() {
 	float bevel = (1.0 - smoothstep(0.004, 0.016, d_seam)) * (1.0 - gap) * clamp(0.02 / px, 0.0, 1.0);
 	float d_crease = EDGE_W * (1.0 - max(e_crease.x, max(e_crease.y, e_crease.z)));
 	float crease = line_at(d_crease, 0.006, px) * clamp(0.03 / px, 0.0, 1.0);
+#endif
 
 	// Rust eats the paint from the sills and the seams up (the beater).
 	float rust = 0.0;
@@ -232,11 +285,13 @@ void fragment() {
 	// The street's own light from above, soft: what the lamps leave on a
 	// body between their pools.
 	lit += car_lamp_light.rgb * base * shade * (1.0 - METALLIC) * (0.5 + 0.5 * n.y) * OVERHEAD * 0.6;
+	lit += moon_rim(n, v, f) * mix(0.3, 1.0, gloss) * (1.0 - occ) * (1.0 - gap);
 #endif
 #ifdef LAMPS
-	vec2 lamp = lamps(w_pos, n, v, mix(12.0, 220.0, gloss * gloss));
+	vec2 lamp = lamps(n, v, mix(12.0, 220.0, gloss * gloss));
 	vec3 lamp_c = car_lamp_light.rgb * shade;
-	lit += lamp_c * base * (1.0 - METALLIC) * lamp.x;
+	// 0.55: a full-strength wash turned bright paints pale under the tone map.
+	lit += lamp_c * base * (1.0 - METALLIC) * lamp.x * 0.55;
 	lit += lamp_c * tint * lamp.y * mix(0.08, 2.5, gloss) * (0.35 + 0.65 * coat + edges);
 	// Metal flake: sparks in the paint where a lamp's highlight falls.
 	float cell = fract(sin(dot(floor(obj_pos * 260.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
@@ -255,6 +310,10 @@ void vertex() {
 	obj_pos = VERTEX;
 	obj_nrm = NORMAL;
 	w_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+#ifdef LAMPS
+	lamp_a = lamp_vec(w_pos, 0);
+	lamp_b = lamp_vec(w_pos, 1);
+#endif
 }
 void fragment() {
 	vec3 n = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
@@ -268,13 +327,68 @@ void fragment() {
 	SPECULAR = 0.6;
 	vec3 lit = city(reflect(-v, n), 0.0) * fres * 1.5;
 	lit += vec3(1.0, 0.62, 0.3) * 0.022 * UV.x * UV.x * (1.0 - fres);
+#ifdef PANO
+	lit += moon_rim(n, v, f);
+#endif
 #ifdef LAMPS
-	vec2 lamp = lamps(w_pos, n, v, 320.0);
+	vec2 lamp = lamps(n, v, 320.0);
 	lit += car_lamp_light.rgb * lamp.y * (0.5 + fres);
 #endif
 	EMISSION = lit;
 #ifdef SEE_THROUGH
 	ALPHA = clamp(see + fres * 0.7, 0.0, 1.0);
+#endif
+}
+"""
+
+# The trim of a body assembled from parts (CarAssembler: plastic, rubber,
+# chrome, plate, mirror glass, lamp lens on one surface). COLOR.a * 8 is the
+# class; chrome and the mirror glass show the city and the lamps.
+const _TRIM := """
+// roughness, metallic, specular per class: 1 plastic, 2 rubber, 3 chrome,
+// 4 plate, 5 mirror glass, 6 red lamp lens.
+const vec3 FINISH[8] = vec3[](vec3(0.6, 0.0, 0.5), vec3(0.55, 0.0, 0.5), vec3(0.9, 0.0, 0.3), vec3(0.2, 1.0, 0.5),
+	vec3(0.45, 0.0, 0.5), vec3(0.06, 1.0, 0.5), vec3(0.12, 0.0, 0.8), vec3(0.6, 0.0, 0.5));
+// How strongly the trim mirrors the street (1 = as designed).
+uniform float trim_shine = 1.0;
+varying vec2 ao_shut;
+varying flat vec3 trim_fin;
+void vertex() {
+	obj_pos = VERTEX;
+	obj_nrm = NORMAL;
+	w_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+#ifdef LAMPS
+	lamp_a = lamp_vec(w_pos, 0);
+	lamp_b = lamp_vec(w_pos, 1);
+#endif
+	ao_shut = CUSTOM0.rg;
+	trim_fin = FINISH[clamp(int(COLOR.a * 8.0 + 0.5), 0, 7)];
+}
+void fragment() {
+	float shade = mix(1.0, ao_shut.x, 0.7) * (1.0 - 0.75 * ao_shut.y);
+	ALBEDO = COLOR.rgb * shade;
+	ROUGHNESS = trim_fin.x;
+	METALLIC = trim_fin.y;
+	SPECULAR = trim_fin.z;
+#ifdef PANO
+	vec3 n = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	vec3 v = normalize(CAMERA_POSITION_WORLD - w_pos);
+	float f = 1.0 - clamp(dot(n, v), 0.0, 1.0);
+	float f2 = f * f;
+	float fres = f2 * f2 * f;
+	float gloss = 1.0 - trim_fin.x;
+	// Chrome and mirror glass mirror the street; plastic and rubber only at a
+	// glancing angle, and dully.
+	float k = mix(0.04 + 0.5 * fres, 0.55 + 0.45 * fres, trim_fin.y) * mix(0.1, 1.0, gloss) * ao_shut.x * trim_shine;
+	vec3 tint = mix(vec3(1.0), COLOR.rgb * 1.6, trim_fin.y);
+	vec3 lit = city(reflect(-v, n), trim_fin.x) * k * tint;
+#ifdef LAMPS
+	vec2 lamp = lamps(n, v, mix(10.0, 200.0, gloss * gloss));
+	vec3 lamp_c = car_lamp_light.rgb * shade;
+	lit += lamp_c * COLOR.rgb * (1.0 - trim_fin.y) * lamp.x;
+	lit += lamp_c * tint * lamp.y * mix(0.05, 2.0, gloss) * (0.3 + 0.7 * k);
+#endif
+	EMISSION = lit;
 #endif
 }
 """
@@ -292,13 +406,17 @@ static func tier_of(preset: String) -> int:
 
 static func tier() -> int:
 	if _tier < 0:
-		_tier = tier_of(GraphicsSettings.preset)
+		_tier = clampi(GraphicsSettings.car_paint, TIER_LOW, TIER_HIGH)
 	return _tier
+
+## The tier a preset name stands for on its own (tests, tools).
+static func set_preset(preset: String) -> void:
+	set_tier(tier_of(preset))
 
 ## GraphicsSettings.apply() calls this: recompiles the car shaders when the
 ## tier changed (a one-off hitch in the menu), and swaps the contact shadow.
-static func set_preset(preset: String) -> void:
-	var t := tier_of(preset)
+static func set_tier(t: int) -> void:
+	t = clampi(t, TIER_LOW, TIER_HIGH)
 	if t == _tier:
 		return
 	_tier = t
@@ -311,6 +429,13 @@ static func set_preset(preset: String) -> void:
 ## material's own `paint` (the coupe, wheels).
 static func body_shader(instance_paint: bool) -> Shader:
 	return _shader("body_instance" if instance_paint else "body")
+
+## The paint and trim shaders of a body assembled from parts (CarAssembler).
+static func parts_body_shader() -> Shader:
+	return _shader("body_parts")
+
+static func parts_trim_shader() -> Shader:
+	return _shader("trim_parts")
 
 ## The glass shader; `see_through` blends the cabin in behind it.
 static func glass_shader(see_through: bool) -> Shader:
@@ -337,13 +462,17 @@ static func code(variant: String, at_tier: int) -> String:
 	match variant:
 		"body_instance":
 			return head + "#define PAINT_INSTANCE\n" + _LIB + _BODY
+		"body_parts":
+			return head + "#define PARTS\n" + _LIB + _BODY
+		"trim_parts":
+			return head + _LIB + _TRIM
 		"glass":
 			return head + _LIB + _GLASS
 		"glass_see":
 			return head + "#define SEE_THROUGH\n" + _LIB + _GLASS
 	return head + _LIB + _BODY
 
-const VARIANTS := ["body", "body_instance", "glass", "glass_see"]
+const VARIANTS := ["body", "body_instance", "body_parts", "trim_parts", "glass", "glass_see"]
 
 ## The finish instance uniform for a car kind.
 static func finish_for(kind: String) -> Vector4:

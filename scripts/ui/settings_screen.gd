@@ -41,7 +41,7 @@ const GROUPS := [
 	["Gears & Engine", [
 		["shift_up", "Shift up (manual)"], ["shift_down", "Shift down (manual)"], ["toggle_gearbox", "Gearbox: auto / semi / manual"],
 		["clutch", "Clutch (hold, manual)"], ["starter", "Start / stop the engine"]]],
-	["Camera", [["camera_cycle", "Camera smoothing"], ["camera_view", "Chase / cockpit view"], ["look_back", "Look back (hold)"], ["look_left", "Look left (hold)"], ["look_right", "Look right (hold)"], ["look_up", "Look up (hold)"], ["look_down", "Look down (hold)"], ["window", "Side window (hold: down, tap: up)"]]],
+	["Camera", [["camera_cycle", "Camera smoothing"], ["camera_view", "Change camera (cockpit, hood, chase)"], ["look_back", "Look back (hold)"], ["look_left", "Look left (hold)"], ["look_right", "Look right (hold)"], ["look_up", "Look up (hold)"], ["look_down", "Look down (hold)"], ["window", "Side window (hold: down, tap: up)"]]],
 	["Lights", [["turn_left", "Indicator left"], ["turn_right", "Indicator right"], ["hazard", "Hazard lights"]]],
 	["Driver", [["flip_off", "Flip off"], ["idle_action", "Idle action"]]],
 	["Audio & Radio", [["mute", "Mute"], ["map", "Map"], ["radio_next", "Next radio station"]]],

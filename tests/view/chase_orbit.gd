@@ -216,7 +216,12 @@ func _step(tick_n: int) -> bool:
 			if t == 20:
 				Input.action_press("camera_view")
 			if t == 24:
-				_check(cam.view == ChaseCamera.View.CHASE, "F again: back in the chase view")
+				_check(cam.view == ChaseCamera.View.HOOD, "F again: the hood view")
+				Input.action_release("camera_view")
+			if t == 28:
+				Input.action_press("camera_view")
+			if t == 32:
+				_check(cam.view == ChaseCamera.View.CHASE, "F once more: back in the chase view")
 				_check(absf(cam.orbit_yaw) < 0.01, "and straight behind the car (%.2f)" % cam.orbit_yaw)
 				Input.action_release("camera_view")
 				_go(S.PAUSE_TAP, n)

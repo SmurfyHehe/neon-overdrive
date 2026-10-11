@@ -8,7 +8,8 @@ extends SceneTree
 # 3), with 20 older report folders already in the (test) bug-report folder and
 # one rebound key in the settings file. Then F9 is pressed as a real key event.
 #
-# Fails on: no folder, any of drive.json / screen.png / log.txt / info.txt
+# Fails on: no folder, any of drive.json / screen.png / log.txt / info.txt /
+# errors.txt
 # missing or empty, drive.json not loading (by file, by folder and as "last"),
 # screen.png not being a picture, info.txt missing a line it should have, the
 # oldest of the 21 folders still being there (or any other one gone), no click,
@@ -20,8 +21,8 @@ const TestDriver := preload("res://scripts/core/test_driver.gd")
 const TestMode := preload("res://scripts/core/test_mode.gd")
 const DriveRecorder := preload("res://scripts/core/drive_recorder.gd")
 const RATE := 120
-const FILES := ["drive.json", "screen.png", "log.txt", "info.txt"]
-const INFO_HAS := ["git: branch ", "car: ", "night: ", "act: ", "graphics preset: ", "[keys]", "horn="]
+const FILES := ["drive.json", "screen.png", "log.txt", "info.txt", "errors.txt"]
+const INFO_HAS := ["git: branch ", "car: ", "night: ", "act: ", "graphics preset: ", "[keys]", "horn=", "[game state", " km/h"]
 
 var logger := Harness.ErrorCounter.new()
 var game: Node

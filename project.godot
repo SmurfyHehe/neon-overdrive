@@ -26,6 +26,11 @@ config/features=PackedStringArray("4.7", "Mobile")
 [autoload]
 
 TickRate="*res://scripts/core/tick_rate.gd"
+ErrorLog="*res://scripts/core/error_log.gd"
+
+[debug]
+
+settings/gdscript/always_track_call_stacks=true
 
 [display]
 

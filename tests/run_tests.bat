@@ -164,6 +164,8 @@ call :run core/view_settings --headless
 call :run core/discord_presence --headless
 call :run view/camera_smoothing_setting --headless
 call :run core/log_folder --headless
+rem Errors and warnings into errors.log (scrubbed, capped), and a crashed last run makes a crash folder.
+call :run core/error_log --headless
 call :run car/powertrain_health "--headless --fixed-fps 60"
 call :run car/fix_car "--headless --fixed-fps 60"
 call :run ui/fix_car_button --headless

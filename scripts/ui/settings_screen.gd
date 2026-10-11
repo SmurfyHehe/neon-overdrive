@@ -22,6 +22,7 @@ const LogFolder := preload("res://scripts/core/log_folder.gd")
 const DiscordPresence := preload("res://scripts/core/discord_presence.gd")
 const TestBuild := preload("res://scripts/core/test_build.gd")
 const WheelStyles := preload("res://scripts/view/wheel_styles.gd")
+const ErrorLog := preload("res://scripts/core/error_log.gd")
 
 const PAGES: Array[String] = ["Sound", "Picture", "Driving", "Controls", "Game"]
 ## What a mixer channel is called on the Sound page (the rest use their own name).
@@ -721,7 +722,7 @@ func _pick_car() -> void:
 	PlayerCars.save_settings()
 	game_state.restart()
 
-## The end of godot.log on the clipboard, for a bug report.
+## The end of godot.log on the clipboard, for a bug report (account name scrubbed).
 func _copy_log() -> void:
 	var f := FileAccess.open(LogFolder.log_file(), FileAccess.READ)
 	if f == null:
@@ -731,7 +732,7 @@ func _copy_log() -> void:
 	if n > LOG_TAIL_BYTES:
 		f.seek(n - LOG_TAIL_BYTES)
 	var text := f.get_buffer(mini(n, LOG_TAIL_BYTES)).get_string_from_utf8()
-	DisplayServer.clipboard_set("%s\n\n%s" % [GameInfo.title(), text])
+	DisplayServer.clipboard_set("%s\n\n%s" % [GameInfo.title(), ErrorLog.scrub(text)])
 	log_status.text = "Copied the end of the log."
 
 # ---------- Controls ----------

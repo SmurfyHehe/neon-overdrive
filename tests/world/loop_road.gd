@@ -174,21 +174,24 @@ func _districts() -> void:
 	# Blending into the next district happens at the lap's end too (8 -> 1).
 	if Districts.name_for_building(n - 1, 0.0) != Districts.name_at(0):
 		_fail("the last chunk of the lap does not blend into district 1")
-	# Crossings: one just inside each end of each city area, in city chunks only.
+	# Crossings: one just inside each end of each city area, in city chunks
+	# only, except in a district with a ring site: there the ring is the
+	# junction and the highway has no signals (ring sites, 2026-10-11).
 	var js := RoadMap.junctions()
 	var city_edges := 0
 	for d in 8:
-		if RoadMap.district_info(d).area == "city" and RoadMap.district_info(d + 1).area != "city":
+		var ringed := RoadMap.ring_at(floori(RoadMap.district_start(d) / 50.0) + 8) >= 0
+		var ringed_next := RoadMap.ring_at(floori(RoadMap.district_start(d + 1) / 50.0) + 8) >= 0
+		if RoadMap.district_info(d).area == "city" and RoadMap.district_info(d + 1).area != "city" and not ringed:
 			city_edges += 1
-		if RoadMap.district_info(d).area != "city" and RoadMap.district_info(d + 1).area == "city":
+		if RoadMap.district_info(d).area != "city" and RoadMap.district_info(d + 1).area == "city" and not ringed_next:
 			city_edges += 1
 	if js.size() != city_edges or js.size() == 0:
 		_fail("%d crossings for %d city edges" % [js.size(), city_edges])
 	# Far enough apart that a car is only ever near one (Junction.NEAR_FOCUS).
 	for a in js.size():
 		var gap := fposmod(js[(a + 1) % js.size()] - js[a], RoadMap.length())
-		# (Two ring sites' crossings are 800 m apart since they moved under the rings.)
-		if gap < 2.0 * Junction.NEAR_FOCUS:
+		if js.size() > 1 and gap < 1450.0:   # (one crossing alone is its own neighbour)
 			_fail("crossings at %.0f m and %.0f m are only %.0f m apart" % [js[a], js[(a + 1) % js.size()], gap])
 	for s in js:
 		if RoadMap.district_info(RoadMap.district_of(floori(s / L))).area != "city":

@@ -144,11 +144,10 @@ static func centre_s_near(s: float) -> float:
 	return RoadMap.junction_near(s) if RoadMap.is_loop() else CENTRE_S
 
 ## Within this far of the player a point's nearest crossing is the player's,
-## or it is too far from any other to matter: crossings are at least twice
-## this apart (two ring sites' are 800 m; tests/world/loop_road.gd checks) and
-## nothing here looks further than LOOK. So nearly every traffic car's
-## question each tick is one cached answer.
-const NEAR_FOCUS := 350.0
+## or it is too far from any other to matter: crossings are at least 1450 m
+## apart (tests/world/loop_road.gd checks) and nothing here looks further than
+## LOOK. So every traffic car's question each tick is one cached answer.
+const NEAR_FOCUS := 500.0
 static var _focus_key := Vector2(INF, INF)
 static var _focus_cz := 0.0
 

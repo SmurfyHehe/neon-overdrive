@@ -10,7 +10,8 @@ extends SceneTree
 #   the hand is at the tile when it happens
 # - N during a manual shift waits: no change while the hand is on the gear
 #   knob, the tap comes after the shift
-# - past the last tile the hand presses the knob: radio off, screen dimmed
+# - V (radio_power): the hand presses the knob, the radio turns off, screen dimmed;
+#   V again turns it back on at the same station
 # - chase view: the HUD radio card (RadioManager toast) changes on the tap too
 # - optional: TOUCH_RADIO_SHOT=<dir> saves cockpit screenshots there
 # Exit code 1 on failure. Run (a window opens):
@@ -20,6 +21,8 @@ const TIMEOUT_TICKS := 60 * 60
 const STEP_TIMEOUT := 60 * 6
 
 enum Step { BOOT, SETTLE, KEY, SHIFT, CYCLE, OFF, CHASE, SHOT, DONE }
+const DEFAULT_CARD := RadioStations.DEFAULT_STATION
+var key_code := KEY_N
 
 var step := Step.BOOT
 var step_start := 0
@@ -55,23 +58,24 @@ func _drive(c: PlayerCar) -> void:
 
 func _key(pressed: bool) -> void:
 	var ev := InputEventKey.new()
-	ev.keycode = KEY_N
-	ev.physical_keycode = KEY_N
+	ev.keycode = key_code
+	ev.physical_keycode = key_code
 	ev.pressed = pressed
 	Input.parse_input_event(ev)
 
 ## Presses N for two ticks (the game polls input on the physics tick).
-func _press() -> void:
+func _press(power := false) -> void:
+	key_code = KEY_V if power else KEY_N
 	_key(true)
 	key_tick = tick
-	key_station = radio.station
-	touch_pos = frame.radio_touch().pos
+	key_station = radio.card
+	touch_pos = frame.radio_touch(DriverModel.RADIO_POWER if power else DriverModel.RADIO_NEXT).pos
 
 func _on_contact(target: StringName) -> void:
 	if target != DriverModel.CONTACT_RADIO_TILE and target != DriverModel.CONTACT_RADIO_KNOB:
 		return
 	var touch := touch_pos + Vector3(0.0, -0.005, 0.055)   # hand origin with the fingertips on the glass
-	contacts.append([tick, target, radio.station, radio.toast_text, frame.head_unit.taps, d.hand_position(1).distance_to(touch)])
+	contacts.append([tick, target, radio.card, radio.toast_text, frame.head_unit.taps, d.hand_position(1).distance_to(touch), radio.station])
 
 func _physics_process(_delta: float) -> bool:
 	tick += 1
@@ -116,7 +120,7 @@ func _physics_process(_delta: float) -> bool:
 				_go(Step.KEY)
 		Step.KEY:
 			if contacts.is_empty():
-				_check(radio.station == key_station, "the station changed before the finger touched the screen (tick %d after the key)" % (tick - key_tick))
+				_check(radio.card == key_station and radio.station == -1, "the radio changed before the finger touched the screen (tick %d after the key)" % (tick - key_tick))
 				if waited == 3:
 					_check(d.act == DriverModel.Act.RADIO_REACH, "N sends the right hand toward the screen (act %s)" % DriverModel.Act.keys()[d.act])
 					_check(radio.toast_left <= 0.0, "the HUD radio card waits for the tap")
@@ -126,12 +130,12 @@ func _physics_process(_delta: float) -> bool:
 				return false
 			print("key to tap: %d ticks (%.2f s)" % [c[0] - key_tick, float(c[0] - key_tick) / Engine.physics_ticks_per_second])
 			_check(c[0] - key_tick >= 6, "the tap should come a moment after the key, not on it (%d ticks)" % (c[0] - key_tick))
-			_check(c[1] == DriverModel.CONTACT_RADIO_TILE and c[2] == 0, "the first tap lands on tile 0 and tunes it (%s, station %d)" % [c[1], c[2]])
-			_check(c[3] == "RADIO  %s" % RadioStations.STATIONS[0].name, "the radio card shows the station on the tap (%s)" % c[3])
+			_check(c[1] == DriverModel.CONTACT_RADIO_TILE and c[2] == DEFAULT_CARD and c[6] == DEFAULT_CARD, "the first tap lands on the glass and turns the radio on at the card (%s, card %d, station %d)" % [c[1], c[2], c[6]])
+			_check(c[3] == "%s %s." % [RadioStations.STATIONS[DEFAULT_CARD].dial, RadioStations.STATIONS[DEFAULT_CARD].name], "the caption names the station on the tap (%s)" % c[3])
 			_check(c[4] == 1, "one tap tick on contact (%d)" % c[4])
-			_check(c[5] < 0.03, "the hand is on tile 0 when the station changes (%.3f m off)" % c[5])
+			_check(c[5] < 0.03, "the hand is on the glass when the radio turns on (%.3f m off)" % c[5])
 			if true:
-				_check(not frame.head_unit.is_dimmed() and frame.head_unit.station == 0, "the screen shows station 0 lit")
+				_check(not frame.head_unit.is_dimmed() and frame.head_unit.station == DEFAULT_CARD, "the screen shows the station lit")
 				throttle = 1.0
 				_go(Step.SHIFT)
 		Step.SHIFT:
@@ -145,13 +149,13 @@ func _physics_process(_delta: float) -> bool:
 				var shifting := d.act in [DriverModel.Act.SHIFT_REACH, DriverModel.Act.SHIFT_HOLD, DriverModel.Act.SHIFT_RETURN]
 				if shifting:
 					shift_seen = true
-					if radio.station != key_station:
+					if radio.card != key_station:
 						changed_during_shift = true
 				if contacts.size() >= 2 and waited > 33 + 30:
 					var c: Array = contacts[1]
 					_check(shift_seen, "the hand was busy with the shift when N was pressed")
-					_check(not changed_during_shift, "the station must not change while the hand is shifting")
-					_check(c[2] == 1 and c[1] == DriverModel.CONTACT_RADIO_TILE, "after the shift the hand taps tile 1 (%s, station %d)" % [c[1], c[2]])
+					_check(not changed_during_shift, "the ring must not move while the hand is shifting")
+					_check(c[2] == (DEFAULT_CARD + 1) % 5 and c[1] == DriverModel.CONTACT_RADIO_TILE, "after the shift the hand taps and the ring moves one card (%s, card %d)" % [c[1], c[2]])
 					print("key during shift to tap: %d ticks" % (c[0] - key_tick))
 					throttle = 0.3
 					cycle_left = 2
@@ -159,8 +163,8 @@ func _physics_process(_delta: float) -> bool:
 		Step.CYCLE:
 			if not d.is_busy() and contacts.size() == 4 - cycle_left and waited > 10:
 				if cycle_left == 0:
-					_check(radio.station == 3, "four taps reach the last tile (%d)" % radio.station)
-					_press()
+					_check(radio.card == (DEFAULT_CARD + 3) % 5, "three slides land three cards on (%d)" % radio.card)
+					_press(true)
 					_go(Step.OFF)
 				else:
 					cycle_left -= 1
@@ -169,7 +173,7 @@ func _physics_process(_delta: float) -> bool:
 			if contacts.size() == 5 and not d.is_busy():
 				var c: Array = contacts[4]
 				var want := DriverModel.CONTACT_RADIO_KNOB
-				_check(c[1] == want and c[2] == -1, "past the last tile the hand presses the knob and the radio turns off (%s, station %d)" % [c[1], c[2]])
+				_check(c[1] == want and c[6] == -1 and c[2] == (DEFAULT_CARD + 3) % 5, "V sends the hand to the knob and the radio turns off (%s, station %d, card %d)" % [c[1], c[6], c[2]])
 				_check(c[5] < 0.03, "the hand is on the knob when the radio turns off (%.3f m off)" % c[5])
 				if frame.head_unit.has_knob:
 					_check(frame.head_unit.knob_presses == 1, "the knob was pressed once (%d)" % frame.head_unit.knob_presses)
@@ -179,13 +183,16 @@ func _physics_process(_delta: float) -> bool:
 				_go(Step.CHASE)
 		Step.CHASE:
 			if waited == 30:
-				_press()
+				_press(true)
 			if waited > 30:
 				if contacts.size() == 5:
-					_check(radio.toast_text == "RADIO OFF" and radio.station == -1, "in the chase view the radio card waits for the tap too (%s)" % radio.toast_text)
+					_check(radio.station == -1 and not radio._cap_label.visible, "radio off: no caption, and V waits for the tap (%d)" % radio.station)
 				elif waited > 30 + 5:
 					var c: Array = contacts[5]
-					_check(c[2] == 0 and c[3] == "RADIO  %s" % RadioStations.STATIONS[0].name, "chase view: the card shows the station at the tap (%s)" % c[3])
+					var want_card := (DEFAULT_CARD + 3) % 5
+					_check(c[6] == want_card and c[1] == DriverModel.CONTACT_RADIO_KNOB, "V again turns it back on at the same station (%d)" % c[6])
+					_check(c[3] == "%s %s." % [RadioStations.STATIONS[want_card].dial, RadioStations.STATIONS[want_card].name], "chase view: the caption names the station (%s)" % c[3])
+					_check(radio._cap_label.visible and radio._cap_label.text == c[3], "the bottom caption is up outside the cockpit (%s)" % radio._cap_label.text)
 					cam.set_view(ChaseCamera.View.COCKPIT)
 					_go(Step.SHOT)
 		Step.SHOT:

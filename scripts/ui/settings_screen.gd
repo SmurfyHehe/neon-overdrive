@@ -44,7 +44,7 @@ const GROUPS := [
 	["Camera", [["camera_cycle", "Camera smoothing"], ["camera_view", "Change camera (cockpit, hood, chase)"], ["look_back", "Look back (hold)"], ["look_left", "Look left (hold)"], ["look_right", "Look right (hold)"], ["look_up", "Look up (hold)"], ["look_down", "Look down (hold)"], ["window", "Side window (hold: down, tap: up)"]]],
 	["Lights", [["turn_left", "Indicator left"], ["turn_right", "Indicator right"], ["hazard", "Hazard lights"]]],
 	["Driver", [["flip_off", "Flip off"], ["idle_action", "Idle action"]]],
-	["Audio & Radio", [["mute", "Mute"], ["map", "Map"], ["radio_next", "Next radio station"]]],
+	["Audio & Radio", [["mute", "Mute"], ["map", "Map"], ["radio_next", "Next radio station"], ["radio_power", "Radio on/off"]]],
 	["Photo mode", [["photo_mode", "Photo mode"], ["photo_forward", "Forward"], ["photo_back", "Back"], ["photo_left", "Left"], ["photo_right", "Right"], ["photo_down", "Down"], ["photo_up", "Up"], ["photo_fast", "Faster (hold)"], ["photo_look_left", "Look left"], ["photo_look_right", "Look right"], ["photo_look_up", "Look up"], ["photo_look_down", "Look down"], ["photo_fov_narrow", "Zoom in"], ["photo_fov_wide", "Zoom out"], ["photo_shot", "Save photo"]]],
 	["Menus", [["pause", "Pause / back"], ["tuning_panel", "Tuning panel"], ["autotune_panel", "Auto-Tune panel"], ["put_back", "Put me back on the road (test build)"]]],
 ]
@@ -56,6 +56,7 @@ var current_page := 0
 
 # Sound
 var volume_sliders := {}   # channel -> HSlider
+var song_names_check: CheckButton
 # Picture
 var fullscreen_check: CheckButton
 var resolution_option: OptionButton
@@ -378,6 +379,10 @@ func _build_sound_page(parent: Control) -> Control:
 			func(v: float) -> void:
 				AudioSettings.set_volume(channel, v)
 				AudioSettings.save_settings())
+	_heading(page, "Radio")
+	song_names_check = _add_check(page, "Song names", AudioSettings.song_names, func(on: bool) -> void:
+		AudioSettings.song_names = on
+		AudioSettings.save_settings())
 	return _page_of(page)
 
 # ---------- Picture ----------

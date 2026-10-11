@@ -790,6 +790,8 @@ func _physics_process(_delta: float) -> void:
 		request_next_station()
 	if Input.is_action_just_pressed("put_back") and game_state.state == GameState.State.PLAYING:
 		put_back()
+	if Input.is_action_just_pressed("radio_power") and radio != null:
+		request_radio_power()
 
 ## Next station (N): with the cockpit built the driver's hand reaches the touch
 ## screen and the station changes on the tap (CockpitFrame.request_radio), in
@@ -800,6 +802,15 @@ func request_next_station() -> void:
 		f.request_radio()
 	else:
 		radio.next_station()
+
+## Radio on/off (V): the hand presses the knob or the power spot and the radio
+## switches on the finger's contact; with no cockpit it switches at once.
+func request_radio_power() -> void:
+	var f: CockpitFrame = camera.frame if camera != null else null
+	if f != null and f.driver != null:
+		f.request_radio(DriverModel.RADIO_POWER)
+	else:
+		radio.toggle_power()
 
 ## Moves the world back by shift_chunks whole chunks (positive = the car had
 ## driven forward, -z). Whole chunks keep chunk positions exact integers x 50.
@@ -1010,13 +1021,16 @@ func _setup_game_state() -> void:
 	radio = RadioManager.new()
 	radio.listener = player  # reception follows the car (tunnels, bridges)
 	radio.process_mode = Node.PROCESS_MODE_ALWAYS   # plays on, muffled, while paused (PauseLook)
+	# No song captions during a chase or a race (R4): the checks read what exists by then.
+	radio.busy_check = func() -> bool:
+		return (race != null and race.is_racing()) or (police_heat != null and police_heat.level > PoliceHeat.NONE)
 	add_child(radio)
 	add_child(PauseLook.new(game_state, player, camera))
 	add_child(TitleScreen.new(game_state))
 	menu_sfx = MenuSfx.new()
 	add_child(menu_sfx)
 	if run.get("radio") is float or run.get("radio") is int:
-		radio.tune_to(int(run.radio))
+		radio.restore(run)
 	if GameState.wants_title():
 		game_state.enter_title()   # the title shows over the frozen world; Drive is instant
 	else:
@@ -1038,7 +1052,7 @@ func _setup_game_state() -> void:
 	add_child(run_end)
 	run_end.sensor.enabled = wrecks_on()
 	if moments != null:
-		moments.announce = radio.announce
+		moments.announce = func(text: String) -> bool: return radio.announce(text, true)
 	world_mood = WorldMood.new()
 	add_child(world_mood)
 	_start_weather()
@@ -1062,7 +1076,7 @@ func _setup_police(benchmark: bool) -> void:
 	heat_icons = HeatIcons.new(police_heat)
 	add_child(heat_icons)
 	police_heat.line_said.connect(func(text: String) -> void:
-		if not radio.announce(text):
+		if not radio.announce(text, true):
 			heat_icons.say(text))
 	game_state.restarting.connect(police_heat.reset)
 	if PolicePatrol.enabled(benchmark):
@@ -1111,7 +1125,7 @@ func _on_hour(hour24: int) -> void:
 	# would be overwritten in the same frame and never heard).
 	if hour24 != NightClock.START_HOUR and not weather_spoke:
 		if hour24 == 2 and world_mood.crackdown_until < 0.0:
-			radio.announce(WorldMood.BAR_CLOSE_LINE)  # bar close starts on the hour
+			radio.announce(WorldMood.BAR_CLOSE_LINE, true)  # bar close starts on the hour
 		else:
 			radio.announce_hour(hour24)
 
@@ -1196,7 +1210,7 @@ func _begin_night(boot: bool) -> void:
 		var night := night_clock.night
 		get_tree().create_timer(FORECAST_DELAY, false).timeout.connect(func() -> void:
 			if night_clock.night == night and radio != null:
-				radio.announce(WeatherPlan.forecast_line(e)))
+				radio.announce(WeatherPlan.forecast_line(e), true))
 
 ## A saved weather block is used only if its stage is one this build knows
 ## (a save from a newer build has stages past SLUSH: the plan's stage is used).
@@ -1232,7 +1246,7 @@ func _apply_weather_change(e: Dictionary) -> bool:
 	Weather.set_level(int(e.change_to), false, e.snow_roads)
 	_refresh_frost()
 	var line := WeatherPlan.change_line(e)
-	return line != "" and radio != null and radio.announce(line)
+	return line != "" and radio != null and radio.announce(line, true)
 
 func _on_race_ended_weather(_result: int) -> void:
 	if _change_waits and not Weather.tonight.is_empty() and _plan_active():
@@ -1265,7 +1279,7 @@ func _on_event(e: int) -> void:
 	if e == WorldMood.Event.CRACKDOWN:
 		traffic.reform_all()
 	if WorldMood.EVENT_LINES.has(e):
-		radio.announce(WorldMood.EVENT_LINES[e])
+		radio.announce(WorldMood.EVENT_LINES[e], true)
 
 func _process(delta: float) -> void:
 	_update_bands()

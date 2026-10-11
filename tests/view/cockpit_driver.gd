@@ -195,7 +195,7 @@ func _physics_process(_delta: float) -> bool:
 			if waited == ticks(1.2):
 				_check(hand_at_radio, "a station change should send the right hand to the head unit")
 				_check(not d.is_busy() and d.hand_position(1).distance_to(d.grip_position(1)) <= GRIP_TOL, "the hand returns to the rim after the radio press")
-				_check(game.radio.station == 0 and frame.head_unit.station == 0, "the tap tuned the first station and the screen shows it (%d)" % frame.head_unit.station)
+				_check(game.radio.station == RadioStations.DEFAULT_STATION and frame.head_unit.station == RadioStations.DEFAULT_STATION, "the tap turned the radio on at the card and the screen shows it (%d)" % frame.head_unit.station)
 				throttle = 0.0
 				handbrake = 1.0
 				_go(Step.BRAKE)

@@ -228,6 +228,9 @@ const CONTACT_GEAR := &"gear_knob"
 const CONTACT_HANDBRAKE := &"handbrake"
 const CONTACT_RADIO_TILE := &"radio_tile"
 const CONTACT_RADIO_KNOB := &"radio_knob"
+## What a radio request asks for: the next station (N) or the power press (V).
+const RADIO_NEXT := 0
+const RADIO_POWER := 1
 ## Next-station presses that may wait for the hand at once (more are dropped).
 const MAX_RADIO_REQUESTS := 4
 
@@ -295,6 +298,7 @@ var _idle_drags := 0             # drags already breathed out this use
 var _draw := 0.0                 # 0..1 through the draw or the sip
 var _window_idle := 0.0          # seconds since the window last moved
 var radio_requests := 0          # next-station presses waiting for the hand
+var _radio_kinds: Array[int] = []   # what each waiting press asks for (RADIO_NEXT / RADIO_POWER)
 var contact_count := 0
 var last_contact := &""
 var _radio_target := Vector3.ZERO  # car space, where the finger lands this reach
@@ -957,14 +961,18 @@ func _update_events() -> void:
 	_brake_was_on = brake_on
 
 ## Next station asked for (the key): the hand goes when it is free.
-func request_radio() -> void:
-	radio_requests = mini(radio_requests + 1, MAX_RADIO_REQUESTS)
+func request_radio(kind := RADIO_NEXT) -> void:
+	if radio_requests >= MAX_RADIO_REQUESTS:
+		return
+	radio_requests += 1
+	_radio_kinds.append(kind)
 
 ## Starts a reach for the screen: picks the touch point now (the next tile, or
 ## the knob past the last one) so the hand flies to where the tap will land.
 func _begin_radio() -> void:
 	radio_requests -= 1
-	var touch := frame.radio_touch()
+	var kind: int = _radio_kinds.pop_front() if not _radio_kinds.is_empty() else RADIO_NEXT
+	var touch := frame.radio_touch(kind)
 	_radio_target = touch.pos
 	_radio_contact = touch.contact
 	_pressed = false

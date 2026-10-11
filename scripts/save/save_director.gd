@@ -152,6 +152,8 @@ func capture() -> Dictionary:
 	var live := car_live()
 	if not live.is_empty():
 		run.car_live = live
+		run.radio_on = game.radio.player_on()
+		run.radio_id = RadioStations.STATIONS[game.radio.player_station()].id
 	return run
 
 ## The car's part of a run save. "box" is PlayerCar.Transmission (the gearbox

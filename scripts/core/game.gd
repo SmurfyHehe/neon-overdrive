@@ -835,6 +835,7 @@ func _setup_traffic() -> void:
 	if Junction.enabled:
 		junction = Junction.new()
 		junction.night_clock = night_clock
+		junction.player = player
 		# A random point in the cycle, so the first arrival is not always green.
 		junction.t = randf() * Junction.CYCLE
 		add_child(junction)

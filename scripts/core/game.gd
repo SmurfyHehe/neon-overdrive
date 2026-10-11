@@ -485,6 +485,7 @@ func _setup_road_shape() -> void:
 	road_seed = int(seed_env) if seed_env.is_valid_int() else (Benchmark.SEED if Benchmark.requested() else randi())
 	var road := _pick_road()
 	RoadMap.use(road, road_act)
+	RoadMap.known_stops = {}
 	if RoadMap.is_loop() and not seed_env.is_valid_int():
 		road_seed = RoadMap.seed_of(RoadMap.road_id)
 	if resume_place:
@@ -496,6 +497,8 @@ func _setup_road_shape() -> void:
 		# On a loop only the place on the lap matters: laps driven are dropped.
 		origin_index = RoadMap.lap_chunk(int(run.origin_index))
 		recenter_count = int(run.get("recenter_count", 0))
+		for sid in run.get("known_stops", []):
+			RoadMap.known_stops[String(sid)] = true
 		# The save's "sections" are not read back. They held each chunk's barrier
 		# roll when that was random (true / false); since RoadBarriers (R1) the
 		# barrier type and its crossover gap follow from the road seed alone

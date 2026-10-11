@@ -194,6 +194,14 @@ rem Near-band traffic: hand-overs between the 60 m physics band and the rails, b
 call :run traffic/traffic_near_band "--headless --fixed-fps 120"
 rem ~45 s: race core (RC1): win across a recenter, lose, give up from the pause menu.
 call :run core/race_core "--headless --fixed-fps 60"
+rem Rival driver (step 1): the plan and line maths; then, each a few minutes on the real game at 120 Hz:
+rem same inputs whether the player is behind or ahead, the racing line through four bends, pace against the grip bot.
+call :run traffic/rival_plan_pure --headless
+call :run traffic/rival_no_rubber_band "--headless --fixed-fps 120"
+call :run traffic/rival_line "--headless --fixed-fps 120"
+call :run traffic/rival_pace "--headless --fixed-fps 120"
+rem The race as the game runs it: traffic, bends and hills, the rival handed back to traffic at the end.
+call :run traffic/rival_race "--headless --fixed-fps 120"
 rem ~40 s: the traffic cars (stage B step 5) against their sheets, then a drive each at the game's 120 Hz.
 rem npc_cars drives every kind (14 since the player and cop cars joined), about 16 min: give it 20.
 set "TT_SAVED=%TEST_TIMEOUT%"

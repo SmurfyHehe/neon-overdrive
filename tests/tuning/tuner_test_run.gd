@@ -86,8 +86,9 @@ func _run() -> void:
 	# A second run on the changed setup: stock is not driven again.
 	var stock_before: Dictionary = screen.stock_run
 	screen.start_test_run()
+	_check(screen.test_running(), "the second test run should be running")
 	t0 = Time.get_ticks_msec()
-	while screen.test_button.disabled and Time.get_ticks_msec() - t0 < TIMEOUT_S * 1000.0:
+	while screen.test_running() and Time.get_ticks_msec() - t0 < TIMEOUT_S * 1000.0:
 		await process_frame
 	_check(screen.stock_run == stock_before, "the second test run should reuse the stock run")
 	_check(screen.pit_wall.visible, "the second test run should show the pit-wall result")

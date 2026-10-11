@@ -115,6 +115,10 @@ func _map() -> void:
 		# the slip lane is whole at each gore and closed at its far end
 		_check(absf(RoadMap.aux(rc - RoadMap.RAMP_CHUNKS - 1).y - RoadMap.AUX_W) < 1e-6, "ring %s: the slip lane is %.1f m wide at the first gore" % [rings[r].id, RoadMap.aux(rc - RoadMap.RAMP_CHUNKS - 1).y])
 		_check(absf(RoadMap.aux(rc + RoadMap.RAMP_CHUNKS).x - RoadMap.AUX_W) < 1e-6, "ring %s: the slip lane is %.1f m wide at the second gore" % [rings[r].id, RoadMap.aux(rc + RoadMap.RAMP_CHUNKS).x])
+		# and full width for its two chunks nearest the gore, at every site (no
+		# crossing cuts one short: they stand under the rings)
+		for k in [-6, -5, 4, 5]:
+			_check(RoadMap.aux(rc + k) == Vector2(RoadMap.AUX_W, RoadMap.AUX_W), "ring %s: the slip lane is %s wide beside chunk k %d" % [rings[r].id, RoadMap.aux(rc + k), k])
 		_check(RoadMap.aux(rc - RoadMap.RAMP_CHUNKS - RoadMap.AUX_CHUNKS).x == 0.0 and RoadMap.aux(rc + RoadMap.RAMP_CHUNKS + RoadMap.AUX_CHUNKS - 1).y == 0.0, "ring %s: the slip lane does not close" % rings[r].id)
 	# a slip lane never changes width across a chunk join, and is shut at a crossing
 	for c in RoadMap.period:

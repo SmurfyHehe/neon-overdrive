@@ -208,16 +208,16 @@ static func use(id: int, act_value: int = 1) -> void:
 		_starts.append(period)
 		_kinds.append(String(d.kind))
 		period += int(d.chunks)
-	# A crossing just inside each end of every city area.
+	# A crossing just inside each end of every city area that has no ring site.
 	for n in ds.size():
 		var prev: Dictionary = ds[posmod(n - 1, ds.size())]
 		var next: Dictionary = ds[posmod(n + 1, ds.size())]
 		if ds[n].area != "city":
 			continue
-		if prev.area != "city":
-			_junctions.append(float(_starts[n]) * L + JUNCTION_INSET)
-		if next.area != "city":
-			_junctions.append(float(_starts[n] + int(ds[n].chunks)) * L - JUNCTION_INSET)
+		for at in [float(_starts[n]) * L + JUNCTION_INSET if prev.area != "city" else -1.0,
+				float(_starts[n] + int(ds[n].chunks)) * L - JUNCTION_INSET if next.area != "city" else -1.0]:
+			if at >= 0.0 and _crossing_allowed(road, at, float(period) * L):
+				_junctions.append(at)
 	# Rings, exits and gaps on the part of the road this act has; straight,
 	# level road at each and at the crossings.
 	_pins.resize(period)
@@ -269,6 +269,20 @@ static func use(id: int, act_value: int = 1) -> void:
 	_map_len.append(0.0)
 	for i in pts.size():
 		_map_len.append(_map_len[i] + (pts[(i + 1) % pts.size()] as Vector2).distance_to(pts[i]))
+
+## Whether a crossing wanted at `at` gets built. Not beside a ring site
+## (Roy, 2026-10-11): a crossing belongs where an exit's ramp meets the
+## street, and there that is the ring itself, so the highway has no signals
+## and the slip lanes keep their full length. A district with no ring (the
+## tunnel) keeps its crossing.
+static func _crossing_allowed(road: Dictionary, at: float, lap: float) -> bool:
+	var reach := float(RAMP_CHUNKS + AUX_CHUNKS) * L
+	for r in road.rings:
+		if float(r.s) >= lap or String(r.kind) == "tunnel":
+			continue
+		if at >= float(r.s) - reach and at < float(r.s) + reach:
+			return false
+	return true
 
 static func _pin(chunk: int, approach: int) -> void:
 	for i in range(chunk - approach, chunk + approach + 1):

@@ -838,6 +838,11 @@ static func npc_spec(kind: String) -> Dictionary:
 			s["rear_damping_ratio"] = 0.50
 			s["front_arb_ratio"] = 0.22
 			s["rear_arb_ratio"] = 0.16
+	# Cops, rivals and crew cars (every kind with a brake entry) show their
+	# brakes within 40 m (CarParts, car-parts-every-vehicle plan, Roy 1171);
+	# traffic stays on wheels only.
+	if CarFittings.has_brakes(kind):
+		s["parts"] = "full"
 	return s
 
 ## Physics layers (milestone 3). Every car sits on CAR_LAYER and collides with

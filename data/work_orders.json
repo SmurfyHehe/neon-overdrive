@@ -1,0 +1,523 @@
+[
+ {
+  "id": "halloran_brakes",
+  "giver": "walt",
+  "customer": "Mrs. Halloran",
+  "car": "n1_commuter",
+  "problem": "Brakes grind. Front left.",
+  "kind": "bench",
+  "steps": [
+   {
+    "label": "Wheels off",
+    "zone": 0.22,
+    "speed": 1.0,
+    "style": "sweep"
+   },
+   {
+    "label": "Old pads out",
+    "zone": 0.18,
+    "speed": 1.0,
+    "style": "sweep"
+   },
+   {
+    "label": "New pads in",
+    "zone": 0.18,
+    "speed": 1.1,
+    "style": "bounce"
+   },
+   {
+    "label": "Bleed",
+    "zone": 0.14,
+    "speed": 1.2,
+    "style": "rush"
+   },
+   {
+    "label": "Wheels on",
+    "zone": 0.22,
+    "speed": 1.0,
+    "style": "sweep"
+   }
+  ],
+  "pay": {
+   "min": 0.2,
+   "max": 0.4
+  },
+  "favour": false,
+  "extra": null,
+  "lines": {
+   "card": "Mrs. Halloran's brakes. She pays on time. Be nice.",
+   "start": "PLACEHOLDER",
+   "miss": "PLACEHOLDER",
+   "done": "PLACEHOLDER"
+  },
+  "unlock": {
+   "from_night": 1
+  },
+  "away": [],
+  "weight": 3
+ },
+ {
+  "id": "moose_gearbox",
+  "giver": "moose",
+  "customer": "Moose's customer",
+  "car": "n2_cityhatch",
+  "problem": "Gearbox whines in third.",
+  "kind": "bench",
+  "steps": [
+   {
+    "label": "Box on the jack",
+    "zone": 0.2,
+    "speed": 1.0,
+    "style": "hold"
+   },
+   {
+    "label": "Line it up",
+    "zone": 0.16,
+    "speed": 1.0,
+    "style": "hold"
+   },
+   {
+    "label": "Bolt it",
+    "zone": 0.18,
+    "speed": 1.1,
+    "style": "sweep"
+   }
+  ],
+  "pay": {
+   "min": 0.25,
+   "max": 0.4
+  },
+  "favour": true,
+  "extra": null,
+  "lines": {
+   "card": "PLACEHOLDER",
+   "start": "PLACEHOLDER",
+   "miss": "PLACEHOLDER",
+   "done": "PLACEHOLDER"
+  },
+  "unlock": {
+   "from_night": 1
+  },
+  "away": [],
+  "weight": 3
+ },
+ {
+  "id": "scrap_alternator",
+  "giver": "ferris",
+  "customer": "Walt",
+  "car": "n1_commuter",
+  "problem": "Need an alternator. Big saloon in the yard.",
+  "kind": "scrap",
+  "steps": [
+   {
+    "label": "Belt off",
+    "zone": 0.2,
+    "speed": 1.0,
+    "style": "sweep"
+   },
+   {
+    "label": "Bolts out",
+    "zone": 0.16,
+    "speed": 1.2,
+    "style": "bounce"
+   },
+   {
+    "label": "Alternator free",
+    "zone": 0.14,
+    "speed": 1.3,
+    "style": "rush"
+   }
+  ],
+  "pay": {
+   "min": 0.2,
+   "max": 0.35
+  },
+  "favour": false,
+  "extra": null,
+  "lines": {
+   "card": "PLACEHOLDER",
+   "start": "PLACEHOLDER",
+   "miss": "That's a wagon, kid.",
+   "done": "PLACEHOLDER"
+  },
+  "unlock": {
+   "from_night": 3
+  },
+  "away": [],
+  "weight": 3,
+  "donor": {
+   "want": "n1_commuter",
+   "decoys": [
+    "p6_crossover",
+    "n2_cityhatch"
+   ]
+  }
+ },
+ {
+  "id": "pilar_bushings",
+  "giver": "pilar",
+  "customer": "Pilar",
+  "car": "p4_kei",
+  "problem": "Worn bushings. It wanders.",
+  "kind": "bench",
+  "steps": [
+   {
+    "label": "Press out",
+    "zone": 0.18,
+    "speed": 1.3,
+    "style": "rush"
+   },
+   {
+    "label": "Press in",
+    "zone": 0.18,
+    "speed": 1.1,
+    "style": "bounce"
+   },
+   {
+    "label": "Torque up",
+    "zone": 0.2,
+    "speed": 1.0,
+    "style": "sweep"
+   }
+  ],
+  "pay": {
+   "min": 0.15,
+   "max": 0.25
+  },
+  "favour": true,
+  "extra": {
+   "kind": "road",
+   "ref": "pilar_back_road"
+  },
+  "lines": {
+   "card": "PLACEHOLDER",
+   "start": "PLACEHOLDER",
+   "miss": "PLACEHOLDER",
+   "done": "PLACEHOLDER"
+  },
+  "unlock": {
+   "from_night": 2
+  },
+  "away": [],
+  "weight": 3
+ },
+ {
+  "id": "jo_regular",
+  "giver": "jo",
+  "customer": "One of Jo's regulars",
+  "car": "n1_commuter",
+  "problem": "Broke down at the pumps. Won't start.",
+  "kind": "bench",
+  "steps": [
+   {
+    "label": "Battery test",
+    "zone": 0.22,
+    "speed": 1.0,
+    "style": "sweep"
+   },
+   {
+    "label": "Clean the terminals",
+    "zone": 0.2,
+    "speed": 1.0,
+    "style": "sweep"
+   },
+   {
+    "label": "Starter in",
+    "zone": 0.16,
+    "speed": 1.1,
+    "style": "bounce"
+   }
+  ],
+  "pay": {
+   "min": 0.2,
+   "max": 0.35
+  },
+  "favour": false,
+  "extra": null,
+  "lines": {
+   "card": "PLACEHOLDER",
+   "start": "PLACEHOLDER",
+   "miss": "PLACEHOLDER",
+   "done": "PLACEHOLDER"
+  },
+  "unlock": {
+   "from_night": 4
+  },
+  "away": [],
+  "weight": 3
+ },
+ {
+  "id": "dave_old_car",
+  "giver": "dave",
+  "customer": "Dave",
+  "car": "n1_commuter",
+  "problem": "Dave's old car won't start in the station car park.",
+  "kind": "bench",
+  "steps": [
+   {
+    "label": "Plugs out",
+    "zone": 0.2,
+    "speed": 1.0,
+    "style": "sweep"
+   },
+   {
+    "label": "New plugs",
+    "zone": 0.16,
+    "speed": 1.1,
+    "style": "bounce"
+   },
+   {
+    "label": "Fuel pump relay",
+    "zone": 0.14,
+    "speed": 1.3,
+    "style": "rush"
+   }
+  ],
+  "pay": {
+   "min": 0.15,
+   "max": 0.25
+  },
+  "favour": false,
+  "extra": {
+   "kind": "line_on_air",
+   "ref": "dave_names_shop"
+  },
+  "lines": {
+   "card": "PLACEHOLDER",
+   "start": "PLACEHOLDER",
+   "miss": "PLACEHOLDER",
+   "done": "PLACEHOLDER"
+  },
+  "unlock": {
+   "from_night": 5
+  },
+  "away": [],
+  "weight": 3
+ },
+ {
+  "id": "crew_docks_rust",
+  "giver": "crew:docks",
+  "customer": "Docks crew",
+  "car": "n2_cityhatch",
+  "problem": "Rust through the sills.",
+  "kind": "bench",
+  "steps": [
+   {
+    "label": "Cut it out",
+    "zone": 0.18,
+    "speed": 1.0,
+    "style": "sweep"
+   },
+   {
+    "label": "Weld the patch",
+    "zone": 0.14,
+    "speed": 1.0,
+    "style": "hold"
+   },
+   {
+    "label": "Seal it",
+    "zone": 0.2,
+    "speed": 1.0,
+    "style": "sweep"
+   }
+  ],
+  "pay": {
+   "min": 0.3,
+   "max": 0.45
+  },
+  "favour": false,
+  "extra": null,
+  "lines": {
+   "card": "PLACEHOLDER",
+   "start": "PLACEHOLDER",
+   "miss": "PLACEHOLDER",
+   "done": "PLACEHOLDER"
+  },
+  "unlock": {
+   "from_night": 1,
+   "flag": "crew_beaten:docks"
+  },
+  "away": [],
+  "weight": 3
+ },
+ {
+  "id": "rookie_own_car",
+  "giver": "rookie",
+  "customer": "The rookie",
+  "car": "n1_commuter",
+  "problem": "His own car. Wants a receipt.",
+  "kind": "bench",
+  "steps": [
+   {
+    "label": "Oil out",
+    "zone": 0.22,
+    "speed": 1.0,
+    "style": "sweep"
+   },
+   {
+    "label": "Filter",
+    "zone": 0.18,
+    "speed": 1.1,
+    "style": "bounce"
+   },
+   {
+    "label": "Oil in",
+    "zone": 0.22,
+    "speed": 1.0,
+    "style": "sweep"
+   }
+  ],
+  "pay": {
+   "min": 0.2,
+   "max": 0.3
+  },
+  "favour": false,
+  "extra": null,
+  "lines": {
+   "card": "PLACEHOLDER",
+   "start": "PLACEHOLDER",
+   "miss": "PLACEHOLDER",
+   "done": "PLACEHOLDER"
+  },
+  "unlock": {
+   "from_night": 8
+  },
+  "away": [],
+  "weight": 3
+ },
+ {
+  "id": "walt_regular_1",
+  "giver": "walt",
+  "customer": "A regular",
+  "car": "n1_commuter",
+  "problem": "Squeal from the belt.",
+  "kind": "bench",
+  "steps": [
+   {
+    "label": "Belt off",
+    "zone": 0.22,
+    "speed": 1.0,
+    "style": "sweep"
+   },
+   {
+    "label": "New belt",
+    "zone": 0.2,
+    "speed": 1.0,
+    "style": "sweep"
+   },
+   {
+    "label": "Tension",
+    "zone": 0.16,
+    "speed": 1.1,
+    "style": "bounce"
+   }
+  ],
+  "pay": {
+   "min": 0.2,
+   "max": 0.35
+  },
+  "favour": false,
+  "extra": null,
+  "lines": {
+   "card": "PLACEHOLDER",
+   "start": "PLACEHOLDER",
+   "miss": "PLACEHOLDER",
+   "done": "PLACEHOLDER"
+  },
+  "unlock": {
+   "from_night": 1
+  },
+  "away": [],
+  "weight": 1
+ },
+ {
+  "id": "walt_regular_2",
+  "giver": "walt",
+  "customer": "A regular",
+  "car": "n2_cityhatch",
+  "problem": "Exhaust blowing at the manifold.",
+  "kind": "bench",
+  "steps": [
+   {
+    "label": "Bolts out",
+    "zone": 0.18,
+    "speed": 1.1,
+    "style": "bounce"
+   },
+   {
+    "label": "Gasket",
+    "zone": 0.2,
+    "speed": 1.0,
+    "style": "sweep"
+   },
+   {
+    "label": "Bolts in",
+    "zone": 0.16,
+    "speed": 1.2,
+    "style": "rush"
+   }
+  ],
+  "pay": {
+   "min": 0.2,
+   "max": 0.35
+  },
+  "favour": false,
+  "extra": null,
+  "lines": {
+   "card": "PLACEHOLDER",
+   "start": "PLACEHOLDER",
+   "miss": "PLACEHOLDER",
+   "done": "PLACEHOLDER"
+  },
+  "unlock": {
+   "from_night": 1
+  },
+  "away": [],
+  "weight": 1
+ },
+ {
+  "id": "walt_regular_3",
+  "giver": "walt",
+  "customer": "A regular",
+  "car": "n1_commuter",
+  "problem": "Coolant on the drive.",
+  "kind": "bench",
+  "steps": [
+   {
+    "label": "Find the hose",
+    "zone": 0.22,
+    "speed": 1.0,
+    "style": "sweep"
+   },
+   {
+    "label": "New clamp",
+    "zone": 0.18,
+    "speed": 1.1,
+    "style": "bounce"
+   },
+   {
+    "label": "Fill and bleed",
+    "zone": 0.14,
+    "speed": 1.2,
+    "style": "rush"
+   }
+  ],
+  "pay": {
+   "min": 0.2,
+   "max": 0.35
+  },
+  "favour": false,
+  "extra": null,
+  "lines": {
+   "card": "PLACEHOLDER",
+   "start": "PLACEHOLDER",
+   "miss": "PLACEHOLDER",
+   "done": "PLACEHOLDER"
+  },
+  "unlock": {
+   "from_night": 1
+  },
+  "away": [],
+  "weight": 1
+ }
+]

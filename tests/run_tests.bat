@@ -151,6 +151,8 @@ rem Save system: atomic files, 3 slots, chases, rename migration (scripts/save/)
 call :run core/save_system --headless
 rem F0: cash and bank through reloads, chases and 6 a.m. (and the HUD and pause screen).
 call :run core/wallet --headless
+rem Work board W0: pay rules, the daily draw, shop pay into the bank once.
+call :run core/work_orders --headless
 rem Police F0/F1: heat levels and icons, cop_can_see_player, headlights off hides, night one lines.
 call :run traffic/police_heat --headless
 rem Ending a run on a crash: the rules, the hit sensor, the crash screen; then the real restart.

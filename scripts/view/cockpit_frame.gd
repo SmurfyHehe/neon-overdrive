@@ -164,6 +164,7 @@ const DIAL_FACE := Color("#0B0E14")
 ##   utility  the crossover: two-tone grey cloth, hard grey plastics
 ##   drift    the drift coupe: hard dark-grey plastics, a black cloth bucket with a red-stitched
 ##            centre beside the old brown velour passenger seat, an amber strip
+##   truck    the street truck: charcoal cloth bench, grey-black plastics, a sodium strip
 const TRIMS := {
 	"stock": {"plastic": PLASTIC, "plastic_light": PLASTIC_LIGHT, "trim": TRIM, "seat": SEAT, "seat_pass": SEAT, "seat_panel": SEAT_PANEL,
 		"leather": LEATHER, "carpet": CARPET, "strip": Color("#FFC06659"), "dash": PLASTIC, "dash_face": PLASTIC_LIGHT},
@@ -181,6 +182,8 @@ const TRIMS := {
 		"leather": Color("#1D1F23"), "carpet": Color("#111214"), "strip": Color("#FFC06633"), "dash": Color("#24272B"), "dash_face": Color("#2E3136")},
 	"drift": {"plastic": Color("#2A2C30"), "plastic_light": Color("#383B40"), "trim": Color("#3C3F45"), "seat": Color("#141518"), "seat_pass": Color("#6E5238"), "seat_panel": Color("#8A1F22"),
 		"leather": Color("#121318"), "carpet": Color("#17181B"), "strip": Color("#FFC06640"), "dash": Color("#2A2C30"), "dash_face": Color("#34373C")},
+	"truck": {"plastic": Color("#202226"), "plastic_light": Color("#2C2F34"), "trim": Color("#3A3D43"), "seat": Color("#2A2B2E"), "seat_pass": Color("#2A2B2E"), "seat_panel": Color("#3C3E42"),
+		"leather": Color("#1E1F22"), "carpet": Color("#121316"), "strip": Color("#FF8A1F4D"), "dash": Color("#202226"), "dash_face": Color("#2A2D32")},
 }
 const BACKLIGHT_ENERGY := 1.6
 

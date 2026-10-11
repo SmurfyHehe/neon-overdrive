@@ -24,6 +24,7 @@ const SEAT := {
 	"p5_muscle":    {"seat_h": 0.23, "eye_back": 0.36, "console": "tunnel", "seats": "bench",  "cluster": "strip",  "speedo": 260.0},
 	"p6_crossover": {"seat_h": 0.31, "eye_back": 0.38, "console": "tunnel", "seats": "bucket", "cluster": "dials",  "speedo": 260.0},
 	"p8_driftcoupe": {"seat_h": 0.24, "eye_back": 0.36, "console": "tunnel", "seats": "bucket", "cluster": "centre", "speedo": 240.0},
+	"p10_truck":    {"seat_h": 0.34, "eye_back": 0.40, "console": "flat",   "seats": "bench",  "cluster": "wide",   "speedo": 200.0},
 }
 
 var skin: Array = []   # [a, b, c, n]

@@ -97,7 +97,7 @@ func _catalogue() -> void:
 	b.free()
 
 func _slots() -> void:
-	var kinds := ["p0_beater", "p1_coupe", "p2_hothatch", "p3_tuner", "p4_kei", "p5_muscle", "p6_crossover"]
+	var kinds := ["p0_beater", "p1_coupe", "p2_hothatch", "p3_tuner", "p4_kei", "p5_muscle", "p6_crossover", "p10_truck"]
 	for kind in kinds:
 		var cab := CabinSpec.for_kind(kind)
 		var spot := CabinSpots.dash_pass(kind)

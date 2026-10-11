@@ -450,6 +450,60 @@ P17 = {
     'options': {},
 }
 
+P10 = {
+    'id': 'p10_truck', 'role': 'player', 'label': 'Street truck',
+    'refs': 'the lowered regular-cab short-bed sport trucks of 1993-99 (category only; no brand): a pushrod V8, rear drive, '
+            'a covered bed, a roll-pan tail',
+    'rule': 'A workbench with a V8 bolted on, dropped two inches: a single upright cab, ONE level line from the cab back '
+            'to the tailgate top (hard cover flush with the rails), 2 cm arches, a roll-pan tail with tall corner lamps.',
+    'tier': 'T2 street truck (Harlan Drover), Diesel Row crew truck, for sale after act 2 (you pay); MC2 brief 2026-10-11',
+    'L': 5.05, 'WB': 2.95, 'OHf': 0.90, 'W': 1.92,
+    # 0.72 m tyres, 255 front / 285 rear, 2 cm arch gaps (the brief): the lowered one, not the Camel
+    'wheel': {'r': 0.36, 'w': 0.255, 'w_rear': 0.285, 'track': 1.62, 'track_rear': 1.64, 'arch_gap': 0.02,
+              'rim': '5spoke', 'rim_ratio': 0.70},
+    # low hood to a cowl at 1.02, screen raked 38 deg to a flat roof at 1.62, a 12 deg backlight down to the
+    # bed rail at 1.08, then one level line to the tailgate (the cover sits flush with the rails)
+    'top': [(0.0, 0.76), (0.05, 0.84), (0.30, 0.88), (1.25, 1.02), (1.68, 1.59), (1.78, 1.62), (2.52, 1.62), (2.60, 1.60),
+            (2.71, 1.10), (2.72, 1.08), (2.725, 1.02), (2.775, 1.02), (2.78, 1.08), (5.00, 1.08), (5.05, 1.02)],
+    # the belly at 0.20; the frame rails hang to the 0.14 ground clearance (kit)
+    'floor': [(0, 0.42), (0.22, 0.20), (4.80, 0.20), (5.05, 0.34)],
+    # flat bed sides, half width 0.96, the nose a little narrower
+    # a real 60 mm cab-to-bed gap in the loft: the sides and the top step in 60 mm between 2.72 and 2.78
+    'hw': [(0, 0.82), (0.06, 0.90), (0.30, 0.94), (0.70, 0.96), (2.72, 0.96), (2.725, 0.90), (2.775, 0.90), (2.78, 0.96),
+           (4.95, 0.96), (5.05, 0.95)],
+    # the shoulder crease at 0.82 nose to tail: the highlight line and the paint split (Bone over Black)
+    'waist': [(0, 0.72), (0.30, 0.82), (5.05, 0.82)],
+    # belt line 1.08 on the cab; behind it the bed side runs just under the rail top
+    'belt': [(0, 0.84), (0.30, 0.92), (1.25, 1.02), (1.45, 1.08), (2.74, 1.08), (5.05, 1.06)],
+    'tumble': 0.03, 'sill_in': 0.04, 'rocker_h': 0.30,
+    # regular cab: screen base 1.25, roof 1.68-2.60, a near-vertical back wall at 2.71; no pillar inside the glass
+    'cabin': {'A': 1.25, 'W': 1.68, 'R': 2.60, 'C': 2.71, 'D': 2.72,
+              'roof_w': [(1.68, 0.78), (2.60, 0.78)], 'roof_drop': 0.03, 'pillars': []},
+    'decals': [
+        # twin wide rectangles flush in a full-width black mesh grille, a thin amber marker line under each
+        {'view': 'front', 'rect': (-0.78, 0.70, 0.78, 0.92), 'mat': 'grille', 'cell': 0.2},
+        {'view': 'front', 'rect': (0.33, 0.74, 0.75, 0.88), 'mat': 'head', 'mirror': True},
+        {'view': 'front', 'rect': (0.33, 0.705, 0.75, 0.725), 'mat': 'turn', 'mirror': True},
+        # tall red blocks at the roll-pan corners, 1.76 m apart centre to centre
+        {'view': 'rear', 'rect': (0.79, 0.58, 0.91, 1.04), 'mat': 'tail', 'mirror': True},
+    ],
+    'parts': [
+        MIRRORS,
+    ],
+    # one oval tip out the right rear corner, through the roll pan (the design check wants 0.6 m clear behind a tip)
+    'exhaust': [{'x': 0.68, 'y': 0.30, 'r': 0.05, 'squash': 0.6}],
+    'stickers': [
+        {'id': 'door', 'view': 'left', 'rect': (1.32, 0.58, 2.42, 0.86), 'mirror': True},
+        {'id': 'hood', 'view': 'top', 'rect': (-0.40, 0.14, 0.40, 1.12)},
+        {'id': 'rear', 'view': 'rear', 'rect': (-0.65, 0.65, 0.65, 0.91), 'note': 'tailgate centre, between the lamp blocks'},
+    ],
+    'paint': {'hero': ('Bone', '#E7E1D3'), 'alts': [('Oxide', '#7A3A24'), ('Gunmetal', '#4A4F58'), ('Forest', '#1F4D3A'), ('Sodium', '#FF8A1F')],
+              'trim': '#15171C', 'rim': '#22252C'},
+    # T2, a working truck: bed rail and bumper scratches (the brief: 0.3)
+    'condition': 0.3,
+    'options': {},
+}
+
 P7 = {
     'id': 'p7_wagon', 'role': 'player', 'label': 'Shop wagon',
     'refs': 'the boxy front-drive estate cars of the late 1980s (category only; no brand): a small four, an automatic, barn doors',
@@ -807,7 +861,7 @@ C3 = {
     'options': {},
 }
 
-FLEET = [P0, P1, P2, P3, P4, P5, P6, P7, P17, P8, N1, N2, N3, C1, C2, C3]
+FLEET = [P0, P1, P2, P3, P4, P5, P6, P7, P10, P17, P8, N1, N2, N3, C1, C2, C3]
 
 
 def _add_sun_strips():

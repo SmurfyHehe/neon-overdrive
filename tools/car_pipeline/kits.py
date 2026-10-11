@@ -583,3 +583,4 @@ KITS = {
 }
 KITS['p5_muscle'] = __import__('kit_p5_muscle').KIT     # the muscle hardtop: its own file
 KITS['p8_driftcoupe'] = __import__('kit_p8_driftcoupe').KIT   # the drift coupe: its own file
+KITS['p10_truck'] = __import__('kit_p10_truck').KIT     # the street truck: its own file

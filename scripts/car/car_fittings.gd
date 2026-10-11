@@ -66,6 +66,8 @@ const BRAKES := {
 	"p17_work_pickup": {"front": "disc", "rear": "drum", "rim": "steel", "caliper": Color("#4A505B")},
 	# Drift coupe: 260 mm vented discs on all four, black single-pot calipers (the parts glb models them).
 	"p8_driftcoupe": {"front": "disc", "rear": "disc", "rim": "dish", "caliper": Color("#1B1D22")},
+	# Street truck: 330 / 300 mm vented discs on all four, generic calipers (MC2 brief).
+	"p10_truck": {"front": "disc", "rear": "disc", "rim": "five", "caliper": Color("#4A505B")},
 	"c1_patrol": {"front": "disc", "rear": "disc", "rim": "steel", "caliper": Color("#1B1D22")},
 	"c2_patrolsuv": {"front": "disc", "rear": "disc", "rim": "steel", "caliper": Color("#1B1D22")},
 	"c3_interceptor": {"front": "disc", "rear": "disc", "rim": "five", "caliper": Color("#B5261E")},

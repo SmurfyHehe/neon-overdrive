@@ -131,7 +131,7 @@ call :run view/cockpit_shifter "--headless --fixed-fps 60"
 call :run view/cockpit_shifter_rnd "--headless --fixed-fps 60"
 rem the shift animation runs on the frame clock, so the gate test (every
 rem player car) and the shifter tests get a fixed 60 fps headless
-for %%c in (p0_beater p1_coupe p2_hothatch p3_tuner p4_kei p5_muscle p6_crossover) do (
+for %%c in (p0_beater p1_coupe p2_hothatch p3_tuner p4_kei p5_muscle p6_crossover p10_truck) do (
 	set "NEON_CAR=%%c"
 	call :run view/cockpit_shift_gate "--headless --fixed-fps 60"
 )

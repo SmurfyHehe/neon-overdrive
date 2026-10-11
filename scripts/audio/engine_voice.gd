@@ -71,6 +71,11 @@ const PRESETS := {
 	# seed and a lower body, raspier and a touch lumpier at its 1100 idle.
 	"p8_driftcoupe": {"cylinders": 4, "cyl_spread": 0.14, "seed": 83, "body_hz": 150.0, "body_q": 1.7,
 			"rasp_hz": 2050.0, "rasp_q": 2.8, "tone": 1.3, "pulse_width": 0.27, "wander": 0.75},
+	# Street truck, pushrod V8 on a single pipe: the muscle car's lope, a
+	# touch lower in the body and more muffled, its own seed.
+	"p10_truck": {"cylinders": 8, "firing": _V8_FIRING, "cyl_amps": _V8_BANKS, "cyl_spread": 0.26, "seed": 97,
+			"body_hz": 54.0, "body_q": 1.15, "rasp_hz": 640.0, "rasp_q": 1.3, "tone": 0.66,
+			"pulse_width": 0.48, "wander": 0.95},
 	# Traffic: quiet, smooth, muffled. They should not compete with the player.
 	"n1_commuter": {"cylinders": 4, "cyl_spread": 0.04, "seed": 71, "body_hz": 140.0, "body_q": 1.2,
 			"rasp_hz": 1000.0, "rasp_q": 1.4, "tone": 0.7, "pulse_width": 0.42, "wander": 0.5},

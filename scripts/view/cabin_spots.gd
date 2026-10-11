@@ -52,6 +52,7 @@ const CARS := {
 	"p5_muscle": {"strut_bar": {"x": 0.66, "y": 0.87, "z": -1.33}},
 	"p6_crossover": {"strut_bar": {"x": 0.61, "y": 1.00, "z": -1.16}},
 	"p8_driftcoupe": {"strut_bar": {"x": 0.60, "y": 0.76, "z": -1.18}},
+	"p10_truck": {"strut_bar": {"x": 0.70, "y": 0.92, "z": -1.45}},
 }
 
 ## A cabin spot for a car (CockpitFrame space). Unknown spot: Vector3.ZERO.

@@ -69,6 +69,7 @@ const CAR_FINISH := {
 	"p0_beater": [0.4, 0.75, 0.0],
 	"p17_work_pickup": [0.75, 0.0, 0.2],
 	"n3_pickup": [0.75, 0.0, 0.2],
+	"p10_truck": [0.85, 0.0, 0.3],   # gloss bone over satin black; a few rail and bumper scratches
 }
 const CAR_FINISH_DEFAULT := [1.0, 0.0, 0.5]
 ## Side doors per car, for the door shut lines (cut_seams).

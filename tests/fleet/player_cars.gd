@@ -24,13 +24,13 @@ const CAP_KMH := 125.0
 ## km/h each car must reach in DRIVE_SECS from a standing start.
 const FLOOR_KMH := {
 	"p0_beater": 70.0, "p1_coupe": 120.0, "p2_hothatch": 120.0, "p3_tuner": 120.0,
-	"p4_kei": 100.0, "p5_muscle": 120.0, "p6_crossover": 120.0, "p17_work_pickup": 115.0,
+	"p4_kei": 100.0, "p5_muscle": 120.0, "p6_crossover": 120.0, "p17_work_pickup": 115.0, "p10_truck": 120.0,
 	"p7_wagon": 95.0, "p8_driftcoupe": 120.0,
 }
 ## 0-100 km/h ceiling per car, seconds (the beater is slow by design: T0).
 const T100_MAX := {
 	"p0_beater": 16.0, "p1_coupe": 7.0, "p2_hothatch": 10.5, "p3_tuner": 7.0,
-	"p4_kei": 13.0, "p5_muscle": 7.0, "p6_crossover": 7.0, "p17_work_pickup": 9.5,
+	"p4_kei": 13.0, "p5_muscle": 7.0, "p6_crossover": 7.0, "p17_work_pickup": 9.5, "p10_truck": 8.0,
 	"p7_wagon": 14.0, "p8_driftcoupe": 7.5,
 }
 

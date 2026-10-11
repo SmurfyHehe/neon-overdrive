@@ -149,10 +149,13 @@ var oncoming_share := 0.4
 ## z: -1 = down the road (the +x lanes are the player's side), +1 = back up it
 ## (the map, 2026-10-10: the road is driven both ways, and then the -x lanes
 ## are the player's side). "Ahead", "behind", "oncoming" and the lane speeds
-## all follow it. It flips only once the player is doing FLOW_FLIP m/s the
-## other way, so backing up or a spin does not turn the traffic round.
+## all follow it. It flips only once the player has done FLOW_FLIP m/s the
+## other way for FLOW_FLIP_SECS, so backing up or a spin does not turn the
+## traffic round.
 var flow := -1.0
 const FLOW_FLIP := 6.0
+const FLOW_FLIP_SECS := 1.0
+var _flip_since := -1.0
 ## Times the flow has turned round (tests).
 var flow_flips := 0
 ## Own-direction / oncoming lanes traffic may use, for spawns and lane
@@ -400,8 +403,14 @@ func _physics_process(_delta: float) -> void:
 	_build_index()
 	var pz := _player_z()
 	if _vz[0] * flow < -FLOW_FLIP:
-		flow = -flow
-		flow_flips += 1
+		if _flip_since < 0.0:
+			_flip_since = now
+		elif now - _flip_since >= FLOW_FLIP_SECS:
+			_flip_since = -1.0
+			flow = -flow
+			flow_flips += 1
+	else:
+		_flip_since = -1.0
 	var pv := _player_speed()
 	var band_hi := _spawn_band().y
 	var frame := Engine.get_physics_frames()

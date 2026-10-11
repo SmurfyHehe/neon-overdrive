@@ -178,6 +178,10 @@ rem Police F0/F1: heat levels and icons, cop_can_see_player, headlights off hide
 call :run traffic/police_heat --headless
 rem Police P1/P2: the rulebook table, sight, offences, warning step, heat times.
 call :run traffic/police_rules --headless
+rem W0: wrong way = travelling against the flow (8 cases, shoulder, spin); heat with a mocked cop; the flow flip hold.
+call :run traffic/wrong_way_pure --headless
+call :run traffic/police_wrong_way --headless
+call :run traffic/flow_flip --headless
 call :run traffic/free_driver_pure --headless
 call :run traffic/cop_brain_pure --headless
 rem Ending a run on a crash: the rules, the hit sensor, the crash screen; then the real restart.

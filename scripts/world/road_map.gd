@@ -105,7 +105,8 @@ const ROADS := {
 			{"id": "x15a", "s": 11600.0, "side": 1, "number": 15}, {"id": "x15b", "s": 11600.0, "side": -1, "number": 15},
 			{"id": "x16a", "s": 12400.0, "side": 1, "number": 16}, {"id": "x16b", "s": 12400.0, "side": -1, "number": 16},
 		],
-		# Gaps in the centre barrier (a legal place to turn round), two per
+		# Illegal turns: gaps in the centre barrier. Turning round at one
+		# while a cop notices is +1 heat (PoliceRules MEDIAN_GAP). Two per
 		# district, 225 m and 625 m in.
 		"gaps": [
 			{"id": "g1a", "s": 225.0}, {"id": "g1b", "s": 625.0}, {"id": "g2a", "s": 1025.0}, {"id": "g2b", "s": 1425.0},

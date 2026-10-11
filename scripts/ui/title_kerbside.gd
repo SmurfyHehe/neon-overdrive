@@ -11,6 +11,14 @@ extends Node3D
 # is a copy of the player's car body and wheels with no physics and no script.
 # One real light (the lamp, no shadows); the shadow under the car is a dark
 # quad. The title screen frees the whole set when the drive starts.
+#
+# Lamp life (menu litter M2, 2026-10-11): the lamp post's own small life from
+# the road chunks (lamp_life.gd) is switched on here too: newspaper and leaves
+# gusting across the road in front of the car, steam from a manhole, moths
+# round the lamp head and a bat now and then. All of it is shader-driven, so it
+# runs while the title pauses the tree. The wind is one number
+# (set_title_wind); the turbo on the title raises it. NEON_LAMP_LIFE=0 turns it
+# off here as in the world.
 
 const SITE := Vector3(0.0, -600.0, 0.0)
 const SODIUM_LIGHT := Color(1.0, 0.62, 0.3)
@@ -23,6 +31,36 @@ const CAM_FOV := 48.0
 const SWAY_M := 0.18
 const SWAY_SECS := 17.0
 
+const LampLife := preload("res://scripts/world/lamp_life.gd")
+## The district and chunk index lamp life is asked for. Chunk 1 is not a
+## banner chunk (every third lamp wears one); the lamp has no banner here.
+const LIFE_DISTRICT := "downtown"
+const LIFE_CHUNK := 1
+## Litter lane, title space. Lamp life blows litter along chunk +X; the root
+## frame is turned a quarter turn so that is world -Z: from the road, past the
+## camera side of the car, toward the kerb. The lane centre is LITTER_Z and the
+## pieces cross LITTER_HALF either side of it, and LITTER_SQUASH pulls the
+## along-the-road spread (22 m in a chunk) in so the lane fits the picture.
+const LITTER_AT := Vector3(-4.0, 0.0, 0.0)
+const LITTER_Z := 4.8
+const LITTER_HALF := 2.3
+const LITTER_SQUASH := 0.45
+## Gust phases of the two litter sets (0..1 of the 24.5 s gust period): one
+## every ~12 s. The world's chunks use 17-32 s.
+const GUST_PERIOD_SEED := 0.5
+const GUST_PHASES := [0.10, 0.60]
+## The manhole: round, on the road between the camera and the car, in the
+## lamp's pool.
+const VENT_AT := Vector3(-6.6, 0.0, 4.4)
+## The bat: custom-data period seed 0.05 is a flight every 15 s (the world's
+## lamps are 14-34 s).
+const BAT_PERIOD_SEED := 0.05
+## Wind: still-air rest value is lamp life's own default; a gale on a held
+## turbo. Wind rises with the turbo at once and falls back over WIND_FALL_SECS.
+const WIND_REST := 0.6
+const WIND_MAX := 2.0
+const WIND_FALL_SECS := 3.0
+
 var kind := ""
 var camera: Camera3D
 var car: Node3D
@@ -30,6 +68,17 @@ var lamp_light: SpotLight3D
 var _t := 0.0
 var _cam_home := Vector3.ZERO
 var _look := Vector3.ZERO
+## The lamp's transform (the pole's origin and which way its arm reaches),
+## set by _build_lamp; lamp life reads the head and the pool from it.
+var _lamp_xf := Transform3D.IDENTITY
+var life_root: Node3D
+## What _build_lamp_life wrote (a MultiMesh does not hand its data back on the
+## headless renderer, so tests and shots read it from here): litter_xf, the
+## two litter custom colours, vent_xf (the manhole cover), vent_round, moth_xf
+## and moth_custom.
+var life := {}
+var _wind_target := WIND_REST
+var _wind_now := WIND_REST
 
 func _init(car_kind: String) -> void:
 	name = "TitleKerbside"
@@ -38,6 +87,7 @@ func _init(car_kind: String) -> void:
 	position = SITE
 	_build_street()
 	_build_lamp()
+	_build_lamp_life()
 	set_car(car_kind)
 	camera = Camera3D.new()
 	camera.fov = CAM_FOV
@@ -117,11 +167,37 @@ func _aim() -> void:
 	camera.position = _cam_home + Vector3(sway * SWAY_M, 0.03 * sin(_t * TAU / (SWAY_SECS * 0.61)), 0.0)
 	camera.look_at(to_global(_look), Vector3.UP)
 
+func _exit_tree() -> void:
+	# the wind is lamp life's one global number: hand it back at rest
+	if LampLife.enabled:
+		LampLife.set_wind(LampLife.DEFAULT_WIND)
+
+## The wind the title wants (0 still, 1 breeze, 2 gale). The turbo calls this
+## each frame with lerpf(WIND_REST, WIND_MAX, boost); a higher wind is taken at
+## once, a lower one is eased down over WIND_FALL_SECS.
+func set_title_wind(w: float) -> void:
+	_wind_target = clampf(w, 0.0, WIND_MAX)
+
+func wind_now() -> float:
+	return _wind_now
+
 func _process(delta: float) -> void:
 	if not visible or camera == null or not camera.current:
 		return
 	_t += delta
 	_aim()
+	_ease_wind(delta)
+
+func _ease_wind(delta: float) -> void:
+	var w := _wind_now
+	if _wind_target >= w:
+		w = _wind_target
+	else:
+		w = maxf(_wind_target, w - (WIND_MAX - WIND_REST) / WIND_FALL_SECS * delta)
+	if not is_equal_approx(w, _wind_now):
+		_wind_now = w
+		if LampLife.enabled:
+			LampLife.set_wind(w)
 
 func _build_street() -> void:
 	# Asphalt: the road, from the kerb out past the camera.
@@ -162,6 +238,52 @@ func _build_lamp() -> void:
 	lamp_light.position = post.position + Vector3(0.0, RoadChunkBuilder.LAMP_POLE_H - 0.3, 1.7)
 	lamp_light.rotation.x = -PI * 0.5   # straight down
 	add_child(lamp_light)
+	_lamp_xf = Transform3D(Basis(Vector3.UP, PI * 0.5), post.position)
+
+## Lamp life for this one lamp (see the header). Lamp life wants chunk space,
+## with the road along Z and the wind across it (+X); here the street runs along
+## X, so the litter and the steam are given a quarter-turned frame. The vent and
+## the bat are forced rather than left to the world's dice.
+func _build_lamp_life() -> void:
+	life_root = Node3D.new()
+	life_root.name = "LampLife"
+	add_child(life_root)
+	LampLife.create_nodes(life_root, 1)
+	var litter := (life_root.get_node(^"WindLitter") as MultiMeshInstance3D).multimesh
+	litter.instance_count = 2   # two gust phases (data is written below)
+	var turn := Basis(Vector3.UP, PI * 0.5)
+	var litter_xf := Transform3D(turn * Basis.from_scale(Vector3(1.0, 1.0, LITTER_SQUASH)), LITTER_AT)
+	LampLife.apply(life_root, LIFE_CHUNK, LIFE_DISTRICT, [_lamp_xf], litter_xf,
+		-LITTER_Z - LITTER_HALF, -LITTER_Z + LITTER_HALF)
+	if not LampLife.enabled:
+		return
+	# 2. two litter sets, half a gust period apart
+	litter.visible_instance_count = 2
+	var litter_custom: Array[Color] = []
+	for i in 2:
+		var c := Color(-LITTER_Z, LITTER_HALF, GUST_PERIOD_SEED, GUST_PHASES[i])
+		litter.set_instance_transform(i, litter_xf)
+		litter.set_instance_custom_data(i, c)
+		litter_custom.append(c)
+	life["litter_xf"] = litter_xf
+	life["litter_custom"] = litter_custom
+	# 3. the manhole, round, with its steam leaning the way the litter blows
+	var steam := (life_root.get_node(^"SteamVents") as MultiMeshInstance3D).multimesh
+	var cover := (life_root.get_node(^"VentCovers") as MultiMeshInstance3D).multimesh
+	steam.visible_instance_count = 1
+	cover.visible_instance_count = 1
+	steam.set_instance_transform(0, Transform3D(turn, VENT_AT))
+	steam.set_instance_custom_data(0, Color(0.31, 0.0, 0.0, 0.0))   # seed, 0 = round
+	cover.set_instance_transform(0, Transform3D(Basis(), VENT_AT))
+	life["vent_xf"] = Transform3D(Basis(), VENT_AT)
+	life["vent_round"] = true
+	# 4. moths at the lamp head, and the bat on its flight every 15 s
+	var moths := (life_root.get_node(^"LampMoths") as MultiMeshInstance3D).multimesh
+	moths.visible_instance_count = 1
+	moths.set_instance_transform(0, _lamp_xf)
+	moths.set_instance_custom_data(0, Color(0.37, BAT_PERIOD_SEED, 0.2, 1.0))
+	life["moth_xf"] = _lamp_xf
+	life["moth_custom"] = Color(0.37, BAT_PERIOD_SEED, 0.2, 1.0)
 
 func _slab(size: Vector3, at: Vector3, mat: Material) -> void:
 	var mi := MeshInstance3D.new()

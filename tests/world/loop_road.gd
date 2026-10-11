@@ -251,7 +251,8 @@ func _along_map(pts: Array, p: Vector2) -> float:
 	return -1.0
 
 func _map_data() -> void:
-	for a in [1, 3]:
+	var placed := {}   # place (metres) -> its map point in the first act that had it
+	for a in [1, 2, 3]:
 		RoadMap.use(0, a)
 		var pts: Array = RoadMap.ROADS[0].map
 		if pts.size() < 8 or pts.size() > 20:
@@ -277,13 +278,31 @@ func _map_data() -> void:
 			elif t < last - 1e-4:
 				_fail("act %d: %.0f m is out of loop order on the map" % [a, s])
 			last = t
+			# A place keeps the same point in every act (the line is the full loop).
+			if placed.has(s) and placed[s].distance_to(p) > 1e-5:
+				_fail("act %d: %.0f m moved on the map between acts (%s -> %s)" % [a, s, placed[s], p])
+			placed[s] = p
 			# Wraps: a lap on, laps back.
 			if p.distance_to(RoadMap.map_point(0, s + RoadMap.length())) > 1e-5 or p.distance_to(RoadMap.map_point(0, s - 3.0 * RoadMap.length())) > 1e-5:
 				_fail("act %d: map_point does not wrap at %.0f m" % [a, s])
 		if RoadMap.map_point(0, 0.0).distance_to(pts[0]) > 1e-5:
 			_fail("the map does not start at its first point")
-		if RoadMap.map_point(0, RoadMap.length() - 0.01).distance_to(pts[0]) > 0.01:
-			_fail("the drawn loop does not close")
+		var seam := RoadMap.map_seam(0)
+		var near_end := RoadMap.map_point(0, RoadMap.length() - 0.01)
+		if a < RoadMap.MAX_ACT:
+			# Not every district is open: the drawn line stops short of its start and the seam bridges it.
+			if near_end.distance_to(pts[0]) < 0.05:
+				_fail("act %d: the drawn line closes on itself; only act 3 should" % a)
+			if seam.size() != 2 or seam[1].distance_to(pts[0]) > 1e-5 or seam[0].distance_to(near_end) > 0.01:
+				_fail("act %d: the seam is %s, expected the end of the open line back to its start" % [a, seam])
+			var span := RoadMap.map_locked_span(0)
+			if not is_equal_approx(span.x, RoadMap.length()) or not is_equal_approx(span.y, RoadMap.map_full_length(0)):
+				_fail("act %d: locked span %s is not [open length, full length]" % [a, span])
+		else:
+			if near_end.distance_to(pts[0]) > 0.01:
+				_fail("the drawn loop does not close")
+			if not seam.is_empty() or RoadMap.map_locked_span(0).x != RoadMap.map_locked_span(0).y:
+				_fail("act 3 has a seam or a locked stretch")
 		# The layout's exits are the map's, on every lap, in both directions.
 		var lay := RoadLayout.new(5, null, 1.0)
 		if lay.changes.size() != RoadMap.exits().size():
@@ -301,6 +320,11 @@ func _map_data() -> void:
 			_fail("stop %s points at exit %s, which road %s does not have" % [st.id, st.exit, st.road])
 	if not RoadMap.INTERCHANGES.is_empty():
 		_fail("interchanges before there is a second loop")
+	for st in RoadMap.STOPS:
+		if not RoadMap.stop_known(st.id):
+			_fail("placeholder stop %s is not known" % st.id)
+	if RoadMap.stop_known("nowhere"):
+		_fail("an unknown stop reads as known")
 	print("map: %d points, %d stops, %d interchanges" % [RoadMap.ROADS[0].map.size(), RoadMap.STOPS.size(), RoadMap.INTERCHANGES.size()])
 	RoadMap.use(RoadMap.ENDLESS)
 

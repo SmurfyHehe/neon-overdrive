@@ -42,6 +42,7 @@ enum State { PLAYING, PAUSED, TUNING, AUTOTUNE, PHOTO, TITLE, WRECKED, STATION, 
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
 const TestMode := preload("res://scripts/core/test_mode.gd")
+const RoadMap := preload("res://scripts/world/road_map.gd")
 
 signal state_changed(new_state: State, old_state: State)
 ## The garage is about to take over, before the state changes, so the world is
@@ -114,6 +115,12 @@ signal race_quit_requested
 ## the save system tracks); the pause screen shows this for a second instead.
 const CHASE_LOCK_TEXT := "Not while they're on you."
 signal pause_refused
+## M while paused on the pause list: the pause menu shows its Map page.
+signal map_requested
+## Set by M from the road: the pause that follows opens on the Map page.
+var open_on_map := false
+## True while the pause menu's Map page is up (the menu sets it).
+var map_open := false
 
 ## Title screen at boot: in a real play session, or when a test sets NEON_TITLE=1.
 static func wants_title() -> bool:
@@ -140,7 +147,7 @@ signal special_unlocked_changed
 # name) would also switch tabs or close the tuner. _input() runs before the GUI
 # sees the key, so it can tell whether a text control had focus when the key went
 # down; the poll then skips that press.
-const TEXT_GUARDED := [&"pause", &"tuning_panel", &"autotune_panel", &"photo_mode"]
+const TEXT_GUARDED := [&"pause", &"map", &"tuning_panel", &"autotune_panel", &"photo_mode"]
 var _typed_into_text: Dictionary = {}
 
 # The Settings screen (scripts/ui/settings_screen.gd) sits on top of the pause
@@ -272,6 +279,8 @@ func _physics_process(_delta: float) -> void:
 		_enter_dawn(ENTRY_DAWN)
 	if Input.is_action_just_pressed("pause") and not blocked.has(&"pause"):
 		toggle_pause()
+	elif Input.is_action_just_pressed("map") and not blocked.has(&"map"):
+		toggle_map()
 	elif Input.is_action_just_pressed("tuning_panel") and not blocked.has(&"tuning_panel"):
 		toggle_tuning()
 	elif Input.is_action_just_pressed("photo_mode") and not blocked.has(&"photo_mode"):
@@ -430,6 +439,25 @@ func toggle_pause() -> void:
 			pause_refused.emit()   # the menu stays shut while a cop sees you
 		else:
 			pause()
+
+## M: the pause screen, straight onto the Map page. Refused while a cop sees you,
+## like Esc. Nothing on the endless road (it has no map). While paused it brings
+## the page up from the list, or closes the pause when the page is already up.
+func toggle_map() -> void:
+	if RoadMap.road_id == RoadMap.ENDLESS or not RoadMap.is_loop():
+		return
+	if state == State.PLAYING:
+		if chase_locked():
+			pause_refused.emit()
+		else:
+			open_on_map = true
+			pause()
+			open_on_map = false
+	elif state == State.PAUSED:
+		if map_open:
+			resume()
+		else:
+			map_requested.emit()
 
 ## `notice` is the amber line the pause screen shows ("" for the player's own Esc).
 func pause(notice := "") -> void:

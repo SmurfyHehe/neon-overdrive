@@ -139,6 +139,7 @@ func capture() -> Dictionary:
 	# give it back. Optional on read: older saves have no block.
 	if game.has_method("weather_save"):
 		run.weather = game.weather_save()
+	run.known_stops = RoadMap.known_stops.keys()
 	return run
 
 ## The car's part of a run save. "box" is PlayerCar.Transmission (the gearbox

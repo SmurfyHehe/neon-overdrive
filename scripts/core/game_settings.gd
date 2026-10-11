@@ -10,12 +10,34 @@ extends RefCounted
 #   critters  "Roaches and rats" (2026-10-11): the roaches, the rats and the
 #             flies over the bin bags on the title, and anywhere they are
 #             used later. On by default. The moths are not part of it.
+#   wrecks    (test build only) "Meter" counts crashes on the totalled meter
+#             (scripts/car/totalled_meter.gd); "Off" leaves the wreck sensor off,
+#             as the sandbox always did. Outside the test build the sensor is
+#             always on and the row is hidden.
+
+const TestBuild := preload("res://scripts/core/test_build.gd")
 
 const DEFAULT_TIPS := true
 const DEFAULT_CRITTERS := true
+## Meter by default in the test build, so the people testing feel it.
+const DEFAULT_WRECKS_METER := true
 
 static var tips := DEFAULT_TIPS
 static var critters := DEFAULT_CRITTERS
+static var wrecks_meter := DEFAULT_WRECKS_METER
+
+## The test build (the sandbox with the parked start and the stand-in rows).
+static func test_build() -> bool:
+	return TestBuild.on()
+
+## Whether the game's wreck sensor should be on, ignoring the benchmark and
+## tests (Game.wrecks_on handles those): always outside the test build, the
+## "Wrecks" row inside it.
+static func wrecks_enabled() -> bool:
+	return not test_build() or wrecks_meter
+
+static func set_wrecks_meter(on: bool) -> void:
+	wrecks_meter = on
 
 static func set_tips(on: bool) -> void:
 	tips = on
@@ -26,6 +48,7 @@ static func set_critters(on: bool) -> void:
 static func reset_defaults() -> void:
 	tips = DEFAULT_TIPS
 	critters = DEFAULT_CRITTERS
+	wrecks_meter = DEFAULT_WRECKS_METER
 
 static func load_settings() -> void:
 	var cfg := ConfigFile.new()
@@ -37,6 +60,8 @@ static func load_settings() -> void:
 	set_tips(t if t is bool else str(t).to_lower() == "true")
 	var c: Variant = cfg.get_value("game", "critters", DEFAULT_CRITTERS)
 	set_critters(c if c is bool else str(c).to_lower() == "true")
+	var w: Variant = cfg.get_value("game", "wrecks", "meter")
+	set_wrecks_meter(str(w).to_lower() != "off")
 
 ## Rewrites only the [game] section; the other sections stay.
 static func save_settings() -> bool:
@@ -44,4 +69,5 @@ static func save_settings() -> bool:
 	cfg.load(AudioSettings.path)
 	cfg.set_value("game", "tips", tips)
 	cfg.set_value("game", "critters", critters)
+	cfg.set_value("game", "wrecks", "meter" if wrecks_meter else "off")
 	return cfg.save(AudioSettings.path) == OK

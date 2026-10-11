@@ -1055,6 +1055,11 @@ func _setup_game_state() -> void:
 	run_end.game_state = game_state
 	add_child(run_end)
 	run_end.sensor.enabled = wrecks_on()
+	# The totalled meter survives a restart: the new car takes it back (a
+	# quit is not a free repair). TODO(save core): the saved car replaces this.
+	player.damage.take_carried()
+	game_state.restarting.connect(func() -> void: CarDamage.carry_over(player.damage))
+	game_state.quitting.connect(func() -> void: CarDamage.carry_over(player.damage))
 	if moments != null:
 		moments.announce = func(text: String) -> bool: return radio.announce(text, true)
 	world_mood = WorldMood.new()
@@ -1133,14 +1138,24 @@ func _on_hour(hour24: int) -> void:
 		else:
 			radio.announce_hour(hour24)
 
-## A hard hit ends the run (run_end.gd). Off in the benchmark, and in tests
-## unless the test asks with NEON_WRECK=1: the older drive tests crash on
-## purpose and must not be restarted halfway. NEON_WRECK=0 turns it off in play.
+## Hard hits count on the totalled meter (run_end.gd). Off in the benchmark,
+## and in tests unless the test asks with NEON_WRECK=1: the older drive tests
+## crash on purpose and must not be totalled halfway. NEON_WRECK=0 turns it
+## off in play. In the test build the Settings > Game "Wrecks" row decides.
 func wrecks_on() -> bool:
 	var env := OS.get_environment("NEON_WRECK")
-	if Benchmark.requested() or env == "0" or TestBuild.on():
-		return false  # the test build's sandbox: crashes just happen
-	return not TestMode.active() or env == "1"
+	if Benchmark.requested() or env == "0":
+		return false
+	if env == "1":
+		return true
+	if TestMode.active():
+		return false
+	return GameSettings.wrecks_enabled()
+
+## The "Wrecks" row changed: the sensor follows at once.
+func apply_wrecks_setting() -> void:
+	if run_end != null and run_end.phase == RunEnd.Phase.DRIVING:
+		run_end.sensor.enabled = wrecks_on()
 
 ## Tonight's weather (weather.gd, planned by weather_plan.gd): NEON_WEATHER
 ## pins it; otherwise the benchmark and tests stay dry, so their numbers keep

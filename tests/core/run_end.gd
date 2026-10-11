@@ -1,22 +1,26 @@
 extends SceneTree
 
-# Ending a run on a crash (decided 2026-10-10): scripts/car/wreck_rules.gd,
-# wreck_sensor.gd, scripts/core/run_end.gd, scripts/ui/crash_screen.gd.
+# Hard hits and the end of the night (decided 2026-10-10, totalled meter TM1
+# 2026-10-11): scripts/car/wreck_rules.gd, wreck_sensor.gd,
+# scripts/core/run_end.gd, scripts/ui/crash_screen.gd. The meter's own rules
+# are in tests/car/totalled_meter.gd; the run without a total in
+# tests/core/totalled_run_end.gd.
 #
 # Part 1, the rules on their own: wall speed from closing speed and the other
-# car's mass, the three outcomes, and what a wreck takes from tonight's cash.
+# car's mass, and what a total takes from tonight's cash.
 #
 # Part 2, the sensor in the real game (its own sensor on the player's car, the
 # game's own one switched off so nothing ends halfway):
-# - a wall at 30 km/h is a bump; a wall at 80 km/h is a wreck, measured near 80;
+# - a wall at 30 km/h is a bump; a wall at 80 km/h is a counted hit, measured near 80;
 # - a wall met at 30 degrees at 90 km/h is a bump: only the speed INTO the
 #   wall counts, not the speed along it;
 # - a standing 800 kg car hit at 60 km/h is a bump, and it gets pushed;
 # - closing at 110 km/h on a 2100 kg car is a wreck, on an 800 kg one a bump:
 #   same closing speed, the other car's mass decides.
 #
-# Part 3, the whole thing: the first wreck (free), then a paid one, bad cops,
-# and a huge crash, each through every step of the crash screen.
+# Part 3, the whole thing: the first total (free; the real sensor on a real
+# wall with the meter at 0.8), then a paid one, bad cops, and a total from two
+# big hits, each through every step of the crash screen.
 #   <godot> --headless --fixed-fps 120 --path . -s res://tests/core/run_end.gd
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
@@ -40,9 +44,9 @@ var rest: Transform3D
 var sensor: WreckSensor
 var prop: Node3D
 var hits_before := 0
-var wrecks: Array = []       # outcomes my sensor reported
+var wrecks: Array = []       # wall speeds (km/h) my sensor reported
 var run_end: Node            # the RunEnd under test in part 3
-var started: Array = []      # wreck_started args
+var started: Array = []      # totalled_started args (loss, free)
 var done: Array = []         # finished args
 var seen := {}               # what the crash screen showed, by phase
 var night_before := 0
@@ -81,15 +85,12 @@ func _rules() -> void:
 	_check(is_equal_approx(R.wall_speed(100.0, 1200.0, 1200.0), 50.0), "two equal cars share the closing speed")
 	_check(R.wall_speed(100.0, 900.0, 2100.0) > R.wall_speed(100.0, 2100.0, 900.0), "the lighter car gets the worse hit")
 	_check(R.wall_speed(-5.0, 1200.0, 0.0) == 0.0, "moving apart is no hit")
-	_check(R.outcome(R.WRECK_KMH - 0.1) == R.Outcome.BUMP, "just under the line is a bump")
-	_check(R.outcome(R.WRECK_KMH) == R.Outcome.WRECK, "the line is a wreck")
-	_check(R.outcome(R.NIGHT_END_KMH) == R.Outcome.NIGHT_END, "a huge crash ends the night")
-	_check(R.cash_loss(500, false, false) == 250, "a wreck costs half")
+	_check(R.cash_loss(500, false, false) == 250, "a total costs half")
 	_check(R.cash_loss(501, false, false) == 251, "the odd dollar goes too")
 	_check(R.cash_loss(500, true, false) == 500, "bad cops take it all")
-	_check(R.cash_loss(500, true, true) == 0 and R.cash_loss(500, false, true) == 0, "the first wreck is free")
+	_check(R.cash_loss(500, true, true) == 0 and R.cash_loss(500, false, true) == 0, "the first total is free")
 	_check(R.cash_loss(0, true, false) == 0, "nothing to take from empty pockets")
-	_check(not SaveStore.first_wreck_used(), "a new save has its free wreck")
+	_check(not SaveStore.first_wreck_used(), "a new save has its free total")
 
 # ---------- helpers ----------
 static func _coast(c: Vehicle) -> void:
@@ -178,7 +179,7 @@ func _new_run_end(p: PlayerCar, cash: int) -> void:
 	done.clear()
 	seen.clear()
 	held = false
-	run_end.wreck_started.connect(func(o: int, loss: int, free: bool) -> void: started.append([o, loss, free]))
+	run_end.totalled_started.connect(func(loss: int, free: bool) -> void: started.append([loss, free]))
 	run_end.finished.connect(func(night: bool) -> void: done.append(night))
 	night_before = game.night_clock.night
 	p.driver = _coast
@@ -198,23 +199,27 @@ func _watch() -> void:
 	if not seen.has(ph):
 		seen[ph] = {"cracked": s.is_cracked(), "black": s.is_black(), "line": s.line_text(), "card": s.card_texts(),
 			"scrape": s.scrape_playing(), "trauma": (game.camera as ChaseCamera).trauma,
+			"brake": (game.get("player") as PlayerCar).brake_input, "throttle": (game.get("player") as PlayerCar).throttle_input,
 			"engine_muted": AudioServer.is_bus_mute(AudioServer.get_bus_index(&"Engine"))}
 
 func _report(label: String) -> void:
-	print("%s: outcome %s loss %s free %s, night ended %s, cash %d bank %d" % [label,
+	print("%s: loss %s free %s, night ended %s, cash %d bank %d" % [label,
 		started[0][0] if not started.is_empty() else "-", started[0][1] if not started.is_empty() else "-",
-		started[0][2] if not started.is_empty() else "-", done, game.wallet.cash, game.wallet.bank])
+		done, game.wallet.cash, game.wallet.bank])
 	for ph in seen:
 		print("   %s: %s" % [RunEnd.Phase.keys()[ph], seen[ph]])
 
 func _common_screen_checks(label: String) -> void:
 	var P := RunEnd.Phase
+	_check(seen.has(P.TOTALLED) and not seen[P.TOTALLED].cracked and not seen[P.TOTALLED].black, label + ": the totalled beat is the plain view first")
+	_check(seen.has(P.TOTALLED) and is_equal_approx(seen[P.TOTALLED].throttle, 0.0) and is_equal_approx(seen[P.TOTALLED].brake, RunEnd.TOTALLED_BRAKE), label + ": nobody on the pedals, a light brake")
+	_check(seen.has(P.TOTALLED) and not seen[P.TOTALLED].engine_muted, label + ": the sound carries on while it coasts")
 	_check(seen.has(P.HIT) and seen[P.HIT].cracked and not seen[P.HIT].black, label + ": the hit shows cracked glass, not black")
 	_check(seen.has(P.HIT) and seen[P.HIT].trauma > 0.8, label + ": the hit shakes the camera")
 	_check(seen.has(P.HIT) and not seen[P.HIT].engine_muted, label + ": the sound carries on through the hit")
 	_check(seen.has(P.BLACK) and seen[P.BLACK].black and not seen[P.BLACK].cracked and seen[P.BLACK].line == "", label + ": then a hard cut to black, no line yet")
 	_check(seen.has(P.BLACK) and seen[P.BLACK].scrape and seen[P.BLACK].engine_muted, label + ": the black has the scrape tail and nothing else")
-	_check(seen.has(P.LINE) and seen[P.LINE].line != "" and not seen[P.LINE].scrape, label + ": then Dale's line, the scrape gone")
+	_check(seen.has(P.LINE) and seen[P.LINE].line != "" and not seen[P.LINE].scrape, label + ": then Dave's line, the scrape gone")
 
 # ---------- the drive ----------
 func _physics_process(_delta: float) -> bool:
@@ -232,7 +237,7 @@ func _physics_process(_delta: float) -> bool:
 				rest = p.global_transform
 				_check(game.run_end != null and not game.run_end.sensor.enabled, "in a test the game's own wrecks are off unless asked for")
 				sensor = WreckSensor.new(p)
-				sensor.wrecked.connect(func(o: int, _w: float, _c: float, _obj: Object) -> void: wrecks.append(o))
+				sensor.wrecked.connect(func(w: float, _c: float, _obj: Object) -> void: wrecks.append(w))
 				root.add_child(sensor)
 				print("car: %s, %.0f kg" % [PlayerCar.chassis_kind(), p.mass])
 				_wall(14.0)
@@ -250,7 +255,7 @@ func _physics_process(_delta: float) -> bool:
 			if _hit_seen() or t > hz * 6:
 				print("wall at 80 km/h: closing %.1f, wall speed %.1f km/h" % [sensor.last_closing_kmh, sensor.last_wall_kmh])
 				_check(_hit_seen() and absf(sensor.last_wall_kmh - 80.0) < 10.0, "an 80 km/h wall hit is measured near 80")
-				_check(wrecks == [WreckRules.Outcome.WRECK], "an 80 km/h wall hit is a wreck")
+				_check(wrecks.size() == 1, "an 80 km/h wall hit is a counted hit")
 				_wall(14.0, 60.0)  # turned 60 degrees: the car meets it at 30
 				_launch(p, 90.0)
 				step = Step.WALL_GLANCE
@@ -278,7 +283,7 @@ func _physics_process(_delta: float) -> bool:
 				var want := WreckRules.wall_speed(110.0, p.mass, 2100.0)
 				print("2100 kg car, closing 110 km/h: closing %.1f, wall speed %.1f km/h (rule says %.1f)" % [sensor.last_closing_kmh, sensor.last_wall_kmh, want])
 				_check(_hit_seen() and absf(sensor.last_closing_kmh - 110.0) < 12.0, "head-on, both speeds add up")
-				_check(wrecks.size() == 1 and wrecks[0] != WreckRules.Outcome.BUMP, "closing at 110 on a heavy car is a wreck")
+				_check(wrecks.size() == 1, "closing at 110 on a heavy car is a counted hit")
 				_car(12.0, 800.0, 50.0)
 				_launch(p, 60.0)
 				step = Step.CAR_LIGHT_FAST
@@ -289,10 +294,12 @@ func _physics_process(_delta: float) -> bool:
 				_check(_hit_seen() and absf(sensor.last_closing_kmh - 110.0) < 12.0, "head-on on the light car, both speeds add up")
 				_check(wrecks.is_empty() == (want < WreckRules.WRECK_KMH), "the same closing speed on a light car follows the rule for its mass")
 				sensor.enabled = false
-				# Part 3. The first wreck: a real wall, the game-wired sensor.
+				# Part 3. The first total: a real wall at 80 km/h (0.30) on a
+				# meter already at 0.8, the RunEnd's own sensor.
 				_new_run_end(p, 500)
 				_wall(14.0)
 				_launch(p, 80.0)
+				p.damage.totalled = 0.8
 				step = Step.FIRST
 		Step.FIRST:
 			_watch()
@@ -302,18 +309,19 @@ func _physics_process(_delta: float) -> bool:
 				t = 0
 			if not done.is_empty() or t > hz * 40:
 				Input.action_release(&"brake")
-				_report("first wreck, wall at 80 km/h")
-				_common_screen_checks("first wreck")
-				_check(started.size() == 1 and started[0] == [WreckRules.Outcome.WRECK, 0, true], "the first wreck is free")
-				_check(SaveStore.first_wreck_used(), "the free wreck is used up in the save")
+				_report("first total, wall at 80 km/h on a meter of 0.8")
+				_common_screen_checks("first total")
+				_check(started.size() == 1 and started[0] == [0, true], "the first total is free")
+				_check(is_equal_approx(p.damage.totalled, 0.0), "Walt's fix puts the meter back to 0")
+				_check(SaveStore.first_wreck_used(), "the free total is used up in the save")
 				_check(seen.has(RunEnd.Phase.MORNING) and "Moose" in " ".join(seen[RunEnd.Phase.MORNING].card) and "Walt" in " ".join(seen[RunEnd.Phase.MORNING].card), "the morning card has Moose and Walt")
 				_check(done == [true] and held and t < hz * 3, "holding S skips the morning (it took %d ticks)" % t)
-				_check(game.night_clock.night == night_before + 1, "the first wreck ends the night")
+				_check(game.night_clock.night == night_before + 1, "the first total ends the night")
 				_check(game.wallet.cash == 0 and game.wallet.bank == 500, "all of tonight's cash is banked at dawn")
 				_check(game.game_state.state == GameState.State.WRECKED, "the game stays in the wrecked state until the restart")
 				var bank: int = game.wallet.bank
 				_new_run_end(p, 501)
-				_check(run_end.begin(WreckRules.Outcome.WRECK), "a second wreck starts")
+				_check(run_end.begin_total(), "a second total starts")
 				seen["bank"] = bank
 				step = Step.PAID
 		Step.PAID:
@@ -321,17 +329,18 @@ func _physics_process(_delta: float) -> bool:
 			if not done.is_empty() or t > hz * 40:
 				var bank: int = seen["bank"]
 				seen.erase("bank")
-				_report("paid wreck")
-				_common_screen_checks("paid wreck")
-				_check(started.size() == 1 and started[0] == [WreckRules.Outcome.WRECK, 251, false], "a paid wreck takes half of $501")
+				_report("paid total")
+				_common_screen_checks("paid total")
+				_check(started.size() == 1 and started[0] == [251, false], "a paid total takes half of $501")
 				_check("$251" in seen.get(RunEnd.Phase.LINE, {}).get("line", ""), "the line says what was lost")
-				_check(not seen.has(RunEnd.Phase.MORNING) and done == [false], "a plain wreck has no morning")
-				_check(game.night_clock.night == night_before, "a plain wreck leaves the night going")
-				_check(game.wallet.cash == 250 and game.wallet.bank == bank, "the other half stays in the pocket, the bank untouched")
-				_check(not run_end.begin(WreckRules.Outcome.WRECK), "a finished wreck cannot start again")
+				_check(seen.has(RunEnd.Phase.MORNING) and done == [true], "a total always has its morning: the night ends")
+				_check("hook" in " ".join(seen[RunEnd.Phase.MORNING].card), "the paid morning is the tow")
+				_check(game.night_clock.night == night_before + 1, "a total ends the night")
+				_check(game.wallet.cash == 0 and game.wallet.bank == bank + 250, "the other half is banked at dawn, the bank was untouched before")
+				_check(not run_end.begin_total(), "a finished total cannot start again")
 				_new_run_end(p, 400)
 				run_end.bad_cops = true
-				_check(run_end.begin(WreckRules.Outcome.WRECK), "a wreck with bad cops starts")
+				_check(run_end.begin_total(), "a total with bad cops starts")
 				seen["bank"] = bank
 				step = Step.BAD_COPS
 		Step.BAD_COPS:
@@ -339,17 +348,19 @@ func _physics_process(_delta: float) -> bool:
 			if not done.is_empty() or t > hz * 40:
 				var bank: int = seen["bank"]
 				seen.erase("bank")
-				_report("wreck with bad cops")
-				_check(started.size() == 1 and started[0][1] == 400, "bad cops take all of tonight's cash")
+				_report("total with bad cops")
+				_check(started.size() == 1 and started[0] == [400, false], "bad cops take all of tonight's cash")
 				_check(game.wallet.cash == 0 and game.wallet.bank == bank, "and never the bank")
-				_check(seen.get(RunEnd.Phase.LINE, {}).get("line", "").begins_with(RunEnd.BAD_COP_LINE), "Dale says who took it")
+				_check(seen.get(RunEnd.Phase.LINE, {}).get("line", "").begins_with(RunEnd.BAD_COP_LINE), "Dave says who took it")
 				_new_run_end(p, 300)
-				_check(not run_end.begin(WreckRules.Outcome.BUMP), "a bump ends nothing")
+				_check(not run_end.hit(30.0) and is_equal_approx(p.damage.totalled, 0.0), "a bump adds nothing to the meter")
 				game.game_state.pause()
-				_check(not run_end.begin(WreckRules.Outcome.WRECK), "no wreck starts from the pause menu")
+				_check(not run_end.begin_total() and not run_end.hit(120.0), "no total starts from the pause menu")
 				game.game_state.resume()
-				_check(run_end.begin(WreckRules.Outcome.NIGHT_END), "a huge crash starts")
-				_check(game.game_state.state == GameState.State.WRECKED, "a wreck puts the game in the wrecked state")
+				_check(not run_end.hit(120.0, Node.new()) and is_equal_approx(p.damage.totalled, 0.6), "one huge hit is 0.60 and ends nothing")
+				_check(run_end.phase == RunEnd.Phase.DRIVING and run_end.screen.is_cracked(), "it shows cracked glass and the car is still driving")
+				_check(run_end.hit(120.0, Node.new()), "a second huge hit totals the car")
+				_check(game.game_state.state == GameState.State.WRECKED, "a total puts the game in the wrecked state")
 				game.game_state.toggle_pause()
 				_check(game.game_state.state == GameState.State.WRECKED and not paused, "Esc does nothing on the crash screen")
 				seen["bank"] = bank
@@ -359,11 +370,11 @@ func _physics_process(_delta: float) -> bool:
 			if not done.is_empty() or t > hz * 40:
 				var bank: int = seen["bank"]
 				seen.erase("bank")
-				_report("huge crash")
-				_common_screen_checks("huge crash")
-				_check(started.size() == 1 and started[0] == [WreckRules.Outcome.NIGHT_END, 150, false], "a huge crash takes half too")
-				_check(seen.has(RunEnd.Phase.MORNING) and done == [true], "a huge crash has a morning, which ends by itself")
-				_check(game.night_clock.night == night_before + 1, "a huge crash ends the night")
+				_report("total from two huge hits")
+				_common_screen_checks("two huge hits")
+				_check(started.size() == 1 and started[0] == [150, false], "a total from hits takes half too")
+				_check(seen.has(RunEnd.Phase.MORNING) and done == [true], "the morning ends by itself")
+				_check(game.night_clock.night == night_before + 1, "it ends the night")
 				_check(game.wallet.cash == 0 and game.wallet.bank == bank + 150, "what was left is banked")
 				run_end.queue_free()
 				run_end = null

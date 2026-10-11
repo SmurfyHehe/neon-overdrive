@@ -1,0 +1,28 @@
+{
+	"_note": "Placeholder lines for a totalled car (the story is Roy's to write). Read by scripts/core/run_end.gd. A line is never repeated twice in a row.",
+	"Dave": {
+		"total": [
+			"Scanner says a car just folded itself up out on the highway. If that was you: breathe. The road will still be there.",
+			"That's a tow truck night for somebody. Go home. It'll be dark again tomorrow.",
+			"They're closing a lane for a wreck out there. Whoever was driving is done for tonight."
+		],
+		"bad_cops": [
+			"Word is the first car at that wreck had its lights off and its hand out. Check your pockets."
+		]
+	},
+	"Moose": {
+		"first_total_morning": [
+			"Moose came out with the truck and brought you home."
+		]
+	},
+	"Walt": {
+		"first_total_morning": [
+			"Walt had the car straight by sunrise. This one is on him. The next one is not."
+		]
+	},
+	"Ferris": {
+		"morning": [
+			"The car came home on a hook."
+		]
+	}
+}

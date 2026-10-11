@@ -137,6 +137,11 @@ func _ready() -> void:
 	add_child(confirm)
 	settings = SettingsScreen.new(game_state)
 	settings.tow_action = _call_tow
+	settings.tow_offered = _tow_offered
+	settings.wrecks_changed = func() -> void:
+		var game := get_parent()
+		if game != null and game.has_method("apply_wrecks_setting"):
+			game.apply_wrecks_setting()
 	settings.race_action = _race_pressed
 	add_child(settings)
 	settings.closed.connect(_on_settings_closed)
@@ -262,19 +267,26 @@ func _fix_car() -> void:
 	FixCar.fix(get_parent().get("player"))
 	game_state.resume()
 
-## Ferris's tow (damage slice 1): only for a dead engine, never in a chase.
-## Damage no longer kills the engine (DP0), so this is unreachable until a
-## totalled car (CarDamage.totalled) makes is_engine_dead() true again.
-## The car goes home, the night ends, and the garage at home fixes it; the
-## bank pays once it exists (null = free for now). Chases come with Stage F.
+## Ferris's tow row (TM1): offered while the car is in limp or the totalled
+## meter is at 0.60 or over, never in a chase (CarDamage.tow_offered).
+func _tow_offered() -> bool:
+	var player: Variant = get_parent().get("player")
+	if player == null or player.get("damage") == null or player.get("limp") == null:
+		return false
+	return player.damage.tow_offered(player.limp.is_limping(), GameState.chase_locked())
+
+## Ferris's tow: the car goes home and the night ends, with no cash loss
+## (tonight's cash is banked at 6 a.m.). The meter and the broken parts stay:
+## they are the bill. TODO(bill card, towing T5): the bill card repairs and
+## charges the bank here (garage_repair used to be called at this point).
+## The bank pays once it exists (null = free for now).
 func _call_tow() -> void:
 	var game := get_parent()
 	var player: Variant = game.get("player")
-	if player == null or player.get("damage") == null or not player.damage.is_engine_dead():
+	if not _tow_offered():
 		return
-	if not player.damage.tow(null, false):
+	if not player.damage.tow(null, GameState.chase_locked()):
 		return
-	player.damage.garage_repair(null)
 	player.health.repair()
 	var clock: Variant = game.get("night_clock")
 	if clock != null:

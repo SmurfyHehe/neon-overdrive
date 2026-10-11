@@ -96,6 +96,13 @@ var car_restart_button: Button
 var tow_button: Button
 ## Test stand-ins the pause menu hands over (they act on the running game).
 var tow_action: Callable
+## Optional: returns whether the tow row is on offer right now (limp or a
+## meter at 0.60 or over, not in a chase). Unset = always on while paused.
+var tow_offered: Callable
+## Called after the test build's "Wrecks" row changes, so the running game can
+## switch its wreck sensor at once.
+var wrecks_changed: Callable
+var wrecks_option: OptionButton
 var race_action: Callable   # start (or give up) a race against a test rival, until meet spots exist
 var race_button: Button
 var clean_button: Button      # Walt's free cabin clean (CabinDirt)
@@ -346,6 +353,8 @@ func _sync_all() -> void:
 		volume_sliders[channel].value = AudioSettings.volumes[channel]
 	tips_check.button_pressed = GameSettings.tips
 	critters_check.button_pressed = GameSettings.critters
+	if wrecks_option != null:
+		wrecks_option.selected = 1 if GameSettings.wrecks_meter else 0
 	fullscreen_check.button_pressed = DisplaySettings.fullscreen
 	for i in resolution_option.item_count:
 		if resolution_option.get_item_metadata(i) == DisplaySettings.resolution:
@@ -544,6 +553,15 @@ func _build_game_page(parent: Control) -> Control:
 	critters_check = _add_check(page, "Roaches and rats", GameSettings.critters, func(on: bool) -> void:
 		GameSettings.set_critters(on)
 		GameSettings.save_settings())
+	# Test build only: whether crashes count on the totalled meter. Outside it
+	# the sensor is always on and there is no row.
+	if GameSettings.test_build():
+		wrecks_option = _add_option(page, "Wrecks", ["Off", "Meter"], func(i: int) -> void:
+			GameSettings.set_wrecks_meter(i == 1)
+			GameSettings.save_settings()
+			if wrecks_changed.is_valid():
+				wrecks_changed.call())
+		wrecks_option.selected = 1 if GameSettings.wrecks_meter else 0
 	copy_log_button = _add_button(page, "Copy my log", _copy_log)
 	log_status = Label.new()
 	log_status.add_theme_color_override("font_color", AMBER)
@@ -641,7 +659,7 @@ func _build_game_page(parent: Control) -> Control:
 	if not TestBuild.on():
 		car_option.get_parent().visible = false
 		car_restart_button.visible = false
-	tow_button = _add_button(page, "Call a tow (engine dead)", func() -> void:
+	tow_button = _add_button(page, "Call a tow (limping or badly hurt)", func() -> void:
 		if tow_action.is_valid():
 			tow_action.call())
 	race_button = _add_button(page, "Race a test rival", func() -> void:
@@ -667,7 +685,7 @@ func _refresh_game_page() -> void:
 	var in_garage := game_state != null and game_state.state == GameState.State.GARAGE
 	car_option.disabled = not (paused or in_garage)
 	car_restart_button.disabled = not (paused or in_garage)
-	tow_button.disabled = not paused or not tow_action.is_valid()
+	tow_button.disabled = not paused or not tow_action.is_valid() or (tow_offered.is_valid() and not tow_offered.call())
 	race_button.disabled = not paused or not race_action.is_valid()
 	var dirt := CabinDirt.level(now)
 	clean_button.text = "Clean the car (Walt, free)" if dirt > CabinDirt.CLEAN or CabinDirt.cans(now) > 0 else "Clean the car (already clean)"

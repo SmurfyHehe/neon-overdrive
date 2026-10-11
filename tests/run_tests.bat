@@ -235,6 +235,12 @@ rem Delete a save: the store, and the title's Load > Delete a save with its ques
 call :run core/save_delete --headless
 rem Test build: every player car with everything its mod tree offers fitted.
 call :run car/test_build_mods --headless
+rem Hard hits and the end of the night: the rules, the hit sensor, the crash screen; then the real restart.
+call :run core/run_end "--headless --fixed-fps 120"
+call :run core/run_end_restart "--headless --fixed-fps 120"
+rem Totalled meter (TM1): no single hit ends a run; the meter, the free first total, bad cops, the tow row, the test build setting.
+call :run car/totalled_meter --headless
+call :run core/totalled_run_end "--headless --fixed-fps 120"
 call :run world/gas_station --headless
 call :run world/gas_station_sides --headless
 rem ~4-5 min: the four compound station lots driven for real (in, every spot kind, out) at 60 and 120 km/h.

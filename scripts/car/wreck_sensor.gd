@@ -3,7 +3,9 @@ extends Node
 # Watches the player's car for a hard hit (wreck_rules.gd). Every physics tick
 # it reads the car's contacts; the first tick a thing touches the car, it
 # works out how fast the two were closing along the contact, turns that into a
-# wall speed with the other thing's mass, and reports the outcome.
+# wall speed with the other thing's mass, and reports it when it is at least
+# WreckRules.WRECK_KMH. What a hit is worth is the totalled meter's call
+# (totalled_meter.gd, applied by run_end.gd).
 #
 # The contacts a tick shows were already solved by the physics step before
 # it, so the speeds read now are the speeds AFTER the hit. The closing speed
@@ -19,7 +21,7 @@ const WreckRules := preload("res://scripts/car/wreck_rules.gd")
 
 ## A hit at or over the wreck threshold. Speeds in km/h; `other` is the thing
 ## hit (a TrafficCar, a wall body, or null if it is already gone).
-signal wrecked(outcome: int, wall_kmh: float, closing_kmh: float, other: Object)
+signal wrecked(wall_kmh: float, closing_kmh: float, other: Object)
 ## Any new contact with a wall or a moving thing, bump or not (police: a crash
 ## with traffic over 15 km/h, a touch on a cop). `closing_kmh` as in wrecked.
 signal touched(other: Object, closing_kmh: float)
@@ -92,6 +94,5 @@ func _read(vel: Vector3) -> void:
 	last_wall_kmh = worst * 3.6
 	last_closing_kmh = worst_closing * 3.6
 	touched.emit(worst_obj, last_closing_kmh)
-	var result := WreckRules.outcome(last_wall_kmh)
-	if result != WreckRules.Outcome.BUMP:
-		wrecked.emit(result, last_wall_kmh, last_closing_kmh, worst_obj)
+	if last_wall_kmh >= WreckRules.WRECK_KMH:
+		wrecked.emit(last_wall_kmh, last_closing_kmh, worst_obj)

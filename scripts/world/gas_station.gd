@@ -23,6 +23,7 @@ extends Node3D
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
 const L := RoadChunkBuilder.CHUNK_LEN
+const TunnelMap := preload("res://scripts/world/road_map.gd")
 
 ## Where the first station is and how far apart they are, metres of road.
 ## A third of a tank (the start) lasts about 9 km of mixed driving and the
@@ -62,7 +63,12 @@ var armed := true
 
 ## Metres of road of station k (k = 0, 1, ...).
 static func s_of(k: int) -> float:
-	return first_s + float(k) * SPACING
+	var s := first_s + float(k) * SPACING
+	# Not in a tunnel or its trench (TN1): that one stands 60 m before the dip.
+	var chunk := floori(s / L)
+	if TunnelMap.dip_at(chunk) == TunnelMap.DIP_NONE:
+		return s
+	return float(TunnelMap.dip_span(chunk).x) * L - 60.0
 
 ## The station nearest `s`.
 static func nearest(s: float) -> float:

@@ -6,7 +6,8 @@ extends SceneTree
 # the car (clear of the downtown towers), a 30 degree lens aimed 15 degrees up on the moon's bearing,
 # so the frame runs from the horizon glow at the bottom to ~30 degrees of
 # navy at the top. Region-averaged because the film grain is per-pixel
-# noise. Then steps the moon through its phases and measures the lit area.
+# noise. Then centres on the moon (50 degrees up at midnight on its real
+# path, above that frame), steps it through its phases and measures the lit area.
 #
 # Asserts (exit code 1 on failure):
 # - the sky is a gradient, not flat fog: navy at the top (blue over red),
@@ -78,6 +79,12 @@ func _process(_delta: float) -> bool:
 			env.fog_aerial_perspective = 1.0
 		_:
 			var i := step - 2
+			if i == 0:
+				# The moon follows a real sky now (night_sky.gd: peak 50..55
+				# degrees up at transit, 1-2 a.m.), so at the pinned midnight it
+				# stands above the 30 degree frame that holds the gradient.
+				# Centre on it for the phases.
+				cam.look_at(cam.global_position + NightSky.moon_dir_of(env.sky) * 100.0)
 			if i > 0:
 				lit_px[PHASES[i - 1]] = _moon("phase_%02d" % int(PHASES[i - 1] * 100))
 			if i >= PHASES.size():

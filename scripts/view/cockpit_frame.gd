@@ -1008,7 +1008,7 @@ func _process(delta: float) -> void:
 	var cue := Hud.shift_cue(p, frac)
 	var blink := Hud.blink()
 	_step_wheel(delta)
-	wheel.update(frac, cue, blink, p.motor_rpm, Hud.kmh(p.current_speed()), Hud.cluster_gear(p))
+	wheel.update(frac, cue, blink, Hud.kmh(p.current_speed()), p.gear, delta)
 	var rest := dial_sweep * 0.5   # the needle points at the first tick (lower left, or the band's left end)
 	tach_needle.rotation = Vector3(0.0, 0.0, deg_to_rad(rest - dial_sweep * frac))
 	var kmh := clampf(absf(p.current_speed()) * Hud.KMH_PER_MS / float(cab.speedo_max_kmh), 0.0, 1.0)
@@ -1126,5 +1126,5 @@ func triangle_count() -> int:
 				n += (mesh as ArrayMesh).surface_get_array_len(s) / 3
 		elif mesh is QuadMesh:
 			n += 2
-	n += 12 * (SteeringWheel.LED_COUNT + 4 + 4)
+	n += 12 * (SteeringWheel.LED_COUNT + 4 + SteeringWheel.SCREEN_SEGS + 4)
 	return n

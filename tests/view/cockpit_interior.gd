@@ -54,7 +54,7 @@ func _physics_process(_delta: float) -> bool:
 	match step:
 		Step.BOOT:
 			_check(frame != null and frame.get_parent() == p, "the cockpit frame should be a child of the player car")
-			for n in ["Cabin", "Backlight", "WheelMount", "WheelMount/Wheel", "WheelMount/Wheel/Leds", "WheelMount/Wheel/Lcd",
+			for n in ["Cabin", "Backlight", "WheelMount", "WheelMount/Wheel", "WheelMount/Wheel/Leds",
 					"WheelMount/Wheel/PaddleL", "WheelMount/Wheel/PaddleR", "TachNeedle", "SpeedoNeedle", "Lamps", "Radio", "Radio/Screen", "Radio/Bezel",
 					"Lever", "Lever/Knob", "Handbrake", "ThrottlePedal", "BrakePedal", "ClutchPedal", "CabinLight",
 					"Mirrors", "Mirrors/RearView", "Mirrors/LeftView", "Mirrors/RightView", "Mirrors/RearGlass", "Shelf"]:
@@ -112,18 +112,20 @@ func _physics_process(_delta: float) -> bool:
 				_check(signf(w.angle) == signf(frame.steering) and absf(w.rotation.z + w.angle) < 1e-4, "right steering turns the wheel clockwise (rotation.z = -angle)")
 				var frac := clampf(p.motor_rpm / p.max_rpm, 0.0, 1.0)
 				_check(w.lit_count == SteeringWheel.lit_count_for(frac), "live LED count follows the live rpm")
-				_check(w.lcd.text.contains("rpm") and w.lcd.text.contains("km/h") and w.lcd.text.contains(str(int(p.motor_rpm))) and w.lcd.text.contains(str(Hud.kmh(p.current_speed()))) and w.lcd.text.ends_with(Hud.gear_text(p.gear)), "the LCD shows rpm, km/h and the gear, got '%s'" % w.lcd.text.replace("\n", " / "))
+				var shown := w.lcd_text()
+				_check(shown.begins_with(SevenSeg.gear_char(p.gear) + " ") and not shown.contains("rpm") and absi(int(shown.substr(2)) - Hud.kmh(p.current_speed())) <= 30, "the screen shows the gear and a km/h close to the live speed, got '%s' (gear %d, %d km/h)" % [shown, p.gear, Hud.kmh(p.current_speed())])
+				_check(w.find_children("*", "Label3D", true, false).is_empty(), "no Label3D under the wheel")
 				# flash on the shift cue: manual, gear 1 of several, past the shift point
 				p.automatic_transmission = false
 				var cue := Hud.shift_cue(p, 0.95)
 				_check(cue, "manual box in 1st past the shift point should cue a shift")
-				w.update(0.95, cue, true, 6650.0, 40, "1")
+				w.update(0.95, cue, true, 40, 1, 0.016)
 				_check(w.lit_count == 15 and w.flashing, "all LEDs lit and flashing on the cue")
 				var mid := w.led_colours[7]
 				_check(mid.a > 0.99 and mid.r > 0.7 and mid.g > 0.7 and mid.b > 0.7, "a flashing LED goes silver, got %s" % mid)
-				w.update(0.95, cue, false, 6650.0, 40, "1")
+				w.update(0.95, cue, false, 40, 1, 0.016)
 				_check(not w.flashing and w.led_colours[7].is_equal_approx(Color(SteeringWheel.RED, 1.0)), "between blinks the middle LED is red")
-				w.update(0.5, false, false, 3500.0, 40, "1")
+				w.update(0.5, false, false, 40, 1, 0.016)
 				_check(w.lit_count == 0 and w.led_colours[0].a < 0.01, "at 50%% every LED is off (alpha 0)")
 				_check_sightline(p, frame)
 				_check_wheel_pose(frame)

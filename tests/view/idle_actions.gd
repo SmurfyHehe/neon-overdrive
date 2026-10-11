@@ -12,11 +12,13 @@ extends SceneTree
 #   either side of straight ahead;
 # - beer: with "beer while driving" on, L works at 80 km/h; off, nothing at
 #   80 km/h and it works parked;
-# - cigarette (MA5), window shut and down: the lighter clicks once and its
-#   flame and light are up about 0.4 s, three drags each with a breath out and
-#   a brighter tip, then the end is flicked out of the open window through the
-#   pooled ember burst (put out inside with the window shut); three fast
-#   presses are at most two uses;
+# - cigarette (MA5), from a shut window and from a down one: the window rolls
+#   down a little by itself (about 0.55) and back up after, and not at all if
+#   it was down; the lighter clicks once and its flame and light are up about
+#   0.4 s; three drags each with a breath out and a brighter tip; the
+#   cigarette gets shorter with every drag and never longer (its length is the
+#   only health bar); the butt is flicked out of the window by itself through
+#   the pooled ember burst, always; three fast presses are at most two uses;
 # - traffic flicks (once, driven by hand): a car 24 m ahead flicks no more than
 #   once per 120 s, none from 60 m ahead or from behind;
 # - None: L does nothing;
@@ -73,6 +75,14 @@ var hands_wrong := false
 var flame_ticks := 0         # ticks the lighter's flame was up
 var flame_light_ok := true
 var tip_peak := 0.0          # the brightest the cigarette tip got
+var cig_first := -1.0        # how much cigarette was left at the first sample of a use, and the last
+var cig_last := -1.0
+var cig_mono := true         # it never got longer
+var cig_paper_first := -1.0  # the paper's drawn length, m
+var cig_paper_last := -1.0
+var win_max := 0.0           # the window's range during the watch
+var win_min := 1.0
+var window_hand_seen := false   # the crank or switch animated (window_direction != 0)
 var traffic_checked := false # the traffic flick check runs once, on the first car
 
 func _check(ok: bool, msg: String) -> void:
@@ -132,6 +142,14 @@ func _watch() -> void:
 	flame_ticks = 0
 	flame_light_ok = true
 	tip_peak = 0.0
+	cig_first = -1.0
+	cig_last = -1.0
+	cig_mono = true
+	cig_paper_first = -1.0
+	cig_paper_last = -1.0
+	win_max = 0.0
+	win_min = 1.0
+	window_hand_seen = false
 
 func _in_view(c: Vector3, what: String) -> void:
 	var rel: Vector3 = c - (frame.cab.eye as Vector3)
@@ -168,6 +186,11 @@ func _sample() -> void:
 			elif item == IdleActions.CIGARETTE:
 				held_node = d.props.cig
 			_corners(held_node, "the " + String(item))
+			for ch in held_node.get_children():   # the cigarette's paper and tip hang off it
+				if ch is MeshInstance3D and ch.visible:
+					var bb := (ch as MeshInstance3D).mesh.get_aabb()
+					for i in 8:
+						_in_view(held_node.transform * (ch as Node3D).transform * bb.get_endpoint(i), "the " + String(item))
 			mouth_gap = minf(mouth_gap, h.position.distance_to((frame.cab.eye as Vector3) + DriverModel.IDLE_MOUTH[item]))
 	hands_wrong = hands_wrong or shown != 1
 	saw_idle = saw_idle or d.is_idling()
@@ -177,6 +200,19 @@ func _sample() -> void:
 	elif d.props.flame_light.visible or d.props.lighter.visible:
 		flame_light_ok = false   # the flame's light must go out with the flame
 	tip_peak = maxf(tip_peak, d.props.tip_energy())
+	win_max = maxf(win_max, frame.window)
+	win_min = minf(win_min, frame.window)
+	window_hand_seen = window_hand_seen or frame.window_direction != 0
+	if saw_hold == IdleActions.CIGARETTE and d.hold_hands[IdleActions.CIGARETTE].visible:
+		var left: float = d.props.burn_left()
+		var len: float = d.props.paper.scale.y
+		if cig_first < 0.0:
+			cig_first = left
+			cig_paper_first = len
+		if cig_last >= 0.0 and left > cig_last + 0.0001:
+			cig_mono = false
+		cig_last = left
+		cig_paper_last = len
 	_corners(hand, "the left hand")
 	var puffs := d.props.puffs()
 	most_puffs = maxi(most_puffs, puffs.size())
@@ -347,17 +383,19 @@ func _beer_cases() -> void:
 	_always("beer parked")
 	IdleActions.set_beer_while_moving(true)
 
-## The cigarette (MA5): the same states as the vape, window shut and down.
-## Lighter first (a click, a flame for about 0.4 s and the one extra light, the
-## tip catching), three drags with a breath out after each and the tip brighter
-## on each, then the end goes out of the open window as an ember behind the car,
-## or, with the window shut, into the pocket.
+## The cigarette (MA5): the same states as the vape, from a shut window and an
+## open one. The window rolls down a little by itself for the light (and back
+## up after, if it opened it); lighter first (a click, a flame for about 0.4 s
+## and the one extra light, the tip catching); three drags with a breath out
+## after each and the tip brighter on each, the cigarette itself shorter with
+## every drag (its length is the only "health bar"); then the butt is flicked
+## out of the window by itself as an ember behind the car.
 func _cigarette_cases() -> void:
-	for open in [false, true]:
-		var what := "cigarette, window %s" % ("down" if open else "shut")
+	for start_open in [false, true]:
+		var what := "cigarette, window starts %s" % ("down" if start_open else "shut")
 		IdleActions.set_item(IdleActions.CIGARETTE)
-		cam.set_view(ChaseCamera.View.CHASE if open else ChaseCamera.View.COCKPIT)
-		await _set_window(1.0 if open else 0.0)
+		cam.set_view(ChaseCamera.View.CHASE if start_open else ChaseCamera.View.COCKPIT)
+		await _set_window(1.0 if start_open else 0.0)
 		var pr: IdleProps = d.props
 		_check(pr.cig.visible and not pr.vape.visible and not pr.can.visible, "with Cigarette picked only the cigarette should be in the car")
 		var ember: EmberFlick = EmberFlick.current
@@ -366,8 +404,8 @@ func _cigarette_cases() -> void:
 		var clicks := pr.lighter_clicks
 		var exhales := pr.exhales
 		var flicked := pr.butts_flicked
-		var dropped := pr.butts_dropped
 		var player_flicks := ember.player_flicks if ember != null else 0
+		_check(is_equal_approx(pr.burn_left(), 1.0), "%s: a fresh cigarette is not whole (%.2f)" % [what, pr.burn_left()])
 		_watch()
 		await _tap()
 		await _secs(CIG_BACK_SECS - float(TAP_TICKS) / RATE)
@@ -383,20 +421,25 @@ func _cigarette_cases() -> void:
 		_check(tip_peak >= IdleProps.TIP_DRAG * 0.9, "%s: the tip peaked at %.1f, want about %.1f on a drag" % [what, tip_peak, IdleProps.TIP_DRAG])
 		_check(pr.tip_energy() == IdleProps.TIP_UNLIT and not pr.is_lit(), "%s: the tip is still glowing at the end" % what)
 		_check(most_puffs > 0 and most_puffs <= IdleProps.MAX_PUFFS, "%s: %d puffs at once" % [what, most_puffs])
-		if open:
-			_check(puff_out > d.door_line(), "%s: the smoke never got out of the window (%.2f out, the door line is %.2f)" % [what, puff_out, d.door_line()])
-			_check(pr.butts_flicked - flicked == 1 and pr.butts_dropped == dropped, "%s: the end was not flicked out of the window" % what)
-			if ember != null:
-				_check(ember.player_flicks - player_flicks == 1, "%s: the ember effect did not play (%d flicks)" % [what, ember.player_flicks - player_flicks])
-				var side := p.to_local(ember.last_origin)
-				_check(side.x < -d.door_line(), "%s: the ember left from %.2f m, inside the door line %.2f" % [what, side.x, d.door_line()])
-				_check(ember.last_ground < ember.last_origin.y, "%s: the road slab is not under the flick" % what)
+		# it shortens with every drag, never grows back, and is a butt at the end
+		_check(cig_first > 0.99 and cig_last <= IdleProps.BURN_END + 0.02, "%s: the cigarette went from %.2f to %.2f of its length" % [what, cig_first, cig_last])
+		_check(cig_mono, "%s: the cigarette got longer during the use" % what)
+		_check(cig_paper_last < cig_paper_first * 0.4, "%s: the paper is %.4f m of %.4f m, want under 40%%" % [what, cig_paper_last, cig_paper_first])
+		# the window: a little by itself from shut, none of the crank or switch, untouched if already down
+		_check(not window_hand_seen, "%s: the window's crank or switch animated (the hand was busy)" % what)
+		if start_open:
+			_check(is_equal_approx(frame.window, 1.0) and win_min > 0.99, "%s: the window moved from fully down (%.2f)" % [what, win_min])
 		else:
-			if d.has_door_glass():
-				_check(puff_out < d.door_line(), "%s: the smoke went through the glass" % what)
-			_check(pr.butts_dropped - dropped == 1 and pr.butts_flicked == flicked, "%s: with the window shut the end was not put out inside" % what)
-			if ember != null:
-				_check(ember.player_flicks == player_flicks, "%s: an ember flew out of a shut window" % what)
+			_check(win_max >= 0.5 and win_max <= 0.7, "%s: the window rolled to %.2f, want a little past half" % [what, win_max])
+			_check(await _wait_for(func() -> bool: return frame.window < 0.01, 3.0), "%s: the window did not roll back up (%.2f)" % [what, frame.window])
+		# the smoke and the butt went out of the window
+		_check(puff_out > d.door_line(), "%s: the smoke never got out of the window (%.2f out, the door line is %.2f)" % [what, puff_out, d.door_line()])
+		_check(pr.butts_flicked - flicked == 1, "%s: the butt was not flicked out" % what)
+		if ember != null:
+			_check(ember.player_flicks - player_flicks == 1, "%s: the ember effect did not play (%d flicks)" % [what, ember.player_flicks - player_flicks])
+			var side := p.to_local(ember.last_origin)
+			_check(side.x < -d.door_line(), "%s: the ember left from %.2f m, inside the door line %.2f" % [what, side.x, d.door_line()])
+			_check(ember.last_ground < ember.last_origin.y, "%s: the road slab is not under the flick" % what)
 		await _secs(CLOUD_SECS)
 		_check(pr.puff_count() == 0, "%s: %d puffs still there %.0f s after the hand was back" % [what, pr.puff_count(), CLOUD_SECS])
 		_always(what)

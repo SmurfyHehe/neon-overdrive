@@ -1,0 +1,135 @@
+NEONSAVE1 92a6351d3639130ed3405242fb057e7d5e9168772827fb0799f07fee0de6cd90
+{
+	"car": {
+		"ang_vel": [
+			-0.01919209212064743,
+			-0.00012030212383251637,
+			-4.525858457782306e-05
+		],
+		"gear": 2,
+		"lin_vel": [
+			0.0008611606899648905,
+			-0.028163980692625046,
+			-13.083953857421875
+		],
+		"rpm": 4672.519038853472,
+		"xform": [
+			1.0,
+			-8.839955626172014e-06,
+			4.243995135766454e-05,
+			8.24385915620951e-06,
+			0.9999016523361206,
+			0.014025166630744934,
+			-4.255976091371849e-05,
+			-0.014025166630744934,
+			0.9999016523361206,
+			5.196218013763428,
+			-0.2061910778284073,
+			-41.5547981262207
+		]
+	},
+	"clock": {
+		"minutes": 136.49583333333197,
+		"night": 7
+	},
+	"origin_index": 0,
+	"radio": 1,
+	"recenter_count": 0,
+	"road": {
+		"act": 1,
+		"curviness": 0.5,
+		"dir": 1,
+		"hilliness": 0.5,
+		"id": 0,
+		"kicker_chance": 0.0,
+		"s": 41.5547981262207,
+		"seed": 4242
+	},
+	"sections": {
+		"0": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4,
+			"own_lanes": 4
+		},
+		"1": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4,
+			"own_lanes": 4
+		},
+		"121": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4,
+			"own_lanes": 4
+		},
+		"122": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4,
+			"own_lanes": 4
+		},
+		"123": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4,
+			"own_lanes": 4
+		},
+		"124": {
+			"barrier": "concrete",
+			"gap": true,
+			"onc_lanes": 4,
+			"own_lanes": 4
+		},
+		"125": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4,
+			"own_lanes": 4
+		},
+		"126": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4,
+			"own_lanes": 4
+		},
+		"127": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4,
+			"own_lanes": 4
+		},
+		"2": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4,
+			"own_lanes": 4
+		},
+		"3": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4,
+			"own_lanes": 4
+		},
+		"4": {
+			"barrier": "concrete",
+			"gap": true,
+			"onc_lanes": 4,
+			"own_lanes": 4
+		},
+		"5": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4,
+			"own_lanes": 4
+		},
+		"6": {
+			"barrier": "concrete",
+			"gap": false,
+			"onc_lanes": 4,
+			"own_lanes": 4
+		}
+	},
+	"version": 1
+}

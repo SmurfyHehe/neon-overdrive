@@ -1,0 +1,11 @@
+{
+	"slots": {
+		"Street": {
+			"final_drive": 4.0,
+			"gear_ratios/0": 2.5,
+			"gear_ratios/1": 2.5,
+			"gear_ratios/2": 2.5
+		}
+	},
+	"version": 1
+}

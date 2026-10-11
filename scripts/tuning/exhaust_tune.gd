@@ -8,6 +8,7 @@ extends RefCounted
 class_name ExhaustTune
 
 const TestMode := preload("res://scripts/core/test_mode.gd")
+const SaveCore := preload("res://scripts/save/save_core.gd")
 
 ## How loud the whole exhaust note is. 0.5 is the prototype's old level.
 var loudness := 0.5
@@ -28,9 +29,17 @@ var flame := 0.0
 ## A bare ExhaustTune.new() (a synth with no car) has it off.
 var anti_lag := 0.0
 
-## Where the player's tune is kept between runs (one entry per car id). Tests
-## point this at a scratch file so they never read or write the real one.
-static var save_path := TestMode.path("user://exhaust_tune.json")
+## Where the player's tune is kept between runs. In the game it is the save
+## slot, per car (career block tunes[car id].exhaust; save core S1, 2026-10-11):
+## DEFAULT_PATH means "in the slot". The old shared user://exhaust_tune.json is
+## upgraded into the slot that was being played and not read again. In test
+## mode, and for a test that points this at a scratch file, it is a plain file
+## with one entry per car id.
+const DEFAULT_PATH := "user://exhaust_tune.json"
+static var save_path := TestMode.path(DEFAULT_PATH)
+
+static func in_slot() -> bool:
+	return save_path == DEFAULT_PATH
 
 const KEYS := ["loudness", "raspiness", "pops", "flame", "anti_lag"]
 
@@ -58,8 +67,11 @@ func apply_dict(d: Dictionary) -> void:
 ## The saved tune of a car as {key: float}, or {} if there is none (no file, a
 ## file that will not parse, or no entry for this car).
 static func load_saved(car_id: String) -> Dictionary:
-	var cars := _read_cars()
-	var d: Variant = cars.get(car_id)
+	var d: Variant
+	if in_slot():
+		d = SaveCore.tune(car_id).get("exhaust") if SaveCore.persist else null
+	else:
+		d = _read_cars().get(car_id)
 	if not d is Dictionary:
 		return {}
 	var out := {}
@@ -71,11 +83,13 @@ static func load_saved(car_id: String) -> Dictionary:
 ## Stores a car's tune, keeping the other cars' entries. A file that will not
 ## parse is replaced. Returns false if the file cannot be written.
 static func save_car(car_id: String, d: Dictionary) -> bool:
-	var cars := _read_cars()
 	var entry := {}
 	for k in KEYS:
 		if d.has(k):
 			entry[k] = snappedf(float(d[k]), 0.001)
+	if in_slot():
+		return SaveCore.persist and SaveCore.set_tune(car_id, "exhaust", entry)
+	var cars := _read_cars()
 	cars[car_id] = entry
 	var f := FileAccess.open(save_path, FileAccess.WRITE)
 	if f == null:

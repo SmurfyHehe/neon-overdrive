@@ -1,16 +1,24 @@
 extends Node
 
-# When the game saves, and what a run save holds (run structure, 2026-10-09).
-# Game adds one of these; SaveStore does the writing.
+# When the game saves, and what a run save holds (run structure, 2026-10-09;
+# save core S1, 2026-10-11). Game adds one of these; SaveCore does the writing.
 #
-# Auto-save only. It writes the run:
+# Auto-save only. It writes the night in progress (the slot's night.json):
 #   - every AUTOSAVE_SECS of driving,
 #   - when the game is paused or a Tuner/photo screen opens,
 #   - when the night rolls over,
 #   - on quit (pause menu Quit or the window's close button).
-# Never during a chase (SaveStore.chase_active). Restart starts a fresh run:
-# the run file is emptied, money and parts stay; a restart mid-chase leaves the
-# chase open, so it counts as a bust like a quit.
+# Never during a chase (SaveStore.chase_active).
+#
+# The career (the slot's career.json) is written at commit points only, never
+# while driving: on quit, after the night save; at a run end (restart, or a
+# bust settled on the way back in), which also clears the run: money, parts,
+# the clock and the car's wear stay; and at dawn (Wallet.bank_night). A restart
+# mid-chase leaves the chase open, so it counts as a bust like a quit.
+#
+# With the night goes the state of the car you are in (car_live: wear, damage,
+# fuel, dirt), so a quit and reload is not a free repair. A commit folds it
+# into the career.
 #
 # A run save is enough to put the car back exactly: the road (seed, shape,
 # floating-origin index, the barrier roll of the chunks around the car), the
@@ -26,17 +34,18 @@ extends Node
 # that id; a save with another id, or none (saves from before the map), starts
 # at the top of the default road and keeps the clock and the radio. So a later
 # loop is a new id, and old saves keep opening. No version bump: the fields
-# are optional.
+# are optional. An old run is upgraded with its slot (save_upgrade.gd), never
+# thrown away for its version number.
 #
 # Off in test mode unless a test sets `enabled` (like PlayerTune), so tests that
 # boot Game.tscn never resume each other's runs.
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
+const SaveCore := preload("res://scripts/save/save_core.gd")
 const TestMode := preload("res://scripts/core/test_mode.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
 
-const RUN_VERSION := 1
 const AUTOSAVE_SECS := 30.0
 
 static var enabled := not TestMode.active()
@@ -51,6 +60,7 @@ var resumed := {}
 var busted := false
 var saves := 0  # how many run saves this session wrote (tests read it)
 var _left := AUTOSAVE_SECS
+var _play_secs := 0.0  # driving time of the slot, all sessions
 
 func _init(owner_game: Node) -> void:
 	game = owner_game
@@ -67,6 +77,7 @@ func read_run() -> Dictionary:
 	if busted:
 		SaveStore.clear_run()
 		return {}
+	_play_secs = float(SaveCore.play_secs())
 	var run := SaveStore.load_run()
 	resumed = run if valid_run(run) else {}
 	return resumed
@@ -77,8 +88,6 @@ func _ready() -> void:
 
 ## True when `run` has everything restore needs, all finite.
 static func valid_run(run: Dictionary) -> bool:
-	if int(run.get("version", 0)) != RUN_VERSION:
-		return false
 	for k in ["road", "car", "origin_index"]:
 		if not run.has(k):
 			return false
@@ -118,7 +127,6 @@ func capture() -> Dictionary:
 				sections[str(i)] = game.section_cache[str(i)]
 	var at := RoadMap.where(RoadFrame.unroll(p.global_position).z, -p.global_transform.basis.z)
 	var run := {
-		"version": RUN_VERSION,
 		"road": {"seed": game.road_seed, "curviness": game.curviness, "hilliness": game.hilliness,
 			"kicker_chance": game.kicker_chance,
 			"id": at.road, "s": at.s, "dir": at.dir, "act": RoadMap.act},
@@ -134,7 +142,24 @@ func capture() -> Dictionary:
 		run.clock = {"minutes": game.night_clock.minutes, "night": game.night_clock.night}
 	if game.radio != null:
 		run.radio = game.radio.player_station()
+	run.play_secs = int(_play_secs)
+	var live := car_live()
+	if not live.is_empty():
+		run.car_live = live
 	return run
+
+## The state of the car you are in: {"car": id, "wear", "damage", "fuel",
+## "dirt"}. {} for a car that is not one of the player's (the test car).
+func car_live() -> Dictionary:
+	var p: Node3D = game.player
+	var kind := PlayerCar.chassis_kind()
+	if p == null or not PlayerCars.is_player_kind(kind) or not p.health.enabled:
+		return {}
+	var live := {"car": kind, "wear": p.health.to_dict(), "damage": p.damage.to_dict(), "fuel": p.fuel.to_dict()}
+	var fx: Variant = game.get("fx")
+	if fx != null and fx.get("dirt") != null:
+		live.dirt = fx.dirt.level
+	return live
 
 ## Puts the car's motion back once it is in the tree (Vehicle._ready has run).
 func restore_car(p: Node3D, car: Dictionary) -> void:
@@ -166,6 +191,7 @@ func save_now() -> bool:
 func _process(delta: float) -> void:
 	if get_tree().paused:
 		return
+	_play_secs += delta
 	_left -= delta
 	if _left <= 0.0:
 		save_now()
@@ -174,11 +200,19 @@ func on_state_changed(new_state: int, old_state: int) -> void:
 	if old_state == GameState.State.PLAYING and new_state != GameState.State.PLAYING:
 		save_now()
 
-## Restart: a fresh run. Mid-chase the chase stays open (a bust next load).
+## Restart: the run ends, a commit. The car's state now goes into the career
+## and the next load starts a fresh run. Mid-chase nothing is written and the
+## chase stays open (a bust next load).
 func on_restart() -> void:
-	if enabled and not SaveStore.chase_active:
-		SaveStore.clear_run()
+	if enabled and not SaveStore.chase_active and game.player != null:
+		SaveCore.commit("run_end", {"clear_run": true, "car_live": car_live()})
+
+## Quit (the pause menu, back to the title, a slot switch, the window's close
+## button): the night is saved, then the career is committed.
+func on_quit() -> void:
+	if save_now():
+		SaveCore.commit("quit")
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
-		save_now()
+		on_quit()

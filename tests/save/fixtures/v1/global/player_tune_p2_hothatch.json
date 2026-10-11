@@ -1,0 +1,9 @@
+{
+	"values": {
+		"final_drive": 3.25,
+		"gear_ratios/0": 1.5,
+		"gear_ratios/1": 1.5,
+		"gear_ratios/2": 1.5
+	},
+	"version": 1
+}

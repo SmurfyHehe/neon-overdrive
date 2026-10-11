@@ -4,7 +4,11 @@ extends Node
 # Night game clock (living world step 1, 2026-10-08). The game is played at
 # night only: the clock runs from 8 p.m. to 6 a.m. while you drive, stops while
 # the game is paused (a pausable node, so the pause menu and the tuner hold it),
-# and is saved across sessions in its own file. The HUD and the head unit show
+# and is saved across sessions: in the game with the night in progress in the
+# save slot (save core S1, 2026-10-11: night.json's clock, SaveCore.clock /
+# set_clock), so each slot has its own night and time. The old shared
+# user://night_clock.cfg is upgraded into the slot and not read again; test
+# mode and tests that set `path` still use a .cfg file. The HUD and the head unit show
 # it, building windows follow it (WindowLights) and Dave reads the hour out on
 # his station (RadioManager.announce).
 #
@@ -30,6 +34,9 @@ const BENCHMARK_MINUTES := 240.0      # midnight
 const TestMode := preload("res://scripts/core/test_mode.gd")
 const SaveStore := preload("res://scripts/save/save_store.gd")
 
+const SaveCore := preload("res://scripts/save/save_core.gd")
+
+## DEFAULT_PATH means "in the save slot"; any other path is a .cfg file (tests).
 static var path := TestMode.path(DEFAULT_PATH)
 
 ## Game minutes since 8 p.m. this night.
@@ -119,11 +126,20 @@ func set_time(m: Variant, n: Variant) -> void:
 
 ## Missing or damaged file: a fresh night 1 at 8 p.m.
 func load_clock() -> void:
-	var cfg := ConfigFile.new()
-	if cfg.load(path) != OK:
-		return
-	var m = cfg.get_value("clock", "minutes", 0.0)
-	var n = cfg.get_value("clock", "night", 1)
+	var m: Variant
+	var n: Variant
+	if path == DEFAULT_PATH:
+		if not SaveCore.persist:
+			return
+		var c := SaveCore.clock()
+		m = c.minutes
+		n = c.night
+	else:
+		var cfg := ConfigFile.new()
+		if cfg.load(path) != OK:
+			return
+		m = cfg.get_value("clock", "minutes", 0.0)
+		n = cfg.get_value("clock", "night", 1)
 	if (m is float or m is int) and is_finite(float(m)):
 		minutes = clampf(float(m), 0.0, NIGHT_MINUTES - 0.001)
 	if n is int or n is float:
@@ -132,6 +148,8 @@ func load_clock() -> void:
 func save_clock() -> bool:
 	if SaveStore.chase_active:
 		return false  # never save during a chase (run structure, 2026-10-09)
+	if path == DEFAULT_PATH:
+		return SaveCore.persist and SaveCore.set_clock(minutes, night)
 	var cfg := ConfigFile.new()
 	cfg.set_value("clock", "minutes", minutes)
 	cfg.set_value("clock", "night", night)

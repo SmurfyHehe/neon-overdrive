@@ -1,0 +1,12 @@
+{
+	"cars": {
+		"p1_coupe": {
+			"anti_lag": 1.0,
+			"flame": 0.2,
+			"loudness": 0.8,
+			"pops": 0.6,
+			"raspiness": 0.4
+		}
+	},
+	"version": 1
+}

@@ -42,13 +42,13 @@ const CABIN := {
 
 ## Per car: cabin overrides (none yet: one shared cabin) and the car spots.
 const CARS := {
-	"p0_beater": {"strut_bar": {"x": 0.48, "y": 0.93, "z": -1.05}},
+	"p0_beater": {"strut_bar": {"x": 0.48, "y": 0.93, "z": -1.05}, "bobble": {"along": 0.8, "scale": 0.65, "tilt": 0.2}},
 	"p1_coupe": {"strut_bar": {"x": 0.595, "y": 0.71, "z": -1.11}},
 	"p2_hothatch": {"strut_bar": {"x": 0.62, "y": 0.85, "z": -1.13}},
 	"p3_tuner": {"strut_bar": {"x": 0.59, "y": 0.79, "z": -1.16}},
 	# the kei's dash is a 6 cm ledge a hand's width under the screen: its
 	# bobble head stands nearer the cowl and a size smaller (BobbleHead)
-	"p4_kei": {"strut_bar": {"x": 0.445, "y": 0.67, "z": -0.98}, "bobble": {"along": 0.2, "scale": 0.8}},
+	"p4_kei": {"strut_bar": {"x": 0.445, "y": 0.67, "z": -0.98}, "bobble": {"along": 0.05, "scale": 0.45, "tilt": 0.15}},
 	"p5_muscle": {"strut_bar": {"x": 0.66, "y": 0.87, "z": -1.33}},
 	"p6_crossover": {"strut_bar": {"x": 0.61, "y": 1.00, "z": -1.16}},
 }
@@ -98,7 +98,7 @@ static func dash_pass(kind: String) -> Vector3:
 	x = minf(x, minf(dash_half - 0.06, door_x - 0.25))
 	return Vector3(x, y, z)
 
-## Per-car bobble head fit overrides: {"along", "scale"} (empty for most cars).
+## Per-car bobble head fit overrides: {"along", "scale", "tilt"} (empty for most cars).
 static func bobble_fit(kind: String) -> Dictionary:
 	var car: Dictionary = CARS.get(kind, {})
 	return car.get("bobble", {})

@@ -48,7 +48,7 @@ const ACCEL_TAU := 0.04
 ## Largest acceleration taken from the car (m/s^2): a wall hit is not a sling.
 const ACCEL_CAP := 30.0
 ## Swing limit (rad): the charm hits the windscreen, the mirror and the dash.
-const SWING_MAX := 0.9
+const SWING_MAX := 0.75
 
 const CORD_COL := Color("#1A1D24")
 const SILVER := Color("#C9CED6")

@@ -36,6 +36,13 @@ const AREA_NAMES := {
 	"residential": "Residential",
 	"strip": "The Strip",
 	"industrial": "Industrial",
+	"old_town": "Old Town",
+	"lofts": "The Lofts",
+	"hillside": "Hillside",
+	"airport": "Airport",
+	"docks": "The Docks",
+	"freeway": "Route 9",
+	"canyon": "Canyon",
 }
 
 ## On by default, saved in [discord] of the shared settings file.

@@ -139,6 +139,7 @@ func _ready() -> void:
 	FxSettings.load_settings()   # cockpit mirrors on/off and quality ([fx] in settings.cfg)
 	ViewSettings.load_settings()
 	CabinMods.load_settings()   # interior mods: trinket, shift knob, short shifter, strut bar ([interior])
+	IdleActions.load_settings() # what the L key does: vape, beer or nothing ([driver])
 	GraphicsSettings.load_settings()   # preset, edge smoothing, render scale ([graphics])
 	DisplaySettings.load_settings()    # fullscreen, window size ([display]); applied below in a play session
 	KeyBindings.load_settings()        # the player's rebound keys ([keys])

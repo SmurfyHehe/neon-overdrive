@@ -131,7 +131,7 @@ func _unit_tests() -> void:
 	var fl_effect := clampf((ox.part(D.Part.STEER_FL) - D.FREE_BELOW) / (1.0 - D.FREE_BELOW), 0.0, 1.0)
 	var ox_toe: float = ox.offsets.get_wheel(0, DamageOffsets.TOE_ADD)
 	print("front-left hit dv 12.7: FL %.3f -> toe %+.5f rad (MAX_TOE_BEND %.3f)" % [ox.part(D.Part.STEER_FL), ox_toe, D.MAX_TOE_BEND])
-	_check(ox_toe > 0.0 and is_equal_approx(ox_toe, D.MAX_TOE_BEND * fl_effect) and ox_toe == ox.toe_offset(0), "a front-left hit bends that toe by MAX_TOE_BEND x effect")
+	_check(ox_toe > 0.0 and is_equal_approx(ox_toe, D.MAX_TOE_BEND * fl_effect) and is_equal_approx(ox_toe, ox.toe_offset(0)), "a front-left hit bends that toe by MAX_TOE_BEND x effect")
 	_check(ox.offsets.get_wheel(1, DamageOffsets.TOE_ADD) == 0.0 and ox.offsets.get_wheel(2, DamageOffsets.TOE_ADD) == 0.0, "the other toes stay at zero")
 	var ox_rr := CarDamage.new()
 	ox_rr.apply_hit(Vector3(0, 0, -16.0))   # rear-ended
@@ -142,7 +142,7 @@ func _unit_tests() -> void:
 	_check(ox_rr.offsets.get_wheel(0, DamageOffsets.SPRING_MULT) == 1.0, "a front spring is untouched")
 	var ox_rad := CarDamage.new()
 	ox_rad.apply_hit(Vector3(0, 0, 22.0))
-	_check(ox_rad.offsets.get_car(DamageOffsets.COOLING_MULT) == ox_rad.cooling_mult() and ox_rad.cooling_mult() < 1.0, "a hurt radiator lowers COOLING_MULT")
+	_check(is_equal_approx(ox_rad.offsets.get_car(DamageOffsets.COOLING_MULT), ox_rad.cooling_mult()) and ox_rad.cooling_mult() < 1.0, "a hurt radiator lowers COOLING_MULT")
 	_check(ox_rad.offsets.get_car(DamageOffsets.TORQUE_MULT) == 1.0 and ox_rad.offsets.get_wheel(0, DamageOffsets.GRIP_MULT) == 1.0, "fields no sim reads yet stay neutral")
 	ox_rad.garage_repair(null)
 	ox.garage_repair(null)

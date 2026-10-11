@@ -1847,46 +1847,91 @@ static func name_sign_kind(chunk_index: int) -> String:
 		return "advance"
 	return ""
 
+## The road-rule signs a chunk carries (signed U-turns, T1), decided from the
+## chunk number alone: [{part, foot_x, z, dir, kind, lamp}] where part is
+## "advance" (a roadside sign ~200 m before a signed U-turn, `side` +1 own
+## side / -1 oncoming) or "median" (on the barrier at an opening: the U-turn
+## sign, or the no-U-turn sign at an emergency crossover; the own-side one
+## carries the lamp head over a signed U-turn).
+static func rule_signs(chunk_index: int) -> Array:
+	var out: Array = []
+	var ahead := int(round(RoadSigns.UTURN_ADVANCE_M / CHUNK_LEN))
+	if RoadBarriers.uturn_at(chunk_index + ahead):
+		out.append({"part": "advance", "side": 1, "z": RoadSigns.ADVANCE_OWN_Z})
+	if RoadBarriers.uturn_at(chunk_index - ahead):
+		out.append({"part": "advance", "side": -1, "z": RoadSigns.ADVANCE_ONC_Z})
+	var kind := RoadBarriers.gap_kind(chunk_index)
+	if kind != "":
+		out.append({"part": "median", "kind": kind, "dir": 1.0, "z": RoadSigns.MEDIAN_OWN_Z, "lamp": kind == RoadBarriers.KIND_UTURN})
+		out.append({"part": "median", "kind": kind, "dir": -1.0, "z": RoadSigns.MEDIAN_ONC_Z, "lamp": false})
+	return out
+
 ## Area signs (world step 4, "Names you can read"): the gantry in the last
 ## chunk before an area and the advance sign 400 m earlier, drawn from this
-## chunk's one NameSigns MultiMesh. Zero instances on every other chunk.
-static func _update_names(root: Node3D, chunk_index: int, walk0: float, walk1: float) -> void:
+## chunk's one NameSigns MultiMesh, then the road-rule signs (rule_signs).
+## Zero instances on every chunk with neither.
+static func _update_names(root: Node3D, chunk_index: int, walk0: float, walk1: float, onc0: float = 0.0, onc1: float = 0.0) -> void:
 	var mmi := root.get_node(^"NameSigns") as MultiMeshInstance3D
 	var mm: MultiMesh = mmi.multimesh
 	var kind := name_sign_kind(chunk_index)
+	var rules := rule_signs(chunk_index)
+	var shown := kind != "" or not rules.is_empty()
 	if RoadSigns.has_flag("hide"):
-		mmi.visible = kind != ""
-	if kind == "":
+		mmi.visible = shown
+	if not shown:
 		mm.visible_instance_count = 0
 		return
-	var area := PlaceNames.area_name(Districts.name_of_run(Districts.run_of(chunk_index) + 1))
-	var z := GANTRY_Z if kind == "gantry" else ADVANCE_Z
-	var x := lerpf(walk0, walk1, -z / CHUNK_LEN) + NAME_SIGN_SETBACK
-	var foot := Vector3(x, 0.0, z)
-	var burnt := -1
-	if kind == "gantry":
-		var hb := posmod(hash([chunk_index, "floodlight"]), 6)
-		burnt = hb if hb < 3 else -1
-	# With "cache" the parts come laid out around a foot at the origin, once
-	# per area, and only move to this chunk's foot here.
-	var cached := RoadSigns.has_flag("cache")
-	var list: Array
-	if cached:
-		list = RoadSigns.parts_at_origin(kind, area, _foundation(), burnt)
-	elif kind == "gantry":
-		list = RoadSigns.gantry(area, foot, _foundation(), burnt)
-	else:
-		list = RoadSigns.advance(area, foot, _foundation())
-	var n := mini(list.size(), mm.instance_count)
 	var xfs := []
 	var anchors := PackedFloat32Array()
-	for k in n:
-		var xf: Transform3D = list[k].xf
+	var datas: Array = []
+	if kind != "":
+		var area := PlaceNames.area_name(Districts.name_of_run(Districts.run_of(chunk_index) + 1))
+		var z := GANTRY_Z if kind == "gantry" else ADVANCE_Z
+		var x := lerpf(walk0, walk1, -z / CHUNK_LEN) + NAME_SIGN_SETBACK
+		var foot := Vector3(x, 0.0, z)
+		var burnt := -1
+		if kind == "gantry":
+			var hb := posmod(hash([chunk_index, "floodlight"]), 6)
+			burnt = hb if hb < 3 else -1
+		# With "cache" the parts come laid out around a foot at the origin, once
+		# per area, and only move to this chunk's foot here.
+		var cached := RoadSigns.has_flag("cache")
+		var list: Array
 		if cached:
-			xf.origin += foot
-		xfs.append(xf)
-		anchors.append(z)
-		mm.set_instance_custom_data(k, list[k].cd)
+			list = RoadSigns.parts_at_origin(kind, area, _foundation(), burnt)
+		elif kind == "gantry":
+			list = RoadSigns.gantry(area, foot, _foundation(), burnt)
+		else:
+			list = RoadSigns.advance(area, foot, _foundation())
+		for item in list:
+			var xf: Transform3D = item.xf
+			if cached:
+				xf.origin += foot
+			xfs.append(xf)
+			anchors.append(z)
+			datas.append(item.cd)
+	for r in rules:
+		var list: Array
+		var rz: float = r.z
+		if r.part == "advance":
+			var side: float = r.side
+			var w := lerpf(walk0, walk1, -rz / CHUNK_LEN) if side > 0.0 else lerpf(onc0, onc1, -rz / CHUNK_LEN)
+			list = RoadSigns.uturn_advance(Vector3((w + NAME_SIGN_SETBACK) * side, 0.0, rz), _foundation(), side)
+		else:
+			var moved: Array = RoadSigns.median_parts(String(r.kind), float(r.dir), bool(r.lamp))
+			list = []
+			for item in moved:
+				var xf: Transform3D = item.xf
+				xf.origin += Vector3(0.0, 0.0, rz)
+				list.append({"xf": xf, "cd": item.cd})
+		for item in list:
+			xfs.append(item.xf)
+			anchors.append(rz)
+			datas.append(item.cd)
+	var n := mini(xfs.size(), mm.instance_count)
+	xfs.resize(n)
+	for k in n:
+		mm.set_instance_custom_data(k, datas[k])
 	mm.visible_instance_count = n
 	_bend_instances(mm, 0, xfs, anchors)
 
@@ -1974,7 +2019,7 @@ static func _create_nodes(root: Node3D) -> void:
 	# Pavements step 1: at most one hydrant per side, on the pavement by the kerb.
 	root.add_child(_new_multimesh("Hydrants", _get_hydrant_mesh(), _get_hydrant_mat(), 2))
 	root.add_child(_new_multimesh("Drains", _get_drain_mesh(), _get_drain_mat(), DRAIN_MAX * 2))
-	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2 + SideStreets.CAPACITY))
+	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2 + SideStreets.CAPACITY + 1))
 	# living world step 2: moths, banners, steam and litter (lamp_life.gd)
 	LampLife.create_nodes(root, _lamp_slots() * 2)
 	# Fake wet-road reflections (RESEARCH-cheap-pretty item 7): one additive
@@ -2213,7 +2258,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	root.set_meta("signs_used", signs_used)
 	_update_roofs(root, infos, signs_used)
 	if not RoadSigns.off():
-		_update_names(root, chunk_index, start_own_walk, end_own_walk)
+		_update_names(root, chunk_index, start_own_walk, end_own_walk, start_onc_walk, end_onc_walk)
 		_update_paint(root, chunk_index, int(prev_cfg.own_lanes) != own_lanes, own_lanes)
 
 	if job != null:
@@ -2408,8 +2453,15 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		mouth_edges.append(lerpf(start_own_walk, end_own_walk, mt) if int(m.side) == 1 else lerpf(start_onc_walk, end_onc_walk, mt))
 	var n_road_lamps := n_lamps   # side-street lamps (below) have no smear and no lamp-post life
 	n_lamps += SideStreets.update(root, mouths, mouth_edges, lamps, pools, n_lamps)
+	# the lamp head over a signed U-turn's opening (RoadSigns.median_parts) is
+	# part of the sign MultiMesh; this is its pool of light on the road, one
+	# more pool than there are lamp posts
+	var n_pools := n_lamps
+	if RoadBarriers.gap_kind(chunk_index) == RoadBarriers.KIND_UTURN and n_pools < pools.instance_count:
+		pools.set_instance_transform(n_pools, _xf(0.0, POOL_Y, RoadSigns.MEDIAN_OWN_Z - 2.6, Basis.from_scale(Vector3(pool_size.x * 0.8, 1.0, pool_size.y * 0.8))))
+		n_pools += 1
 	lamps.visible_instance_count = n_lamps
-	pools.visible_instance_count = n_lamps
+	pools.visible_instance_count = n_pools
 	smears.visible_instance_count = n_road_lamps
 	var lamp_xfs := []
 	for k in range(n_road_lamps):

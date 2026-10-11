@@ -38,14 +38,16 @@ const PANEL := 2    # backing panel with a frame and grime
 const LAMP := 3     # a floodlight head, on
 const LAMP_DEAD := 4
 const BLADE := 5    # a lettering plate with its own frame
+const OVERLAY := 6  # a lettering plate with no background: only the lit ink is drawn
 
 ## Letter colours (custom data z): index into the shader's colour table.
 const OFF_WHITE := 0
 const AMBER := 1
 const SODIUM := 2
 const SILVER := 3
+const RED := 4      # the ring of a no-U-turn sign, the one real traffic red here
 
-const CAPACITY := 24
+const CAPACITY := 32
 
 const GANTRY_TOP := 7.6        # arm height above the road
 const GANTRY_PANEL_TOP := 7.3
@@ -62,7 +64,7 @@ shader_type spatial;
 render_mode diffuse_lambert, specular_disabled;
 
 uniform sampler2DArray words : filter_linear_mipmap_anisotropic, repeat_disable;
-uniform vec3 colors[4];
+uniform vec3 colors[5];
 uniform float text_energy = 0.75;
 uniform float lamp_energy = 2.2;
 uniform float band_y0 = 14.0;
@@ -118,7 +120,11 @@ void fragment() {
 		vec3 col = colors[int(cd.z + 0.5)];
 		ALBEDO = mix(panel, col * 0.35, cov);
 		EMISSION = col * cov * text_energy;
-		if (style > 4.5) {
+		if (style > 5.5) {
+			if (cov < 0.15) {
+				discard;
+			}
+		} else if (style > 4.5) {
 			float e = min(min(u, 1.0 - u) * len, min(v, 1.0 - v) * hgt);
 			float frame = step(0.025, e) * (1.0 - step(0.05, e));
 			ALBEDO = mix(ALBEDO, vec3(0.45, 0.47, 0.5), frame);
@@ -177,6 +183,7 @@ static func material() -> ShaderMaterial:
 			Vector3(1.0, 0.75, 0.38),    # amber
 			Vector3(1.0, 0.54, 0.12),    # sodium
 			Vector3(0.79, 0.81, 0.84),   # silver
+			Vector3(0.88, 0.14, 0.10),   # red
 		])
 		_material.set_shader_parameter("colors", cols)
 		_material.set_shader_parameter("band_y0", float(WordAtlas.Y0))
@@ -317,6 +324,79 @@ static func advance(area: String, foot: Vector3, foundation: float, toe: float =
 	out.append(_item(base, n, PANEL_DEPTH, panel_h, panel_len, 0, 0, 0, PANEL))
 	out.append(text_plate(area, Vector3(cx, top - 0.16 - big_h / 2.0, foot.z) + front, n, big_h, OFF_WHITE))
 	out.append(text_plate(PlaceNames.ADVANCE, Vector3(cx, top - 0.16 - big_h - 0.16 - small_h / 2.0, foot.z) + front, n, small_h, AMBER))
+	return out
+
+## ---- Signed U-turns (T1) ----
+## Where the median signs stand in a gap chunk (chunk-local z, m): the one for
+## own-side traffic (which arrives from z = 0) a little before the opening
+## starts (stations GAP_FROM..GAP_TO of ten 5 m stations: z -15 .. -40), the
+## one for oncoming traffic (arriving from z = -50) a little past its end.
+const MEDIAN_OWN_Z := -12.5
+const MEDIAN_ONC_Z := -43.0
+const UTURN_ADVANCE_M := 200.0
+## Chunk-local z of the advance signs, a whole UTURN_ADVANCE_M before the
+## opening's near end as each side meets it (own side: z -15 of the gap chunk;
+## oncoming: z -40).
+const ADVANCE_OWN_Z := -15.0
+const ADVANCE_ONC_Z := -40.0
+const MEDIAN_POLE := 0.12
+const MEDIAN_SIGN_BOTTOM := 2.0
+const MEDIAN_LAMP_H := 6.2
+const BARRIER_TOP := 0.85      # the signs' poles start inside the barrier
+
+## The advance sign ~200 m before a signed U-turn opening, on the roadside
+## post at `foot` (x outside the sidewalk, as an area sign's): a dark panel
+## with one white U-arrow, toed in a little toward the lanes. dir = +1 for
+## own-side traffic (faces +z, panel reaches toward -x), -1 for the oncoming
+## side (faces -z, panel reaches toward +x). Returns a list of {xf, cd}.
+static func uturn_advance(foot: Vector3, foundation: float, dir: float = 1.0, toe: float = 0.2) -> Array:
+	var inward := -dir
+	var n := Vector3(inward * sin(toe), 0.0, dir * cos(toe))
+	var h := 1.7
+	var panel_len := plate_len("#UTURN", h) + 0.6
+	var panel_h := h + 0.6
+	var bottom := 2.4
+	var top := bottom + panel_h
+	var post_h := top + 0.3
+	var cx := foot.x + inward * (0.12 + panel_len / 2.0)
+	var cy := bottom + panel_h / 2.0
+	var front := n * (PANEL_DEPTH / 2.0 + PLATE_DEPTH / 2.0 + 0.004)
+	var out: Array = []
+	out.append(_item(Vector3(foot.x, (post_h - foundation) / 2.0, foot.z), Vector3.BACK, 0.16, post_h + foundation, 0.16, 0, 0, 0, METAL))
+	out.append(_item(Vector3(cx, cy, foot.z), n, PANEL_DEPTH, panel_h, panel_len, 0, 0, 0, PANEL))
+	out.append(text_plate("#UTURN", Vector3(cx, cy, foot.z) + front, n, h, OFF_WHITE))
+	return out
+
+## The signs on the median at one end of a barrier opening, laid out around
+## a foot at (0, 0, 0) on the barrier line (the caller adds the chunk-local z:
+## MEDIAN_OWN_Z or MEDIAN_ONC_Z). dir = +1 faces +z (own-side traffic), -1
+## faces -z. kind "uturn": the small U-arrow sign, and with `lamp` a taller
+## pole with an arm and a sodium head reaching toward the opening (dir tells
+## which way that is: toward -z for own-side traffic's pole). kind
+## "emergency": the no-U-turn sign.
+static func median_parts(kind: String, dir: float = 1.0, lamp: bool = false) -> Array:
+	var n := Vector3(0.0, 0.0, dir)
+	var out: Array = []
+	var pole_h := (MEDIAN_LAMP_H if lamp else MEDIAN_SIGN_BOTTOM + 1.5) - BARRIER_TOP
+	out.append(_item(Vector3(0.0, BARRIER_TOP + pole_h / 2.0, 0.0), Vector3.BACK, MEDIAN_POLE, pole_h, MEDIAN_POLE, 0, 0, 0, METAL))
+	var side := 1.3
+	var cy := MEDIAN_SIGN_BOTTOM + side / 2.0
+	var oz := dir * (MEDIAN_POLE / 2.0 + 0.06)   # the panel stands just in front of the pole
+	var front := n * (0.04 + PLATE_DEPTH / 2.0 + 0.004)
+	out.append(_item(Vector3(0.0, cy, oz), n, 0.08, side, side, 0, 0, 0, PANEL))
+	if kind == "uturn":
+		out.append(text_plate("#UTURN", Vector3(0.0, cy, oz) + front, n, 0.9, OFF_WHITE))
+	else:
+		# a white U-arrow struck through by a red ring and slash: the arrow at
+		# about half the ring's height so it sits inside it
+		out.append(text_plate("#UTURN", Vector3(0.0, cy, oz) + front, n, 0.5, OFF_WHITE))
+		out.append(text_plate("#NOUTURN", Vector3(0.0, cy, oz) + front + n * 0.012, n, 0.98, RED, OVERLAY))
+	if lamp:
+		# arm from the pole top toward the opening, a sodium head at its end
+		var arm := 2.6
+		var toward := -dir   # own-side pole: the opening lies toward -z
+		out.append(_item(Vector3(0.0, MEDIAN_LAMP_H - 0.1, toward * arm / 2.0), Vector3.BACK, arm, 0.1, 0.1, 0, 0, 0, METAL))
+		out.append(_item(Vector3(0.0, MEDIAN_LAMP_H - 0.25, toward * arm), Vector3.BACK, 0.5, 0.14, 0.3, 0, 0, 0, LAMP))
 	return out
 
 ## A street-name blade: a framed plate `height` tall at `centre`, face along

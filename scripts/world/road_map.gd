@@ -105,8 +105,10 @@ const ROADS := {
 			{"id": "x15a", "s": 11600.0, "side": 1, "number": 15}, {"id": "x15b", "s": 11600.0, "side": -1, "number": 15},
 			{"id": "x16a", "s": 12400.0, "side": 1, "number": 16}, {"id": "x16b", "s": 12400.0, "side": -1, "number": 16},
 		],
-		# Gaps in the centre barrier (a legal place to turn round), two per
-		# district, 225 m and 625 m in.
+		# Gaps in the centre barrier: signed U-turns, legal for everyone (a
+		# sign 200 m before, painted arrows, a lamp over the opening), two
+		# per district, 225 m and 625 m in. The emergency crossovers
+		# (RoadBarriers) are a different kind: cops only.
 		"gaps": [
 			{"id": "g1a", "s": 225.0}, {"id": "g1b", "s": 625.0}, {"id": "g2a", "s": 1025.0}, {"id": "g2b", "s": 1425.0},
 			{"id": "g3a", "s": 1825.0}, {"id": "g3b", "s": 2225.0}, {"id": "g4a", "s": 2625.0}, {"id": "g4b", "s": 3025.0},

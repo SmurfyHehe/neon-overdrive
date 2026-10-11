@@ -82,6 +82,8 @@ const BOUND_PAD := 75.0
 
 const C_DECK := Color(0.105, 0.105, 0.115, 0.0)
 const C_WALL := Color(0.3, 0.295, 0.28, 0.0)
+## The walls' colour while laying out (RingSite sets the district's).
+static var wall_colour := C_WALL
 const C_KERB := Color(0.42, 0.41, 0.39, 0.0)
 const C_PAINT := Color(0.82, 0.82, 0.78, 0.07)
 const C_POLE := Color(0.2, 0.2, 0.21, 0.0)
@@ -101,6 +103,21 @@ void fragment() {
 """
 
 static var enabled := true
+## R2: the ramps join the ring (RingSite) and there is no pad. false = R1's
+## temporary pads (tests of the pad alone).
+static var ring := true
+
+## The ring (R2): its lane's inner and outer edge, metres from its centre.
+const RING_IN := 28.0
+const RING_OUT := 35.0
+## A ramp's deck and outer barrier run to where its outer edge has crossed
+## the ring's rim, and its inner barrier to where its inner edge has: the
+## mouth in the rim is between the two (whole rim pieces, see RingSite).
+const RING_SEG_DEG := 5.625
+const V_RING_OUT := 10.16    # RING_OUT * sin(3 pieces)
+const V_RING_IN := 19.44     # RING_OUT * sin(6 pieces)
+## The out-of-bounds wall beside the ring (and its spur).
+const BOUND_RING := 56.0
 static var _material: ShaderMaterial
 
 # the chunk being laid out
@@ -114,6 +131,32 @@ static var _pools: Array = []   # Transform3D
 static var _k := 0
 static var _lam := 1.0
 static var _side := 1.0
+## RingSite lays the ring out with the same tools in its own flat space
+## (x across, y up, -z the way the chunks count) instead of a chunk's frame.
+static var _flat := false
+
+static func begin_flat() -> void:
+	_verts = PackedVector3Array()
+	_norms = PackedVector3Array()
+	_cols = PackedColorArray()
+	_faces_own = PackedVector3Array()
+	_faces_onc = PackedVector3Array()
+	_boxes = []
+	_pools = []
+	_k = 0
+	_lam = 1.0
+	_side = 1.0
+	_flat = true
+
+## What was laid out since begin_flat(): {arrays, faces, boxes, pools}.
+static func end_flat() -> Dictionary:
+	_flat = false
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = _verts
+	arrays[Mesh.ARRAY_NORMAL] = _norms
+	arrays[Mesh.ARRAY_COLOR] = _cols
+	return {"arrays": arrays, "faces": _faces_own, "boxes": _boxes, "pools": _pools}
 
 # ---------- the shape ----------
 
@@ -160,6 +203,17 @@ static func nose(chunk_index: int) -> bool:
 	var k := RoadMap.ring_k(chunk_index)
 	return k == -RoadMap.RAMP_CHUNKS or k == RoadMap.RAMP_CHUNKS - 1
 
+## Whether a road lamp at chunk-local z of this chunk would stand under the
+## ring's rim (its pole is taller than the bridge is high).
+static func under_ring(chunk_index: int, z: float) -> bool:
+	if not ring or not zone(chunk_index):
+		return false
+	var k := RoadMap.ring_k(chunk_index)
+	if k != -1 and k != 0:
+		return false
+	var r := Vector2(17.0, float(k) * L - z).length()
+	return r > RING_IN - 1.5 and r < RING_OUT + 1.5
+
 ## Where the out-of-bounds wall stands beside a ramp chunk, metres from the
 ## centre line (0 = no ramp here, the district's own line).
 static func bound(chunk_index: int) -> float:
@@ -168,7 +222,7 @@ static func bound(chunk_index: int) -> float:
 	var k := RoadMap.ring_k(chunk_index)
 	var d := -k - 1 if k < 0 else k   # 0 at the pad .. 3 at the gore
 	if d == 0:
-		return BOUND_PAD
+		return BOUND_RING if ring else BOUND_PAD
 	return BOUND_NOSE if d == RoadMap.RAMP_CHUNKS - 1 else BOUND_RAMP
 
 ## Where a point of a site is in road space: x metres out on `side` (+1 the
@@ -329,6 +383,8 @@ static func _write(root: Node3D, on: bool) -> void:
 
 ## Chunk-local point for (x out on this side, y up, v from the ring's centre).
 static func _p(x: float, y: float, v: float) -> Vector3:
+	if _flat:
+		return Vector3(x, y, -v)
 	return RoadChunkBuilder._at(_side * x, y, float(_k) * L - _lam * v)
 
 ## A triangle seen from the `want` side (chunk-local direction).
@@ -392,7 +448,10 @@ static func _wall_box(a: Vector3, b: Vector3, bottom: float, top: float, width: 
 ## direction (x, v) pointing off the deck at each, `hs` the barrier's height
 ## at each (0 = no barrier there yet). Draws kerb, barrier and the wall down
 ## to the ground, and adds the barrier's collision.
-static func _edge(pts: Array[Vector3], out: Array[Vector2], hs: PackedFloat32Array) -> void:
+## `bottoms` (optional): how far down the wall goes at each point (a bridge:
+## the deck's underside; default the ground). `faces` (optional): the colour
+## of each piece's inside face.
+static func _edge(pts: Array[Vector3], out: Array[Vector2], hs: PackedFloat32Array, bottoms: PackedFloat32Array = PackedFloat32Array(), faces: Array = []) -> void:
 	for i in pts.size() - 1:
 		if hs[i] <= 0.0 and hs[i + 1] <= 0.0:
 			continue
@@ -408,19 +467,19 @@ static func _edge(pts: Array[Vector3], out: Array[Vector2], hs: PackedFloat32Arr
 				_p(p.x, p.z + kh, p.y),
 				_p(p.x, p.z + h, p.y),
 				_p(p.x + o.x * BARRIER_W, p.z + h, p.y + o.y * BARRIER_W),
-				_p(p.x + o.x * BARRIER_W, -SKIRT, p.y + o.y * BARRIER_W),
+				_p(p.x + o.x * BARRIER_W, bottoms[j] if j < bottoms.size() else -SKIRT, p.y + o.y * BARRIER_W),
 			])
 		var r0: Array = rows[0]
 		var r1: Array = rows[1]
 		var outward: Vector3 = (r0[4] as Vector3) - (r0[3] as Vector3)
 		outward.y = 0.0
-		var cols := [C_KERB, C_KERB, C_WALL, C_WALL, C_WALL]
+		var cols := [C_KERB, C_KERB, faces[i] if i < faces.size() else wall_colour, wall_colour, wall_colour]
 		var wants := [-outward, Vector3.UP, -outward, Vector3.UP, outward]
 		for q in 5:
 			_quad(r0[q], r1[q], r0[q + 1], r1[q + 1], cols[q], wants[q])
 		var a: Vector3 = ((r0[3] as Vector3) + (r0[4] as Vector3)) * 0.5
 		var b: Vector3 = ((r1[3] as Vector3) + (r1[4] as Vector3)) * 0.5
-		_wall_box(a, b, -SKIRT, maxf((r0[3] as Vector3).y, (r1[3] as Vector3).y), BARRIER_W)
+		_wall_box(a, b, minf((r0[5] as Vector3).y, (r1[5] as Vector3).y), maxf((r0[3] as Vector3).y, (r1[3] as Vector3).y), BARRIER_W)
 
 ## A flat painted quad on a surface at height y: x0..x1 across, v0..v1 along.
 static func _paint(x0: float, x1: float, v0: float, v1: float, y0: float, y1: float) -> void:
@@ -450,8 +509,8 @@ static func _lamp(x: float, v: float, y: float, toward: Vector2, arm: float = LA
 
 ## One side's ramp (and pad) between v_lo and v_hi metres from the centre.
 static func _leg(v_lo: float, v_hi: float) -> void:
-	var vp := v_pad()
-	var pad := v_lo < vp
+	var vp := V_RING_OUT if ring else v_pad()
+	var pad := not ring and v_lo < vp
 	# rows across the lane, every ROW metres, ending where the pad begins
 	var vs := PackedFloat32Array()
 	var v := v_hi
@@ -459,6 +518,11 @@ static func _leg(v_lo: float, v_hi: float) -> void:
 		vs.append(v)
 		v -= ROW
 	vs.append(maxf(v_lo, vp))
+	if ring and v_lo < V_RING_IN:
+		# a row where the inner barrier ends, at the ring's rim
+		vs.append(V_RING_IN)
+		vs.sort()
+		vs.reverse()
 	# traffic drives at the nose on the leg it leaves the road by
 	var diverge := _lam == -_side
 	var inner: Array[Vector3] = []
@@ -470,15 +534,18 @@ static func _leg(v_lo: float, v_hi: float) -> void:
 	for i in vs.size():
 		var x := x_at(vs[i])
 		var y := y_at(vs[i]) + LIFT
-		inner.append(Vector3(x - HALF, vs[i], y))
+		var past_rim: bool = ring and vs[i] < V_RING_IN - 0.01   # inside the ring's rim: its lane, no barrier
+		if not past_rim:
+			inner.append(Vector3(x - HALF, vs[i], y))
+			inner_out.append(Vector2(-1.0, 0.0))
 		outer.append(Vector3(x + HALF, vs[i], y))
-		inner_out.append(Vector2(-1.0, 0.0))
 		outer_out.append(Vector2(1.0, 0.0))
 		# inside: from the nose (a short taper where traffic drives away from it)
 		var ih := 0.0
 		if vs[i] <= V_NOSE:
 			ih = BARRIER_H if diverge else BARRIER_H * clampf((V_NOSE - vs[i]) / BARRIER_TAPER, 0.0, 1.0)
-		inner_h.append(ih)
+		if not past_rim:
+			inner_h.append(ih)
 		outer_h.append(BARRIER_H * clampf((V_GORE - vs[i]) / BARRIER_TAPER, 0.0, 1.0))
 		if i > 0:
 			var x0 := x_at(vs[i - 1])

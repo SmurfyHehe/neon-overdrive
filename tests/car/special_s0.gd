@@ -64,9 +64,8 @@ func _keys() -> void:
 	for action in SpecialKeys.KEYS:
 		_check(InputMap.has_action(action), "action %s is not registered" % action)
 	_check(SpecialKeys.KEYS.special == KEY_CTRL, "special is not Ctrl")
-	var want := {"hyd_pump_left": KEY_7, "hyd_pump_front": KEY_8, "hyd_pump_back": KEY_9, "hyd_pump_right": KEY_0,
-		"hyd_dump_left": KEY_U, "hyd_dump_front": KEY_I, "hyd_dump_back": KEY_O, "hyd_dump_right": KEY_BRACKETLEFT,
-		"hyd_three": KEY_6, "hyd_dump_all": KEY_MINUS}
+	var want := {"hyd_pump_front": KEY_KP_8, "hyd_pump_back": KEY_KP_2, "hyd_pump_left": KEY_KP_4,
+		"hyd_pump_right": KEY_KP_6, "hyd_drop": KEY_KP_0, "hyd_three": KEY_KP_5}
 	for a in want:
 		_check(SpecialKeys.KEYS[a] == want[a], "%s is not on its column key" % a)
 	# nothing in ordinary cars; hydraulics only in the lowrider; special in both
@@ -75,7 +74,7 @@ func _keys() -> void:
 		_check(not SpecialKeys.applies(a, "p0_beater"), "%s does something in the beater" % a)
 	_check(SpecialKeys.applies("special", "m1_monster") and SpecialKeys.applies("special", "l1_lowrider"), "special should work in both")
 	_check(not SpecialKeys.applies("hyd_pump_left", "m1_monster"), "hydraulics work in the truck")
-	_check(SpecialKeys.applies("hyd_pump_left", "l1_lowrider") and SpecialKeys.applies("hyd_dump_all", "l1_lowrider"), "hydraulics do not work in the lowrider")
+	_check(SpecialKeys.applies("hyd_pump_left", "l1_lowrider") and SpecialKeys.applies("hyd_drop", "l1_lowrider"), "hydraulics do not work in the lowrider")
 	# the Controls page lists them under "Special vehicles"
 	var listed := false
 	for g in PauseMenu.controls_groups():

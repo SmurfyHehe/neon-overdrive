@@ -40,6 +40,19 @@ const CONTEXTS := ["play", "photo", "wash"]
 const OLD_DEFAULTS := {
 	&"put_back": [KEY_V],
 	&"photo_mode": [KEY_F12],
+	# the lowrider moved from the digit row to the numpad
+	&"hyd_pump_left": [KEY_7], &"hyd_pump_front": [KEY_8], &"hyd_pump_back": [KEY_9], &"hyd_pump_right": [KEY_0],
+	&"hyd_three": [KEY_6],
+}
+
+## Numpad keys read "Numpad 7", never just "7": they are a different key from
+## the digit row above the letters.
+const NUMPAD_NAMES := {
+	KEY_KP_0: "Numpad 0", KEY_KP_1: "Numpad 1", KEY_KP_2: "Numpad 2", KEY_KP_3: "Numpad 3",
+	KEY_KP_4: "Numpad 4", KEY_KP_5: "Numpad 5", KEY_KP_6: "Numpad 6", KEY_KP_7: "Numpad 7",
+	KEY_KP_8: "Numpad 8", KEY_KP_9: "Numpad 9", KEY_KP_ADD: "Numpad +", KEY_KP_SUBTRACT: "Numpad -",
+	KEY_KP_MULTIPLY: "Numpad *", KEY_KP_DIVIDE: "Numpad /", KEY_KP_PERIOD: "Numpad .",
+	KEY_KP_ENTER: "Numpad Enter",
 }
 
 ## action -> its key events as they were at start (the defaults).
@@ -64,6 +77,8 @@ static func keys(action: StringName) -> Array[int]:
 static func key_name(code: int) -> String:
 	if code == 0:
 		return "-"
+	if NUMPAD_NAMES.has(code):
+		return NUMPAD_NAMES[code]
 	var label := 0
 	if DisplayServer.get_name() != "headless":   # a headless run has no keyboard layout
 		label = DisplayServer.keyboard_get_label_from_physical(code as Key)

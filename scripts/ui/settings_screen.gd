@@ -54,11 +54,10 @@ const GROUPS := [
 	["Driver", [["flip_off", "Flip off"], ["idle_action", "Idle action"]]],
 	["Special vehicles", [
 		["special", "Special move (truck: crab steer, hold / lowrider: dance, tap)"],
-		["hyd_pump_left", "Lowrider: pump left up (hold)"], ["hyd_pump_front", "Lowrider: pump front up (hold)"],
-		["hyd_pump_back", "Lowrider: pump back up (hold)"], ["hyd_pump_right", "Lowrider: pump right up (hold)"],
-		["hyd_dump_left", "Lowrider: dump left down (hold)"], ["hyd_dump_front", "Lowrider: dump front down (hold)"],
-		["hyd_dump_back", "Lowrider: dump back down (hold)"], ["hyd_dump_right", "Lowrider: dump right down (hold)"],
-		["hyd_three", "Lowrider: three-wheel pose (tap on / off)"], ["hyd_dump_all", "Lowrider: drop all four"]]],
+		["hyd_pump_front", "Lowrider: pump front up (hold)"], ["hyd_pump_back", "Lowrider: pump back up (hold)"],
+		["hyd_pump_left", "Lowrider: pump left up (hold)"], ["hyd_pump_right", "Lowrider: pump right up (hold)"],
+		["hyd_drop", "Lowrider: drop (hold + a pump key: that side, tap: all four)"],
+		["hyd_three", "Lowrider: three-wheel pose (tap on / off)"]]],
 	["Photo mode", [
 		["photo_mode", "Photo mode"], ["photo_forward", "Forward"], ["photo_back", "Back"],
 		["photo_left", "Left"], ["photo_right", "Right"], ["photo_down", "Down"], ["photo_up", "Up"],

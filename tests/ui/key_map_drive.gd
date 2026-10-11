@@ -7,6 +7,10 @@ extends SceneTree
 # - P opens photo mode, P again leaves
 # - H: tap = low <-> high, one hold = high while down and exactly one flash,
 #   double tap = lights off
+# - the numpad and the digit row are different keys (Roy 1464): KP_n triggers
+#   only its own action, digit-row n never triggers a numpad action, and a
+#   numpad key with Num Lock off (logical key = Home / arrows, same physical
+#   key) still triggers only the numpad action
 # Exit code 1 on failure. Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/ui/key_map_drive.gd
 
@@ -125,6 +129,7 @@ func _physics_process(_delta: float) -> bool:
 			if _since() >= 3:
 				_key(KEY_P, false)
 			if gs.state == GameState.State.PLAYING:
+				_key(KEY_P, false)   # may still be down if the state flipped inside 3 ticks
 				_go(7)
 			elif _since() > _t(2.0):
 				_check(false, "P did not leave photo mode (state %d)" % gs.state)
@@ -184,7 +189,75 @@ func _physics_process(_delta: float) -> bool:
 			if _since() >= _t(0.5):
 				_check(player.beams.mode == HeadlightBeams.Mode.OFF, "double tap: lights not off (mode %d)" % player.beams.mode)
 				_check(player.beams.flashes == flashes_before + 1, "a double tap counted a flash")
-				return _end("")
+				_go(18)
+		18:
+			_numpad_vs_digits()
+			return _end("")
 	if tick > TIMEOUT_TICKS * 3:
 		return _end("timed out in phase %d" % phase)
 	return false
+
+## What a numpad key reports with Num Lock OFF: the logical key is the
+## navigation key printed under the digit, the physical key is unchanged.
+const NUMLOCK_OFF := {
+	KEY_KP_0: KEY_INSERT, KEY_KP_1: KEY_END, KEY_KP_2: KEY_DOWN, KEY_KP_3: KEY_PAGEDOWN,
+	KEY_KP_4: KEY_LEFT, KEY_KP_5: KEY_CLEAR, KEY_KP_6: KEY_RIGHT, KEY_KP_7: KEY_HOME,
+	KEY_KP_8: KEY_UP, KEY_KP_9: KEY_PAGEUP,
+}
+
+func _pressed_actions() -> Array:
+	var out := []
+	for a in KeyBindings.game_actions():
+		if Input.is_action_pressed(a):
+			out.append(String(a))
+	out.sort()
+	return out
+
+## Presses one physical key with the given logical keycode and returns the
+## game actions that fired, then releases it.
+func _fire(physical: int, logical: int) -> Array:
+	var e := InputEventKey.new()
+	e.physical_keycode = physical as Key
+	e.keycode = logical as Key
+	e.pressed = true
+	Input.parse_input_event(e)
+	Input.flush_buffered_events()
+	var got := _pressed_actions()
+	e = e.duplicate()
+	e.pressed = false
+	Input.parse_input_event(e)
+	Input.flush_buffered_events()
+	return got
+
+func _numpad_vs_digits() -> void:
+	var kp := [KEY_KP_0, KEY_KP_1, KEY_KP_2, KEY_KP_3, KEY_KP_4, KEY_KP_5, KEY_KP_6, KEY_KP_7, KEY_KP_8, KEY_KP_9]
+	var digit := [KEY_0, KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9]
+	for n in 10:
+		# what the game binds to this numpad key
+		var want := []
+		for a in KeyBindings.game_actions():
+			if kp[n] in KeyBindings.keys(a):
+				want.append(String(a))
+		want.sort()
+		var got := _fire(kp[n], kp[n])
+		_check(got == want, "Numpad %d fired %s, wanted %s" % [n, got, want])
+		got = _fire(kp[n], NUMLOCK_OFF[kp[n]])
+		_check(got == want, "Numpad %d with Num Lock off fired %s, wanted %s" % [n, got, want])
+		# the digit row never fires a numpad action
+		var want_d := []
+		for a in KeyBindings.game_actions():
+			if digit[n] in KeyBindings.keys(a):
+				want_d.append(String(a))
+		want_d.sort()
+		got = _fire(digit[n], digit[n])
+		_check(got == want_d, "digit %d fired %s, wanted %s" % [n, got, want_d])
+		for a in got:
+			_check(not (kp[n] in KeyBindings.keys(StringName(a))) and not String(a).begins_with("hyd_"),
+				"digit %d fired the lowrider action %s" % [n, a])
+	# the lowrider's keys really are the numpad ones, and the names differ
+	for a in SpecialKeys.KEYS:
+		if String(a).begins_with("hyd_"):
+			for c in KeyBindings.keys(a):
+				_check(not (c in digit), "%s is on the digit row" % a)
+	_check(KeyBindings.key_name(KEY_KP_7) == "Numpad 7" and KeyBindings.key_name(KEY_7) == "7",
+		"names: '%s' vs '%s'" % [KeyBindings.key_name(KEY_KP_7), KeyBindings.key_name(KEY_7)])

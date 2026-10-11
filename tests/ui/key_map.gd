@@ -107,6 +107,11 @@ func _defaults_checks() -> void:
 		if InputMap.has_action(a):
 			_check(KeyBindings.keys(a)[0] == TABLE[a] if not KeyBindings.keys(a).is_empty() else false,
 				"%s should be on %s, is on %s" % [a, OS.get_keycode_string(TABLE[a]), KeyBindings.keys(a)])
+	# the lowrider is on the numpad, none of it on the digit row or on P
+	for a in SpecialKeys.KEYS:
+		if String(a).begins_with("hyd_"):
+			var k := KeyBindings.keys(a)
+			_check(k.size() == 1 and (k[0] >= KEY_KP_MULTIPLY and k[0] <= KEY_KP_9), "%s is not on the numpad: %s" % [a, k])
 	_check(InputMap.has_action(&"put_back") and InputMap.has_action(&"photo_mode"), "put_back / photo_mode missing")
 	_check(KeyBindings.key_name(KEY_W) == "W", "key name of W is '%s'" % KeyBindings.key_name(KEY_W))
 
@@ -128,6 +133,15 @@ func _set_key_checks() -> void:
 	_check(KeyBindings.keys(&"idle_action")[0] == KEY_K and KeyBindings.keys(&"flip_off").has(KEY_L),
 		"swap: idle_action %s flip_off %s" % [KeyBindings.keys(&"idle_action"), KeyBindings.keys(&"flip_off")])
 	KeyBindings.reset_defaults()
+	# the digit row and the numpad are different keys: binding one never moves the other
+	_check(_keys_are(&"hyd_pump_left", [KEY_KP_4]), "hyd_pump_left is %s" % [KeyBindings.keys(&"hyd_pump_left")])
+	_check(KeyBindings.set_key(&"idle_action", 1, KEY_4), "digit 4 refused")
+	_check(_keys_are(&"hyd_pump_left", [KEY_KP_4]), "binding digit 4 moved the numpad 4 action")
+	_check(KeyBindings.action_using(KEY_4, &"flip_off") == &"idle_action", "digit 4 is not on idle_action")
+	_check(KeyBindings.set_key(&"flip_off", 1, KEY_KP_1), "numpad 1 refused")
+	_check(KeyBindings.keys(&"idle_action").has(KEY_4), "binding numpad 1 moved the digit 4")
+	_check(KeyBindings.key_name(KEY_KP_4) != KeyBindings.key_name(KEY_4), "numpad 4 and 4 read the same")
+	KeyBindings.reset_defaults()
 
 func _saved_checks() -> void:
 	# a save from before the new map: the old defaults, and a player's choice
@@ -139,12 +153,15 @@ func _saved_checks() -> void:
 	cfg.set_value("keys", "radio_next", PackedInt32Array([KEY_V]))    # the player's choice wins V
 	cfg.set_value("keys", "horn", PackedInt32Array([KEY_J]))          # (unbuilt: ignored when missing)
 	cfg.set_value("keys", "handbrake", PackedInt32Array([KEY_J]))     # a free key: stays
+	cfg.set_value("keys", "hyd_pump_left", PackedInt32Array([KEY_7]))  # the old digit-row default: moves to the numpad
 	_check(cfg.save(AudioSettings.path) == OK, "could not write the test settings.cfg")
 	KeyBindings.load_settings()
 	_check(_keys_are(&"put_back", [KEY_F7]), "put_back kept the old V: %s" % [KeyBindings.keys(&"put_back")])
 	_check(_keys_are(&"photo_mode", [KEY_P]), "photo_mode kept F12: %s" % [KeyBindings.keys(&"photo_mode")])
 	_check(_keys_are(&"radio_next", [KEY_V]), "the player's V did not win: %s" % [KeyBindings.keys(&"radio_next")])
 	_check(KeyBindings.keys(&"radio_power").is_empty(), "radio_power should be unbound (its V is taken): %s" % [KeyBindings.keys(&"radio_power")])
+	_check(_keys_are(&"hyd_pump_left", [KEY_KP_4]), "hyd_pump_left kept the old 7: %s" % [KeyBindings.keys(&"hyd_pump_left")])
+	_check(_keys_are(&"photo_mode", [KEY_P]), "photo_mode lost P")
 	_check(_keys_are(&"handbrake", [KEY_J]), "handbrake lost its saved J: %s" % [KeyBindings.keys(&"handbrake")])
 	for ctx in KeyBindings.CONTEXTS:
 		var seen := {}

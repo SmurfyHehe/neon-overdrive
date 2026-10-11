@@ -151,7 +151,8 @@ func _sample(v: Vehicle, label: String) -> void:
 func _touches_road(v: Vehicle) -> bool:
 	for b in v.get_colliding_bodies():
 		var n := String(b.name)
-		if not (n.begins_with("Boundary") or n.begins_with("Building") or n == "BarrierCol"):
+		# CushionCol: the crash cushion at a median gap is the barrier's end, the same crash.
+		if not (n.begins_with("Boundary") or n.begins_with("Building") or n == "BarrierCol" or n == "CushionCol"):
 			return true
 	return false
 

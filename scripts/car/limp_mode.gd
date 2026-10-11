@@ -31,6 +31,10 @@ enum Cause { NONE = 0, FUEL = 1, OVERHEAT = 2, ENGINE = 4 }
 const ENGINE_REV_FRAC := 0.55
 const ENGINE_TORQUE := 0.6
 const ENGINE_MAX_GEAR := 3
+## A starved engine has nothing at the top of its revs, so an automatic
+## shifts up early: it plans its shifts inside this share of the rev range.
+## (Without it the box waits in 1st for revs the engine can no longer reach.)
+const STARVED_SHIFT_FRAC := 0.6
 ## Once the overheat limp is on it stays until the engine is back under this
 ## (PowertrainHealth.DERATE_C), like a real limp-home: without it the limp's
 ## own torque cut cools the engine a degree and the limp flickers off and on.
@@ -49,22 +53,29 @@ const FUEL_FLAT_SHARE := 0.35
 const STUMBLE_THROTTLE_FLOOR := 0.25
 const STUMBLE_PER_LAT_G := 1.0
 const STUMBLE_PER_GRADE := 6.0
-## Seconds the engine runs between cuts at demand 1, worked out so the average
-## cut (the middle of MIN..MAX) leaves FUEL_FLAT_SHARE.
-const STUMBLE_RUN_S := (STUMBLE_MIN_S + STUMBLE_MAX_S) * 0.5 * FUEL_FLAT_SHARE / (1.0 - FUEL_FLAT_SHARE)
 ## The cut lengths walk MIN..MAX by this step (the golden ratio's fraction:
 ## it never settles into a short loop the ear can pick out).
 const STUMBLE_STEP := 0.6180339887
 
 ## Set by the damage system: the engine itself asks for limp-home.
 var engine_damaged := false
+## The top gear of this car's engine limp. ENGINE_MAX_GEAR unless the car's
+## spec says otherwise ("limp_max_gear": a car whose 3rd gear at the limp's
+## revs is under 50 km/h gets its 4th).
+var engine_max_gear := ENGINE_MAX_GEAR
+## The share of the torque that gets through a dry tank at full throttle on
+## the flat, for this car. FUEL_FLAT_SHARE unless the car's spec says otherwise
+## ("limp_fuel_share": a car that cannot make 50 km/h on the standard share).
+var fuel_share := FUEL_FLAT_SHARE
 
-## What the car reads, refreshed by update(). Healthy: 1, 1, 1, 99, 0.
+## What the car reads, refreshed by update(). Healthy: 1, 1, 1, 99, 0, 1.
 var rev_limit_frac := 1.0
 var boost_mult := 1.0
 var torque_mult := 1.0
 var max_gear := 99
 var stumble := 0.0
+## Share of the rev range an automatic plans its shifts in.
+var shift_frac := 1.0
 ## Read-outs for the dash lamps, the HUD and tests. `cause` is the most
 ## serious active one (engine, then overheat, then fuel).
 var cause := Cause.NONE
@@ -99,15 +110,18 @@ func update(fuel_empty: bool, engine_temp: float) -> void:
 	torque_mult = 1.0
 	max_gear = 99
 	stumble = 0.0
+	shift_frac = 1.0
 	cause = Cause.NONE
 	if active_causes & Cause.FUEL:
 		stumble = maxf(stumble, 1.0)
+		shift_frac = minf(shift_frac, STARVED_SHIFT_FRAC)
 		cause = Cause.FUEL
 	if active_causes & (Cause.OVERHEAT | Cause.ENGINE):
 		rev_limit_frac = minf(rev_limit_frac, ENGINE_REV_FRAC)
 		boost_mult = minf(boost_mult, 0.0)
 		torque_mult = minf(torque_mult, ENGINE_TORQUE)
-		max_gear = mini(max_gear, ENGINE_MAX_GEAR)
+		max_gear = mini(max_gear, engine_max_gear)
+		shift_frac = minf(shift_frac, ENGINE_REV_FRAC)
 		cause = Cause.ENGINE if active_causes & Cause.ENGINE else Cause.OVERHEAT
 	if stumble <= 0.0:
 		_stumble_left = 0.0
@@ -149,7 +163,7 @@ func step_cut(dt: float, rpm: float, redline: float, throttle: float, lat_g: flo
 		else:
 			var demand := lerpf(STUMBLE_THROTTLE_FLOOR, 1.0, clampf(throttle, 0.0, 1.0)) \
 				* (1.0 + absf(lat_g) * STUMBLE_PER_LAT_G) * (1.0 + maxf(grade, 0.0) * STUMBLE_PER_GRADE)
-			_run_phase += dt * demand * stumble / STUMBLE_RUN_S
+			_run_phase += dt * demand * stumble / run_seconds()
 			if _run_phase >= 1.0:
 				_run_phase -= 1.0
 				_stumble_left = stumble_length(_stumble_index) - dt  # this tick is the first of the cut
@@ -158,6 +172,12 @@ func step_cut(dt: float, rpm: float, redline: float, throttle: float, lat_g: flo
 				starved = true
 	fuel_cut = _rev_cut or starved
 	return fuel_cut
+
+## Seconds the engine runs between cuts at demand 1, worked out so the average
+## cut (the middle of MIN..MAX) leaves fuel_share.
+func run_seconds() -> float:
+	var share := clampf(fuel_share, 0.05, 0.95)
+	return (STUMBLE_MIN_S + STUMBLE_MAX_S) * 0.5 * share / (1.0 - share)
 
 ## Length (s) of the n-th stumble: MIN..MAX in a fixed, never-random order.
 static func stumble_length(n: int) -> float:

@@ -121,8 +121,9 @@ var drag_scale := 1.0            # engine braking through the converter
 var drag_cap := INF              # Nm the wheels may put into the engine (downshifts)
 var feed_torque := 0.0           # Nm put through the clutch directly: the idle creep, and the drive during an upshift
 var hill_hold_left := 0.0        # s of hill hold left after the brake came off
-## Limp-home (LimpMode, set by the car every tick): the box goes no higher
-## than this gear and plans its shifts inside this share of the revs.
+## Limp (LimpMode.max_gear and shift_frac, set by the car every tick): the
+## box goes no higher than this gear and plans its shifts inside this share
+## of the revs.
 var limp_max_gear := 99
 var limp_rev_frac := 1.0
 
@@ -361,8 +362,9 @@ func _brain(v: Vehicle, delta: float, gear: int, fwd: float, kmh: float, thr: fl
 	var per_ratio := v.final_drive * maxf(fwd, 0.0) / v.average_drive_wheel_radius * Vehicle.ANGULAR_VELOCITY_TO_RPM
 
 	# limp-home caught the box in too high a gear: down as soon as the lower
-	# gear fits under the rev limit
-	if gear > n and _since_shift >= shift_time and v.gear_ratios[gear - 2] * per_ratio < max_rpm * UP_FULL:
+	# gear is safe for the engine (under the real redline, not the limp's rev
+	# limit: the fuel cut then slows the car down to what that gear allows)
+	if gear > n and _since_shift >= shift_time and v.gear_ratios[gear - 2] * per_ratio < v.max_rpm * UP_FULL:
 		_begin(v, gear - 1, thr)
 		return
 

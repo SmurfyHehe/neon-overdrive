@@ -341,6 +341,8 @@ func _physics_process(delta: float) -> void:
 		_smear_brake_on = braking
 		WetReflections.set_tail_brake(chassis_visual, 1.0 if braking else 0.0)
 	# Limp mode (brief LM): no speed cap; the engine and the gearbox are held back.
+	limp.engine_max_gear = int(get_meta(&"limp_max_gear", LimpMode.ENGINE_MAX_GEAR))
+	limp.fuel_share = float(get_meta(&"limp_fuel_share", LimpMode.FUEL_FLAT_SHARE))
 	limp.update(fuel.is_empty(), health.engine_temp if health.enabled else 0.0)
 	_apply_limp(delta)
 	super._physics_process(delta)
@@ -388,7 +390,7 @@ func _apply_limp(delta: float) -> void:
 	set_meta(ForcedInduction.BOOST_MULT_META, limp.boost_mult)
 	if auto_box != null:
 		auto_box.limp_max_gear = limp.max_gear
-		auto_box.limp_rev_frac = limp.rev_limit_frac
+		auto_box.limp_rev_frac = limp.shift_frac
 	if not on:
 		limp.step_cut(delta, motor_rpm, max_rpm, 0.0, 0.0, 0.0)
 		return
@@ -396,12 +398,13 @@ func _apply_limp(delta: float) -> void:
 	var grade := -global_transform.basis.z.y
 	var cut := limp.step_cut(delta, motor_rpm, max_rpm, clampf(throttle_input, 0.0, 1.0), lat_g, grade)
 	torque_mult = 0.0 if cut else limp.torque_for(health.torque_mult if health.enabled else 1.0)
-	# SEMI: the box drops to the limp's top gear as soon as the revs allow it.
+	# SEMI: the box drops to the limp's top gear as soon as the lower gear is
+	# safe for the engine; the fuel cut then slows the car to what it allows.
 	# (AUTO does the same inside AutoBox; in MANUAL the driver holds the stick,
 	# so a higher gear stays in until they shift down, and then cannot go back.)
 	if not automatic_transmission and not realistic_clutch and current_gear > limp.max_gear and not is_shifting:
 		var lower_rpm := gear_ratios[current_gear - 2] * final_drive * speed / average_drive_wheel_radius * ANGULAR_VELOCITY_TO_RPM
-		if lower_rpm < max_rpm * limp.rev_limit_frac:
+		if lower_rpm < max_rpm * 0.9:
 			shift(-1)
 
 ## Wheels on their rims: grip from the offsets (after health and the wet have

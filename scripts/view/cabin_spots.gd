@@ -42,13 +42,15 @@ const CABIN := {
 
 ## Per car: cabin overrides (none yet: one shared cabin) and the car spots.
 const CARS := {
-	"p0_beater": {"strut_bar": {"x": 0.48, "y": 0.93, "z": -1.05}},
+	# bobble head: the beater's dash top sits close under the glass, so the
+	# figure stands nearer the driver's face and a size smaller (BobbleHead)
+	"p0_beater": {"strut_bar": {"x": 0.48, "y": 0.93, "z": -1.05}, "bobble": {"along": 0.8, "scale": 0.9}},
 	"p1_coupe": {"strut_bar": {"x": 0.595, "y": 0.71, "z": -1.11}},
 	"p2_hothatch": {"strut_bar": {"x": 0.62, "y": 0.85, "z": -1.13}},
 	"p3_tuner": {"strut_bar": {"x": 0.59, "y": 0.79, "z": -1.16}},
 	# the kei's dash is a 6 cm ledge a hand's width under the screen: its
-	# bobble head stands nearer the cowl and a size smaller (BobbleHead)
-	"p4_kei": {"strut_bar": {"x": 0.445, "y": 0.67, "z": -0.98}, "bobble": {"along": 0.2, "scale": 0.8}},
+	# bobble head stands at the cowl and two sizes smaller: the kei's glass is close (BobbleHead)
+	"p4_kei": {"strut_bar": {"x": 0.445, "y": 0.67, "z": -0.98}, "bobble": {"along": 0.05, "scale": 0.65}},
 	"p5_muscle": {"strut_bar": {"x": 0.66, "y": 0.87, "z": -1.33}},
 	"p6_crossover": {"strut_bar": {"x": 0.61, "y": 1.00, "z": -1.16}},
 }

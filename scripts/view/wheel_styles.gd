@@ -88,6 +88,8 @@ const FIT := {
 	"p5_muscle": {"factory": 40.0, "lo": 35.0, "hi": 36.0, "dish": 4.0},
 	"p6_crossover": {"factory": 37.0, "lo": 34.0, "hi": 36.0, "dish": 4.0},
 	"p17_work_pickup": {"factory": 39.0, "lo": 35.0, "hi": 35.0, "dish": 4.0},
+	# its CABIN wheel_fit (35 factory, 33-36, 8 cm dish), the top capped to 35
+	"p8_driftcoupe": {"factory": 35.0, "lo": 33.0, "hi": 35.0, "dish": 8.0},
 }
 
 ## The race wheel's diameter, the same on every car (cm).

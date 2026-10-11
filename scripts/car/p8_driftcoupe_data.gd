@@ -27,6 +27,10 @@ const GLASS := ["glass"]
 ## its top stays under the 8 degree sight line; the rear seat is deleted, so
 ## "shelf" is the flat carpeted plate behind the seats; the handbrake is the
 ## tall hydraulic lever on the tunnel; crank windows.
+## Build 4 merge (2026-10-11): the 35 cm race wheel's top sat 11 degrees under
+## the eye and hid the whole tach (tests/view/gauge_layout.gd), so the wheel
+## came 3 cm down and 2.5 cm back toward the driver (its top 16 degrees under
+## the eye, the rim 5 cm off the thighs) and the cluster 1.2 cm up.
 const CABIN := {
 	"seat_x": -0.360, "seat_h": 0.460, "seat_z": 0.280,
 	"eye": Vector3(-0.320, 1.080, 0.220),
@@ -37,8 +41,8 @@ const CABIN := {
 	"a_pillar": [Vector3(0.774, 0.836, -0.660), Vector3(0.533, 1.435, -0.040)],
 	"b_pillar_z": 0.370, "rear_z": 0.840,
 	"shelf": {"y": 0.935, "z0": 0.840, "z1": 1.580, "half_w": 0.732},
-	"wheel": Vector3(-0.360, 0.820, -0.140), "wheel_tilt_deg": -25.0,
-	"cluster": Vector2(0.895, -0.430), "cluster_style": "centre", "speedo_max_kmh": 240.0,
+	"wheel": Vector3(-0.360, 0.790, -0.115), "wheel_tilt_deg": -25.0,
+	"cluster": Vector2(0.907, -0.430), "cluster_style": "centre", "speedo_max_kmh": 240.0,
 	"head_unit": Vector3(0.0, 0.797, -0.244),
 	"lever": Vector3(0.0, 0.595, -0.100), "handbrake": Vector3(0.0, 0.595, 0.360),
 	"pedals": Vector3(-0.260, 0.530, -0.580),

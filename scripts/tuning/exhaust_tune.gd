@@ -91,6 +91,7 @@ static func save_car(car_id: String, d: Dictionary) -> bool:
 		return SaveCore.persist and SaveCore.set_tune(car_id, "exhaust", entry)
 	var cars := _read_cars()
 	cars[car_id] = entry
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(save_path.get_base_dir()))
 	var f := FileAccess.open(save_path, FileAccess.WRITE)
 	if f == null:
 		push_error("ExhaustTune: cannot write %s (%s)" % [save_path, error_string(FileAccess.get_open_error())])

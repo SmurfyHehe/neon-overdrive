@@ -201,6 +201,10 @@ hazard={
 
 test_build=true
 
+[neon]
+
+test_build=true
+
 [physics]
 
 common/physics_ticks_per_second=120

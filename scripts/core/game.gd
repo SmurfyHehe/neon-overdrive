@@ -67,6 +67,7 @@ var menu_sfx: MenuSfx   # clicks, ticks and the squelch for every menu (menu_sfx
 var sky: Sky  # tonight's sky (NightSky), driven by SkyDirector
 var night_clock: NightClock  # 8 p.m. to 6 a.m., saved (night_clock.gd); windows follow it
 var race: RaceController  # race core RC1 (race_controller.gd)
+var garage_flow: GarageFlow  # the garage plumbing (G0, garage_flow.gd)
 var _bands := false  # hour bands drive traffic and Dave (bands_on)
 var moments: MomentSpots  # roadside moment spots, dealt nightly (moment_spots.gd); null when off
 var world_mood: WorldMood  # tonight's events: rule-breaker share, bar close, meets, crackdowns
@@ -939,6 +940,16 @@ func _setup_game_state() -> void:
 	add_child(PumpPanel.new(game_state, player, wallet, night_clock))
 	gas_station.pulled_up.connect(func(_s: float) -> void: game_state.open_station())
 	add_child(WashScreen.new(game_state))
+	# Garage G0: the dawn card, the garage behind it and the plumbing around them.
+	# Live in real play (or NEON_GARAGE=1); every other run never meets them.
+	game_state.garage_enabled = GameState.wants_garage()
+	var dawn_card := DawnCard.new(game_state)
+	dawn_card.night_clock = night_clock
+	add_child(dawn_card)
+	dawn_card.bind_wallet(wallet)
+	add_child(GarageScreen.new(game_state, player))
+	garage_flow = GarageFlow.new(game_state, player)
+	add_child(garage_flow)
 	# Special vehicles: a flip ends the run (SpecialRunEnd). A restart is the
 	# stand-in until the run loop (stage C) owns what "ends the night" means.
 	var kind := PlayerCar.chassis_kind()
@@ -958,12 +969,15 @@ func _setup_game_state() -> void:
 		radio.tune_to(int(run.radio))
 	if GameState.wants_title():
 		game_state.enter_title()   # the title shows over the frozen world; Drive is instant
+	else:
+		game_state.enter_garage_boot()   # no title: the dawn card and garage first
 	game_state.state_changed.connect(saver.on_state_changed)
 	game_state.restarting.connect(saver.on_restart)
 	game_state.quitting.connect(saver.save_now)
 	# 6 a.m.: tonight's cash goes into the bank (F0).
 	night_clock.night_ended.connect(func(_n: int) -> void: wallet.bank_night())
 	night_clock.night_ended.connect(func(_n: int) -> void: saver.save_now.call_deferred())
+	night_clock.night_ended.connect(game_state.request_dawn)   # after the bank, so the card shows it
 	run_end = RunEnd.new()
 	run_end.player = player
 	run_end.camera = camera

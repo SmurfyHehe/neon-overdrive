@@ -169,7 +169,8 @@ func _run() -> void:
 	GameSettings.load_settings()
 	_check(not GameSettings.tips, "Tips off is saved")
 	_check(st.find_child("Build", true, false) != null, "the Game tab shows the build number")
-	_check(not st.car_option.disabled and not st.service_button.disabled, "the garage stand-ins are usable from the pause screen")
+	_check(not st.car_option.disabled and not st.tow_button.disabled, "the test stand-ins are usable from the pause screen")
+	_check(st.get("service_button") == null and st.get("wash_button") == null, "Service car and Wash car are not on Settings any more")
 	st.close()
 
 	# ---------- Quit to title ----------

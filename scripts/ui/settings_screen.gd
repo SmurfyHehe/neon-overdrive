@@ -20,6 +20,7 @@ signal closed
 const GameInfo := preload("res://scripts/core/game_info.gd")
 const LogFolder := preload("res://scripts/core/log_folder.gd")
 const DiscordPresence := preload("res://scripts/core/discord_presence.gd")
+const TestBuild := preload("res://scripts/core/test_build.gd")
 
 const PAGES: Array[String] = ["Sound", "Picture", "Driving", "Controls", "Game"]
 ## What a mixer channel is called on the Sound page (the rest use their own name).
@@ -85,15 +86,11 @@ var copy_log_button: Button
 var log_status: Label
 var car_option: OptionButton
 var car_restart_button: Button
-var service_button: Button
 var tow_button: Button
-## Garage stand-ins the pause menu hands over (they act on the running game).
-var service_action: Callable
+## Test stand-ins the pause menu hands over (they act on the running game).
 var tow_action: Callable
 var race_action: Callable   # start (or give up) a race against a test rival, until meet spots exist
-var wash_action: Callable   # the garage wash mini-game
 var race_button: Button
-var wash_button: Button
 var keys_dirty := false   # rebinds not saved yet
 
 var _capture := {}        # {action, slot, button} while waiting for a key
@@ -568,17 +565,20 @@ func _build_game_page(parent: Control) -> Control:
 		_sync_strut_bar())
 	strut.selected = 1 if CabinMods.strut_bar else 0
 
-	# Stand-ins until the garage exists; only usable from the pause screen.
-	_heading(page, "Garage stand-ins")
+	# Test stand-ins; only usable from the pause screen or the garage. Service car
+	# and Wash car are not here any more: they live in the garage (garage G0). The
+	# car picker is the test build's (TestBuild); the garage's key board replaces
+	# it later.
+	_heading(page, "Test stand-ins")
 	car_option = _add_option(page, "Car", [], func(_i: int) -> void:
 		pass)
 	for k in PlayerCars.KINDS:
 		car_option.add_item("%s   %d Nm / %d kg" % [PlayerCars.title(k.id), int(k.nm), int(k.kg)])
 		car_option.set_item_metadata(car_option.item_count - 1, String(k.id))
 	car_restart_button = _add_button(page, "Restart the run in this car", _pick_car)
-	service_button = _add_button(page, "Service car (reset wear and damage)", func() -> void:
-		if service_action.is_valid():
-			service_action.call())
+	if not TestBuild.on():
+		car_option.get_parent().visible = false
+		car_restart_button.visible = false
 	tow_button = _add_button(page, "Call a tow (engine dead)", func() -> void:
 		if tow_action.is_valid():
 			tow_action.call())
@@ -586,10 +586,6 @@ func _build_game_page(parent: Control) -> Control:
 		if race_action.is_valid():
 			close()
 			race_action.call())
-	wash_button = _add_button(page, "Wash car", func() -> void:
-		if wash_action.is_valid():
-			close()
-			wash_action.call())
 
 	return _page_of(page)
 
@@ -602,12 +598,11 @@ func _refresh_game_page() -> void:
 		if car_option.get_item_metadata(i) == now:
 			car_option.select(i)
 	var paused := game_state != null and game_state.state == GameState.State.PAUSED
-	car_option.disabled = not paused
-	car_restart_button.disabled = not paused
-	service_button.disabled = not paused or not service_action.is_valid()
+	var in_garage := game_state != null and game_state.state == GameState.State.GARAGE
+	car_option.disabled = not (paused or in_garage)
+	car_restart_button.disabled = not (paused or in_garage)
 	tow_button.disabled = not paused or not tow_action.is_valid()
 	race_button.disabled = not paused or not race_action.is_valid()
-	wash_button.disabled = not paused or not wash_action.is_valid()
 
 func _pick_car() -> void:
 	if car_option.selected < 0 or game_state == null:

@@ -105,7 +105,9 @@ func _on_state_changed(new_state: GameState.State, _old_state: GameState.State) 
 	if on and not _active:
 		_start()
 	elif not on and _active:
-		_stop()
+		# Photo mode (from the pause row) owns the view; handing it back to the
+		# game camera here would undo the free camera it just made current.
+		_stop(new_state != GameState.State.PHOTO)
 	_set_blur(new_state == GameState.State.PAUSED)
 	_set_muffle(on)
 
@@ -121,9 +123,9 @@ func _start() -> void:
 	_place(0.0)
 	orbit.make_current()
 
-func _stop() -> void:
+func _stop(restore_camera := true) -> void:
 	_active = false
-	if game_camera != null and is_instance_valid(game_camera):
+	if restore_camera and game_camera != null and is_instance_valid(game_camera):
 		game_camera.make_current()
 
 func _process(delta: float) -> void:

@@ -44,6 +44,10 @@ func _ready() -> void:
 	_audio.stream = AudioDsp.cached("res://scripts/audio/damage_audio.gd", "rattle", make_rattle)
 	add_child(_audio)
 
+## Starts making the rattle on a worker thread (issue #524).
+static func prefetch() -> void:
+	AudioDsp.prefetch("res://scripts/audio/damage_audio.gd", "rattle", make_rattle)
+
 func _physics_process(delta: float) -> void:
 	var loose := _player.damage.rattle_level()
 	var target := 0.0

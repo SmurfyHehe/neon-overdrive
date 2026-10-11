@@ -118,6 +118,10 @@ func _ready() -> void:
 # The synth is touched only by the task while one runs: every main-thread use
 # goes through _join() first, which by then is normally a no-op (the task had
 # the rest of the frame).
+# The block is a high-priority task: low-priority ones share a few threads, and
+# the loop bake and the traffic horns (seconds of work on a cold cache) queue
+# there; a block stuck behind them held the main thread in _join() for 1.7 to
+# 3.6 s on the first boot into the garage (issue #524).
 func _process(delta: float) -> void:
 	if _playback == null:
 		return
@@ -168,7 +172,7 @@ func _process(delta: float) -> void:
 		_task_start_usec = Time.get_ticks_usec()
 		_task = WorkerThreadPool.add_task(_render.bind(n, _vehicle.motor_rpm,
 				_throttle(), _vehicle.motor_is_redline, tn,
-				loop_mode == LoopMode.LOOPS, f0, f1), false, "engine audio")
+				loop_mode == LoopMode.LOOPS, f0, f1), true, "engine audio")
 
 ## The throttle the voice hears: the pedal, or the blip as a key start catches
 ## (PlayerCar.start_throttle), whichever is more.
@@ -301,7 +305,7 @@ func _update_loops(delta: float) -> void:
 		_bake_cancel = {"stop": false}
 		var voice: Dictionary = (_spec.get("engine_voice", {}) as Dictionary).duplicate(true)
 		_bake_task = WorkerThreadPool.add_task(_bake_job.bind(voice, sig.x / 100.0, sig.y / 100.0,
-				_vehicle.idle_rpm, _vehicle.max_rpm, _bake_cancel), false, "engine loops")
+				_vehicle.idle_rpm, _vehicle.max_rpm, _bake_cancel), true, "engine loops")
 		return
 	if loop_mode == LoopMode.HANDOFF:
 		_handoff_t += delta / HANDOFF_SECS
@@ -314,6 +318,8 @@ func _update_loops(delta: float) -> void:
 				_vehicle.engine_running)
 
 ## Worker thread: the bank for one voice, from the cache when it was baked before.
+## A high-priority task (#524): at low priority it queued behind the garage
+## boot's tyre and wind sounds, and leaving the scene waited for it to start.
 func _bake_job(voice: Dictionary, loudness: float, raspiness: float, idle: float, max_rpm: float,
 		cancel: Dictionary) -> void:
 	_bake_out = EngineLoops.bake_cached(voice, loudness, raspiness, idle, max_rpm, ENGINE_VOLUME, cancel)

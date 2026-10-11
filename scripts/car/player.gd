@@ -314,6 +314,15 @@ func _ready() -> void:
 	# synthesised engine driven by this car's motor_rpm/throttle. Added after
 	# CarSpec.apply() so it picks up the real idle/max rpm.
 	if not sim_only:
+		# The sounds below, made side by side off the main thread while the
+		# nodes come in (a cold cache: first boot after a change, issue #524).
+		# Waited on in this order; on a garage boot nothing waits for the
+		# starter's and CarAudio's (see there), so they go last.
+		DamageAudio.prefetch()
+		DrivelineAudio.prefetch()
+		CabinLifeAudio.prefetch()
+		StarterAudio.prefetch(spec)
+		CarAudio.prefetch()
 		add_child(EngineAudio.new())
 		# Stage A (2026-10-04): wind, road, tyre and kerb sound next to the engine.
 		add_child(CarAudio.new())

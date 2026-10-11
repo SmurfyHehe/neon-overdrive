@@ -103,6 +103,7 @@ static var _lock := Mutex.new()
 static var _task := -1
 static var _users := 0
 static var _first := ""
+static var _cancel := false
 
 static func horn_for(kind: String, sour := false) -> String:
 	if sour:
@@ -122,6 +123,20 @@ static func warm(first := "") -> void:
 	if _task >= 0:
 		return
 	_first = first
+	_cancel = false
+	# Takes built before come from the disk cache, here on the main thread
+	# (loading and saving resources from the worker leaked them at exit); the
+	# worker builds only the rest, and finish() saves those (issue #524: they
+	# were rebuilt on every boot, about 2 s of a worker).
+	if AudioDsp.use_cache:
+		for horn in NAMES:
+			for kind in ["short", "long", "hold"]:
+				var key: String = horn + "|" + kind
+				var path := _cache_file(key)
+				if ResourceLoader.exists(path):
+					var res := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE)
+					if res is AudioStreamWAV:
+						_keep(key, res)
 	_task = WorkerThreadPool.add_task(_build_all, false, "traffic horns")
 
 ## A user is leaving the tree. After the last one: waits for the build if it
@@ -131,8 +146,15 @@ static func finish() -> void:
 	_users = maxi(_users - 1, 0)
 	if _task < 0 or _users > 0:
 		return
+	_cancel = true   # stop between takes: freeing the game waited ~1.7 s here (#524)
 	WorkerThreadPool.wait_for_task_completion(_task)
 	_task = -1
+	if AudioDsp.use_cache:
+		for key in _streams:
+			var path := _cache_file(key)
+			if not ResourceLoader.exists(path):
+				DirAccess.make_dir_recursive_absolute(AudioDsp.CACHE_DIR)
+				ResourceSaver.save(_streams[key], path)
 	_lock.lock()
 	_streams.clear()
 	_lock.unlock()
@@ -171,13 +193,29 @@ static func _build_all() -> void:
 	if _first in order:
 		order.erase(_first)
 		order.push_front(_first)
-		_keep(_first + "|hold", hold_wav(_first))
+		_build(_first + "|hold")
 	for horn in order:
 		for long in [false, true]:
-			_keep(_key(horn, long), AudioDsp.to_wav(samples(horn, LONG_S if long else SHORT_S), RATE, false))
+			_build(_key(horn, long))
 	for horn in order:
 		if horn != _first:
-			_keep(horn + "|hold", hold_wav(horn))
+			_build(horn + "|hold")
+
+## One take, unless warm() had it from the disk cache or finish() asked the
+## build to stop.
+static func _build(key: String) -> void:
+	if _cancel or _take(key) != null:
+		return
+	var parts := key.split("|")
+	var wav: AudioStreamWAV
+	if parts[1] == "hold":
+		wav = hold_wav(parts[0])
+	else:
+		wav = AudioDsp.to_wav(samples(parts[0], LONG_S if parts[1] == "long" else SHORT_S), RATE, false)
+	_keep(key, wav)
+
+static func _cache_file(key: String) -> String:
+	return AudioDsp._cache_path("res://scripts/audio/traffic_horns.gd", key.replace("|", "_"))
 
 ## The player's looping take as a stream.
 static func hold_wav(horn: String) -> AudioStreamWAV:

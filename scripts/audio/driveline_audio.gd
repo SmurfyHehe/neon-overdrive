@@ -207,8 +207,23 @@ func _one_shot(p: AudioStreamPlayer, gain: float) -> void:
 ## "clack_up" and "clack_down" are variant 0; "thump3" etc. pick a variant.
 static func stream(layer: String) -> AudioStreamWAV:
 	if not _streams.has(layer):
-		_streams[layer] = AudioDsp.cached("res://scripts/audio/driveline_audio.gd", layer, _clack.bind(layer) if layer.begins_with("clack") else (_tick_sound.bind(layer) if layer.begins_with("tick") else _make.bind(layer)))
+		_streams[layer] = AudioDsp.cached("res://scripts/audio/driveline_audio.gd", layer, _maker(layer))
 	return _streams[layer]
+
+static func _maker(layer: String) -> Callable:
+	return _clack.bind(layer) if layer.begins_with("clack") else (_tick_sound.bind(layer) if layer.begins_with("tick") else _make.bind(layer))
+
+## Starts making every layer _ready() asks for on worker threads (issue #524).
+static func prefetch() -> void:
+	var layers: Array[String] = ["whine", "clunk", "landing"]
+	for layer in ["thump", "clack_up", "clack_down"]:
+		for k in VARIANTS:
+			layers.append(layer if k == 0 else "%s%d" % [layer, k])
+	for k in TICK_VARIANTS:
+		layers.append("tick%d" % k)
+	for layer in layers:
+		if not _streams.has(layer):
+			AudioDsp.prefetch("res://scripts/audio/driveline_audio.gd", layer, _maker(layer))
 
 ## Every variant of a shift layer, picked at random per shift.
 static func variants(layer: String) -> AudioStreamRandomizer:

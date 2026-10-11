@@ -151,7 +151,7 @@ def material_colours(D):
     if own.get('rim') and 'rim_bronze' not in own:
         cols['rim_bronze'] = own['rim']
     for k, v in fparts.COLOURS.items():
-        cols[k] = v or cols['trim' if k == 'plastic' else k]
+        cols[k] = v or cols.get(fparts.ALIAS.get(k, k), '#808080')
     return cols
 
 
@@ -306,6 +306,7 @@ def build_scene(D, build_name):
     opts = build_options(D, build_name)
     Dr = fcar.resolve(D, opts)
     Dr['game_mirrors'] = GAME.get(Dr['id'], {}).get('mirrors', [])
+    kit = fparts.kit_of(Dr)
     body, stations = fcar.loft(Dr)
     body_tris = body.array()
     tips = []
@@ -365,10 +366,15 @@ def build_scene(D, build_name):
             pick = (np.sign(centres[:, 0]) == sx) & (np.abs(centres[:, 2] - hub[2]) < 0.5)
             wp = fparts.Part('wheel_%s_mesh' % tag, bevel=0)
             for i in np.nonzero(pick)[0]:
-                wp.add(wheel_arr[i] - hub, wm.mesh.mats[i], fparts.DETAIL)
+                # a kit car's wheels are drawn from this mesh, so they use the assembler's material names
+                mat = fparts.MATMAP.get(wm.mesh.mats[i], wm.mesh.mats[i]) if kit else wm.mesh.mats[i]
+                wp.add(wheel_arr[i] - hub, mat, fparts.DETAIL)
+            if kit.get('wheel'):
+                kit['wheel'](Dr, tag, sx, ai, wp)     # brakes, hubcaps: part of the wheel's own mesh
             wheels[tag] = (hub, wp)
 
     H = hinges(Dr, R)
+    H.update(info.get('hinges', {}))
     root = Node(Dr['id'], extras={'build': build_name or 'stock', 'generator': GENERATOR})
     hinge_nodes = {}
     for hname, h in H.items():
@@ -396,11 +402,17 @@ def build_scene(D, build_name):
             twin.mirror_of = node
             twin.origin = lparent.origin
             centre_of[p.twin] = [-centre_of[p.name][0], centre_of[p.name][1], centre_of[p.name][2]]
+    for hname in [h for h, hn in hinge_nodes.items() if not hn.children]:
+        root.children.remove(hinge_nodes.pop(hname))      # a hinge nothing hangs on (a kit without a deck lid)
+        H.pop(hname)
     for tag, (hub, wp) in wheels.items():
         wn = root.add(Node('wheel_' + tag, translation=hub, extras={'r': wh['r']}))
         wn.origin = hub
         wn.add(Node(wp.name, mesh=wp)).origin = hub
-    for name, a in anchors(Dr, R, tips, slots, centre_of).items():
+    A = anchors(Dr, R, tips, slots, centre_of)
+    if kit.get('anchors'):
+        kit['anchors'](Dr, R, A)
+    for name, a in A.items():
         root.add(Node(name, translation=a['pos'], rotation=a.get('quat', (0, 0, 0, 1)), extras=a.get('extras')))
 
     cols = material_colours(Dr)

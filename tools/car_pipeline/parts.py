@@ -41,6 +41,8 @@ import math
 
 import numpy as np
 
+import types
+
 import car as fcar
 from geom import AXES, Mesh, box, pl, place_on_surface
 
@@ -69,7 +71,9 @@ ASYMMETRIC = {
 # fleet material -> parts-build material (the names CarAssembler keys on)
 MATMAP = {'paint': 'paint', 'roof': 'paint', 'under': 'under_paint', 'glass': 'glass',
           'pillar': 'plastic', 'trim': 'plastic', 'grille': 'rubber', 'chrome': 'chrome',
-          'exh_hole': 'rubber', 'head': 'glow_head', 'tail': 'glow_tail', 'turn': 'glow_turn'}
+          'exh_hole': 'rubber', 'head': 'glow_head', 'tail': 'glow_tail', 'turn': 'glow_turn',
+          'primer': 'paint_primer', 'paint2': 'paint_primer', 'rust': 'paint_rust', 'bondo': 'paint_bondo',
+          'tire': 'rubber', 'tire_side': 'rubber', 'rim': 'rim', 'rim_dark': 'steel'}
 COLOURS = {
     'paint': None,                 # the car's own paint
     'under_paint': '#0B0D12',      # behind the shut lines, the underbody
@@ -84,7 +88,24 @@ COLOURS = {
     'glow_lens': '#8A7350',        # the lamp lens round the bulb: the same warm white, dimmer
     'glow_tail': '#E5262B',
     'glow_turn': '#FFC066',
+    # separate lamps that are dark until the game lights them (Roy 1171-1180)
+    'glow_brake': '#7A1418',
+    'glow_reverse': '#3A3A38',
+    # fixed paints: a panel that is not the car's colour (primer, rust, filler)
+    'paint_primer': None,
+    'paint_rust': None,
+    'paint_bondo': None,
+    'steel': '#4A4E55',            # drums, discs, axles, engine castings
+    'rim': None,                   # the wheel's own rim colour
 }
+# parts-build material -> the fleet colour it takes when COLOURS has None
+ALIAS = {'plastic': 'trim', 'paint_primer': 'primer', 'paint_rust': 'rust', 'paint_bondo': 'bondo'}
+
+
+def kit_of(D):
+    """What one car adds to the common recipe (kits.KITS), or {}."""
+    import kits
+    return kits.KITS.get(D['id'], {})
 
 
 def poly_normal(p):
@@ -234,6 +255,68 @@ def loft_tagged(D):
     if T.shape != ref.shape or np.abs(T - ref).max() > 1e-12:
         raise SystemExit('parts.loft_tagged no longer matches fleet_design.car.loft: the shape would change')
     return T, mats, tags, sts
+
+
+def merge_flat(D, ps, sts, tol=3e-3):
+    """Kit option `merge_flat`. The loft has a ring of triangles at every
+    station, and a wheel arch alone puts nine stations across the whole car:
+    the roof, the hood and the floor are cut into slivers there although they
+    are flat. Merge each run of quads along one strip whose long edges are
+    straight lines into one quad, as long as its fourth corner stays within
+    `tol` (3 mm) of the plane of the other three: the skin then moves by less
+    than half of that, and only between the long edges, which do not move.
+    The outline of the car is the sheet's; a neighbour strip that keeps its
+    stations gets them back as points on the shared edge (fix_tjunctions)."""
+    ring = [[np.array([x, y, fcar._s2z(D, s)]) for x, y in fcar.half_section(D, s)[0]] for s in sts]
+    by = {}
+    for idx, g in enumerate(ps.G):
+        if g[0] >= 0 and g[1] != 0:
+            by.setdefault((g[0], g[1], g[2]), []).append(idx)
+
+    def straight(i, k):
+        a, b, c = ring[i - 1][k], ring[i][k], ring[i + 1][k]
+        t = (sts[i] - sts[i - 1]) / (sts[i + 1] - sts[i - 1])
+        return np.abs(a + (c - a) * t - b).max() < 1e-7
+
+    def quad(j, side, i, k):
+        q = np.array([ring[i][j], ring[i][j + 1], ring[k + 1][j + 1], ring[k + 1][j]])
+        return q * MIRROR if side < 0 else q
+
+    def bend(q):
+        n = np.cross(q[1] - q[0], q[2] - q[0])
+        ln = np.linalg.norm(n)
+        return abs((q[3] - q[0]) @ n) / ln if ln > 1e-12 else 1.0
+
+    n_int = len(sts) - 1
+    drop, add = set(), []
+    for j in range(fcar.N_HALF - 1):
+        for side in (1, -1):
+            i = 0
+            while i < n_int:
+                first = by.get((j, side, i))
+                if not first or len(first) != 2:
+                    i += 1
+                    continue
+                mat = ps.M[first[0]]
+                k = i
+                while k + 1 < n_int:
+                    nxt = by.get((j, side, k + 1))
+                    if not nxt or len(nxt) != 2 or ps.M[nxt[0]] != mat or ps.M[nxt[1]] != mat:
+                        break
+                    if not (straight(k + 1, j) and straight(k + 1, j + 1)) or bend(quad(j, side, i, k + 1)) > tol:
+                        break
+                    k += 1
+                if k > i and ps.M[first[1]] == mat:
+                    q = quad(j, side, i, k)
+                    idx = [t for m in range(i, k + 1) for t in by[(j, side, m)]]
+                    want = sum(poly_normal(ps.P[t]) for t in idx)
+                    add.append((q if poly_normal(q) @ want > 0 else q[::-1], mat, (j, side, i)))
+                    drop.update(idx)
+                i = k + 1
+    out = ps.pick([t not in drop for t in range(len(ps))])
+    for q, mat, tag in add:
+        out.add(q, mat, tag)
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -498,7 +581,7 @@ def finish_shut(ps, planes):
         da, db = inward(a) * RETURN, inward(b) * RETURN
         tag = ps.G[pi]
         if wall:
-            wm = 'paint' if ps.M[pi] in ('paint', 'roof') else 'rubber'
+            wm = ps.M[pi] if ps.M[pi] in ('paint', 'roof', 'primer') else 'rubber'
             out.append((wound([A, B, B + db, A + da], -n), wm, WALL, np.ones(4), tag))
         if floor:
             q = [A + da + n * FLOOR_IN, B + db + n * FLOOR_IN,
@@ -569,7 +652,8 @@ def decal(part, D, body_tris, d, mat, offset, kind=DETAIL):
 def regions(D):
     """Where the panels are cut (s along the length from the nose, metres)."""
     cab = D['cabin']
-    R = dict(D.get('part_regions') or {})
+    R = dict(kit_of(D).get('regions') or {})
+    R.update(D.get('part_regions') or {})
     pillars = cab.get('pillars') or [[cab['A'] + 1.1, cab['A'] + 1.16]]
     hw_mid = pl(D['hw'], 0.5 * (cab['A'] + cab['W']))
     R.setdefault('nose_s', 0.55)                               # bumper / hood / fender line
@@ -593,12 +677,16 @@ CUT_PARTS = ('body', 'hood', 'door_l', 'door_r', 'trunk', 'fender_fl', 'fender_f
 def build_parts(D, tips_out=None):
     """-> (parts list, info dict). D is a resolved fleet definition."""
     cab = D['cabin']
+    kit = kit_of(D)
+    panel_mats = kit.get('panel_mats', {})
     z = lambda s: fcar._s2z(D, s)
     s_of = lambda p: p[2] + D['OHf'] + D['WB'] / 2.0
     R = regions(D)
     T, M, G, sts = loft_tagged(D)
     body_tris = T.copy()
     pool = PolySet(list(T), M, G)
+    if kit.get('merge_flat'):
+        pool = merge_flat(D, pool, sts)
     wh = D['wheel']
     Ra = wh['r'] + wh.get('arch_gap', 0.03)
     axles = fcar._axles(D)
@@ -626,7 +714,10 @@ def build_parts(D, tips_out=None):
     hw_, s0, s1 = R['hood_hw'], R['nose_s'], cab['A']
     cut('hood', [((0, 0, 1), z(s0)), ((0, 0, -1), -z(s1)), ((1, 0, 0), -hw_), ((-1, 0, 0), -hw_)], top, True)
     hw_, s0, s1 = R['trunk_hw'], R['trunk_s0'], R['trunk_s1']
-    cut('trunk', [((0, 0, 1), z(s0)), ((0, 0, -1), -z(s1)), ((1, 0, 0), -hw_), ((-1, 0, 0), -hw_)], top, True)
+    if kit.get('no_trunk'):
+        sets['trunk'] = (PolySet(), [])          # no deck lid: the kit cuts its own tail doors
+    else:
+        cut('trunk', [((0, 0, 1), z(s0)), ((0, 0, -1), -z(s1)), ((1, 0, 0), -hw_), ((-1, 0, 0), -hw_)], top, True)
     for sx, nm in ((1, 'r'), (-1, 'l')):
         side = (lambda sx: lambda ps: (ps.col(1) == sx) & (ps.col(0) >= 3) & (ps.col(0) <= 7))(sx)
         cut('door_' + nm, [((0, 0, 1), z(R['door_s0'])), ((0, 0, -1), -z(R['door_s1'])), ((0, 1, 0), R['door_y0'])],
@@ -635,6 +726,10 @@ def build_parts(D, tips_out=None):
     # the nose: it carries the floor against the hood and both fenders
     cut('bumper_f', [((0, 0, -1), -z(R['nose_s']))], everything, False, [True])
     cut('bumper_r', [((0, 0, 1), z(R['tail_s'])), ((0, -1, 0), -R['tail_y'])], everything, False, [True, True])
+    extra_cuts = []
+    if kit.get('cuts'):
+        # the kit's own panels: f(D, R, z, cut) -> the names it cut
+        extra_cuts = list(kit['cuts'](D, R, z, cut))
     for sx, nm in ((1, 'r'), (-1, 'l')):
         side = (lambda sx: lambda ps: ~ps.mat_is('glass') & (ps.centroids()[:, 0] * sx > 0))(sx)
         cut('fender_f' + nm, [((0, 0, 1), z(R['nose_s'])), ((0, 0, -1), -z(R['door_s0'])), ((sx, 0, 0), R['hood_hw'])],
@@ -650,21 +745,42 @@ def build_parts(D, tips_out=None):
             return name
         if mat == 'glass':
             if tag[0] >= 8:
-                return 'glass_windshield' if s_of(cen) < 0.5 * (cab['W'] + cab['R']) else 'glass_backlight'
+                if s_of(cen) < 0.5 * (cab['W'] + cab['R']):
+                    return 'glass_windshield'
+                # tail doors (kit): each carries its half of the rear glass
+                return ('glass_barn_' + lr) if kit.get('split_backlight') else 'glass_backlight'
             return ('sail_' if s_of(cen) < R['door_s0'] else 'glass_quarter_') + lr
         if mat == 'pillar':
             return 'pillar_b_' + lr
         return 'body'
 
+    # kit: stretches of the side skin in another paint (a primer fender). The
+    # skin is split on the region's edges and keeps its place, so nothing is
+    # laid over it and no shut line is added.
+    for s0, s1, y0, y1, mat in kit.get('paint_regions', []):
+        box_ = [((0, 0, 1), z(s0)), ((0, 0, -1), -z(s1)), ((0, 1, 0), y0), ((0, -1, 0), -y1)]
+        for name in list(CUT_PARTS) + extra_cuts:
+            ps, planes = sets[name]
+            m = ps.mat_is('paint') & (ps.col(0) >= 3) & (ps.col(0) <= 7)
+            ins, rest = ps.pick(m), ps.pick(~m)
+            for n, d in box_:
+                ins, out = clip(ins, n, d)
+                rest.extend(out)
+            ins.M = [mat] * len(ins)
+            sets[name] = (rest.extend(ins), planes)
+
     parts = {}
+
+    hinge_of = dict(HINGE_OF)
+    hinge_of.update(kit.get('hinge_of', {}))
 
     def part(name, parent=None, bevel=None):
         if name not in parts:
-            parts[name] = Part(name, parent if parent is not None else HINGE_OF.get(name), bevel)
+            parts[name] = Part(name, parent if parent is not None else hinge_of.get(name), bevel)
         return parts[name]
 
     counts = {}
-    for name in CUT_PARTS:
+    for name in list(CUT_PARTS) + extra_cuts:
         ps, planes = sets[name]
         rows = finish_shut(ps, planes)
         counts[name] = {'wall': sum(len(r[0]) - 2 for r in rows if r[2] == WALL),
@@ -674,6 +790,8 @@ def build_parts(D, tips_out=None):
             m = MATMAP.get(mat, mat)
             if pn.startswith('sail_') and kind == SKIN:
                 m = 'plastic'
+            if m == 'paint' and pn in panel_mats:
+                m = panel_mats[pn]
             part(pn).add(poly, m, kind, shut)
 
     # underbody and the arch liners
@@ -690,8 +808,10 @@ def build_parts(D, tips_out=None):
     add_glass_trim(D, parts, part, sts)
     add_fittings(D, parts, part, body_tris, R, info, tips_out)
     info['arch_lip_tris'] = add_arch_lips(D, parts)
-    parts = symmetrize(parts)
-    info['asymmetric'] = {n: why for n, why in ASYMMETRIC.items() if n in parts}
+    asym = dict(ASYMMETRIC)
+    asym.update(kit.get('asymmetric', {}))
+    parts = symmetrize(parts, asym)
+    info['asymmetric'] = {n: why for n, why in asym.items() if n in parts}
     return list(parts.values()), info
 
 
@@ -740,15 +860,17 @@ def clip_right(poly, vals):
     return np.array(pts), np.array(out)
 
 
-def symmetrize(parts):
-    """Keep the right half of everything and mark how the left is made from it."""
+def symmetrize(parts, asym=None):
+    """Keep the right half of everything and mark how the left is made from it.
+    asym: the names that are written as they are (ASYMMETRIC plus the car's own)."""
+    asym = ASYMMETRIC if asym is None else asym
     names = set(parts)
     out = {}
     for name, p in parts.items():
-        if name in ASYMMETRIC:
+        if name in asym:
             out[name] = p
             continue
-        if name[-1] == 'l' and (name[:-1] + 'r') in names:
+        if name[-1] == 'l' and (name[:-1] + 'r') in names and (name[:-1] + 'r') not in asym:
             continue                      # written as the mirror of its right-hand twin
         polys, mats, kind, shut = [], [], [], []
         for poly, m, k, s in zip(p.polys, p.mats, p.kind, p.shut):
@@ -760,7 +882,7 @@ def symmetrize(parts):
             kind.append(k)
             shut.append(v)
         p.polys, p.mats, p.kind, p.shut = polys, mats, kind, shut
-        p.twin = twin_name(name, names)
+        p.twin = twin_name(name, names - set(asym))
         p.sym = 'pair' if p.twin else 'centre'
         if len(p):
             out[name] = p
@@ -847,9 +969,16 @@ def add_fittings(D, parts, part, body_tris, R, info, tips_out):
         hit = laid_on(body_tris, 'top', [(x, z(s_))], lift)
         return None if hit is None else hit[0]
 
+    kit = kit_of(D)
+    lamps = {}
+    ctx = types.SimpleNamespace(D=D, parts=parts, part=part, body_tris=body_tris, R=R, info=info,
+                                z=z, on_top=on_top, lamps=lamps)
+
     # ---- the sheet's decals become parts
     for d in D.get('decals', []):
         mat, view, tag = d['mat'], d['view'], d.get('tag')
+        if kit.get('decal') and kit['decal'](ctx, d):
+            continue
         if mat == 'grille':
             g = part('grille', bevel=0)
             x0, y0, x1, y1 = d['rect']
@@ -893,9 +1022,10 @@ def add_fittings(D, parts, part, body_tris, R, info, tips_out):
             decal(part('trim_misc', bevel=0), D, body_tris, d, MATMAP.get(mat, mat), 0.004)
 
     # ---- the sheet's parts
-    lamps = {}
     for p in D.get('parts', []):
         t = p['type']
+        if kit.get('sheet_part') and kit['sheet_part'](ctx, p):
+            continue
         if t == 'mirrors':
             continue                      # the game's own door mirrors, below
         if t == 'popups':
@@ -992,10 +1122,15 @@ def add_fittings(D, parts, part, body_tris, R, info, tips_out):
             obox(hp, c[0], (0.014, 0.016, 0.105), np.eye(3), 'chrome')
 
     # ---- plates, proud of the grille slats and the bumper insert
-    for name, view, y in (('plate_f', 'front', 0.27), ('plate_r', 'rear', 0.285)):
+    # (view, centre height, half width, half height); the coupe's are 320 x 110, a kit's 520 x 110
+    plates = kit.get('plates') or {'plate_f': ('front', 0.27, 0.16, 0.055), 'plate_r': ('rear', 0.285, 0.16, 0.055)}
+    for name, (view, y, hw_p, hh_p) in plates.items():
         pp = part(name, bevel=0)
-        decal(pp, D, body_tris, {'view': view, 'rect': (-0.16, y - 0.055, 0.16, y + 0.055), 'cell': 0.4}, 'plate', 0.017)
-        decal(pp, D, body_tris, {'view': view, 'rect': (-0.17, y - 0.065, 0.17, y + 0.065), 'cell': 0.4}, 'plastic', 0.014)
+        cell = 0.6 if 'plates' in kit else 0.4
+        decal(pp, D, body_tris, {'view': view, 'rect': (-hw_p, y - hh_p, hw_p, y + hh_p), 'cell': cell}, 'plate', 0.017)
+        # the dark recess the plate sits in
+        decal(pp, D, body_tris, {'view': view, 'rect': (-hw_p - 0.01, y - hh_p - 0.01, hw_p + 0.01, y + hh_p + 0.01), 'cell': cell},
+              'rubber' if 'plates' in kit else 'plastic', 0.014)
 
     # ---- wipers: parked along the bottom of the windshield
     sA = cab['A']
@@ -1013,9 +1148,14 @@ def add_fittings(D, parts, part, body_tris, R, info, tips_out):
         mid = (a_ + b_) / 2 + n_glass * 0.010
         obox(wp, (pivot + mid) / 2, (np.linalg.norm(mid - pivot), 0.008, 0.012), frame_basis(mid - pivot, n_glass), 'plastic')
 
+    if kit.get('fittings'):
+        kit['fittings'](ctx)
+    if kit.get('no_antenna'):
+        return
+
     # ---- antenna: a short mast on the left rear quarter
     an = part('antenna', bevel=0)
-    s_a = cab['C'] + 0.10
+    s_a = kit.get('antenna_s', cab['C'] + 0.10)   # a kit may stand it elsewhere (a wagon has no rear deck)
     base = on_top(-(pl(D['hw'], s_a) - 0.16), s_a)
     tip = base + np.array([0.0, 0.27, 0.06])
     Bt = frame_basis(tip - base, (0, 0, 1))

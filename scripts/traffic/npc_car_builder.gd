@@ -100,6 +100,8 @@ const KINDS := {
 		"builds": {"stock": 100},
 		"build_paint": {},
 		"sheet_paint": true,
+		## Rear-engined: the underside has no pipe running the length of the car.
+		"engine": "rear",
 	},
 	"p2_hothatch": {
 		"data": preload("res://scripts/car/p2_hothatch_data.gd"),
@@ -152,6 +154,19 @@ const KINDS := {
 		"sheet_paint": true,
 	},
 	# The work pickup (Camel, P17, 2026-10-10): the 4-door T2 truck Walt sells
+	# The shop wagon (sheet p7_wagon, 2026-10-11): front drive, built from
+	# its parts glb like the Bug; the sheet mesh is the NEON_PARTS_LEGACY body.
+	"p7_wagon": {
+		"data": preload("res://scripts/car/p7_wagon_data.gd"),
+		"length": 4.30, "width": 1.74, "height": 1.55, "clearance": 0.16,
+		"front_overhang": 0.72, "rear_overhang": 0.98,
+		"wheel_r": 0.305, "wheel_x": 0.73, "axle_z": 1.30,
+		"drive": "fwd",
+		"rest_y": -0.12,
+		"builds": {"stock": 100},
+		"build_paint": {},
+		"sheet_paint": true,
+	},
 	# after act 1. Its own sheet mesh (p17_work_pickup_data.gd), not the
 	# traffic pickup's, which stays as it is.
 	"p17_work_pickup": {
@@ -306,6 +321,7 @@ static var _body_mat: ShaderMaterial
 static var _wheel_mat: ShaderMaterial
 static var _glass_mat: ShaderMaterial
 static var _glow_mat: ShaderMaterial
+static var _parts_glow_mat: ShaderMaterial
 static var _flare_mat: ShaderMaterial
 static var _light_glow := 1.0
 
@@ -315,6 +331,8 @@ static func set_light_glow(g: float) -> void:
 	_light_glow = g
 	if _glow_mat != null:
 		_glow_mat.set_shader_parameter("tail_gain", g)
+	if _parts_glow_mat != null:
+		_parts_glow_mat.set_shader_parameter("tail_gain", g)
 	if _flare_mat != null:
 		_flare_mat.set_shader_parameter("gain", g)
 
@@ -421,16 +439,31 @@ static func chassis_visual(kind: String, build: String, paint: Color, role := ""
 	root.name = "NpcBody"
 	root.set_meta("kind", kind)
 	root.set_meta("build", build)
-	var mi := MeshInstance3D.new()
-	mi.name = "Body"
-	mi.position = lift
-	mi.mesh = body_mesh(kind, build)
-	mi.set_instance_shader_parameter("paint", paint)
-	mi.set_instance_shader_parameter("finish", CarPaint.finish_for(kind))
-	mi.set_instance_shader_parameter("seams", mi.mesh.get_meta("paint_seams", Vector4.ZERO))
-	# The tail flares grow past the body's box at a distance.
-	mi.extra_cull_margin = 2.0
-	root.add_child(mi)
+	if uses_parts(kind):
+		# Cars from parts: the body is assembled from the real parts in
+		# assets/cars/<kind>/body.glb (CarAssembler: one mesh, 4 surfaces).
+		var paint_mat := ShaderMaterial.new()
+		paint_mat.shader = CarAssembler.paint_shader(P1CoupeBuilder.PARTS_BODY_SHADER)
+		paint_mat.set_shader_parameter("paint", paint)
+		var body := CarAssembler.build(kind, parts_config(), paint_mat)
+		body.position = lift
+		# This builder's lamp shader on the glow surface, so brake and hazard
+		# (set_lamps) work on a parts car as they do on a sheet car.
+		var gi := CarAssembler.surface_index(body.mesh, "glow")
+		if gi >= 0:
+			body.set_surface_override_material(gi, _get_parts_glow_material())
+		root.add_child(body)
+		root.set_meta("body_mat", paint_mat)
+		root.set_meta("tail_lights", _parts_tail_lamps(kind, lift))
+	else:
+		var mi := MeshInstance3D.new()
+		mi.name = "Body"
+		mi.position = lift
+		mi.mesh = body_mesh(kind, build)
+		mi.set_instance_shader_parameter("paint", paint)
+		# The tail flares grow past the body's box at a distance.
+		mi.extra_cull_margin = 2.0
+		root.add_child(mi)
 	var tips := []
 	for t in b.tips:
 		tips.append({"pos": t.pos + lift, "dir": t.dir, "r": t.r})
@@ -445,6 +478,32 @@ static func chassis_visual(kind: String, build: String, paint: Color, role := ""
 	Undercarriage.attach(root, undercarriage_params(kind, build), role)
 	return root
 
+## True when this kind's body is assembled from a parts glb (the default once
+## the glb is in the project). NEON_PARTS_LEGACY=1 keeps every sheet car on
+## its one-piece sheet proxy (before-shots, comparisons).
+static func uses_parts(kind: String) -> bool:
+	return OS.get_environment("NEON_PARTS_LEGACY") != "1" and CarAssembler.has_car(kind)
+
+## What CarAssembler builds: the stock parts, panels closed. NEON_CAR_PANELS=open
+## opens the lids, the doors and the fuel flap (pictures; nothing in the game
+## opens them yet).
+static func parts_config() -> Dictionary:
+	return {"panels": "open"} if OS.get_environment("NEON_CAR_PANELS") == "open" else {}
+
+## Centres of the lit tail lamps of a parts car, car space (wet-road smears).
+static func _parts_tail_lamps(kind: String, lift: Vector3) -> Array:
+	var out := []
+	for pname in CarAssembler.part_names(kind):
+		var mats := CarAssembler.part_arrays(kind, pname)
+		if not mats.has("glow_tail"):
+			continue
+		var sum := Vector3.ZERO
+		var verts: PackedVector3Array = mats["glow_tail"].v
+		for v in verts:
+			sum += v
+		out.append(sum / maxi(verts.size(), 1) + lift)
+	return out
+
 ## What the underside is built from (Undercarriage.params), car space: the
 ## ground at rest is -rest_y above the origin, the floor the body's lowest
 ## point, the wheels the KINDS entry's. "drive" in KINDS, rwd when unset;
@@ -454,12 +513,13 @@ static func undercarriage_params(kind: String, build: String) -> Dictionary:
 	var b: Dictionary = k.data.BUILDS[build]
 	var lift := Vector3(0.0, -float(k.rest_y), 0.0)
 	var floor_y: float = body_mesh(kind, build).get_aabb().position.y + lift.y
+	var engine := String(k.get("engine", "front"))
 	var tips := []
 	for t in b.tips:
 		tips.append({"pos": t.pos + lift, "dir": t.dir, "r": t.r})
 	var variant := "interceptor" if kind.contains("interceptor") else ""
 	return Undercarriage.params(float(k.width) / 2.0, float(k.length) / 2.0, floor_y, lift.y,
-		float(k.wheel_r), float(k.wheel_x), float(k.axle_z), tips, String(k.get("drive", "rwd")), variant)
+		float(k.wheel_r), float(k.wheel_x), float(k.axle_z), tips, String(k.get("drive", "rwd")), variant, engine)
 
 ## Tyre and rim for one corner, to parent under its physics Wheel (the pivot
 ## is what the wheel moves and spins). `hub` is the wheel's position in car
@@ -469,14 +529,26 @@ static func wheel_visual(kind: String, build: String, hub: Vector3) -> Node3D:
 	pivot.name = "NpcWheel"
 	var mi := MeshInstance3D.new()
 	mi.name = "Mesh"
-	mi.mesh = wheel_mesh(kind, build, hub.z > 0.0)
-	if hub.x < 0.0:
-		mi.rotation.y = PI
+	var corner := ("r" if hub.z > 0.0 else "f") + ("l" if hub.x < 0.0 else "r")
+	var parts_wheel: ArrayMesh = CarAssembler.wheel_mesh(kind, corner) if uses_parts(kind) else null
+	if parts_wheel != null:
+		# A parts car's wheel carries its brake and hubcap, modelled per corner.
+		mi.mesh = parts_wheel
+		mi.set_surface_override_material(0, CarAssembler.trim_material())
+	else:
+		mi.mesh = wheel_mesh(kind, build, hub.z > 0.0)
+		if hub.x < 0.0:
+			mi.rotation.y = PI
 	pivot.add_child(mi)
 	return pivot
 
 ## Triangles of one car as drawn (body plus 4 wheels).
 static func triangle_count(kind: String, build: String) -> int:
+	if uses_parts(kind):
+		var total := CarAssembler.triangle_count(kind, parts_config())
+		for corner in ["fl", "fr", "rl", "rr"]:
+			total += CarAssembler.wheel_triangle_count(kind, corner)
+		return total
 	var n := 0
 	var m := body_mesh(kind, build)
 	for i in m.get_surface_count():
@@ -490,6 +562,8 @@ static func triangle_count(kind: String, build: String) -> int:
 static func draw_call_count(kind: String, build: String, role := "") -> int:
 	if role == "":
 		role = Undercarriage.role_for_kind(kind)
+	if uses_parts(kind):
+		return CarAssembler.draw_call_count(kind, parts_config()) + 4 + Undercarriage.draw_calls(role)
 	return body_mesh(kind, build).get_surface_count() + 4 + Undercarriage.draw_calls(role)
 
 # ---------- meshes ----------
@@ -611,6 +685,20 @@ static func _get_glass_material() -> ShaderMaterial:
 		_glass_mat.shader = CarPaint.glass_shader(false)
 		_glass_mat.set_shader_parameter("glass", Color("#151D2E"))
 	return _glass_mat
+
+## The same lamp shader for a body assembled from parts, one-sided: a parts
+## lamp is wound outward, and a lamp laid on the rear glass (the wagon's tall
+## columns) must not shine into the cabin and the rear-view mirror.
+static func _get_parts_glow_material() -> ShaderMaterial:
+	if _parts_glow_mat == null:
+		var sh := Shader.new()
+		sh.code = GLOW_SHADER.replace("unshaded, cull_disabled", "unshaded, cull_back")
+		_parts_glow_mat = ShaderMaterial.new()
+		_parts_glow_mat.shader = sh
+		_parts_glow_mat.set_shader_parameter("energy", GLOW_ENERGY)
+		_parts_glow_mat.set_shader_parameter("tail_gain", _light_glow)
+		_parts_glow_mat.set_shader_parameter("brake_gain", BRAKE_GAIN)
+	return _parts_glow_mat
 
 static func _get_glow_material() -> ShaderMaterial:
 	if _glow_mat == null:

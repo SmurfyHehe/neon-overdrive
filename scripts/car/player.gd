@@ -615,6 +615,11 @@ func clutch_ready() -> bool:
 	return transmission_mode() != Transmission.MANUAL or clutch_input >= SHIFT_CLUTCH_MIN
 
 func manual_shift(count: int) -> void:
+	# The box that is picked, not GEVP's own flag: with the engine switched off
+	# the car is held in the manual model whatever was picked, and Q and E
+	# walked a switched-off automatic into 3rd, neutral or reverse.
+	if transmission_mode() == Transmission.AUTO:
+		return
 	if clutch_ready():
 		super.manual_shift(count)
 

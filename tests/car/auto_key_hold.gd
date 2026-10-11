@@ -12,6 +12,10 @@ extends SceneTree
 #     way up, twice at most)
 #   - floored from rest it still runs first gear out (the 1-2 shift comes
 #     above 80% of max rpm): the steadier demand did not make it short-shift
+#   - where the car has an ignition (X switches the engine off): with the
+#     automatic picked and the engine off, the shift keys still do nothing
+#     (they walked it into 3rd, neutral or reverse), and it starts again as
+#     the automatic, in first
 # Exit code 1 on failure. Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --fixed-fps 120 --path . -s res://tests/car/auto_key_hold.gd
 
@@ -46,6 +50,7 @@ func _run() -> void:
 		await _hold(c[0], c[1])
 	await _launch("p1_coupe")
 	await _launch("p4_kei")
+	await _keys_while_off()
 	for f in fails:
 		printerr("FAIL: ", f)
 	print("auto_key_hold: ", "PASS" if fails.is_empty() else "FAIL (%d)" % fails.size())
@@ -104,4 +109,30 @@ func _launch(kind: String) -> void:
 	print("%s: floored from rest, 1-2 after %.1f s at %.0f rpm (max %.0f)" % [kind, t, rpm, c.max_rpm])
 	_check(c.current_gear == 2, "%s: no 1-2 shift within 20 s of a floored start" % kind)
 	_check(rpm > 0.8 * c.max_rpm, "%s: floored, it left first at %.0f rpm, under 80%% of %.0f" % [kind, rpm, c.max_rpm])
+	await H.remove(self, c)
+
+func _keys_while_off() -> void:
+	var p := H.Pedals.new()
+	var c: PlayerCar = H.car(root, "p1_coupe", AUTO, p)
+	await H.settle(self, p)
+	if not c.has_method("ignition_off"):
+		print("no ignition in this build: the switched-off check is skipped")
+		await H.remove(self, c)
+		return
+	c.call("ignition_off")
+	await H.wait(self, 0.3)
+	var seen: Array[int] = []
+	for k in [PlayerCar.KEY_SHIFT_UP, PlayerCar.KEY_SHIFT_UP, PlayerCar.KEY_SHIFT_DOWN, PlayerCar.KEY_SHIFT_DOWN, PlayerCar.KEY_SHIFT_DOWN, PlayerCar.KEY_SHIFT_DOWN]:
+		c.driver = func(car: PlayerCar) -> void: car.apply_keys(k)
+		await physics_frame
+		c.driver = func(car: PlayerCar) -> void: car.apply_keys(0)
+		await H.wait(self, 0.5)
+		seen.append(c.current_gear)
+	_check(seen.max() == 1 and seen.min() == 1, "switched off, automatic picked: E E Q Q Q Q moved the gear: %s" % str(seen))
+	c.call("ignition_on")
+	await H.wait(self, 0.5)
+	print("switched off with the automatic picked: gears through E E Q Q Q Q %s, started in mode %s, gear %d" % [str(seen),
+		PlayerCar.TRANSMISSION_LETTERS[c.transmission_mode()], c.current_gear])
+	_check(c.transmission_mode() == AUTO and c.current_gear == 1 and c.engine_running, "after the start: mode %d, gear %d, engine %s" % [
+		c.transmission_mode(), c.current_gear, "on" if c.engine_running else "off"])
 	await H.remove(self, c)

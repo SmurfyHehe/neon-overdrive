@@ -9,8 +9,8 @@ extends CanvasLayer
 # closes by itself. Esc leaves early and keeps whatever grime is left, so a
 # half wash is a half-clean car.
 #
-# Opened from the pause menu ("Wash car") through GameState.open_wash; the
-# garage will own the button when it exists. Keys are InputMap actions
+# Opened from the garage ("Wash car") through GameState.open_wash; Esc or a clean
+# car goes back to the garage. Keys are InputMap actions
 # (wash_up and friends, registered here like photo mode's) so the Controls page
 # lists them; nothing is written on the screen itself. Palette: navy, amber,
 # silver, sodium, and a brown for the grime.

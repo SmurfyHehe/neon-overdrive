@@ -149,6 +149,7 @@ call :run core/settings_safety --headless
 call :run core/setting_danger --headless
 rem Save system: atomic files, 3 slots, chases, rename migration (scripts/save/).
 call :run core/save_system --headless
+call :run core/garage_g0 --headless
 rem F0: cash and bank through reloads, chases and 6 a.m. (and the HUD and pause screen).
 call :run core/wallet --headless
 rem Work board W0: pay rules, the daily draw, shop pay into the bank once.

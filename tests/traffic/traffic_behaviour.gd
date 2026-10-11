@@ -83,6 +83,13 @@ var last_usec := 0
 var min_player_gap := INF
 var speed_hist: PackedFloat32Array = []
 var first_hit := ""
+# E: one entry per car the player flashed, until it has cleared the lane
+# (see _watch_flashes): {car, t0, blocked, z0}.
+var flash_open: Array[Dictionary] = []
+var flash_done: Array[String] = []    # "car 12: 2.4 s" per car that cleared
+var flash_late: Array[String] = []    # the ones over their limit
+var flash_seen := 0
+var flash_count_seen := 0
 var first_drift := ""
 var max_player_err := 0.0
 
@@ -291,6 +298,7 @@ func _setup_highway() -> void:
 	traffic.log_spawns = true
 	spawns_start = traffic.spawn_log.size()
 	wreck_count_start = traffic.wreck_recycle_count
+	flash_count_seen = traffic.flash_count
 	traffic.set_car_count(TrafficSettings.CAR_COUNT_DEFAULT)
 	last_usec = Time.get_ticks_usec()
 	ms_sum = 0.0
@@ -302,6 +310,7 @@ func _tick_highway() -> void:
 	ms_n += 1
 	last_usec = now
 	_watch_player()
+	_watch_flashes()
 	speed_sum += p.current_speed()
 	speed_n += 1
 	# The first sudden speed loss of the player (2 m/s in 0.25 s at full
@@ -341,6 +350,83 @@ func _tick_highway() -> void:
 				if cars[j].detailed and Harness.overlaps(cars[i], cars[j], 1.5, 3.0):
 					pair_contacts += 1
 
+## Per-flash check (#558): every car the player flashes must START moving
+## over within FLASH_START_S of the flash, or FLASH_START_BLOCKED_S when the
+## lane it wants is taken at some point while it waits, and then have its body
+## out of the player's lane within FLASH_CLEAR_S of starting. Measured on
+## seeds 4242 and 1-5 (2026-10-11), flash to the start of the lane change:
+## 2.4-3.3 s with the lane free, about 6 s when it had to wait for a gap. By
+## design that is the reaction time (TrafficCar.REACTION_MAX 1.2 s), the
+## decision tick and the blinker (SIGNAL_T 1.5 s); clearing the lane is then
+## about two thirds of the LC_TIME (3.0 s) S.
+const FLASH_START_S := 4.0
+const FLASH_START_BLOCKED_S := 7.0
+const FLASH_CLEAR_S := TrafficCar.LC_TIME
+## At least this many flashes, so the check cannot pass with nothing to judge.
+## Flashes per run (2026-10-11): seed 4242 4, seeds 1-5: 2 4 4 3 4 (seed 1 is
+## light traffic, 205 km/h, every flash answered in time), so 2, not 3.
+const FLASH_MIN := 2
+
+## Cleared: the car's body is out of the player's lane (its centre more than
+## its half width plus the player's from the lane centre).
+func _flash_cleared(car: TrafficCar) -> bool:
+	return absf(car.global_position.x - Harness.lane_x(1)) > car.half_w + 1.0
+
+## Started: a lane change out of the player's lane has begun.
+func _flash_started(car: TrafficCar, lc0: int) -> bool:
+	return car.lane_changes > lc0 and car.lane_i != 1
+
+func _watch_flashes() -> void:
+	var now := float(scene_tick) / RATE
+	if traffic.flash_count != flash_count_seen:
+		flash_count_seen = traffic.flash_count
+		var fc := traffic.flashed_car
+		var open := false
+		for r in flash_open:
+			if r.car == fc:
+				open = true
+		if fc != null and not open and not _flash_cleared(fc):
+			flash_open.append({"car": fc, "t0": now, "blocked": false, "z0": fc.global_position.z,
+				"lc0": fc.lane_changes - (1 if fc.changing and fc.lane_i != 1 else 0), "t_start": -1.0})
+			flash_seen += 1
+	var keep: Array[Dictionary] = []
+	for r in flash_open:
+		var car: TrafficCar = r.car
+		var dt: float = now - float(r.t0)
+		# Recycled (placed somewhere else): no longer the car that was flashed.
+		if absf(car.global_position.z - float(r.z0)) > 400.0 or absf(car.global_position.z - p.global_position.z) > 400.0:
+			flash_seen -= 1
+			continue
+		if float(r.t_start) < 0.0:
+			if _flash_started(car, int(r.lc0)):
+				r.t_start = now
+			elif scene_tick % 10 == 0:
+				# The lane it is waiting for: signalling toward one, else the
+				# right one (the left if there is none).
+				var want: int = car._sig_lane
+				if want < 0:
+					want = car.lane_i + 1 if traffic.lane_allowed(car.lane_i + 1, false) else car.lane_i - 1
+				if traffic.lane_allowed(want, false) and not car._merge_safe(TrafficManager.lane_centre(want, false), car.current_speed()):
+					r.blocked = true
+		var limit := FLASH_START_BLOCKED_S if r.blocked else FLASH_START_S
+		var t_start: float = r.t_start
+		if t_start >= 0.0:
+			var took := t_start - float(r.t0)
+			if took > limit:
+				flash_late.append("car %d took %.1f s to start moving over (lane beside it blocked: %s, limit %.1f s)" % [car._idx, took, r.blocked, limit])
+				continue
+			if _flash_cleared(car):
+				flash_done.append("car %d %.1f s + %.1f s%s" % [car._idx, took, now - t_start, " (blocked)" if r.blocked else ""])
+				continue
+			if now - t_start > FLASH_CLEAR_S:
+				flash_late.append("car %d still in the player's lane %.1f s into its lane change (limit %.1f s; blocked before it: %s)" % [car._idx, now - t_start, FLASH_CLEAR_S, r.blocked])
+				continue
+		elif dt > FLASH_START_BLOCKED_S:
+			flash_late.append("car %d had not started moving over %.1f s after the flash (lane beside it blocked: %s, limit %.1f s)" % [car._idx, dt, r.blocked, limit])
+			continue
+		keep.append(r)
+	flash_open = keep
+
 func _end_highway() -> void:
 	var changes := traffic.lane_change_count - lc_start
 	var behind := 0
@@ -363,9 +449,28 @@ func _end_highway() -> void:
 	_check(crossings == 0, "E: %d car-ticks with a lane or path across the centre line" % crossings)
 	_check(body_crossings == 0, "E: %d car-ticks with a car centre across the centre line" % body_crossings)
 	# Was 220 km/h while traffic cleared the lane on its own. Since the near-miss
-	# fix the player flashes and brakes behind a car until it has moved over
-	# (about 4 s a car), and averaged 200 km/h on this seed (2026-10-10).
-	_check(Harness.kmh(speed_sum / maxi(speed_n, 1)) > 180.0, "E: the player averaged under 180 km/h")
+	# fix (b238db8) the player flashes and brakes behind a car until it has moved
+	# over (about 4 s a car). The floor then became 180 from one run that
+	# measured 200, but the mean is a draw of how many slow cars line up in
+	# lane 1: the same commit gives 168 km/h with only this scene run, and
+	# 154-175 on boot seeds 4242 and 1-5 (avg 169). After build 3 + 44 PRs
+	# (2026-10-11): 153-194 (avg 177), 171 in the full run. With flashes
+	# ignored (react_to_player off) it is 117. So the floor sits between those:
+	# it fails when flashing stops clearing the lane, not on an unlucky layout
+	# (issue #558).
+	var end_t := float(scene_tick) / RATE
+	for r in flash_open:   # still waiting when the scene ended
+		var dt: float = end_t - float(r.t0)
+		if float(r.t_start) < 0.0 and dt > (FLASH_START_BLOCKED_S if r.blocked else FLASH_START_S):
+			flash_late.append("car %d had not started moving over %.1f s after the flash when the scene ended (lane beside it blocked: %s)" % [r.car._idx, dt, r.blocked])
+	lines.append("E highway: %d cars flashed, cleared (flash to start + start to clear): %s; %d still waiting at the end" % [flash_seen, ", ".join(flash_done), flash_open.size()])
+	_check(flash_seen >= FLASH_MIN, "E: only %d cars were flashed (want %d or more for the per-flash check to mean anything)" % [flash_seen, FLASH_MIN])
+	for f in flash_late:
+		_check(false, "E: flashed " + f)
+	# The per-flash check above is the real test of the flash rule. The mean
+	# speed is a backstop only: it is seed-dependent (a draw of how many slow
+	# cars line up in lane 1), see below.
+	_check(Harness.kmh(speed_sum / maxi(speed_n, 1)) > 140.0, "E: the player averaged under 140 km/h (flashed cars are not clearing the lane)")
 
 func _nearest_note() -> String:
 	var near: TrafficCar = null

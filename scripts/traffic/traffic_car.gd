@@ -1422,7 +1422,15 @@ func _abort() -> void:
 	traffic.note_abort(self)
 
 ## The player flashed this car (TrafficManager.flash_ahead).
+## A flash while one is still waiting out the reaction time keeps the first
+## one's time: the driver already saw it. Restarting the clock on every flash
+## meant a player flashing once a second never got a driver whose reaction is
+## over 1 s (REACTION_MAX 1.2) to move at all; in tests/traffic/
+## traffic_behaviour.gd E one such car sat in the lane for 6 s, until the
+## player had slowed to its speed and stopped flashing (#558).
 func on_flashed(t: float) -> void:
+	if flashed_at > -100.0 and t - flashed_at < TrafficManager.FLASH_WINDOW:
+		return
 	flashed_at = t
 
 func _start_lane_change(lane: int, urgent: bool, why := DO_PASSING) -> void:

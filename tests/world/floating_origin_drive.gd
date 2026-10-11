@@ -60,8 +60,8 @@ func _initialize() -> void:
 	game = (load("res://Game.tscn") as PackedScene).instantiate()
 	game.set("recenter_dist", TEST_RECENTER_DIST)
 	root.add_child(game)
-	(game.get("camera") as ChaseCamera).shake_enabled = false
-	_teleport_far()
+	# Game's _ready (camera, chunk pool) runs only once the tree starts, so
+	# shake-off and the far teleport wait for the first frame (#559).
 	# Render checks run right before drawing, after every node's _process
 	# (the camera moves in game.gd's _process), so they see the drawn frame.
 	RenderingServer.frame_pre_draw.connect(_check_drawn_frame)
@@ -124,6 +124,10 @@ func _physics_process(delta: float) -> bool:
 func _process(delta: float) -> bool:
 	if not started:
 		started = true
+		(game.get("camera") as ChaseCamera).shake_enabled = false
+		if (game.get("chunk_pool") as Array).is_empty():
+			_fail("no chunks to relabel on the first frame")
+		_teleport_far()
 		_press(KEY_W, true)
 		return false
 	t += delta

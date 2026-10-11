@@ -44,6 +44,7 @@ class_name RoadsideKit
 # median only.
 
 const Districts := preload("res://scripts/world/districts.gd")
+const GasStation := preload("res://scripts/world/gas_station.gd")
 
 const HYDRANT := "hydrant"
 const BIN := "bin"
@@ -445,6 +446,9 @@ static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: fl
 	var kept: Array = []
 	for r in placed:
 		var kind: String = r.kind
+		# nothing along a gas station's lot or the taper before its entry
+		if GasStation.in_frontage(chunk_index, float(r.z), int(r.side)):
+			continue
 		if int(counts[kind]) >= int(CAP[kind]):
 			continue
 		counts[kind] = int(counts[kind]) + 1

@@ -1,7 +1,8 @@
 extends SceneTree
 
 # Gas stations on both sides of Loop 1 (2026-10-11). In the real game on the
-# loop, the car is put into each bay in turn and held still:
+# loop, the car is put at a pump of each lot in turn and held still (the
+# compound lots replaced the shoulder bays there, same day):
 # - the own-side station at 2,225 m opens the pump menu;
 # - the oncoming-side station at 1,825 m opens it too, and a car in the same
 #   spot mirrored on the other side (the wrong side of the road) does not;
@@ -61,12 +62,10 @@ func _physics_process(_delta: float) -> bool:
 			# 1: own side bay (opens); 3: oncoming bay (opens); 5: the own-side
 			# spot mirrored onto the oncoming side at 2225 (must not open)
 			var s := OWN_S if phase == 1 else (ONC_S if phase == 3 else OWN_S)
-			var x := GasStation.own_edge(s, 1) + 1.6
-			if phase == 3:
-				x = -(GasStation.own_edge(s, -1) + 1.6)
-			elif phase == 5:
-				x = -(GasStation.own_edge(s, -1) + 1.6)
-			_hold(player, x, s, 0.0 if phase != 3 else PI)
+			var at := GasStation.spot_centre(s, -1 if phase == 3 else 1, "pump")
+			if phase == 5:
+				at.x = -at.x
+			_hold(player, at.x, at.y, 0.0 if phase != 3 else PI)
 			wait += 1
 			if phase == 5:
 				if gs.state == GameState.State.STATION:

@@ -1442,14 +1442,18 @@ static func bounds(root: Node3D) -> Vector2:
 ## never opens a gap between two straight pieces.
 const BOUNDARY_OVERLAP := 0.1
 
-static func _update_boundary(root: Node3D, body_name: String, inner_x: float, side: int) -> void:
+## `lot_x` > 0: a gas station's lot reaches into this chunk on this side, and
+## the pieces along it stand back at lot_x, behind the lot (GasStation).
+static func _update_boundary(root: Node3D, body_name: String, inner_x: float, side: int, chunk_index: int = 0, lot_x: float = 0.0) -> void:
 	var body: StaticBody3D = root.get_node(NodePath(body_name))
 	var seg := CHUNK_LEN / STATIONS
 	for k in STATIONS:
 		var col: CollisionShape3D = body.get_node(NodePath("Shape" if k == 0 else "Shape%d" % k))
 		var f := _foundation()
+		var z := -seg * (float(k) + 0.5)
+		var x := lot_x if lot_x > 0.0 and GasStation.in_lot(chunk_index, z, side) else inner_x
 		(col.shape as BoxShape3D).size = Vector3(BOUNDARY_T, BOUNDARY_H + f, seg + BOUNDARY_OVERLAP)
-		col.transform = _xf_up((inner_x + BOUNDARY_T / 2.0) * float(side), (BOUNDARY_H - f) / 2.0, -seg * (float(k) + 0.5))
+		col.transform = _xf_up((x + BOUNDARY_T / 2.0) * float(side), (BOUNDARY_H - f) / 2.0, z)
 	body.position = Vector3.ZERO
 
 # Road collision (#37 step R5). On a flat road the wheels drive on game.gd's
@@ -2156,9 +2160,14 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var setback := Districts.setback_at(chunk_index)
 	var bound_own := maxf(start_own_walk, end_own_walk) + BUILDING_GAP + setback
 	var bound_onc := maxf(start_onc_walk, end_onc_walk) + BUILDING_GAP + setback
-	_update_boundary(root, "BoundaryOwn", bound_own, 1)
-	_update_boundary(root, "BoundaryOnc", bound_onc, -1)
-	root.set_meta(&"bounds", Vector2(bound_own, bound_onc))
+	# A gas station's lot (GasStation): along it the wall stands LOT_DEPTH
+	# back from the road edge, behind the lot; the lot's own side walls close
+	# the step. The chunk's bounds (OffMapRescue) are the lot's there.
+	var lot_own := maxf(start_own_w, end_own_w) + GasStation.LOT_DEPTH if not is_inf(GasStation.lot_centre(chunk_index, 1)) else 0.0
+	var lot_onc := maxf(start_onc_w, end_onc_w) + GasStation.LOT_DEPTH if not is_inf(GasStation.lot_centre(chunk_index, -1)) else 0.0
+	_update_boundary(root, "BoundaryOwn", bound_own, 1, chunk_index, lot_own)
+	_update_boundary(root, "BoundaryOnc", bound_onc, -1, chunk_index, lot_onc)
+	root.set_meta(&"bounds", Vector2(maxf(bound_own, lot_own), maxf(bound_onc, lot_onc)))
 	# Where the setback changes from the previous chunk, a cross wall at this
 	# chunk's start closes the step between the two boundary lines, so the
 	# deeper lot does not open behind the shallower chunk's wall.
@@ -2167,7 +2176,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var step_onc := Vector2(bound_onc, start_onc_walk + BUILDING_GAP + prev_setback)
 	_update_step(root, "BoundaryStepOwn", step_own, 1, absf(setback - prev_setback) > 0.01)
 	_update_step(root, "BoundaryStepOnc", step_onc, -1, absf(setback - prev_setback) > 0.01)
-	_update_road_collision(root, maxf(bound_own, bound_onc) + BOUNDARY_T + ROAD_COL_MARGIN)
+	_update_road_collision(root, maxf(maxf(bound_own, bound_onc), maxf(lot_own, lot_onc)) + BOUNDARY_T + ROAD_COL_MARGIN)
 
 	if job != null:
 		job.keep(_curve_k, _vert, _strip_n)
@@ -2259,6 +2268,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		for m in mouths:  # a side street's mouth drops the kerb like a crossing's (W7)
 			if int(m.side) == side:
 				drops.append([float(m.z), SideStreets.MOUTH_HALF])
+		drops.append_array(GasStation.lot_drops(chunk_index, side))  # a station lot's two driveways
 		if Junction.touches(chunk_index):
 			var jc := Junction.local_centre(chunk_index)
 			drops.append([jc, Junction.MOUTH_HALF])
@@ -2341,10 +2351,17 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var walk1: float = end_own_walk if side == 1 else end_onc_walk
 		var z_from := 0.0
 		var edges: Array = spans[side].duplicate()
-		if Junction.touches(chunk_index):
+		var opening := Junction.touches(chunk_index)
+		if opening:
 			# the crossing's mouth is an opening like a building's frontage
 			var jc := Junction.local_centre(chunk_index)
 			edges.append([jc + Junction.MOUTH_HALF, jc - Junction.MOUTH_HALF])
+		var lc := GasStation.lot_centre(chunk_index, side)
+		if not is_inf(lc):
+			# so is the whole of a gas station's lot
+			opening = true
+			edges.append([lc + GasStation.LOT_HALF, lc - GasStation.LOT_HALF])
+		if opening:
 			edges.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
 		edges.append([-CHUNK_LEN, -CHUNK_LEN])
 		for e in edges:
@@ -2357,7 +2374,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 				var basis := Basis.from_scale(Vector3(WALL_T, WALL_H + f, length))
 				walls.set_instance_transform(n_walls, _xf_up(x * float(side), (WALL_H - f) / 2.0, zc, basis))
 				n_walls += 1
-			z_from = minf(z_from, e[1]) if Junction.touches(chunk_index) else e[1]
+			z_from = minf(z_from, e[1]) if opening else e[1]
 		# the district step: a visible wall across the lot edge, where the
 		# invisible cross wall stands
 		var step: Vector2 = step_own if side == 1 else step_onc

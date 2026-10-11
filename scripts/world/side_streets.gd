@@ -25,6 +25,7 @@ extends RefCounted
 # where the car and lamp stand, 1-3 per run.
 
 const Districts := preload("res://scripts/world/districts.gd")
+const GasStation := preload("res://scripts/world/gas_station.gd")
 
 const LANE_W := 3.0           # the side street's lanes are narrower than the main road's
 const KERB_W := 0.3
@@ -106,6 +107,9 @@ static func mouths_at(chunk_index: int) -> Array:
 		var bz := slot_z(slot)
 		# not on a crossing's chunks (its mouth and corner lots are its own)
 		if Junction.touches(chunk_index) or Junction.near(chunk_index, bz, Junction.MOUTH_HALF + MOUTH_HALF + 2.0):
+			continue
+		# nor into a gas station's lot
+		if GasStation.in_lot(chunk_index, bz, side):
 			continue
 		taken[[side, slot]] = true
 		var roll := float(posmod(hash([run, k, "mouth_len"]), 1000)) / 1000.0

@@ -82,10 +82,14 @@ func _loop_static() -> void:
 		var ci := int(float(c[0]) / l)
 		var z := -fmod(float(c[0]), l)
 		_check(GasStation.in_bay(ci, z, int(c[1])) == bool(c[2]), "in_bay at %.0f side %d should be %s" % [c[0], c[1], c[2]])
-	# the bay is on its own side
-	_check(GasStation.in_spot(Vector2(GasStation.own_edge(2225.0, 1) + 1.6, 2225.0), 2225.0, 1), "a car in the +1 bay is not in the spot")
-	_check(GasStation.in_spot(Vector2(-(GasStation.own_edge(1825.0, -1) + 1.6), 1825.0), 1825.0, -1), "a car in the -1 bay is not in the spot")
-	_check(not GasStation.in_spot(Vector2(GasStation.own_edge(1825.0, -1) + 1.6, 1825.0), 1825.0, -1), "a +1 car counted in the -1 bay")
+	# a pump spot of the lot (the compound replaced the shoulder bay on the
+	# loop, 2026-10-11) is on its own side
+	var own_pump := GasStation.spot_centre(2225.0, 1, "pump")
+	var onc_pump := GasStation.spot_centre(1825.0, -1, "pump")
+	_check(GasStation.in_spot(own_pump, 2225.0, 1), "a car at a +1 pump is not in the spot")
+	_check(GasStation.in_spot(onc_pump, 1825.0, -1), "a car at a -1 pump is not in the spot")
+	_check(not GasStation.in_spot(Vector2(-onc_pump.x, onc_pump.y), 1825.0, -1), "a +1 car counted at the -1 pump")
+	_check(not GasStation.in_spot(Vector2(GasStation.own_edge(2225.0, 1) + 1.6, 2225.0), 2225.0, 1), "the old shoulder bay still counts at a loop station")
 	RM.use(RM.ENDLESS)
 	GasStation.first_s = FIRST
 

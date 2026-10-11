@@ -45,7 +45,12 @@ static func paths() -> Array[String]:
 ## The spec's tune as {path: float}.
 static func values_from(spec: Dictionary) -> Dictionary:
 	var out := {}
+	# The registry's gear count is the last car built; another car still in
+	# the tree (tests build several) may have fewer gears.
+	var gears: int = (spec.get("gear_ratios", []) as Array).size()
 	for p in paths():
+		if p.begins_with("gear_ratios/") and int(p.get_slice("/", 1)) >= gears:
+			continue
 		out[p] = TuneParams.get_value(spec, p)
 	return out
 
@@ -88,6 +93,7 @@ static func load_values() -> Dictionary:
 static func save(spec: Dictionary) -> bool:
 	if not enabled:
 		return false
+	DirAccess.make_dir_recursive_absolute(file().get_base_dir())
 	var f := FileAccess.open(file(), FileAccess.WRITE)
 	if f == null:
 		push_error("PlayerTune: cannot write %s (%s)" % [file(), error_string(FileAccess.get_open_error())])

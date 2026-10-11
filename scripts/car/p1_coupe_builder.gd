@@ -148,8 +148,17 @@ static func build_chassis_visual(paint: Color = PAINT) -> Node3D:
 		var gi := CarAssembler.surface_index(body.mesh, "glass")
 		if gi >= 0:
 			body.set_surface_override_material(gi, _get_glass_material())
+		# The lamp shader on the glow surface, as NpcCarBuilder does for its
+		# parts cars, so brake, reverse, indicators and hazards light.
+		var li := CarAssembler.surface_index(body.mesh, "glow")
+		if li >= 0:
+			body.set_surface_override_material(li, NpcCarBuilder._get_parts_glow_material())
 		root.add_child(body)
 		lamps = CarAssembler.lamp_centres(KIND)
+		# The sheet body's fittings pass gives the fuel flap site, the
+		# windscreen frame (wipers) and the slot counts, as it does for the
+		# other parts cars (NpcCarBuilder.fittings).
+		_get_body_mesh()
 	else:
 		var body := MeshInstance3D.new()
 		body.name = "Body"
@@ -271,7 +280,8 @@ static func triangle_count() -> int:
 			n += b.surface_get_array_len(i) / 3
 	for rear in [false, true]:
 		n += 2 * _get_wheel_mesh(rear).surface_get_array_len(0) / 3
-	return n - fittings_triangle_count()
+	# a body from parts models its own lamps and plates: nothing was merged into it
+	return n if uses_parts() else n - fittings_triangle_count()
 
 ## Triangles CarFittings merged into the body (lenses and plates), on top of
 ## the design's TRIS_TOTAL. No extra draw call: they sit in the body's surfaces.

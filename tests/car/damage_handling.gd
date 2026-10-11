@@ -84,7 +84,7 @@ func _unit_tests() -> void:
 	for i in 4:
 		_near(_one(D.CAMBER_PARTS[i], 1.0).offsets.get_wheel(i, DamageOffsets.CAMBER_ADD), -deg_to_rad(2.5), "camber %d at 100 %%: 2.5 deg, top in" % i)
 		_near(_one(D.DAMPER_PARTS[i], 1.0).offsets.get_wheel(i, DamageOffsets.DAMPER_MULT), 0.35, "damper %d at 100 %%: x0.35" % i)
-		_near(_one(D.BRAKE_PARTS[i], 1.0).offsets.get_wheel(i, DamageOffsets.BRAKE_MULT), 0.6, "brake %d at 100 %%: x0.6" % i)
+		_near(_one(D.BRAKE_PARTS[i], 1.0).offsets.get_wheel(i, DamageOffsets.BRAKE_MULT), 0.78, "brake %d at 100 %%: x0.78 (Roy 1470: softer than the brief's 0.6)" % i)
 		var sag := _one(D.SPRING_PARTS[i], 1.0)
 		_near(sag.offsets.get_wheel(i, DamageOffsets.SPRING_MULT), 0.65, "spring %d at 100 %%: x0.65" % i)
 		_near(sag.offsets.get_wheel(i, DamageOffsets.RIDE_DROP), 0.025, "corner %d at 100 %%: 25 mm low" % i)
@@ -96,7 +96,7 @@ func _unit_tests() -> void:
 	# the gates
 	_check(_one(P.RACK, 0.49).offsets.is_neutral() and _one(P.BRAKE_FL, 0.49).offsets.is_neutral(), "the rack and the brakes do nothing under 50 %")
 	_near(_one(P.RACK, 0.5).offsets.get_car(DamageOffsets.STEER_LOCK_MULT), 1.0 - 0.2 / 3.0, "the rack at 50 %")
-	_near(_one(P.BRAKE_RR, 0.5).offsets.get_wheel(3, DamageOffsets.BRAKE_MULT), 1.0 - 0.4 / 3.0, "a brake at 50 %")
+	_near(_one(P.BRAKE_RR, 0.5).offsets.get_wheel(3, DamageOffsets.BRAKE_MULT), 1.0 - D.BRAKE_LOSS / 3.0, "a brake at 50 %")
 	_check(_one(P.CAMBER_FL, 0.8).warning() and not _one(P.CAMBER_FL, 0.2).warning(), "a corner part lights DMG past 25 %")
 	# the wheel sits crooked by the front toe x the steering ratio; the pull is one angle
 	var arm := _one(P.STEER_FL, 1.0)
@@ -320,7 +320,7 @@ func _physics_process(_delta: float) -> bool:
 					# two clean runs differ by about 0.005 rad here: the limit is that noise, far under the brake pull
 					_check(absf(turn_coast[Step.BRAKE_HURT] - turn_coast[Step.BRAKE_CLEAN]) < 0.02, "no pull from a hurt brake while not braking")
 					_check(turn_brake[Step.BRAKE_HURT] > turn_brake[Step.BRAKE_CLEAN] + 0.005, "on the brakes the car turns toward the healthy side (right)")
-					_check(turn_brake[Step.BRAKE_HURT] < 0.6, "and stays a pull, not a spin")
+					_check(turn_brake[Step.BRAKE_HURT] < 0.17, "and stays a gentle pull: under 10 degrees in a 2 s full stop (Roy 1470)")
 					return _end("")
 				_begin(p, Step.BRAKE_HURT)
 	return false

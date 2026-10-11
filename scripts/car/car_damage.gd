@@ -129,8 +129,10 @@ const DAMPER_LOSS := 0.65
 const RACK_LOSS := 0.2
 ## The rack only takes hits that are this much from the front.
 const RACK_FRONT_MIN := 0.6
-## Brake torque lost on a fully hurt brake corner (BRAKE_MULT 0.6).
-const BRAKE_LOSS := 0.4
+## Brake force lost on a fully hurt brake corner (BRAKE_MULT 0.78). The brief's
+## 0.6 turned the car 20 degrees in a 2 s full stop from 95 km/h; Roy,
+## 2026-10-11 (1470): softer, a hard stop should not feel like a crash.
+const BRAKE_LOSS := 0.22
 ## A brake corner only takes hits that land this much on its corner.
 const BRAKE_SHARE_MIN := 0.5
 ## The rack and the brakes do nothing until the part is this hurt.

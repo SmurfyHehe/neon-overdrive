@@ -155,9 +155,9 @@ static func marks(chunk_index: int, district: String, run_len: int, own_lanes: i
 	var h := hash([chunk_index, "paint"])
 	var wear := 0.72 + 0.28 * float(posmod(h, 1000)) / 999.0
 	var near_crossing := crossing_z < INF and absf(crossing_z + chunk_len * 0.5) < chunk_len + 130.0
-	# the area's speed number, outer lane, just past the area sign
+	# the area's posted limit, outer lane, just past the area sign
 	if chunk_index > 0 and posmod(chunk_index, run_len) == 1:
-		out.append(item(str(PlaceNames.speed_of(district)), median_gap + (float(own_lanes) - 0.5) * lane_w, -26.0, 0.0, wear))
+		out.append(item(str(PlaceNames.limit_at(chunk_index)), median_gap + (float(own_lanes) - 0.5) * lane_w, -26.0, 0.0, wear))
 	if crossing_z < INF:
 		# SLOW, one per lane, 75 m before the centre; arrows 32 m before
 		var zs := crossing_z + 75.0

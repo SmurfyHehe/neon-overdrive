@@ -21,6 +21,10 @@ extends RefCounted
 #             lanes, a few metres before the area starts.
 #   advance:  the name over "400 m", roadside on two short posts, 400 m
 #             before the area starts.
+# The speed limit (police step P3): the area's posted number in a round plate
+# on the gantry, and on a round repeater sign on a post every 400 m inside
+# the area. Dark face, amber ring, off-white number: the same look, not a
+# red-ring road sign. The numbers are PoliceRules' posted limits.
 # Blades (street names on the signal masts at a crossing) are placed by
 # Junction with blade().
 #
@@ -38,6 +42,7 @@ const PANEL := 2    # backing panel with a frame and grime
 const LAMP := 3     # a floodlight head, on
 const LAMP_DEAD := 4
 const BLADE := 5    # a lettering plate with its own frame
+const ROUND := 6    # a round limit plate: a disc with a ring and its number
 
 ## Letter colours (custom data z): index into the shader's colour table.
 const OFF_WHITE := 0
@@ -56,6 +61,9 @@ const ROAD_LINE_H := 1.15      # lettering plate height of the area's name, m
 const SMALL_LINE_H := 0.62     # "ENTERING" / "400 m"
 const MARGIN := 0.35           # panel margin around the lettering, m
 const MAX_PANEL_LEN := 11.0
+const LIMIT_GAP := 0.3         # between the gantry's limit plate and its lettering, m
+const REPEATER_D := 0.95       # repeater plate diameter, m
+const REPEATER_Y := 3.0        # its centre above the road
 
 const SHADER := """
 shader_type spatial;
@@ -90,7 +98,36 @@ void fragment() {
 	bool big = abs(lnrm.x) > 0.5;
 	float len = length(MODEL_MATRIX[2].xyz);
 	float hgt = length(MODEL_MATRIX[1].xyz);
-	if (style > 2.5 && style < 3.5) {
+	if (style > 5.5) {
+		// round limit plate: disc, amber ring, the number in the middle
+		if (!big) {
+			discard;
+		}
+		float u = lnrm.x < 0.0 ? lpos.z + 0.5 : 0.5 - lpos.z;
+		float v = 0.5 - lpos.y;
+		vec2 q = vec2(u - 0.5, v - 0.5) * 2.0;
+		float r = length(q);
+		if (r > 1.0) {
+			discard;
+		}
+		if (lnrm.x < 0.0) {
+			float span = cd.y + 2.0 * pad;
+			float th = 0.46;
+			float tw = th * span / band_h;
+			float fit = min(1.0, 0.66 / tw);
+			th *= fit;
+			tw *= fit;
+			float tu = (u - 0.5) / tw + 0.5;
+			float tv = (v - 0.5) / th + 0.5;
+			float inside = step(0.0, tu) * step(tu, 1.0) * step(0.0, tv) * step(tv, 1.0);
+			vec3 uvw = vec3(tu * span / atlas_w, (band_y0 + tv * band_h) / atlas_h, floor(cd.x + 0.5));
+			float cov = texture(words, uvw).r * inside;
+			vec3 col = colors[int(cd.z + 0.5)];
+			float ring = step(0.8, r);
+			ALBEDO = mix(mix(panel, col * 0.35, cov), colors[1] * 0.5, ring);
+			EMISSION = col * cov * text_energy + colors[1] * ring * text_energy * 0.6;
+		}
+	} else if (style > 2.5 && style < 3.5) {
 		ALBEDO = vec3(0.25, 0.14, 0.05);
 		EMISSION = vec3(1.0, 0.55, 0.2) * lamp_energy;
 	} else if (style > 3.5 && style < 4.5) {
@@ -106,7 +143,7 @@ void fragment() {
 			float grime = 1.0 - 0.45 * streak * smoothstep(0.1, 1.0, v);
 			ALBEDO = mix(panel * grime, vec3(0.45, 0.47, 0.5), frame);
 		}
-	} else if (big && (style < 0.5 || style > 4.5)) {
+	} else if (big && (style < 0.5 || (style > 4.5 && style < 5.5))) {
 		float u = lnrm.x < 0.0 ? lpos.z + 0.5 : 0.5 - lpos.z;
 		float v = 0.5 - lpos.y;
 		float span = cd.y + 2.0 * pad;
@@ -233,7 +270,9 @@ static func text_plate(word: String, centre: Vector3, n: Vector3, height: float,
 ## panel facing +z (toward traffic), reaching toward the road centre (-x).
 ## `foundation` is how far the post goes below the road on a hilly road.
 ## Returns a list of {xf, cd} and the lowest panel edge via out["clearance"].
-static func gantry(area: String, foot: Vector3, foundation: float, burnt: int = -1) -> Array:
+## `limit` (km/h, 0 = none) adds the round limit plate at the post end of the
+## panel; the lettering moves along to make room.
+static func gantry(area: String, foot: Vector3, foundation: float, burnt: int = -1, limit: int = 0) -> Array:
 	var n := Vector3(0.0, 0.0, 1.0)
 	var small_h := SMALL_LINE_H
 	var big_h := ROAD_LINE_H
@@ -241,10 +280,16 @@ static func gantry(area: String, foot: Vector3, foundation: float, burnt: int = 
 	if big_len > MAX_PANEL_LEN - 2.0 * MARGIN:
 		big_h *= (MAX_PANEL_LEN - 2.0 * MARGIN) / big_len
 		big_len = MAX_PANEL_LEN - 2.0 * MARGIN
+	var panel_h := small_h + big_h + 3.0 * 0.22
+	# the limit plate takes its room out of the name, never out of the reach
+	var disc := panel_h - 2.0 * 0.2 if limit > 0 else 0.0
+	var disc_room := disc + LIMIT_GAP if limit > 0 else 0.0
+	if big_len > MAX_PANEL_LEN - 2.0 * MARGIN - disc_room:
+		big_len = MAX_PANEL_LEN - 2.0 * MARGIN - disc_room
 	var small_len := plate_len(PlaceNames.ENTERING, small_h)
 	var inner := maxf(big_len, small_len)
-	var panel_len := inner + 2.0 * MARGIN
-	var panel_h := small_h + big_h + 3.0 * 0.22
+	var panel_len := inner + 2.0 * MARGIN + disc_room
+	var name_h := big_len * big_h / plate_len(area, big_h)
 	var out: Array = []
 	# post, standing on the ground (or the hill under it)
 	var post_h := GANTRY_TOP + 0.35
@@ -260,8 +305,11 @@ static func gantry(area: String, foot: Vector3, foundation: float, burnt: int = 
 	# lettering: "ENTERING" amber on top, the name below
 	var y_small := GANTRY_PANEL_TOP - 0.22 - small_h / 2.0
 	var y_big := GANTRY_PANEL_TOP - 0.22 - small_h - 0.22 - big_h / 2.0
-	out.append(text_plate(PlaceNames.ENTERING, Vector3(cx, y_small, foot.z) + front, n, small_h, AMBER))
-	out.append(text_plate(area, Vector3(cx, y_big, foot.z) + front, n, big_h, OFF_WHITE))
+	var tx := cx - disc_room / 2.0
+	out.append(text_plate(PlaceNames.ENTERING, Vector3(tx, y_small, foot.z) + front, n, small_h, AMBER))
+	out.append(text_plate(area, Vector3(tx, y_big, foot.z) + front, n, name_h, OFF_WHITE))
+	if limit > 0:
+		out.append(limit_plate(limit, Vector3(cx + panel_len / 2.0 - MARGIN - disc / 2.0, cy, foot.z) + front, n, disc))
 	# floodlights under the panel, one in the line burnt out now and then
 	var bottom := GANTRY_PANEL_TOP - panel_h
 	for k in 3:
@@ -274,11 +322,33 @@ static func gantry(area: String, foot: Vector3, foundation: float, burnt: int = 
 ## foot at the origin, built once per area and kept ("cache"). Every part's
 ## place is its place here plus the foot, so the caller only adds the foot.
 ## Do not change the returned list.
-static func parts_at_origin(kind: String, area: String, foundation: float, burnt: int) -> Array:
-	var key := "%s|%s|%.2f|%d" % [kind, area, foundation, burnt]
+static func parts_at_origin(kind: String, area: String, foundation: float, burnt: int, limit: int = 0) -> Array:
+	var key := "%s|%s|%.2f|%d|%d" % [kind, area, foundation, burnt, limit]
 	if not _cache.has(key):
-		_cache[key] = gantry(area, Vector3.ZERO, foundation, burnt) if kind == "gantry" else advance(area, Vector3.ZERO, foundation)
+		match kind:
+			"gantry":
+				_cache[key] = gantry(area, Vector3.ZERO, foundation, burnt, limit)
+			"repeater":
+				_cache[key] = repeater(limit, Vector3.ZERO, foundation)
+			_:
+				_cache[key] = advance(area, Vector3.ZERO, foundation)
 	return _cache[key]
+
+## A round limit plate `diameter` across, centred at `centre`, face along `n`.
+static func limit_plate(limit: int, centre: Vector3, n: Vector3, diameter: float) -> Dictionary:
+	var word := str(limit)
+	return _item(centre, n, PLATE_DEPTH, diameter, diameter, WordAtlas.layer(word), WordAtlas.width_px(word), OFF_WHITE, ROUND)
+
+## The repeater: the area's limit on a round plate on one post just outside
+## the sidewalk, toed in `toe` radians toward the lanes. `foot` is the post's
+## foot.
+static func repeater(limit: int, foot: Vector3, foundation: float, toe: float = 0.2) -> Array:
+	var n := Vector3(-sin(toe), 0.0, cos(toe))
+	var post_h := REPEATER_Y + REPEATER_D / 2.0 - 0.1
+	var out: Array = []
+	out.append(_item(Vector3(foot.x, (post_h - foundation) / 2.0, foot.z), Vector3.BACK, 0.1, post_h + foundation, 0.1, 0, 0, 0, METAL))
+	out.append(limit_plate(limit, Vector3(foot.x, REPEATER_Y, foot.z) + n * (0.05 + PLATE_DEPTH / 2.0 + 0.004), n, REPEATER_D))
+	return out
 
 ## Height of the lowest part of a gantry panel above the road, m.
 static func gantry_clearance(area: String) -> float:

@@ -71,6 +71,10 @@ var _bands := false  # hour bands drive traffic and Dave (bands_on)
 var moments: MomentSpots  # roadside moment spots, dealt nightly (moment_spots.gd); null when off
 var world_mood: WorldMood  # tonight's events: rule-breaker share, bar close, meets, crackdowns
 var police_heat: PoliceHeat  # heat level + cop_can_see_player (police F0/F1)
+## Dave names the limits once, on night 1 (police step P3). He only speaks on
+## his own station, so it waits there until he can.
+var limit_line_said := false
+var _limit_line_wait := 40.0
 var police: PolicePatrol     # the stand-in patrol car; null with NEON_POLICE=0 or a benchmark
 var heat_icons: HeatIcons
 const TestMode := preload("res://scripts/core/test_mode.gd")
@@ -1016,10 +1020,11 @@ func _wire_police() -> void:
 	police_heat.junction = junction
 	if traffic != null:
 		police_heat.flow_kmh = func() -> float:
-			var x := RoadFrame.unroll(player.global_position).x
-			if x < 0.0:
-				return traffic.lane_speed(clampi(RoadChunkBuilder.lane_at(-x), 0, traffic.onc_lanes - 1), true) * 3.6
-			return traffic.lane_speed(clampi(RoadChunkBuilder.lane_at(x), 0, traffic.own_lanes - 1), false) * 3.6
+			var u := RoadFrame.unroll(player.global_position)
+			var city := traffic.city_at(u.z)
+			if u.x < 0.0:
+				return traffic.lane_speed(clampi(RoadChunkBuilder.lane_at(-u.x), 0, traffic.onc_lanes - 1), true, city) * 3.6
+			return traffic.lane_speed(clampi(RoadChunkBuilder.lane_at(u.x), 0, traffic.own_lanes - 1), false, city) * 3.6
 	police_heat.lit_here = func(pos: Vector3) -> bool:
 		if RoadMap.period <= 0:
 			return false
@@ -1195,6 +1200,11 @@ func _on_event(e: int) -> void:
 
 func _process(delta: float) -> void:
 	_update_bands()
+	if not limit_line_said and radio != null and night_clock != null and night_clock.night == 1:
+		_limit_line_wait -= delta
+		if _limit_line_wait <= 0.0:
+			_limit_line_wait = 5.0
+			limit_line_said = radio.announce(RadioStations.LIMIT_LINE)
 	var pz := RoadFrame.unroll(player.position).z
 	Junction.focus_z = pz
 	_update_chunk_pool(pz)

@@ -30,6 +30,9 @@ const STATIONS := [
 const DAVE_PERIOD := 30.0   # seconds from one Dave line to the next
 const BREAK_SECS := 8.0     # how long a line's caption stays up (and the music, if any, ducks)
 
+## Dave names the speed limits once, on night 1 (police step P3; game.gd).
+const LIMIT_LINE := "Dave: City's sixty, highway's a hundred, and the cops give you a bit over that."
+
 ## Dave's time checks, read out on the hour (NightClock -> RadioManager.announce_hour).
 ## Placeholders like his other lines: the story is Roy's to write.
 const TIME_LINES := {

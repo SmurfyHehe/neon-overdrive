@@ -58,6 +58,7 @@ class_name TrafficManager
 
 const LANE_W := RoadChunkBuilder.LANE_W
 const Weather := preload("res://scripts/world/weather.gd")
+const RoadMap := preload("res://scripts/world/road_map.gd")
 const NearMissLog := preload("res://scripts/traffic/near_miss_log.gd")
 
 var player: Node3D
@@ -165,6 +166,15 @@ var onc_lanes_used: Array[int] = []
 ## each other and do (milestone 3 kept it at 1 km/h because nothing braked).
 var lane_speeds_own: Array[float] = [31.9, 27.8, 23.6, 19.4]
 var lane_speeds_onc: Array[float] = [26.4, 23.6, 20.8, 18.0]
+## The same in a city district (police step P3, Roy 2026-10-10: keeping up
+## with city traffic must not break the city limit): 75/65/55/50 km/h with the
+## flow, 68/60/52/46 km/h oncoming. Only on a mapped road (RoadMap area
+## "city"); a road with no map keeps the highway set.
+var lane_speeds_own_city: Array[float] = [20.8, 18.1, 15.3, 13.9]
+var lane_speeds_onc_city: Array[float] = [18.9, 16.7, 14.4, 12.8]
+## A car takes the city pace this far before the city starts (it slows ahead
+## of the sign, not on it) and keeps it to the city's last metre.
+const PACE_AHEAD := 150.0
 const SPEED_JITTER := 2.5
 ## Spawns, merges and moving over take the player into account as a car that
 ## may not brake. Tests turn it off to force rear-end crashes.
@@ -458,6 +468,10 @@ func _physics_process(_delta: float) -> void:
 		_build_index()
 	if _pool_size() > target_count:
 		_trim_cars()
+	if not cars.is_empty():
+		var paced := cars[_tick % cars.size()]
+		if not paced.benched and paced._idx >= 0 and paced._idx < _z.size():
+			pace(paced, _z[paced._idx])
 	if near_miss != null:
 		near_miss.step(_delta)
 
@@ -650,6 +664,9 @@ func _respawn(car: TrafficCar) -> void:
 		return
 	spawn_count += 1
 	car.target_speed = slot.speed
+	car.pace_lane = slot.pace_lane
+	car.pace_far = slot.pace_far
+	car.pace_city = slot.pace_city
 	car.set_rule_breaker(breaker, weave_m if breaker and weave_share > 0.0 and randf() < weave_share else 0.0)
 	if breaker:
 		rule_breaker_spawns += 1
@@ -720,11 +737,17 @@ func _find_slot(car: TrafficCar, pz: float, extra_speed := 0.0) -> Dictionary:
 		var seen := in_view(RoadFrame.roll(Vector3(lane_x, car.rest_y, z)))
 		if seen:
 			continue
+		var city := city_at(z, dir)
+		if city:
+			speed += lane_speed(lane_i, far_side, true) - lane_speed(lane_i, far_side)
+			if behind and speed <= pv + BEHIND_DV:
+				continue  # at the city pace it would never catch the player up
 		var check := _slot_check(car, lane_x, z, dir, speed)
 		if check.is_empty():
 			continue
 		return {"lane_x": lane_x, "direction": dir, "z": z, "dist": (z - pz) * flow, "gap": check.gap, "ttc": check.ttc,
-			"behind": behind, "in_view": seen, "speed": speed, "ttc_player": check.ttc_player, "lanes_from_player": lanes_from}
+			"behind": behind, "in_view": seen, "speed": speed, "ttc_player": check.ttc_player, "lanes_from_player": lanes_from,
+			"pace_lane": lane_i, "pace_far": far_side, "pace_city": city}
 	return {}
 
 ## Gap and time-to-contact check for a car placed at (lane_x, z) moving at
@@ -940,9 +963,33 @@ func note_abort(car: TrafficCar) -> void:
 
 ## `oncoming` is the road's -x carriageway; the slower set goes to whichever
 ## side is oncoming for the player (flow).
-func lane_speed(lane_i: int, oncoming: bool) -> float:
-	var speeds := lane_speeds_onc if oncoming != (flow > 0.0) else lane_speeds_own
+func lane_speed(lane_i: int, oncoming: bool, city := false) -> float:
+	var speeds: Array[float]
+	if oncoming != (flow > 0.0):
+		speeds = lane_speeds_onc_city if city else lane_speeds_onc
+	else:
+		speeds = lane_speeds_own_city if city else lane_speeds_own
 	return speeds[mini(lane_i, speeds.size() - 1)]
+
+## Whether a car at road z, travelling along `dir` (0 = just here), is on the
+## city pace: in a city district or within PACE_AHEAD of driving into one.
+func city_at(z: float, dir := 0.0) -> bool:
+	if RoadMap.period <= 0:
+		return false
+	var s := RoadFrame.s_at(z)
+	return RoadMap.area_at(s) == "city" or (dir != 0.0 and RoadMap.area_at(s - dir * PACE_AHEAD) == "city")
+
+## Moves a car's cruise speed to the area it is in now (its own jitter and any
+## rule-breaker extra stay on top). Cars that were not given a pace lane
+## (rivals) are left alone. Cheap: the manager does one car a tick.
+func pace(car: TrafficCar, z: float) -> void:
+	if car.pace_lane < 0:
+		return
+	var city := city_at(z, car.direction)
+	if city == car.pace_city:
+		return
+	car.target_speed += lane_speed(car.pace_lane, car.pace_far, city) - lane_speed(car.pace_lane, car.pace_far, car.pace_city)
+	car.pace_city = city
 
 ## Whether traffic on that side may drive in lane `lane_i` (spawns and lane
 ## changes). Never the other side of the centre line.

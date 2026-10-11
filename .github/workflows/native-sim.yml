@@ -1,8 +1,10 @@
-# Builds the neon_sim GDExtension (native/neon_sim: GevpTyreNative and
+# Builds the neon_sim GDExtension (native/neon_sim: CarSim, GevpTyreNative and
 # CrossingBench) for Windows, debug and release, and uploads the two DLLs as an
-# artifact. The laptop has no C++ compiler, so this is the only place the
-# library is built. Take the DLLs from the run's artifact into
-# addons/neon_sim/ (gh run download).
+# artifact. The DLLs in addons/neon_sim/ are committed (built on the laptop
+# with tools/build-native.ps1); this run shows the source still builds on a
+# clean machine and prints each built DLL's size and SHA-256 next to the
+# committed one's. Two builds of the same source rarely match byte for byte
+# (the linker stamps each DLL), so the hashes are for the record, not a gate.
 name: Native sim library
 
 on:
@@ -18,6 +20,12 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+
+      - name: Keep the committed DLLs for comparison
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force committed | Out-Null
+          Copy-Item addons/neon_sim/*.dll committed/
 
       - uses: actions/setup-python@v5
         with:
@@ -40,6 +48,17 @@ jobs:
       - name: Build debug
         working-directory: native/neon_sim
         run: scons platform=windows target=template_debug arch=x86_64
+
+      - name: Built against committed
+        shell: pwsh
+        run: |
+          foreach ($f in Get-ChildItem addons/neon_sim/*.dll) {
+            $c = Join-Path committed $f.Name
+            "{0}" -f $f.Name
+            "  built      {0,8} bytes  {1}" -f $f.Length, (Get-FileHash $f -Algorithm SHA256).Hash
+            if (Test-Path $c) { "  committed  {0,8} bytes  {1}" -f (Get-Item $c).Length, (Get-FileHash $c -Algorithm SHA256).Hash }
+            else { "  committed  (none)" }
+          }
 
       - uses: actions/upload-artifact@v4
         with:

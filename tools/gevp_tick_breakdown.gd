@@ -23,6 +23,11 @@ extends SceneTree
 #   <godot> --headless --fixed-fps 60 --path . --audio-driver Dummy -s res://tools/gevp_tick_breakdown.gd -- --benchmark --secs=12 --traffic=40 --detail=300
 # With NEON_NATIVE_TYRES=1 in the environment the cars themselves run the C++
 # tyre maths, so "car" and "wheel" show the per-car effect.
+# With NEON_SIM_NATIVE=1 the cars run CarSim (C++ step 1: all four wheels in
+# one native call). "car process_forces" and "car whole _physics_process" then
+# time that path, and "wheels_ab" times process_forces on the same cars both
+# ways in turn (bridge on, bridge off) in this one process. The "wheel ..."
+# lines always time the GDScript wheel.
 # Release build: an export template ignores -s and --path. Copy the release
 # template .exe into the project folder, put this in override.cfg next to
 # project.godot and run the .exe from there with the options after "--":
@@ -92,6 +97,8 @@ func _finish() -> void:
 		"physics_hz": Engine.physics_ticks_per_second,
 		"native_available": NativeTyres.available(),
 		"native_cars": NativeTyres.active(),
+		"sim_native_available": CarSimSwitch.available(),
+		"sim_native_on": CarSimSwitch.enabled,
 		"cars_full_sim": cars.size(),
 		"opts": " ".join(OS.get_cmdline_user_args()),
 	}
@@ -157,6 +164,43 @@ func _finish() -> void:
 		# us for one call on one car (or one wheel), clock read taken off.
 		pieces[key] = {"us": snappedf(maxf(_median(a) / per - clock_us, 0.0), 0.01), "us_best": snappedf(maxf(float(a[0]) / per - clock_us, 0.0), 0.01)}
 	out["pieces"] = pieces
+
+	# --- the four wheels of one car: CarSim against the GDScript, same cars -----
+	# Each car with a bridge runs process_forces() with it, then with it taken
+	# off (the vendored wheels), in turn; ms per car per call.
+	var with_bridge: Array[TrafficCar] = []
+	for v in cars:
+		if is_instance_valid(v) and v.sim_bridge != null:
+			with_bridge.append(v)
+	out["sim_native_cars"] = with_bridge.size()
+	if not with_bridge.is_empty():
+		var nat_runs: Array = []
+		var gd_runs: Array = []
+		for pass_i in PASSES * 4:
+			var nat_tot := 0
+			var gd_tot := 0
+			for v in with_bridge:
+				var bridge: RefCounted = v.sim_bridge
+				var t0 := Time.get_ticks_usec()
+				v.process_forces(dt)
+				var t1 := Time.get_ticks_usec()
+				v.sim_bridge = null
+				var t2 := Time.get_ticks_usec()
+				v.process_forces(dt)
+				var t3 := Time.get_ticks_usec()
+				v.sim_bridge = bridge
+				nat_tot += t1 - t0
+				gd_tot += t3 - t2
+			nat_runs.append(nat_tot)
+			gd_runs.append(gd_tot)
+		nat_runs.sort()
+		gd_runs.sort()
+		var n := float(with_bridge.size())
+		out["wheels_ab"] = {"cars": with_bridge.size(), "passes": PASSES * 4,
+			"native_ms_per_car": snappedf(maxf(_median(nat_runs) / n - clock_us, 0.0) / 1000.0, 0.00001),
+			"native_ms_per_car_best": snappedf(maxf(float(nat_runs[0]) / n - clock_us, 0.0) / 1000.0, 0.00001),
+			"gdscript_ms_per_car": snappedf(maxf(_median(gd_runs) / n - clock_us, 0.0) / 1000.0, 0.00001),
+			"gdscript_ms_per_car_best": snappedf(maxf(float(gd_runs[0]) / n - clock_us, 0.0) / 1000.0, 0.00001)}
 
 	# --- tyre maths alone: GDScript against C++, same process -----------------
 	var live: Wheel = cars[0].rear_left_wheel

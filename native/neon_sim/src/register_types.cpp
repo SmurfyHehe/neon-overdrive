@@ -1,3 +1,4 @@
+#include "car_sim.h"
 #include "crossing_bench.h"
 #include "gevp_tyre_native.h"
 
@@ -14,6 +15,7 @@ void initialize_neon_sim(ModuleInitializationLevel p_level) {
 	}
 	ClassDB::register_class<GevpTyreNative>();
 	ClassDB::register_class<CrossingBench>();
+	ClassDB::register_class<CarSim>();
 }
 
 void uninitialize_neon_sim(ModuleInitializationLevel p_level) {

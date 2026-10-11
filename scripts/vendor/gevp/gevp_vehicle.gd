@@ -927,6 +927,13 @@ var _camber_active := false
 ## apply_torque (b); pow(x, 2) is written x * x (d). No tuning number changed.
 var tick_center_of_mass := Vector3.ZERO
 var _tick_basis := Basis.IDENTITY
+## (16) Car physics in C++, step 1 (2026-10-11), DEVIATION: the only hook for
+## the native path. A car built while CarSimSwitch is on carries a bridge
+## (scripts/car/car_sim_bridge.gd); process_forces() then hands the four wheels'
+## work (ray cast, surface, suspension, tyres, summed force) to CarSim in one
+## call and returns. null on every car while the switch is off (the default),
+## and the lines below it run exactly as before.
+var sim_bridge : RefCounted = null
 ## (14) Realistic automatic (2026-10-10, DEVIATION). A car whose spec has an
 ## "auto" block (the player's cars) gets an AutoBox (scripts/car/auto_box.gd);
 ## while it is in AUTO the box replaces GEVP's automatic. auto_box stays null on
@@ -1226,6 +1233,8 @@ func process_axle_drive(axle : Axle, torque : float, drive_inertia : float, delt
 	axle.rotation_split = clampf(rotation_sum, -1.0, 1.0)
 
 func process_forces(delta : float) -> void:
+	if sim_bridge != null and sim_bridge.step(self, delta):  # (16)
+		return
 	## Spring compression values are kept for antiroll bar calculations
 	# (15b) each wheel leaves its push as one force and one torque about the
 	# centre of mass; the car's total goes to the engine in two calls instead of

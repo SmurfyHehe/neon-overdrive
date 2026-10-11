@@ -2,7 +2,8 @@
 # tools/traffic_profile.gd (whole-frame split) over a matrix of
 #   build    debug (the editor .exe) | release (the release export template)
 #   physics  godot | jolt
-#   tyres    gd (vendored GDScript) | native (C++ GevpTyreNative)
+#   tyres    gd (vendored GDScript) | native (C++ GevpTyreNative, the first trial)
+#            | sim (C++ CarSim: all four wheels of a car in one native call)
 # headless, several rounds, the order reversed every other round so a busy
 # laptop hits every combination alike.
 #
@@ -67,6 +68,7 @@ for ($r = 1; $r -le $Rounds; $r++) {
 		$psi.RedirectStandardOutput = $true
 		$psi.RedirectStandardError = $true
 		$psi.EnvironmentVariables["NEON_NATIVE_TYRES"] = $(if ($tyre -eq "native") { "1" } else { "0" })
+		$psi.EnvironmentVariables["NEON_SIM_NATIVE"] = $(if ($tyre -eq "sim") { "1" } else { "0" })
 		$others = @(Get-Process | Where-Object { $_.Name -like "Godot*" }).Count
 		Write-Host ("[{0}] round {1}/{2}  {3} {4} {5}  other Godot={6}" -f (Get-Date -Format "HH:mm:ss"), $r, $Rounds, $build, $phys, $tyre, $others)
 		$p = [System.Diagnostics.Process]::Start($psi)

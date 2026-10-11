@@ -198,15 +198,24 @@ func vstep(i: int) -> float:
 	return _dc[i]
 
 ## Height of the road above the start of chunk i, s metres into it.
+## The endless road reads its arrays straight (same numbers as the calls in
+## the loop branch): this runs for every car several times a tick, and the
+## four getters cost more than the sum (issue #526).
 func rise(i: int, s: float) -> float:
-	return ease_rise(start_grade(i), vcurve(i), vstep(i), vstep(i + 1), s)
+	if period > 0 or i < 0:
+		return ease_rise(start_grade(i), vcurve(i), vstep(i), vstep(i + 1), s)
+	_ensure(i + 1)
+	return ease_rise(_g0[i], _vc[i], _dc[i], _dc[i + 1], s)
 
 ## Height and grade at distance s into chunk i.
 func height_at(i: int, s: float) -> float:
 	return start_height(i) + rise(i, s)
 
 func grade_at(i: int, s: float) -> float:
-	return ease_grade(start_grade(i), vcurve(i), vstep(i), vstep(i + 1), s)
+	if period > 0 or i < 0:
+		return ease_grade(start_grade(i), vcurve(i), vstep(i), vstep(i + 1), s)
+	_ensure(i + 1)
+	return ease_grade(_g0[i], _vc[i], _dc[i], _dc[i + 1], s)
 
 # One chunk's eased vertical profile: start grade g0, its own curvature c,
 # and the curvature steps at its start (dc_in) and end (dc_out). A step of 1

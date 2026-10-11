@@ -41,6 +41,7 @@ const TICK_RATE_MAX := 1.7
 const TICK_GAIN := 0.5
 const FAN_GAIN := 0.12
 const TICK_VARIANTS := 6
+const PATH := "res://scripts/audio/cabin_life_audio.gd"
 const COCKPIT_QUIET := 0.55      # tick level in the cockpit view, of the chase level
 
 const G := 9.81
@@ -342,16 +343,35 @@ func busy() -> bool:
 
 # ---------- the sounds ----------
 
-func _build_streams() -> void:
+## Every take: [set, cache layer, maker]. Through the disk cache since issue
+## #524 (they were made on every boot, about 0.3 s).
+static func takes() -> Array:
+	var out := []
 	for i in TICK_VARIANTS:
-		_ticks.append(make_tick(1000 + i * 37))
+		out.append(["tick", "tick%d" % i, make_tick.bind(1000 + i * 37)])
 	for i in 3:
-		_can.append(make_can(2000 + i * 53))
+		out.append(["can", "can%d" % i, make_can.bind(2000 + i * 53)])
 	for i in 4:
-		_coins.append(make_coins(3000 + i * 29))
+		out.append(["coins", "coins%d" % i, make_coins.bind(3000 + i * 29)])
 	for i in 2:
-		_latch.append(make_latch(4000 + i * 11))
-	_fan_stream = make_fan(5000)
+		out.append(["latch", "latch%d" % i, make_latch.bind(4000 + i * 11)])
+	out.append(["fan", "fan", make_fan.bind(5000)])
+	return out
+
+## Starts making the takes on worker threads (issue #524).
+static func prefetch() -> void:
+	for t in takes():
+		AudioDsp.prefetch(PATH, t[1], t[2])
+
+func _build_streams() -> void:
+	for t in takes():
+		var s := AudioDsp.cached(PATH, t[1], t[2])
+		match String(t[0]):
+			"tick": _ticks.append(s)
+			"can": _can.append(s)
+			"coins": _coins.append(s)
+			"latch": _latch.append(s)
+			_: _fan_stream = s
 
 static func _noise(rng: RandomNumberGenerator) -> float:
 	return rng.randf_range(-1.0, 1.0)

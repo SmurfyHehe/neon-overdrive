@@ -197,20 +197,48 @@ func _ready() -> void:
 	_rng.randomize()
 	_pace = _player.crank_pace()
 	_key_offs = _player.key_offs
-	var rec := recipe(_player.spec.get("engine_voice", {}) as Dictionary)
-	var key: String = rec.key
-	for i in CRANK_TAKES:
-		_crank_takes.append(AudioDsp.cached(PATH, "crank%d_%s" % [i, key], make_crank.bind(crank_seed(i), rec)))
-	for i in COUGH_TAKES:
-		_cough_takes.append(AudioDsp.cached(PATH, "cough%d_%s" % [i, key], make_cough.bind(cough_seed(i), rec)))
-	for i in CATCH_TAKES:
-		_catch_takes.append(AudioDsp.cached(PATH, "catch%d_%s" % [i, key], make_catch.bind(catch_seed(i), rec)))
-	for i in STOP_TAKES:
-		_stop_takes.append(AudioDsp.cached(PATH, "stop%d" % i, make_shutdown.bind(2203 + i * 17)))
+	# Booting into the garage the engine is off until the player goes out:
+	# the takes (on a cold cache still being made, issue #524) are collected on
+	# the first start or stop instead of holding up the garage.
+	if not CarAudio.garage_boot():
+		_collect_takes()
 	_crank = _voice("CrankAudio")
 	_cough = _voice("CoughAudio")
 	_catch = _voice("CatchAudio")
 	_stop = _voice("ShutdownAudio")
+
+## Every take for this car: [set, cache layer, maker].
+static func take_list(spec: Dictionary) -> Array:
+	var rec := recipe(spec.get("engine_voice", {}) as Dictionary)
+	var key: String = rec.key
+	var out := []
+	for i in CRANK_TAKES:
+		out.append(["crank", "crank%d_%s" % [i, key], make_crank.bind(crank_seed(i), rec)])
+	for i in COUGH_TAKES:
+		out.append(["cough", "cough%d_%s" % [i, key], make_cough.bind(cough_seed(i), rec)])
+	for i in CATCH_TAKES:
+		out.append(["catch", "catch%d_%s" % [i, key], make_catch.bind(catch_seed(i), rec)])
+	for i in STOP_TAKES:
+		out.append(["stop", "stop%d" % i, make_shutdown.bind(2203 + i * 17)])
+	return out
+
+## Starts making this car's takes off the main thread (issue #524). On a
+## garage boot nothing waits for them (see _ready): AudioDsp's background lane.
+static func prefetch(spec: Dictionary) -> void:
+	var urgent := not CarAudio.garage_boot()
+	for t in take_list(spec):
+		AudioDsp.prefetch(PATH, t[1], t[2], urgent)
+
+func _collect_takes() -> void:
+	if not _crank_takes.is_empty():
+		return
+	for t in take_list(_player.spec):
+		var s := AudioDsp.cached(PATH, t[1], t[2])
+		match String(t[0]):
+			"crank": _crank_takes.append(s)
+			"cough": _cough_takes.append(s)
+			"catch": _catch_takes.append(s)
+			_: _stop_takes.append(s)
 
 static func crank_seed(i: int) -> int:
 	return 9127 + i * 31
@@ -231,6 +259,7 @@ func _voice(voice_name: String) -> AudioStreamPlayer:
 ## Plays one of `takes`, a little off pitch (times `pitch`); returns how long
 ## it lasts.
 func _play(a: AudioStreamPlayer, takes: Array[AudioStream], gain: float, pitch := 1.0) -> float:
+	_collect_takes()
 	a.stream = takes[_rng.randi() % takes.size()]
 	a.pitch_scale = pitch * _rng.randf_range(1.0 - PITCH_SPREAD, 1.0 + PITCH_SPREAD)
 	a.volume_db = linear_to_db(gain)

@@ -190,7 +190,9 @@ static func basis_at(z: float) -> Basis:
 	var i := _chunk_of(z)
 	var s := _s_in_chunk(z, i)
 	var h := align.start_heading(i) + RoadAlignment.arc_heading(align.curvature(i), s)
-	return Basis(Vector3.UP, h) * Basis(Vector3.RIGHT, atan(align.grade_at(i, s)))
+	var g := align.grade_at(i, s)
+	# level ground: the pitch is the identity, so skip the product (#526)
+	return Basis(Vector3.UP, h) if g == 0.0 else Basis(Vector3.UP, h) * Basis(Vector3.RIGHT, atan(g))
 
 ## Road heading at road-space z, radians about world up (0 = down world -Z).
 static func heading_at(z: float) -> float:

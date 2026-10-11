@@ -168,6 +168,8 @@ static var _streams := {}
 
 var _vehicle: Vehicle
 var _players := {}
+var _loops := []           # [player, layer] for every looping layer
+var _waiting := false      # streams not attached yet (garage boot, cold cache)
 var _rng := RandomNumberGenerator.new()
 var _gust_target := 1.0
 var _gust_wait := 0.0
@@ -199,6 +201,40 @@ func _ready() -> void:
 	_players.grit = _add_player("grit", &"Tires")
 	_players.wet = _add_player("wet", &"Tires")
 	_players.chirp = _add_player("chirp", &"Tires", false)
+	for layer in ["joint", "manhole"]:
+		var p := _add_player(layer, &"Tires", false)
+		p.max_polyphony = 4
+		_players[layer] = p
+	_players.deck = _add_player("deck", &"Tires")
+	add_child(CabinLifeAudio.new())  # cooling ticks, a can, coins, the glovebox (MA1)
+	if _vehicle != null:
+		_wheelbase = maxf(1.5, absf(_vehicle.front_axle_position.z - _vehicle.rear_axle_position.z))
+	# Booting into the garage (issue #524): the car stands there with the engine
+	# off, so none of these sounds can play yet. On a cold cache they are still
+	# being made off the main thread (prefetch()); the garage opens without
+	# waiting for them and _process() hands them over when they are done, or as
+	# soon as the player goes out or the car moves. Every other boot gets them now.
+	_waiting = garage_boot() and not _all_built()
+	if not _waiting:
+		_attach_streams()
+
+func _add_player(layer: String, bus_name: StringName, looping := true) -> AudioStreamPlayer:
+	var p := AudioStreamPlayer.new()
+	p.name = layer.to_pascal_case() + "Audio"
+	p.bus = bus_name
+	p.volume_db = -80.0
+	add_child(p)
+	if looping:
+		_loops.append([p, layer])
+	return p
+
+## Every layer's stream onto its player; starts the loops.
+func _attach_streams() -> void:
+	_waiting = false
+	for pl in _loops:
+		var p: AudioStreamPlayer = pl[0]
+		p.stream = stream(pl[1])
+		p.play()
 	var chirps: Array[AudioStream] = []
 	for k in CHIRP_VARIANTS:
 		chirps.append(stream("chirp" if k == 0 else "chirp%d" % k))
@@ -207,25 +243,18 @@ func _ready() -> void:
 		var list: Array[AudioStream] = []
 		for k in ROAD_VARIANTS:
 			list.append(stream("%s%d" % [layer, k]))
-		var p := _add_player(layer, &"Tires", false)
-		p.stream = AudioDsp.randomizer(list, 1.06, 1.5)
-		p.max_polyphony = 4
-		_players[layer] = p
-	_players.deck = _add_player("deck", &"Tires")
-	add_child(CabinLifeAudio.new())  # cooling ticks, a can, coins, the glovebox (MA1)
-	if _vehicle != null:
-		_wheelbase = maxf(1.5, absf(_vehicle.front_axle_position.z - _vehicle.rear_axle_position.z))
+		_players[layer].stream = AudioDsp.randomizer(list, 1.06, 1.5)
 
-func _add_player(layer: String, bus_name: StringName, looping := true) -> AudioStreamPlayer:
-	var p := AudioStreamPlayer.new()
-	p.name = layer.to_pascal_case() + "Audio"
-	p.stream = stream(layer)
-	p.bus = bus_name
-	p.volume_db = -80.0
-	add_child(p)
-	if looping:
-		p.play()
-	return p
+## No sound job outlives the car (its starter's takes may not be collected yet).
+func _exit_tree() -> void:
+	AudioDsp.release()
+
+## True once no layer is still being made off the main thread.
+static func _all_built() -> bool:
+	for layer in layer_names():
+		if not _streams.has(layer) and AudioDsp.building("res://scripts/audio/car_audio.gd", layer):
+			return false
+	return true
 
 ## What the car is doing this frame, as plain numbers (so the listen pack can
 ## set them directly).
@@ -303,6 +332,10 @@ func _read_car() -> Dictionary:
 	return st
 
 func _process(delta: float) -> void:
+	# (not on engine_running: the engine idles through the frames before the
+	# dawn card, and the layers are silent at a standstill anyway)
+	if _waiting and (_all_built() or GameState.garage_seen or _vehicle.linear_velocity.length() > 2.0):
+		_attach_streams()
 	var st := _read_car()
 	for k in forced:
 		st[k] = forced[k]
@@ -456,6 +489,33 @@ func _drive_pair(layer: String, amplitude: float, pitch: float) -> void:
 func _drive_layer(p: AudioStreamPlayer, amplitude: float, pitch: float) -> void:
 	p.volume_db = linear_to_db(amplitude) if amplitude > 0.0005 else -80.0
 	p.pitch_scale = pitch
+
+## Starts making every layer _ready() asks for off the main thread, so a cold
+## cache costs the slowest layer, not all of them (issue #524). On a garage
+## boot nothing waits for them (see _ready): AudioDsp's background lane.
+static func prefetch() -> void:
+	var urgent := not garage_boot()
+	for layer in layer_names():
+		if not _streams.has(layer):
+			AudioDsp.prefetch("res://scripts/audio/car_audio.gd", layer, _make.bind(layer), urgent)
+
+## This boot opens on the dawn card and the garage (GameState).
+static func garage_boot() -> bool:
+	return GameState.wants_garage() and not GameState.garage_seen
+
+## Every layer _ready() plays.
+static func layer_names() -> Array[String]:
+	var layers: Array[String] = []
+	for kind in KINDS:
+		layers.append_array([kind + "_l", kind + "_r"])
+	for layer in PAIRED:
+		layers.append_array([layer, layer + "_b"])
+	layers.append_array(["throb", "surface", "grit", "wet", "chirp", "deck"])
+	for k in range(1, CHIRP_VARIANTS):
+		layers.append("chirp%d" % k)
+	for k in ROAD_VARIANTS:
+		layers.append_array(["joint%d" % k, "manhole%d" % k])
+	return layers
 
 ## The shared stream for one layer, generated on first use.
 static func stream(layer: String) -> AudioStreamWAV:

@@ -79,7 +79,7 @@ func _unit_tests() -> void:
 	print("front hit dv 13: radiator %.2f FL %.2f FR %.2f body %.2f" % [d.part(D.Part.RADIATOR), fl, fr, d.part(D.Part.BODY)])
 	_check(d.hits == 1 and is_equal_approx(fl, fr) and fl > 0.0, "a straight front hit shares the front corners")
 	_check(d.part(D.Part.SUSP_RL) == 0.0 and d.part(D.Part.SUSP_RR) == 0.0, "a front hit leaves the rear alone")
-	_check(is_equal_approx(d.part(D.Part.RADIATOR), 10.0 * D.DAMAGE_PER_DV), "the radiator takes the whole front share")
+	_check(is_equal_approx(d.part(D.Part.RADIATOR), minf(10.0 * D.DAMAGE_PER_DV, D.MAX_PER_HIT)), "the radiator takes the whole front share, up to one hit's cap")
 	_check(not d.lamps.has(true) or d.lamps[D.Lamp.HEAD_L], "only front lamps can break from the front")
 	var o := CarDamage.new()
 	o.apply_hit(Vector3(9.0, 0, 9.0))   # from the front-left corner

@@ -66,6 +66,8 @@ call :run world/cross_section --headless
 call :run world/side_streets --headless
 call :run car/kerb_strike --headless
 call :run car/damage_offsets --headless
+rem ~1 min: wheel-corner damage (DP1+DP2): the table, the caps, the fade, auto-trim drift and brake pull on the road.
+call :run car/damage_handling "--headless --fixed-fps 120"
 call :run car/aero_draft_equivalence --headless
 call :run view/camera_feel --headless
 call :run audio/car_audio --headless

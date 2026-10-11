@@ -156,6 +156,9 @@ var pedals := {}                 # "throttle" / "brake" / "clutch" -> pivot Node
 var cabin_light: OmniLight3D
 var driver: DriverModel
 var steering := 0.0              # -1..1 from the car, set by the camera (tests set it too)
+## Radians added to the drawn wheel, + = right: a bent steering arm leaves the
+## wheel crooked when the car runs straight (PlayerCar.steer_centre_view).
+var steer_centre := 0.0
 var window := 0.0                # 0 closed .. 1 down, set by the camera (PerspectiveAudio's value)
 var window_direction := 0        # +1 rolling down, -1 rolling up, 0 at rest (same source)
 var window_control := DEFAULT_WINDOW_CONTROL
@@ -981,7 +984,7 @@ func _build_light() -> void:
 ## spring overshoot or blow up.
 const WHEEL_SUBSTEP := 1.0 / 120.0
 func _step_wheel(delta: float) -> void:
-	var target := clampf(steering, -1.0, 1.0) * WHEEL_LOCK_RAD
+	var target := clampf(clampf(steering, -1.0, 1.0) * WHEEL_LOCK_RAD + steer_centre, -WHEEL_LOCK_RAD, WHEEL_LOCK_RAD)
 	var w := TAU * WHEEL_SPRING_HZ
 	var vmax := deg_to_rad(WHEEL_RATE_DEG)
 	var n := maxi(int(ceil(delta / WHEEL_SUBSTEP)), 1)

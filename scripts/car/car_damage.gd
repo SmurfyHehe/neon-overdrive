@@ -50,15 +50,48 @@ extends RefCounted
 # a rear corner's spring. The body takes a quarter of it as cost. A
 # shallow, slow mount - a normal drive up a dropped kerb - does nothing.
 #
+# Wheel corners (brief DP1+DP2, 2026-10-11; Roy's fun rules): the same hit,
+# split by corner as above, also hurts the parts in the table below. Each is
+# 0..1, free under FREE_BELOW and scaled from 0 there to the full offset at 1.
+#   rear toe RL/RR   rear corner share, rear kerb strike   REAR_TOE_BEND toward toe-out
+#   camber x4        the hit's side share >= CAMBER_SIDE_MIN   CAMBER_BEND_DEG, top of the wheel in
+#   front sag FL/FR  front corner share                    SPRING_LOSS and RIDE_DROP_M
+#   rear corner      (the slice 1 spring part)             + RIDE_DROP_M
+#   damper x4        a hard landing, the third kerb strike on a corner   DAMPER_LOSS
+#   steering rack    front share >= RACK_FRONT_MIN, part >= GATE_AT   RACK_LOSS of the lock
+#   brake x4         corner share >= BRAKE_SHARE_MIN, part >= GATE_AT   BRAKE_LOSS on that wheel
+# The fun rules, all enforced where the offsets are built:
+# - at most MAX_EFFECTS handling effects at once: the biggest three count, the
+#   rest stay cost, looks and sound (ties go to the part listed first);
+# - one hit or strike adds at most MAX_PER_HIT to any part;
+# - the toe damage adds per axle stay inside the Tuner's range (TOE_AXLE_MAX);
+# - damage never takes more than GRIP_LOSS_MAX of the grip in total;
+# - parts fade in: `applied` (what the car reads) moves from the old numbers
+#   to the new ones over FADE_TICKS physics ticks. Repairs, loads and
+#   rebuild_offsets() are at once.
+# Nothing is random: the same hit always gives the same parts and offsets.
+#
 # The state is plain numbers (to_dict / from_dict) so the save system and the
 # garage can keep it. Until the save system lands it lives as long as the car,
 # like FuelTank: Restart starts a fresh, undamaged car.
 
 const DamageOffsets := preload("res://scripts/car/damage_offsets.gd")
 
-enum Part { RADIATOR, STEER_FL, STEER_FR, SUSP_RL, SUSP_RR, BODY }
+enum Part { RADIATOR, STEER_FL, STEER_FR, SUSP_RL, SUSP_RR, BODY,
+	TOE_RL, TOE_RR, CAMBER_FL, CAMBER_FR, CAMBER_RL, CAMBER_RR, SAG_FL, SAG_FR,
+	DAMPER_FL, DAMPER_FR, DAMPER_RL, DAMPER_RR, RACK, BRAKE_FL, BRAKE_FR, BRAKE_RL, BRAKE_RR }
 enum Lamp { HEAD_L, HEAD_R, TAIL_L, TAIL_R }
-const PART_NAMES := ["radiator", "steer_fl", "steer_fr", "susp_rl", "susp_rr", "body"]
+const PART_NAMES := ["radiator", "steer_fl", "steer_fr", "susp_rl", "susp_rr", "body",
+	"toe_rl", "toe_rr", "camber_fl", "camber_fr", "camber_rl", "camber_rr", "sag_fl", "sag_fr",
+	"damper_fl", "damper_fr", "damper_rl", "damper_rr", "rack", "brake_fl", "brake_fr", "brake_rl", "brake_rr"]
+## Per wheel (FL, FR, RL, RR): the part behind each offset.
+const TOE_PARTS := [Part.STEER_FL, Part.STEER_FR, Part.TOE_RL, Part.TOE_RR]
+const SPRING_PARTS := [Part.SAG_FL, Part.SAG_FR, Part.SUSP_RL, Part.SUSP_RR]
+const CAMBER_PARTS := [Part.CAMBER_FL, Part.CAMBER_FR, Part.CAMBER_RL, Part.CAMBER_RR]
+const DAMPER_PARTS := [Part.DAMPER_FL, Part.DAMPER_FR, Part.DAMPER_RL, Part.DAMPER_RR]
+const BRAKE_PARTS := [Part.BRAKE_FL, Part.BRAKE_FR, Part.BRAKE_RL, Part.BRAKE_RR]
+## Parts that only bite once they are at GATE_AT.
+const GATED_PARTS := [Part.RACK, Part.BRAKE_FL, Part.BRAKE_FR, Part.BRAKE_RL, Part.BRAKE_RR]
 const LAMP_NAMES := ["head_l", "head_r", "tail_l", "tail_r"]
 
 ## Hit detection, matching CrashAudio: a horizontal acceleration this big while
@@ -82,6 +115,39 @@ const COOLING_LOSS := 0.7
 ## Toe (rad) a fully bent front arm adds. The Tuner's toe range is +-0.02;
 ## "slightly" (Roy) keeps this inside it.
 const MAX_TOE_BEND := 0.004
+## Toe (rad) a fully bent rear corner adds, toward toe-out on its side.
+const REAR_TOE_BEND := 0.003
+## Camber (degrees) a fully bent corner adds, top of the wheel in.
+const CAMBER_BEND_DEG := 2.5
+## A hit bends camber only when this much of it comes from the side.
+const CAMBER_SIDE_MIN := 0.4
+## How far (m) a fully broken corner sits low, on top of the softer spring.
+const RIDE_DROP_M := 0.025
+## Damping lost on a fully blown damper (DAMPER_MULT 0.35).
+const DAMPER_LOSS := 0.65
+## Steering lock lost with a fully bent rack (STEER_LOCK_MULT 0.8).
+const RACK_LOSS := 0.2
+## The rack only takes hits that are this much from the front.
+const RACK_FRONT_MIN := 0.6
+## Brake torque lost on a fully hurt brake corner (BRAKE_MULT 0.6).
+const BRAKE_LOSS := 0.4
+## A brake corner only takes hits that land this much on its corner.
+const BRAKE_SHARE_MIN := 0.5
+## The rack and the brakes do nothing until the part is this hurt.
+const GATE_AT := 0.5
+## The fun rules: see the header.
+const MAX_EFFECTS := 3
+const MAX_PER_HIT := 0.5
+const TOE_AXLE_MAX := 0.02
+const GRIP_LOSS_MAX := 0.15
+const FADE_TICKS := 240   # 2 s at the game's 120 Hz; counted in ticks, never time
+## A corner's damper goes on its third hard kerb strike (and every one after).
+const KERB_STRIKES_TO_DAMPER := 3
+## Landings: a wheel that was in the air for LANDING_AIR_MIN and comes down
+## faster than LANDING_FREE_MS (4 m/s is a 0.8 m drop) hurts its damper.
+const LANDING_AIR_MIN := 0.15
+const LANDING_FREE_MS := 4.0
+const LANDING_DAMAGE_PER_MS := 0.08
 ## A wheel's speed into the kerb (m/s, horizontal, across the kerb face)
 ## below which nothing bends; 5 m/s is 18 km/h straight at it, or about 14
 ## degrees at 100 km/h.
@@ -102,21 +168,29 @@ const RATTLE_FROM := 0.15
 const STEAM_RATE := 14.0
 
 ## Placeholder prices in Cred until the economy pass. Paid from the bank.
-const REPAIR_PRICE := {"radiator": 400, "steer_fl": 250, "steer_fr": 250, "susp_rl": 300, "susp_rr": 300, "body": 600}
+const REPAIR_PRICE := {"radiator": 400, "steer_fl": 250, "steer_fr": 250, "susp_rl": 300, "susp_rr": 300, "body": 600,
+	"toe_rl": 200, "toe_rr": 200, "camber_fl": 150, "camber_fr": 150, "camber_rl": 150, "camber_rr": 150,
+	"sag_fl": 250, "sag_fr": 250, "damper_fl": 180, "damper_fr": 180, "damper_rl": 180, "damper_rr": 180,
+	"rack": 350, "brake_fl": 200, "brake_fr": 200, "brake_rl": 200, "brake_rr": 200}
 const LAMP_PRICE := 60
 const TOW_PRICE := 150
 ## A station's free patch brings the radiator back to here (no performance loss).
 const PATCH_TO := FREE_BELOW - 0.01
 
 var enabled := true
-var parts: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+var parts: Array[float] = []
 var lamps: Array[bool] = [false, false, false, false]   # true = broken
 ## The night number of the last free patch; one patch per night.
 var patched_night := -1
 ## 0..1, unused yet: a totalled car (the save core stores it).
 var totalled := 0.0
-## What the sim reads on top of the tune; rebuilt only when damage changes.
+## Where the damage is heading: rebuilt only when damage changes.
 var offsets := DamageOffsets.new()
+## What the sim reads on top of the tune: `offsets`, faded in over FADE_TICKS.
+var applied := DamageOffsets.new()
+## Steering wheel turn per unit of road wheel turn, for STEER_CENTRE (the
+## cockpit's 1.5 turns lock to lock over 40 degrees; the camera sets the car's).
+var steering_ratio := 6.75
 var hits := 0
 var last_hit_dv := 0.0
 var last_hit_dir := Vector2.ZERO   # car-local (x, z) of the velocity change
@@ -124,12 +198,27 @@ var last_hit_dir := Vector2.ZERO   # car-local (x, z) of the velocity change
 ## Kerb strikes this car has taken, and the speed into the kerb of the last.
 var kerb_strikes := 0
 var last_kerb_strike := 0.0
+## Counted kerb strikes per corner (FL, FR, RL, RR), for the dampers.
+var kerb_corner: Array[int] = [0, 0, 0, 0]
+var landings := 0
+var last_landing := 0.0
 
 var _on_kerb: Array[bool] = [false, false, false, false]
 var _prev_vel := Vector3.ZERO
 var _hit_dv := Vector3.ZERO
 var _hit_left := -1.0
 var _wait := 0.0
+var _active: Array[bool] = []
+var _fade_from := PackedFloat32Array()
+var _fade_left := 0
+var _air: Array[float] = [0.0, 0.0, 0.0, 0.0]
+var _fall: Array[float] = [0.0, 0.0, 0.0, 0.0]
+
+func _init() -> void:
+	parts.resize(PART_NAMES.size())
+	parts.fill(0.0)
+	_active.resize(PART_NAMES.size())
+	_active.fill(false)
 
 func part(p: Part) -> float:
 	return parts[p]
@@ -147,8 +236,8 @@ func is_engine_dead() -> bool:
 func warning() -> bool:
 	if not enabled:
 		return false
-	for i in Part.BODY:
-		if parts[i] >= FREE_BELOW:
+	for i in parts.size():
+		if i != Part.BODY and parts[i] >= FREE_BELOW:
 			return true
 	return lamps.has(true)
 
@@ -163,19 +252,126 @@ func engine_cap_kmh() -> float:
 		return INF
 	return ENGINE_LIMP_KMH if parts[Part.RADIATOR] >= ENGINE_LIMP_AT else INF
 
-## Rebuilds `offsets` from the parts. Called when damage changes (a hit, a
-## kerb strike, a repair, a load); a test or tool that sets `parts` directly
-## calls it too. The effect functions below stay plain readers of the parts.
+## Rebuilds the offsets from the parts, at once (no fade). Called by a repair
+## and a load; a test or tool that sets `parts` directly calls it too. A hit or
+## a kerb strike fades in instead (_damage_changed). The reader functions
+## below stay plain readers of the parts.
 func rebuild_offsets() -> void:
-	offsets.neutral()
-	for i in 4:
-		offsets.set_wheel(i, DamageOffsets.TOE_ADD, toe_offset(i))
-		offsets.set_wheel(i, DamageOffsets.SPRING_MULT, spring_mult(i))
-	offsets.set_car(DamageOffsets.COOLING_MULT, cooling_mult())
+	_build()
+	applied.data = offsets.data.duplicate()
+	_fade_left = 0
 
-## Toe added to wheel i (FL, FR, RL, RR): bent toward the hit side, so the
-## car pulls that way (a wheel's rotation.y turns it left when positive).
-## Rear wheels are not bent in slice 1.
+## A hit, a strike or a landing changed the parts: new target, faded in.
+func _damage_changed() -> void:
+	_fade_from = applied.data.duplicate()
+	_build()
+	_fade_left = FADE_TICKS
+
+## One physics tick of the fade; step() calls it. Returns true while fading.
+func fade_step() -> bool:
+	if _fade_left <= 0:
+		return false
+	_fade_left -= 1
+	if _fade_left == 0:
+		applied.data = offsets.data.duplicate()
+		return false
+	var k := 1.0 - float(_fade_left) / FADE_TICKS
+	for i in DamageOffsets.SIZE:
+		applied.data[i] = lerpf(_fade_from[i], offsets.data[i], k)
+	return true
+
+## How much part p changes the handling, 0..1, before the worst-three rule.
+## The radiator and the body are not handling; the rack and the brakes wait
+## for GATE_AT.
+func handling_effect(p: int) -> float:
+	if p == Part.RADIATOR or p == Part.BODY:
+		return 0.0
+	if GATED_PARTS.has(p) and parts[p] < GATE_AT:
+		return 0.0
+	return effect(parts[p])
+
+## The parts whose handling effects count right now: the MAX_EFFECTS biggest,
+## ties to the part listed first. Set by the last build.
+func active_effects() -> Array[int]:
+	var out: Array[int] = []
+	for p in _active.size():
+		if _active[p]:
+			out.append(p)
+	return out
+
+## Part p's handling effect after the worst-three rule (0 if it lost).
+func felt(p: int) -> float:
+	return handling_effect(p) if _active[p] else 0.0
+
+func _rank() -> void:
+	_active.fill(false)
+	for n in MAX_EFFECTS:
+		var best := -1
+		var best_e := 0.0
+		for p in parts.size():
+			var e := handling_effect(p)
+			if not _active[p] and e > best_e:
+				best = p
+				best_e = e
+		if best < 0:
+			return
+		_active[best] = true
+
+func _build() -> void:
+	offsets.neutral()
+	if not enabled:
+		return
+	_rank()
+	var toe_sign := [1.0, -1.0, 1.0, -1.0]   # toward the hit side in front, toe-out behind
+	for i in 4:
+		var bend := MAX_TOE_BEND if i < 2 else REAR_TOE_BEND
+		offsets.set_wheel(i, DamageOffsets.TOE_ADD, toe_sign[i] * bend * felt(TOE_PARTS[i]))
+		offsets.set_wheel(i, DamageOffsets.CAMBER_ADD, -deg_to_rad(CAMBER_BEND_DEG) * felt(CAMBER_PARTS[i]))
+		var sag := felt(SPRING_PARTS[i])
+		offsets.set_wheel(i, DamageOffsets.SPRING_MULT, 1.0 - SPRING_LOSS * sag)
+		offsets.set_wheel(i, DamageOffsets.RIDE_DROP, RIDE_DROP_M * sag)
+		offsets.set_wheel(i, DamageOffsets.DAMPER_MULT, 1.0 - DAMPER_LOSS * felt(DAMPER_PARTS[i]))
+		offsets.set_wheel(i, DamageOffsets.BRAKE_MULT, 1.0 - BRAKE_LOSS * felt(BRAKE_PARTS[i]))
+	offsets.set_car(DamageOffsets.STEER_LOCK_MULT, 1.0 - RACK_LOSS * felt(Part.RACK))
+	offsets.set_car(DamageOffsets.COOLING_MULT, cooling_mult())
+	apply_caps(offsets)
+	# the wheel sits crooked by the front toe bend, turned the way that holds the car straight
+	offsets.set_car(DamageOffsets.STEER_CENTRE, steering_ratio
+			* (offsets.get_wheel(0, DamageOffsets.TOE_ADD) + offsets.get_wheel(1, DamageOffsets.TOE_ADD)))
+
+## The caps on built offsets: the toe adds of an axle sum to at most
+## TOE_AXLE_MAX either way, and the grip multipliers multiply to at least
+## 1 - GRIP_LOSS_MAX. Scales, never reorders.
+static func apply_caps(o: RefCounted) -> void:
+	for axle in 2:
+		var a := axle * 2
+		var total: float = o.get_wheel(a, DamageOffsets.TOE_ADD) + o.get_wheel(a + 1, DamageOffsets.TOE_ADD)
+		if absf(total) > TOE_AXLE_MAX:
+			var k := TOE_AXLE_MAX / absf(total)
+			o.set_wheel(a, DamageOffsets.TOE_ADD, o.get_wheel(a, DamageOffsets.TOE_ADD) * k)
+			o.set_wheel(a + 1, DamageOffsets.TOE_ADD, o.get_wheel(a + 1, DamageOffsets.TOE_ADD) * k)
+	var grip := 1.0
+	for i in 4:
+		grip *= o.get_wheel(i, DamageOffsets.GRIP_MULT)
+	var floor_grip := 1.0 - GRIP_LOSS_MAX
+	if grip < floor_grip and grip > 0.0:
+		# raise every multiplier by the same power so the product lands on the floor
+		var power := log(floor_grip) / log(grip)
+		for i in 4:
+			o.set_wheel(i, DamageOffsets.GRIP_MULT, pow(o.get_wheel(i, DamageOffsets.GRIP_MULT), power))
+
+## The damage pull in `o` as one angle (rad at the road wheels, + = left like
+## a wheel's rotation.y): the front axle's mean toe add, less the rear's (a
+## rear axle pointing left yaws the car right). The car holds a share of minus
+## this when no steer key is down (PlayerCar.damage_trim).
+static func pull_angle(o: RefCounted) -> float:
+	var front: float = o.get_wheel(0, DamageOffsets.TOE_ADD) + o.get_wheel(1, DamageOffsets.TOE_ADD)
+	var rear: float = o.get_wheel(2, DamageOffsets.TOE_ADD) + o.get_wheel(3, DamageOffsets.TOE_ADD)
+	return (front - rear) * 0.5
+
+## Toe a bent front arm adds to wheel i (FL, FR), before the worst-three rule:
+## bent toward the hit side, so the car pulls that way (a wheel's rotation.y
+## turns it left when positive). The rear's toe is the TOE_RL / TOE_RR parts.
 func toe_offset(i: int) -> float:
 	match i:
 		0:
@@ -184,7 +380,7 @@ func toe_offset(i: int) -> float:
 			return -MAX_TOE_BEND * effect(parts[Part.STEER_FR])
 	return 0.0
 
-## Spring rate multiplier for wheel i.
+## Rear spring rate multiplier for wheel i, before the worst-three rule.
 func spring_mult(i: int) -> float:
 	match i:
 		2:
@@ -203,9 +399,9 @@ func rattle_level() -> float:
 		return 0.0
 	var worst := 0.0
 	var total := 0.0
-	for a in parts:
-		worst = maxf(worst, a)
-		total += a
+	for i in Part.BODY + 1:   # the slice 1 parts; the corner parts ride on the same hits
+		worst = maxf(worst, parts[i])
+		total += parts[i]
 	return clampf(maxf(worst, total * 0.4) - RATTLE_FROM, 0.0, 1.0) / (1.0 - RATTLE_FROM)
 
 ## Steam puffs per second off the radiator.
@@ -241,10 +437,26 @@ func apply_hit(dv_local: Vector3) -> void:
 	_add(Part.SUSP_RL, amount * share[2])
 	_add(Part.SUSP_RR, amount * share[3])
 	_add(Part.BODY, amount)
+	# wheel corners (DP1): the same split
+	_add(Part.SAG_FL, amount * share[0])
+	_add(Part.SAG_FR, amount * share[1])
+	_add(Part.TOE_RL, amount * share[2])
+	_add(Part.TOE_RR, amount * share[3])
+	if front * front >= RACK_FRONT_MIN:
+		_add(Part.RACK, amount * front * front)
+	for i in 4:
+		if share[i] >= BRAKE_SHARE_MIN:
+			_add(BRAKE_PARTS[i], amount * share[i])
+	# camber: the side share, on the hit side's two wheels, more on the end the hit leans to
+	var side := d.x * d.x
+	if side >= CAMBER_SIDE_MIN:
+		var first := 0 if d.x > 0.0 else 1   # from the left = +x
+		_add(CAMBER_PARTS[first], amount * side * 0.5 * (1.0 + d.y))
+		_add(CAMBER_PARTS[first + 2], amount * side * 0.5 * (1.0 - d.y))
 	for i in 4:
 		if amount * share[i] >= LAMP_BREAK:
 			lamps[[Lamp.HEAD_L, Lamp.HEAD_R, Lamp.TAIL_L, Lamp.TAIL_R][i]] = true
-	rebuild_offsets()
+	_damage_changed()
 
 ## One kerb strike from raw numbers (testable without a car): wheel i (FL,
 ## FR, RL, RR) met the kerb at `approach` m/s across the kerb face.
@@ -252,11 +464,41 @@ func apply_kerb_strike(i: int, approach: float) -> void:
 	if not enabled or approach <= KERB_FREE_MS:
 		return
 	var amount := (approach - KERB_FREE_MS) * KERB_DAMAGE_PER_MS
+	i = clampi(i, 0, 3)
 	kerb_strikes += 1
 	last_kerb_strike = approach
-	_add([Part.STEER_FL, Part.STEER_FR, Part.SUSP_RL, Part.SUSP_RR][clampi(i, 0, 3)], amount)
+	kerb_corner[i] += 1
+	_add([Part.STEER_FL, Part.STEER_FR, Part.SUSP_RL, Part.SUSP_RR][i], amount)
+	if i >= 2:
+		_add(TOE_PARTS[i], amount)
+	if kerb_corner[i] >= KERB_STRIKES_TO_DAMPER:
+		_add(DAMPER_PARTS[i], amount)
 	_add(Part.BODY, amount * KERB_BODY_SHARE)
-	rebuild_offsets()
+	_damage_changed()
+
+## One landing from raw numbers (testable without a car): wheel i came down
+## at `fall` m/s after time in the air. Over LANDING_FREE_MS it hurts that
+## wheel's damper.
+func apply_landing(i: int, fall: float) -> void:
+	if not enabled or fall <= LANDING_FREE_MS:
+		return
+	landings += 1
+	last_landing = fall
+	_add(DAMPER_PARTS[clampi(i, 0, 3)], (fall - LANDING_FREE_MS) * LANDING_DAMAGE_PER_MS)
+	_damage_changed()
+
+## Times each wheel's air and, on touch-down, lands it (apply_landing).
+func _landing_step(v: Vehicle, dt: float) -> void:
+	var fall := -v.linear_velocity.y
+	for i in mini(4, v.wheel_array.size()):
+		if (v.wheel_array[i] as Wheel).is_colliding():
+			if _air[i] >= LANDING_AIR_MIN:
+				apply_landing(i, _fall[i])
+			_air[i] = 0.0
+			_fall[i] = 0.0
+		else:
+			_air[i] += dt
+			_fall[i] = maxf(_fall[i], fall)
 
 ## Looks for a wheel that has just come onto the "Kerb" surface and, if it
 ## came hard, strikes. The speed into the kerb is the car's sideways speed in
@@ -273,8 +515,9 @@ func _kerb_step(v: Vehicle) -> void:
 			apply_kerb_strike(i, across if pos.x > 0.0 else -across)
 		_on_kerb[i] = on
 
+## One hit's worth on one part: never more than MAX_PER_HIT.
 func _add(p: Part, a: float) -> void:
-	parts[p] = clampf(parts[p] + a, 0.0, 1.0)
+	parts[p] = clampf(parts[p] + minf(a, MAX_PER_HIT), 0.0, 1.0)
 
 ## The car was moved and stopped by the game (off-map rescue): the jump in
 ## velocity is not a hit.
@@ -282,6 +525,8 @@ func forget_motion() -> void:
 	_prev_vel = Vector3.ZERO
 	_hit_dv = Vector3.ZERO
 	_hit_left = -1.0
+	_air.fill(0.0)
+	_fall.fill(0.0)
 
 ## One physics step from raw numbers: world velocity, the car's basis, and
 ## whether the body touches something other than the road.
@@ -302,14 +547,16 @@ func step_values(dt: float, vel: Vector3, basis: Basis, touching: bool) -> void:
 		_hit_dv = dv
 		_hit_left = HIT_WINDOW
 
-## One step on the car: reads contacts (a hit or a kerb strike rebuilds the
-## offsets) and sets the engine's limp cap. The offsets themselves are applied
+## One step on the car: moves the fade on a tick, reads contacts (a hit, a kerb
+## strike or a landing gives new offsets) and sets the engine's limp cap. The offsets themselves are applied
 ## by the car (PlayerCar._apply_damage_offsets), on top of the tune.
 func step(v: Vehicle, dt: float, _health: PowertrainHealth, limp: LimpMode) -> void:
 	if not enabled:
 		return
+	fade_step()
 	step_values(dt, v.linear_velocity, v.global_transform.basis, _touching(v))
 	_kerb_step(v)
+	_landing_step(v, dt)
 	limp.engine_damage_kmh = engine_cap_kmh()
 
 ## Touching a wall, a building or another car (not the road under the body).
@@ -335,6 +582,7 @@ func garage_repair(bank: Object) -> int:
 		parts[i] = 0.0
 	for i in lamps.size():
 		lamps[i] = false
+	kerb_corner.fill(0)
 	rebuild_offsets()
 	return price
 
@@ -372,7 +620,7 @@ func tow(bank: Object, in_chase: bool) -> bool:
 	return true
 
 func to_dict() -> Dictionary:
-	var d := {"lamps": lamps.duplicate(), "patched_night": patched_night, "totalled": totalled}
+	var d := {"lamps": lamps.duplicate(), "patched_night": patched_night, "totalled": totalled, "kerb_corner": kerb_corner.duplicate()}
 	for i in parts.size():
 		d[PART_NAMES[i]] = parts[i]
 	return d
@@ -383,6 +631,9 @@ func from_dict(d: Dictionary) -> void:
 	var l: Array = d.get("lamps", [])
 	for i in lamps.size():
 		lamps[i] = bool(l[i]) if i < l.size() else false
+	var kc: Array = d.get("kerb_corner", [])
+	for i in kerb_corner.size():
+		kerb_corner[i] = int(kc[i]) if i < kc.size() else 0
 	patched_night = int(d.get("patched_night", -1))
 	totalled = clampf(float(d.get("totalled", 0.0)), 0.0, 1.0)
 	rebuild_offsets()

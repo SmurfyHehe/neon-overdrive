@@ -55,7 +55,15 @@ const SHAPE_AABB := {
 	RoofProps.SHAPE_TANK: [Vector3(-0.75, 0.0, -0.75), Vector3(1.5, 3.6, 1.5)],
 	RoofProps.SHAPE_ANTENNA: [Vector3(-0.8, 0.0, -0.6), Vector3(1.6, 6.14, 1.2)],
 	RoofProps.SHAPE_FLOOD: [Vector3(-0.25, 0.0, -0.35), Vector3(0.5, 5.15, 0.7)],
+	# the roof shapes of world step 1: unit footprint, bottom at 0, rise 1
+	RoofProps.SHAPE_GABLE: [Vector3(-0.5, 0.0, -0.5), Vector3(1.0, 1.0, 1.0)],
+	RoofProps.SHAPE_HIP: [Vector3(-0.5, 0.0, -0.5), Vector3(1.0, 1.0, 1.0)],
+	RoofProps.SHAPE_SCREEN: [Vector3(-0.5, 0.0, -0.5), Vector3(1.0, 1.0, 1.0)],
 }
+## The kerb and pavement are a raised edge (pavements step 1): things stood on
+## them (hydrants, street animals, sign posts) sit up to the district's kerb
+## height above the road surface, so they are "on the ground" there.
+const WALK_NAMES := ["CurbOwn", "CurbOnc", "SidewalkOwn", "SidewalkOnc"]
 const GROUND_NAMES := ["RoadOwn", "RoadOnc", "EdgeLineOwn", "EdgeLineOnc", "ShoulderOwn", "ShoulderOnc", "CurbOwn", "CurbOnc", "SidewalkOwn", "SidewalkOnc"]
 
 var fails := 0
@@ -162,6 +170,15 @@ func _check_chunk(chunk: Node3D, idx: int, label: String) -> void:
 				if g is MultiMeshInstance3D and g.visible:
 					_collect(W, g, pieces)
 	var signs_used: int = chunk.get_meta("signs_used", 0)
+	# footprints of the raised kerb and pavement strips, and how high they stand
+	# (the district's kerb height, tapered from the previous chunk's)
+	var walk_boxes := []
+	for wn in WALK_NAMES:
+		var wmi := chunk.get_node_or_null(NodePath(wn)) as MeshInstance3D
+		if wmi != null and wmi.mesh != null:
+			var wa := wmi.mesh.get_aabb()
+			walk_boxes.append(_world_box(W * wmi.transform, wa.position, wa.size))
+	var walk_h := maxf(Districts.kerb_h_at(idx), Districts.kerb_h_at(maxi(idx - 1, 0)))
 	for p in pieces:
 		var name: String = p[0]
 		var i: int = p[1]
@@ -173,13 +190,28 @@ func _check_chunk(chunk: Node3D, idx: int, label: String) -> void:
 		var sy := _surface_y(foot)
 		if box.position.y <= sy + TOL:
 			continue
+		# on the raised kerb or pavement
+		var on_walk := false
+		for wb in walk_boxes:
+			if foot.x >= wb.position.x and foot.x <= wb.end.x and foot.z >= wb.position.z and foot.z <= wb.end.z:
+				on_walk = true
+				break
+		if on_walk and box.position.y <= sy + walk_h + TOL:
+			continue
 		var ok := false
 		# 2. on a building's top face, inside its footprint
 		for b in buildings:
-			var top: float = b[1].end.y
-			if absf(box.position.y - top) > TOL:
+			# the building's top face under the foot, not its AABB's highest
+			# corner: a box tilted to a steep hill (kickers) has its top face
+			# lower than that corner by up to a quarter metre
+			var local: Vector3 = b[0].affine_inverse() * foot
+			var top: float = (b[0] * Vector3(local.x, 0.5, local.z)).y
+			# standing on the roof, or let into it: a cornice band (world step 1)
+			# is built 0.25 m down into the wall so it wraps the top edge, its
+			# bottom inside the building and its top above the roof plane
+			if box.position.y > top + TOL or box.end.y < top - TOL:
 				continue
-			var q: Vector3 = (b[0].affine_inverse() * foot).abs()
+			var q := local.abs()
 			if q.x <= 0.5 + TOL / b[0].basis.get_scale().x and q.z <= 0.5 + TOL / b[0].basis.get_scale().z:
 				ok = true
 				break

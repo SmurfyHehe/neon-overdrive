@@ -28,6 +28,8 @@ const SHOP_CHANCE := 30       # per cent: at a shop / diner / garage front
 const DOG_CHANCE := 30        # per cent, else a cat
 const CAT_SCALE := 0.85
 const DOG_SCALE := 1.35
+## The body box's bottom edge in the mesh (0.17 centre, 0.2 tall): taken off so it rests on y = 0.
+const PAW_LIFT := 0.07
 const CAT_SPEED := 2.4        # m/s when it bolts
 const DOG_SPEED := 3.2
 const HOLD := 0.35            # s in the beam before it goes
@@ -69,12 +71,15 @@ static func mesh() -> ArrayMesh:
 	if _mesh == null:
 		var st := SurfaceTool.new()
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		# a crouched cat-sized shape, 1 unit = a cat; nose along -Z
-		SideStreets._box(st, Vector3(0.0, 0.17, 0.02), Vector3(0.18, 0.2, 0.44), FUR, 0)
-		SideStreets._box(st, Vector3(0.0, 0.26, -0.26), Vector3(0.15, 0.14, 0.14), FUR, 0)
-		SideStreets._box(st, Vector3(0.0, 0.12, 0.32), Vector3(0.05, 0.05, 0.22), FUR, 0)  # tail
+		# a crouched cat-sized shape, 1 unit = a cat; nose along -Z. The body
+		# sits on y = 0 (it hovered PAW_LIFT above the ground before: the
+		# floating-structures scan caught it at 6 to 10 cm once scaled).
+		var l := -PAW_LIFT
+		SideStreets._box(st, Vector3(0.0, 0.17 + l, 0.02), Vector3(0.18, 0.2, 0.44), FUR, 0)
+		SideStreets._box(st, Vector3(0.0, 0.26 + l, -0.26), Vector3(0.15, 0.14, 0.14), FUR, 0)
+		SideStreets._box(st, Vector3(0.0, 0.12 + l, 0.32), Vector3(0.05, 0.05, 0.22), FUR, 0)  # tail
 		for ex in [-0.04, 0.04]:
-			_eye(st, Vector3(ex, 0.28, -0.335), 0.028)
+			_eye(st, Vector3(ex, 0.28 + l, -0.335), 0.028)
 		_mesh = st.commit()
 	return _mesh
 

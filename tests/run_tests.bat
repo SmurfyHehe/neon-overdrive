@@ -65,6 +65,7 @@ call :run fleet/p1_coupe --headless
 call :run car/undercarriage --headless
 rem Under a second: the sat-nav's route finder on the map's numbers (no game): exits, turn-rounds at gaps only, the lap seam, acts 2-3, a made-up interchange, missed turns.
 call :run car/sat_nav_route --headless
+call :run car/cabin_dirt "--headless --fixed-fps 60 --audio-driver Dummy"
 call :run world/road_strip_winding --headless
 call :run world/sidewalk_collision_taper --headless
 call :run world/kerb_profile --headless

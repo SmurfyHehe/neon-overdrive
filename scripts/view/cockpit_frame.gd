@@ -209,6 +209,7 @@ var handbrake: Node3D
 var pedals := {}                 # "throttle" / "brake" / "clutch" -> pivot Node3D
 var cabin_light: OmniLight3D
 var driver: DriverModel
+var clutter: CabinClutter          # receipts, dust, cans... (CabinDirt says how much)
 var steering := 0.0              # -1..1 from the car, set by the camera (tests set it too)
 var window := 0.0                # 0 closed .. 1 down, set by the camera (PerspectiveAudio's value)
 var window_direction := 0        # +1 rolling down, -1 rolling up, 0 at rest (same source)
@@ -278,6 +279,8 @@ func _ready() -> void:
 	bobble = BobbleHead.new(player, PlayerCar.chassis_kind())
 	add_child(bobble)
 	add_child(ShifterMods.new(self))
+	clutter = CabinClutter.new(self)   # before the layer pass, like the trinket
+	add_child(clutter)
 	mirrors = CockpitMirrors.new()
 	mirrors.name = "Mirrors"
 	mirrors.cab = cab

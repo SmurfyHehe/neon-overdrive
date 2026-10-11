@@ -15,10 +15,15 @@ const COLORS := {"chrome": "#C9CED6", "exh_hole": "#050608", "glass": "#151D2E",
 const EMISSIVE := ["head", "pol_b", "pol_r", "tail", "turn"]
 const GLASS := ["glass"]
 ## The cabin, car space (the car at rest, lift included), from the MC2 brief's
-## interior envelope (floor 0.42 up, H-point 0.78 up and 0.10 behind the axle
-## midpoint, dash face 0.55 ahead of the H-point, roof underside 1.56, door
-## inner skin 0.88) and the loft (screen base 1.25, header 1.68, cab back
-## 2.72; tools/fleet_design/cars.py P10), hand-tuned. Not another car's block.
+## interior envelope (floor 0.42 up, H-point 0.78 up; the seat sits 0.08 AHEAD of
+## the axle midpoint, not 0.10 behind, and the rear bulkhead stands under the
+## roof's trailing edge: further back the head and the bulkhead went through
+## the upright cab back, which is mostly glass, in tests/fleet/interior_fit.gd;
+## the carpet sits above the front wheel wells' tops and the firewall 5 cm
+## behind the measured cowl, clear of the wells' rear ends), dash face 0.55 ahead of the H-point, roof underside 1.56, door
+## inner skin 0.88), the pillars, cowl, header, belt and mirrors measured from
+## this body by tools/fleet_design/cabin_measure.gd (2026-10-11), the rest
+## hand-tuned. Not another car's block.
 ## Square speedo and tacho side by side in a flat panel with the idiot-light
 ## row between them ("wide"), fuel and temp below; a 60/40 charcoal cloth
 ## bench with a fold-down armrest ("bench", "flat" floor, trim "truck"); a
@@ -28,25 +33,25 @@ const GLASS := ["glass"]
 ## Sight line: the cluster top is 22 degrees below the eye, the mirror 25
 ## degrees right, the bobble spot on the passenger dash top past 20 degrees.
 const CABIN := {
-	"seat_x": -0.360, "seat_h": 0.760, "seat_z": 0.100,
-	"eye": Vector3(-0.360, 1.380, 0.040),
-	"floor_y": 0.420, "belt_y": 1.080,
-	"cowl": Vector2(1.000, -1.120), "dash_face_z": -0.450,
-	"header": Vector2(1.560, -0.700), "roof_y": 1.560, "open_top": false,
-	"door_x": 0.880, "door_x_rear": 0.880, "glass_x": 0.900,
-	"a_pillar": [Vector3(0.900, 1.020, -1.125), Vector3(0.780, 1.590, -0.700)],
-	"b_pillar_z": 0.075, "rear_z": 0.345,
+	"seat_x": -0.360, "seat_h": 0.740, "seat_z": -0.120,
+	"eye": Vector3(-0.360, 1.360, -0.180),
+	"floor_y": 0.560, "belt_y": 1.165,
+	"cowl": Vector2(1.019, -1.050), "dash_face_z": -0.450,
+	"header": Vector2(1.715, -0.685), "roof_y": 1.700, "roof_z1": 0.150, "open_top": false,
+	"door_x": 0.840, "door_x_rear": 0.820, "door_x_front": 0.840, "glass_x": 0.860, "glass_top": 1.685,
+	"a_pillar": [Vector3(0.902, 1.019, -1.103), Vector3(0.706, 1.715, -0.685)],
+	"b_pillar_z": 0.075, "rear_z": 0.150,
 	"shelf": {},
-	"wheel": Vector3(-0.360, 1.050, -0.440), "wheel_tilt_deg": -22.0,
+	"wheel": Vector3(-0.360, 1.060, -0.560), "wheel_tilt_deg": -22.0,
 	"wheel_fit": {"factory_cm": 39.0, "range_cm": [35.0, 40.0], "max_dish_cm": 5.0},
 	"wheel_factory": "a fat four-spoke factory wheel, 39 cm, soft black plastic rim",
-	"cluster": Vector2(1.100, -0.600), "cluster_style": "wide", "speedo_max_kmh": 200.0,
-	"head_unit": Vector3(0.0, 1.080, -0.470),
-	"lever": Vector3(0.0, 0.860, -0.250), "handbrake": Vector3(0.0, 0.860, 0.280),
-	"pedals": Vector3(-0.260, 0.600, -0.760),
-	"crank": Vector3(-0.780, 0.920, -0.420), "switch": Vector3(-0.760, 1.060, -0.200),
-	"rear_mirror": Vector3(0.0, 1.460, -0.720),
-	"door_mirror": Vector3(1.000, 1.160, -0.900),
+	"cluster": Vector2(1.060, -0.700), "cluster_style": "wide", "speedo_max_kmh": 200.0,
+	"head_unit": Vector3(0.0, 1.040, -0.540),
+	"lever": Vector3(0.0, 0.900, -0.360), "handbrake": Vector3(0.0, 0.900, 0.060),
+	"pedals": Vector3(-0.260, 0.720, -0.840),
+	"crank": Vector3(-0.800, 0.980, -0.420), "switch": Vector3(-0.780, 1.120, -0.200),
+	"rear_mirror": Vector3(0.0, 1.540, -0.700),
+	"door_mirror": Vector3(1.019, 1.215, -0.963),
 	"console": "flat", "seats": "bench", "trim": "truck",
 }
 ## Build name -> body_tris, tris_total, body_pos (chunks), body_mat, wheels

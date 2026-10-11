@@ -661,9 +661,10 @@ static func player_spec(kind: String) -> Dictionary:
 		"p10_truck":
 			# Harlan Drover, T2 (MC2 brief, 2026-10-11): a lowered regular-cab sport
 			# truck, pushrod V8, rear drive, 4-speed automatic with overdrive (the
-			# "90s" family), 1750 kg. Cloned from the Camel and lowered: 680 Nm on
-			# the game's torque scale (0.39 Nm/kg, nudged up from the Camel's 0.36
-			# toward 0-100 in about 6.8 s and 225 km/h), torque low down, done by
+			# "90s" family), 1750 kg. Cloned from the Camel and lowered: 560 Nm on
+			# the game's torque scale (0.32 Nm/kg; 680 ran 0-100 in 5.4 s and 245
+			# km/h on the sweep, 600 in 5.8 s and 228; the targets are about 6.8 s
+			# and 225 km/h, MC10 tunes the rest), torque low down, done by
 			# 5500, a tall overdrive top, street tyres 255 / 285, a high centre of
 			# gravity on stiffer springs than the Camel, a soft rear bar (the empty
 			# bed is light; MC10 tunes the rest). Data only: no new physics.
@@ -671,14 +672,14 @@ static func player_spec(kind: String) -> Dictionary:
 			s["vehicle_mass"] = 1750.0
 			s["front_weight_distribution"] = 0.58
 			s["front_torque_split"] = 0.0
-			s["max_torque"] = 680.0
+			s["max_torque"] = 560.0
 			s["max_rpm"] = 5500.0
 			s["idle_rpm"] = 650.0
 			s["torque_shape"] = {"low_end": 0.75, "peak_pos": 0.45, "plateau": 0.20, "falloff": 0.60}
 			s["gear_ratios"] = gears
 			s["final_drive"] = 3.73
-			s["coefficient_of_drag"] = 0.40
-			s["frontal_area"] = 2.70
+			s["coefficient_of_drag"] = 0.44
+			s["frontal_area"] = 2.80
 			s["front_tire_width"] = 255.0
 			s["rear_tire_width"] = 285.0
 			s["coefficient_of_friction"] = {"Road": 1.15, "Dirt": 1.0}
@@ -942,13 +943,13 @@ static func npc_spec(kind: String) -> Dictionary:
 			s["vehicle_mass"] = 1750.0
 			s["front_weight_distribution"] = 0.58
 			s["front_torque_split"] = 0.0
-			s["max_torque"] = 680.0
+			s["max_torque"] = 560.0
 			s["max_rpm"] = 5500.0
 			s["torque_shape"] = {"low_end": 0.75, "peak_pos": 0.45, "plateau": 0.20, "falloff": 0.60}
 			s["gear_ratios"] = gears
 			s["final_drive"] = 3.73
-			s["coefficient_of_drag"] = 0.40
-			s["frontal_area"] = 2.70
+			s["coefficient_of_drag"] = 0.44
+			s["frontal_area"] = 2.80
 			s["front_tire_width"] = 255.0
 			s["rear_tire_width"] = 285.0
 			s["coefficient_of_friction"] = {"Road": 1.15, "Dirt": 1.0}

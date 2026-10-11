@@ -65,11 +65,23 @@ extends RefCounted
 # leaves them all neutral: lamps, steam, rattle and the repair bill are read
 # from the parts, so they stay.
 #
-# Tyres (brief LM, 2026-10-11): `pressure` is the share of air left in each
-# tyre. A very hard kerb strike (over RIM_STRIKE x KERB_FREE_MS) bursts it:
-# the wheel runs on its rim (flat_tyre.gd: less grip, rolling drag, a shake,
-# rim wear). The tyre brief (DP3) adds slow leaks that empty into the same
-# state.
+# Tyres (briefs LM and DP3, 2026-10-11): `pressure` is the share of air left
+# in each tyre, `leak` how fast it is going, `runout` how far the rim is out
+# of round (m), `rim_wear` how far a rim has been ground down.
+# - slow leak: a kerb strike over the free line starts one on that wheel. The
+#   pressure falls from 1 to LEAK_TO in LEAK_SLOW_S (just over the line) down
+#   to LEAK_FAST_S (a strike at RIM_STRIKE x the line), and keeps falling at
+#   that rate. A soft tyre is less stiff, grips less, sits lower and drags, so
+#   the car leans and pulls to that corner (flat_tyre.gd).
+# - the air machine at a station pumps every tyre back to 1; a tyre that was
+#   leaking leaks again, slowly (LEAK_REFILL_S), until the garage fixes it.
+# - bent rim: the same strike puts up to RUNOUT_MAX of runout on the rim: a
+#   once-per-turn wobble that rises with speed. A bent rim also seals worse:
+#   it leaks from a gentler kerb (leak_free_ms), a threshold, never dice.
+# - flat spot: a wheel locked in a skid for FLAT_SPOT_S gets FLAT_SPOT_RUNOUT.
+# - on the rim: a very hard strike (over RIM_STRIKE x KERB_FREE_MS) bursts the
+#   tyre at once, and a leak that reaches FlatTyre.RIM_PRESSURE ends the same
+#   way: the wheel runs on its rim (less grip, rolling drag, a shake, wear).
 #
 # The state is plain numbers (to_dict / from_dict) so the save system and the
 # garage can keep it. Until the save system lands it lives as long as the car,
@@ -121,6 +133,27 @@ const KERB_DAMAGE_PER_MS := 0.045
 const RIM_STRIKE := 2.5
 ## Grip left on a wheel that runs on its rim.
 const RIM_GRIP := 0.45
+## A slow leak is timed to this pressure: 1 -> LEAK_TO takes LEAK_SLOW_S for a
+## strike just over the free line, LEAK_FAST_S for one at RIM_STRIKE x it.
+const LEAK_TO := 0.55
+const LEAK_SLOW_S := 120.0
+const LEAK_FAST_S := 60.0
+## After the air machine a leaking tyre goes 1 -> LEAK_TO in about 5 minutes.
+const LEAK_REFILL_S := 300.0
+## The TYRE lamp comes on under this pressure.
+const TYRE_LOW := 0.8
+## Runout (m) a strike at RIM_STRIKE x the free line bends into the rim, the most a rim takes.
+const RUNOUT_MAX := 0.004
+## A fully bent rim leaks from a kerb met at this share less than the free speed.
+const BENT_RIM_LEAK_DROP := 0.4
+## A wheel locked in a skid this long (s) gets a flat spot of this runout (m).
+const FLAT_SPOT_S := 1.5
+const FLAT_SPOT_RUNOUT := 0.0015
+## A locked wheel only counts as a skid while it moves forward or back over
+## the road faster than this (m/s), and "locked" is its tread moving at under
+## this share of that speed. A wheel sliding sideways is not locked.
+const SKID_MIN_MS := 5.0
+const LOCKED_SHARE := 0.2
 ## A strike's cost to the body, as a share of the corner's.
 const KERB_BODY_SHARE := 0.25
 ## Spring rate lost on a fully broken rear corner.
@@ -137,6 +170,7 @@ const STEAM_RATE := 14.0
 const REPAIR_PRICE := {"radiator": 400, "steer_fl": 250, "steer_fr": 250, "susp_rl": 300, "susp_rr": 300, "body": 600}
 const LAMP_PRICE := 60
 const TYRE_PRICE := 120   # a burst tyre
+const PUNCTURE_PRICE := 40   # a leak that has not emptied the tyre yet
 const RIM_PRICE := 200    # a rim worn right down; less for less wear
 const TOW_PRICE := 150
 ## A station's free patch brings the radiator back to here (no performance loss).
@@ -155,6 +189,13 @@ var coolant := 1.0
 var pressure: Array[float] = [1.0, 1.0, 1.0, 1.0]
 ## How far each rim has been ground down by running flat, 0..1.
 var rim_wear: Array[float] = [0.0, 0.0, 0.0, 0.0]
+## Pressure share each tyre loses per second (0 = sound).
+var leak: Array[float] = [0.0, 0.0, 0.0, 0.0]
+## How far each rim is out of round, m (a bent rim or a flat spot).
+var runout: Array[float] = [0.0, 0.0, 0.0, 0.0]
+## Leaks started and flat spots made (tests and read-outs).
+var leaks_started := 0
+var flat_spots := 0
 ## The night number of the last free patch; one patch per night.
 var patched_night := -1
 ## 0..1, unused yet: a totalled car (the save core stores it).
@@ -171,6 +212,7 @@ var last_kerb_strike := 0.0
 
 var _on_kerb: Array[bool] = [false, false, false, false]
 var _refilled := false
+var _lock_t: Array[float] = [0.0, 0.0, 0.0, 0.0]
 var _prev_vel := Vector3.ZERO
 var _hit_dv := Vector3.ZERO
 var _hit_left := -1.0
@@ -198,7 +240,80 @@ func any_tyre_flat() -> bool:
 			return true
 	return false
 
-## The DMG lamp: any part past the free band, a lamp out, or a flat tyre.
+## The TYRE lamp: a tyre under TYRE_LOW.
+func any_tyre_low() -> bool:
+	if not enabled:
+		return false
+	for i in 4:
+		if pressure[i] < TYRE_LOW:
+			return true
+	return false
+
+## The kerb speed (m/s) from which wheel i starts to leak: KERB_FREE_MS on a
+## true rim, lower the more the rim is bent.
+func leak_free_ms(i: int) -> float:
+	return KERB_FREE_MS * (1.0 - BENT_RIM_LEAK_DROP * clampf(runout[i] / RUNOUT_MAX, 0.0, 1.0))
+
+## Pressure share per second a strike at `approach` m/s starts leaking.
+static func leak_rate(approach: float) -> float:
+	var hard := clampf((approach - KERB_FREE_MS) / (KERB_FREE_MS * (RIM_STRIKE - 1.0)), 0.0, 1.0)
+	return (1.0 - LEAK_TO) / lerpf(LEAK_SLOW_S, LEAK_FAST_S, hard)
+
+## The leaks for one step (testable without a car). Returns true if a
+## pressure changed.
+func step_tyres(dt: float) -> bool:
+	if not enabled:
+		return false
+	var changed := false
+	for i in 4:
+		if leak[i] > 0.0 and pressure[i] > 0.0:
+			pressure[i] = maxf(pressure[i] - leak[i] * dt, 0.0)
+			changed = true
+	if changed:
+		_write_tyres()
+	return changed
+
+## A wheel's skid for one step (testable without a car): `locked` while the
+## wheel is not turning under a moving car. FLAT_SPOT_S of it in one go grinds
+## a flat spot.
+func step_lock(i: int, dt: float, locked: bool) -> void:
+	if not enabled or not locked:
+		_lock_t[i] = 0.0
+		return
+	_lock_t[i] += dt
+	if _lock_t[i] >= FLAT_SPOT_S and runout[i] < FLAT_SPOT_RUNOUT:
+		runout[i] = FLAT_SPOT_RUNOUT
+		flat_spots += 1
+		_write_tyres()
+
+## The station's air machine: every tyre back to full. A tyre that was leaking
+## or flat still has its hole, so it leaks again, slowly, until the garage
+## fixes it. Returns how many tyres it pumped up.
+func air_refill() -> int:
+	if not enabled:
+		return 0
+	var n := 0
+	for i in 4:
+		if pressure[i] < 1.0:
+			n += 1
+			if leak[i] > 0.0 or pressure[i] <= FlatTyre.RIM_PRESSURE:
+				leak[i] = (1.0 - LEAK_TO) / LEAK_REFILL_S
+			pressure[i] = 1.0
+	if n > 0:
+		rebuild_offsets()
+	return n
+
+## Puts the tyre numbers into the offsets on their own (pressure moves every
+## tick while a tyre leaks), with the Damage setting.
+func _write_tyres() -> void:
+	var k: float = MODE_SCALE[clampi(mode, 0, MODE_SCALE.size() - 1)]
+	for i in 4:
+		offsets.set_wheel(i, DamageOffsets.PRESSURE_MULT, 1.0 + (pressure[i] - 1.0) * k)
+		offsets.set_wheel(i, DamageOffsets.GRIP_MULT, 1.0 + ((RIM_GRIP if tyre_flat(i) else 1.0) - 1.0) * k)
+		offsets.set_wheel(i, DamageOffsets.RUNOUT, runout[i] * k)
+
+## The DMG lamp: any part past the free band, a lamp out, or a flat tyre (a
+## soft tyre or a bent rim shows on the TYRE lamp).
 func warning() -> bool:
 	if not enabled:
 		return false
@@ -278,6 +393,7 @@ func rebuild_offsets() -> void:
 		offsets.set_wheel(i, DamageOffsets.TOE_ADD, toe_offset(i))
 		offsets.set_wheel(i, DamageOffsets.SPRING_MULT, spring_mult(i))
 		offsets.set_wheel(i, DamageOffsets.PRESSURE_MULT, pressure[i] if enabled else 1.0)
+		offsets.set_wheel(i, DamageOffsets.RUNOUT, runout[i] if enabled else 0.0)
 		if tyre_flat(i):
 			offsets.set_wheel(i, DamageOffsets.GRIP_MULT, RIM_GRIP)
 	offsets.set_car(DamageOffsets.COOLING_MULT, cooling_mult())
@@ -360,15 +476,25 @@ func apply_hit(dv_local: Vector3) -> void:
 ## One kerb strike from raw numbers (testable without a car): wheel i (FL,
 ## FR, RL, RR) met the kerb at `approach` m/s across the kerb face.
 func apply_kerb_strike(i: int, approach: float) -> void:
-	if not enabled or approach <= KERB_FREE_MS:
+	if not enabled:
+		return
+	i = clampi(i, 0, 3)
+	# the tyre: a leak from the free line, or lower on a bent rim
+	if approach > leak_free_ms(i):
+		if leak[i] <= 0.0:
+			leaks_started += 1
+		leak[i] = maxf(leak[i], leak_rate(approach))
+	if approach <= KERB_FREE_MS:
 		return
 	var amount := (approach - KERB_FREE_MS) * KERB_DAMAGE_PER_MS * damage_mult()
 	kerb_strikes += 1
 	last_kerb_strike = approach
-	_add([Part.STEER_FL, Part.STEER_FR, Part.SUSP_RL, Part.SUSP_RR][clampi(i, 0, 3)], amount)
+	_add([Part.STEER_FL, Part.STEER_FR, Part.SUSP_RL, Part.SUSP_RR][i], amount)
 	_add(Part.BODY, amount * KERB_BODY_SHARE)
+	# the rim: bent in proportion, RUNOUT_MAX at RIM_STRIKE x the free line
+	runout[i] = minf(runout[i] + (approach - KERB_FREE_MS) / (KERB_FREE_MS * (RIM_STRIKE - 1.0)) * RUNOUT_MAX * damage_mult(), RUNOUT_MAX)
 	if approach > KERB_FREE_MS * RIM_STRIKE:
-		pressure[clampi(i, 0, 3)] = 0.0
+		pressure[i] = 0.0
 	rebuild_offsets()
 
 ## Looks for a wheel that has just come onto the "Kerb" surface and, if it
@@ -429,9 +555,14 @@ func step(v: Vehicle, dt: float, health: PowertrainHealth, limp: LimpMode) -> vo
 		# fresh, cold coolant: the engine is back at working temperature at once
 		_refilled = false
 		health.engine_temp = minf(health.engine_temp, PowertrainHealth.THERMOSTAT_C)
+	step_tyres(dt)
 	for i in mini(4, v.wheel_array.size()):
-		if FlatTyre.on_rim(offsets, i) and v.wheel_array[i].is_colliding():
+		var w: Wheel = v.wheel_array[i]
+		var down := w.is_colliding()
+		if FlatTyre.on_rim(offsets, i) and down:
 			step_rim_wear(i, v.speed, dt)
+		var along := absf(w.local_velocity.z)
+		step_lock(i, dt, down and along > SKID_MIN_MS and absf(w.spin) * w.tire_radius < LOCKED_SHARE * along)
 	limp.engine_damaged = engine_limp()
 
 ## Rim wear for wheel i running flat at `speed` m/s for dt (testable without a car).
@@ -466,6 +597,9 @@ func garage_repair(bank: Object) -> int:
 	for i in 4:
 		pressure[i] = 1.0
 		rim_wear[i] = 0.0
+		leak[i] = 0.0
+		runout[i] = 0.0
+		_lock_t[i] = 0.0
 	rebuild_offsets()
 	return price
 
@@ -480,7 +614,10 @@ func repair_price() -> int:
 	for i in 4:
 		if pressure[i] <= FlatTyre.RIM_PRESSURE:
 			total += TYRE_PRICE
-		total += RIM_PRICE * rim_wear[i]
+		elif leak[i] > 0.0:
+			total += PUNCTURE_PRICE
+		# one rim, whichever is worse: ground down or bent
+		total += RIM_PRICE * maxf(rim_wear[i], runout[i] / RUNOUT_MAX)
 	return roundi(total)
 
 ## A fuel station's free engine patch, once a night: the radiator comes back
@@ -511,7 +648,8 @@ func tow(bank: Object, in_chase: bool) -> bool:
 
 func to_dict() -> Dictionary:
 	var d := {"lamps": lamps.duplicate(), "patched_night": patched_night, "totalled": totalled, "coolant": coolant,
-		"pressure": pressure.duplicate(), "rim_wear": rim_wear.duplicate()}
+		"pressure": pressure.duplicate(), "rim_wear": rim_wear.duplicate(),
+		"leak": leak.duplicate(), "runout": runout.duplicate()}
 	for i in parts.size():
 		d[PART_NAMES[i]] = parts[i]
 	return d
@@ -525,9 +663,13 @@ func from_dict(d: Dictionary) -> void:
 	coolant = clampf(float(d.get("coolant", 1.0)), 0.0, 1.0)
 	var pr: Array = d.get("pressure", [])
 	var rw: Array = d.get("rim_wear", [])
+	var lk: Array = d.get("leak", [])
+	var ro: Array = d.get("runout", [])
 	for i in 4:
 		pressure[i] = clampf(float(pr[i]), 0.0, 1.0) if i < pr.size() else 1.0
 		rim_wear[i] = clampf(float(rw[i]), 0.0, 1.0) if i < rw.size() else 0.0
+		leak[i] = maxf(float(lk[i]), 0.0) if i < lk.size() else 0.0
+		runout[i] = clampf(float(ro[i]), 0.0, RUNOUT_MAX) if i < ro.size() else 0.0
 	patched_night = int(d.get("patched_night", -1))
 	totalled = clampf(float(d.get("totalled", 0.0)), 0.0, 1.0)
 	rebuild_offsets()

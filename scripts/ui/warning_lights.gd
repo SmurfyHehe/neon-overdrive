@@ -47,7 +47,7 @@ func _process(_delta: float) -> void:
 	_apply_light(eng_label, h.is_warning(PowertrainHealth.Warn.ENG) or eng_limp, h.is_warning(PowertrainHealth.Warn.ENG_DERATE) or eng_limp)
 	_apply_light(brk_label, h.is_warning(PowertrainHealth.Warn.BRK), h.is_warning(PowertrainHealth.Warn.BRK_FADE))
 	var flat := player.damage.any_tyre_flat()
-	_apply_light(tyre_label, h.is_warning(PowertrainHealth.Warn.TYRE) or flat, flat)
+	_apply_light(tyre_label, h.is_warning(PowertrainHealth.Warn.TYRE) or player.damage.any_tyre_low(), flat)
 	_apply_light(clt_label, h.is_warning(PowertrainHealth.Warn.CLUTCH), false)
 	# Damage (Stage C): a part past the free band, a lamp out or a flat tyre;
 	# red once the damage itself limps the engine (nothing does since the heat

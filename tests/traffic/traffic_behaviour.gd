@@ -363,9 +363,16 @@ func _end_highway() -> void:
 	_check(crossings == 0, "E: %d car-ticks with a lane or path across the centre line" % crossings)
 	_check(body_crossings == 0, "E: %d car-ticks with a car centre across the centre line" % body_crossings)
 	# Was 220 km/h while traffic cleared the lane on its own. Since the near-miss
-	# fix the player flashes and brakes behind a car until it has moved over
-	# (about 4 s a car), and averaged 200 km/h on this seed (2026-10-10).
-	_check(Harness.kmh(speed_sum / maxi(speed_n, 1)) > 180.0, "E: the player averaged under 180 km/h")
+	# fix (b238db8) the player flashes and brakes behind a car until it has moved
+	# over (about 4 s a car). The floor then became 180 from one run that
+	# measured 200, but the mean is a draw of how many slow cars line up in
+	# lane 1: the same commit gives 168 km/h with only this scene run, and
+	# 154-175 on boot seeds 4242 and 1-5 (avg 169). After build 3 + 44 PRs
+	# (2026-10-11): 153-194 (avg 177), 171 in the full run. With flashes
+	# ignored (react_to_player off) it is 117. So the floor sits between those:
+	# it fails when flashing stops clearing the lane, not on an unlucky layout
+	# (issue #558).
+	_check(Harness.kmh(speed_sum / maxi(speed_n, 1)) > 140.0, "E: the player averaged under 140 km/h (flashed cars are not clearing the lane)")
 
 func _nearest_note() -> String:
 	var near: TrafficCar = null

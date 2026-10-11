@@ -6362,6 +6362,471 @@
    }
   },
   {
+   "id": "p7_wagon",
+   "role": "player",
+   "label": "Shop wagon",
+   "refs": "the boxy front-drive estate cars of the late 1980s (category only; no brand): a small four, an automatic, barn doors",
+   "silhouette_rule": "A shoebox on small wheels: snub nose, short flat bonnet, then ONE flat roof line from the top of the windscreen to a square tail; glass all round, three side windows, two barn doors, tall lamp columns at the rear corners.",
+   "dims": {
+    "length": 4.3,
+    "width_body": 1.74,
+    "height": 1.55,
+    "wheelbase": 2.6,
+    "front_overhang": 0.72,
+    "rear_overhang": 0.98,
+    "ground_clearance": 0.16
+   },
+   "physics_hint": {
+    "wheel_r": 0.305,
+    "wheel_x": 0.73,
+    "axle_z": 1.3,
+    "tire_w_front": 0.185,
+    "tire_w_rear": 0.185,
+    "note": "CarSpec.build_wheels uses symmetric axle_z; this origin already sits midway between the axles."
+   },
+   "curves": {
+    "top": [
+     [
+      0.0,
+      0.66
+     ],
+     [
+      0.04,
+      0.8
+     ],
+     [
+      0.14,
+      0.86
+     ],
+     [
+      1.05,
+      0.96
+     ],
+     [
+      1.55,
+      1.55
+     ],
+     [
+      4.22,
+      1.55
+     ],
+     [
+      4.27,
+      0.88
+     ],
+     [
+      4.3,
+      0.56
+     ]
+    ],
+    "floor": [
+     [
+      0,
+      0.34
+     ],
+     [
+      0.2,
+      0.16
+     ],
+     [
+      3.95,
+      0.16
+     ],
+     [
+      4.3,
+      0.3
+     ]
+    ],
+    "hw": [
+     [
+      0,
+      0.74
+     ],
+     [
+      0.06,
+      0.83
+     ],
+     [
+      0.2,
+      0.87
+     ],
+     [
+      1.1,
+      0.87
+     ],
+     [
+      1.25,
+      0.85
+     ],
+     [
+      2.8,
+      0.85
+     ],
+     [
+      2.95,
+      0.87
+     ],
+     [
+      3.75,
+      0.87
+     ],
+     [
+      4.24,
+      0.86
+     ],
+     [
+      4.3,
+      0.82
+     ]
+    ],
+    "waist": [
+     [
+      0,
+      0.56
+     ],
+     [
+      0.2,
+      0.6
+     ],
+     [
+      4.3,
+      0.6
+     ]
+    ],
+    "belt": [
+     [
+      0,
+      0.6
+     ],
+     [
+      0.05,
+      0.76
+     ],
+     [
+      0.14,
+      0.83
+     ],
+     [
+      1.05,
+      0.86
+     ],
+     [
+      4.3,
+      0.86
+     ]
+    ]
+   },
+   "section": {
+    "tumble": 0.04,
+    "sill_in": 0.03,
+    "rocker_h": 0.3
+   },
+   "cabin": {
+    "A": 1.05,
+    "W": 1.55,
+    "R": 4.22,
+    "C": 4.27,
+    "D": 4.22,
+    "roof_w": [
+     [
+      1.55,
+      0.72
+     ],
+     [
+      4.22,
+      0.74
+     ]
+    ],
+    "roof_drop": 0.02,
+    "pillars": [
+     [
+      2.1,
+      2.17
+     ],
+     [
+      3.15,
+      3.22
+     ]
+    ]
+   },
+   "open_top": [],
+   "wheel": {
+    "r": 0.305,
+    "w": 0.185,
+    "track": 1.46,
+    "arch_gap": 0.05,
+    "rim": "steel",
+    "rim_ratio": 0.6
+   },
+   "decals": [
+    {
+     "view": "front",
+     "rect": [
+      -0.45,
+      0.7,
+      0.45,
+      0.76
+     ],
+     "mat": "grille"
+    },
+    {
+     "view": "front",
+     "rect": [
+      0.5,
+      0.66,
+      0.68,
+      0.82
+     ],
+     "mat": "head",
+     "mirror": true
+    },
+    {
+     "view": "front",
+     "rect": [
+      -0.84,
+      0.36,
+      0.84,
+      0.54
+     ],
+     "mat": "trim",
+     "cell": 0.3,
+     "tag": "fbumper"
+    },
+    {
+     "view": "front",
+     "rect": [
+      0.52,
+      0.42,
+      0.66,
+      0.48
+     ],
+     "mat": "turn",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.7,
+      0.56,
+      0.82,
+      0.875
+     ],
+     "mat": "turn",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      0.7,
+      0.875,
+      0.82,
+      1.51
+     ],
+     "mat": "tail",
+     "mirror": true
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.15,
+      1.495,
+      0.15,
+      1.535
+     ],
+     "mat": "tail",
+     "tag": "roof_brake"
+    },
+    {
+     "view": "rear",
+     "rect": [
+      -0.84,
+      0.36,
+      0.84,
+      0.54
+     ],
+     "mat": "trim",
+     "cell": 0.3,
+     "tag": "rbumper"
+    },
+    {
+     "view": "left",
+     "rect": [
+      0.22,
+      0.58,
+      4.2,
+      0.62
+     ],
+     "mat": "trim",
+     "mirror": true,
+     "cell": 0.5,
+     "tag": "rub"
+    }
+   ],
+   "parts": [
+    {
+     "type": "mirrors"
+    }
+   ],
+   "sticker_slots": [
+    {
+     "id": "door",
+     "view": "left",
+     "mirror": true,
+     "note": "",
+     "rect": [
+      1.55,
+      0.545,
+      2.65,
+      0.895
+     ],
+     "center": [
+      -0.839,
+      0.72,
+      0.08
+     ],
+     "normal": [
+      -0.978,
+      0.209,
+      -0.0
+     ],
+     "size": [
+      1.1,
+      0.35
+     ]
+    },
+    {
+     "id": "hood",
+     "view": "top",
+     "mirror": false,
+     "note": "",
+     "rect": [
+      -0.3,
+      0.3,
+      0.3,
+      0.85
+     ],
+     "center": [
+      0.0,
+      0.914,
+      -1.445
+     ],
+     "normal": [
+      -0.001,
+      0.995,
+      -0.101
+     ],
+     "size": [
+      0.6,
+      0.55
+     ]
+    },
+    {
+     "id": "sun",
+     "view": "top",
+     "mirror": false,
+     "note": "windshield sun strip",
+     "rect": [
+      -0.6499999999999999,
+      1.4000000000000001,
+      0.6499999999999999,
+      1.53
+     ],
+     "center": [
+      0.0,
+      1.44,
+      -0.555
+     ],
+     "normal": [
+      0.009,
+      0.596,
+      -0.803
+     ],
+     "size": [
+      1.3,
+      0.13
+     ]
+    },
+    {
+     "id": "rear",
+     "view": "rear",
+     "mirror": false,
+     "note": "left barn door",
+     "rect": [
+      -0.62,
+      0.575,
+      -0.07,
+      1.025
+     ],
+     "center": [
+      -0.345,
+      0.8,
+      2.282
+     ],
+     "normal": [
+      -0.011,
+      0.096,
+      0.995
+     ],
+     "size": [
+      0.55,
+      0.45
+     ]
+    }
+   ],
+   "paint": {
+    "hero": [
+     "Shop white",
+     "#E4DDD0"
+    ],
+    "alts": [
+     [
+      "Primer grey",
+      "#7E7F82"
+     ],
+     [
+      "Fleet tan",
+      "#B89B6E"
+     ],
+     [
+      "Sodium",
+      "#FF8A1F"
+     ],
+     [
+      "Dusk navy",
+      "#1B2A4A"
+     ]
+    ],
+    "trim": "#1A1D24",
+    "rim": "#B9BEC6",
+    "extra": {
+     "chrome": "#C9CED6"
+    }
+   },
+   "options": {},
+   "builds": {},
+   "budget_tris": 10000,
+   "proxy_tris": {
+    "stock": 2378
+   },
+   "exhaust_tips": {
+    "stock": [
+     {
+      "pos": [
+       -0.45,
+       0.26,
+       2.23
+      ],
+      "dir": [
+       0,
+       0,
+       1
+      ],
+      "r": 0.035
+     }
+    ]
+   }
+  },
+  {
    "id": "p17_work_pickup",
    "role": "player",
    "label": "Work pickup",

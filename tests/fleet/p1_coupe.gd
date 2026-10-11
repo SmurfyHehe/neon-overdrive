@@ -6,6 +6,10 @@ extends SceneTree
 #   - budget: at most 10,000 triangles and 9 draw calls (body surfaces + door
 #     mirrors + underside + 4 wheels); the mirror cups are a few dozen
 #     triangles on top, the underside (car-parts plan 5b) under 1,000
+#   - from parts (cars from parts, 2026-10-10: the body is assembled from
+#     assets/cars/p1_coupe/body.glb, see tests/car/car_assembler.gd) the door
+#     mirrors are part of the Body mesh, so its width includes them and the
+#     triangle count is body.json's; NEON_COUPE_LEGACY=1 runs the old checks
 #   - exactly the 4 sticker slots (door, hood, sun strip, rear), each lying on
 #     the body, the door one mirrored
 #   - head lamps at the nose, tail lamps at the tail, both on the glow surface;
@@ -42,6 +46,7 @@ func _initialize() -> void:
 	_check(PlayerCar.chassis_kind() == P1CoupeBuilder.KIND, "the player should drive the P1 coupe by default, got %s" % PlayerCar.chassis_kind())
 
 	# ---- the model
+	var from_parts := P1CoupeBuilder.uses_parts()
 	var car := P1CoupeBuilder.build_chassis_visual()
 	var body := car.get_node_or_null("Body") as MeshInstance3D
 	_check(body != null and body.mesh is ArrayMesh, "the chassis visual should have a Body ArrayMesh")
@@ -54,7 +59,9 @@ func _initialize() -> void:
 	print("body size %s (mirrors included), %d surfaces %s" % [box.size, mesh.get_surface_count(), names])
 	_check(absf(box.size.z - P1CoupeBuilder.LENGTH) <= TOL, "length %.3f, want %.2f" % [box.size.z, P1CoupeBuilder.LENGTH])
 	_check(absf(box.end.y - P1CoupeBuilder.HEIGHT) <= TOL, "height %.3f, want %.2f" % [box.end.y, P1CoupeBuilder.HEIGHT])
-	_check(box.size.x >= P1CoupeBuilder.WIDTH - TOL and box.size.x <= P1CoupeBuilder.WIDTH + 0.15, "width %.3f, want %.2f plus mirrors" % [box.size.x, P1CoupeBuilder.WIDTH])
+	var shell_w := CarAssembler.part_aabb(P1CoupeBuilder.KIND, "body").size.x if from_parts else box.size.x
+	_check(shell_w >= P1CoupeBuilder.WIDTH - TOL and shell_w <= P1CoupeBuilder.WIDTH + 0.15, "width %.3f, want %.2f" % [shell_w, P1CoupeBuilder.WIDTH])
+	_check(box.size.x <= P1CoupeBuilder.WIDTH + 0.5, "width with the door mirrors %.3f" % box.size.x)
 	_check(absf(body.position.y - P1CoupeBuilder.BODY_LIFT) < 1e-6, "the body should sit BODY_LIFT above the chassis origin")
 
 	# ---- budget
@@ -63,9 +70,16 @@ func _initialize() -> void:
 	print("triangles %d (budget %d), draw calls %d (budget %d)" % [tris, TRI_BUDGET, dc, DRAW_CALL_BUDGET])
 	_check(tris <= TRI_BUDGET, "%d triangles, budget %d" % [tris, TRI_BUDGET])
 	_check(dc <= DRAW_CALL_BUDGET, "%d draw calls, budget %d" % [dc, DRAW_CALL_BUDGET])
-	_check(tris == P1CoupeBuilder.Data.TRIS_TOTAL, "built %d triangles, the design data says %d" % [tris, P1CoupeBuilder.Data.TRIS_TOTAL])
+	if from_parts:
+		var meta: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://assets/cars/p1_coupe/body.json"))
+		_check(meta is Dictionary and tris == int(meta.tris_total), "built %d triangles, body.json says %s" % [tris, meta.tris_total if meta is Dictionary else "nothing"])
+		for i in 2:
+			var mb := CarAssembler.part_aabb(P1CoupeBuilder.KIND, "mirror_l" if i == 0 else "mirror_r")
+			_check(absf(mb.position.x) > P1CoupeBuilder.WIDTH / 2.0 or absf(mb.end.x) > P1CoupeBuilder.WIDTH / 2.0, "door mirror %d should stand out past the body side (%s)" % [i, mb])
+	else:
+		_check(tris == P1CoupeBuilder.Data.TRIS_TOTAL, "built %d triangles, the design data says %d" % [tris, P1CoupeBuilder.Data.TRIS_TOTAL])
 	var mirrors := car.get_node_or_null("Mirrors") as MeshInstance3D
-	_check(mirrors != null and mirrors.mesh is ArrayMesh, "the body should carry a Mirrors mesh (door mirror cups)")
+	_check(from_parts or (mirrors != null and mirrors.mesh is ArrayMesh), "the body should carry a Mirrors mesh (door mirror cups)")
 	var mtris := P1CoupeBuilder.mirror_triangle_count()
 	_check(mtris > 0 and mtris <= 200 and tris + mtris <= TRI_BUDGET, "door mirrors are %d triangles" % mtris)
 	var utris := P1CoupeBuilder.undercarriage_triangle_count()
@@ -172,14 +186,21 @@ func _on_body(mesh: ArrayMesh, center: Vector3, normal: Vector3) -> bool:
 	for si in mesh.get_surface_count():
 		if mesh.surface_get_name(si) == "glow":   # the sun strip sits on the windshield glass
 			continue
-		var verts: PackedVector3Array = mesh.surface_get_arrays(si)[Mesh.ARRAY_VERTEX]
-		var norms: PackedVector3Array = mesh.surface_get_arrays(si)[Mesh.ARRAY_NORMAL]
-		for t in verts.size() / 3:
-			var n := norms[t * 3]
+		var arrays := mesh.surface_get_arrays(si)
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var norms: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+		# the sheet proxy is unindexed, the assembled body indexed
+		var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+		var count := (idx.size() if not idx.is_empty() else verts.size()) / 3
+		for t in count:
+			var i0 := idx[t * 3] if not idx.is_empty() else t * 3
+			var i1 := idx[t * 3 + 1] if not idx.is_empty() else t * 3 + 1
+			var i2 := idx[t * 3 + 2] if not idx.is_empty() else t * 3 + 2
+			var n := norms[i0]
 			if n.dot(normal) < 0.8:
 				continue
-			var a := verts[t * 3]
-			var centroid := (a + verts[t * 3 + 1] + verts[t * 3 + 2]) / 3.0
+			var a := verts[i0]
+			var centroid := (a + verts[i1] + verts[i2]) / 3.0
 			if centroid.distance_to(lifted) > 0.6:
 				continue
 			if absf(n.dot(lifted - a)) <= 0.03:

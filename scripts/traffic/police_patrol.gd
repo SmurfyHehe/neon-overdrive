@@ -38,7 +38,9 @@ func _physics_process(delta: float) -> void:
 			_wait = RETRY
 			spawn()
 		return
-	var d := absf(RoadFrame.unroll(car.global_position).z - _player_z())
+	var cz := RoadFrame.unroll(car.global_position).z
+	var d := absf(cz - _player_z())
+	traffic.pace(car, cz)  # a patrol keeps the area's pace like traffic does
 	# Full crash physics near the player only, the rails further out, like
 	# traffic (it used to run the full sim for its whole 300 m life).
 	traffic.tier(car, d)
@@ -58,12 +60,16 @@ func spawn() -> bool:
 		lane = used[0]
 	var lane_x := TrafficManager.lane_centre(lane, oncoming)
 	var dir := 1.0 if oncoming else -1.0
-	var speed := traffic.lane_speed(lane, oncoming)
 	var z := _player_z() - (traffic.reveal_distance() + SPAWN_PAST_REVEAL)
+	var city := traffic.city_at(z, dir)
+	var speed := traffic.lane_speed(lane, oncoming, city)
 	var c := PatrolCar.make()
 	c.name = "Patrol%d" % spawn_count
 	c.traffic = traffic
 	c.target_speed = speed
+	c.pace_lane = lane
+	c.pace_far = oncoming
+	c.pace_city = city
 	if traffic.in_view(RoadFrame.roll(Vector3(lane_x, c.rest_y, z))) or traffic._slot_check(c, lane_x, z, dir, speed).is_empty():
 		c.free()
 		return false

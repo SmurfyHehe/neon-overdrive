@@ -177,6 +177,10 @@ window={
 ]
 }
 
+[neon]
+
+sim/native=false
+
 [physics]
 
 common/physics_ticks_per_second=120

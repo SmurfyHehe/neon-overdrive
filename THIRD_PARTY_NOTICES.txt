@@ -33,6 +33,7 @@ SOFTWARE.
 GEVP (Godot Easy Vehicle Physics)
 ========================================================================
 https://github.com/DAShoe1/Godot-Easy-Vehicle-Physics
+(also the C++ port of its wheel code in the neon_sim library, native/neon_sim/src/car_sim.cpp)
 
 MIT License
 

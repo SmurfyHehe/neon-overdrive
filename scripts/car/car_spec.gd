@@ -947,9 +947,10 @@ static func build_wheels(v: Vehicle, kind: String, wheel_cfg: Dictionary, front_
 	v.front_right_wheel = _build_wheel(v, kind, Vector3(wheel_x, front_mount_y, -axle_z))
 	v.rear_left_wheel = _build_wheel(v, kind, Vector3(-wheel_x, rear_mount_y, axle_z))
 	v.rear_right_wheel = _build_wheel(v, kind, Vector3(wheel_x, rear_mount_y, axle_z))
+	CarSimSwitch.attach(v)  # C++ wheel physics, only while neon/sim/native is on
 
 static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
-	var w := Wheel.new()
+	var w := CarSimSwitch.new_wheel()
 	w.position = pos
 	# GEVP casts each wheel itself (force_raycast_update() in process_forces)
 	# every tick. Left enabled, RayCast3D also casts on its own right after,

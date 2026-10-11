@@ -628,14 +628,20 @@ func _physics_process(delta : float) -> void:
 	# smoothing time constant depend on the tick rate (twice as long at 120 Hz in
 	# wall-clock terms). Weight on the old value is now 0.5^(60*delta): identical
 	# to upstream at 60 Hz, same time constant at any rate.
-	local_velocity = lerp(((global_transform.origin - previous_global_position) / delta) * global_transform.basis, local_velocity, pow(0.5, 60.0 * delta))
-	previous_global_position = global_position
+	# (15c) the body does not move inside this call: read its transform once
+	var body_transform := global_transform
+	var body_origin := body_transform.origin
+	var body_basis := body_transform.basis
+	_tick_basis = body_basis
+	tick_center_of_mass = body_origin + body_basis * center_of_mass
+	local_velocity = lerp(((body_origin - previous_global_position) / delta) * body_basis, local_velocity, pow(0.5, 60.0 * delta))
+	previous_global_position = body_origin
 	speed = local_velocity.length()
 	
 	if _camber_active:
-		var right := global_basis.x
+		var right := body_basis.x
 		var flat := Vector3(right.x, 0.0, right.z).normalized()
-		body_tilt_deg = rad_to_deg(asin(clampf(global_basis.y.dot(flat), -1.0, 1.0)))
+		body_tilt_deg = rad_to_deg(asin(clampf(body_basis.y.dot(flat), -1.0, 1.0)))
 	process_drag()
 	process_braking(delta)
 	process_steering(delta)
@@ -701,7 +707,7 @@ func process_hill_hold() -> void:
 	apply_central_force(-mass * (pull + creep / HILL_HOLD_TAU))
 
 func process_drag() -> void:
-	var drag := 0.5 * air_density * pow(speed, 2.0) * frontal_area * coefficient_of_drag
+	var drag := 0.5 * air_density * (speed * speed) * frontal_area * coefficient_of_drag
 	if drag > 0.0:
 		apply_central_force(-linear_velocity.normalized() * drag)
 
@@ -912,6 +918,22 @@ const AUTO_CLUTCH_SHUT_SPEED := 3.0
 ## model; only computed while some wheel is off its stock camber.
 var body_tilt_deg := 0.0
 var _camber_active := false
+## (15) B0 tidy (2026-10-11), DEVIATION: same driving, fewer engine calls a tick
+## (the full note is in gevp_wheel.gd). Here: _physics_process reads the body's
+## transform once (c) and works out the centre of mass in world space, the same
+## point the physics engine turns the body about (center_of_mass_mode is CUSTOM,
+## so it is this node's center_of_mass); process_forces() applies the four
+## wheels' summed force and torque in one apply_central_force and one
+## apply_torque (b); pow(x, 2) is written x * x (d). No tuning number changed.
+var tick_center_of_mass := Vector3.ZERO
+var _tick_basis := Basis.IDENTITY
+## (16) Car physics in C++, step 1 (2026-10-11), DEVIATION: the only hook for
+## the native path. A car built while CarSimSwitch is on carries a bridge
+## (scripts/car/car_sim_bridge.gd); process_forces() then hands the four wheels'
+## work (ray cast, surface, suspension, tyres, summed force) to CarSim in one
+## call and returns. null on every car while the switch is off (the default),
+## and the lines below it run exactly as before.
+var sim_bridge : RefCounted = null
 ## (14) Realistic automatic (2026-10-10, DEVIATION). A car whose spec has an
 ## "auto" block (the player's cars) gets an AutoBox (scripts/car/auto_box.gd);
 ## while it is in AUTO the box replaces GEVP's automatic. auto_box stays null on
@@ -1033,7 +1055,7 @@ func process_clutch(delta : float):
 	
 	## Formula to calculate the forces needed to keep the drivetrain and motor closely coupled
 	var current_gear_ratio := get_gear_ratio(current_gear)
-	var drive_inertia := motor_moment + (pow(absf(current_gear_ratio), 2.0) * gear_inertia) + drive_axles_inertia
+	var drive_inertia := motor_moment + ((current_gear_ratio * current_gear_ratio) * gear_inertia) + drive_axles_inertia
 	var drive_inertia_R := drive_inertia / (current_gear_ratio * current_gear_ratio)
 	var reaction_torque := get_drive_wheels_reaction_torque() / current_gear_ratio
 	var speed_difference := (motor_rpm / ANGULAR_VELOCITY_TO_RPM) - (get_drivetrain_spin() * current_gear_ratio * (auto_box.speed_k if auto_box_on else 1.0))  # (14)
@@ -1142,7 +1164,7 @@ func process_transmission() -> void:
 func process_drive(delta : float) -> void:
 	var current_gear_ratio := get_gear_ratio(current_gear)
 	var drive_torque := 0.0
-	var drive_inertia := motor_moment + pow(current_gear_ratio, 2) * gear_inertia
+	var drive_inertia := motor_moment + (current_gear_ratio * current_gear_ratio) * gear_inertia
 	var is_slipping := get_is_a_wheel_slipping()
 	
 	if current_gear != 0:
@@ -1211,11 +1233,32 @@ func process_axle_drive(axle : Axle, torque : float, drive_inertia : float, delt
 	axle.rotation_split = clampf(rotation_sum, -1.0, 1.0)
 
 func process_forces(delta : float) -> void:
+	if sim_bridge != null and sim_bridge.step(self, delta):  # (16)
+		return
 	## Spring compression values are kept for antiroll bar calculations
+	# (15b) each wheel leaves its push as one force and one torque about the
+	# centre of mass; the car's total goes to the engine in two calls instead of
+	# up to twenty. No call at all with every wheel in the air, as upstream.
+	var total_force := Vector3.ZERO
+	var total_torque := Vector3.ZERO
+	var any_force := false
 	for axle in axles:
+		var left : Wheel = axle.wheels[0]
+		var right : Wheel = axle.wheels[1]
 		var previous_compression_left : float = axle.suspension_compression_left
-		axle.suspension_compression_left = axle.wheels[0].process_forces(axle.suspension_compression_right, is_braking, delta)
-		axle.suspension_compression_right = axle.wheels[1].process_forces(previous_compression_left, is_braking, delta)
+		axle.suspension_compression_left = left.process_forces(axle.suspension_compression_right, is_braking, delta)
+		axle.suspension_compression_right = right.process_forces(previous_compression_left, is_braking, delta)
+		if left.tick_has_force:
+			total_force += left.tick_force
+			total_torque += left.tick_torque
+			any_force = true
+		if right.tick_has_force:
+			total_force += right.tick_force
+			total_torque += right.tick_torque
+			any_force = true
+	if any_force:
+		apply_central_force(total_force)
+		apply_torque(total_torque)
 
 func process_stability() -> void:
 	var is_stability_on := false
@@ -1233,7 +1276,7 @@ func process_stability() -> void:
 		
 		stability_torque_vector = Vector3.ZERO
 		if get_wheel_contact_count() < 3:
-			stability_torque_vector = (global_transform.basis.y.cross(Vector3.UP) * vehicle_inertia * stability_upright_spring) + (-angular_velocity * stability_upright_damping)
+			stability_torque_vector = (_tick_basis.y.cross(Vector3.UP) * vehicle_inertia * stability_upright_spring) + (-angular_velocity * stability_upright_damping)
 			apply_torque(stability_torque_vector)
 		else:
 			stability_yaw_torque *= stability_yaw_ground_multiplier
@@ -1241,7 +1284,7 @@ func process_stability() -> void:
 		if stability_yaw_torque:
 			is_stability_on = true
 			stability_yaw_torque *= signf(-local_velocity.x)
-			apply_torque(global_transform.basis.y * stability_yaw_torque)
+			apply_torque(_tick_basis.y * stability_yaw_torque)
 	
 	stability_active = is_stability_on
 

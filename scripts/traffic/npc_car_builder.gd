@@ -22,7 +22,8 @@ class_name NpcCarBuilder
 #
 # Night lights (2026-10-07): the tail lamps glow at a running level and
 # brighten when the car brakes (instance uniform "brake", set by TrafficCar);
-# a wrecked or hazard-stopped car blinks its amber turn lamps ("hazard").
+# the amber turn lamps blink on one side before and during a lane change, on
+# both for a wrecked or hazard-stopped car (instance uniforms "turn_l", "turn_r", "hazard").
 # Each tail lamp also carries a camera-facing flare that never shrinks below
 # FLARE_MIN_SCREEN of the screen, so a car 200 m up the road is still two red points
 # instead of nothing. It only shows from behind (it fades out as the car turns
@@ -242,6 +243,7 @@ render_mode unshaded, cull_disabled;
 uniform float energy = 2.5;
 uniform float tail_gain = 1.0;
 uniform float brake_gain = 2.2;
+const float FLASH_GAIN = 3.5;
 instance uniform float brake : instance_index(1) = 0.0;
 instance uniform float hazard : instance_index(2) = 0.0;
 // Lamp functions added for every car (car-parts-every-vehicle plan): reverse,
@@ -249,6 +251,10 @@ instance uniform float hazard : instance_index(2) = 0.0;
 instance uniform float reverse : instance_index(3) = 0.0;
 instance uniform float turn_l : instance_index(4) = 0.0;
 instance uniform float turn_r : instance_index(5) = 0.0;
+// Near-miss work: 1 = the left tail lamp is out (a weaving driver's tell).
+instance uniform float tail_out : instance_index(6) = 0.0;
+// 1 while the driver flashes the headlights (at a player who cut in).
+instance uniform float flash : instance_index(7) = 0.0;
 varying float side;
 void vertex() {
 	// Model space: the car's right-hand side is +x.
@@ -277,6 +283,11 @@ void fragment() {
 	float is_lit = turn * step(0.5, want);
 	float ind = mix(0.3, mix(0.1, 2.5, blink), is_lit);
 	k = mix(k, ind, turn);
+	// A dead left tail lamp.
+	k *= mix(1.0, 0.03, tail * tail_out * step(side, 0.0));
+	// The head lamps (warm white: the only lamp with all three channels up).
+	float head = step(0.8, c.r) * step(0.7, c.g) * step(0.3, c.b);
+	k *= mix(1.0, FLASH_GAIN, head * flash);
 	ALBEDO = c;
 	EMISSION = c * energy * k;
 }
@@ -297,8 +308,11 @@ uniform float gain = 1.0;
 uniform float near_r = 0.14;
 uniform float min_screen = 0.006;
 instance uniform float brake : instance_index(1) = 0.0;
+instance uniform float tail_out : instance_index(6) = 0.0;
 varying float v_face;
 void vertex() {
+	// The left tail lamp is out: no flare on that side.
+	float lamp_out = step(0.5, tail_out) * step(VERTEX.x, 0.0);
 	vec3 c = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	float d = max(-c.z, 0.05);
 	vec3 rear = normalize((MODELVIEW_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
@@ -306,7 +320,7 @@ void vertex() {
 	// The view's height at distance d is 2d / |P[1][1]| (negative under
 	// Vulkan's flipped Y, hence the abs).
 	float far_r = min_screen * 2.0 * d / abs(PROJECTION_MATRIX[1][1]);
-	float r = max(near_r, far_r) * (1.0 + 0.6 * brake) * v_face * step(0.001, gain);
+	float r = max(near_r, far_r) * (1.0 + 0.6 * brake) * v_face * step(0.001, gain) * (1.0 - lamp_out);
 	c *= max(d - 0.25, 0.05) / d;
 	c.xy += UV * r;
 	VERTEX = c;
@@ -340,19 +354,36 @@ static func set_light_glow(g: float) -> void:
 	if _flare_mat != null:
 		_flare_mat.set_shader_parameter("gain", g)
 
-## Brake (0..1) and hazard (on/off) for one car's lamps; `vis` is its
-## chassis_visual. Instance uniforms on the body, no material change. The
-## player's cars (and the coupe) also have reverse lamps and left/right
-## indicators; the extra arguments default to off so traffic's call is unchanged.
-static func set_lamps(vis: Node3D, brake: float, hazard: bool, reverse := false,
-		turn_left := false, turn_right := false) -> void:
+## Head lamps on full for a flash (TrafficCar: flashing back at the player).
+## One instance uniform, written at the start and end of each flash.
+static func set_flash(vis: Node3D, on: bool) -> void:
 	var mi := vis.get_node_or_null(^"Body") as MeshInstance3D
 	if mi != null:
+		mi.set_instance_shader_parameter("flash", 1.0 if on else 0.0)
+
+## Turn lamp states for set_lamps.
+const TURN_OFF := 0
+const TURN_LEFT := 1
+const TURN_RIGHT := 2
+const TURN_BOTH := 3
+## Added to a turn state: the left tail lamp is out.
+const TAIL_OUT := 4
+
+## Brake (0..1) and turn lamps (TURN_OFF / LEFT / RIGHT / BOTH = hazard,
+## + TAIL_OUT for a dead left tail lamp) for one car's lamps; `vis` is its
+## chassis_visual. Instance uniforms on the body, no material change. The
+## player's cars (and the coupe) also have reverse lamps; that argument
+## defaults to off so traffic's call is unchanged.
+static func set_lamps(vis: Node3D, brake: float, turn: int, reverse := false) -> void:
+	var mi := vis.get_node_or_null(^"Body") as MeshInstance3D
+	if mi != null:
+		var sig := turn & 3
 		mi.set_instance_shader_parameter("brake", brake)
-		mi.set_instance_shader_parameter("hazard", 1.0 if hazard else 0.0)
+		mi.set_instance_shader_parameter("hazard", 1.0 if sig == TURN_BOTH else 0.0)
 		mi.set_instance_shader_parameter("reverse", 1.0 if reverse else 0.0)
-		mi.set_instance_shader_parameter("turn_l", 1.0 if turn_left else 0.0)
-		mi.set_instance_shader_parameter("turn_r", 1.0 if turn_right else 0.0)
+		mi.set_instance_shader_parameter("turn_l", 1.0 if sig == TURN_LEFT else 0.0)
+		mi.set_instance_shader_parameter("turn_r", 1.0 if sig == TURN_RIGHT else 0.0)
+		mi.set_instance_shader_parameter("tail_out", 1.0 if (turn & TAIL_OUT) != 0 else 0.0)
 
 static func is_npc(kind: String) -> bool:
 	return KINDS.has(kind)

@@ -76,6 +76,34 @@ const PLAYER_UNDERSTEER_FF := 0.0008
 static func lane_driver(lane_x: float, throttle: float, max_speed: float = INF) -> Callable:
 	return TestDriver.legacy_lane(lane_x, throttle, max_speed)
 
+## A driver for PlayerCar.driver that does what the player is asked to do since
+## the near-miss fix (2026-10-10: traffic no longer clears the lane for a
+## closing player on its own): holds the lane centre `lane_x`, flashes the car
+## ahead (once a second while it is in the lane and slower), and brakes behind
+## it until it has moved over. Full throttle up to `max_speed` (m/s) otherwise.
+static func flash_brake_driver(traffic: TrafficManager, lane_x: float, max_speed: float = 100.0) -> Callable:
+	var last_flash := [-10.0]
+	return func(c: PlayerCar) -> void:
+		var u := RoadFrame.unroll(c.global_position)
+		var side_v := RoadFrame.dir_to_road(u.z, c.linear_velocity).x
+		c.steering_input = TrafficCar.lane_steer(c, lane_x - side_v * LAT_DAMP_T, -1.0, 2.5, PLAYER_UNDERSTEER_FF)
+		c.handbrake_input = 0.0
+		var v := c.current_speed()
+		var gap := traffic.scan(u.z, -1.0, lane_x - 1.0, lane_x + 1.0, true, 0, TrafficManager.PLAYER_HALF_L, 300.0, false)
+		var lead_v := traffic.q_speed
+		var a := (max_speed - v) * 2.0
+		if gap < INF:
+			a = minf(a, TrafficCar.follow_accel(v, max_speed, gap, lead_v, 1.0))
+			if gap < TrafficManager.FLASH_REACH - 10.0 and v > lead_v + 2.0 and traffic.now - float(last_flash[0]) > 1.0:
+				last_flash[0] = traffic.now
+				c.beams.flash()
+		if a < -0.3:
+			c.throttle_input = 0.0
+			c.brake_input = clampf(-a / 9.0, 0.0, 1.0)
+		else:
+			c.throttle_input = clampf(a, 0.0, 1.0)
+			c.brake_input = 0.0
+
 ## Own-direction lane centre, lane 0 nearest the centre line (the fast lane).
 static func lane_x(i: int) -> float:
 	return TrafficManager.lane_centre(i, false)

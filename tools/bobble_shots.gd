@@ -7,7 +7,7 @@ extends SceneTree
 # Needs the real renderer (no --headless). Writes PNGs to user://bobble_shots/.
 #
 #   <godot> --path . -s res://tools/bobble_shots.gd
-# BOBBLE=<id> picks the figure for the two dash views (default kasumi_driver);
+# BOBBLE=<id> picks the figure for the two dash views (default ledger);
 # BOBBLE_ALL=1 also writes one close-up per figure.
 
 var game: Node
@@ -16,7 +16,7 @@ func _initialize() -> void:
 	AudioSettings.path = "user://bobble_shots_settings.cfg"
 	OS.set_environment("NEON_TRAFFIC", "0")
 	var pick := OS.get_environment("BOBBLE")
-	OS.set_environment("NEON_CABIN_MODS", "trinket=none;bobble=%s" % (pick if pick != "" else "kasumi_driver"))
+	OS.set_environment("NEON_CABIN_MODS", "trinket=none;bobble=%s" % (pick if pick != "" else "ledger"))
 	game = (load("res://Game.tscn") as PackedScene).instantiate()
 	root.add_child(game)
 	_run.call_deferred()

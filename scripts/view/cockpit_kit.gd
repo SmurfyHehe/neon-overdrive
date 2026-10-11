@@ -129,6 +129,12 @@ func offset(by: Vector3) -> void:
 	for i in _v.size():
 		_v[i] += by
 
+## Turns everything built so far by `basis` about the point `about`.
+func rotate(basis: Basis, about: Vector3) -> void:
+	for i in _v.size():
+		_v[i] = about + basis * (_v[i] - about)
+		_n[i] = basis * _n[i]
+
 ## Raises every vertex below `min_y` to it (the underside's ground clearance).
 func clamp_above(min_y: float) -> void:
 	for i in _v.size():

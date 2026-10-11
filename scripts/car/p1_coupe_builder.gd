@@ -95,26 +95,18 @@ void fragment() {
 }
 """
 
-## Lights are drawn from both sides: the lamp lenses are single quads laid on
-## the body, and the design's left pop-up lens is wound the other way round
-## (one side of the sheet's 4 head triangles), which backface culling would hide.
-const GLOW_SHADER := """
-shader_type spatial;
-render_mode unshaded, cull_disabled;
-uniform float energy = 2.5;
-void fragment() {
-	ALBEDO = COLOR.rgb;
-	EMISSION = COLOR.rgb * energy;
-}
-"""
-
+## The lamps use NpcCarBuilder's glow shader (drawn from both sides: the lamp
+## lenses are single quads laid on the body, and the design's left pop-up lens
+## is wound the other way round, which backface culling would hide). It gives
+## the coupe the same lamp channels as every car: brake, reverse, indicators.
 static var _body_mesh: ArrayMesh
 static var _wheel_meshes := {}
 static var _body_shader: Shader
-static var _glow_shader: Shader
 static var _glass_mat: StandardMaterial3D
-static var _glow_mat: ShaderMaterial
 static var _wheel_mat: ShaderMaterial
+## CarFittings' counts and points for this body (see NpcCarBuilder.fittings).
+static var _fit_counts := {}
+static var _fit_points := {}
 
 ## Body, glass, lights and the sticker slot markers -- no wheels, those hang
 ## under the physics wheel nodes (build_wheel_visual). Metas, read by CarFx
@@ -168,6 +160,9 @@ static func build_chassis_visual(paint: Color = PAINT) -> Node3D:
 	root.set_meta("body_mat", paint_mat)
 	root.set_meta("half_w", WIDTH / 2.0)
 	root.set_meta("half_l", LENGTH / 2.0)
+	# Which small parts this body carries (CarSlots, tests/car/required_slots.gd).
+	root.set_meta("fittings", _fit_counts)
+	root.set_meta("fitting_points", _fit_points)
 	# The real underside (car-parts plan, section 5b): one more draw call.
 	Undercarriage.attach(root, undercarriage_params(), Undercarriage.ROLE_PLAYER)
 	return root
@@ -226,7 +221,13 @@ static func triangle_count() -> int:
 		n += b.surface_get_array_len(i) / 3
 	for rear in [false, true]:
 		n += 2 * _get_wheel_mesh(rear).surface_get_array_len(0) / 3
-	return n
+	return n - fittings_triangle_count()
+
+## Triangles CarFittings merged into the body (lenses and plates), on top of
+## the design's TRIS_TOTAL. No extra draw call: they sit in the body's surfaces.
+static func fittings_triangle_count() -> int:
+	_get_body_mesh()
+	return int(_fit_counts.get("tris", 0))
 
 ## Draw calls of one car: body surfaces, the door mirrors, the underside,
 ## plus one per wheel.
@@ -316,6 +317,13 @@ static func _build_mesh(tris: PackedVector3Array, mats: PackedByteArray, is_body
 			g[0].append(p)
 			g[1].append(n)
 			g[2].append(col)
+	if is_body:
+		# Reverse and third brake lenses, the indicators the sheet lacks and both
+		# plates (CarFittings), merged into the body's own surfaces.
+		var fit := CarFittings.build(KIND + "|" + Data.BUILD, tris, mats, Data.NAMES, Data.GLASS, Data.EMISSIVE, Data.COLORS)
+		_fit_counts = fit.counts
+		_fit_points = fit.points
+		NpcCarBuilder._append_fittings(groups, fit)
 	var mesh := ArrayMesh.new()
 	for kind in ["body", "glass", "glow"]:
 		if not groups.has(kind):
@@ -387,10 +395,4 @@ static func _get_glass_material() -> StandardMaterial3D:
 	return _glass_mat
 
 static func _get_glow_material() -> ShaderMaterial:
-	if _glow_mat == null:
-		_glow_shader = Shader.new()
-		_glow_shader.code = GLOW_SHADER
-		_glow_mat = ShaderMaterial.new()
-		_glow_mat.shader = _glow_shader
-		_glow_mat.set_shader_parameter("energy", GLOW_ENERGY)
-	return _glow_mat
+	return NpcCarBuilder._get_glow_material()

@@ -86,7 +86,10 @@ func _physics_process(_delta: float) -> bool:
 				return _end()
 		2, 4:
 			wait += 1
-			_hold(player, GasStation.own_edge(1000.0, 1) + 3.0, 1000.0, 0.0)
+			# beside the slip lane past exit 1's merge: clear of every ramp
+			# (since the ring sites, 1000 m is exit 2's gore, where its ramp
+			# leaves the road)
+			_hold(player, GasStation.own_edge(700.0, 1) + 3.0, 700.0, 0.0)
 			if wait > 40:
 				phase += 1
 				wait = 0

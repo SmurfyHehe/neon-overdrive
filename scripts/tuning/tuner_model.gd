@@ -492,11 +492,16 @@ func _preset_values(name: String) -> Dictionary:
 		"Drift":
 			# Easy slides, not a spin: the first cut (locked diff, stiff rear bar,
 			# stability off) spun the coupe right round on the test track.
+			# Rear pressure +0.1 bar, not +0.2: since the tyre slide state (#498)
+			# the +0.2 car spun round on the track's 60 Hz corner run (174 deg;
+			# 30 deg before #498), and so did +0.175; +0.15 held 31 deg on the
+			# edge of it. +0.1 slides 14 deg against Stock's 11.5 with room to
+			# spare. At the game's 120 Hz every one of these holds about 6 deg.
 			out["rear_locking_differential_engage_torque"] = 100.0
 			out["rear_arb_ratio"] = stock.rear_arb_ratio + 0.1
 			out["front_toe"] = -0.005
 			out["max_steering_angle"] = deg_to_rad(48.0)
-			out["rear_tyre_pressure"] = stock.rear_tyre_pressure + 0.2
+			out["rear_tyre_pressure"] = stock.rear_tyre_pressure + 0.1
 			out.merge(choice_values("traction", 0))
 			out.merge(choice_values("stability", 1))
 	for p in out:

@@ -42,6 +42,14 @@ static func boot(tree: SceneTree, car_count: int, detail: float, seed_value: int
 	OS.set_environment("NEON_RNG_SEED", str(seed_value))
 	OS.set_environment("NEON_TRAFFIC", "")  # run_tests.bat sets 0 for the other tests
 	AudioSettings.path = SETTINGS_PATH
+	# This scratch file outlives the run, and Game reads [keys] from it: a
+	# rebinding left by an earlier test (horn on H, which unbinds the lights
+	# key) must not reach this one. Seen on the laptop: police_patrol failed
+	# "no key for headlights" from a stale horn=H.
+	var stale := ConfigFile.new()
+	if stale.load(SETTINGS_PATH) == OK and stale.has_section("keys"):
+		stale.erase_section("keys")
+		stale.save(SETTINGS_PATH)
 	TrafficSettings.set_car_count(car_count)
 	TrafficSettings.set_detail_distance(detail)
 	TrafficSettings.save_settings()

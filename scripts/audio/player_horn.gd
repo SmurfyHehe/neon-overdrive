@@ -37,7 +37,7 @@ var horn := ""
 var presses := 0
 var patterns: Array[String] = []
 
-var _voice: AudioStreamPlayer3D
+var _voice: Sound3D   # not AudioStreamPlayer3D: issue #567 (sound_3d.gd)
 var _down := false
 var _held := 0.0
 var _leaned := false
@@ -54,10 +54,9 @@ func _init() -> void:
 func _ready() -> void:
 	if kind == "" and get_parent() is PlayerCar:
 		kind = PlayerCar.chassis_kind()
-	_voice = AudioStreamPlayer3D.new()
+	_voice = Sound3D.new()
 	_voice.name = "HornVoice"
-	# the tail fades every frame while it sounds: a gain bus (#567)
-	PlayerGain.route(_voice, &"Traffic", HORN_DB)
+	_voice.bus = &"Traffic"
 	_voice.unit_size = 14.0
 	_voice.max_distance = 160.0
 	add_child(_voice)
@@ -109,7 +108,7 @@ func _process(delta: float) -> void:
 		_voice.stop()
 		_sounding = false
 	else:
-		PlayerGain.set_db(_voice, HORN_DB + linear_to_db(1.0 - _tail_t / TAIL_S))
+		_voice.volume_db = HORN_DB + linear_to_db(1.0 - _tail_t / TAIL_S)
 
 func _press() -> void:
 	presses += 1
@@ -124,7 +123,7 @@ func _press() -> void:
 	if take == null:
 		return   # still being built: this one is silent
 	_voice.stream = take
-	PlayerGain.set_db(_voice, HORN_DB)
+	_voice.volume_db = HORN_DB
 	_voice.play()
 
 func _release() -> void:

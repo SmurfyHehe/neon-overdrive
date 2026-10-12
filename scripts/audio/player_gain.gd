@@ -27,18 +27,25 @@ extends RefCounted
 #
 # Pitch writes are safe: pitch_scale is one atomic number per playback.
 # AudioStreamPlayer3D swaps bus details itself every mix while it plays (its
-# panning), so a 3D player cannot be made safe from here.
+# panning), so the game has none: Sound3D does the same job on a spatial gain
+# bus (route(..., true): amplifier, then an AudioEffectPanner and the distance
+# high-shelf, each a plain number the mix thread reads).
 
 const PREFIX := "Gain"
 
 static var _free: Array[StringName] = []
+static var _free_3d: Array[StringName] = []
 static var _made := 0
 
 ## Puts `player` on a gain bus of its own that sends to `target`, at `db`.
 ## Call it while the player is stopped (at spawn): it sets the player's bus.
-## From then on use set_db(), never player.volume_db.
-static func route(player: Node, target: StringName, db := 0.0) -> void:
+## From then on use set_db(), never player.volume_db. The gain bus is added
+## after every bus there is, so `target` must already exist (a bus only sends
+## to one before it; the game's all come from the layout). `spatial`: the bus also
+## carries a panner and a high-shelf filter (Sound3D sets them, see pan()).
+static func route(player: Node, target: StringName, db := 0.0, spatial := false) -> void:
 	player.set_meta(&"gain_target", target)
+	player.set_meta(&"gain_spatial", spatial)
 	player.volume_db = 0.0
 	_take(player, db)
 	player.tree_entered.connect(func() -> void:
@@ -49,6 +56,15 @@ static func route(player: Node, target: StringName, db := 0.0) -> void:
 ## The player's level, dB. Safe every frame while it plays.
 static func set_db(player: Node, db: float) -> void:
 	(player.get_meta(&"gain_amp") as AudioEffectAmplify).volume_db = db
+
+## A spatial player's left/right balance (AudioEffectPanner pan, -1 .. 1) and
+## its distance high-shelf (gain as a linear factor, cutoff in Hz).
+static func pan(player: Node, balance: float, shelf_gain: float, shelf_hz: float) -> void:
+	var fx: Array = player.get_meta(&"gain_fx")
+	(fx[0] as AudioEffectPanner).pan = balance
+	var shelf := fx[1] as AudioEffectHighShelfFilter
+	shelf.gain = shelf_gain
+	shelf.cutoff_hz = shelf_hz
 
 ## The amplifier that carries the player's level (to tween its volume_db).
 static func amp(player: Node) -> AudioEffectAmplify:
@@ -104,21 +120,34 @@ static func _spare(p: AudioStreamPlayer) -> AudioStreamPlayer:
 	return oldest
 
 static func _take(player: Node, db: float) -> void:
+	var spatial: bool = player.get_meta(&"gain_spatial", false)
+	var pool := _free_3d if spatial else _free
 	var name: StringName
-	if _free.is_empty():
-		name = StringName("%s%d" % [PREFIX, _made])
+	if pool.is_empty():
+		name = StringName("%s%s%d" % [PREFIX, "3D" if spatial else "", _made])
 		_made += 1
 		var i := AudioServer.bus_count
 		AudioServer.add_bus(i)
 		AudioServer.set_bus_name(i, name)
 		AudioServer.add_bus_effect(i, AudioEffectAmplify.new(), 0)
+		if spatial:
+			AudioServer.add_bus_effect(i, AudioEffectPanner.new(), 1)
+			# AudioStreamPlayer3D's own distance filter: a one-stage high shelf
+			# with resonance 1 (AudioServer._mix_step_for_channel)
+			var shelf := AudioEffectHighShelfFilter.new()
+			shelf.resonance = 1.0
+			shelf.db = AudioEffectFilter.FILTER_6DB
+			shelf.gain = 1.0
+			AudioServer.add_bus_effect(i, shelf, 2)
 	else:
-		name = _free.pop_back()
+		name = pool.pop_back()
 	var idx := AudioServer.get_bus_index(name)
 	AudioServer.set_bus_send(idx, player.get_meta(&"gain_target"))
 	var amp := AudioServer.get_bus_effect(idx, 0) as AudioEffectAmplify
 	amp.volume_db = db
 	player.set_meta(&"gain_amp", amp)
+	if spatial:
+		player.set_meta(&"gain_fx", [AudioServer.get_bus_effect(idx, 1), AudioServer.get_bus_effect(idx, 2)])
 	player.bus = name
 
 static func _give(player: Node) -> void:
@@ -126,4 +155,4 @@ static func _give(player: Node) -> void:
 		return
 	player.set_meta(&"gain_last", (player.get_meta(&"gain_amp") as AudioEffectAmplify).volume_db)
 	player.remove_meta(&"gain_amp")
-	_free.append(player.bus)
+	(_free_3d if player.get_meta(&"gain_spatial", false) else _free).append(player.bus)

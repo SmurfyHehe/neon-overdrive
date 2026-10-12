@@ -39,6 +39,9 @@ var ticks_in_sim: Dictionary = {}
 var max_gap := 0
 var both_parities := true
 var per_tick_runs := PackedInt32Array()
+## Per tick, the runs that are a car's first after coming into the sim: those
+## run at once by design (TrafficCar._drive), whatever tick they land on.
+var per_tick_entries := PackedInt32Array()
 var wheels_on_drawn := 0
 var wheels_off_hidden := 0
 var wheel_mismatch := 0
@@ -87,6 +90,7 @@ func _physics_process(_delta: float) -> bool:
 		return false
 	phase_tick += 1
 	var ran := 0
+	var entered := 0
 	for car in traffic.cars:
 		var id := car.get_instance_id()
 		if not car.detailed or car.benched:
@@ -100,6 +104,8 @@ func _physics_process(_delta: float) -> bool:
 				last_run[id] = car._ai_last
 				runs[id] = int(runs.get(id, 0)) + 1
 				ran += 1
+				if seen_last < 0:
+					entered += 1
 			if not car.changing:
 				var err := absf(RoadFrame.unroll(car.global_position).x - car.path_x())
 				lane_err_sum[phase - 1] += err
@@ -119,6 +125,7 @@ func _physics_process(_delta: float) -> bool:
 				wheels_off_hidden += 1
 	if phase == 1:
 		per_tick_runs.append(ran)
+		per_tick_entries.append(entered)
 	if phase_tick >= PHASE_TICKS:
 		if phase == 1:
 			_check_stagger()
@@ -168,8 +175,26 @@ func _check_stagger() -> void:
 			even += per_tick_runs[k]
 	_check(total > 0 and even * 4 >= total and (total - even) * 4 >= total, "controller runs are not split over alternate ticks: %d on even ticks, %d on odd" % [even, total - even])
 	var mean := float(total) / float(maxi(per_tick_runs.size(), 1))
-	_check(float(worst) <= mean * 2.0 + 2.0, "one tick ran %d controllers, mean %.1f: not spread" % [worst, mean])
-	print("stagger: stride %d, cars sampled %d, max gap %d ticks, controller runs per tick mean %.1f worst %d" % [stride, cars_sampled, max_gap, mean, worst])
+	# Spread at every moment: over any `stride` ticks in a row, no tick takes
+	# more than its even share of the runs (rounded up), not counting a car's
+	# first run after coming into the sim. (This used to compare the worst tick
+	# with twice the mean of the whole phase, but the cars in the sim come and
+	# go: 10 at once split 5 and 5 is spread, while the phase mean was 1.5.)
+	var lumpy := 0
+	var lumpy_worst := ""
+	for k in range(per_tick_runs.size() - stride + 1):
+		var sum := 0
+		var top := 0
+		for j in stride:
+			var r := per_tick_runs[k + j] - per_tick_entries[k + j]
+			sum += r
+			top = maxi(top, r)
+		if top > ceili(float(sum) / float(stride)):
+			lumpy += 1
+			if lumpy_worst == "" or top > int(lumpy_worst.get_slice(" ", 0)):
+				lumpy_worst = "%d of %d" % [top, sum]
+	_check(lumpy == 0, "controller runs not spread on %d of %d ticks (worst: %s runs on one tick of %d)" % [lumpy, per_tick_runs.size(), lumpy_worst, stride])
+	print("stagger: stride %d, cars sampled %d, max gap %d ticks, controller runs per tick mean %.1f worst %d, unspread ticks %d" % [stride, cars_sampled, max_gap, mean, worst, lumpy])
 
 func _finish() -> bool:
 	_check(wheel_mismatch == 0, "%d car-ticks where the wheel process did not follow visibility" % wheel_mismatch)

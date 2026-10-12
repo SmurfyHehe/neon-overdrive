@@ -19,8 +19,9 @@ extends Node
 # estimate and rejected: in a 4.7 headless probe they changed about once a
 # second and read above the frame time.)
 #
-# Benchmark runs, headless runs and runs with NEON_GFX set never auto-pick.
+# Benchmark runs, headless runs, tests and runs with NEON_GFX set never auto-pick.
 
+const TestMode := preload("res://scripts/core/test_mode.gd")
 const WARMUP_SECS := 2.0
 const MEASURE_SECS := 3.0
 const LOW_BELOW := 50.0
@@ -36,9 +37,13 @@ var _uncapped := false
 ## True while measuring: DynamicResolution holds still so it does not skew the GPU time.
 static var running := false
 
+## Never in a test (TestMode): a test starts from a fresh settings file, and
+## on a slow renderer the pick switched the preset to Low part way through,
+## which changed the traffic count, hid the undersides and moved the draw call
+## counts the window tests compare (#581).
 static func wanted() -> bool:
 	return GraphicsSettings.needs_auto_pick() and not Benchmark.requested() \
-		and DisplayServer.get_name() != "headless"
+		and DisplayServer.get_name() != "headless" and not TestMode.active()
 
 ## The tier for an estimated frame rate.
 static func pick_for(fps: float) -> String:

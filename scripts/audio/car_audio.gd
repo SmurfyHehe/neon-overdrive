@@ -487,7 +487,7 @@ func _drive_pair(layer: String, amplitude: float, pitch: float) -> void:
 	_drive_layer(_players[layer + "_b"], amplitude * 0.71, pitch * 0.985)
 
 func _drive_layer(p: AudioStreamPlayer, amplitude: float, pitch: float) -> void:
-	p.volume_db = linear_to_db(amplitude) if amplitude > 0.0005 else -80.0
+	AudioDsp.set_volume_db(p, linear_to_db(amplitude) if amplitude > 0.0005 else -80.0)
 	p.pitch_scale = pitch
 
 ## Starts making every layer _ready() asks for off the main thread, so a cold

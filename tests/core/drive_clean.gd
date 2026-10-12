@@ -83,9 +83,9 @@ func _physics_process(_delta: float) -> bool:
 		road_cap = minf(road_cap, bot._bend_v)
 	if OS.get_environment("DRIVE_DEBUG") == "1" and phase_tick % 30 == 0:
 		var u := RoadFrame.unroll(p.global_position)
-		print("  t=%.2f v=%.0f x=%.2f lane=%d slip=%.2f head=%.2f steer=%.2f thr=%.2f brk=%.2f gear=%d gap=%.0f bend=%.0f rec=%d k=%.5f" % [
+		print("  t=%.2f v=%.0f x=%.2f lane=%d slip=%.2f head=%.2f steer=%.2f thr=%.2f brk=%.2f gear=%d gap=%.0f bend=%.0f rec=%d k=%.5f ff=%.5f" % [
 			phase_tick / float(RATE), p.current_speed() * 3.6, u.x, bot.lane, TestDriver.slip_angle(p), TestDriver.heading_error(p),
-			p.steer_fraction(), p.throttle_input, p.brake_input, p.current_gear, minf(bot._gap, 9999.0), minf(bot._bend_v, 999.0) * 3.6, bot._rec, RoadFrame.curvature_at(u.z)])
+			p.steer_fraction(), p.throttle_input, p.brake_input, p.current_gear, minf(bot._gap, 9999.0), minf(bot._bend_v, 999.0) * 3.6, bot._rec, RoadFrame.curvature_at(u.z), bot._understeer])
 	var bad := TestDriver.sanity(p)
 	if bad != "":
 		fails.append("%s: %s" % [_name(), bad])

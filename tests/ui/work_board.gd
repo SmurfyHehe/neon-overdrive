@@ -270,27 +270,57 @@ func _frames_budget() -> void:
 	# A fresh day on the board, then in a job.
 	shop.data = {}
 	shop.begin_day(2)
-	# What the bare rig costs (state machine, clock, wallet) with the board hidden.
-	var base_ms := await _avg_process_ms()
 	gs.open_workboard()   # from the garage the walk ended in
 	await process_frame
 	_check(gs.state == GameState.State.WORKBOARD and screen.mode == "board", "Walt's board row did not reopen the board")
-	var board_ms := await _avg_process_ms() - base_ms
+	var board_ms := await _screen_cost_ms()
 	_check(board_ms < BUDGET_MS, "the board takes %.3f ms per frame, budget %.1f" % [board_ms, BUDGET_MS])
 	screen.press(&"accept")
-	var job_ms := await _avg_process_ms() - base_ms
 	_check(screen.mode == "job", "frame test: not in a job (mode %s)" % screen.mode)
+	var job_ms := await _screen_cost_ms()
 	_check(job_ms < BUDGET_MS, "a job takes %.3f ms per frame, budget %.1f" % [job_ms, BUDGET_MS])
-	print("work_board: rig alone %.3f ms; board +%.3f ms, job +%.3f ms per frame (budget %.1f)" % [base_ms, board_ms, job_ms, BUDGET_MS])
+	print("work_board: board +%.3f ms, job +%.3f ms per frame (budget %.1f)" % [board_ms, job_ms, BUDGET_MS])
 
-func _avg_process_ms() -> float:
-	var total := 0.0
+## What the screen's own processing costs per frame (#579): the screen and
+## everything under it are moved to a process priority of their own, between
+## two probe nodes that read the clock just before and just after them. The
+## frame-time monitor this used to read is the whole frame's wall time, which
+## on a busy machine (and headless, where frames are paced) swung by
+## milliseconds either way and did not even move when 1 ms of work was added
+## to the screen.
+func _screen_cost_ms() -> float:
+	const P := 1000000
+	var nodes: Array[Node] = [screen]
+	nodes.append_array(screen.find_children("*", "", true, false))
+	var prio: Array[int] = []
+	for n in nodes:
+		prio.append(n.process_priority)
+		n.process_priority = P
+	var probes: Array[TimeProbe] = []
+	for k in 2:
+		var probe := TimeProbe.new()
+		probe.process_mode = Node.PROCESS_MODE_ALWAYS
+		probe.process_priority = P - 1 if k == 0 else P + 1
+		root.add_child(probe)
+		probes.append(probe)
 	for i in 20:
-		await process_frame   # warm up
+		await process_frame   # settle
+	var total := 0
 	for i in FRAMES:
 		await process_frame
-		total += Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
-	return total / FRAMES
+		total += probes[1].at - probes[0].at
+	for k in nodes.size():
+		if is_instance_valid(nodes[k]):
+			nodes[k].process_priority = prio[k]
+	for probe in probes:
+		probe.queue_free()
+	return total / 1000.0 / FRAMES
+
+## Reads the clock when the tree processes it (_screen_cost_ms).
+class TimeProbe extends Node:
+	var at := 0
+	func _process(_delta: float) -> void:
+		at = Time.get_ticks_usec()
 
 # ---------- screenshots ----------
 

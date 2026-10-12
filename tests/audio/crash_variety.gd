@@ -151,7 +151,12 @@ func _process(delta: float) -> bool:
 			# each surface held at 20 m/s for 9 s, then let go
 			var kinds := CrashAudio.SCRAPE_KINDS
 			var kind: String = kinds[scrape_i]
-			if step_t < delta * 1.5:
+			# once per surface, on its first frame (#574: "step_t < 1.5 delta"
+			# also held on the second frame when that frame was over twice as
+			# long as the first, so on a loaded machine the bite fired in the
+			# first frame was left out of the count)
+			if samples.get("scrape_kind", "") != kind:
+				samples.scrape_kind = kind
 				samples.plays0 = crash.plays.size()
 				samples.peak = 0.0
 				samples.spark = 0.0

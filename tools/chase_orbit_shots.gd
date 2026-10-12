@@ -29,13 +29,14 @@ func _run() -> void:
 		c.brake_input = clampf(-err * 0.3, 0.0, 1.0)
 		c.steering_input = 0.0
 	cam.shake_enabled = false
+	_hide_hud(root)   # no HUD text over the shots (Roy, 2026-10-11)
 	cam.set_view(ChaseCamera.View.CHASE)
 	var dir := OS.get_environment("NEON_SHOT_DIR")
 	if dir == "":
 		dir = "C:/SmurfyHehe/review-shots/look-around-1"
 	DirAccess.make_dir_recursive_absolute(dir)
 	var kind := PlayerCar.chassis_kind()
-	for i in 600:
+	for i in 1800:   # the beater needs most of a minute to reach 100 km/h
 		await process_frame
 		if absf(p.current_speed() - CRUISE) < 1.5 and i > 240:
 			break
@@ -78,3 +79,10 @@ func _shot(dir: String, kind: String, tag: String, cam: ChaseCamera) -> void:
 	var path := "%s/%s_%s.png" % [dir, kind, tag]
 	img.save_png(path)
 	print("%s: orbit %.1f, lift %.2f, speed %.1f m/s" % [path, cam.orbit_yaw, cam.orbit_lift, (game.get("player") as PlayerCar).current_speed()])
+
+## No HUD over the shots: every CanvasLayer in the tree goes dark.
+func _hide_hud(n: Node) -> void:
+	if n is CanvasLayer:
+		(n as CanvasLayer).visible = false
+	for c in n.get_children():
+		_hide_hud(c)

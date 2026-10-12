@@ -28,6 +28,9 @@ const CABIN := {
 	"door_x": 0.750, "door_x_rear": 0.750, "door_x_front": 0.730, "glass_x": 0.775, "glass_top": 1.300,
 	"a_pillar": [Vector3(0.780, 0.829, -0.700), Vector3(0.620, 1.345, -0.030)],
 	"b_pillar_z": 0.420, "rear_z": 0.920,
+	# Hood view (2026-10-11, judged on screenshots): the cowl default showed the
+	# fender humps over a third of the screen; forward and up keeps them in the bottom fifth.
+	"hood_cam": Vector3(0.0, 1.10, -1.40),
 	"shelf": {"y": 1.011, "z0": 0.920, "z1": 1.622, "half_w": 0.736},
 	"wheel": Vector3(-0.360, 0.770, -0.180), "wheel_tilt_deg": -25.0,
 	"cluster": Vector2(0.930, -0.349), "cluster_style": "dials", "speedo_max_kmh": 300.0,

@@ -1,0 +1,28 @@
+#!/usr/bin/env python
+# Builds the neon_sim GDExtension: CarSim (the car physics' per-wheel work in
+# C++), GevpTyreNative (the first tyre-maths trial) and CrossingBench
+# (engine-call cost measurement). Needs godot-cpp 10.0.0-stable:
+#   git clone https://github.com/godotengine/godot-cpp && git -C godot-cpp checkout 507ed9d840c01a3c5b2a39af8bb4000bfac30bf5
+# either next to this file (what the "Native sim library" workflow does) or
+# anywhere else with environment variable GODOT_CPP pointing at it. On Windows
+# keep it on a short path (C:/Users/<you>/gcpp10): from deep inside a worktree
+# the compiler runs out of path length (error C1083). Then, in the VS x64 build
+# shell:
+#   scons platform=windows target=template_release arch=x86_64
+#   scons platform=windows target=template_debug arch=x86_64
+# (tools/build-native.ps1 does both). Output:
+# addons/neon_sim/neon_sim.<platform>.<target>.<arch>.dll, which are committed so
+# a checkout runs without a compiler.
+# api_version is pinned here so the library asks for Godot 4.7 or later.
+
+import os
+
+godot_cpp = os.environ.get("GODOT_CPP", "godot-cpp")
+env = SConscript(godot_cpp + "/SConstruct", {"api_version": "4.7"})
+env.Append(CPPPATH=["src/"])
+sources = Glob("src/*.cpp")
+library = env.SharedLibrary(
+    "../../addons/neon_sim/neon_sim{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
+    source=sources,
+)
+Default(library)

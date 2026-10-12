@@ -1349,6 +1349,7 @@ static func _new_sidewalk_collision(body_name: String) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = body_name
 	body.add_to_group("Kerb")  # CarSpec gives the "Kerb" surface its own grip numbers
+	CarSimSwitch.note_ground(body)
 	body.collision_layer = 1 << (CarSpec.KERB_LAYER - 1)  # wheels only, see CarSpec
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
@@ -1533,6 +1534,7 @@ static func _new_road_collision() -> StaticBody3D:
 	body.name = "RoadCol"
 	body.set_meta(SurfaceMap.BANDS_META, true)
 	body.add_to_group("Road")
+	CarSimSwitch.note_ground(body)
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
 	var tri := ConcavePolygonShape3D.new()

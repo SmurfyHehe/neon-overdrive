@@ -418,7 +418,8 @@ P17 = {
     # roof 10 cm lower, bed rail 8 cm lower, 10 cm more wheelbase. Build 4 (Roy
     # 1475 "differ"): the bed is 30 cm shorter (4.95 long, the sheet's stubby
     # "all cab" proportion) and a chrome step bumper stands out behind the
-    # tailgate, so the outline test no longer finds N3's twin from the high views
+    # tailgate (0.96 wide, between the dual tips' spots), so the outline test no
+    # longer finds N3's twin from the high views
     'top': [(0.0, 0.86), (0.04, 0.96), (0.20, 1.02), (1.30, 1.09), (1.95, 1.70), (3.25, 1.74), (3.32, 1.16),
             (4.92, 1.14), (4.95, 1.08)],
     'floor': [(0, 0.46), (0.30, 0.28), (4.52, 0.28), (4.95, 0.50)],
@@ -445,7 +446,7 @@ P17 = {
     'parts': [
         {'type': 'mirrors', 'out': 0.11, 'up': 0.09},
         {'type': 'step', 's0': 1.45, 's1': 3.20, 'y': 0.40},
-        {'type': 'box', 's': 5.02, 'xy': (0.0, 0.56), 'size': (1.66, 0.13, 0.16), 'mat': 'chrome', 'tag': 'step_bumper'},
+        {'type': 'box', 's': 5.02, 'xy': (0.0, 0.56), 'size': (0.96, 0.13, 0.16), 'mat': 'chrome', 'tag': 'step_bumper'},
     ],
     # one pipe out the rear corner (right side), no headache rack
     'exhaust': [{'x': 0.68, 'y': 0.40, 'r': 0.04}],

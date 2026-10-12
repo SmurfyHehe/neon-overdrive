@@ -318,7 +318,7 @@ var honk_count := 0
 var honk_log: Array[Dictionary] = []
 var _horn_until := PackedFloat32Array([0.0, 0.0])
 var _horn_cars: Array = [null, null]
-var _horn_players: Array[AudioStreamPlayer3D] = []
+var _horn_players: Array[Sound3D] = []   # not AudioStreamPlayer3D: issue #567
 var _horns_live := false
 ## Draws that must not disturb the game's random sequence (reaction times):
 ## tests and the benchmark keep the placements they had before.
@@ -1110,7 +1110,7 @@ func _play_horn(voice: int, car: TrafficCar, horn: String, long: bool) -> void:
 		return   # still being built: this one is silent
 	if _horn_players.is_empty():
 		for i in HORN_VOICES:
-			var pl := AudioStreamPlayer3D.new()
+			var pl := Sound3D.new()
 			pl.bus = &"Traffic"
 			pl.unit_size = 14.0
 			pl.max_distance = 160.0

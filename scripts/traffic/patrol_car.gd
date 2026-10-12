@@ -54,7 +54,7 @@ func warn_flash() -> void:
 		NpcCarBuilder.set_lamps(chassis_visual, 1.0, true)
 		_lamp_key = -1
 		get_tree().create_timer(FLASH_SECS).timeout.connect(_end_flash)
-	var p := AudioStreamPlayer3D.new()
+	var p := Sound3D.new()   # not AudioStreamPlayer3D: issue #567
 	p.stream = _whoop_stream()
 	if AudioServer.get_bus_index(&"Sirens") >= 0:
 		p.bus = &"Sirens"

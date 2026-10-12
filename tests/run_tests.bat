@@ -390,6 +390,8 @@ call :run traffic/more_alive_traffic "--headless --fixed-fps 120"
 	call :run world/junction_uturn "--headless --fixed-fps 120"
 	rem ~100 s: the map, loop 1: the road repeats each lap, drives both ways, and the save names the road.
 	call :run world/loop_road "--headless --fixed-fps 60"
+	call :run world/exits_live "--headless --fixed-fps 60"
+	call :run world/ring_drive "--headless --fixed-fps 60"
 	rem ~3 min: the road both ways: 2 km out, 3 km back across the lap seam, ten turns; road under the car every tick, no chunk rebuilt in view.
 	call :run world/two_way_drive "--headless --fixed-fps 60"
 	call :run traffic/traffic_perf "--headless --fixed-fps 120"
@@ -397,6 +399,8 @@ call :run traffic/more_alive_traffic "--headless --fixed-fps 120"
 	call :run world/hill_drive "--headless --fixed-fps 120"
 	rem ~4 min: 10 km of the default hilly, bending road at 120 and 200 km/h, watching the springs for bumps.
 	call :run world/hill_bumps "--headless --fixed-fps 120"
+	rem The tunnel under Downtown (TN1): map, dip profile, a pass with traffic at 200 km/h and one at 250.
+	call :run world/tunnel "--headless --fixed-fps 120"
 	rem ~3 min: more than a lap of the default loop at 140 km/h: no step in the road and no launch at any of 140 chunk borders.
 	call :run world/chunk_border_launch "--headless --fixed-fps 120"
 	call :run world/hill_park "--headless --fixed-fps 60"

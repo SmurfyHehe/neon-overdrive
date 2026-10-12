@@ -396,6 +396,44 @@ static func advance(area: String, foot: Vector3, foundation: float, toe: float =
 	out.append(text_plate(PlaceNames.ADVANCE, Vector3(cx, top - 0.16 - big_h - 0.16 - small_h / 2.0, foot.z) + front, n, small_h, AMBER))
 	return out
 
+## ---- Exits (ring sites R1) ----
+## The exit gantry: the area gantry's build with three lines, "EXIT 3" (amber)
+## over where it leads (off-white) over how far (amber). `dir` +1 stands on
+## the own side facing own-side traffic (panel toward +z, reaching toward
+## -x); -1 is the mirror for the oncoming carriageway.
+static func exit_gantry(exit_word: String, leads_to: String, how_far: String, foot: Vector3, foundation: float, dir: float = 1.0) -> Array:
+	var n := Vector3(0.0, 0.0, dir)
+	var small_h := SMALL_LINE_H
+	var big_h := ROAD_LINE_H * 0.85
+	var big_len := plate_len(leads_to, big_h)
+	if big_len > MAX_PANEL_LEN - 2.0 * MARGIN:
+		big_h *= (MAX_PANEL_LEN - 2.0 * MARGIN) / big_len
+		big_len = MAX_PANEL_LEN - 2.0 * MARGIN
+	var inner := maxf(big_len, maxf(plate_len(exit_word, small_h), plate_len(how_far, small_h)))
+	var panel_len := inner + 2.0 * MARGIN
+	var gap := 0.2
+	var panel_h := 2.0 * small_h + big_h + 4.0 * gap
+	var out: Array = []
+	var post_h := GANTRY_TOP + 0.35
+	out.append(_item(Vector3(foot.x, (post_h - foundation) / 2.0, foot.z), n, GANTRY_POST, post_h + foundation, GANTRY_POST, 0, 0, 0, METAL))
+	var reach := panel_len + 0.9
+	out.append(_item(Vector3(foot.x - dir * reach / 2.0, GANTRY_TOP, foot.z), n, 0.22, 0.24, reach, 0, 0, 0, METAL))
+	var cx := foot.x - dir * (0.5 + panel_len / 2.0)
+	var cy := GANTRY_PANEL_TOP - panel_h / 2.0
+	var front := n * (PANEL_DEPTH / 2.0 + PLATE_DEPTH / 2.0 + 0.004)
+	out.append(_item(Vector3(cx, cy, foot.z), n, PANEL_DEPTH, panel_h, panel_len, 0, 0, 0, PANEL))
+	var y := GANTRY_PANEL_TOP - gap - small_h / 2.0
+	out.append(text_plate(exit_word, Vector3(cx, y, foot.z) + front, n, small_h, AMBER))
+	y -= small_h / 2.0 + gap + big_h / 2.0
+	out.append(text_plate(leads_to, Vector3(cx, y, foot.z) + front, n, big_h, OFF_WHITE))
+	y -= big_h / 2.0 + gap + small_h / 2.0
+	out.append(text_plate(how_far, Vector3(cx, y, foot.z) + front, n, small_h, AMBER))
+	var bottom := GANTRY_PANEL_TOP - panel_h
+	for k in 2:
+		var lx := cx + (float(k) - 0.5) * panel_len * 0.5
+		out.append(_item(Vector3(lx, bottom - 0.08, foot.z) + n * 0.32, n, 0.6, 0.14, 0.3, 0, 0, 0, LAMP))
+	return out
+
 ## ---- Signed U-turns (T1) ----
 ## Where the median signs stand in a gap chunk (chunk-local z, m): the one for
 ## own-side traffic (which arrives from z = 0) a little before the opening

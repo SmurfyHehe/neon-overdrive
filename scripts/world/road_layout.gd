@@ -42,8 +42,14 @@ class_name RoadLayout
 # stay off a loop until they are designed onto fixed places too.
 #
 # Step 1 builds the plan only. The road and traffic still run 4+4 until
-# `lanes_live` is switched on (step 3); median splits and exits wait for
-# steps 4 and 5 (`splits_live`, `exits_live`).
+# `lanes_live` is switched on (step 3); median splits wait for step 4
+# (`splits_live`).
+#
+# Exits are live on a loop (ring sites R1, 2026-10-11): each ring site on the
+# map (RoadMap.rings) has an exit and a way back on per carriageway. The slip
+# lane beside the outside lane is aux() here (a width in metres, not a lane
+# traffic counts); the ramps themselves are RoadRamps'. `EXIT_LOOP` is the
+# endless road's old plan and is not used on a loop.
 
 const RoadMap := preload("res://scripts/world/road_map.gd")
 
@@ -89,7 +95,7 @@ var align: RoadAlignment
 ## Switches for what the game builds from the plan (see the header).
 var lanes_live := false
 var splits_live := false
-var exits_live := false
+var exits_live := true
 
 var _rng := RandomNumberGenerator.new()
 var _map_rng := RandomNumberGenerator.new()
@@ -117,10 +123,12 @@ func _init(seed_value: int, alignment: RoadAlignment = null, busy_value: float =
 	_map_rng.seed = MAP_SEED
 	_loop = RoadMap.is_loop()
 	if _loop and busy > 0.0:
+		# One change per exit: s0 .. s1 is the stretch its two ramps stand
+		# beside the road (gore to gore, the ring's centre in the middle).
 		for e in RoadMap.exits():
 			var own := int(e.side) > 0
 			changes.append({"kind": "exit", "side": "own" if own else "onc", "id": e.id, "number": e.number,
-				"s0": float(e.s) if own else float(e.s) - EXIT_LOOP.x, "s1": float(e.s) + EXIT_LOOP.x if own else float(e.s)})
+				"centre": float(e.centre), "s0": float(e.centre) - RoadMap.RING_GORE, "s1": float(e.centre) + RoadMap.RING_GORE})
 		changes.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.s0 < b.s0)
 
 # ---------- queries ----------
@@ -185,6 +193,14 @@ func next_drop(oncoming: bool, s: float) -> Dictionary:
 			return c
 	return {}
 
+## Width of the slip lane outside the outside lane at the start and at the
+## end of a chunk, metres (x, y): the diverge lane before an exit, the merge
+## lane after the way back on. The same on both carriageways. Zero off a loop.
+func aux(chunk_index: int) -> Vector2:
+	if not _loop or not exits_live or busy <= 0.0:
+		return Vector2.ZERO
+	return RoadMap.aux(chunk_index)
+
 ## Extra width between the carriageways at s, metres on top of the normal
 ## median (0 outside a split).
 func median_extra(s: float) -> float:
@@ -208,7 +224,7 @@ func changes_between(a: float, b: float) -> Array[Dictionary]:
 	if _loop:
 		# The lap's exits, on every lap that [a, b] touches.
 		var lap := RoadMap.length()
-		for n in range(floori((a - EXIT_LOOP.x) / lap), floori(b / lap) + 1):
+		for n in range(floori((a - 2.0 * RoadMap.RING_GORE) / lap), floori(b / lap) + 1):
 			for c in changes:
 				if c.s0 + float(n) * lap <= b and c.s1 + float(n) * lap >= a:
 					var d: Dictionary = c.duplicate()

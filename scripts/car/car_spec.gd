@@ -457,6 +457,19 @@ static func player_spec(kind: String) -> Dictionary:
 	var s := coupe_default()
 	s["auto"] = (PLAYER_AUTO.get(kind, {"family": AutoBox.DEFAULT_FAMILY}) as Dictionary).duplicate()
 	match kind:
+		"p1_coupe":
+			# Springs to match its downforce (2026-10-11, issue #538). The wings
+			# press it down by 0.4 g at 250 km/h and more at 300; on the base
+			# springs (half the travel used up at rest) that left the front
+			# 2.8 cm of spring at 300 on a flat road, so any dip put it on the
+			# bump stops and the body on the road. A fifth less sag at rest is a
+			# quarter more spring rate: 6.5 cm left at 300, the body 2.5 cm
+			# higher, and the same cornering grip at every speed, since grip
+			# follows the load on the tyres and not how far the springs give
+			# (tools/grip_at_speed.gd: 1.05 g at 100 km/h, 1.42 g at 250, before
+			# and after). Only this car: the others have little or no downforce.
+			s["front_resting_ratio"] = 0.4
+			s["rear_resting_ratio"] = 0.4
 		"p0_beater":
 			# The prologue car (Roy, 2026-10-09): a worn rear-engine, air-cooled
 			# flat four. About 290 Nm, power tier T0 (0.29 Nm/kg: under the T1

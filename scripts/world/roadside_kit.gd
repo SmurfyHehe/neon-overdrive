@@ -45,6 +45,7 @@ class_name RoadsideKit
 
 const Districts := preload("res://scripts/world/districts.gd")
 const GasStation := preload("res://scripts/world/gas_station.gd")
+const RoadMap := preload("res://scripts/world/road_map.gd")
 
 const HYDRANT := "hydrant"
 const BIN := "bin"
@@ -339,16 +340,19 @@ static func new_nodes(root: Node3D) -> void:
 ## them); `setback` the district's lot depth behind the sidewalk; `lamps`
 ## the lamp poles' chunk-local z per side; `lots` the empty or set-back
 ## building slots per side as [z, frontage] (from _update_building's infos).
-static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: float, lamps: Dictionary, lots: Dictionary) -> void:
+static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: float, lamps: Dictionary, lots: Dictionary, off: bool = false) -> void:
 	_read_density()
 	var spec: Dictionary = BY_DISTRICT.get(Districts.name_at(chunk_index), BY_DISTRICT["downtown"]).duplicate()
 	spec.merge(force, true)
+	if RoadMap.ramp_zone(chunk_index):  # a ring site's ramps stand here
+		for key in spec.keys():
+			spec[key] = 0.0
 	_rng.seed = hash([chunk_index, "roadside kit"])
 	var placed: Array = []  # {kind, side, x, y, z, yaw, len}
 	var f := RoadChunkBuilder._foundation()
 	var L := RoadChunkBuilder.CHUNK_LEN
 	var seg := L / RoadChunkBuilder.STATIONS
-	var d := density
+	var d := 0.0 if off else density  # off: a tunnel or its trench (TN1) has no kit
 	for side in [1, -1]:
 		var e: Dictionary = edges[side]
 		var taken: Array = []  # [z_from, z_to] along the road already used on this side

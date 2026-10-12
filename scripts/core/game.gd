@@ -61,6 +61,9 @@ var traffic: TrafficManager
 ## City lights (junction.gd): the one signalised crossing, or null when the
 ## switch is off.
 var junction: Junction
+var ring_site: Node3D
+## Where the player is off the main road ({} on it): RoadRamps.place_of.
+var off_main := {}
 var game_state: GameState
 
 # Chase camera, its three smoothing modes (#31, C to cycle) and the stage A
@@ -101,6 +104,8 @@ const Freemode := preload("res://scripts/core/freemode.gd")
 const UserDirMigration := preload("res://scripts/save/user_dir_migration.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
 const ColorGrade := preload("res://scripts/world/color_grade.gd")
+const RingSite := preload("res://scripts/world/ring_site.gd")
+const RoadRamps := preload("res://scripts/world/road_ramps.gd")
 # The shared test driver and the F9 drive recorder (2026-10-10). `bot` is the
 # driver when the game was started with -- --bot=<mode> / NEON_BOT (watching
 # the bot in a window uses the same switch the headless tests do), with
@@ -149,12 +154,15 @@ var _change_waits := false
 var _weather_seen := -1
 var _wet_pinned := false
 const StreetAnimals := preload("res://scripts/world/street_animals.gd")
+const TunnelAudio := preload("res://scripts/audio/tunnel_audio.gd")
 var road_seed := 0
 var run := {}
 ## Whether `run` puts the car back where it was: false for a fresh run, and for
 ## a save from a road this build does not have (or from before the map), which
 ## starts at the top of the default road and keeps only the clock and the radio.
 var resume_place := false
+## Metres into the origin chunk a fresh run starts at (NEON_START_S).
+var start_in_chunk := 0.0
 ## The act the road is in (road_map.gd: the loop grows by act).
 var road_act := 1
 
@@ -543,6 +551,11 @@ func _setup_road_shape() -> void:
 	# A benchmark run with --curves or --hills gets a fixed road, so runs compare.
 	road_seed = int(seed_env) if seed_env.is_valid_int() else (Benchmark.SEED if Benchmark.requested() else randi())
 	var road := _pick_road()
+	# Tunnels (TN1): the dip needs the per-chunk road surface of a hilly road,
+	# so a road rolled flat (the older drive tests, the default benchmark) has
+	# none and keeps the exit the tunnel replaces. NEON_TUNNEL=0 also turns it off.
+	var hills_now := float(run.road.hilliness) if resume_place else hilliness
+	RoadMap.tunnel_live = OS.get_environment("NEON_TUNNEL") != "0" and hills_now > 0.0
 	RoadMap.use(road, road_act)
 	RoadMap.known_stops = {}
 	if RoadMap.is_loop() and not seed_env.is_valid_int():
@@ -564,8 +577,15 @@ func _setup_road_shape() -> void:
 		# (_section_at), and a save from either time may hold a bool or a type
 		# name there. Comparing a type name with true was a script error that
 		# stopped this function before the road was set up.
+	# NEON_START_S=<metres round the loop>: a fresh run starts there instead of
+	# at the top of the road (tests and screenshot tools of a far-off place).
+	var start_env := OS.get_environment("NEON_START_S")
+	if start_env.is_valid_float() and not resume_place and RoadMap.is_loop():
+		var start_s := RoadMap.wrap_s(float(start_env))
+		origin_index = floori(start_s / RoadChunkBuilder.CHUNK_LEN)
+		start_in_chunk = start_s - float(origin_index) * RoadChunkBuilder.CHUNK_LEN
 	RoadFrame.origin_index = origin_index
-	RoadFrame.align = RoadAlignment.new(road_seed, curviness, hilliness, kicker_chance, RoadMap.period, RoadMap.pins()) if curviness > 0.0 or hilliness > 0.0 else null
+	RoadFrame.align = RoadAlignment.new(road_seed, curviness, hilliness, kicker_chance, RoadMap.period, RoadMap.pins(), RoadMap.dip_vcurves()) if curviness > 0.0 or hilliness > 0.0 else null
 	# Lane adds and drops, median splits and exits (road lane proposal): a
 	# third stream from the same seed. NEON_LAYOUT=0 keeps the plain 4+4,
 	# NEON_LAYOUT=<metres> forces a change that often (the tests' sweep).
@@ -597,6 +617,12 @@ func _section_at(idx: int) -> Dictionary:
 	# legal), "emergency" (a crossover, cops only) or "" (RoadBarriers.gap_kind).
 	var gap_kind := RoadBarriers.gap_kind(idx)
 	var cfg := {"own_lanes": own, "onc_lanes": onc, "barrier": RoadBarriers.kind_at(idx), "gap": gap_kind != "", "gap_kind": gap_kind}
+	# The slip lane beside the outside lane at a ring site (R1), the same on
+	# both sides: its width at this chunk's start and end.
+	if lay != null:
+		var aux := lay.aux(idx)
+		if aux != Vector2.ZERO:
+			cfg["aux"] = [aux.x, aux.y, aux.x, aux.y]
 	section_cache[key] = cfg
 	return cfg
 
@@ -789,7 +815,14 @@ func _physics_process(_delta: float) -> void:
 	# shifted consistently.
 	# Road-space z (RoadFrame, #37): distance along the road, which is what
 	# the whole-chunk shift counts in.
-	var z := RoadFrame.unroll(player.global_position).z
+	var ru := RoadFrame.unroll(player.global_position)
+	var z := ru.z
+	# Off the main road (ring sites R3): on a ramp, the ring or a spur. Kept
+	# for traffic, the police, the save and the put-back.
+	off_main = RoadRamps.place_of(ru, RoadFrame.s_at(z))
+	if not off_main.is_empty():
+		off_main["wrong_way"] = RoadRamps.wrong_way(off_main, RoadFrame.dir_to_road(z, player.linear_velocity))
+	RoadRamps.player_place = off_main
 	if absf(z) >= recenter_dist:
 		var t0 := Time.get_ticks_usec()
 		_shift_origin(int(floor(-z / RoadChunkBuilder.CHUNK_LEN)))
@@ -882,12 +915,27 @@ const PLAYER_SPAWN_LANE := 1
 
 func _setup_player() -> void:
 	player = PlayerCar.new()
-	player.position = RoadFrame.roll(Vector3(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, 0))
+	player.position = RoadFrame.roll(Vector3(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, -start_in_chunk))
+	if start_in_chunk > 0.0 or origin_index != 0:
+		# Away from the top of the road it does not run down world -Z: face along it.
+		player.transform = RoadFrame.pose(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, -start_in_chunk, 0.0)
 	if resume_place:
 		player.transform = SaveDirector.array_to_xform(run.car.xform)
 	add_child(player)
 	if resume_place:
 		saver.restore_car(player, run.car)
+		# Saved on a ramp, the ring or a spur: the save names the place, and if
+		# the car's saved position is not on it any more (the site was
+		# rebuilt since), the car is stood on it.
+		var rec: Variant = run.road.get("off")
+		if rec is Dictionary and not (rec as Dictionary).is_empty():
+			var ru := RoadFrame.unroll(player.global_position)
+			var saved_place := RoadRamps.from_save(rec, RoadFrame.s_at(ru.z))
+			var now_place := RoadRamps.place_of(ru, RoadFrame.s_at(ru.z))
+			if not saved_place.is_empty() and (now_place.is_empty() or now_place.part != saved_place.part or now_place.site != saved_place.site):
+				player.global_transform = RoadRamps.pose_of(saved_place)
+				player.linear_velocity = Vector3.ZERO
+				player.angular_velocity = Vector3.ZERO
 	# Interior mods batch 1 (2026-10-09): the fitted parts' sim effects (short
 	# shifter, strut bar) held on the built car, and the bar itself under the hood.
 	CabinMods.attach(player)
@@ -899,9 +947,17 @@ func _setup_player() -> void:
 func _park_at_start() -> void:
 	if not OffMapRescue.parked_start():
 		return
-	var s := 0.0
+	# beside where the car is: the top of the road, a saved place, or
+	# NEON_START_S (TN1)
+	var ru := RoadFrame.unroll(player.global_position)
+	var s := RoadFrame.s_at(ru.z)
 	if resume_place:
-		s = RoadFrame.s_at(RoadFrame.unroll(player.global_position).z)
+		# resumed on a ramp, the ring or a spur (ring sites R3): park up there,
+		# not at the kerb of the highway under it
+		var place := RoadRamps.place_of(ru, s)
+		if not place.is_empty():
+			rescue.park_place(place)
+			return
 	rescue.park_at(s)
 
 ## "Put me back on the road" (the pause menu row and the put_back key): the
@@ -946,6 +1002,12 @@ func _setup_traffic() -> void:
 	flicks.player = player
 	flicks.traffic = traffic
 	add_child(flicks)
+	# The raised ring at the nearest ring site (R2), moved like the crossing.
+	# (Placed for where the car is now: a run resumed on a ring needs it
+	# under the wheels on the first tick.)
+	RingSite.focus_s = RoadFrame.s_at(RoadFrame.unroll(player.global_position).z)
+	ring_site = RingSite.new()
+	add_child(ring_site)
 
 # ---------- camera ----------
 func _setup_camera() -> void:
@@ -1034,6 +1096,11 @@ func _setup_game_state() -> void:
 	radio.busy_check = func() -> bool:
 		return (race != null and race.is_racing()) or (police_heat != null and police_heat.level > PoliceHeat.NONE)
 	add_child(radio)
+	# Tunnels (TN1): the car's own sounds echo while it is under cover.
+	var tunnel_audio := TunnelAudio.new()
+	tunnel_audio.name = "TunnelAudio"
+	tunnel_audio.listener = player
+	add_child(tunnel_audio)
 	add_child(PauseLook.new(game_state, player, camera))
 	# The title only ever opens here, at boot (enter_title below; Quit to title
 	# reloads the scene). A boot without it never builds it, nor compiles its
@@ -1329,6 +1396,7 @@ func _process(delta: float) -> void:
 			limit_line_said = radio.announce(RadioStations.LIMIT_LINE)
 	var pz := RoadFrame.unroll(player.position).z
 	Junction.focus_z = pz
+	RingSite.focus_s = RoadFrame.s_at(pz)
 	_update_chunk_pool(pz)
 	# eyes in the headlights (world step 6, A1): one angle check per animal
 	# on the chunks round the car

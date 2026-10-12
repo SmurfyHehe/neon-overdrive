@@ -85,40 +85,31 @@ const ROADS := {
 			Vector2(0.86, 0.66), Vector2(0.70, 0.84), Vector2(0.50, 0.90), Vector2(0.30, 0.86),
 			Vector2(0.13, 0.70), Vector2(0.08, 0.48), Vector2(0.14, 0.26), Vector2(0.30, 0.13),
 		],
-		# Exits, one pair per district, 400 m in: s = the gore, side +1 = the
-		# carriageway going the way the chunks count, -1 = the other one.
-		# `number` is what the sign says.
-		"exits": [
-			{"id": "x1a", "s": 400.0, "side": 1, "number": 1}, {"id": "x1b", "s": 400.0, "side": -1, "number": 1},
-			{"id": "x2a", "s": 1200.0, "side": 1, "number": 2}, {"id": "x2b", "s": 1200.0, "side": -1, "number": 2},
-			{"id": "x3a", "s": 2000.0, "side": 1, "number": 3}, {"id": "x3b", "s": 2000.0, "side": -1, "number": 3},
-			{"id": "x4a", "s": 2800.0, "side": 1, "number": 4}, {"id": "x4b", "s": 2800.0, "side": -1, "number": 4},
-			{"id": "x5a", "s": 3600.0, "side": 1, "number": 5}, {"id": "x5b", "s": 3600.0, "side": -1, "number": 5},
-			{"id": "x6a", "s": 4400.0, "side": 1, "number": 6}, {"id": "x6b", "s": 4400.0, "side": -1, "number": 6},
-			{"id": "x7a", "s": 5200.0, "side": 1, "number": 7}, {"id": "x7b", "s": 5200.0, "side": -1, "number": 7},
-			{"id": "x8a", "s": 6000.0, "side": 1, "number": 8}, {"id": "x8b", "s": 6000.0, "side": -1, "number": 8},
-			{"id": "x9a", "s": 6800.0, "side": 1, "number": 9}, {"id": "x9b", "s": 6800.0, "side": -1, "number": 9},
-			{"id": "x10a", "s": 7600.0, "side": 1, "number": 10}, {"id": "x10b", "s": 7600.0, "side": -1, "number": 10},
-			{"id": "x11a", "s": 8400.0, "side": 1, "number": 11}, {"id": "x11b", "s": 8400.0, "side": -1, "number": 11},
-			{"id": "x12a", "s": 9200.0, "side": 1, "number": 12}, {"id": "x12b", "s": 9200.0, "side": -1, "number": 12},
-			{"id": "x13a", "s": 10000.0, "side": 1, "number": 13}, {"id": "x13b", "s": 10000.0, "side": -1, "number": 13},
-			{"id": "x14a", "s": 10800.0, "side": 1, "number": 14}, {"id": "x14b", "s": 10800.0, "side": -1, "number": 14},
-			{"id": "x15a", "s": 11600.0, "side": 1, "number": 15}, {"id": "x15b", "s": 11600.0, "side": -1, "number": 15},
-			{"id": "x16a", "s": 12400.0, "side": 1, "number": 16}, {"id": "x16b", "s": 12400.0, "side": -1, "number": 16},
+		# Ring sites, one per district, 400 m in: s = the ring's centre (a raised
+		# roundabout over the highway, R2; in R1 a turning pad either side).
+		# `number` is what the exit signs say. `kind` is what the ring leads to:
+		# "stop" (a spur to a stop, see STOPS), "lot", "landmark" (something on
+		# the island), "plain", or "tunnel" (no ring and no exits: the road goes
+		# under, built separately). The exits and the gaps are worked out from
+		# these (exits(), gaps()).
+		"rings": [
+			{"id": "x1", "s": 400.0, "number": 1, "kind": "stop"}, {"id": "x2", "s": 1200.0, "number": 2, "kind": "landmark"},
+			{"id": "x3", "s": 2000.0, "number": 3, "kind": "stop"}, {"id": "x4", "s": 2800.0, "number": 4, "kind": "plain"},
+			{"id": "x5", "s": 3600.0, "number": 5, "kind": "lot"}, {"id": "x6", "s": 4400.0, "number": 6, "kind": "tunnel"},
+			{"id": "x7", "s": 5200.0, "number": 7, "kind": "stop"}, {"id": "x8", "s": 6000.0, "number": 8, "kind": "plain"},
+			{"id": "x9", "s": 6800.0, "number": 9, "kind": "plain"}, {"id": "x10", "s": 7600.0, "number": 10, "kind": "plain"},
+			{"id": "x11", "s": 8400.0, "number": 11, "kind": "plain"}, {"id": "x12", "s": 9200.0, "number": 12, "kind": "plain"},
+			{"id": "x13", "s": 10000.0, "number": 13, "kind": "plain"}, {"id": "x14", "s": 10800.0, "number": 14, "kind": "plain"},
+			{"id": "x15", "s": 11600.0, "number": 15, "kind": "plain"}, {"id": "x16", "s": 12400.0, "number": 16, "kind": "plain"},
 		],
-		# Gaps in the centre barrier: signed U-turns, legal for everyone (a
-		# sign 200 m before, painted arrows, a lamp over the opening), two
-		# per district, 225 m and 625 m in. The emergency crossovers
-		# (RoadBarriers) are a different kind: cops only.
-		"gaps": [
-			{"id": "g1a", "s": 225.0}, {"id": "g1b", "s": 625.0}, {"id": "g2a", "s": 1025.0}, {"id": "g2b", "s": 1425.0},
-			{"id": "g3a", "s": 1825.0}, {"id": "g3b", "s": 2225.0}, {"id": "g4a", "s": 2625.0}, {"id": "g4b", "s": 3025.0},
-			{"id": "g5a", "s": 3425.0}, {"id": "g5b", "s": 3825.0}, {"id": "g6a", "s": 4225.0}, {"id": "g6b", "s": 4625.0},
-			{"id": "g7a", "s": 5025.0}, {"id": "g7b", "s": 5425.0}, {"id": "g8a", "s": 5825.0}, {"id": "g8b", "s": 6225.0},
-			{"id": "g9a", "s": 6625.0}, {"id": "g9b", "s": 7025.0}, {"id": "g10a", "s": 7425.0}, {"id": "g10b", "s": 7825.0},
-			{"id": "g11a", "s": 8225.0}, {"id": "g11b", "s": 8625.0}, {"id": "g12a", "s": 9025.0}, {"id": "g12b", "s": 9425.0},
-			{"id": "g13a", "s": 9825.0}, {"id": "g13b", "s": 10225.0}, {"id": "g14a", "s": 10625.0}, {"id": "g14b", "s": 11025.0},
-			{"id": "g15a", "s": 11425.0}, {"id": "g15b", "s": 11825.0}, {"id": "g16a", "s": 12225.0}, {"id": "g16b", "s": 12625.0},
+		# Tunnels (TN1): s0 to s1 is under cover, whole chunks. `dip` is how far
+		# the road drops below the street on the way in and `ramp` the length of
+		# the open trench at each end, whole chunks too. `sag` is the length of
+		# the curve at the bottom of each ramp, an odd number of chunks (see
+		# _lay_dip). An exit inside a tunnel's reach (ramps included) is left
+		# off the road while tunnels are live.
+		"tunnels": [
+			{"id": "t1", "s0": 4250.0, "s1": 4550.0, "district": 6, "dip": 6.0, "ramp": 150.0, "sag": 150.0},
 		],
 	},
 }
@@ -129,19 +120,22 @@ const ROADS := {
 ## Placeholders until the stops are designed. `known`: on the map from the start
 ## (the placeholders); a later stop is found in play (learn_stop).
 ## The four fuel stops are staggered, never opposite one another: own side at
-## 2,225 and 5,425, oncoming side at 1,825 and 5,025 (the median gaps).
+## 2,375 and 5,575, oncoming side at 1,625 and 4,875. Each sits on the slip
+## lane past its ring site's merge (ring sites R1-R4 made the exits live: the
+## ramps fill 200 m either side of a ring, so the old places, 175 m from the
+## ring, were on a ramp), clear of the gores' and the crossings' pinned chunks.
 ## A station's `lot` is its compound's recipe (GasStation lays it out):
 ## `pumps` dispensers (4 or 6, a car each side), where the `store` stands
 ## ("back_centre", "back_left", "corner") and the `wash` ("bay" or "tunnel").
 const STOPS := [
 	{"id": "shop", "name": "The Shop", "kind": "shop", "road": 0, "exit": "x1a", "known": true},
-	{"id": "fuel_3a", "name": "Fuel 3A", "kind": "station", "road": 0, "s": 2225.0, "side": 1, "known": true,
+	{"id": "fuel_3a", "name": "Fuel 3A", "kind": "station", "road": 0, "s": 2375.0, "side": 1, "known": true,
 		"lot": {"pumps": 4, "store": "corner", "wash": "bay"}},
-	{"id": "fuel_3b", "name": "Fuel 3B", "kind": "station", "road": 0, "s": 1825.0, "side": -1, "known": true,
+	{"id": "fuel_3b", "name": "Fuel 3B", "kind": "station", "road": 0, "s": 1625.0, "side": -1, "known": true,
 		"lot": {"pumps": 4, "store": "back_centre", "wash": "bay"}},
-	{"id": "fuel_7a", "name": "Fuel 7A", "kind": "station", "road": 0, "s": 5425.0, "side": 1, "known": true,
+	{"id": "fuel_7a", "name": "Fuel 7A", "kind": "station", "road": 0, "s": 5575.0, "side": 1, "known": true,
 		"lot": {"pumps": 6, "store": "back_centre", "wash": "tunnel"}},
-	{"id": "fuel_7b", "name": "Fuel 7B", "kind": "station", "road": 0, "s": 5025.0, "side": -1, "known": true,
+	{"id": "fuel_7b", "name": "Fuel 7B", "kind": "station", "road": 0, "s": 4875.0, "side": -1, "known": true,
 		"lot": {"pumps": 4, "store": "back_left", "wash": "bay"}},
 ]
 
@@ -151,8 +145,44 @@ const INTERCHANGES := []
 
 ## Crossing centre, metres inside the city area from its edge.
 const JUNCTION_INSET := 75.0
-## Chunks kept straight and level either side of a crossing's or an exit's own.
+## Chunks kept straight and level either side of a crossing's own.
 const PIN_APPROACH := 1
+
+# ---------- ring sites (R1) ----------
+#
+# Everything about a ring site is the same on both sides of the road and
+# either way along it, so it is described by `k`, a chunk's offset from the
+# ring chunk (the chunk that STARTS at the ring's centre; the centre is on a
+# chunk join):
+#
+#   k -8 .. -5   the slip lane before the ring: an extra lane outside the
+#                outside lane, opening over two chunks (AUX_W wide by k = -6);
+#   k -4 .. -1   ramps: the lane leaves the road at the gore (the start of
+#                k = -4, RING_GORE before the centre) and climbs to the pad;
+#   k  0 ..  3   ramps down again, joining the road at the end of k = 3;
+#   k  4 ..  7   the slip lane after, closing over the last two chunks.
+#
+# On the +1 carriageway (driven the way the chunks count) the first half is
+# the exit and the second the way back on; on the -1 carriageway it is the
+# other way round. So each exit comes RING_GORE before the ring in its own
+# direction, and each side's two ramps stand on that side of the road.
+
+## The gore (where a ramp leaves or joins the road), metres from the ring's centre.
+const RING_GORE := 200.0
+## Chunks either side of the centre with ramps beside the road.
+const RAMP_CHUNKS := 4
+## Chunks of slip lane beyond those, and how many of them it opens over.
+const AUX_CHUNKS := 4
+const AUX_TAPER := 2
+## Width of the slip lane (and of a ramp's deck), m.
+const AUX_W := 4.4
+## A signed U-turn at the start of every district, this far in, except where
+## a crossing stands within GAP_CLEAR_OF_CROSSING of it.
+const GAP_INSET := 25.0
+const GAP_CLEAR_OF_CROSSING := 100.0
+## Pin values (pins()): straight and level, or level only (the road may bend).
+const PIN_STRAIGHT := 1
+const PIN_LEVEL := 2
 
 ## The road this run is on: ENDLESS = the road from before the map.
 static var road_id := ENDLESS
@@ -164,8 +194,23 @@ static var _kinds := PackedStringArray()
 static var _junctions := PackedFloat64Array()  # crossing centres, metres round the loop
 static var _exits: Array = []
 static var _gaps: Array = []
+static var _rings: Array = []
+static var _ring_of := PackedInt32Array()   # per lap chunk: index into _rings, -1 = none
+static var _ring_k := PackedInt32Array()    # per lap chunk: its offset k from that ring's chunk
+static var _held := PackedByteArray()       # per lap chunk: a crossing's chunk or a neighbour
+static var _exit_signs := {}                # lap chunk -> [{side, ring, far}]
 static var _gap_chunk := PackedByteArray()
 static var _pins := PackedByteArray()
+## Tunnels (TN1). Live = the road has them: on unless NEON_TUNNEL=0, and
+## game.gd turns it off for a road rolled without hills (the dip needs the
+## per-chunk road surface a hilly road has).
+static var tunnel_live := OS.get_environment("NEON_TUNNEL") != "0"
+const DIP_NONE := 0
+const DIP_RAMP := 1    # the open trench either side of a tunnel
+const DIP_TUNNEL := 2  # under cover
+static var _tunnels: Array = []
+static var _dip := PackedByteArray()   # per chunk of the lap: DIP_*
+static var _dip_vc := {}               # lap chunk -> vertical curvature the dip forces there
 static var _map_len := PackedFloat32Array()  # distance along the drawn line to each point
 
 static func knows(id: int) -> bool:
@@ -184,8 +229,16 @@ static func use(id: int, act_value: int = 1) -> void:
 	_junctions = PackedFloat64Array()
 	_exits = []
 	_gaps = []
+	_rings = []
+	_ring_of = PackedInt32Array()
+	_ring_k = PackedInt32Array()
+	_held = PackedByteArray()
+	_exit_signs = {}
 	_gap_chunk = PackedByteArray()
 	_pins = PackedByteArray()
+	_tunnels = []
+	_dip = PackedByteArray()
+	_dip_vc = {}
 	_map_len = PackedFloat32Array()
 	if not ROADS.has(id):
 		return
@@ -195,43 +248,188 @@ static func use(id: int, act_value: int = 1) -> void:
 		_starts.append(period)
 		_kinds.append(String(d.kind))
 		period += int(d.chunks)
-	# A crossing just inside each end of every city area.
+	# A crossing just inside each end of every city area that has no ring site.
 	for n in ds.size():
 		var prev: Dictionary = ds[posmod(n - 1, ds.size())]
 		var next: Dictionary = ds[posmod(n + 1, ds.size())]
 		if ds[n].area != "city":
 			continue
-		if prev.area != "city":
-			_junctions.append(float(_starts[n]) * L + JUNCTION_INSET)
-		if next.area != "city":
-			_junctions.append(float(_starts[n] + int(ds[n].chunks)) * L - JUNCTION_INSET)
-	# Exits and gaps on the part of the road this act has; straight, level
-	# road at each and at the crossings.
+		for at in [float(_starts[n]) * L + JUNCTION_INSET if prev.area != "city" else -1.0,
+				float(_starts[n] + int(ds[n].chunks)) * L - JUNCTION_INSET if next.area != "city" else -1.0]:
+			if at >= 0.0 and _crossing_allowed(road, at, float(period) * L):
+				_junctions.append(at)
+	# Rings, exits and gaps on the part of the road this act has; straight,
+	# level road at each and at the crossings.
 	_pins.resize(period)
 	_gap_chunk.resize(period)
-	for e in road.exits:
-		if float(e.s) < length():
-			_exits.append(e)
-			_pin(floori(float(e.s) / L), PIN_APPROACH)
-	for g in road.gaps:
-		if float(g.s) < length():
-			_gaps.append(g)
-			_gap_chunk[floori(float(g.s) / L)] = 1
-			_pin(floori(float(g.s) / L), 0)
+	_held.resize(period)
+	_dip.resize(period)
+	if tunnel_live:
+		for t in road.get("tunnels", []):
+			if float(t.s1) <= length():
+				_tunnels.append(t)
+	_ring_of.resize(period)
+	_ring_k.resize(period)
+	_ring_of.fill(-1)
 	for c in _junctions:
 		_pin(floori(c / L), PIN_APPROACH)
+		for i in range(-1, 2):
+			_held[posmod(floori(c / L) + i, period)] = 1
 	# A station's lot is flat: its own chunk and one either side (150 m).
 	for st in STOPS:
 		if String(st.kind) == "station" and int(st.road) == id and st.has("s") and float(st.s) < length():
 			_pin(floori(float(st.s) / L), PIN_APPROACH)
+	for r in road.rings:
+		if float(r.s) >= length() or String(r.kind) == "tunnel":
+			continue
+		var ri := _rings.size()
+		_rings.append(r)
+		var rc := floori(float(r.s) / L)
+		for k in range(-RAMP_CHUNKS - AUX_CHUNKS, RAMP_CHUNKS + AUX_CHUNKS):
+			_ring_of[posmod(rc + k, period)] = ri
+			_ring_k[posmod(rc + k, period)] = k
+		# the pad (the ring, from R2) on straight, level road; the ramps on level road
+		for k in range(-2, 2):
+			_pins[posmod(rc + k, period)] = PIN_STRAIGHT
+		for k in [-4, -3, 2, 3]:
+			if _pins[posmod(rc + k, period)] == 0:
+				_pins[posmod(rc + k, period)] = PIN_LEVEL
+		for side in [1, -1]:
+			_exits.append({"id": "%s%s" % [r.id, "a" if side > 0 else "b"], "s": float(r.s) - float(side) * RING_GORE,
+				"side": side, "number": int(r.number), "ring": String(r.id), "centre": float(r.s)})
+			# its two gantries stand 400 m and 1 km before the gore
+			for far in [false, true]:
+				var chunks := roundi((1000.0 if far else 400.0) / L)
+				var at := posmod(rc - RAMP_CHUNKS - chunks if side > 0 else rc + RAMP_CHUNKS + chunks - 1, period)
+				if not _exit_signs.has(at):
+					_exit_signs[at] = []
+				_exit_signs[at].append({"side": side, "ring": ri, "far": far})
+	for n in ds.size():
+		var gs := float(_starts[n]) * L + GAP_INSET
+		var clear := true
+		for c in _junctions:
+			if absf(fposmod(c - gs + length() * 0.5, length()) - length() * 0.5) < GAP_CLEAR_OF_CROSSING:
+				clear = false
+		if clear:
+			_gaps.append({"id": "g%d" % (n + 1), "s": gs})
+			_gap_chunk[floori(gs / L)] = 1
+			_pin(floori(gs / L), 0)
+	# Last, so a ramp that shares a chunk with a crossing's approach keeps its
+	# profile: straight from the top of one ramp to the top of the other.
+	for t in _tunnels:
+		_lay_dip(t)
 	var pts: Array = road.map
 	_map_len.append(0.0)
 	for i in pts.size():
 		_map_len.append(_map_len[i] + (pts[(i + 1) % pts.size()] as Vector2).distance_to(pts[i]))
 
+## Whether a crossing wanted at `at` gets built. Not beside a ring site
+## (Roy, 2026-10-11): a crossing belongs where an exit's ramp meets the
+## street, and there that is the ring itself, so the highway has no signals
+## and the slip lanes keep their full length. A district with no ring (the
+## tunnel) keeps its crossing.
+static func _crossing_allowed(road: Dictionary, at: float, lap: float) -> bool:
+	var reach := float(RAMP_CHUNKS + AUX_CHUNKS) * L
+	for r in road.rings:
+		if float(r.s) >= lap or String(r.kind) == "tunnel":
+			continue
+		if at >= float(r.s) - reach and at < float(r.s) + reach:
+			return false
+	return true
+
 static func _pin(chunk: int, approach: int) -> void:
 	for i in range(chunk - approach, chunk + approach + 1):
-		_pins[posmod(i, period)] = 1
+		_pins[posmod(i, period)] = PIN_STRAIGHT
+
+# ---------- tunnels (TN1) ----------
+# A tunnel's road goes down a ramp in an open trench, runs under cover, and
+# climbs out the same way. The whole reach is pinned straight, and instead of
+# level it has a forced height profile (RoadAlignment takes dip_vcurves()):
+# a crest over the first ramp chunk, a steady grade, and a sag `sag` metres
+# long centred on the end of the ramp's steady part, so it runs on under
+# cover; mirrored at the far end. With the road's 50 m chunks that gives
+# grade = dip / ramp (6 m over 150 m: 4 %), a crest radius of chunk / grade
+# (1250 m) and a sag radius of sag / grade (3750 m).
+#
+# The sag is the long one on purpose (stress test, 2026-10-11): a sag presses
+# the car into its springs by speed^2 / radius, and with a 1250 m sag the
+# stock coupe, whose body rides 7 cm off the road, touched down at 250 km/h
+# and lost the car at 300. At 3750 m it has room left at 300. The crest only
+# makes a car light, and nothing leaves the road over 1250 m at 300.
+
+static func _ramp_chunks(t: Dictionary) -> int:
+	return maxi(1, roundi(float(t.get("ramp", 0.0)) / L))
+
+static func _in_tunnel_reach(s: float) -> bool:
+	for t in _tunnels:
+		var r := float(_ramp_chunks(t)) * L
+		if s >= float(t.s0) - r and s < float(t.s1) + r:
+			return true
+	return false
+
+static func _lay_dip(t: Dictionary) -> void:
+	var c0 := floori(float(t.s0) / L)       # first covered chunk
+	var c1 := floori(float(t.s1) / L) - 1   # last covered chunk
+	var n := _ramp_chunks(t)
+	for c in range(c0 - n, c1 + n + 1):
+		var m := posmod(c, period)
+		_pins[m] = 1
+		_dip[m] = DIP_TUNNEL if c >= c0 and c <= c1 else DIP_RAMP
+	var grade := float(t.get("dip", 0.0)) / (float(n) * L)
+	if grade <= 0.0:
+		return
+	# Chunks of sag (odd), and of steady grade between the crest and the sag:
+	# crest L / 2 + steady + sag / 2 of full grade must come to the ramp's length.
+	var ns := maxi(1, roundi(float(t.get("sag", L)) / L))
+	ns = mini(ns if ns % 2 == 1 else ns - 1, 2 * n - 1)
+	@warning_ignore("integer_division")
+	var steady := n - 1 - (ns - 1) / 2
+	_dip_vc[posmod(c0 - n, period)] = -grade / L
+	_dip_vc[posmod(c1 + n, period)] = -grade / L
+	for k in ns:
+		_dip_vc[posmod(c0 - n + 1 + steady + k, period)] = grade / (float(ns) * L)
+		_dip_vc[posmod(c1 + n - 1 - steady - k, period)] = grade / (float(ns) * L)
+
+## The tunnels on the road in this act: [{id, s0, s1, district, dip, ramp}].
+static func tunnels() -> Array:
+	return _tunnels
+
+## Whether this chunk is under cover.
+static func tunnel_at(chunk_index: int) -> bool:
+	return period > 0 and _dip[lap_chunk(chunk_index)] == DIP_TUNNEL
+
+## DIP_NONE, DIP_RAMP (the open trench) or DIP_TUNNEL for this chunk.
+static func dip_at(chunk_index: int) -> int:
+	return _dip[lap_chunk(chunk_index)] if period > 0 else DIP_NONE
+
+## The first chunk of the dip this chunk is in and how many chunks it is long
+## (ramp, tunnel, ramp), in the same lap as chunk_index: Vector2i(first, count).
+## count is 0 off a dip.
+static func dip_span(chunk_index: int) -> Vector2i:
+	if dip_at(chunk_index) == DIP_NONE:
+		return Vector2i(chunk_index, 0)
+	var first := chunk_index
+	while dip_at(first - 1) != DIP_NONE and chunk_index - first < period:
+		first -= 1
+	var last := chunk_index
+	while dip_at(last + 1) != DIP_NONE and last - chunk_index < period:
+		last += 1
+	return Vector2i(first, last - first + 1)
+
+## Lap chunk -> the vertical curvature (1/m, + = sag) the dips force there.
+static func dip_vcurves() -> Dictionary:
+	return _dip_vc
+
+## How far inside a tunnel s metres along the road is: metres from the nearer
+## mouth; 0 or less outside (minus the distance to the nearest mouth).
+static func tunnel_depth(s: float) -> float:
+	var best := -INF
+	if period <= 0:
+		return best
+	var m := wrap_s(s)
+	for t in _tunnels:
+		best = maxf(best, minf(m - float(t.s0), float(t.s1) - m))
+	return best
 
 ## The fixed seed for what stands on the road (buildings, centre barrier).
 static func seed_of(id: int) -> int:
@@ -306,29 +504,135 @@ static func left_in_district(chunk_index: int) -> int:
 static func junctions() -> PackedFloat64Array:
 	return _junctions
 
-## Exits on the road in this act: [{id, s, side, number}].
+## Exits on the road in this act: [{id, s, side, number, ring, centre}], two
+## per ring site. s = the gore: RING_GORE before the ring's centre on the +1
+## carriageway (side 1, id "<ring>a"), RING_GORE after it on the -1 one (side
+## -1, id "<ring>b"), which is "before" for the traffic on that side.
 static func exits() -> Array:
 	return _exits
 
-## Gaps in the centre barrier in this act: [{id, s}].
+## Gaps in the centre barrier in this act: [{id, s}]: signed U-turns, legal
+## for everyone, one at the start of each district.
 static func gaps() -> Array:
 	return _gaps
+
+## Ring sites on the road in this act: [{id, s, number, kind}] (no tunnels).
+static func rings() -> Array:
+	return _rings
+
+## The ring site whose ramps or slip lanes run beside this chunk: an index
+## into rings(), or -1.
+static func ring_at(chunk_index: int) -> int:
+	return _ring_of[lap_chunk(chunk_index)] if period > 0 else -1
+
+## That chunk's offset k from the ring's own chunk (see "ring sites" above).
+## Only meaningful where ring_at() is not -1.
+static func ring_k(chunk_index: int) -> int:
+	return _ring_k[lap_chunk(chunk_index)] if period > 0 else 0
+
+## What the ring leads to: "stop", "lot", "landmark" or "plain".
+static func ring_kind(ring: int) -> String:
+	return String(_rings[ring].kind)
+
+## Whether ramps (or the pad) stand beside this chunk: no buildings, no kerb,
+## and the out-of-bounds wall moves out past them.
+static func ramp_zone(chunk_index: int) -> bool:
+	if period <= 0:
+		return false
+	var m := lap_chunk(chunk_index)
+	return _ring_of[m] >= 0 and _ring_k[m] >= -RAMP_CHUNKS and _ring_k[m] < RAMP_CHUNKS
+
+## Width of the slip lane at the join `offset` chunks from a ring's chunk
+## (the join at the START of chunk k is offset k), before crossings are
+## taken into account.
+static func _aux_plan(offset: int) -> float:
+	var d := absi(offset)
+	if d < RAMP_CHUNKS or d >= RAMP_CHUNKS + AUX_CHUNKS:
+		return 0.0
+	return AUX_W * clampf(float(RAMP_CHUNKS + AUX_CHUNKS - d) / float(AUX_TAPER), 0.0, 1.0)
+
+## Width of the slip lane at the start and at the end of a chunk, m (x, y);
+## the same on both carriageways. Zero through a crossing's chunk and its
+## neighbours (the crossing is built for the plain road), so where a crossing
+## stands on a slip lane's length the lane opens after it, in one chunk.
+## The ramp chunks themselves have none: the lane has left the road.
+static func aux(chunk_index: int) -> Vector2:
+	if period <= 0:
+		return Vector2.ZERO
+	var m := lap_chunk(chunk_index)
+	if _ring_of[m] < 0 or _held[m] == 1:
+		return Vector2.ZERO
+	var k := _ring_k[m]
+	if k >= -RAMP_CHUNKS and k < RAMP_CHUNKS:
+		return Vector2.ZERO
+	var a := _aux_plan(k)
+	var b := _aux_plan(k + 1)
+	if _held[posmod(m - 1, period)] == 1:
+		a = 0.0
+	if _held[posmod(m + 1, period)] == 1:
+		b = 0.0
+	return Vector2(a, b)
+
+## The exit gantries that stand in this chunk: [{side, ring, far}], side +1
+## for the carriageway driven the way the chunks count; far = the 1 km one
+## (else 400 m). Empty on most chunks.
+static func exit_signs(chunk_index: int) -> Array:
+	return _exit_signs.get(lap_chunk(chunk_index), []) if period > 0 else []
+
+## The ring site nearest `s` metres along the road: {index (into rings()), s
+## (its centre, on the same lap as s or the one before or after)}. index -1
+## when there is none.
+static func ring_near(s: float) -> Dictionary:
+	if _rings.is_empty():
+		return {"index": -1, "s": INF}
+	var lap := length()
+	var m := fposmod(s, lap)
+	var best := INF
+	var which := -1
+	for i in _rings.size():
+		var d := fposmod(float(_rings[i].s) - m + lap * 0.5, lap) - lap * 0.5
+		if absf(d) < absf(best):
+			best = d
+			which = i
+	return {"index": which, "s": s + best}
+
+## Which side a ring's spur leaves on: +1 / -1 for a "stop" (its STOPS exit's
+## side) or +1 for a "lot"; 0 = no spur.
+static func ring_spur_side(ring: int) -> int:
+	var kind := String(_rings[ring].kind)
+	if kind == "lot":
+		return 1
+	if kind != "stop":
+		return 0
+	for st in STOPS:
+		if int(st.road) == road_id and String(st.get("exit", "")).trim_suffix("a").trim_suffix("b") == String(_rings[ring].id):
+			return 1 if String(st.get("exit", "")).ends_with("a") else -1
+	return 1
+
+## Whether a stop (STOPS) hangs off this ring.
+static func ring_has_stop(ring: int) -> bool:
+	for st in STOPS:
+		if int(st.road) == road_id and String(st.get("exit", "")).trim_suffix("a").trim_suffix("b") == String(_rings[ring].id):
+			return true
+	return false
 
 ## Whether the centre barrier is open for the whole of this chunk (a gap).
 static func gap_in(chunk_index: int) -> bool:
 	return period > 0 and _gap_chunk[lap_chunk(chunk_index)] == 1
 
-## One byte per chunk of the lap: 1 = straight and level whatever the night's
-## seed (RoadAlignment).
+## One byte per chunk of the lap: PIN_STRAIGHT = straight and level whatever
+## the night's seed, PIN_LEVEL = level, but free to bend (RoadAlignment).
 static func pins() -> PackedByteArray:
 	return _pins
 
 ## An exit of road `id` by its exit id ({} if there is none).
 static func exit_of(id: int, exit_id: String) -> Dictionary:
 	if ROADS.has(id):
-		for e in ROADS[id].exits:
-			if e.id == exit_id:
-				return e
+		for r in ROADS[id].rings:
+			for side in [1, -1]:
+				if "%s%s" % [r.id, "a" if side > 0 else "b"] == exit_id and String(r.kind) != "tunnel":
+					return {"id": exit_id, "s": float(r.s) - float(side) * RING_GORE, "side": side,
+						"number": int(r.number), "ring": String(r.id), "centre": float(r.s)}
 	return {}
 
 ## Where a stop is: {road, s, side} of its own place, or of its exit ({} for an
@@ -338,7 +642,7 @@ static func stop_place(stop_id: String) -> Dictionary:
 		if st.id == stop_id:
 			if st.has("s") and st.has("side"):
 				return {"road": int(st.road), "s": float(st.s), "side": int(st.side)}
-			var e := exit_of(int(st.road), String(st.exit))
+			var e := exit_of(int(st.road), String(st.get("exit", "")))
 			return {"road": int(st.road), "s": float(e.s), "side": int(e.side)} if not e.is_empty() else {}
 	return {}
 

@@ -64,32 +64,33 @@ func _loop_static() -> void:
 	_check(is_equal_approx(lap, 6400.0), "Loop 1 act 1 is %.0f m, expected 6400" % lap)
 	var cases := [
 		# [s, side, expected next_after]
-		[0.0, 1, 2225.0], [2225.0, 1, 2225.0], [2300.0, 1, 5425.0], [6500.0, 1, 8625.0],
-		[0.0, -1, 1825.0], [1900.0, -1, 5025.0], [5100.0, -1, 8225.0],
-		[12900.0, 1, 12800.0 + 2225.0],
+		# (the stations on the slip lanes past the ring sites' merges since R1-R4)
+		[0.0, 1, 2375.0], [2375.0, 1, 2375.0], [2450.0, 1, 5575.0], [6500.0, 1, 8775.0],
+		[0.0, -1, 1625.0], [1700.0, -1, 4875.0], [4950.0, -1, 8025.0],
+		[12900.0, 1, 12800.0 + 2375.0],
 	]
 	for c in cases:
 		var got := GasStation.next_after(float(c[0]), int(c[1]))
 		_check(is_equal_approx(got, float(c[2])), "next_after(%.0f, side %d) = %.0f, expected %.0f" % [c[0], c[1], got, c[2]])
-	for st in [2225.0, 5425.0]:
+	for st in [2375.0, 5575.0]:
 		_check(is_equal_approx(GasStation.nearest(st + 30.0, 1), st), "side +1 nearest to %.0f is %.0f" % [st + 30.0, GasStation.nearest(st + 30.0, 1)])
 		_check(absf(GasStation.nearest(st, -1) - st) > 300.0, "a side -1 station within 300 m of the side +1 one at %.0f" % st)
-	for st in [1825.0, 5025.0]:
+	for st in [1625.0, 4875.0]:
 		_check(is_equal_approx(GasStation.nearest(st - 30.0, -1), st), "side -1 nearest to %.0f is %.0f" % [st - 30.0, GasStation.nearest(st - 30.0, -1)])
 		_check(absf(GasStation.nearest(st, 1) - st) > 300.0, "a side +1 station within 300 m of the side -1 one at %.0f" % st)
 	var l := GasStation.L
-	for c in [[2225.0, 1, true], [2225.0, -1, false], [1825.0, -1, true], [1825.0, 1, false]]:
+	for c in [[2375.0, 1, true], [2375.0, -1, false], [1625.0, -1, true], [1625.0, 1, false]]:
 		var ci := int(float(c[0]) / l)
 		var z := -fmod(float(c[0]), l)
 		_check(GasStation.in_bay(ci, z, int(c[1])) == bool(c[2]), "in_bay at %.0f side %d should be %s" % [c[0], c[1], c[2]])
 	# a pump spot of the lot (the compound replaced the shoulder bay on the
 	# loop, 2026-10-11) is on its own side
-	var own_pump := GasStation.spot_centre(2225.0, 1, "pump")
-	var onc_pump := GasStation.spot_centre(1825.0, -1, "pump")
-	_check(GasStation.in_spot(own_pump, 2225.0, 1), "a car at a +1 pump is not in the spot")
-	_check(GasStation.in_spot(onc_pump, 1825.0, -1), "a car at a -1 pump is not in the spot")
-	_check(not GasStation.in_spot(Vector2(-onc_pump.x, onc_pump.y), 1825.0, -1), "a +1 car counted at the -1 pump")
-	_check(not GasStation.in_spot(Vector2(GasStation.own_edge(2225.0, 1) + 1.6, 2225.0), 2225.0, 1), "the old shoulder bay still counts at a loop station")
+	var own_pump := GasStation.spot_centre(2375.0, 1, "pump")
+	var onc_pump := GasStation.spot_centre(1625.0, -1, "pump")
+	_check(GasStation.in_spot(own_pump, 2375.0, 1), "a car at a +1 pump is not in the spot")
+	_check(GasStation.in_spot(onc_pump, 1625.0, -1), "a car at a -1 pump is not in the spot")
+	_check(not GasStation.in_spot(Vector2(-onc_pump.x, onc_pump.y), 1625.0, -1), "a +1 car counted at the -1 pump")
+	_check(not GasStation.in_spot(Vector2(GasStation.own_edge(2375.0, 1) + 1.6, 2375.0), 2375.0, 1), "the old shoulder bay still counts at a loop station")
 	RM.use(RM.ENDLESS)
 	GasStation.first_s = FIRST
 

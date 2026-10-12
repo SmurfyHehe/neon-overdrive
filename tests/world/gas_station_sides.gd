@@ -3,8 +3,8 @@ extends SceneTree
 # Gas stations on both sides of Loop 1 (2026-10-11). In the real game on the
 # loop, the car is put at a pump of each lot in turn and held still (the
 # compound lots replaced the shoulder bays there, same day):
-# - the own-side station at 2,225 m opens the pump menu;
-# - the oncoming-side station at 1,825 m opens it too, and a car in the same
+# - the own-side station at 2,375 m opens the pump menu;
+# - the oncoming-side station at 1,625 m opens it too, and a car in the same
 #   spot mirrored on the other side (the wrong side of the road) does not;
 # - the lots are cleared on their own sides (a building of that side near the
 #   station is an empty lot).
@@ -15,8 +15,8 @@ const GasStation := preload("res://scripts/world/gas_station.gd")
 const Harness := preload("res://tests/traffic/traffic_harness.gd")
 
 const ROOT := "user://test_gas_station_sides"
-const OWN_S := 2225.0
-const ONC_S := 1825.0
+const OWN_S := 2375.0
+const ONC_S := 1625.0
 
 var failures: Array[String] = []
 var game: Node
@@ -55,12 +55,12 @@ func _physics_process(_delta: float) -> bool:
 		0:
 			_check(game.get("gas_station_onc") != null, "no oncoming-side station node")
 			_check(GasStation.RoadMap.period > 0, "the game is not on a loop")
-			_check(is_equal_approx(GasStation.nearest(OWN_S, 1), OWN_S) and is_equal_approx(GasStation.nearest(ONC_S, -1), ONC_S), "the loop's stations are not at 2225 / 1825")
+			_check(is_equal_approx(GasStation.nearest(OWN_S, 1), OWN_S) and is_equal_approx(GasStation.nearest(ONC_S, -1), ONC_S), "the loop's stations are not at 2375 / 1625")
 			phase = 1
 			wait = 0
 		1, 3, 5:
 			# 1: own side bay (opens); 3: oncoming bay (opens); 5: the own-side
-			# spot mirrored onto the oncoming side at 2225 (must not open)
+			# spot mirrored onto the oncoming side at 2375 (must not open)
 			var s := OWN_S if phase == 1 else (ONC_S if phase == 3 else OWN_S)
 			var at := GasStation.spot_centre(s, -1 if phase == 3 else 1, "pump")
 			if phase == 5:
@@ -86,7 +86,10 @@ func _physics_process(_delta: float) -> bool:
 				return _end()
 		2, 4:
 			wait += 1
-			_hold(player, GasStation.own_edge(1000.0, 1) + 3.0, 1000.0, 0.0)
+			# beside the slip lane past exit 1's merge: clear of every ramp
+			# (since the ring sites, 1000 m is exit 2's gore, where its ramp
+			# leaves the road)
+			_hold(player, GasStation.own_edge(700.0, 1) + 3.0, 700.0, 0.0)
 			if wait > 40:
 				phase += 1
 				wait = 0

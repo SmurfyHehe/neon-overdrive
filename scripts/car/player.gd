@@ -100,6 +100,17 @@ var headlights_on := true
 ## Low / high beam, flash and auto-dip (all on H; scripts/car/headlight_beams.gd).
 var beams := HeadlightBeams.new()
 var _steer_smooth := 0.0
+## Auto-trim (brief DP2, Roy 2026-10-11: "the game holds most of a pull for
+## you", stronger pull on Racer): with no steer key down the keyboard steering
+## rests on the angle that cancels this share of the damage pull, not on zero.
+## The pull comes from the toe offsets (CarDamage.pull_angle), never from
+## measuring drift; braking pull, bump twitch and sag are not trimmed.
+const AUTO_TRIM_DAILY := 0.85
+const AUTO_TRIM_WEEKEND := 0.70
+const AUTO_TRIM_RACER := 0.40
+## TODO(DP4a+DP7): read the share from the difficulty setting once it exists;
+## until then every car gets Weekend Warrior's.
+var auto_trim_share := AUTO_TRIM_WEEKEND
 ## Heat and wear (Phase B). Off for sim_only cars so TuneTrack stays clean.
 var health := PowertrainHealth.new()
 ## Grip, slide and roughness per surface under each wheel (surface_feel.gd).
@@ -392,6 +403,7 @@ func _physics_process(delta: float) -> void:
 	else:
 		_read_keyboard()
 	_step_ignition(delta)
+	_limit_steering_lock()
 	_update_line_lock()
 	# Tail smears brighten with the brakes; one instance-colour write per flip.
 	var braking := brake_input > 0.05
@@ -415,6 +427,7 @@ func _physics_process(delta: float) -> void:
 	heat = HeatShimmer.next_heat(heat, self, delta)
 	damage.step(self, delta, health, limp)
 	_apply_damage_offsets()
+	_apply_brake_damage()
 	_apply_lamp_damage()
 	_light_reflectors()
 	health.step(self, delta)
@@ -439,35 +452,117 @@ var _offsets_written := false
 ## Damage offsets (brief DP0) applied on top of the tune, once per physics tick:
 ## effective = tuned x mult (or + add). The tuned values stay in their own
 ## places and are never written over: toe is front_toe / rear_toe, and the
-## spring rate is worked out from the suspension settings exactly as
-## Vehicle.apply_suspension() does. A repair is the offsets going back to
-## neutral; nothing guesses a base from what is in a Wheel.
-## Read today: toe (TOE_ADD), spring rate (SPRING_MULT), cooling (COOLING_MULT).
-## Neutral and unread for now (the brief that wires each, as I understand the
-## plan; DP1 = suspension and geometry, DP3 = tyres and brakes, LM = limp mode
-## and the engine's output):
-##   DP1: CAMBER_ADD, DAMPER_MULT, RIDE_DROP, STEER_CENTRE
-##   DP3: PRESSURE_MULT, GRIP_MULT, RUNOUT, BRAKE_MULT
-##   LM:  STEER_LOCK_MULT, TORQUE_MULT, BOOST_MULT, DRAG_ADD, DOWNFORCE_REAR_MULT
+## spring and damper rates are worked out from the suspension settings exactly
+## as Vehicle.apply_suspension() does. A repair is the offsets going back to
+## neutral; nothing guesses a base from what is in a Wheel. The car reads
+## `damage.applied`, the faded-in copy (CarDamage.FADE_TICKS).
+## Read here (DP0 + DP1): TOE_ADD, CAMBER_ADD (the tyre's own camber term),
+## SPRING_MULT, RIDE_DROP, DAMPER_MULT, COOLING_MULT. Read elsewhere:
+## BRAKE_MULT (_apply_brake_damage), STEER_LOCK_MULT (_limit_steering_lock),
+## the toe adds again for the auto-trim (damage_trim), STEER_CENTRE (the
+## cockpit wheel, steer_centre_view).
+## Still neutral and unread (the brief that wires each, as I understand the plan):
+##   DP3: PRESSURE_MULT, GRIP_MULT, RUNOUT
+##   LM:  TORQUE_MULT, BOOST_MULT, DRAG_ADD, DOWNFORCE_REAR_MULT
+const RIDE_DROP_MIN_TRAVEL := 0.02   # m of bump travel a dropped corner always keeps
 func _apply_damage_offsets() -> void:
 	if not damage.enabled:
 		return
-	var o := damage.offsets
-	health.cooling_mult = o.get_car(CarDamage.DamageOffsets.COOLING_MULT)
+	var o := damage.applied
+	var DO := CarDamage.DamageOffsets
+	health.cooling_mult = o.get_car(DO.COOLING_MULT)
 	var neutral := o.is_neutral()
 	if neutral and not _offsets_written:
 		return
 	_offsets_written = not neutral
 	var tuned_toe := [-front_toe, front_toe, -rear_toe, rear_toe]
-	var front_rate := calculate_spring_rate(vehicle_mass * front_weight_distribution * 4.9,
-		front_spring_length, front_resting_ratio)
-	var rear_rate := calculate_spring_rate(vehicle_mass * (1.0 - front_weight_distribution) * 4.9,
-		rear_spring_length, rear_resting_ratio)
-	var tuned_rate := [front_rate, front_rate, rear_rate, rear_rate]
+	var front_weight := vehicle_mass * front_weight_distribution * 4.9
+	var rear_weight := vehicle_mass * (1.0 - front_weight_distribution) * 4.9
+	var front_rate := calculate_spring_rate(front_weight, front_spring_length, front_resting_ratio)
+	var rear_rate := calculate_spring_rate(rear_weight, rear_spring_length, rear_resting_ratio)
+	var front_damp := calculate_damping(front_weight, front_rate, front_damping_ratio)
+	var rear_damp := calculate_damping(rear_weight, rear_rate, rear_damping_ratio)
+	var any_camber := false
 	for i in mini(4, wheel_array.size()):
 		var w: Wheel = wheel_array[i]
-		w.toe = tuned_toe[i] + o.get_wheel(i, CarDamage.DamageOffsets.TOE_ADD)
-		w.spring_rate = tuned_rate[i] * o.get_wheel(i, CarDamage.DamageOffsets.SPRING_MULT)
+		var front := i < 2
+		var spring := o.get_wheel(i, DO.SPRING_MULT)
+		w.toe = tuned_toe[i] + o.get_wheel(i, DO.TOE_ADD)
+		w.spring_rate = (front_rate if front else rear_rate) * spring
+		# Ride drop: a shorter spring at the same rate sits the corner lower by
+		# that much. Never so far that the softer spring's resting point is
+		# within RIDE_DROP_MIN_TRAVEL of the bump stop.
+		var length := front_spring_length if front else rear_spring_length
+		var resting := length * (front_resting_ratio if front else rear_resting_ratio) / maxf(spring, 0.01)
+		var drop := clampf(o.get_wheel(i, DO.RIDE_DROP), 0.0, maxf(length - resting - RIDE_DROP_MIN_TRAVEL, 0.0))
+		var new_length := length - drop
+		if w.spring_length != new_length:
+			# keep the damper from seeing the change of length as spring travel
+			w.previous_compression += (new_length - w.spring_length) * 1000.0
+			w.spring_length = new_length
+		var damp := (front_damp if front else rear_damp) * o.get_wheel(i, DO.DAMPER_MULT)
+		var bump := front_bump_damp_multiplier if front else rear_bump_damp_multiplier
+		var rebound := front_rebound_damp_multiplier if front else rear_rebound_damp_multiplier
+		w.slow_bump = damp * bump
+		w.slow_rebound = damp * rebound
+		w.fast_bump = damp * bump * 0.5
+		w.fast_rebound = damp * rebound * 0.5
+		# Camber through the tyre's own model (set_tyre_setup's numbers, degrees).
+		var stock := front_static_camber_stock if front else rear_static_camber_stock
+		var camber := (front_static_camber if front else rear_static_camber) + rad_to_deg(o.get_wheel(i, DO.CAMBER_ADD))
+		w.static_camber = camber
+		w.camber_active = not is_equal_approx(camber, stock)
+		w.camber_long_mult = (1.0 - Wheel.CAMBER_LONG_LOSS * absf(camber)) / (1.0 - Wheel.CAMBER_LONG_LOSS * absf(stock))
+		any_camber = any_camber or w.camber_active
+	_camber_active = any_camber
+
+## A hurt brake corner (BRAKE_MULT). GEVP shares the brake torque per axle
+## inside the vendored code with no per-wheel input, so the lost share is
+## given back on our side: while braking, (1 - mult) of that tyre's braking
+## force is applied the other way at its contact patch. Same net force and
+## yaw as a weaker brake on that wheel; nothing at all when not braking.
+func _apply_brake_damage() -> void:
+	if not _offsets_written or not is_braking:
+		return
+	var o := damage.applied
+	for i in mini(4, wheel_array.size()):
+		var lost := 1.0 - o.get_wheel(i, CarDamage.DamageOffsets.BRAKE_MULT)
+		if lost <= 0.0:
+			continue
+		var w: Wheel = wheel_array[i]
+		if not w.is_colliding() or w.last_collider == null:
+			continue
+		var f := w.force_vector.y
+		if f * w.local_velocity.z >= 0.0:
+			continue   # not slowing the car (drive, or stopped)
+		apply_force(-w.global_transform.basis.z * f * lost, w.last_collision_point - global_position)
+
+## A bent rack (STEER_LOCK_MULT): whoever steers, the wheels get at most that
+## share of the lock. steering_input is before GEVP's exponent, hence the root.
+func _limit_steering_lock() -> void:
+	if not _offsets_written:
+		return
+	var lock := damage.applied.get_car(CarDamage.DamageOffsets.STEER_LOCK_MULT)
+	if lock < 1.0:
+		var cap := pow(maxf(lock, 0.0), 1.0 / maxf(steering_exponent, 0.1))
+		steering_input = clampf(steering_input, -cap, cap)
+
+## Where the keyboard steering rests with no steer key down, as a share of
+## lock, + = right: the trim that cancels auto_trim_share of the damage pull.
+## Zero on an undamaged car.
+func damage_trim() -> float:
+	if not _offsets_written:
+		return 0.0
+	var lock := maxf(max_steering_angle * front_steering_ratio, 0.01)
+	return clampf(CarDamage.pull_angle(damage.applied) * auto_trim_share / lock, -1.0, 1.0)
+
+## What the cockpit adds to its drawn wheel (rad, + = right) so that it rests
+## on STEER_CENTRE when no steer key is down: the crooked wheel of a bent arm.
+## `wheel_lock_rad` is the drawn wheel's turn at full lock.
+func steer_centre_view(wheel_lock_rad: float) -> float:
+	if not _offsets_written:
+		return 0.0
+	return damage.applied.get_car(CarDamage.DamageOffsets.STEER_CENTRE) - damage_trim() * wheel_lock_rad
 
 ## A broken head lamp takes its half of the beam (CarFx's one spot light).
 func _apply_lamp_damage() -> void:
@@ -623,8 +718,9 @@ func apply_keys(k: int) -> void:
 	# Negating here (rather than swapping which key does what) keeps A=left/D=right
 	# reading naturally in the code while matching what the asset expects.
 	var speed_t := clampf((current_speed() - STEER_SLOW_SPEED) / (STEER_FAST_SPEED - STEER_SLOW_SPEED), 0.0, 1.0)
-	var target := steer_in * steer_lock_cap()
-	var coming_in := target != 0.0 and (_steer_smooth == 0.0 or signf(target) == signf(_steer_smooth))
+	var held := steer_in != 0.0
+	var target := steer_in * steer_lock_cap() if held else damage_trim()
+	var coming_in := held and (_steer_smooth == 0.0 or signf(target) == signf(_steer_smooth))
 	var rate := lerpf(STEER_ATTACK, STEER_ATTACK_FAST, speed_t) if coming_in else STEER_RELEASE
 	_steer_smooth = move_toward(_steer_smooth, target, rate * get_physics_process_delta_time())
 	# GEVP raises the input to steering_exponent (1.5) before it reaches the

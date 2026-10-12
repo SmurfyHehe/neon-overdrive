@@ -418,6 +418,9 @@ func _process(delta: float) -> void:
 	bump *= exp(-BUMP_DECAY * delta)
 	if frame != null:
 		frame.steering = target.steer_fraction()  # the wheel turns the way the car does, in every view
+		# damage: the drawn wheel rests crooked by the front toe bend x this car's steering ratio
+		target.damage.steering_ratio = CockpitFrame.WHEEL_LOCK_RAD / maxf(target.max_steering_angle, 0.01)
+		frame.steer_centre = target.steer_centre_view(CockpitFrame.WHEEL_LOCK_RAD)
 	if view == View.COCKPIT:
 		_place_cockpit(delta)
 		if look_back:

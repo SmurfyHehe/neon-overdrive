@@ -19,7 +19,8 @@ extends SceneTree
 # Anywhere else the drop-in asks for braking and cornering at once at the
 # limit (400 km/h 150 m before a 351 m bend needs 2 g), and the test would
 # measure that, not the drop-in. The car is moved there along the road, in
-# short hops so the chunks under it are built.
+# short hops so the chunks under it are built. A speed no stretch allows
+# (400 km/h on the default loop) is tested at the fastest one that is.
 
 const Harness := preload("res://tests/traffic/traffic_harness.gd")
 const TestDriver := preload("res://scripts/core/test_driver.gd")
@@ -30,7 +31,8 @@ const BURST := 3.0   # m/s over the spawn speed
 const HOP_M := 120.0    # m per hop to the drop-in spot (inside CHUNKS_AHEAD/BEHIND)
 const HOP_TICKS := 12   # ticks after each hop for the chunks to build
 const SEARCH_AHEAD := 200   # chunks searched ahead for a drop-in spot
-const SEARCH_BACK := 100    # ... and back (the run-up before chunk 0 is straight)
+const SEARCH_BACK := 100    # ... and back
+const CAP_STEP := 10.0      # km/h: a speed no stretch allows is tried this much lower
 
 var logger := Harness.ErrorCounter.new()
 var game: Node
@@ -95,8 +97,18 @@ func _next() -> bool:
 	p.fuel.litres = FuelTank.CAPACITY_L
 	hop_left = _to_drop_in(speeds[at] / 3.6)
 	if is_nan(hop_left):
-		fails.append("%d km/h: no stretch within %d chunks either way lets the car carry it" % [int(speeds[at]), SEARCH_AHEAD])
-		return _end()
+		# No stretch of this road lets the bot carry it (400 km/h on the
+		# default loop: its longest straight is 250 m). Roy, 2026-10-12
+		# (#550): bends are tested up to the fastest speed the road allows;
+		# the flat run (no DRIVE_CURVES) still tests every speed.
+		var asked := speeds[at]
+		while is_nan(hop_left) and speeds[at] > CAP_STEP:
+			speeds[at] -= CAP_STEP
+			hop_left = _to_drop_in(speeds[at] / 3.6)
+		if is_nan(hop_left):
+			fails.append("%d km/h: no stretch within %d chunks either way lets the car carry any speed" % [int(asked), SEARCH_AHEAD])
+			return _end()
+		print("drive_spawn %d km/h: no stretch of this road allows it; tested at %d km/h, the fastest it does" % [int(asked), int(speeds[at])])
 	if hop_left != 0.0:
 		print("drive_spawn %d km/h: dropped in %.0f m %s, where the road ahead allows it" % [int(speeds[at]), absf(hop_left), "on" if hop_left > 0.0 else "back"])
 		return _hop()

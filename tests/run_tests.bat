@@ -2,6 +2,7 @@
 rem Run every test in tests\ and print one pass/fail summary (GitHub #39).
 rem
 rem   tests\run_tests.bat          all tests; a game window opens for ~1 min
+rem   tests\run_tests.bat ci       the GitHub check: ~100 fast headless tests, about 12 min
 rem   tests\run_tests.bat quick    headless tests only, no window: about 15 min of test
 rem                                time over 85 tests (CI wall clock about 23 of its 30)
 rem
@@ -43,6 +44,7 @@ echo Started %DATE% %TIME:~0,8%
 
 set "FAILED="
 set "CRASHED="
+if /i "%~1"=="ci" goto ci
 call :run low_fps_watch --headless
 call :run core/perf_ladder --headless
 call :run core/smoke --headless
@@ -468,6 +470,7 @@ call :run traffic/more_alive_traffic "--headless --fixed-fps 120"
 	call :run audio/mute --headless
 	call :run car/feel_pass_1 --headless
 )
+:report
 echo.
 echo Per-test times:
 type "%TIMES%"
@@ -480,6 +483,113 @@ if defined FAILED (
 )
 if defined CRASHED (echo No test failed, but see CRASHED above.) else echo All tests passed.
 exit /b 0
+
+rem The GitHub check (.github/workflows/test.yml): about 100 of the fastest quick tests,
+rem one or more from every area, so it finishes inside the runner's 30 minutes. The full
+rem quick and window sets still run before every merge.
+:ci
+call :run core/work_orders_data --headless
+call :run audio/song_names --headless
+call :run car/bolt_ons --headless
+call :run car/damage_offsets --headless
+call :run car/kerb_strike --headless
+call :run core/discord_presence --headless
+call :run core/perf_ladder --headless
+call :run core/save_system --headless
+call :run core/view_settings --headless
+call :run fleet/car_loft_normals --headless
+call :run fleet/interior_unique --headless
+call :run low_fps_watch --headless
+call :run traffic/cop_brain_pure --headless
+call :run traffic/flow_flip --headless
+call :run traffic/free_driver_pure --headless
+call :run traffic/police_heat --headless
+call :run traffic/police_wrong_way --headless
+call :run traffic/trap_warning_flash --headless
+call :run traffic/wrong_way_pure --headless
+call :run ui/radio_carousel --headless
+call :run ui/timing_bar --headless
+call :run world/person_body --headless
+call :run world/side_streets --headless
+call :run world/water_rules --headless
+call :run audio/exhaust_pops --headless
+call :run audio/menu_sfx --headless
+call :run audio/radio_power --headless
+call :run car/car_assembler --headless
+call :run car/fix_car "--headless --fixed-fps 60"
+call :run car/sat_nav_route --headless
+call :run car/totalled_meter --headless
+call :run car_dirt --headless
+call :run core/error_log --headless
+call :run core/key_bindings --headless
+call :run core/setting_danger --headless
+call :run core/work_orders --headless
+call :run fleet/car_pipeline_p1 --headless
+call :run traffic/police_rules --headless
+call :run traffic/rival_plan_pure --headless
+call :run view/cabin_mods --headless
+call :run view/dash_trinket --headless
+call :run world/road_frame --headless
+call :run world/season_calendar --headless
+call :run world/uturn_signs --headless
+call :run world/weather_plan --headless
+call :run car/chassis_targets "--headless --fixed-fps 60"
+call :run car/test_build_mods --headless
+call :run car/undercarriage --headless
+call :run core/game_info --headless
+call :run core/log_folder --headless
+call :run core/save_gearbox "--headless --fixed-fps 120"
+call :run core/settings_safety --headless
+call :run fleet/car_parts_kits --headless
+call :run tuning/auto_tune_rules --headless
+call :run ui/fonts --headless
+call :run ui/key_map --headless
+call :run ui/settings_screen --headless
+call :run world/cross_section --headless
+call :run world/graffiti --headless
+call :run world/kerb_profile --headless
+call :run world/lamp_life --headless
+call :run world/names --headless
+call :run world/sidewalk_collision_taper --headless
+call :run audio/exhaust_tune --headless
+call :run core/palette --headless
+call :run view/wheel_screen --headless
+call :run world/road_strip_winding --headless
+call :run fleet/fleet_design_check --headless
+call :run world/road_space --headless
+call :run car/car_paint --headless
+call :run tuning/tune_params --headless
+call :run ui/mod_tree_panel --headless
+call :run world/chunk_builder_equivalence --headless
+call :run world/district_kinds --headless
+call :run world/road_alignment --headless
+call :run world/road_centerline --headless
+call :run audio/starter_render --headless
+call :run fleet/p1_coupe --headless
+call :run fleet/test_car --headless
+call :run world/chunk_rebuild_perf --headless
+call :run world/road_layout --headless
+call :run view/camera_rate_independent --headless
+call :run world/roadside_kit --headless
+call :run audio/audio_master --headless
+call :run car/anti_lag_turbo --headless
+call :run car/car_parts --headless
+call :run car_wash_scene --headless
+call :run save/save_upgrade --headless
+call :run ui/hud_rear_strip --headless
+call :run ui/work_board --headless
+call :run audio/crash_timbre --headless
+call :run car/car_detail --headless
+call :run core/shop_day --headless
+call :run fleet/car_symmetry --headless
+call :run tuning/tune_slots --headless
+call :run view/camera_smoothing_setting --headless
+call :run view/cockpit_shake_rotation_only --headless
+call :run world/boundary_walls --headless
+call :run world/night_bands "--headless --fixed-fps 60"
+call :run car/auto_key_hold "--headless --fixed-fps 120"
+call :run core/freemode --headless
+goto report
 
 :run
 echo.

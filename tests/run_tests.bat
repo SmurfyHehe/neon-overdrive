@@ -160,6 +160,8 @@ call :run core/run_end_restart "--headless --fixed-fps 120"
 rem Totalled meter (TM1): no single hit ends a run; the meter, the free first total, bad cops, the tow row, the test build setting.
 call :run car/totalled_meter --headless
 call :run core/totalled_run_end "--headless --fixed-fps 120"
+rem No roll ends a run (TM2): a car on its side or roof rights itself after 3 s and the roll costs meter. Three game boots, about 2 min of driving time.
+call :run car/roll_righting "--headless --fixed-fps 120"
 call :run world/gas_station --headless
 call :run traffic/traffic_spawn "--headless --fixed-fps 60"
 rem Near-band traffic: hand-overs between the 60 m physics band and the rails, both ways, no visible jump.

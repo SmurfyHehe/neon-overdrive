@@ -62,7 +62,7 @@ func _physics_process(delta: float) -> void:
 		target = loose * shake
 	level = move_toward(level, target, delta * (ATTACK if target > level else RELEASE))
 	if level > 0.001:
-		_audio.volume_db = linear_to_db(level * GAIN)
+		AudioDsp.set_volume_db(_audio, linear_to_db(level * GAIN))
 		if not _audio.playing:
 			_audio.play(randf() * SECONDS)
 	elif _audio.playing:

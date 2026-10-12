@@ -320,7 +320,7 @@ func _physics_process(delta: float) -> void:
 		target = COUGH_DUCK if _cough_left > 0.0 else 1.0
 	level = move_toward(level, target, delta * (ATTACK if target > level else RELEASE))
 	if level > 0.001:
-		_crank.volume_db = linear_to_db(level * GAIN * view_gain(_cabin()))
+		AudioDsp.set_volume_db(_crank, linear_to_db(level * GAIN * view_gain(_cabin())))
 	elif _crank.playing and not cranking:
 		_crank.stop()
 

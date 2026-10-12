@@ -120,7 +120,7 @@ func _process(delta: float) -> void:
 	var target := speed_gate * gear_weight * load if in_gear else 0.0
 	var rate := ATTACK if target > whine_level else RELEASE
 	whine_level = lerpf(whine_level, target, 1.0 - exp(-rate * delta))
-	_whine.volume_db = linear_to_db(whine_level * WHINE_GAIN) if whine_level > 0.002 else -80.0
+	AudioDsp.set_volume_db(_whine, linear_to_db(whine_level * WHINE_GAIN) if whine_level > 0.002 else -80.0)
 	_whine.pitch_scale = clampf(v.motor_rpm / 60.0 * WHINE_TEETH / WHINE_BASE_HZ, 0.3, 4.0)
 
 	# --- shift thump: when a gear change completes

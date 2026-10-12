@@ -25,7 +25,24 @@ class ErrorCounter extends Logger:
 		pass
 
 const TestDriver := preload("res://scripts/core/test_driver.gd")
-const SETTINGS_PATH := "user://traffic_test_settings.cfg"
+## The scratch settings file Game reads in a harness test: one per test
+## script, emptied when the test starts (#584); what the test itself saves
+## between two boots still carries over. It used to be one shared file that
+## outlived the run, so on the laptop whatever an earlier test left in it (a
+## rebound key, another car, a graphics preset) reached the next test, and two
+## harness tests running side by side wrote over each other's settings.
+static var SETTINGS_PATH := _settings_path()
+
+static func _settings_path() -> String:
+	var script := "harness"
+	var args := OS.get_cmdline_args()
+	for i in args.size():
+		if args[i].begins_with("res://tests/") and args[i].ends_with(".gd"):
+			script = args[i].trim_prefix("res://tests/").trim_suffix(".gd").replace("/", "_")
+	var path := "user://test_harness/%s.cfg" % script
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(path.get_base_dir()))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	return path
 
 ## Boots Game.tscn with `car_count` traffic cars and the given draw distance.
 ## Game reads both from the settings file, so a scratch file is written first
@@ -42,14 +59,6 @@ static func boot(tree: SceneTree, car_count: int, detail: float, seed_value: int
 	OS.set_environment("NEON_RNG_SEED", str(seed_value))
 	OS.set_environment("NEON_TRAFFIC", "")  # run_tests.bat sets 0 for the other tests
 	AudioSettings.path = SETTINGS_PATH
-	# This scratch file outlives the run, and Game reads [keys] from it: a
-	# rebinding left by an earlier test (horn on H, which unbinds the lights
-	# key) must not reach this one. Seen on the laptop: police_patrol failed
-	# "no key for headlights" from a stale horn=H.
-	var stale := ConfigFile.new()
-	if stale.load(SETTINGS_PATH) == OK and stale.has_section("keys"):
-		stale.erase_section("keys")
-		stale.save(SETTINGS_PATH)
 	TrafficSettings.set_car_count(car_count)
 	TrafficSettings.set_detail_distance(detail)
 	TrafficSettings.save_settings()

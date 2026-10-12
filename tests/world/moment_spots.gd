@@ -10,8 +10,8 @@ extends SceneTree
 #   car over the limit, lets a slow one go, lets a dark car go in the far
 #   lanes and clocks it in the lane beside the cop
 # - the cost of one look
-# - the real game (NEON_MOMENTS=1, a road seed picked so run 0 holds a power
-#   cut and then a trap): the car is held at 100 km/h; the block goes dark
+# - the real game (NEON_MOMENTS=1, a road seed picked so the first two runs
+#   hold a power cut and then a trap): the car is held at 100 km/h; the block goes dark
 #   (lamp heads, pools, signs, windows) and its neighbour does not; a new
 #   night lights it again; the patrol car stands on the sidewalk and clocks
 #   the car; at the end every live chunk's dark state matches tonight's deal.
@@ -21,6 +21,13 @@ extends SceneTree
 
 const TIMEOUT_TICKS := 3600
 const SPEED := 100.0 / 3.6
+const RoadMap := preload("res://scripts/world/road_map.gd")
+const Districts := preload("res://scripts/world/districts.gd")
+## Runs the game part looks in for its power cut and trap. Since the ring
+## sites (R2) every run's second spot stands beside a ring's ramps, where
+## there are no buildings and no sidewalk, so it is always quiet: one run
+## can no longer hold both a cut and a trap.
+const GAME_RUNS := 2
 
 class FakeCar extends Node3D:
 	var speed := 0.0
@@ -48,14 +55,38 @@ func _initialize() -> void:
 	_deck_tests()
 	_rule_tests()
 	_cost()
-	# A road whose first run holds a power cut, then a trap, on night 1.
+	# A road whose first runs hold a power cut, then a trap, on night 1. The
+	# spots' tags read the map (ring ramps), so it is the game's map.
+	RoadMap.use(RoadMap.DEFAULT, 1)
 	for sd in range(1, 5000):
-		if MomentSpots.moment_at(sd, 1, 0, 0) == "power_cut" and MomentSpots.moment_at(sd, 1, 0, 1) == "speed_trap":
+		var cut := -1
+		var trap := -1
+		for run in range(GAME_RUNS):
+			for i in range(MomentSpots.SPOTS_PER_RUN):
+				var card := MomentSpots.moment_at(sd, 1, run, i)
+				if card == "power_cut" and cut < 0 and trap < 0:
+					cut = MomentSpots.spot_chunk(sd, run, i)
+				elif card == "speed_trap" and trap < 0:
+					trap = MomentSpots.spot_chunk(sd, run, i)
+		if cut >= 0 and trap > cut:
 			seed_used = sd
+			cut_chunk = cut
+			trap_chunk = trap
 			break
-	_check(seed_used > 0, "a seed with a power cut and a trap in run 0")
-	cut_chunk = MomentSpots.spot_chunk(seed_used, 0, 0)
-	trap_chunk = MomentSpots.spot_chunk(seed_used, 0, 1)
+	# No moment beside a ring's ramps: the block would have no buildings and
+	# the patrol car would park on the exit ramp's lane.
+	for sd in [1, 77, 123456]:
+		for night in [1, 2, 9]:
+			for run in range(floori(float(RoadMap.period) / float(Districts.RUN))):
+				for i in range(MomentSpots.SPOTS_PER_RUN):
+					var c := MomentSpots.spot_chunk(sd, run, i)
+					var card := MomentSpots.moment_at(sd, night, run, i)
+					var reach := MomentSpots.BLOCK_CHUNKS if card == "power_cut" else 1
+					for k in range(c, c + reach):
+						_check(card == "quiet" or not RoadMap.ramp_zone(k), "%s beside a ring's ramps at chunk %d (seed %d night %d)" % [card, k, sd, night])
+	_check(seed_used > 0, "a seed with a power cut and then a trap in the first %d runs" % GAME_RUNS)
+	for c in [cut_chunk, cut_chunk + MomentSpots.BLOCK_CHUNKS - 1, trap_chunk]:
+		_check(not RoadMap.ramp_zone(c), "chunk %d of a moment is not beside a ring's ramps" % c)
 	OS.set_environment("NEON_MOMENTS", "1")
 	OS.set_environment("NEON_TRAFFIC", "0")
 	OS.set_environment("NEON_CURVES", "0")

@@ -30,6 +30,7 @@ extends Node
 ##   just passed it flashes its headlights twice at the player, once.
 
 const Districts := preload("res://scripts/world/districts.gd")
+const RoadMap := preload("res://scripts/world/road_map.gd")
 const TestMode := preload("res://scripts/core/test_mode.gd")
 
 signal power_cut_started(chunk: int)
@@ -47,8 +48,11 @@ const BAND := 6
 ## Card -> copies in the deck. 8 spots are 4 runs (3.2 km): one of each
 ## moment in that stretch, in an order that changes every night.
 const DECK := {"power_cut": 1, "speed_trap": 1, "quiet": 6}
-## Spot tags a card needs. "block": buildings and lamps on both sides (every
-## spot). "shoulder": a clear roadside to park on (no crossing mouth).
+## Spot tags a card needs. "block": buildings and lamps on both sides, the
+## whole block long. "shoulder": a clear roadside to park on (no crossing
+## mouth). Beside a ring site's ramps (RoadMap.ramp_zone) there is neither:
+## no buildings, no kerb or sidewalk, and the exit ramp's lane runs where the
+## patrol car would park.
 const NEEDS := {"power_cut": ["block"], "speed_trap": ["shoulder"]}
 
 const CHECK_EVERY := 0.1
@@ -113,8 +117,14 @@ static func spot_chunk(seed: int, run: int, i: int) -> int:
 	return run * Districts.RUN + FIRST_CHUNK + i * BAND + posmod(hash([seed, run, i, "spot"]), BAND - 1)
 
 static func spot_tags(chunk: int) -> Array:
-	var tags := ["block"]
-	if not Junction.touches(chunk):
+	var tags := []
+	var block := true
+	for c in range(chunk, chunk + BLOCK_CHUNKS):
+		if RoadMap.ramp_zone(c):
+			block = false
+	if block:
+		tags.append("block")
+	if not Junction.touches(chunk) and not RoadMap.ramp_zone(chunk):
 		tags.append("shoulder")
 	return tags
 

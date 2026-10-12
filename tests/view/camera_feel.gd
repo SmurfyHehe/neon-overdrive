@@ -48,6 +48,13 @@ const MAX_TICKS := 60 * 90
 
 ## Game.PLAYER_SPAWN_LANE (game.gd has no class_name to read it through).
 const SPAWN_LANE := 1
+## Where each game starts, metres round the loop (NEON_START_S). Since the
+## ring sites (R2) the road from the top of the loop runs straight into ring
+## x1's ramp zone (200 to 600 m: ramps beside the road, no kerb), which is
+## where the kerb phase used to begin. From here launch and brake take about
+## 140 m, so the kerb phase starts past x1's ramps, beside its slip lane, with
+## a kerb all the way to x2's ramp zone at 1000 m.
+const START_S := 470.0
 
 var logger := ErrorCounter.new()
 var fails := 0
@@ -70,6 +77,7 @@ var impact_peak := 0.0
 
 func _initialize() -> void:
 	OS.set_environment("NEON_TRAFFIC", "0")  # an empty road, whatever run_tests.bat or the saved settings say
+	OS.set_environment("NEON_START_S", str(START_S))
 	OS.add_logger(logger)
 	seed(777)
 	_spawn()
@@ -109,11 +117,15 @@ func _cam() -> ChaseCamera:
 	return game.get("camera")
 
 ## Lateral position of the middle of the right-hand sidewalk where the car is
-## now (lane counts change chunk to chunk, so it is looked up, not fixed).
+## now (lane counts change chunk to chunk, so it is looked up, not fixed),
+## outside a ring site's slip lane where there is one.
 func _sidewalk_x(p: PlayerCar) -> float:
-	var idx := int(floor(-p.global_position.z / RoadChunkBuilder.CHUNK_LEN)) + int(game.get("origin_index"))
+	var s := RoadFrame.s_at(RoadFrame.unroll(p.global_position).z)
+	var idx := floori(s / RoadChunkBuilder.CHUNK_LEN)
 	var cfg: Dictionary = game.call("_section_at", idx)
-	return RoadChunkBuilder._lane_w(cfg.own_lanes) + Districts.shoulder_at(1) + RoadChunkBuilder.CURB_W + Districts.walk_at(1) / 2.0
+	var aux: Array = cfg.get("aux", [0.0, 0.0, 0.0, 0.0])
+	var slip := lerpf(float(aux[0]), float(aux[1]), s / RoadChunkBuilder.CHUNK_LEN - float(idx))
+	return RoadChunkBuilder._lane_w(cfg.own_lanes) + slip + Districts.shoulder_at(idx) + RoadChunkBuilder.CURB_W + Districts.walk_at(idx) / 2.0
 
 ## Holds the heading down the road toward lateral position aim_x, like
 ## chunk_drive.gd's bot. Default aim is the player's spawn lane: x = 0 is the

@@ -1453,6 +1453,13 @@ func _step_wheel(delta: float) -> void:
 func wheel_rate() -> float:
 	return _wheel_vel
 
+## The pod reads the car, so it runs on the car's tick (#580): on a busy
+## machine several ticks pass between two drawn frames, and per frame it was
+## fitted late and its needles lagged the car.
+func _physics_process(delta: float) -> void:
+	if visible:
+		_update_pod(delta)
+
 func _process(delta: float) -> void:
 	if not visible:
 		return
@@ -1479,7 +1486,6 @@ func _process(delta: float) -> void:
 		limit_tick.rotation = Vector3(0.0, 0.0, deg_to_rad(rest - dial_sweep * lt))
 	_update_lamps()
 	_update_gear_window()
-	_update_pod(delta)
 	var inputs := pedal_inputs()
 	for key in pedals:
 		(pedals[key] as Node3D).rotation_degrees = Vector3(PEDAL_TRAVEL_DEG * float(inputs[key]), 0.0, 0.0)

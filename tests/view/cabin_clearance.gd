@@ -618,6 +618,20 @@ func _bobble_and_trinket(frame: CockpitFrame) -> Dictionary:
 	var gdir := (p1 - p0).normalized()
 	var foot: Vector3 = cab.a_pillar[0]
 	var topp: Vector3 = cab.a_pillar[1]
+	# The tilts and swings share most vertices (and a mesh repeats a vertex
+	# per face): measure each distinct point once. The first label is kept,
+	# which is the one the strict "<" below would report anyway.
+	var seen := {}
+	var uniq_pts := PackedVector3Array()
+	var uniq_lbl := PackedStringArray()
+	for i in all_pts.size():
+		if seen.has(all_pts[i]):
+			continue
+		seen[all_pts[i]] = true
+		uniq_pts.append(all_pts[i])
+		uniq_lbl.append(all_lbl[i])
+	all_pts = uniq_pts
+	all_lbl = uniq_lbl
 	for i in all_pts.size():
 		var p := all_pts[i]
 		var lbl := all_lbl[i]
@@ -665,8 +679,18 @@ func _objects_clearance(frame: CockpitFrame, w: SteeringWheel, objects: Dictiona
 			i += 3
 	var pts: PackedVector3Array = objects.near_pts
 	var lbls: PackedStringArray = objects.near_lbl
+	# The wheel's bounding box: a point at least `res.clear` outside it is at
+	# least that far from every wheel triangle, so it cannot set a new minimum.
+	var box_lo := Vector3(INF, INF, INF)
+	var box_hi := Vector3(-INF, -INF, -INF)
+	for k in soup.size():
+		box_lo = box_lo.min(soup.lo[k])
+		box_hi = box_hi.max(soup.hi[k])
 	for i in pts.size():
-		var r := soup.nearest(pts[i], float(res.clear) + 0.0)
+		var p := pts[i]
+		if p.distance_to(p.clamp(box_lo, box_hi)) >= float(res.clear):
+			continue
+		var r := soup.nearest(p, float(res.clear) + 0.0)
 		if float(r[0]) < float(res.clear):
 			res.clear = float(r[0])
 			res.what = lbls[i]

@@ -6,9 +6,11 @@ extends SceneTree
 # Part 1, the map and the road's shape, no game:
 # - RoadMap.tunnel_at() is true on chunks 85-90 of every lap and nowhere else,
 #   in every act; the dip is chunks 82-93
-# - exit 6 (x6a, x6b) is off the road while tunnels are live and back when
-#   they are not; the other exits, both of district 6's median gaps and its
-#   crossing stay
+# - exit 6 (x6a, x6b) is off the road while tunnels are live; the other
+#   exits, district 6's median gap and its crossing stay. Since the ring
+#   sites (R1-R4) exit 6 is the tunnel's site in the map ("kind": "tunnel"):
+#   it has no ring and no exits with tunnels off either, so turning tunnels
+#   off changes nothing but the dip
 # - chunks 82-93 are pinned and straight for every road seed; the road is
 #   level with the street at both ends of the dip, 6 m under it through the
 #   middle of the tunnel (level there), never steeper than 4 %, the crests
@@ -142,7 +144,8 @@ func _map() -> void:
 		var gaps := {}
 		for g in RoadMap.gaps():
 			gaps[String(g.id)] = true
-		_check(gaps.has("g6a") and gaps.has("g6b"), "act %d: district 6 lost a median gap" % act)
+		# one signed U-turn per district since the ring sites: district 6's is g6
+		_check(gaps.has("g6"), "act %d: district 6 lost its median gap" % act)
 		var crossing := false
 		for j in RoadMap.junctions():
 			crossing = crossing or absf(j - 4725.0) < 0.5
@@ -151,7 +154,8 @@ func _map() -> void:
 		for c in range(FIRST - RAMP, LAST + RAMP + 1):
 			_check(pins[c] == 1, "act %d: chunk %d is not pinned" % [act, c])
 	_check(RoadMap.tunnels().size() == 1 and String(RoadMap.tunnels()[0].id) == "t1", "the road should have the one tunnel t1")
-	# off: the exit is back and nothing is under cover
+	# off: nothing is under cover, and the exits are as they were (the
+	# tunnel's site has no ring either way)
 	RoadMap.tunnel_live = false
 	RoadMap.use(0, 1)
 	var back := 0
@@ -162,7 +166,8 @@ func _map() -> void:
 	for c in RoadMap.period:
 		if RoadMap.dip_at(c) != RoadMap.DIP_NONE:
 			covered += 1
-	_check(back == 2, "tunnels off: exit 6 should be back (%d of 2)" % back)
+	_check(back == 0 and RoadMap.exits().size() == RoadMap.district_count() * 2 - 2,
+		"tunnels off: exit 6 is the tunnel's site and has no ring (%d of 2 back, %d exits)" % [back, RoadMap.exits().size()])
 	_check(covered == 0 and RoadMap.dip_vcurves().is_empty(), "tunnels off: %d chunks still dip" % covered)
 	RoadMap.tunnel_live = true
 	RoadMap.use(0, 1)

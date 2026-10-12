@@ -13,7 +13,10 @@ extends SceneTree
 #      - no spin (heading back inside 8 degrees, turning under 0.2 rad/s) and
 #        no wheel off the ground for more than a couple of ticks;
 #      - the prop is marked gone, and the pools stay inside their caps.
-# 2. A real post from the chunk's own record is hit: it bends, in place.
+# 2. A real post from the chunk's own record is hit: it bends, in place. The
+#    post and its run-up are on a plain stretch of shoulder: no gas station
+#    lot or its taper (the lot's walls stand where the car's right side runs)
+#    and no slip lane opening or closing (the post line bends outward there).
 # 3. Layers: a rolling prop is on its own layer, which neither the car body
 #    nor a wheel looks at.
 # 4. Spree: 20 props in a row at 100 km/h. The caps hold (16 flying, 4
@@ -27,6 +30,8 @@ const Harness := preload("res://tests/traffic/traffic_harness.gd")
 const TestDriver := preload("res://scripts/core/test_driver.gd")
 const Props := preload("res://scripts/world/roadside_props.gd")
 const PropBreak := preload("res://scripts/world/prop_break.gd")
+const RoadMap := preload("res://scripts/world/road_map.gd")
+const GasStation := preload("res://scripts/world/gas_station.gd")
 
 const RATE := 120
 const SPEEDS := [30.0, 80.0, 150.0, 250.0]
@@ -184,9 +189,9 @@ func _root_of(chunk: int) -> Node3D:
 			return e.root
 	return null
 
-func _place(speed_kmh: float, x: float) -> void:
+func _place(speed_kmh: float, x: float, ahead := 0.0) -> void:
 	p.damage.garage_repair(null)
-	TestDriver.place(p, x, 0.0, 0.0, speed_kmh / 3.6)
+	TestDriver.place(p, x, ahead, 0.0, speed_kmh / 3.6)
 	p.damage.forget_motion()
 
 func _next_case() -> void:
@@ -245,14 +250,37 @@ func _layers() -> void:
 			_fail("layers: a wheel looks at the prop layer")
 			break
 
+## Run-up to the real post, m (a little over 3 s at 60 km/h).
+const POST_RUN_UP := 50.0
+
+## Whether the own-side shoulder from road distance s0 to s1 is plain: no gas
+## station lot or the taper before it, no ring site's ramps, and no slip lane
+## opening or closing (the edge, and so the post line, runs straight).
+func _plain_shoulder(s0: float, s1: float) -> bool:
+	var s := s0
+	while s <= s1 + 0.01:
+		var c := floori(s / Props.CHUNK_LEN)
+		var z := -(s - float(c) * Props.CHUNK_LEN)
+		if GasStation.in_frontage(c, z, 1) or RoadMap.ramp_zone(c):
+			return false
+		var aux: Vector2 = RoadMap.aux(c)
+		if not is_equal_approx(aux.x, aux.y):
+			return false
+		s += 5.0
+	return true
+
 func _start_real_post() -> void:
-	# the nearest own-side post at least 40 m ahead, from the chunk's record
+	# The nearest own-side post at least 40 m ahead with a plain run-up, from
+	# the chunk's record; the car starts POST_RUN_UP before it. (Since the ring
+	# sites, the gas stations sit on the slip lanes past a ring: a start beside
+	# Fuel 7A put the car's flank into the lot wall and aimed it at a post on
+	# the next ring's widening slip lane, which it never reached.)
 	var u := RoadFrame.unroll(p.global_position)
 	var s := RoadFrame.s_at(u.z)
 	var here := floori(s / Props.CHUNK_LEN)
 	var best := INF
 	var post_x := 0.0
-	for c in [here + 1, here + 2]:
+	for c in range(here + 1, here + 7):
 		var root := _root_of(c)
 		if root == null:
 			continue
@@ -261,15 +289,15 @@ func _start_real_post() -> void:
 			if rec.kind[i] != Props.POST or rec.side[i] != 1 or rec.slot[i] < 0:
 				continue
 			var ahead: float = float(c) * Props.CHUNK_LEN - rec.road[i].y - s
-			if ahead > 40.0 and ahead < best:
+			if ahead > 40.0 and ahead < best and _plain_shoulder(s + ahead - POST_RUN_UP, s + ahead + 5.0):
 				best = ahead
 				post_x = rec.road[i].x
 	if best == INF:
-		_fail("real post: no post within two chunks")
+		_fail("real post: no post with a plain run-up within six chunks")
 		_start_spree()
 		return
 	# the right-hand corner just reaches the post line; the wheels stay off the kerb
-	_place(60.0, post_x - half.x * 0.9)
+	_place(60.0, post_x - half.x * 0.9, best - POST_RUN_UP)
 	hits_before = breaker.hits
 	phase = "real_post"
 	t = 0

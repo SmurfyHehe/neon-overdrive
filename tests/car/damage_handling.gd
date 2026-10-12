@@ -235,6 +235,14 @@ const SETTLE_SECS := 1.0
 func _launch(p: PlayerCar) -> void:
 	_place(p)
 	Harness.launch_player(p, 0.0)
+	# The stop is the test's, not a hit. ARM_40 and ARM_0 end their 10 s
+	# sliding along the median barrier at about 70 km/h (on the damage chain's
+	# own branch, before the raised coupe hull, they bounced off it and
+	# stopped), and the
+	# barrier contact is still there on the next tick, so the jump to a stand-
+	# still read as a 20 m/s front hit: it bent the next run's front corners
+	# and the REPAIRED car drifted into the barrier.
+	p.damage.forget_motion()
 	keys = PlayerCar.KEY_BRAKE
 	p.driver = func(c: Vehicle) -> void: (c as PlayerCar).apply_keys(keys)
 	settle_left = int(SETTLE_SECS * Engine.physics_ticks_per_second)

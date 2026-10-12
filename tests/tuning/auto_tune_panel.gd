@@ -29,10 +29,12 @@ const HOLD_TICKS := 6
 # (last: 2026-10-11, after the lifted chassis underside of 116e790 moved 0-100 and 100-0,
 # then on the merged branch: 976d9e6 summing the wheel forces moved 100-0 to 41.7, and
 # d0c1335's tyre slide state moved 0-100 to 5.60 and 100-0 to 41.6; bisected with
-# tune_track's default coupe run).
+# tune_track's default coupe run; then #572 moved the track's ground a kilometre
+# up and widened it: 60 Hz 0-100 5.60 -> 5.58, 100-0 41.6 -> 41.9; 120 Hz 100-0
+# 43.3 -> 43.2, re-measured with tune_track.gd at each rate).
 var EXPECT_TOP := 244.1
-var EXPECT_0_100 := 5.60
-var EXPECT_100_0 := 41.6
+var EXPECT_0_100 := 5.58
+var EXPECT_100_0 := 41.9
 const TOLERANCE := 0.005
 const SLOT_FILE := "user://autotune/test_panel_slots.json"
 
@@ -42,7 +44,7 @@ func _initialize() -> void:
 	if Engine.physics_ticks_per_second >= 120:
 		EXPECT_TOP = 248.1
 		EXPECT_0_100 = 5.19
-		EXPECT_100_0 = 43.3
+		EXPECT_100_0 = 43.2
 	change_scene_to_file("res://Game.tscn")
 	_run()
 

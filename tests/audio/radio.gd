@@ -195,7 +195,10 @@ func _physics_process(_delta: float) -> bool:
 				radio._clock += 4.0   # out of the crossfade (3 s long)
 				_go(Step.XFADE_END)
 		Step.XFADE_END:
-			if waited >= 3:
+			# The radio drops the faded player in its own _process; under CPU load
+			# several physics ticks run per drawn frame, so wait for it (up to 1 s)
+			# rather than a fixed 3 ticks.
+			if (radio._music.playing != radio._music_b.playing and waited >= 3) or waited >= 60:
 				_check(radio._music.playing != radio._music_b.playing, "after the crossfade one player should be left")
 				_check(radio._streams.size() <= 2, "after the crossfade only the song on air and the next stay loaded, %d are" % radio._streams.size())
 				_check(radio.now_playing != "", "the music should still be playing")

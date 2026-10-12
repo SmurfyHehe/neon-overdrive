@@ -38,6 +38,7 @@ const TestMode := preload("res://scripts/core/test_mode.gd")
 const TestDriver := preload("res://scripts/core/test_driver.gd")
 const Districts := preload("res://scripts/world/districts.gd")
 const GasStation := preload("res://scripts/world/gas_station.gd")
+const RoadRamps := preload("res://scripts/world/road_ramps.gd")
 
 ## The car was put back; `reason` is one of the REASON_ strings.
 signal rescued(reason: String)
@@ -128,6 +129,8 @@ var _has_good := false
 var _good_s := 0.0  # metres along the road (RoadFrame.s_at), origin-proof
 var _good_x := 0.0
 var _good_y := 0.0
+## Where the last good spot was off the main road ({} = on it): RoadRamps.place_of.
+var _good_place := {}
 var _chunk := {}  # the chunk_pool entry the car was last in
 var _tick := 0
 var _flipped_for := 0.0
@@ -243,6 +246,8 @@ func _remember() -> void:
 	if b == Vector2.ZERO or u.x > b.x - GOOD_INSET or u.x < -(b.y - GOOD_INSET):
 		return
 	_has_good = true
+	# on a ramp, the ring or a spur (ring sites R3): put back there, not on the road under it
+	_good_place = RoadRamps.place_of(u, RoadFrame.s_at(u.z))
 	_good_s = RoadFrame.s_at(u.z)
 	_good_x = u.x
 	_good_y = u.y
@@ -338,8 +343,18 @@ func _clear(x: float, z: float, s: float) -> bool:
 func park_at(s: float) -> void:
 	_park(spot(s))
 
+## Parks the car at once at a place off the main road (RoadRamps.place_of):
+## a run resumed on a ramp, the ring or a spur stays up there.
+func park_place(place: Dictionary) -> void:
+	_park_pose(RoadRamps.pose_of(place))
+
 func _put_back() -> void:
-	_park(target())
+	if not _good_place.is_empty():
+		# on a ramp, the ring or a spur (ring sites R3): the ring's lane facing
+		# anticlockwise, or the ramp facing the way it is driven
+		_park_pose(RoadRamps.pose_of(_good_place))
+	else:
+		_park(target())
 	# The sandbox never leaves a tester with a car that cannot drive on.
 	if TestBuild.on():
 		if _player.damage.is_engine_dead():
@@ -356,7 +371,10 @@ func _put_back() -> void:
 	rescued.emit(_reason)
 
 func _park(u: Vector3) -> void:
-	_player.global_transform = RoadFrame.pose(u.x, u.y + PARK_Y, u.z, 0.0)
+	_park_pose(RoadFrame.pose(u.x, u.y + PARK_Y, u.z, 0.0))
+
+func _park_pose(xf: Transform3D) -> void:
+	_player.global_transform = xf
 	# Standing still, with the sim's saved positions and wheel spin to match
 	# (GEVP reads speed off them; see Game._shift_origin).
 	TrafficCar.set_moving(_player, 0.0)

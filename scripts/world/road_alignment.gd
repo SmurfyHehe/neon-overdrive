@@ -94,6 +94,8 @@ var _closed := false
 ## lap's end; 0 on a pinned chunk).
 var _free_from := PackedInt32Array()
 var _to_level := PackedInt32Array()
+## A loop: 1 on the chunks that must not bend.
+var _straight := PackedByteArray()
 
 var _rng := RandomNumberGenerator.new()
 var _k := PackedFloat64Array()    # curvature of chunk i
@@ -120,9 +122,13 @@ func _init(seed_value: int, curviness_value: float, hilliness_value: float = 0.0
 	period = maxi(period_value, 0)
 	_free_from.resize(period + 1)
 	_to_level.resize(period + 1)
+	_straight.resize(period + 1)
 	for i in range(period - 1, -1, -1):
 		var pinned := i < pins.size() and pins[i] != 0
-		_free_from[i] = _free_from[i + 1] + (0 if pinned else 1)
+		# Pinned 2 (RoadMap.PIN_LEVEL, a ramp beside the road): level, free to bend.
+		var straight := i < pins.size() and pins[i] == 1
+		_straight[i] = 1 if straight else 0
+		_free_from[i] = _free_from[i + 1] + (0 if straight else 1)
 		_to_level[i] = 0 if pinned else _to_level[i + 1] + 1
 	_rng.seed = seed_value
 	_vrng.seed = seed_value ^ 0x5EED_4111
@@ -308,7 +314,7 @@ func _extend() -> void:
 	if absf(end) > MAX_HEADING:
 		k = (signf(end) * MAX_HEADING - psi) / L
 	if period > 0 and i < period:
-		if _to_level[i] == 0:
+		if _straight[i] == 1:
 			k = 0.0  # pinned: straight
 		else:
 			# Never more heading than the free chunks still to come can undo.

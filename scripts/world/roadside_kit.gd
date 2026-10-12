@@ -45,6 +45,7 @@ class_name RoadsideKit
 
 const Districts := preload("res://scripts/world/districts.gd")
 const GasStation := preload("res://scripts/world/gas_station.gd")
+const RoadMap := preload("res://scripts/world/road_map.gd")
 
 const HYDRANT := "hydrant"
 const BIN := "bin"
@@ -343,6 +344,9 @@ static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: fl
 	_read_density()
 	var spec: Dictionary = BY_DISTRICT.get(Districts.name_at(chunk_index), BY_DISTRICT["downtown"]).duplicate()
 	spec.merge(force, true)
+	if RoadMap.ramp_zone(chunk_index):  # a ring site's ramps stand here
+		for key in spec.keys():
+			spec[key] = 0.0
 	_rng.seed = hash([chunk_index, "roadside kit"])
 	var placed: Array = []  # {kind, side, x, y, z, yaw, len}
 	var f := RoadChunkBuilder._foundation()

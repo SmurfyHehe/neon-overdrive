@@ -26,6 +26,7 @@ extends RefCounted
 
 const Districts := preload("res://scripts/world/districts.gd")
 const GasStation := preload("res://scripts/world/gas_station.gd")
+const RoadMap := preload("res://scripts/world/road_map.gd")
 
 const LANE_W := 3.0           # the side street's lanes are narrower than the main road's
 const KERB_W := 0.3
@@ -89,7 +90,7 @@ static var _prop_mat: ShaderMaterial
 ## from the district run's hash. slot is the building slot (0 or 1) whose
 ## lot becomes the opening.
 static func mouths_at(chunk_index: int) -> Array:
-	if not enabled or Districts.is_freeway(chunk_index):
+	if not enabled or Districts.is_freeway(chunk_index) or RoadMap.ramp_zone(chunk_index):
 		return []
 	var run := Districts.run_of(chunk_index)
 	var n := PER_RUN_MIN + posmod(hash([run, "mouths"]), PER_RUN_MAX - PER_RUN_MIN + 1)

@@ -452,6 +452,10 @@ static func cross_at(chunk_index: int) -> Dictionary:
 		var d: Dictionary = cross_of(name_at(chunk_index)).duplicate()
 		d.merge(JUNCTION, true)  # the crossing's geometry, the district's drops
 		return d
+	# Beside a ring site's ramps (RoadRamps): no kerb or pavement for a ramp
+	# to cut through, from the gore to the gore.
+	if RoadMap.ramp_zone(chunk_index) or RoadMap.ramp_zone(chunk_index + 1):
+		return FREEWAY
 	if is_freeway(chunk_index):
 		return FREEWAY
 	return cross_of(name_at(chunk_index))

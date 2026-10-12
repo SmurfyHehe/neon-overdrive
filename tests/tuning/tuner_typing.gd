@@ -3,6 +3,11 @@ extends SceneTree
 # Typing in a Tuner text field must not drive the game state. GameState polls
 # T, Y and Esc, so typing "t" or "y" in the tune slot name box used to switch
 # tabs, and Esc closed the whole screen. Runs the real Game.tscn and checks that
+# - Auto-Tune opens: key map K1 (b455e6f) took Y away from Auto-Tune and no key
+#   opens it now (which key, if any, is GitHub issue #554, waiting on Roy). So the
+#   test opens the Tuner with its key (T, read by position through KeyBindings)
+#   and switches to the Auto-Tune tab with GameState.switch_tuner, what the tab
+#   does, as tests/tuning/auto_tune_panel.gd does since fc7ada6
 # - with the slot name box focused, typing t and y puts the letters in the box and
 #   leaves the screen on the Auto-Tune tab
 # - Esc in the box only leaves the box (focus dropped, text kept, screen open)
@@ -30,9 +35,12 @@ func _run() -> void:
 		return _end("Game has no TunerScreen")
 	var edit: LineEdit = screen.auto.slot_name_edit
 
-	await _tap(KEY_Y)
+	await _tap(_tuner_key())
+	await _until(func(): return gs.state == GameState.State.TUNING, 5.0)
+	_check(gs.state == GameState.State.TUNING, "T should open the Tuner (state %d)" % gs.state)
+	gs.switch_tuner(GameState.State.AUTOTUNE)   # the Auto-Tune tab; no key until #554 is decided
 	await _until(func(): return gs.state == GameState.State.AUTOTUNE, 5.0)
-	_check(gs.state == GameState.State.AUTOTUNE and screen.auto.is_visible_in_tree(), "Y should open Auto-Tune")
+	_check(gs.state == GameState.State.AUTOTUNE and screen.auto.is_visible_in_tree(), "the Auto-Tune tab should open Auto-Tune (state %d)" % gs.state)
 	edit.grab_focus()
 	_check(root.gui_get_focus_owner() == edit, "slot name box should take focus")
 
@@ -52,13 +60,17 @@ func _run() -> void:
 	_check(edit.text == "ty", "Esc should keep the text")
 
 	# Not typing: the keys work again.
-	await _tap(KEY_T)
+	await _tap(_tuner_key())
 	await _until(func(): return gs.state == GameState.State.TUNING, 5.0)
 	_check(gs.state == GameState.State.TUNING, "T with no text field focused should switch to the Tuner tab")
 	await _tap(KEY_ESCAPE)
 	await _until(func(): return gs.state == GameState.State.PLAYING, 5.0)
 	_check(gs.state == GameState.State.PLAYING and not paused, "Esc with no text field focused should close the Tuner")
 	_end("")
+
+## The Tuner key's position (T by default; keys are bound by position since key map K1).
+func _tuner_key() -> Key:
+	return KeyBindings.keys(&"tuning_panel")[0] as Key
 
 func _end(msg: String) -> void:
 	if msg != "":

@@ -124,6 +124,7 @@ class Run extends RefCounted:
 	var heat_log: Array = []
 	var start_pos := Vector3.ZERO
 	var has_start := false
+	var prev_dist := 0.0  # accel run: distance from start_pos at the last tick
 
 	func drive(c: PlayerCar) -> void:
 		if done:
@@ -199,9 +200,15 @@ class Run extends RefCounted:
 		if not has_start:
 			start_pos = c.global_position
 			has_start = true
-		# Standing 400 m (balance sweep): the "lap" is built from this.
-		if not m.has("t_400") and c.global_position.distance_to(start_pos) >= 400.0:
-			m.t_400 = t
+		# Standing 400 m (balance sweep): the "lap" is built from this. Timed
+		# where the line is crossed between two ticks, not at the tick after
+		# (2026-10-12, #601): in whole ticks a small gain read as nothing or as
+		# a full 1/60 s depending on where the ticks fell.
+		var dist := c.global_position.distance_to(start_pos)
+		if not m.has("t_400") and dist >= 400.0:
+			var k := clampf((400.0 - prev_dist) / maxf(dist - prev_dist, 1e-6), 0.0, 1.0)
+			m.t_400 = t - dt + dt * k
+		prev_dist = dist
 		if t >= ACCEL_TIME:
 			_finish()
 
@@ -270,6 +277,11 @@ class Run extends RefCounted:
 ## more replaces the RigidBody's linear damping with that value, for what-if
 ## runs: Godot's old default of 0.1 capped the car near 124 km/h.
 var linear_damp_override := -1.0
+## The car each spec is driven on (PlayerCar.chassis: its wheel hardpoints,
+## collision body and fittings). Set it to the car the specs belong to; ""
+## builds on the player's picked car, which is right only for that car's specs
+## (2026-10-12, #601: the p0_beater bolt-on sweep was timed on the coupe).
+var car_kind := ""
 ## Keep the brake run's telemetry trace (see the top of the file).
 var record_trace := false
 ## Steering input of the corner run (CORNER_STEER = the track's usual number).
@@ -385,6 +397,7 @@ func _spawn(spec: Dictionary, lane: int, kind: int) -> Run:
 		r.trace = {"step": TRACE_STEP, "speed": [], "throttle": [], "brake": []}
 	var car := PlayerCar.new()
 	car.sim_only = true
+	car.chassis = car_kind
 	car.spec = CarSpec.clone_spec(spec)
 	# TuneTrack shifts by itself (_shift); the game default is automatic now.
 	car.spec["automatic_transmission"] = false

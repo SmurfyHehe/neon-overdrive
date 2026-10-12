@@ -144,6 +144,12 @@ var spec := {}
 ## engine audio, which have no effect on the physics.
 var driver := Callable()
 var sim_only := false
+## The car to build: its wheel hardpoints, collision body and fittings. "" is
+## chassis_kind(), the car the player picked. TuneTrack sets it (before
+## add_child) so a spec is measured on its own car, not on whatever the player
+## drives: the p0_beater bolt-on sweep ran on the coupe's hull and wheels, and
+## its numbers moved when the coupe's hull did (#538, #601).
+var chassis := ""
 
 ## The tune kept between runs (PlayerTune): only the game's own car, the one
 ## built from the default spec, loads and saves it.
@@ -184,7 +190,7 @@ func _ready() -> void:
 	# of the old flat-box look.
 	# The P1 sports coupe (P1CoupeBuilder), or the neutral #63 test car with
 	# NEON_TEST_CAR=1. Same physics either way; see chassis_kind().
-	var kind := chassis_kind()
+	var kind := chassis if chassis != "" else chassis_kind()
 	var cfg := wheel_config(kind)
 	if not sim_only:
 		if kind == TestCarBuilder.KIND:

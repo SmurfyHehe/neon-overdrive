@@ -470,6 +470,10 @@ static func player_spec(kind: String) -> Dictionary:
 			# and after). Only this car: the others have little or no downforce.
 			s["front_resting_ratio"] = 0.4
 			s["rear_resting_ratio"] = 0.4
+			# The coupe's voices and exhaust stay coupe_default()'s, as before it
+			# had a branch of its own (it used to return at `_` below; falling
+			# through added a turbo_voice block it never had, issue #600).
+			return s
 		"p0_beater":
 			# The prologue car (Roy, 2026-10-09): a worn rear-engine, air-cooled
 			# flat four. About 290 Nm, power tier T0 (0.29 Nm/kg: under the T1

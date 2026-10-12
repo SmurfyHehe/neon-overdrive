@@ -44,6 +44,13 @@ func _init(car: PlayerCar, state: GameState) -> void:
 	game_state = state
 	layer = 20
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# Look at the car before anything else steps it (issue #598). The watchdog
+	# joins the scene after the player, so at the default priority a NaN speed
+	# went through a whole tick of the car's own physics first: the drag
+	# normalised a NaN vector, the wheel forces went NaN and the visuals took a
+	# non-finite transform before it was put right. Checked first, the NaN is
+	# caught before anything reads it.
+	process_physics_priority = -100
 
 func _ready() -> void:
 	dialog = PanelContainer.new()

@@ -231,6 +231,11 @@ func _physics_process(_delta: float) -> bool:
 	var d: DriverModel = frame.driver
 	cur_where = ""
 	if not started:
+		# No crash damage: the patterns swing the car across the lanes into kerbs
+		# and the barrier (5 hits, 4 kerb strikes in one run), and since DP1 a
+		# bent front arm leaves the drawn wheel resting crooked by STEER_CENTRE
+		# (-1.6 deg), which is damage, not what this test is about.
+		p.damage.enabled = false
 		p.driver = _drive
 		cam.set_view(ChaseCamera.View.COCKPIT)
 		started = true

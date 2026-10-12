@@ -52,6 +52,8 @@ var drift_5s := {}
 var turn_coast := {}
 var turn_brake := {}
 var keys := 0
+## Ticks left of the stand-still before a run's launch (see _launch).
+var settle_left := 0
 
 func _initialize() -> void:
 	OS.set_environment("NEON_CURVES", "0")
@@ -223,14 +225,31 @@ func _unit_tests() -> void:
 
 # ---------- drive ----------
 
+## Every run starts from the same car: put back on the boot pose, standing on
+## the foot brake for SETTLE_SECS so the suspension, wheel spin and ABS state
+## of the run before (a barrier hit, a full stop) have died away, then set
+## moving. Without the stand-still that state carried over, and the brake
+## runs' heading turned by up to 0.04 rad more or less with the order of
+## the runs before them.
+const SETTLE_SECS := 1.0
 func _launch(p: PlayerCar) -> void:
+	_place(p)
+	Harness.launch_player(p, 0.0)
+	keys = PlayerCar.KEY_BRAKE
+	p.driver = func(c: Vehicle) -> void: (c as PlayerCar).apply_keys(keys)
+	settle_left = int(SETTLE_SECS * Engine.physics_ticks_per_second)
+	t = 0
+
+func _place(p: PlayerCar) -> void:
 	p.global_transform = rest
 	p.angular_velocity = Vector3.ZERO
 	Harness.move_player_to_lane(p, Harness.lane_x(1))
+
+func _go(p: PlayerCar) -> void:
+	_place(p)
 	x0 = p.global_position.x
 	Harness.launch_player(p, SPEED)
 	keys = 0
-	p.driver = func(c: Vehicle) -> void: (c as PlayerCar).apply_keys(keys)
 	t = 0
 
 func _fresh(p: PlayerCar) -> void:
@@ -270,6 +289,11 @@ func _physics_process(_delta: float) -> bool:
 		return tick > hz * 10 and _end("Game never became ready")
 	if not Harness.finite(p):
 		return _end("non-finite car state in %s" % Step.keys()[step])
+	if settle_left > 0:
+		settle_left -= 1
+		if settle_left == 0:
+			_go(p)
+		return false
 	match step:
 		Step.BOOT:
 			if t >= hz:

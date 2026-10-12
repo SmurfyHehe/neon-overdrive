@@ -11,6 +11,9 @@ extends SceneTree
 #   whole table.
 # - direction: some negative camber (-1.5 deg) corners harder than none, and
 #   high pressure does not cost top speed
+# Lateral g here is the track's path measure (TuneTrack.corner_path_lat_g): the
+# acceleration the tyres really give the car, which a spin or a gearshift's yaw
+# kick cannot inflate.
 # Run (tests/run_tests.bat does):
 #   Godot_v4.7.2-stable_win64_console.exe --headless --fixed-fps 60 --path . -s res://tests/car/tyre_model.gd
 # Exit code 1 on failure.
@@ -89,6 +92,11 @@ func _initialize() -> void:
 
 func _new_track() -> TuneTrack:
 	var track := TuneTrack.new()
+	# Lateral g from the path, not speed x yaw rate: since the tyre slide state
+	# (#498, d0c1335) the coupe on -4 deg camber spins in the corner run, and
+	# yaw rate read the spin as 1.79 g of grip; upshift yaw kicks set the other
+	# peaks, so -1.5 vs 0 deg compared two kicks (1.290 vs 1.301).
+	track.corner_path_lat_g = true
 	root.add_child(track)
 	return track
 

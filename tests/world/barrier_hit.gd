@@ -253,6 +253,14 @@ func _start(p: PlayerCar) -> void:
 		basis = Basis(Vector3.UP, deg_to_rad(a))  # yawed toward -x, the barrier
 	p.global_transform = Transform3D(basis, pos)
 	p.angular_velocity = Vector3.ZERO
+	# Every run starts with a sound car. Since the damage chain (DP0-DP7,
+	# LM) each hit leaves bent arms, sagged corners and toe on the car, and
+	# all the runs share one car: by the last ones it carried thirty hits'
+	# worth (a rear corner on 0.65 of its spring and 2.5 cm low, both fronts
+	# toed out), which is a different car from the one the run is about.
+	# The run's own hit still damages it, as in the game.
+	p.damage.garage_repair(null)
+	p.damage.forget_motion()  # the launch's jump in velocity is not a hit
 	TrafficCar.set_moving(p, v)
 	p.reset_physics_interpolation()
 	run_tick = 0

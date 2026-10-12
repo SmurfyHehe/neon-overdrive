@@ -29,7 +29,13 @@ const Palette := preload("res://tests/core/palette.gd")
 const RATE := 120
 ## Stock builds whose sheet body length leaves out a fitted kit: the cops'
 ## push bars (the sheet's "nobar" builds measure the body alone).
-const STOCK_KIT_LEN := {"c1_patrol": 0.16, "c2_patrolsuv": 0.16}
+## Stock parts that stick out past the sheet's body length: the patrol cars'
+## push bars, and since Build 4 (Roy 1475 "differ", outline twins) the
+## interceptor's low push bar and the Camel's rear step bumper.
+const STOCK_KIT_LEN := {"c1_patrol": 0.16, "c2_patrolsuv": 0.16, "c3_interceptor": 0.16, "p17_work_pickup": 0.16}
+## Of those, parts every variant keeps at the other end from its kit: the
+## Camel's step bumper stays on behind its bull bar build.
+const KEPT_KIT_LEN := {"p17_work_pickup": 0.16}
 ## Cars with one working tail lamp, so one flare quad, on this side (-1 left).
 ## The Bug's right tail-lamp lens is gone, a dark socket (missing bit 4 on
 ## Roy's decided sheet, e5c65c9; tools/fleet_design/cars.py P0).
@@ -77,7 +83,9 @@ func _model_checks(kind: String, build: String, d: Dictionary) -> void:
 		_check(over > -0.03 and over < kit + 0.03, "%s is %.3f m long, the sheet says %.2f" % [tag, aabb.size.z, d.length])
 		_check(absf(aabb.size.y - float(d.height)) < 0.03, "%s is %.3f m tall, the sheet says %.2f" % [tag, aabb.size.y, d.height])
 	else:
-		_check(over > -0.03 and over < 0.16, "%s is %.3f m long, the sheet says %.2f" % [tag, aabb.size.z, d.length])
+		# a variant kit adds up to 16 cm on top of the stock parts it keeps
+		var kept: float = KEPT_KIT_LEN.get(kind, 0.0)
+		_check(over > -0.03 and over < kept + 0.16, "%s is %.3f m long, the sheet says %.2f" % [tag, aabb.size.z, d.length])
 	_check(aabb.size.x >= float(d.width_body) - 0.01, "%s is %.3f m wide, narrower than the sheet's %.2f body" % [tag, aabb.size.x, d.width_body])
 	_check(tris <= 4000, "%s has %d triangles, over the 4,000 traffic budget" % [tag, tris])
 	# 8 for the body and wheels, +1 for the underside the player and cop classes

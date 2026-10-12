@@ -18,6 +18,21 @@ extends SceneTree
 # Frame time is NOT measured here (counts come from the renderer, not the
 # GPU). Needs a real renderer (headless reports 0 draw calls):
 #   godot --audio-driver Dummy --path . -s res://tests/view/chase_undercarriage.gd
+#
+# Every row must see the same world, or the differences measure the world
+# instead of the cars (#581). Two things used to move it between rows:
+#   - the first-launch graphics pick (GraphicsAutoPick): with no saved preset
+#     (a fresh user folder, as in the cloud) the game starts at Medium, times
+#     a few seconds and then applies Low or High mid-test. Low sets its own
+#     traffic count over NEON_TRAFFIC=0 (cars spawn into view), hides the
+#     undersides while driving and changes the mirror and render scale, so
+#     whichever row it landed in read 5 to 20 draw calls off. NEON_GFX pins
+#     Medium (the default preset, undersides drawn) and turns the pick off.
+#   - the automatic's idle creep (63fadcc): a player left in D rolls off at
+#     7 km/h, taking the chase cam and the 7 parking slots with it, so each
+#     row framed a different stretch of street. The player holds the brake.
+# With both held, repeated rows read the same counts to the draw call; the
+# test fails if the player moved or traffic appeared anyway.
 
 const SAMPLE_FRAMES := 20
 const RIVALS := 3
@@ -31,6 +46,7 @@ func _fail(msg: String) -> void:
 
 func _initialize() -> void:
 	OS.set_environment("NEON_TRAFFIC", "0")
+	OS.set_environment("NEON_GFX", "medium")
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	Engine.max_fps = 0
 	seed(777)
@@ -38,7 +54,14 @@ func _initialize() -> void:
 	root.add_child(game)
 	for i in 60:
 		await process_frame
-	var player: Node3D = game.get("player")
+	var player: PlayerCar = game.get("player")
+	# Foot on the brake for the whole test (the idle creep, see the header).
+	player.driver = func(c: Vehicle) -> void:
+		c.throttle_input = 0.0
+		c.brake_input = 1.0
+	for i in 30:
+		await process_frame
+	var start := player.global_position
 	var base: Dictionary = await _sample()
 	print("baseline  draw calls %4d  triangles %7d  objects %4d" % [base.dc, base.tris, base.obj])
 
@@ -60,6 +83,12 @@ func _initialize() -> void:
 		_fail("the undersides cost %d draw calls for %d cars, want at most 1 each" % [chase.dc - plain.dc, n])
 	if tris_per_car > 1000.0:
 		_fail("%.0f triangles per underside, want under 1,000" % tris_per_car)
+	# Like for like: the rows only compare if the world held still.
+	if player.global_position.distance_to(start) > 0.1:
+		_fail("the player moved %.2f m during the rows, so they framed different scenes" % player.global_position.distance_to(start))
+	var traffic: TrafficManager = game.get("traffic")
+	if traffic != null and not traffic.cars.is_empty():
+		_fail("%d traffic cars spawned during the rows (NEON_TRAFFIC=0)" % traffic.cars.size())
 	game.queue_free()
 	await process_frame
 	print("PASS" if fails == 0 else "FAILURES: %d" % fails)

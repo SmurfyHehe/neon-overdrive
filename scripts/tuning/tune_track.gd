@@ -88,6 +88,8 @@ class Run extends RefCounted:
 	var trace_ticks := 0
 	var profile: Dictionary = DEFAULT_PROFILE
 	var corner_steer := CORNER_STEER
+	var gone_hold := 0.0
+	var gone_t := 0.0
 	# heat telemetry (record_heat only): one [speed m/s, engine load 0..1, on limiter, brake power W]
 	# per tick, replayed through PowertrainHealth offline by the balance sweep
 	var record_heat := false
@@ -223,8 +225,13 @@ class Run extends RefCounted:
 			m.turn_radius_m = minf(float(m.get("turn_radius_m", INF)), sp / yaw)
 		m.peak_lat_g = peak_lat_g
 		m.max_slip_deg = max_slip
-		# Past the limit the car just plows out; stop once the grip has clearly gone.
-		if t >= CORNER_TIME or (t > 4.0 and peak_lat_g > 0.3 and lat_g_smooth < 0.6 * peak_lat_g):
+		# Past the limit the car just plows out; stop once the grip has clearly gone
+		# (for gone_hold seconds when the caller asks for that, see corner_gone_hold).
+		if t > 4.0 and peak_lat_g > 0.3 and lat_g_smooth < 0.6 * peak_lat_g:
+			gone_t += dt
+		else:
+			gone_t = 0.0
+		if t >= CORNER_TIME or (gone_t > 0.0 and gone_t >= gone_hold):
 			_finish()
 
 ## -1 runs the cars exactly as the game does (PlayerCar.LINEAR_DAMP, 0). 0 or
@@ -237,6 +244,15 @@ var record_trace := false
 var corner_steer := CORNER_STEER
 ## The scripted driver's limits (DEFAULT_PROFILE = the track's usual driver).
 var driver_profile: Dictionary = DEFAULT_PROFILE
+## How long (seconds) the corner run's lateral g must stay under 60% of its
+## peak before the run calls the grip gone. 0 = the first tick under it, the
+## track's usual. Since tyre and surface feel (#498, d0c1335) a tyre that has
+## let go grips less until it hooks up again, so a rear-drive car's back end can
+## step out under power mid-corner and catch a moment later; with 0 that dip
+## ends the run as if the car had plowed out. tests/car/mod_tree.gd sets 1.0.
+## Keep it 0 where the track runs inside the live game: a longer corner run
+## circles into the town beside the lanes (LANE_X0).
+var corner_gone_hold := 0.0
 ## Keep per-tick heat telemetry of the accel and brake runs as metrics.heat_accel
 ## and metrics.heat_brake (see Run.heat_log), for the balance sweep's offline
 ## PowertrainHealth replay. Off by default.
@@ -323,6 +339,7 @@ func _spawn(spec: Dictionary, lane: int, kind: int) -> Run:
 	r.t = -SETTLE_TIME
 	r.profile = driver_profile
 	r.corner_steer = corner_steer
+	r.gone_hold = corner_gone_hold
 	r.record_heat = record_heat and kind != Kind.CORNER
 	if record_trace and kind == Kind.BRAKE:
 		r.trace = {"step": TRACE_STEP, "speed": [], "throttle": [], "brake": []}

@@ -20,7 +20,8 @@ extends SceneTree
 #     speed, the 100-200 pull, braking or cornering (eight builds cannot each win one of four
 #     outright, so the rule checked is that none is level-or-behind another
 #     everywhere), and each of the five has a winner
-#   - the car's showcase path is its quickest measured 0-200 km/h
+#   - the car's showcase path is its quickest measured 0-200 km/h (or level
+#     with it to the physics tick)
 # MOD_TREE_CARS (comma list) limits the cars; MOD_TREE_OUT writes the tables.
 
 const TIE := 0.002  # two builds within 0.2% on a metric are level
@@ -315,6 +316,13 @@ func _track(track: TuneTrack, car: String) -> void:
 	# for the Bug; at 0.7 the coupe spins, and a spin reads as neither grip nor slide.
 	track.corner_steer = float(OS.get_environment("MOD_TREE_STEER")) if OS.get_environment("MOD_TREE_STEER") != "" else TuneTrack.CORNER_STEER
 	track.driver_profile = TuneTrack.DEFAULT_PROFILE
+	# Since tyre and surface feel (#498) a sliding tyre grips less until it hooks
+	# up again. On the corner run the twin-scroll build with Grip stepped its back
+	# end out under power in third, caught it within a second, and went on to
+	# 1.47 g; the track's usual rule (stop at the first tick under 60% of the
+	# peak) ended that run at the wobble and read 1.27 g. The grip has to stay
+	# gone for a second to count. Every other build here reads the same either way.
+	track.corner_gone_hold = 1.0
 
 	# Every node against the same build without it.
 	_say("")
@@ -397,19 +405,26 @@ func _track(track: TuneTrack, car: String) -> void:
 	_say("|---|---|---|---|")
 	var best_path: Array = []
 	var best_t := INF
+	var showcase_t := INF
 	for p in paths:
 		var m: Dictionary = await _measure(track, stock, car, ModTree.max_fit(car, p).installed, [TuneTrack.Kind.ACCEL])
 		_check(m.ok, "%s %s fully fitted: the track run had problems %s" % [car, str(p), str(m.problems)])
 		var t200 := float(m.get("t_0_200", INF))
 		_say("| %s | %s | %s | %s |" % ["/".join(PackedStringArray(p)), _f(m.get("t_0_100", NAN), 2), _f(t200, 2), _f(m.get("top_speed_kmh", NAN), 0)])
+		if p == t.showcase:
+			showcase_t = t200
 		if t200 < best_t:
 			best_t = t200
 			best_path = p
 	_check(is_finite(best_t), "%s: no fully fitted build reaches 200 km/h" % car)
-	_check(best_path == t.showcase, "%s: the quickest 0-200 is %s (%.2f s), the file's showcase is %s" % [car, str(best_path), best_t, str(t.showcase)])
+	# The track times in whole physics ticks, so two builds can reach 200 km/h on
+	# the same tick. Then both are the quickest, and the showcase may be either:
+	# the file's pick has to be one of them, not the first in path order.
+	_check(showcase_t <= best_t, "%s: the quickest 0-200 is %s (%.2f s), the file's showcase %s takes %.2f s" % [car, str(best_path), best_t, str(t.showcase), showcase_t])
 	_say("")
 	_say("%s: %d track evaluations in %.0f s." % [car, _evals, (Time.get_ticks_msec() - t0) / 1000.0])
 	track.corner_steer = TuneTrack.CORNER_STEER
+	track.corner_gone_hold = 0.0
 
 func _node_row(track: TuneTrack, stock: Dictionary, car: String, id: String, without_ids: Array, with_ids: Array) -> void:
 	var n := ModTree.node(car, id)

@@ -1193,8 +1193,9 @@ static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
 	elif kind == P1CoupeBuilder.KIND:
 		visual = P1CoupeBuilder.build_wheel_visual(v.front_tire_radius, pos)
 	elif NpcCarBuilder.is_npc(kind):
-		# Traffic cars (TrafficCar.build names the sheet variant).
-		visual = NpcCarBuilder.wheel_visual(kind, String(v.get("build")), pos)
+		# Traffic cars (TrafficCar.build names the sheet variant), and the
+		# player's sheet car. An AI car wears the sheet wheel, as its body.
+		visual = NpcCarBuilder.wheel_visual(kind, String(v.get("build")), pos, v is TrafficCar)
 	else:
 		# CarBuilder kinds (traffic) share one merged, cached wheel mesh per
 		# kind (traffic milestone 4, draw calls).

@@ -37,6 +37,7 @@ extends RefCounted
 # each tick and lists the contacts only while something is touching.
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
+const Districts := preload("res://scripts/world/districts.gd")
 const KMH := 1.0 / 3.6
 const PLAN_SECS := 0.05          # traffic and bend lookahead refresh
 const HALF_W := 1.0              # TrafficManager.PLAYER_HALF_W
@@ -77,6 +78,7 @@ const REJOIN_SLOPE := 3.0        # lookahead per metre off the lane (18 deg appr
 const WRONG_WAY := 1.2           # rad off the road's heading at low speed = turn round
 const TURN_LEG_SECS := 2.5
 const TURN_DONE := 0.8           # rad: the lane keeper can take it from here
+const TURN_EDGE := 0.5           # m short of the kerb or the median a turn-round leg stops
 
 var mode := "clean"
 var target_speed := 150.0 * KMH
@@ -633,7 +635,7 @@ func _recovering(c: PlayerCar) -> bool:
 			c.toggle_reverse()
 		return true
 	_rec_t += _dt
-	if _rec_t > TURN_LEG_SECS:
+	if _rec_t > TURN_LEG_SECS or _leg_at_edge(c):
 		_rec_fwd = not _rec_fwd
 		_rec_t = 0.0
 		return true
@@ -644,6 +646,30 @@ func _recovering(c: PlayerCar) -> bool:
 	c.throttle_input = 0.45 if v < 5.0 else 0.0
 	c.brake_input = 0.0
 	return true
+
+## Whether the end of the car leading this turn-round leg (the nose going
+## forward, the tail in reverse) has reached TURN_EDGE, plus the distance
+## it needs to stop at PLAN_DECEL, short of the kerb's foot or of the median. A leg used to run its full TURN_LEG_SECS whatever
+## was there: from lane 2 the forward leg carried the nose 7 m across, over
+## the kerb, and into a gas station's lot wall (drive_bends turn, #569). A
+## three-point turn uses the road's width and no more.
+func _leg_at_edge(c: PlayerCar) -> bool:
+	var xf := c.global_transform
+	var lead := -xf.basis.z * (HALF_L if _rec_fwd else -HALF_L)
+	var side := xf.basis.x * HALF_W
+	var s := RoadFrame.s_at(RoadFrame.unroll(c.global_position).z)
+	var stop := TURN_EDGE + c.linear_velocity.length_squared() / (2.0 * PLAN_DECEL)
+	var kerb := SurfaceMap.edge_at(s, false) + Districts.shoulder_at(floori(s / RoadChunkBuilder.CHUNK_LEN)) - stop
+	var median := RoadChunkBuilder.MEDIAN_GAP + stop
+	var z := RoadFrame.unroll(c.global_position).z
+	for arm in [lead + side, lead - side]:
+		var x := RoadFrame.unroll(xf.origin + arm).x
+		# Only while that corner is still heading out: a car that starts the
+		# turn already past a limit must be able to drive back from it.
+		var out := RoadFrame.dir_to_road(z, c.linear_velocity + c.angular_velocity.cross(arm)).x
+		if (x > kerb and out > 0.0) or (x < median and out < 0.0):
+			return true
+	return false
 
 func _drive_aim(c: PlayerCar) -> void:
 	var point := aim_node.global_position if aim_node != null and is_instance_valid(aim_node) else aim_point

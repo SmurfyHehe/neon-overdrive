@@ -227,7 +227,13 @@ func _ready() -> void:
 		# The sheet body's own box (NpcCarBuilder.config), as TrafficCar.
 		CarSpec.build_collision(self, cfg.col_size, cfg.col_y)
 	else:
-		CarSpec.build_collision(self, Vector3(1.6, 1.0, 3.4), 0.7)
+		# Underside 6 cm higher than it was (bottom face at y=0.26, top unchanged;
+		# 2026-10-11, issue #538). At y=0.2 the body rode 7.4 cm off the road at
+		# rest, 6 cm lower than every sheet car's box and half a real coupe's
+		# clearance, and the car's own downforce (7 cm of spring at 250 km/h)
+		# put it on the road. The centre of mass is set apart from the shape
+		# (Vehicle.center_of_gravity), so only the roll inertia moves, by +2 %.
+		CarSpec.build_collision(self, Vector3(1.6, 0.94, 3.4), 0.73)
 
 	# ---- Vehicle-level tuning ----
 	# CarSpec refactor (2026-09-13, Roy: "i want full physics everywhere ...

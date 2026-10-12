@@ -165,7 +165,8 @@ func _touches_road(v: Vehicle) -> bool:
 	for b in v.get_colliding_bodies():
 		var n := String(b.name)
 		var wall := b is CollisionObject3D and (b as CollisionObject3D).collision_layer == wall_only
-		if not (n.begins_with("Boundary") or n.begins_with("Building") or n == "BarrierCol" or wall):
+		# CushionCol: the crash cushion at a median gap is the barrier's end, the same crash.
+		if not (n.begins_with("Boundary") or n.begins_with("Building") or n == "BarrierCol" or n == "CushionCol" or wall):
 			return true
 	return false
 

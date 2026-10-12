@@ -552,13 +552,28 @@ func _update_captions(delta: float) -> void:
 	_cap_label.visible = text != ""
 	_cap_label.text = text
 
+## Metres inside a tunnel's mouth over which the signal goes (TN1).
+const TUNNEL_FADE := 40.0
+const TunnelMap := preload("res://scripts/world/road_map.gd")
+
+## Reception in a map tunnel (road_map.gd): clear at the mouth, gone
+## TUNNEL_FADE metres in, and back over the last TUNNEL_FADE before the far
+## mouth. 1 anywhere else.
+static func tunnel_reception(world_pos: Vector3) -> float:
+	if TunnelMap.tunnels().is_empty():
+		return 1.0
+	return reception_at_depth(TunnelMap.tunnel_depth(RoadFrame.s_at(RoadFrame.unroll(world_pos).z)))
+
+static func reception_at_depth(depth: float) -> float:
+	return 1.0 - clampf(depth / TUNNEL_FADE, 0.0, 1.0)
+
 ## Follows the zone the car is in; rolls the dice for a drop-out.
 func _update_reception(delta: float) -> void:
 	var want := 1.0
 	if forced_reception >= 0.0:
 		want = forced_reception
 	elif is_instance_valid(listener):
-		want = SoundZone.reception_at(listener.global_position)
+		want = minf(SoundZone.reception_at(listener.global_position), tunnel_reception(listener.global_position))
 	reception = lerpf(reception, want, 1.0 - exp(-RECEPTION_RATE * delta))
 	_cut_left = maxf(_cut_left - delta, 0.0)
 	if station >= 0 and reception < DROP_FROM and _cut_left <= 0.0 and _rx_rng.randf() < (DROP_FROM - reception) * 5.0 * delta:

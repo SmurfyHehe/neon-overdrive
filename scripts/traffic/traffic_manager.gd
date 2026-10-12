@@ -851,6 +851,10 @@ func _find_slot(car: TrafficCar, pz: float, extra_speed := 0.0) -> Dictionary:
 			speed += lane_speed(lane_i, far_side, true) - lane_speed(lane_i, far_side)
 			if behind and speed <= pv + BEHIND_DV:
 				continue  # at the city pace it would never catch the player up
+		# Not under cover (TN1): a car appearing in a lit tunnel is in plain
+		# sight of anyone looking in at the mouth. Traffic drives in instead.
+		if RoadMap.tunnel_at(floori(RoadFrame.s_at(z) / RoadChunkBuilder.CHUNK_LEN)):
+			continue
 		var check := _slot_check(car, lane_x, z, dir, speed)
 		if check.is_empty():
 			continue

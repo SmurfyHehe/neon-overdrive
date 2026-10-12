@@ -340,7 +340,7 @@ static func new_nodes(root: Node3D) -> void:
 ## them); `setback` the district's lot depth behind the sidewalk; `lamps`
 ## the lamp poles' chunk-local z per side; `lots` the empty or set-back
 ## building slots per side as [z, frontage] (from _update_building's infos).
-static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: float, lamps: Dictionary, lots: Dictionary) -> void:
+static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: float, lamps: Dictionary, lots: Dictionary, off: bool = false) -> void:
 	_read_density()
 	var spec: Dictionary = BY_DISTRICT.get(Districts.name_at(chunk_index), BY_DISTRICT["downtown"]).duplicate()
 	spec.merge(force, true)
@@ -352,7 +352,7 @@ static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: fl
 	var f := RoadChunkBuilder._foundation()
 	var L := RoadChunkBuilder.CHUNK_LEN
 	var seg := L / RoadChunkBuilder.STATIONS
-	var d := density
+	var d := 0.0 if off else density  # off: a tunnel or its trench (TN1) has no kit
 	for side in [1, -1]:
 		var e: Dictionary = edges[side]
 		var taken: Array = []  # [z_from, z_to] along the road already used on this side

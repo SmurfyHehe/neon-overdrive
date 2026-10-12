@@ -215,6 +215,10 @@ idle_action={
 
 test_build=true
 
+[neon]
+
+sim/native=false
+
 [physics]
 
 common/physics_ticks_per_second=120

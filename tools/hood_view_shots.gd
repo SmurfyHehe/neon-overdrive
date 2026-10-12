@@ -33,6 +33,7 @@ func _run() -> void:
 		c.brake_input = clampf(-err * 0.3, 0.0, 1.0)
 		c.steering_input = 0.0
 	cam.shake_enabled = false
+	_hide_hud(root)   # no HUD text over the shots (Roy, 2026-10-11)
 	cam.set_view(ChaseCamera.View.HOOD)
 	var dir := OS.get_environment("NEON_SHOT_DIR")
 	if dir == "":
@@ -67,3 +68,10 @@ func _shot(dir: String, kind: String, tag: String, cam: ChaseCamera) -> void:
 	var path := "%s/hood_%s_%s.png" % [dir, kind, tag]
 	img.save_png(path)
 	print("%s: look %.1f / %.1f, speed %.1f m/s" % [path, cam.look_yaw, cam.look_pitch, (game.get("player") as PlayerCar).current_speed()])
+
+## No HUD over the shots: every CanvasLayer in the tree goes dark.
+func _hide_hud(n: Node) -> void:
+	if n is CanvasLayer:
+		(n as CanvasLayer).visible = false
+	for c in n.get_children():
+		_hide_hud(c)

@@ -103,6 +103,7 @@ const WetReflections := preload("res://scripts/world/wet_reflections.gd")
 const RoadWet := preload("res://scripts/world/road_wet.gd")
 const Districts := preload("res://scripts/world/districts.gd")
 const Kit := preload("res://scripts/world/roadside_kit.gd")
+const Props := preload("res://scripts/world/roadside_props.gd")
 const LampLife := preload("res://scripts/world/lamp_life.gd")
 const PlaceNames := preload("res://scripts/world/place_names.gd")
 const RoadSigns := preload("res://scripts/world/road_signs.gd")
@@ -1367,6 +1368,7 @@ static func _new_sidewalk_collision(body_name: String) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = body_name
 	body.add_to_group("Kerb")  # CarSpec gives the "Kerb" surface its own grip numbers
+	CarSimSwitch.note_ground(body)
 	body.collision_layer = 1 << (CarSpec.KERB_LAYER - 1)  # wheels only, see CarSpec
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
@@ -1551,6 +1553,7 @@ static func _new_road_collision() -> StaticBody3D:
 	body.name = "RoadCol"
 	body.set_meta(SurfaceMap.BANDS_META, true)
 	body.add_to_group("Road")
+	CarSimSwitch.note_ground(body)
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
 	var tri := ConcavePolygonShape3D.new()
@@ -1890,6 +1893,9 @@ static func _update_roofs(root: Node3D, infos: Array, signs_used: int) -> void:
 
 ## Where an area sign's post stands, past the sidewalk's outer edge, m.
 const NAME_SIGN_SETBACK := 0.25
+## A roadside-kit hydrant's slot in the props record is its Kit_hydrant index
+## plus this, to tell it from a kerb hydrant (the "Hydrants" MultiMesh).
+const KIT_SLOT := 100
 ## Where along its chunk (chunk-local z) the area gantry and the advance sign
 ## stand: the gantry in the last chunk before an area, the advance sign a
 ## whole number of chunks further back (PlaceNames.ADVANCE_M).
@@ -1955,6 +1961,7 @@ static func _update_names(root: Node3D, chunk_index: int, walk0: float, walk1: f
 		mmi.visible = shown
 	if not shown:
 		mm.visible_instance_count = 0
+		root.set_meta("name_sign_xfs", [])
 		return
 	var xfs := []
 	var anchors := PackedFloat32Array()
@@ -2023,7 +2030,8 @@ static func _update_names(root: Node3D, chunk_index: int, walk0: float, walk1: f
 	for k in n:
 		mm.set_instance_custom_data(k, datas[k])
 	mm.visible_instance_count = n
-	_bend_instances(mm, 0, xfs, anchors)
+	# kept for a sign that gets knocked over (prop_break.gd bends these)
+	root.set_meta("name_sign_xfs", _bend_instances(mm, 0, xfs, anchors))
 
 ## Painted road words and arrows (RoadPaint.marks decides which): flat decals
 ## laid on the road surface through the centreline frame, so they follow a
@@ -2057,11 +2065,15 @@ static func _update_paint(root: Node3D, chunk_index: int, lanes_changed: bool, o
 ## pooled chunk rebuilt in the game is the previous occupant's. The old
 ## read-modify-write here put those stale props back, so office roof tanks
 ## hung 40 m over a one-floor lot (floating structures, 2026-10-09).
-static func _bend_instances(mm: MultiMesh, from: int, xfs: Array, anchors: PackedFloat32Array) -> void:
+static func _bend_instances(mm: MultiMesh, from: int, xfs: Array, anchors: PackedFloat32Array) -> Array:
+	var written := []
 	for k in xfs.size():
 		var t: Transform3D = xfs[k]
 		var a := float(anchors[k])
-		mm.set_instance_transform(from + k, _xf_up(0.0, 0.0, a) * Transform3D(t.basis, Vector3(t.origin.x, t.origin.y, t.origin.z - a)))
+		var xf := _xf_up(0.0, 0.0, a) * Transform3D(t.basis, Vector3(t.origin.x, t.origin.y, t.origin.z - a))
+		mm.set_instance_transform(from + k, xf)
+		written.append(xf)
+	return written
 
 # ---------- build / rebuild ----------
 
@@ -2347,6 +2359,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var pylons_onc: MultiMesh = (root.get_node(^"PylonsOnc") as MultiMeshInstance3D).multimesh
 	var n_pylons := _pylon_slots()
 	var n_posts := 0
+	# every small prop laid below is also written here (roadside_props.gd)
+	var props := Props.begin()
 	for i in range(n_pylons):
 		var pz := -float(i) * PYLON_SPACING - PYLON_SPACING / 2.0
 		if Junction.in_mouth(chunk_index, pz):
@@ -2362,8 +2376,15 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		# sides share one instance count)
 		var own_y := -50.0 if GasStation.in_bay(chunk_index, pz, 1) else PYLON_HEIGHT / 2.0
 		var onc_y := -50.0 if GasStation.in_bay(chunk_index, pz, -1) else PYLON_HEIGHT / 2.0
-		pylons_own.set_instance_transform(n_posts, _xf_up(own_edge, own_y, pz))
-		pylons_onc.set_instance_transform(n_posts, _xf_up(-onc_edge, onc_y, pz))
+		var own_post := _xf_up(own_edge, own_y, pz)
+		var onc_post := _xf_up(-onc_edge, onc_y, pz)
+		pylons_own.set_instance_transform(n_posts, own_post)
+		pylons_onc.set_instance_transform(n_posts, onc_post)
+		# the foot is straight below (_xf_up raises y straight up)
+		if own_y > 0.0:
+			Props.add(props, Props.POST, own_post.origin - Vector3(0.0, own_y, 0.0), n_posts, 1, own_edge, pz)
+		if onc_y > 0.0:
+			Props.add(props, Props.POST, onc_post.origin - Vector3(0.0, onc_y, 0.0), n_posts, -1, -onc_edge, pz)
 		n_posts += 1
 	pylons_own.visible_instance_count = n_posts
 	pylons_onc.visible_instance_count = n_posts
@@ -2488,7 +2509,9 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		if hydrant_ok:
 			var ht: float = -hz / CHUNK_LEN
 			var hx: float = lerpf(cb0, cb1, ht) + HYDRANT_SETBACK
-			hydrants.set_instance_transform(n_hydrants, _xf_up(hx * sx, KERB_H * _drop_at(hs, ts, hz), hz))
+			var hxf := _xf_up(hx * sx, KERB_H * _drop_at(hs, ts, hz), hz)
+			hydrants.set_instance_transform(n_hydrants, hxf)
+			Props.add(props, Props.HYDRANT, hxf.origin, n_hydrants, side, hx * sx, hz)
 			n_hydrants += 1
 		# Drains (K4): a grate in the gutter, hashed per chunk side and slot,
 		# clear of the crossing, every dropped kerb and the hydrant's paint.
@@ -2611,7 +2634,9 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			var curb: float = lerp(start_own_curb, end_own_curb, lt) if side == 1 else lerp(start_onc_curb, end_onc_curb, lt)
 			var pole_x := (curb + LAMP_SETBACK) * float(side)
 			var turn := Basis() if side == 1 else Basis(Vector3.UP, PI)
-			lamps.set_instance_transform(n_lamps, _xf_up(pole_x, 0.0, lz, turn))
+			var lamp_xf := _xf_up(pole_x, 0.0, lz, turn)
+			lamps.set_instance_transform(n_lamps, lamp_xf)
+			Props.add(props, Props.LAMP, lamp_xf.origin, n_lamps, side, pole_x, lz)
 			var head_x := pole_x - reach * float(side)
 			pools.set_instance_transform(n_lamps, _xf(head_x, POOL_Y, lz, Basis.from_scale(Vector3(pool_size.x, 1.0, pool_size.y))))
 			smears.set_instance_transform(n_lamps, _xf(head_x, WetReflections.SMEAR_Y, lz, WetReflections.lamp_smear_basis()))
@@ -2659,6 +2684,25 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	for info in infos:
 		lots[int(info.side)].append([float(info.z), (BUILDING_SPACING * 0.6) if info.empty else float(info.d)])
 	Kit.apply(root, chunk_index, kit_edges, setback, lamp_zs, lots, dip != RoadMap.DIP_NONE)
+	# The kit's own small pieces (slot = order within the kind, as it lays
+	# them), the name sign's foot, then the record goes on the chunk.
+	var kit_slot := {}
+	for r in root.get_meta("kit", []):
+		var kk: String = r.kind
+		var ks := int(kit_slot.get(kk, 0))
+		kit_slot[kk] = ks + 1
+		var pk := Props.NAMES.find(kk)
+		if pk < 0:
+			continue  # rails, dumpsters and jersey blocks are solid
+		var kx := float(r.x) * float(r.side)
+		# Kit hydrants get ids above the kerb hydrants' (two MultiMeshes)
+		Props.add(props, pk, r.p, ks + (KIT_SLOT if pk == Props.HYDRANT else 0), int(r.side), kx, float(r.z))
+	var sign_kind := "" if RoadSigns.off() else name_sign_kind(chunk_index)
+	if sign_kind != "":
+		var sz := GANTRY_Z if sign_kind == "gantry" else (REPEATER_Z if sign_kind == "repeater" else ADVANCE_Z)
+		var sign_x := lerpf(start_own_walk, end_own_walk, -sz / CHUNK_LEN) + NAME_SIGN_SETBACK
+		Props.add(props, Props.GANTRY if sign_kind == "gantry" else Props.SIGN, _xf_up(sign_x, 0.0, sz).origin, 0, 1, sign_x, sz)
+	Props.write(root, props)
 	RoadRamps.apply(root, chunk_index)
 	# the tunnel or its trench (TN1): walls, roof, light strip, mouths; hidden
 	# on every other chunk

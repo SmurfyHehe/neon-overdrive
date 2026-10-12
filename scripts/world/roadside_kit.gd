@@ -473,6 +473,7 @@ static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: fl
 		var turn := Basis() if side > 0.0 else Basis(Vector3.UP, PI)
 		var xf := RoadChunkBuilder._xf_up(float(r.x) * side, 0.0, float(r.z), turn)
 		mm.set_instance_transform(int(n[kind]), xf)
+		r["p"] = xf.origin   # the foot in chunk space, for roadside_props.gd
 		n[kind] = int(n[kind]) + 1
 		match kind:
 			RAIL:

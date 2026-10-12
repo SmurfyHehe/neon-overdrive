@@ -1116,6 +1116,11 @@ const WORLD_LAYER := 1
 const CAR_LAYER := 2
 const WALL_LAYER := 3
 const KERB_LAYER := 4
+## Knocked-over roadside props that roll (scripts/world/prop_break.gd). Left
+## out of the car body's mask above and the wheel raycast mask below on
+## purpose: a rolling bin meets the road, kerb, walls and other props, never
+## a car or a wheel.
+const PROP_LAYER := 5
 
 static func set_collision_layers(v: Vehicle) -> void:
 	v.collision_layer = 1 << (CAR_LAYER - 1)
@@ -1198,9 +1203,10 @@ static func build_wheels(v: Vehicle, kind: String, wheel_cfg: Dictionary, front_
 	v.front_right_wheel = _build_wheel(v, kind, Vector3(wheel_x, front_mount_y, -axle_z))
 	v.rear_left_wheel = _build_wheel(v, kind, Vector3(-wheel_x, rear_mount_y, axle_z))
 	v.rear_right_wheel = _build_wheel(v, kind, Vector3(wheel_x, rear_mount_y, axle_z))
+	CarSimSwitch.attach(v)  # C++ wheel physics, only while neon/sim/native is on
 
 static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
-	var w := Wheel.new()
+	var w := CarSimSwitch.new_wheel()
 	w.position = pos
 	# GEVP casts each wheel itself (force_raycast_update() in process_forces)
 	# every tick. Left enabled, RayCast3D also casts on its own right after,

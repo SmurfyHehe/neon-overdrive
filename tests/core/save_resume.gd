@@ -17,12 +17,16 @@ extends SceneTree
 
 const SaveStore := preload("res://scripts/save/save_store.gd")
 const SaveDirector := preload("res://scripts/save/save_director.gd")
+const TestDriver := preload("res://scripts/core/test_driver.gd")
+const DRIVE_KMH := 110.0
 
 var game: Node
 var phase := 0
 var ticks := 0
 var fails: Array[String] = []
 var saved := {}
+## Held here: the player's driver Callable does not keep the bot alive.
+var bot: RefCounted
 
 func _initialize() -> void:
 	OS.set_environment("NEON_CURVES", "0.5")
@@ -50,15 +54,15 @@ func _fail(msg: String) -> void:
 	fails.append(msg)
 	print("FAIL ", msg)
 
-func _drive(p: PlayerCar) -> void:
-	p.driver = func(c: Vehicle) -> void:
-		c.throttle_input = 1.0
-		c.brake_input = 0.0
-		# Hold the lane: steer back toward the road's centre line.
-		var u := RoadFrame.unroll(c.global_position)
-		c.steering_input = clampf((u.x - TrafficManager.lane_centre(1, false)) * 0.08, -0.3, 0.3)
-		if c.current_gear < 3 and c.motor_rpm > 6000.0:
-			c.current_gear += 1
+## The shared test driver's clean mode: holds lane 1 at DRIVE_KMH, slows for
+## the bends. The old bot here (full throttle, lane offset only, gears bumped by
+## hand) spun the car on the curved, hilly road, so the save caught a car sliding
+## backwards at 70 km/h with 6000 rpm on the wheels; the automatic rightly drops
+## to first on the next tick (under FIRST_GEAR_KMH going forward) and the slide
+## changes the velocity by more than the tolerance, so a resume that was exact
+## still failed "velocity" and "gear 1, saved 3".
+func _drive(_p: PlayerCar) -> void:
+	bot = TestDriver.start(game, "clean", {"speed": DRIVE_KMH})
 
 func _physics_process(_delta: float) -> bool:
 	if game == null or not game.is_inside_tree():

@@ -13,7 +13,8 @@ extends SceneTree
 # Needs --fixed-fps 60 (game time runs as fast as the laptop steps it):
 #   <godot> --headless --fixed-fps 60 --path . -s res://tests/traffic/police_flow.gd
 # No traffic cars (the bot never brakes for them, a rear-end crash is its own
-# fault and would be a legitimate offence); the patrol car is the only one.
+# fault and would be a legitimate offence); the patrol car is the only one, and
+# when it is ahead in the bot's lane the speeding bot passes it in the next lane.
 
 const Harness := preload("res://tests/traffic/traffic_harness.gd")
 const LANE_SECS := 150.0
@@ -35,6 +36,7 @@ var lines: Array[String] = []
 var wall_start := 0
 var want_kmh := 0.0
 var areas := {}
+var round_patrol := false
 
 func _check(ok: bool, msg: String) -> void:
 	if not ok:
@@ -106,6 +108,7 @@ func _physics_process(delta: float) -> bool:
 					_go_lane(3, 100.0)
 					step = 2
 		2:
+			_steer_round_patrol()
 			if heat.level >= PoliceHeat.ONE_CAR:
 				_check(warnings >= 1, "heat 1 without a warning first")
 				return _finish()
@@ -113,6 +116,25 @@ func _physics_process(delta: float) -> bool:
 				_check(false, "100 km/h in the slow lane for %.0f s: level %d, warnings %d, spotted %d" % [SPEEDING_SECS, heat.level, warnings, spotted])
 				return _finish()
 	return false
+
+## The speeding bot never brakes, and the patrol car keeps right like traffic
+## and holds its lane for an unflashed player (traffic_car.gd), so it can end up
+## in front in the slow lane. Rear-ending it slowed the bot to the city line,
+## which the warning step rightly takes as slowing down. Like a driver, the bot
+## passes it in the next lane at the same speed and comes back once by.
+func _steer_round_patrol() -> void:
+	var police: PolicePatrol = game.get("police")
+	var c: PatrolCar = police.car if police != null else null
+	var want := false
+	if c != null and is_instance_valid(c):
+		var pu := RoadFrame.unroll(player.global_position)
+		var cu := RoadFrame.unroll(c.global_position)
+		var ahead := pu.z - cu.z   # the bot drives toward -z
+		var in_lane := absf(cu.x - Harness.lane_x(3)) < RoadChunkBuilder.LANE_W * 0.75
+		want = in_lane and ahead > -12.0 and ahead < (80.0 if not round_patrol else 200.0)
+	if want != round_patrol:
+		round_patrol = want
+		player.driver = _driver(Harness.lane_x(2 if want else 3))
 
 func _finish() -> bool:
 	for f in failures:

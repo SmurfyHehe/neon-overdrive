@@ -69,7 +69,10 @@ func _table() -> void:
 func _atlas() -> void:
 	var words := PlaceNames.atlas_words()
 	_check(WordAtlas.layer_count() == words.size(), "atlas has %d layers for %d words" % [WordAtlas.layer_count(), words.size()])
-	_check(WordAtlas.layer_count() <= 32, "atlas has %d layers (32 max)" % WordAtlas.layer_count())
+	# 48 since the exit gantries (ring sites R2, as in uturn_signs): "EXIT 1"
+	# .. "EXIT 16", "SERVICES" and "1 km" joined the lettering (a layer is
+	# 512 x 64 px).
+	_check(WordAtlas.layer_count() <= 48, "atlas has %d layers (48 max)" % WordAtlas.layer_count())
 	for w in words:
 		var l := WordAtlas.layer(w)
 		_check(l >= 0, "word '%s' has no atlas layer" % w)

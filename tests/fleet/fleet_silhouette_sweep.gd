@@ -53,6 +53,8 @@ const AHEAD := 14.0            # B1's traffic-ahead distance: car tail to camera
 const MIN_GAP := 0.02         # 2 px of 96: ~9 cm on a 4.4 m car side-on
 const GAP_Q := 0.97            # judged on the outline's most different 3%
 const JUDGED_MAX_PITCH := 35
+## Most frames to wait for a view's image to stop changing (_settled_image).
+const SETTLE_MAX_FRAMES := 60
 # Twins that are known and left open for Roy (B1 audit, 2026-10-05). Listed
 # so the check still fails on any NEW twin. Key: "car|other car|view".
 const KNOWN_TWINS := {
@@ -120,9 +122,7 @@ func _initialize() -> void:
 		var tiles := []
 		for v in views:
 			_place_camera(v, aabb)
-			await RenderingServer.frame_post_draw
-			await RenderingServer.frame_post_draw
-			var img := vp.get_texture().get_image()
+			var img: Image = await _settled_image()
 			if v.name in save_views:
 				_save_view(img, out_dir.path_join("views").path_join("%s__%s.png" % [car.id if sj[1] == "stock" else "%s__%s" % [car.id, sj[1]], v.name]))
 			var mt := _mask(img)
@@ -206,6 +206,29 @@ func _initialize() -> void:
 	f.close()
 	print("PASS" if fails == 0 else "FAILURES: %d" % fails)
 	quit(1 if fails > 0 else 0)
+
+# ------------------------------------------------------------------ rendering
+## The viewport's image once it stops changing. After a camera move the image
+## keeps changing for up to about 7 frames (measured on the laptop, 2026-10-12:
+## 6 of 35 views were still different between frame 3 and frame 4), and two
+## frames, which this used to wait, caught it half way: the same car and view
+## came out a pixel apart from run to run, and with 15 of 17 cars one pixel
+## above the 2% line (2 px of 96) that was an intermittent "FAILURES: 2".
+## Once settled the image is bit-identical whatever view came before
+## (35 of 35 views, 2 approaches each), so two identical frames in a row is
+## the point to read it.
+func _settled_image() -> Image:
+	var prev := PackedByteArray()
+	var img: Image
+	for k in SETTLE_MAX_FRAMES:
+		await RenderingServer.frame_post_draw
+		img = vp.get_texture().get_image()
+		var d := img.get_data()
+		if k > 0 and d == prev:
+			return img
+		prev = d
+	_fail("the render did not settle in %d frames" % SETTLE_MAX_FRAMES)
+	return img
 
 # ------------------------------------------------------------------ views
 func _views() -> Array:

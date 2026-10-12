@@ -26,8 +26,12 @@ const GEARS := {
 ## The hot hatch, tuner sedan and crossover were re-measured on 2026-10-11 after
 ## they lost their factory turbo (28a5e92, the 40-minute night): 185.8, 221.8
 ## and 220.7 km/h. The wagon, pickup and drift coupe were measured the same day.
+## 2026-10-12 (#601): TuneTrack drives each car on its own wheels and body now,
+## not the coupe's (wheel radius 0.34 m). On their own smaller wheels the beater
+## (153.6 -> 142.6 km/h), wagon (168.6 -> 157.9, 0.305 m) and drift coupe
+## (238.5 -> 226.4, 0.30 m) hit the rev cut sooner; their bands moved with them.
 const SPEED := {
-	"p0_beater": [13.5, 140.0, 168.0],
+	"p0_beater": [13.5, 130.0, 160.0],
 	"p1_coupe": [6.4, 235.0, 250.0],
 	"p2_hothatch": [9.5, 175.0, 205.0],
 	"p3_tuner": [7.5, 210.0, 245.0],
@@ -35,8 +39,8 @@ const SPEED := {
 	"p5_muscle": [5.8, 257.0, 300.0],
 	"p6_crossover": [7.3, 208.0, 242.0],
 	"p10_truck": [7.5, 205.0, 248.0],
-	"p8_driftcoupe": [6.5, 228.0, 250.0],   # measured 5.73 s, 238.5 km/h (#487)
-	"p7_wagon": [12.0, 158.0, 185.0],
+	"p8_driftcoupe": [6.5, 216.0, 238.0],   # measured 6.03 s, 226.4 km/h (#601; 5.73 s, 238.5 on the coupe's wheels, #487)
+	"p7_wagon": [12.0, 147.0, 175.0],
 	"p17_work_pickup": [7.3, 212.0, 245.0],
 	"m1_monster": [6.4, 235.0, 250.0],
 	"l1_lowrider": [6.4, 235.0, 250.0],
@@ -68,6 +72,7 @@ func _run() -> void:
 		for i in range(1, box.size()):
 			_check(box[i] < box[i - 1], "%s gear %d (%.2f) is not shorter than gear %d (%.2f)" % [id, i + 1, box[i], i, box[i - 1]])
 		var kinds: Array = TuneTrack.ALL_KINDS if id == "p6_crossover" else [TuneTrack.Kind.ACCEL]
+		track.car_kind = id  # on the car's own wheels and body (#601)
 		var m: Dictionary = (await track.evaluate([spec], kinds))[0]
 		_check(m.ok, "%s: %s" % [id, str(m.problems)])
 		var t100: float = m.get("t_0_100", INF)

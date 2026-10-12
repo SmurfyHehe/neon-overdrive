@@ -52,6 +52,7 @@ static func base_spec(car_id: String) -> Dictionary:
 ## preceded by nothing: the baseline is rows' "base" key on every row.
 static func sweep(track: TuneTrack, car_id := "p0_beater", only: Array = []) -> Array:
 	var base := base_spec(car_id)
+	track.car_kind = car_id  # on the car's own wheels and body (#601)
 	track.corner_steer = BEND_STEER
 	track.driver_profile = TuneTrack.DEFAULT_PROFILE
 	var m0: Dictionary = (await track.evaluate([base]))[0]
@@ -88,6 +89,7 @@ static func sweep(track: TuneTrack, car_id := "p0_beater", only: Array = []) -> 
 		rows.append(r)
 	track.corner_steer = TuneTrack.CORNER_STEER
 	track.driver_profile = TuneTrack.DEFAULT_PROFILE
+	track.car_kind = ""
 	return rows
 
 ## The upshift point (of SHIFT_CANDIDATES) with the quickest standing 400 m.

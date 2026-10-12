@@ -27,7 +27,12 @@ const TRI_BUDGET := 10000
 const DRAW_CALL_BUDGET := 9
 ## Phase B hardpoints (player.gd CFG) and the collision box from player._ready.
 const CFG := {"wheel_r": 0.34, "axle_z": 1.25, "wheel_x": 0.88}
-const COLLISION := Vector3(1.6, 1.0, 3.4)
+## The box is 0.94 m tall since #538 (2026-10-11): the underside was lifted 6 cm
+## for road and tunnel clearance, the top left where it was (it was 1.0 m).
+const COLLISION := Vector3(1.6, 0.94, 3.4)
+## What player_spec("p1_coupe") lays over coupe_default() besides the auto block:
+## the stiffer springs of #538 (resting ratio 0.4 front and rear, was 0.5).
+const SPEC_OVER_DEFAULT := {"front_resting_ratio": 0.4, "rear_resting_ratio": 0.4}
 
 var fails := 0
 
@@ -127,10 +132,12 @@ func _initialize() -> void:
 	await process_frame
 	_check(player.chassis_visual != null and player.chassis_visual.name == "P1Coupe", "the player should carry the P1 body")
 	_check(PlayerCar.CFG == CFG, "player CFG changed: %s" % [PlayerCar.CFG])
-	# coupe_default() plus the one block player_spec() adds: which automatic it drives like in AUTO
+	# coupe_default() plus what player_spec() adds: which automatic it drives like
+	# in AUTO, and the coupe's own springs (#538)
 	var want_spec := CarSpec.coupe_default()
 	want_spec["auto"] = CarSpec.PLAYER_AUTO["p1_coupe"]
-	_check(player.spec == want_spec, "the player's spec should still be CarSpec.coupe_default() (plus its auto block)")
+	want_spec.merge(SPEC_OVER_DEFAULT, true)
+	_check(player.spec == want_spec, "the player's spec should still be CarSpec.coupe_default() (plus its auto block and the #538 springs)")
 	var wheels := {
 		"FL": [player.front_left_wheel, Vector3(-CFG.wheel_x, 0, -CFG.axle_z)],
 		"FR": [player.front_right_wheel, Vector3(CFG.wheel_x, 0, -CFG.axle_z)],

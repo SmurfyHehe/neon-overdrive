@@ -97,6 +97,8 @@ func _run() -> void:
 	print("balance sweep: %d cars x %d presets x %d skills x %d assists = %d runs" % [cars.size(), presets.size(), skills.size(), assists.size(), total])
 	for car in cars:
 		var stock := _spec_for(car)
+		# A player car on its own wheels and body (#601); the rest on the coupe's.
+		track.car_kind = car if PlayerCars.is_player_kind(car) else ""
 		for preset in presets:
 			var m := TunerModel.new(null, CarSpec.clone_spec(stock), stock)
 			if preset != "Stock":

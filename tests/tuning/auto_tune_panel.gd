@@ -31,9 +31,14 @@ const HOLD_TICKS := 6
 # d0c1335's tyre slide state moved 0-100 to 5.60 and 100-0 to 41.6; bisected with
 # tune_track's default coupe run; then #572 moved the track's ground a kilometre
 # up and widened it: 60 Hz 0-100 5.60 -> 5.58, 100-0 41.6 -> 41.9; 120 Hz 100-0
-# 43.3 -> 43.2, re-measured with tune_track.gd at each rate).
+# 43.3 -> 43.2, re-measured with tune_track.gd at each rate); then #538 lifted
+# the coupe's collision underside 6 cm (2c27f96): the old box's underside met the
+# track while the car settled on spawn, the new one never does, and the launch
+# runs differently from there: 60 Hz 0-100 5.58 -> 5.15 (top 244.1 and 100-0
+# 41.9 unchanged); 120 Hz 0-100 5.19 -> 5.18, 100-0 43.2 -> 43.3 (top 248.1
+# unchanged). Re-measured with tune_track.gd at each rate.
 var EXPECT_TOP := 244.1
-var EXPECT_0_100 := 5.58
+var EXPECT_0_100 := 5.15
 var EXPECT_100_0 := 41.9
 const TOLERANCE := 0.005
 const SLOT_FILE := "user://autotune/test_panel_slots.json"
@@ -43,8 +48,8 @@ var failures: Array[String] = []
 func _initialize() -> void:
 	if Engine.physics_ticks_per_second >= 120:
 		EXPECT_TOP = 248.1
-		EXPECT_0_100 = 5.19
-		EXPECT_100_0 = 43.2
+		EXPECT_0_100 = 5.18
+		EXPECT_100_0 = 43.3
 	change_scene_to_file("res://Game.tscn")
 	_run()
 
@@ -180,13 +185,14 @@ func _run() -> void:
 	panel.budget_override = 60
 	panel.run_button.pressed.emit()
 	_check(panel.running, "search should be running")
-	var job_pid: int = panel._job.pid
+	var job: AutoTuneJob = panel._job
 	await _ticks(90)  # ~1.5 s: the worker is mid-search
 	await _close_autotune(game)
 	_check(not panel.running, "closing the panel should cancel the search")
-	# Wait on the worker's exit itself (OS.kill is sent; the OS reaps it in its own
-	# time), not a fixed number of ticks.
-	var worker_gone := await _until(func(): return not OS.is_process_running(job_pid), 10.0)
+	# Wait on the worker's exit itself, not a fixed number of ticks. Asked of the
+	# job: on Linux and macOS OS.kill() has already reaped the worker, and asking
+	# the OS about a reaped pid is an error there (#594).
+	var worker_gone := await _until(func(): return not job.worker_running(), 10.0)
 	_check(worker_gone, "worker still running after the panel closed")
 	_check(panel.status_label.text == "Cancelled.", "status should say Cancelled, says: %s" % panel.status_label.text)
 	_end("")

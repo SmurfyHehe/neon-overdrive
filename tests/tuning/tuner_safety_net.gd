@@ -38,7 +38,11 @@ func _run() -> void:
 	await _frames(30)
 	dog = screen.watchdog
 	_check(dog != null and dog.is_inside_tree(), "the watchdog should be in the scene")
-	var stock := CarSpec.coupe_default()
+	# The car's own stock, the one the Tuner resets to (TunerScreen builds its
+	# model on CarSpec.player_spec). Since #538 the coupe's springs are stiffer
+	# than coupe_default()'s (resting ratio 0.4, not 0.5), so a nudge up from
+	# stock landed on exactly coupe_default()'s 0.5 and a page reset on 0.4.
+	var stock := CarSpec.player_spec(PlayerCar.chassis_kind())
 
 	# --- per-page reset ---
 	game.game_state.toggle_tuning()

@@ -320,6 +320,7 @@ func _track(track: TuneTrack, car: String) -> void:
 	var t := ModTree.tree(car)
 	var paths := ModTree.finished_paths(car)
 	var t0 := Time.get_ticks_msec()
+	track.car_kind = car  # every build on the car's own wheels and body (#601)
 	# The track's usual bend (steer 0.3). The bolt-on sweep's harder 0.7 was picked
 	# for the Bug; at 0.7 the coupe spins, and a spin reads as neither grip nor slide.
 	track.corner_steer = float(OS.get_environment("MOD_TREE_STEER")) if OS.get_environment("MOD_TREE_STEER") != "" else TuneTrack.CORNER_STEER
@@ -433,6 +434,7 @@ func _track(track: TuneTrack, car: String) -> void:
 	_say("%s: %d track evaluations in %.0f s." % [car, _evals, (Time.get_ticks_msec() - t0) / 1000.0])
 	track.corner_steer = TuneTrack.CORNER_STEER
 	track.corner_gone_hold = 0.0
+	track.car_kind = ""
 
 func _node_row(track: TuneTrack, stock: Dictionary, car: String, id: String, without_ids: Array, with_ids: Array) -> void:
 	var n := ModTree.node(car, id)

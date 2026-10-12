@@ -48,7 +48,7 @@
 			"sound": {"engine": "high_rev"},
 			"measure": {"test": "top_speed", "better_by_pct": 3}},
 		"na_stroker": {"icon": "crank", "minigame": "torque_wrench",
-			"ops": [{"path": "max_torque", "mul": 1.22}, {"path": "max_rpm", "add": -500}, {"path": "torque_shape/low_end", "add": 0.15}, {"path": "torque_shape/peak_pos", "add": -0.1}, {"path": "torque_shape/falloff", "add": -0.1}, {"path": "vehicle_mass", "add": 15}],
+			"ops": [{"path": "max_torque", "mul": 1.25}, {"path": "max_rpm", "add": -500}, {"path": "torque_shape/low_end", "add": 0.15}, {"path": "torque_shape/peak_pos", "add": -0.1}, {"path": "torque_shape/falloff", "add": -0.1}, {"path": "vehicle_mass", "add": 15}],
 			"sound": {"engine": "lumpy"},
 			"measure": {"test": "quarter_400", "better_by_pct": 1}},
 		"na_race_cam": {"icon": "cam_lumpy", "minigame": "cam_timing",

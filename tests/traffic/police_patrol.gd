@@ -5,8 +5,11 @@ extends SceneTree
 #   view: a C1 patrol body with the cop undercarriage role and full parts,
 #   driving its lane at traffic speed;
 # - lit and speeding past it head on (130 km/h, over lane 0's flow and the line):
-#   seen, a warning first (the dim icon, the loudspeaker line on the
-#   caption), then level 1 and night one's jab once the 5 s are up;
+#   seen, a warning first (the dim icon, the loudspeaker line on a
+#   caption), then level 1 and night one's jab once the 5 s are up. The lines
+#   go to Dave's caption when the radio is off or on his station (an important
+#   line switches the radio on for itself, R4 in 051e1f6) and to the heat
+#   caption only on a music station (Game._setup_police); either counts;
 # - a crash that is the player's fault with a car ahead, seen by the cop:
 #   heat 1 at once, no warning; the same crash with the car behind: nothing;
 # - the same pass with the headlights off (H): not seen at 35 m;
@@ -28,6 +31,15 @@ var t := 0
 func _check(ok: bool, msg: String) -> void:
 	if not ok:
 		failures.append(msg)
+
+## The police line on screen now: Dave's (the radio said it, with its caption)
+## or, failing that, the heat caption's. "" = none.
+func _captioned() -> String:
+	var radio: RadioManager = game.get("radio")
+	if radio != null and radio._announce_left > 0.0 and radio.on_air() >= 0:
+		return radio._announce_text
+	var icons: HeatIcons = game.get("heat_icons")
+	return icons.caption.text if icons.caption.visible else ""
 
 func _initialize() -> void:
 	OS.set_environment("NEON_POLICE", "1")
@@ -108,7 +120,8 @@ func _physics_process(_delta: float) -> bool:
 			_check(heat.warning_active and heat.level == PoliceHeat.NONE, "lit speeding car: warning %s, level %d" % [heat.warning_active, heat.level])
 			var icons: HeatIcons = game.get("heat_icons")
 			_check(icons.icon.visible and icons.icon.kind == "car" and icons.icon.modulate.a < 1.0, "dim icon %s / %s / %.2f" % [icons.icon.visible, icons.icon.kind, icons.icon.modulate.a])
-			_check(icons.caption.visible and PoliceRules.WARN_LINES.values().has(icons.caption.text), "loudspeaker line not on the caption: '%s'" % icons.caption.text)
+			var warn := _captioned()
+			_check(PoliceRules.WARN_LINES.values().has(warn), "loudspeaker line not on a caption: '%s'" % warn)
 			step = 41
 			t = 0
 		41:
@@ -118,7 +131,8 @@ func _physics_process(_delta: float) -> bool:
 			var icons: HeatIcons = game.get("heat_icons")
 			_check(heat.level >= PoliceHeat.ONE_CAR and not heat.warning_active, "warning ignored: level %d" % heat.level)
 			_check(icons.icon.visible and icons.icon.kind == "car" and icons.icon.modulate.a == 1.0, "icon %s / %s at level %d" % [icons.icon.visible, icons.icon.kind, heat.level])
-			_check(icons.caption.visible and icons.caption.text == PoliceHeat.MOCK_LINE, "night one jab not on the caption: '%s'" % icons.caption.text)
+			var jab := _captioned()
+			_check(jab == PoliceHeat.MOCK_LINE, "night one jab not on a caption: '%s'" % jab)
 			# Crash: the same pass again, with a car 20 m ahead in the player's lane.
 			_pass_setup(90.0, true)
 			step = 42

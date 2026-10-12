@@ -36,8 +36,8 @@ extends RefCounted
 #
 # Built once, off the main thread (warm()), a few seconds in all. Until that
 # finishes stream() returns null and a honk is silent. TrafficManager plays
-# them on two shared AudioStreamPlayer3Ds on the Traffic bus; the player's car
-# has its own (PlayerHorn).
+# them on two shared Sound3Ds on the Traffic bus; the player's car has its own
+# (PlayerHorn).
 
 const RATE := 22050
 const SHORT_S := 0.4

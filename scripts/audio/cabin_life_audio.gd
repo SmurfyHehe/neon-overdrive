@@ -81,8 +81,8 @@ var last_event := ""             # last one-shot that started: "can" / "coins" /
 var _vehicle: Vehicle
 var _car_audio: Node
 var _rng := RandomNumberGenerator.new()
-var _bay: AudioStreamPlayer3D    # ticks, at the engine
-var _fan: AudioStreamPlayer3D    # the fan, same place
+var _bay: Sound3D    # ticks, at the engine (Sound3D, not AudioStreamPlayer3D: #567)
+var _fan: Sound3D    # the fan, same place
 var _one: AudioStreamPlayer      # can / coins / latch
 var _ticks: Array[AudioStream] = []
 var _can: Array[AudioStream] = []
@@ -111,7 +111,6 @@ func _ready() -> void:
 	_rng.seed = 7711
 	_bay = _player3d("EngineBayTicks")
 	_fan = _player3d("EngineBayFan")
-	PlayerGain.route(_fan, &"World", -80.0)   # winds down every tick while it plays (#567)
 	# Booting into the garage nothing here can sound yet: the takes (on a cold
 	# cache still being made, #524) are taken once ready or once the car is out.
 	if not CarAudio.garage_boot():
@@ -132,8 +131,8 @@ func _ready() -> void:
 	else:
 		set_physics_process(false)
 
-func _player3d(node_name: String) -> AudioStreamPlayer3D:
-	var p := AudioStreamPlayer3D.new()
+func _player3d(node_name: String) -> Sound3D:
+	var p := Sound3D.new()
 	p.name = node_name
 	p.bus = &"World"
 	p.unit_size = 4.0
@@ -209,7 +208,7 @@ func _start_cooling() -> void:
 	_tick_level = lerpf(0.35, 1.0, h)
 	tick_log = PackedFloat32Array()
 	_tick_wait = _next_wait(0.0)
-	PlayerGain.set_db(_fan, linear_to_db(FAN_GAIN * _tick_level))
+	_fan.volume_db = linear_to_db(FAN_GAIN * _tick_level)
 	_fan.play()
 
 func _stop_cooling() -> void:
@@ -225,7 +224,7 @@ func _step_cooling(delta: float) -> void:
 	if fan_left > 0.0:
 		fan_left = maxf(fan_left - delta, 0.0)
 		# winds down over its last second
-		PlayerGain.set_db(_fan, linear_to_db(maxf(FAN_GAIN * _tick_level * minf(fan_left, 1.0), 0.0001)))
+		_fan.volume_db = linear_to_db(maxf(FAN_GAIN * _tick_level * minf(fan_left, 1.0), 0.0001))
 		if fan_left <= 0.0:
 			_fan.stop()
 	if cool_age >= cool_length:

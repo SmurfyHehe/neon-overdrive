@@ -77,7 +77,7 @@ func _run() -> void:
 	_check(TrafficHorns.ready(), "the horns were never built")
 	print("player_horn: horns built in %d ms" % (Time.get_ticks_msec() - t0))
 	var horn: PlayerHorn = horns["p1_coupe"]
-	var voice := horn.get_node(^"HornVoice") as AudioStreamPlayer3D
+	var voice := horn.get_node(^"HornVoice") as Sound3D
 	horn.set_process(true)
 	horn.player_horn.connect(func(p: String) -> void: heard.append(p))
 	await _frames(2)
@@ -142,7 +142,7 @@ func _run() -> void:
 		h.set_process(true)
 		Input.action_press(&"horn")
 		await _frames(1)
-		var v := h.get_node(^"HornVoice") as AudioStreamPlayer3D
+		var v := h.get_node(^"HornVoice") as Sound3D
 		_check(v.playing and h.horn == CARS[kind] and v.stream == TrafficHorns.hold_stream(CARS[kind]), "%s played %s" % [kind, h.horn])
 		Input.action_release(&"horn")
 		await _wait(0.5)

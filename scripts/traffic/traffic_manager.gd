@@ -318,7 +318,7 @@ var honk_count := 0
 var honk_log: Array[Dictionary] = []
 var _horn_until := PackedFloat32Array([0.0, 0.0])
 var _horn_cars: Array = [null, null]
-var _horn_players: Array[AudioStreamPlayer3D] = []
+var _horn_players: Array[Sound3D] = []   # not AudioStreamPlayer3D: issue #567
 var _horns_live := false
 ## Draws that must not disturb the game's random sequence (reaction times):
 ## tests and the benchmark keep the placements they had before.
@@ -500,6 +500,8 @@ func _physics_process(_delta: float) -> void:
 		_build_index()
 	if _pool_size() > target_count:
 		_trim_cars()
+	# after this pass's moves into and out of the sim
+	_deal_ai_phases()
 	if not cars.is_empty():
 		# its own counter: this point is reached every other tick, so _tick
 		# would only ever land on every other car
@@ -1108,7 +1110,7 @@ func _play_horn(voice: int, car: TrafficCar, horn: String, long: bool) -> void:
 		return   # still being built: this one is silent
 	if _horn_players.is_empty():
 		for i in HORN_VOICES:
-			var pl := AudioStreamPlayer3D.new()
+			var pl := Sound3D.new()
 			pl.bus = &"Traffic"
 			pl.unit_size = 14.0
 			pl.max_distance = 160.0
@@ -1229,6 +1231,56 @@ func _build_index() -> void:
 	for i in cars.size():
 		cars[i]._idx = i + 1
 		_put(cars[i])
+
+## The staggered controller (TrafficCar.AI_STRIDE), dealt at the end of each
+## bookkeeping pass: each car in the sim keeps the tick it was dealt; a car
+## coming into the sim gets the least used one, and when cars leaving have
+## tipped the split, cars move over until it is even again (a move costs that
+## car one early run, never a late one). Cars out of the sim give theirs back.
+var _ai_load := PackedInt32Array()
+var _ai_new: Array[TrafficCar] = []
+func _deal_ai_phases() -> void:
+	var stride := maxi(TrafficCar.AI_STRIDE, 1)
+	if _ai_load.size() != stride:
+		_ai_load.resize(stride)
+	_ai_load.fill(0)
+	_ai_new.clear()
+	for car in cars:
+		if not car.detailed or car.benched:
+			car._ai_phase = -1
+		elif car._ai_phase < 0:
+			_ai_new.append(car)
+		else:
+			car._ai_phase %= stride
+			_ai_load[car._ai_phase] += 1
+	for car in _ai_new:
+		var ph := _ai_least()
+		car._ai_phase = ph
+		_ai_load[ph] += 1
+	var lo := _ai_least()
+	var hi := 0
+	for k in stride:
+		if _ai_load[k] > _ai_load[hi]:
+			hi = k
+	while _ai_load[hi] - _ai_load[lo] > 1:
+		for car in cars:
+			if car._ai_phase == hi:
+				car._ai_phase = lo
+				break
+		_ai_load[hi] -= 1
+		_ai_load[lo] += 1
+		lo = _ai_least()
+		hi = 0
+		for k in stride:
+			if _ai_load[k] > _ai_load[hi]:
+				hi = k
+
+func _ai_least() -> int:
+	var best := 0
+	for k in _ai_load.size():
+		if _ai_load[k] < _ai_load[best]:
+			best = k
+	return best
 
 ## Writes a car's entry (footprint across the road, z, z-velocity, all in
 ## road space: RoadFrame) and adds

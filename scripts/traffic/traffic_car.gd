@@ -233,6 +233,13 @@ static var AI_STRIDE := int(OS.get_environment("NEON_AI_STRIDE")) if OS.get_envi
 var _wheels_posed := true
 var _ai_owed := 0.0
 var _ai_last := -1000000
+## Which of the AI_STRIDE ticks this car's controller runs on (-1 = none
+## dealt yet). TrafficManager deals it over the cars in the sim
+## (_deal_ai_phases) so they split evenly between the ticks. (It used to be
+## the index slot's parity; the slots follow the spawn order, and the handful
+## of sim cars around the player were often all even, so every run landed on
+## one tick.)
+var _ai_phase := -1
 ## Physics frame before which a car parked by a deferred spawn does not
 ## retry (TrafficManager).
 var retry_frame := 0
@@ -724,7 +731,7 @@ func _drive(delta: float) -> void:
 		_ai_owed = 0.0  # not driven for a while (just entered the sim): run now
 		_ai_last = frame - AI_STRIDE
 	_ai_owed += delta
-	if (frame + maxi(_idx, 0)) % AI_STRIDE != 0 and frame - _ai_last < AI_STRIDE:
+	if (frame + maxi(_ai_phase, 0)) % AI_STRIDE != 0 and frame - _ai_last < AI_STRIDE:
 		return
 	delta = _ai_owed
 	_ai_owed = 0.0

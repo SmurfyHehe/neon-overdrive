@@ -9,6 +9,8 @@ extends Node3D
 # and the player instance.
 
 const FixCar := preload("res://scripts/car/fix_car.gd")
+## Loaded only when the title shows (_setup_game_state).
+const TITLE_SCREEN := "res://scripts/ui/title_screen.gd"
 
 const CHUNKS_AHEAD := 6
 const CHUNKS_BEHIND := 4
@@ -113,7 +115,9 @@ var saver: SaveDirector
 var wallet: Node
 const Wallet := preload("res://scripts/core/wallet.gd")
 const ShopDay := preload("res://scripts/core/shop_day.gd")
-const WorkBoardScreen := preload("res://scripts/ui/work_board_screen.gd")
+## Walt's board screen: loaded only when the shop is on (_setup_game_state), so
+## a run without it never compiles the board.
+const WORK_BOARD_SCREEN := "res://scripts/ui/work_board_screen.gd"
 ## Walt's board for the day (W2); null-less: always exists, `enabled` says if it is live.
 var shop_day: Node
 ## A hard hit ends the run: rules, crash screen, morning (scripts/core/run_end.gd).
@@ -1022,7 +1026,7 @@ func _setup_game_state() -> void:
 		shop_day.reload()
 		game_state.workboard_gate = shop_day.want_board
 		garage_screen.shop_day = shop_day
-		add_child(WorkBoardScreen.new(game_state, shop_day, wallet))
+		add_child(load(WORK_BOARD_SCREEN).new(game_state, shop_day, wallet))
 	radio = RadioManager.new()
 	radio.listener = player  # reception follows the car (tunnels, bridges)
 	radio.process_mode = Node.PROCESS_MODE_ALWAYS   # plays on, muffled, while paused (PauseLook)
@@ -1031,12 +1035,18 @@ func _setup_game_state() -> void:
 		return (race != null and race.is_racing()) or (police_heat != null and police_heat.level > PoliceHeat.NONE)
 	add_child(radio)
 	add_child(PauseLook.new(game_state, player, camera))
-	add_child(TitleScreen.new(game_state))
+	# The title only ever opens here, at boot (enter_title below; Quit to title
+	# reloads the scene). A boot without it never builds it, nor compiles its
+	# scripts (the title street, rats, roaches, graffiti: about 0.4 s of a cold
+	# start), so it is loaded by path, not named.
+	var title := GameState.wants_title()
+	if title:
+		add_child(load(TITLE_SCREEN).new(game_state))
 	menu_sfx = MenuSfx.new()
 	add_child(menu_sfx)
 	if run.get("radio") is float or run.get("radio") is int:
 		radio.restore(run)
-	if GameState.wants_title():
+	if title:
 		game_state.enter_title()   # the title shows over the frozen world; Drive is instant
 	else:
 		game_state.enter_garage_boot()   # no title: the dawn card and garage first

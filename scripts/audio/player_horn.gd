@@ -56,7 +56,8 @@ func _ready() -> void:
 		kind = PlayerCar.chassis_kind()
 	_voice = AudioStreamPlayer3D.new()
 	_voice.name = "HornVoice"
-	_voice.bus = &"Traffic"
+	# the tail fades every frame while it sounds: a gain bus (#567)
+	PlayerGain.route(_voice, &"Traffic", HORN_DB)
 	_voice.unit_size = 14.0
 	_voice.max_distance = 160.0
 	add_child(_voice)
@@ -108,7 +109,7 @@ func _process(delta: float) -> void:
 		_voice.stop()
 		_sounding = false
 	else:
-		_voice.volume_db = HORN_DB + linear_to_db(1.0 - _tail_t / TAIL_S)
+		PlayerGain.set_db(_voice, HORN_DB + linear_to_db(1.0 - _tail_t / TAIL_S))
 
 func _press() -> void:
 	presses += 1
@@ -123,7 +124,7 @@ func _press() -> void:
 	if take == null:
 		return   # still being built: this one is silent
 	_voice.stream = take
-	_voice.volume_db = HORN_DB
+	PlayerGain.set_db(_voice, HORN_DB)
 	_voice.play()
 
 func _release() -> void:

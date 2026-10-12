@@ -193,14 +193,14 @@ func _ready() -> void:
 	menu_mark = lockup[0]
 	menu_wheel = lockup[1]
 	_mark_rest = menu_mark.position
-	_menu_whistle = _menu_player(MENU_WHISTLE_LOOP)
+	_menu_whistle = _menu_player(MENU_WHISTLE_LOOP, true)
 	_menu_flutter = _menu_player(MENU_WHISTLE_FLUTTER)
 	_menu_blowoff = _menu_player(MENU_BLOWOFF)
-	_menu_grind = _menu_player(MENU_GRIND)
+	_menu_grind = _menu_player(MENU_GRIND, true)
 	_build_boost_effects()
 	_build_menu()
 	_theme = AudioStreamPlayer.new()
-	_theme.bus = &"Music"
+	PlayerGain.route(_theme, &"Music")   # ducked by a tween while it plays (#567)
 	_theme.process_mode = Node.PROCESS_MODE_ALWAYS
 	add_child(_theme)
 	_build_ticker()
@@ -253,10 +253,13 @@ func _build_shade() -> void:
 
 ## The mark with BOOST over a spaced SIMCADE beside it. Returns [mark, wheel,
 ## name block] so the splash can move them.
-func _menu_player(path: String) -> AudioStreamPlayer:
+func _menu_player(path: String, fades := false) -> AudioStreamPlayer:
 	var p := AudioStreamPlayer.new()
-	p.bus = &"UI"
-	p.volume_db = MENU_WHISTLE_DB
+	if fades:
+		PlayerGain.route(p, &"UI", MENU_WHISTLE_DB)   # level set every frame while it plays (#567)
+	else:
+		p.bus = &"UI"
+		p.volume_db = MENU_WHISTLE_DB
 	if ResourceLoader.exists(path):
 		p.stream = load(path)
 	add_child(p)
@@ -987,8 +990,7 @@ func _run_menu_voice(delta: float) -> void:
 		_flutter_wait -= delta
 		if _flutter_wait < 0.0:
 			if _menu_flutter.stream != null:
-				_menu_flutter.volume_db = MENU_WHISTLE_DB 						+ linear_to_db(lerpf(0.4, 1.0, _release_boost))
-				_menu_flutter.play()
+				PlayerGain.play_at(_menu_flutter, MENU_WHISTLE_DB 						+ linear_to_db(lerpf(0.4, 1.0, _release_boost)))
 			_flutter_t = 0.0
 	if _flutter_t >= 0.0:
 		var f := _flutter_t / SPLASH_FLUTTER
@@ -1003,7 +1005,7 @@ func _run_menu_voice(delta: float) -> void:
 	# A slow release: fade the loop out, then let it go.
 	if _whistle_gain > 0.0:
 		_whistle_gain = move_toward(_whistle_gain, 0.0, delta / MENU_WHISTLE_OUT)
-		_menu_whistle.volume_db = MENU_WHISTLE_DB + linear_to_db(maxf(_whistle_gain, 0.0001))
+		PlayerGain.set_db(_menu_whistle, MENU_WHISTLE_DB + linear_to_db(maxf(_whistle_gain, 0.0001)))
 		if _whistle_gain <= 0.0:
 			_menu_whistle.stop()
 
@@ -1047,7 +1049,7 @@ func _play_whistle(k: float, delta: float) -> void:
 	else:
 		_limiter_t = 0.0
 	_menu_whistle.pitch_scale = pitch * (1.0 - 0.07 * dip)
-	_menu_whistle.volume_db = MENU_WHISTLE_DB + linear_to_db(maxf(_whistle_gain, 0.0001)) - 5.0 * dip
+	PlayerGain.set_db(_menu_whistle, MENU_WHISTLE_DB + linear_to_db(maxf(_whistle_gain, 0.0001)) - 5.0 * dip)
 
 ## A rough low layer from half boost, swelling and rising in pitch.
 func _play_grind() -> void:
@@ -1059,7 +1061,7 @@ func _play_grind() -> void:
 	if not _menu_grind.playing and _menu_grind.stream != null:
 		_menu_grind.play()
 	_menu_grind.pitch_scale = lerpf(0.85, 1.25, t)
-	_menu_grind.volume_db = GRIND_DB + linear_to_db(maxf(minf(t * 3.0, 1.0), 0.0001))
+	PlayerGain.set_db(_menu_grind, GRIND_DB + linear_to_db(maxf(minf(t * 3.0, 1.0), 0.0001)))
 
 ## Sparks leave the outlet from half boost, faster the higher it goes, and not
 ## for SPARK_COOLDOWN after a blow-off.
@@ -1083,8 +1085,7 @@ func _set_ring_heat(b: float) -> void:
 ## puff, then the flutter follows.
 func _blow_off(boost: float) -> void:
 	if _menu_blowoff.stream != null:
-		_menu_blowoff.volume_db = BLOWOFF_DB + linear_to_db(boost)
-		_menu_blowoff.play()
+		PlayerGain.play_at(_menu_blowoff, BLOWOFF_DB + linear_to_db(boost))
 	if kerbside != null:
 		kerbside.blow_off(boost)   # a second big one in 20 s wakes the neighbour (M8)
 	_puff.restart()
@@ -1226,7 +1227,7 @@ func _start_theme() -> void:
 		st.loop = true
 		_theme.stream = st
 	_theme_open = 0.0
-	_theme.volume_db = 0.0
+	PlayerGain.set_db(_theme, 0.0)
 	_theme.play()
 	_voice_theme(0.0)
 
@@ -1266,7 +1267,7 @@ func _end_theme() -> void:
 	if _theme_tween != null:
 		_theme_tween.kill()
 	_theme_tween = create_tween().set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
-	_theme_tween.tween_property(_theme, "volume_db", THEME_DUCK_DB, THEME_DUCK_SECS)
+	_theme_tween.tween_property(PlayerGain.amp(_theme), "volume_db", THEME_DUCK_DB, THEME_DUCK_SECS)
 	_theme_tween.tween_callback(func() -> void:
 		_theme.stop()
 		_theme_tween = null)

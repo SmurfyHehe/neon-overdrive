@@ -89,7 +89,7 @@ func _run() -> void:
 	_check(voice.playing and horn.is_sounding(), "J down: nothing is playing one frame later")
 	_check(horn.horn == "sharp", "the coupe sounded %s" % horn.horn)
 	_check(voice.stream == TrafficHorns.hold_stream("sharp"), "the coupe is not playing the sharp take")
-	_check(voice.bus == &"Traffic", "the horn is on the %s bus" % voice.bus)
+	_check(PlayerGain.target(voice) == &"Traffic", "the horn is on the %s bus" % PlayerGain.target(voice))
 	var take := voice.stream as AudioStreamWAV
 	_check(take != null and take.loop_mode == AudioStreamWAV.LOOP_FORWARD and take.loop_begin > 0, "the held take does not loop")
 	await _frames(1)

@@ -221,8 +221,8 @@ class LoopLayer:
 		if xfade >= 1.0 and other.playing:
 			other.stop()
 		var g := level * gain
-		players[cur].volume_db = linear_to_db(maxf(g * sin(xfade * PI * 0.5), 1e-5))
-		other.volume_db = linear_to_db(maxf(g * cos(xfade * PI * 0.5), 1e-5))
+		PlayerGain.set_db(players[cur], linear_to_db(maxf(g * sin(xfade * PI * 0.5), 1e-5)))
+		PlayerGain.set_db(other, linear_to_db(maxf(g * cos(xfade * PI * 0.5), 1e-5)))
 		players[cur].pitch_scale = pitch * jitter[cur]
 		other.pitch_scale = pitch * jitter[1 - cur]
 		return started
@@ -233,7 +233,7 @@ class LoopLayer:
 		jitter[slot] = rng.randf_range(0.95, 1.05)
 		var p := players[slot]
 		p.stream = pool.streams[k]
-		p.volume_db = -80.0
+		PlayerGain.set_db(p, -80.0)
 		p.play(rng.randf_range(0.0, p.stream.get_length() * 0.9))
 		swap_in = rng.randf_range(_SWAP_MIN, _SWAP_MAX)
 		started.append(k)
@@ -267,8 +267,7 @@ func _ready() -> void:
 		for side in ["A", "B"]:
 			var p := AudioStreamPlayer.new()
 			p.name = "Scrape%s%sAudio" % [String(kind).capitalize(), side]
-			p.bus = BUS
-			p.volume_db = -80.0
+			PlayerGain.route(p, BUS, -80.0)   # cross-faded every tick while it plays (#567)
 			add_child(p)
 			layer.players.append(p)
 		_loops[kind] = layer

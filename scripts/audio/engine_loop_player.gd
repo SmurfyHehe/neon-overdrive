@@ -66,7 +66,7 @@ func _init() -> void:
 	for i in MAX_VOICES:
 		var p := AudioStreamPlayer.new()
 		p.name = "Loop%d" % i
-		p.bus = &"Engine"
+		PlayerGain.route(p, &"Engine")   # level set every frame while it plays (#567)
 		add_child(p)
 		_players.append(p)
 
@@ -149,7 +149,7 @@ func update(delta: float, rpm: float, throttle: float, redline: bool, running: b
 			continue
 		if _band[v] < 0:
 			continue
-		AudioDsp.set_volume_db(p, linear_to_db(maxf(_level[v], 0.00001)))
+		PlayerGain.set_db(p, linear_to_db(maxf(_level[v], 0.00001)))
 		p.pitch_scale = clampf(rpm / loops.rpms[_band[v]] * (1.0 + WANDER_PITCH * wander * _w_pitch), 0.05, 4.0)
 
 ## Makes player `v` play `band` (state 0 lifted, 1 open), starting at the firing

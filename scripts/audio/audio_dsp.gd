@@ -3,8 +3,8 @@ extends RefCounted
 
 # Small offline DSP kit for the sounds generated in code (2026-10-08): CarAudio,
 # DrivelineAudio and CrashAudio build their samples once at load with these,
-# so nothing here runs per frame (set_volume_db() is the one exception).
-# Everything is synthesised: no files, nothing to license or credit.
+# so nothing here runs per frame. Everything is synthesised: no files, nothing
+# to license or credit.
 
 const CACHE_DIR := "user://audio_cache"
 ## Bump when a recipe changes. Exported builds carry no script source, so the
@@ -13,25 +13,6 @@ const CACHE_DIR := "user://audio_cache"
 const CACHE_VERSION := 1
 ## Tests turn this off to time the real build.
 static var use_cache := true
-
-## Smallest volume change set_volume_db() passes on to the player: far below
-## what the ear can tell apart (about 1 dB). A slow fade still tracks its
-## value to within this, because the gap is measured from what the player last
-## got, not from the previous frame.
-const VOLUME_STEP_DB := 0.1
-
-## Sets a playing AudioStreamPlayer's volume_db, but only when it moved by
-## VOLUME_STEP_DB or more (issue #567). Every volume_db write on a playing
-## player makes Godot's AudioServer swap that playback's bus details and free
-## the old copy a frame later, without checking that the audio mix thread is
-## done reading it; a mix thread held off the CPU across that frame reads the
-## freed copy and the game segfaults on the audio thread (seen in a test run
-## with four tests sharing the CPU). The layers that call this wrote every
-## frame, silent ones at -80 dB included: hundreds of swaps a second that
-## changed nothing anyone could hear.
-static func set_volume_db(player: Node, db: float) -> void:
-	if absf(float(player.volume_db) - db) >= VOLUME_STEP_DB:
-		player.volume_db = db
 
 ## A generated stream, from disk when this exact recipe was built before.
 ## Building every car loop takes a few seconds in GDScript; loading them is

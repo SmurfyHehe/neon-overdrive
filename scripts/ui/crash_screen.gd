@@ -117,14 +117,14 @@ func _ready() -> void:
 	_ring.bus = SFX_BUS
 	add_child(_ring)
 	_scrape = AudioStreamPlayer.new()
-	_scrape.bus = SFX_BUS
+	PlayerGain.route(_scrape, SFX_BUS)   # fades every frame while it plays (#567)
 	add_child(_scrape)
 
 func _process(delta: float) -> void:
 	if _scrape_left > 0.0:
 		_scrape_left -= delta
 		var t := clampf(_scrape_left / SCRAPE_TAIL_SECS, 0.0, 1.0)
-		_scrape.volume_db = linear_to_db(maxf(t * t, 0.0001))
+		PlayerGain.set_db(_scrape, linear_to_db(maxf(t * t, 0.0001)))
 		if _scrape_left <= 0.0:
 			_scrape.stop()
 
@@ -149,7 +149,7 @@ func black() -> void:
 	_glass.visible = false
 	_black.visible = true
 	_scrape.stream = CrashAudio.stream(SCRAPE_LAYER)
-	_scrape.volume_db = 0.0
+	PlayerGain.set_db(_scrape, 0.0)
 	_scrape.play()
 	_scrape_left = SCRAPE_TAIL_SECS
 

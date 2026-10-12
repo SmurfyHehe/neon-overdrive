@@ -39,8 +39,7 @@ func _ready() -> void:
 		return
 	_audio = AudioStreamPlayer.new()
 	_audio.name = "RattleAudio"
-	_audio.bus = &"Tires"
-	_audio.volume_db = -80.0
+	PlayerGain.route(_audio, &"Tires", -80.0)   # level set every tick while it plays (#567)
 	add_child(_audio)
 	# garage boot: taken once ready or once the car is out (#524; see CarAudio)
 	if not CarAudio.garage_boot():
@@ -70,7 +69,7 @@ func _physics_process(delta: float) -> void:
 		target = loose * shake
 	level = move_toward(level, target, delta * (ATTACK if target > level else RELEASE))
 	if level > 0.001:
-		AudioDsp.set_volume_db(_audio, linear_to_db(level * GAIN))
+		PlayerGain.set_db(_audio, linear_to_db(level * GAIN))
 		if not _audio.playing:
 			_audio.play(randf() * SECONDS)
 	elif _audio.playing:

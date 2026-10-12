@@ -33,7 +33,7 @@ func _run() -> void:
 	_check(title._theme != null and title.theme_playing(), "the theme song is playing on the title")
 	if title._theme == null or look == null:
 		return _finish("")
-	_check(title._theme.bus == &"Music", "the song is on the Music bus (slider and mute apply)")
+	_check(PlayerGain.target(title._theme) == &"Music", "the song is on the Music bus (slider and mute apply)")
 	var st := title._theme.stream as AudioStreamOggVorbis
 	_check(st != null and st.loop, "the song loops")
 	_check(st != null and st.resource_path.ends_with("title_theme_full_boost.ogg"), "it is Roy's Full Boost")
@@ -81,7 +81,7 @@ func _run() -> void:
 	# The drive starts: ducked, then stopped.
 	game.game_state.start_drive()
 	await _frames(3)
-	_check(title._theme.volume_db < 0.0 or not title.theme_playing(), "the song ducks under the start of the drive")
+	_check(PlayerGain.get_db(title._theme) < 0.0 or not title.theme_playing(), "the song ducks under the start of the drive")
 	await create_timer(TitleScreen.THEME_DUCK_SECS + 0.5).timeout
 	_check(not title.theme_playing(), "the song stops when the drive starts")
 	_finish("")

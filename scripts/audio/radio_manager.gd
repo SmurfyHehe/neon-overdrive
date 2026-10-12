@@ -145,11 +145,12 @@ func _ready() -> void:
 	gen.mix_rate = MIX_RATE
 	gen.buffer_length = BUFFER_SECS
 	_lengths = RadioLengths.LENGTHS.duplicate()
+	# the two track players fade every frame while they play: gain buses (#567)
 	_music = AudioStreamPlayer.new()
-	_music.bus = &"Music"
+	PlayerGain.route(_music, &"Music")
 	add_child(_music)
 	_music_b = AudioStreamPlayer.new()
-	_music_b.bus = &"Music"
+	PlayerGain.route(_music_b, &"Music")
 	add_child(_music_b)
 	_slots = [_music, _music_b]
 	_player = AudioStreamPlayer.new()
@@ -446,16 +447,19 @@ func _update_music() -> void:
 		var w: Dictionary = want[e]
 		var key := Vector2i(station, e)
 		var slot := _slot_key.find(key)
+		var db := linear_to_db(maxf(base * w.gain, 0.00001))
 		if slot < 0:
 			if not _stream_ready(w.path):
 				continue
 			slot = 0 if _slot_key[0].x < 0 else 1
 			_slots[slot].stream = _streams[w.path]
+			PlayerGain.set_db(_slots[slot], db)
 			_slots[slot].play(w.offset)
 			_slot_key[slot] = key
 		elif not _slots[slot].playing:
+			PlayerGain.set_db(_slots[slot], db)
 			_slots[slot].play(w.offset)
-		_slots[slot].volume_db = linear_to_db(maxf(base * w.gain, 0.00001))
+		PlayerGain.set_db(_slots[slot], db)
 	_stream_ready(next_path)   # warm: the next song loads while this one plays
 	var on_air := _slot_key.find(Vector2i(station, pos.entry))
 	now_playing = _tracks[station][pos.track] if on_air >= 0 else ""

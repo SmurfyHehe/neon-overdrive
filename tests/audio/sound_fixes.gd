@@ -144,7 +144,7 @@ func _process(delta: float) -> bool:
 			if fmod(step_t, 1.2) > 1.0 and not samples.has(names[i]):
 				samples[names[i]] = {
 					"cutoff": persp.cutoff(&"Engine"),
-					"buffet": db_to_linear(car.get_node("BuffetAudio").volume_db),
+					"buffet": db_to_linear(PlayerGain.get_db(car.get_node("BuffetAudio"))),
 					"throb": car.throb_level,
 					"whistle": car.whistle_level,
 				}
@@ -167,7 +167,7 @@ func _process(delta: float) -> bool:
 				_check(lv[0] > 0.9 and lv[1] < 0.01, "a left squeal should play on the left only")
 				_check(lv[3] > 0.9 and lv[2] < 0.01, "a right lock-up should play on the right only")
 				_check(lv[4] < 0.01 and lv[5] < 0.01, "kinds not fed should stay silent")
-				_check(car.get_node("SquealLAudio").volume_db > -20.0 and car.get_node("SquealRAudio").volume_db <= -79.0, "the squeal players don't follow their side")
+				_check(PlayerGain.get_db(car.get_node("SquealLAudio")) > -20.0 and PlayerGain.get_db(car.get_node("SquealRAudio")) <= -79.0, "the squeal players don't follow their side")
 				car.forced = {"speed": 0.0, "spin_l": 1.0, "spin_r": 1.0}
 				_go("chirp")
 		"chirp":

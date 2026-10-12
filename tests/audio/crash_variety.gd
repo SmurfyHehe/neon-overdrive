@@ -373,7 +373,9 @@ func _check_bus() -> void:
 	for c in crash.get_children():
 		if c is AudioStreamPlayer:
 			players += 1
-			_check((c as AudioStreamPlayer).bus == CrashAudio.BUS, "%s plays on %s, not %s" % [c.name, (c as AudioStreamPlayer).bus, CrashAudio.BUS])
+			# the scrape loops sit on gain buses that send to it (#567): where the sound ends up
+			var bus := PlayerGain.target(c)
+			_check(bus == CrashAudio.BUS, "%s plays on %s, not %s" % [c.name, bus, CrashAudio.BUS])
 	_check(players == CrashAudio.VOICES + CrashAudio.LOOPS.size() * 2, "CrashAudio should have %d players, has %d" % [CrashAudio.VOICES + CrashAudio.LOOPS.size() * 2, players])
 
 func _check_classify() -> void:

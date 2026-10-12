@@ -203,6 +203,7 @@ func _ready() -> void:
 	if not CarAudio.garage_boot():
 		_collect_takes()
 	_crank = _voice("CrankAudio")
+	PlayerGain.route(_crank, &"Engine")   # its level moves every tick while it cranks (#567)
 	_cough = _voice("CoughAudio")
 	_catch = _voice("CatchAudio")
 	_stop = _voice("ShutdownAudio")
@@ -262,7 +263,11 @@ func _play(a: AudioStreamPlayer, takes: Array[AudioStream], gain: float, pitch :
 	_collect_takes()
 	a.stream = takes[_rng.randi() % takes.size()]
 	a.pitch_scale = pitch * _rng.randf_range(1.0 - PITCH_SPREAD, 1.0 + PITCH_SPREAD)
-	a.volume_db = linear_to_db(gain)
+	# setting the stream stopped it: no playback hears this write (#567)
+	if a == _crank:
+		PlayerGain.set_db(a, linear_to_db(gain))
+	else:
+		a.volume_db = linear_to_db(gain)
 	a.play()
 	return a.stream.get_length() / a.pitch_scale
 
@@ -320,7 +325,7 @@ func _physics_process(delta: float) -> void:
 		target = COUGH_DUCK if _cough_left > 0.0 else 1.0
 	level = move_toward(level, target, delta * (ATTACK if target > level else RELEASE))
 	if level > 0.001:
-		AudioDsp.set_volume_db(_crank, linear_to_db(level * GAIN * view_gain(_cabin())))
+		PlayerGain.set_db(_crank, linear_to_db(level * GAIN * view_gain(_cabin())))
 	elif _crank.playing and not cranking:
 		_crank.stop()
 

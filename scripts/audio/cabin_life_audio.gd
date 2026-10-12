@@ -111,6 +111,7 @@ func _ready() -> void:
 	_rng.seed = 7711
 	_bay = _player3d("EngineBayTicks")
 	_fan = _player3d("EngineBayFan")
+	PlayerGain.route(_fan, &"World", -80.0)   # winds down every tick while it plays (#567)
 	# Booting into the garage nothing here can sound yet: the takes (on a cold
 	# cache still being made, #524) are taken once ready or once the car is out.
 	if not CarAudio.garage_boot():
@@ -208,7 +209,7 @@ func _start_cooling() -> void:
 	_tick_level = lerpf(0.35, 1.0, h)
 	tick_log = PackedFloat32Array()
 	_tick_wait = _next_wait(0.0)
-	_fan.volume_db = linear_to_db(FAN_GAIN * _tick_level)
+	PlayerGain.set_db(_fan, linear_to_db(FAN_GAIN * _tick_level))
 	_fan.play()
 
 func _stop_cooling() -> void:
@@ -224,7 +225,7 @@ func _step_cooling(delta: float) -> void:
 	if fan_left > 0.0:
 		fan_left = maxf(fan_left - delta, 0.0)
 		# winds down over its last second
-		_fan.volume_db = linear_to_db(maxf(FAN_GAIN * _tick_level * minf(fan_left, 1.0), 0.0001))
+		PlayerGain.set_db(_fan, linear_to_db(maxf(FAN_GAIN * _tick_level * minf(fan_left, 1.0), 0.0001)))
 		if fan_left <= 0.0:
 			_fan.stop()
 	if cool_age >= cool_length:

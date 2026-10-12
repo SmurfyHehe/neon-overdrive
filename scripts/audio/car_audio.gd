@@ -221,11 +221,13 @@ func _ready() -> void:
 func _add_player(layer: String, bus_name: StringName, looping := true) -> AudioStreamPlayer:
 	var p := AudioStreamPlayer.new()
 	p.name = layer.to_pascal_case() + "Audio"
-	p.bus = bus_name
-	p.volume_db = -80.0
-	add_child(p)
 	if looping:
+		# its level moves every frame while it plays: a gain bus (#567)
+		PlayerGain.route(p, bus_name, -80.0)
 		_loops.append([p, layer])
+	else:
+		p.bus = bus_name
+	add_child(p)
 	return p
 
 ## Every layer's stream onto its player; starts the loops.
@@ -371,9 +373,7 @@ func _process(delta: float) -> void:
 	if spin_now > 0.5 and _spin_prev < 0.15 and _chirp_wait <= 0.0:
 		chirp_count += 1
 		_chirp_wait = CHIRP_COOLDOWN
-		var c: AudioStreamPlayer = _players.chirp
-		c.volume_db = linear_to_db(CHIRP_GAIN)
-		c.play()
+		PlayerGain.play_at(_players.chirp, linear_to_db(CHIRP_GAIN))
 	_spin_prev = spin_now
 
 	# --- road: louder and brighter, barely higher
@@ -424,10 +424,7 @@ func _road_features(st: Dictionary, speed: float, delta: float) -> void:
 
 func _joint(strength: float, pitch: float) -> void:
 	joint_count += 1
-	var p: AudioStreamPlayer = _players.joint
-	p.volume_db = linear_to_db(maxf(JOINT_GAIN * strength, 0.001))
-	p.pitch_scale = pitch
-	p.play()
+	PlayerGain.play_at(_players.joint, linear_to_db(maxf(JOINT_GAIN * strength, 0.001)), pitch)
 	road_bump.emit(strength * 0.5)
 
 ## One wheel over a manhole cover. Public for the listen pack and tests.
@@ -436,9 +433,7 @@ func hit_manhole(speed: float) -> void:
 		return
 	manhole_count += 1
 	var strength := smoothstep(1.0, 25.0, speed)
-	var p: AudioStreamPlayer = _players.manhole
-	p.volume_db = linear_to_db(maxf(MANHOLE_GAIN * (0.4 + 0.6 * strength), 0.001))
-	p.play()
+	PlayerGain.play_at(_players.manhole, linear_to_db(maxf(MANHOLE_GAIN * (0.4 + 0.6 * strength), 0.001)))
 	road_bump.emit(strength * 0.8)
 
 ## One wheel climbing onto the kerb strip or the pavement: a low thump (the
@@ -448,10 +443,7 @@ func hit_kerb(speed: float) -> void:
 		return
 	kerb_hit_count += 1
 	var strength := smoothstep(2.0, 25.0, speed)
-	var p: AudioStreamPlayer = _players.joint
-	p.volume_db = linear_to_db(maxf(KERB_HIT_GAIN * (0.4 + 0.6 * strength), 0.001))
-	p.pitch_scale = 0.7
-	p.play()
+	PlayerGain.play_at(_players.joint, linear_to_db(maxf(KERB_HIT_GAIN * (0.4 + 0.6 * strength), 0.001)), 0.7)
 	road_bump.emit(0.4 + 0.5 * strength)
 
 ## Gusts: a slow random wander of the wind level, quicker and wider at speed.
@@ -487,7 +479,7 @@ func _drive_pair(layer: String, amplitude: float, pitch: float) -> void:
 	_drive_layer(_players[layer + "_b"], amplitude * 0.71, pitch * 0.985)
 
 func _drive_layer(p: AudioStreamPlayer, amplitude: float, pitch: float) -> void:
-	AudioDsp.set_volume_db(p, linear_to_db(amplitude) if amplitude > 0.0005 else -80.0)
+	PlayerGain.set_db(p, linear_to_db(amplitude) if amplitude > 0.0005 else -80.0)
 	p.pitch_scale = pitch
 
 ## Starts making every layer _ready() asks for off the main thread, so a cold

@@ -98,20 +98,20 @@ func _hold_six_seconds(title: TitleScreen) -> void:
 		if t < 5.0:
 			if loop.pitch_scale < last_pitch - 0.0005:
 				dropped = "pitch fell to %.3f from %.3f at %.2f s" % [loop.pitch_scale, last_pitch, t]
-			if loop.volume_db < last_db - 0.01 and dropped == "":
-				dropped = "level fell to %.2f dB from %.2f dB at %.2f s" % [loop.volume_db, last_db, t]
+			if PlayerGain.get_db(loop) < last_db - 0.01 and dropped == "":
+				dropped = "level fell to %.2f dB from %.2f dB at %.2f s" % [PlayerGain.get_db(loop), last_db, t]
 		else:
 			limiter_pitch_hi = maxf(limiter_pitch_hi, loop.pitch_scale)
 		if t > 5.4 and loop.pitch_scale < limiter_pitch_hi - 0.03:
 			dipped = true
 		last_pitch = loop.pitch_scale
-		last_db = loop.volume_db
+		last_db = PlayerGain.get_db(loop)
 		# The wheel is at 18 rad/s and boost is under half: steady 2.0 - 2.9 s.
 		if t > 2.0 and t < 2.9:
 			if held_pitch == 0.0:
 				held_pitch = loop.pitch_scale
-				held_db = loop.volume_db
-			elif not (is_equal_approx(loop.pitch_scale, held_pitch) and is_equal_approx(loop.volume_db, held_db)):
+				held_db = PlayerGain.get_db(loop)
+			elif not (is_equal_approx(loop.pitch_scale, held_pitch) and is_equal_approx(PlayerGain.get_db(loop), held_db)):
 				steady_ok = false
 		if boost_at_2 == 0.0 and t >= 2.0:
 			boost_at_2 = title.menu_boost

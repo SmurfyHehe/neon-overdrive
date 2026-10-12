@@ -200,6 +200,14 @@ func _physics_process(_delta: float) -> bool:
 				pedal = 1.0 if modes[mode_i] == PlayerCar.Transmission.MANUAL and t < HZ * 2 else 0.0
 				if (t == 20 or t == 60) and p.gear < 3:
 					p.manual_shift(1)
+				# Off the throttle while the pedal is in, as a driver shifts. Held
+				# flat, the engine ran free to 7300 rpm and the pedal came up as a
+				# clutch dump in 3rd: the rears spun at twice road speed for a
+				# second, and when the tank went dry mid-burnout the unwinding
+				# engine and wheels pushed the car to 64.5 km/h, past the cap the
+				# governor had already shut (a burnout, not a governor overshoot).
+				if pedal > 0.0:
+					throttle = 0.0
 			p.health.engine_temp = minf(p.health.engine_temp, 100.0)
 			if p.fuel.is_empty() and dry_at < 0:
 				dry_at = t

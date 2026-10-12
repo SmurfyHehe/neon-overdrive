@@ -90,6 +90,8 @@ class Run extends RefCounted:
 	var corner_steer := CORNER_STEER
 	var gone_hold := 0.0
 	var gone_t := 0.0
+	var path_lat_g := false
+	var prev_vel := Vector3.ZERO
 	# heat telemetry (record_heat only): one [speed m/s, engine load 0..1, on limiter, brake power W]
 	# per tick, replayed through PowertrainHealth offline by the balance sweep
 	var record_heat := false
@@ -209,6 +211,12 @@ class Run extends RefCounted:
 		vel.y = 0.0
 		var sp := vel.length()
 		var a_lat := sp * absf(c.angular_velocity.y)
+		if path_lat_g:
+			# How fast the velocity itself turns: the car's real sideways
+			# acceleration (see corner_path_lat_g).
+			var acc := (vel - prev_vel) / dt
+			a_lat = absf(acc.cross(vel / sp).y) if sp > 1.0 else 0.0
+		prev_vel = vel
 		lat_g_smooth = lerpf(lat_g_smooth, a_lat / 9.81, clampf(dt / 0.25, 0.0, 1.0))
 		peak_lat_g = maxf(peak_lat_g, lat_g_smooth)
 		if sp > 5.0:
@@ -253,6 +261,16 @@ var driver_profile: Dictionary = DEFAULT_PROFILE
 ## Keep it 0 where the track runs inside the live game: a longer corner run
 ## circles into the town beside the lanes (LANE_X0).
 var corner_gone_hold := 0.0
+## Measure the corner run's lateral g from the path (how fast the velocity
+## turns, times speed: the acceleration the tyres really give the car) instead
+## of the usual speed x yaw rate. The two agree in a steady corner, but yaw rate
+## is not the path's turn rate while the body rotates under the car: a car that
+## spins reads its spin as grip (the coupe on -4 deg camber read 1.79 g at 83
+## deg of slip; its path never passed 1.06 g), and every upshift's yaw kick
+## sets the peak (stock read 1.30 g; its path peaks at 1.08). Off by default, so the numbers
+## the Tuner, Auto-Tune and their tests are calibrated on stay put;
+## tests/car/tyre_model.gd, which compares tyre settings, turns it on.
+var corner_path_lat_g := false
 ## Keep per-tick heat telemetry of the accel and brake runs as metrics.heat_accel
 ## and metrics.heat_brake (see Run.heat_log), for the balance sweep's offline
 ## PowertrainHealth replay. Off by default.
@@ -340,6 +358,7 @@ func _spawn(spec: Dictionary, lane: int, kind: int) -> Run:
 	r.profile = driver_profile
 	r.corner_steer = corner_steer
 	r.gone_hold = corner_gone_hold
+	r.path_lat_g = corner_path_lat_g
 	r.record_heat = record_heat and kind != Kind.CORNER
 	if record_trace and kind == Kind.BRAKE:
 		r.trace = {"step": TRACE_STEP, "speed": [], "throttle": [], "brake": []}

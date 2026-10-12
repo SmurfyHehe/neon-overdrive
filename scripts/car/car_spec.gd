@@ -1093,6 +1093,11 @@ const WORLD_LAYER := 1
 const CAR_LAYER := 2
 const WALL_LAYER := 3
 const KERB_LAYER := 4
+## Knocked-over roadside props that roll (scripts/world/prop_break.gd). Left
+## out of the car body's mask above and the wheel raycast mask below on
+## purpose: a rolling bin meets the road, kerb, walls and other props, never
+## a car or a wheel.
+const PROP_LAYER := 5
 
 static func set_collision_layers(v: Vehicle) -> void:
 	v.collision_layer = 1 << (CAR_LAYER - 1)

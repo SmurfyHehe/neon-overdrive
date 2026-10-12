@@ -50,7 +50,7 @@ const TARGET_HEIGHT := 0.8
 ## Offences. `heat` is what it adds; `warn` = a soft offence at heat 0 gets the
 ## warning step first; `judged` = needs speed judgement (cone + JUDGE_SECS);
 ## `add` = +heat on top of what there is (the rest raise it to that level).
-enum Offence { SPEEDING, FLAGRANT, WRONG_SIDE, RED_LIGHT, RACING, CRASH, HIT_AND_RUN, TOUCH_COP, RAM_COP, MEDIAN_GAP }
+enum Offence { SPEEDING, FLAGRANT, WRONG_SIDE, RED_LIGHT, RACING, CRASH, HIT_AND_RUN, TOUCH_COP, RAM_COP, MEDIAN_GAP, PROPERTY }
 const OFFENCES := {
 	Offence.SPEEDING: {"heat": 1, "warn": true, "judged": true},
 	Offence.FLAGRANT: {"heat": 1, "warn": true, "judged": true},
@@ -62,6 +62,8 @@ const OFFENCES := {
 	Offence.TOUCH_COP: {"heat": 1, "warn": true, "judged": false},
 	Offence.RAM_COP: {"heat": 4, "warn": false, "judged": false},
 	Offence.MEDIAN_GAP: {"heat": 1, "warn": false, "judged": false, "add": true},
+	# a lamp post, hydrant or sign knocked down in a cop's sight (breakable world I3)
+	Offence.PROPERTY: {"heat": 1, "warn": true, "judged": false},
 }
 const WRONG_SIDE_SECS := 2.0    # travelling against the flow this long
 const WRONG_WAY_KMH := 15.0     # ...at more than this along the road

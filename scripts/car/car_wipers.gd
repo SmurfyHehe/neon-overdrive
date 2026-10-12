@@ -29,6 +29,10 @@ const RATE_HEAVY := 1.5            # downpour
 const WEATHER_PATH := "res://scripts/world/weather.gd"
 
 static var rain_override := -1.0
+## Seconds of fast wiping left on this car whatever the weather (a burst
+## hydrant's water on the glass, hydrant_water.gd).
+var burst := 0.0
+const RATE_BURST := 2.4
 static var _weather: Script
 
 var visual: Node3D
@@ -107,11 +111,14 @@ func _process(delta: float) -> void:
 func advance(delta: float) -> void:
 	var rain := rain_amount()
 	var raining := rain > RAIN_ON
-	if raining or phase > 0.0:
-		var rate := lerpf(RATE_LIGHT, RATE_HEAVY, rain) if raining else RATE_LIGHT
+	var fast := burst > 0.0
+	if fast:
+		burst = maxf(burst - delta, 0.0)
+	if raining or fast or phase > 0.0:
+		var rate := RATE_BURST if fast else (lerpf(RATE_LIGHT, RATE_HEAVY, rain) if raining else RATE_LIGHT)
 		phase += rate * delta
 		if phase >= 1.0:
-			phase = fposmod(phase, 1.0) if raining else 0.0
+			phase = fposmod(phase, 1.0) if raining or burst > 0.0 else 0.0
 		angle = MAX_ANGLE * 0.5 * (1.0 - cos(TAU * phase))
 		_update()
 

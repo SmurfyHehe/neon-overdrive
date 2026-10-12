@@ -73,6 +73,7 @@ var night_clock: NightClock  # 8 p.m. to 6 a.m., saved (night_clock.gd); windows
 var race: RaceController  # race core RC1 (race_controller.gd)
 var garage_flow: GarageFlow  # the garage plumbing (G0, garage_flow.gd)
 var _bands := false  # hour bands drive traffic and Dave (bands_on)
+var breaker: Node3D  # breakable roadside props (prop_break.gd); null when off
 var moments: MomentSpots  # roadside moment spots, dealt nightly (moment_spots.gd); null when off
 var world_mood: WorldMood  # tonight's events: rule-breaker share, bar close, meets, crackdowns
 var police_heat: PoliceHeat  # heat level + cop_can_see_player (police F0/F1)
@@ -87,6 +88,7 @@ const TestBuild := preload("res://scripts/core/test_build.gd")
 var perf_ladder: PerfLadder  # lowers the load when the PC falls behind (perf_ladder.gd); real play only
 var rescue: OffMapRescue  # off-map rescue (off_map_rescue.gd)
 const Weather := preload("res://scripts/world/weather.gd")
+const PropBreak := preload("res://scripts/world/prop_break.gd")
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
 const DiscordPresence := preload("res://scripts/core/discord_presence.gd")
@@ -611,6 +613,13 @@ func _setup_chunk_pool() -> void:
 		moments.night_clock = night_clock
 		moments.pool = chunk_pool
 		add_child(moments)
+	if PropBreak.enabled:
+		breaker = PropBreak.new()
+		breaker.name = "PropBreak"
+		breaker.pool = chunk_pool
+		breaker.night_clock = night_clock
+		breaker.game = self
+		add_child(breaker)
 	var start := 0
 	if resume_place:
 		var z := RoadFrame.unroll(SaveDirector.v3(run.car.xform.slice(9, 12))).z
@@ -624,6 +633,8 @@ func _setup_chunk_pool() -> void:
 		chunk_pool.append({"root": root, "index": idx})
 		if moments != null:
 			moments.dress_chunk(root, idx)
+		if breaker != null:
+			breaker.dress_chunk(root, idx)
 	_pool_centre = start
 
 ## Tests: called as (chunk_root, gap) just before a chunk is rebuilt (it vanishes
@@ -764,6 +775,8 @@ func _rebuilt(job: RoadChunkBuilder.RebuildJob) -> void:
 	rebuild_count += 1
 	if moments != null and is_instance_valid(job.root):
 		moments.dress_chunk(job.root, job.index)
+	if breaker != null and is_instance_valid(job.root):
+		breaker.dress_chunk(job.root, job.index)
 
 ## Finishes every rebuild in flight now (tests that walk the pool by hand).
 func flush_rebuilds() -> void:
@@ -870,6 +883,8 @@ func _shift_origin(shift_chunks: int) -> void:
 	if police != null:
 		police.shift_world(offset)
 	fx.shift_world(offset)  # skid marks are laid in world space
+	if breaker != null:
+		breaker.shift_world(offset)  # so are flying and rolling props
 	SpikeLog.mark("recenter", SpikeLog.since(t0))
 	# The ground plane stays put: it is infinite.
 	# The camera follows the car's interpolated position in _process, so it
@@ -919,6 +934,8 @@ func put_back() -> bool:
 func _setup_traffic() -> void:
 	if moments != null:
 		moments.player = player
+	if breaker != null:
+		breaker.player = player
 	traffic = TrafficManager.new()
 	traffic.player = player
 	if moments != null:
@@ -930,6 +947,8 @@ func _setup_traffic() -> void:
 	traffic.detail_distance = TrafficSettings.detail_distance
 	traffic.add_to_group(GraphicsSettings.GROUP)   # a graphics tier sets count and distance
 	add_child(traffic)
+	if breaker != null:
+		breaker.traffic = traffic
 	# Auto-dip: the high beam drops to low when a car is in its way.
 	player.beams.dip_probe = traffic.beam_blocked
 	if Junction.enabled:

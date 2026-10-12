@@ -33,6 +33,7 @@ extends SceneTree
 
 const Harness := preload("res://tests/traffic/traffic_harness.gd")
 const Districts := preload("res://scripts/world/districts.gd")
+const RoadRamps := preload("res://scripts/world/road_ramps.gd")
 
 const SPEEDS := [10.0, 25.0, 45.0]  # m/s (36 to 162 km/h)
 const ANGLES := [10.0, 30.0, 60.0]  # degrees toward the barrier
@@ -261,7 +262,7 @@ func _start(p: PlayerCar) -> void:
 		"dents": _count(RoadBarriers.dents), "crumpled": _count(RoadBarriers.crumpled), "x0": pos.x, "z0": pos.z}
 
 ## The first z at or ahead of `z` (the road runs toward -z) from which the
-## next CLOSED_CHUNKS chunks have no opening in the barrier.
+## next CLOSED_CHUNKS chunks have no opening in the barrier and no ring site.
 const CLOSED_CHUNKS := 3
 func _closed_z(z: float) -> float:
 	for tries in 12:
@@ -269,6 +270,9 @@ func _closed_z(z: float) -> float:
 		var open := false
 		for i in CLOSED_CHUNKS:
 			open = open or RoadBarriers.gap_kind(c + i) != RoadBarriers.NONE
+			# nor under a ring site's bridges, whose walls stand in the median
+			# (ring sites R2): a hit there is a hit on the ring, not the barrier
+			open = open or RoadRamps.zone(c + i)
 		if not open:
 			return z
 		z -= RoadChunkBuilder.CHUNK_LEN

@@ -122,7 +122,10 @@ func _targets() -> void:
 	_check(m.top_speed_kmh >= 235.0 and m.top_speed_kmh <= 250.0, "top speed %.1f outside 235-250" % m.top_speed_kmh)
 	_check(m.t_0_100 >= 4.6 and m.t_0_100 <= 6.4, "0-100 %.2f outside 4.6-6.4" % m.t_0_100)
 	_check(m.brake_dist_100 >= 36.0 and m.brake_dist_100 <= 47.0, "100-0 %.1f outside 36-47" % m.brake_dist_100)
-	_check(m.peak_lat_g >= 0.9 and m.peak_lat_g <= 1.5, "peak lateral g %.2f outside 0.9-1.5" % m.peak_lat_g)
+	# The g band was set on TuneTrack's old 120 Hz reading (speed x yaw rate,
+	# 1.22 g); since #572 the track reads g off the car's path (1.08 g at
+	# 120 Hz). Same band in the new reading, x 1.08 / 1.22: 0.80-1.33.
+	_check(m.peak_lat_g >= 0.80 and m.peak_lat_g <= 1.33, "peak lateral g %.2f outside 0.80-1.33" % m.peak_lat_g)
 	_end("")
 
 func _go(next: Step) -> void:

@@ -17,7 +17,10 @@ const NOTCHES := 11
 
 ## Coupe numbers measured on the hidden test track (tests/tuning/tune_track.gd,
 ## 2026-10-06). The estimates are scaled so the stock coupe reads these.
-const COUPE_MEASURED := {"top": 244.1, "accel": 5.60, "brake": 42.7, "grip": 1.296}
+## grip: TuneTrack's peak_lat_g for the stock coupe. 1.296 until #572, when the
+## track stopped reading lateral g as speed x yaw rate (which counted upshift yaw
+## kicks and spins as grip) and started reading it off the car's path: 1.083.
+const COUPE_MEASURED := {"top": 244.1, "accel": 5.60, "brake": 42.7, "grip": 1.083}
 
 const PRESETS := ["Stock", "Street", "Grip", "Drift"]
 

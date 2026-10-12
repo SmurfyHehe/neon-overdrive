@@ -132,7 +132,7 @@ static func score(it: Dictionary, m: Dictionary, ref: Dictionary, m0: Dictionary
 	var loop_ref := float(loop.gap_s) + _loop_variable_s(ref, cfg)
 	var loop_m := float(loop.gap_s) + _loop_variable_s(m, cfg)
 	row["pace_s"] = loop_ref - loop_m
-	# A bend that ends in a spin reads spin, not grip (speed x yaw rate): no
+	# A bend that ends in a spin is not a bend the car holds at its peak g: no
 	# lap-time credit, and it is shown. Same rule as tools/balance_sweep.gd.
 	row["spins"] = float(m.get("max_slip_deg", 0.0)) > SPIN_DEG and not float(ref.get("max_slip_deg", 0.0)) > SPIN_DEG
 	if row.spins:

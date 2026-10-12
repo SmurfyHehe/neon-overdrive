@@ -17,9 +17,10 @@ extends SceneTree
 # Track rules (a few minutes; MOD_TREE_ONLY=data skips them, =track runs only them):
 #   - every node moves its measure number past its threshold
 #   - every finished build has something over every other one at launch, top
-#     speed, the 100-200 pull, braking or cornering (eight builds cannot each win one of four
-#     outright, so the rule checked is that none is level-or-behind another
-#     everywhere), and each of the five has a winner
+#     speed, the 100-200 pull, braking, cornering or the tightest turn (eight
+#     builds cannot each win one of four outright, so the rule checked is that
+#     none is level-or-behind another everywhere), and each of the six has a
+#     winner
 #   - the car's showcase path is its quickest measured 0-200 km/h (or level
 #     with it to the physics tick)
 # MOD_TREE_CARS (comma list) limits the cars; MOD_TREE_OUT writes the tables.
@@ -28,7 +29,14 @@ const TIE := 0.002  # two builds within 0.2% on a metric are level
 ## The 100-200 pull is here beside the four asked for because top speed on the
 ## stock gears is set by the redline alone (the coupe has the power for far more
 ## than its gearing reaches), so a boost build can never win it.
-const CATEGORIES := [["launch", "t_0_100", "less"], ["top speed", "top_speed_kmh", "more"], ["pull", "t_100_200", "less"], ["braking", "brake_dist_100", "less"], ["cornering", "peak_lat_g", "more"]]
+## The tightest turn is here because the fork at L3 trades grip against slide
+## (docs/planning/garage-mod-trees-and-player-cars-2026-10-07.md, risk 3), and
+## the Slide capstone's own measure is the turn it gives (26% tighter on the
+## coupe). Without it, Slide could only stay "unbeaten" by a tick of launch or
+## a few cm of braking: on B1 it was 4.78 against Grip's 4.80 s, and when the
+## track moved (#572) both read 4.80 and B1/slide went "beaten by B1/grip"
+## while turning in 10.9 m against 14.7 m.
+const CATEGORIES := [["launch", "t_0_100", "less"], ["top speed", "top_speed_kmh", "more"], ["pull", "t_100_200", "less"], ["braking", "brake_dist_100", "less"], ["cornering", "peak_lat_g", "more"], ["tight turn", "turn_radius_m", "less"]]
 
 var failures: Array[String] = []
 var report: Array[String] = []
@@ -382,7 +390,7 @@ func _track(track: TuneTrack, car: String) -> void:
 				ahead = ahead or d > 0
 			if never_behind and ahead:
 				beaten_by = "/".join(PackedStringArray(paths[j]))
-		_check(beaten_by == "", "%s %s: has nothing over %s at launch, top speed, pull, braking or cornering" % [car, "/".join(PackedStringArray(paths[i])), beaten_by])
+		_check(beaten_by == "", "%s %s: has nothing over %s at launch, top speed, pull, braking, cornering or the tightest turn" % [car, "/".join(PackedStringArray(paths[i])), beaten_by])
 		var m: Dictionary = ms[i]
 		_say("| %s | %s | %s | %s | %s | %s | %s | %s | %s |" % ["/".join(PackedStringArray(paths[i])), _f(m.get("t_0_100", NAN), 2), _f(m.get("t_400", NAN), 2),
 			_f(m.get("t_100_200", NAN), 2), _f(m.get("top_speed_kmh", NAN), 0), _f(m.get("brake_dist_100", NAN), 1), _f(m.get("peak_lat_g", NAN), 2),

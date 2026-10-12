@@ -109,10 +109,12 @@ func _ready() -> void:
 	_car_audio = get_parent()
 	_vehicle = _car_audio.get_parent() as Vehicle if _car_audio != null else null
 	_rng.seed = 7711
-	_build_streams()
 	_bay = _player3d("EngineBayTicks")
 	_fan = _player3d("EngineBayFan")
-	_fan.stream = _fan_stream
+	# Booting into the garage nothing here can sound yet: the takes (on a cold
+	# cache still being made, #524) are taken once ready or once the car is out.
+	if not CarAudio.garage_boot():
+		_build_streams()
 	_one = AudioStreamPlayer.new()
 	_one.name = "CabinOneShot"
 	_one.bus = &"World"
@@ -174,6 +176,8 @@ func _find_crash() -> void:
 ## (x right, z back; so braking while going forward is +z), m/s^2. Public so a
 ## test can script it without a car.
 func step(delta: float, running: bool, throttle: float, rpm_share: float, accel: Vector3, rough := 0.0, speed := 0.0) -> void:
+	if _ticks.is_empty() and (GameState.garage_seen or speed > 2.0 or _all_built()):
+		_build_streams()
 	_clock += delta
 	if running:
 		_heat_step(delta, throttle, rpm_share)
@@ -241,6 +245,8 @@ func _tick() -> void:
 		return   # a loose-object sound is sounding: the tick waits its turn
 	tick_count += 1
 	tick_log.append(cool_age)
+	if _ticks.is_empty():
+		return   # takes not in yet (garage boot)
 	_bay.stream = _ticks[_rng.randi() % _ticks.size()]
 	var fade := exp(-1.5 * cool_age / maxf(cool_length, 1.0))
 	var level := TICK_GAIN * _tick_level * fade * lerpf(1.0, COCKPIT_QUIET, cabin)
@@ -264,7 +270,8 @@ func _step_can(delta: float) -> void:
 	if _can_wait > 0.0 or can_forward or _one_left > 0.0:
 		return
 	if long_g > CAN_BRAKE_G or side_g > CAN_CORNER_G:
-		_play_one("can", _can[_rng.randi() % _can.size()], CAN_GAIN, 1.0)
+		if not _can.is_empty():
+			_play_one("can", _can[_rng.randi() % _can.size()], CAN_GAIN, 1.0)
 		can_clunks += 1
 		can_forward = true
 		_can_wait = CAN_COOLDOWN
@@ -279,7 +286,8 @@ func _step_coins(delta: float, rough: float, speed: float) -> void:
 	coin_bursts += 1
 	_coin_wait = COIN_GAP + _rng.randf_range(0.0, 1.0)
 	var level := COIN_GAIN * clampf(speed / 20.0, 0.4, 1.0) * clampf(rough * 1.5, 0.4, 1.0)
-	_play_one("coins", _coins[_rng.randi() % _coins.size()], level, _rng.randf_range(0.92, 1.1))
+	if not _coins.is_empty():
+		_play_one("coins", _coins[_rng.randi() % _coins.size()], level, _rng.randf_range(0.92, 1.1))
 
 # ---------- the glovebox ----------
 
@@ -298,7 +306,8 @@ func hit(dv: float, front: bool) -> void:
 	glovebox_open = true
 	latch_count += 1
 	_one_left = 0.0
-	_play_one("latch", _latch[_rng.randi() % _latch.size()], LATCH_GAIN, 1.0)
+	if not _latch.is_empty():
+		_play_one("latch", _latch[_rng.randi() % _latch.size()], LATCH_GAIN, 1.0)
 	if _vehicle != null:
 		var lid := _vehicle.find_child("GloveboxLid", true, false) as Node3D
 		if lid != null:
@@ -358,12 +367,22 @@ static func takes() -> Array:
 	out.append(["fan", "fan", make_fan.bind(5000)])
 	return out
 
-## Starts making the takes on worker threads (issue #524).
+## Starts making the takes off the main thread (issue #524); on a garage boot
+## nothing waits for them (see _ready): AudioDsp's background lane.
 static func prefetch() -> void:
+	var urgent := not CarAudio.garage_boot()
 	for t in takes():
-		AudioDsp.prefetch(PATH, t[1], t[2])
+		AudioDsp.prefetch(PATH, t[1], t[2], urgent)
+
+static func _all_built() -> bool:
+	for t in takes():
+		if AudioDsp.building(PATH, t[1]):
+			return false
+	return true
 
 func _build_streams() -> void:
+	if not _ticks.is_empty():
+		return
 	for t in takes():
 		var s := AudioDsp.cached(PATH, t[1], t[2])
 		match String(t[0]):
@@ -372,6 +391,7 @@ func _build_streams() -> void:
 			"coins": _coins.append(s)
 			"latch": _latch.append(s)
 			_: _fan_stream = s
+	_fan.stream = _fan_stream
 
 static func _noise(rng: RandomNumberGenerator) -> float:
 	return rng.randf_range(-1.0, 1.0)

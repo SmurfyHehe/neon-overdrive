@@ -209,11 +209,14 @@ static func _lighter_mesh(k: CockpitKit) -> void:
 	k.box(Vector3(0.005, 0.016, 0.005), Vector3(0.0, -0.03, 0.0), AMBER)
 
 ## A lighter strike: a flint scrape and click, then a short soft whoosh, made
-## in code (nothing downloaded), once and shared.
+## in code (nothing downloaded), once and shared; through the disk cache (#524).
 static var _lighter_wav: AudioStreamWAV
 static func _lighter_stream() -> AudioStreamWAV:
-	if _lighter_wav != null:
-		return _lighter_wav
+	if _lighter_wav == null:
+		_lighter_wav = AudioDsp.cached("res://scripts/view/idle_props.gd", "lighter", _make_lighter) as AudioStreamWAV
+	return _lighter_wav
+
+static func _make_lighter() -> AudioStreamWAV:
 	var r := 44100.0
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 41017
@@ -230,8 +233,7 @@ static func _lighter_stream() -> AudioStreamWAV:
 		var click := (mid.step(w) * 7.0) * exp(-t * 700.0) + (hi.step(w) * 6.0) * exp(-pow((t - 0.075) / 0.002, 2.0))
 		var whoosh := (low.step(w) * 2.2) * exp(-pow((t - 0.15) / 0.07, 2.0))
 		s[i] = scrape + click + whoosh
-	_lighter_wav = AudioDsp.to_wav(AudioDsp.normalise(s, 0.8), int(r), false)
-	return _lighter_wav
+	return AudioDsp.to_wav(AudioDsp.normalise(s, 0.8), int(r), false)
 
 ## The can stands along local y, centred on the grip.
 static func _can_mesh(k: CockpitKit) -> void:

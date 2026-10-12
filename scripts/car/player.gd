@@ -316,8 +316,8 @@ func _ready() -> void:
 	if not sim_only:
 		# The sounds below, made side by side off the main thread while the
 		# nodes come in (a cold cache: first boot after a change, issue #524).
-		# Waited on in this order; on a garage boot nothing waits for the
-		# starter's and CarAudio's (see there), so they go last.
+		# Waited on in this order; on a garage boot nothing waits for them
+		# (each node takes them once ready or once the car is out).
 		DamageAudio.prefetch()
 		DrivelineAudio.prefetch()
 		CabinLifeAudio.prefetch()

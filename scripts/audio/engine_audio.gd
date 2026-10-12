@@ -124,10 +124,12 @@ func _ready() -> void:
 # The synth is touched only by the task while one runs: every main-thread use
 # goes through _join() first, which by then is normally a no-op (the task had
 # the rest of the frame).
-# The block is a high-priority task: low-priority ones share a few threads, and
-# the loop bake and the traffic horns (seconds of work on a cold cache) queue
-# there; a block stuck behind them held the main thread in _join() for 1.7 to
-# 3.6 s on the first boot into the garage (issue #524).
+# Seconds of low-priority work in the pool queued ahead of the block once held
+# the main thread in _join() for 1.7 to 3.6 s on the first boot into the garage
+# (issue #524): the loop bake is high priority now and the traffic horns build
+# on a thread of their own. The block itself stays low priority: as a
+# high-priority task every frame it held the radio's song loads back (the first
+# song went on air after ~2 s instead of ~0.2 s on a cold boot).
 func _process(delta: float) -> void:
 	if _playback == null:
 		return
@@ -178,7 +180,7 @@ func _process(delta: float) -> void:
 		_task_start_usec = Time.get_ticks_usec()
 		_task = WorkerThreadPool.add_task(_render.bind(n, _vehicle.motor_rpm,
 				_throttle(), _vehicle.motor_is_redline, tn,
-				loop_mode == LoopMode.LOOPS, f0, f1), true, "engine audio")
+				loop_mode == LoopMode.LOOPS, f0, f1), false, "engine audio")
 
 ## The throttle the voice hears: the pedal, or the blip as a key start catches
 ## (PlayerCar.start_throttle), whichever is more.

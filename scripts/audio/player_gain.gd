@@ -20,7 +20,17 @@ extends RefCounted
 #   player's own volume_db stays 0 dB. Its bus sends to the bus the player
 #   used to be on, so the sliders, filters and effects there still apply.
 #   Buses are made on first need and reused, never removed (indices of the
-#   layout's buses never move).
+#   layout's buses never move). A player keeps its bus for its whole life, in
+#   the tree or out of it, so its bus is only ever written at route(); the bus
+#   goes back to the pool when the player is freed.
+# - The bus layout itself is not safe to change while the mix thread runs
+#   either (issue #580): AudioServer.add_bus() and set_bus_send() take no lock,
+#   and add_bus() grows the server's bus list and its name -> bus map while
+#   the mix thread looks buses up in them (thread_find_bus_index, once per
+#   playing player per block): a lookup into the freed table segfaults. So
+#   every layout change here is made under AudioServer.lock(), which the mix
+#   thread holds while it mixes (it is recursive, so the locking calls inside
+#   are fine).
 # - play_at(): a one-shot gets its level while it is stopped. A player that
 #   is still sounding is stopped first (play() would have cut it anyway), or,
 #   with max_polyphony above 1, a spare copy that is free plays instead.
@@ -46,12 +56,23 @@ static var _made := 0
 static func route(player: Node, target: StringName, db := 0.0, spatial := false) -> void:
 	player.set_meta(&"gain_target", target)
 	player.set_meta(&"gain_spatial", spatial)
+	if player.has_meta(&"gain_amp"):
+		retarget(player, target)   # routed already: keep its bus
+		set_db(player, db)
+		return
 	player.volume_db = 0.0
 	_take(player, db)
-	player.tree_entered.connect(func() -> void:
-		if not player.has_meta(&"gain_amp"):
-			_take(player, player.get_meta(&"gain_last", db)))
-	player.tree_exited.connect(func() -> void: _give(player))
+
+## Points a routed player's gain bus at another `target` (Sound3D.bus). Safe
+## while it plays: only the bus's send changes, not the player.
+static func retarget(player: Node, target: StringName) -> void:
+	player.set_meta(&"gain_target", target)
+	var idx := AudioServer.get_bus_index(player.bus)
+	if idx < 0 or not player.has_meta(&"gain_amp"):
+		return   # not routed (yet): route() sends to gain_target
+	AudioServer.lock()
+	AudioServer.set_bus_send(idx, target)
+	AudioServer.unlock()
 
 ## The player's level, dB. Safe every frame while it plays.
 static func set_db(player: Node, db: float) -> void:
@@ -123,6 +144,9 @@ static func _take(player: Node, db: float) -> void:
 	var spatial: bool = player.get_meta(&"gain_spatial", false)
 	var pool := _free_3d if spatial else _free
 	var name: StringName
+	# the mix thread reads the bus list, the name map and each bus's send
+	# while it mixes: change them only while it is held off (#580)
+	AudioServer.lock()
 	if pool.is_empty():
 		name = StringName("%s%s%d" % [PREFIX, "3D" if spatial else "", _made])
 		_made += 1
@@ -143,16 +167,28 @@ static func _take(player: Node, db: float) -> void:
 		name = pool.pop_back()
 	var idx := AudioServer.get_bus_index(name)
 	AudioServer.set_bus_send(idx, player.get_meta(&"gain_target"))
+	AudioServer.unlock()
 	var amp := AudioServer.get_bus_effect(idx, 0) as AudioEffectAmplify
 	amp.volume_db = db
 	player.set_meta(&"gain_amp", amp)
 	if spatial:
 		player.set_meta(&"gain_fx", [AudioServer.get_bus_effect(idx, 1), AudioServer.get_bus_effect(idx, 2)])
-	player.bus = name
+	player.bus = name   # the player is stopped: route() is called at spawn
+	# Freed with the player (its metadata goes with it): the bus is free again.
+	player.set_meta(&"gain_lease", _Lease.new(name, spatial))
 
-static func _give(player: Node) -> void:
-	if not player.has_meta(&"gain_amp"):
-		return
-	player.set_meta(&"gain_last", (player.get_meta(&"gain_amp") as AudioEffectAmplify).volume_db)
-	player.remove_meta(&"gain_amp")
-	(_free_3d if player.get_meta(&"gain_spatial", false) else _free).append(player.bus)
+## Holds a gain bus for one player; gives it back to the pool when the player
+## is freed. A player that leaves the tree and comes back (a pooled car, the
+## speed-trap cop) keeps its bus, so nothing writes the bus of a player that
+## may be sounding again.
+class _Lease extends RefCounted:
+	var bus: StringName
+	var spatial: bool
+
+	func _init(b: StringName, s: bool) -> void:
+		bus = b
+		spatial = s
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_PREDELETE:
+			(PlayerGain._free_3d if spatial else PlayerGain._free).append(bus)

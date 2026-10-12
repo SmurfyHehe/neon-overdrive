@@ -58,9 +58,7 @@ const SILENT_DB := -200.0
 	set(v):
 		bus = v
 		if _player != null:
-			_player.set_meta(&"gain_target", v)
-			if _player.has_meta(&"gain_amp"):
-				AudioServer.set_bus_send(AudioServer.get_bus_index(_player.bus), v)
+			PlayerGain.retarget(_player, v)   # under the audio lock (#580)
 
 var playing: bool:
 	get:

@@ -62,6 +62,7 @@ call :run ui/pause_look --headless
 call :run ui/mod_tree_panel --headless
 call :run audio/menu_sfx --headless
 call :run audio/player_horn --headless
+call :run audio/player_gain --headless
 call :run core/key_bindings --headless
 call :run fleet/car_loft_normals --headless
 call :run fleet/test_car --headless

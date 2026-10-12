@@ -448,6 +448,7 @@ func _fire(pool_name: String, level: float, pitch := 1.0, delay := 0.0) -> void:
 	var p := _voices[_next_voice]
 	_next_voice = (_next_voice + 1) % VOICES
 	p.stream = pl.streams[k]
+	# setting the stream stopped it: no playback hears this write (#567)
 	p.volume_db = linear_to_db(POOLS[pool_name] * level) + _rng.randf_range(-VOLUME_JITTER_DB, VOLUME_JITTER_DB)
 	p.pitch_scale = pitch * (1.0 + _rng.randf_range(-PITCH_JITTER, PITCH_JITTER))
 	p.play()

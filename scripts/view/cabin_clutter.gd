@@ -282,6 +282,7 @@ func play_clink(strength: float) -> bool:
 	max_simultaneous = maxi(max_simultaneous, ringing + 1)
 	var p := _clink_players[free]
 	p.stream = _clink_stream(free + (clinks_played & 1) * 2)
+	# setting the stream stopped it: no playback hears this write (#567)
 	p.volume_db = -26.0 + 16.0 * clampf(strength, 0.0, 1.0)
 	p.pitch_scale = 0.94 + 0.12 * _frand()
 	if p.is_inside_tree():

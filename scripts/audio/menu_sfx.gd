@@ -101,6 +101,7 @@ func play(sound: String) -> void:
 	var p := _players[_next]
 	_next = (_next + 1) % _players.size()
 	p.stream = stream(sound)
+	# setting the stream stopped it: no playback hears this write (#567)
 	p.volume_db = LEVEL_DB.get(sound, -10.0)
 	p.play()
 

@@ -341,6 +341,7 @@ func _prune_hits() -> void:
 func _play_one(kind: String, stream: AudioStream, gain: float, pitch: float) -> void:
 	last_event = kind
 	_one.stream = stream
+	# setting the stream stopped it: no playback hears this write (#567)
 	_one.volume_db = linear_to_db(maxf(gain, 0.0001))
 	_one.pitch_scale = pitch
 	_one.play()

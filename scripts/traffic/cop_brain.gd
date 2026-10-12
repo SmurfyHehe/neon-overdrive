@@ -311,7 +311,9 @@ func _turn_step(dt: float) -> void:
 	var u := RoadFrame.unroll(car.global_position)
 	var tu := RoadFrame.unroll(driver.target.global_position)
 	var other_side := (u.x < 0.0) != (tu.x < 0.0)
-	var passed := (tu.z - u.z) * car.direction < -30.0 and state == State.PURSUIT
+	# A blocker is meant to be in front of you (it was put on the road ahead and
+	# dawdles until you catch it up): you being behind it is not a pass.
+	var passed := (tu.z - u.z) * car.direction < -30.0 and state == State.PURSUIT and role != Role.BLOCKER
 	if not (driver.wrong_way or other_side or passed):
 		turning = false
 		_turn_t = 0.0

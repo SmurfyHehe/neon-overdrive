@@ -57,6 +57,7 @@ func _initialize() -> void:
 	OS.set_environment("NEON_TRAFFIC", "0")
 	ExhaustTune.save_path = "user://autotune/test_touch_radio_exhaust.json"
 	shot_dir = OS.get_environment("TOUCH_RADIO_SHOT")
+	process_frame.connect(_sample_swipe)
 	change_scene_to_file("res://Game.tscn")
 
 func _drive(c: PlayerCar) -> void:
@@ -87,6 +88,23 @@ func _on_contact(target: StringName) -> void:
 	var dx := DriverModel.SWIPE_M * 0.5 if target == DriverModel.CONTACT_RADIO_TILE else 0.0
 	var touch := touch_pos + Vector3(dx, -0.005, 0.055)
 	contacts.append([tick, target, radio.card, radio.toast_text, frame.head_unit.taps, d.hand_position(1).distance_to(touch), radio.station, d.act])
+
+## The swipe is sampled on every drawn frame (the hand moves on render
+## frames), including the one that ends it: that frame puts the finger at the
+## far left and already hands over to the return, so a sample taken by act
+## alone missed it, and on a busy machine (few, long frames) the last frame
+## still marked as the swipe could be well short of the end.
+var _prev_act := -1
+func _sample_swipe() -> void:
+	if d == null or step != Step.KEY:
+		return
+	var ended := _prev_act == DriverModel.Act.RADIO_SWIPE
+	_prev_act = d.act
+	if d.act == DriverModel.Act.RADIO_SWIPE or ended:
+		swipe_seen = true
+		var hp := d.hand_position(1)
+		swipe_min_x = minf(swipe_min_x, hp.x)
+		swipe_z_off = maxf(swipe_z_off, absf(hp.z - (touch_pos.z + 0.055)))
 
 func _physics_process(_delta: float) -> bool:
 	tick += 1
@@ -138,11 +156,6 @@ func _physics_process(_delta: float) -> bool:
 					_check(radio.toast_left <= 0.0, "the HUD radio card waits for the tap")
 				return false
 			var c: Array = contacts[0]
-			if d.act == DriverModel.Act.RADIO_SWIPE:
-				swipe_seen = true
-				var hp := d.hand_position(1)
-				swipe_min_x = minf(swipe_min_x, hp.x)
-				swipe_z_off = maxf(swipe_z_off, absf(hp.z - (touch_pos.z + 0.055)))
 			if d.act != DriverModel.Act.RADIO_RETURN and d.act != DriverModel.Act.GRIP:
 				return false   # the swipe is still going (the hand runs on render frames, not ticks)
 			_check(reach_seen, "N sends the right hand toward the screen")

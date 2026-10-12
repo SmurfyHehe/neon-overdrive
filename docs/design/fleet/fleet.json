@@ -7368,14 +7368,14 @@
    "role": "player",
    "label": "Work pickup",
    "refs": "the mid-size 4-door work pickups of the late 1990s (category only; no brand): a 4.0 V6, rear drive, a long bed",
-   "silhouette_rule": "Low flat hood under a tall upright double cab, one long open bed behind it on flared box sides, a side stripe the length of the body, steel wheels in big arches, a single tailpipe out the rear corner.",
+   "silhouette_rule": "Low flat hood under a tall upright double cab, a short open bed behind it on flared box sides, a chrome step bumper, a side stripe the length of the body, steel wheels in big arches, a single tailpipe out the rear corner.",
    "dims": {
-    "length": 5.25,
+    "length": 4.95,
     "width_body": 1.8,
     "height": 1.74,
     "wheelbase": 3.18,
     "front_overhang": 0.9,
-    "rear_overhang": 1.17,
+    "rear_overhang": 0.87,
     "ground_clearance": 0.28
    },
    "physics_hint": {
@@ -7417,11 +7417,11 @@
       1.16
      ],
      [
-      5.22,
+      4.92,
       1.14
      ],
      [
-      5.25,
+      4.95,
       1.08
      ]
     ],
@@ -7435,11 +7435,11 @@
       0.28
      ],
      [
-      4.5,
+      4.52,
       0.28
      ],
      [
-      5.25,
+      4.95,
       0.5
      ]
     ],
@@ -7469,15 +7469,15 @@
       0.94
      ],
      [
-      4.95,
+      4.65,
       0.94
      ],
      [
-      5.12,
+      4.82,
       0.9
      ],
      [
-      5.25,
+      4.95,
       0.88
      ]
     ],
@@ -7491,7 +7491,7 @@
       0.88
      ],
      [
-      5.25,
+      4.95,
       0.88
      ]
     ],
@@ -7513,7 +7513,7 @@
       1.12
      ],
      [
-      5.25,
+      4.95,
       1.12
      ]
     ]
@@ -7550,7 +7550,7 @@
    "open_top": [
     {
      "s0": 3.4,
-     "s1": 5.22,
+     "s1": 4.92,
      "floor": 0.84,
      "wall": 0.05,
      "mat": "bed"
@@ -7604,7 +7604,7 @@
      "rect": [
       0.4,
       0.74,
-      5.05,
+      4.75,
       0.82
      ],
      "mat": "paint2",
@@ -7615,7 +7615,7 @@
      "rect": [
       0.4,
       0.715,
-      5.05,
+      4.75,
       0.735
      ],
      "mat": "trim",
@@ -7656,6 +7656,21 @@
      "s0": 1.45,
      "s1": 3.2,
      "y": 0.4
+    },
+    {
+     "type": "box",
+     "s": 5.02,
+     "xy": [
+      0.0,
+      0.56
+     ],
+     "size": [
+      1.66,
+      0.13,
+      0.16
+     ],
+     "mat": "chrome",
+     "tag": "step_bumper"
     }
    ],
    "sticker_slots": [
@@ -7751,7 +7766,7 @@
      "center": [
       0.0,
       0.98,
-      2.772
+      2.472
      ],
      "normal": [
       0.0,
@@ -7910,12 +7925,12 @@
         "tips": [
          {
           "x": 0.558,
-          "y": 0.571,
+          "y": 0.549,
           "r": 0.042
          },
          {
           "x": -0.558,
-          "y": 0.571,
+          "y": 0.549,
           "r": 0.042
          }
         ]
@@ -7988,9 +8003,9 @@
    },
    "budget_tris": 10000,
    "proxy_tris": {
-    "stock": 2542,
-    "street": 2500,
-    "full": 2400
+    "stock": 2554,
+    "street": 2512,
+    "full": 2412
    },
    "exhaust_tips": {
     "stock": [
@@ -7998,7 +8013,7 @@
       "pos": [
        0.68,
        0.4,
-       2.469
+       2.315
       ],
       "dir": [
        0,
@@ -8012,8 +8027,8 @@
      {
       "pos": [
        0.558,
-       0.571,
-       2.81
+       0.549,
+       2.51
       ],
       "dir": [
        0,
@@ -8025,8 +8040,8 @@
      {
       "pos": [
        -0.558,
-       0.571,
-       2.81
+       0.549,
+       2.51
       ],
       "dir": [
        0,
@@ -8425,7 +8440,7 @@
       -1.33
      ],
      "normal": [
-      -0.0,
+      0.0,
       0.99,
       -0.143
      ],
@@ -8447,13 +8462,13 @@
      ],
      "center": [
       0.0,
-      1.231,
+      1.228,
       -0.135
      ],
      "normal": [
-      0.01,
-      0.76,
-      -0.65
+      0.0,
+      0.749,
+      -0.662
      ],
      "size": [
       1.06,
@@ -8478,7 +8493,7 @@
      ],
      "normal": [
       0.0,
-      0.0,
+      -0.0,
       1.0
      ],
      "size": [
@@ -11262,7 +11277,7 @@
    "role": "cop",
    "label": "Unmarked interceptor",
    "refs": "unmarked Charger Hellcat, Mustang GT PI",
-   "silhouette_rule": "Big long-hood fastback with a pillar spotlight and a cluster of trunk antennas; no light bar, plain dark paint.",
+   "silhouette_rule": "Big long-hood fastback with a pillar spotlight, a low push bar and a cluster of trunk antennas; no light bar, plain dark paint.",
    "dims": {
     "length": 4.82,
     "width_body": 1.92,
@@ -11594,6 +11609,14 @@
        0.28
       ]
      ]
+    },
+    {
+     "type": "pushbar",
+     "s": -0.1,
+     "y0": 0.28,
+     "y1": 0.8,
+     "w": 0.84,
+     "tag": "pushbar"
     }
    ],
    "sticker_slots": [
@@ -11731,16 +11754,21 @@
       "ops": []
      },
      "pursuit": {
-      "label": "Pursuit pack (push bar)",
+      "label": "Pursuit pack (tall push bar)",
       "ops": [
+       {
+        "op": "remove",
+        "tag": "pushbar"
+       },
        {
         "op": "add",
         "part": {
          "type": "pushbar",
+         "tag": "pushbar",
          "s": -0.1,
-         "y0": 0.28,
-         "y1": 0.8,
-         "w": 0.8
+         "y0": 0.3,
+         "y1": 0.96,
+         "w": 0.86
         }
        }
       ]
@@ -11754,7 +11782,7 @@
    },
    "budget_tris": 6000,
    "proxy_tris": {
-    "stock": 2476,
+    "stock": 2548,
     "pursuit": 2548
    },
    "exhaust_tips": {

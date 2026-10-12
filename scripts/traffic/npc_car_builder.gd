@@ -170,11 +170,12 @@ const KINDS := {
 	},
 	# The work pickup (Camel, P17, 2026-10-10): the 4-door T2 truck Walt sells
 	# after act 1. Its own sheet mesh (p17_work_pickup_data.gd), not the
-	# traffic pickup's, which stays as it is.
+	# traffic pickup's, which stays as it is. Bed 30 cm shorter (Build 4,
+	# Roy 1475 "differ"): the step bumper adds 0.15 m behind the 4.95 body.
 	"p17_work_pickup": {
 		"data": preload("res://scripts/car/p17_work_pickup_data.gd"),
-		"length": 5.25, "width": 1.80, "height": 1.74, "clearance": 0.28,
-		"front_overhang": 0.90, "rear_overhang": 1.17,
+		"length": 4.95, "width": 1.80, "height": 1.74, "clearance": 0.28,
+		"front_overhang": 0.90, "rear_overhang": 0.87,
 		"wheel_r": 0.37, "wheel_x": 0.775, "axle_z": 1.59,
 		"drive": "rwd",
 		"rest_y": -0.12,

@@ -126,6 +126,8 @@ static var _wheel_mat: ShaderMaterial
 static var _fit_counts := {}
 static var _fit_points := {}
 static var _fit_frames := {}
+## The body's lowest point in body space (_body_floor_y), without the mesh.
+static var _floor_y := NAN
 
 ## Body, glass, lights and the sticker slot markers -- no wheels, those hang
 ## under the physics wheel nodes (build_wheel_visual). Metas, read by CarFx
@@ -157,8 +159,9 @@ static func build_chassis_visual(paint: Color = PAINT) -> Node3D:
 		lamps = CarAssembler.lamp_centres(KIND)
 		# The sheet body's fittings pass gives the fuel flap site, the
 		# windscreen frame (wipers) and the slot counts, as it does for the
-		# other parts cars (NpcCarBuilder.fittings).
-		_get_body_mesh()
+		# other parts cars (NpcCarBuilder.fittings). Only the pass: the sheet
+		# mesh itself is never drawn from parts.
+		_ensure_fittings()
 	else:
 		var body := MeshInstance3D.new()
 		body.name = "Body"
@@ -206,8 +209,8 @@ static func build_chassis_visual(paint: Color = PAINT) -> Node3D:
 	root.set_meta("half_l", LENGTH / 2.0)
 	# Which small parts this body carries (CarSlots, tests/car/required_slots.gd).
 	# From parts the frames come from the sheet mesh's CarFittings pass, as
-	# NpcCarBuilder does for its parts cars: build it once before reading them.
-	_get_body_mesh()
+	# NpcCarBuilder does for its parts cars: run it once before reading them.
+	_ensure_fittings()
 	root.set_meta("fittings", _fit_counts)
 	root.set_meta("fitting_points", _fit_points)
 	root.set_meta("windscreen", _fit_frames.get("screen", {}))
@@ -220,7 +223,7 @@ static func build_chassis_visual(paint: Color = PAINT) -> Node3D:
 ## ground at rest is BODY_LIFT above the chassis origin (see BODY_LIFT), the
 ## floor is the body's lowest point, the wheels are the sheet's.
 static func undercarriage_params() -> Dictionary:
-	var floor_y: float = _get_body_mesh().get_aabb().position.y + BODY_LIFT
+	var floor_y: float = _body_floor_y() + BODY_LIFT
 	var tips := []
 	for t in Data.EXHAUST_TIPS:
 		tips.append({"pos": t.pos + Vector3(0.0, BODY_LIFT, 0.0), "dir": t.dir, "r": t.r})
@@ -290,7 +293,7 @@ static func triangle_count() -> int:
 ## Triangles CarFittings merged into the body (lenses and plates), on top of
 ## the design's TRIS_TOTAL. No extra draw call: they sit in the body's surfaces.
 static func fittings_triangle_count() -> int:
-	_get_body_mesh()
+	_ensure_fittings()
 	return int(_fit_counts.get("tris", 0))
 
 ## Draw calls of one car: body surfaces, the door mirrors, the underside,
@@ -336,6 +339,51 @@ static func _get_body_mesh() -> ArrayMesh:
 		_body_mesh = _build_mesh(decode_points(Data.b64(Data.BODY_POS)), Marshalls.base64_to_raw(Data.b64(Data.BODY_MAT)), true)
 	return _body_mesh
 
+## The CarFittings pass over the sheet body (counts, points, windscreen and
+## flap frames) without building the sheet mesh. A body from parts needs only
+## these; building the whole sheet ArrayMesh for them cost ~0.1 s of a cold
+## boot (the mesh is cached, so only the first car paid).
+static func _ensure_fittings() -> void:
+	if _body_mesh != null or not _fit_counts.is_empty():
+		return
+	var tris := decode_points(Data.b64(Data.BODY_POS))
+	var mats := Marshalls.base64_to_raw(Data.b64(Data.BODY_MAT))
+	_store_fittings(_fittings(tris, mats))
+
+static func _fittings(tris: PackedVector3Array, mats: PackedByteArray) -> Dictionary:
+	return CarFittings.build(KIND + "|" + Data.BUILD, tris, mats, Data.NAMES, Data.GLASS, Data.EMISSIVE, Data.COLORS)
+
+static func _store_fittings(fit: Dictionary) -> void:
+	_fit_counts = fit.counts
+	_fit_points = fit.points
+	_fit_frames = {"screen": fit.get("screen", {}), "flap": fit.get("flap", {})}
+
+## The sheet body mesh's lowest y (its AABB's), read off the same vertices the
+## mesh would hold: every non-degenerate triangle (CarPaint.build_groups drops
+## the degenerate ones) plus the fittings merged into the body and glow
+## surfaces. From the mesh itself when it is built anyway.
+static func _body_floor_y() -> float:
+	if _body_mesh != null:
+		return _body_mesh.get_aabb().position.y
+	if is_nan(_floor_y):
+		var tris := decode_points(Data.b64(Data.BODY_POS))
+		var lo := INF
+		for t in tris.size() / 3:
+			var a := tris[t * 3]
+			var b := tris[t * 3 + 1]
+			var c := tris[t * 3 + 2]
+			if (b - a).cross(c - a).length_squared() < 1e-12:
+				continue
+			lo = minf(lo, minf(a.y, minf(b.y, c.y)))
+		var fit := _fittings(tris, Marshalls.base64_to_raw(Data.b64(Data.BODY_MAT)))
+		if _fit_counts.is_empty():
+			_store_fittings(fit)
+		for surf in ["body", "glow"]:
+			for p in (fit[surf][0] as PackedVector3Array):
+				lo = minf(lo, p.y)
+		_floor_y = lo
+	return _floor_y
+
 static func _get_wheel_mesh(rear: bool) -> ArrayMesh:
 	var key := "rear" if rear else "front"
 	if not _wheel_meshes.has(key):
@@ -375,10 +423,8 @@ static func _build_mesh(tris: PackedVector3Array, mats: PackedByteArray, is_body
 	if is_body:
 		# Reverse and third brake lenses, the indicators the sheet lacks and both
 		# plates (CarFittings), merged into the body's own surfaces.
-		var fit := CarFittings.build(KIND + "|" + Data.BUILD, tris, mats, Data.NAMES, Data.GLASS, Data.EMISSIVE, Data.COLORS)
-		_fit_counts = fit.counts
-		_fit_points = fit.points
-		_fit_frames = {"screen": fit.get("screen", {}), "flap": fit.get("flap", {})}
+		var fit := _fittings(tris, mats)
+		_store_fittings(fit)
 		NpcCarBuilder._append_fittings(groups, fit)
 	var mesh := ArrayMesh.new()
 	for kind in ["body", "glass", "glow"]:

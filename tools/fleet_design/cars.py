@@ -117,11 +117,16 @@ P0 = {
         {'view': 'front', 'rect': (-0.16, 0.62, 0.16, 0.66), 'mat': 'trim', 'offset': 0.004},
         # the primer front lid: one panel that never got painted (paint2)
         {'view': 'top', 'rect': (-0.36, 0.32, 0.36, 1.22), 'mat': 'paint2', 'tag': 'hood'},
-        # the four pontoon fenders in primer (Roy, 2026-10-09: "primer grey with
-        # rust and unfinished bondo work like body work"): primer panel cut
-        # round each arch, rust blooms on the arch lips, bondo patches sanded flat.
-        {'view': 'left', 'poly': _fender(P0_AXLES[0]), 'mat': 'primer', 'mirror': True, 'cell': 0.16, 'tag': 'fender'},
-        {'view': 'left', 'poly': _fender(P0_AXLES[1]), 'mat': 'primer', 'mirror': True, 'cell': 0.16, 'tag': 'fender'},
+        # primer, rust and bondo on the pontoon fenders (Roy, 2026-10-09: "primer
+        # grey with rust and unfinished bondo work like body work"): a primer
+        # panel cut round the arch, rust blooms on the arch lips, bondo patches
+        # sanded flat. One fender in primer, the rear left (with the primer front
+        # lid that is two primer panels): the sheet body is also the AI car,
+        # which must stay within the 4,000-triangle traffic budget
+        # (tests/traffic/npc_cars.gd), and each primer fender costs 208
+        # triangles at this cell size. All four had primer up to 2026-10-12
+        # (4,572 triangles); every rust bloom and bondo patch stays.
+        {'view': 'left', 'poly': _fender(P0_AXLES[1]), 'mat': 'primer', 'cell': 0.16, 'tag': 'fender'},
         {'view': 'left', 'ellipse': (0.57, 0.46, 0.10, 0.045, 10), 'mat': 'rust', 'mirror': True, 'cell': 0.12},
         {'view': 'left', 'ellipse': (1.14, 0.50, 0.09, 0.05, 10), 'mat': 'rust', 'mirror': True, 'cell': 0.12},
         {'view': 'left', 'ellipse': (3.12, 0.47, 0.11, 0.05, 10), 'mat': 'rust', 'mirror': True, 'cell': 0.12},

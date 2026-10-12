@@ -493,8 +493,11 @@ type "%TIMES%"
 echo Finished %DATE% %TIME:~0,8%
 rem A negative exit code is Godot crashing (often at shutdown, after the test printed PASS). The old script never counted those either; they are only listed.
 if defined CRASHED echo CRASHED, not counted as failed:!CRASHED!
+if defined CRASHED if defined GITHUB_ACTIONS echo ::warning::CRASHED:!CRASHED!
 if defined FAILED (
 	echo FAILED:!FAILED!
+	rem On GitHub, also as an annotation: the job log is not readable from every client.
+	if defined GITHUB_ACTIONS echo ::error::FAILED:!FAILED!
 	exit /b 1
 )
 if defined CRASHED (echo No test failed, but see CRASHED above.) else echo All tests passed.

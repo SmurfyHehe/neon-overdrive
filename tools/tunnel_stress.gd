@@ -92,6 +92,7 @@ func _run() -> void:
 					await _pass(kind, tune_name, kmh, dir)
 	PlayerCars.selected = was_selected
 	game.set("player", first)
+	_free_done()
 	_table()
 	quit(0)
 
@@ -111,6 +112,7 @@ func _pass(kind: String, tune_name: String, kmh: float, dir: int) -> void:
 	game.add_child(car)
 	Harness.launch_player(car, 0.0)
 	game.set("player", car)
+	_free_done()   # the last pass's car, now that the game reads this one
 	car.contact_monitor = true
 	car.max_contacts_reported = maxi(car.max_contacts_reported, 8)
 	# settle on its springs, held in place
@@ -180,8 +182,20 @@ func _pass(kind: String, tune_name: String, kmh: float, dir: int) -> void:
 		kind, tune_name, kmh, "in " if dir == 1 else "out", road_ticks, (" from %.0f m" % first_at) if first_at >= 0.0 else "",
 		low, low_at, rest_clear, air_ticks, fewest, wall_ticks, min_kmh, "" if t < RATE * 40 else "  DID NOT FINISH"])
 	car.driver = Callable()
-	car.queue_free()
+	# Not freed here: game.gd reads its player every frame, and this car is
+	# still it until the next pass (or the end) hands the game another one.
+	car.freeze = true
+	car.process_mode = Node.PROCESS_MODE_DISABLED
+	_done = car
 	await physics_frame
+
+var _done: PlayerCar
+
+## Frees the last pass's car once the game no longer points at it.
+func _free_done() -> void:
+	if _done != null and is_instance_valid(_done) and game.get("player") != _done:
+		_done.queue_free()
+	_done = null
 
 ## Lowest point of the body shape above the road under it (m); as
 ## tests/car/car_scrape.gd measures it.

@@ -100,7 +100,10 @@ const RECIPES := {
 
 static var _streams := {}
 static var _lock := Mutex.new()
-static var _task := -1
+## The build runs on a thread of its own, not the worker pool (#524 follow-up):
+## on a cold cache it is about 2 s of work, and in the pool's low-priority
+## lane it held up the engine's per-frame audio block and the radio's song loads.
+static var _thread: Thread
 static var _users := 0
 static var _first := ""
 static var _cancel := false
@@ -120,7 +123,7 @@ static func horn_for(kind: String, sour := false) -> String:
 ## finish().
 static func warm(first := "") -> void:
 	_users += 1
-	if _task >= 0:
+	if _thread != null:
 		return
 	_first = first
 	_cancel = false
@@ -137,18 +140,19 @@ static func warm(first := "") -> void:
 					var res := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE)
 					if res is AudioStreamWAV:
 						_keep(key, res)
-	_task = WorkerThreadPool.add_task(_build_all, false, "traffic horns")
+	_thread = Thread.new()
+	_thread.start(_build_all, Thread.PRIORITY_LOW)
 
 ## A user is leaving the tree. After the last one: waits for the build if it
 ## is still running and lets the takes go (nothing static holds a resource at
 ## exit). The next warm() builds them again.
 static func finish() -> void:
 	_users = maxi(_users - 1, 0)
-	if _task < 0 or _users > 0:
+	if _thread == null or _users > 0:
 		return
 	_cancel = true   # stop between takes: freeing the game waited ~1.7 s here (#524)
-	WorkerThreadPool.wait_for_task_completion(_task)
-	_task = -1
+	_thread.wait_to_finish()
+	_thread = null
 	if AudioDsp.use_cache:
 		for key in _streams:
 			var path := _cache_file(key)

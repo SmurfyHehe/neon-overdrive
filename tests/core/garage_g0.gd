@@ -110,12 +110,19 @@ func _run() -> void:
 	_check(gs.state == GameState.State.GARAGE, "Esc must not leave the garage")
 
 	# Auto-pause: slow frames in the garage never open the pause screen...
+	var auto_was := gs.auto_pause_on_low_fps
+	var slow_was := gs._fps_watch.slow_pauses
 	gs.auto_pause_on_low_fps = true
 	gs._fps_watch.slow_pauses = true
 	gs._fps_watch.reset()
 	for i in 400:
 		gs.feed_frame(0.05)   # 20 fps for 20 s
 	_check(gs.state == GameState.State.GARAGE and not pause_menu.visible, "20 fps in the garage must not open the pause screen")
+	# ...and back off (tests run with it off): left on, a busy test machine's
+	# real slow frames paused the road after Go out and 13 later checks failed.
+	gs.auto_pause_on_low_fps = auto_was
+	gs._fps_watch.slow_pauses = slow_was
+	gs._fps_watch.reset()
 
 	# Frame cap.
 	flow.idle_secs = 0.0

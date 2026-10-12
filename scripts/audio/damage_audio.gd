@@ -41,14 +41,22 @@ func _ready() -> void:
 	_audio.name = "RattleAudio"
 	_audio.bus = &"Tires"
 	_audio.volume_db = -80.0
-	_audio.stream = AudioDsp.cached("res://scripts/audio/damage_audio.gd", "rattle", make_rattle)
 	add_child(_audio)
+	# garage boot: taken once ready or once the car is out (#524; see CarAudio)
+	if not CarAudio.garage_boot():
+		_audio.stream = AudioDsp.cached("res://scripts/audio/damage_audio.gd", "rattle", make_rattle)
 
-## Starts making the rattle on a worker thread (issue #524).
+## Starts making the rattle off the main thread (issue #524); on a garage boot
+## nothing waits for it: AudioDsp's background lane.
 static func prefetch() -> void:
-	AudioDsp.prefetch("res://scripts/audio/damage_audio.gd", "rattle", make_rattle)
+	AudioDsp.prefetch("res://scripts/audio/damage_audio.gd", "rattle", make_rattle, not CarAudio.garage_boot())
 
 func _physics_process(delta: float) -> void:
+	if _audio.stream == null:
+		if not (GameState.garage_seen or _player.speed > 2.0 \
+				or not AudioDsp.building("res://scripts/audio/damage_audio.gd", "rattle")):
+			return
+		_audio.stream = AudioDsp.cached("res://scripts/audio/damage_audio.gd", "rattle", make_rattle)
 	var loose := _player.damage.rattle_level()
 	var target := 0.0
 	if loose > 0.0:

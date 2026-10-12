@@ -60,6 +60,7 @@ const BEND_K := 1.5              # bends at this times the traffic car's bend sp
 const BRAKE_READ := 0.6           # s ahead a braking target's speed is read
 const PASS_CLEAR := 6.5          # m of clear road in front of a target before moving over in front of it
 const B_PLAN := 5.5              # m/s^2 it counts on when closing on its spot
+const WAIT_SHARE := 0.6          # of the target's pace: a blocker in front of its spot rolls on at this
 ## Stuck.
 const STUCK_SECS := 5.0
 const STUCK_V := 1.0
@@ -241,6 +242,14 @@ func drive(car: TrafficCar, delta: float) -> void:
 	var v0 := minf(minf(v_top, v_max), _bend_v)
 	car.target_speed = v0   # what it cruises at if it drops onto the rails
 	var a := approach_accel(v, v0, gap_along, vt)
+	# A blocker in front of its spot dawdles at WAIT_SHARE of the target's
+	# pace so the target catches it up (what CopBrain asks of it on the
+	# rails), instead of stopping dead in the road: a stopped cop holds up
+	# the traffic behind it and the target with it (police_dispatch,
+	# 2026-10-12). A target that stops still gets a cop that stops.
+	if offset_back < 0.0 and gap_along < 0.0:
+		var dawdle := minf(WAIT_SHARE * maxf(vt, 0.0), v0)
+		a = maxf(a, clampf(TrafficCar.K_V * 2.0 * (dawdle - v), -TrafficCar.A_BRAKE_FULL, 6.0))
 	var body_gap := (tu.z - u.z) * car.direction - car.half_l - 2.2
 	if body_gap > -4.0 and absf(tu.x - u.x) < car.half_w + 1.0 + TrafficCar.CORRIDOR_MARGIN:
 		if ram and body_gap < ram_gap and vt < v0 and vt > 1.0:

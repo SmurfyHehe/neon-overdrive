@@ -1,0 +1,9 @@
+#secs	id  (Linux, 4-core cloud container, 4 tests at once; run_tests_linux.py writes a fresh one as <out>/times.tsv)
+1200	tuning/auto_tune_search
+1200	tuning/tune_track
+1200	tuning/tuner_settings
+1200	tuning/tuner_safety_net
+1000	traffic/npc_cars
+810	car/car_scrape_cars
+720	car/car_scrape_cars_b
+600	car/forced_induction

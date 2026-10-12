@@ -8,12 +8,17 @@ extends SceneTree
 
 const RoadMap := preload("res://scripts/world/road_map.gd")
 const TIMEOUT_TICKS := 60 * 30
+const PARK_TICKS := 60
 
 var tick := 0
 var step := 0
 var step_start := 0
 var failures: Array[String] = []
 var city_angle := 0.0
+# Where step 2 holds the car (road space) while the road there is built.
+var park_s := 0.0
+var park_x := 0.0
+var park_y := 0.0
 
 func _initialize() -> void:
 	OS.set_environment("NEON_TRAFFIC", "0")
@@ -71,15 +76,28 @@ func _physics_process(_delta: float) -> bool:
 			while n < RoadMap.district_count() and String(RoadMap.district_info(n).area) != PoliceRules.HIGHWAY:
 				n += 1
 			_check(n < RoadMap.district_count(), "the map has no highway stretch")
-			var s := RoadMap.district_start(n) + 120.0
+			park_s = RoadMap.district_start(n) + 120.0
 			var u := RoadFrame.unroll(p.global_position)
-			var z := float(RoadFrame.origin_index) * RoadMap.L - s
-			p.global_transform = RoadFrame.pose(u.x, p.global_position.y - RoadFrame.roll(Vector3(u.x, 0.0, u.z)).y, z, 0.0)
-			p.linear_velocity = Vector3.ZERO
-			p.angular_velocity = Vector3.ZERO
+			park_x = u.x
+			park_y = p.global_position.y - RoadFrame.roll(Vector3(u.x, 0.0, u.z)).y
 			step = 2
 			step_start = tick
 		2:
+			# Held still where it is put until the road there is built (issue
+			# #606): a car put down 1.7 km on, before the chunks under it
+			# existed, was thrown off the road by the new chunks' collision and
+			# the off-map rescue parked it back in the city. The pose is worked
+			# out again each tick, as the floating origin may move under it.
+			var z := float(RoadFrame.origin_index) * RoadMap.L - park_s
+			p.global_transform = RoadFrame.pose(park_x, park_y, z, 0.0)
+			p.linear_velocity = Vector3.ZERO
+			p.angular_velocity = Vector3.ZERO
+			p.reset_physics_interpolation()
+			if tick - step_start < PARK_TICKS:
+				return false
+			step = 3
+			step_start = tick
+		3:
 			if tick - step_start < 90:
 				return false
 			_check(_area(p) == PoliceRules.HIGHWAY, "the car was moved to '%s', not a highway" % _area(p))

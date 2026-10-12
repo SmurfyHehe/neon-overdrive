@@ -609,7 +609,8 @@ func _ready() -> void:
 		rest_y = float(cfg.rest_y)
 
 	if not sim_only:
-		chassis_visual = NpcCarBuilder.chassis_visual(kind, build, color, role) if npc else CarBuilder.shared_chassis_visual(kind, color)
+		# ai: the sheet body, within the traffic triangle budget (NpcCarBuilder.uses_parts).
+		chassis_visual = NpcCarBuilder.chassis_visual(kind, build, color, role, true) if npc else CarBuilder.shared_chassis_visual(kind, color)
 		add_child(chassis_visual)
 		_apply_phone_glow()
 		# Wet-road tail smears (wet_reflections.gd): ride with the visual.

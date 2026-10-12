@@ -155,7 +155,7 @@ P8['options'] = {
     'exhaust': {'stock': {'label': 'Single oval (right)', 'ops': []},
                 'twin': {'label': 'Twin ovals (right)', 'ops': [{'op': 'exhaust', 'tips': [
                     {'x': 0.48, 'y': 0.26, 'r': 0.04, 'squash': 0.7}, {'x': 0.34, 'y': 0.26, 'r': 0.04, 'squash': 0.7}]}]},
-                'cannon': {'label': 'Cannon (right)', 'ops': [{'op': 'exhaust', 'tips': [{'x': 0.45, 'y': 0.30, 'r': 0.055, 'out': 0.08}]}]}},
+                'cannon': {'label': 'Cannon (right)', 'ops': [{'op': 'exhaust', 'tips': [{'x': 0.45, 'y': 0.30, 'r': 0.055, 'out': 0.06}]}]}},
     'stance': _stance(),
 }
 

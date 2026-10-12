@@ -493,7 +493,9 @@ static func pick_paint(kind: String, build: String) -> Color:
 ## `role` is an Undercarriage role (player, crew, cop, traffic); "" picks
 ## it from the kind's prefix. Traffic gets no underside: the sheet's own
 ## dark tray is in the body mesh. The others get the real set, one draw call.
-static func chassis_visual(kind: String, build: String, paint: Color, role := "") -> Node3D:
+## `ai`: a car the game drives (TrafficCar), which wears the sheet body, not
+## the parts body (see uses_parts).
+static func chassis_visual(kind: String, build: String, paint: Color, role := "", ai := false) -> Node3D:
 	var k: Dictionary = KINDS[kind]
 	var b: Dictionary = k.data.BUILDS[build]
 	var lift := Vector3(0.0, -float(k.rest_y), 0.0)
@@ -503,7 +505,7 @@ static func chassis_visual(kind: String, build: String, paint: Color, role := ""
 	root.name = "NpcBody"
 	root.set_meta("kind", kind)
 	root.set_meta("build", build)
-	if uses_parts(kind):
+	if uses_parts(kind, ai):
 		# Cars from parts: the body is assembled from the real parts in
 		# assets/cars/<kind>/body.glb (CarAssembler: one mesh, 4 surfaces).
 		var paint_mat := ShaderMaterial.new()
@@ -557,8 +559,18 @@ static func chassis_visual(kind: String, build: String, paint: Color, role := ""
 ## True when this kind's body is assembled from a parts glb (the default once
 ## the glb is in the project). NEON_PARTS_LEGACY=1 keeps every sheet car on
 ## its one-piece sheet proxy (before-shots, comparisons).
-static func uses_parts(kind: String) -> bool:
-	return OS.get_environment("NEON_PARTS_LEGACY") != "1" and CarAssembler.has_car(kind)
+##
+## `ai` (a car the game drives: traffic, rivals, crew, cops) always takes the
+## sheet body. The parts bodies are built for the player's own car, up close:
+## 4,800 to 6,800 triangles with their braked wheels, against the 4,000 a car
+## on the road may cost (tests/traffic/npc_cars.gd), and they only model the
+## stock build, while the AI picks street and full builds too. The car-parts
+## plan (docs/planning/car-parts-plan-2026-10-09.md, section 7) keeps traffic
+## and far cars on "today's merged body, closed rim"; this is that body.
+## The Bug's parts build (a49df4f) and the cars after it switched AI copies
+## to the parts body as well, which put them over the budget.
+static func uses_parts(kind: String, ai := false) -> bool:
+	return not ai and OS.get_environment("NEON_PARTS_LEGACY") != "1" and CarAssembler.has_car(kind)
 
 ## What CarAssembler builds: the stock parts, panels closed. NEON_CAR_PANELS=open
 ## opens the lids, the doors and the fuel flap (pictures; nothing in the game
@@ -600,13 +612,14 @@ static func undercarriage_params(kind: String, build: String) -> Dictionary:
 ## Tyre and rim for one corner, to parent under its physics Wheel (the pivot
 ## is what the wheel moves and spins). `hub` is the wheel's position in car
 ## space; the design's right-hand wheel is turned round for the left side.
-static func wheel_visual(kind: String, build: String, hub: Vector3) -> Node3D:
+## `ai` as chassis_visual's: the sheet wheel, not the parts car's braked one.
+static func wheel_visual(kind: String, build: String, hub: Vector3, ai := false) -> Node3D:
 	var pivot := Node3D.new()
 	pivot.name = "NpcWheel"
 	var mi := MeshInstance3D.new()
 	mi.name = "Mesh"
 	var corner := ("r" if hub.z > 0.0 else "f") + ("l" if hub.x < 0.0 else "r")
-	var parts_wheel: ArrayMesh = CarAssembler.wheel_mesh(kind, corner) if uses_parts(kind) else null
+	var parts_wheel: ArrayMesh = CarAssembler.wheel_mesh(kind, corner) if uses_parts(kind, ai) else null
 	if parts_wheel != null:
 		# A parts car's wheel carries its brake and hubcap, modelled per corner.
 		mi.mesh = parts_wheel
@@ -618,9 +631,9 @@ static func wheel_visual(kind: String, build: String, hub: Vector3) -> Node3D:
 	pivot.add_child(mi)
 	return pivot
 
-## Triangles of one car as drawn (body plus 4 wheels).
-static func triangle_count(kind: String, build: String) -> int:
-	if uses_parts(kind):
+## Triangles of one car as drawn (body plus 4 wheels); `ai` as chassis_visual's.
+static func triangle_count(kind: String, build: String, ai := false) -> int:
+	if uses_parts(kind, ai):
 		var total := CarAssembler.triangle_count(kind, parts_config())
 		for corner in ["fl", "fr", "rl", "rr"]:
 			total += CarAssembler.wheel_triangle_count(kind, corner)
@@ -637,10 +650,10 @@ static func triangle_count(kind: String, build: String) -> int:
 
 ## Body surfaces, 4 wheels, plus the underside where the class has one
 ## (Undercarriage.draw_calls; traffic +0).
-static func draw_call_count(kind: String, build: String, role := "") -> int:
+static func draw_call_count(kind: String, build: String, role := "", ai := false) -> int:
 	if role == "":
 		role = Undercarriage.role_for_kind(kind)
-	if uses_parts(kind):
+	if uses_parts(kind, ai):
 		return CarAssembler.draw_call_count(kind, parts_config()) + 4 + Undercarriage.draw_calls(role)
 	return body_mesh(kind, build).get_surface_count() + 4 + Undercarriage.draw_calls(role)
 

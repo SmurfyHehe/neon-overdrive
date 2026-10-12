@@ -48,9 +48,13 @@ BAT = os.path.join(ROOT, "tests", "run_tests.bat")
 # same cores would skew them, so they run one at a time after the rest.
 SOLO = {"low_fps_watch", "core/perf_ladder", "traffic/traffic_perf",
         "audio/synth_perf", "world/chunk_rebuild_perf", "core/perf_probe",
-        "traffic/near_miss_cost", "fx/tyre_smoke_perf"}
+        "traffic/near_miss_cost", "fx/tyre_smoke_perf",
+        # Failed on cost budgets only when sharing the cores (2026-10-12).
+        "audio/exhaust_pops", "core/garage_g0"}
 
 # Guessed seconds for a test with no recorded time (4-core cloud container).
+TIMEOUT_SCALE = 2.0
+
 DEFAULT_SECS = {"quick": 45, "heavy": 400, "windowed": 120}
 
 # Variables run_tests.bat uses for its own bookkeeping, not passed to tests.
@@ -210,7 +214,7 @@ def run_one(t, godot, out, lock, results):
         p = subprocess.Popen(args, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT,
                              start_new_session=True)
         try:
-            code = p.wait(timeout=t["timeout"])
+            code = p.wait(timeout=t["timeout"] * TIMEOUT_SCALE)
             status = "PASS" if code == 0 else ("FAIL" if code > 0 else "CRASH")
         except subprocess.TimeoutExpired:
             os.killpg(p.pid, signal.SIGKILL)
@@ -236,8 +240,13 @@ def main():
     ap.add_argument("--times", default=os.path.join(ROOT, "tests", "linux_test_times.tsv"))
     ap.add_argument("--out", default=os.path.join(tempfile.gettempdir(), "neon_tests"))
     ap.add_argument("--only", default="")
+    ap.add_argument("--timeout-scale", type=float, default=2.0,
+                    help="multiply run_tests.bat's per-test timeout: a shared 4-core cloud "
+                         "container runs the slow physics tests well past the laptop's 600 s")
     a = ap.parse_args()
 
+    global TIMEOUT_SCALE
+    TIMEOUT_SCALE = a.timeout_scale
     tests = select(parse_bat(), a.set)
     times = load_times(a.times)
     if a.only:
@@ -297,6 +306,8 @@ def main():
     for secs, status, tid, _ in results:
         if status in ("PASS", "FAIL"):
             merged[tid] = round(secs)
+        elif status == "TIMEOUT":
+            merged[tid] = max(round(secs), merged.get(tid, 0))
     with open(os.path.join(a.out, "times.tsv"), "w", encoding="utf-8") as f:
         f.write("#secs\tid  (Linux, 4-core cloud container; feed back in with --times)\n")
         for tid, secs in sorted(merged.items(), key=lambda x: -x[1]):

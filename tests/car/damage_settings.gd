@@ -93,7 +93,9 @@ func _unit_tests() -> void:
 	looks.apply_hit(Vector3(4.0, 0, -25.0))
 	_check(looks.offsets.is_neutral(), "Looks only: the offsets are neutral after two big hits")
 	_check(looks.lamps[D.Lamp.HEAD_L] and looks.lamps[D.Lamp.HEAD_R] and looks.headlight_share() == 0.0, "Looks only: the head lamps still break")
-	_check(looks.part(D.Part.RADIATOR) > 0.9 and looks.part(D.Part.SUSP_RL) > D.FREE_BELOW, "Looks only: the parts still take the damage")
+	# one hit adds at most MAX_PER_HIT to a part (DP1's fun rule), so the dv 25
+	# front hit puts the radiator at exactly that, as it does on Full
+	_check(is_equal_approx(looks.part(D.Part.RADIATOR), D.MAX_PER_HIT) and looks.part(D.Part.SUSP_RL) > D.FREE_BELOW, "Looks only: the parts still take the damage")
 	_check(looks.repair_price() > 0 and looks.steam_rate() > 0.0 and looks.rattle_level() > 0.0 and looks.warning(), "Looks only: repair bill, steam, rattle and the DMG lamp stay")
 	looks.apply_kerb_strike(0, 20.0)
 	_check(looks.offsets.is_neutral() and looks.kerb_strikes == 1, "Looks only: a kerb strike counts but bends nothing you can feel")

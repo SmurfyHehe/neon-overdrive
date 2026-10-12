@@ -347,6 +347,11 @@ func _put_back() -> void:
 			_player.health.repair()
 		if _player.fuel.is_low():
 			_player.fuel.litres = FuelTank.CAPACITY_L
+		# a burst or soft tyre gets the station's free air machine (DP3): a car
+		# on its rims can be stuck where it stands (four rims' drag is more
+		# than their grip), and a leak still leaks, as at the pump
+		if _player.damage.any_tyre_flat() or _player.damage.any_tyre_low():
+			_player.damage.air_refill()
 	var cabin := CabinLifeAudio.of(_player)
 	if cabin != null:
 		cabin.reset_cabin()  # the glovebox shuts, the can is back (MA1)

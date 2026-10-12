@@ -219,8 +219,10 @@ C2['options'] = {
 }
 C3['options'] = {
     'kit': {'stock': {'label': 'Unmarked', 'ops': []},
-            'pursuit': {'label': 'Pursuit pack (push bar)', 'ops': [
-                {'op': 'add', 'part': {'type': 'pushbar', 's': -0.10, 'y0': 0.28, 'y1': 0.80, 'w': 0.80}}]}},
+            # the low push bar is stock since Build 4 (Roy 1475); the pack swaps it for a tall one
+            'pursuit': {'label': 'Pursuit pack (tall push bar)', 'ops': [
+                {'op': 'remove', 'tag': 'pushbar'},
+                {'op': 'add', 'part': {'type': 'pushbar', 'tag': 'pushbar', 's': -0.10, 'y0': 0.30, 'y1': 0.96, 'w': 0.86}}]}},
 }
 
 # ------------------------------------------------------------------ builds

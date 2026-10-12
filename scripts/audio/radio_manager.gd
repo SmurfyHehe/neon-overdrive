@@ -517,6 +517,10 @@ func announce(text: String, important := false) -> bool:
 	_announce_text = text
 	_announce_left = RadioStations.BREAK_SECS
 	_in_break_before = false   # a new line: chime even if a rotation line was up
+	# on air now, not at the next frame: under load several physics ticks run
+	# before a _process, and anything reading dj_text there saw the old line (#576)
+	if _dj_label != null:
+		_update_dj(0.0)
 	return true
 
 ## The music gain a DJ break aims for: ducked while a line is on and there is music

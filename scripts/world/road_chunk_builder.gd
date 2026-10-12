@@ -2323,8 +2323,12 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# ... and where a trench begins or ends, between the pavement and its wall
 	var stepped := absf(setback - prev_setback) > 0.01 or ramp_bound != ramp_bound_prev \
 		or (dip != RoadMap.DIP_NONE) != (dip_prev != RoadMap.DIP_NONE)
-	_update_step(root, "BoundaryStepOwn", step_own, 1, stepped)
-	_update_step(root, "BoundaryStepOnc", step_onc, -1, stepped)
+	# A gas station's lot on this side, here or in the chunk before: the step
+	# would stand across the lot's yard, and the lot's own walls close it.
+	var stepped_own := stepped and is_inf(GasStation.lot_centre(chunk_index, 1)) and is_inf(GasStation.lot_centre(chunk_index - 1, 1))
+	var stepped_onc := stepped and is_inf(GasStation.lot_centre(chunk_index, -1)) and is_inf(GasStation.lot_centre(chunk_index - 1, -1))
+	_update_step(root, "BoundaryStepOwn", step_own, 1, stepped_own)
+	_update_step(root, "BoundaryStepOnc", step_onc, -1, stepped_onc)
 	_update_road_collision(root, maxf(maxf(maxf(bound_own, bound_onc), maxf(lot_own, lot_onc)),
 		maxf(start_own_walk, start_onc_walk) + BUILDING_GAP + setback) + BOUNDARY_T + ROAD_COL_MARGIN)
 	# From here on, upright things outside the trench stand at street height.
@@ -2557,7 +2561,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		# the district step: a visible wall across the lot edge, where the
 		# invisible cross wall stands
 		var step: Vector2 = step_own if side == 1 else step_onc
-		if stepped:
+		if stepped_own if side == 1 else stepped_onc:
 			var sx := absf(step.x - step.y)
 			var basis2 := Basis.from_scale(Vector3(sx, WALL_H, WALL_T))
 			walls.set_instance_transform(n_walls, Transform3D(basis2, Vector3((step.x + step.y) / 2.0 * float(side), WALL_H / 2.0, -WALL_T / 2.0)))

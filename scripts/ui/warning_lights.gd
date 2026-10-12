@@ -42,14 +42,18 @@ func _light(parent: Control, text: String) -> Label:
 
 func _process(_delta: float) -> void:
 	var h := player.health
-	_apply_light(eng_label, h.is_warning(PowertrainHealth.Warn.ENG), h.is_warning(PowertrainHealth.Warn.ENG_DERATE))
+	# the engine lamp is also the limp-home lamp (brief LM): red while the engine limps
+	var eng_limp := player.limp.is_engine_limp()
+	_apply_light(eng_label, h.is_warning(PowertrainHealth.Warn.ENG) or eng_limp, h.is_warning(PowertrainHealth.Warn.ENG_DERATE) or eng_limp)
 	_apply_light(brk_label, h.is_warning(PowertrainHealth.Warn.BRK), h.is_warning(PowertrainHealth.Warn.BRK_FADE))
-	_apply_light(tyre_label, h.is_warning(PowertrainHealth.Warn.TYRE), false)
+	var flat := player.damage.any_tyre_flat()
+	_apply_light(tyre_label, h.is_warning(PowertrainHealth.Warn.TYRE) or player.damage.any_tyre_low(), flat)
 	_apply_light(clt_label, h.is_warning(PowertrainHealth.Warn.CLUTCH), false)
-	# Damage (Stage C): a part past the free band or a lamp out; red once the
-	# engine limps on its own or is dead.
+	# Damage (Stage C): a part past the free band, a lamp out or a flat tyre;
+	# red once the damage itself limps the engine (nothing does since the heat
+	# window, DP4a: a wrecked radiator shows as the ENG lamp when it runs hot).
 	var d := player.damage
-	_apply_light(dmg_label, d.warning(), d.engine_cap_kmh() < INF)
+	_apply_light(dmg_label, d.warning(), d.engine_limp())
 
 func _apply_light(l: Label, on: bool, severe: bool) -> void:
 	l.visible = on and (not severe or int(Time.get_ticks_msec() / 350) % 2 == 0)

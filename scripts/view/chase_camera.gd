@@ -595,6 +595,8 @@ func _update_feel(delta: float) -> void:
 				if w.surface_type != "Road":
 					rough += 1
 		want_s = float(rough) / float(grounded) * clampf(speed / 15.0, 0.0, 1.0) if grounded > 0 else 0.0
+	# a wheel on its rim or a bent rim shakes the car the same way (flat_tyre.gd)
+	want_s = maxf(want_s, target.wheel_shake)
 	surface_t = lerpf(surface_t, want_s, 1.0 - exp(-12.0 * delta))
 
 ## Eases orbit_yaw / orbit_lift toward the arrow keys (chase view only).

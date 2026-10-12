@@ -404,12 +404,19 @@ call :run traffic/more_alive_traffic "--headless --fixed-fps 120"
 	call :run world/water_drive "--headless --fixed-fps 120"
 	rem ~8 s: brake + throttle from a stop holds the fronts only (line lock burnout).
 	call :run car/burnout_line_lock "--headless --fixed-fps 120"
-	rem ~3 min: fuel burn calibration, a dry tank in every gearbox, limp causes (slowest wins), refuel from the bank.
+	rem ~3 min: fuel burn calibration, a dry tank in every gearbox (the engine starves, 50 km/h or more), dry + hot, refuel from the bank.
 	call :run car/fuel_limp "--headless --fixed-fps 60"
 	rem ~5 s: every start is a full tank (START_FULL_TANK), two player cars.
 	call :run car/fuel_start "--headless --fixed-fps 60"
+	rem ~1 min: limp by physics: multipliers per cause, worst wins, the stumble pattern, a wheel on its rim, and each cause's top speed (50 km/h or more).
+	rem This runs the selected car; for the per-car table set NEON_CAR=<kind> and run it once per car.
+	call :run car/limp_physics "--headless --fixed-fps 60"
+	rem ~40 s: tyres (DP3): slow leaks and their timing, the air machine, bent rims, flat spots, the pull and the wobble on the car.
+	call :run car/tyre_damage "--headless --fixed-fps 120"
 	rem ~25 s: damage slice 1: hits by direction, crash pull, rear sag, dead engine, lamps, steam, rattle, garage/station/tow.
 	call :run car/car_damage "--headless --fixed-fps 120"
+	rem ~2 min: the Damage setting (Full / Light / Looks only), difficulty, and the radiator heat window per difficulty.
+	call :run car/damage_settings "--headless --fixed-fps 60"
 	rem No car or road chunk pops in or out where a camera can see it (Roy, 2026-10-09): flat road, then the hilly one.
 	call :run traffic/no_visible_spawn "--headless --fixed-fps 60"
 	set "NEON_HILLS=1"

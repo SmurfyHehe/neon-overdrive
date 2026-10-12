@@ -33,6 +33,10 @@ static func apply(v: Vehicle, spec: Dictionary) -> void:
 			continue  # sound only (B1): EngineAudio hands it to TurboSynth
 		elif key == "window_control":
 			continue  # cosmetic: how the cockpit's side window is worked (CockpitFrame)
+		elif key == "limp_fuel_share":
+			v.set_meta(&"limp_fuel_share", float(spec[key]))  # LimpMode.fuel_share, read by PlayerCar
+		elif key == "limp_max_gear":
+			v.set_meta(&"limp_max_gear", int(spec[key]))  # LimpMode.engine_max_gear, read by PlayerCar
 		elif key == "boost_kind":
 			ForcedInduction.set_kind(v, String(spec[key]))  # not a Vehicle property (C1)
 		elif key == "driver_grip_deg":
@@ -471,6 +475,9 @@ static func player_spec(kind: String) -> Dictionary:
 			s["torque_shape"] = {"low_end": 0.55, "peak_pos": 0.40, "plateau": 0.1, "falloff": 0.35}
 			s["gear_ratios"] = gears
 			s["final_drive"] = 4.1
+			# Engine limp holds 0.55 of this low redline: 3rd would be 43.5 km/h
+			# (measured, tests/car/limp_physics.gd), under the 50 km/h floor.
+			s["limp_max_gear"] = 4
 			s["coefficient_of_drag"] = 0.46
 			s["frontal_area"] = 2.0
 			s["front_tire_width"] = 155.0   # fleet.json physics_hint
@@ -546,6 +553,9 @@ static func player_spec(kind: String) -> Dictionary:
 			s["torque_shape"] = {"low_end": 0.35, "peak_pos": 0.7, "plateau": 0.15, "falloff": 0.8}
 			s["gear_ratios"] = gears
 			s["final_drive"] = 4.6
+			# A dry tank on the standard 35 % of its small, peaky torque tops out at
+			# 48 km/h (measured, tests/car/limp_physics.gd), under the 50 km/h floor.
+			s["limp_fuel_share"] = 0.45
 			s["coefficient_of_drag"] = 0.36
 			s["frontal_area"] = 1.6
 			s["front_tire_width"] = 175.0

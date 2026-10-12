@@ -119,6 +119,17 @@ func _process(_delta: float) -> bool:
 			_check(not GameSettings.critters, "critters off loads back")
 			s.critters_check.button_pressed = true
 			_check(GameSettings.critters, "and on again")
+			# Game: the Damage row (brief DP7), applied and saved at once
+			_check(s.damage_option != null and s.damage_option.item_count == 3 and s.damage_option.get_item_text(0) == "Full" and s.damage_option.get_item_text(1) == "Light" and s.damage_option.get_item_text(2) == "Looks only", "Game has a Damage row: Full / Light / Looks only")
+			s.damage_option.select(2)
+			s.damage_option.item_selected.emit(2)
+			_check(GameSettings.damage == GameSettings.Damage.LOOKS_ONLY, "Damage: Looks only applies")
+			var damage_cfg := ConfigFile.new()
+			damage_cfg.load(AudioSettings.path)
+			_check(str(damage_cfg.get_value("game", "damage", "")) == "Looks only", "the Damage setting is saved with the game settings")
+			s.damage_option.select(0)
+			s.damage_option.item_selected.emit(0)
+			_check(GameSettings.damage == GameSettings.Damage.FULL, "Damage: back to Full")
 			# Controls: rebind handbrake slot 0 to K
 			s.show_page(3)
 			_check(s.controls_save_button != null and s.controls_reset_button != null, "Controls has Save and Reset")

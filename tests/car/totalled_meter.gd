@@ -105,8 +105,19 @@ func _settings() -> void:
 	_check(T.DIFFICULTY_MULT == {"daily": 1.0, "weekend": 1.0, "racer": 1.0}, "every difficulty is 1.0 until Roy decides")
 	_check(T.difficulty_mult() == 1.0, "the factor in use is 1.0")
 	_check(T.counts(), "the meter counts (Damage: Full)")
-	# TODO(DP4a+DP7): when the Damage setting exists, add a test that "Looks only"
-	# adds nothing and can never total the car, and "Light" counts in full.
+	# the Damage setting (Roy 1437): Looks only adds nothing and can never
+	# total the car; Light counts in full
+	var was := GameSettings.damage
+	GameSettings.set_damage(GameSettings.Damage.LOOKS_ONLY)
+	var meter := T.new()
+	var after := 0.0
+	for i in 10:
+		after = meter.after_hit(after, 150.0, i + 1, float(i))
+	after = T.add(after, T.scaled(T.step_for_roll("car")))
+	_check(not T.counts() and T.scaled(T.BIG_HIT_STEP) == 0.0 and after == 0.0 and not T.is_totalled(after), "Damage: Looks only: ten 150 km/h hits and a roll leave the meter at 0, never totalled")
+	GameSettings.set_damage(GameSettings.Damage.LIGHT)
+	_check(T.counts() and is_equal_approx(T.scaled(T.HIT_STEP), T.HIT_STEP), "Damage: Light counts the meter in full")
+	GameSettings.set_damage(was)
 
 func _damage_side() -> void:
 	var D := CarDamage

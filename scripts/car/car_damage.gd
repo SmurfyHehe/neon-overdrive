@@ -9,8 +9,8 @@ extends RefCounted
 #   the body (cost only).
 # - no performance loss under 25 % in a part (FREE_BELOW).
 # - the engine never dies from damage (the fun test, 2026-10-11): a wrecked
-#   radiator limps at ENGINE_LIMP_KMH, it does not stop the car. The tow is
-#   kept for a totalled car (`totalled`, unused for now).
+#   radiator overheats the engine into limp mode, it does not stop the car.
+#   The tow is kept for a totalled car (`totalled`, unused for now).
 # - parts break instead of the hood popping: nothing ever covers the view,
 #   and there are no dents until the car redesign (week of 2026-10-12). For
 #   now the signs are a DMG lamp, steam off a hurt radiator, a crash pull,
@@ -32,10 +32,18 @@ extends RefCounted
 # corners, an oblique one lands on one corner, and the shares add up to one.
 #
 # Effects (each only past FREE_BELOW, scaled from 0 there to full at 1.0):
-# - radiator: the engine cools worse (PowertrainHealth.cooling_mult), so it
-#   runs hot and the existing derate and OVERHEAT limp take over; from
-#   ENGINE_LIMP_AT the engine limps on its own (LimpMode.ENGINE), at
-#   ENGINE_LIMP_KMH, also at 1.0: it never dies.
+# - radiator: it leaks. The coolant drains while the engine runs, faster the
+#   more the radiator is broken and the wider the throttle; as it goes the
+#   engine cools worse (PowertrainHealth.cooling_mult), runs hot, and the
+#   existing derate and OVERHEAT limp take over. That heat is the only way a
+#   radiator limps the car (the heat window, brief DP4a, 2026-10-11): a 100 %
+#   radiator gives about heat_window_s of full-throttle driving
+#   (DamageDifficulty) before LIMP_C, and gentle driving lasts at least twice
+#   as long. A patch or a repair refills it. It never dies.
+#   (Why a leak and not a fixed cooling loss: measured on the coupe, a fixed
+#   loss has a cliff. Cooling x0.22 limps in 16 s, x0.24 never does, because
+#   the derate lowers the heat as fast as the loss raises it. No fixed number
+#   gives a 75 s window.)
 # - front corner: the wheel's toe is bent toward the hit, so the car pulls to
 #   that side (the "crash pull").
 # - rear corner: that spring is softer, the corner sags and the rear wallows.
@@ -61,8 +69,9 @@ extends RefCounted
 #   steering rack    front share >= RACK_FRONT_MIN, part >= GATE_AT   RACK_LOSS of the lock
 #   brake x4         corner share >= BRAKE_SHARE_MIN, part >= GATE_AT   BRAKE_LOSS on that wheel
 # The fun rules, all enforced where the offsets are built:
-# - at most MAX_EFFECTS handling effects at once: the biggest three count, the
-#   rest stay cost, looks and sound (ties go to the part listed first);
+# - at most effects_at_once() handling effects at once (by difficulty, 2 or 3):
+#   the biggest count, the rest stay cost, looks and sound (ties go to the part
+#   listed first);
 # - one hit or strike adds at most MAX_PER_HIT to any part;
 # - the toe damage adds per axle stay inside the Tuner's range (TOE_AXLE_MAX);
 # - damage never takes more than GRIP_LOSS_MAX of the grip in total;
@@ -71,11 +80,41 @@ extends RefCounted
 #   rebuild_offsets() are at once.
 # Nothing is random: the same hit always gives the same parts and offsets.
 #
+# Difficulty and the Damage setting (brief DP7, 2026-10-11): `difficulty`
+# scales the damage per hit and the radiator's cooling loss (and holds the
+# auto-trim share and effects-at-once numbers for the handling work); `mode`
+# is the Settings > Game "Damage" row. Light halves every offset, Looks only
+# leaves them all neutral: lamps, steam, rattle and the repair bill are read
+# from the parts, so they stay.
+#
+# Tyres (briefs LM and DP3, 2026-10-11): `pressure` is the share of air left
+# in each tyre, `leak` how fast it is going, `runout` how far the rim is out
+# of round (m), `rim_wear` how far a rim has been ground down.
+# - slow leak: a kerb strike over the free line starts one on that wheel. The
+#   pressure falls from 1 to LEAK_TO in LEAK_SLOW_S (just over the line) down
+#   to LEAK_FAST_S (a strike at RIM_STRIKE x the line), and keeps falling at
+#   that rate. A soft tyre is less stiff, grips less, sits lower and drags, so
+#   the car leans and pulls to that corner (flat_tyre.gd).
+# - the air machine at a station pumps every tyre back to 1; a tyre that was
+#   leaking leaks again, slowly (LEAK_REFILL_S), until the garage fixes it.
+# - bent rim: the same strike puts up to RUNOUT_MAX of runout on the rim: a
+#   once-per-turn wobble that rises with speed. A bent rim also seals worse:
+#   it leaks from a gentler kerb (leak_free_ms), a threshold, never dice.
+# - flat spot: a wheel locked in a skid for FLAT_SPOT_S gets FLAT_SPOT_RUNOUT.
+# - on the rim: a very hard strike (over RIM_STRIKE x KERB_FREE_MS) bursts the
+#   tyre at once, and a leak that reaches FlatTyre.RIM_PRESSURE ends the same
+#   way: the wheel runs on its rim (less grip, rolling drag, a shake, wear).
+# - tyre state (pressure, a rim, runout) and the coolant are live: they skip
+#   the fade and the worst-three rule and are not grip-capped (LM's rim grip
+#   is a tyre off its bead, not a bent part).
+#
 # The state is plain numbers (to_dict / from_dict) so the save system and the
 # garage can keep it. Until the save system lands it lives as long as the car,
 # like FuelTank: Restart starts a fresh, undamaged car.
 
 const DamageOffsets := preload("res://scripts/car/damage_offsets.gd")
+const DamageDifficulty := preload("res://scripts/car/damage_difficulty.gd")
+const FlatTyre := preload("res://scripts/car/flat_tyre.gd")
 
 enum Part { RADIATOR, STEER_FL, STEER_FR, SUSP_RL, SUSP_RR, BODY,
 	TOE_RL, TOE_RR, CAMBER_FL, CAMBER_FR, CAMBER_RL, CAMBER_RR, SAG_FL, SAG_FR,
@@ -107,11 +146,16 @@ const DV_FREE := 3.0
 const DAMAGE_PER_DV := 0.06
 ## Below this a part is cosmetic (Roy: no performance loss under 25 %).
 const FREE_BELOW := 0.25
-## The radiator from here makes the engine limp at ENGINE_LIMP_KMH.
-const ENGINE_LIMP_AT := 0.75
-const ENGINE_LIMP_KMH := 70.0   # the cap stays up at 100 %: the engine never dies
-## Engine cooling lost with a wrecked radiator (1.0 = no cooling at all).
-const COOLING_LOSS := 0.7
+## Engine cooling lost once the coolant is gone (1.0 = no cooling at all; some
+## always stays, so the heat sum never divides by zero). On the way there the
+## loss follows the cube of the share drained: the engine runs a little hot
+## for most of the window, then the lamp, the derate and the limp come close
+## together at the end.
+const COOLING_LOSS := 0.95
+## Share of the full-throttle drain an idling engine still has.
+const COOLANT_IDLE_DRAIN := 0.1
+## How much of each offset the Damage setting lets through, by GameSettings.Damage.
+const MODE_SCALE := [1.0, 0.5, 0.0]
 ## Toe (rad) a fully bent front arm adds. The Tuner's toe range is +-0.02;
 ## "slightly" (Roy) keeps this inside it.
 const MAX_TOE_BEND := 0.004
@@ -157,6 +201,31 @@ const KERB_FREE_MS := 5.0
 ## Damage per m/s above KERB_FREE_MS: 100 km/h at 30 degrees (13.9 m/s) puts
 ## about 0.4 on the corner, 100 km/h square on bends it fully.
 const KERB_DAMAGE_PER_MS := 0.045
+## A kerb met at more than this many times KERB_FREE_MS bursts that tyre.
+const RIM_STRIKE := 2.5
+## Grip left on a wheel that runs on its rim.
+const RIM_GRIP := 0.45
+## A slow leak is timed to this pressure: 1 -> LEAK_TO takes LEAK_SLOW_S for a
+## strike just over the free line, LEAK_FAST_S for one at RIM_STRIKE x it.
+const LEAK_TO := 0.55
+const LEAK_SLOW_S := 120.0
+const LEAK_FAST_S := 60.0
+## After the air machine a leaking tyre goes 1 -> LEAK_TO in about 5 minutes.
+const LEAK_REFILL_S := 300.0
+## The TYRE lamp comes on under this pressure.
+const TYRE_LOW := 0.8
+## Runout (m) a strike at RIM_STRIKE x the free line bends into the rim, the most a rim takes.
+const RUNOUT_MAX := 0.004
+## A fully bent rim leaks from a kerb met at this share less than the free speed.
+const BENT_RIM_LEAK_DROP := 0.4
+## A wheel locked in a skid this long (s) gets a flat spot of this runout (m).
+const FLAT_SPOT_S := 1.5
+const FLAT_SPOT_RUNOUT := 0.0015
+## A locked wheel only counts as a skid while it moves forward or back over
+## the road faster than this (m/s), and "locked" is its tread moving at under
+## this share of that speed. A wheel sliding sideways is not locked.
+const SKID_MIN_MS := 5.0
+const LOCKED_SHARE := 0.2
 ## A strike's cost to the body, as a share of the corner's.
 const KERB_BODY_SHARE := 0.25
 ## Spring rate lost on a fully broken rear corner.
@@ -175,6 +244,9 @@ const REPAIR_PRICE := {"radiator": 400, "steer_fl": 250, "steer_fr": 250, "susp_
 	"sag_fl": 250, "sag_fr": 250, "damper_fl": 180, "damper_fr": 180, "damper_rl": 180, "damper_rr": 180,
 	"rack": 350, "brake_fl": 200, "brake_fr": 200, "brake_rl": 200, "brake_rr": 200}
 const LAMP_PRICE := 60
+const TYRE_PRICE := 120   # a burst tyre
+const PUNCTURE_PRICE := 40   # a leak that has not emptied the tyre yet
+const RIM_PRICE := 200    # a rim worn right down; less for less wear
 const TOW_PRICE := 150
 ## A station's free patch brings the radiator back to here (no performance loss).
 const PATCH_TO := FREE_BELOW - 0.01
@@ -186,8 +258,25 @@ const TOTALLED_PATCH_TO := 0.60
 const TOW_AT := 0.60
 
 var enabled := true
+## GameSettings.Damage (Full / Light / Looks only) and the DamageDifficulty
+## index. The car copies both from GameSettings every tick (sync_settings).
+var mode: int = GameSettings.damage
+var difficulty: int = GameSettings.difficulty
 var parts: Array[float] = []
 var lamps: Array[bool] = [false, false, false, false]   # true = broken
+## Coolant left, 1 = full, 0 = none. A broken radiator drains it (step_coolant).
+var coolant := 1.0
+## Air left in each tyre (FL, FR, RL, RR), 1 = full, 0 = none.
+var pressure: Array[float] = [1.0, 1.0, 1.0, 1.0]
+## How far each rim has been ground down by running flat, 0..1.
+var rim_wear: Array[float] = [0.0, 0.0, 0.0, 0.0]
+## Pressure share each tyre loses per second (0 = sound).
+var leak: Array[float] = [0.0, 0.0, 0.0, 0.0]
+## How far each rim is out of round, m (a bent rim or a flat spot).
+var runout: Array[float] = [0.0, 0.0, 0.0, 0.0]
+## Leaks started and flat spots made (tests and read-outs).
+var leaks_started := 0
+var flat_spots := 0
 ## The night number of the last free patch; one patch per night.
 var patched_night := -1
 ## The totalled meter, 0..1 (TM1, scripts/car/totalled_meter.gd): big crashes
@@ -216,6 +305,8 @@ var landings := 0
 var last_landing := 0.0
 
 var _on_kerb: Array[bool] = [false, false, false, false]
+var _refilled := false
+var _lock_t: Array[float] = [0.0, 0.0, 0.0, 0.0]
 var _prev_vel := Vector3.ZERO
 var _hit_dv := Vector3.ZERO
 var _hit_left := -1.0
@@ -244,25 +335,172 @@ static func effect(amount: float) -> float:
 func is_engine_dead() -> bool:
 	return false
 
-## The DMG lamp: any part past the free band, or a lamp out.
+## True if tyre i has no air left (before the Damage setting).
+func tyre_flat(i: int) -> bool:
+	return enabled and pressure[i] <= FlatTyre.RIM_PRESSURE
+
+func any_tyre_flat() -> bool:
+	for i in 4:
+		if tyre_flat(i):
+			return true
+	return false
+
+## The TYRE lamp: a tyre under TYRE_LOW.
+func any_tyre_low() -> bool:
+	if not enabled:
+		return false
+	for i in 4:
+		if pressure[i] < TYRE_LOW:
+			return true
+	return false
+
+## The kerb speed (m/s) from which wheel i starts to leak: KERB_FREE_MS on a
+## true rim, lower the more the rim is bent.
+func leak_free_ms(i: int) -> float:
+	return KERB_FREE_MS * (1.0 - BENT_RIM_LEAK_DROP * clampf(runout[i] / RUNOUT_MAX, 0.0, 1.0))
+
+## Pressure share per second a strike at `approach` m/s starts leaking.
+static func leak_rate(approach: float) -> float:
+	var hard := clampf((approach - KERB_FREE_MS) / (KERB_FREE_MS * (RIM_STRIKE - 1.0)), 0.0, 1.0)
+	return (1.0 - LEAK_TO) / lerpf(LEAK_SLOW_S, LEAK_FAST_S, hard)
+
+## The leaks for one step (testable without a car). Returns true if a
+## pressure changed.
+func step_tyres(dt: float) -> bool:
+	if not enabled:
+		return false
+	var changed := false
+	for i in 4:
+		if leak[i] > 0.0 and pressure[i] > 0.0:
+			pressure[i] = maxf(pressure[i] - leak[i] * dt, 0.0)
+			changed = true
+	if changed:
+		_write_tyres()
+	return changed
+
+## A wheel's skid for one step (testable without a car): `locked` while the
+## wheel is not turning under a moving car. FLAT_SPOT_S of it in one go grinds
+## a flat spot.
+func step_lock(i: int, dt: float, locked: bool) -> void:
+	if not enabled or not locked:
+		_lock_t[i] = 0.0
+		return
+	_lock_t[i] += dt
+	if _lock_t[i] >= FLAT_SPOT_S and runout[i] < FLAT_SPOT_RUNOUT:
+		runout[i] = FLAT_SPOT_RUNOUT
+		flat_spots += 1
+		_write_tyres()
+
+## The station's air machine: every tyre back to full. A tyre that was leaking
+## or flat still has its hole, so it leaks again, slowly, until the garage
+## fixes it. Returns how many tyres it pumped up.
+func air_refill() -> int:
+	if not enabled:
+		return 0
+	var n := 0
+	for i in 4:
+		if pressure[i] < 1.0:
+			n += 1
+			if leak[i] > 0.0 or pressure[i] <= FlatTyre.RIM_PRESSURE:
+				leak[i] = (1.0 - LEAK_TO) / LEAK_REFILL_S
+			pressure[i] = 1.0
+	if n > 0:
+		rebuild_offsets()
+	return n
+
+## Puts the tyre numbers into the offsets on their own (pressure moves every
+## tick while a tyre leaks), with the Damage setting.
+func _write_tyres() -> void:
+	var k: float = MODE_SCALE[clampi(mode, 0, MODE_SCALE.size() - 1)]
+	for i in 4:
+		offsets.set_wheel(i, DamageOffsets.PRESSURE_MULT, 1.0 + (pressure[i] - 1.0) * k)
+		offsets.set_wheel(i, DamageOffsets.GRIP_MULT, 1.0 + ((RIM_GRIP if tyre_flat(i) else 1.0) - 1.0) * k)
+		offsets.set_wheel(i, DamageOffsets.RUNOUT, runout[i] * k)
+	_live_to_applied()
+
+## The tyre and coolant slots move every tick on their own; the car reads
+## them at once, never through the fade (FADE_TICKS is for bent parts).
+const _LIVE_WHEEL := [DamageOffsets.PRESSURE_MULT, DamageOffsets.GRIP_MULT, DamageOffsets.RUNOUT]
+func _live_to_applied() -> void:
+	if applied.data.size() != offsets.data.size():
+		return
+	for i in 4:
+		for f in _LIVE_WHEEL:
+			applied.set_wheel(i, f, offsets.get_wheel(i, f))
+	applied.set_car(DamageOffsets.COOLING_MULT, offsets.get_car(DamageOffsets.COOLING_MULT))
+
+## The DMG lamp: any part past the free band, a lamp out, or a flat tyre (a
+## soft tyre or a bent rim shows on the TYRE lamp).
 func warning() -> bool:
 	if not enabled:
 		return false
+	if any_tyre_flat():
+		return true
 	for i in parts.size():
 		if i != Part.BODY and parts[i] >= FREE_BELOW:
 			return true
 	return lamps.has(true)
 
-## Engine cooling multiplier for PowertrainHealth.
+## Engine cooling multiplier for PowertrainHealth (before the Damage setting):
+## what is left with this much coolant gone.
 func cooling_mult() -> float:
-	return 1.0 - COOLING_LOSS * effect(parts[Part.RADIATOR]) if enabled else 1.0
-
-## The cap LimpMode.engine_damage_kmh takes: INF healthy, ENGINE_LIMP_KMH from
-## ENGINE_LIMP_AT up to 100 % (never 0).
-func engine_cap_kmh() -> float:
 	if not enabled:
-		return INF
-	return ENGINE_LIMP_KMH if parts[Part.RADIATOR] >= ENGINE_LIMP_AT else INF
+		return 1.0
+	var drained := 1.0 - coolant
+	return 1.0 - COOLING_LOSS * drained * drained * drained
+
+## Seconds of full-throttle driving a 100 % radiator lasts on this difficulty.
+func heat_window_s() -> float:
+	return float(DamageDifficulty.row(difficulty)["heat_window_s"])
+
+## The radiator's leak for one step, from raw numbers (testable without a
+## car): throttle 0..1, and whether the engine is running. The drain follows
+## the square of the throttle, so 60 % throttle lasts more than twice as long
+## as flat out. Returns true if the coolant level changed.
+func step_coolant(dt: float, throttle: float, running: bool) -> bool:
+	var leak := effect(parts[Part.RADIATOR])
+	if not enabled or not running or leak <= 0.0 or coolant <= 0.0:
+		return false
+	var th := clampf(throttle, 0.0, 1.0)
+	var demand := COOLANT_IDLE_DRAIN + (1.0 - COOLANT_IDLE_DRAIN) * th * th
+	coolant = maxf(coolant - leak * demand * dt / heat_window_s(), 0.0)
+	_write_cooling()
+	return true
+
+## Puts the cooling into the offsets on its own (the coolant level moves every
+## tick; a full rebuild is for when damage changes), with the Damage setting.
+func _write_cooling() -> void:
+	var k: float = MODE_SCALE[clampi(mode, 0, MODE_SCALE.size() - 1)]
+	offsets.set_car(DamageOffsets.COOLING_MULT, 1.0 + (cooling_mult() - 1.0) * k)
+	_live_to_applied()
+
+## Whether damage asks the engine for limp-home (LimpMode.engine_damaged).
+## Always false since the heat window (brief DP4a): a radiator limps the car
+## through engine heat only, never by its size. Kept for the totalled meter,
+## which will limp the engine from here.
+func engine_limp() -> bool:
+	return false
+
+## Damage per hit on this difficulty.
+func damage_mult() -> float:
+	return float(DamageDifficulty.row(difficulty)["damage_mult"])
+
+## Share of a steering pull the car trims out by itself on this difficulty.
+func auto_trim_share() -> float:
+	return float(DamageDifficulty.row(difficulty)["auto_trim"])
+
+## How many handling effects can act at once on this difficulty.
+func effects_at_once() -> int:
+	return int(DamageDifficulty.row(difficulty)["effects_at_once"])
+
+## Takes the Damage setting and the difficulty (the car calls this every tick
+## with GameSettings' values); a change rebuilds the offsets at once.
+func sync_settings(new_mode: int, new_difficulty: int) -> void:
+	if new_mode == mode and new_difficulty == difficulty:
+		return
+	mode = new_mode
+	difficulty = new_difficulty
+	rebuild_offsets()
 
 ## Rebuilds the offsets from the parts, at once (no fade). Called by a repair
 ## and a load; a test or tool that sets `parts` directly calls it too. A hit or
@@ -277,6 +515,7 @@ func rebuild_offsets() -> void:
 func _damage_changed() -> void:
 	_fade_from = applied.data.duplicate()
 	_build()
+	_live_to_applied()
 	_fade_left = FADE_TICKS
 
 ## One physics tick of the fade; step() calls it. Returns true while fading.
@@ -290,6 +529,7 @@ func fade_step() -> bool:
 	var k := 1.0 - float(_fade_left) / FADE_TICKS
 	for i in DamageOffsets.SIZE:
 		applied.data[i] = lerpf(_fade_from[i], offsets.data[i], k)
+	_live_to_applied()
 	return true
 
 ## How much part p changes the handling, 0..1, before the worst-three rule.
@@ -302,7 +542,8 @@ func handling_effect(p: int) -> float:
 		return 0.0
 	return effect(parts[p])
 
-## The parts whose handling effects count right now: the MAX_EFFECTS biggest,
+## The parts whose handling effects count right now: the effects_at_once()
+## biggest (MAX_EFFECTS at most),
 ## ties to the part listed first. Set by the last build.
 func active_effects() -> Array[int]:
 	var out: Array[int] = []
@@ -317,7 +558,7 @@ func felt(p: int) -> float:
 
 func _rank() -> void:
 	_active.fill(false)
-	for n in MAX_EFFECTS:
+	for n in mini(effects_at_once(), MAX_EFFECTS):
 		var best := -1
 		var best_e := 0.0
 		for p in parts.size():
@@ -350,6 +591,12 @@ func _build() -> void:
 	# the wheel sits crooked by the front toe bend, turned the way that holds the car straight
 	offsets.set_car(DamageOffsets.STEER_CENTRE, steering_ratio
 			* (offsets.get_wheel(0, DamageOffsets.TOE_ADD) + offsets.get_wheel(1, DamageOffsets.TOE_ADD)))
+	# the Damage setting comes last, after everything and the caps (brief DP7):
+	# Light halves every offset, Looks only leaves them all neutral
+	offsets.scale_effects(MODE_SCALE[clampi(mode, 0, MODE_SCALE.size() - 1)])
+	# the tyres are live state, not a bent part: outside the caps, scaled by
+	# the same setting inside _write_tyres
+	_write_tyres()
 
 ## The caps on built offsets: the toe adds of an axle sum to at most
 ## TOE_AXLE_MAX either way, and the grip multipliers multiply to at least
@@ -433,7 +680,7 @@ func apply_hit(dv_local: Vector3) -> void:
 	last_hit_dv = size
 	d /= size
 	last_hit_dir = d
-	var amount := (size - DV_FREE) * DAMAGE_PER_DV
+	var amount := (size - DV_FREE) * DAMAGE_PER_DV * damage_mult()
 	# corner shares: projection of the hit on each corner's diagonal, squared
 	# (from the front = +z, from the left = +x)
 	var k := 0.70710678
@@ -473,10 +720,18 @@ func apply_hit(dv_local: Vector3) -> void:
 ## One kerb strike from raw numbers (testable without a car): wheel i (FL,
 ## FR, RL, RR) met the kerb at `approach` m/s across the kerb face.
 func apply_kerb_strike(i: int, approach: float) -> void:
-	if not enabled or approach <= KERB_FREE_MS:
+	if not enabled:
 		return
-	var amount := (approach - KERB_FREE_MS) * KERB_DAMAGE_PER_MS
 	i = clampi(i, 0, 3)
+	# the tyre: a leak from the free line, or lower on a bent rim
+	if approach > leak_free_ms(i):
+		if leak[i] <= 0.0:
+			leaks_started += 1
+		leak[i] = maxf(leak[i], leak_rate(approach))
+	if approach <= KERB_FREE_MS:
+		_write_tyres()
+		return
+	var amount := (approach - KERB_FREE_MS) * KERB_DAMAGE_PER_MS * damage_mult()
 	kerb_strikes += 1
 	last_kerb_strike = approach
 	kerb_corner[i] += 1
@@ -486,17 +741,21 @@ func apply_kerb_strike(i: int, approach: float) -> void:
 	if kerb_corner[i] >= KERB_STRIKES_TO_DAMPER:
 		_add(DAMPER_PARTS[i], amount)
 	_add(Part.BODY, amount * KERB_BODY_SHARE)
+	# the rim: bent in proportion, RUNOUT_MAX at RIM_STRIKE x the free line
+	runout[i] = minf(runout[i] + (approach - KERB_FREE_MS) / (KERB_FREE_MS * (RIM_STRIKE - 1.0)) * RUNOUT_MAX * damage_mult(), RUNOUT_MAX)
+	if approach > KERB_FREE_MS * RIM_STRIKE:
+		pressure[i] = 0.0
 	_damage_changed()
 
 ## One landing from raw numbers (testable without a car): wheel i came down
 ## at `fall` m/s after time in the air. Over LANDING_FREE_MS it hurts that
-## wheel's damper.
+## wheel's damper (times the difficulty's damage per hit).
 func apply_landing(i: int, fall: float) -> void:
 	if not enabled or fall <= LANDING_FREE_MS:
 		return
 	landings += 1
 	last_landing = fall
-	_add(DAMPER_PARTS[clampi(i, 0, 3)], (fall - LANDING_FREE_MS) * LANDING_DAMAGE_PER_MS)
+	_add(DAMPER_PARTS[clampi(i, 0, 3)], (fall - LANDING_FREE_MS) * LANDING_DAMAGE_PER_MS * damage_mult())
 	_damage_changed()
 
 ## Times each wheel's air and, on touch-down, lands it (apply_landing).
@@ -560,16 +819,35 @@ func step_values(dt: float, vel: Vector3, basis: Basis, touching: bool) -> void:
 		_hit_left = HIT_WINDOW
 
 ## One step on the car: moves the fade on a tick, reads contacts (a hit, a kerb
-## strike or a landing gives new offsets) and sets the engine's limp cap. The offsets themselves are applied
-## by the car (PlayerCar._apply_damage_offsets), on top of the tune.
-func step(v: Vehicle, dt: float, _health: PowertrainHealth, limp: LimpMode) -> void:
+## strike or a landing gives new offsets), drains a leaking radiator, leaks the
+## tyres, wears a rim that runs flat and tells the limp whether the engine is
+## damaged. The offsets themselves are applied by the car
+## (PlayerCar._apply_damage_offsets), on top of the tune.
+func step(v: Vehicle, dt: float, health: PowertrainHealth, limp: LimpMode) -> void:
 	if not enabled:
 		return
 	fade_step()
 	step_values(dt, v.linear_velocity, v.global_transform.basis, _touching(v))
 	_kerb_step(v)
 	_landing_step(v, dt)
-	limp.engine_damage_kmh = engine_cap_kmh()
+	step_coolant(dt, v.throttle_input, v.engine_running)  # the pedal, not the throttle body: a gear change is not a lift
+	if _refilled:
+		# fresh, cold coolant: the engine is back at working temperature at once
+		_refilled = false
+		health.engine_temp = minf(health.engine_temp, PowertrainHealth.THERMOSTAT_C)
+	step_tyres(dt)
+	for i in mini(4, v.wheel_array.size()):
+		var w: Wheel = v.wheel_array[i]
+		var down := w.is_colliding()
+		if FlatTyre.on_rim(applied, i) and down:
+			step_rim_wear(i, v.speed, dt)
+		var along := absf(w.local_velocity.z)
+		step_lock(i, dt, down and along > SKID_MIN_MS and absf(w.spin) * w.tire_radius < LOCKED_SHARE * along)
+	limp.engine_damaged = engine_limp()
+
+## Rim wear for wheel i running flat at `speed` m/s for dt (testable without a car).
+func step_rim_wear(i: int, speed: float, dt: float) -> void:
+	rim_wear[i] = minf(rim_wear[i] + FlatTyre.wear_step(speed, dt), 1.0)
 
 ## Touching a wall, a building or another car (not the road under the body).
 static func _touching(v: Vehicle) -> bool:
@@ -610,6 +888,14 @@ func garage_repair(bank: Object) -> int:
 		lamps[i] = false
 	totalled = 0.0
 	kerb_corner.fill(0)
+	coolant = 1.0
+	_refilled = true
+	for i in 4:
+		pressure[i] = 1.0
+		rim_wear[i] = 0.0
+		leak[i] = 0.0
+		runout[i] = 0.0
+		_lock_t[i] = 0.0
 	rebuild_offsets()
 	return price
 
@@ -621,18 +907,27 @@ func repair_price() -> int:
 	for b in lamps:
 		if b:
 			total += LAMP_PRICE
+	for i in 4:
+		if pressure[i] <= FlatTyre.RIM_PRESSURE:
+			total += TYRE_PRICE
+		elif leak[i] > 0.0:
+			total += PUNCTURE_PRICE
+		# one rim, whichever is worse: ground down or bent
+		total += RIM_PRICE * maxf(rim_wear[i], runout[i] / RUNOUT_MAX)
 	return roundi(total)
 
 ## A fuel station's free patch, once a night: the radiator comes back to the
-## no-loss band (the limp ends), and a meter at or over TOTALLED_PATCH_AT drops
-## to TOTALLED_PATCH_TO. Returns true if it patched anything.
-## Nothing calls it yet: TM4 adds the station button.
+## no-loss band and is topped up (the overheat limp ends), and a meter at or
+## over TOTALLED_PATCH_AT drops to TOTALLED_PATCH_TO. Returns true if it
+## patched anything. Nothing calls it yet: TM4 adds the station button.
 func station_patch(night: int) -> bool:
 	if not enabled or night == patched_night:
 		return false
 	var did := false
 	if parts[Part.RADIATOR] >= FREE_BELOW:
 		parts[Part.RADIATOR] = PATCH_TO
+		coolant = 1.0
+		_refilled = true
 		did = true
 	if totalled >= TOTALLED_PATCH_AT:
 		totalled = TOTALLED_PATCH_TO
@@ -661,7 +956,9 @@ func tow(bank: Object, in_chase: bool) -> bool:
 	return true
 
 func to_dict() -> Dictionary:
-	var d := {"lamps": lamps.duplicate(), "patched_night": patched_night, "totalled": totalled, "kerb_corner": kerb_corner.duplicate()}
+	var d := {"lamps": lamps.duplicate(), "patched_night": patched_night, "totalled": totalled, "kerb_corner": kerb_corner.duplicate(),
+		"coolant": coolant, "pressure": pressure.duplicate(), "rim_wear": rim_wear.duplicate(),
+		"leak": leak.duplicate(), "runout": runout.duplicate()}
 	for i in parts.size():
 		d[PART_NAMES[i]] = parts[i]
 	return d
@@ -675,6 +972,16 @@ func from_dict(d: Dictionary) -> void:
 	var kc: Array = d.get("kerb_corner", [])
 	for i in kerb_corner.size():
 		kerb_corner[i] = int(kc[i]) if i < kc.size() else 0
+	coolant = clampf(float(d.get("coolant", 1.0)), 0.0, 1.0)
+	var pr: Array = d.get("pressure", [])
+	var rw: Array = d.get("rim_wear", [])
+	var lk: Array = d.get("leak", [])
+	var ro: Array = d.get("runout", [])
+	for i in 4:
+		pressure[i] = clampf(float(pr[i]), 0.0, 1.0) if i < pr.size() else 1.0
+		rim_wear[i] = clampf(float(rw[i]), 0.0, 1.0) if i < rw.size() else 0.0
+		leak[i] = maxf(float(lk[i]), 0.0) if i < lk.size() else 0.0
+		runout[i] = clampf(float(ro[i]), 0.0, RUNOUT_MAX) if i < ro.size() else 0.0
 	patched_night = int(d.get("patched_night", -1))
 	totalled = clampf(float(d.get("totalled", 0.0)), 0.0, 1.0)
 	rebuild_offsets()

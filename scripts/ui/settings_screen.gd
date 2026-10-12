@@ -111,6 +111,7 @@ var controls_reset_button: Button
 var back_button: Button
 var tips_check: CheckButton
 var critters_check: CheckButton
+var damage_option: OptionButton   # Full / Light / Looks only (GameSettings.damage)
 var copy_log_button: Button
 var log_status: Label
 var idle_item_option: OptionButton    # Driver: what the L key does
@@ -380,6 +381,7 @@ func _sync_all() -> void:
 	critters_check.button_pressed = GameSettings.critters
 	if wrecks_option != null:
 		wrecks_option.selected = 1 if GameSettings.wrecks_meter else 0
+	damage_option.select(GameSettings.damage)
 	fullscreen_check.button_pressed = DisplaySettings.fullscreen
 	for i in resolution_option.item_count:
 		if resolution_option.get_item_metadata(i) == DisplaySettings.resolution:
@@ -578,6 +580,12 @@ func _build_game_page(parent: Control) -> Control:
 	critters_check = _add_check(page, "Roaches and rats", GameSettings.critters, func(on: bool) -> void:
 		GameSettings.set_critters(on)
 		GameSettings.save_settings())
+	# Damage: Full / Light / Looks only (brief DP7); the car reads it live and
+	# Looks only also keeps the totalled meter still (TotalledMeter.counts).
+	damage_option = _add_option(page, "Damage", GameSettings.DAMAGE_NAMES, func(i: int) -> void:
+		GameSettings.set_damage(i)
+		GameSettings.save_settings())
+	damage_option.select(GameSettings.damage)
 	# Test build only: whether crashes count on the totalled meter. Outside it
 	# the sensor is always on and there is no row.
 	if GameSettings.test_build():

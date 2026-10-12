@@ -44,8 +44,9 @@ const ROLL_STEP := {
 	# "trike": 0.50,  # a roll
 }
 
-## TODO(DP4a+DP7): read the per-difficulty values from
-## scripts/car/damage_difficulty.gd once it exists. Roy has not set them.
+## By difficulty (GameSettings.difficulty, damage_difficulty.gd's order).
+## Roy has not set per-difficulty values: all 1.0 until QA tunes them.
+const DIFFICULTY_KEYS := ["daily", "weekend", "racer"]
 const DIFFICULTY_MULT := {"daily": 1.0, "weekend": 1.0, "racer": 1.0}
 
 ## The same hit seen twice inside the window counts once.
@@ -78,21 +79,19 @@ static func is_totalled(meter: float) -> bool:
 	return meter >= 1.0 - 0.0001
 
 ## The factor on every step for the current difficulty.
-## TODO(DP4a+DP7): ask the difficulty setting once it is on the base.
 static func difficulty_mult() -> float:
 	return float(DIFFICULTY_MULT.get(_difficulty(), 1.0))
 
-## False when "Damage: Looks only" is on: the meter never moves.
-## TODO(DP4a+DP7): read the Damage setting ("Full" / "Light" / "Looks only")
-## once it exists; until then every run counts the meter in full.
+## False when "Damage: Looks only" is on (Settings > Game, GameSettings.damage):
+## the meter never moves, so the car can never be totalled.
 static func counts() -> bool:
 	return _damage_setting() != "Looks only"
 
 static func _difficulty() -> String:
-	return "daily"  # TODO(DP4a+DP7)
+	return DIFFICULTY_KEYS[clampi(GameSettings.difficulty, 0, DIFFICULTY_KEYS.size() - 1)]
 
 static func _damage_setting() -> String:
-	return "Full"  # TODO(DP4a+DP7)
+	return GameSettings.DAMAGE_NAMES[clampi(GameSettings.damage, 0, GameSettings.DAMAGE_NAMES.size() - 1)]
 
 ## A step as the game applies it: through the difficulty factor, capped at one
 ## hit's worth.

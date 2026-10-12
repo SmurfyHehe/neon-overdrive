@@ -210,6 +210,19 @@ func _physics_process(_delta: float) -> bool:
 			_check(absf(gone - PumpPanel.FILL_GAME_MINUTES) < 0.5, "the fill took %.1f in-game minutes" % gone)
 			_check(not (_find(panel, "DriveOff") as Button).disabled, "drive off still disabled after the fill")
 			print("gas_station: fill took %.1f in-game minutes, message '%s'" % [gone, (_find(panel, "Message") as Label).text])
+			# the air machine (DP3): pumps a soft tyre back up, free, and the leak stays
+			var air_b := _find(panel, "Air") as Button
+			_check(air_b != null and air_b.disabled, "air machine: nothing to do with four good tyres")
+			player.damage.apply_kerb_strike(0, CarDamage.KERB_FREE_MS + 2.0)
+			player.damage.step_tyres(60.0)
+			panel.call("refresh")
+			var bank_before_air: int = w.bank
+			_check(player.damage.pressure[0] < 1.0 and not air_b.disabled, "air machine: offered for a soft tyre ('%s')" % air_b.text)
+			panel.call("air")
+			_check(player.damage.pressure[0] == 1.0 and w.bank == bank_before_air, "air machine: the tyre is full again and it cost nothing")
+			_check(player.damage.leak[0] > 0.0 and is_equal_approx(player.damage.leak[0], (1.0 - CarDamage.LEAK_TO) / CarDamage.LEAK_REFILL_S), "air machine: the leak is still there, slower")
+			_check(air_b.disabled, "air machine: done, the button greys out")
+			player.damage.garage_repair(null)
 			gs.close_station()
 			_check(gs.state == GameState.State.PLAYING and not get_tree_paused(), "drive off did not resume the game")
 			phase = 4

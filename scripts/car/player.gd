@@ -401,6 +401,7 @@ func beam_mode() -> int:
 
 func _physics_process(delta: float) -> void:
 	beams.step(delta)
+	_step_trim_grip(delta)
 	if driver.is_valid():
 		last_keys = -1
 		driver.call(self)
@@ -612,7 +613,36 @@ func damage_trim() -> float:
 	if not _offsets_written:
 		return 0.0
 	var lock := maxf(max_steering_angle * front_steering_ratio, 0.01)
-	return clampf(CarDamage.pull_angle(damage.applied) * auto_trim_share / lock, -1.0, 1.0)
+	return clampf(CarDamage.pull_angle(damage.applied) * auto_trim_share * _trim_grip / lock, -1.0, 1.0)
+
+## Auto-trim and wheelspin: the trim cancels a toe pull, which only exists
+## while the tyres grip. With the driven wheels spinning hard (a floored
+## launch) a held steer offset is no correction, it just yaws a car whose
+## rear has let go (test_build_sandbox: a bent arm, floored from the kerb,
+## spun into the median). So the trim backs out while the worst driven wheel
+## slips more than TRIM_SLIP_FULL and comes back in as grip returns.
+## Slip = (wheel surface speed - road speed) / max(road speed, TRIM_SLIP_FLOOR_MS).
+const TRIM_SLIP_FULL := 0.15      # at or under this slip the trim is all there
+const TRIM_SLIP_NONE := 0.30      # at or over this slip it is gone
+const TRIM_SLIP_FLOOR_MS := 3.0   # slip of a crawling car is read against this speed
+const TRIM_GRIP_OUT := 10.0       # per second the trim backs out (0.1 s)
+const TRIM_GRIP_IN := 1.0         # per second it fades back in (1 s)
+var _trim_grip := 1.0
+
+## Worst slip of the driven wheels this tick (0 = rolling, 1 = spinning twice road speed).
+func driven_slip() -> float:
+	var worst := 0.0
+	for w in drive_wheels:
+		if not w.is_colliding():
+			continue
+		var road := absf(w.local_velocity.z)
+		var surface := absf(w.spin * w.tire_radius)
+		worst = maxf(worst, (surface - road) / maxf(road, TRIM_SLIP_FLOOR_MS))
+	return worst
+
+func _step_trim_grip(delta: float) -> void:
+	var want := 1.0 - clampf((driven_slip() - TRIM_SLIP_FULL) / (TRIM_SLIP_NONE - TRIM_SLIP_FULL), 0.0, 1.0)
+	_trim_grip = move_toward(_trim_grip, want, delta * (TRIM_GRIP_OUT if want < _trim_grip else TRIM_GRIP_IN))
 
 ## What the cockpit adds to its drawn wheel (rad, + = right) so that it rests
 ## on STEER_CENTRE when no steer key is down: the crooked wheel of a bent arm.

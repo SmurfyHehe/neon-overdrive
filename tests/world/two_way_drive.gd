@@ -72,9 +72,13 @@ func _where(p: PlayerCar) -> Dictionary:
 ## Turns the car round where it stands, onto the other carriageway.
 func _turn(p: PlayerCar) -> void:
 	var before := _where(p)
+	var u := RoadFrame.unroll(p.global_position)
+	# The pool first catches up with where the car has driven to this tick
+	# (the game does that in _process, after this physics tick): a chunk the
+	# drive itself is owed is not one the turn rebuilt.
+	game.call("_update_chunk_pool", u.z)
 	var had := rebuilds
 	way = -way
-	var u := RoadFrame.unroll(p.global_position)
 	var t := RoadFrame.pose(TrafficManager.lane_centre(1, way > 0.0), u.y, u.z, PI if way > 0.0 else 0.0)
 	game.saver.restore_car(p, {"xform": SaveDirector.xform_to_array(t), "lin_vel": [0.0, 0.0, 0.0], "ang_vel": [0.0, 0.0, 0.0], "gear": 1})
 	game.call("_update_chunk_pool", u.z)

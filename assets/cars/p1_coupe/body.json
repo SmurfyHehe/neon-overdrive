@@ -190,6 +190,7 @@
    "pillar_a_r -> pillar_a_l",
    "pillar_b_r -> pillar_b_l",
    "popup_r -> popup_l",
+   "reverse_r -> reverse_l",
    "sail_r -> sail_l",
    "seal_door_r -> seal_door_l",
    "seal_quarter_r -> seal_quarter_l",
@@ -337,8 +338,10 @@
  "materials": {
   "chrome": "#C9CED6",
   "glass": "#151D2E",
+  "glow_brake": "#7A1418",
   "glow_head": "#FFE7BD",
   "glow_lens": "#8A7350",
+  "glow_reverse": "#3A3A38",
   "glow_tail": "#E5262B",
   "glow_turn": "#FFC066",
   "lens_red": "#A3161B",
@@ -355,8 +358,10 @@
   "under_paint": "#0B0D12"
  },
  "emissive": [
+  "glow_brake",
   "glow_head",
   "glow_lens",
+  "glow_reverse",
   "glow_tail",
   "glow_turn",
   "head",
@@ -417,7 +422,10 @@
   "glass_door_l": "hinge_door_l",
   "handle_l": "hinge_door_l",
   "mirror_l": "hinge_door_l",
-  "seal_door_l": "hinge_door_l"
+  "seal_door_l": "hinge_door_l",
+  "brake_c": null,
+  "reverse_r": null,
+  "reverse_l": null
  },
  "backend": "blender",
  "bevel": true,
@@ -533,7 +541,10 @@
   "cam_side",
   "cam_top",
   "cam_under",
-  "cam_wheel"
+  "cam_wheel",
+  "brake_c",
+  "reverse_r",
+  "reverse_l"
  ],
  "tris": {
   "hood": 476,
@@ -591,8 +602,12 @@
   "wheel_fr_mesh": 118,
   "wheel_fl_mesh": 118,
   "wheel_rr_mesh": 118,
-  "wheel_rl_mesh": 118
+  "wheel_rl_mesh": 118,
+  "brake_c": 8,
+  "reverse_r": 2,
+  "reverse_l": 2
  },
- "tris_total": 6540,
- "tris_body": 6068
+ "tris_total": 6552,
+ "tris_body": 6080,
+ "grafted": "brake_c, reverse_r, reverse_l from kit_p1_coupe.py (python backend, flat lenses, no bevel) added to the Blender build on 2026-10-11"
 }

@@ -25,7 +25,7 @@ const GEARS := {
 ## [0-100 km/h ceiling s, top speed floor km/h, top speed ceiling km/h].
 ## The hot hatch, tuner sedan and crossover were re-measured on 2026-10-11 after
 ## they lost their factory turbo (28a5e92, the 40-minute night): 185.8, 221.8
-## and 220.7 km/h. The wagon and pickup were measured the same day.
+## and 220.7 km/h. The wagon, pickup and drift coupe were measured the same day.
 const SPEED := {
 	"p0_beater": [13.5, 140.0, 168.0],
 	"p1_coupe": [6.4, 235.0, 250.0],

@@ -54,6 +54,10 @@ const STYLES := {
 	"p6_crossover": {"bezel": PLASTIC, "alt": Color(0, 0, 0, 0), "face": NAVY_DEEP, "face_glow": 0.40, "needle": AMBER, "marks": AMBER, "label": SILVER, "holder": PLASTIC, "label_size": 16},
 	# the drift coupe: black bezels, orange needles like its cluster, a dark-grey plastic holder on its own A-pillar
 	"p8_driftcoupe": {"bezel": PLASTIC, "alt": Color(0, 0, 0, 0), "face": Color("#1A1A18"), "face_glow": 0.45, "needle": SODIUM, "marks": AMBER, "label": AMBER, "holder": Color("#2E3136"), "label_size": 16},
+	# the shop wagon: a cream face in a beige plastic holder, like its dash
+	"p7_wagon":     {"bezel": PLASTIC, "alt": Color(0, 0, 0, 0), "face": Color("#2A261E"), "face_glow": 0.40, "needle": CREAM, "marks": AMBER, "label": CREAM, "holder": Color("#6A6152"), "label_size": 16},
+	# the work pickup: plain black, white needles, a rubbery black holder
+	"p17_work_pickup": {"bezel": PLASTIC, "alt": Color(0, 0, 0, 0), "face": BLACK_FACE, "face_glow": 0.35, "needle": Color("#E8E8E4"), "marks": SILVER, "label": SILVER, "holder": Color("#16171A"), "label_size": 16},
 }
 const DEFAULT_STYLE := "p1_coupe"
 

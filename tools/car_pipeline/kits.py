@@ -4,7 +4,8 @@
 fenders, bumpers, glass, seals, handles, plates, wipers). A KIT is the rest of
 one car: where its panels are cut, the lamps as separate parts, its brakes,
 its fuel flap, what is under its lids, and what on it is NOT a mirror image
-left to right. The coupe (the pilot) has no kit: it is the common recipe.
+left to right. The coupe (the pilot) is the common recipe plus its own lamps
+(kit_p1_coupe.py).
 
 A kit is a dict (all keys optional):
 
@@ -581,6 +582,7 @@ KITS = {
     'p2_hothatch': kit_p2_hothatch.KIT,
     'p4_kei': kit_p4_kei.KIT,
 }
+KITS['p1_coupe'] = __import__('kit_p1_coupe').KIT       # the coupe: only its brake and reverse lamps
 KITS['p5_muscle'] = __import__('kit_p5_muscle').KIT     # the muscle hardtop: its own file
 KITS['p8_driftcoupe'] = __import__('kit_p8_driftcoupe').KIT   # the drift coupe: its own file
 KITS['p10_truck'] = __import__('kit_p10_truck').KIT     # the street truck: its own file

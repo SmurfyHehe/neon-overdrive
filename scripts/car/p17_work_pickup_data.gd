@@ -14,6 +14,30 @@ const NAMES := ["bed", "chrome", "exh_hole", "glass", "grille", "head", "paint",
 const COLORS := {"bed": "#1E2129", "chrome": "#C9CED6", "exh_hole": "#050608", "glass": "#151D2E", "grille": "#0D1017", "head": "#FFE7BD", "paint": "#C4A264", "paint2": "#FF8A1F", "pillar": "#10141C", "rim": "#A9AEB6", "rim_dark": "#22252C", "rim_gap": "#0B0E14", "rim_gold": "#C8A04A", "roof": "#C4A264", "tail": "#E5262B", "tire": "#15171C", "tire_side": "#1C1F26", "trim": "#1A1D24", "under": "#0B0E14"}
 const EMISSIVE := ["head", "pol_b", "pol_r", "tail", "turn"]
 const GLASS := ["glass"]
+## The cabin, car space (the car at rest, lift included), measured from this
+## body by tools/fleet_design/cabin_measure.gd (2026-10-09) and hand-tuned
+## (2026-10-11: a work pickup has no parcel shelf; the bulkhead is the cab back).
+## CockpitFrame builds the interior from these; nothing in it is the coupe's.
+const CABIN := {
+	"seat_x": -0.360, "seat_h": 0.756, "seat_z": -0.080,
+	"eye": Vector3(-0.320, 1.376, -0.140),
+	"floor_y": 0.416, "belt_y": 1.196,
+	"cowl": Vector2(1.092, -1.080), "dash_face_z": -0.770,
+	"header": Vector2(1.800, -0.500), "roof_y": 1.810, "roof_z1": 0.700, "open_top": false,
+	"door_x": 0.781, "door_x_rear": 0.783, "door_x_front": 0.778, "glass_x": 0.764, "glass_top": 1.803,
+	"a_pillar": [Vector3(0.837, 1.092, -1.100), Vector3(0.626, 1.800, -0.500)],
+	"b_pillar_z": 0.020, "rear_z": 0.620,
+	"shelf": {},
+	"wheel": Vector3(-0.360, 1.046, -0.620), "wheel_tilt_deg": -25.0,
+	"cluster": Vector2(1.206, -0.789), "cluster_style": "quad", "speedo_max_kmh": 240.0,
+	"head_unit": Vector3(0.0, 1.108, -0.694),
+	"lever": Vector3(0.0, 0.891, -0.460), "handbrake": Vector3(0.0, 0.891, -0.000),
+	"pedals": Vector3(-0.260, 0.686, -0.940),
+	"crank": Vector3(-0.777, 0.926, -0.620), "switch": Vector3(-0.751, 1.063, -0.420),
+	"rear_mirror": Vector3(0.0, 1.670, -0.540),
+	"door_mirror": Vector3(0.961, 1.246, -1.060),
+	"console": "flat", "seats": "bench", "trim": "work",
+}
 ## Build name -> body_tris, tris_total, body_pos (chunks), body_mat, wheels
 ## (front and rear right-hand wheel, hub-relative), slots, tips. Car space.
 const BUILDS := {

@@ -48,6 +48,14 @@ func _run() -> void:
 		(c.root.get_node(^"Barrier") as MultiMeshInstance3D).visible = true
 	var p: PlayerCar = game.get("player")
 	Harness.move_player_to_lane(p, Harness.lane_x(3))
+	# Foot on the brake for the whole test. The camera below is fixed 3 m
+	# ahead of where the player stands, and since the automatic got its idle
+	# creep (63fadcc, 2026-10-10) a player left in D rolls off at 7 km/h:
+	# by the setting-1 frames its own roof sat between the camera and the
+	# cars at 90 and 200 m, and their lamps "vanished" behind it (#578).
+	p.driver = func(c: Vehicle) -> void:
+		c.throttle_input = 0.0
+		c.brake_input = 1.0
 	var cars: Array[TrafficCar] = []
 	for k in DISTS.size():
 		var d: float = DISTS[k]

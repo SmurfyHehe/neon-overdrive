@@ -131,10 +131,12 @@ P6['options'] = {
     'skirts': {'stock': {'label': 'Cladding', 'ops': []},
                'mudflaps': {'label': 'Mud flaps', 'ops': [{'op': 'add', 'part': {'type': 'mudflaps'}}]}},
     'spoiler': {'stock': {'label': 'Roof spoiler', 'ops': []},
-                'big': {'label': 'Big roof wing', 'ops': [
+                # a rally-style wing nearly the full width of the body (1.76 of 1.84 m; Roy 1475 "differ"):
+                # at 1.40 the rally build read as the hot hatch from high in front (issue #577)
+                'big': {'label': 'Big roof wing (full width)', 'ops': [
                     {'op': 'remove', 'tag': 'spoiler'},
                     {'op': 'add', 'part': {'type': 'roof_spoiler', 'tag': 'spoiler', 's0': 3.70, 's1': 4.16, 'y0': 1.54,
-                                           'y1': 1.52, 'span': 1.40, 'thick': 0.05}}]}},
+                                           'y1': 1.52, 'span': 1.76, 'thick': 0.05}}]}},
     'wheels': _wheel_set('5-spoke dark', ('rally', M.wheels('6spoke', 'Rally 6-spoke gold', 0.66, 'rim_gold')),
                          ('mesh', M.wheels('mesh', 'Mesh', 0.70))),
     'exhaust': {'stock': {'label': 'Dual (centre)', 'ops': []}, 'center': M.exhaust(P6, 'center', 0.05)},
@@ -215,7 +217,12 @@ C1['options'] = {
 }
 C2['options'] = {
     'kit': {'stock': {'label': 'Full light bar + push bar', 'ops': []},
-            'nobar': {'label': 'No push bar', 'ops': [{'op': 'remove', 'tag': 'pushbar'}]}},
+            # no push bar, a tow hitch instead (Roy 1475 "differ"): a drop receiver and ball under the
+            # tailgate, so from high behind it is no outline twin of the street truck (issue #577)
+            'nobar': {'label': 'No push bar, tow hitch', 'ops': [
+                {'op': 'remove', 'tag': 'pushbar'},
+                {'op': 'add', 'part': {'type': 'box', 'tag': 'hitch', 's': 5.12, 'xy': (0.0, 0.38), 'size': (0.10, 0.10, 0.16), 'mat': 'trim'}},
+                {'op': 'add', 'part': {'type': 'box', 'tag': 'hitch', 's': 5.205, 'xy': (0.0, 0.46), 'size': (0.07, 0.07, 0.07), 'mat': 'chrome'}}]}},
 }
 C3['options'] = {
     'kit': {'stock': {'label': 'Unmarked', 'ops': []},

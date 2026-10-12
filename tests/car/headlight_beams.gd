@@ -237,6 +237,10 @@ func _auto_dip(b: HeadlightBeams) -> void:
 	# No traffic for the shots after this: a car's own lamps would light the
 	# wall above the cut-off and the road at 60 m, and its lamps count towards
 	# the cap on lights per mesh.
+	# set_car_count(0) leaves a car a camera can see: the one left standing in
+	# the oncoming lane 60 m ahead is behind the player first, then removed.
+	onc.target_speed = 0.0
+	onc.place(Harness.lane_x(3), -1.0, pz + 300.0, onc.rest_y, 0.0)
 	traffic.set_car_count(0)
 	for i in 4:
 		await physics_frame

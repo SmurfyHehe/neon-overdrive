@@ -117,6 +117,10 @@ const LEVER_ALONE_SECS := 0.25
 ## (DriverModel.hand_boxes, 3.3 cm palm to fingertips) with a little air.
 const KNOB_R := 0.015
 const PEDAL_TRAVEL_DEG := 22.0
+## The pad's bottom edge over the toe board, at rest and pressed.
+const PEDAL_FLOOR_CLEAR := 0.02
+## The footwell's toe board: how far it rises from the floor to the firewall.
+const TOE_BOARD_RISE := 0.16
 
 ## The driver's side window (2026-10-09, Roy: "the Z to roll up and roll down
 ## needs an animation"). The glass is a pane in the door, its foot at the belt
@@ -569,7 +573,7 @@ func _build_static() -> void:
 	var floor_half := door_x + 0.02
 	var floor_len := rear_z - (cowl.y + 0.12)
 	k.box(Vector3(floor_half * 2.0, 0.04, floor_len), Vector3(0.0, floor_y, (cowl.y + 0.12 + rear_z) * 0.5), c_carpet)
-	k.wedge(Vector3((minf(door_x, door_x_f) - 0.12) * 2.0, 0.04, 0.30), Vector3(0.0, floor_y + 0.02, cowl.y + 0.09), c_carpet, 0.16, 0.0)   # footwell, between the arches
+	k.wedge(Vector3((minf(door_x, door_x_f) - 0.12) * 2.0, 0.04, 0.30), Vector3(0.0, floor_y + 0.02, cowl.y + 0.09), c_carpet, TOE_BOARD_RISE, 0.0)   # footwell, between the arches (toe_board_y)
 	k.box(Vector3(minf(dash_half, minf(door_x, door_x_f)) * 2.0, cowl.x - 0.10 - floor_y, 0.04), Vector3(0.0, (cowl.x - 0.10 + floor_y) * 0.5, cowl.y - 0.03), c_plastic)
 	var bulk_top := (belt + 0.26) if not open_top else belt - 0.02
 	if not (cab.shelf as Dictionary).is_empty():
@@ -1494,12 +1498,29 @@ func _build_pedals() -> void:
 		var pivot := Node3D.new()
 		pivot.name = String(p[0]).capitalize() + "Pedal"
 		pivot.position = at + Vector3(p[1], 0.0, 0.0)
+		# hung high enough that the pad's bottom edge clears the toe board by
+		# PEDAL_FLOOR_CLEAR at rest and pressed (it stood in it on 9 cars, #682)
+		var lift := 0.0
+		for deg in [0.0, PEDAL_TRAVEL_DEG]:
+			var r := Basis(Vector3.RIGHT, deg_to_rad(deg))
+			for corner in [Vector3(0.0, -0.17 - float(p[3]) * 0.5, -0.002), Vector3(0.0, -0.17 - float(p[3]) * 0.5, 0.010)]:
+				var c: Vector3 = pivot.position + r * corner
+				lift = maxf(lift, toe_board_y(c.z) + PEDAL_FLOOR_CLEAR - c.y)
+		pivot.position.y += lift
 		var k := CockpitKit.new()
 		k.box(Vector3(0.018, 0.17, 0.012), Vector3(0.0, -0.085, 0.0), TRIM)
 		k.box(Vector3(p[2], p[3], 0.012), Vector3(0.0, -0.17, 0.004), PLASTIC_LIGHT)
 		pivot.add_child(k.instance(CockpitKit.material(0.7, 0.3)))
 		add_child(pivot)
 		pedals[p[0]] = pivot
+
+## The top of the floor under the pedals at car z: the toe board rising to
+## the firewall (the footwell wedge in _build_static), else the floor.
+func toe_board_y(z: float) -> float:
+	var floor_y := float(cab.floor_y)
+	var cowl_z := (cab.cowl as Vector2).y
+	var t := clampf((z - (cowl_z + 0.09 - 0.15)) / 0.30, 0.0, 1.0)   # 0 at the board's front (top) edge
+	return maxf(floor_y + 0.04 + TOE_BOARD_RISE * (1.0 - t), floor_y + 0.02)
 
 ## Pedal travel 0..1 as it reads from the car.
 func pedal_inputs() -> Dictionary:

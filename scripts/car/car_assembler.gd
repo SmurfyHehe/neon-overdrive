@@ -119,6 +119,10 @@ void fragment() {
 """
 
 static var _cars := {}          # car id -> what the glb holds, in car space
+## Cars whose glb data stays cached: the one being driven plus one more (a
+## rival, the garage's last look). Every car used to stay until quit, ~2 MB
+## each (#609, measured 2026-10-13).
+const KEEP_CARS := 2
 static var _wheels := {}        # "car id|corner" -> ArrayMesh
 static var _meshes := {}        # cache key -> {"body": ArrayMesh, "panels": {hinge: ArrayMesh}}
 static var _paint_shaders := {} # base shader code -> Shader with the ao/shut hook
@@ -362,13 +366,29 @@ static func clear_cache() -> void:
 	_meshes.clear()
 	_wheels.clear()
 
+## Drops one car's decoded glb and its merged meshes from the caches. Nodes
+## still drawing them keep their own references; a later build re-reads it.
+static func _forget(car_id: String) -> void:
+	_cars.erase(car_id)
+	var prefix := car_id + "|"
+	for cache: Dictionary in [_meshes, _wheels]:
+		for key: String in cache.keys():
+			if key.begins_with(prefix):
+				cache.erase(key)
+
 # ---------- loading ----------
 
 ## What the glb holds, read once: every part's triangles per material in car
 ## space, the hinges and the named empties.
 static func _load(car_id: String) -> Dictionary:
 	if _cars.has(car_id):
-		return _cars[car_id]
+		# Most recently used last, so the oldest is the one dropped below.
+		var hit: Dictionary = _cars[car_id]
+		_cars.erase(car_id)
+		_cars[car_id] = hit
+		return hit
+	while _cars.size() >= KEEP_CARS:
+		_forget(_cars.keys()[0])
 	var car := {"parts": {}, "hinges": {}, "anchors": {}, "wheels": {}}
 	_cars[car_id] = car
 	if not has_car(car_id):

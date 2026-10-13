@@ -179,6 +179,8 @@ func _physics_process(delta: float) -> void:
 	_next_in = randf_range(MIN_GAP, MAX_GAP)
 	traffic_flicks += 1
 	flick_log.append(_clock)
+	if flick_log.size() > 256:
+		flick_log.pop_front()   # a test reads it; in play it only grew (#611)
 	var xf := car.global_transform
 	var local := WINDOW_LOCAL + Vector3(-float(car.get("half_w")), 0.0, 0.0)
 	var out := (xf.basis * Vector3.LEFT).normalized()

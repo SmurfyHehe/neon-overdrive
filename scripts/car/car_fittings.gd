@@ -112,7 +112,7 @@ static func parts_cfg(kind: String, tyre_mm := 0.0, discs_upgrade := false) -> D
 	if tyre_mm > 0.0:
 		cfg["tyre_w"] = tyre_mm / 1000.0
 	if NpcCarBuilder.is_npc(kind):
-		cfg["rim_color"] = Color(NpcCarBuilder.KINDS[kind].data.COLORS.get("rim", "#C9CED6"))
+		cfg["rim_color"] = Color(NpcCarBuilder.data_of(kind).COLORS.get("rim", "#C9CED6"))
 	return cfg
 
 static func none_reason(kind: String, slot: String) -> String:

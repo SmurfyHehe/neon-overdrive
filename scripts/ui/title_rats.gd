@@ -59,6 +59,11 @@ const EYE := Color(1.0, 0.78, 0.38)
 static var _mesh: ArrayMesh
 static var _mat: ShaderMaterial
 
+## Forgets the shared mesh and material; the next use builds them again.
+static func drop_cache() -> void:
+	_mesh = null
+	_mat = null
+
 # ---------- the run of one rat (mirrored in the shader) ----------
 
 static func hs(s: float, k: int) -> float:

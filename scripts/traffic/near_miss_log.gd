@@ -158,7 +158,21 @@ func step(delta: float) -> void:
 	if _t >= _next_summary:
 		_next_summary += SUMMARY_EVERY_S
 		_summary()
+		_prune()
 	cost_usec += Time.get_ticks_usec() - t0
+
+## Forgets cars not seen for WINDOW_S: the per-car tables are keyed by
+## instance id and used to keep every car the pool ever made (#611).
+func _prune() -> void:
+	var cutoff := _t - WINDOW_S
+	for id in _pt.keys():
+		if float(_pt[id]) < cutoff and not _pending.has(id):
+			_pt.erase(id)
+			_px.erase(id)
+	for table: Dictionary in [_loose_last, _last_emit]:
+		for id in table.keys():
+			if float(table[id]) < cutoff:
+				table.erase(id)
 
 func _check() -> void:
 	var m = tm
@@ -340,6 +354,8 @@ func _emit(rec: Dictionary) -> void:
 	if records.size() > KEEP_RECORDS:
 		records.pop_front()
 	_events.append([_t, cause])
+	while float(_events[0][0]) < _t - WINDOW_S:
+		_events.pop_front()   # only the last WINDOW_S is ever read (#611)
 	if tm != null:
 		tm.near_miss_count = count
 		tm.near_miss_by_cause = by_cause

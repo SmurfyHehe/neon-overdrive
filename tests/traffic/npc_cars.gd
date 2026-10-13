@@ -68,7 +68,7 @@ func _model_checks(kind: String, build: String, d: Dictionary) -> void:
 	var aabb := mesh.get_aabb()
 	for w in [false, true]:
 		var wm := NpcCarBuilder.wheel_mesh(kind, build, w)
-		var hub: Vector3 = NpcCarBuilder.KINDS[kind].data.BUILDS[build].wheels[1 if w else 0].hub
+		var hub: Vector3 = NpcCarBuilder.data_of(kind).BUILDS[build].wheels[1 if w else 0].hub
 		aabb = aabb.merge(AABB(wm.get_aabb().position + hub, wm.get_aabb().size))
 	# As the game drives it (TrafficCar): the AI build, ai = true.
 	var tris := NpcCarBuilder.triangle_count(kind, build, true)

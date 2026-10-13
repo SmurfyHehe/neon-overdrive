@@ -260,10 +260,30 @@ func _menu_player(path: String, fades := false) -> AudioStreamPlayer:
 	else:
 		p.bus = &"UI"
 		p.volume_db = MENU_WHISTLE_DB
+	p.set_meta("stream_path", path)
 	if ResourceLoader.exists(path):
 		p.stream = load(path)
 	add_child(p)
 	return p
+
+## Leaving the title lets go of its sounds (theme song, menu whistle set) and
+## the street's shared meshes; the title shows once per scene, so they only
+## held memory for the rest of the night (~5 MB, measured 2026-10-13,
+## notes/ram-usage-2026-10-13.md). _arrive puts them back.
+func _release_sounds() -> void:
+	for p: AudioStreamPlayer in [_menu_whistle, _menu_flutter, _menu_blowoff, _menu_grind]:
+		if p != null:
+			p.stop()
+			p.stream = null
+	if _whistle != null and not _whistle.playing:
+		_whistle.stream = null
+	if _theme != null and not _theme.playing:
+		_theme.stream = null
+
+func _restore_sounds() -> void:
+	for p: AudioStreamPlayer in [_menu_whistle, _menu_flutter, _menu_blowoff, _menu_grind]:
+		if p != null and p.stream == null and ResourceLoader.exists(String(p.get_meta("stream_path", ""))):
+			p.stream = load(String(p.get_meta("stream_path")))
 
 ## The hot ring is part of the mark's one body texture, so a tinted copy of just
 ## that ring is laid over it with an additive blend. Every target colour is at
@@ -1167,6 +1187,7 @@ func _on_state_changed(new_state: GameState.State, old_state: GameState.State) -
 
 ## The title has just come up: build the street, tune the radio, cap the frames.
 func _arrive() -> void:
+	_restore_sounds()
 	if kerbside == null:
 		kerbside = TitleKerbside.new(PlayerCar.chassis_kind())
 		get_parent().add_child(kerbside)
@@ -1201,8 +1222,10 @@ func _leave_title() -> void:
 	if splash_running():
 		_end_splash()
 	if kerbside != null:
+		kerbside.tree_exited.connect(TitleKerbside.drop_caches)   # once it can no longer rebuild them
 		kerbside.queue_free()
 		kerbside = null
+	_release_sounds()
 	var radio: Variant = get_parent().get("radio")
 	if radio != null:
 		radio.give_back()
@@ -1270,7 +1293,9 @@ func _end_theme() -> void:
 	_theme_tween.tween_property(PlayerGain.amp(_theme), "volume_db", THEME_DUCK_DB, THEME_DUCK_SECS)
 	_theme_tween.tween_callback(func() -> void:
 		_theme.stop()
-		_theme_tween = null)
+		_theme_tween = null
+		if not visible:
+			_theme.stream = null)   # _start_theme loads it again
 
 static func _synthwave_station() -> int:
 	for i in RadioStations.STATIONS.size():

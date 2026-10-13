@@ -678,8 +678,10 @@ CUT_PARTS = ('body', 'hood', 'door_l', 'door_r', 'trunk', 'fender_fl', 'fender_f
 
 def build_parts(D, tips_out=None):
     """-> (parts list, info dict). D is a resolved fleet definition."""
-    cab = D['cabin']
     kit = kit_of(D)
+    if kit.get('defn'):
+        D = dict(D, **kit['defn'])                # the kit's own changes to the loft (the tuner's deeper wheel wells)
+    cab = D['cabin']
     panel_mats = kit.get('panel_mats', {})
     z = lambda s: fcar._s2z(D, s)
     s_of = lambda p: p[2] + D['OHf'] + D['WB'] / 2.0
@@ -746,8 +748,7 @@ def build_parts(D, tips_out=None):
         """Which glTF node a body or door polygon ends up in."""
         lr = 'r' if cen[0] > 0 else 'l'
         if name.startswith('door_'):
-            # door_r -> glass_door_r; a kit's rear doors (door_rr) -> glass_door_rr
-            return ('glass_' + name) if mat == 'glass' else name
+            return ('glass_' + name) if mat == 'glass' else name   # door_l -> glass_door_l, a kit's door_rr -> glass_door_rr
         if name != 'body':
             return name
         if mat == 'glass':

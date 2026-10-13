@@ -273,28 +273,36 @@ front fender is written as it is too; the rear bumper's corners are scuffed
 fender's arch edge, which `parts.add_arch_lips` only does for `paint`.
 
 **P17, the Camel** (`p17_work_pickup`, kit in `kit_p17_work_pickup.py`):
-5,868 body triangles in 92 parts, 732 more in the wheels; 0.000 mm over 55
-mirrored parts and pairs. A four-door work pickup at the sheet's size (4.95 m;
-the shorter 4.8 m of decision 1219 is NOT applied, Build 4 set 4.95). The
-kit cuts the rear doors out of the cab side (`door_rr/rl`, their glass on
-their own hinges), the tailgate out of the tail face (bottom hinge, 90
-degrees) and the open bed as a bolted-on box (`bed`, liner as `plastic`);
-`parts.cut(edges=...)` gives the bed its shut band and floor where it meets
-the tailgate. Door hinges stand on the outer skin and the hood on a gooseneck
-so nothing swings through a fender (tests/car/part_fit.gd: 0 clashes). Nose:
-a chrome-framed three-bar grille, small square lamps with amber blocks
-outboard, a chrome blade bumper. Tail: stacked lamp columns (red tail over a
-brake core, clear middle with the reversing lamp inboard and the amber
-blinker outboard, red low lamp), a third brake lamp over the cab's sliding
-rear pane, a plate lamp, a chrome step bumper. The side stripe is
-`paint_primer` (sodium orange, `cars.py` P17 `primer`) over a dark pinline.
-300 mm front discs with the caliper on the upright, 260 mm rear drums,
-chrome dog-dish hubcaps. Underneath: a ladder frame, front arms, leaf springs
-and a live axle with its diff cover, the driveshaft, the tank on the left,
-the exhaust and muffler down the right, and a rocker lip a side under the
-cab floor (`rocker_l/r`; without it the cabin floor's edge is open from the
-side, tests/fleet/interior_fit.gd). Under the hood: a dark floor and the
-radiator, no engine yet.
+6,246 body triangles in 84 meshes, 732 more in the wheels; 0.000 mm over 49
+mirrored parts and pairs. A four-door work pickup, 4.80 m long (decision
+1219, visual only: `NpcCarBuilder.KINDS` keeps the 4.95 m collision box and
+axles, so it drives as before). Wide work-truck mirrors on long arms
+(`cars.py` P17 `long_arm`) keep its outline apart from the P10 truck's at
+4.8 m (tests/fleet/fleet_silhouette_sweep.gd). The kit cuts the rear doors
+out of the cab side (`door_rr/rl`, their glass on their own hinges; the
+B-pillar strip stays on the body, with a dark strip behind the rear door's
+front shut line so the gap there is not a slot into the cab), the tailgate
+out of the tail face (bottom hinge, 90 degrees) and the open bed as a
+bolted-on box (`bed`, liner as `plastic`); `parts.cut(edges=...)` gives the
+bed its shut band and floor where it meets the tailgate. Door hinges stand
+on the outer skin and the hood on a gooseneck so nothing swings through a
+fender (tests/car/part_fit.gd: 0 clashes). Lamps, plates, handles, steps,
+the step bumper, mirror feet, bed rails and hooks are laid on the built skin
+(`_on_skin`, `_skin_decal`, `_rim`, copied from the tuner kit) so nothing
+crosses a merged panel; the kit's `defn` sets `well_x` 0.44 so the front
+tyres clear the arch liner at full lock. Nose: a chrome-framed three-bar
+grille, square head lamps with amber blinkers outboard, a chrome blade
+bumper. Tail: one lamp column a side, brake lamp on top, clear reversing
+lamp and amber blinker in the middle, the running tail lamp low (the two
+red lamps 300 mm apart), a third brake lamp over the cab's sliding rear pane
+(its own `seal_slider`), a plate lamp, a chrome step bumper. The side stripe
+is `paint_primer` (sodium orange) over a dark pinline. 300 mm front discs,
+260 mm rear drums, chrome dog-dish hubcaps. Nothing under the belly (no
+frame, tank or exhaust: they crossed the floor). Under the hood: a dark
+floor and the radiator, no engine yet. The exterior fit test
+(tests/fleet/exterior_fit.gd, PR 724) finds 0 clashes; it still calls the
+four tyres "floating" because it assumes a 30 mm arch gap, and the Camel's
+sheet has 55 mm plus a 20 mm arch lift (steel wheels in big arches).
 
 A new car's kit goes in a file of its own (`kit_<id>.py`, a dict `KIT`) with
 one import line in `kits.py`.

@@ -217,19 +217,18 @@ const CARS := {
 	"p17_work_pickup": {
 		## the Camel: four doors (the rear pair cut by the kit, each on its own
 		## hinge), the bed a bolted-on box with the tailgate on its bottom hinge,
-		## no deck lid; stacked tail lamps (red, clear, red) at the bed corners
-		"without": ["trunk"],
+		## no deck lid; stacked tail lamps (red brake, clear, red running lamp) at the bed corners;
+		## nothing hangs under the belly (the game's Undercarriage draws it)
+		"without": ["trunk", "frame", "fuel_tank"],
 		"parts": ["door_rl", "door_rr", "glass_door_rl", "glass_door_rr", "seal_door_rl", "seal_door_rr",
 			"handle_rl", "handle_rr", "bed", "bed_rails", "bed_hooks", "tailgate", "handle_tailgate",
-			"grille", "bumper_blade_f", "step_bumper", "step", "lamp_block_l", "lamp_block_r", "tail_low_l", "tail_low_r",
-			"glass_slider", "plate_lamp", "mirror_l", "mirror_r", "antenna", "pillar_b_l", "pillar_b_r",
-			"caliper_fl", "caliper_fr", "bay_floor", "bay_radiator_core", "frame", "rocker_l", "rocker_r", "susp_fl", "susp_fr", "leaf_l", "leaf_r",
-			"axle_r", "diff_cover", "driveshaft", "fuel_tank", "exhaust_pipe", "muffler",
-			"trunk"],   # listed so that `without` is checked
+			"grille", "bumper_blade_f", "step_bumper", "step", "lamp_block_l", "lamp_block_r",
+			"glass_slider", "seal_slider", "plate_lamp", "mirror_l", "mirror_r", "antenna", "pillar_b_l", "pillar_b_r",
+			"caliper_fl", "caliper_fr", "bay_floor", "bay_radiator_core", "susp_fl", "susp_fr",
+			"trunk", "frame", "fuel_tank"],   # listed so that `without` is checked
 		## the clear middle of each lamp: reversing lamp inboard, the blinker's amber bulb outboard
 		"lamps": {"head_l": "glow_head", "head_r": "glow_head", "turn_fl": "glow_turn", "turn_fr": "glow_turn",
 			"turn_rl": "glow_turn", "turn_rr": "glow_turn", "tail_l": "glow_tail", "tail_r": "glow_tail",
-			"tail_low_l": "glow_tail", "tail_low_r": "glow_tail",
 			"brake_l": "glow_brake", "brake_r": "glow_brake", "brake_c": "glow_brake",
 			"reverse_l": "glow_reverse", "reverse_r": "glow_reverse", "plate_lamp": "glow_lens"},
 		"anchors": ["bay_engine", "bay_radiator", "tank", "fuel_filler", "diff"],

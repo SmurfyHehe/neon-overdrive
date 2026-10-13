@@ -192,6 +192,32 @@ const ORBIT_LIFT_UP_M := 2.5
 const ORBIT_LOW_ABOVE_ROAD_M := 0.6
 const ORBIT_AIM_LO_DEG := 20.0     # the aim slides from "down the road" to the car's centre
 const ORBIT_AIM_HI_DEG := 60.0     # between these two orbit angles
+## Wall check (camera proposal step 1, #634, #557): the chase rig never sits
+## inside the world. Each drawn frame one ray runs from WALL_ROOF_UP above the
+## car's roof to the chase point, on the world and wall layers only (road,
+## buildings, walls, barriers; never cars or knocked props). On a hit the
+## camera moves in along that line at once to WALL_GAP short of it, and eases
+## back out at WALL_OUT_RATE once it is clear, so a fence run does not pump it.
+## While the orbit swings it to a side, a second ray at WALL_LOW_H above the
+## road, from under the car to under the camera, finds a guardrail or a median
+## barrier the camera would be looking over (the rail across the wheels, #557).
+## Under a tunnel roof (which has no collider) the height is capped
+## WALL_GAP under TunnelKit.CLEAR_H, rising WALL_MOUTH_SLOPE m per metre
+## outside a mouth, so going in or out never jumps.
+const WALL_MASK := (1 << (CarSpec.WORLD_LAYER - 1)) | (1 << (CarSpec.WALL_LAYER - 1))
+const WALL_GAP := 0.3
+const WALL_ROOF_UP := 0.2
+const WALL_MIN_M := 1.0          # never closer than this to the roof point
+const WALL_OUT_RATE := 4.0       # 1/s
+const WALL_LOW_H := 0.5
+const WALL_LOW_ORBIT_DEG := 10.0 # the low ray only past this much orbit
+const WALL_MOUTH_SLOPE := 0.5
+const RoadMap := preload("res://scripts/world/road_map.gd")
+const TunnelKit := preload("res://scripts/world/tunnel_kit.gd")
+## Share of the roof-to-chase-point line the camera may use (1 = clear).
+var wall_f := 1.0
+## Whether the last frame's rays hit (tests read it).
+var wall_hit := false
 var orbit_yaw := 0.0               # degrees, + = toward the car's left flank
 var orbit_lift := 0.0              # -1 (low) .. +1 (high)
 var _orbit_dir := 0                # arrow held (-1 right, +1 left), 0 none
@@ -305,6 +331,11 @@ func set_view(v: View) -> void:
 	if not cockpit:
 		_set_look_focus(0)   # no door mirror is drawn in the chase or hood view
 	reset_orbit()   # F: both ways start from the straight chase view
+	# F is a cut (#635): the new view takes its own FOV and place on its first
+	# frame instead of easing over from the old one.
+	_started_fov = false
+	_started = false
+	wall_f = 1.0
 	if frame != null:
 		frame.set_cockpit(cockpit)
 	elif target.chassis_visual != null:
@@ -678,7 +709,12 @@ func _place(delta: float) -> void:
 	var h := height_now + ORBIT_LIFT_UP_M * orbit_lift
 	if orbit_lift < 0.0:
 		h = lerpf(height_now, ORBIT_LOW_ABOVE_ROAD_M - _follow.y, -orbit_lift)
-	anchor = RoadFrame.roll(Vector3(_follow.x + back.x, _follow.y + h, u.z + back.z))
+	var anchor_rs := Vector3(_follow.x + back.x, _follow.y + h, u.z + back.z)
+	if not RoadMap.tunnels().is_empty():
+		var depth := RoadMap.tunnel_depth(RoadFrame.s_at(anchor_rs.z))
+		anchor_rs.y = minf(anchor_rs.y, TunnelKit.CLEAR_H - WALL_GAP + maxf(0.0, -depth) * WALL_MOUTH_SLOPE)
+	anchor = RoadFrame.roll(anchor_rs)
+	_wall_check(delta, u, anchor_rs)
 	var aim_rs := Vector3(_follow.x + ahead.x, _follow.y + look_height, u.z + ahead.z)
 	var centre_t := smoothstep(ORBIT_AIM_LO_DEG, ORBIT_AIM_HI_DEG, absf(orbit_yaw))
 	if centre_t > 0.0:
@@ -691,16 +727,58 @@ func _place(delta: float) -> void:
 	global_position = anchor
 	look_at(aim, Vector3.UP)
 
+## Pulls `anchor` in toward the car's roof when the world is in the way (see
+## WALL_MASK). Two rays at most per drawn frame; with nothing hit and wall_f
+## back at 1 the anchor is exactly the rig's.
+func _wall_check(delta: float, u: Vector3, anchor_rs: Vector3) -> void:
+	var space := get_world_3d().direct_space_state if is_inside_tree() else null
+	if space == null:
+		return
+	var xf := target.get_global_transform_interpolated()
+	_body_centre()
+	var from := xf * Vector3(_centre_local.x, _roof_local + WALL_ROOF_UP, _centre_local.z)
+	var line := anchor - from
+	var full := line.length()
+	var want := 1.0
+	wall_hit = false
+	if full > WALL_MIN_M:
+		var q := PhysicsRayQueryParameters3D.create(from, anchor, WALL_MASK)
+		var hit := space.intersect_ray(q)
+		if not hit.is_empty():
+			want = ((hit.position as Vector3).distance_to(from) - WALL_GAP) / full
+			wall_hit = true
+		if absf(orbit_yaw) > WALL_LOW_ORBIT_DEG:
+			var lo_from := RoadFrame.roll(Vector3(u.x, WALL_LOW_H, u.z))
+			var lo_to := RoadFrame.roll(Vector3(anchor_rs.x, WALL_LOW_H, anchor_rs.z))
+			var lo_len := lo_from.distance_to(lo_to)
+			if lo_len > WALL_MIN_M:
+				q = PhysicsRayQueryParameters3D.create(lo_from, lo_to, WALL_MASK)
+				hit = space.intersect_ray(q)
+				if not hit.is_empty():
+					want = minf(want, ((hit.position as Vector3).distance_to(lo_from) - WALL_GAP) / lo_len)
+					wall_hit = true
+		want = clampf(want, WALL_MIN_M / full, 1.0)
+	if want < wall_f:
+		wall_f = want   # in at once: not one frame inside the wall
+	else:
+		wall_f = lerpf(wall_f, want, 1.0 - exp(-WALL_OUT_RATE * delta))
+		if wall_f > 0.999:   # 5 mm at the chase distance: the last bit snaps
+			wall_f = 1.0
+	if wall_f < 1.0:
+		anchor = from + line * wall_f
+
 ## The middle of the car's drawn body in the car's own frame (the box round
 ## every visible part of chassis_visual), for the orbit's aim. Worked out once
 ## per body; the origin with look_height when there is no body yet.
 var _centre_of: Node3D = null
 var _centre_local := Vector3.ZERO
+var _roof_local := 1.4   # top of that box (the wall check's ray starts above it)
 
 func _body_centre() -> Vector3:
 	var vis := target.chassis_visual
 	if vis == null or not is_instance_valid(vis):
-		return Vector3(0.0, look_height, 0.0)
+		_centre_local = Vector3(0.0, look_height, 0.0)
+		return _centre_local
 	if vis == _centre_of:
 		return _centre_local
 	var to_car := target.global_transform.affine_inverse()
@@ -714,9 +792,11 @@ func _body_centre() -> Vector3:
 		box = b if first else box.merge(b)
 		first = false
 	if first:
-		return Vector3(0.0, look_height, 0.0)
+		_centre_local = Vector3(0.0, look_height, 0.0)
+		return _centre_local
 	_centre_of = vis
 	_centre_local = box.get_center()
+	_roof_local = box.end.y
 	return _centre_local
 
 ## Smooth noise shake applied on top of the chase transform. Amplitude adds

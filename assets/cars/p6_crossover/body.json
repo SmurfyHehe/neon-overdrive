@@ -86,7 +86,7 @@
    "open_deg": 60,
    "panel": "door_l"
   },
-  "hinge_rdoor_r": {
+  "hinge_door_rr": {
    "pos": [
     0.885,
     0.7926,
@@ -99,9 +99,9 @@
    ],
    "open_sign": 1,
    "open_deg": 60,
-   "panel": "rdoor_r"
+   "panel": "door_rr"
   },
-  "hinge_rdoor_l": {
+  "hinge_door_rl": {
    "pos": [
     -0.885,
     0.7926,
@@ -114,7 +114,7 @@
    ],
    "open_sign": -1,
    "open_deg": 60,
-   "panel": "rdoor_l"
+   "panel": "door_rl"
   },
   "hinge_hatch": {
    "pos": [
@@ -207,23 +207,23 @@
    "clad_rr -> clad_rl",
    "clad_sill_r -> clad_sill_l",
    "door_r -> door_l",
+   "door_rr -> door_rl",
    "fender_fr -> fender_fl",
    "glass_door_r -> glass_door_l",
+   "glass_door_rr -> glass_door_rl",
    "glass_quarter_r -> glass_quarter_l",
-   "glass_rdoor_r -> glass_rdoor_l",
+   "handle_door_rr -> handle_door_rl",
    "handle_r -> handle_l",
-   "handle_rdoor_r -> handle_rdoor_l",
    "head_r -> head_l",
    "lamp_block_r -> lamp_block_l",
    "pillar_a_r -> pillar_a_l",
    "pillar_b_r -> pillar_b_l",
    "pillar_b_shut_r -> pillar_b_shut_l",
-   "rdoor_r -> rdoor_l",
    "reverse_r -> reverse_l",
    "sail_r -> sail_l",
    "seal_door_r -> seal_door_l",
+   "seal_door_rr -> seal_door_rl",
    "seal_quarter_r -> seal_quarter_l",
-   "seal_rdoor_r -> seal_rdoor_l",
    "susp_fr -> susp_fl",
    "susp_rr -> susp_rl",
    "tail_low_r -> tail_low_l",
@@ -387,6 +387,23 @@
   "doors": 4,
   "condition": 0.5
  },
+ "stance": {
+  "ride_height": 0.22,
+  "arch_gap": [
+   0.045,
+   0.045
+  ],
+  "rake_deg": 0.0,
+  "rear_camber_deg": 0.0,
+  "body_drop": 0.0,
+  "wheel_push_out": 0.0,
+  "flare_x": 0.92,
+  "tyre_outer_x": [
+   0.8975,
+   0.9125
+  ],
+  "note": "front 235 / rear 265 tyres on a 1.56 m track; not applied"
+ },
  "budget_target": [
   5000,
   6500
@@ -503,14 +520,14 @@
   "handle_l": "hinge_door_l",
   "mirror_l": "hinge_door_l",
   "seal_door_l": "hinge_door_l",
-  "glass_rdoor_r": "hinge_rdoor_r",
-  "handle_rdoor_r": "hinge_rdoor_r",
-  "rdoor_r": "hinge_rdoor_r",
-  "seal_rdoor_r": "hinge_rdoor_r",
-  "glass_rdoor_l": "hinge_rdoor_l",
-  "handle_rdoor_l": "hinge_rdoor_l",
-  "rdoor_l": "hinge_rdoor_l",
-  "seal_rdoor_l": "hinge_rdoor_l",
+  "door_rr": "hinge_door_rr",
+  "glass_door_rr": "hinge_door_rr",
+  "handle_door_rr": "hinge_door_rr",
+  "seal_door_rr": "hinge_door_rr",
+  "door_rl": "hinge_door_rl",
+  "glass_door_rl": "hinge_door_rl",
+  "handle_door_rl": "hinge_door_rl",
+  "seal_door_rl": "hinge_door_rl",
   "brake_c": "hinge_hatch",
   "glass_backlight": "hinge_hatch",
   "handle_hatch": "hinge_hatch",
@@ -529,7 +546,7 @@
   12.0
  ],
  "bevelled_edges": 222,
- "source_commit": "df50f69",
+ "source_commit": "b62fe22",
  "nodes": [
   "p6_crossover",
   "hinge_hood",
@@ -546,16 +563,16 @@
   "handle_l",
   "mirror_l",
   "seal_door_l",
-  "hinge_rdoor_r",
-  "glass_rdoor_r",
-  "handle_rdoor_r",
-  "rdoor_r",
-  "seal_rdoor_r",
-  "hinge_rdoor_l",
-  "glass_rdoor_l",
-  "handle_rdoor_l",
-  "rdoor_l",
-  "seal_rdoor_l",
+  "hinge_door_rr",
+  "door_rr",
+  "glass_door_rr",
+  "handle_door_rr",
+  "seal_door_rr",
+  "hinge_door_rl",
+  "door_rl",
+  "glass_door_rl",
+  "handle_door_rl",
+  "seal_door_rl",
   "hinge_hatch",
   "brake_c",
   "glass_backlight",
@@ -701,14 +718,14 @@
   "handle_l": 14,
   "mirror_l": 24,
   "seal_door_l": 24,
-  "glass_rdoor_r": 13,
-  "handle_rdoor_r": 14,
-  "rdoor_r": 76,
-  "seal_rdoor_r": 18,
-  "glass_rdoor_l": 13,
-  "handle_rdoor_l": 14,
-  "rdoor_l": 76,
-  "seal_rdoor_l": 18,
+  "door_rr": 76,
+  "glass_door_rr": 13,
+  "handle_door_rr": 14,
+  "seal_door_rr": 18,
+  "door_rl": 76,
+  "glass_door_rl": 13,
+  "handle_door_rl": 14,
+  "seal_door_rl": 18,
   "brake_c": 4,
   "glass_backlight": 72,
   "handle_hatch": 28,

@@ -7,7 +7,7 @@ same 4.35 x 1.84 x 1.61 the game collides with (the sheet's 4.30 is not
 applied: dimensions stay as CarSpec and NpcCarBuilder have them).
 
   doors      four: the front pair from the common recipe, the rear pair cut
-             here (`rdoor_*`, each with its own glass and seal), meeting the
+             here (`door_rr/rl`, each with its own glass and seal), meeting the
              front door on one shut line; every door hinges just outboard of
              its skin so its front edge swings clear of what is ahead of it
   tailgate   one hatch cut out of the deck and the tail face, hinged at the
@@ -80,10 +80,10 @@ def _cuts(D, R, z, cut):
     (the deck behind the glass and the tail face down to the bumper)."""
     for sx, nm in ((1, 'r'), (-1, 'l')):
         side = (lambda sx: lambda ps: (ps.col(1) == sx) & (ps.col(0) >= 3) & (ps.col(0) <= 7))(sx)
-        cut('rdoor_' + nm, [((0, 0, 1), z(RDOOR[0])), ((0, 0, -1), -z(RDOOR[1])), ((0, 1, 0), R['door_y0'])], side, True)
+        cut('door_r' + nm, [((0, 0, 1), z(RDOOR[0])), ((0, 0, -1), -z(RDOOR[1])), ((0, 1, 0), R['door_y0'])], side, True)
     rear = lambda ps: ((ps.col(0) >= 8) & ~ps.mat_is('glass')) | (ps.col(0) == -2)
     cut('hatch', [((0, 0, 1), z(D['cabin']['C'])), ((1, 0, 0), -HATCH_HW), ((-1, 0, 0), -HATCH_HW), ((0, 1, 0), HATCH_Y0)], rear, True)
-    return ['rdoor_r', 'rdoor_l', 'hatch']
+    return ['door_rr', 'door_rl', 'hatch']
 
 
 def _decal(ctx, d):
@@ -320,7 +320,7 @@ def _fittings(ctx):
     # ---- doors: the front pair's hinge moved just outboard of the skin, the rear pair's own
     for nm in ('r', 'l'):
         hinges['hinge_door_' + nm] = _door_hinge(D, R, R['door_s0'], nm, 'door_' + nm, R['door_s0'])
-        hinges['hinge_rdoor_' + nm] = _door_hinge(D, R, RDOOR[0], nm, 'rdoor_' + nm, RDOOR[0])
+        hinges['hinge_door_r' + nm] = _door_hinge(D, R, RDOOR[0], nm, 'door_r' + nm, RDOOR[0])
     # the hood: hinged just behind and above its rear edge, so the whole panel
     # lifts forward and up (a hinge ahead of the edge dips the rear corners into the fenders)
     cab_a = D['cabin']['A']
@@ -331,8 +331,8 @@ def _fittings(ctx):
     # the rear door's handle, at the front door's height
     hs = RDOOR[1] - 0.16
     hy = pl(D['belt'], R['door_s1'] - 0.16) - 0.075
-    part('handle_rdoor_l', parent='hinge_rdoor_l', bevel=0)     # named: the right one is written as a pair
-    hp = part('handle_rdoor_r', parent='hinge_rdoor_r', bevel=0)
+    part('handle_door_rl', parent='hinge_door_rl', bevel=0)     # named: the right one is written as a pair
+    hp = part('handle_door_rr', parent='hinge_door_rr', bevel=0)
     P.decal(hp, D, ctx.body_tris, {'view': 'right', 'rect': (hs - 0.065, hy - 0.022, hs + 0.065, hy + 0.022), 'cell': 0.2},
             'rubber', 0.002)
     c = P.laid_on(ctx.body_tris, 'right', [(z(hs), hy)], 0.009)
@@ -484,9 +484,8 @@ KIT = {
     'merge_flat': True,
     'no_trunk': True,                      # the tail is one tailgate
     'no_antenna': True,                    # the kit stands its own fin on the roof
-    'door_glass': ('rdoor_r', 'rdoor_l'),
-    'hinge_of': {'rdoor_r': 'hinge_rdoor_r', 'rdoor_l': 'hinge_rdoor_l',
-                 'glass_rdoor_r': 'hinge_rdoor_r', 'glass_rdoor_l': 'hinge_rdoor_l',
+    'hinge_of': {'door_rr': 'hinge_door_rr', 'door_rl': 'hinge_door_rl',
+                 'glass_door_rr': 'hinge_door_rr', 'glass_door_rl': 'hinge_door_rl',
                  'hatch': 'hinge_hatch', 'glass_backlight': 'hinge_hatch', 'plate_r': 'hinge_hatch'},
     'plates': PLATES,
     'asymmetric': {
@@ -500,6 +499,12 @@ KIT = {
               'brake_lamps': 2, 'third_brake': 1, 'reverse': 2, 'blinkers_front': 2, 'blinkers_rear': 2,
               'hazards': 'the four blinkers', 'plates': 2, 'plate_lamp': 1, 'wipers': 3, 'fuel_flap': 1, 'doors': 4,
               'condition': 0.5},
+    # stance data (car-and-parts audit J2, car-shape-and-stance S3/S4): numbers for the
+    # shared stance pass, NOT applied here or in the game; the model stands as the sheet.
+    # Rally-raised: no drop and no push-out (the shape note keeps its 22 cm clearance)
+    'stance': {'ride_height': 0.22, 'arch_gap': [0.045, 0.045], 'rake_deg': 0.0, 'rear_camber_deg': 0.0,
+               'body_drop': 0.0, 'wheel_push_out': 0.0, 'flare_x': CLAD_X,
+               'tyre_outer_x': [0.8975, 0.9125], 'note': 'front 235 / rear 265 tyres on a 1.56 m track; not applied'},
     'cuts': _cuts, 'decal': _decal, 'sheet_part': _sheet_part, 'fittings': _fittings,
     'wheel': _wheel, 'anchors': _anchors,
 }

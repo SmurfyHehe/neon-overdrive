@@ -65,12 +65,21 @@ const PLAN_DECEL := 2.0
 ## The give-way line: on the up-ramp, this far before the ramp's centre line
 ## touches the ring (just outside the ring's rim, RoadRamps.V_RING_IN).
 const GIVE_WAY_W := 22.0
-## A car on the ring this many seconds (or GIVE_WAY_M metres) from the point
-## where the ramp meets it keeps a car at the line waiting.
-const GIVE_WAY_T := 3.5
+## The ramp's top runs along the ring's lane (x = X_TOP) and meets it
+## tangentially, so they overlap over a stretch, not at a point: the ramp is
+## within a car's width (plus margin) of the ring's lane for |w| < ZONE_W.
+## A car at the line goes only when everything on the ring will reach that
+## stretch at least GIVE_WAY_T seconds after the car itself has got into it
+## (a gap acceptance, like any roundabout), and nothing is in the stretch or
+## within GIVE_WAY_M metres of it.
+const ZONE_W := 12.3
+const GIVE_WAY_T := 2.0
 const GIVE_WAY_M := 10.0
-## Further round than this it is not counted at all.
-const GIVE_WAY_LOOK := 70.0
+## Further round than this it is not counted at all (just over half the ring).
+const GIVE_WAY_LOOK := 105.0
+## The acceleration a car at the line is assumed to pull away with (follow_accel
+## gives about this from a standstill), m/s^2.
+const GIVE_WAY_A := 1.5
 ## Within this far across of a route point, something is on the route.
 const ON_ROUTE := 2.3
 ## Height difference above which two things are on different decks.
@@ -210,6 +219,7 @@ static func _build(kind: int) -> Dictionary:
 	# past the top: the ring's end, or for STRAIGHT the ramp's top
 	var mid := ring_d.y if kind != STRAIGHT else RoadRamps.V_GORE + 10.0
 	var gw := -1.0
+	var zone := -1.0
 	var merge := -1.0
 	var road_up := -1.0
 	var road_down := -1.0
@@ -218,6 +228,8 @@ static func _build(kind: int) -> Dictionary:
 		var di := float(i) * STEP
 		if gw < 0.0 and p.y >= -GIVE_WAY_W:
 			gw = di
+		if zone < 0.0 and p.y >= -ZONE_W:
+			zone = di
 		if road_up < 0.0 and p.z > 0.05:
 			road_up = di
 		if di > mid and p.z <= 0.05:
@@ -227,9 +239,9 @@ static func _build(kind: int) -> Dictionary:
 			if merge < 0.0 and wo >= LEAD_OUT.x:
 				merge = di
 	return {"kind": kind, "side": 1, "pts": pts, "yaw": yaw, "pitch": pitch, "cap": cap,
-		"end": float(n - 1) * STEP, "gw": gw, "merge": merge, "ring": ring_d,
+		"end": float(n - 1) * STEP, "gw": gw, "zone": zone, "merge": merge, "ring": ring_d,
 		"road_up": road_up, "road_down": road_down,
-		"p": Vector2(R, 0.0), "p_angle": 0.0,
+		"p": Vector2(R, 0.0), "p_angle": 0.0, "zone_angle": -asin(ZONE_W / R),
 		"end_dir": 1.0 if far else -1.0, "end_x": -LANE3 if far else LANE3}
 
 ## The same route from the -1 carriageway: turned half a circle about the
@@ -247,6 +259,7 @@ static func _turned(r: Dictionary) -> Dictionary:
 	out["side"] = -1
 	out["p"] = -(r.p as Vector2)
 	out["p_angle"] = PI
+	out["zone_angle"] = float(r.zone_angle) + PI
 	out["end_dir"] = -float(r.end_dir)
 	out["end_x"] = -float(r.end_x)
 	return out
@@ -325,6 +338,23 @@ static func road_level(r: Dictionary, d: float) -> bool:
 static func on_ring(r: Dictionary, d: float) -> bool:
 	var rd: Vector2 = r.ring
 	return rd.x >= 0.0 and d >= rd.x and d < rd.y
+
+## The ring's length round the stretch where a ramp overlaps it (both sides
+## of where they meet), metres.
+static func zone_arc() -> float:
+	return 2.0 * asin(ZONE_W / R) * R
+
+## Seconds to cover `dist` metres from speed v, pulling away at GIVE_WAY_A up
+## to RING_V.
+static func time_to(dist: float, v: float) -> float:
+	v = clampf(v, 0.0, RING_V)
+	if dist <= 0.0:
+		return 0.0
+	var t_up := (RING_V - v) / GIVE_WAY_A
+	var d_up := (v + RING_V) * 0.5 * t_up
+	if dist <= d_up:
+		return (sqrt(v * v + 2.0 * GIVE_WAY_A * dist) - v) / GIVE_WAY_A
+	return t_up + (dist - d_up) / RING_V
 
 ## Metres round the ring (anticlockwise) from (x, w) to the conflict point at
 ## angle `p_angle`, for something on the ring's lane; INF when (x, w, y) is

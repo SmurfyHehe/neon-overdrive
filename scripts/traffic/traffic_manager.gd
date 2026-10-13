@@ -1679,26 +1679,34 @@ func visit_lead(car: TrafficCar, reach: float) -> void:
 					q_speed = -sin(yaw) * p_road_v.x - cos(yaw) * p_road_v.z
 					q_player = true
 
-## Whether anything on the ring (a visitor, the player) would reach the point
-## `p` (angle p_angle round the ring) where `car`'s ramp meets it inside
-## RingVisitors.GIVE_WAY_T seconds or GIVE_WAY_M metres: `car` waits at the
-## give-way line until it would not.
-func ring_busy(car: TrafficCar, _p: Vector2, p_angle: float) -> bool:
+## Whether anything on the ring (a visitor, the player) is in, or would reach,
+## the stretch where `car`'s ramp overlaps the ring (it starts at angle
+## `zone_angle`) sooner than RingVisitors.GIVE_WAY_T seconds after `car`, which
+## needs `t_me` seconds to get into it: `car` waits at the give-way line until
+## nothing would.
+func ring_busy(car: TrafficCar, zone_angle: float, t_me: float) -> bool:
 	for o in visitors:
 		if o == car or o.visit_s != car.visit_s:
 			continue
 		var p := o.visit_xwy
-		var arc := RingVisitors.ring_arc_to(p.x, p.y, p.z, p_angle)
-		if arc < RingVisitors.GIVE_WAY_LOOK and (arc < RingVisitors.GIVE_WAY_M or arc / maxf(o.visit_v, 2.0) < RingVisitors.GIVE_WAY_T):
+		if _ring_conflict(RingVisitors.ring_arc_to(p.x, p.y, p.z, zone_angle), o.visit_v, t_me):
 			return true
 	if player != null:
 		var pw := RoadFrame.s_at(p_road.z) - car.visit_s
-		var arc := RingVisitors.ring_arc_to(p_road.x, pw, p_road.y, p_angle)
-		if arc < RingVisitors.GIVE_WAY_LOOK:
-			var pv := Vector2(p_road_v.x, -p_road_v.z).length()
-			if arc < RingVisitors.GIVE_WAY_M or arc / maxf(pv, 2.0) < RingVisitors.GIVE_WAY_T:
-				return true
+		var pv := Vector2(p_road_v.x, -p_road_v.z).length()
+		if _ring_conflict(RingVisitors.ring_arc_to(p_road.x, pw, p_road.y, zone_angle), pv, t_me):
+			return true
 	return false
+
+func _ring_conflict(arc: float, v: float, t_me: float) -> bool:
+	if arc == INF:
+		return false
+	# already in the stretch (or just past it, a car's length)
+	if arc > TAU * RingVisitors.R - RingVisitors.zone_arc() - 6.0:
+		return true
+	if arc > RingVisitors.GIVE_WAY_LOOK:
+		return false
+	return arc < RingVisitors.GIVE_WAY_M or arc / maxf(v, 1.0) < t_me + RingVisitors.GIVE_WAY_T
 
 ## Some respawns go to the ring site ahead of the player, while it is out past
 ## the draw distance and has under SEED_CAP visitors: on its ring or a ramp

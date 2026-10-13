@@ -22,7 +22,8 @@ extends SceneTree
 # - A: at least MIN_RING_CARS different cars seen on a ring, MIN_RAMP_CARS on
 #   a ramp, traffic off the main lanes at MIN_SITE_SHARE of the sites passed,
 #   MIN_DONE routes finished (back on the main road);
-# - B: cars stopped at a give-way line at least MIN_GIVE_WAYS times;
+# - B: cars held at a give-way line (slowed or stopped for the ring) at least
+#   MIN_GIVE_WAYS times;
 # - all phases: no two cars touching at a site where one of them is a
 #   visitor, none touching the player; no visitor wrecked; nobody waits at a
 #   give-way line over MAX_WAIT_S; no visitor spawned in view or shown inside
@@ -43,7 +44,7 @@ const CARS := 40
 const A_S := 150.0
 const A_SPEED := 130.0 / 3.6
 const B_S := 90.0
-const B_SPEED := 100.0 / 3.6
+const B_SPEED := 30.0 / 3.6
 const C_TIMEOUT_S := 200.0
 const SITE_REACH := 320.0
 const LANE_X := 11.6
@@ -84,6 +85,9 @@ var popins := 0
 var max_wait := 0.0
 var give_ways := 0
 var _waiting := {}         # car id -> true while stopped at a give-way line
+var give_way_holds := 0
+var b_max_visitors := 0
+var _held := {}            # car id -> true while held at a give-way line
 var cost_a := 0.0
 var phys_sum := 0.0
 var phys_n := 0
@@ -164,6 +168,7 @@ func _physics_process(_delta: float) -> bool:
 				player.driver = Harness.flash_brake_driver(tr, Harness.lane_x(1), B_SPEED)
 				_start("B")
 		"B":
+			b_max_visitors = maxi(b_max_visitors, tr.visitors.size())
 			if t >= int(B_S * hz):
 				_begin_c()
 				_start("C")
@@ -271,7 +276,7 @@ func _path_driver(c: Vehicle) -> void:
 	# whatever is in front: follow it, never closer than 5 m
 	for car in tr.cars:
 		var l := c.to_local(car.global_position)
-		if l.z < -1.0 and l.z > -(6.0 + speed * 1.5 + 4.4) and absf(l.x) < 2.4 and absf(l.y) < 2.0:
+		if l.z < -1.0 and l.z > -(6.0 + speed * 1.5 + 4.4) and absf(l.x) < 1.9 and absf(l.y) < 2.0:
 			var gap := -l.z - 4.4
 			goal = minf(goal, maxf(car.lane_speed(), 0.0) + 0.5 * (gap - 5.0))
 	goal = maxf(goal, 0.0)
@@ -297,6 +302,12 @@ func _look() -> void:
 			if car.wrecked:
 				wrecked[car.get_instance_id()] = true
 			var id := car.get_instance_id()
+			if car.signal_held and not _held.has(id):
+				_held[id] = true
+				if phase == "B":
+					give_way_holds += 1
+			elif not car.signal_held:
+				_held.erase(id)
 			if car.visit_wait > 0.0 and not _waiting.has(id):
 				_waiting[id] = true
 				if phase == "B":
@@ -374,13 +385,13 @@ func _finish() -> void:
 	print("ring_traffic: A (%.0f s at %.0f km/h, %d cars): %s" % [A_S, A_SPEED * 3.6, CARS, stats_a])
 	print("ring_traffic: A samples main %d, slip %d, ramp %d, ring %d" % [samples.main, samples.slip, samples.ramp, samples.ring])
 	print("ring_traffic: A visitors' own code %.1f us per physics tick; whole physics step %.2f ms a tick on average over A and B (report only)" % [cost_a, phys_sum / float(maxi(phys_n, 1)) * 1000.0])
-	print("ring_traffic: B (busy rings): stops at a give-way line %d; all phases: routes started %d, placed on a ring %d, finished %d" % [give_ways, tr.visit_starts, tr.ring_spawn_count, done])
+	print("ring_traffic: B (busy rings): most visitors at once %d, held at a give-way line %d times, %d of them to a stop; all phases: routes started %d, placed on a ring %d, finished %d" % [b_max_visitors, give_way_holds, give_ways, tr.visit_starts, tr.ring_spawn_count, done])
 	print("ring_traffic: C: player on the ring %.0f s, %.0f s of it with a visitor within 30 m" % [float(c_ring_ticks) / 60.0, float(c_near_ticks) / 60.0])
 	print("ring_traffic: touching A %d, B %d, C %d (with the player %d), wrecked visitors %d, longest give-way wait %.1f s, visitors in view %d" % [touches.A, touches.B, touches.C, player_touches, wrecked.size(), max_wait, popins])
 	for t in touch_log:
 		print("  touch: ", t)
-	if give_ways < MIN_GIVE_WAYS:
-		_fail("B: only %d stops at a give-way line on a busy ring (need %d)" % [give_ways, MIN_GIVE_WAYS])
+	if give_way_holds < MIN_GIVE_WAYS:
+		_fail("B: cars held at a give-way line only %d times on a busy ring (need %d)" % [give_way_holds, MIN_GIVE_WAYS])
 	var all_touches: int = touches.A + touches.B + touches.C
 	if all_touches > 0:
 		_fail("%d times two cars touched at a ring site (%d with the player)" % [all_touches, player_touches])

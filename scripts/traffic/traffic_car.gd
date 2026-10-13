@@ -2219,7 +2219,9 @@ func _visit_accel(v: float, dt: float) -> float:
 		if to_line < 0.5:
 			visit_go = true
 		elif to_line < 40.0:
-			var busy := traffic.ring_busy(self, r.p as Vector2, float(r.p_angle))
+			# time to get the whole car into the stretch where the ramp overlaps the ring
+			var t_me := RingVisitors.time_to(float(r.zone) - d + 2.0 * half_l, v)
+			var busy := traffic.ring_busy(self, float(r.zone_angle), t_me)
 			# too close to stop without a hard stamp: go (ring cars follow it)
 			if busy and v * v / (2.0 * B_SAFE) > to_line + 1.0:
 				busy = false

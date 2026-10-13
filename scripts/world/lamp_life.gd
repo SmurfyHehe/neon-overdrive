@@ -75,6 +75,23 @@ const BANNER_TOP := 5.9
 const BANNER_COLS := 3
 const BANNER_ROWS := 8
 
+## Where the moths and the banner go on each lamp shape
+## (RoadChunkBuilder.LAMP_KINDS; #654). The meshes are built for the cobra
+## lamp (HEAD, BANNER_TOP); a chunk with another shape moves its instances:
+##   head    the lamp head the moths circle, lamp-local (the head box's
+##           centre; the swarm hangs a little below it)
+##   top     the banner bracket's height, m: under the arm or the lantern
+##   scale   the banner cloth's size against the cobra's (x across, y down,
+##           z along the road): shorter on a 4.2 m post, bigger on a mast
+##   bat     whether a bat can cross the pool: not under a post's lantern,
+##           where it would fly at knee height
+const FIT := {
+	"cobra": {"head": HEAD, "top": BANNER_TOP, "scale": Vector3.ONE, "bat": true},
+	"post": {"head": Vector3(0.0, 4.5, 0.0), "top": 3.75, "scale": Vector3(1.0, 0.62, 0.8), "bat": false},
+	"mast": {"head": Vector3(-2.6, 11.8, 0.0), "top": 9.0, "scale": Vector3(1.25, 1.25, 1.25), "bat": true},
+	"flood": {"head": Vector3(-0.9, 14.3, 0.0), "top": 10.0, "scale": Vector3(1.3, 1.3, 1.3), "bat": true},
+}
+
 static var enabled := OS.get_environment("NEON_LAMP_LIFE") != "0"
 
 static var _wind := DEFAULT_WIND
@@ -118,16 +135,25 @@ static func roll(chunk_index: int, tag: int, k: int) -> float:
 	h = h ^ (h >> 16)
 	return float(h & 0xFFFF) / 65536.0
 
-## District colour/emblem slot (see the banner shader) of a district name.
+## District colour/emblem slot (see the banner shader), one per kind in
+## districts.gd (#653: the seven newer kinds had industrial's).
+const SLOTS := {
+	"downtown": 0, "residential": 1, "strip": 2, "industrial": 3,
+	"old_town": 4, "lofts": 5, "hillside": 6, "airport": 7,
+	"docks": 8, "freeway": 9, "canyon": 10,
+}
+
 static func district_slot(district: String) -> int:
-	match district:
-		"downtown":
-			return 0
-		"residential":
-			return 1
-		"strip":
-			return 2
-	return 3  # industrial, and anything added later
+	return int(SLOTS.get(district, 3))
+
+## The instance offsets that move the cobra-sized moths and banner onto a
+## lamp of shape `lamp` (FIT): [moth offset, banner offset], lamp-local.
+static func fit_offsets(lamp: String) -> Array:
+	var f: Dictionary = FIT.get(lamp, FIT["cobra"])
+	var sc: Vector3 = f.scale
+	var moth := Transform3D(Basis(), (f.head as Vector3) - HEAD)
+	var banner := Transform3D(Basis.from_scale(sc), Vector3(0.0, float(f.top) - BANNER_TOP * sc.y, 0.0))
+	return [moth, banner]
 
 ## What one chunk gets, given where its lamps stand. lamp_xfs are the lamp
 ## pole transforms in chunk space (upright, local -X over the road, as the
@@ -135,21 +161,23 @@ static func district_slot(district: String) -> int:
 ##   moths   [{xf, custom}]   one swarm per entry, at the pole
 ##   banners [{xf, custom}]   one banner per entry, at the pole
 ##   vents   [{cover_xf, steam_xf, custom, drain}]  at most one
-static func plan(chunk_index: int, district: String, lamp_xfs: Array) -> Dictionary:
+static func plan(chunk_index: int, district: String, lamp_xfs: Array, lamp: String = "cobra") -> Dictionary:
 	var moths := []
 	var banners := []
 	var vents := []
 	var slot := district_slot(district)
+	var fit := fit_offsets(lamp)
+	var bats: bool = FIT.get(lamp, FIT["cobra"]).bat
 	for k in range(lamp_xfs.size()):
 		var xf: Transform3D = lamp_xfs[k]
 		if roll(chunk_index, 1, k) < SWARM_SHARE:
 			# x: seed, y: bat period seed, z: bat phase seed, w: bat on/off
-			moths.append({"xf": xf, "custom": Color(
+			moths.append({"xf": xf * (fit[0] as Transform3D), "custom": Color(
 				roll(chunk_index, 2, k), roll(chunk_index, 3, k), roll(chunk_index, 4, k),
-				1.0 if roll(chunk_index, 5, k) < BAT_SHARE else 0.0)})
+				1.0 if bats and roll(chunk_index, 5, k) < BAT_SHARE else 0.0)})
 		if posmod(chunk_index + k, BANNER_EVERY) == 0:
 			# x: district slot, y: phase seed
-			banners.append({"xf": xf, "custom": Color(float(slot), roll(chunk_index, 6, k), 0.0, 0.0)})
+			banners.append({"xf": xf * (fit[1] as Transform3D), "custom": Color(float(slot), roll(chunk_index, 6, k), 0.0, 0.0)})
 	if not lamp_xfs.is_empty() and roll(chunk_index, 7, 0) < VENT_SHARE:
 		var k := int(roll(chunk_index, 8, 0) * float(lamp_xfs.size())) % lamp_xfs.size()
 		var lx: Transform3D = lamp_xfs[k]
@@ -186,7 +214,7 @@ static func create_nodes(root: Node3D, lamp_capacity: int) -> void:
 ## Writes one chunk's share. litter_xf: the chunk-space frame at mid-chunk
 ## (the litter's motion is local to it); road_x0 / road_x1: the road's left
 ## and right edge in that frame.
-static func apply(root: Node3D, chunk_index: int, district: String, lamp_xfs: Array, litter_xf: Transform3D, road_x0: float, road_x1: float) -> void:
+static func apply(root: Node3D, chunk_index: int, district: String, lamp_xfs: Array, litter_xf: Transform3D, road_x0: float, road_x1: float, lamp: String = "cobra") -> void:
 	var moth_mm := _mm(root, "LampMoths")
 	var banner_mm := _mm(root, "LampBanners")
 	var steam_mm := _mm(root, "SteamVents")
@@ -196,7 +224,7 @@ static func apply(root: Node3D, chunk_index: int, district: String, lamp_xfs: Ar
 		for mm in [moth_mm, banner_mm, steam_mm, cover_mm, litter_mm]:
 			(mm as MultiMesh).visible_instance_count = 0
 		return
-	var p := plan(chunk_index, district, lamp_xfs)
+	var p := plan(chunk_index, district, lamp_xfs, lamp)
 	_fill(moth_mm, p.moths)
 	_fill(banner_mm, p.banners)
 	var vents: Array = p.vents
@@ -399,6 +427,13 @@ static func _get_banner_mesh() -> ArrayMesh:
 #   1 residential  amber field, navy ring
 #   2 strip        sodium orange field, dark chevron
 #   3 industrial   silver field, navy bars
+#   4 old town     brick-brown field, amber ring
+#   5 lofts        dark field, two silver uprights
+#   6 hillside     navy field, an amber disc (a porch light)
+#   7 airport      silver field, an orange chevron
+#   8 docks        navy field, silver waves
+#   9 freeway      sodium orange field, a dark diamond
+#  10 canyon       amber field, dark bars (a dark road: rarely seen)
 const BANNER_SHADER := """
 shader_type spatial;
 render_mode cull_disabled, specular_disabled;
@@ -450,9 +485,32 @@ void fragment() {
 		field = vec3(0.13, 0.12, 0.13); mark = orange * 1.15;
 		float chev = abs(p.x) * 1.1 - p.y;  // two stacked chevrons
 		m = step(abs(mod(chev + 0.4, 0.34) - 0.17), 0.065) * step(abs(p.x), 0.3) * step(abs(p.y), 0.42);
-	} else {
+	} else if (s == 3) {
 		field = silver; mark = navy;
 		m = step(abs(p.x), 0.27) * step(0.5, fract(p.y * 5.0 + 0.25)) * step(abs(p.y), 0.34);
+	} else if (s == 4) {
+		field = vec3(0.30, 0.14, 0.09); mark = amber;
+		float d = length(p);
+		m = step(0.17, d) * step(d, 0.25);
+	} else if (s == 5) {
+		field = dark * 1.3; mark = silver * 1.2;
+		m = step(abs(abs(p.x) - 0.12), 0.045) * step(abs(p.y), 0.4);
+	} else if (s == 6) {
+		field = navy; mark = amber;
+		m = step(length(p), 0.14);
+	} else if (s == 7) {
+		field = silver; mark = orange;
+		m = step(abs(abs(p.x) * 0.9 - p.y + 0.05), 0.07) * step(abs(p.x), 0.3);
+	} else if (s == 8) {
+		field = navy; mark = silver;
+		float w = p.y + 0.05 * sin(p.x * 18.0);
+		m = step(abs(mod(w + 0.4, 0.2) - 0.1), 0.035) * step(abs(p.x), 0.3) * step(abs(p.y), 0.36);
+	} else if (s == 9) {
+		field = orange; mark = dark;
+		m = diamond(p, 0.24);
+	} else {
+		field = amber * 0.8; mark = dark;
+		m = step(abs(p.y), 0.3) * step(0.5, fract(p.x * 6.0 + 0.25)) * step(abs(p.x), 0.3);
 	}
 	vec3 c = mix(field, mark, m);
 	// hem: a dark band at the bottom edge, a thin one at the top

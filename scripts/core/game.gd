@@ -382,8 +382,8 @@ func _setup_world() -> void:
 	env.sky = NightSky.build(night_clock.night)
 	sky = env.sky
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.1, 0.066, 0.042)
-	env.fog_density = 0.009
+	env.fog_light_color = NightSky.FOG_COLOR
+	env.fog_density = NightSky.FOG_DENSITY  # SkyDirector varies it by district and hour
 	env.fog_sky_affect = 0.0
 	# NIGHT LIGHTING PASS (2026-09-29, docs/research/RESEARCH-cheap-pretty.md item 1): the
 	# gradient sky is also the ambient source (Godot's default under BG_SKY),
@@ -418,6 +418,7 @@ func _setup_world() -> void:
 	# Amber vs. Dusk. All in the post pass glow already runs (color_grade.gd).
 	ColorGrade.apply(env)
 	var world_env := WorldEnvironment.new()
+	world_env.name = "WorldEnvironment"  # SkyDirector finds it by name
 	world_env.environment = env
 	add_child(world_env)
 	# Look B's "grainy filter" (stage A): a light, darken-only animated grain
@@ -1045,6 +1046,7 @@ func _setup_hud() -> void:
 	hud.night_clock = night_clock
 	var sky_director := SkyDirector.new()
 	sky_director.sky = sky
+	sky_director.env = (get_node(^"WorldEnvironment") as WorldEnvironment).environment if has_node(^"WorldEnvironment") else null
 	sky_director.night_clock = night_clock
 	sky_director.game = self
 	add_child(sky_director)

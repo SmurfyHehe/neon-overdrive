@@ -100,7 +100,7 @@ static func look_of(ring: int) -> Dictionary:
 	var style := "concrete"
 	if String(info.kind) == "industrial":
 		style = "rust"
-	elif String(info.zone) == "The Docks":
+	elif String(info.kind) == "docks" or String(info.zone) == "The Docks":
 		style = "steel"
 	return {"style": style, "spur": RoadMap.ring_spur_side(ring), "landmark": String(r.kind) == "landmark"}
 

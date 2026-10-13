@@ -64,6 +64,16 @@ const BY_DISTRICT := {
 	"residential": {"hydrant": 0.8, "bin": 0.7, "dumpster": 0.0, "workzone": 0.04, "rail": 0.0},
 	"strip":       {"hydrant": 0.4, "bin": 0.6, "dumpster": 0.7, "workzone": 0.06, "rail": 0.0},
 	"industrial":  {"hydrant": 0.2, "bin": 0.1, "dumpster": 0.8, "workzone": 0.10, "rail": 0.55},
+	# The newer kinds (#653; they took downtown's row). Dumpsters only where
+	# there are lots behind the pavement; guardrail where the road runs past
+	# open ground (the hills, the airport fence, the quays).
+	"old_town":    {"hydrant": 0.9, "bin": 1.2, "dumpster": 0.0, "workzone": 0.05, "rail": 0.0},
+	"lofts":       {"hydrant": 0.8, "bin": 1.3, "dumpster": 0.0, "workzone": 0.08, "rail": 0.0},
+	"hillside":    {"hydrant": 0.5, "bin": 0.4, "dumpster": 0.0, "workzone": 0.02, "rail": 0.3},
+	"airport":     {"hydrant": 0.3, "bin": 0.2, "dumpster": 0.3, "workzone": 0.06, "rail": 0.4},
+	"docks":       {"hydrant": 0.2, "bin": 0.1, "dumpster": 0.9, "workzone": 0.08, "rail": 0.5},
+	"freeway":     {"hydrant": 0.0, "bin": 0.05, "dumpster": 0.3, "workzone": 0.10, "rail": 0.8},
+	"canyon":      {"hydrant": 0.0, "bin": 0.0, "dumpster": 0.0, "workzone": 0.03, "rail": 0.9},
 }
 
 ## Overall density, 0 (off) to about 2. NEON_KIT in the environment sets it
@@ -494,10 +504,15 @@ static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: fl
 				col.transform = RoadChunkBuilder._xf_up(float(r.x) * side, (COL_JERSEY.y - f) / 2.0, float(r.z))
 				col.disabled = false
 				n_concrete += 1
-	for i in range(n_metal, metal.get_child_count()):
-		(metal.get_child(i) as CollisionShape3D).disabled = true
-	for i in range(n_concrete, concrete.get_child_count()):
-		(concrete.get_child(i) as CollisionShape3D).disabled = true
+	# unused shapes are switched off and put back at the origin, so a pooled
+	# chunk holds the same state whatever chunk it was before
+	for body_n in [[metal, n_metal], [concrete, n_concrete]]:
+		var body: StaticBody3D = body_n[0]
+		for i in range(int(body_n[1]), body.get_child_count()):
+			var col := body.get_child(i) as CollisionShape3D
+			col.disabled = true
+			if col.transform != Transform3D.IDENTITY:
+				col.transform = Transform3D.IDENTITY
 	for kind in KINDS:
 		var mmi := root.get_node(NodePath(_mmi_name(kind))) as MultiMeshInstance3D
 		mmi.multimesh.visible_instance_count = int(n[kind])

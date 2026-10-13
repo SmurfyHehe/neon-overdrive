@@ -89,6 +89,13 @@ func _initialize() -> void:
 	OS.set_environment("NEON_CURVES", "0")
 	OS.set_environment("NEON_HILLS", "0")
 	OS.set_environment("NEON_LAYOUT", "0")
+	# One roadside the whole way (downtown's kerb and pavement): a car the
+	# barrier throws back across the lanes ends on the kerb of whatever
+	# district the run reached, and that is the kerb's behaviour, not the
+	# barrier's. Since the 8-look loop (2026-10-13) the runs reach old town,
+	# whose pavement and building line differ from the residential street
+	# they used to reach (issue filed for the old-town kerb roll).
+	Districts.force = "downtown"
 	RoadBarriers.force_kind = scenarios[0][0]
 	game = Harness.boot(self, 0, 300.0, 4242)
 

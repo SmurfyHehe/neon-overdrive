@@ -273,17 +273,86 @@ const CENTER_COLOR := Color(0.86, 0.62, 0.12)
 const LANE_DASH_COLOR := Color(0.82, 0.82, 0.78)
 const PAINT_ENERGY := 0.28
 
+# Worn paint (better world B3, 2026-10-13; Roy 1516 "worn and dim"): the
+# dashes, the centre line and the edge lines share one shader that wears the
+# paint through to the road by the district's Districts.PAINT [cover, fade].
+# A dash is worn on its own (INSTANCE_ID: some are nearly whole, some nearly
+# gone); a long line loses stretches to the shoulder dirt. Wear sits in the
+# paint's own space (the dash box, or the chunk for a line), never the world,
+# so a floating-origin shift does not move it. PAINT_VARIANTS seeds per kind,
+# picked by the chunk, so neighbouring chunks are not worn alike; all of
+# them are the same shader (one pipeline), only uniforms differ. Build time
+# only: a rebuilt chunk points at its cached material, nothing per frame.
+const PAINT_VARIANTS := 4
+## The wear value under which a given share of the paint is kept, at shares
+## 0, 0.05 .. 1 (dash, line): the quantiles of paint_keep() over 44 seeds
+## (60 dashes each, or 100 m of line), so `cover` is the share actually kept
+## (tests/world/better_world.gd measures it on other dashes and metres).
+const PAINT_CUT_DASH := [0.0176, 0.1932, 0.2459, 0.2868, 0.3228, 0.3566, 0.3898, 0.4236, 0.4558, 0.4895, 0.5234,
+	0.5568, 0.5895, 0.6209, 0.6524, 0.6829, 0.7153, 0.7501, 0.7898, 0.8376, 0.9875]
+const PAINT_CUT_LINE := [0.0061, 0.1953, 0.2543, 0.2992, 0.3376, 0.3715, 0.4025, 0.4316, 0.4591, 0.4856, 0.5115,
+	0.5377, 0.5634, 0.5906, 0.6185, 0.6480, 0.6793, 0.7148, 0.7573, 0.8143, 0.9833]
+const PAINT_SHADER := """
+shader_type spatial;
+render_mode specular_disabled;
+
+uniform vec3 paint = vec3(0.82, 0.82, 0.78);
+uniform float energy = 0.28;
+uniform float cut = 1.0;    // wear value above which the paint is gone (PAINT_CUT of the cover)
+uniform float cover = 1.0;  // share of the paint left (for reading back; cut does the work)
+uniform float fade = 1.0;   // brightness of what is left
+uniform float seed = 0.0;
+uniform float line = 0.0;   // 1: a long line in chunk space; 0: a dash
+varying vec3 lp;
+varying float id;
+
+float h1(float n) { return fract(sin(n * 12.9898 + 4.1414) * 43758.5453); }
+float vn(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	float n = i.x + i.y * 57.0;
+	return mix(mix(h1(n), h1(n + 1.0), f.x), mix(h1(n + 57.0), h1(n + 58.0), f.x), f.y);
+}
+
+void vertex() {
+	lp = VERTEX;
+	id = float(INSTANCE_ID);
+}
+
+void fragment() {
+	float s = mod(seed * 13.7 + id * 7.31, 89.0);  // small: the sine hash bands on big numbers
+	float keep;
+	if (line > 0.5) {
+		// stretches of a metre or two lost to the shoulder dirt, scuffs between
+		keep = 0.55 * vn(vec2(lp.z * 0.5 + s, 0.0)) + 0.45 * vn(vec2(lp.z * 3.0 + s, lp.x * 9.0));
+	} else {
+		// each dash worn on its own, ragged where it is worn through
+		keep = 0.35 * vn(vec2(lp.z * 1.1 + s, lp.x * 3.0 + s * 0.37)) + 0.65 * h1(s + 0.5);
+	}
+	if (keep > cut) {
+		discard;
+	}
+	// thinner paint toward a worn edge: it catches less light back (the
+	// albedo stays, so a worn patch inside a lamp pool does not turn darker
+	// than the road around it)
+	float thick = 1.0 - smoothstep(cut - 0.08, cut, keep);
+	ALBEDO = paint * fade;
+	EMISSION = paint * energy * fade * mix(0.45, 1.0, thick);
+	ROUGHNESS = 0.9;
+}
+"""
+
 static var _own_mat: ShaderMaterial
 static var _onc_mat: ShaderMaterial
 static var _shoulder_mat: ShaderMaterial
 static var _curb_mat: StandardMaterial3D
 static var _sidewalk_mat: ShaderMaterial
-static var _edge_line_mat: StandardMaterial3D
+static var _paint_mats := {}   # "mark/district/variant" -> ShaderMaterial
+static var _paint_shader: Shader
 static var _pylon_mat_own: StandardMaterial3D
 static var _pylon_mat_onc: StandardMaterial3D
 static var _barrier_mat: StandardMaterial3D
-static var _center_dash_mat: StandardMaterial3D
-static var _lane_dash_mat: StandardMaterial3D
 
 # Shared geometry, built once and reused by every chunk in the pool -- see the
 # "shared geometry" section below.
@@ -483,10 +552,8 @@ static func _get_drain_mesh() -> ArrayMesh:
 
 ## Solid (non-dashed) lane-edge line -- real roads mark the outer edge
 ## differently from interior lane splits; ours didn't distinguish them at all.
-static func _get_edge_line_mat() -> StandardMaterial3D:
-	if _edge_line_mat == null:
-		_edge_line_mat = _flat_mat(LANE_DASH_COLOR, true, PAINT_ENERGY)
-	return _edge_line_mat
+static func _get_edge_line_mat(district: String = "downtown", variant: int = 0) -> ShaderMaterial:
+	return _paint_mat("edge", district, variant)
 
 ## Delineator posts (stage A; were cyan/magenta neon pylons). Faint emission
 ## stands in for the reflector catching headlights, so the 5 m rhythm still
@@ -511,15 +578,61 @@ static func _get_barrier_mat() -> StandardMaterial3D:
 		_barrier_mat = _flat_mat(Color(0.36, 0.355, 0.34), true, 0.1)
 	return _barrier_mat
 
-static func _get_center_dash_mat() -> StandardMaterial3D:
-	if _center_dash_mat == null:
-		_center_dash_mat = _flat_mat(CENTER_COLOR, true, PAINT_ENERGY)
-	return _center_dash_mat
+static func _get_center_dash_mat(district: String = "downtown", variant: int = 0) -> ShaderMaterial:
+	return _paint_mat("centre", district, variant)
 
-static func _get_lane_dash_mat() -> StandardMaterial3D:
-	if _lane_dash_mat == null:
-		_lane_dash_mat = _flat_mat(LANE_DASH_COLOR, true, PAINT_ENERGY)
-	return _lane_dash_mat
+static func _get_lane_dash_mat(district: String = "downtown", variant: int = 0) -> ShaderMaterial:
+	return _paint_mat("lane", district, variant)
+
+## One worn-paint material per (mark, district, variant), built on first use.
+## mark: "edge", "centre" or "lane".
+static func _paint_mat(mark: String, district: String, variant: int) -> ShaderMaterial:
+	var key := "%s/%s/%d" % [mark, district, variant]
+	if _paint_mats.has(key):
+		return _paint_mats[key]
+	if _paint_shader == null:
+		_paint_shader = Shader.new()
+		_paint_shader.code = PAINT_SHADER
+	var wear: Array = Districts.paint_of(district)
+	var c: Color = CENTER_COLOR if mark == "centre" else LANE_DASH_COLOR
+	var m := ShaderMaterial.new()
+	m.shader = _paint_shader
+	m.set_shader_parameter("paint", Vector3(c.r, c.g, c.b))
+	m.set_shader_parameter("energy", PAINT_ENERGY)
+	m.set_shader_parameter("cover", float(wear[0]))
+	m.set_shader_parameter("cut", paint_cut(float(wear[0]), mark == "edge"))
+	m.set_shader_parameter("fade", float(wear[1]))
+	m.set_shader_parameter("seed", float(variant) + {"lane": 0.0, "centre": 0.25, "edge": 0.5}[mark] + float(Districts.PAINT.keys().find(district)) * 4.0)
+	m.set_shader_parameter("line", 1.0 if mark == "edge" else 0.0)
+	_paint_mats[key] = m
+	return m
+
+## PAINT_SHADER's wear value at paint-space point `lp` (tests: the share of
+## paint left is the share of points where this is <= cover). Same maths as
+## the shader, line for line.
+static func paint_keep(lp: Vector3, seed_v: float, id: int, line: bool) -> float:
+	var s := fmod(seed_v * 13.7 + float(id) * 7.31, 89.0)
+	if line:
+		return 0.55 * _pvn(Vector2(lp.z * 0.5 + s, 0.0)) + 0.45 * _pvn(Vector2(lp.z * 3.0 + s, lp.x * 9.0))
+	return 0.35 * _pvn(Vector2(lp.z * 1.1 + s, lp.x * 3.0 + s * 0.37)) + 0.65 * _ph1(s + 0.5)
+
+## The shader's cut for a share `cover` of the paint kept (PAINT_CUT_*).
+static func paint_cut(cover: float, line: bool) -> float:
+	var t: Array = PAINT_CUT_LINE if line else PAINT_CUT_DASH
+	var f := clampf(cover, 0.0, 1.0) * float(t.size() - 1)
+	var i := mini(floori(f), t.size() - 2)
+	return lerpf(float(t[i]), float(t[i + 1]), f - float(i))
+
+static func _ph1(n: float) -> float:
+	var v := sin(n * 12.9898 + 4.1414) * 43758.5453
+	return v - floorf(v)
+
+static func _pvn(p: Vector2) -> float:
+	var i := Vector2(floorf(p.x), floorf(p.y))
+	var f := p - i
+	f = f * f * (Vector2(3.0, 3.0) - 2.0 * f)
+	var n := i.x + i.y * 57.0
+	return lerpf(lerpf(_ph1(n), _ph1(n + 1.0), f.x), lerpf(_ph1(n + 57.0), _ph1(n + 58.0), f.x), f.y)
 
 # ---------- shared geometry ----------
 #
@@ -2251,6 +2364,19 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	_update_strip(root, "RoadOwn", 0.0, 0.0, start_own_w, end_own_w)
 	_update_strip(root, "RoadOnc", 0.0, 0.0, -start_onc_w, -end_onc_w)
 
+	# worn paint: the district's wear, one of PAINT_VARIANTS by chunk (only
+	# set when it changes: a recycled chunk of the same kind and variant
+	# keeps its materials)
+	var paint_district := Districts.name_at(chunk_index)
+	var paint_key := "%s/%d" % [paint_district, posmod(chunk_index, PAINT_VARIANTS)]
+	if root.get_meta("paint_kit", "") != paint_key:
+		root.set_meta("paint_kit", paint_key)
+		var variant := posmod(chunk_index, PAINT_VARIANTS)
+		var edge := _get_edge_line_mat(paint_district, variant)
+		(root.get_node(^"EdgeLineOwn") as MeshInstance3D).material_override = edge
+		(root.get_node(^"EdgeLineOnc") as MeshInstance3D).material_override = edge
+		(root.get_node(^"CenterDashes") as MultiMeshInstance3D).material_override = _get_center_dash_mat(paint_district, variant)
+		(root.get_node(^"LaneDashes") as MultiMeshInstance3D).material_override = _get_lane_dash_mat(paint_district, variant)
 	# solid edge line along each lane's OUTER boundary -- distinct from the
 	# dashed interior lane splits handled further below
 	_update_strip(root, "EdgeLineOwn", start_own_w - 0.12, end_own_w - 0.12, start_own_w + 0.03, end_own_w + 0.03, 0.012)
@@ -2662,7 +2788,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	for k in range(n_road_lamps):
 		lamp_xfs.append(lamps.get_instance_transform(k))
 	LampLife.apply(root, chunk_index, Districts.name_at(chunk_index), lamp_xfs, _xf(0.0, 0.0, -CHUNK_LEN * 0.5),
-		-(start_onc_w + end_onc_w) * 0.5, (start_own_w + end_own_w) * 0.5)
+		-(start_onc_w + end_onc_w) * 0.5, (start_own_w + end_own_w) * 0.5, String(street.lamp))
 	# animals at shop fronts and alley mouths (A1): placed now, their eyes
 	# shine per frame from StreetAnimals.step (game.gd)
 	StreetAnimals.update(root, chunk_index, infos, mouths, [start_own_walk, end_own_walk, start_onc_walk, end_onc_walk], setback, pave_tops)

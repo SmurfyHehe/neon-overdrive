@@ -199,9 +199,16 @@ func _check_materials() -> void:
 	var bm := B.BuildingKit.material()
 	if bm.shader == null or not bm.shader.code.contains("EMISSION = c * lit"):
 		_fail("building facade material lost its window-masked emission")
+	# the worn paint (better world B3) is a shader: its energy times its
+	# fade must stay under the threshold, in every district
+	for d in B.Districts.PAINT:
+		for pm in [["lane dash", B._get_lane_dash_mat(d)], ["centre dash", B._get_center_dash_mat(d)], ["edge line", B._get_edge_line_mat(d)]]:
+			var sm: ShaderMaterial = pm[1]
+			var e := float(sm.get_shader_parameter("energy")) * float(sm.get_shader_parameter("fade"))
+			if e >= 1.0:
+				_fail("%s (%s) glows (emission %.2f >= glow threshold 1.0): neon is out (Look Board B)" % [pm[0], d, e])
 	var dim := {
-		"lane dash": B._get_lane_dash_mat(), "centre dash": B._get_center_dash_mat(),
-		"edge line": B._get_edge_line_mat(), "curb": B._get_curb_mat(),
+		"curb": B._get_curb_mat(),
 		"barrier (concrete)": RoadBarriers._mat("concrete"), "barrier (guardrail)": RoadBarriers._mat("guardrail"),
 		"barrier (cable)": RoadBarriers._mat("cable"), "crash cushion": RoadBarriers._mat("cushion"),
 		"post (own)": B._get_pylon_mat_own(),

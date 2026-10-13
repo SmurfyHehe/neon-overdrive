@@ -59,21 +59,27 @@ const ROADS := {
 		"seed": 20261010,
 		# Where a night starts (beside the shop's district).
 		"start": {"s": 0.0, "dir": 1},
+		# Act 1 is the 8-look order Roy approved (2026-10-10, again 10-13 as
+		# 1515): downtown, old town, strip, industrial, docks, lofts,
+		# residential, freeway. Acts 2 and 3 bring the hills, the canyon and
+		# the airport in (placeholder order; no kind follows itself, the wrap
+		# back to District 1 included). Areas stay per slot, so the crossings,
+		# rings and stops did not move.
 		"districts": [
 			{"name": "District 1", "zone": "Route 9", "kind": "downtown", "area": "city", "act": 1, "chunks": 16},
-			{"name": "District 2", "zone": "Route 9", "kind": "residential", "area": "city", "act": 1, "chunks": 16},
+			{"name": "District 2", "zone": "Route 9", "kind": "old_town", "area": "city", "act": 1, "chunks": 16},
 			{"name": "District 3", "zone": "Route 9", "kind": "strip", "area": "highway", "act": 1, "chunks": 16},
 			{"name": "District 4", "zone": "Route 9", "kind": "industrial", "area": "highway", "act": 1, "chunks": 16},
-			{"name": "District 5", "zone": "The Docks", "kind": "residential", "area": "city", "act": 1, "chunks": 16},
-			{"name": "District 6", "zone": "The Docks", "kind": "downtown", "area": "city", "act": 1, "chunks": 16},
-			{"name": "District 7", "zone": "The Docks", "kind": "strip", "area": "highway", "act": 1, "chunks": 16},
-			{"name": "District 8", "zone": "The Docks", "kind": "industrial", "area": "highway", "act": 1, "chunks": 16},
-			{"name": "District 9", "zone": "", "kind": "residential", "area": "city", "act": 2, "chunks": 16},
-			{"name": "District 10", "zone": "", "kind": "downtown", "area": "city", "act": 2, "chunks": 16},
-			{"name": "District 11", "zone": "", "kind": "strip", "area": "highway", "act": 2, "chunks": 16},
-			{"name": "District 12", "zone": "", "kind": "industrial", "area": "highway", "act": 2, "chunks": 16},
-			{"name": "District 13", "zone": "", "kind": "downtown", "area": "city", "act": 3, "chunks": 16},
-			{"name": "District 14", "zone": "", "kind": "residential", "area": "city", "act": 3, "chunks": 16},
+			{"name": "District 5", "zone": "The Docks", "kind": "docks", "area": "city", "act": 1, "chunks": 16},
+			{"name": "District 6", "zone": "The Docks", "kind": "lofts", "area": "city", "act": 1, "chunks": 16},
+			{"name": "District 7", "zone": "The Docks", "kind": "residential", "area": "highway", "act": 1, "chunks": 16},
+			{"name": "District 8", "zone": "The Docks", "kind": "freeway", "area": "highway", "act": 1, "chunks": 16},
+			{"name": "District 9", "zone": "", "kind": "hillside", "area": "city", "act": 2, "chunks": 16},
+			{"name": "District 10", "zone": "", "kind": "lofts", "area": "city", "act": 2, "chunks": 16},
+			{"name": "District 11", "zone": "", "kind": "canyon", "area": "highway", "act": 2, "chunks": 16},
+			{"name": "District 12", "zone": "", "kind": "airport", "area": "highway", "act": 2, "chunks": 16},
+			{"name": "District 13", "zone": "", "kind": "old_town", "area": "city", "act": 3, "chunks": 16},
+			{"name": "District 14", "zone": "", "kind": "downtown", "area": "city", "act": 3, "chunks": 16},
 			{"name": "District 15", "zone": "", "kind": "strip", "area": "highway", "act": 3, "chunks": 16},
 			{"name": "District 16", "zone": "", "kind": "industrial", "area": "highway", "act": 3, "chunks": 16},
 		],

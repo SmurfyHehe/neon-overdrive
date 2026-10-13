@@ -2,11 +2,14 @@ class_name SettingsScreen
 extends CanvasLayer
 
 # The Settings screen: one place for everything that used to sit in the long
-# pause column. Four pages behind a tab row:
+# pause column. Pages behind a tab row:
 #   Sound    Master / Engine / Effects / Music volume, Turbo volume
 #   Picture  fullscreen and window size, graphics Low / Medium / High and the
 #            settings behind them, traffic detail, night lights
-#   Driving  cockpit FOV, camera, tyre smoke
+#   View     the cameras (camera proposal section 4, Roy 1494): chase distance,
+#            chase FOV, chase follow, cockpit FOV, hood FOV, speed FOV
+#            widening, camera shake, head motion, remember last view, Reset
+#   Driving  tyre smoke
 #   Controls key rebinding (two keys per action) with Reset and Save
 #
 # Opened from the pause menu (PauseMenu) and from the title screen. It has no
@@ -24,7 +27,7 @@ const TestBuild := preload("res://scripts/core/test_build.gd")
 const WheelStyles := preload("res://scripts/view/wheel_styles.gd")
 const ErrorLog := preload("res://scripts/core/error_log.gd")
 
-const PAGES: Array[String] = ["Sound", "Picture", "Driving", "Controls", "Game"]
+const PAGES: Array[String] = ["Sound", "Picture", "View", "Driving", "Controls", "Game"]
 ## What a mixer channel is called on the Sound page (the rest use their own name).
 const CHANNEL_LABELS := {"Menus": "Menu sounds"}
 ## How much of the end of the log the "Copy my log" button puts on the clipboard.
@@ -98,9 +101,18 @@ var traffic_cars_slider: HSlider
 var traffic_dist_slider: HSlider
 var night_lights_slider: HSlider
 var city_lights_check: CheckButton
+# View
+var chase_distance_option: OptionButton
+var chase_fov_slider: HSlider
+var smoothing_option: OptionButton   # Chase follow: Tight / Smooth / Loose (smoothing A / B / C)
+var fov_slider: HSlider              # Cockpit FOV
+var hood_fov_slider: HSlider
+var widening_check: CheckButton
+var shake_slider: HSlider
+var head_motion_check: CheckButton
+var remember_view_check: CheckButton
+var reset_view_button: Button
 # Driving
-var fov_slider: HSlider
-var smoothing_slider: HSlider
 var smoke_burnout_slider: HSlider
 var smoke_drift_slider: HSlider
 # Controls
@@ -185,6 +197,7 @@ func _ready() -> void:
 	box.add_child(stack)
 	pages.append(_build_sound_page(stack))
 	pages.append(_build_picture_page(stack))
+	pages.append(_build_view_page(stack))
 	pages.append(_build_driving_page(stack))
 	pages.append(_build_controls_page(stack))
 	pages.append(_build_game_page(stack))
@@ -228,7 +241,7 @@ func show_page(index: int, take_focus := true) -> void:
 	for i in pages.size():
 		pages[i].visible = i == index
 		tab_buttons[i].set_pressed_no_signal(i == index)
-	if index == 3:
+	if PAGES[index] == "Controls":
 		_refresh_controls()
 	_fit_pages()
 	if take_focus and visible:
@@ -401,8 +414,15 @@ func _sync_all() -> void:
 	traffic_dist_slider.value = TrafficSettings.detail_distance
 	night_lights_slider.value = TrafficSettings.light_glow
 	city_lights_check.button_pressed = TrafficSettings.city_lights
+	chase_distance_option.select(ViewSettings.chase_distance)
+	chase_fov_slider.value = ViewSettings.chase_fov
+	smoothing_option.select(ViewSettings.camera_smoothing)
 	fov_slider.value = ViewSettings.cockpit_fov
-	smoothing_slider.value = float(ViewSettings.camera_smoothing)
+	hood_fov_slider.value = ViewSettings.hood_fov
+	widening_check.button_pressed = AccessSettings.fov_widening
+	shake_slider.value = AccessSettings.shake_scale
+	head_motion_check.button_pressed = FxSettings.is_on("head_motion")
+	remember_view_check.button_pressed = ViewSettings.remember_view
 	smoke_burnout_slider.value = FxSettings.smoke_burnout
 	smoke_drift_slider.value = FxSettings.smoke_drift
 	_syncing = false
@@ -539,19 +559,62 @@ func _game_node(property: String) -> Variant:
 		host = host.get_parent()
 	return host.get(property) if host != null else null
 
-# ---------- Driving ----------
-func _build_driving_page(parent: Control) -> Control:
+# ---------- View ----------
+## Nine rows and Reset. Every row applies at once (the camera reads the values
+## each frame, so the change shows behind the menu) and is saved. Defaults are
+## picked so nobody has to open this page.
+func _build_view_page(parent: Control) -> Control:
 	var page := _new_page(parent)
-	_heading(page, "View")
+	_heading(page, "Chase")
+	chase_distance_option = _add_option(page, "Chase distance", ViewSettings.CHASE_DISTANCES, func(i: int) -> void:
+		ViewSettings.set_chase_distance(i)
+		ViewSettings.save_settings())
+	# Chase FOV 50-70, default 58; the speed widening rides on top.
+	chase_fov_slider = _add_slider(page, "Chase FOV", ViewSettings.CHASE_FOV_MIN, ViewSettings.CHASE_FOV_MAX, 1.0, ViewSettings.chase_fov,
+		func(v: float) -> void:
+			ViewSettings.set_chase_fov(v)
+			ViewSettings.save_settings())
+	smoothing_option = _add_option(page, "Chase follow", ViewSettings.FOLLOW_NAMES, func(i: int) -> void:
+		ViewSettings.set_camera_smoothing(i)
+		ViewSettings.save_settings())
+	_heading(page, "Cockpit and hood")
 	# Cockpit FOV 55-78, default 62; the speed widening (up to +6) rides on top.
 	fov_slider = _add_slider(page, "Cockpit FOV", ViewSettings.COCKPIT_FOV_MIN, ViewSettings.COCKPIT_FOV_MAX, 1.0, ViewSettings.cockpit_fov,
 		func(v: float) -> void:
 			ViewSettings.set_cockpit_fov(v)
 			ViewSettings.save_settings())
-	smoothing_slider = _add_slider(page, "Camera", 0.0, float(ViewSettings.CAMERA_SMOOTHING_MAX), 1.0, float(ViewSettings.camera_smoothing),
+	hood_fov_slider = _add_slider(page, "Hood FOV", ViewSettings.HOOD_FOV_MIN, ViewSettings.HOOD_FOV_MAX, 1.0, ViewSettings.hood_fov,
 		func(v: float) -> void:
-			ViewSettings.set_camera_smoothing(int(v))
+			ViewSettings.set_hood_fov(v)
 			ViewSettings.save_settings())
+	_heading(page, "Comfort")
+	widening_check = _add_check(page, "Speed FOV widening", AccessSettings.fov_widening, func(on: bool) -> void:
+		AccessSettings.fov_widening = on
+		AccessSettings.save_settings())
+	shake_slider = _add_slider(page, "Camera shake", 0.0, 1.0, 0.05, AccessSettings.shake_scale,
+		func(v: float) -> void:
+			AccessSettings.set_shake_scale(v)
+			AccessSettings.save_settings())
+	head_motion_check = _add_check(page, "Head motion", FxSettings.is_on("head_motion"), func(on: bool) -> void:
+		FxSettings.set_on("head_motion", on)
+		FxSettings.save_settings())
+	remember_view_check = _add_check(page, "Remember last view", ViewSettings.remember_view, func(on: bool) -> void:
+		ViewSettings.remember_view = on
+		ViewSettings.save_settings())
+	reset_view_button = _add_button(page, "Reset view", reset_view)
+	return _page_of(page)
+
+## Every View row back to its default, saved, and the rows show it.
+func reset_view() -> void:
+	ViewSettings.reset_view()
+	ViewSettings.save_settings()
+	AccessSettings.save_settings()
+	FxSettings.save_settings()
+	_sync_all()
+
+# ---------- Driving ----------
+func _build_driving_page(parent: Control) -> Control:
+	var page := _new_page(parent)
 	# Tyre smoke: 0 = none, 1 = default, 2 = double. Read live by TyreSmoke.
 	_heading(page, "Tyre smoke")
 	smoke_burnout_slider = _add_slider(page, "Burnout", 0.0, FxSettings.SMOKE_MAX, 0.1, FxSettings.smoke_burnout,

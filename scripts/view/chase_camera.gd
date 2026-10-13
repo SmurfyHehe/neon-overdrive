@@ -34,6 +34,19 @@ const FRAMING := {
 	"l1_lowrider": [6.2, 1.6, 12.0, 0.7],
 }
 const SQUAT := 0.2        # m the camera drops at full speed effect
+## Throttle and brake give (Roy 1493): full throttle lets the car pull away up to
+## GIVE_M, hard braking brings the camera in as much, on a critically damped
+## spring (no bounce) with a GIVE_HALF_LIFE half-life, about a quarter second
+## to settle. Driven by the forward acceleration (the speed is the dolly's job),
+## full at GIVE_ACCEL_FULL m/s^2 forward or GIVE_BRAKE_FULL braking. The
+## per-tick acceleration jitters (a settling car reads +-1 m/s^2), so it is
+## smoothed at GIVE_ACCEL_RATE first and nothing under GIVE_DEAD counts.
+const GIVE_M := 0.5
+const GIVE_HALF_LIFE := 0.12
+const GIVE_ACCEL_FULL := 4.0
+const GIVE_BRAKE_FULL := 8.0
+const GIVE_ACCEL_RATE := 10.0   # 1/s
+const GIVE_DEAD := 0.6          # m/s^2
 
 # Speed FOV (vertical degrees; Godot keeps height, so 16:9 is ~1.6x wider).
 const FOV_REST := 58.0
@@ -128,6 +141,18 @@ const CORNER_RATE_FULL := 0.30
 const CORNER_SPEED_LO := 4.0
 const CORNER_SPEED_HI := 10.0
 const CORNER_LOOK_RATE := 4.0      # 1/s, ~0.75 s to settle; back to 0 well inside 1 s
+## Drift look (Roy 1492, #640): in a slide the eyes go where the car is going,
+## not further into the bend. Past DRIFT_SLIP_LO degrees between the nose and the
+## direction of travel the corner look blends toward the travel direction, all
+## the way at DRIFT_SLIP_HI, never past DRIFT_LOOK_MAX_DEG. A spin (slip past
+## DRIFT_SPIN_LO..HI) fades it back out so it never flips side at 180 degrees.
+## Same gates as the corner look (speed, head motion, no key, not reversing);
+## the hood gets HOOD_STRENGTH of it.
+const DRIFT_SLIP_LO := 5.0
+const DRIFT_SLIP_HI := 30.0
+const DRIFT_LOOK_MAX_DEG := 20.0
+const DRIFT_SPIN_LO := 70.0
+const DRIFT_SPIN_HI := 100.0
 ## Camera upgrade: no drawn frame moves the FOV more than this (degrees); also
 ## capped at FOV_MAX_RATE degrees/s so a low frame rate does not jump either.
 const FOV_MAX_STEP_DEG := 0.5
@@ -137,6 +162,15 @@ const FOV_MAX_RATE := 30.0
 const BUMP_ROT := 0.006            # radians at full strength (~0.35 deg)
 var head_offset := Vector3.ZERO   # car-local, metres, current
 var head_tilt := Vector2.ZERO     # (pitch, roll) degrees, current
+## The sideways acceleration the head sway follows (#641, m/s^2): the car's real
+## acceleration across its right axis (+ = toward its left, the inside of a left
+## turn), from the velocity change each physics tick. It used to be yaw rate x
+## speed, which in a spin reads several g and pinned the sway at its cap.
+var lat_accel := 0.0
+## Where the car is going against where it points (degrees, + = to its left),
+## and how far apart they are (0..180), for the drift look; tests read them.
+var travel_deg := 0.0
+var slip_deg := 0.0
 var view := View.CHASE
 ## Look back (hold the look_back key, B): the chase cam swings to the front
 ## of the car and looks back at it, the same move as reversing; the cockpit
@@ -248,6 +282,10 @@ var bump := 0.0        # 0..1, the last road bump, decaying
 var surface_t := 0.0   # 0..1, share of wheels on a rough surface (scaled by speed)
 var dist_now := DIST
 var height_now := HEIGHT
+## The throttle / brake give (m, + = farther back) and its spring's speed.
+var give := 0.0
+var _give_v := 0.0
+var _give_accel := 0.0   # the acceleration the give follows, smoothed
 ## This car's framing (FRAMING, or the constants): set in _init.
 var base_dist := DIST
 var base_height := HEIGHT
@@ -420,11 +458,16 @@ func _physics_process(delta: float) -> void:
 				c.road_bump.connect(road_bump)
 	var v := target.linear_velocity
 	var dv := (v - _prev_vel).length()
+	if delta > 0.0:
+		lat_accel = -(v - _prev_vel).dot(target.global_transform.basis.x) / delta
 	_prev_vel = v
 	register_impact(dv)
 	var speed := target.current_speed()
 	_accel = (speed - _prev_speed) / delta
 	_prev_speed = speed
+	# smoothed here, once per tick: a drawn frame that spans several ticks would
+	# otherwise sample the tick-to-tick jitter of a car standing on its brakes
+	_give_accel = lerpf(_give_accel, _accel, 1.0 - exp(-GIVE_ACCEL_RATE * delta))
 
 ## The car was moved and stopped by the game (off-map rescue): the jump in
 ## velocity is not an impact.
@@ -463,17 +506,17 @@ func _process(delta: float) -> void:
 			global_transform.basis = global_transform.basis * Basis(Vector3.UP, PI)
 		if shake_enabled:
 			_shake(delta, false)
-			rotate_object_local(Vector3.RIGHT, BUMP_ROT * bump)
+			rotate_object_local(Vector3.RIGHT, BUMP_ROT * bump * AccessSettings.shake_scale)
 	elif view == View.HOOD and not hood_open():
 		_place_hood(delta)
 		if shake_enabled:
 			_shake(delta, false, HOOD_STRENGTH)
-			rotate_object_local(Vector3.RIGHT, BUMP_ROT * bump * HOOD_STRENGTH)
+			rotate_object_local(Vector3.RIGHT, BUMP_ROT * bump * HOOD_STRENGTH * AccessSettings.shake_scale)
 	else:
 		_place(delta)   # the chase rig (also the hood view while the hood is up)
 		if shake_enabled:
 			_shake(delta, true)
-			global_position += global_basis.y * BUMP_POS * bump
+			global_position += global_basis.y * BUMP_POS * bump * AccessSettings.shake_scale
 	# No drawn frame moves the FOV by more than FOV_MAX_STEP_DEG.
 	if delta > 0.0 and _started_fov:
 		var step := minf(FOV_MAX_STEP_DEG, FOV_MAX_RATE * delta)
@@ -490,7 +533,7 @@ func _place_cockpit(delta: float) -> void:
 	var turn := Basis.from_euler(Vector3(deg_to_rad(look_pitch), deg_to_rad(look_yaw + corner_yaw), 0.0))
 	var tilt := Basis.from_euler(Vector3(deg_to_rad(head_tilt.x), 0.0, deg_to_rad(head_tilt.y)))
 	global_transform = Transform3D(_levelled(xf.basis) * turn * tilt, xf * (eye + head_offset))
-	fov = ViewSettings.cockpit_fov + COCKPIT_FOV_SPEED_GAIN * speed_t
+	fov = ViewSettings.cockpit_fov + _widening() * COCKPIT_FOV_SPEED_GAIN * speed_t
 
 ## On the bonnet: the interpolated body transform, levelled and leaning into
 ## corners at HOOD_STRENGTH, no head sway, FOV as in the cockpit. B moves it to
@@ -504,7 +547,11 @@ func _place_hood(delta: float) -> void:
 	else:
 		var turn := Basis.from_euler(Vector3(deg_to_rad(look_pitch), deg_to_rad(look_yaw + corner_yaw), 0.0))
 		global_transform = Transform3D(level * turn, xf * hood_cam)
-	fov = ViewSettings.cockpit_fov + COCKPIT_FOV_SPEED_GAIN * speed_t
+	fov = ViewSettings.hood_fov + _widening() * COCKPIT_FOV_SPEED_GAIN * speed_t
+
+## 1 with the View page's "Speed FOV widening" on, 0 with it off.
+static func _widening() -> float:
+	return 1.0 if AccessSettings.fov_widening else 0.0
 
 ## True while the hood is up, when the hood view shows the chase camera instead
 ## (the bonnet camera would be inside the lid). No roadside hood-pop sets one
@@ -570,10 +617,32 @@ func _update_look(delta: float) -> void:
 	elif not look_back and target.gear != -1 and FxSettings.is_on("head_motion"):
 		var w := target.angular_velocity.y
 		var strength := clampf((absf(w) - CORNER_RATE_DEAD) / (CORNER_RATE_FULL - CORNER_RATE_DEAD), 0.0, 1.0)
-		var gate := smoothstep(CORNER_SPEED_LO, CORNER_SPEED_HI, absf(target.current_speed()))
-		want_corner = signf(w) * strength * gate * CORNER_LOOK_MAX_DEG * (HOOD_STRENGTH if hood else 1.0)
+		# the speed along the ground, not along the nose: a car 60 deg sideways
+		# is still going fast
+		var gate := smoothstep(CORNER_SPEED_LO, CORNER_SPEED_HI, Vector2(target.linear_velocity.x, target.linear_velocity.z).length())
+		_update_travel()
+		want_corner = drift_look(signf(w) * strength * CORNER_LOOK_MAX_DEG, travel_deg, slip_deg) * gate * (HOOD_STRENGTH if hood else 1.0)
 	corner_yaw = lerpf(corner_yaw, want_corner, corner_k)
 	_set_look_focus(0 if hood or absf(look_yaw) < LOOK_FOCUS_YAW else (-1 if look_yaw > 0.0 else 1))
+
+## travel_deg / slip_deg from the car's velocity in its own frame. Under 1 m/s
+## there is no direction of travel to speak of: both read 0.
+func _update_travel() -> void:
+	var lv := target.global_transform.basis.inverse() * target.linear_velocity
+	if Vector2(lv.x, lv.z).length() < 1.0:
+		travel_deg = 0.0
+	else:
+		travel_deg = rad_to_deg(atan2(-lv.x, -lv.z))   # + = to the car's left (about +y)
+	slip_deg = absf(travel_deg)
+
+## The cockpit look's yaw (degrees, + = left) for a corner look of `grip_deg`
+## (the yaw-rate turn, C4) while the car travels `travel` degrees off its nose:
+## the grip look under DRIFT_SLIP_LO of slip, the travel direction (capped at
+## DRIFT_LOOK_MAX_DEG) from DRIFT_SLIP_HI, a blend between, faded out in a spin.
+static func drift_look(grip_deg: float, travel: float, slip: float) -> float:
+	var t := smoothstep(DRIFT_SLIP_LO, DRIFT_SLIP_HI, slip)
+	var drift := clampf(travel, -DRIFT_LOOK_MAX_DEG, DRIFT_LOOK_MAX_DEG) * (1.0 - smoothstep(DRIFT_SPIN_LO, DRIFT_SPIN_HI, slip))
+	return lerpf(grip_deg, drift, t)
 
 func _set_look_focus(side: int) -> void:
 	if side == _look_focus:
@@ -582,7 +651,7 @@ func _set_look_focus(side: int) -> void:
 	if frame != null and frame.mirrors != null:
 		frame.mirrors.set_focus(side)
 
-## Head sway from lateral g (yaw rate x speed) and longitudinal g (the speed
+## Head sway from lateral g (lat_accel, #641) and longitudinal g (the speed
 ## derivative the FOV already uses). +x is the passenger side: a left turn
 ## (yaw rate +) slides the head right (outward) but tips it LEFT, into the
 ## corner (positive roll about +z; it used to roll with the body, outward);
@@ -591,7 +660,7 @@ func _update_head(delta: float) -> void:
 	var want_offset := Vector3.ZERO
 	var want_tilt := Vector2.ZERO
 	if FxSettings.is_on("head_motion"):
-		var lat_g := clampf(target.angular_velocity.y * target.current_speed() / 9.81 / HEAD_G_FULL, -1.0, 1.0)
+		var lat_g := clampf(lat_accel / 9.81 / HEAD_G_FULL, -1.0, 1.0)
 		var long_g := clampf(_accel / 9.81 / HEAD_G_FULL, -1.0, 1.0)
 		want_offset = Vector3(lat_g, 0.0, long_g).limit_length(1.0) * HEAD_MAX_M
 		want_tilt = Vector2(long_g, lat_g).limit_length(1.0) * HEAD_MAX_DEG
@@ -611,13 +680,16 @@ func _update_feel(delta: float) -> void:
 	var speed := absf(target.current_speed())
 	var want_t := _speed_curve(speed)
 	speed_t = lerpf(speed_t, want_t, 1.0 - exp(-FOV_RATE * delta))
-	var want_a := clampf(_accel * FOV_ACCEL_GAIN, FOV_ACCEL_MIN, FOV_ACCEL_MAX)
+	var want_a := clampf(_accel * FOV_ACCEL_GAIN, FOV_ACCEL_MIN, FOV_ACCEL_MAX) * _widening()
 	accel_fov = lerpf(accel_fov, want_a, 1.0 - exp(-ACCEL_RATE * delta))
-	fov = lerpf(FOV_REST, FOV_FAST, speed_t) + accel_fov
+	# The View page's chase FOV is the rest; the widening keeps its 16 degrees.
+	var rest := ViewSettings.chase_fov
+	fov = rest + (FOV_FAST - FOV_REST) * speed_t * _widening() + accel_fov
 	# Dolly: scale the distance by how much the frustum widened, part way.
-	var widen := tan(deg_to_rad(FOV_REST) * 0.5) / tan(deg_to_rad(fov) * 0.5)
-	dist_now = base_dist * (DOLLY * widen + (1.0 - DOLLY))
-	height_now = base_height - SQUAT * speed_t
+	var widen := tan(deg_to_rad(rest) * 0.5) / tan(deg_to_rad(fov) * 0.5)
+	_update_give(delta)
+	dist_now = base_dist * ViewSettings.chase_dist_scale() * (DOLLY * widen + (1.0 - DOLLY)) + give
+	height_now = base_height + ViewSettings.chase_dist_lift() - SQUAT * speed_t
 	trauma = maxf(0.0, trauma - TRAUMA_DECAY * delta)
 	# How rough the ground under the wheels is (SurfaceFeel): the pavement and
 	# the kerb strip shake fully, the gritty shoulder about a third as much.
@@ -634,6 +706,29 @@ func _update_feel(delta: float) -> void:
 	# a wheel on its rim or a bent rim shakes the car the same way (flat_tyre.gd)
 	want_s = maxf(want_s, target.wheel_shake)
 	surface_t = lerpf(surface_t, want_s, 1.0 - exp(-12.0 * delta))
+
+## The throttle / brake give: a critically damped spring (exact for any frame
+## length, so the same at 60 or 144 fps) toward GIVE_M x the forward
+## acceleration's share of full. Nothing while reversing or looking back (the
+## rig is in front of the car then).
+func _update_give(delta: float) -> void:
+	var a := signf(_give_accel) * maxf(0.0, absf(_give_accel) - GIVE_DEAD)
+	var want := 0.0
+	if target.gear != -1 and not look_back:
+		want = GIVE_M * (clampf(a / (GIVE_ACCEL_FULL - GIVE_DEAD), 0.0, 1.0) if a > 0.0 else -clampf(-a / (GIVE_BRAKE_FULL - GIVE_DEAD), 0.0, 1.0))
+	var xv := spring(give, _give_v, want, GIVE_HALF_LIFE, delta)
+	give = xv.x
+	_give_v = xv.y
+
+## One step of a critically damped spring (position x, speed v) toward `goal`:
+## the exact solution, so any split of the same time lands in the same place.
+## Returns the new (x, v). half_life: seconds to close half the gap.
+static func spring(x: float, v: float, goal: float, half_life: float, dt: float) -> Vector2:
+	var y := 2.0 * log(2.0) / half_life
+	var j0 := x - goal
+	var j1 := v + j0 * y
+	var e := exp(-y * dt)
+	return Vector2(e * (j0 + j1 * dt) + goal, e * (v - j1 * y * dt))
 
 ## Eases orbit_yaw / orbit_lift toward the arrow keys (chase view only).
 ## Tap-or-hold uses the cockpit's constants (LOOK_TAP_S, LOOK_TAP_LATCH_S).
@@ -819,6 +914,7 @@ func _body_centre() -> Vector3:
 ## cockpit it is rotation only (with_position false): the eye never leaves the
 ## cabin on a hit.
 func _shake(delta: float, with_position: bool, strength := 1.0) -> void:
+	strength *= AccessSettings.shake_scale   # the View page's Camera shake row
 	var buzz := pow(speed_t, 1.5)
 	var start := target.start_shake * (START_SHAKE_CHASE if with_position else 1.0)
 	var rot := (SPEED_SHAKE_ROT * buzz + SURFACE_SHAKE_ROT * surface_t + IMPACT_SHAKE_ROT * trauma * trauma + START_SHAKE_ROT * start) * strength

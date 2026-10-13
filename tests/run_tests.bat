@@ -130,6 +130,9 @@ call :run view/cockpit_horizon --headless
 call :run view/cockpit_eye_inside --headless
 call :run view/cockpit_shake_rotation_only --headless
 call :run view/look_into_corner --headless
+call :run view/drift_look --headless
+call :run view/chase_give --headless
+call :run view/view_camera_settings --headless
 call :run view/look_tap_hold "--headless --fixed-fps 60"
 call :run view/camera_rate_independent --headless
 call :run view/fov_step_limit --headless

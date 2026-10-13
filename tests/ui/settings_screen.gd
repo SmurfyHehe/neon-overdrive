@@ -70,8 +70,8 @@ func _process(_delta: float) -> bool:
 			_check(menu.settings != null and not menu.settings.visible and menu.settings_button != null, "Settings starts closed, with a button")
 			menu.settings_button.pressed.emit()
 			_check(menu.settings.visible and menu.settings.current_page == 0, "the Settings button opens the Sound page")
-			_check(menu.settings.pages.size() == 5 and menu.settings.tab_buttons.size() == 5, "five pages")
-			_check(["Sound", "Picture", "Driving", "Controls", "Game"] == Array(SettingsScreen.PAGES), "page names")
+			_check(menu.settings.pages.size() == 6 and menu.settings.tab_buttons.size() == 6, "six pages")
+			_check(["Sound", "Picture", "View", "Driving", "Controls", "Game"] == Array(SettingsScreen.PAGES), "page names")
 			_check(state.modal_open, "game shortcuts stand down while Settings is open")
 			var s := menu.settings
 			# Sound
@@ -100,14 +100,44 @@ func _process(_delta: float) -> bool:
 			s.traffic_cars_slider.value = 35
 			_check(GraphicsSettings.preset == "custom" and s.gfx_preset.selected == 3, "a hand-moved traffic slider shows Custom")
 			_check(s.fullscreen_check != null and s.resolution_option.item_count >= 1, "Display controls exist")
-			# Driving
+			# View (camera proposal section 4): nine rows and Reset
 			s.show_page(2)
+			var view_page: Control = s.pages[2]
+			var rows := [s.chase_distance_option, s.chase_fov_slider, s.smoothing_option, s.fov_slider, s.hood_fov_slider,
+				s.widening_check, s.shake_slider, s.head_motion_check, s.remember_view_check]
+			_check(rows.all(func(c: Control) -> bool: return c != null and view_page.is_ancestor_of(c)), "the View page has the nine rows")
+			_check(s.reset_view_button != null and view_page.is_ancestor_of(s.reset_view_button), "the View page has Reset view")
+			_check(s.chase_distance_option.item_count == 3 and s.chase_distance_option.get_item_text(2) == "Far" and s.chase_distance_option.selected == 1, "Chase distance: Near / Normal / Far, Normal shown")
+			_check(s.smoothing_option.get_item_text(0) == "Tight" and s.smoothing_option.get_item_text(1) == "Smooth" and s.smoothing_option.get_item_text(2) == "Loose", "Chase follow: Tight / Smooth / Loose")
 			s.fov_slider.value = 70
 			_check(is_equal_approx(ViewSettings.cockpit_fov, 70.0), "FOV slider sets the cockpit FOV")
+			s.chase_distance_option.select(2)
+			s.chase_distance_option.item_selected.emit(2)
+			_check(ViewSettings.chase_distance == 2, "Chase distance Far applies")
+			s.chase_fov_slider.value = 66
+			s.hood_fov_slider.value = 80
+			_check(is_equal_approx(ViewSettings.chase_fov, 66.0) and is_equal_approx(ViewSettings.hood_fov, 80.0), "Chase FOV and Hood FOV sliders apply")
+			s.shake_slider.value = 0.4
+			s.widening_check.button_pressed = false
+			s.head_motion_check.button_pressed = false
+			s.remember_view_check.button_pressed = false
+			_check(is_equal_approx(AccessSettings.shake_scale, 0.4) and not AccessSettings.fov_widening and not FxSettings.is_on("head_motion") and not ViewSettings.remember_view, "shake, widening, head motion and remember apply")
+			var vcfg := ConfigFile.new()
+			vcfg.load(AudioSettings.path)
+			_check(int(vcfg.get_value("view", "chase_distance", -1)) == 2 and is_equal_approx(float(vcfg.get_value("access", "shake_scale", -1.0)), 0.4) and vcfg.get_value("fx", "head_motion", true) == false, "the View rows are saved")
+			s.reset_view_button.pressed.emit()
+			_check(ViewSettings.chase_distance == 1 and is_equal_approx(ViewSettings.chase_fov, 58.0) and is_equal_approx(ViewSettings.hood_fov, 65.0) and is_equal_approx(ViewSettings.cockpit_fov, 62.0), "Reset view puts the view rows back")
+			_check(is_equal_approx(AccessSettings.shake_scale, 1.0) and AccessSettings.fov_widening and FxSettings.is_on("head_motion") and ViewSettings.remember_view, "Reset view puts the comfort rows back")
+			_check(s.chase_distance_option.selected == 1 and is_equal_approx(s.chase_fov_slider.value, 58.0) and s.head_motion_check.button_pressed, "and the rows show it")
+			vcfg.load(AudioSettings.path)
+			_check(int(vcfg.get_value("view", "chase_distance", -1)) == 1 and is_equal_approx(float(vcfg.get_value("access", "shake_scale", -1.0)), 1.0), "Reset view is saved")
+			s.fov_slider.value = 70
+			# Driving
+			s.show_page(3)
 			s.smoke_burnout_slider.value = 1.5
 			_check(is_equal_approx(FxSettings.smoke_burnout, 1.5), "Burnout smoke slider")
 			# Game: "Roaches and rats" saves with the rest and loads back
-			s.show_page(4)
+			s.show_page(5)
 			_check(s.critters_check != null and s.critters_check.text == "Roaches and rats" and s.critters_check.button_pressed, "Game page has Roaches and rats, on by default")
 			s.critters_check.button_pressed = false
 			_check(not GameSettings.critters, "the switch turns the critters off")
@@ -131,7 +161,7 @@ func _process(_delta: float) -> bool:
 			s.damage_option.item_selected.emit(0)
 			_check(GameSettings.damage == GameSettings.Damage.FULL, "Damage: back to Full")
 			# Controls: rebind handbrake slot 0 to K
-			s.show_page(3)
+			s.show_page(4)
 			_check(s.controls_save_button != null and s.controls_reset_button != null, "Controls has Save and Reset")
 			var b := _key_button(&"handbrake", 0)
 			_check(b != null, "a key button for handbrake")

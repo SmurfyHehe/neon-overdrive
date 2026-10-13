@@ -16,6 +16,10 @@ class_name ChaseCamera
 const MODE_NAMES := ["A: hard snap", "B: light smoothing", "C: smoothing + reverse swing"]
 const FOLLOW_RATE := 6.0  # 1/s, how fast the camera catches up sideways/vertically
 const SWING_RATE := 5.0   # 1/s, how fast it swings round for reverse (~0.6 s)
+## 1/s, how fast the rig turns to follow the car's heading (smoothing B and C;
+## A locks to it). Round the 63 m roundabout at 50 km/h the car turns 25
+## deg/s and the rig trails it by about 25/HEADING_RATE degrees.
+const HEADING_RATE := 6.0
 
 # Framing. Was distance 6.0 / height 3.2 / look 10 m ahead at 1.1 / FOV 62.
 const DIST := 5.2         # m behind the car at rest
@@ -226,10 +230,11 @@ var look_height := LOOK_HEIGHT
 var anchor := Vector3.ZERO  # chase position before shake
 var aim := Vector3.ZERO     # point the rig looks at before shake
 
-var _follow := Vector2.ZERO
-var _yaw := 0.0
-## Whether the car faces back up the road (RoadFrame's +z).
-var _up_road := false
+var _follow := Vector2.ZERO   # the point the rig follows: across, up (road space)
+var _follow_z := 0.0          # and along the road
+var _yaw := 0.0               # where the rig looks, road space (0 = down the road, -z)
+var _head := 0.0              # the car's heading, eased (HEADING_RATE)
+var _flip := 0.0              # 0 behind the car, PI in front (reversing, B), eased in mode C
 var _started := false
 var _started_fov := false
 var _prev_vel := Vector3.ZERO
@@ -638,48 +643,58 @@ func _place(delta: float) -> void:
 	# the 60 Hz physics tick, and with vsync off the camera updates several
 	# times per tick. Following the raw position made car and road judder.
 	var p := target.get_global_transform_interpolated().origin
-	# Road space (RoadFrame, #37): across / up / along the road. The rig sits
-	# behind the car ALONG THE ROAD and looks down it, so it swings round
-	# bends with the road instead of staring down world -Z; on a straight
-	# road this is exactly the old world-axis rig.
+	# Road space (RoadFrame, #37): across / up / along the road. Everything
+	# below is worked in it and rolled back to the world at the end, so on a
+	# straight road it is the old world-axis rig.
 	var u := RoadFrame.unroll(p)
-	# Reversing flips the chase cam to the opposite side of the car looking
-	# the opposite way (2026-09-13 fix, kept); so does holding look_back.
-	# The road goes both ways (the map, 2026-10-10): the rig looks the way the
-	# car faces along the road. It changes side only once the car is well
-	# round (past 60 degrees from across the road), so a slide or a spin does
-	# not swing it back and forth.
-	var facing := RoadFrame.dir_to_road(u.z, -target.global_transform.basis.z).z
-	if absf(facing) > 0.5:
-		_up_road = facing > 0.0
-	var target_yaw := PI if (target.gear == -1 or look_back) != _up_road else 0.0
+	# The rig sits behind the CAR and looks the way the car faces (Roy,
+	# 2026-10-13). It used to sit behind the car along the ROAD and look down
+	# it, so round a roundabout it stared down the highway while the car
+	# circled, up to 120 degrees off, then flipped side at 60 degrees from
+	# across the road (tests/view/chase_ring_recenter). Now it follows the
+	# car's heading at HEADING_RATE: in a steady turn it trails the car by a
+	# few degrees (yaw rate / HEADING_RATE), never by a quarter turn.
+	var fwd := RoadFrame.dir_to_road(u.z, -target.global_transform.basis.z)
+	var head := _head
+	if Vector2(fwd.x, fwd.z).length() > 0.1:   # not pointing straight up or down
+		head = atan2(-fwd.x, -fwd.z)
+	# Reversing turns the chase cam to the other side of the car looking the
+	# other way (2026-09-13 fix, kept); so does holding look_back.
+	var want_flip := PI if (target.gear == -1 or look_back) else 0.0
 	if mode == 0 or not _started:
 		_follow = Vector2(u.x, u.y)
-		_yaw = target_yaw
+		_follow_z = u.z
+		_head = head
+		_flip = want_flip
 		_started = true
 	else:
 		# Frame-rate independent ease: the same feel at 60 or 300 fps.
-		_follow = _follow.lerp(Vector2(u.x, u.y), 1.0 - exp(-FOLLOW_RATE * delta))
+		_head = lerp_angle(_head, head, 1.0 - exp(-HEADING_RATE * delta))
+		# Distance along the rig's own line stays locked to the car (the dolly
+		# shortens it with speed); only sideways and height motion is smoothed.
+		var along := Vector2(-sin(_head), -cos(_head))
+		var d := Vector2(u.x - _follow.x, u.z - _follow_z)
+		var lock := along * d.dot(along)
+		var side := (d - lock) * (1.0 - exp(-FOLLOW_RATE * delta))
+		_follow.x += lock.x + side.x
+		_follow_z += lock.y + side.y
+		_follow.y = lerpf(_follow.y, u.y, 1.0 - exp(-FOLLOW_RATE * delta))
 		if mode == 2:
-			_yaw = lerpf(_yaw, target_yaw, 1.0 - exp(-SWING_RATE * delta))
+			_flip = lerpf(_flip, want_flip, 1.0 - exp(-SWING_RATE * delta))
 		else:
-			_yaw = target_yaw
-	# Distance along the road stays locked to the car (only sideways and
-	# height motion is smoothed); the dolly shortens it with speed.
+			_flip = want_flip
+	_yaw = _head + _flip
 	# The orbit goes round the car's own sides: with the rig behind the car
-	# (rel 0) Left is minus about +y, with it in front (rel PI: reversing, B)
-	# it is plus. Worked from the rig's yaw relative to where the car faces, so
-	# it also holds driving the other way along the road, and it runs through
-	# 0 (not a jump) while the rig swings round.
-	var rel := _yaw - (PI if _up_road else 0.0)
-	var orbit := -cos(rel) * deg_to_rad(orbit_yaw)
+	# (flip 0) Left is minus about +y, in front of it (flip PI: reversing, B)
+	# it is plus; it runs through 0 (not a jump) while the rig swings round.
+	var orbit := -cos(_flip) * deg_to_rad(orbit_yaw)
 	var back := Vector3(0, 0, dist_now).rotated(Vector3.UP, _yaw + orbit)
 	var ahead := Vector3(0, 0, -look_ahead).rotated(Vector3.UP, _yaw)
 	var h := height_now + ORBIT_LIFT_UP_M * orbit_lift
 	if orbit_lift < 0.0:
 		h = lerpf(height_now, ORBIT_LOW_ABOVE_ROAD_M - _follow.y, -orbit_lift)
-	anchor = RoadFrame.roll(Vector3(_follow.x + back.x, _follow.y + h, u.z + back.z))
-	var aim_rs := Vector3(_follow.x + ahead.x, _follow.y + look_height, u.z + ahead.z)
+	anchor = RoadFrame.roll(Vector3(_follow.x + back.x, _follow.y + h, _follow_z + back.z))
+	var aim_rs := Vector3(_follow.x + ahead.x, _follow.y + look_height, _follow_z + ahead.z)
 	var centre_t := smoothstep(ORBIT_AIM_LO_DEG, ORBIT_AIM_HI_DEG, absf(orbit_yaw))
 	if centre_t > 0.0:
 		# the middle of the body, not the car's origin: the origin sits at the

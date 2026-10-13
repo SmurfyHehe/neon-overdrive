@@ -74,7 +74,8 @@ MATMAP = {'paint': 'paint', 'roof': 'paint', 'under': 'under_paint', 'glass': 'g
           'exh_hole': 'rubber', 'head': 'glow_head', 'tail': 'glow_tail', 'turn': 'glow_turn',
           'primer': 'paint_primer', 'paint2': 'paint_primer', 'rust': 'paint_rust', 'bondo': 'paint_bondo',
           'tire': 'rubber', 'tire_side': 'rubber', 'rim': 'rim', 'rim_dark': 'steel',
-          'interior': 'plastic'}    # the tub of an open car (the kei): its walls and floor
+          'interior': 'plastic',    # the tub of an open car (the kei): its walls and floor
+          'bed': 'plastic'}         # the liner of an open pickup bed (the Camel)
 COLOURS = {
     'paint': None,                 # the car's own paint
     'under_paint': '#0B0D12',      # behind the shut lines, the underbody
@@ -695,14 +696,18 @@ def build_parts(D, tips_out=None):
     sets = {}           # name -> (PolySet, planes)
     rest_planes = []
 
-    def cut(name, planes, mask, opens, owns=None):
+    def cut(name, planes, mask, opens, owns=None, edges=None):
         """opens: the part is a panel that opens (it gets the edge returns, the
         other side the floor). owns: per plane, a fixed part that carries the
-        floor of that line (the other side then carries nothing)."""
+        floor of that line (the other side then carries nothing). edges: more
+        shut lines this part's skin ends on, (n, d, wall, floor) as below,
+        that do not choose its polygons: a kit part cut out of what an earlier
+        cut left (the Camel's bed round its tailgate) carries that cut's floor."""
         nonlocal pool
         owns = owns or [False] * len(planes)
         part, pool = take(pool, planes, mask)
-        sets[name] = (part, [(np.asarray(n, float), d + GAP / 2, opens, o) for (n, d), o in zip(planes, owns)])
+        sets[name] = (part, [(np.asarray(n, float), d + GAP / 2, opens, o) for (n, d), o in zip(planes, owns)]
+                      + list(edges or []))
         for (n, d), o in zip(planes, owns):
             rest_planes.append((-np.asarray(n, float), -(d - GAP / 2), False, opens or not o))
 
@@ -741,7 +746,8 @@ def build_parts(D, tips_out=None):
         """Which glTF node a body or door polygon ends up in."""
         lr = 'r' if cen[0] > 0 else 'l'
         if name.startswith('door_'):
-            return ('glass_door_' + name[-1]) if mat == 'glass' else name
+            # door_r -> glass_door_r; a kit's rear doors (door_rr) -> glass_door_rr
+            return ('glass_' + name) if mat == 'glass' else name
         if name != 'body':
             return name
         if mat == 'glass':

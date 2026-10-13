@@ -456,7 +456,7 @@ P17 = {
         {'id': 'rear', 'view': 'rear', 'rect': (-0.45, 0.88, 0.45, 1.08), 'note': 'tailgate'},
     ],
     'paint': {'hero': ('Camel', '#C4A264'), 'alts': [('Work white', '#E9E6DF'), ('Midnight', '#1B2A4A'), ('Forest', '#2B4A3A'), ('Oxide red', '#8E2A28')],
-              'trim': '#1A1D24', 'rim': '#A9AEB6', 'extra': {'paint2': '#FF8A1F', 'chrome': '#C9CED6'}},
+              'trim': '#1A1D24', 'rim': '#A9AEB6', 'extra': {'paint2': '#FF8A1F', 'primer': '#FF8A1F', 'chrome': '#C9CED6'}},
     'options': {},
 }
 

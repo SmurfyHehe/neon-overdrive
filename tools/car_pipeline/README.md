@@ -272,6 +272,30 @@ front fender is written as it is too; the rear bumper's corners are scuffed
 (`paint_regions` in primer, both sides). `_primer_lip` rolls the primer
 fender's arch edge, which `parts.add_arch_lips` only does for `paint`.
 
+**P17, the Camel** (`p17_work_pickup`, kit in `kit_p17_work_pickup.py`):
+5,868 body triangles in 92 parts, 732 more in the wheels; 0.000 mm over 55
+mirrored parts and pairs. A four-door work pickup at the sheet's size (4.95 m;
+the shorter 4.8 m of decision 1219 is NOT applied, Build 4 set 4.95). The
+kit cuts the rear doors out of the cab side (`door_rr/rl`, their glass on
+their own hinges), the tailgate out of the tail face (bottom hinge, 90
+degrees) and the open bed as a bolted-on box (`bed`, liner as `plastic`);
+`parts.cut(edges=...)` gives the bed its shut band and floor where it meets
+the tailgate. Door hinges stand on the outer skin and the hood on a gooseneck
+so nothing swings through a fender (tests/car/part_fit.gd: 0 clashes). Nose:
+a chrome-framed three-bar grille, small square lamps with amber blocks
+outboard, a chrome blade bumper. Tail: stacked lamp columns (red tail over a
+brake core, clear middle with the reversing lamp inboard and the amber
+blinker outboard, red low lamp), a third brake lamp over the cab's sliding
+rear pane, a plate lamp, a chrome step bumper. The side stripe is
+`paint_primer` (sodium orange, `cars.py` P17 `primer`) over a dark pinline.
+300 mm front discs with the caliper on the upright, 260 mm rear drums,
+chrome dog-dish hubcaps. Underneath: a ladder frame, front arms, leaf springs
+and a live axle with its diff cover, the driveshaft, the tank on the left,
+the exhaust and muffler down the right, and a rocker lip a side under the
+cab floor (`rocker_l/r`; without it the cabin floor's edge is open from the
+side, tests/fleet/interior_fit.gd). Under the hood: a dark floor and the
+radiator, no engine yet.
+
 A new car's kit goes in a file of its own (`kit_<id>.py`, a dict `KIT`) with
 one import line in `kits.py`.
 

@@ -23,6 +23,7 @@ const LEGACY_NAMES := ["Neon Overdrive"]
 const MARKER := ".migrated_from"
 const IN_PROGRESS := ".migrating_from"
 const SKIP := ["audio_cache", "autotune", "logs", "shader_cache", "vulkan"]
+const PART := ".part"
 
 ## Copies an older name's folder into this one if needed. Returns the folder it
 ## copied from, or "" (nothing to do, already done, or in test mode).
@@ -80,7 +81,13 @@ static func _copy_tree(from_dir: String, to_dir: String, top: bool) -> bool:
 		ok = _copy_tree(from_dir.path_join(sub), dest, false) and ok
 	for f in DirAccess.get_files_at(from_dir):
 		var dest := to_dir.path_join(f)
-		if FileAccess.file_exists(dest):
+		if FileAccess.file_exists(dest) or f.ends_with(PART):
 			continue
-		ok = DirAccess.copy_absolute(from_dir.path_join(f), dest) == OK and ok
+		# Under a .part name first, renamed in whole: a copy cut short by a
+		# crash was kept as a finished file on the resumed copy (a torn save).
+		var part := dest + PART
+		var err := DirAccess.copy_absolute(from_dir.path_join(f), part)
+		if err == OK:
+			err = DirAccess.rename_absolute(part, dest)
+		ok = err == OK and ok
 	return ok

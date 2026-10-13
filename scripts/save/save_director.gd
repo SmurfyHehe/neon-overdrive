@@ -75,10 +75,16 @@ func _init(owner_game: Node) -> void:
 func read_run() -> Dictionary:
 	if not enabled:
 		return {}
+	# A chase left open: the run is cleared FIRST, then the bust is counted
+	# (which closes the chase). Killed between the two, the next load still
+	# finds the chase open and busts once; the other way round the run came
+	# back and the chase was gone.
+	SaveStore.chase_active = false
+	if SaveStore.load_meta_raw().chase_open:
+		SaveStore.clear_run()
 	var meta := SaveStore.load_meta()
 	busted = meta.busted
 	if busted:
-		SaveStore.clear_run()
 		return {}
 	_play_secs = float(SaveCore.play_secs())
 	var run := SaveStore.load_run()

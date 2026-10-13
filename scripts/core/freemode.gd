@@ -48,7 +48,7 @@ static var _free := false
 ## True when the career's freemode block says unlocked (default false).
 static func active(career: Dictionary) -> bool:
 	var b: Variant = career.get("freemode")
-	return b is Dictionary and b.get("unlocked", false) == true
+	return b is Dictionary and b.get("unlocked") is bool and b.unlocked
 
 ## The cached answer for runtime reads. Set by refresh() on load and after a commit.
 static func is_active() -> bool:

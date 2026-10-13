@@ -31,8 +31,11 @@ extends RefCounted
 
 const DEFAULT_KIND := "p1_coupe"
 
+## The trinket's knot from the rear-view mirror's centre: under the housing, driver's side.
+const HANG_FROM_MIRROR := Vector3(-0.07, -0.033, -0.015)
+
 const CABIN := {
-	"mirror_hang": Vector3(-0.07, 1.182, -0.145),
+	"mirror_hang": Vector3(-0.07, 1.182, -0.145),   # the coupe's; a known car hangs it from its own mirror
 	"shifter": Vector3(0.0, 0.615, -0.02),
 	"handbrake": Vector3(0.0, 0.615, 0.44),
 	"dash_pod": Vector3(-0.56, 0.955, -0.42),
@@ -47,9 +50,11 @@ const CARS := {
 	"p2_hothatch": {"strut_bar": {"x": 0.62, "y": 0.85, "z": -1.13}},
 	"p3_tuner": {"strut_bar": {"x": 0.59, "y": 0.79, "z": -1.16}},
 	# the kei's dash is a 6 cm ledge a hand's width under the screen: its
-	# bobble head stands nearer the cowl and a size smaller (BobbleHead)
-	"p4_kei": {"strut_bar": {"x": 0.445, "y": 0.67, "z": -0.98}, "bobble": {"along": 0.05, "scale": 0.45, "tilt": 0.15}},
-	"p5_muscle": {"strut_bar": {"x": 0.66, "y": 0.87, "z": -1.33}},
+	# bobble head stands two sizes smaller (BobbleHead), on the dash face's flat
+	# top at the driver's edge, where the screen has risen enough over it (#684)
+	"p4_kei": {"strut_bar": {"x": 0.445, "y": 0.67, "z": -0.98}, "bobble": {"along": 0.98, "scale": 0.27, "tilt": 0.15}},
+	# the tall figures' heads leaned full over reached into the dash's rise (#684)
+	"p5_muscle": {"strut_bar": {"x": 0.66, "y": 0.87, "z": -1.33}, "bobble": {"tilt": 0.45}},
 	"p6_crossover": {"strut_bar": {"x": 0.61, "y": 1.00, "z": -1.16}},
 	"p8_driftcoupe": {"strut_bar": {"x": 0.60, "y": 0.76, "z": -1.18}},
 	"p10_truck": {"strut_bar": {"x": 0.70, "y": 0.92, "z": -1.45}},
@@ -67,6 +72,8 @@ const CARS := {
 static func cabin(kind: String, spot: String) -> Vector3:
 	if spot == "dash_pass":
 		return dash_pass(kind)
+	if spot == "mirror_hang" and has_car(kind):   # under this car's own mirror (it hung at the coupe's spot in every car, #685)
+		return (CabinSpec.for_kind(kind).rear_mirror as Vector3) + HANG_FROM_MIRROR
 	var car: Dictionary = CARS.get(kind, {})
 	var over: Dictionary = car.get("cabin", {})
 	if over.has(spot):
@@ -91,6 +98,10 @@ static func has_car(kind: String) -> bool:
 ## the door mirror. A car with a very narrow dash keeps it inside the body.
 const DASH_PASS_ALONG := 0.62
 const DASH_PASS_DEG := 28.0
+## CockpitFrame's dash face runs: half their depth about dash_face_z, and how
+## far their flat top sits under the cluster's height.
+const DASH_FACE_HALF_DEPTH := 0.06
+const DASH_FACE_UNDER_CLUSTER := 0.02
 
 static func dash_pass(kind: String) -> Vector3:
 	var cab := CabinSpec.for_kind(kind)
@@ -106,7 +117,28 @@ static func dash_pass(kind: String) -> Vector3:
 	var pillar_foot: Vector3 = cab.a_pillar[0]
 	var dash_half := minf(float(cab.get("door_x_front", door_x)) + 0.04, pillar_foot.x - 0.03)
 	x = minf(x, minf(dash_half - 0.06, door_x - 0.25))
+	y += dash_pass_lift(kind)
+	# the dash face's runs (CockpitFrame, 12 cm deep about the face, their flat
+	# top 2 cm under the cluster) stand over a dash as shallow as the kei's:
+	# the bobble stands on that top there, not in it (#684)
+	var r := BobbleSculpt.BASE_R * dash_pass_scale(kind)
+	if z + r > face_z - DASH_FACE_HALF_DEPTH:
+		y = maxf(y, cluster.x - DASH_FACE_UNDER_CLUSTER + 0.001)
 	return Vector3(x, y, z)
+
+## How far the bobble's foot sits over the dash slope under its centre: the
+## flat base up until its uphill edge rests on the dash, not sunk into it
+## (issue #684: 6-18 mm deep before, the kei's steep ledge the most).
+static func dash_pass_lift(kind: String) -> float:
+	return BobbleSculpt.BASE_R * dash_pass_scale(kind) * dash_slope(kind) + 0.001
+
+## The dash top's slope where the bobble stands: rise toward the driver per
+## metre (the wedge from the cowl lip up to the cluster's height).
+static func dash_slope(kind: String) -> float:
+	var cab := CabinSpec.for_kind(kind)
+	var cowl: Vector2 = cab.cowl
+	var cluster: Vector2 = cab.cluster
+	return (cluster.x - cowl.x) / maxf(float(cab.dash_face_z) - cowl.y, 0.01)
 
 ## Per-car bobble head fit overrides: {"along", "scale", "tilt"} (empty for most cars).
 static func bobble_fit(kind: String) -> Dictionary:

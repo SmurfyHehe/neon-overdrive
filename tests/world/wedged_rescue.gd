@@ -9,6 +9,7 @@ extends SceneTree
 # Three cases, one boot:
 # - nosed into the right-hand wall, gas held: rescued once, as "wedged",
 #   within WEDGE_S plus the fade, and it ends up inside the walls
+# - the same with the gas on and off each second: rescued, after twice as long
 # - nosed into the wall, no gas: never rescued (a parked car stays put)
 # - standing in a lane with gas and brake both held: never rescued (only near
 #   a wall counts)
@@ -17,7 +18,6 @@ extends SceneTree
 const Harness := preload("res://tests/traffic/traffic_harness.gd")
 const TestDriver := preload("res://scripts/core/test_driver.gd")
 const RATE := 120
-const WAIT := OffMapRescue.WEDGE_S + 3.0
 
 var logger := Harness.ErrorCounter.new()
 var game: Node
@@ -26,6 +26,7 @@ var rescue: OffMapRescue
 var fails: Array[String] = []
 var cases := [
 	{"name": "nosed into the wall, gas held", "wall": true, "gas": true, "brake": false, "rescued": true},
+	{"name": "nosed into the wall, gas on and off each second", "wall": true, "gas": true, "pulse": true, "brake": false, "rescued": true},
 	{"name": "nosed into the wall, no gas", "wall": true, "gas": false, "brake": false, "rescued": false},
 	{"name": "in a lane, gas and brake held", "wall": false, "gas": true, "brake": true, "rescued": false},
 ]
@@ -53,7 +54,7 @@ func _physics_process(_delta: float) -> bool:
 			return _next()
 		return false
 	tick += 1
-	if rescue.count > count_before or tick >= int(WAIT * RATE):
+	if rescue.count > count_before or tick >= int(_wait() * RATE):
 		_judge()
 		settling = true   # let a fade finish before the next case
 	return false
@@ -73,7 +74,7 @@ func _next() -> bool:
 	else:
 		TestDriver.place(p, Harness.lane_x(1), 0.0, 0.0, 0.0)
 	p.driver = func(car: PlayerCar) -> void:
-		car.throttle_input = 1.0 if c.gas else 0.0
+		car.throttle_input = 1.0 if c.gas and not (c.get("pulse", false) and (tick / RATE) % 2 == 1) else 0.0
 		car.brake_input = 1.0 if c.brake else 0.0
 		car.handbrake_input = 1.0 if c.brake else 0.0
 		car.steering_input = 0.0
@@ -108,15 +109,19 @@ func _judge() -> void:
 	if c.rescued:
 		if got != 1 or rescue.last_reason != OffMapRescue.REASON_WEDGED:
 			fails.append("%s: expected one rescue as '%s', got %d (%s) in %.1f s" % [c.name, OffMapRescue.REASON_WEDGED, got, rescue.last_reason, tick / float(RATE)])
-		elif tick > int((OffMapRescue.WEDGE_S + 1.5) * RATE):
+		elif tick > int((_wait() - 1.5) * RATE):
 			fails.append("%s: rescued only after %.1f s" % [c.name, tick / float(RATE)])
 		else:
 			print("%s: rescued after %.1f s" % [c.name, tick / float(RATE)])
 	elif got != 0:
 		fails.append("%s: rescued (%s) but should not be" % [c.name, rescue.last_reason])
 	else:
-		print("%s: left alone for %.0f s" % [c.name, WAIT])
+		print("%s: left alone for %.0f s" % [c.name, _wait()])
 	p.driver = Callable()
+
+## Pulsed gas counts only its on half: twice as long.
+func _wait() -> float:
+	return OffMapRescue.WEDGE_S * (2.0 if cases[at].get("pulse", false) else 1.0) + 3.0
 
 func _end() -> bool:
 	if not logger.errors.is_empty():

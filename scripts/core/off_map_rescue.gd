@@ -16,7 +16,9 @@ extends CanvasLayer
 # - beside or beyond road that is not built (off either end of
 #   the chunk pool: the road is only recycled forward)          -> after GRACE
 # - wedged near a wall: within WEDGE_NEAR of a wall's inner face,
-#   engine running and gas held, but not moving for WEDGE_S     -> after WEDGE_S
+#   engine running and gas on, but going nowhere: WEDGE_S of
+#   gas in all, forward or reverse, without getting WEDGE_MOVE
+#   from where it began                                         -> then
 #   (fuzz runs, 2026-10-13: about one run in 80 left the car
 #   jammed between the wall and a building front, where neither
 #   gear nor steering got it out; the release build has no
@@ -116,8 +118,8 @@ const BACK_STEPS := 6
 
 ## Wedged: the car's centre this close to a wall's inner face, m (the driving
 ## lanes stay well clear of it: the walls stand past the sidewalk and the
-## building fronts), held this long with the gas on and the car going nowhere:
-## under WEDGE_SPEED m/s and never more than WEDGE_MOVE m from where it began.
+## building fronts), this much time with the gas on (and under WEDGE_SPEED
+## m/s) while never more than WEDGE_MOVE m from where it began.
 const WEDGE_NEAR := 4.0
 const WEDGE_S := 8.0
 const WEDGE_SPEED := 0.5
@@ -240,16 +242,19 @@ func _watch(delta: float) -> void:
 	phase = Phase.FADE_OUT
 	_t = 0.0
 
-## True once the car has been jammed near a wall with the gas on for WEDGE_S.
+## True once the car has been jammed near a wall for WEDGE_S of gas: time
+## with the gas on adds up, time off it pauses the count (a player rocking
+## between forward and reverse is still stuck), and the count starts over
+## once the car gets WEDGE_MOVE from where it began or leaves the wall.
 func _wedged(delta: float) -> bool:
 	var p := _player.global_position
 	var u := RoadFrame.unroll(p)
 	var b := _bounds_at(u.z)
 	var near := b != Vector2.ZERO and (u.x > b.x - WEDGE_NEAR or u.x < -(b.y - WEDGE_NEAR))
-	var pushing := _player.engine_running and _player.throttle_input > 0.5 \
-			and _player.linear_velocity.length() < WEDGE_SPEED
-	if not (near and pushing) or (_wedged_for > 0.0 and p.distance_to(_wedged_at) > WEDGE_MOVE):
+	if not near or (_wedged_for > 0.0 and p.distance_to(_wedged_at) > WEDGE_MOVE):
 		_wedged_for = 0.0
+		return false
+	if not (_player.engine_running and _player.throttle_input > 0.5 and _player.linear_velocity.length() < WEDGE_SPEED):
 		return false
 	if _wedged_for == 0.0:
 		_wedged_at = p

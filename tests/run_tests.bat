@@ -405,6 +405,8 @@ call :run traffic/more_alive_traffic "--headless --fixed-fps 120"
 	call :run traffic/traffic_perf "--headless --fixed-fps 120"
 	call :run world/curve_drive "--headless --fixed-fps 120"
 	call :run world/hill_drive "--headless --fixed-fps 120"
+	rem ~1 min: 36 s at 198 km/h; chunks rebuilt one stage a frame, the car bit for bit as with the old 3 stages a frame.
+	call :run world/rebuild_pacing "--headless --fixed-fps 120"
 	rem ~4 min: 10 km of the default hilly, bending road at 120 and 200 km/h, watching the springs for bumps.
 	call :run world/hill_bumps "--headless --fixed-fps 120"
 	rem The tunnel under Downtown (TN1): map, dip profile, a pass with traffic at 200 km/h and one at 250.

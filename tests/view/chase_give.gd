@@ -120,7 +120,9 @@ func _step(n: int) -> bool:
 				AccessSettings.fov_widening = false
 				_go(S.FLAT_LAUNCH, n)
 		S.FLAT_LAUNCH:
-			if t > 2:
+			# from 1 s in: switched off at a standstill, the acceleration term left
+			# from the stop eases out first (ACCEL_RATE)
+			if t > int(hz * 1.0):
 				fov_dev = maxf(fov_dev, absf(cam.fov - ViewSettings.chase_fov))
 			if p.current_speed() > 20.0:
 				print("widening off: chase FOV within %.3f deg of %.0f up to %.0f m/s" % [fov_dev, ViewSettings.chase_fov, p.current_speed()])

@@ -48,7 +48,8 @@ func _process(_delta: float) -> bool:
 	cut_next = cam.view != last_view
 	last_view = cam.view
 	if cut:
-		var want := ViewSettings.cockpit_fov + ChaseCamera.COCKPIT_FOV_SPEED_GAIN * cam.speed_t
+		var base := ViewSettings.hood_fov if cam.view == ChaseCamera.View.HOOD else ViewSettings.cockpit_fov
+		var want := base + ChaseCamera.COCKPIT_FOV_SPEED_GAIN * cam.speed_t
 		if cam.view == ChaseCamera.View.CHASE:
 			want = lerpf(ChaseCamera.FOV_REST, ChaseCamera.FOV_FAST, cam.speed_t) + cam.accel_fov
 		cuts += 1

@@ -569,6 +569,7 @@ func _build_view_page(parent: Control) -> Control:
 	chase_distance_option = _add_option(page, "Chase distance", ViewSettings.CHASE_DISTANCES, func(i: int) -> void:
 		ViewSettings.set_chase_distance(i)
 		ViewSettings.save_settings())
+	chase_distance_option.select(ViewSettings.chase_distance)
 	# Chase FOV 50-70, default 58; the speed widening rides on top.
 	chase_fov_slider = _add_slider(page, "Chase FOV", ViewSettings.CHASE_FOV_MIN, ViewSettings.CHASE_FOV_MAX, 1.0, ViewSettings.chase_fov,
 		func(v: float) -> void:
@@ -577,6 +578,7 @@ func _build_view_page(parent: Control) -> Control:
 	smoothing_option = _add_option(page, "Chase follow", ViewSettings.FOLLOW_NAMES, func(i: int) -> void:
 		ViewSettings.set_camera_smoothing(i)
 		ViewSettings.save_settings())
+	smoothing_option.select(ViewSettings.camera_smoothing)
 	_heading(page, "Cockpit and hood")
 	# Cockpit FOV 55-78, default 62; the speed widening (up to +6) rides on top.
 	fov_slider = _add_slider(page, "Cockpit FOV", ViewSettings.COCKPIT_FOV_MIN, ViewSettings.COCKPIT_FOV_MAX, 1.0, ViewSettings.cockpit_fov,

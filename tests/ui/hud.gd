@@ -121,7 +121,7 @@ func _physics_process(_delta: float) -> bool:
 	gs.pause()
 	_check(menu.visible and menu.main_page.visible and not menu.settings.visible, "pausing should open the main page")
 	menu.show_settings("Controls")
-	_check(menu.settings.visible and menu.settings.current_page == 3, "Settings should open on the Controls page")
+	_check(menu.settings.visible and menu.settings.current_page == SettingsScreen.PAGES.find("Controls"), "Settings should open on the Controls page")
 	var rows := 0
 	for n in menu.settings.controls_scroll.find_children("*", "Label", true, false):
 		rows += 1

@@ -138,7 +138,7 @@ func _hood_checks(kind: String) -> void:
 	var fwd := -cam.global_basis.z
 	var car_fwd := -p.global_basis.z
 	_check(fwd.angle_to(car_fwd) < deg_to_rad(3.0), "%s: looks where the car points (%.1f deg)" % [kind, rad_to_deg(fwd.angle_to(car_fwd))])
-	_check(absf(cam.fov - ViewSettings.cockpit_fov) < 0.8, "%s: FOV %.1f is the cockpit FOV setting %.1f" % [kind, cam.fov, ViewSettings.cockpit_fov])
+	_check(absf(cam.fov - ViewSettings.hood_fov) < 0.8, "%s: FOV %.1f is the hood FOV setting %.1f (its own since the View page)" % [kind, cam.fov, ViewSettings.hood_fov])
 	# mirrors: the door mirrors never render in this view; the rear one only for the HUD strip
 	var mirrors: CockpitMirrors = cam.frame.mirrors
 	_check(not mirrors.active, "%s: the mirrors are not active in hood view" % kind)

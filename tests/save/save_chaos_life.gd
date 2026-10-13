@@ -146,6 +146,9 @@ static func sig_of(n: int) -> Dictionary:
 		"busts": m.pending_busts, "chase": m.chase_open,
 		"run": not SaveCore.run(n).is_empty(),
 		"fuel": snappedf(float(fl), 0.01) if SaveCore._is_num(fl) else -1.0,
+		# The night clock is on the story's night (a slot switch once leaked
+		# another slot's clock in, and every autosave was then dropped).
+		"clock_ok": int(SaveCore.clock(n).night) == maxi(SaveCore._int(story.get("night", 1)), 1),
 	}
 
 static func canon(x: Variant) -> String:
@@ -205,7 +208,10 @@ func _verify() -> bool:
 	var verdict := {"life": life, "mode": mode, "after_life": last_life.get("life", -1)}
 	var files := files_report(mode == "upgrade")
 	verdict.files = files
-	var ok: bool = files.torn_main.is_empty()
+	# A kill while the upgrade mode lays the old save down again tears the
+	# harness's own copies, not the game's.
+	var resetting: bool = mode == "upgrade" and last.get("op") == "reset" and last.get("t") == "begin"
+	var ok: bool = files.torn_main.is_empty() or resetting
 	if mode == "upgrade":
 		var u := _upgrade_check(last)
 		ok = ok and u.ok
@@ -302,6 +308,7 @@ func _game_boot() -> void:
 	OS.set_environment("NEON_TITLE", "1")
 	OS.set_environment("NEON_GARAGE", "0")
 	OS.set_environment("NEON_TRAFFIC", "0")
+	OS.set_environment("NEON_WRECK", "0")   # a wreck ends the run on its own
 	cur = sig()
 	# The boot itself is a step: a chase left open is a bust, the run is not resumed.
 	var after := cur.duplicate(true)
@@ -310,7 +317,7 @@ func _game_boot() -> void:
 		after.chase = false
 		after.run = false
 	phase = "title"
-	_begin("boot", after)
+	_begin("boot", after, ["run"] if cur.chase else [])
 	_load_game()
 	_game_loop.call_deferred(after)
 
@@ -356,6 +363,11 @@ func _ensure_driving() -> void:
 		_end("start_drive", cur)
 	if _driving() and bot == null:
 		bot = TestDriver.start(game, "clean", {"speed": 120.0})
+		# The police signals stay wired (the step emits them); their AI is off,
+		# so a real pursuit or a bad cop never changes the save behind a step.
+		for n in [game.get("police"), game.get("police_heat")]:
+			if n != null:
+				n.process_mode = Node.PROCESS_MODE_DISABLED
 
 func _game_step() -> void:
 	await _ensure_driving()
@@ -437,13 +449,13 @@ func _g_chase_begin() -> void:
 func _g_chase_end() -> void:
 	phase = "chase"
 	var after := _with({"chase": false})
-	_begin("chase_end", after)
+	_begin("chase_end", after, ["run"])
 	if game.police != null:
 		game.police.pursuit_ended.emit(true)
 	else:
 		SaveCore.end_chase()
 	await _wait(3)
-	_end("chase_end", after)
+	_end("chase_end", after, ["run"])
 
 func _g_cash() -> void:
 	phase = "race"
@@ -612,7 +624,7 @@ func _core_start() -> void:
 		after.busts = int(cur.busts) + 1
 		after.chase = false
 		after.run = false
-	_begin("boot", after)
+	_begin("boot", after, ["run"] if cur.chase else [])
 	SaveDirector.new(null).read_run()
 	_end("boot", after)
 	fuel = load("res://scripts/car/fuel_tank.gd").new()
@@ -721,7 +733,7 @@ func _core_reboot() -> void:
 		a.busts = int(cur.busts) + 1
 		a.chase = false
 		a.run = false
-	_begin("boot", a)
+	_begin("boot", a, ["run"] if cur.chase else [])
 	SaveCore.forget()
 	SaveDirector.new(null).read_run()
 	_end("boot", a)
@@ -832,6 +844,8 @@ func _upgrade_check(last: Dictionary) -> Dictionary:
 		var pre := slot_dir.path_join("pre_v1")
 		if DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(pre)):
 			for f in DirAccess.get_files_at(pre):
+				if f.ends_with(".part"):
+					continue   # a copy cut short, under its working name (never read)
 				if FileAccess.get_file_as_bytes(pre.path_join(f)) != FileAccess.get_file_as_bytes(src.path_join(f)):
 					out.ok = false
 					out["torn_pre_v1_" + f] = n

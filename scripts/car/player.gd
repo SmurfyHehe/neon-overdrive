@@ -159,6 +159,9 @@ const WetReflections := preload("res://scripts/world/wet_reflections.gd")
 const TUNE_CHECK_SECS := 1.0
 var _smear_brake_on := false  # last brake state sent to the tail smears
 var _keeps_tune := false
+## The save slot the tune was read from: the save on the way out of a slot
+## switch must not write this car's tune into the new slot (as NightClock._slot).
+var _tune_slot := 0
 var _saved_tune := {}
 var _tune_check_left := TUNE_CHECK_SECS
 
@@ -284,6 +287,7 @@ func _ready() -> void:
 		PlayerTune.apply_saved(spec)
 		_keeps_tune = true
 		_saved_tune = PlayerTune.values_from(spec)
+		_tune_slot = SaveCore.active_slot() if SaveCore.persist else 0
 	CarSpec.apply(self, spec)
 	TuneParams.set_gear_count(gear_ratios.size())   # the tuner lists one box per gear of this car
 	# The realistic automatic: only cars whose spec has an "auto" block (the
@@ -687,6 +691,8 @@ func _exit_tree() -> void:
 		_save_tune_if_changed()  # restart reloads the scene; quit frees it
 
 func _save_tune_if_changed() -> void:
+	if _tune_slot > 0 and SaveCore.active_slot() != _tune_slot:
+		return
 	var now := PlayerTune.values_from(spec)
 	if now != _saved_tune and PlayerTune.save(spec):
 		_saved_tune = now

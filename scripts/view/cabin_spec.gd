@@ -30,6 +30,7 @@ extends RefCounted
 #   head_unit, lever, handbrake, pedals (throttle pivot; brake and clutch step left)
 #   crank, switch            the window controls
 #   pocket_z      optional  the door pocket's z (default 47 cm ahead of the eye)
+#   pocket_h      optional  its floor over the seat cushion (default 0.10)
 #   rear_mirror, door_mirror (right side; mirrored)
 #   console, seats           "tunnel" | "flat"; "bucket" | "bench" | "flat"
 #

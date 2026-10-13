@@ -341,8 +341,8 @@ var _leg_gap := {-1: 0.0, 1: 0.0}
 ## #678-#681 and #683: each pose is pushed clear once and the offset kept.
 var _probe_pts := {}               # hand mesh name -> its probe points, hand space
 var _fits := {}                    # pose key -> car-space offset
-var _idle_via := {}                # item -> how far the lift's via point moves
-var _reach_via := Vector3.ZERO     # the rim-to-pocket reach's via point, car space
+var _idle_via := {}                # item -> how far the lift's two control points move [near the pocket, near the mouth]
+var _reach_via := [Vector3.ZERO, Vector3.ZERO]   # the rim-to-pocket reach's two control points' moves, car space
 
 func _init(cockpit: CockpitFrame) -> void:
 	frame = cockpit
@@ -916,12 +916,12 @@ func _idle_transform(e: float, draw: float) -> Transform3D:
 	var from := props.holder_xf().origin
 	var eye: Vector3 = frame.cab.eye
 	var to: Vector3 = eye + IDLE_MOUTH[_idle_item]
-	var via := Vector3(lerpf(from.x, to.x, 0.35), from.y + 0.06, eye.z - 0.10) + (_idle_via.get(_idle_item, Vector3.ZERO) as Vector3)
+	var via := Vector3(lerpf(from.x, to.x, 0.35), from.y + 0.06, eye.z - 0.10)
 	var tilt: float = IDLE_TILT_DEG[_idle_item] * e
 	if _idle_item == IdleActions.BEER:
 		tilt += SIP_TILT_DEG * draw
 	var b := Basis(Vector3.UP, deg_to_rad(IDLE_YAW_DEG) * e) * Basis(Vector3.RIGHT, deg_to_rad(tilt))
-	return Transform3D(b, from.lerp(via, e).lerp(via.lerp(to, e), e))
+	return Transform3D(b, _cubic(from, via, to, _idle_via.get(_idle_item, NO_VIA), e))
 
 ## The side window counts as open from half way down, or when the car has no glass there.
 func _window_is_open() -> bool:
@@ -1146,10 +1146,13 @@ func _step_left(delta: float) -> void:
 	_window_idle = 0.0 if working else _window_idle + delta
 	var crank := frame.window_control == "crank"
 	# a flip-off waits for the window to stop, then takes the hand from wherever it is
-	if _gesture_wanted and not working and not is_idling() and (left_act == LeftAct.GESTURE_RETURN or not is_gesturing()):
+	if _gesture_wanted and not working and not is_idling() and (left_act == LeftAct.GESTURE_RETURN or not is_gesturing()) \
+			and (left_act != LeftAct.GRIP or left_t >= RIM_SETTLE_SECS):   # one that waited for an idle use: the hand back on the rim first
 		_begin_gesture()
-	# an idle action waits for the window and the flip-off, and starts from the rim
-	if _idle_pending > 0 and not working and left_act == LeftAct.GRIP:
+	# an idle action waits for the window and the flip-off, and starts from the
+	# rim once the hand has settled on it (straight after a flip-off it began in
+	# the same frame the hand came back, idle_actions "did not wait")
+	if _idle_pending > 0 and not working and left_act == LeftAct.GRIP and left_t >= RIM_SETTLE_SECS:
 		_begin_idle()
 	match left_act:
 		LeftAct.IDLE_REACH:
@@ -1353,9 +1356,16 @@ func left_at_window() -> bool:
 ## through a point kept clear of the wheel, the armrest and the door card.
 func _idle_reach_transform(rim: Transform3D, pocket: Transform3D, e: float) -> Transform3D:
 	# out toward the door at the rim's height first, then down: clear of the column and its stalks
-	var via := Vector3(pocket.origin.x, lerpf(rim.origin.y, pocket.origin.y, 0.3), lerpf(rim.origin.z, pocket.origin.z, 0.5)) + _reach_via
-	var p := rim.origin.lerp(via, e).lerp(via.lerp(pocket.origin, e), e)
-	return Transform3D(Basis(rim.basis.get_rotation_quaternion().slerp(pocket.basis.get_rotation_quaternion(), e)), p)
+	var via := Vector3(pocket.origin.x, lerpf(rim.origin.y, pocket.origin.y, 0.3), lerpf(rim.origin.z, pocket.origin.z, 0.5))
+	return Transform3D(Basis(rim.basis.get_rotation_quaternion().slerp(pocket.basis.get_rotation_quaternion(), e)), _cubic(rim.origin, via, pocket.origin, _reach_via, e))
+
+const NO_VIA := [Vector3.ZERO, Vector3.ZERO]
+
+## A cubic from `a` to `b` whose two control points both start at `via`,
+## moved by `moves` [the one nearer a, the one nearer b] (the cabin fit's).
+static func _cubic(a: Vector3, via: Vector3, b: Vector3, moves: Array, e: float) -> Vector3:
+	var u := 1.0 - e
+	return a * (u * u * u) + (via + (moves[0] as Vector3)) * (3.0 * u * u * e) + (via + (moves[1] as Vector3)) * (3.0 * u * e * e) + b * (e * e * e)
 
 ## Probe points of a hand mesh (and anything it holds), hand space: the
 ## vertices, the face centres and the edge midpoints, like tests/fleet/cabin_fit.
@@ -1387,53 +1397,175 @@ func _points_of(meshes: Array) -> PackedVector3Array:
 ## How far to move a pose (car space) so none of `pts` (hand space) is inside
 ## a cabin solid: each solid is left along its own way out, the deepest first,
 ## until all are clear. Built once per pose, never per frame.
-func _clear_offset(xf: Transform3D, pts: PackedVector3Array, extra: Array = []) -> Vector3:
+func _clear_offset(xf: Transform3D, pts: PackedVector3Array, extra: Array = [], sight := 0.0) -> Vector3:
 	var off := Vector3.ZERO
 	var boxes: Array = frame.keepout + extra
 	for iter in 12:
+		if sight > 0.0:   # out of the road ahead first (a box's way out may then take it further)
+			var away := _sight_offset(xf, pts, off, sight)
+			if away != Vector3.ZERO:
+				off += away
+				continue
 		var best := INF
 		var best_out := Vector3.ZERO
 		for box in boxes:
-			var need := 0.0
 			var inv: Transform3D = (box[0] as Transform3D).affine_inverse()
 			var h: Vector3 = box[1]
-			var d: Vector3 = inv.basis * (box[2] as Vector3)
+			var inside := []
 			for p in pts:
 				var q: Vector3 = inv * (xf * p + off)
-				if absf(q.x) >= h.x or absf(q.y) >= h.y or absf(q.z) >= h.z:
-					continue
-				var t := INF
-				for i in 3:
-					if d[i] > 1e-6:
-						t = minf(t, (h[i] - q[i]) / d[i])
-					elif d[i] < -1e-6:
-						t = minf(t, (-h[i] - q[i]) / d[i])
-				if t < INF and t > need:
-					need = t
-			if need > 0.0 and need < best:   # the shallowest first: a deep way out of one solid is often a short one out of its neighbour
-				best = need
-				best_out = box[2]
+				if absf(q.x) < h.x and absf(q.y) < h.y and absf(q.z) < h.z:
+					inside.append(q)
+			if inside.is_empty():
+				continue
+			# a box may have more than one way out: the shortest is taken
+			for way in (box[2] if box[2] is Array else [box[2]]):
+				var d: Vector3 = inv.basis * (way as Vector3)
+				var need := 0.0
+				for q in inside:
+					var t := INF
+					for i in 3:
+						if d[i] > 1e-6:
+							t = minf(t, (h[i] - q[i]) / d[i])
+						elif d[i] < -1e-6:
+							t = minf(t, (-h[i] - q[i]) / d[i])
+					need = maxf(need, t)
+				if need > 0.0 and need < best:   # the shallowest first: a deep way out of one solid is often a short one out of its neighbour
+					best = need
+					best_out = way
 		if best == INF:
 			break
 		off += best_out * (best + FIT_MARGIN)
 	return off
 
+## The road ahead (tests/view/idle_actions' sight line, with a little air):
+## nothing the idle hand carries comes above this far under the eye within
+## this far either side of straight ahead.
+const FIT_SIGHT_DOWN_DEG := 8.5
+const FIT_SIGHT_SIDE_DEG := 20.5
+## How much longer a move down may be than one out to the side and still be
+## taken: the reach to the pocket goes down (toward the pocket, under the
+## dash end); the lift to the mouth goes out (down, it starts by the armrest).
+const SIGHT_DOWN_FIRST := 3.0
+const SIGHT_SIDE_FIRST := 0.33
+
+## The move (down, or out to the side it is on: `side_cost`) that takes the box
+## round `pts` out of the road ahead, or zero when it is already out.
+func _sight_offset(xf: Transform3D, pts: PackedVector3Array, off: Vector3, side_cost: float) -> Vector3:
+	var eye: Vector3 = frame.cab.eye
+	var bb := AABB(pts[0], Vector3.ZERO)
+	for p in pts:
+		bb = bb.expand(p)
+	var c := xf * bb.get_center() + off - eye
+	var side := 1.0 if c.x >= 0.0 else -1.0
+	var down := 0.0
+	var out := 0.0
+	var tan_d := tan(deg_to_rad(FIT_SIGHT_DOWN_DEG))
+	var tan_s := tan(deg_to_rad(FIT_SIGHT_SIDE_DEG))
+	for i in 8:
+		var r := xf * bb.get_endpoint(i) + off - eye
+		if r.z >= 0.0:
+			continue
+		var ahead := -r.z
+		if absf(r.x) >= tan_s * ahead or r.y <= -tan_d * Vector2(r.x, r.z).length():
+			continue
+		down = maxf(down, r.y + tan_d * Vector2(r.x, r.z).length())
+		out = maxf(out, tan_s * ahead - r.x * side)
+	if down == 0.0 and out == 0.0:
+		return Vector3.ZERO
+	if down <= out * side_cost:
+		return Vector3(0.0, -(down + FIT_MARGIN), 0.0)
+	return Vector3(side * (out + FIT_MARGIN), 0.0, 0.0)
+
 ## Moves the via point of a curve (from -> via -> to, quadratic) until the
-## hand is clear at the samples; returns the via's offset.
-func _clear_curve(pose: Callable, pts_at: Callable, samples: Array, extra: Array = []) -> Vector3:
+## hand is clear at the samples; returns the via's offset. With `sight` (a
+## side cost, _sight_offset), also out of the road ahead.
+func _clear_curve(pose: Callable, pts_at: Callable, samples: Array, extra: Array = [], sight := 0.0) -> Vector3:
 	var via := Vector3.ZERO
+	_curve_clear = false
 	for r in 8:
 		var moved := false
 		for e in samples:
-			var off := _clear_offset(pose.call(e, via), pts_at.call(e), extra)
+			var off := _clear_offset(pose.call(e, via), pts_at.call(e), extra, sight)
 			if off != Vector3.ZERO:
 				via += off / maxf(2.0 * e * (1.0 - e), 0.25)
 				moved = true
 		if not moved:
+			_curve_clear = true
 			break
 	return via
 
+## `boxes` with only their ways out along the door card (no x), where they have one.
+static func _along_card(boxes: Array) -> Array:
+	var out := []
+	for b in boxes:
+		if not b[2] is Array:
+			out.append(b)
+			continue
+		var ways := (b[2] as Array).filter(func(w: Vector3) -> bool: return absf(w.x) < 0.5)
+		out.append([b[0], b[1], ways if not ways.is_empty() else b[2]])
+	return out
+
+## Whether the last _clear_curve came out clear at every sample.
+var _curve_clear := false
+
+## The idle hand's way between two poses (`pose(e, moves)`, a _cubic): tries
+## each set of extra solids with the hand sent out of the road ahead down
+## first and side first, and keeps the smallest moves that come out clear
+## everywhere, preferring moves within PATH_VIA_MAX (beyond it the hand swings
+## wide round the armrest: the kei and the drift coupe, #727), then the
+## smallest of any size; if none come out clear, the smallest clear of the
+## cabin alone; else none.
+const PATH_VIA_MAX := 0.45
+func _fit_path(pose: Callable, pts: PackedVector3Array, extras: Array) -> Array:
+	var wide := []
+	var wide_len := INF
+	for sight in [SIGHT_DOWN_FIRST, SIGHT_SIDE_FIRST, 0.0]:
+		var best := []
+		var best_len := INF
+		for extra in extras:
+			var moves := _clear_cubic(pose, pts, extra, sight)
+			var size := maxf((moves[0] as Vector3).length(), (moves[1] as Vector3).length())
+			if not _curve_clear:
+				continue
+			if size <= PATH_VIA_MAX and size < best_len:
+				best = moves
+				best_len = size
+			elif size < wide_len:
+				wide = moves
+				wide_len = size
+		if not best.is_empty():
+			return best
+		if sight == SIGHT_SIDE_FIRST and not wide.is_empty():
+			return wide   # out of the road ahead, the long way round, before through it
+	return wide if not wide.is_empty() else NO_VIA.duplicate()
+
+## Moves a _cubic's two control points until the hand is clear at
+## REACH_SAMPLES: each sample's way out is shared between them by how much
+## each pulls on that point of the curve (the smallest change that clears it).
+func _clear_cubic(pose: Callable, pts: PackedVector3Array, extra: Array, sight: float) -> Array:
+	var moves := [Vector3.ZERO, Vector3.ZERO]
+	_curve_clear = false
+	for r in 12:
+		var moved := false
+		for e in REACH_SAMPLES:
+			var off := _clear_offset(pose.call(e, moves), pts, extra, sight)
+			if off != Vector3.ZERO:
+				var w1: float = 3.0 * (1.0 - e) * (1.0 - e) * e
+				var w2: float = 3.0 * (1.0 - e) * e * e
+				var n: float = w1 * w1 + w2 * w2
+				moves[0] += off * (w1 / n)
+				moves[1] += off * (w2 / n)
+				moved = true
+		if not moved:
+			_curve_clear = true
+			break
+	return moves
+
 const FIT_MARGIN := 0.003
+## How long the left hand is back on the rim before a flip-off or an idle
+## reach that waited for the other leaves it.
+const RIM_SETTLE_SECS := 0.1
 ## Where along a reach the fit checks the hand.
 const REACH_SAMPLES := [0.2, 0.25, 0.33, 0.4, 0.5, 0.6, 0.66, 0.75, 0.8, 0.9]
 ## The handbrake hand's wrist raised off the console, rolled about the lever.
@@ -1469,25 +1601,40 @@ func _fit_cabin() -> void:
 		lift = maxf(lift, _clear_offset(_brake_hand_transform(), right, lever).y)
 	_fits["handbrake"] = lift
 	frame.handbrake.rotation = hb_rot
-	# the door pocket: where the hand can take an item out of it
+	# the door pocket: where the hand can take an item out of it. It moves along
+	# the card only (a solid's way out across the car is dropped while it fits).
+	var all: Array = frame.keepout
+	frame.keepout = _along_card(all)
 	var pocket_off := _clear_offset(props.holder_xf(), mitten)
 	for item in hold_hands:
 		pocket_off = _bigger(pocket_off, _clear_offset(props.holder_xf(), _points_of(_held(item))))
+	if not frame.crank_keep.is_empty():   # the pocket itself out from under the crank
+		frame.keepout = []
+		pocket_off = _bigger(pocket_off, _clear_offset(props.pocket.transform, _points_of([props.pocket]), _along_card([frame.crank_keep])))
+	frame.keepout = all
 	if pocket_off != Vector3.ZERO:
 		props.move_pocket(pocket_off)
 	# the reach from the rim to the pocket
 	var grip := _grip_transform(-1)
-	_reach_via = _clear_curve(func(e: float, v: Vector3) -> Transform3D:
+	var pocket_box := props.pocket.get_aabb()   # its walls, left upward: the hand comes into it from above
+	var in_pocket := [[props.pocket.transform * Transform3D(Basis.IDENTITY, pocket_box.get_center()), pocket_box.size * 0.5, Vector3.UP]]
+	# and the wheel's disc, left toward the driver (or out past its edge, toward
+	# the door): the hand comes off the rim before it goes for the door
+	var rim := SteeringWheel.RADIUS + SteeringWheel.GRIP_R
+	var mount := frame.wheel_mount.transform
+	var back := (mount.basis * Vector3.BACK).normalized()
+	var discs := [[mount, Vector3(rim, rim, SteeringWheel.GRIP_R + 0.005), back],
+		[mount, Vector3(rim, rim, SteeringWheel.GRIP_R + 0.005), [back, Vector3.LEFT]]]
+	_reach_via = _fit_path(func(e: float, v: Array) -> Transform3D:
 		_reach_via = v
-		return _idle_reach_transform(grip, props.holder_xf(), e), func(_e: float) -> PackedVector3Array: return mitten, REACH_SAMPLES)
+		return _idle_reach_transform(grip, props.holder_xf(), e), mitten, [[in_pocket[0], discs[0]], [in_pocket[0], discs[1]]])
 	# the lift to the mouth, per item
 	var keep_item := _idle_item
 	for item in hold_hands:
 		_idle_item = item
-		var pts := _points_of(_held(item))
-		_idle_via[item] = _clear_curve(func(e: float, v: Vector3) -> Transform3D:
+		_idle_via[item] = _fit_path(func(e: float, v: Array) -> Transform3D:
 			_idle_via[item] = v
-			return _idle_transform(e, 0.0), func(_e: float) -> PackedVector3Array: return pts, REACH_SAMPLES)
+			return _idle_transform(e, 0.0), _points_of(_held(item)), [[discs[0]], [discs[1]]])
 	_idle_item = keep_item
 	# the flip-off: each aim, window open and shut, and the way there
 	var keep := [_gesture_open, _gesture_aim]

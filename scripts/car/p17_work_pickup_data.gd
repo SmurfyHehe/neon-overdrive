@@ -33,7 +33,7 @@ const CABIN := {
 	"head_unit": Vector3(0.0, 1.108, -0.694),
 	"lever": Vector3(0.0, 0.891, -0.460), "handbrake": Vector3(0.0, 0.891, -0.000),
 	"pedals": Vector3(-0.260, 0.686, -0.940),
-	"crank": Vector3(-0.777, 0.926, -0.620), "switch": Vector3(-0.751, 1.063, -0.420),
+	"crank": Vector3(-0.781, 0.856, -0.230), "switch": Vector3(-0.751, 1.063, -0.420),
 	"rear_mirror": Vector3(0.0, 1.670, -0.540),
 	"door_mirror": Vector3(0.961, 1.246, -1.060),
 	"console": "flat", "seats": "bench", "trim": "work",

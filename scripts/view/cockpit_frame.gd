@@ -140,8 +140,11 @@ const GLASS_TOP := 1.30
 const GLASS_TRAVEL := 0.36
 const CRANK_POS := Vector3(-0.826, 0.65, -0.18)   # hub on the door card, forward of and below the armrest (the hand on the knob stays under the sightline)
 const CRANK_ARM := 0.085
-const CRANK_KNOB_X := 0.03                        # knob mid-length, inward from the arm
+const CRANK_KNOB_X := 0.05                        # where the hand holds the knob, inward from the card (at 3 cm the mitten was 1.5 cm into the card, #680)
 const CRANK_TURNS := 2.5
+## Half extents of the disc the crank and the hand on its knob sweep, from the
+## card face inward (x) and about the hub (y, z): arm and knob, plus the mitten.
+const CRANK_SWEEP := Vector3(0.045, 0.125, 0.125)
 const SWITCH_POS := Vector3(-0.80, 0.787, 0.02)   # rocker on the outboard edge of the armrest
 const SWITCH_TILT_DEG := 14.0
 const WINDOW_CONTROLS := ["crank", "switch"]
@@ -215,9 +218,12 @@ var _pane_tint := Color.WHITE
 var _pane_window := -1.0          # the window the drawn pane was cut for
 ## The cabin solids the driver's hands must keep out of (issues #678-#681,
 ## #683), as the boxes are built: [box -> car Transform3D, half extents, the
-## way out (unit, car space)]. DriverModel fits its poses against these once
+## way out (unit, car space; or an Array of them, the shortest taken)]. DriverModel fits its poses against these once
 ## per pose, not every frame.
 var keepout: Array = []
+## The crank's keepout entry (in keepout while the car has the crank): the
+## disc its arm, knob and the hand on it sweep, left downward or inboard.
+var crank_keep: Array = []
 var radio: RadioManager          # found lazily; the game adds it after the camera
 var wheel: SteeringWheel
 var wheel_mount: Node3D          # tilt and place; the wheel turns inside it
@@ -494,6 +500,7 @@ func _build_static() -> void:
 		# one cushion and backrest across the car, a fold-down armrest hump in the middle
 		var bw := door_x * 2.0 - 0.06
 		k.wedge(Vector3(bw, 0.10, 0.50), Vector3(0.0, seat_h - 0.05, seat_z), c_seat, 0.03, 0.0)
+		_keep(Vector3(bw, 0.13, 0.50), Vector3(0.0, seat_h - 0.035, seat_z), Vector3.UP)   # the cushion runs to the door: the crank turns over it
 		k.box(Vector3(bw, 0.58, 0.10), Vector3(0.0, seat_h + 0.28, seat_z + 0.25), c_seat, recline)
 		k.box(Vector3(bw, 0.06, 0.30), Vector3(0.0, seat_h - 0.12, seat_z + 0.03), c_plastic)
 		for sx in [seat_x, -seat_x]:
@@ -505,6 +512,8 @@ func _build_static() -> void:
 			k.wedge(Vector3(seat_w, 0.10, 0.50), Vector3(sx, seat_h - 0.05, seat_z), c_this, 0.03, 0.0)
 			if cab.seats == "bucket":
 				k.box(Vector3(0.10, 0.10, 0.46), Vector3(sx - seat_w * 0.42, seat_h + 0.02, seat_z - 0.02), c_seat_panel)  # cushion bolsters
+				if sx == seat_x:   # the driver's outer one, by the door (the kei's is near the crank)
+					_keep(Vector3(0.10, 0.10, 0.46), Vector3(sx - seat_w * 0.42, seat_h + 0.02, seat_z - 0.02), Vector3.UP)
 				k.box(Vector3(0.10, 0.10, 0.46), Vector3(sx + seat_w * 0.42, seat_h + 0.02, seat_z - 0.02), c_seat_panel)
 				k.box(Vector3(0.09, 0.50, 0.14), Vector3(sx - seat_w * 0.44, seat_h + 0.28, seat_z + 0.23), c_seat_panel, recline)
 				k.box(Vector3(0.09, 0.50, 0.14), Vector3(sx + seat_w * 0.44, seat_h + 0.28, seat_z + 0.23), c_seat_panel, recline)
@@ -525,7 +534,7 @@ func _build_static() -> void:
 		_kbox(k, Vector3(0.06, card_h, door_len - front_len), Vector3(side * (door_x + 0.03), (card_top + floor_y + 0.26) * 0.5, b_z - (door_len - front_len) * 0.5), c_plastic_light, inboard)
 		_kbox(k, Vector3(0.06, 0.08, front_len), Vector3(side * (minf(door_x, door_x_f) + 0.03), belt - 0.055, door_z0 + front_len * 0.5), c_leather, inboard)   # belt line pad, its top just under the belt (the glass leans in above it)
 		_kbox(k, Vector3(0.06, 0.08, door_len - front_len), Vector3(side * (door_x + 0.03), belt - 0.055, b_z - (door_len - front_len) * 0.5), c_leather, inboard)
-		_kbox(k, Vector3(0.12, 0.04, 0.32), Vector3(side * (door_x - 0.04), seat_h + 0.28, eye.z - 0.22), c_leather, Vector3.UP)       # armrest
+		_kbox(k, Vector3(0.12, 0.04, 0.32), Vector3(side * (door_x - 0.04), seat_h + 0.28, eye.z - 0.22), c_leather, [Vector3.UP, Vector3.FORWARD, inboard])       # armrest (a reach past its front end goes ahead of or beside it, not over it)
 		_kbox(k, Vector3(0.05, 0.03, 0.12), Vector3(side * (door_x - 0.025), seat_h + 0.36, eye.z - 0.52), c_trim, inboard)        # door pull
 		lit.box(Vector3(0.004, 0.004, door_len - 0.25), Vector3(side * (door_x - 0.002), card_top, door_zc), Color(strip, strip.a * 0.86))
 		k.box(Vector3(0.14, 0.12, door_len + 0.10), Vector3(side * (minf(door_x, door_x_f) - 0.04), floor_y + 0.04, door_zc + 0.05), c_plastic)   # sill
@@ -859,11 +868,11 @@ static func _bar(k: CockpitKit, a: Vector3, b: Vector3, w: float, col: Color, ke
 		keep.append([Transform3D(Basis(x, y, z), (a + b) * 0.5), Vector3(w, len, w * 1.2) * 0.5, out])
 
 ## A cabin box the hands keep out of, leaving by `out` (see keepout).
-func _kbox(k: CockpitKit, size: Vector3, center: Vector3, col: Color, out: Vector3) -> void:
+func _kbox(k: CockpitKit, size: Vector3, center: Vector3, col: Color, out: Variant) -> void:
 	k.box(size, center, col)
 	_keep(size, center, out)
 
-func _keep(size: Vector3, center: Vector3, out: Vector3) -> void:
+func _keep(size: Vector3, center: Vector3, out: Variant) -> void:
 	keepout.append([Transform3D(Basis.IDENTITY, center), size * 0.5, out])
 
 # ---------- the side window ----------
@@ -946,6 +955,11 @@ func set_window_control(control: String) -> void:
 		_window_parts.queue_free()
 	crank = null
 	window_switch = null
+	keepout.erase(crank_keep)
+	crank_keep = []
+	if control == "crank":   # the door pocket and the reaches keep out from under the turning hand
+		crank_keep = [Transform3D(Basis.IDENTITY, crank_pos + Vector3(CRANK_SWEEP.x, 0.0, 0.0)), CRANK_SWEEP, [Vector3.DOWN, Vector3.RIGHT]]   # under it, or inboard past the knob
+		keepout.append(crank_keep)
 	_window_parts = Node3D.new()
 	_window_parts.name = "WindowControl"
 	add_child(_window_parts)
@@ -963,7 +977,7 @@ func set_window_control(control: String) -> void:
 		var k := CockpitKit.new()
 		k.box(Vector3(0.014, CRANK_ARM + 0.03, 0.022), Vector3(0.016, CRANK_ARM * 0.5, 0.0), SILVER)
 		k.cylinder(0.011, 0.012, 0.022, Vector3(0.0, 0.0, 0.0), SILVER, 8, Basis(Vector3.BACK, -PI / 2.0))   # hub cap
-		k.cylinder(0.011, 0.008, 0.052, Vector3(0.0, CRANK_ARM, 0.0), PLASTIC, 10, Basis(Vector3.BACK, -PI / 2.0))   # the peg knob
+		k.cylinder(0.011, 0.008, 0.072, Vector3(0.0, CRANK_ARM, 0.0), PLASTIC, 10, Basis(Vector3.BACK, -PI / 2.0))   # the peg knob, long enough for the hand to stand off the card
 		crank.add_child(k.instance(mat, "Arm"))
 	else:
 		# A small bezel let into the armrest with one rocker in it, an amber

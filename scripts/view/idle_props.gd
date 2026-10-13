@@ -124,7 +124,7 @@ func _ready() -> void:
 	var eye: Vector3 = cab.eye
 	var door := minf(float(cab.door_x), float(cab.get("door_x_front", cab.door_x)))
 	# behind the dash's lower face (on the truck and the drift coupe it reached into it)
-	_pocket_floor = Vector3(-(door - 0.043), float(cab.seat_h) + 0.10, maxf(float(cab.get("pocket_z", eye.z - 0.47)), float(cab.dash_face_z) + POCKET_FROM_DASH))
+	_pocket_floor = Vector3(-(door - 0.043), float(cab.seat_h) + float(cab.get("pocket_h", 0.10)), maxf(float(cab.get("pocket_z", eye.z - 0.47)), float(cab.dash_face_z) + POCKET_FROM_DASH))
 	var mat := CockpitKit.material(0.6, 0.0, 0.15)
 	var k := CockpitKit.new()
 	# open on top: the cup's open face (+z) turned up

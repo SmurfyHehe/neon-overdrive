@@ -9,8 +9,9 @@ extends SceneTree
 # Moving parts (door glass, crank, switch, both hands, the idle items, lever,
 # handbrake, pedals, trinket, bobble, the vape cloud) are posed through their
 # worst positions. The pane is a sheet, so hand-vs-pane is "points on both
-# sides of the pane, within it". The window crank is tried on every car, not
-# only the cars that have one, so a spec change cannot surprise.
+# sides of the pane, within it". Each car's own window control is tried (its
+# spec's "window_control"): a spec change to the other is tried when it lands.
+# The kei's and the work pickup's doors have no room for a crank (#726).
 #
 # Pass rule: no probe point deeper than ALLOW inside another solid (the ray
 # probe's own floor; hands, held items and the pane get nothing more), parts
@@ -577,7 +578,7 @@ func _pane_cut(frame: CockpitFrame, pts: PackedVector3Array) -> float:
 func _window_controls(kind: String, frame: CockpitFrame, driver: DriverModel) -> void:
 	var inv := frame.global_transform.affine_inverse()
 	var original := frame.window_control
-	for control in ["crank", "switch"]:
+	for control in [original]:
 		frame.set_window_control(control)
 		await process_frame
 		if control == "crank":

@@ -42,7 +42,7 @@ from geom import pl
 REAR_DOOR = (2.60, 3.18)             # rear door: B-pillar trailing edge to the C-pillar (side glass ends at 3.18)
 BED_S = 3.37                         # the bed box starts here: the shut line behind the cab's back wall
 TAILGATE_HW, TAILGATE_Y0 = 0.74, 0.80   # between the lamp columns, down to the bed floor (0.84)
-TAILGATE_S = 4.905                   # its inner skin (the bed's end wall) starts at 4.908
+TAILGATE_S = 4.755                   # its inner skin (the bed's end wall) starts at 4.758
 
 # ---- lamps
 HEAD = (0.54, 0.74, 0.72, 0.88)      # head lamp, right side (front view): the warm white part
@@ -59,8 +59,8 @@ BUMPER_F = (0.46, 0.58)              # chrome front bumper, bottom and top
 BUMPER_IN = 0.30                     # flat under the plate inboard of this, 30 mm proud outboard of it
 
 # ---- the stripe (cars.py P17 decals: sodium band, dark pinline under it), as paint regions
-STRIPE = (0.40, 4.75, 0.74, 0.82)
-PINLINE = (0.40, 4.75, 0.715, 0.735)
+STRIPE = (0.40, 4.60, 0.74, 0.82)
+PINLINE = (0.40, 4.60, 0.715, 0.735)
 
 # ---- running gear and small parts
 DISC_F, DRUM_R = 0.15, 0.13          # 300 mm discs in front, 260 mm drums at the rear
@@ -298,8 +298,8 @@ def _fittings(ctx):
     # diff, the driveshaft, the tank on the left, the exhaust down the right.
     fr = part('frame', bevel=0)
     for sx in (1, -1):
-        P.obox(fr, (sx * 0.46, 0.255, z(2.45)), (0.08, 0.05, 4.20), np.eye(3), 'steel')
-    for s_ in (0.55, 1.40, 3.40, 4.60):
+        P.obox(fr, (sx * 0.46, 0.255, z(2.40)), (0.08, 0.05, 4.10), np.eye(3), 'steel')
+    for s_ in (0.55, 1.40, 3.40, 4.45):
         P.obox(fr, (0.0, 0.255, z(s_)), (0.84, 0.045, 0.06), np.eye(3), 'steel')
     for sx, nm in ((1, 'r'), (-1, 'l')):
         arm = part('susp_f' + nm, bevel=0)
@@ -323,7 +323,7 @@ def _fittings(ctx):
     P.obox(part('fuel_tank', bevel=0), (-0.30, 0.225, z(axles[1] - 0.70)), (0.42, 0.10, 0.70), np.eye(3), 'plastic')
     tip = D['exhaust'][0]
     pipe = part('exhaust_pipe', bevel=0)
-    pts = [(0.30, 0.25, 1.20), (0.32, 0.22, 1.60), (0.32, 0.22, 3.30), (0.56, 0.24, 3.55), (0.60, 0.26, 4.55),
+    pts = [(0.30, 0.25, 1.20), (0.32, 0.22, 1.60), (0.32, 0.22, 3.30), (0.56, 0.24, 3.55), (0.60, 0.26, 4.40),
            (tip['x'], tip['y'], L - 0.02)]
     for (xa, ya, sa), (xb, yb, sb) in zip(pts, pts[1:]):
         K.cyl(pipe, (xa, ya, z(sa)), (xb, yb, z(sb)), 0.028, 5, 'steel', caps=(False, False))
@@ -357,7 +357,7 @@ KIT = {
     'regions': {
         'nose_s': 0.22,                    # the front fascia under the grille and lamps
         'door_s0': 1.34, 'door_s1': 2.52,  # the front door; the rear one is cut in _cuts
-        'tail_s': 4.70, 'tail_y': 0.46,    # the lower rear apron the step bumper bolts to
+        'tail_s': 4.55, 'tail_y': 0.46,    # the lower rear apron the step bumper bolts to
     },
     'merge_flat': True,
     'no_trunk': True,                      # the tail is the tailgate (cuts), the deck the open bed

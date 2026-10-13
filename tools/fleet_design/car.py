@@ -389,7 +389,12 @@ def add_part(model, p):
                 box(m, (sx * (x - 0.07), y - 0.02, z(s) + 0.02), (0.04, 0.03, 0.05), p.get('stub_mat', 'trim'))
                 continue
             box(m, (sx * x, y, z(s)), (0.1, 0.075, 0.14), p.get('mat', 'paint'), {'-z': 'trim'})
-            box(m, (sx * (x - 0.06), y - 0.01, z(s) + 0.02), (0.06, 0.03, 0.06), 'trim')
+            if p.get('long_arm'):
+                # a work truck's wide mirror: the arm reaches all the way from the door
+                arm = p['out'] - 0.03
+                box(m, (sx * (x - p['out'] + arm / 2), y - 0.01, z(s) + 0.02), (arm, 0.03, 0.06), 'trim')
+            else:
+                box(m, (sx * (x - 0.06), y - 0.01, z(s) + 0.02), (0.06, 0.03, 0.06), 'trim')
 
     elif t == 'wing':
         # GT wing: plank (s0..s1 chord, y height of its underside), uprights, endplates

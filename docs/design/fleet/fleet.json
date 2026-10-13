@@ -7370,12 +7370,12 @@
    "refs": "the mid-size 4-door work pickups of the late 1990s (category only; no brand): a 4.0 V6, rear drive, a long bed",
    "silhouette_rule": "Low flat hood under a tall upright double cab, a short open bed behind it on flared box sides, a chrome step bumper, a side stripe the length of the body, steel wheels in big arches, a single tailpipe out the rear corner.",
    "dims": {
-    "length": 4.95,
+    "length": 4.8,
     "width_body": 1.8,
     "height": 1.74,
     "wheelbase": 3.18,
     "front_overhang": 0.9,
-    "rear_overhang": 0.87,
+    "rear_overhang": 0.72,
     "ground_clearance": 0.28
    },
    "physics_hint": {
@@ -7417,11 +7417,11 @@
       1.16
      ],
      [
-      4.92,
+      4.77,
       1.14
      ],
      [
-      4.95,
+      4.8,
       1.08
      ]
     ],
@@ -7435,11 +7435,11 @@
       0.28
      ],
      [
-      4.52,
+      4.45,
       0.28
      ],
      [
-      4.95,
+      4.8,
       0.5
      ]
     ],
@@ -7469,15 +7469,15 @@
       0.94
      ],
      [
-      4.65,
+      4.55,
       0.94
      ],
      [
-      4.82,
+      4.7,
       0.9
      ],
      [
-      4.95,
+      4.8,
       0.88
      ]
     ],
@@ -7491,7 +7491,7 @@
       0.88
      ],
      [
-      4.95,
+      4.8,
       0.88
      ]
     ],
@@ -7513,7 +7513,7 @@
       1.12
      ],
      [
-      4.95,
+      4.8,
       1.12
      ]
     ]
@@ -7550,7 +7550,7 @@
    "open_top": [
     {
      "s0": 3.4,
-     "s1": 4.92,
+     "s1": 4.77,
      "floor": 0.84,
      "wall": 0.05,
      "mat": "bed"
@@ -7604,7 +7604,7 @@
      "rect": [
       0.4,
       0.74,
-      4.75,
+      4.6,
       0.82
      ],
      "mat": "paint2",
@@ -7615,7 +7615,7 @@
      "rect": [
       0.4,
       0.715,
-      4.75,
+      4.6,
       0.735
      ],
      "mat": "trim",
@@ -7648,8 +7648,9 @@
    "parts": [
     {
      "type": "mirrors",
-     "out": 0.11,
-     "up": 0.09
+     "out": 0.15,
+     "up": 0.09,
+     "long_arm": true
     },
     {
      "type": "step",
@@ -7659,7 +7660,7 @@
     },
     {
      "type": "box",
-     "s": 5.02,
+     "s": 4.87,
      "xy": [
       0.0,
       0.56
@@ -7766,10 +7767,10 @@
      "center": [
       0.0,
       0.98,
-      2.472
+      2.322
      ],
      "normal": [
-      0.0,
+      -0.0,
       -0.0,
       1.0
      ],
@@ -7926,12 +7927,12 @@
         "tips": [
          {
           "x": 0.558,
-          "y": 0.549,
+          "y": 0.537,
           "r": 0.042
          },
          {
           "x": -0.558,
-          "y": 0.549,
+          "y": 0.537,
           "r": 0.042
          }
         ]
@@ -8004,9 +8005,9 @@
    },
    "budget_tris": 10000,
    "proxy_tris": {
-    "stock": 2554,
-    "street": 2512,
-    "full": 2412
+    "stock": 2594,
+    "street": 2552,
+    "full": 2448
    },
    "exhaust_tips": {
     "stock": [
@@ -8014,7 +8015,7 @@
       "pos": [
        0.68,
        0.4,
-       2.315
+       2.201
       ],
       "dir": [
        0,
@@ -8028,8 +8029,8 @@
      {
       "pos": [
        0.558,
-       0.549,
-       2.51
+       0.537,
+       2.36
       ],
       "dir": [
        0,
@@ -8041,8 +8042,8 @@
      {
       "pos": [
        -0.558,
-       0.549,
-       2.51
+       0.537,
+       2.36
       ],
       "dir": [
        0,

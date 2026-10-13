@@ -94,7 +94,7 @@ func _initialize() -> void:
 	# district the run reached, and that is the kerb's behaviour, not the
 	# barrier's. Since the 8-look loop (2026-10-13) the runs reach old town,
 	# whose pavement and building line differ from the residential street
-	# they used to reach (issue filed for the old-town kerb roll).
+	# they used to reach (#702: the old-town kerb roll).
 	Districts.force = "downtown"
 	RoadBarriers.force_kind = scenarios[0][0]
 	game = Harness.boot(self, 0, 300.0, 4242)

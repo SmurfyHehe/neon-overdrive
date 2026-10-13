@@ -995,6 +995,12 @@ func is_switched_off() -> bool:
 func is_cranking() -> bool:
 	return not engine_running and starter_input
 
+## A day parked: everything that cools down overnight has (PowertrainHealth.rest),
+## and the first start of the night cranks a cold engine, as on a new game.
+func rest_overnight() -> void:
+	health.rest()
+	_warmth = 0.0
+
 func ignition_off() -> void:
 	if _ignition_mode < 0:
 		_ignition_mode = transmission_mode()

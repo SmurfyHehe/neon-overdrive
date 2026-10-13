@@ -82,8 +82,12 @@ static func write_polaroid(img: Image, car_id: String) -> bool:
 
 # ---------- entry ----------
 
-func _on_entering(_entry: String) -> void:
+func _on_entering(entry: String) -> void:
 	capture_polaroid()
+	# 6 a.m.: the car stands in the garage all day and comes out cold. Before
+	# GameState leaves PLAYING, so the save made on the way in has it cool.
+	if entry == GameState.ENTRY_DAWN and player != null and is_instance_valid(player):
+		player.rest_overnight()
 
 ## Takes the Polaroid from what is on screen now. Needs a real renderer: a
 ## headless run has no frame to read, so it returns false there. Not in test

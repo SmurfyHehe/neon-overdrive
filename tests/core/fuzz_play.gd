@@ -271,7 +271,7 @@ func _physics_process(_delta: float) -> bool:
 ## Esc out of what Esc closes; on a screen it does not (garage, dawn card,
 ## title, a confirm box), arrows through the buttons and Enter on the one that
 ## leads back to the road. A screen with no keyboard focus is stuck.
-const LEAVE_BUTTONS := ["resume", "go out", "continue", "drive", "no", "back"]
+const LEAVE_BUTTONS := ["resume", "go out", "continue", "new game", "drive", "no", "back"]
 const RECOVER_STEP := RATE / 4
 
 func _recover(gs: GameState, p: PlayerCar) -> bool:
@@ -401,7 +401,16 @@ func _touching(p: PlayerCar) -> Array:
 	var out: Array = []
 	for hit in p.get_world_3d().direct_space_state.intersect_shape(q, 16):
 		var c: Object = hit.collider
-		out.append("%s(%s)" % [c.get("name"), c.get_class()])
+		var where := ""
+		if c is CollisionObject3D:
+			var owner_id: int = (c as CollisionObject3D).shape_find_owner(hit.shape)
+			var sh: Shape3D = (c as CollisionObject3D).shape_owner_get_shape(owner_id, 0)
+			var xf: Transform3D = (c as Node3D).global_transform * (c as CollisionObject3D).shape_owner_get_transform(owner_id)
+			var u := RoadFrame.unroll(xf.origin)
+			where = " at x %.1f y %.1f s %.1f size %s" % [u.x, u.y, RoadFrame.s_at(u.z), str((sh as BoxShape3D).size) if sh is BoxShape3D else sh.get_class()]
+		out.append("%s(%s)%s" % [c.get("name"), c.get_class(), where])
+	var b: Vector2 = game.rescue._bounds_at(RoadFrame.unroll(p.global_position).z)
+	out.append("walls at +%.1f / -%.1f" % [b.x, b.y])
 	return out
 
 ## A cop or a traffic car with a NaN in its state.
@@ -431,7 +440,19 @@ func _memory() -> Dictionary:
 			"nodes": int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
 			"orphans": int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT))}
 
+## QUIT on the title (or anything else that ends the game) ends the run
+## early: what was played still counts, and it is not a failure by itself.
+func _finalize() -> void:
+	if _ended:
+		return
+	fails.append_array([] if logger.errors.is_empty() else ["seed %d, tick %d: %d engine error(s) before the game quit, first: %s" % [seed_value, tick, logger.errors.size(), logger.errors[0]]])
+	info.quit_by_game = true
+	_end()
+
+var _ended := false
+
 func _end() -> bool:
+	_ended = true
 	_release_all()
 	mem.end = _memory()
 	var out := setup.duplicate()

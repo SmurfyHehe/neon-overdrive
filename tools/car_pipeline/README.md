@@ -272,6 +272,27 @@ front fender is written as it is too; the rear bumper's corners are scuffed
 (`paint_regions` in primer, both sides). `_primer_lip` rolls the primer
 fender's arch edge, which `parts.add_arch_lips` only does for `paint`.
 
+**P6, the crossover** (`p6_crossover`, kit in `kit_p6_crossover.py`): 4,824
+body triangles in 99 parts, 1,048 more in the wheels; 0.000 mm over 58
+mirrored parts and pairs. Five doors: the front pair from the common recipe,
+the rear pair cut by the kit (`rdoor_*`), each with its own glass and seal
+(`door_glass`: a kit door listed there gets its glass as `glass_<door>`).
+Every door hinges just outboard of its skin. The tailgate (`hatch`) hangs on
+the roof's rear edge and takes the spoiler, glass, plate, plate lamp, high
+brake lamp and rear wiper up with it (70 degrees). Black cladding laid on the
+skin (arches 4.5 cm proud, a sill panel, rivets) keeps the 1.84 m width;
+silver roof rails, black crossbars. Stacked twin lamps in front, split lamps
+behind (upper on the corner with the brake core and a wrap, amber inboard;
+lower in the bumper with the reversing lamp), 316/300 mm vented discs. Three
+things the common recipe would clash on, fixed in the kit for this car
+(`tests/car/part_fit.gd` finds none): the hood hinges just behind and above
+its rear edge so it lifts forward (`hinge_hood`), the wiper arms pivot on
+the scuttle behind it (`_wipers`), and the front door glass stops 2 cm short
+of the windscreen's edge, under the A-pillar strip (`_trim_door_glass`). The
+fuel flap's hinge sits out past the flap, as the flank leans in. Built in a
+cloud container with `pip install bpy==5.1.2` as the Blender backend, which
+reproduces the hatch's triangle and bevel counts exactly.
+
 A new car's kit goes in a file of its own (`kit_<id>.py`, a dict `KIT`) with
 one import line in `kits.py`.
 

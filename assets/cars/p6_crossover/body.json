@@ -44,8 +44,8 @@
   "hinge_hood": {
    "pos": [
     0.0,
-    1.05,
-    -1.0
+    1.062,
+    -0.975
    ],
    "axis": [
     1,
@@ -119,8 +119,8 @@
   "hinge_hatch": {
    "pos": [
     0.0,
-    1.5241,
-    1.53
+    1.155,
+    1.95
    ],
    "axis": [
     1,
@@ -128,12 +128,12 @@
     0
    ],
    "open_sign": -1,
-   "open_deg": 75,
+   "open_deg": 70,
    "panel": "hatch"
   },
   "hinge_fuel_flap": {
    "pos": [
-    -0.849,
+    -0.864,
     0.94,
     1.065
    ],
@@ -528,8 +528,8 @@
   8.0,
   12.0
  ],
- "bevelled_edges": 226,
- "source_commit": "4164226",
+ "bevelled_edges": 222,
+ "source_commit": "df50f69",
  "nodes": [
   "p6_crossover",
   "hinge_hood",
@@ -692,15 +692,15 @@
  "tris": {
   "hood": 134,
   "door_r": 67,
-  "glass_door_r": 35,
+  "glass_door_r": 22,
   "handle_r": 14,
   "mirror_r": 24,
-  "seal_door_r": 32,
+  "seal_door_r": 24,
   "door_l": 67,
-  "glass_door_l": 35,
+  "glass_door_l": 22,
   "handle_l": 14,
   "mirror_l": 24,
-  "seal_door_l": 32,
+  "seal_door_l": 24,
   "glass_rdoor_r": 13,
   "handle_rdoor_r": 14,
   "rdoor_r": 76,
@@ -794,6 +794,6 @@
   "wheel_rr_mesh": 262,
   "wheel_rl_mesh": 262
  },
- "tris_total": 5914,
- "tris_body": 4866
+ "tris_total": 5872,
+ "tris_body": 4824
 }

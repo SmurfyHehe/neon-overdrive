@@ -11,8 +11,8 @@ applied: dimensions stay as CarSpec and NpcCarBuilder have them).
              front door on one shut line; every door hinges just outboard of
              its skin so its front edge swings clear of what is ahead of it
   tailgate   one hatch cut out of the deck and the tail face, hinged at the
-             roof spoiler's front edge: glass, plate, plate lamp, handle, rear
-             wiper, spoiler and high brake lamp go up with it
+             roof's rear edge (its top shut line): glass, plate, plate lamp,
+             handle, rear wiper, spoiler and high brake lamp go up with it
   cladding   bolted-on black arch pieces 4.5 cm proud of the flat flank
              (0.92 over the arches: the 1.84 overall width), a rolled lip into
              the well, a top wall back to the skin, rivets on the arch edge,
@@ -43,10 +43,12 @@ from kit_p2_hothatch import alloy_face
 
 DOOR_S0 = 1.40          # front door: behind the front cladding's top (a black sail with the mirror ahead of it)
 RDOOR = (2.36, 3.07)    # rear door: from the front door's rear edge to the thin pillar ahead of the quarter glass
+WIPER_PIVOT = 0.025     # the wiper arms pivot this far up the glass from its base (behind the hood)
+A_TUCK = 0.02           # the front door glass stops this far in from the windscreen's edge (the pillar strip covers 0.04)
 HINGE_OUT = 0.01        # every door hinges this far outboard of its skin, so its front edge swings clear
 HATCH_HW = 0.585        # the tailgate reaches this far from the centre line; the upper lamps stand outboard of it
 HATCH_Y0 = 0.60         # and down to the top of the bumper
-HATCH_HINGE_S = 3.76    # its hinge: the roof spoiler's front edge (the spoiler goes up with it)
+SPOILER_IN = 0.006      # the roof spoiler starts this far behind the tailgate's top shut line, so all of it rides on the tailgate
 CLAD_X = 0.92           # the cladding's outer face (4.5 cm proud of the 0.875 flank; the car's 1.84 width)
 CLAD_BAND = 0.11        # it reaches this far out from the arch edge
 CLAD_RIVETS = 9
@@ -138,7 +140,7 @@ def _sheet_part(ctx, p):
     if t == 'roof_spoiler':
         # the spoiler sits on the tailgate's top edge and goes up with it
         pm = fcar.CarModel(D)
-        fcar.add_part(pm, dict(p, brake_light=False))
+        fcar.add_part(pm, dict(p, brake_light=False, s0=D['cabin']['C'] + SPOILER_IN))
         sp = ctx.part('spoiler', parent='hinge_hatch', bevel=0.006)
         for tri, mm in zip(pm.mesh.tris, pm.mesh.mats):
             sp.add(np.array(tri), P.MATMAP.get(mm, mm), P.SKIN)
@@ -237,6 +239,74 @@ def _door_hinge(D, R, s, nm, panel, belt_s):
             'axis': [0, 1, 0], 'open_sign': sx, 'open_deg': 60, 'panel': panel}
 
 
+def _trim_door_glass(ctx):
+    """The front door glass ends A_TUCK in from the windscreen's side edge,
+    under the A-pillar strip: the loft's side glass and windscreen do not
+    share that edge exactly, so glass and seal running right up to it cross
+    the windscreen and the pillar when shut. The edge is the windscreen's own
+    outermost vertex at each station; each glass polygon is cut on the
+    stretch its centre lies beside."""
+    ws = ctx.parts.get('glass_windshield')
+    if ws is None:
+        return
+    corner = {}
+    for q in ws.polys:
+        for v in np.asarray(q, float):
+            k = round(float(v[2]), 3)
+            if k not in corner or v[0] > corner[k][0]:
+                corner[k] = v
+    line = [corner[k] for k in sorted(corner)]
+    across = np.array([0.30, -1.0, 0.0])        # down the side glass from the pillar, right side
+    cuts = []
+    for a, b in zip(line, line[1:]):
+        d = b - a
+        if np.linalg.norm(d) < 0.02:
+            continue
+        d /= np.linalg.norm(d)
+        n = across - (across @ d) * d
+        n /= np.linalg.norm(n)
+        cuts.append((a[2], b[2], n, float(n @ a) + A_TUCK))
+    for name in ('glass_door_r', 'seal_door_r'):
+        pt = ctx.parts.get(name)
+        if pt is None:
+            continue
+        keep = list(zip(pt.polys, pt.mats, pt.kind, pt.shut))
+        pt.polys, pt.mats, pt.kind, pt.shut = [], [], [], []
+        for q, m, k, sh in keep:
+            q = np.asarray(q, float)
+            zc = float(q[:, 2].mean())
+            cut = next((c for c in cuts if c[0] - 1e-6 <= zc <= c[1] + 1e-6), None)
+            ins = q if cut is None else P.clip_poly(q, cut[2], cut[3])[0]
+            if ins is None:
+                continue
+            if ins is q or (len(ins) == len(q) and np.allclose(ins, q)):
+                pt.add(q, m, k, sh)
+            else:
+                pt.add(ins, m, k)
+
+
+def _wipers(ctx):
+    """The common wipers, with their arm pivots on the scuttle behind the
+    hood's shut line instead of on the hood: the hood lifts forward from a
+    hinge at its rear edge, and its rear edge would come up through them."""
+    D, z, on_top = ctx.D, ctx.z, ctx.on_top
+    sA = D['cabin']['A']
+    s_w = sA + 0.075
+    g0, g1 = on_top(0.3, sA + 0.05), on_top(0.3, sA + 0.30)
+    up_glass = (g1 - g0) / np.linalg.norm(g1 - g0)
+    n_glass = np.cross(np.array([1.0, 0, 0]), up_glass)
+    if n_glass[1] < 0:
+        n_glass = -n_glass
+    for nm, x0, x1 in (('r', 0.06, 0.52), ('l', -0.50, -0.04)):
+        wp = ctx.part('wiper_' + nm, bevel=0)
+        wp.polys, wp.mats, wp.kind, wp.shut = [], [], [], []
+        a_, b_ = on_top(x0, s_w) + n_glass * 0.012, on_top(x1, s_w) + n_glass * 0.012
+        P.obox(wp, (a_ + b_) / 2, (np.linalg.norm(b_ - a_), 0.012, 0.016), P.frame_basis(b_ - a_, n_glass), 'rubber')
+        pivot = on_top(x0 + 0.02, sA + WIPER_PIVOT) + n_glass * 0.010
+        mid = (a_ + b_) / 2 + n_glass * 0.010
+        P.obox(wp, (pivot + mid) / 2, (np.linalg.norm(mid - pivot), 0.008, 0.012), P.frame_basis(mid - pivot, n_glass), 'plastic')
+
+
 def _fittings(ctx):
     D, part, z = ctx.D, ctx.part, ctx.z
     L = D['L']
@@ -251,6 +321,13 @@ def _fittings(ctx):
     for nm in ('r', 'l'):
         hinges['hinge_door_' + nm] = _door_hinge(D, R, R['door_s0'], nm, 'door_' + nm, R['door_s0'])
         hinges['hinge_rdoor_' + nm] = _door_hinge(D, R, RDOOR[0], nm, 'rdoor_' + nm, RDOOR[0])
+    # the hood: hinged just behind and above its rear edge, so the whole panel
+    # lifts forward and up (a hinge ahead of the edge dips the rear corners into the fenders)
+    cab_a = D['cabin']['A']
+    hinges['hinge_hood'] = {'pos': [0.0, round(pl(D['top'], cab_a) + 0.002, 4), round(z(cab_a) + 0.005, 4)],
+                            'axis': [1, 0, 0], 'open_sign': 1, 'open_deg': 45, 'panel': 'hood'}
+    _trim_door_glass(ctx)
+    _wipers(ctx)
     # the rear door's handle, at the front door's height
     hs = RDOOR[1] - 0.16
     hy = pl(D['belt'], R['door_s1'] - 0.16) - 0.075
@@ -263,7 +340,7 @@ def _fittings(ctx):
         P.obox(hp, c[0], (0.014, 0.016, 0.105), np.eye(3), 'chrome')
     # behind the shut line between the two doors: a dark pillar face, so the gap is never a hole
     by0, by1 = R['door_y0'], pl(D['belt'], RDOOR[0])
-    xb = pl(D['hw'], RDOOR[0]) - 0.035
+    xb = pl(D['hw'], RDOOR[0]) - 0.11             # inboard of both doors' turned-in edges (they reach 0.10 in at the belt)
     part('pillar_b_shut_l', bevel=0)
     part('pillar_b_shut_r', bevel=0).add(
         P.facing([np.array([(xb, by0, z(RDOOR[0] - 0.03)), (xb, by0, z(RDOOR[0] + 0.03)),
@@ -308,9 +385,10 @@ def _fittings(ctx):
         xa, xb_ = xs(LOWER_REV + 0.005, LOWER[2])
         K.lay(ctx, part('tail_low_' + nm, bevel=0), 'rear', K.rect2(xa, LOWER[1], xb_, LOWER[3]), 'glow_tail', 0.006)
 
-    # ---- the tailgate: it hangs on the spoiler's front edge and takes its glass, plate, lamp, handle and wiper up
-    hinges['hinge_hatch'] = {'pos': [0.0, round(pl(D['top'], HATCH_HINGE_S) - 0.005, 4), round(z(HATCH_HINGE_S), 4)],
-                             'axis': [1, 0, 0], 'open_sign': -1, 'open_deg': 75, 'panel': 'hatch'}
+    # ---- the tailgate: it hangs on the roof's rear edge and takes its spoiler, glass, plate, lamp, handle and wiper up
+    hs = D['cabin']['C']
+    hinges['hinge_hatch'] = {'pos': [0.0, round(pl(D['top'], hs) - 0.005, 4), round(z(hs), 4)],
+                             'axis': [1, 0, 0], 'open_sign': -1, 'open_deg': 70, 'panel': 'hatch'}
     py = PLATES['plate_r'][1] + PLATES['plate_r'][3]
     lamp = part('plate_lamp', parent='hinge_hatch', bevel=0)
     K.lay(ctx, lamp, 'rear', K.rect2(-0.11, py + 0.012, 0.11, py + 0.030), 'plastic', 0.012)
@@ -334,6 +412,10 @@ def _fittings(ctx):
 
     # ---- fuel flap on the left rear quarter, over the rear cladding
     K.fuel_flap(ctx, -1, FLAP[0], FLAP[1])
+    # its hinge out past the flap's most outboard point: the flank leans in,
+    # and a hinge on the skin at mid height swings the flap's lower front corner into it
+    fh = hinges['hinge_fuel_flap']
+    fh['pos'][0] = round(min(float(np.min(q[:, 0])) for q in ctx.parts['fuel_flap'].polys) - 0.006, 4)
 
     # ---- antenna: a short fin at the back of the roof, between the rails
     base = ctx.on_top(0.0, 3.62)

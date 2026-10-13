@@ -167,6 +167,14 @@ func _parked_driver(c: Vehicle) -> void:
 func _physics_process(delta: float) -> void:
 	if not parked_off or player == null or not is_instance_valid(player):
 		return
+	# A tap of X starts the engine by itself (the car latches the crank,
+	# PlayerCar.CRANK_LATCH_S), well before X has been held START_HOLD. A
+	# running engine drives: otherwise the throttle stayed cut and the
+	# handbrake on with the engine running, until X switched it off and was
+	# held again (found by the fuzz runs, tests/core/fuzz_play.gd seed 3).
+	if player.engine_running:
+		start_engine()
+		return
 	if Input.is_action_pressed("starter"):
 		_held += delta
 		if _held >= START_HOLD:

@@ -176,6 +176,23 @@ func _run() -> void:
 	Input.action_release("starter")
 	_check(player.engine_running and not flow.parked_off, "holding the starter starts the engine")
 	_check(not player.driver.is_valid(), "the parked-car driver is gone once it is started")
+	# A tap of X (shorter than START_HOLD) also starts it: the car latches the
+	# crank by itself, and a running engine has to drive (fuzz seed 3: the
+	# engine ran with the throttle cut and the handbrake on).
+	player.key_off()
+	flow.park_car()
+	Input.action_press("starter")
+	await _frames(3)
+	Input.action_release("starter")
+	await _wait_until(func() -> bool: return player.engine_running)
+	await physics_frame
+	_check(player.engine_running and not flow.parked_off and not player.driver.is_valid(),
+			"a tap of the starter starts the parked car and lets it drive (running %s, parked %s)" % [player.engine_running, flow.parked_off])
+	Input.action_press("accelerate")
+	await _frames(10)
+	_check(player.throttle_input == 1.0 and player.handbrake_input == 0.0, "the started car takes the throttle (%.2f, handbrake %.2f)" % [player.throttle_input, player.handbrake_input])
+	Input.action_release("accelerate")
+	await _frames(2)
 
 	# ---------- mid-night visit from the forecourt ----------
 	# A cop sees the player: refused, with the toast signal.

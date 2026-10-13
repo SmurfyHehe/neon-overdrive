@@ -55,6 +55,12 @@ func _init() -> void:
 	park = false
 
 func _initialize() -> void:
+	# the tunnel needs the default road (run_tests.bat turns hills and curves off)
+	OS.set_environment("NEON_HILLS", "0.5")
+	OS.set_environment("NEON_CURVES", "0.5")
+	OS.set_environment("NEON_KICKERS", "0")
+	OS.set_environment("NEON_ROAD", "0")
+	OS.set_environment("NEON_TUNNEL", "")
 	OS.set_environment("NEON_START_S", str(START_S))
 	super._initialize()
 

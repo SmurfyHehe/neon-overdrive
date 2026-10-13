@@ -205,6 +205,8 @@ const GESTURE_BELOW_EYE := 0.04      # the fist's centre under the eye line
 const GESTURE_MIRROR_CLEAR := 0.13   # the fist's centre over the door mirror when it is right behind it
 const GESTURE_WINDOW_OPEN := 0.5     # the window counts as open from half way down
 const GESTURE_FINGER_IN := 0.35      # the fist takes over from the mitten this far into the reach
+const GESTURE_BELT_ABOVE := 0.075    # window shut, aimed back: the fist's centre over the belt line
+const GESTURE_PILLAR_AHEAD := 0.12   # and this far ahead of the B-pillar's centre line
 ## Idle action (the left hand, L): rim -> the door pocket -> the mouth -> the
 ## pocket -> rim, about 2.5 s in all. The mouth pose hangs off the car's eye,
 ## low enough that no part of the hand or the item comes within 8 degrees of
@@ -335,6 +337,12 @@ var tri_count := 0
 ## How far the shin ends fall short of the ankle targets (0 when the leg can
 ## reach), per side; tests read these.
 var _leg_gap := {-1: 0.0, 1: 0.0}
+## Pose fits against the cabin's solids (CockpitFrame.keepout), issues
+## #678-#681 and #683: each pose is pushed clear once and the offset kept.
+var _probe_pts := {}               # hand mesh name -> its probe points, hand space
+var _fits := {}                    # pose key -> car-space offset
+var _idle_via := {}                # item -> how far the lift's via point moves
+var _reach_via := Vector3.ZERO     # the rim-to-pocket reach's via point, car space
 
 func _init(cockpit: CockpitFrame) -> void:
 	frame = cockpit
@@ -369,6 +377,7 @@ func _ready() -> void:
 	_left_xf = _grip_transform(-1)
 	_foot_target = _pedal_ankle("throttle")
 	_left_foot = _pedal_ankle("clutch") if player.realistic_clutch else _dead_pedal_ankle()
+	_fit_cabin()
 
 ## Cockpit view: the camera is the head, so head and torso go.
 func set_cockpit(on: bool) -> void:
@@ -758,8 +767,9 @@ static func knob_hand_basis() -> Basis:
 ## thumb inboard, riding the lever's lift.
 func _brake_hand_transform() -> Transform3D:
 	var lever: Node3D = frame.handbrake
-	var b := Basis(Vector3(0, -1, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0))
-	return lever.transform * Transform3D(b, Vector3(0.0, 0.047, -0.21))
+	var b := Basis(Vector3.BACK, -deg_to_rad(BRAKE_WRIST_UP_DEG)) * Basis(Vector3(0, -1, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0))
+	var xf := lever.transform * Transform3D(b, Vector3(0.0, 0.047, -0.21))
+	return Transform3D(xf.basis, xf.origin + Vector3(0.0, float(_fits.get("handbrake", 0.0)), 0.0))
 
 ## The right hand pressing the head unit at _radio_target, car space: at
 ## pressed = 1 the fingertips touch the glass (or the knob face). For a swipe,
@@ -835,8 +845,17 @@ func _gesture_transform(pump: float) -> Transform3D:
 		var dm: Vector3 = cab.door_mirror
 		if absf(z - dm.z) < 0.16 and absf(-x - absf(dm.x)) < 0.16:
 			y = maxf(y, dm.y + GESTURE_MIRROR_CLEAR)
+	if not _gesture_open and _gesture_aim == AIM_BACK:
+		# window shut, aimed at the car behind (Roy, 1530): a short one, the fist
+		# down at the belt pad under the B-pillar, pointing back through the glass
+		y = float(cab.belt_y) + GESTURE_BELT_ABOVE
+		z = float(cab.b_pillar_z) - GESTURE_PILLAR_AHEAD
 	var aim := Vector3(-sin(yaw), 0.0, -cos(yaw))
-	return Transform3D(_hand_basis(-1, aim, Vector3.DOWN), Vector3(x, y + GESTURE_PUMP * pump, z))
+	var off: Vector3 = _fits.get(_gesture_key_name(), Vector3.ZERO)
+	return Transform3D(_hand_basis(-1, aim, Vector3.DOWN), Vector3(x, y + GESTURE_PUMP * pump, z) + off)
+
+func _gesture_key_name() -> String:
+	return "gesture %d %d" % [int(_gesture_open), _gesture_aim]
 
 ## From one hand transform to another for the gesture, e 0..1. The hand swings
 ## wide (a curve pulled toward a point just outside the sill, or along the door
@@ -846,6 +865,7 @@ func _gesture_path(from: Transform3D, to: Transform3D, e: float) -> Transform3D:
 	var via := Vector3(-(door_line() + 0.05), frame.glass_bottom + 0.14, eye.z - 0.25)
 	if not _gesture_open:
 		via = Vector3(-(pane_x(frame.glass_bottom) - GESTURE_IN), frame.glass_bottom, eye.z - 0.25)   # along the door, under the sill
+	via += _fits.get(_gesture_key_name() + " via", Vector3.ZERO)
 	var p := from.origin.lerp(via, e).lerp(via.lerp(to.origin, e), e)
 	return Transform3D(Basis(from.basis.get_rotation_quaternion().slerp(to.basis.get_rotation_quaternion(), e)), p)
 
@@ -896,7 +916,7 @@ func _idle_transform(e: float, draw: float) -> Transform3D:
 	var from := props.holder_xf().origin
 	var eye: Vector3 = frame.cab.eye
 	var to: Vector3 = eye + IDLE_MOUTH[_idle_item]
-	var via := Vector3(lerpf(from.x, to.x, 0.35), from.y + 0.06, eye.z - 0.10)
+	var via := Vector3(lerpf(from.x, to.x, 0.35), from.y + 0.06, eye.z - 0.10) + (_idle_via.get(_idle_item, Vector3.ZERO) as Vector3)
 	var tilt: float = IDLE_TILT_DEG[_idle_item] * e
 	if _idle_item == IdleActions.BEER:
 		tilt += SIP_TILT_DEG * draw
@@ -1134,7 +1154,7 @@ func _step_left(delta: float) -> void:
 	match left_act:
 		LeftAct.IDLE_REACH:
 			var t := clampf(left_t / IDLE_REACH_SECS, 0.0, 1.0)
-			_left_xf = _left_from.interpolate_with(props.holder_xf(), _ease(t))
+			_left_xf = _idle_reach_transform(_left_from, props.holder_xf(), _ease(t))
 			if t >= 1.0:
 				_idle_holding = true
 				_start_left(LeftAct.IDLE_USE)
@@ -1178,7 +1198,7 @@ func _step_left(delta: float) -> void:
 				_start_left(LeftAct.IDLE_RETURN)
 		LeftAct.IDLE_RETURN:
 			var t := clampf(left_t / IDLE_RETURN_SECS, 0.0, 1.0)
-			_left_xf = _left_from.interpolate_with(grip, _ease(t))
+			_left_xf = _idle_reach_transform(grip, _left_from, 1.0 - _ease(t))
 			if t >= 1.0:
 				_start_left(LeftAct.GRIP)
 		LeftAct.GESTURE_REACH:
@@ -1326,3 +1346,175 @@ func idle_waiting() -> bool:
 ## The left hand is off the rim, at the window (tests).
 func left_at_window() -> bool:
 	return left_act == LeftAct.WINDOW_HOLD
+
+# ---------- fitting the poses to the cabin ----------
+
+## The hand to and from the door pocket, e 0 at `rim` .. 1 at `pocket`: a curve
+## through a point kept clear of the wheel, the armrest and the door card.
+func _idle_reach_transform(rim: Transform3D, pocket: Transform3D, e: float) -> Transform3D:
+	# out toward the door at the rim's height first, then down: clear of the column and its stalks
+	var via := Vector3(pocket.origin.x, lerpf(rim.origin.y, pocket.origin.y, 0.3), lerpf(rim.origin.z, pocket.origin.z, 0.5)) + _reach_via
+	var p := rim.origin.lerp(via, e).lerp(via.lerp(pocket.origin, e), e)
+	return Transform3D(Basis(rim.basis.get_rotation_quaternion().slerp(pocket.basis.get_rotation_quaternion(), e)), p)
+
+## Probe points of a hand mesh (and anything it holds), hand space: the
+## vertices, the face centres and the edge midpoints, like tests/fleet/cabin_fit.
+func _points_of(meshes: Array) -> PackedVector3Array:
+	var key := ""
+	for m in meshes:
+		key += String((m as Node).name) + "|"
+	if _probe_pts.has(key):
+		return _probe_pts[key]
+	var seen := {}
+	var out := PackedVector3Array()
+	for m in meshes:
+		var mi := m as MeshInstance3D
+		var root := mi if mi.get_parent() is not MeshInstance3D else mi.get_parent() as MeshInstance3D
+		var xf := Transform3D.IDENTITY if mi == root else mi.transform
+		var f := mi.mesh.get_faces()
+		for i in range(0, f.size() - 2, 3):
+			var a := xf * f[i]
+			var b := xf * f[i + 1]
+			var c := xf * f[i + 2]
+			for q in [a, (a + b + c) / 3.0, (a + b) * 0.5]:
+				var k := Vector3i(roundi(q.x * 2000.0), roundi(q.y * 2000.0), roundi(q.z * 2000.0))
+				if not seen.has(k):
+					seen[k] = true
+					out.append(q)
+	_probe_pts[key] = out
+	return out
+
+## How far to move a pose (car space) so none of `pts` (hand space) is inside
+## a cabin solid: each solid is left along its own way out, the deepest first,
+## until all are clear. Built once per pose, never per frame.
+func _clear_offset(xf: Transform3D, pts: PackedVector3Array, extra: Array = []) -> Vector3:
+	var off := Vector3.ZERO
+	var boxes: Array = frame.keepout + extra
+	for iter in 12:
+		var best := INF
+		var best_out := Vector3.ZERO
+		for box in boxes:
+			var need := 0.0
+			var inv: Transform3D = (box[0] as Transform3D).affine_inverse()
+			var h: Vector3 = box[1]
+			var d: Vector3 = inv.basis * (box[2] as Vector3)
+			for p in pts:
+				var q: Vector3 = inv * (xf * p + off)
+				if absf(q.x) >= h.x or absf(q.y) >= h.y or absf(q.z) >= h.z:
+					continue
+				var t := INF
+				for i in 3:
+					if d[i] > 1e-6:
+						t = minf(t, (h[i] - q[i]) / d[i])
+					elif d[i] < -1e-6:
+						t = minf(t, (-h[i] - q[i]) / d[i])
+				if t < INF and t > need:
+					need = t
+			if need > 0.0 and need < best:   # the shallowest first: a deep way out of one solid is often a short one out of its neighbour
+				best = need
+				best_out = box[2]
+		if best == INF:
+			break
+		off += best_out * (best + FIT_MARGIN)
+	return off
+
+## Moves the via point of a curve (from -> via -> to, quadratic) until the
+## hand is clear at the samples; returns the via's offset.
+func _clear_curve(pose: Callable, pts_at: Callable, samples: Array, extra: Array = []) -> Vector3:
+	var via := Vector3.ZERO
+	for r in 8:
+		var moved := false
+		for e in samples:
+			var off := _clear_offset(pose.call(e, via), pts_at.call(e), extra)
+			if off != Vector3.ZERO:
+				via += off / maxf(2.0 * e * (1.0 - e), 0.25)
+				moved = true
+		if not moved:
+			break
+	return via
+
+const FIT_MARGIN := 0.003
+## Where along a reach the fit checks the hand.
+const REACH_SAMPLES := [0.2, 0.25, 0.33, 0.4, 0.5, 0.6, 0.66, 0.75, 0.8, 0.9]
+## The handbrake hand's wrist raised off the console, rolled about the lever.
+const BRAKE_WRIST_UP_DEG := 20.0
+## How far the lever comes up when pulled (tests/fleet/cabin_fit poses it the same).
+const HANDBRAKE_PULL_DEG := 28.0
+
+## Per axis, whichever of the two moves is the larger.
+static func _bigger(a: Vector3, b: Vector3) -> Vector3:
+	return Vector3(a.x if absf(a.x) >= absf(b.x) else b.x, a.y if absf(a.y) >= absf(b.y) else b.y, a.z if absf(a.z) >= absf(b.z) else b.z)
+
+## Fits every pose that reaches into the cabin once, at build (issues #678-#681, #683).
+func _fit_cabin() -> void:
+	var mitten := _points_of([hands[-1]])
+	var right := _points_of([hands[1]])
+	var fist := _points_of([finger_hand])
+	# the window switch: the hand palm down on the armrest, the switch moved to its thumb
+	if true:   # whichever control the car has: a spec change or a test may swap it
+		var pane := [frame.pane_keepout()]
+		var off := _clear_offset(_switch_hand_transform(1.0), mitten, pane)
+		off = _bigger(off, _clear_offset(_switch_hand_transform(0.0), mitten, pane) * Vector3(1, 0, 1))
+		if off != Vector3.ZERO:
+			frame.move_switch(off)
+	# the right hand on the handbrake: lifted clear of the console, the lever pulled
+	var hb_rot := frame.handbrake.rotation
+	var lift := 0.0
+	for deg in [0.0, HANDBRAKE_PULL_DEG]:
+		frame.handbrake.rotation_degrees = Vector3(deg, 0.0, 0.0)
+		# the lever's shaft under the palm and its grip in the hand's hollow
+		var up := frame.handbrake.basis * Vector3.UP
+		var lever := [[frame.handbrake.transform * Transform3D(Basis.IDENTITY, Vector3(0.0, 0.012, -0.11)), Vector3(0.012, 0.012, 0.11), up],
+			[frame.handbrake.transform * Transform3D(Basis.IDENTITY, Vector3(0.0, 0.017, -0.21)), Vector3(0.017, 0.017, 0.04), up]]
+		lift = maxf(lift, _clear_offset(_brake_hand_transform(), right, lever).y)
+	_fits["handbrake"] = lift
+	frame.handbrake.rotation = hb_rot
+	# the door pocket: where the hand can take an item out of it
+	var pocket_off := _clear_offset(props.holder_xf(), mitten)
+	for item in hold_hands:
+		pocket_off = _bigger(pocket_off, _clear_offset(props.holder_xf(), _points_of(_held(item))))
+	if pocket_off != Vector3.ZERO:
+		props.move_pocket(pocket_off)
+	# the reach from the rim to the pocket
+	var grip := _grip_transform(-1)
+	_reach_via = _clear_curve(func(e: float, v: Vector3) -> Transform3D:
+		_reach_via = v
+		return _idle_reach_transform(grip, props.holder_xf(), e), func(_e: float) -> PackedVector3Array: return mitten, REACH_SAMPLES)
+	# the lift to the mouth, per item
+	var keep_item := _idle_item
+	for item in hold_hands:
+		_idle_item = item
+		var pts := _points_of(_held(item))
+		_idle_via[item] = _clear_curve(func(e: float, v: Vector3) -> Transform3D:
+			_idle_via[item] = v
+			return _idle_transform(e, 0.0), func(_e: float) -> PackedVector3Array: return pts, REACH_SAMPLES)
+	_idle_item = keep_item
+	# the flip-off: each aim, window open and shut, and the way there
+	var keep := [_gesture_open, _gesture_aim]
+	for open in [false, true]:
+		for aim in [AIM_AHEAD, AIM_LEFT, AIM_BACK]:
+			_gesture_open = open
+			_gesture_aim = aim
+			var key := _gesture_key_name()
+			_fits.erase(key)
+			_fits.erase(key + " via")
+			var extra := [] if open else [frame.pane_keepout()]
+			var off := _clear_offset(_gesture_transform(0.0), fist, extra)
+			off = _bigger(off, _clear_offset(_gesture_transform(1.0), fist, extra))
+			_fits[key] = off
+			var to := _gesture_transform(0.0)
+			var via := _clear_curve(func(e: float, v: Vector3) -> Transform3D:
+				_fits[key + " via"] = v
+				return _gesture_path(grip, to, e), func(e: float) -> PackedVector3Array: return mitten if e < GESTURE_FINGER_IN else fist, REACH_SAMPLES, extra)
+			_fits[key + " via"] = via
+	_gesture_open = keep[0]
+	_gesture_aim = keep[1]
+
+## The hand shaped round an item and the item, as meshes.
+func _held(item: String) -> Array:
+	var out: Array = [hold_hands[item]]
+	var mi: MeshInstance3D = props.item_mesh(item)
+	out.append(mi)
+	for ch in mi.find_children("*", "MeshInstance3D", true, false):
+		out.append(ch)
+	return out

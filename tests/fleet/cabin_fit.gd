@@ -629,7 +629,7 @@ func _hand_points(driver: DriverModel, inv: Transform3D, side := -1) -> PackedVe
 		var nm := String(m.name)
 		if names.has(nm) or (side < 0 and nm.begins_with("HandLHold")):
 			out.append_array(_points(m, inv))
-	if side < 0:
+	if side < 0 and driver._idle_holding:   # an item standing in the pocket is probed on its own
 		for m in [driver.props.vape, driver.props.can, driver.props.cig]:
 			var mi := m as MeshInstance3D
 			if mi.is_visible_in_tree():
@@ -646,6 +646,8 @@ func _left_hand(kind: String, frame: CockpitFrame, driver: DriverModel) -> void:
 	var grip := driver._grip_transform(-1)
 	# flip-off, window shut (hand inside the glass) and open (hand out)
 	for open in [false, true]:
+		if not open and not driver.has_door_glass():
+			continue   # an open car always gestures out over the door (DriverModel._window_is_open)
 		frame.set_window(1.0 if open else 0.0, 0)
 		driver._gesture_open = open
 		for aim in [DriverModel.AIM_AHEAD, DriverModel.AIM_LEFT, DriverModel.AIM_BACK]:
@@ -701,8 +703,9 @@ func _left_hand(kind: String, frame: CockpitFrame, driver: DriverModel) -> void:
 			findings.append([kind, item + " in pocket", "rest", "floats above the pocket rim", low - rim, 1, rest.size(), Vector3(0, low, 0)])
 		# the reach from the rim to the pocket
 		for e in [0.33, 0.66, 1.0]:
-			driver._start_left(DriverModel.LeftAct.IDLE_REACH)
-			driver._left_xf = grip.interpolate_with(driver.props.holder_xf(), float(e))
+			driver._idle_holding = e >= 1.0   # the hand closes round the item as it lands (DriverModel IDLE_REACH)
+			driver._start_left(DriverModel.LeftAct.IDLE_REACH if e < 1.0 else DriverModel.LeftAct.IDLE_USE)
+			driver._left_xf = driver._idle_reach_transform(grip, driver.props.holder_xf(), float(e))
 			driver._place_hands()
 			_probe(kind, "left hand", item + " reach %.2f" % e, _hand_points(driver, inv))
 		# holding it: lift 0..1 and the sip
@@ -752,9 +755,12 @@ func _right_hand(kind: String, frame: CockpitFrame, driver: DriverModel) -> void
 		driver._place_hands()
 		_probe(kind, "right hand on knob", "gear %d" % g, _hand_points(driver, inv, 1))
 	frame._apply_lever(frame._slot_of(frame.player.gear))
-	driver._hand_xf = driver._brake_hand_transform()
-	driver._place_hands()
-	_probe(kind, "right hand on handbrake", "pulled", _hand_points(driver, inv, 1))
+	for deg in [0.0, DriverModel.HANDBRAKE_PULL_DEG]:
+		frame.handbrake.rotation_degrees = Vector3(deg, 0.0, 0.0)
+		driver._hand_xf = driver._brake_hand_transform()
+		driver._place_hands()
+		_probe(kind, "right hand on handbrake", "lever at %.0f deg" % deg, _hand_points(driver, inv, 1))
+	frame.handbrake.rotation_degrees = Vector3.ZERO
 	driver._hand_xf = driver._radio_hand_transform(1.0)
 	driver._place_hands()
 	_probe(kind, "right hand on head unit", "press", _hand_points(driver, inv, 1))
@@ -790,7 +796,7 @@ func _lever_and_pedals(kind: String, frame: CockpitFrame) -> void:
 	var hb_rest := PackedVector3Array()
 	for mi in frame.handbrake.find_children("*", "MeshInstance3D", true, false):
 		hb_rest.append_array(_points(mi, inv))
-	frame.handbrake.rotation_degrees = Vector3(28.0, 0.0, 0.0)
+	frame.handbrake.rotation_degrees = Vector3(DriverModel.HANDBRAKE_PULL_DEG, 0.0, 0.0)
 	var hb := PackedVector3Array()
 	for mi in frame.handbrake.find_children("*", "MeshInstance3D", true, false):
 		hb.append_array(_points(mi, inv))

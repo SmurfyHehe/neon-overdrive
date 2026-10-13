@@ -216,7 +216,7 @@ const CARS := {
 	},
 	"p6_crossover": {
 		## five doors (the rear pair cut by the kit, each with its own glass), no deck lid: one tailgate on the
-		## spoiler's front edge takes its glass, plate, lamp, handle, wiper, spoiler and high brake lamp up with it
+		## roof's rear edge takes its glass, plate, lamp, handle, wiper, spoiler and high brake lamp up with it
 		"without": ["trunk"],
 		"parts": ["door_rl", "door_rr", "glass_door_rl", "glass_door_rr", "seal_door_rl", "seal_door_rr",
 			"handle_door_rl", "handle_door_rr", "hatch", "handle_hatch", "wiper_rear", "plate_lamp", "spoiler",
@@ -227,7 +227,6 @@ const CARS := {
 			"trunk"],   # listed so that `without` is checked
 		"lamps": {"head_l": "glow_head", "head_r": "glow_head", "turn_fl": "glow_turn", "turn_fr": "glow_turn",
 			"turn_rl": "glow_turn", "turn_rr": "glow_turn", "tail_l": "glow_tail", "tail_r": "glow_tail",
-			"tail_low_l": "glow_tail", "tail_low_r": "glow_tail",
 			"brake_l": "glow_brake", "brake_r": "glow_brake", "brake_c": "glow_brake",
 			"reverse_l": "glow_reverse", "reverse_r": "glow_reverse", "plate_lamp": "glow_lens"},
 		"anchors": ["bay_engine", "bay_radiator", "bay_turbo", "bay_intercooler", "tank", "fuel_filler", "diff",

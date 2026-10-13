@@ -61,6 +61,7 @@ const Weather := preload("res://scripts/world/weather.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
 const NearMissLog := preload("res://scripts/traffic/near_miss_log.gd")
 const RoadRamps := preload("res://scripts/world/road_ramps.gd")
+const RingVisitors := preload("res://scripts/traffic/ring_visitors.gd")
 
 var player: Node3D
 var own_lanes := 4
@@ -359,12 +360,34 @@ var _slots: Array = []  # per lane slot (oncoming lanes, then own), an Array of 
 var q_speed := 0.0
 var q_player := false
 var q_idx := -1
+## Gap left by the last visit_lead() call (bumper to bumper, INF = none).
+var q_gap := INF
+
+## Ring visitors (#630, RingVisitors): the cars on a route at a ring site
+## (TrafficCar.start_visit adds a car, end_visit and place take it off);
+## counters for the tests.
+var visitors: Array[TrafficCar] = []
+var visit_starts := 0
+var ring_spawn_count := 0
+## The RingVisitors shares and caps, per manager: tests raise them for a
+## busy ring.
+var visit_share := RingVisitors.VISIT_SHARE
+var ring_spawn_share := RingVisitors.RING_SPAWN_SHARE
+var ring_seed_cap := RingVisitors.SEED_CAP
+var ring_site_cap := RingVisitors.SITE_CAP
+var _ring_rng := RandomNumberGenerator.new()
+## The player in road space and its road-space velocity, as of this tick.
+var p_road := Vector3.ZERO
+var p_road_v := Vector3.ZERO
 
 func _ready() -> void:
 	if NearMissLog.enabled():
 		near_miss = NearMissLog.new(self)
 	_own_rng.seed = 90817
 	_life_rng.seed = 40117
+	_ring_rng.seed = 63001
+	if RingVisitors.live():
+		RingVisitors.route(0, 1)   # built once here, not on the first car that takes an exit
 	if not sim_only:
 		TrafficHorns.warm()
 	target_count = car_count
@@ -516,6 +539,7 @@ func _physics_process(_delta: float) -> void:
 		_build_index()
 	if _pool_size() > target_count:
 		_trim_cars()
+	_pick_visitors()
 	# after this pass's moves into and out of the sim
 	_deal_ai_phases()
 	if not cars.is_empty():
@@ -754,6 +778,12 @@ func _respawn(car: TrafficCar) -> void:
 	# Rule breakers (living world step 3): the event share, picked per spawn.
 	# No random draw at a 0 share: the benchmark and the traffic tests keep the
 	# exact random sequence they had before rule breakers existed.
+	var t_ring := Time.get_ticks_usec()
+	var ringed := RingVisitors.live() and _ring_respawn(car, pz)
+	RingVisitors.cost_usec += Time.get_ticks_usec() - t_ring
+	if ringed:
+		SpikeLog.mark("traffic_respawn", SpikeLog.since(t0))
+		return
 	var breaker := rule_breaker_share > 0.0 and randf() < minf(rule_breaker_share, RULE_BREAKER_CAP)
 	var slot := _find_slot(car, pz, TrafficCar.RB_SPEED if breaker else 0.0)
 	if slot.is_empty():
@@ -1026,7 +1056,8 @@ func _life_step() -> void:
 	var pv := absf(_vz[0])
 	for car in cars:
 		if car.benched or car.direction != flow or car.rule_breaker or car.phone or car.changing or car.wrecked \
-				or car.racer != null or car.free_driver != null or car.is_in_group("patrol_cars") or car.lane_i != pl.lane:
+				or car.racer != null or car.free_driver != null or car.is_in_group("patrol_cars") or car.lane_i != pl.lane \
+				or car.visiting:
 			continue
 		var k := car._idx
 		var behind := (_z[0] - _z[k]) * flow
@@ -1220,6 +1251,8 @@ func _refresh_index() -> void:
 func _write_player() -> void:
 	var p := RoadFrame.unroll(player.global_position)
 	var v := RoadFrame.dir_to_road(p.z, player.linear_velocity) if player is RigidBody3D else Vector3.ZERO
+	p_road = p
+	p_road_v = v
 	_lo[0] = p.x - PLAYER_HALF_W
 	_hi[0] = p.x + PLAYER_HALF_W
 	_z[0] = p.z
@@ -1317,6 +1350,9 @@ func _put(car: TrafficCar) -> void:
 ## The entry alone, without the lane slots.
 func _write(car: TrafficCar) -> void:
 	var k := car._idx
+	if car.visiting:
+		_write_visitor(car, k)
+		return
 	# A car on rails is driven in road space and knows where it is; only a sim
 	# car has to be looked up from its world position.
 	var o := RoadFrame.unroll(car.global_position) if car.detailed or is_nan(car._rail_z) else Vector3(car.path_x() + car._rail_dx + car._edge, 0.0, car.rail_z_now())
@@ -1484,6 +1520,7 @@ func _trim_cars() -> void:
 		if far.visible and event_hook.is_valid():
 			event_hook.call("despawn", far, far.global_position)
 		cars.erase(far)
+		visitors.erase(far)
 		# queue_free() runs at the end of the frame, and a car added meanwhile
 		# could be placed on top of this one: park it out of the way first
 		# (frozen, 50 km behind), out of the draft lookup too.
@@ -1499,3 +1536,221 @@ func detailed_count() -> int:
 		if car.detailed:
 			n += 1
 	return n
+
+# ---------- ring visitors (#630) ----------
+
+func ring_randf_range(from: float, to: float) -> float:
+	return _ring_rng.randf_range(from, to)
+
+## Visitors at the site centred at site_s.
+func _site_visitors(site_s: float) -> int:
+	var n := 0
+	for c in visitors:
+		if c.visit_s == site_s:
+			n += 1
+	return n
+
+## At the bookkeeping rate: the list of visitors, and the outside-lane cars
+## passing RingVisitors.START_W before a site roll (once per site) whether
+## they take its exit. Two array lookups per car (RingVisitors.site_at).
+## Picks run every PICK_EVERY bookkeeping passes: a car moves a couple of
+## metres between them, well inside the 12 m pick window.
+const PICK_EVERY := 4
+var _pick_pass := 0
+func _pick_visitors() -> void:
+	var t0 := Time.get_ticks_usec()
+	_pick_visitors_step()
+	RingVisitors.cost_usec += Time.get_ticks_usec() - t0
+
+func _pick_visitors_step() -> void:
+	if not RingVisitors.live():
+		return
+	_pick_pass += 1
+	if _pick_pass % PICK_EVERY != 0:
+		return
+	var lane3 := own_lanes - 1
+	var origin_s := float(RoadFrame.origin_index) * RoadChunkBuilder.CHUNK_LEN
+	for car in cars:
+		# the outside lane first (it rules out three cars in four), then only
+		# on coming into a new chunk: the pick line is a chunk's start
+		if car.lane_i != lane3 or car._idx < 0 or car.visiting:
+			continue
+		var s := origin_s - _z[car._idx]   # RoadFrame.s_at, inline
+		var c := floori(s / RoadChunkBuilder.CHUNK_LEN)
+		if c == car.visit_chunk:
+			continue
+		car.visit_chunk = c
+		if car.changing or car.benched or car.race_pinned or car.race_released or car.racer != null \
+				or car.free_driver != null or car.wrecked or car.hazard or car.weave > 0.0 or car.tg_phase != TrafficCar.TG_NONE:
+			continue
+		var side := 1 if car.direction < 0.0 else -1
+		if (car.lane_x > 0.0) != (side > 0) or RoadMap.ring_at(c) < 0:
+			continue
+		# the site beside this chunk, inline (RingVisitors.site_at without its Dictionary)
+		var site_s := float(c - RoadMap.ring_k(c)) * RoadChunkBuilder.CHUNK_LEN
+		var wt := (s - site_s) * float(side)
+		if wt < RingVisitors.START_W or wt > RingVisitors.START_W + 12.0 or car.visit_rolled == site_s:
+			continue
+		var role := car.role if car.role != "" else Undercarriage.role_for_kind(car.kind)
+		if role != Undercarriage.ROLE_TRAFFIC:
+			continue
+		car.visit_rolled = site_s
+		if _ring_rng.randf() >= visit_share or _site_visitors(site_s) >= ring_site_cap:
+			continue
+		car.start_visit(RingVisitors.route(_pick_route(), side), site_s, wt - RingVisitors.START_W)
+		visit_starts += 1
+
+func _pick_route() -> int:
+	var r := _ring_rng.randf()
+	for k in RingVisitors.KIND_SHARE.size():
+		r -= float(RingVisitors.KIND_SHARE[k])
+		if r < 0.0:
+			return k
+	return RingVisitors.LAP
+
+## A visitor's entry: its real footprint at road height (the slip lanes, where
+## it shares the road with the lanes' traffic, and the outside lane while it
+## joins); up on a ramp or the ring, a footprint far off the road, so no lane
+## car brakes for a car on the bridge over it. Visitors find each other along
+## their routes instead (visit_lead).
+func _write_visitor(car: TrafficCar, k: int) -> void:
+	var p := car.visit_xwy
+	var yaw := car.visit_yaw
+	_z[k] = RingVisitors.road_z(car.visit_s, p.y)
+	_vz[k] = -cos(yaw) * car.visit_v
+	_hl[k] = car.half_l
+	if RingVisitors.road_level(car.visit, car.visit_d):
+		var ex := car.half_w * absf(cos(yaw)) + car.half_l * absf(sin(yaw))
+		var lo := p.x - ex
+		var hi := p.x + ex
+		if car.visit_join:
+			var lx := float(car.visit.end_x)
+			lo = minf(lo, lx - car.half_w)
+			hi = maxf(hi, lx + car.half_w)
+		_lo[k] = lo
+		_hi[k] = hi
+	else:
+		_lo[k] = 1000.0
+		_hi[k] = 1001.0
+
+## The nearest thing on `car`'s route ahead within `reach` metres: another
+## visitor at its site, or the player (on the slip lane, a ramp or the ring).
+## Returns the bumper gap in q_gap (INF = none) and its speed along the route
+## in q_speed, q_player whether it is the player. Something alongside (within
+## a car length either way) counts only for the car that has to give way: the
+## one not on the ring when the other is, else the one further back.
+func visit_lead(car: TrafficCar, reach: float) -> void:
+	q_gap = INF
+	q_speed = 0.0
+	q_player = false
+	var me := car.visit_xwy
+	var r := car.visit
+	var mine := RingVisitors.on_ring(r, car.visit_d)
+	var lim := reach + 10.0
+	for o in visitors:
+		if o == car or o.visit_s != car.visit_s:
+			continue
+		var p := o.visit_xwy
+		if absf(p.x - me.x) > lim or absf(p.y - me.y) > lim:
+			continue
+		var along := RingVisitors.ahead_on(r, car.visit_d, p.x, p.y, p.z, reach)
+		if along == INF:
+			continue
+		if along < car.half_l + o.half_l:
+			var theirs := RingVisitors.on_ring(o.visit, o.visit_d)
+			if mine and not theirs:
+				continue
+			if mine == theirs and o.visit_d < car.visit_d:
+				continue
+		var gap := along - car.half_l - o.half_l
+		if gap < q_gap:
+			q_gap = gap
+			q_speed = o.visit_v * cos(o.visit_yaw - RingVisitors.yaw_at(r, car.visit_d + along))
+			q_player = false
+	if react_to_player and player != null:
+		var pw := RoadFrame.s_at(p_road.z) - car.visit_s
+		if absf(p_road.x - me.x) <= lim and absf(pw - me.y) <= lim:
+			var along := RingVisitors.ahead_on(r, car.visit_d, p_road.x, pw, p_road.y, reach)
+			if along < INF:
+				var gap := along - car.half_l - PLAYER_HALF_L
+				if gap < q_gap:
+					var yaw := RingVisitors.yaw_at(r, car.visit_d + along)
+					q_gap = gap
+					q_speed = -sin(yaw) * p_road_v.x - cos(yaw) * p_road_v.z
+					q_player = true
+
+## Whether anything on the ring (a visitor, the player) would reach the point
+## `p` (angle p_angle round the ring) where `car`'s ramp meets it inside
+## RingVisitors.GIVE_WAY_T seconds or GIVE_WAY_M metres: `car` waits at the
+## give-way line until it would not.
+func ring_busy(car: TrafficCar, _p: Vector2, p_angle: float) -> bool:
+	for o in visitors:
+		if o == car or o.visit_s != car.visit_s:
+			continue
+		var p := o.visit_xwy
+		var arc := RingVisitors.ring_arc_to(p.x, p.y, p.z, p_angle)
+		if arc < RingVisitors.GIVE_WAY_LOOK and (arc < RingVisitors.GIVE_WAY_M or arc / maxf(o.visit_v, 2.0) < RingVisitors.GIVE_WAY_T):
+			return true
+	if player != null:
+		var pw := RoadFrame.s_at(p_road.z) - car.visit_s
+		var arc := RingVisitors.ring_arc_to(p_road.x, pw, p_road.y, p_angle)
+		if arc < RingVisitors.GIVE_WAY_LOOK:
+			var pv := Vector2(p_road_v.x, -p_road_v.z).length()
+			if arc < RingVisitors.GIVE_WAY_M or arc / maxf(pv, 2.0) < RingVisitors.GIVE_WAY_T:
+				return true
+	return false
+
+## Some respawns go to the ring site ahead of the player, while it is out past
+## the draw distance and has under SEED_CAP visitors: on its ring or a ramp
+## coming down from it, so cars also come down from the ring and join the
+## main road. False (nothing done) when this respawn is not one of them.
+func _ring_respawn(car: TrafficCar, pz: float) -> bool:
+	var fs := -flow
+	var ps := RoadFrame.s_at(pz)
+	var band := _spawn_band()
+	var near := RoadMap.ring_near(ps + fs * (band.x + band.y) * 0.5)
+	if int(near.index) < 0:
+		return false
+	var site_s := float(near.s)
+	var ahead := (site_s - ps) * fs
+	if ahead < band.x + RingVisitors.R or ahead > band.y or _site_visitors(site_s) >= ring_seed_cap:
+		return false
+	if _ring_rng.randf() >= ring_spawn_share:
+		return false
+	var side := 1 if _ring_rng.randf() < 0.5 else -1
+	var r := RingVisitors.route(RingVisitors.HALF if _ring_rng.randf() < 0.6 else RingVisitors.LAP, side)
+	var rd: Vector2 = r.ring
+	var d := _ring_rng.randf_range(rd.x, float(r.merge) - 60.0)
+	var p := RingVisitors.at(r, d)
+	if (site_s + p.y - ps) * fs < band.x:
+		return false
+	for o in visitors:
+		if o.visit_s == site_s and Vector2(o.visit_xwy.x - p.x, o.visit_xwy.y - p.y).length() < 25.0:
+			return false
+	var z := RingVisitors.road_z(site_s, p.y)
+	if in_view(RoadFrame.roll(Vector3(p.x, p.z, z))):
+		return false
+	spawn_count += 1
+	ring_spawn_count += 1
+	var far := float(r.end_x) < 0.0
+	var city := city_at(z, float(r.end_dir))
+	car.target_speed = lane_speed(own_lanes - 1, far, city) + _ring_rng.randf_range(-SPEED_JITTER, SPEED_JITTER)
+	car.pace_lane = own_lanes - 1
+	car.pace_far = far
+	car.pace_city = city
+	car.set_rule_breaker(false, 0.0)
+	car.set_phone(false, 0.0, 1.0, 0.0)
+	car.set_detailed(false)
+	var speed := minf(RingVisitors.cap_at(r, d), car.target_speed)
+	car.place(float(r.end_x), float(r.end_dir), z, car.rest_y, speed)
+	car.start_visit(r, site_s, d)
+	car.doing = TrafficCar.DO_CRUISING
+	car.spawn_frame = Engine.get_physics_frames()
+	car.spawned_behind = false
+	car.reaction_s = _ring_rng.randf_range(TrafficCar.REACTION_MIN, TrafficCar.REACTION_MAX)
+	car.wet.settle()
+	car.set_shown(absf(z - pz) <= reveal_distance())
+	_put(car)
+	if car.visible and event_hook.is_valid():
+		event_hook.call("spawn", car, car.global_position)
+	return true

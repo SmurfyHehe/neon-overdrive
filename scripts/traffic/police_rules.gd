@@ -121,11 +121,19 @@ const BUST_SECS := 3.0
 const BUST_DRAIN_SECS := 1.5
 
 ## Dispatcher and roles (P6, spec section 3).
-const MAX_COPS := 3             # driving cops, never more
+## Driving cops near you, by graphics tier (Roy 2026-10-13, "1490 yes": real
+## cops near you scale by the tier; chases farther off are map positions and
+## the helicopter is counted on its own). The tier is a CPU budget: each cop
+## in the full sim costs about what a traffic car does.
+const NEAR_COPS := {"low": 3, "medium": 4, "high": 6}
+const MAX_COPS := 6             # the most any tier allows, never more
+## Cops a chase wants at each heat level (six-chases doc 4.2b), before the tier cap.
+const COPS_BY_HEAT := [0, 1, 2, 3, 5, 6]
 const DISPATCH_HZ := 4.0
 const SPAWN_GAP := 8.0          # s between two cops joining a chase
 const PATROL_TOP_KMH := 220.0   # the patrol sedan's working top speed (its gearing alone gives 285)
-const BLOCK_AHEAD := 18.0       # the blocker's spot: this far in front of you, in your lane
+const BLOCK_AHEAD := 18.0       # the blocker's spot: at least this far in front of you, in your lane
+const BLOCK_HEADWAY := 1.0      # ...and at least this many seconds of your speed between the bumpers (issue #625)
 const BLOCK_IN_PLACE := 6.0     # within this of its spot (and in your lane) it starts to slow
 const BLOCK_SLOW_KMH := 15.0    # ...to this much under your speed
 const BLOCK_MIN_KMH := 30.0     # but it never brake-checks you below this
@@ -135,10 +143,28 @@ const FLANK_BACK := 2.8         # the flanker's nose by your rear wheel
 const FLANK_SIDE := 2.4         # m to your side
 const RAM_GAP := 3.0            # the chaser nudges your tail inside this, if you are slower
 const RAM_DV := 3.0             # m/s it closes at when it does
+## The heavy unit (heat 4, replaces spikes; spec 3.1, issue #631): the patrol
+## SUV with a push bar, heavier, slower. It rams your rear corner at up to
+## HEAVY_RAM_KMH closing speed and boxes; you can outrun it on a straight.
+const HEAVY_KIND := "c2_patrolsuv"
+const HEAVY_MASS := 2400.0      # kg (the stock patrol SUV is 2300)
+const HEAVY_TOP_KMH := 180.0
+const HEAVY_BACK := 8.0         # its spot behind you
+const HEAVY_CORNER := 0.7       # m off your centre line: it aims at a rear corner
+const HEAVY_RAM_GAP := 6.0      # inside this it closes to ram
+const HEAVY_RAM_KMH := 25.0     # ...at this closing speed at most
+const MAX_HEAVY := 2            # at most this many of the slots
 
-## Driving cops a chase at this heat level gets (the icons: one car, two cars, then three).
-static func cops_wanted(level: int) -> int:
-	return clampi(level, 0, MAX_COPS)
+## Driving cops near you on graphics preset `preset` (custom counts as medium).
+static func near_cops(preset := "") -> int:
+	if preset == "":
+		preset = GraphicsSettings.preset
+	return int(NEAR_COPS.get(preset, NEAR_COPS["medium"]))
+
+## Driving cops a chase at this heat level gets: 1, 2, 3, 5, 6, never more
+## than the tier's near cap.
+static func cops_wanted(level: int, preset := "") -> int:
+	return mini(COPS_BY_HEAT[clampi(level, 0, MAX_HEAT)], near_cops(preset))
 
 ## The danger number of a chase (spec section 2): up with your speed, the
 ## traffic near you, oncoming cars on an undivided road, a junction near.

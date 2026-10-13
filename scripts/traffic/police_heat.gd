@@ -6,10 +6,10 @@ extends Node
 # whole part is the level, and every level has its own icon on the HUD
 # (scripts/ui/heat_icons.gd):
 #
-#   1 one patrol car   2 two cars   3 sawhorse (roadblock)   4 spike strip
-#   5 helicopter
+#   1 one patrol car   2 two cars   3 sawhorse (roadblock)
+#   4 heavy ramming truck   5 helicopter
 #
-# (The strip's icon stays until the art stage; no spikes exist anywhere.)
+# (No spikes exist anywhere: level 4 was the spike strip until issue #631.)
 #
 # Bad cops (the ones who take tonight's cash, scripts/core/wallet.gd) get no
 # icon on purpose: a cop registered as bad never raises heat.
@@ -48,10 +48,10 @@ signal warning_ended(complied: bool)
 ## the later stages.
 signal offence_seen(kind: int, cop: Node3D)
 
-enum { NONE, ONE_CAR, TWO_CARS, ROADBLOCK, SPIKES, HELICOPTER }
+enum { NONE, ONE_CAR, TWO_CARS, ROADBLOCK, HEAVY, HELICOPTER }
 const MAX_LEVEL := HELICOPTER
 ## Icon per level (HeatIcons draws them). Level 0 has none; neither do bad cops.
-const ICONS := ["", "car", "two_cars", "sawhorse", "spikes", "helicopter"]
+const ICONS := ["", "car", "two_cars", "sawhorse", "heavy_truck", "helicopter"]
 
 ## The old names, now the table's numbers (scripts/traffic/police_rules.gd).
 const SEE_RANGE_LIT := PoliceRules.REACH_LOW

@@ -2,8 +2,8 @@ class_name PolicePatrol
 extends Node3D
 
 # The police dispatcher (the spec's "PoliceDispatch"; police steps F1, P5, P6).
-# It owns the police slots: at most PoliceRules.MAX_COPS driving cops, never
-# more. Every cop is a PatrolCar with a CopBrain, in the traffic index
+# It owns the police slots: at most PoliceRules.near_cops() driving cops (the
+# graphics tier's cap: 3 Low, 4 Medium, 6 High), never more. Every cop is a PatrolCar with a CopBrain, in the traffic index
 # (TrafficManager.adopt) and registered with PoliceHeat, which decides what it
 # sees.
 #
@@ -13,15 +13,26 @@ extends Node3D
 # lanes, at that lane's traffic speed. Once it is well behind or far off, it
 # goes and the next one comes PATROL_GAP later.
 #
-# A chase (heat 1 or more): as many cops as the heat icon shows (1, 2, then 3),
-# one new one every SPAWN_GAP at most, each with a role (CopBrain.Role):
+# A chase (heat 1 or more): PoliceRules.cops_wanted (1, 2, 3, 5, 6 by heat,
+# capped by the tier), one new one every SPAWN_GAP at most, each with a role
+# (CopBrain.Role), sent in the order ROLES lists for the heat:
 #   chaser   first. From behind, out of sight (or the patrol that saw you).
-#   blocker  from heat 2. From AHEAD, out of sight, in your lane, driving
-#            slower than you so you catch it up.
+#   blocker  from heat 2. From AHEAD, out of sight, in the lane beside yours
+#            where there is one, driving slower than you so you catch it up;
+#            it moves over in front of you only at a safe gap (issue #625).
 #   flanker  from heat 3. From behind, out of sight.
+#   heavy    from heat 4 (it replaced the spike strip, issue #631): the
+#            patrol SUV with a push bar, from behind, out of sight. At most
+#            PoliceRules.MAX_HEAVY. On a tier with fewer slots than the heat
+#            wants, the roles first in ROLES win: a cop whose role is no
+#            longer wanted is dropped once out of view, to free its slot.
 # Nobody is ever placed in view, and nobody drives faster than its car can.
 # A cop that has called the chase off, or is cruising on Patrol, is dropped
 # once it is far off and out of view, which frees its slot.
+#
+# Heat 5 also puts the helicopter up (PoliceHelicopter): not a car and not in
+# the slots. It comes from far behind, high and out of view, and is sent home
+# when the heat drops below 5.
 #
 # This node also runs the bust ring (under 10 km/h with a chasing cop within
 # 6 m for 3 s). Box-in is what the three roles do together when you are slow;
@@ -34,6 +45,14 @@ const PATROL_GAP := 25.0       # s between one patrol leaving and the next
 const SPAWN_PAST_REVEAL := 40.0
 const DROP_PAST_REVEAL := 60.0
 const RETRY := 1.0
+const HEAVY_KIND := PoliceRules.HEAVY_KIND
+const _C := CopBrain.Role.CHASER
+const _B := CopBrain.Role.BLOCKER
+const _F := CopBrain.Role.FLANKER
+const _H := CopBrain.Role.HEAVY
+## The roles a chase wants at each heat level, in the order they are sent
+## (and kept, when the tier has fewer slots than the heat wants).
+const ROLES := [[], [_C], [_C, _B], [_C, _B, _F], [_C, _H, _F, _B, _H], [_C, _H, _F, _B, _H, _C]]
 
 ## The chase began (the first cop went into Pursuit) / ended: escaped = heat
 ## cooled to nothing, not escaped = busted.
@@ -55,6 +74,9 @@ var player: Node3D
 var traffic: TrafficManager
 var heat: PoliceHeat
 var units: Array[Unit] = []
+## The helicopter at heat 5 (null when none is up).
+var heli: PoliceHelicopter
+var helis_sent := 0
 ## The first cop on the road and its brain (the patrol, before a chase).
 var car: PatrolCar:
 	get:
@@ -108,10 +130,14 @@ func _physics_process(delta: float) -> void:
 			if d > traffic.reveal_distance() + DROP_PAST_REVEAL and not traffic.in_view(u.car.global_position):
 				_drop(u)
 	_chase_step(delta)
+	if heli != null and heli.can_go():
+		heli.queue_free()
+		heli = null
 
 ## Slots and roles, PoliceRules.DISPATCH_HZ times a second.
 func _dispatch(dt: float) -> void:
 	var level := heat.level if heat != null else PoliceHeat.NONE
+	_heli_step(level)
 	if level < PoliceHeat.ONE_CAR:
 		_spawn_t = 0.0
 		if units.is_empty():
@@ -122,12 +148,10 @@ func _dispatch(dt: float) -> void:
 		return
 	_spawn_t -= dt
 	var active := 0
-	var roles := {}
 	var terminated := false
 	for u in units:
 		if u.brain.stood_down_at < 0:
 			active += 1
-			roles[u.brain.role] = true
 		else:
 			terminated = true
 	if terminated:
@@ -136,21 +160,63 @@ func _dispatch(dt: float) -> void:
 		for u in units:
 			u.brain.call_off()
 		return
-	if active >= PoliceRules.cops_wanted(level) or _spawn_t > 0.0:
+	var want := roles_wanted(level, PoliceRules.near_cops())
+	# a cop whose role this heat (on this tier) no longer wants goes once it is
+	# out of view, so the slot can take one it does want (a heavy at heat 4)
+	var have := {}
+	for u in units:
+		if u.brain.stood_down_at >= 0:
+			continue
+		var r := u.brain.role
+		have[r] = int(have.get(r, 0)) + 1
+		if int(have[r]) > want.count(r) and not traffic.in_view(u.car.global_position):
+			_drop(u)
+			return
+	if active >= want.size() or _spawn_t > 0.0:
 		return
-	if units.size() >= PoliceRules.MAX_COPS:
+	if units.size() >= PoliceRules.near_cops():
 		# every slot is taken: one that is out of the chase and out of view makes room
 		for u in units:
 			if u.brain.stood_down_at >= 0 and not traffic.in_view(u.car.global_position):
 				_drop(u)
 				break
 		return
-	var role := CopBrain.Role.CHASER
-	for r in [CopBrain.Role.CHASER, CopBrain.Role.BLOCKER, CopBrain.Role.FLANKER]:
-		if not roles.has(r):
+	var role := -1
+	var counted := {}
+	for r in want:
+		counted[r] = int(counted.get(r, 0)) + 1
+		if int(have.get(r, 0)) < int(counted[r]):
 			role = r
 			break
+	if role < 0:
+		return
 	_spawn_t = PoliceRules.SPAWN_GAP if spawn_unit(role) else RETRY
+
+## Heat 5: the helicopter goes up; under 5 it goes home.
+func _heli_step(level: int) -> void:
+	if level >= PoliceHeat.HELICOPTER:
+		if heli == null or heli.phase == PoliceHelicopter.Phase.LEAVING:
+			if heli != null:
+				heli.queue_free()   # turned back before it was gone: a fresh one from behind
+			heli = PoliceHelicopter.new()
+			heli.name = "Helicopter"
+			heli.player = player
+			heli.heat = heat
+			heli.traffic = traffic
+			add_child(heli)
+			var pu := RoadFrame.unroll(player.global_position)
+			var vel: Vector3 = player.get("linear_velocity") if player.get("linear_velocity") is Vector3 else Vector3.ZERO
+			var vz := RoadFrame.dir_to_road(pu.z, vel).z
+			heli.start_at(signf(vz) if absf(vz) > 2.0 else -1.0)
+			helis_sent += 1
+	elif heli != null:
+		heli.leave()
+
+## The roles a chase at heat `level` wants with `slots` driving cops (ROLES,
+## first ones first).
+static func roles_wanted(level: int, slots: int) -> Array:
+	var all: Array = ROLES[clampi(level, 0, ROLES.size() - 1)]
+	return all.slice(0, mini(slots, all.size()))
 
 ## The chase as a whole: started, the bust ring, escaped.
 func _chase_step(delta: float) -> void:
@@ -216,7 +282,7 @@ func spawn() -> bool:
 ## player, the others behind, out past the reveal distance and never in view.
 ## True if placed.
 func spawn_unit(role: int) -> bool:
-	if units.size() >= PoliceRules.MAX_COPS:
+	if units.size() >= PoliceRules.near_cops():
 		return false
 	var pu := RoadFrame.unroll(player.global_position)
 	var vel: Vector3 = player.get("linear_velocity") if player.get("linear_velocity") is Vector3 else Vector3.ZERO
@@ -228,9 +294,14 @@ func spawn_unit(role: int) -> bool:
 	var z := pu.z + pd * (traffic.reveal_distance() + SPAWN_PAST_REVEAL) * (1.0 if ahead else -1.0)
 	var pv := absf(pvz)
 	# ahead: slower than the player, so it is caught up; behind: the player's pace or better
-	var speed := maxf(pv * 0.6, 12.0) if ahead else minf(maxf(pv, 20.0), PoliceRules.PATROL_TOP_KMH / 3.6)
+	var top := (PoliceRules.HEAVY_TOP_KMH if role == CopBrain.Role.HEAVY else PoliceRules.PATROL_TOP_KMH) / 3.6
+	var speed := maxf(pv * 0.6, 12.0) if ahead else minf(maxf(pv, 20.0), top)
 	var lanes := traffic.onc_lanes if far else traffic.own_lanes
 	var first := clampi(RoadChunkBuilder.lane_at(absf(pu.x)), 0, maxi(lanes, 1) - 1)
+	# the blocker comes in the lane beside yours (it moves over at a safe gap),
+	# the others behind you in yours
+	if ahead and lanes > 1:
+		first = first + 1 if first + 1 < lanes else first - 1
 	var city := traffic.city_at(z, pd)
 	for k in lanes:
 		var lane := (first + k) % lanes
@@ -243,9 +314,12 @@ func spawn_unit(role: int) -> bool:
 ## One cop at (lane_x, z) going `dir`, if nobody can see the place and the
 ## slot is free. Null if not.
 func _place(lane_x: float, dir: float, z: float, speed: float, role: int, lane: int, far: bool, city: bool) -> Unit:
-	if units.size() >= PoliceRules.MAX_COPS:
+	if units.size() >= PoliceRules.near_cops():
 		return null
-	var c := PatrolCar.make()
+	var heavy := role == CopBrain.Role.HEAVY
+	var c := PatrolCar.make(HEAVY_KIND if heavy else PatrolCar.KIND)
+	if heavy:
+		c.spec["vehicle_mass"] = PoliceRules.HEAVY_MASS
 	c.name = "Patrol%d" % spawn_count
 	c.traffic = traffic
 	c.target_speed = speed
@@ -266,7 +340,7 @@ func _place(lane_x: float, dir: float, z: float, speed: float, role: int, lane: 
 	u.brain = CopBrain.new(c, heat, traffic, player, u.ghost)
 	u.brain.undivided_at = undivided_at
 	u.brain.role = role
-	u.brain.v_cap = PoliceRules.PATROL_TOP_KMH / 3.6
+	u.brain.v_cap = (PoliceRules.HEAVY_TOP_KMH if c.kind == HEAVY_KIND else PoliceRules.PATROL_TOP_KMH) / 3.6
 	u.acc = float(units.size()) * 0.03   # brains think on different ticks
 	units.append(u)
 	most_units = maxi(most_units, units.size())
@@ -295,9 +369,11 @@ func _drop(u: Unit) -> void:
 		_wait = PATROL_GAP
 
 ## Floating origin (game.gd): the cars are in the traffic manager's list
-## (adopted), which moves them with the world; nothing to do here.
-func shift_world(_offset: Vector3) -> void:
-	pass
+## (adopted), which moves them with the world.
+## The helicopter is not in that list: it moves here.
+func shift_world(offset: Vector3) -> void:
+	if heli != null:
+		heli.shift_world(offset)
 
 func _player_z() -> float:
 	return RoadFrame.unroll(player.global_position).z

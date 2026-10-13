@@ -458,8 +458,12 @@ call :run traffic/more_alive_traffic "--headless --fixed-fps 120"
 	call :run traffic/free_driver_chase "--headless --fixed-fps 60"
 	rem P5: the cop brain in the game: warning to pursuit, the bust ring, lost and search, called off (about 2 min).
 	call :run traffic/police_chase "--headless --fixed-fps 60"
-	rem P6 proof: never more than 3 cops, no cop put on the road in view, blocker and flanker get into place, box-in busts (about 1.5 min).
+	rem P6 proof: never more cops than the graphics tier allows, no cop put on the road in view, blocker, flanker and heavy get into place, box-in busts (about 3 min).
 	call :run traffic/police_dispatch "--headless --fixed-fps 60"
+	rem Issue 625: cops never cut in front of you inside your stopping distance or brake hard in front of you; the issue's two crashes replayed (about 1.5 min).
+	call :run traffic/cop_cut_in "--headless --fixed-fps 60"
+	rem Issue 631 / P12: the heat-5 helicopter comes unseen, sees you except under a roof, holds heat 5 only while it sees you, goes home (about 1 min).
+	call :run traffic/police_helicopter "--headless --fixed-fps 60"
 	rem (traffic/police_escape_rate is a measurement, about 2 min a trial: run it by hand.)
 	call :run tuning/tuning_panel --headless
 	call :run tuning/auto_tune_panel --headless

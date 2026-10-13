@@ -14,6 +14,8 @@ extends SceneTree
 # - a broken meta.json or night.json never touches the career (bank, parts,
 #   nights closed exactly the newest)
 # - a broken career.json falls back one commit (its .bak1), never to nothing
+# - a version 1 save whose upgrade was killed while writing career.json.tmp is
+#   upgraded again on the next load, not loaded as an empty slot
 # - the next commit writes whole files again and keeps the broken copy aside
 #   as .bad; a save from a newer build stays byte-identical and is not loaded
 #
@@ -53,6 +55,7 @@ func _initialize() -> void:
 		for d in DAMAGES:
 			n += 1
 			_case(n, f, d)
+	_v1_torn_career_tmp()
 	print("save_damage: %d cases, %d failures" % [cases, failures.size()])
 	for f in failures:
 		print("FAIL ", f)
@@ -208,3 +211,30 @@ func _case(n: int, file: String, how: String) -> void:
 	if how in ["cut_in_header", "cut_mid", "cut_last_byte", "flipped_byte", "garbage", "empty"] and file != "active_slot":
 		_check(FileAccess.file_exists(_path(file) + ".bad"), "%s: the broken copy was not kept aside as .bad" % tag)
 	_check(SaveCore.bank() + SaveCore.cash() <= total, "%s: money grew after the next commit (%d)" % [tag, SaveCore.bank() + SaveCore.cash()])
+
+## The upgrade from version 1 killed while writing career.json.tmp (found by
+## save_chaos.py upgrade mode): the torn .tmp made the slot count as upgraded
+## and it loaded empty. It must upgrade again from the untouched old files.
+func _v1_torn_career_tmp() -> void:
+	cases += 1
+	var fx := "res://tests/save/fixtures/v1"
+	var want: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(fx.path_join("expect.json")))
+	SaveCore.root = ROOT.path_join("v1_torn/saves")
+	SaveCore.legacy_dir = ROOT.path_join("v1_torn/global")
+	_copy(fx.path_join("saves"), SaveCore.root)
+	_copy(fx.path_join("global"), SaveCore.legacy_dir)
+	_put(ProjectSettings.globalize_path(SaveCore.file("career", 1) + ".tmp"), "NEONSAVE1 0123\n{\"gen\": 1, \"wal".to_utf8_buffer())
+	SaveCore.slot = 0
+	SaveCore.chase_active = false
+	SaveCore.forget()
+	SaveCore.summary(1)
+	_check(SaveCore.bank(1) == int(want.bank) and SaveCore.cash(1) == int(want.cash),
+		"v1 + torn career.json.tmp: bank %d cash %d, expected %d and %d" % [SaveCore.bank(1), SaveCore.cash(1), want.bank, want.cash])
+	SaveCore.legacy_dir = ""
+
+static func _copy(from: String, to: String) -> void:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(to))
+	for d in DirAccess.get_directories_at(from):
+		_copy(from.path_join(d), to.path_join(d))
+	for f in DirAccess.get_files_at(from):
+		DirAccess.copy_absolute(ProjectSettings.globalize_path(from.path_join(f)), ProjectSettings.globalize_path(to.path_join(f)))

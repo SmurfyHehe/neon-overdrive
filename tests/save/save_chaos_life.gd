@@ -45,6 +45,7 @@ const Wallet := preload("res://scripts/core/wallet.gd")
 const GarageMods := preload("res://scripts/car/garage_mods.gd")
 const TestBuild := preload("res://scripts/core/test_build.gd")
 const TestDriver := preload("res://scripts/core/test_driver.gd")
+const PlayerTune := preload("res://scripts/car/player_tune.gd")
 
 const FIXTURE := "res://tests/save/fixtures/v1"
 ## Fields that drift on their own while driving; compared only where a step says.
@@ -88,6 +89,12 @@ func _initialize() -> void:
 	SaveCore.chase_active = false
 	SaveDirector.enabled = true
 	TestBuild.forced = 0   # money is real: the sandbox pays everything for free
+	# The clock, dirt and tunes in the slot, as in the game (test mode keeps
+	# them in shared test_ files, which would leak between slots here).
+	NightClock.path = NightClock.DEFAULT_PATH
+	CarDirt.path = CarDirt.DEFAULT_PATH
+	PlayerTune.enabled = true
+	ExhaustTune.save_path = ExhaustTune.DEFAULT_PATH
 	var ok := _verify()
 	if OS.get_environment("CHAOS_VERIFY_ONLY") == "1":
 		quit(0 if ok else 1)

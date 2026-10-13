@@ -593,9 +593,11 @@ static func _ensure() -> void:
 			# this run of the game, so nothing is written next to or over it.
 			_locked[slot_dir(n)] = true
 
-## A version 1 slot: no career.json, and any of the old section files.
+## A version 1 slot: no good career.json copy, and any of the old section files.
+## A torn career.json.tmp alone (the upgrade killed while writing it) does not
+## count: it made the slot look upgraded, and it loaded as an empty save.
 static func _is_v1(n: int) -> bool:
-	if AtomicJson.any_exists(file("career", n)):
+	if AtomicJson.read(file("career", n)).has("data"):
 		return false
 	for s in V1_FILES:
 		if s != "meta" and AtomicJson.any_exists(file(s, n)):

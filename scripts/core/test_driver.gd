@@ -64,6 +64,7 @@ const US_MIN := 0.0              # the range the estimate is kept in
 const US_MAX := 0.003
 const US_PRIOR := 4.0            # weight of UNDERSTEER_FF: one sample at 2 m/s^2 of cornering
 const US_SAMPLE := 6             # ticks per sample (the path's turn over 0.05 s)
+const US_STEADY := 0.02          # most the lock may move within a sample that is learned from
 ## Speed.
 const CLEAN_LAT_ACCEL := 4.0     # m/s^2 in a bend, clean and weave
 const GRIP_LAT_ACCEL := 8.0      # m/s^2, grip mode
@@ -160,6 +161,8 @@ var _vel_heading := 0.0           # travel direction at the sample's start, rad 
 var _vel_tick := -10              # last tick seen
 var _us_n := -1                   # ticks in the sample so far, -1 = none started
 var _us_wheel := 0.0              # sum of the wheel's path curvature over them
+var _us_lo := 0.0                 # least and most lock asked within it
+var _us_hi := 0.0
 
 # ---------- starting it ----------
 
@@ -320,6 +323,11 @@ func _learn_understeer(c: PlayerCar) -> void:
 	# that too, so it belongs in what is learned.
 	var asked := signf(c.steering_amount) * pow(absf(c.steering_amount), c.steering_exponent)
 	_us_wheel += tan(asked * c.max_steering_angle) / wheelbase
+	if _us_n == 0:
+		_us_lo = asked
+		_us_hi = asked
+	_us_lo = minf(_us_lo, asked)
+	_us_hi = maxf(_us_hi, asked)
 	_us_n += 1
 	if _us_n < US_SAMPLE:
 		return
@@ -330,6 +338,13 @@ func _learn_understeer(c: PlayerCar) -> void:
 	_us_wheel = 0.0
 	if absf(turn) > 0.05 * US_SAMPLE:
 		return   # a hit, not a bend
+	# Only a held lock says how the car turns for it. Mid-correction the path
+	# lags the wheel, so a weave reads as understeer, a bigger ff steers
+	# harder into the next swing, and the estimate ran to US_MAX while the
+	# max-tuned muscle car weaved off the road at 180 km/h (speed ladder,
+	# 2026-10-13).
+	if _us_hi - _us_lo > US_STEADY:
+		return
 	# Weighted least squares of k_wheel - k_path = ff * (k_path v^2), fading
 	# with US_LEARN_T and pulled to UNDERSTEER_FF by US_PRIOR: on a straight
 	# there is nothing to learn from and it drifts back to the fitted value.

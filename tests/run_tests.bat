@@ -21,6 +21,11 @@ if not exist "%GODOT%" (
 cd /d "%~dp0.."
 rem A fresh checkout has no import cache yet; scripts fail to load without it.
 if not exist ".godot" "%GODOT%" --headless --path . --import >nul 2>&1
+rem Tests get their own user folder, so their saves, logs and shader pipeline
+rem cache stay out of the player's (the cache had grown to 277 MB, #608).
+if "%NEON_TEST_APPDATA%"=="" set "NEON_TEST_APPDATA=%LOCALAPPDATA%\BoostSimcadeTests"
+if not exist "%NEON_TEST_APPDATA%" mkdir "%NEON_TEST_APPDATA%"
+set "APPDATA=%NEON_TEST_APPDATA%"
 rem Tests are silent unless you set SOUND=1 (the Dummy audio driver plays nothing).
 set "AUDIO=--audio-driver Dummy"
 rem Most tests count physics ticks as sixtieths of a second, so they run at 60 Hz; the game itself runs at 120 (see tick_rate.gd and tests/core/tick_rate_120.gd).

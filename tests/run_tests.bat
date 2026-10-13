@@ -296,6 +296,7 @@ set "TEST_TIMEOUT=%TT_SAVED%"
 rem Player cars (stage D): every PlayerCars.KINDS car boots as the player and gets a drive test.
 call :run fleet/player_cars "--headless --fixed-fps 120"
 call :run fleet/interior_fit --headless
+call :run fleet/exterior_fit --headless
 rem every player car's cabin: its own look, the road band clear, the driver fits
 call :run fleet/interior_unique --headless
 call :run fleet/sight_line --headless

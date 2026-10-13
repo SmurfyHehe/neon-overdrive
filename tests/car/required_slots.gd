@@ -17,7 +17,8 @@ extends SceneTree
 #   high on the rear glass, tags in the glow surface match the counts
 # - lamps light: the brake pedal, reverse gear, the indicators (one side) and
 #   the hazards (all) change the body's lamp channels; an indicator cancels
-#   after the turn
+#   after the turn; lights off puts the lamps out, a flash lights them
+# - the glass on a parts body and on a sheet body is see-through
 # - nothing logs an error the whole time
 # Exit code 1 on failure. Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/car/required_slots.gd
@@ -266,6 +267,28 @@ func _lamps_light() -> void:
 		lamps._self_cancel()
 		lamps.apply()
 		_check(not lamps.turn_right and _param(v, "turn") == 0.0, "%s: the indicator cancels once straight" % kind)
+		# The light switch (Roy 1521): H off puts the lamps out on the body,
+		# a held H (a flash) lights them, letting go puts them out again.
+		_check(_param(v, "lamps") == 1.0, "%s: the lamps start on with the lights" % kind)
+		p.set_headlights(false)
+		_check(_param(v, "lamps") == 0.0 and _param(v, "flash") == 0.0, "%s: lights off puts the body's lamps out" % kind)
+		p.lights_key_down()
+		p.beams.step(HeadlightBeams.HOLD_SECONDS + 0.05)
+		_check(_param(v, "lamps") == 1.0 and _param(v, "flash") == 1.0, "%s: a flash lights the lamps with the lights off" % kind)
+		p.lights_key_up()
+		_check(_param(v, "lamps") == 0.0 and _param(v, "flash") == 0.0, "%s: after the flash the lamps are out again" % kind)
+		p.set_headlights(true)
+		_check(_param(v, "lamps") == 1.0, "%s: lights on lights the lamps again" % kind)
+		_park(p)
+	PlayerCars.selected = PlayerCars.DEFAULT
+	# See-through glass on every player car (Roy 1523): a parts body and a
+	# sheet body both wear the coupe's see-through glass.
+	for kind in ["p2_hothatch", "p3_tuner"]:
+		var p := await _player(kind)
+		var body := p.chassis_visual.get_node("Body") as MeshInstance3D
+		var gi := CarAssembler.surface_index(body.mesh, "glass")
+		var mat := body.get_active_material(gi) as ShaderMaterial if gi >= 0 else null
+		_check(mat != null and mat.shader == CarPaint.glass_shader(true), "%s: the glass is see-through" % kind)
 		_park(p)
 	PlayerCars.selected = PlayerCars.DEFAULT
 

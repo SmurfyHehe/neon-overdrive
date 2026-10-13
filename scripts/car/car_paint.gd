@@ -76,6 +76,8 @@ const CAR_FINISH_DEFAULT := [1.0, 0.0, 0.5]
 const DOORS := {
 	"n1_commuter": 4, "n2_cityhatch": 4, "c1_patrol": 4, "c2_patrolsuv": 4,
 	"c3_interceptor": 4, "p6_crossover": 4, "p0_beater": 4,
+	# four-door sedan and double cab (sheets; #664)
+	"p3_tuner": 4, "p17_work_pickup": 4,
 }
 
 const _LIB := """

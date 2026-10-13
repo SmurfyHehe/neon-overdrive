@@ -12,7 +12,10 @@ extends SceneTree
 # - at rest on a floor the shock is scaled to the live spring length and the
 #   caliper rides at the hub's height, both under the steered Wheel
 # - cold discs give no glow; brake_temp 400 degC glows with the fronts above
-#   the rears; cooling back to ambient turns it off; heat_for() clamps
+#   the rears; the inner ring lags the edge (brake_heat_lag) and is still
+#   warm when the edge has cooled; cooling back to ambient turns the edge
+#   off; heat_for() clamps
+# - the shock and caliper follow the drawn hub, under the arch stop
 # - a traffic car gets no parts unless its spec says parts = "full"; one that
 #   does gets them with the 40 m range and keeps its own heat estimate that
 #   rises under braking and falls when coasting
@@ -204,12 +207,16 @@ func _player() -> void:
 		_check(w.spring_current_length > 0.02 and w.spring_current_length < w.spring_length, "%s should be on its spring at rest (length %.3f of %.3f)" % [names[i], w.spring_current_length, w.spring_length])
 		var st := parts.shock_xf[i]
 		var sy := st.basis.y.length()
-		var want_len: float = float(parts.cfg.shock_top) + w.spring_current_length
+		# The drawn hub, held under the arch by the stop when the spring sits
+		# higher than the arch allows (issue #670); the shock and the caliper
+		# follow the wheel you see.
+		var held := parts.held(i)
+		var want_len: float = float(parts.cfg.shock_top) + w.spring_current_length + held
 		_check(absf(sy - want_len) < 1e-3, "%s shock scaled to the spring length plus its top mount: %.3f vs %.3f" % [names[i], sy, want_len])
 		var top := w.transform.origin
 		_check(absf(st.origin.y - top.y - float(parts.cfg.shock_top)) < 1e-4 and st.origin.z - top.z > 0.3 and absf(st.origin.x) < absf(top.x), "%s shock hangs from the top mount height, behind the tyre (at %s, mount %s)" % [names[i], st.origin, top])
 		var ct := parts.caliper_xf[i]
-		var hub_y := top.y + w.wheel_node.position.y
+		var hub_y := top.y + w.wheel_node.position.y - held
 		_check(absf(ct.origin.y - hub_y) < 0.01, "%s caliper rides at the hub height %.3f, got %.3f" % [names[i], hub_y, ct.origin.y])
 		_check(absf(ct.basis.determinant() - 1.0) < 1e-4, "%s caliper has no mirror scale" % names[i])
 		# The caliper body sits behind the hub on both sides: its mesh's hub-side
@@ -227,9 +234,15 @@ func _player() -> void:
 	var rear := float(rl_mesh.get_instance_shader_parameter("brake_heat"))
 	_check(front > 0.7 and front <= 1.0, "400 degC should glow strongly on the front: %.2f" % front)
 	_check(rear > 0.0 and rear < front, "the rear should glow less than the front: %.2f vs %.2f" % [rear, front])
+	# The inner ring follows about 2 s behind (Roy 1514: edge first, centre last).
+	for i in 30:
+		await process_frame
+	var lag := float(fl_mesh.get_instance_shader_parameter("brake_heat_lag"))
+	_check(lag > 0.0 and lag < front, "the disc's inner ring should lag its edge: %.2f vs %.2f" % [lag, front])
 	player.health.brake_temp = PowertrainHealth.AMBIENT_C
 	await process_frame
 	_check(float(fl_mesh.get_instance_shader_parameter("brake_heat")) == 0.0, "back at ambient the glow is off")
+	_check(float(fl_mesh.get_instance_shader_parameter("brake_heat_lag")) > 0.0, "the inner ring is still cooling when the edge is cold")
 	player.free()
 
 # ---------- traffic ----------

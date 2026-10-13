@@ -625,11 +625,18 @@ static func undercarriage_params(kind: String, build: String) -> Dictionary:
 ## is what the wheel moves and spins). `hub` is the wheel's position in car
 ## space; the design's right-hand wheel is turned round for the left side.
 ## `ai` as chassis_visual's: the sheet wheel, not the parts car's braked one.
-static func wheel_visual(kind: String, build: String, hub: Vector3, ai := false) -> Node3D:
+## `bare`: CarParts will draw this wheel (the player's car), so child 0 is an
+## empty, hidden placeholder and the parts car's modelled wheel is not built
+## for nothing (issue #649).
+static func wheel_visual(kind: String, build: String, hub: Vector3, ai := false, bare := false) -> Node3D:
 	var pivot := Node3D.new()
 	pivot.name = "NpcWheel"
 	var mi := MeshInstance3D.new()
 	mi.name = "Mesh"
+	if bare:
+		mi.visible = false
+		pivot.add_child(mi)
+		return pivot
 	var corner := ("r" if hub.z > 0.0 else "f") + ("l" if hub.x < 0.0 else "r")
 	var parts_wheel: ArrayMesh = CarAssembler.wheel_mesh(kind, corner) if uses_parts(kind, ai) else null
 	if parts_wheel != null:

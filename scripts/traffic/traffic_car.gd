@@ -652,7 +652,7 @@ func _ready() -> void:
 			var pcfg := {"lod": true}
 			if CarFittings.has_brakes(kind):
 				# Discs or drums, rim and caliper from the car's own entry.
-				pcfg.merge(CarFittings.parts_cfg(kind, float(get("front_tire_width"))), true)
+				pcfg.merge(CarFittings.parts_cfg(kind, float(get("front_tire_width")), false, true), true)
 			if spec.has("rim"):
 				pcfg["rim"] = CarParts.rim_for_style(String(spec.get("rim", "")))
 			CarParts.attach(self, pcfg)

@@ -214,6 +214,42 @@ const CARS := {
 			["tailgate", "body", Vector3.RIGHT, Vector3.BACK, 1, 1.00],
 		],
 	},
+	"p6_crossover": {
+		## five doors (the rear pair cut by the kit, each with its own glass), no deck lid: one tailgate on the
+		## spoiler's front edge takes its glass, plate, lamp, handle, wiper, spoiler and high brake lamp up with it
+		"without": ["trunk"],
+		"parts": ["rdoor_l", "rdoor_r", "glass_rdoor_l", "glass_rdoor_r", "seal_rdoor_l", "seal_rdoor_r",
+			"handle_rdoor_l", "handle_rdoor_r", "hatch", "handle_hatch", "wiper_rear", "plate_lamp", "spoiler",
+			"clad_fl", "clad_fr", "clad_rl", "clad_rr", "clad_sill_l", "clad_sill_r", "roof_rails", "rack_bars",
+			"skid_strip_f", "skid_strip_r", "skid_plate", "lamp_block_l", "lamp_block_r", "grille", "mirror_l", "mirror_r",
+			"antenna", "glass_quarter_l", "glass_quarter_r", "caliper_fl", "caliper_fr", "caliper_rl", "caliper_rr",
+			"susp_fl", "susp_fr", "susp_rl", "susp_rr", "engine", "bay_radiator_core", "bay_battery", "cargo",
+			"trunk"],   # listed so that `without` is checked
+		"lamps": {"head_l": "glow_head", "head_r": "glow_head", "turn_fl": "glow_turn", "turn_fr": "glow_turn",
+			"turn_rl": "glow_turn", "turn_rr": "glow_turn", "tail_l": "glow_tail", "tail_r": "glow_tail",
+			"tail_low_l": "glow_tail", "tail_low_r": "glow_tail",
+			"brake_l": "glow_brake", "brake_r": "glow_brake", "brake_c": "glow_brake",
+			"reverse_l": "glow_reverse", "reverse_r": "glow_reverse", "plate_lamp": "glow_lens"},
+		"anchors": ["bay_engine", "bay_radiator", "bay_turbo", "bay_intercooler", "tank", "fuel_filler", "diff",
+			"strut_top_fl", "strut_top_fr"],
+		"hinges": ["hinge_hood", "hinge_door_l", "hinge_door_r", "hinge_rdoor_l", "hinge_rdoor_r", "hinge_hatch"],
+		"on_hinge": {"hinge_hatch": ["hatch", "glass_backlight", "seal_backlight", "plate_r", "plate_lamp", "handle_hatch",
+				"wiper_rear", "spoiler", "brake_c"],
+			"hinge_rdoor_r": ["rdoor_r", "glass_rdoor_r", "seal_rdoor_r", "handle_rdoor_r"],
+			"hinge_rdoor_l": ["rdoor_l", "glass_rdoor_l", "seal_rdoor_l", "handle_rdoor_l"],
+			"hinge_door_r": ["door_r", "glass_door_r", "mirror_r", "handle_r"]},
+		## 316 mm vented discs in front, 300 mm at the rear
+		"brakes": {"fl": 0.158, "fr": 0.158, "rl": 0.15, "rr": 0.15},
+		"no_hubcap": [],
+		"gaps": [
+			## at vertices of the merged outline (merge_flat leaves none between corners)
+			["hood", "fender_fr", Vector3.RIGHT, Vector3.UP, 2, -1.02],
+			["fender_fr", "door_r", Vector3.BACK, Vector3.RIGHT, 1, 0.73],
+			["door_r", "rdoor_r", Vector3.BACK, Vector3.RIGHT, 1, 0.73],
+			["rdoor_r", "body", Vector3.BACK, Vector3.RIGHT, 1, 0.73],
+			["hatch", "body", Vector3.RIGHT, Vector3.BACK, 1, 0.74],
+		],
+	},
 }
 
 var fails := 0

@@ -742,6 +742,8 @@ def build_parts(D, tips_out=None):
         lr = 'r' if cen[0] > 0 else 'l'
         if name.startswith('door_'):
             return ('glass_door_' + name[-1]) if mat == 'glass' else name
+        if name in kit.get('door_glass', ()):
+            return ('glass_' + name) if mat == 'glass' else name    # a kit's own door (rear doors): its glass on its own
         if name != 'body':
             return name
         if mat == 'glass':

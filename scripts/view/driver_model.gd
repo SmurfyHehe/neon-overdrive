@@ -1400,6 +1400,7 @@ func _points_of(meshes: Array) -> PackedVector3Array:
 func _clear_offset(xf: Transform3D, pts: PackedVector3Array, extra: Array = [], sight := 0.0) -> Vector3:
 	var off := Vector3.ZERO
 	var boxes: Array = frame.keepout + extra
+	var reach := _reach_of(pts)   # the points' centre and radius, hand space: boxes out of reach are skipped
 	for iter in 12:
 		if sight > 0.0:   # out of the road ahead first (a box's way out may then take it further)
 			var away := _sight_offset(xf, pts, off, sight)
@@ -1408,9 +1409,14 @@ func _clear_offset(xf: Transform3D, pts: PackedVector3Array, extra: Array = [], 
 				continue
 		var best := INF
 		var best_out := Vector3.ZERO
+		var centre: Vector3 = xf * (reach[0] as Vector3) + off
 		for box in boxes:
 			var inv: Transform3D = (box[0] as Transform3D).affine_inverse()
 			var h: Vector3 = box[1]
+			var cq := inv * centre
+			var gap := Vector3(maxf(absf(cq.x) - h.x, 0.0), maxf(absf(cq.y) - h.y, 0.0), maxf(absf(cq.z) - h.z, 0.0))
+			if gap.length() >= float(reach[1]):
+				continue
 			var inside := []
 			for p in pts:
 				var q: Vector3 = inv * (xf * p + off)
@@ -1511,8 +1517,8 @@ var _curve_clear := false
 
 ## The idle hand's way between two poses (`pose(e, moves)`, a _cubic): tries
 ## each set of extra solids with the hand sent out of the road ahead down
-## first and side first, and keeps the smallest moves that come out clear
-## everywhere, preferring moves within PATH_VIA_MAX (beyond it the hand swings
+## first and side first, and keeps the first moves that come out clear
+## everywhere within PATH_VIA_MAX (beyond it the hand swings
 ## wide round the armrest: the kei and the drift coupe, #727), then the
 ## smallest of any size; if none come out clear, the smallest clear of the
 ## cabin alone; else none.
@@ -1521,24 +1527,36 @@ func _fit_path(pose: Callable, pts: PackedVector3Array, extras: Array) -> Array:
 	var wide := []
 	var wide_len := INF
 	for sight in [SIGHT_DOWN_FIRST, SIGHT_SIDE_FIRST, 0.0]:
-		var best := []
-		var best_len := INF
 		for extra in extras:
 			var moves := _clear_cubic(pose, pts, extra, sight)
 			var size := maxf((moves[0] as Vector3).length(), (moves[1] as Vector3).length())
 			if not _curve_clear:
 				continue
-			if size <= PATH_VIA_MAX and size < best_len:
-				best = moves
-				best_len = size
-			elif size < wide_len:
+			if size <= PATH_VIA_MAX:
+				return moves   # the first close one (the extras go from fewer ways out to more)
+			if size < wide_len:
 				wide = moves
 				wide_len = size
-		if not best.is_empty():
-			return best
 		if sight == SIGHT_SIDE_FIRST and not wide.is_empty():
 			return wide   # out of the road ahead, the long way round, before through it
 	return wide if not wide.is_empty() else NO_VIA.duplicate()
+
+## [centre, radius] of a set of probe points (cached by the array's size and ends).
+func _reach_of(pts: PackedVector3Array) -> Array:
+	var key := "%d|%s|%s" % [pts.size(), pts[0], pts[-1]]
+	if _reach_cache.has(key):
+		return _reach_cache[key]
+	var bb := AABB(pts[0], Vector3.ZERO)
+	for p in pts:
+		bb = bb.expand(p)
+	var c := bb.get_center()
+	var r := 0.0
+	for p in pts:
+		r = maxf(r, p.distance_to(c))
+	_reach_cache[key] = [c, r]
+	return _reach_cache[key]
+
+var _reach_cache := {}
 
 ## Moves a _cubic's two control points until the hand is clear at
 ## REACH_SAMPLES: each sample's way out is shared between them by how much

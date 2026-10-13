@@ -43,6 +43,8 @@ Build 3 blocks (work board, weather, map, delete), all through the old `SaveStor
 | 3 slots, each its own car, tunes, dirt, clock and difficulty | `save_core.gd`; nothing game-state is kept outside the slot any more. Settings (audio, graphics, view, fx, traffic, keys) stay global |
 | Backups, crash-safe writes | `atomic_json.gd`: write `.tmp`, verify, rotate `.bak1..3`, rename in; SHA-256 header on every file |
 | Never save during a chase | `SaveCore.begin_chase()` / `end_chase()`; every write refuses while `chase_active` |
+| A police chase is the save's chase | `Game` connects `PolicePatrol.pursuit_started` / `pursuit_ended` to `begin_chase()` / `end_chase()` (before 2026-10-13 nothing did, so a kill mid-chase resumed the run) |
+| Money and what it buys are one commit | a garage part: `Wallet.spend_bank_with()` pays and writes the part (`SaveStore.apply_parts`) together; a pump fill: the fuel goes in first and every wallet commit carries the car's state (`Wallet.car_live`) |
 | Quit mid-chase still busts you | `begin_chase()` marks the chase open in `meta.json` first; the next load turns it into a bust (`pending_busts`, run not resumed) |
 | Resume exactly where you left | the run in `night.json`: which road (`road.id`, `road.s`, `road.dir`, `road.act`: `RoadMap.where()`; a save with no road id or one this build does not have starts at the top of the default road), road seed and shape, floating-origin index, nearby barrier rolls, car transform / velocity / spin / gear / rpm, clock, radio |
 | A quit is not a free repair | `car_live` goes with every night save; a commit folds it into `cars[id]`; `PlayerCar` reads it back on load |
@@ -87,6 +89,12 @@ To change the format: add the step, bump `CURRENT_SAVE_VERSION`, freeze a save o
 ## Cost
 
 Measured on Roy's laptop (`tests/save/save_core.gd` prints it): one crash-safe write of a tiny file takes about 6 ms, and a commit is three of them, so a commit takes 25 to 50 ms, more for a big career (18 cars with 4 tunes each is 138 KB). It runs at commit points, not every frame. A named tune is about 1.4 KB; there is no cap on how many a car keeps.
+
+## Crash tests
+
+- `tests/save/save_chaos.py` kills the game with `kill -9` at random moments (title, driving with autosaves, pause menu, police chase, dawn, garage buy, pump, restart, slot switch, an upgrade from version 1) and checks every restart against a ledger of what each step must leave. Linux only, each run in its own `XDG_DATA_HOME`; not in `run_tests.bat`. Results of the first run: `notes/save-chaos-run-2026-10-13.md` in the project files.
+- `tests/save/save_damage.gd`: each of meta, career, night and active_slot cut short, flipped, garbage, empty, missing, all copies missing, a nonsense value with a good checksum, from a newer build, a torn `.tmp` beside it, only the `.tmp` left.
+- Known limit: a broken newest `career.json` falls back to `.bak1`, so the last commit (for example the last dawn's banked cash) is lost. A kill never does this; only a damaged file.
 
 ## Not built yet
 

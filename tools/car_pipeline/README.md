@@ -177,6 +177,8 @@ What a kit car has that the pilot does not:
 | Other paints | `paint_primer`, `paint_rust`, `paint_bondo`: fixed colours on the body surface. `panel_mats` paints a whole cut panel, `paint_regions` a stretch of the side skin, split on the region's edges |
 | Own panels | `cuts` cuts panels the common recipe does not have (barn doors), `hinge_of` hangs parts on a kit hinge, `no_trunk` drops the deck lid |
 | Fewer triangles | `merge_flat`: runs of flat quads along the loft (a wheel arch puts nine stations across the roof and the floor) become one quad when the fourth corner stays within 3 mm of the plane of the other three. Outline and long edges do not move |
+| Loft changes | `defn`: keys laid over the car's sheet definition for the parts build only (the tuner's `well_x`, its wheel wells' inner wall). The sheet car and the physics do not see them |
+| Stance | `stance`: ride height, arch gap, rake, camber and how far the wheels push out, written to `body.json` for the shared stance pass; nothing applies them yet |
 
 **P0, the Bug** (`p0_beater`): 6,050 body triangles in 69 parts with the
 Blender backend, 782 more in the four wheels; worst mirror deviation 0.000 mm
@@ -271,6 +273,52 @@ on purpose: the primer-grey front-left fender (`panel_mats`), so the right
 front fender is written as it is too; the rear bumper's corners are scuffed
 (`paint_regions` in primer, both sides). `_primer_lip` rolls the primer
 fender's arch edge, which `parts.add_arch_lips` only does for `paint`.
+
+**P3, the tuner sedan** (`p3_tuner`, kit in `kit_p3_tuner.py`): 6,470 body
+triangles in 85 parts, 1,304 more in the wheels; 48 mirrored parts and pairs
+within 0.05 mm. Four doors: the kit cuts the rear pair (`door_rl/rr`) on the
+B-pillar line, each with its glass, seal and handle on `hinge_door_rl/rr`;
+the B-pillar strip stays on the body between the door glasses, and the rear
+quarter glass is fixed. Box overfenders laid on the skin (`flare_*`, the rear
+ones on the rear doors as `flare_door_*`, so they open with them). Slim bar
+headlamps, amber blinkers beside the plate, a slot grille, round tail lamps
+on a dark `tail_panel` with the brake, reverse and rear blinker lamps as parts
+of their own, a plate lamp, no high brake lamp (era). A pedestal wing on the
+deck lid, its feet following the lid's curve; wipers rebuilt on the glass
+(the merged windshield is up to 15 mm off the loft); the mirrors on a foot down
+to the door top; a short mast on the left rear quarter. 300 mm vented discs
+with bronze calipers, a strut and arm in the front wells and a multi-link rear.
+Its wheel wells are 30 cm deep instead of the fleet's 16 (`defn`: `well_x`
+0.46), so a front tyre at full lock clears the inner wall (on the other cars
+it swings 24-30 mm through it).
+
+Two things the tuner does that the next car can copy: lamps, rims, handles
+and grilles are laid on the car's own merged panels (`_on_skin`: every way a
+merged face can be cut into triangles, so what is laid on it clears it however
+Blender splits it), and a flat rect on a folded panel is cut from the panel
+itself (`_skin_decal`: each skin face under the rect, clipped and moved out),
+not from a grid whose flat cells let the fold through.
+
+## The exterior fit test
+
+`tests/fleet/exterior_fit.gd` holds a car from parts to zero clashes (a car
+joins its `CARS` list when its kit passes):
+
+- no two parts cross by more than 2 mm. The depth of a crossing is how far
+  one triangle goes through the other within the other's outline, so a part
+  that only touches an edge is not a clash. A shut line's turned-in edge and
+  dark floor reaching up to 15 mm into another's in the gap is how the shut
+  line is built and does not count
+- every open edge of a glass is in its seal or against an opaque part
+- doors, lids and the fuel flap swing open (every 10 degrees) without going
+  through anything
+- the tyres clear the body at rest, rise at least 5 mm before they touch, and
+  clear it at full steering lock (the car's own `max_steering_angle`); the arch
+  edge sits no more than arch gap + 10 mm over the tyre
+- nothing floats (every outside part within 3 mm of another), nothing below
+  the ground, the tail lamps apart and tall enough
+
+    godot --headless --path . -s res://tests/fleet/exterior_fit.gd
 
 A new car's kit goes in a file of its own (`kit_<id>.py`, a dict `KIT`) with
 one import line in `kits.py`.

@@ -586,3 +586,4 @@ KITS['p1_coupe'] = __import__('kit_p1_coupe').KIT       # the coupe: only its br
 KITS['p5_muscle'] = __import__('kit_p5_muscle').KIT     # the muscle hardtop: its own file
 KITS['p8_driftcoupe'] = __import__('kit_p8_driftcoupe').KIT   # the drift coupe: its own file
 KITS['p10_truck'] = __import__('kit_p10_truck').KIT     # the street truck: its own file
+KITS['p3_tuner'] = __import__('kit_p3_tuner').KIT     # the tuner sedan: its own file

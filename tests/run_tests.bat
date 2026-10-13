@@ -96,6 +96,8 @@ call :run fleet/car_pipeline_p1 --headless
 call :run car/car_assembler --headless
 rem Cars from parts after the pilot (kits.py): the Bug's and the wagon's required parts, gaps, symmetry, triangles, draw calls.
 call :run fleet/car_parts_kits --headless
+rem Outside of a car from parts: no two parts cross, glass in its frame, doors and lids swing clear, tyres clear at full lock, nothing floats.
+call :run fleet/exterior_fit --headless
 call :run audio/exhaust_tune --headless
 call :run audio/exhaust_pops --headless
 rem Engine loops: baked rpm x load bank is seamless, the player stays under its voice cap and never swaps a stream under a sounding voice, events stay live, in-game hand-over.
@@ -565,6 +567,7 @@ call :run core/log_folder --headless
 call :run core/save_gearbox "--headless --fixed-fps 120"
 call :run core/settings_safety --headless
 call :run fleet/car_parts_kits --headless
+call :run fleet/exterior_fit --headless
 call :run tuning/auto_tune_rules --headless
 call :run ui/fonts --headless
 call :run ui/key_map --headless

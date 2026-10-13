@@ -51,6 +51,11 @@ const WARMUP_SECS := 2.0  # skip shader-compile hitches at startup
 ##          Default: legacy_bench (full throttle, never brakes), or weave when
 ##          weave=1. bot=legacy_bench with weave=1 is the old blind lane swap.
 ## seed     the fuzz mode's key seed.
+## trace    1 = one line a second: speed, gear, rpm, pedals, boost, engine
+##          heat and limp, and what the bot is holding the speed to (its
+##          target, the bend ahead, the gap to traffic). For "why is it slow".
+## max-tune (a bare flag, --max-tune) drives the car max-tuned
+##          (scripts/tuning/max_tune.gd): turbo and top-speed gearing.
 ## warmup   1 = run the splash's shader warm-up first (shader_warmup.gd), as a
 ##          normal launch does; the result line counts the pipelines still
 ##          compiled mid-drive either way.
@@ -224,6 +229,8 @@ func _process(delta: float) -> void:
 
 	var p: PlayerCar = game.get("player")
 	max_speed = max(max_speed, p.linear_velocity.length())
+	if opt("trace") == "1" and floori(t) != floori(t - delta):
+		_trace(p)
 
 	if t >= run_secs() + WARMUP_SECS:
 		set_process(false)
@@ -283,6 +290,15 @@ func _start_driver() -> void:
 		opts.seed = int(opt("seed"))
 	bot = TestDriver.start(game, mode, opts)
 	game.set("bot", bot)
+
+func _trace(p: PlayerCar) -> void:
+	var line := "BENCHMARK t=%3d s  %5.1f km/h  gear %d%s  %5.0f rpm  thr %.2f brk %.2f  boost %.2f  eng %.0f C x%.2f" % [
+		floori(t), p.current_speed() * 3.6, p.current_gear, " auto" if p.automatic_transmission else "", p.motor_rpm,
+		p.throttle_input, p.brake_input, p.boost, p.health.engine_temp, p.health.torque_mult]
+	if bot != null and bot.mode != "legacy_bench":
+		line += "  bot: target %.0f, bend %s, gap %s, lane %d" % [bot.target_speed * 3.6,
+			"-" if bot._bend_v == INF else "%.0f" % (bot._bend_v * 3.6), "-" if bot._gap == INF else "%.0f m at %.0f km/h" % [bot._gap, bot._lead_v * 3.6], bot.lane]
+	print(line)
 
 func _report() -> void:
 	var s: Array = Array(frames)

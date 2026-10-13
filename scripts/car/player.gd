@@ -127,6 +127,7 @@ var wet := WetGrip.new()
 const WetGrip := preload("res://scripts/car/wet_grip.gd")
 const StarterAudio := preload("res://scripts/audio/starter_audio.gd")
 const TestBuild := preload("res://scripts/core/test_build.gd")
+const MaxTune := preload("res://scripts/tuning/max_tune.gd")
 ## Broken parts (Stage C damage, slice 1). Off for sim_only cars, like health.
 var damage := CarDamage.new()
 var _head_share := 1.0
@@ -275,15 +276,25 @@ func _ready() -> void:
 		# offers already fitted (ModTree.everything_fit), as if bought. The
 		# tune made on the modded car is kept in its own file, so it never
 		# lands on the stock car when the switch goes off.
-		if TestBuild.on():
+		# MAX TUNE (MaxTune, test-only): the fully fitted car with a turbo and
+		# top-speed gearing, for flat-out bot and benchmark runs. Built fresh
+		# every spawn and never saved: no saved tune is read or written, and
+		# the slot's wear, damage and fuel are not loaded onto it.
+		if MaxTune.on():
+			var mt := MaxTune.build(kind)
+			spec = mt.spec
+			mod_build = {"spec": spec, "nodes": mt.nodes, "bolt_ons": ModTree.all_bolt_ons(), "max_tune": true}
+			print("MAX TUNE ", MaxTune.spec_report(kind))
+		elif TestBuild.on():
 			TuneParams.set_gear_count((spec.gear_ratios as Array).size())  # the build reads the Tuner's windows
 			mod_build = ModTree.build(spec, ModTree.everything_fit(kind))
 			spec = mod_build.spec
 			PlayerTune.kind = kind + "_modded"
 		TuneParams.set_gear_count((spec.gear_ratios as Array).size())  # before the saved tune is read: it walks the registry
-		PlayerTune.apply_saved(spec)
-		_keeps_tune = true
-		_saved_tune = PlayerTune.values_from(spec)
+		if not MaxTune.on():
+			PlayerTune.apply_saved(spec)
+			_keeps_tune = true
+			_saved_tune = PlayerTune.values_from(spec)
 	CarSpec.apply(self, spec)
 	TuneParams.set_gear_count(gear_ratios.size())   # the tuner lists one box per gear of this car
 	# The realistic automatic: only cars whose spec has an "auto" block (the

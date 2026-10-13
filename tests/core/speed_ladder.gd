@@ -166,7 +166,8 @@ func _install_probes() -> void:
 	game.move_child(first, 0)
 	for k in kids:
 		var pr: Node = Probe.new()
-		pr.label = String(k.name)
+		var sc: Script = k.get_script()
+		pr.label = String(k.name) + ("" if sc == null else "(" + sc.resource_path.get_file() + ")")
 		pr.shared = _prof
 		game.add_child(pr)
 		game.move_child(pr, k.get_index() + 1)

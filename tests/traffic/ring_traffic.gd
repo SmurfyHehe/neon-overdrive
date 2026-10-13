@@ -165,6 +165,7 @@ func _physics_process(_delta: float) -> bool:
 				tr.visit_share = 1.0
 				tr.ring_spawn_share = 1.0
 				tr.ring_seed_cap = RingVisitors.SITE_CAP
+				tr.ring_all_share = 1.0
 				player.driver = Harness.flash_brake_driver(tr, Harness.lane_x(1), B_SPEED)
 				_start("B")
 		"B":

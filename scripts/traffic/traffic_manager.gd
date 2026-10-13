@@ -375,6 +375,7 @@ var visit_share := RingVisitors.VISIT_SHARE
 var ring_spawn_share := RingVisitors.RING_SPAWN_SHARE
 var ring_seed_cap := RingVisitors.SEED_CAP
 var ring_site_cap := RingVisitors.SITE_CAP
+var ring_all_share := RingVisitors.ALL_SHARE
 var _ring_rng := RandomNumberGenerator.new()
 ## The player in road space and its road-space velocity, as of this tick.
 var p_road := Vector3.ZERO
@@ -1595,10 +1596,13 @@ func _pick_visitors_step() -> void:
 		if role != Undercarriage.ROLE_TRAFFIC:
 			continue
 		car.visit_rolled = site_s
-		if _ring_rng.randf() >= visit_share or _site_visitors(site_s) >= ring_site_cap:
+		if _ring_rng.randf() >= visit_share or _site_visitors(site_s) >= ring_site_cap or _visitors_full():
 			continue
 		car.start_visit(RingVisitors.route(_pick_route(), side), site_s, wt - RingVisitors.START_W)
 		visit_starts += 1
+
+func _visitors_full() -> bool:
+	return visitors.size() >= maxi(1, roundi(float(cars.size()) * ring_all_share))
 
 func _pick_route() -> int:
 	var r := _ring_rng.randf()
@@ -1721,7 +1725,7 @@ func _ring_respawn(car: TrafficCar, pz: float) -> bool:
 		return false
 	var site_s := float(near.s)
 	var ahead := (site_s - ps) * fs
-	if ahead < band.x + RingVisitors.R or ahead > band.y or _site_visitors(site_s) >= ring_seed_cap:
+	if ahead < band.x + RingVisitors.R or ahead > band.y or _site_visitors(site_s) >= ring_seed_cap or _visitors_full():
 		return false
 	if _ring_rng.randf() >= ring_spawn_share:
 		return false

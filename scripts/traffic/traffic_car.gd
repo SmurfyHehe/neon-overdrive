@@ -1493,6 +1493,8 @@ func _start_lane_change(lane: int, urgent: bool, why := DO_PASSING) -> void:
 ## Where the car's path is across the road now: the lane centre, or the
 ## lane-change S.
 func path_x() -> float:
+	if visiting:
+		return RingVisitors.at(visit, visit_d).x
 	return _path_x_at(_lc_t) if changing else lane_x
 
 ## Where the lane change steers: along the path's tangent, t_look + LC_AIM_LEAD
@@ -2027,6 +2029,7 @@ func _leave_visit() -> void:
 func _visit_offset(u: Vector3, b: Basis) -> Vector3:
 	var w := RoadFrame.s_at(u.z) - visit_s
 	visit_d = RingVisitors.project(visit, u.x, w, visit_d)
+	_visit_come_down()
 	var p := RingVisitors.at(visit, visit_d)
 	var yaw := RingVisitors.yaw_at(visit, visit_d)
 	var across := (u.x - p.x) * cos(yaw) + (w - p.y) * sin(yaw)
@@ -2076,6 +2079,13 @@ func _visit_cruise(delta: float) -> void:
 	_visit_cruise_step(delta)
 	RingVisitors.cost_usec += Time.get_ticks_usec() - t0
 
+## Back at road level past the ramp: the car belongs to the carriageway it is
+## coming down onto from this tick on (the U-turn's is the other one).
+func _visit_come_down() -> void:
+	if visit_d >= float(visit.road_down) and direction != float(visit.end_dir):
+		direction = float(visit.end_dir)
+		lane_x = float(visit.end_x)
+
 func _visit_cruise_step(delta: float) -> void:
 	_think_in -= 1
 	if _think_in <= 0:
@@ -2083,6 +2093,7 @@ func _visit_cruise_step(delta: float) -> void:
 		_rail_a = _rail_stop_accel(clampf(_visit_accel(_cruise_speed, delta * float(think_ticks)), -A_BRAKE_FULL, 2.0))
 	_cruise_speed = maxf(_cruise_speed + _rail_a * delta, 0.0)
 	visit_d += _cruise_speed * delta
+	_visit_come_down()
 	if _rail_dx != 0.0 or _rail_dy != 0.0 or _rail_dyaw != 0.0:
 		var k := exp(-delta / RAIL_EASE)
 		_rail_dx *= k
@@ -2192,8 +2203,6 @@ func _visit_accel(v: float, dt: float) -> float:
 		lead_speed = traffic.q_speed
 		lead_is_player = traffic.q_player
 		if RingVisitors.road_level(r, d):
-			if d >= float(r.road_down):
-				direction = float(r.end_dir)
 			var p := visit_xwy
 			_my_x = p.x
 			_my_z = RingVisitors.road_z(visit_s, p.y)
@@ -2245,6 +2254,7 @@ func _visit_accel(v: float, dt: float) -> float:
 	var merge := float(r.merge)
 	if merge >= 0.0 and not visit_join and traffic != null and d > merge - 40.0:
 		direction = float(r.end_dir)
+		lane_x = float(r.end_x)
 		if _merge_safe(float(r.end_x), v):
 			visit_join = true
 		else:

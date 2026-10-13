@@ -99,6 +99,11 @@ const SITE_CAP := 4
 ## than SEED_CAP visitors, that are placed on its ring or a ramp coming down.
 const RING_SPAWN_SHARE := 0.35
 const SEED_CAP := 2
+## Most visitors over all sites, as a share of the traffic cars: at the
+## default 16 cars that is 2, so the main road keeps its traffic (the
+## highway's flash check, tests/traffic/traffic_behaviour.gd E, needs cars in
+## the player's lane).
+const ALL_SHARE := 1.0 / 8.0
 
 ## NEON_RING_TRAFFIC=0 turns ring visitors off (before/after comparisons).
 static var enabled := OS.get_environment("NEON_RING_TRAFFIC") != "0"

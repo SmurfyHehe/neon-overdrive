@@ -392,6 +392,8 @@ func _half_of(car: Node3D) -> Vector3:
 				m = m.max(pt.abs())
 			h = m
 			break
+	if _half.size() > 256:
+		_half.clear()   # keyed by instance id: cars the pool replaced stay otherwise (#611)
 	_half[id] = h
 	return h
 

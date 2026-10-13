@@ -42,6 +42,7 @@ extends Node
 const TestMode := preload("res://scripts/core/test_mode.gd")
 const GameInfo := preload("res://scripts/core/game_info.gd")
 const LogFolder := preload("res://scripts/core/log_folder.gd")
+const PipelineCache := preload("res://scripts/core/pipeline_cache.gd")
 
 const ERRORS := "user://logs/errors.log"
 const SESSION := "user://logs/session.txt"
@@ -77,6 +78,7 @@ func _init() -> void:
 	_logger.state_source = state_text
 	OS.add_logger(_logger)
 	_write_session(RUNNING)
+	PipelineCache.check_at_start()   # exported builds only (#608)
 
 func _process(_delta: float) -> void:
 	var now := Time.get_ticks_msec()
@@ -98,6 +100,7 @@ func close() -> void:
 	_logger.finish()
 	_logger = null
 	_write_session(CLOSED)
+	PipelineCache.tidy_at_exit()
 
 static func errors_path() -> String:
 	return TestMode.path(ERRORS)

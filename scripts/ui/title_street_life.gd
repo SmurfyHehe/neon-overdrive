@@ -101,6 +101,11 @@ const RANGE := 60.0
 static var _meshes := {}
 static var _mats := {}
 
+## Forgets the shared mesh and material; the next use builds them again.
+static func drop_cache() -> void:
+	_meshes.clear()
+	_mats.clear()
+
 # ---------- the clock and the wind ----------
 
 static func set_clock(t: float) -> void:

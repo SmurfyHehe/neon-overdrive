@@ -65,6 +65,11 @@ const SHELL := Color(0.165, 0.102, 0.063)   # #2A1A10
 static var _mesh: ArrayMesh
 static var _mat: ShaderMaterial
 
+## Forgets the shared mesh and material; the next use builds them again.
+static func drop_cache() -> void:
+	_mesh = null
+	_mat = null
+
 # ---------- the run of one roach (mirrored in the shader) ----------
 
 ## A stable value in [0, 1) for (seed, k), products only so the GPU and the

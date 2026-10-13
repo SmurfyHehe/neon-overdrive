@@ -182,6 +182,14 @@ var _probe_time := -1.0
 var _probe_clock := 0.0
 var _probe_pending := 0.0
 
+## Drops the street's shared meshes and materials (street life, rats, roaches,
+## graffiti) once the title is gone; each rebuilds itself on next use.
+static func drop_caches() -> void:
+	TitleStreetLife.drop_cache()
+	TitleRats.drop_cache()
+	TitleRoaches.drop_cache()
+	Graffiti.drop_cache()
+
 func _init(car_kind: String) -> void:
 	name = "TitleKerbside"
 	kind = car_kind

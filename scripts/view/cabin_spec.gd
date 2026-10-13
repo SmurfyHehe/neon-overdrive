@@ -53,7 +53,7 @@ static func for_kind(kind: String) -> Dictionary:
 	if kind == P1CoupeBuilder.KIND:
 		data = P1CoupeBuilder.Data
 	elif NpcCarBuilder.KINDS.has(kind):
-		data = NpcCarBuilder.KINDS[kind].data
+		data = NpcCarBuilder.data_of(kind)
 	if data == null or not "CABIN" in data:
 		var cab: Dictionary = P1CoupeBuilder.Data.CABIN
 		if HOOD_POINTS.has(kind):

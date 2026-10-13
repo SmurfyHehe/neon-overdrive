@@ -72,6 +72,11 @@ static var _mesh: ArrayMesh
 static var _mat: ShaderMaterial
 static var _wind := 0.6
 
+## Forgets the shared mesh and material; the next use builds them again.
+static func drop_cache() -> void:
+	_mesh = null
+	_mat = null
+
 # ---------- the cells file ----------
 
 static func cells() -> Array:

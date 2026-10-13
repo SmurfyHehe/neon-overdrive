@@ -49,8 +49,10 @@ static func texture() -> Texture2DArray:
 	_ensure()
 	return _tex
 
-## The layers as images (tests read pixels from here).
+## The layers as images (tests read pixels from here). Kept only in test
+## mode: in play they were a second ~2 MB copy of the texture (#611).
 static var images: Array[Image] = []
+const TestMode := preload("res://scripts/core/test_mode.gd")
 
 static func _ensure() -> void:
 	if _tex != null:
@@ -75,6 +77,8 @@ static func _ensure() -> void:
 	var arr := Texture2DArray.new()
 	arr.create_from_images(images)
 	_tex = arr
+	if not TestMode.active():
+		images.clear()
 
 ## Shapes `text` with the TextServer and blits each glyph's coverage into
 ## `data` (one byte per pixel). Returns the text's width in px.

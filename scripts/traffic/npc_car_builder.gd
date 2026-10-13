@@ -44,7 +44,7 @@ class_name NpcCarBuilder
 
 const KINDS := {
 	"n1_commuter": {
-		"data": preload("res://scripts/traffic/n1_commuter_data.gd"),
+		"data_path": "res://scripts/traffic/n1_commuter_data.gd",
 		# fleet.json dims and physics_hint
 		"length": 4.80, "width": 1.82, "height": 1.51, "clearance": 0.16,
 		"front_overhang": 0.98, "rear_overhang": 1.02,
@@ -61,7 +61,7 @@ const KINDS := {
 		"build_paint": {"taxi": Color("#F2B53A")},
 	},
 	"n2_cityhatch": {
-		"data": preload("res://scripts/traffic/n2_cityhatch_data.gd"),
+		"data_path": "res://scripts/traffic/n2_cityhatch_data.gd",
 		"length": 3.95, "width": 1.69, "height": 1.53, "clearance": 0.15,
 		"front_overhang": 0.80, "rear_overhang": 0.62,
 		"wheel_r": 0.295, "wheel_x": 0.73, "axle_z": 1.265,
@@ -71,7 +71,7 @@ const KINDS := {
 		"build_paint": {},
 	},
 	"n3_pickup": {
-		"data": preload("res://scripts/traffic/n3_pickup_data.gd"),
+		"data_path": "res://scripts/traffic/n3_pickup_data.gd",
 		"length": 5.30, "width": 1.86, "height": 1.86, "clearance": 0.30,
 		"front_overhang": 0.92, "rear_overhang": 1.30,
 		"wheel_r": 0.39, "wheel_x": 0.79, "axle_z": 1.54,
@@ -88,7 +88,7 @@ const KINDS := {
 	# faded paint. In KINDS so the player and (later) a rival or a parked
 	# prologue car share one mesh path.
 	"p0_beater": {
-		"data": preload("res://scripts/car/p0_beater_data.gd"),
+		"data_path": "res://scripts/car/p0_beater_data.gd",
 		## Rebuilt from the decided sheet (2026-10-10): stretched to 4.30 x 1.72,
 		## wheels filling the arches on a 1.44 m track.
 		"length": 4.30, "width": 1.72, "height": 1.61, "clearance": 0.17,
@@ -104,7 +104,7 @@ const KINDS := {
 		"engine": "rear",
 	},
 	"p2_hothatch": {
-		"data": preload("res://scripts/car/p2_hothatch_data.gd"),
+		"data_path": "res://scripts/car/p2_hothatch_data.gd",
 		"length": 3.97, "width": 1.83, "height": 1.4, "clearance": 0.12,
 		"front_overhang": 0.74, "rear_overhang": 0.67,
 		"wheel_r": 0.315, "wheel_x": 0.79, "axle_z": 1.28,
@@ -114,7 +114,7 @@ const KINDS := {
 		"sheet_paint": true,
 	},
 	"p3_tuner": {
-		"data": preload("res://scripts/car/p3_tuner_data.gd"),
+		"data_path": "res://scripts/car/p3_tuner_data.gd",
 		"length": 4.48, "width": 1.78, "height": 1.36, "clearance": 0.12,
 		"front_overhang": 0.95, "rear_overhang": 0.91,
 		"wheel_r": 0.32, "wheel_x": 0.76, "axle_z": 1.31,
@@ -124,7 +124,7 @@ const KINDS := {
 		"sheet_paint": true,
 	},
 	"p4_kei": {
-		"data": preload("res://scripts/car/p4_kei_data.gd"),
+		"data_path": "res://scripts/car/p4_kei_data.gd",
 		"length": 3.30, "width": 1.40, "height": 1.05, "clearance": 0.12,
 		"front_overhang": 0.55, "rear_overhang": 0.48,
 		"wheel_r": 0.28, "wheel_x": 0.615, "axle_z": 1.135,
@@ -134,7 +134,7 @@ const KINDS := {
 		"sheet_paint": true,
 	},
 	"p5_muscle": {
-		"data": preload("res://scripts/car/p5_muscle_data.gd"),
+		"data_path": "res://scripts/car/p5_muscle_data.gd",
 		## The two-door hardtop (2026-10-11), built from its parts glb: 35 cm
 		## shorter, wheelbase 2.84, one long door a side.
 		"length": 5.00, "width": 1.93, "height": 1.33, "clearance": 0.16,
@@ -146,7 +146,7 @@ const KINDS := {
 		"sheet_paint": true,
 	},
 	"p6_crossover": {
-		"data": preload("res://scripts/car/p6_crossover_data.gd"),
+		"data_path": "res://scripts/car/p6_crossover_data.gd",
 		"length": 4.35, "width": 1.84, "height": 1.61, "clearance": 0.22,
 		"front_overhang": 0.92, "rear_overhang": 0.81,
 		"wheel_r": 0.345, "wheel_x": 0.78, "axle_z": 1.31,
@@ -158,7 +158,7 @@ const KINDS := {
 	# The shop wagon (sheet p7_wagon, 2026-10-11): front drive, built from
 	# its parts glb like the Bug; the sheet mesh is the NEON_PARTS_LEGACY body.
 	"p7_wagon": {
-		"data": preload("res://scripts/car/p7_wagon_data.gd"),
+		"data_path": "res://scripts/car/p7_wagon_data.gd",
 		"length": 4.30, "width": 1.74, "height": 1.55, "clearance": 0.16,
 		"front_overhang": 0.72, "rear_overhang": 0.98,
 		"wheel_r": 0.305, "wheel_x": 0.73, "axle_z": 1.30,
@@ -173,7 +173,7 @@ const KINDS := {
 	# traffic pickup's, which stays as it is. Bed 30 cm shorter (Build 4,
 	# Roy 1475 "differ"): the step bumper adds 0.15 m behind the 4.95 body.
 	"p17_work_pickup": {
-		"data": preload("res://scripts/car/p17_work_pickup_data.gd"),
+		"data_path": "res://scripts/car/p17_work_pickup_data.gd",
 		"length": 4.95, "width": 1.80, "height": 1.74, "clearance": 0.28,
 		"front_overhang": 0.90, "rear_overhang": 0.87,
 		"wheel_r": 0.37, "wheel_x": 0.775, "axle_z": 1.59,
@@ -187,7 +187,7 @@ const KINDS := {
 	# glb (tools/car_pipeline/kit_p8_driftcoupe.py); the sheet mesh is the
 	# NEON_PARTS_LEGACY body. 1.80 wide over the bolt-on arches.
 	"p8_driftcoupe": {
-		"data": preload("res://scripts/car/p8_driftcoupe_data.gd"),
+		"data_path": "res://scripts/car/p8_driftcoupe_data.gd",
 		"length": 4.30, "width": 1.80, "height": 1.34, "clearance": 0.10,
 		"front_overhang": 0.78, "rear_overhang": 0.88,
 		"wheel_r": 0.30, "wheel_x": 0.75, "axle_z": 1.32,
@@ -201,7 +201,7 @@ const KINDS := {
 	# sport truck, built from its parts glb; the sheet mesh is the
 	# NEON_PARTS_LEGACY body. Not the Camel (tall) and not the traffic pickup.
 	"p10_truck": {
-		"data": preload("res://scripts/car/p10_truck_data.gd"),
+		"data_path": "res://scripts/car/p10_truck_data.gd",
 		"length": 5.05, "width": 1.92, "height": 1.62, "clearance": 0.14,
 		"front_overhang": 0.90, "rear_overhang": 1.20,
 		"wheel_r": 0.36, "wheel_x": 0.81, "axle_z": 1.475,
@@ -212,7 +212,7 @@ const KINDS := {
 		"sheet_paint": true,
 	},
 	"c1_patrol": {
-		"data": preload("res://scripts/car/c1_patrol_data.gd"),
+		"data_path": "res://scripts/car/c1_patrol_data.gd",
 		"length": 5.30, "width": 1.96, "height": 1.6, "clearance": 0.16,
 		"front_overhang": 1.08, "rear_overhang": 1.30,
 		"wheel_r": 0.335, "wheel_x": 0.81, "axle_z": 1.46,
@@ -222,7 +222,7 @@ const KINDS := {
 		"sheet_paint": true,
 	},
 	"c2_patrolsuv": {
-		"data": preload("res://scripts/car/c2_patrolsuv_data.gd"),
+		"data_path": "res://scripts/car/c2_patrolsuv_data.gd",
 		"length": 5.10, "width": 2.00, "height": 2.09, "clearance": 0.23,
 		"front_overhang": 0.98, "rear_overhang": 1.09,
 		"wheel_r": 0.37, "wheel_x": 0.85, "axle_z": 1.515,
@@ -232,7 +232,7 @@ const KINDS := {
 		"sheet_paint": true,
 	},
 	"c3_interceptor": {
-		"data": preload("res://scripts/car/c3_interceptor_data.gd"),
+		"data_path": "res://scripts/car/c3_interceptor_data.gd",
 		"length": 4.82, "width": 1.92, "height": 1.38, "clearance": 0.13,
 		"front_overhang": 1.02, "rear_overhang": 1.08,
 		"wheel_r": 0.34, "wheel_x": 0.8, "axle_z": 1.36,
@@ -425,6 +425,17 @@ static func set_lamps(vis: Node3D, brake: float, turn = 0, reverse := false,
 		mi.set_instance_shader_parameter("turn", float(state))
 		mi.set_instance_shader_parameter("reverse", 1.0 if reverse else 0.0)
 
+## A kind's data script (base64 shapes, builds, colours), loaded the first
+## time that kind is used. They used to be preloaded in KINDS, which kept all
+## 16 in memory for the whole game (~26 MB in the editor build, measured
+## 2026-10-13, notes/ram-usage-2026-10-13.md) though traffic only uses n1-n3.
+static var _data := {}
+
+static func data_of(kind: String) -> GDScript:
+	if not _data.has(kind):
+		_data[kind] = load(KINDS[kind].data_path)
+	return _data[kind]
+
 static func is_npc(kind: String) -> bool:
 	return KINDS.has(kind)
 
@@ -450,7 +461,7 @@ static func config(kind: String) -> Dictionary:
 	}
 
 static func builds(kind: String) -> Array:
-	return (KINDS[kind].data.BUILDS as Dictionary).keys()
+	return (data_of(kind).BUILDS as Dictionary).keys()
 
 ## A build by the KINDS weights.
 static func pick_build(kind: String) -> String:
@@ -467,7 +478,7 @@ static func pick_build(kind: String) -> String:
 
 ## The design sheet's paint colour for this car (its data COLORS "paint").
 static func sheet_paint(kind: String) -> Color:
-	return Color(KINDS[kind].data.COLORS["paint"])
+	return Color(data_of(kind).COLORS["paint"])
 
 ## Paint for a car of this build: the build's own colour, the sheet's paint
 ## (sheet_paint kinds), or a weighted traffic neutral.
@@ -498,7 +509,7 @@ static func pick_paint(kind: String, build: String) -> Color:
 ## the parts body (see uses_parts).
 static func chassis_visual(kind: String, build: String, paint: Color, role := "", ai := false) -> Node3D:
 	var k: Dictionary = KINDS[kind]
-	var b: Dictionary = k.data.BUILDS[build]
+	var b: Dictionary = data_of(kind).BUILDS[build]
 	var lift := Vector3(0.0, -float(k.rest_y), 0.0)
 	if role == "":
 		role = Undercarriage.role_for_kind(kind)
@@ -599,7 +610,7 @@ static func _parts_tail_lamps(kind: String, lift: Vector3) -> Array:
 ## the C3 interceptor is the straight-pipe cop variant.
 static func undercarriage_params(kind: String, build: String) -> Dictionary:
 	var k: Dictionary = KINDS[kind]
-	var b: Dictionary = k.data.BUILDS[build]
+	var b: Dictionary = data_of(kind).BUILDS[build]
 	var lift := Vector3(0.0, -float(k.rest_y), 0.0)
 	var floor_y: float = body_mesh(kind, build).get_aabb().position.y + lift.y
 	var engine := String(k.get("engine", "front"))
@@ -663,7 +674,7 @@ static func draw_call_count(kind: String, build: String, role := "", ai := false
 static func body_mesh(kind: String, build: String) -> ArrayMesh:
 	var key := "%s|%s" % [kind, build]
 	if not _body_meshes.has(key):
-		var data: GDScript = KINDS[kind].data
+		var data: GDScript = data_of(kind)
 		var b: Dictionary = data.BUILDS[build]
 		var k: Dictionary = KINDS[kind]
 		var hubs := []
@@ -692,7 +703,7 @@ static func fittings(kind: String, build: String) -> Dictionary:
 static func wheel_mesh(kind: String, build: String, rear: bool) -> ArrayMesh:
 	var key := "%s|%s|%s" % [kind, build, "rear" if rear else "front"]
 	if not _wheel_meshes.has(key):
-		var data: GDScript = KINDS[kind].data
+		var data: GDScript = data_of(kind)
 		var w: Dictionary = data.BUILDS[build].wheels[1 if rear else 0]
 		_wheel_meshes[key] = _build_mesh(data, P1CoupeBuilder.decode_points(w.pos), Marshalls.base64_to_raw(w.mat), false)
 	return _wheel_meshes[key]

@@ -52,7 +52,9 @@ const CARS := {
 	# the kei's dash is a 6 cm ledge a hand's width under the screen: its
 	# bobble head stands two sizes smaller (BobbleHead), on the dash face's flat
 	# top at the driver's edge, where the screen has risen enough over it (#684)
-	"p4_kei": {"strut_bar": {"x": 0.445, "y": 0.67, "z": -0.98}, "bobble": {"along": 0.98, "scale": 0.27, "tilt": 0.15}},
+	"p4_kei": {"strut_bar": {"x": 0.445, "y": 0.67, "z": -0.98}, "bobble": {"along": 0.98, "scale": 0.27, "tilt": 0.15},
+		# its mirror is low and near the eye: the trinket hangs at the passenger's end of it
+		"trinket_far_side": true},
 	# the tall figures' heads leaned full over reached into the dash's rise (#684)
 	"p5_muscle": {"strut_bar": {"x": 0.66, "y": 0.87, "z": -1.33}, "bobble": {"tilt": 0.45}},
 	"p6_crossover": {"strut_bar": {"x": 0.61, "y": 1.00, "z": -1.16}},
@@ -73,7 +75,7 @@ static func cabin(kind: String, spot: String) -> Vector3:
 	if spot == "dash_pass":
 		return dash_pass(kind)
 	if spot == "mirror_hang" and has_car(kind):   # under this car's own mirror (it hung at the coupe's spot in every car, #685)
-		return (CabinSpec.for_kind(kind).rear_mirror as Vector3) + HANG_FROM_MIRROR
+		return (CabinSpec.for_kind(kind).rear_mirror as Vector3) + hang_from_mirror(kind)
 	var car: Dictionary = CARS.get(kind, {})
 	var over: Dictionary = car.get("cabin", {})
 	if over.has(spot):
@@ -102,6 +104,14 @@ const DASH_PASS_DEG := 28.0
 ## far their flat top sits under the cluster's height.
 const DASH_FACE_HALF_DEPTH := 0.06
 const DASH_FACE_UNDER_CLUSTER := 0.02
+
+## The trinket's knot from this car's mirror: HANG_FROM_MIRROR, or under the
+## housing's other end where the driver's side hangs it in the road ahead.
+static func hang_from_mirror(kind: String) -> Vector3:
+	var off := HANG_FROM_MIRROR
+	if (CARS.get(kind, {}) as Dictionary).get("trinket_far_side", false):
+		off.x = -off.x
+	return off
 
 static func dash_pass(kind: String) -> Vector3:
 	var cab := CabinSpec.for_kind(kind)

@@ -119,8 +119,11 @@ const KNOB_R := 0.015
 const PEDAL_TRAVEL_DEG := 22.0
 ## The pad's bottom edge over the toe board, at rest and pressed.
 const PEDAL_FLOOR_CLEAR := 0.02
-## The footwell's toe board: how far it rises from the floor to the firewall.
+## The footwell's toe board: how far it rises from the floor to the firewall,
+## at most (lower where the pedal pads hang over it: _fit_toe_rise).
 const TOE_BOARD_RISE := 0.16
+## Each pedal: name, x from the throttle pivot, pad width, pad height.
+const PEDALS := [["throttle", 0.0, 0.045, 0.10], ["brake", -0.12, 0.065, 0.075], ["clutch", -0.24, 0.060, 0.075]]
 
 ## The driver's side window (2026-10-09, Roy: "the Z to roll up and roll down
 ## needs an animation"). The glass is a pane in the door, its foot at the belt
@@ -221,6 +224,7 @@ var _pane_window := -1.0          # the window the drawn pane was cut for
 ## way out (unit, car space; or an Array of them, the shortest taken)]. DriverModel fits its poses against these once
 ## per pose, not every frame.
 var keepout: Array = []
+var toe_rise := TOE_BOARD_RISE   # this car's toe board rise (_fit_toe_rise)
 ## The crank's keepout entry (in keepout while the car has the crank): the
 ## disc its arm, knob and the hand on it sweep, left downward or inboard.
 var crank_keep: Array = []
@@ -314,6 +318,7 @@ func _init(car: PlayerCar) -> void:
 func _ready() -> void:
 	# Always drawn: in the chase view the cabin and driver show through the glass.
 	visible = true
+	toe_rise = _fit_toe_rise()
 	_build_static()
 	_build_wheel()
 	_build_cluster()
@@ -582,7 +587,7 @@ func _build_static() -> void:
 	var floor_half := door_x + 0.02
 	var floor_len := rear_z - (cowl.y + 0.12)
 	k.box(Vector3(floor_half * 2.0, 0.04, floor_len), Vector3(0.0, floor_y, (cowl.y + 0.12 + rear_z) * 0.5), c_carpet)
-	k.wedge(Vector3((minf(door_x, door_x_f) - 0.12) * 2.0, 0.04, 0.30), Vector3(0.0, floor_y + 0.02, cowl.y + 0.09), c_carpet, TOE_BOARD_RISE, 0.0)   # footwell, between the arches (toe_board_y)
+	k.wedge(Vector3((minf(door_x, door_x_f) - 0.12) * 2.0, 0.04, 0.30), Vector3(0.0, floor_y + 0.02, cowl.y + 0.09), c_carpet, toe_rise, 0.0)   # footwell, between the arches (toe_board_y)
 	k.box(Vector3(minf(dash_half, minf(door_x, door_x_f)) * 2.0, cowl.x - 0.10 - floor_y, 0.04), Vector3(0.0, (cowl.x - 0.10 + floor_y) * 0.5, cowl.y - 0.03), c_plastic)
 	var bulk_top := (belt + 0.26) if not open_top else belt - 0.02
 	if not (cab.shelf as Dictionary).is_empty():
@@ -1508,18 +1513,15 @@ func _step_lever(delta: float) -> void:
 
 func _build_pedals() -> void:
 	var at: Vector3 = cab.pedals   # the throttle pivot; brake and clutch step 12 cm left each
-	for p in [["throttle", 0.0, 0.045, 0.10], ["brake", -0.12, 0.065, 0.075], ["clutch", -0.24, 0.060, 0.075]]:
+	for p in PEDALS:
 		var pivot := Node3D.new()
 		pivot.name = String(p[0]).capitalize() + "Pedal"
 		pivot.position = at + Vector3(p[1], 0.0, 0.0)
-		# hung high enough that the pad's bottom edge clears the toe board by
-		# PEDAL_FLOOR_CLEAR at rest and pressed (it stood in it on 9 cars, #682)
+		# the toe board is already low enough under the pads (_fit_toe_rise);
+		# where even the flat floor is too high, the pedal hangs higher
 		var lift := 0.0
-		for deg in [0.0, PEDAL_TRAVEL_DEG]:
-			var r := Basis(Vector3.RIGHT, deg_to_rad(deg))
-			for corner in [Vector3(0.0, -0.17 - float(p[3]) * 0.5, -0.002), Vector3(0.0, -0.17 - float(p[3]) * 0.5, 0.010)]:
-				var c: Vector3 = pivot.position + r * corner
-				lift = maxf(lift, toe_board_y(c.z) + PEDAL_FLOOR_CLEAR - c.y)
+		for c in _pad_corners(pivot.position, p):
+			lift = maxf(lift, toe_board_y(c.z) + PEDAL_FLOOR_CLEAR - c.y)
 		pivot.position.y += lift
 		var k := CockpitKit.new()
 		k.box(Vector3(0.018, 0.17, 0.012), Vector3(0.0, -0.085, 0.0), TRIM)
@@ -1531,10 +1533,33 @@ func _build_pedals() -> void:
 ## The top of the floor under the pedals at car z: the toe board rising to
 ## the firewall (the footwell wedge in _build_static), else the floor.
 func toe_board_y(z: float) -> float:
-	var floor_y := float(cab.floor_y)
-	var cowl_z := (cab.cowl as Vector2).y
-	var t := clampf((z - (cowl_z + 0.09 - 0.15)) / 0.30, 0.0, 1.0)   # 0 at the board's front (top) edge
-	return maxf(floor_y + 0.04 + TOE_BOARD_RISE * (1.0 - t), floor_y + 0.02)
+	return maxf(float(cab.floor_y) + 0.04 + toe_rise * (1.0 - _toe_t(z)), float(cab.floor_y) + 0.02)
+
+## 0 at the toe board's front (top) edge .. 1 at its foot.
+func _toe_t(z: float) -> float:
+	return clampf((z - ((cab.cowl as Vector2).y + 0.09 - 0.15)) / 0.30, 0.0, 1.0)
+
+## The pad's bottom edge, front and back, at rest and pressed (car space).
+static func _pad_corners(pivot: Vector3, p: Array) -> Array:
+	var out := []
+	for deg in [0.0, PEDAL_TRAVEL_DEG]:
+		var r := Basis(Vector3.RIGHT, deg_to_rad(deg))
+		for corner in [Vector3(0.0, -0.17 - float(p[3]) * 0.5, -0.002), Vector3(0.0, -0.17 - float(p[3]) * 0.5, 0.010)]:
+			out.append(pivot + r * corner)
+	return out
+
+## How far the toe board may rise and still keep PEDAL_FLOOR_CLEAR under every
+## pad at rest and pressed: the pads stood in it on 9 cars (#682). Lowering
+## the board, not raising the pedals, keeps the feet and knees where they were.
+func _fit_toe_rise() -> float:
+	var rise := TOE_BOARD_RISE
+	var base := float(cab.floor_y) + 0.04
+	for p in PEDALS:
+		for c in _pad_corners((cab.pedals as Vector3) + Vector3(p[1], 0.0, 0.0), p):
+			var t := _toe_t((c as Vector3).z)
+			if t < 1.0:
+				rise = minf(rise, ((c as Vector3).y - PEDAL_FLOOR_CLEAR - base) / (1.0 - t))
+	return maxf(rise, 0.0)
 
 ## Pedal travel 0..1 as it reads from the car.
 func pedal_inputs() -> Dictionary:

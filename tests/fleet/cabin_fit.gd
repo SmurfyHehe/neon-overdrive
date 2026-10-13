@@ -38,8 +38,6 @@ const MIN_DEPTH := 0.002
 const MOUNT_ALLOW := 0.0025
 ## The trinket's cord ties on under the car's own rear-view mirror, within this.
 const TRINKET_FROM_MIRROR := 0.06
-## The coupe's tie-on point (CabinSpots mirror_hang) from its rear_mirror.
-const COUPE_HANG_FROM_MIRROR := Vector3(-0.07, -0.033, -0.015)
 const BASE := Vector3(0.0, 500.0, 0.0)
 const AXES := [Vector3.RIGHT, Vector3.LEFT, Vector3.UP, Vector3.DOWN, Vector3.FORWARD, Vector3.BACK]
 # three skew directions for the parity vote (never along a box edge or face)
@@ -834,7 +832,7 @@ func _trinket_and_bobble(kind: String, frame: CockpitFrame) -> void:
 			_probe(kind, "trinket " + id, "swing (%.2f, %.2f)" % [sv.x, sv.y], _points(charm, inv, false))
 	tr.set_design(DashTrinket.NONE)
 	# the cord ties on under this car's own rear-view mirror, where the coupe's does under its own
-	var want: Vector3 = (frame.cab.rear_mirror as Vector3) + COUPE_HANG_FROM_MIRROR
+	var want: Vector3 = (frame.cab.rear_mirror as Vector3) + CabinSpots.hang_from_mirror(kind)
 	var off := tr.position.distance_to(want)
 	if off > TRINKET_FROM_MIRROR:
 		findings.append([kind, "trinket cord", "tie-on", "air, %.0f cm from its own mirror's tie-on point" % (off * 100.0), off, 1, 1, tr.position])

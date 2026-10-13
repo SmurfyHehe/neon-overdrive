@@ -43,7 +43,7 @@ const GLASS := ["glass"]
 const CABIN := {
 	"seat_x": -0.360, "seat_h": 0.740, "seat_z": -0.120,
 	"eye": Vector3(-0.360, 1.360, -0.180),
-	"floor_y": 0.560, "belt_y": 1.165,
+	"floor_y": 0.460, "belt_y": 1.165,
 	"cowl": Vector2(1.019, -1.050), "dash_face_z": -0.670,
 	"header": Vector2(1.715, -0.685), "roof_y": 1.700, "roof_z1": 0.150, "open_top": false,
 	"door_x": 0.840, "door_x_rear": 0.820, "door_x_front": 0.840, "glass_x": 0.860, "glass_top": 1.685,

@@ -190,6 +190,16 @@ func step(v: Vehicle, dt: float) -> void:
 func is_warning(flag: int) -> bool:
 	return (warnings & flag) != 0
 
+## A day parked (the garage after 6 a.m., soak test 2026-10-13): engine,
+## brakes and tyres back at the temperatures a new game starts with. Wear and
+## damage stay. Without it a car that came in overheated left the garage the
+## next night still in OVERHEAT limp, and with hot brakes and tyres.
+func rest() -> void:
+	engine_temp = 85.0
+	brake_temp = AMBIENT_C
+	for i in 4:
+		tyre_temp[i] = AMBIENT_C
+
 ## Only the wear numbers; temperatures reset on load. For the garage later.
 func to_dict() -> Dictionary:
 	return {"engine_temp": engine_temp, "brake_temp": brake_temp, "clutch_wear": clutch_wear, "tyre_wear": tyre_wear.duplicate()}

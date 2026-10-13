@@ -21,6 +21,8 @@ extends SceneTree
 # - a visit from the forecourt opens the garage, saves the run in under 16 ms;
 #   refused (toast signal) while a cop sees the player
 # - a 6 a.m. during a chase waits for the chase to end, then the dawn card opens
+# - a real 6 a.m. cools the car (a day parked: engine, brakes, tyres, a cold
+#   first start; wear stays); a mid-night visit does not
 # - a real 6 a.m.: the card shows the banked amount, and the night save that
 #   follows the dawn commit is the new night's (save core)
 # - the Polaroid writer scales to 320x180 and lands in the slot's folder
@@ -205,6 +207,12 @@ func _run() -> void:
 	var ended: int = clock.night
 	var bank0: int = w.bank
 	w.add_cash(730)
+	# The car comes in hot and leaves cold: a day parked (soak test 2026-10-13).
+	player.health.engine_temp = 125.0
+	player.health.brake_temp = 400.0
+	player.health.tyre_temp[1] = 110.0
+	player.health.tyre_wear[1] = 0.3
+	player._warmth = 1.0
 	clock.advance((NightClock.NIGHT_MINUTES - clock.minutes + 1.0) * NightClock.REAL_SECONDS_PER_HOUR / 60.0)
 	_check(gs.state == GameState.State.DAWN and gs.dawn_night == ended, "6 a.m. opens the dawn card for night %d (state %d, night %d)" % [ended, gs.state, gs.dawn_night])
 	await process_frame
@@ -220,12 +228,19 @@ func _run() -> void:
 	_check(int(raw.get("night", 0)) == ended + 1 and int(raw.get("base_gen", -1)) == SaveCore.gen() and int(raw.get("cash", -1)) == 0,
 		"the night save after the dawn commit is night %d on the new career (night %s, base_gen %s, gen %d, cash %s)" % [ended + 1, str(raw.get("night")), str(raw.get("base_gen")), SaveCore.gen(), str(raw.get("cash"))])
 	_check(SaveDirector.valid_run(SaveStore.load_run()), "the run saved after dawn resumes (it is not dropped as a banked night)")
+	_check(player.health.engine_temp == 85.0 and player.health.brake_temp == PowertrainHealth.AMBIENT_C
+		and player.health.tyre_temp[1] == PowertrainHealth.AMBIENT_C,
+		"a day in the garage cools the car (engine %.0f, brakes %.0f, tyre %.0f)" % [player.health.engine_temp, player.health.brake_temp, player.health.tyre_temp[1]])
+	_check(player.health.tyre_wear[1] == 0.3, "a day parked keeps the wear (%.2f)" % player.health.tyre_wear[1])
+	_check(player.coldness() == 1.0, "the first start after a day parked is a cold one (%.2f)" % player.coldness())
 	gs.dawn_continue()
 	gs.leave_garage()
 	await physics_frame
 	_check(gs.state == GameState.State.PLAYING, "back on the road after the real dawn")
 
-	# Forecourt: opens, and the entry (save + polaroid hook) is cheap.
+	# Forecourt: opens, and the entry (save + polaroid hook) is cheap. A
+	# mid-night visit is no day off: a hot engine stays hot.
+	player.health.engine_temp = 118.0
 	var saves_before: int = game.saver.saves
 	var t := Time.get_ticks_usec()
 	var opened := gs.open_garage()
@@ -234,6 +249,7 @@ func _run() -> void:
 	_check(game.saver.saves == saves_before + 1, "entering the garage saves the run (%d -> %d)" % [saves_before, game.saver.saves])
 	print("garage entry (save + polaroid hook): %.2f ms" % entry_ms)
 	_check(entry_ms < 16.0, "garage entry took %.2f ms (budget 16)" % entry_ms)
+	_check(player.health.engine_temp == 118.0, "a mid-night visit does not cool the engine (%.0f)" % player.health.engine_temp)
 	gs.leave_garage()
 	await physics_frame
 

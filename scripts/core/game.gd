@@ -113,6 +113,7 @@ const RoadRamps := preload("res://scripts/world/road_ramps.gd")
 # the bot in a window uses the same switch the headless tests do), with
 # --replay=<file>, or by the benchmark; null in normal play.
 const TestDriver := preload("res://scripts/core/test_driver.gd")
+const MaxTune := preload("res://scripts/tuning/max_tune.gd")
 const DriveRecorder := preload("res://scripts/core/drive_recorder.gd")
 var bot: TestDriver
 var recorder: DriveRecorder
@@ -237,7 +238,9 @@ func _ready() -> void:
 	if TestDriver.requested_replay() != "":
 		_replay = DriveRecorder.load_file(TestDriver.requested_replay())
 		bot_mode = "replay"
-	if bot_mode != "":
+	# The benchmark drives itself too (#613: without --bot it rewrote the
+	# slot's night.json each run), and a max-tuned car is a test car.
+	if bot_mode != "" or benchmark or MaxTune.on():
 		SaveDirector.enabled = false
 	if not _replay.is_empty():
 		# The recording's road, car, tick rate and traffic count.

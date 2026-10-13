@@ -23,6 +23,16 @@ extends RefCounted
 #                path): the same `seed_value` gives the same key presses.
 #   replay       plays `keys` back (a DriveRecorder file, or a fuzz run's log).
 #   hold         fixed pedals and wheel: `hold_throttle`, `hold_brake`, `hold_steer`.
+#   flatout      top-speed runs (2026-10-13): holds `target_speed` (flat out by
+#                default) and keeps it by changing lane round slower traffic
+#                instead of queueing behind it. clean plans every stop at
+#                PLAN_DECEL and changes lane only with a long gap ahead, so
+#                with traffic spawning a few hundred metres ahead it settles
+#                near 200 km/h whatever its target (the "195 km/h" benchmark
+#                runs). flatout looks at every lane's free road, moves to the
+#                one with the most room once the lane beside is clear for the
+#                change, and brakes, at FLAT_DECEL, only for what is in the
+#                lane it is in or moving to. Contacts are counted as usual.
 #   legacy_bench the benchmark's old bang-bang heading hold, full throttle,
 #                never brakes; `legacy_weave` = its blind 4 s lane swap.
 #   legacy_lane  (static legacy_lane()) the old traffic-harness lane keeper.
@@ -68,6 +78,11 @@ const GAP_BEHIND := 8.0          # m, plus CLOSE_SECS of the closing speed
 const GAP_AHEAD := 10.0
 const CLOSE_SECS := 3.0
 const CHANGE_GAIN := 3.0         # m/s a lane must be faster by to be worth moving for
+## Flat out (flatout mode).
+const FLAT_DECEL := 7.0          # m/s^2 it plans its braking on (a full pedal is worth BRAKE_FULL)
+const FLAT_SWAP_GAIN := 25.0     # m more free road a lane needs to be worth moving to
+const FLAT_CHANGE_SECS := 1.6    # s a lane change takes: the gap it needs in the new lane, at the closing speed
+const FLAT_SIDE := 6.0           # m clear behind and beside the car in the new lane
 ## Spin recovery.
 const SPIN_SLIP := 0.45          # rad between nose and travel = spinning
 const SPIN_MIN_SPEED := 6.0
@@ -207,6 +222,8 @@ func set_mode(mode_name: String) -> void:
 			_step = _drive_replay
 		"hold":
 			_step = _drive_hold
+		"flatout":
+			_step = _drive_flatout
 		"legacy_bench":
 			_step = _drive_legacy_bench
 		_:
@@ -670,6 +687,89 @@ func _leg_at_edge(c: PlayerCar) -> bool:
 		if (x > kerb and out > 0.0) or (x < median and out < 0.0):
 			return true
 	return false
+
+func _drive_flatout(c: PlayerCar) -> void:
+	if _recovering(c):
+		return
+	_plan_left -= _dt
+	if _plan_left <= 0.0:
+		_plan_left = PLAN_SECS
+		_check_spin = true
+		_plan_flatout(c)
+	c.steering_input = steer_to(c, TrafficManager.lane_centre(lane, false))
+	pedals_for(c, minf(target_speed, _bend_v))
+
+# Every PLAN_SECS: the lane with the most free road, and the speed the road
+# ahead in it allows.
+func _plan_flatout(c: PlayerCar) -> void:
+	var u := RoadFrame.unroll(c.global_position)
+	var v := c.current_speed()
+	var off := absf(u.x - TrafficManager.lane_centre(lane, false))
+	if _changing and off < CHANGE_DONE:
+		_changing = false
+	if not _changing:
+		max_lane_err = maxf(max_lane_err, off)
+	_bend_here = absf(RoadFrame.curvature_at(u.z))
+	var bend := bend_speed(c, GRIP_LAT_ACCEL)
+	if traffic == null:
+		_bend_v = bend
+		return
+	var reach := clampf(v * v / (2.0 * FLAT_DECEL) + 120.0, 150.0, 1200.0)
+	var here := _lane_room(u.z, lane, reach)
+	if not _changing:
+		var best_room: float = here[0] + FLAT_SWAP_GAIN
+		var pick := lane
+		for d in [-1, 1]:
+			var j: int = lane + d
+			if not _lane_ok(j):
+				continue
+			var room := _lane_room(u.z, j, reach)
+			if room[0] > best_room and _side_clear(c, u, j, v, room):
+				best_room = room[0]
+				pick = j
+		if pick != lane:
+			lane = pick
+			_changing = true
+			lane_changes += 1
+			here = _lane_room(u.z, lane, reach)
+	# The speed is set by the lane it is in or moving to, not by the car it is
+	# moving out from behind (clean brakes for both, which is what holds it
+	# behind traffic). That car only counts once it is too close to finish the
+	# change in front of: then it is a stop.
+	_gap = here[0] if here[0] < reach else INF
+	_lead_v = float(here[1]) if _gap < INF else 0.0
+	var allow := INF
+	if _gap < INF:
+		allow = sqrt(_lead_v * _lead_v + 2.0 * FLAT_DECEL * maxf(0.0, _gap - GAP_AHEAD))
+	if _changing:
+		var lane_x := TrafficManager.lane_centre(lane, false)
+		var lo := minf(u.x, lane_x) - HALF_W - SIDE_MARGIN
+		var hi := maxf(u.x, lane_x) + HALF_W + SIDE_MARGIN
+		var swept := traffic.scan(u.z, -1.0, lo, hi, true, 0, HALF_L, reach, true)
+		var closing := maxf(0.0, v - traffic.q_speed)
+		if swept < INF and swept < GAP_AHEAD + closing * FLAT_CHANGE_SECS * 0.5:
+			allow = minf(allow, traffic.q_speed)
+			_gap = swept
+	min_gap = minf(min_gap, _gap)
+	_bend_v = minf(bend, allow)
+
+# [free road ahead, speed of what ends it] in lane `i`.
+func _lane_room(z: float, i: int, reach: float) -> Array:
+	var x := TrafficManager.lane_centre(i, false)
+	var g := traffic.scan(z, -1.0, x - HALF_W - SIDE_MARGIN, x + HALF_W + SIDE_MARGIN, true, 0, HALF_L, reach, true)
+	return [reach if g == INF else g, traffic.q_speed if g < INF else INF]
+
+# Lane `j` beside the car has room for the change: nothing alongside or just
+# behind, and the car it would close on is far enough to finish moving over.
+func _side_clear(c: PlayerCar, u: Vector3, j: int, v: float, room: Array) -> bool:
+	var x := TrafficManager.lane_centre(j, false)
+	var lo := minf(u.x, x) - HALF_W - SIDE_MARGIN
+	var hi := maxf(u.x, x) + HALF_W + SIDE_MARGIN
+	var behind := traffic.scan(u.z, -1.0, lo, hi, false, 0, HALF_L, 200.0, true)
+	if behind < FLAT_SIDE + maxf(0.0, traffic.q_speed - v) * CLOSE_SECS:
+		return false
+	var closing := maxf(0.0, v - float(room[1])) if room[1] < INF else 0.0
+	return room[0] >= GAP_AHEAD + closing * FLAT_CHANGE_SECS
 
 func _drive_aim(c: PlayerCar) -> void:
 	var point := aim_node.global_position if aim_node != null and is_instance_valid(aim_node) else aim_point

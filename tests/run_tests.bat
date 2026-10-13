@@ -261,6 +261,8 @@ rem Delete a save: the store, and the title's Load > Delete a save with its ques
 call :run core/save_delete --headless
 rem Test build: every player car with everything its mod tree offers fitted.
 call :run car/test_build_mods --headless
+rem Max tune (test-only flat-out profile): every car builds inside the Tuner's limits; in the game it never saves.
+call :run car/max_tune "--headless --fixed-fps 120"
 rem Hard hits and the end of the night: the rules, the hit sensor, the crash screen; then the real restart.
 call :run core/run_end "--headless --fixed-fps 120"
 call :run core/run_end_restart "--headless --fixed-fps 120"
@@ -357,6 +359,10 @@ if /i not "%~1"=="quick" (
 	call :run core/drive_clean "--headless --fixed-fps 120"
 	rem The clean run on bends and hills: the bot has to slow for the bends.
 	call :run core/drive_bends "--headless --fixed-fps 120"
+	rem Flat out on the max-tuned coupe in traffic: reaches its 340 km/h ladder top, touches nothing (~100 s of driving).
+	call :run core/drive_flatout "--headless --fixed-fps 120"
+	rem Every car max-tuned, flat out on the flat: holds the top speed its gearing was set for (~7 min).
+	call :run car/max_tune_speed "--headless --fixed-fps 120"
 	set "DRIVE_SECS=30"
 	set "DRIVE_CARS=24"
 	set "DRIVE_FUZZ_SEEDS=1,2,3,4,5,6,7,8"
@@ -559,6 +565,7 @@ call :run world/uturn_signs --headless
 call :run world/weather_plan --headless
 call :run car/chassis_targets "--headless --fixed-fps 60"
 call :run car/test_build_mods --headless
+call :run car/max_tune "--headless --fixed-fps 120"
 call :run car/undercarriage --headless
 call :run core/game_info --headless
 call :run core/log_folder --headless

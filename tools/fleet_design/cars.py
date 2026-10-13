@@ -365,31 +365,41 @@ P6 = {
     'refs': 'Crosstrek/XV, A6 Allroad, Delta Integrale',
     'rule': 'Lifted rally hatch: black-clad box flares, roof rack, high ground clearance.',
     'L': 4.35, 'WB': 2.62, 'OHf': 0.92, 'W': 1.84,
-    'wheel': {'r': 0.345, 'w': 0.235, 'track': 1.56, 'arch_gap': 0.045, 'rim': '5spoke', 'rim_ratio': 0.64},
+    # rear tyres 265 to match CarSpec.player_spec (rear drive since the
+    # transmissions decision); visual only, the sim reads CarSpec
+    'wheel': {'r': 0.345, 'w': 0.235, 'w_rear': 0.265, 'track': 1.56, 'arch_gap': 0.045, 'rim': '5spoke', 'rim_ratio': 0.64},
     'top': [(0.0, 0.72), (0.06, 0.84), (0.28, 0.94), (1.25, 1.06), (1.92, 1.50), (3.82, 1.53), (4.18, 1.16),
             (4.30, 1.12), (4.35, 0.78)],
     'floor': [(0, 0.42), (0.32, 0.22), (4.02, 0.22), (4.35, 0.44)],
-    'hw': [(0, 0.70), (0.12, 0.85), (0.40, 0.885), (0.50, 0.915), (1.36, 0.915), (1.46, 0.885), (3.08, 0.885),
-           (3.18, 0.915), (3.94, 0.915), (4.04, 0.89), (4.35, 0.82)],
+    # flat flanks (the sheet, part 5): the black cladding carries the car out
+    # to 0.92 over the arches, so the overall width stays 1.84
+    'hw': [(0, 0.70), (0.12, 0.85), (0.40, 0.875), (4.04, 0.875), (4.35, 0.82)],
     'waist': [(0, 0.62), (0.40, 0.72), (4.35, 0.74)],
     'belt': [(0, 0.72), (0.30, 0.90), (1.25, 1.02), (3.90, 1.08), (4.35, 1.02)],
     'tumble': 0.05, 'sill_in': 0.03, 'rocker_h': 0.48, 'rocker_trim': True,
     'cabin': {'A': 1.25, 'W': 1.92, 'R': 3.82, 'C': 4.18, 'D': 3.72,
-              'roof_w': [(1.92, 0.66), (3.82, 0.64)], 'roof_drop': 0.03, 'pillars': [(2.68, 2.76)]},
+              'roof_w': [(1.92, 0.66), (3.82, 0.64)], 'roof_drop': 0.03,
+              # five doors: the B-pillar behind the front door, a thin pillar
+              # between the rear door glass and the fixed quarter glass
+              'pillars': [(2.36, 2.44), (3.07, 3.15)]},
     'decals': [
-        {'view': 'front', 'rect': (0.40, 0.80, 0.58, 0.90), 'mat': 'head', 'mirror': True},
-        {'view': 'front', 'rect': (0.60, 0.80, 0.80, 0.90), 'mat': 'head', 'mirror': True},
+        # stacked twin lamps (Roy 327): driving lamp over an amber lamp
+        {'view': 'front', 'rect': (0.505, 0.81, 0.695, 0.91), 'mat': 'head', 'mirror': True},
+        {'view': 'front', 'rect': (0.505, 0.69, 0.695, 0.79), 'mat': 'turn', 'mirror': True},
         {'view': 'front', 'rect': (-0.38, 0.78, 0.38, 0.92), 'mat': 'grille'},
         {'view': 'front', 'rect': (-0.55, 0.50, 0.55, 0.62), 'mat': 'grille', 'tag': 'fbumper'},
         {'view': 'front', 'rect': (-0.45, 0.40, 0.45, 0.48), 'mat': 'chrome'},
         {'view': 'rear', 'rect': (0.60, 0.86, 0.88, 0.96), 'mat': 'tail', 'mirror': True},
         {'view': 'rear', 'rect': (0.80, 0.96, 0.88, 1.10), 'mat': 'tail', 'mirror': True},
+        # split rear lamps (T6): the lower lamp in the bumper
+        {'view': 'rear', 'rect': (0.58, 0.42, 0.80, 0.54), 'mat': 'tail', 'mirror': True},
         {'view': 'rear', 'rect': (-0.45, 0.44, 0.45, 0.52), 'mat': 'chrome', 'tag': 'rbumper'},
         {'view': 'rear', 'rect': (-0.25, 0.62, 0.25, 0.76), 'mat': 'trim'},
     ],
     'parts': [
         MIRRORS,
-        {'type': 'flares', 'mat': 'trim', 'band': 0.085, 'proud': 0.025, 'tag': 'cladding'},
+        # thick black riveted cladding (Roy 324): 4.5 cm proud of the flat flank
+        {'type': 'flares', 'mat': 'trim', 'band': 0.11, 'proud': 0.045, 'tag': 'cladding'},
         {'type': 'roof_rails', 's0': 2.05, 's1': 3.75, 'x': 0.60, 'h': 0.09, 'bars': [2.45, 3.40], 'bar_over': 0.14, 'bar_h': 0.035},
         {'type': 'roof_spoiler', 'tag': 'spoiler', 's0': 3.76, 's1': 3.96, 'y0': 1.53, 'y1': 1.49, 'span': 1.26},
     ],

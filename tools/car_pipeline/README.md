@@ -272,6 +272,31 @@ front fender is written as it is too; the rear bumper's corners are scuffed
 (`paint_regions` in primer, both sides). `_primer_lip` rolls the primer
 fender's arch edge, which `parts.add_arch_lips` only does for `paint`.
 
+**P6, the crossover** (`p6_crossover`, kit in `kit_p6_crossover.py`): 97
+parts; 0.000 mm over 57 mirrored parts and pairs. Five doors: the front pair
+from the common recipe, the rear pair cut by the kit (`door_rr`, `door_rl`),
+each with its own glass and seal (`glass_door_rr`: any `door_*` gets its glass
+by that name, as PR 724 has it). Every door hinges just outboard of its skin.
+The tailgate (`hatch`) hangs on the roof's rear edge and takes the spoiler,
+glass, plate, plate lamp, high brake lamp and rear wiper up with it (70
+degrees). Black cladding laid on the car's own skin (arches 4.5 cm proud, the
+lip lapping 3 cm over the tyre, a sill panel, rivets) keeps the 1.84 m width
+and the old 4.35 m length; silver roof rails, black crossbars on them. Stacked
+twin lamps in front; behind, a tail with a wrap on the corner, amber inboard,
+and in the bumper the brake lamp outboard with the reversing lamp inboard; the
+high brake lamp is a pod on the spoiler's trailing edge. `stance` data in
+`body.json`; `defn` sets the inner wheel well at 0.46 m so the front tyres
+clear it at full lock. Skin-laid parts (lamps, grille, strips, plates) sit on
+the cut skin, not the loft, with walls down to it (`_on_skin`, `_skin_box`,
+ported from the tuner's kit). Fixed in the kit for this car
+(`tests/car/part_fit.gd` and `tests/fleet/exterior_fit.gd` find nothing): the
+hood hinges just behind and above its rear edge so it lifts forward
+(`hinge_hood`), the wiper arms pivot behind it (`_wipers`), and the front door
+glass stops 2 cm short of the windscreen's edge under the A-pillar strip
+(3 mm at the top corner, `_trim_door_glass`). The fuel flap's hinge sits out
+past the flap, as the flank leans in. Built in a cloud container with
+`pip install bpy==5.1.2` as the Blender backend.
+
 A new car's kit goes in a file of its own (`kit_<id>.py`, a dict `KIT`) with
 one import line in `kits.py`.
 

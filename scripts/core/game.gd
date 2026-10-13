@@ -209,6 +209,7 @@ func _ready() -> void:
 	var stages_env := OS.get_environment("NEON_REBUILD_STAGES")
 	if stages_env.is_valid_int():
 		rebuild_stages_per_frame = maxi(1, int(stages_env))
+		rebuild_paced = false
 	var traffic_env := OS.get_environment("NEON_TRAFFIC")
 	if traffic_env.is_valid_int():
 		TrafficSettings.set_car_count(int(traffic_env))
@@ -669,16 +670,28 @@ var chunk_event_hook: Callable = Callable()
 ## Chunk rebuilds in flight (RoadChunkBuilder.rebuild_begin), oldest first.
 ## A recycled chunk used to be rewritten whole in the frame it fell behind,
 ## ~3 ms (tests/world/chunk_rebuild_perf.gd) landing in one frame every 50 m of
-## road: a visible hitch at speed. Now each frame runs rebuild_stages_per_frame
-## stages (about 1 ms; a count, not a wall-clock budget, so a run is the same
-## on a loaded machine and the physics tests stay reproducible), and a job
-## takes three or four frames. The chunk is parked out of the way and not solid until it
-## is done; it is 250-350 m ahead, in the fog, where it appeared from nothing
-## before too.
+## road: a visible hitch at speed. Now each frame runs a few stages (a count,
+## not a wall-clock budget, so a run is the same on a loaded machine and the
+## physics tests stay reproducible). The chunk is parked out of the way and not
+## solid until it is done; it is 250-350 m ahead, in the fog, where it appeared
+## from nothing before too.
+##
+## How many: with one job in flight, ONE stage a frame (a stage is 0.1 to 1.3
+## ms, so a rebuild adds under ~1.3 ms to any frame; three stages at once were
+## 1.5 to 5 ms and landed in the 1% low, see notes/benchmark-profile-2026-10-13.md).
+## A backlog (the car was put somewhere else, a fast run of chunks) runs one
+## stage more per job waiting, up to rebuild_stages_per_frame, so it clears
+## as fast as before.
 var _rebuild_jobs: Array = []
-## NEON_REBUILD_STAGES=<n> overrides it (a huge value rebuilds a chunk whole
-## in one frame again, to bisect a test against the spreading).
+## The most stages a frame runs, backlog or not (3 as it always was).
+## NEON_REBUILD_STAGES=<n> overrides it AND turns the one-at-a-time pacing off,
+## so <n> stages run every frame (a huge value rebuilds a chunk whole in one
+## frame again, to bisect a test against the spreading).
 var rebuild_stages_per_frame := 3
+var rebuild_paced := true
+## Stages run in the busiest frame so far, and in the last one (tests).
+var rebuild_stages_max := 0
+var rebuild_stages_last := 0
 
 ## The chunk the pool is centred on: the player's, held until the car is
 ## POOL_HYSTERESIS metres into the next one, so a car sitting on a join does
@@ -779,13 +792,19 @@ func _update_chunk_pool(ref_z: float) -> void:
 
 func _run_rebuild_jobs() -> void:
 	if _rebuild_jobs.is_empty():
+		rebuild_stages_last = 0
 		return
 	var t0 := Time.get_ticks_usec()
-	for i in rebuild_stages_per_frame:
+	var stages := rebuild_stages_per_frame if not rebuild_paced else mini(rebuild_stages_per_frame, _rebuild_jobs.size())
+	var ran := 0
+	for i in stages:
 		if _rebuild_jobs.is_empty():
 			break
+		ran += 1
 		if RoadChunkBuilder.rebuild_step(_rebuild_jobs[0]):
 			_rebuilt(_rebuild_jobs.pop_front())
+	rebuild_stages_last = ran
+	rebuild_stages_max = maxi(rebuild_stages_max, ran)
 	# Skeleton-car spike counters: the cost of this frame's slice of rebuild work.
 	rebuild_us_last = Time.get_ticks_usec() - t0
 	rebuild_us_max = maxi(rebuild_us_max, rebuild_us_last)

@@ -923,8 +923,13 @@ func _shift_origin(shift_chunks: int) -> void:
 		breaker.shift_world(offset)  # so are flying and rolling props
 	SpikeLog.mark("recenter", SpikeLog.since(t0))
 	# The ground plane stays put: it is infinite.
-	# The camera follows the car's interpolated position in _process, so it
-	# needs nothing here.
+	# The camera follows the car's interpolated position in _process, but this
+	# runs in a physics tick: until the camera's next _process it stood 1 km
+	# back, and Game's own _process (parent first) ran the chunk pool's
+	# ViewGuard check against it, as did anything reading the camera in the
+	# ticks between (3D sound). Speed ladder stress run, 2026-10-13.
+	if camera != null:
+		camera.global_position += offset
 
 # ---------- player ----------
 ## Where the player starts: in a lane, not on the centre line (x=0) as before

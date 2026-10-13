@@ -361,6 +361,9 @@ if /i not "%~1"=="quick" (
 	call :run core/drive_bends "--headless --fixed-fps 120"
 	rem Flat out on the max-tuned coupe in traffic: reaches its 340 km/h ladder top, touches nothing (~100 s of driving).
 	call :run core/drive_flatout "--headless --fixed-fps 120"
+	rem Stress layer A: the max-tuned coupe on the game road at 200, 250, 300 and 340 km/h, then flat out, in traffic (~3.5 min of driving).
+	rem Any car or traffic: LADDER_CAR, LADDER_TRAFFIC; notes/stress-run-1-speed-ladder-2026-10-13.md.
+	call :run core/speed_ladder "--headless --fixed-fps 60"
 	rem Every car max-tuned, flat out on the flat: holds the top speed its gearing was set for (~7 min).
 	call :run car/max_tune_speed "--headless --fixed-fps 120"
 	set "DRIVE_SECS=30"

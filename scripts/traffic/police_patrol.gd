@@ -80,6 +80,16 @@ var _spawn_t := 0.0
 static func enabled(benchmark: bool) -> bool:
 	return not benchmark and OS.get_environment("NEON_POLICE") != "0"
 
+## Builds what the first cop needs while the game loads: the patrol's spec
+## and its body (sheet mesh and underside, cached per kind once built). Left
+## to the first spawn, that was a 100-130 ms physics tick about 3 s into
+## every drive in the cloud (speed ladder stress run, 2026-10-13), and again
+## on a failed placement for the spec. Later cops reuse the cache (2 ms).
+func _ready() -> void:
+	var c := PatrolCar.make()
+	NpcCarBuilder.chassis_visual(PatrolCar.KIND, c.build, c.color, c.role, true).free()
+	c.free()
+
 func _physics_process(delta: float) -> void:
 	if player == null or traffic == null:
 		return

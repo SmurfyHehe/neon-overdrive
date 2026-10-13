@@ -11,6 +11,7 @@ with four surfaces when the game loads the car.
     blender -b --factory-startup --python tools/car_pipeline/build_car.py -- p1_coupe   # -> assets/cars/p1_coupe/body.glb + body.json
     python tools/car_pipeline/build_car.py p1_coupe --backend python                    # the same without Blender (no bevel)
     python tools/car_pipeline/symmetry_check.py p1_coupe                                # left = mirror of right?
+    python tools/car_pipeline/fit_check.py p1_coupe                                     # bay parts clear of the lids, walls and each other?
     python tools/car_pipeline/parts_sheet.py p1_coupe                                   # -> docs/design/pipeline/p1_coupe_parts.png
     godot --headless --path . -s res://tests/fleet/car_pipeline_p1.gd
     godot --headless --path . -s res://tests/car/car_assembler.gd
@@ -51,6 +52,17 @@ loft and stops if the right half is not the sheet's, triangle for triangle:
 the parts build changes what the car is made of, not its shape. Nothing is
 downloaded: every triangle is generated from those numbers (asset rule: all
 assets free for a sold game, no credit, no payment).
+
+## Engine bay parts
+
+`engine` and every `bay_*` mesh (the rough placeholder boxes under the lids)
+stay in `body.glb`, but the game does not draw them with the body: the closed
+body leaves them out and `CarAssembler.build_bay()` makes them a mesh of their
+own, which `CarDetail` builds only when someone can see them (a lid open while
+stopped, photo mode, the garage). The open-panels picture body keeps them.
+`fit_check.py` (and `tests/car/part_fit.gd`, which also sweeps every hinged
+panel) fails a bay part that touches a shut lid (25 mm), sits within 10 mm of
+a wall or pokes more than 5 mm into another bay part.
 
 ## Symmetry
 

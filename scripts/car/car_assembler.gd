@@ -40,10 +40,18 @@ class_name CarAssembler
 # name mapped to a Mesh replaces that part (its surfaces named or materialled
 # like the glb's: paint, plastic, ...; in the part's own frame), mapped to
 # false leaves it off; "panels" is "closed" (default) or "open".
+#
+# Engine bay parts (`engine`, `bay_*`: the rough placeholder boxes under the
+# lids) are NOT in the closed body (engine bays B0, issue #642): nobody sees
+# them behind a shut lid, so a driving car does not draw them. build_bay()
+# makes them as a mesh of their own, which CarDetail builds only when detail
+# is wanted (a panel open while stopped, photo mode, the garage). The open
+# configuration (pictures with the lids up) keeps them in the body.
 
 const GLB := "res://assets/cars/%s/body.glb"
 const SURFACES := ["body", "trim", "glass", "glow"]
 const NODE_NAME := "Body"
+const BAY_NODE_NAME := "Bay"
 
 const CLASS_PLASTIC := 1
 const CLASS_RUBBER := 2
@@ -165,6 +173,34 @@ static func build(car_id: String, parts: Dictionary = {}, paint_mat: Material = 
 			panel.set_surface_override_material(0, paint_mat)
 		hinge.add_child(panel)
 	return body
+
+## The engine bay parts as one MeshInstance3D named "Bay" in car space (the
+## same frame as build()'s body, so it goes under that body), surfaces as
+## build()'s. Null if the car has no bay parts.
+static func build_bay(car_id: String, paint_mat: Material = null) -> MeshInstance3D:
+	if bay_part_names(car_id).is_empty():
+		return null
+	var built := _merged(car_id, {"bay": "only"})
+	var bay := MeshInstance3D.new()
+	bay.name = BAY_NODE_NAME
+	bay.mesh = built.body
+	_dress(bay, paint_mat)
+	return bay
+
+## True for a part that belongs to the engine bay (or the Bug's front-lid
+## bay): `engine` and every `bay_*` mesh. The `bay_*` empties are anchors,
+## not parts, and are not affected.
+static func is_bay_part(part: String) -> bool:
+	return part == "engine" or part.begins_with("bay_")
+
+## The car's bay parts, sorted.
+static func bay_part_names(car_id: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	for pname: String in _load(car_id).parts:
+		if is_bay_part(pname):
+			out.append(pname)
+	out.sort()
+	return out
 
 ## Replace one part of a built car with another mesh (or null to take it off)
 ## and re-merge: the body-shop proof for the mod tree. `root` is the node
@@ -518,12 +554,17 @@ static func _merged(car_id: String, parts: Dictionary) -> Dictionary:
 		return _meshes[key]
 	var car := _load(car_id)
 	var open := String(parts.get("panels", "closed")) == "open"
+	# closed: no bay parts; open (pictures): the bay stays in; "only": just the bay
+	var bay_only := String(parts.get("bay", "")) == "only"
 	var surf := {}      # surface name -> builder
 	var panels := {}    # hinge name -> builder (one surface)
 	var names: Array = car.parts.keys()
 	names.sort()
 	for pname in names:
 		var p: Dictionary = car.parts[pname]
+		var in_bay := is_bay_part(pname)
+		if (bay_only and not in_bay) or (in_bay and not bay_only and not open):
+			continue
 		var mats: Dictionary = p.mats
 		if parts.has(pname):
 			var swap: Variant = parts[pname]
@@ -531,7 +572,7 @@ static func _merged(car_id: String, parts: Dictionary) -> Dictionary:
 				mats = read_mesh(swap, p.xf)
 			else:
 				continue          # false / null: the part is off the car
-		var hinge: String = p.hinge
+		var hinge: String = "" if bay_only else p.hinge
 		for mname in mats:
 			var m: Dictionary = mats[mname]
 			var info: Array = MATERIALS[mname]

@@ -119,9 +119,12 @@ const KNOB_R := 0.015
 const PEDAL_TRAVEL_DEG := 22.0
 
 ## The driver's side window (2026-10-09, Roy: "the Z to roll up and roll down
-## needs an animation"). The glass is a pane just inside the door skin that
-## slides into the door card by GLASS_TRAVEL as the window opens; below the
-## belt line it is inside the card, so it simply disappears. What works it
+## needs an animation"). The glass is a pane in the door, its foot at the belt
+## inside the door card, leaning in above it with the tumblehome. Opening the
+## window slides it down along its own lean into the door (outward, like a
+## real pane) by GLASS_TRAVEL or its own height, whichever is more, and
+## whatever has gone below the belt is cut off: the pane never shows inside
+## the cabin and nothing stands above the belt fully down (issue #677). What works it
 ## follows the car's spec ("window_control": "crank" or "switch"): an old car
 ## has a crank on the door card the driver's left hand turns (CRANK_TURNS from
 ## shut to open), a modern one a rocker on the armrest the thumb presses. Both
@@ -201,6 +204,11 @@ var dial_sweep := DIAL_SWEEP     # degrees of needle travel for this car's clust
 var crank_pos := CRANK_POS
 var switch_pos := SWITCH_POS
 var glass_bottom := GLASS_BOTTOM
+var glass_travel := GLASS_TRAVEL  # this car's: at least the pane's own height, so fully down leaves none above the belt
+var _pane: PackedVector3Array     # the shut pane's corners a, b, c, d
+var _pane_slide := Vector3.DOWN   # its lean, per metre of drop (y = -1)
+var _pane_tint := Color.WHITE
+var _pane_window := -1.0          # the window the drawn pane was cut for
 var radio: RadioManager          # found lazily; the game adds it after the camera
 var wheel: SteeringWheel
 var wheel_mount: Node3D          # tilt and place; the wheel turns inside it
@@ -840,30 +848,70 @@ static func _bar(k: CockpitKit, a: Vector3, b: Vector3, w: float, col: Color) ->
 # ---------- the side window ----------
 
 func _build_glass() -> void:
-	var k := CockpitKit.new()
-	var tint := Color(Color(P1CoupeBuilder.Data.COLORS.glass), 0.55)
+	_pane_tint = Color(Color(P1CoupeBuilder.Data.COLORS.glass), 0.55)
 	var gx := -float(cab.glass_x)
 	var top := float(cab.get("glass_top", float(cab.roof_y) - 0.03)) if not cab.open_top else float(cab.belt_y) + 0.30
 	var gx_top := -minf(float(cab.glass_x), float((cab.a_pillar[1] as Vector3).x) - 0.01)   # tumblehome: the pane leans in
 	var z0 := float((cab.a_pillar[0] as Vector3).z) + 0.20   # at the A-pillar foot
-	var z1 := float(cab.b_pillar_z) - 0.04                     # at the B-pillar
+	var z1 := float(cab.b_pillar_z) - 0.045                    # at the B-pillar, clear of its 8.4 cm deep bar
 	var zt := float((cab.a_pillar[1] as Vector3).z) - 0.04     # top front, where the A-pillar meets the roof
 	# the body narrows toward the pillar's foot: the pane's front bottom corner follows the door card there
 	var a := Vector3(-minf(float(cab.glass_x), float(cab.get("door_x_front", cab.door_x)) + 0.01), glass_bottom, z0)
 	var b := Vector3(gx, glass_bottom, z1)
 	var c := Vector3(gx_top, top, z1)
 	var d := Vector3(gx_top, top, maxf(zt + 0.30, z0 + 0.10))   # the raked pillar: the top edge starts well behind the foot
-	k.quad(a, b, c, d, tint)
-	k.quad(a, d, c, b, tint)
+	_pane = PackedVector3Array([a, b, c, d])
+	_pane_slide = (b - c) / maxf(c.y - b.y, 0.01)
+	glass_travel = maxf(GLASS_TRAVEL, top - glass_bottom)
 	var m := StandardMaterial3D.new()
 	m.vertex_color_use_as_albedo = true
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	m.metallic = 0.6
 	m.roughness = 0.08
 	m.cull_mode = BaseMaterial3D.CULL_DISABLED
-	glass = k.instance(m, "WindowGlass")
+	glass = MeshInstance3D.new()
+	glass.name = "WindowGlass"
+	glass.mesh = ArrayMesh.new()
+	glass.material_override = m
 	glass.visible = float(cab.glass_x) > 0.0
 	add_child(glass)
+	_cut_pane()
+
+## Redraws the pane for the current window: slid down along its lean and cut
+## at the belt (its foot line), so what is in the door is not drawn. Two to
+## four triangles a side, rebuilt only while the window moves.
+func _cut_pane() -> void:
+	if glass == null or _pane.is_empty() or window == _pane_window:
+		return
+	_pane_window = window
+	var drop := _pane_slide * glass_travel * window
+	var poly := PackedVector3Array()
+	var n := _pane.size()
+	for i in n:   # Sutherland-Hodgman against y >= glass_bottom
+		var p := _pane[i] + drop
+		var q := _pane[(i + 1) % n] + drop
+		var p_in := p.y >= glass_bottom
+		var q_in := q.y >= glass_bottom
+		if p_in:
+			poly.append(p)
+		if p_in != q_in:
+			poly.append(p.lerp(q, (glass_bottom - p.y) / (q.y - p.y)))
+	var mesh := glass.mesh as ArrayMesh
+	mesh.clear_surfaces()
+	if poly.size() < 3:
+		return
+	var k := CockpitKit.new()
+	for i in range(1, poly.size() - 1):
+		k.tri(poly[0], poly[i], poly[i + 1], _pane_tint)
+		k.tri(poly[0], poly[i + 1], poly[i], _pane_tint)
+	if k.is_empty():
+		return
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = k._v
+	arrays[Mesh.ARRAY_NORMAL] = k._n
+	arrays[Mesh.ARRAY_COLOR] = k._c
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 
 ## Builds (or rebuilds) what works the window: "crank" or "switch". Called at
 ## build from the car's spec; the screenshot tool switches it live.
@@ -923,16 +971,15 @@ func set_window(openness: float, direction: int) -> void:
 	_apply_window()
 
 func _apply_window() -> void:
-	if glass != null:
-		glass.position = Vector3(0.0, -GLASS_TRAVEL * window, 0.0)
+	_cut_pane()
 	if crank != null:
 		crank.rotation = Vector3(-window * CRANK_TURNS * TAU, 0.0, 0.0)
 	if window_switch != null:
 		window_switch.rotation_degrees = Vector3(SWITCH_TILT_DEG * float(window_direction), 0.0, 0.0)
 
-## Where the glass's bottom edge is now, car space y (tests).
+## Where the glass's bottom edge is now, car space y, in the door (tests).
 func glass_bottom_y() -> float:
-	return glass_bottom + glass.position.y
+	return glass_bottom - glass_travel * window
 
 ## The crank's knob, mid-length, car space: where the hand holds it.
 func crank_knob_position() -> Vector3:

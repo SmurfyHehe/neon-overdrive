@@ -32,7 +32,7 @@ const CABIN := {
 	"floor_y": 0.296, "belt_y": 0.992,
 	"cowl": Vector2(0.867, -0.880), "dash_face_z": -0.470,
 	"header": Vector2(1.430, -0.190), "roof_y": 1.420, "roof_z1": 0.920, "open_top": false, "hardtop": true,
-	"door_x": 0.778, "door_x_rear": 0.795, "door_x_front": 0.792, "glass_x": 0.708, "glass_top": 1.390,
+	"door_x": 0.778, "door_x_rear": 0.795, "door_x_front": 0.792, "glass_x": 0.788, "glass_top": 1.390,
 	"a_pillar": [Vector3(0.892, 0.867, -0.880), Vector3(0.568, 1.430, -0.190)],
 	"b_pillar_z": 0.385, "rear_z": 0.840,
 	# Hood view (2026-10-11, judged on screenshots): the fitted point on the long hood

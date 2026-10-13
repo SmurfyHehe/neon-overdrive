@@ -19,7 +19,8 @@ extends RefCounted
 #   header (y, z), roof_y    the windshield top; the roof liner
 #   open_top                 no roof: no liner, header bar only, no shelf
 #   door_x, door_x_rear      door card face |x| by the seat and behind it
-#   glass_x                  the door window pane |x|
+#   glass_x                  the door window pane |x| at the belt: inside the 6 cm
+#                            door card (door_x + 0.03 or out), never inboard of its face (#677)
 #   a_pillar [foot, top]     right-hand side; mirrored for the left
 #   b_pillar_z, rear_z       the B-pillar; the rear bulkhead
 #   shelf {y, z0, z1, half_w} the parcel shelf, {} for none

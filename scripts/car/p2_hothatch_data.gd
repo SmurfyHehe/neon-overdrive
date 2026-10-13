@@ -24,7 +24,7 @@ const CABIN := {
 	"floor_y": 0.256, "belt_y": 1.032,
 	"cowl": Vector2(0.875, -0.910), "dash_face_z": -0.530,
 	"header": Vector2(1.435, -0.250), "roof_y": 1.419, "roof_z1": 1.300, "open_top": false,
-	"door_x": 0.703, "door_x_rear": 0.703, "door_x_front": 0.703, "glass_x": 0.657, "glass_top": 1.391,
+	"door_x": 0.703, "door_x_rear": 0.703, "door_x_front": 0.703, "glass_x": 0.733, "glass_top": 1.391,
 	"a_pillar": [Vector3(0.773, 0.875, -0.910), Vector3(0.512, 1.435, -0.250)],
 	"b_pillar_z": 0.260, "rear_z": 1.360,
 	"shelf": {"y": 0.930, "z0": 1.360, "z1": 1.800, "half_w": 0.734},

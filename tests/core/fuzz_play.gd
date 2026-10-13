@@ -30,6 +30,7 @@ const Harness := preload("res://tests/traffic/traffic_harness.gd")
 const TestDriver := preload("res://scripts/core/test_driver.gd")
 const DamageDifficulty := preload("res://scripts/car/damage_difficulty.gd")
 const RATE := 120
+const Weather := preload("res://scripts/world/weather.gd")
 
 ## Held driving keys (by action): a new set every 0.05-1.2 s, as drive_fuzz.
 const HOLD_ACTIONS := [&"accelerate", &"brake", &"steer_left", &"steer_right", &"handbrake", &"clutch"]
@@ -388,7 +389,9 @@ func _car_state(p: PlayerCar) -> String:
 			+ ", springs %s, colliders %s, touching %s, road s %.0f" % [p.wheel_array.map(func(w: Variant) -> float: return snappedf(w.spring_current_length, 0.01)),
 			p.wheel_array.map(func(w: Variant) -> String: return str(w.get_collider().name) if w.get_collider() != null else "-"),
 			_touching(p), RoadFrame.s_at(p.global_position.z)] \
-			+ ", heading %.0f deg, rescue count %d" % [rad_to_deg(TestDriver.heading_error(p)), game.rescue.count]
+			+ ", heading %.0f deg, rescue count %d" % [rad_to_deg(TestDriver.heading_error(p)), game.rescue.count] \
+			+ ", wheels (surface/cof/grip/pressure/load) %s, weather wet %.2f, tyre health %s" % [p.wheel_array.map(func(w: Variant) -> String: return "%s/%.2f/%.2f/%.2f/%.0f" % [w.surface_type, w.current_cof, w.grip_mult, w.pressure_grip_mult, w.force_vector.y if w.force_vector is Vector2 else 0.0]),
+			Weather.wetness, str(p.health.get("tyre_wear"))]
 
 ## What the car's body is touching (a box a little bigger than the body).
 func _touching(p: PlayerCar) -> Array:

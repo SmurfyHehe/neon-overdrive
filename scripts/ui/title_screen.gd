@@ -559,6 +559,14 @@ func _refresh_saves() -> void:
 	var active_empty: bool = SaveStore.summary(active).empty
 	drive_button.disabled = active_empty   # nothing to continue yet
 	new_game_button.disabled = not active_empty and _first_empty_slot() == 0
+	# A greyed row takes no keyboard focus: the arrows stepped onto a greyed
+	# CONTINUE and Enter then did nothing (fuzz runs, tests/core/fuzz_play.gd).
+	for b in [drive_button, new_game_button]:
+		b.focus_mode = Control.FOCUS_NONE if b.disabled else Control.FOCUS_ALL
+		if b.disabled and b.has_focus():
+			var to := _first_enabled(main_list)
+			if to != null:
+				to.grab_focus()
 
 func _first_empty_slot() -> int:
 	for n in range(1, SaveStore.SLOTS + 1):

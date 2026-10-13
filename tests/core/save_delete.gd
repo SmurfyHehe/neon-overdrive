@@ -121,6 +121,8 @@ func _run() -> void:
 	_check(SaveStore.summary(1).empty, "save 1 is empty (nothing wrote it back)")
 	_check(int(second.wallet.cash) == 0 and int(second.wallet.bank) == 0, "the new game has no money from the deleted save")
 	_check(title2.drive_button.disabled and not title2.new_game_button.disabled, "CONTINUE is greyed, NEW GAME is not")
+	# The arrows never land on the greyed row (fuzz runs: Enter on it did nothing).
+	_check(title2.drive_button.focus_mode == Control.FOCUS_NONE and not title2.drive_button.has_focus(), "the greyed CONTINUE takes no keyboard focus")
 	title2.load_button.pressed.emit()
 	await _frames(2)
 	_check(title2.delete_button.disabled, "DELETE A SAVE is greyed with nothing saved")

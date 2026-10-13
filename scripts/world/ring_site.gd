@@ -23,14 +23,22 @@ extends Node3D
 # - a "landmark" site has something on the ground inside the ring (one
 #   shared placeholder for now: a dead tree and a shopping trolley).
 #
-# Cost: 2 draw calls (one mesh, vertex colours, RoadRamps' material; one
-# MultiMesh of fake light pools), a trimesh for the deck and boxes for the
-# barriers, walls and piers. No real lights.
+# The lane leans in 4 % (RoadRamps.BANK). Each bridge's outside face carries
+# the exit's number, lit, over the carriageway that drives at it, and beside
+# it a plate naming the next exit along and how far it is ("EXIT 3 / 600 m"):
+# the bridge is what you count, and it replaces the old 1 km gantry (#645).
+#
+# Cost: 3 draw calls (one mesh, vertex colours, RoadRamps' material; one
+# MultiMesh of fake light pools; one MultiMesh of bridge lettering on the
+# area signs' material and atlas), a trimesh for the deck and boxes for the
+# barriers, walls and piers. No real lights, no new material.
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
 const RoadMap := preload("res://scripts/world/road_map.gd")
 const RoadRamps := preload("res://scripts/world/road_ramps.gd")
 const R := preload("res://scripts/world/road_ramps.gd")   # short, for the layout code
+const PlaceNames := preload("res://scripts/world/place_names.gd")
+const RoadSigns := preload("res://scripts/world/road_signs.gd")
 
 const L := 50.0
 const SEGS := 64                 # rim pieces, RoadRamps.RING_SEG_DEG each
@@ -48,6 +56,15 @@ const POOL := 11.0
 const BOARD_DEG := 38.0          # the chevron board, past each entry
 const BOARD_LEN := 6.0
 const BOARD_H := 1.1
+## The bridge lettering: the number's centre this far out from the centre
+## line, over the carriageway that drives at that face; the next-exit plate
+## further out, to the reader's right.
+const NUMBER_X := 5.5
+const NUMBER_H := 1.2
+const NEXT_X := 11.0
+const NEXT_LINE_H := 0.5
+const SIGN_PROUD := 0.06         # out from the parapet's outside face
+const SIGN_CAP := 12
 
 const C_UNDER := Color(0.07, 0.07, 0.075, 0.0)
 const C_BOARD := Color(0.03, 0.03, 0.03, 0.0)
@@ -78,6 +95,7 @@ var _mesh: MeshInstance3D
 var _pools: MultiMeshInstance3D
 var _deck: CollisionShape3D
 var _walls: StaticBody3D
+var _signs: MultiMeshInstance3D
 
 # ---------- where ----------
 
@@ -137,6 +155,9 @@ func _ready() -> void:
 	_walls.name = "RingWalls"
 	CarSpec.make_wall(_walls)
 	add_child(_walls)
+	_signs = RoadSigns.new_multimesh(SIGN_CAP)
+	_signs.name = "BridgeSigns"
+	add_child(_signs)
 	_place()
 
 func _physics_process(_delta: float) -> void:
@@ -164,6 +185,7 @@ func _place() -> void:
 	if int(near.index) != site or not visible:
 		site = int(near.index)
 		_dress(look_of(site))
+		_letter(site)
 	visible = true
 	force_update_transform()
 	for c in get_children():
@@ -198,6 +220,69 @@ func _dress(look: Dictionary) -> void:
 		mm.set_instance_transform(i, pools[i])
 	mm.visible_instance_count = n
 
+## The bridge lettering for this site (it differs per site, so it is not
+## part of the cached look).
+func _letter(ring: int) -> void:
+	var items := bridge_signs(ring)
+	var mm := _signs.multimesh
+	var n := mini(items.size(), mm.instance_count)
+	for i in n:
+		mm.set_instance_transform(i, items[i].xf)
+		mm.set_instance_custom_data(i, items[i].cd)
+	mm.visible_instance_count = n
+	_signs.visible = n > 0
+
+## The next exit along from ring `ring` for traffic on carriageway `side`
+## (+1 the way the chunks count): {number, metres}, metres from this ring's
+## bridge face to that exit's gore, to the nearest 100 m.
+static func next_exit(ring: int, side: int) -> Dictionary:
+	var rings := RoadMap.rings()
+	var n := rings.size()
+	var here := float(rings[ring].s)
+	var there: Dictionary = rings[posmod(ring + side, n)]
+	var gap := fposmod((float(there.s) - here) * float(side), RoadMap.length())
+	if gap < 1.0:
+		gap += RoadMap.length()   # one ring on the whole loop
+	var face := R.RING_OUT + R.BARRIER_W
+	return {"number": int(there.number), "metres": roundi((gap - RoadMap.RING_GORE + face) / 100.0) * 100}
+
+## The lettering on ring `ring`'s two bridges, in the ring's flat space:
+## [{xf, cd}] (RoadSigns instances). On each bridge's outside face, over the
+## carriageway that drives at it: the exit's number, lit amber, and to the
+## reader's right a dark plate with the next exit's number over how far.
+static func bridge_signs(ring: int) -> Array:
+	var r: Dictionary = RoadMap.rings()[ring]
+	var face := R.RING_OUT + R.BARRIER_W
+	var mid_y: float = R.RAMP_H + (R.BARRIER_H - SLAB) * 0.5
+	var out: Array = []
+	for side in [1, -1]:
+		var sd := float(side)
+		# side +1 drives toward -z (up v) and meets the bridge at -v first
+		var number := _on_face(NUMBER_X * sd, sd, face, mid_y)
+		out.append(RoadSigns.text_plate(PlaceNames.exit_word(int(r.number)), number.c, number.n, NUMBER_H, RoadSigns.AMBER, RoadSigns.OVERLAY))
+		var nx := next_exit(ring, side)
+		var a := PlaceNames.exit_word(int(nx.number))
+		var b := PlaceNames.metres_word(int(nx.metres))
+		var inner := maxf(RoadSigns.plate_len(a, NEXT_LINE_H), RoadSigns.plate_len(b, NEXT_LINE_H))
+		var gap := 0.08
+		var panel_h := 2.0 * NEXT_LINE_H + 3.0 * gap
+		var panel_len := inner + 2.0 * 0.2
+		var plate := _on_face(NEXT_X * sd, sd, face, mid_y)
+		var nn: Vector3 = plate.n
+		out.append(RoadSigns._item(plate.c, nn, RoadSigns.PANEL_DEPTH, panel_h, panel_len, 0, 0, 0, RoadSigns.PANEL))
+		var front: Vector3 = nn * (RoadSigns.PANEL_DEPTH / 2.0 + RoadSigns.PLATE_DEPTH / 2.0 + 0.004)
+		var c: Vector3 = plate.c
+		out.append(RoadSigns.text_plate(a, c + front + Vector3.UP * (NEXT_LINE_H + gap) * 0.5, nn, NEXT_LINE_H, RoadSigns.AMBER))
+		out.append(RoadSigns.text_plate(b, c + front - Vector3.UP * (NEXT_LINE_H + gap) * 0.5, nn, NEXT_LINE_H, RoadSigns.OFF_WHITE))
+	return out
+
+## A point on the outside face of the bridge that carriageway `sd` meets
+## first, x across: {c centre (proud of the face), n the face's outward normal}.
+static func _on_face(x: float, sd: float, face: float, y: float) -> Dictionary:
+	var z := sd * sqrt(face * face - x * x)
+	var n := Vector3(x, 0.0, z) / face
+	return {"c": n * (face + SIGN_PROUD) + Vector3(0.0, y, 0.0), "n": n}
+
 ## What the node holds now: {verts, faces, boxes, pools, draws}. Tests.
 func counts() -> Dictionary:
 	var verts := 0
@@ -211,7 +296,8 @@ func counts() -> Dictionary:
 	@warning_ignore("integer_division")
 	var faces := (_deck.shape as ConcavePolygonShape3D).get_faces().size() / 3
 	return {"verts": verts, "faces": faces, "boxes": boxes, "pools": _pools.multimesh.visible_instance_count,
-		"draws": (1 if verts > 0 else 0) + (1 if _pools.multimesh.visible_instance_count > 0 else 0)}
+		"signs": _signs.multimesh.visible_instance_count,
+		"draws": (1 if verts > 0 else 0) + (1 if _pools.multimesh.visible_instance_count > 0 else 0) + (1 if _signs.multimesh.visible_instance_count > 0 else 0)}
 
 # ---------- geometry ----------
 
@@ -220,15 +306,17 @@ static func build(look: Dictionary) -> Dictionary:
 	R.begin_flat()
 	R.wall_colour = WALLS[look.style]
 	var y: float = R.RAMP_H
+	# the lane leans in: its inside edge is lower (RoadRamps.BANK)
+	var y_in: float = y - R.ring_drop(R.RING_IN)
 	var spur: int = look.spur
 	var step := TAU / float(SEGS)
 	# the lane and the slab's underside
 	for i in SEGS:
 		var a0 := step * float(i)
 		var a1 := step * float(i + 1)
-		var i0 := R._p(R.RING_IN * cos(a0), y, R.RING_IN * sin(a0))
+		var i0 := R._p(R.RING_IN * cos(a0), y_in, R.RING_IN * sin(a0))
 		var o0 := R._p(R.RING_OUT * cos(a0), y, R.RING_OUT * sin(a0))
-		var i1 := R._p(R.RING_IN * cos(a1), y, R.RING_IN * sin(a1))
+		var i1 := R._p(R.RING_IN * cos(a1), y_in, R.RING_IN * sin(a1))
 		var o1 := R._p(R.RING_OUT * cos(a1), y, R.RING_OUT * sin(a1))
 		R._deck_quad(i0, o0, i1, o1)
 		var down := Vector3(0.0, -SLAB, 0.0)
@@ -245,7 +333,7 @@ static func build(look: Dictionary) -> Dictionary:
 		elif open and run_from >= 0:
 			_rim(R.RING_OUT, 1.0, run_from, j, y)
 			run_from = -1
-	_rim(R.RING_IN, -1.0, 0, SEGS, y)
+	_rim(R.RING_IN, -1.0, 0, SEGS, y_in)
 	# piers: on the centre barrier's line and at each road edge, under each bridge
 	for vz in [-1.0, 1.0]:
 		var mid := (R.RING_IN + R.RING_OUT) * 0.5
@@ -261,10 +349,12 @@ static func build(look: Dictionary) -> Dictionary:
 		R._box(Vector3(r * cos(a), y + LAMP_H * 0.5, r * sin(a)), Vector3(0.16, LAMP_H, 0.16), R.C_POLE)
 		R._box(Vector3(r * cos(a), y + LAMP_H + 0.06, r * sin(a)), Vector3(0.8, 0.14, 0.8), R.C_HEAD)
 		var mid := (R.RING_IN + R.RING_OUT) * 0.5
-		R._pools.append(Transform3D(Basis.from_scale(Vector3(POOL, 1.0, POOL)), R._p(mid * cos(a), y + 0.05, mid * sin(a))))
+		# the pool lies on the leaning deck
+		var tip := Basis(Quaternion(Vector3.UP, R.ring_normal(a)))
+		R._pools.append(Transform3D(tip * Basis.from_scale(Vector3(POOL, 1.0, POOL)), R._p(mid * cos(a), y - R.ring_drop(mid) + 0.05, mid * sin(a))))
 	# chevron boards on the inside, past each entry; a lit marker on each nose
 	for base in [0.0, 180.0]:
-		_board(deg_to_rad(base + BOARD_DEG), y)
+		_board(deg_to_rad(base + BOARD_DEG), y_in)
 		for d in [-6.0, 6.0]:
 			var a := deg_to_rad(base + d * R.RING_SEG_DEG)
 			var r: float = R.RING_OUT + R.BARRIER_W * 0.5

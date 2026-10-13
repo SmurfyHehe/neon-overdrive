@@ -58,6 +58,7 @@ call :run core/palette --headless
 call :run ui/fonts --headless
 call :run world/names --headless
 call :run world/uturn_signs --headless
+call :run world/ring_bank_signs --headless
 call :run ui/hud --headless
 call :run ui/settings_screen --headless
 call :run ui/key_map --headless
@@ -556,6 +557,7 @@ call :run view/dash_trinket --headless
 call :run world/road_frame --headless
 call :run world/season_calendar --headless
 call :run world/uturn_signs --headless
+call :run world/ring_bank_signs --headless
 call :run world/weather_plan --headless
 call :run car/chassis_targets "--headless --fixed-fps 60"
 call :run car/test_build_mods --headless

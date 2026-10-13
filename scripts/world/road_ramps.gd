@@ -59,6 +59,8 @@ const PAD_R := 25.0
 const LIFT := 0.02
 const PAINT_LIFT := 0.012
 const ROW := 5.0
+## Strips across a ramp's deck where it runs over the ring's leaning lane.
+const TWIST_STRIPS := 4
 const BARRIER_W := 0.3
 const BARRIER_H := 0.85
 const KERB_W := 0.25
@@ -118,6 +120,13 @@ const V_RING_OUT := 10.16    # RING_OUT * sin(3 pieces)
 const V_RING_IN := 19.44     # RING_OUT * sin(6 pieces)
 ## The out-of-bounds wall beside the ring (and its spur).
 const BOUND_RING := 56.0
+## The ring's lane leans in (Roy, 1502, 2026-10-13): its inside edge is BANK
+## lower per metre across than its outside edge, 4 %: 28 cm over the 7 m lane.
+## The outside edge stays at RAMP_H, where the ramps and the spur meet it, and
+## where a ramp's deck runs over the lane it takes the same lean, so each ramp
+## twists into the ring over its last ~10 m. Only the deck's shape changes
+## (0.04 g at the ring's speeds): the car leans in, the horizon tilts with it.
+const BANK := 0.04
 static var _material: ShaderMaterial
 
 # the chunk being laid out
@@ -186,6 +195,24 @@ static func y_at(v: float) -> float:
 		return RAMP_H - g * (run - d) * (run - d) / (2.0 * EASE_OUT)
 	return g * (d - EASE_IN * 0.5)
 
+## How far the ring's deck is below RAMP_H, r metres from the ring's centre
+## (0 at its outside edge and beyond; R1's pads are flat).
+static func ring_drop(r: float) -> float:
+	if not ring:
+		return 0.0
+	return BANK * clampf(RING_OUT - r, 0.0, RING_OUT - RING_IN)
+
+## Height of a ramp's deck above the road at x metres out, v from the ring's
+## centre: the climb, less the ring's lean where the deck runs over its lane.
+static func deck_y(x: float, v: float) -> float:
+	return y_at(v) + LIFT - ring_drop(Vector2(x, v).length())
+
+## The ring deck's up direction at angle `a` (radians anticlockwise from the
+## +x point), in the ring's flat space (x across, y up, -z the way the chunks
+## count): tipped toward the centre by the lean.
+static func ring_normal(a: float) -> Vector3:
+	return Vector3(-BANK * cos(a), 1.0, BANK * sin(a)).normalized() if ring else Vector3.UP
+
 ## Where the lane ends and the pad begins (the pad's edge at the lane's outer edge).
 static func v_pad() -> float:
 	var dx := X_TOP + HALF - PAD_X
@@ -230,7 +257,7 @@ static func bound(chunk_index: int) -> float:
 ## from the ring's centre (+ = the way the chunks count), on the ramp or pad.
 ## Returns (x across signed, height above the road). Tests and put-back.
 static func deck_point(side: int, u: float) -> Vector2:
-	return Vector2(float(side) * x_at(absf(u)), y_at(absf(u)) + LIFT)
+	return Vector2(float(side) * x_at(absf(u)), deck_y(x_at(absf(u)), absf(u)))
 
 # ---------- off the main road (R3) ----------
 #
@@ -311,14 +338,19 @@ static func pose_of(place: Dictionary) -> Transform3D:
 	var ride := 0.5
 	match String(place.part):
 		"ring":
+			# on the lane's centre line, tipped in with its lean
 			var a: float = place.angle
-			return RoadFrame.pose(X_TOP * cos(a), RAMP_H + ride, cz - X_TOP * sin(a), a)
+			var xf := RoadFrame.pose(X_TOP * cos(a), RAMP_H - ring_drop(X_TOP) + ride, cz - X_TOP * sin(a), a)
+			var road := xf.basis * Basis(Vector3.UP, a).inverse()
+			var up := (road * ring_normal(a)).normalized()
+			xf.basis = Basis(Quaternion(xf.basis.y.normalized(), up)) * xf.basis
+			return xf
 		"spur":
 			var sd: float = float(place.side)
 			return RoadFrame.pose(sd * (RING_OUT + 7.0), RAMP_H + ride, cz, PI * 0.5 * sd)
 	var side: float = float(place.side)
 	var v: float = clampf(float(place.v), 0.0, V_GORE)
-	return RoadFrame.pose(side * x_at(v), y_at(v) + LIFT + ride, cz - float(place.leg) * v, 0.0 if side > 0.0 else PI)
+	return RoadFrame.pose(side * x_at(v), deck_y(x_at(v), v) + ride, cz - float(place.leg) * v, 0.0 if side > 0.0 else PI)
 
 ## A place as the save writes it (plain values), and back. from_save() gives
 ## {} for a record this map no longer has a ring for.
@@ -640,12 +672,11 @@ static func _leg(v_lo: float, v_hi: float) -> void:
 	var outer_h := PackedFloat32Array()
 	for i in vs.size():
 		var x := x_at(vs[i])
-		var y := y_at(vs[i]) + LIFT
 		var past_rim: bool = ring and vs[i] < V_RING_IN - 0.01   # inside the ring's rim: its lane, no barrier
 		if not past_rim:
-			inner.append(Vector3(x - HALF, vs[i], y))
+			inner.append(Vector3(x - HALF, vs[i], deck_y(x - HALF, vs[i])))
 			inner_out.append(Vector2(-1.0, 0.0))
-		outer.append(Vector3(x + HALF, vs[i], y))
+		outer.append(Vector3(x + HALF, vs[i], deck_y(x + HALF, vs[i])))
 		outer_out.append(Vector2(1.0, 0.0))
 		# inside: from the nose (a short taper where traffic drives away from it)
 		var ih := 0.0
@@ -656,11 +687,17 @@ static func _leg(v_lo: float, v_hi: float) -> void:
 		outer_h.append(BARRIER_H * clampf((V_GORE - vs[i]) / BARRIER_TAPER, 0.0, 1.0))
 		if i > 0:
 			var x0 := x_at(vs[i - 1])
-			var y0 := y_at(vs[i - 1]) + LIFT
-			_deck_quad(_p(x0 - HALF, y0, vs[i - 1]), _p(x0 + HALF, y0, vs[i - 1]), _p(x - HALF, y, vs[i]), _p(x + HALF, y, vs[i]))
+			# across in strips where the deck runs over the leaning ring, so it
+			# follows the lean (and lies on the ring's deck) instead of a chord
+			var strips := TWIST_STRIPS if ring and vs[i] < RING_OUT else 1
+			for k in strips:
+				var t0 := float(k) / float(strips) * 2.0 - 1.0
+				var t1 := float(k + 1) / float(strips) * 2.0 - 1.0
+				_deck_quad(_p(x0 + t0 * HALF, deck_y(x0 + t0 * HALF, vs[i - 1]), vs[i - 1]), _p(x0 + t1 * HALF, deck_y(x0 + t1 * HALF, vs[i - 1]), vs[i - 1]),
+					_p(x + t0 * HALF, deck_y(x + t0 * HALF, vs[i]), vs[i]), _p(x + t1 * HALF, deck_y(x + t1 * HALF, vs[i]), vs[i]))
 			for e in [-1.0, 1.0]:
 				var ex: float = e * (HALF - 0.45)
-				_paint(x0 + ex - 0.06, x0 + ex + 0.06, vs[i - 1], vs[i], y0, y)
+				_paint(x0 + ex - 0.06, x0 + ex + 0.06, vs[i - 1], vs[i], deck_y(x0 + ex, vs[i - 1]), deck_y(x + ex, vs[i]))
 			# gore chevrons: bars across the wedge between the road and the deck
 			if vs[i - 1] > V_NOSE:
 				var vm := (vs[i - 1] + vs[i]) * 0.5

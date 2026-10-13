@@ -84,10 +84,16 @@ func refuel(bank: Object, max_litres := INF) -> float:
 	if TestBuild.on():
 		can = want  # sandbox: the pump always fills, whatever the bank holds
 	var buy := clampi(mini(want, can), 0, want)
-	if buy <= 0 or not bank.call("spend_bank", buy * PRICE_PER_LITRE):
+	if buy <= 0:
 		return 0.0
+	# Into the tank before the bank pays: the wallet's commit carries the car's
+	# state (Wallet.car_live), so the fuel and the money are saved together. A
+	# pay refused takes it back out.
 	var got := minf(float(buy), CAPACITY_L - litres)
 	litres += got
+	if not bank.call("spend_bank", buy * PRICE_PER_LITRE):
+		litres -= got
+		return 0.0
 	return got
 
 func to_dict() -> Dictionary:

@@ -35,6 +35,10 @@ var cash := 0
 var bank := 0
 var receipts: Array[String] = []
 var _dirty := false
+## The state of the car you are in, for the money's commits
+## (SaveDirector.car_live; Game sets it). A pump fill changes the tank and the
+## bank together, so they are written together.
+var car_live: Callable = Callable()
 ## A banked night the store has not taken yet: {"night": N} (0 = the story's).
 var _dawn := {}
 
@@ -95,6 +99,25 @@ func spend_bank(amount: int) -> bool:
 	_changed()
 	return true
 
+## Pays `amount` from the bank and writes what it bought (`edit` on the working
+## career, SaveCore.commit) in the same commit, so a crash can never take the
+## money without the goods or give the goods without the money. All or
+## nothing: false, with nothing paid and nothing written, when the bank is
+## short or the save refuses (a chase).
+func spend_bank_with(amount: int, reason: String, edit: Callable) -> bool:
+	var free := TestBuild.on()   # sandbox: paid, and the bank is not touched
+	if amount < 0 or (amount > bank and not free):
+		return false
+	if not _dawn.is_empty() and not _save():
+		return false   # a banked night waits to be written first
+	var new_bank := bank if free else bank - amount
+	if not SaveStore.commit_wallet(reason, cash, new_bank, receipts, _live(), edit):
+		return false
+	bank = new_bank
+	_dirty = false
+	changed.emit(cash, bank)
+	return true
+
 ## Shop pay (Walt's board): straight into the bank, never cash. The money and
 ## the receipt go into the career in one commit, so a crash cannot pay without
 ## the receipt or the receipt without the pay. A receipt already seen pays
@@ -127,12 +150,16 @@ func _changed() -> void:
 
 func _save() -> bool:
 	if _dawn.is_empty():
-		_dirty = not SaveStore.save_wallet(cash, bank, receipts)
+		_dirty = not SaveStore.save_wallet(cash, bank, receipts, _live())
 	else:
-		_dirty = not SaveStore.commit("dawn", {"bank": bank, "cash": cash, "receipts": receipts, "close_night": _dawn.night})
+		_dirty = not SaveStore.commit_wallet("dawn", cash, bank, receipts, _live(), Callable(), {"close_night": _dawn.night})
 		if not _dirty:
 			_dawn = {}
 	return not _dirty
+
+func _live() -> Dictionary:
+	var v: Variant = car_live.call() if car_live.is_valid() else {}
+	return v if v is Dictionary else {}
 
 ## "$1,250"
 static func money(n: int) -> String:

@@ -50,6 +50,11 @@ var speed := 1.0
 var fixed_minutes := -1.0
 var _last_hour := -1
 var _last_save := 0.0
+## The save slot this clock was read from (0 = none). A slot switch reloads
+## the scene AFTER the new slot is picked, and this clock's last save on the
+## way out used to land in the new slot: its night then sat behind or ahead of
+## the story, and every autosave there was dropped as an already banked night.
+var _slot := 0
 
 func _ready() -> void:
 	name = "NightClock"
@@ -134,6 +139,7 @@ func load_clock() -> void:
 		var c := SaveCore.clock()
 		m = c.minutes
 		n = c.night
+		_slot = SaveCore.active_slot()
 	else:
 		var cfg := ConfigFile.new()
 		if cfg.load(path) != OK:
@@ -149,6 +155,8 @@ func save_clock() -> bool:
 	if SaveStore.chase_active:
 		return false  # never save during a chase (run structure, 2026-10-09)
 	if path == DEFAULT_PATH:
+		if _slot > 0 and SaveCore.active_slot() != _slot:
+			return false   # another slot is in use now: this clock is not its
 		return SaveCore.persist and SaveCore.set_clock(minutes, night)
 	var cfg := ConfigFile.new()
 	cfg.set_value("clock", "minutes", minutes)

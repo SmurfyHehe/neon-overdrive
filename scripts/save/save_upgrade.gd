@@ -134,10 +134,10 @@ static func upgrade_1_to_2(files: Dictionary) -> Dictionary:
 
 	var unlocked := {}
 	for k in special:
-		if special[k] == true:
+		if special[k] is bool and special[k]:
 			unlocked[str(k)] = true
 	career.special = {"unlocked": unlocked}
-	career.walt = {"first_total_used": meta.get("first_wreck_used", false) == true}
+	career.walt = {"first_total_used": meta.get("first_wreck_used") is bool and meta.first_wreck_used}
 
 	# The night: the saved run wins, then the old clock file, then night 1.
 	var clock := _dict(run.get("clock"))
@@ -160,7 +160,7 @@ static func upgrade_1_to_2(files: Dictionary) -> Dictionary:
 		if not k in ["first_wreck_used", "weather_seed"]:
 			new_meta[k] = meta[k]
 	new_meta.save_version = 2
-	new_meta.chase_open = meta.get("chase_open", false) == true
+	new_meta.chase_open = meta.get("chase_open") is bool and meta.chase_open
 	new_meta.pending_busts = _whole(meta.get("pending_busts"))
 	new_meta.saved_at = _whole(meta.get("saved_at"))
 	return {"career": career, "night": night, "meta": new_meta}

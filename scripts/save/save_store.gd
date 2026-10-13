@@ -14,6 +14,8 @@ extends RefCounted
 #   weather_seed / set_weather_seed   career world.weather_seed
 #   load_garage / save_garage     career cars[*].parts_owned (all cars together)
 #   load_mod_tree / save_mod_tree career cars[*].fitted
+#   save_parts                    both in one commit (the garage)
+#   commit_wallet                 the wallet plus what it paid for, one commit
 #   load_special / save_special   career special.unlocked
 #   load_run / save_run / clear_run   the night
 #   load_meta / begin_chase / end_chase / take_pending_bust   meta.json
@@ -134,15 +136,31 @@ static func load_wallet(n: int = 0) -> Dictionary:
 
 ## Tonight's cash goes to the night. A bank or a receipt list that changed is
 ## one commit: the pay and its receipt are in the same career write.
-static func save_wallet(cash: int, bank: int, receipts: Array = []) -> bool:
+## `car_live` (SaveDirector.car_live): the car's state now, written in the
+## same commit, so a pump fill is paid and in the tank together.
+static func save_wallet(cash: int, bank: int, receipts: Array = [], car_live: Dictionary = {}) -> bool:
 	if SaveCore.chase_active:
 		return false
+	var kept := _kept_receipts(receipts)
+	if maxi(bank, 0) != SaveCore.bank() or kept != _receipts():
+		return commit_wallet("wallet", cash, bank, kept, car_live)
+	return SaveCore.set_cash(cash)
+
+## The wallet as one commit, with `edit` (what the money bought) in the same
+## career write: a crash never takes the money without the goods, or the
+## other way round.
+static func commit_wallet(reason: String, cash: int, bank: int, receipts: Array, car_live: Dictionary = {}, edit: Callable = Callable(), extra: Dictionary = {}) -> bool:
+	var changes := {"bank": bank, "cash": cash, "receipts": _kept_receipts(receipts)}
+	if not car_live.is_empty():
+		changes.car_live = car_live
+	changes.merge(extra, true)
+	return SaveCore.commit(reason, changes, edit)
+
+static func _kept_receipts(receipts: Array) -> Array[String]:
 	var kept := _string_list(receipts)
 	while kept.size() > RECEIPTS_KEPT:
 		kept.remove_at(0)
-	if maxi(bank, 0) != SaveCore.bank() or kept != _receipts():
-		return SaveCore.commit("wallet", {"bank": bank, "cash": cash, "receipts": kept})
-	return SaveCore.set_cash(cash)
+	return kept
 
 static func _receipts(n: int = 0) -> Array[String]:
 	return _string_list(SaveCore._block(SaveCore.career(n), "wallet").get("receipts"))
@@ -187,21 +205,24 @@ static func load_garage(n: int = 0) -> Dictionary:
 ## "<car>/<id>" (GarageMods keeps a car's own parts that way), to that car; a
 ## part left out of the list is taken from the car that had it.
 static func save_garage(owned_parts: Array) -> bool:
+	return SaveCore.commit("garage", {}, apply_garage.bind(owned_parts))
+
+## save_garage's change to a working career (for one commit with others).
+static func apply_garage(c: Dictionary, owned_parts: Array) -> void:
 	var want := _string_list(owned_parts)
-	return SaveCore.commit("garage", {}, func(c: Dictionary) -> void:
-		var placed := {}
-		for id in c.cars:
-			if c.cars[id] is Dictionary:
-				var keep: Array[String] = []
-				for part in _string_list(c.cars[id].get("parts_owned")):
-					if part in want and not placed.has(part):
-						keep.append(part)
-						placed[part] = true
-				c.cars[id].parts_owned = keep
-		for part in want:
-			if not placed.has(part):
-				var home: String = part.get_slice("/", 0) if part.contains("/") else c.current_car
-				SaveCore.car_entry(c, home if home != "" else c.current_car).parts_owned.append(part))
+	var placed := {}
+	for id in c.cars:
+		if c.cars[id] is Dictionary:
+			var keep: Array[String] = []
+			for part in _string_list(c.cars[id].get("parts_owned")):
+				if part in want and not placed.has(part):
+					keep.append(part)
+					placed[part] = true
+			c.cars[id].parts_owned = keep
+	for part in want:
+		if not placed.has(part):
+			var home: String = part.get_slice("/", 0) if part.contains("/") else c.current_car
+			SaveCore.car_entry(c, home if home != "" else c.current_car).parts_owned.append(part)
 
 ## The mod tree, with every installed id checked against the parts owned.
 ## "damaged" is true when the newest copy of the career was broken.
@@ -223,13 +244,25 @@ static func load_mod_tree(n: int = 0) -> Dictionary:
 
 ## Replaces what every car has fitted: {car id: {"installed": [node id, ...]}}.
 static func save_mod_tree(cars: Dictionary) -> bool:
-	return SaveCore.commit("mod_tree", {}, func(c: Dictionary) -> void:
-		for id in c.cars:
-			if c.cars[id] is Dictionary:
-				c.cars[id].erase("fitted")
-		for id in cars:
-			if cars[id] is Dictionary:
-				SaveCore.car_entry(c, str(id)).fitted = _string_list(cars[id].get("installed")))
+	return SaveCore.commit("mod_tree", {}, apply_mod_tree.bind(cars))
+
+## save_mod_tree's change to a working career.
+static func apply_mod_tree(c: Dictionary, cars: Dictionary) -> void:
+	for id in c.cars:
+		if c.cars[id] is Dictionary:
+			c.cars[id].erase("fitted")
+	for id in cars:
+		if cars[id] is Dictionary:
+			SaveCore.car_entry(c, str(id)).fitted = _string_list(cars[id].get("installed"))
+
+## The parts owned and the fitted lists in one commit (the garage). Two
+## commits left a part owned but not fitted when the game died between them.
+static func save_parts(owned_parts: Array, cars: Dictionary) -> bool:
+	return SaveCore.commit("garage", {}, apply_parts.bind(owned_parts, cars))
+
+static func apply_parts(c: Dictionary, owned_parts: Array, cars: Dictionary) -> void:
+	apply_garage(c, owned_parts)   # parts first: the fitted lists are checked against them on load
+	apply_mod_tree(c, cars)
 
 # ---------- special vehicles ----------
 
@@ -238,14 +271,14 @@ static func load_special(n: int = 0) -> Dictionary:
 	var raw := SaveCore._block(SaveCore._block(SaveCore.career(n), "special"), "unlocked")
 	var out := {}
 	for k in raw:
-		if raw[k] == true:
+		if SaveCore._yes(raw[k]):
 			out[str(k)] = true
 	return {"unlocked": out}
 
 static func save_special(unlocked: Dictionary) -> bool:
 	var out := {}
 	for k in unlocked:
-		if unlocked[k] == true:
+		if SaveCore._yes(unlocked[k]):
 			out[str(k)] = true
 	return SaveCore.commit("special", {}, func(c: Dictionary) -> void: c.special.unlocked = out)
 

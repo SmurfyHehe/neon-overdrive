@@ -257,6 +257,8 @@ func _ready() -> void:
 		night_clock.set_time(run.clock.get("minutes", 0.0), run.clock.get("night", 1))
 	wallet = Wallet.new()
 	wallet.name = "Wallet"
+	# The money's commits carry the car's state (a pump fill: tank and bank together).
+	wallet.car_live = saver.car_live
 	add_child(wallet)
 	# City lights: before the first chunk, which leaves the crossing's mouth
 	# open. Never in a benchmark run (same road every time).
@@ -1206,6 +1208,11 @@ func _setup_police(benchmark: bool) -> void:
 		add_child(police)
 		heat_icons.patrol = police
 		police.busted.connect(func(_cop: Node3D) -> void: heat_icons.say("Busted."))
+		# A police chase is the save's chase (SaveCore.begin_chase): nothing is
+		# written while it lasts, and a quit or crash mid-chase is a bust on
+		# return. Nothing marked it before, so a kill mid-chase resumed the run.
+		police.pursuit_started.connect(func() -> void: SaveStore.begin_chase())
+		police.pursuit_ended.connect(func(_escaped: bool) -> void: SaveStore.end_chase())
 
 ## The rulebook's inputs (P1): tonight's crackdown, the crossing, the lane's
 ## flow (matching it is never speeding), lit districts, and contacts from the
@@ -1324,7 +1331,7 @@ func _begin_night(boot: bool) -> void:
 		# had already landed does not land (or speak) again.
 		Weather.set_level(int(saved.stage), true, float(saved.get("road_snow", 0.0)) >= 1.0)
 		Weather.restore(saved)
-		_change_done = saved.get("change_done", false) == true
+		_change_done = saved.get("change_done") is bool and saved.change_done
 	else:
 		Weather.set_level(WeatherPlan.level_at(e, night_clock.minutes), boot, e.snow_roads)
 		_change_done = e.change_hour >= 0 and night_clock.minutes >= WeatherPlan.minutes_of(e.change_hour)

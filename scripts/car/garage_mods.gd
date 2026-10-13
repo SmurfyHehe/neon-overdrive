@@ -8,7 +8,7 @@ extends RefCounted
 #
 #   var mods := GarageMods.new()
 #   mods.open("p1_coupe", wallet)      # wallet: anything with `bank` and spend_bank(int)
-#   mods.buy("service")                # bank pays, garage.json and mod_tree.json are written
+#   mods.buy("service")                # bank pays and the part is saved, one commit
 #   mods.swap_to("A")                  # free: the other engine branch becomes the fitted one
 #
 # Four kinds of node, all read from the data (ModTree, BoltOns):
@@ -441,9 +441,8 @@ func buy(id: String) -> Dictionary:
 	if SaveStore.chase_active:
 		out.reason = "Not with them on your tail."
 		return out
-	if cost > 0 and not wallet.spend_bank(cost):
-		out.reason = "Short %s" % money(cost - bank())
-		return out
+	var crates := king_crates
+	var was_open := crate_open
 	owned[id] = true
 	if crate_open:
 		king_crates -= 1
@@ -451,9 +450,32 @@ func buy(id: String) -> Dictionary:
 	if items[id].kind == "core":
 		_set_chain_to(id)
 	_refit()
-	_save()
+	if not _pay_and_save(cost):
+		# Nothing was paid or written: back to what the save holds.
+		owned.clear()
+		chain.clear()
+		installed.clear()
+		_last_child.clear()
+		king_crates = crates
+		crate_open = was_open
+		_load()
+		out.reason = "Short %s" % money(cost - bank()) if cost > bank() else "Not now."
+		return out
 	out.ok = true
 	return out
+
+## The bank pays and the part is saved in ONE commit (Wallet.spend_bank_with):
+## a game killed in between used to keep the money and lose the part. A plain
+## bank object (tests) pays first, then the parts go in one commit.
+func _pay_and_save(cost: int) -> bool:
+	var lists := _save_lists()
+	if wallet != null and wallet.has_method("spend_bank_with"):
+		return wallet.spend_bank_with(cost, "garage", func(c: Dictionary) -> void:
+			SaveStore.apply_parts(c, lists[0], lists[1]))
+	if cost > 0 and not wallet.spend_bank(cost):
+		return false
+	SaveStore.save_parts(lists[0], lists[1])
+	return true
 
 ## Fits an owned core node that is not on the fitted path (the other engine
 ## branch, the other keystone). Free. The branch left behind keeps its tune and
@@ -538,6 +560,11 @@ func _load() -> void:
 	_refit()
 
 func _save() -> bool:
+	var lists := _save_lists()
+	return SaveStore.save_parts(lists[0], lists[1])
+
+## [every part owned, all cars; every car's fitted list] with this car's now.
+func _save_lists() -> Array:
 	var prefix := car_id + "/"
 	var parts: Array = []
 	for part in SaveStore.load_garage().owned_parts:
@@ -547,8 +574,7 @@ func _save() -> bool:
 		parts.append(prefix + id)
 	var cars: Dictionary = SaveStore.load_mod_tree().cars
 	cars[car_id] = {"installed": installed.duplicate()}
-	# Parts first: mod_tree.json only keeps ids the garage owns.
-	return SaveStore.save_garage(parts) and SaveStore.save_mod_tree(cars)
+	return [parts, cars]
 
 # ---- Branch tunes ------------------------------------------------------------
 

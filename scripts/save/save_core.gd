@@ -102,9 +102,19 @@ static func file(name: String, n: int = 0) -> String:
 
 static func active_slot() -> int:
 	if slot < 1:
-		var r := AtomicJson.read(root.path_join("active_slot.json"))
-		var s: Variant = r.get("data", {}).get("slot", 1)
-		slot = clampi(int(s), 1, SLOTS) if _is_num(s) else 1
+		# The newest copy holding a real slot number; a number out of range
+		# (a bad hand edit) used to be clamped onto slot 3, so the save in use
+		# looked gone.
+		slot = 1
+		var p := root.path_join("active_slot.json")
+		for c in AtomicJson.candidates(p):
+			if not FileAccess.file_exists(c):
+				continue
+			var d: Variant = AtomicJson.decode(FileAccess.get_file_as_string(c))
+			var s: Variant = d.get("slot") if d is Dictionary else null
+			if _is_whole(s) and int(s) >= 1 and int(s) <= SLOTS:
+				slot = int(s)
+				break
 	return slot
 
 ## Switches slots. Refused during a chase.
@@ -334,7 +344,7 @@ static func commit(reason: String, changes: Dictionary = {}, edit: Callable = Ca
 				c.tunes[id][k] = tl[id][k]
 	nt.erase("tunes_live")
 	c.stats.play_secs = maxi(_int(c.stats.get("play_secs")), _int(nt.get("play_secs")))
-	if _read(file("meta")).get("first_wreck_used", false) == true:
+	if _yes(_read(file("meta")).get("first_wreck_used")):
 		c.walt.first_total_used = true
 	if changes.has("bank"):
 		c.wallet.bank = maxi(int(changes.bank), 0)
@@ -375,7 +385,7 @@ static func commit(reason: String, changes: Dictionary = {}, edit: Callable = Ca
 		return false
 	# Step 3: the night on the new gen.
 	var out := nt
-	if dawn or changes.get("clear_run", false) == true:
+	if dawn or _yes(changes.get("clear_run")):
 		out = {}
 		for k in NIGHT_KEEP:
 			if nt.has(k):
@@ -451,11 +461,11 @@ static func plate(c: Dictionary, nt: Dictionary) -> Dictionary:
 static func meta(n: int = 0) -> Dictionary:
 	_ensure()
 	var m := {} if locked(n) else _read(file("meta", n))
-	return {"chase_open": m.get("chase_open", false) == true,
+	return {"chase_open": _yes(m.get("chase_open")),
 		"pending_busts": _int(m.get("pending_busts")),
 		"saved_at": _int(m.get("saved_at")),
-		"first_wreck_used": m.get("first_wreck_used", false) == true \
-			or _block(career(n), "walt").get("first_total_used", false) == true}
+		"first_wreck_used": _yes(m.get("first_wreck_used")) \
+			or _yes(_block(career(n), "walt").get("first_total_used"))}
 
 ## The last write before a chase: marks it open, then blocks saving until
 ## end_chase(). Call it the moment the police start chasing.
@@ -547,7 +557,7 @@ static func _write_meta(changes: Dictionary) -> bool:
 	if locked():
 		return false
 	var m := _read(file("meta")).duplicate(true)
-	m.chase_open = m.get("chase_open", false) == true
+	m.chase_open = _yes(m.get("chase_open"))
 	m.pending_busts = _int(m.get("pending_busts"))
 	m.merge(changes, true)
 	m.save_version = SAVE_VERSION
@@ -583,9 +593,11 @@ static func _ensure() -> void:
 			# this run of the game, so nothing is written next to or over it.
 			_locked[slot_dir(n)] = true
 
-## A version 1 slot: no career.json, and any of the old section files.
+## A version 1 slot: no good career.json copy, and any of the old section files.
+## A torn career.json.tmp alone (the upgrade killed while writing it) does not
+## count: it made the slot look upgraded, and it loaded as an empty save.
 static func _is_v1(n: int) -> bool:
-	if AtomicJson.any_exists(file("career", n)):
+	if AtomicJson.read(file("career", n)).has("data"):
 		return false
 	for s in V1_FILES:
 		if s != "meta" and AtomicJson.any_exists(file(s, n)):
@@ -605,7 +617,12 @@ static func _upgrade_v1(n: int, active: bool) -> bool:
 			old = old or f.begins_with(s + ".json")
 		if not old or FileAccess.file_exists(pre.path_join(f)):
 			continue
-		var err := DirAccess.copy_absolute(ProjectSettings.globalize_path(dir.path_join(f)), ProjectSettings.globalize_path(pre.path_join(f)))
+		# Copied under a .part name and renamed in whole: a copy cut short by a
+		# crash is never taken for a finished one and skipped next time.
+		var part := ProjectSettings.globalize_path(pre.path_join(f + ".part"))
+		var err := DirAccess.copy_absolute(ProjectSettings.globalize_path(dir.path_join(f)), part)
+		if err == OK:
+			err = DirAccess.rename_absolute(part, ProjectSettings.globalize_path(pre.path_join(f)))
 		if err != OK:
 			push_error("SaveCore: cannot copy %s to pre_v1 (%s); slot %d is not upgraded" % [f, error_string(err), n])
 			return false
@@ -683,6 +700,12 @@ static func _is_num(x: Variant) -> bool:
 
 static func _is_whole(x: Variant) -> bool:
 	return _is_num(x) and float(x) == floorf(float(x)) and float(x) >= 0.0
+
+## True only for a real true. `x == true` is a script error when a damaged or
+## hand-edited file holds a string there (Godot 4 does not compare across
+## types), and that error stopped every later write of the slot.
+static func _yes(x: Variant) -> bool:
+	return x is bool and x
 
 ## A whole number >= 0, or 0.
 static func _int(x: Variant) -> int:

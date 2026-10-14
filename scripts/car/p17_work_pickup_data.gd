@@ -23,6 +23,10 @@ const CABIN := {
 	"eye": Vector3(-0.320, 1.376, -0.140),
 	"floor_y": 0.416, "belt_y": 1.196,
 	"cowl": Vector2(1.092, -1.080), "dash_face_z": -0.770,
+	# Hood view (#732): the bonnet is tall and long, so the default point saw
+	# the road only from 5 m ahead (12.5 m before the default moved). This is
+	# the lowest point on the centre line that sees the road from under 3 m.
+	"hood_cam": Vector3(0.0, 1.50, -1.98),
 	"header": Vector2(1.800, -0.500), "roof_y": 1.810, "roof_z1": 0.700, "open_top": false,
 	"door_x": 0.781, "door_x_rear": 0.783, "door_x_front": 0.778, "glass_x": 0.764, "glass_top": 1.803,
 	"a_pillar": [Vector3(0.837, 1.092, -1.100), Vector3(0.626, 1.800, -0.500)],

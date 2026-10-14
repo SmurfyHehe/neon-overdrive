@@ -168,6 +168,11 @@ func _physics_process(_delta: float) -> bool:
 					_fail("rest fov %.2f, expected %.1f" % [cam.fov, C.FOV_REST])
 				if absf(cam.dist_now - C.DIST) > 0.05 or absf(cam.height_now - C.HEIGHT) > 0.05:
 					_fail("rest framing dist %.2f height %.2f" % [cam.dist_now, cam.height_now])
+				# aims down enough that the horizon sits above the middle of the screen (#730)
+				var pitch := rad_to_deg(asin(clampf(cam.global_basis.z.y, -1.0, 1.0)))
+				print("rest: aims %.1f deg down" % pitch)
+				if pitch < 4.5:
+					_fail("rest: the chase camera aims only %.1f deg down, expected at least 4.5" % pitch)
 				start_dist = cam.dist_now
 				_next("impact")
 		"impact":

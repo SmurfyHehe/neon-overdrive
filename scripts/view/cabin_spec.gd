@@ -35,9 +35,12 @@ extends RefCounted
 #   hood_cam      Vector3   the hood camera, on the bonnet ahead of the windscreen
 #   roof_back_cam Vector3   the roof camera that looks straight back (B in hood view)
 
-## Defaults for the hood camera: above and ahead of the cowl.
-const HOOD_CAM_UP := 0.18
-const HOOD_CAM_FORWARD := 0.35
+## Defaults for the hood camera: above and ahead of the cowl. These are the
+## coupe's hand-placed offsets (#731): at 0.18 / 0.35 the wagon and the other
+## cars without their own point saw the road only from 5 to 6 m ahead and the
+## bonnet filled a third of the screen; from here the road starts at 2 to 3 m.
+const HOOD_CAM_UP := 0.27
+const HOOD_CAM_FORWARD := 0.70
 const ROOF_CAM_UP := 0.12
 
 const REQUIRED := ["seat_x", "seat_h", "seat_z", "eye", "floor_y", "belt_y", "cowl", "dash_face_z", "header", "roof_y",

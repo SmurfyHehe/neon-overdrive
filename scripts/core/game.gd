@@ -121,6 +121,9 @@ var saver: SaveDirector
 ## Tonight's cash and the bank (F0, scripts/core/wallet.gd).
 var wallet: Node
 const Wallet := preload("res://scripts/core/wallet.gd")
+## Race pay, escape pay and bust bills (scripts/core/stakes.gd).
+var stakes: Node
+const Stakes := preload("res://scripts/core/stakes.gd")
 const ShopDay := preload("res://scripts/core/shop_day.gd")
 ## Walt's board screen: loaded only when the shop is on (_setup_game_state), so
 ## a run without it never compiles the board.
@@ -1206,6 +1209,10 @@ func _setup_police(benchmark: bool) -> void:
 		add_child(police)
 		heat_icons.patrol = police
 		police.busted.connect(func(_cop: Node3D) -> void: heat_icons.say("Busted."))
+	# What races, escapes and busts are worth (S1, races in the world).
+	stakes = Stakes.new()
+	add_child(stakes)
+	stakes.bind(race, police, police_heat, wallet, night_clock)
 
 ## The rulebook's inputs (P1): tonight's crackdown, the crossing, the lane's
 ## flow (matching it is never speeding), lit districts, and contacts from the

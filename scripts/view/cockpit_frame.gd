@@ -712,11 +712,36 @@ func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vec
 		if i == 0 and cab.get("gear_window", false):
 			# the black square the gear digit sits on, left of the needle hub
 			k.box(Vector3(GEAR_WIN_SIZE.x, GEAR_WIN_SIZE.y, 0.002), c + Vector3(GEAR_WIN_AT.x, GEAR_WIN_AT.y, 0.0005), Color("#050608"))
-		var ticks := 9 if i == 0 else 7
-		for t in ticks:
-			var a := deg_to_rad(a_start - dial_sweep * float(t) / (ticks - 1))
-			var pt := c + Vector3(cos(a), sin(a), 0.0) * (r - 0.012) + Vector3(0, 0, 0.001)
-			lit.box(Vector3(0.003, 0.009, 0.002), pt, Color(AMBER, 0.6), Basis(Vector3.BACK, a - PI / 2.0))
+		# Ticks and numerals read this car's own range (2026-10-14, HUD and
+		# gauges look: the faces had nine and seven plain ticks and no numbers,
+		# so a needle said nothing). The tach counts x1000 rpm up to the car's
+		# max_rpm, the speedo every speedo_step() km/h up to speedo_max_kmh; a
+		# major tick and a numeral at each, a short tick half way between.
+		var marks := tach_marks(player.max_rpm) if i == 0 else speedo_marks(float(cab.speedo_max_kmh))
+		var top: float = float(player.max_rpm) if i == 0 else float(cab.speedo_max_kmh)
+		var tick_len := tick_length(r)
+		var num_size := numeral_size(r)
+		var num_r := r - 0.003 - tick_len - 0.0015 - num_size * 0.0004 * 0.35
+		for m in marks.size():
+			var v: float = marks[m]
+			var a := deg_to_rad(a_start - dial_sweep * v / top)
+			var dir := Vector3(cos(a), sin(a), 0.0)
+			var pt := c + dir * (r - 0.003 - tick_len * 0.5) + Vector3(0, 0, 0.001)
+			lit.box(Vector3(0.003, tick_len, 0.002), pt, Color(AMBER, 0.9), Basis(Vector3.BACK, a - PI / 2.0))
+			var text := str(int(round(v / 1000.0))) if i == 0 else str(int(round(v)))
+			var num_at := dir * num_r
+			# a numeral that would sit on the tach's gear window stays off (the
+			# coupe's "2"); its tick still marks the spot
+			var half := Vector2(num_size * 0.0004 * 0.4, num_size * 0.0004 * 0.35)
+			var on_window: bool = i == 0 and cab.get("gear_window", false) and Rect2(GEAR_WIN_AT - GEAR_WIN_SIZE * 0.5 - half, GEAR_WIN_SIZE + half * 2.0).has_point(Vector2(num_at.x, num_at.y))
+			if not on_window:
+				var l := _label(text, num_size, c + num_at + Vector3(0, 0, 0.0015), Color(AMBER, 0.95), 0.0004)
+				l.name = "Numeral%d_%s" % [i, text]
+			if m + 1 < marks.size():   # the short tick half way to the next number
+				var am := deg_to_rad(a_start - dial_sweep * (v + marks[m + 1]) * 0.5 / top)
+				var dm := Vector3(cos(am), sin(am), 0.0)
+				var pm := c + dm * (r - 0.003 - tick_len * 0.25) + Vector3(0, 0, 0.001)
+				lit.box(Vector3(0.002, tick_len * 0.5, 0.002), pm, Color(AMBER, 0.5), Basis(Vector3.BACK, am - PI / 2.0))
 		if i == 0:
 			# red zone on the tach, from the HUD's red band to the end
 			var a0 := deg_to_rad(a_start - dial_sweep * Hud.RED_FROM)
@@ -825,6 +850,45 @@ func dial_radii() -> Array:
 			return [0.046, 0.046]
 		_:
 			return [DIAL_R, DIAL_R]
+
+## The tach's numerals, in rpm: every 1000 up to the car's max_rpm (a 7200 rpm
+## engine reads 0..7 and the needle runs on past the 7).
+static func tach_marks(max_rpm: float) -> Array:
+	var out := []
+	var v := 0.0
+	while v <= max_rpm + 0.5:
+		out.append(v)
+		v += 1000.0
+	return out
+
+## The speedo's numeral step for a dial that tops out at max_kmh: the biggest
+## of 50, 40 and 20 that lands a number on the top speed in five to eight
+## steps (300 -> 50, 240 -> 40, 260 and 200 -> 20), so the last numeral is
+## the end of the sweep.
+static func speedo_step(max_kmh: float) -> float:
+	for step in [50.0, 40.0, 20.0]:
+		if fmod(max_kmh, step) < 0.5 and max_kmh / step >= 5.0 and max_kmh / step <= 8.0:
+			return step
+	return 20.0
+
+static func speedo_marks(max_kmh: float) -> Array:
+	var out := []
+	var step := speedo_step(max_kmh)
+	var v := 0.0
+	while v <= max_kmh + 0.5:
+		out.append(v)
+		v += step
+	return out
+
+## A major tick's length on a dial of radius r: 9 mm on the 50 mm dials, down
+## to 4 mm on the smallest cans (they were 9 mm everywhere, nearly to the hub).
+static func tick_length(r: float) -> float:
+	return clampf(r * 0.18, 0.004, 0.009)
+
+## Numeral font size (Label3D px at 0.4 mm/px) for a dial of radius r: 18 on
+## the 50 mm dials, 12 on the smallest.
+static func numeral_size(r: float) -> int:
+	return clampi(int(round(r * 360.0)), 12, 20)
 
 ## A box from a to b, `w` across, for pillars.
 static func _bar(k: CockpitKit, a: Vector3, b: Vector3, w: float, col: Color) -> void:

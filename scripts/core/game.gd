@@ -62,6 +62,7 @@ var traffic: TrafficManager
 ## switch is off.
 var junction: Junction
 var ring_site: Node3D
+var pocket_sites: Array[Node3D] = []
 ## Where the player is off the main road ({} on it): RoadRamps.place_of.
 var off_main := {}
 var game_state: GameState
@@ -912,6 +913,14 @@ func _shift_origin(shift_chunks: int) -> void:
 		# Now, not at the next transform flush: a stale chunk collider is
 		# invisible on a straight road but lies across a curved one (#37).
 		RoadChunkBuilder.sync_collision(c.root)
+	# The ring and the pockets stand by their own rule: moved now, not in
+	# their next _physics_process, which can run after the car's step, so
+	# the deck would be a kilometre away for one tick (exits_live caught the
+	# wheels in the air for one tick at ring 3, whose centre is a shift point).
+	if ring_site != null:
+		ring_site.call("_place")
+	for site in pocket_sites:
+		site.call("_place")
 	# Traffic (milestone 3): every car gets the same bookkeeping as the player.
 	traffic.shift_world(offset)
 	if police != null:
@@ -1034,6 +1043,7 @@ func _setup_traffic() -> void:
 		var site: Node3D = PocketSite.new()
 		site.pocket = pk
 		add_child(site)
+		pocket_sites.append(site)
 
 # ---------- camera ----------
 func _setup_camera() -> void:

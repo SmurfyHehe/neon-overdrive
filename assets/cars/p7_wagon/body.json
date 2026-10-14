@@ -157,13 +157,13 @@
   "head": {
    "r": [
     0.5900000000000001,
-    0.6399999999999999,
-    -2.0183155843356086
+    0.615,
+    -2.021424740336987
    ],
    "l": [
     -0.5900000000000001,
-    0.6399999999999999,
-    -2.0200885180995467
+    0.615,
+    -2.0224477757454435
    ]
   },
   "tail": {
@@ -510,8 +510,8 @@
   8.0,
   12.0
  ],
- "bevelled_edges": 218,
- "source_commit": "da4cccd",
+ "bevelled_edges": 216,
+ "source_commit": "39599fa",
  "nodes": [
   "p7_wagon",
   "hinge_hood",
@@ -670,7 +670,7 @@
  "tris": {
   "hood": 350,
   "door_r": 100,
-  "ghost_door_r": 72,
+  "ghost_door_r": 68,
   "glass_door_r": 28,
   "handle_r": 14,
   "mirror_r": 34,
@@ -678,7 +678,7 @@
   "rub_door_r": 54,
   "seal_door_r": 24,
   "door_l": 100,
-  "ghost_door_l": 64,
+  "ghost_door_l": 60,
   "glass_door_l": 28,
   "handle_l": 14,
   "mirror_l": 34,
@@ -701,7 +701,7 @@
   "body": 1138,
   "fender_fr": 340,
   "fender_fl": 340,
-  "bumper_f": 304,
+  "bumper_f": 306,
   "bumper_r": 190,
   "antenna": 22,
   "arch_liner_fr": 36,
@@ -720,15 +720,15 @@
   "engine": 36,
   "exhaust": 30,
   "fuel_recess": 10,
-  "ghost_l": 80,
-  "ghost_r": 80,
+  "ghost_l": 74,
+  "ghost_r": 74,
   "glass_backlight": 30,
   "glass_quarter_r": 20,
   "glass_quarter_l": 20,
   "glass_windshield": 140,
-  "grille": 80,
-  "head_r": 112,
-  "head_l": 112,
+  "grille": 92,
+  "head_r": 116,
+  "head_l": 116,
   "lamp_column_r": 92,
   "lamp_column_l": 92,
   "pillar_a_r": 9,
@@ -745,8 +745,8 @@
   "rub_fender_l": 70,
   "rub_quarter_r": 130,
   "rub_quarter_l": 130,
-  "rust_r": 131,
-  "rust_l": 131,
+  "rust_r": 66,
+  "rust_l": 66,
   "sail_r": 8,
   "sail_l": 8,
   "seal_backlight": 36,
@@ -771,6 +771,6 @@
   "wheel_rr_mesh": 164,
   "wheel_rl_mesh": 208
  },
- "tris_total": 7776,
- "tris_body": 7000
+ "tris_total": 7648,
+ "tris_body": 6872
 }

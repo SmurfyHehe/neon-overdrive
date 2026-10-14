@@ -191,8 +191,8 @@ lamp (the right lens is gone), the filler on the right front quarter, the one
 tail pipe.
 
 **P7, the shop wagon** (`p7_wagon`, kit in `kit_p7_wagon.py`, rebuilt for
-looks 2026-10-14, Roy 1546): 7,000 body triangles in 96 parts, 776 more in
-the wheels; 0.000 mm over 49 mirrored parts and pairs. Everything is laid on
+looks 2026-10-14, Roy 1546): 6,872 body triangles in 98 parts, 776 more in
+the wheels; 0.000 mm over 50 mirrored parts and pairs. Everything is laid on
 the built skin with the tuner kit's helpers (`_skin_decal`, `_rim`,
 `_on_skin`), and the kit's skin list (`SKIN`) adds its own doors and every
 glass, so `tests/fleet/exterior_fit.gd` holds it to zero clashes. No deck lid
@@ -225,8 +225,9 @@ mast on the left front fender. Small discs in the front wheels with the
 caliper on the body, 200 mm drums at the rear. Strut and torsion beam ends in
 the wheel wells, a transverse engine, radiator and battery under the bonnet;
 nothing hangs under the floor (the spare's cradle is an anchor only). The
-loft's nose is 8 cm taller than the first build's (cars.py P7 `top`, a
-stand-in anyway) so the lamps and grille sit on a face; the body's length,
+loft's nose is 4 cm taller than the first build's (cars.py P7 `top`, a
+stand-in anyway) so the lamps and grille sit on a face (8 cm made it an
+outline twin of the truck from a high front angle); the body's length,
 width, height, wheelbase, collision box, physics and tune are unchanged.
 
 **P2, the hot hatch** (`p2_hothatch`, kit in `kit_p2_hothatch.py`): 4,400 body

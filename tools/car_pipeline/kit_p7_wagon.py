@@ -46,8 +46,9 @@ What it has that the common recipe does not:
 
 Visual rebuild only: the loft's dimensions (4.30 x 1.74 x 1.55, wheelbase
 2.60), the collision box, the physics and the tune are not touched. The nose
-of the loft is 8 cm taller (cars.py P7 `top`, a stand-in anyway), so the
-lamps and grille sit on a face instead of on the hood's roll.
+of the loft is 4 cm taller (cars.py P7 `top`, a stand-in anyway), so the
+lamps and grille sit on a face instead of on the hood's roll; 8 cm made it
+an outline twin of the truck from a high front angle (fleet_silhouette_sweep).
 """
 import numpy as np
 
@@ -69,10 +70,10 @@ WELL_X = 0.46          # the wheel wells' inner wall (the tuner's): a front tyre
 PILLAR_LIFT = 0.004 + T.PILLAR_LIFT   # the A-pillar strip's lift over the glass (the common 4 mm plus the tuner's)
 
 # ---- nose (front view x, y)
-BUMPER_F = (0.36, 0.54)             # the black bumper band, bottom and top
+BUMPER_F = (0.36, 0.52)             # the black bumper band, bottom and top (the lamps' housings start at 0.539)
 BUMPER_IN = 0.68                    # the flat slab across the face reaches this far; the corner pieces take over
 BUMPER_PROUD = 0.03                 # how far the band stands off the body
-HEAD = (0.50, 0.68, 0.57, 0.71)     # square flush headlamp: x0, x1, y0, y1 (the sheet: 0.18 x 0.16, here 0.18 x 0.14 on the face)
+HEAD = (0.50, 0.68, 0.545, 0.685)   # square flush headlamp: x0, x1, y0, y1 (the sheet: 0.18 x 0.16, here 0.18 x 0.14 on the face, which tops out at 0.70)
 GRILLE = (0.47, 0.61, 0.67)         # the slot between the lamps: half width, y0, y1
 TURN_F = (0.54, 0.68, 0.41, 0.49)   # amber blinkers on the bumper, beside the plate
 PLATES = {'plate_f': ('front', 0.445, 0.26, 0.055), 'plate_r': ('rear', 0.445, 0.26, 0.055)}   # 520 x 110, on the bumper bands
@@ -98,12 +99,12 @@ GHOST_DOOR = ('WALT\'S', 1.20)      # on the front door, from this s
 GHOST_QUARTER = ('GARAGE', 2.22)    # on the rear quarter
 GHOST_CELL = 0.0143                 # one cell of the 5 x 7 letters: 7 cells = 10 cm tall
 GHOST_PITCH = 0.09
-GHOST_SANDED = 0.40                 # this share of the cells is sanded away
+GHOST_SANDED = 0.44                 # this share of the cells is sanded away
 FLAP = (3.92, 0.795)                # fuel flap on the right rear quarter, over the strip
 DISC_R = 0.118                      # small solid front discs (the sheet)
 CALIPER_IN = 0.0185
 RAIL_LIFT = 0.012                   # the gutter rail's centre over the roof corner (was 8 mm: it cut 2 mm into the roof)
-RUST_CELL = 0.035                   # the rust bloom is laid in cells this big (each follows the skin's folds)
+RUST_CELL = 0.04                    # the rust bloom is laid in cells this big (each follows the skin's folds)
 RUST_IN = 0.014                     # from the arch lip's shelf outward (the shelf itself is bevelled)
 # the built skin a lamp, strip or foot is laid on: the common panels, the wagon's own doors and every glass
 # (the tail is mostly glass: a rear-view ray through it would land on the hood)

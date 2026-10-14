@@ -525,8 +525,9 @@ P7 = {
             's=1.05 with screen top s=1.55 over this bonnet gives 40 degrees.',
     'L': 4.30, 'WB': 2.60, 'OHf': 0.72, 'W': 1.74,
     'wheel': {'r': 0.305, 'w': 0.185, 'track': 1.46, 'arch_gap': 0.05, 'rim': 'steel', 'rim_ratio': 0.60},
-    # the nose face is 8 cm taller than the first build's (0.66): the lamps and grille sit on a face, not on the hood's roll
-    'top': [(0.0, 0.74), (0.05, 0.83), (0.14, 0.86), (1.05, 0.96), (1.55, 1.55), (4.22, 1.55), (4.27, 0.88), (4.30, 0.56)],
+    # the nose face is 4 cm taller than the first build's (0.66): the lamps and grille sit on a face, not on the hood's
+    # roll (8 cm made it an outline twin of the truck from a high front angle: tests/fleet/fleet_silhouette_sweep.gd)
+    'top': [(0.0, 0.70), (0.05, 0.80), (0.14, 0.86), (1.05, 0.96), (1.55, 1.55), (4.22, 1.55), (4.27, 0.88), (4.30, 0.56)],
     'floor': [(0, 0.34), (0.20, 0.16), (3.95, 0.16), (4.30, 0.30)],
     # pinched 2 cm at the doors: 0.85 there, 0.87 over the arches
     'hw': [(0, 0.74), (0.06, 0.83), (0.20, 0.87), (1.10, 0.87), (1.25, 0.85), (2.80, 0.85), (2.95, 0.87), (3.75, 0.87),

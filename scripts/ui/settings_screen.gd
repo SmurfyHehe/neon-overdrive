@@ -63,9 +63,12 @@ const GROUPS := [
 		["hyd_drop", "Lowrider: drop (hold + a pump key: that side, tap: all four)"],
 		["hyd_three", "Lowrider: three-wheel pose (tap on / off)"]]],
 	["Photo mode", [
-		["photo_mode", "Photo mode"], ["photo_forward", "Forward"], ["photo_back", "Back"],
-		["photo_left", "Left"], ["photo_right", "Right"], ["photo_down", "Down"], ["photo_up", "Up"],
-		["photo_fast", "Faster (hold)"], ["photo_look_left", "Look left"], ["photo_look_right", "Look right"],
+		["photo_mode", "Photo mode"], ["photo_orbit", "Orbit the car / fly free (tap)"],
+		["photo_forward", "Forward (orbit: closer)"], ["photo_back", "Back (orbit: further)"],
+		["photo_left", "Left (orbit: circle left)"], ["photo_right", "Right (orbit: circle right)"],
+		["photo_down", "Down"], ["photo_up", "Up"],
+		["photo_fast", "Faster (hold; with look keys: tilt the shot, with zoom keys: background blur)"],
+		["photo_look_left", "Look left"], ["photo_look_right", "Look right"],
 		["photo_look_up", "Look up"], ["photo_look_down", "Look down"], ["photo_fov_narrow", "Zoom in"],
 		["photo_fov_wide", "Zoom out"], ["photo_shot", "Save photo"]]],
 ]

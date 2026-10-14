@@ -20,7 +20,14 @@ extends SceneTree
 #   godot --headless --audio-driver Dummy --path . -s res://tests/car/hood_panel.gd
 
 const Harness := preload("res://tests/traffic/traffic_harness.gd")
-const CARS := ["p0_beater", "p1_coupe", "p2_hothatch", "p4_kei", "p5_muscle", "p7_wagon", "p8_driftcoupe", "p10_truck"]
+## Every playable car with a parts-built body (the sheet-only cars have no
+## hood to hang a sheet under yet); Roy's rule: a change loops over all of them.
+func _built_cars() -> Array[String]:
+	var out: Array[String] = []
+	for id in PlayerCars.ids():
+		if ResourceLoader.exists("res://assets/cars/%s/body.glb" % id):
+			out.append(id)
+	return out
 
 var logger := Harness.ErrorCounter.new()
 var fails := 0
@@ -79,7 +86,9 @@ func _under_y(car_id: String, part: String, z: float, _x: float) -> float:
 
 func _fit_checks() -> void:
 	var n := 0
-	for id in CARS:
+	var cars := _built_cars()
+	_check(cars.size() >= 8, "expected 8 or more parts-built cars, got %d" % cars.size())
+	for id in cars:
 		var hinges := CarAssembler.hinges(id)
 		if not hinges.has("hinge_hood"):
 			continue
@@ -107,6 +116,12 @@ func _fit_checks() -> void:
 	print("hood_panel: the sheet fits %d hoods" % n)
 
 func _dyno_checks() -> void:
+	# every playable car gets a sane sheet: an engine row, peaks, a tier
+	for id in PlayerCars.ids():
+		var sp := CarSpec.player_spec(id)
+		var dd := HoodPanel.dyno(sp, id)
+		_check(HoodPanel.ENGINES.has(id), "%s: no engine row for the sheet" % id)
+		_check(float(dd.peak_hp) > 30.0 and float(dd.peak_nm) > 50.0 and float(dd.peak_hp_rpm) >= float(dd.peak_nm_rpm) and String(dd.tier) != "", "%s: dyno %.0f hp @ %.0f, %.0f Nm @ %.0f, tier %s" % [id, float(dd.peak_hp), float(dd.peak_hp_rpm), float(dd.peak_nm), float(dd.peak_nm_rpm), String(dd.tier)])
 	var spec := CarSpec.player_spec("p1_coupe")
 	var d := HoodPanel.dyno(spec, "p1_coupe")
 	_check(d.rpm.size() == HoodPanel.CHART_N + 1, "49 samples, got %d" % d.rpm.size())

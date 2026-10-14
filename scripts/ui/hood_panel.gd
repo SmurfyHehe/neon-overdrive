@@ -58,6 +58,8 @@ const ENGINES := {
 	"p3_tuner": [2.5, "STRAIGHT SIX"], "p4_kei": [0.66, "TRIPLE"], "p5_muscle": [6.6, "PUSHROD V8"],
 	"p6_crossover": [2.5, "BOXER FOUR"], "p7_wagon": [1.8, "INLINE FOUR"], "p8_driftcoupe": [1.8, "INLINE FOUR"],
 	"p10_truck": [5.7, "PUSHROD V8"], "p17_work_pickup": [4.0, "V6"],
+	# story-end specials (they wear the coupe's spec until their own lands)
+	"m1_monster": [8.8, "BLOWN BIG-BLOCK V8"], "l1_lowrider": [5.7, "SMALL-BLOCK V8"],
 }
 
 const ROW_PATCH := 0

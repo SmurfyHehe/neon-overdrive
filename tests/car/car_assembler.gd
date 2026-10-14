@@ -74,8 +74,8 @@ func _initialize() -> void:
 	var centred := 0
 	for n in names:
 		var pname := String(n)
-		if pname in NOT_MIRRORED:
-			continue
+		if pname in NOT_MIRRORED or CarAssembler.is_bay_part(pname):
+			continue      # the engine bay (bay.glb) is one-sided like a real one: battery left, airbox right
 		var twin := pname.left(-1) + "l"
 		if pname.ends_with("l") and names.has(pname.left(-1) + "r"):
 			continue          # checked from its right-hand twin
@@ -183,7 +183,13 @@ func _initialize() -> void:
 			n_panels += 1
 	_check(n_panels == 4, "want 4 open panels, got %d" % n_panels)
 	_check(CarAssembler.draw_call_count(ID, {"panels": "open"}) == 8, "open should be 4 + 4 draw calls, got %d" % CarAssembler.draw_call_count(ID, {"panels": "open"}))
-	_check(CarAssembler._mesh_tris(open.mesh) + panel_tris == tris, "open body %d + panels %d should be the closed %d" % [CarAssembler._mesh_tris(open.mesh), panel_tris, tris])
+	# an open picture keeps the bay in the body (B0), the closed drive leaves it out
+	var bay_tris := 0
+	var bay_mesh := CarAssembler.build_bay(ID)
+	if bay_mesh != null:
+		bay_tris = CarAssembler._mesh_tris(bay_mesh.mesh)
+		bay_mesh.free()
+	_check(CarAssembler._mesh_tris(open.mesh) + panel_tris == tris + bay_tris, "open body %d + panels %d should be the closed %d + bay %d" % [CarAssembler._mesh_tris(open.mesh), panel_tris, tris, bay_tris])
 	var hood_top := _panel_aabb(open, "hinge_hood").end.y
 	_check(hood_top > CarAssembler.part_aabb(ID, "hood").end.y + 0.25, "the open hood should rise (top %.2f)" % hood_top)
 	var door_out := _panel_aabb(open, "hinge_door_r").end.x

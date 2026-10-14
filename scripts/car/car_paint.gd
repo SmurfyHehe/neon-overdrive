@@ -346,12 +346,17 @@ void fragment() {
 # chrome, plate, mirror glass, lamp lens on one surface). COLOR.a * 8 is the
 # class; chrome and the mirror glass show the city and the lamps.
 const _TRIM := """
-// roughness, metallic, specular per class: 1 plastic, 2 rubber, 3 chrome,
-// 4 plate, 5 mirror glass, 6 red lamp lens.
-const vec3 FINISH[8] = vec3[](vec3(0.6, 0.0, 0.5), vec3(0.55, 0.0, 0.5), vec3(0.9, 0.0, 0.3), vec3(0.2, 1.0, 0.5),
+// roughness, metallic, specular per class: 0 brushed alloy (the engine bay's
+// covers), 1 plastic, 2 rubber, 3 chrome, 4 plate, 5 mirror glass, 6 red lamp lens.
+const vec3 FINISH[8] = vec3[](vec3(0.42, 0.85, 0.5), vec3(0.55, 0.0, 0.5), vec3(0.9, 0.0, 0.3), vec3(0.2, 1.0, 0.5),
 	vec3(0.45, 0.0, 0.5), vec3(0.06, 1.0, 0.5), vec3(0.12, 0.0, 0.8), vec3(0.6, 0.0, 0.5));
 // How strongly the trim mirrors the street (1 = as designed).
 uniform float trim_shine = 1.0;
+// Engine bay grime (car_dirt.gd bay_level, engine bays 2e): 0 clean .. 1 a
+// bay nobody has opened all season. Set per mesh (the Bay mesh only), 0 on
+// every other trim, so a clean car pays one branch. Dust settles on the
+// flat tops first; later an oily film darkens the sides and undersides.
+instance uniform float grime : hint_range(0.0, 1.0), instance_index(6) = 0.0;
 varying vec2 ao_shut;
 varying flat vec3 trim_fin;
 void vertex() {
@@ -371,6 +376,17 @@ void fragment() {
 	ROUGHNESS = trim_fin.x;
 	METALLIC = trim_fin.y;
 	SPECULAR = trim_fin.z;
+	if (grime > 0.0) {
+		float up = max(obj_nrm.y, 0.0);
+		float n = soft_noise(obj_pos * 23.0) * 0.6 + soft_noise(obj_pos.zxy * 71.0) * 0.4;
+		float dust = clamp(grime * (0.55 + 0.75 * up) - 0.35 * n, 0.0, 1.0);
+		float film = clamp(grime * 1.3 - 0.5 - 0.3 * n, 0.0, 1.0) * (1.0 - up);
+		ALBEDO = mix(ALBEDO, vec3(0.19, 0.165, 0.13) * (0.7 + 0.5 * n) * shade, dust * 0.85);
+		ALBEDO = mix(ALBEDO, ALBEDO * 0.45 + vec3(0.03, 0.025, 0.02), film);
+		ROUGHNESS = mix(ROUGHNESS, 0.95, dust);
+		ROUGHNESS = mix(ROUGHNESS, 0.25, film * 0.6);
+		METALLIC *= 1.0 - dust;
+	}
 #ifdef PANO
 	vec3 n = normalize((INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	vec3 v = normalize(CAMERA_POSITION_WORLD - w_pos);

@@ -9,6 +9,11 @@ extends CanvasLayer
 # closes by itself. Esc leaves early and keeps whatever grime is left, so a
 # half wash is a half-clean car.
 #
+# With the body clean a second page opens the hood (engine bays 2e, Roy 1509):
+# the bay from above, its own grime (CarDirt.bay_level, half the body's rate),
+# the same sponge. CLEAN there closes the wash; Esc keeps what is left in the
+# bay too. A car with a clean body and a dirty bay goes straight to the bay.
+#
 # Opened from the garage ("Wash car") through GameState.open_wash; Esc or a clean
 # car goes back to the garage. Keys are InputMap actions
 # (wash_up and friends, registered here like photo mode's) so the Controls page
@@ -24,6 +29,10 @@ const AMBER := Color("#FFC066")
 const SODIUM := Color("#FF8A1F")
 const GRIME := Color("#4A3F31")
 const PAINT := Color("#FF8A1F")
+const BAY_FLOOR := Color("#2A2E36")
+const ENGINE := Color("#8A9097")
+const PAGE_BODY := "body"
+const PAGE_BAY := "bay"
 
 const CLEAN_HOLD_SECS := 0.9
 
@@ -40,10 +49,12 @@ class Model:
 	var start := 0.0               # mean grime at the start, for the progress bar
 	var sponge := Vector2(COLS / 2.0, ROWS / 2.0)
 	var done := false
+	var page := PAGE_BODY
 
-	func _init(level: float, seed: int = 1) -> void:
+	func _init(level: float, seed: int = 1, which: String = PAGE_BODY) -> void:
 		var rng := RandomNumberGenerator.new()
 		rng.seed = seed
+		page = which
 		cells.resize(COLS * ROWS)
 		mask.resize(COLS * ROWS)
 		var n := 0
@@ -51,7 +62,7 @@ class Model:
 		for r in ROWS:
 			for c in COLS:
 				var i := r * COLS + c
-				mask[i] = 1 if _inside(c, r) else 0
+				mask[i] = 1 if (_inside_bay(c, r) if page == PAGE_BAY else _inside(c, r)) else 0
 				if mask[i] == 1:
 					cells[i] = clampf(level * rng.randf_range(0.7, 1.0), 0.0, 1.0)
 					total += cells[i]
@@ -71,6 +82,13 @@ class Model:
 		elif y > 0.9:
 			half_w = lerpf(0.72, 0.5, (y - 0.9) / 0.1)
 		return absf(x) <= half_w
+
+	## The engine bay with the hood up, seen from above: the tub between the
+	## inner fenders, radiator at the top, firewall at the bottom.
+	static func _inside_bay(c: int, r: int) -> bool:
+		var x := (c + 0.5) / COLS * 2.0 - 1.0
+		var y := (r + 0.5) / ROWS
+		return absf(x) <= 0.78 and y >= 0.10 and y <= 0.90
 
 	## Mean grime left on the car, 0..1.
 	func remaining() -> float:
@@ -164,26 +182,53 @@ func _find_dirt() -> CarDirt:
 
 func _open() -> void:
 	_dirt = _find_dirt()
-	var level := _dirt.level if _dirt != null else 0.0
-	model = Model.new(level, int(Time.get_ticks_msec()))
 	active = true
 	_clean_t = -1.0
+	var level := _dirt.level if _dirt != null else 0.0
+	var bay := _dirt.bay_level if _dirt != null else 0.0
+	# a clean body with a dirty bay goes straight to the bay page
+	_start_page(PAGE_BAY if level <= Model.DONE_AT and bay > Model.DONE_AT else PAGE_BODY)
 	if model.done:
 		_finish()
+
+func _start_page(page: String) -> void:
+	var level := 0.0
+	if _dirt != null:
+		level = _dirt.bay_level if page == PAGE_BAY else _dirt.level
+	model = Model.new(level, int(Time.get_ticks_msec()), page)
+	_clean_t = -1.0
+
+## The page being scrubbed: "body" or "bay".
+func page() -> String:
+	return model.page if model != null else PAGE_BODY
 
 ## Esc (GameState.close_wash) or the car coming up clean: keep what is left.
 func _close() -> void:
 	if _dirt != null and model != null:
-		_dirt.set_level(0.0 if model.done else model.remaining())
+		var left := 0.0 if model.done else model.remaining()
+		if model.page == PAGE_BAY:
+			_dirt.set_bay_level(left)
+		else:
+			_dirt.set_level(left)
 		_dirt.save_state()
 	active = false
 
 func _finish() -> void:
 	model.done = true
 	if _dirt != null:
-		_dirt.set_level(0.0)
+		if model.page == PAGE_BAY:
+			_dirt.set_bay_level(0.0)
+		else:
+			_dirt.set_level(0.0)
 		_dirt.save_state()
 	_clean_t = CLEAN_HOLD_SECS
+
+## After CLEAN on the body: the bay page if the bay needs it, else out.
+func _after_clean() -> void:
+	if model.page == PAGE_BODY and _dirt != null and _dirt.bay_level > Model.DONE_AT:
+		_start_page(PAGE_BAY)
+		return
+	game_state.close_wash()
 
 func _process(delta: float) -> void:
 	if not active or model == null:
@@ -191,7 +236,7 @@ func _process(delta: float) -> void:
 	if _clean_t >= 0.0:
 		_clean_t -= delta
 		if _clean_t < 0.0:
-			game_state.close_wash()
+			_after_clean()
 		_view.queue_redraw()
 		return
 	var dir := Vector2(
@@ -225,27 +270,33 @@ class View:
 		var vp := get_viewport_rect().size
 		draw_rect(Rect2(Vector2.ZERO, vp), NAVY)
 		var font := UiTheme.font("menu")
-		var title := "GARAGE WASH"
+		var bay := m.page == PAGE_BAY
+		var title := "ENGINE BAY" if bay else "GARAGE WASH"
 		draw_string(font, Vector2(vp.x / 2.0 - font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 28).x / 2.0, 54.0), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 28, AMBER)
 
 		var cell := minf((vp.y - 160.0) / Model.ROWS, (vp.x * 0.6) / Model.COLS)
 		var origin := Vector2(vp.x / 2.0 - Model.COLS * cell / 2.0, 80.0)
-		# Floor slab under the car.
-		draw_rect(Rect2(origin - Vector2(cell * 2.0, cell * 2.0), Vector2((Model.COLS + 4) * cell, (Model.ROWS + 4) * cell)), NAVY_LIGHT)
+		# Floor slab under the car; on the bay page the fenders round the tub.
+		draw_rect(Rect2(origin - Vector2(cell * 2.0, cell * 2.0), Vector2((Model.COLS + 4) * cell, (Model.ROWS + 4) * cell)), PAINT if bay else NAVY_LIGHT)
 		for r in Model.ROWS:
 			for c in Model.COLS:
 				var i := r * Model.COLS + c
 				if m.mask[i] == 0:
 					continue
 				var p := origin + Vector2(c, r) * cell
-				draw_rect(Rect2(p, Vector2(cell, cell)), PAINT)
+				draw_rect(Rect2(p, Vector2(cell, cell)), BAY_FLOOR if bay else PAINT)
 				var g: float = m.cells[i]
 				if g > 0.003:
 					draw_rect(Rect2(p, Vector2(cell, cell)), Color(GRIME.r, GRIME.g, GRIME.b, clampf(g * 0.95, 0.0, 0.95)))
-		# Windscreen and rear glass, so it reads as a car.
 		var glass := Color(SILVER.r, SILVER.g, SILVER.b, 0.35)
-		draw_rect(Rect2(origin + Vector2(4.0, 13.0) * cell, Vector2(Model.COLS - 8.0, 5.0) * cell), glass)
-		draw_rect(Rect2(origin + Vector2(5.0, 30.0) * cell, Vector2(Model.COLS - 10.0, 4.0) * cell), glass)
+		if bay:
+			# The engine down the middle, the radiator across the top, so it reads as a bay.
+			draw_rect(Rect2(origin + Vector2(8.0, 14.0) * cell, Vector2(Model.COLS - 16.0, 22.0) * cell), Color(ENGINE.r, ENGINE.g, ENGINE.b, 0.5))
+			draw_rect(Rect2(origin + Vector2(4.0, 6.0) * cell, Vector2(Model.COLS - 8.0, 3.0) * cell), glass)
+		else:
+			# Windscreen and rear glass, so it reads as a car.
+			draw_rect(Rect2(origin + Vector2(4.0, 13.0) * cell, Vector2(Model.COLS - 8.0, 5.0) * cell), glass)
+			draw_rect(Rect2(origin + Vector2(5.0, 30.0) * cell, Vector2(Model.COLS - 10.0, 4.0) * cell), glass)
 		# Sponge.
 		var sp := origin + m.sponge * cell
 		var sr := Model.SPONGE_R * cell

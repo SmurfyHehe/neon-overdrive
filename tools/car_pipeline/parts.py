@@ -97,6 +97,9 @@ COLOURS = {
     'paint_rust': None,
     'paint_bondo': None,
     'steel': '#4A4E55',            # drums, discs, axles, engine castings
+    # the engine bay (bay_kit.py): dark castings and brushed alloy covers
+    'cast': '#2F3338',
+    'alloy': '#8A9097',
     'rim': None,                   # the wheel's own rim colour
 }
 # parts-build material -> the fleet colour it takes when COLOURS has None

@@ -78,6 +78,7 @@ func _run() -> void:
 	_check(is_equal_approx(float(mat.get_shader_parameter("dirt")), left), "uniform after a part wash: %s" % str(mat.get_shader_parameter("dirt")))
 
 	# --- full wash ---
+	dirt.set_bay_level(0.0)   # a dirty bay would be the wash's second page (tests/car/bay_dirt.gd)
 	gs.open_wash()
 	_check(gs.state == GameState.State.WASH and screen.active, "open_wash from the road")
 	var m := screen.model

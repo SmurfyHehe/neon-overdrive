@@ -181,7 +181,7 @@ static func car_state(p: Node3D) -> Dictionary:
 const MANUAL_NEUTRAL_SPEED := 3.0
 
 ## The state of the car you are in: {"car": id, "wear", "damage", "fuel",
-## "dirt"}. {} for a car that is not one of the player's (the test car).
+## "dirt", "bay_dirt"}. {} for a car that is not one of the player's (the test car).
 func car_live() -> Dictionary:
 	var p: Node3D = game.player
 	var kind := PlayerCar.chassis_kind()
@@ -191,6 +191,7 @@ func car_live() -> Dictionary:
 	var fx: Variant = game.get("fx")
 	if fx != null and fx.get("dirt") != null:
 		live.dirt = fx.dirt.level
+		live.bay_dirt = fx.dirt.bay_level
 	return live
 
 ## Puts the car's motion back once it is in the tree (Vehicle._ready has run).

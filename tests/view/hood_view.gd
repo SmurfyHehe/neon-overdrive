@@ -46,9 +46,13 @@ func _initialize() -> void:
 	root.size = Vector2i(1280, 720)   # headless defaults to 64x64
 	_run.call_deferred()
 
+## n frames' worth of look time at 60 fps, as wall-clock seconds: the head
+## turns by real time (ChaseCamera.LOOK_RATE is per second), and headless draws
+## frames as fast as the box allows (7 ms each here, so 60 frames were 0.41 s
+## and Left held read 87.8 deg, not 90; issue #769).
 func _frames(n: int) -> void:
-	for i in n:
-		await process_frame
+	await create_timer(float(n) / 60.0).timeout
+	await process_frame
 
 ## A key press seen by the camera's physics poll (just_pressed), then released.
 func _tap(action: String) -> void:

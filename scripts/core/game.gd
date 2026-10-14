@@ -156,6 +156,10 @@ var _change_waits := false
 var _weather_seen := -1
 var _wet_pinned := false
 const StreetAnimals := preload("res://scripts/world/street_animals.gd")
+const FloodLights := preload("res://scripts/world/flood_lights.gd")
+const Sprinklers := preload("res://scripts/world/sprinklers.gd")
+const RoadsideKit := preload("res://scripts/world/roadside_kit.gd")
+const SeasonCalendar := preload("res://scripts/world/season_calendar.gd")
 const TunnelAudio := preload("res://scripts/audio/tunnel_audio.gd")
 var road_seed := 0
 var run := {}
@@ -255,6 +259,8 @@ func _ready() -> void:
 	add_child(night_clock)
 	if run.get("clock") is Dictionary:
 		night_clock.set_time(run.clock.get("minutes", 0.0), run.clock.get("night", 1))
+	# bin night: the kerb fills with wheelie bins one weekday a week (street life L7)
+	RoadsideKit.bin_night = SeasonCalendar.weekday(night_clock.night) == RoadsideKit.BIN_WEEKDAY
 	wallet = Wallet.new()
 	wallet.name = "Wallet"
 	add_child(wallet)
@@ -1143,6 +1149,7 @@ func _setup_game_state() -> void:
 	game_state.quitting.connect(saver.on_quit)
 	# 6 a.m.: tonight's cash goes into the bank (F0).
 	night_clock.night_ended.connect(func(n: int) -> void: wallet.bank_night(n))
+	night_clock.night_ended.connect(func(n: int) -> void: RoadsideKit.bin_night = SeasonCalendar.weekday(n + 1) == RoadsideKit.BIN_WEEKDAY)
 	night_clock.night_ended.connect(func(_n: int) -> void: CabinDirt.night_ended(PlayerCar.chassis_kind()))   # the cabin gets lived in
 	night_clock.night_ended.connect(func(_n: int) -> void: saver.save_now.call_deferred())
 	night_clock.night_ended.connect(game_state.request_dawn)   # after the bank, so the card shows it
@@ -1422,3 +1429,6 @@ func _process(delta: float) -> void:
 	# eyes in the headlights (world step 6, A1): one angle check per animal
 	# on the chunks round the car
 	StreetAnimals.step(chunk_pool, player, delta)
+	# security floodlights snapping on as the car passes, sprinklers by the clock (street life L6, L9)
+	FloodLights.step(chunk_pool, player, delta)
+	Sprinklers.set_clock(night_clock.minutes)

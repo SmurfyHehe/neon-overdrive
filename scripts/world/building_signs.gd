@@ -89,7 +89,16 @@ varying vec4 cd;
 void vertex() {
 	lpos = VERTEX;
 	lnrm = NORMAL;
-	cd = INSTANCE_CUSTOM;  // x: word row, y: word width px, z: colour, w: style (0 lit letters, 1 lit panel, 2 dim floodlit billboard letters)
+	cd = INSTANCE_CUSTOM;  // x: word row, y: word width px, z: colour, w: style + 4 * (dead letter + 1) + 64 * buzzing (see place())
+}
+
+float hash1(float n) { return fract(sin(n) * 43758.5453); }
+// a dying tube: fast jitter between a third and full, out for a beat now
+// and then (the same buzz as a street lamp's bad ballast, lamp_wear.gd)
+float buzz(float t, float phase) {
+	float fast = hash1(floor(t * 20.0) + phase * 97.0);
+	float beat = hash1(floor(t * 0.6 + phase) + phase * 31.0);
+	return step(0.35, beat) * mix(0.3, 1.0, fast);
 }
 
 void fragment() {
@@ -108,8 +117,17 @@ void fragment() {
 		vec2 auv = vec2(clamp(px, 0.0, cd.y - 0.01) / atlas_w, (cd.x * 9.0 + py) / (rows * 9.0));
 		float glyph = texture(words, auv).r * inside;
 		vec3 col = colors[int(cd.z)];
-		float lit = (cd.w > 0.5 && cd.w < 1.5) ? (1.0 - glyph) * 0.75 : glyph;
-		if (cd.w > 1.5) { lit *= 0.45; }
+		float w = cd.w;
+		float buzzing = floor(w / 64.0);
+		w -= buzzing * 64.0;
+		float dead = floor(w / 4.0) - 1.0;   // letter index, -1 none
+		float style = w - (dead + 1.0) * 4.0;
+		float lit = (style > 0.5 && style < 1.5) ? (1.0 - glyph) * 0.75 : glyph;
+		if (style > 1.5) { lit *= 0.45; }
+		if (dead >= 0.0 && abs(floor(px / 6.0) - dead) < 0.5 && inside > 0.5) {
+			// one dead or dying letter (street life L8)
+			lit *= buzzing > 0.5 ? buzz(TIME, dead * 0.173 + cd.x * 0.011) : 0.0;
+		}
 		ALBEDO = mix(metal, col * 0.3, lit);
 		EMISSION = col * lit * energy;
 	}
@@ -196,8 +214,41 @@ static func place(mm: MultiMesh, i: int, word: String, color: int, style: int, f
 	var basis := turn * Basis.from_scale(Vector3(depth, height, length))
 	var xf := Transform3D(basis, center)
 	mm.set_instance_transform(i, xf)
-	mm.set_instance_custom_data(i, Color(float(word_row(word)), float(px), float(color), float(style)))
+	mm.set_instance_custom_data(i, Color(float(word_row(word)), float(px), float(color), float(encode_style(style, dead_letter(word, style, front)))))
 	return xf
+
+## Dead letters (street life L8): DEAD_SHARE % of lit signs have one letter
+## out, half of those buzzing instead. A hash of the word and where it
+## hangs, so a pooled chunk rebuilt later matches a fresh one. Returns
+## [letter index or -1, buzzing]. Billboards (style 2) are floodlit paint:
+## never.
+const DEAD_SHARE := 12
+static var dead_letters := OS.get_environment("NEON_DEAD_LETTERS") != "0"
+
+static func dead_letter(word: String, style: int, front: Vector3) -> Array:
+	if not dead_letters or style > 1 or word.length() < 2:
+		return [-1, false]
+	var r := posmod(hash([word, snappedf(front.x, 0.01), snappedf(front.z, 0.01), "dead letter"]), 1000)
+	if r >= DEAD_SHARE * 10:
+		return [-1, false]
+	var li := posmod(hash([word, snappedf(front.z, 0.01), "which letter"]), word.length())
+	if word[li] == " ":
+		li = 0
+	return [li, r % 2 == 0]
+
+## Custom data w: style + 4 * (dead letter + 1) + 64 * buzzing.
+static func encode_style(style: int, dead: Array) -> int:
+	return style + 4 * (int(dead[0]) + 1) + (64 if bool(dead[1]) else 0)
+
+static func style_of(w: float) -> int:
+	var v := int(w) % 64
+	return v % 4
+
+static func dead_of(w: float) -> int:
+	return (int(w) % 64) / 4 - 1
+
+static func buzzing_of(w: float) -> bool:
+	return int(w) >= 64
 
 static func atlas() -> ImageTexture:
 	if _atlas == null:

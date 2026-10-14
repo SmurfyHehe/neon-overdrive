@@ -115,6 +115,8 @@ const RoadRamps := preload("res://scripts/world/road_ramps.gd")
 const StreetAnimals := preload("res://scripts/world/street_animals.gd")
 const LampWear := preload("res://scripts/world/lamp_wear.gd")
 const WallVents := preload("res://scripts/world/wall_vents.gd")
+const FloodLights := preload("res://scripts/world/flood_lights.gd")
+const Sprinklers := preload("res://scripts/world/sprinklers.gd")
 const TunnelKit := preload("res://scripts/world/tunnel_kit.gd")
 
 const LANE_W := 3.2
@@ -2236,6 +2238,9 @@ static func _create_nodes(root: Node3D) -> void:
 		root.add_child(n)
 	root.add_child(StreetAnimals.new_multimesh())
 	root.add_child(WallVents.new_multimesh())
+	for fl in FloodLights.new_nodes():
+		root.add_child(fl)
+	root.add_child(Sprinklers.new_multimesh())
 	# Per side: a gap either side of each building, +1 for the district step
 	# wall, +1 more
 	# where a crossing's mouth (Junction) splits a gap in two
@@ -2564,6 +2569,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var verge := not bool(sec1.kerb)
 	var all_types := drop_types.has("*")
 	var pave_tops := {}  # side -> [hs, ts]: the pavement's drawn top, for StreetAnimals
+	var park_clear := {1: [], -1: []}  # z runs [hi, lo] no parked car may stand in (street life L5)
 	for side in [1, -1]:
 		var drops: Array = []
 		var paint: Array = []
@@ -2592,6 +2598,10 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 				hydrant_ok = false
 		if hydrant_ok:
 			paint.append([hz, PAINT_HALF])
+		for d in drops:  # crossings, driveways, mouths and junction: no car across a dropped kerb
+			park_clear[side].append([float(d[0]) + float(d[1]) + DROP_RAMP, float(d[0]) - float(d[1]) - DROP_RAMP])
+		for pt in paint:  # nor on hydrant or junction paint
+			park_clear[side].append([float(pt[0]) + float(pt[1]), float(pt[0]) - float(pt[1])])
 		var ts := _kerb_rows(drops, paint)
 		var ds := _kerb_heights(drops, ts)
 		var cols := _kerb_colours(paint, ts)
@@ -2808,6 +2818,10 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	StreetAnimals.update(root, chunk_index, infos, mouths, [start_own_walk, end_own_walk, start_onc_walk, end_onc_walk], setback, pave_tops)
 	# wall vents steaming on shop and warehouse fronts (street life L4)
 	WallVents.update(root, chunk_index, district_name, infos)
+	# security floodlights that snap on as the car passes (street life L6)
+	FloodLights.update(root, chunk_index, district_name, infos, [start_own_walk, end_own_walk, start_onc_walk, end_onc_walk])
+	# lawn sprinklers in the dead hours (street life L9)
+	Sprinklers.update(root, chunk_index, district_name, [start_own_walk, end_own_walk, start_onc_walk, end_onc_walk], covered)
 
 	if job != null:
 		job.keep(_curve_k, _vert, _strip_n)
@@ -2825,7 +2839,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var lots := {1: [], -1: []}
 	for info in infos:
 		lots[int(info.side)].append([float(info.z), (BUILDING_SPACING * 0.6) if info.empty else float(info.d)])
-	Kit.apply(root, chunk_index, kit_edges, setback, lamp_zs, lots, dip != RoadMap.DIP_NONE)
+	Kit.apply(root, chunk_index, kit_edges, setback, lamp_zs, lots, dip != RoadMap.DIP_NONE, park_clear)
 	# The kit's own small pieces (slot = order within the kind, as it lays
 	# them), the name sign's foot, then the record goes on the chunk.
 	var kit_slot := {}

@@ -128,7 +128,7 @@ func _check_chunk(chunk: Node3D, idx: int, label: String) -> void:
 		var row := int(cd.r)
 		var px := int(cd.g)
 		var color := int(cd.b)
-		var style := int(cd.a)
+		var style := Signs.style_of(cd.a)  # w also carries a dead letter (street life L8)
 		var billboard := i >= signs_used
 		var kind := "billboard" if billboard else "sign"
 		var word: String = words[row] if row >= 0 and row < words.size() else "?"

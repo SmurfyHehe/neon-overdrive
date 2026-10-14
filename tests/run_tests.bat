@@ -126,8 +126,8 @@ call :run view/chase_orbit "--headless --fixed-fps 60"
 call :run view/hood_view "--headless --fixed-fps 60"
 call :run view/cockpit_horizon --headless
 call :run view/cockpit_eye_inside --headless
-rem mirrors you can read (2026-10-14): the rearview glass on screen in every car
-for %%c in (p0_beater p1_coupe p2_hothatch p7_wagon p3_tuner p4_kei p5_muscle p6_crossover p17_work_pickup p8_driftcoupe p10_truck) do (
+rem mirrors you can read (2026-10-14): the rearview glass on screen in every car, the specials included
+for %%c in (p0_beater p1_coupe p2_hothatch p7_wagon p3_tuner p4_kei p5_muscle p6_crossover p17_work_pickup p8_driftcoupe p10_truck m1_monster l1_lowrider) do (
 	set "NEON_CAR=%%c"
 	call :run view/mirror_readable --headless
 )

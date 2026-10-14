@@ -70,6 +70,24 @@ rearview's new place (coupe: 8 cm forward and down, onto the windscreen), the
 size of cars in the glass, and the Low tier's 20 Hz glass at the laptop's frame
 rate; the chase view's 480x144 strip and the cop warning beside it with a chase on. No cloud screenshots: headless Godot has no renderer.
 
+## 6. Reach (rule 1566, 2026-10-14): what the change must touch, and did
+
+| Where | Reached by | Checked by |
+|---|---|---|
+| 11 playable cars + monster truck + lowrider (borrow the coupe cabin) | `CabinSpec.for_kind` fits every cabin | `view/mirror_readable` looped over all 13 in `run_tests.bat` |
+| NPC / traffic / cop cars | not applicable: no cockpit, no mirrors rendered; they appear *in* the glass, which the fit rule does not change | `fleet/interior_unique` still passes |
+| Cockpit view (mirrors on) | glass fitted, cameras 14/22, tier cadence | `mirror_readable` |
+| Chase and hood views (rear strip) | strip 480x144 drawn 1:1, rear renders at strip size | `mirror_readable` strip check |
+| Photo mode, garage, title, pause orbit | no mirrors or strip there (set_active only in cockpit, strip only outside it) | unchanged |
+| Cop warning (HeatIcons), warning lights, info line | icon left of the strip; warning lights inset 330 (was 400, which started on the strip at 1280x720); info line measured against the icon | `mirror_readable` loops `DisplaySettings.RESOLUTIONS` (1280x720 .. 2560x1440) |
+| Graphics tiers Low / Medium / High, mirrors / rear_strip toggles | `FxSettings.mirror_period` 3/2/1, scale 1/1/2 | `mirror_readable` tier checks |
+| Modes (free, story, menu) | HUD and cockpit are mode-independent | - |
+
+Missed before this check: the two specials were not in the test loop, and the
+warning-lights row overlapped the wider strip at 1280x720 (the default windowed
+size). Both fixed in PR 741. Still open: right door mirror off screen (#743),
+look back (#742, camera thread), door glass angles per car (#688).
+
 ## Steelman / premortem
 
 Steelman: the mirrors already render the right thing; they fail on geometry

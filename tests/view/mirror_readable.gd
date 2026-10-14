@@ -14,7 +14,8 @@ extends "res://tests/view/parked_cockpit.gd"
 #   wide); every tier keeps the base render size, only high doubles it
 # - the police heat icon (HeatIcons) covers neither the rearview glass in the
 #   cockpit nor the chase view's rear strip (Roy, 2026-10-14: it blocked the
-#   mirror at top centre)
+#   mirror at top centre); the warning lights and the info line stay off both
+#   at every window size on the Display page (1280x720 up to 2560x1440)
 # - the chase view's rear strip (480x144, Roy 1552) is drawn 1:1: the rear
 #   renders at the strip's size while only the strip shows it
 # Exit code 1 on failure. Run (once per car):
@@ -59,16 +60,42 @@ func _step(n: int) -> bool:
 	# the cameras and the tiers
 	_check(absf(rear.cam.fov - 14.0) < 0.01, "rear mirror camera 14 deg vertical (%.1f)" % rear.cam.fov)
 	_check(absf(mirrors.views[1].cam.fov - 22.0) < 0.01, "door mirror camera 22 deg vertical (%.1f)" % mirrors.views[1].cam.fov)
-	# the cop warning stays off the glass and off the strip
-	# the game's window (headless viewports are tiny)
-	var vp := Vector2(float(ProjectSettings.get_setting("display/window/size/viewport_width", 1920)), float(ProjectSettings.get_setting("display/window/size/viewport_height", 1080)))
+	# the cop warning stays off the glass and off the strip, and the rest of the top
+	# row (warning lights top right, the info line top left) stays off both, at
+	# every window size the Display page offers (fullscreen = the screen's size;
+	# the smallest, 1280x720, is the tight one). Headless viewports are tiny, so
+	# the window sizes come from DisplaySettings.RESOLUTIONS.
 	var io := HeatIcons.icon_offset()
-	var icon := Rect2(Vector2(0.5 + io.x / vp.x, io.y / vp.y), Vector2(HeatIcons.ICON_SIZE.x / vp.x, (HeatIcons.ICON_SIZE.y + 10.0) / vp.y))
 	var glass := Rect2(Vector2(r.rect[0], r.rect[1]), Vector2(r.rect[2] - r.rect[0], r.rect[3] - r.rect[1]))
-	var strip := Rect2(Vector2(0.5 - (Hud.STRIP_SIZE.x * 0.5 + Hud.STRIP_BORDER) / vp.x, Hud.STRIP_TOP / vp.y), Vector2((Hud.STRIP_SIZE.x + 2.0 * Hud.STRIP_BORDER) / vp.x, (Hud.STRIP_SIZE.y + 2.0 * Hud.STRIP_BORDER) / vp.y))
-	_check(not icon.intersects(glass), "%s: the heat icon %s stays off the rearview glass %s" % [kind, icon, glass])
-	_check(not icon.intersects(strip), "the heat icon %s stays off the rear strip %s" % [icon, strip])
-	_check(icon.position.x >= 0.0 and icon.end.y <= 1.0, "the heat icon is on screen (%s)" % icon)
+	var game := current_scene
+	var hud: Hud = null
+	var lights: WarningLights = null
+	for c in game.get_children():
+		if c is Hud:
+			hud = c
+		elif c is WarningLights:
+			lights = c
+	_check(hud != null and lights != null, "the HUD and the warning lights are in the scene")
+	var info_w := 0.0
+	if hud != null:
+		hud.lbl_info.text = "cockpit cam · 16 cars (16 full-sim)"
+		info_w = hud.lbl_info.position.x + hud.lbl_info.get_minimum_size().x
+	var row_w := 0.0
+	if lights != null:
+		for lamp in lights.row.get_children():
+			lamp.visible = true
+		row_w = lights.row.get_combined_minimum_size().x
+		_check(row_w + 8.0 <= WarningLights.ROW_INSET, "all five warning lights fit inside their %d px inset (%.0f)" % [WarningLights.ROW_INSET, row_w])
+	for res in DisplaySettings.RESOLUTIONS:
+		var vp := Vector2(res)
+		var icon := Rect2(Vector2(0.5 + io.x / vp.x, io.y / vp.y), Vector2(HeatIcons.ICON_SIZE.x / vp.x, (HeatIcons.ICON_SIZE.y + 10.0) / vp.y))
+		var strip := Rect2(Vector2(0.5 - (Hud.STRIP_SIZE.x * 0.5 + Hud.STRIP_BORDER) / vp.x, Hud.STRIP_TOP / vp.y), Vector2((Hud.STRIP_SIZE.x + 2.0 * Hud.STRIP_BORDER) / vp.x, (Hud.STRIP_SIZE.y + 2.0 * Hud.STRIP_BORDER) / vp.y))
+		_check(not icon.intersects(glass), "%s at %s: the heat icon %s stays off the rearview glass %s" % [kind, res, icon, glass])
+		_check(not icon.intersects(strip), "at %s the heat icon %s stays off the rear strip %s" % [res, icon, strip])
+		_check(icon.position.x >= 0.0 and icon.end.y <= 1.0, "at %s the heat icon is on screen (%s)" % [res, icon])
+		var lights_left := (vp.x - WarningLights.ROW_INSET) / vp.x
+		_check(lights_left >= strip.end.x + 8.0 / vp.x, "at %s the warning lights (from %.3f) start right of the rear strip (ends %.3f)" % [res, lights_left, strip.end.x])
+		_check(info_w / vp.x <= icon.position.x, "at %s the info line (%.0f px) ends left of the heat icon (%.0f px)" % [res, info_w, icon.position.x * vp.x])
 	# the chase view's strip is drawn 1:1: the rear renders at the strip's size there
 	_check(rear.vp.size == CockpitMirrors._scaled(CockpitMirrors.REAR_SIZE), "in the cockpit the rear renders at the glass size (%s)" % rear.vp.size)
 	mirrors.set_active(false)

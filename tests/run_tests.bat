@@ -99,6 +99,8 @@ call :run fleet/car_parts_kits --headless
 rem Engine bays B0 (#642, #644): bay parts out of the driving body, and nothing on a car from parts clashes (bay, lids, doors, glass).
 call :run car/engine_bay_budget --headless
 call :run car/part_fit --headless
+rem Engine bays B1+B2: the hood and trunk open on Y when stopped, the bay-view camera, hazards.
+call :run car/car_lids --headless
 call :run audio/exhaust_tune --headless
 call :run audio/exhaust_pops --headless
 rem Engine loops: baked rpm x load bank is seamless, the player stays under its voice cap and never swaps a stream under a sounding voice, events stay live, in-game hand-over.
@@ -570,6 +572,7 @@ call :run core/settings_safety --headless
 call :run fleet/car_parts_kits --headless
 call :run car/engine_bay_budget --headless
 call :run car/part_fit --headless
+call :run car/car_lids --headless
 call :run tuning/auto_tune_rules --headless
 call :run ui/fonts --headless
 call :run ui/key_map --headless

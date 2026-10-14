@@ -387,6 +387,10 @@ func _ready() -> void:
 		# and the undercarriage's Low-preset switch. After CarFx, so the node
 		# finds the underside on its layer.
 		CarDetail.of(self)
+		# The hood and trunk on Y (engine bays B1): after CarDetail and
+		# CarLamps, which it drives.
+		if kind != TestCarBuilder.KIND:
+			CarLids.attach(self)
 		beams.attach(get_node_or_null("Headlights") as SpotLight3D)
 
 ## Exhaust heat 0..1 for the heat shimmer (HeatShimmer.next_heat), stepped each tick.
@@ -737,6 +741,8 @@ const KEY_GEARBOX := 512
 const KEY_REVERSE := 1024
 ## The keys applied on the last tick; -1 when a driver set the pedals itself.
 var last_keys := 0
+## True while a hood or trunk is up (CarLids): the car sits on the handbrake.
+var lid_open := false
 
 static func read_keys() -> int:
 	var k := 0
@@ -809,7 +815,7 @@ func apply_keys(k: int) -> void:
 
 	throttle_input = 1.0 if throttle else 0.0
 	brake_input = 1.0 if braking else 0.0
-	handbrake_input = 1.0 if handbrake else 0.0
+	handbrake_input = 1.0 if handbrake or lid_open else 0.0
 	# BUG FIX (2026-09-13, Roy: "controls are still backwards w/d" -- verified
 	# headless): steering_input=+1 (D) actually yawed the chassis LEFT (rotation.y
 	# went positive, which rotates the -Z nose toward -X, the car's own left) and

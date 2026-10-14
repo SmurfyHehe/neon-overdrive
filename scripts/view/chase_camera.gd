@@ -171,6 +171,16 @@ var _look_focus := 0               # door mirror the head is turned to (-1 left,
 ## swaps to the camera on the roof, which looks straight back while held and
 ## ignores the arrows. The points are CabinSpec.hood_cam / roof_back_cam.
 const HOOD_YAW_MAX := 90.0
+## The bay view (engine bays B2, Roy 1272): while a hood or trunk is up
+## (CarLids), the camera CUTS to standing at that end of the car, a step back
+## from the lid, looking down into it; the arrows look round the bay a little.
+## Back to the view it was in, with a cut, once the lid is shut. No walking,
+## no hands (1276).
+const BAY_STAND_BACK := 1.05       # m behind the bumper
+const BAY_EYE_UP := 0.62           # m above the hinge line: a standing person's eyes
+const BAY_AIM_DOWN := 0.22         # m under the hinge line, so the view looks into the bay
+const BAY_YAW_MAX := 40.0
+const BAY_PITCH_MAX := 20.0
 const HOOD_PITCH_UP := 20.0
 const HOOD_PITCH_DOWN := 15.0
 const HOOD_STRENGTH := 0.5
@@ -421,7 +431,24 @@ func _process(delta: float) -> void:
 		# damage: the drawn wheel rests crooked by the front toe bend x this car's steering ratio
 		target.damage.steering_ratio = CockpitFrame.WHEEL_LOCK_RAD / maxf(target.max_steering_angle, 0.01)
 		frame.steer_centre = target.steer_centre_view(CockpitFrame.WHEEL_LOCK_RAD)
-	if view == View.COCKPIT:
+	var bay_lid := _bay_lid()
+	if (bay_lid != "") != _bay_was:
+		# a cut both ways: the chase rig restarts from scratch, and the
+		# cockpit's hidden body shows for the bay (set_view puts it back)
+		_started = false
+		forget_motion()
+		if bay_lid != "":
+			if frame != null:
+				frame.set_cockpit(false)
+			elif target.chassis_visual != null:
+				target.chassis_visual.visible = true
+			perspective.set_cockpit(false)
+		else:
+			set_view(view)
+	_bay_was = bay_lid != ""
+	if bay_lid != "":
+		_place_bay(delta, bay_lid)
+	elif view == View.COCKPIT:
 		_place_cockpit(delta)
 		if look_back:
 			global_transform.basis = global_transform.basis * Basis(Vector3.UP, PI)
@@ -470,10 +497,39 @@ func _place_hood(delta: float) -> void:
 		global_transform = Transform3D(level * turn, xf * hood_cam)
 	fov = ViewSettings.cockpit_fov + COCKPIT_FOV_SPEED_GAIN * speed_t
 
+var _bay_was := false
+
+## The lid the camera stands at, or "" when none is up (CarLids.view_lid).
+func _bay_lid() -> String:
+	var lids := CarLids.of(target)
+	return lids.view_lid() if lids != null else ""
+
+## Standing at the open lid: on the interpolated car transform, at the car's
+## end, eyes above the hinge line, looking down into the bay. The arrows turn
+## the head up to BAY_YAW_MAX / BAY_PITCH_MAX; the cockpit FOV.
+func _place_bay(delta: float, lid: String) -> void:
+	var lids := CarLids.of(target)
+	var xf := target.get_global_transform_interpolated()
+	var hinge := lids.hinge_point(lid)
+	var end := lids.lid_end(lid)
+	var half_l := 2.2
+	if target.chassis_visual != null:
+		half_l = float(target.chassis_visual.get_meta("half_l", half_l))
+	var stand := Vector3(0.0, hinge.y + BAY_EYE_UP, end * (half_l + BAY_STAND_BACK))
+	var aim := Vector3(0.0, hinge.y - BAY_AIM_DOWN, lerpf(end * half_l, hinge.z, 0.5))
+	var axis := Input.get_axis("look_right", "look_left")   # + = left
+	var up := Input.get_axis("look_down", "look_up")
+	var k := 1.0 - exp(-LOOK_RATE * delta)
+	look_yaw = lerpf(look_yaw, axis * BAY_YAW_MAX, k)
+	look_pitch = lerpf(look_pitch, up * BAY_PITCH_MAX, k)
+	var at := Transform3D.IDENTITY.looking_at(aim - stand, Vector3.UP)
+	var turn := Basis.from_euler(Vector3(deg_to_rad(look_pitch), deg_to_rad(look_yaw), 0.0))
+	global_transform = Transform3D(xf.basis * at.basis * turn, xf * stand)
+	fov = ViewSettings.cockpit_fov
+
 ## True while the hood is up, when the hood view shows the chase camera instead
-## (the bonnet camera would be inside the lid). No roadside hood-pop sets one
-## yet: CarDetail.panel_open (a hood, door or trunk open) is the flag the
-## roadside kit is built to set, so this follows it; nothing sets it in play.
+## (the bonnet camera would be inside the lid). CarDetail.panel_open is set by
+## CarLids (Y); with a lid up the bay view (_place_bay) takes over anyway.
 func hood_open() -> bool:
 	var d := target.get_node_or_null(CarDetail.NODE_NAME) as CarDetail
 	return d != null and d.panel_open

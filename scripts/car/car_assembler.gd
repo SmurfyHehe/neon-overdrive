@@ -39,7 +39,10 @@ class_name CarAssembler
 # `parts` (build's second argument) says what differs from the glb: a part
 # name mapped to a Mesh replaces that part (its surfaces named or materialled
 # like the glb's: paint, plastic, ...; in the part's own frame), mapped to
-# false leaves it off; "panels" is "closed" (default) or "open".
+# false leaves it off; "panels" is "closed" (default) or "open"; "split" is a
+# list of hinge names whose parts leave the body as a panel mesh of their own
+# on a hinge node turned to 0 degrees, for the game to swing (CarLids, engine
+# bays B1): the hood alone is +1 draw call while it is up, nothing once shut.
 #
 # Engine bay parts (`engine`, `bay_*`: the rough placeholder boxes under the
 # lids) are NOT in the closed body (engine bays B0, issue #642): nobody sees
@@ -152,27 +155,82 @@ static func build(car_id: String, parts: Dictionary = {}, paint_mat: Material = 
 	var car := _load(car_id)
 	if car.parts.is_empty():
 		return null
-	var built := _merged(car_id, parts)
 	var body := MeshInstance3D.new()
 	body.name = NODE_NAME
-	body.mesh = built.body
 	body.set_meta("car_id", car_id)
+	_apply(body, parts, paint_mat)
+	return body
+
+## Re-merge a built body for a new `parts` configuration: the mesh, the
+## metas, the materials and the hinge nodes (one per split or open panel,
+## named after the hinge, with a "Panel" MeshInstance3D under it). Hinge
+## nodes the new configuration does not need are freed. Cached meshes, so
+## switching back and forth costs no geometry work after the first time.
+static func _apply(body: MeshInstance3D, parts: Dictionary, paint_mat: Material) -> void:
+	var car_id: String = body.get_meta("car_id")
+	var car := _load(car_id)
+	var built := _merged(car_id, parts)
+	var open := String(parts.get("panels", "closed")) == "open"
+	# a re-merge keeps the materials the builder put on the surfaces (the
+	# coupe's glass, the lamp shader on glow) instead of the defaults
+	var kept := {}
+	if body.mesh != null:
+		for i in body.mesh.get_surface_count():
+			var m := body.get_surface_override_material(i)
+			if m != null:
+				kept[(body.mesh as ArrayMesh).surface_get_name(i)] = m
+	body.mesh = built.body
 	body.set_meta("car_parts", parts.duplicate())
 	_dress(body, paint_mat)
+	for sname in kept:
+		var si := surface_index(body.mesh, sname)
+		if si >= 0:
+			body.set_surface_override_material(si, kept[sname])
+	for c in body.get_children():
+		if c is Node3D and car.hinges.has(String(c.name)) and not built.panels.has(String(c.name)):
+			body.remove_child(c)
+			c.queue_free()
 	for hname in built.panels:
 		var h: Dictionary = car.hinges[hname]
-		var hinge := Node3D.new()
-		hinge.name = hname
-		hinge.position = h.origin
-		hinge.rotate(h.axis, deg_to_rad(h.open_sign * h.open_deg))
-		body.add_child(hinge)
-		var panel := MeshInstance3D.new()
-		panel.name = "Panel"
+		var hinge := body.get_node_or_null(NodePath(hname)) as Node3D
+		if hinge == null:
+			hinge = Node3D.new()
+			hinge.name = hname
+			body.add_child(hinge)
+		hinge.transform = Transform3D(Basis(), h.origin)
+		if open:
+			hinge.rotate(h.axis, deg_to_rad(h.open_sign * h.open_deg))
+		var panel := hinge.get_node_or_null("Panel") as MeshInstance3D
+		if panel == null:
+			panel = MeshInstance3D.new()
+			panel.name = "Panel"
+			hinge.add_child(panel)
 		panel.mesh = built.panels[hname]
+		panel.layers = body.layers
 		if paint_mat != null:
 			panel.set_surface_override_material(0, paint_mat)
-		hinge.add_child(panel)
-	return body
+
+## Which hinges' panels are split out of a built body (the "split" option).
+static func split_hinges(body: MeshInstance3D) -> PackedStringArray:
+	return PackedStringArray((body.get_meta("car_parts", {}) as Dictionary).get("split", []))
+
+## Split these hinges' panels out of the body (or merge them back in with an
+## empty list) on a built car, keeping every other option. Returns the hinge
+## nodes by name. The body's paint material is kept.
+static func set_split(body: MeshInstance3D, hinge_names: PackedStringArray) -> Dictionary:
+	var parts: Dictionary = (body.get_meta("car_parts", {}) as Dictionary).duplicate()
+	var names := Array(hinge_names)
+	names.sort()
+	if names.is_empty():
+		parts.erase("split")
+	else:
+		parts["split"] = PackedStringArray(names)
+	var paint_mat := body.get_surface_override_material(surface_index(body.mesh, "body"))
+	_apply(body, parts, paint_mat)
+	var out := {}
+	for hname in names:
+		out[hname] = body.get_node_or_null(NodePath(hname))
+	return out
 
 ## The engine bay parts as one MeshInstance3D named "Bay" in car space (the
 ## same frame as build()'s body, so it goes under that body), surfaces as
@@ -216,10 +274,7 @@ static func swap_part(root: Node, part: String, mesh: Mesh) -> bool:
 	var parts: Dictionary = (body.get_meta("car_parts") as Dictionary).duplicate()
 	parts[part] = mesh if mesh != null else false
 	var paint_mat := body.get_surface_override_material(surface_index(body.mesh, "body"))
-	var built := _merged(car_id, parts)
-	body.mesh = built.body
-	body.set_meta("car_parts", parts)
-	_dress(body, paint_mat)
+	_apply(body, parts, paint_mat)
 	return true
 
 ## The assembled body under (or at) a node, or null.
@@ -544,6 +599,8 @@ static func _key(car_id: String, parts: Dictionary) -> String:
 		var val: Variant = parts[k]
 		if val is Mesh:
 			bits.append("%s=mesh%d" % [k, (val as Mesh).get_instance_id()])
+		elif val is PackedStringArray or val is Array:
+			bits.append("%s=%s" % [k, "+".join(PackedStringArray(val))])
 		else:
 			bits.append("%s=%s" % [k, str(val)])
 	return car_id + "|" + ",".join(bits)
@@ -554,6 +611,8 @@ static func _merged(car_id: String, parts: Dictionary) -> Dictionary:
 		return _meshes[key]
 	var car := _load(car_id)
 	var open := String(parts.get("panels", "closed")) == "open"
+	# hinges whose panels leave the body for the game to swing (CarLids)
+	var split: Array = Array(parts.get("split", []))
 	# closed: no bay parts; open (pictures): the bay stays in; "only": just the bay
 	var bay_only := String(parts.get("bay", "")) == "only"
 	var surf := {}      # surface name -> builder
@@ -577,7 +636,7 @@ static func _merged(car_id: String, parts: Dictionary) -> Dictionary:
 			var m: Dictionary = mats[mname]
 			var info: Array = MATERIALS[mname]
 			var col := (m.albedo as Color).srgb_to_linear()
-			if open and hinge != "":
+			if hinge != "" and (open or split.has(hinge)):
 				# an open panel is one surface drawn with the paint material:
 				# paint keeps alpha 0, everything else rides along as a fixed colour
 				col.a = 0.0 if mname == "paint" else 1.0

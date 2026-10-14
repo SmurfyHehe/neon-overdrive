@@ -11,7 +11,8 @@ extends SceneTree
 #     (its fix is the eye, #737).
 #   - see-through: in the cockpit view the pillar material's alpha is 1 minus
 #     ViewSettings.pillar_see_through (0.35 by default -> 0.65), it follows the
-#     setting the next frame, and in the chase view it is solid again.
+#     setting the next frame, and in the chase view, the hood view and photo
+#     mode (P) it is solid again.
 # Run: <godot> --headless --audio-driver Dummy --path . -s res://tests/view/cockpit_pillars.gd
 # Exit code 1 on failure.
 
@@ -152,7 +153,20 @@ func _see_through(kind: String) -> void:
 	cam.set_view(ChaseCamera.View.CHASE)
 	await _frames(3)
 	_check(absf(frame.pillar_alpha() - 1.0) < 0.01, "%s: the chase view draws the pillars solid (alpha %.2f)" % [kind, frame.pillar_alpha()])
+	cam.set_view(ChaseCamera.View.HOOD)
+	await _frames(3)
+	_check(absf(frame.pillar_alpha() - 1.0) < 0.01, "%s: the hood view draws the pillars solid (alpha %.2f)" % [kind, frame.pillar_alpha()])
 	cam.set_view(ChaseCamera.View.COCKPIT)
 	await _frames(3)
 	_check(absf(frame.pillar_alpha() - 0.4) < 0.01, "%s: back in the cockpit the setting applies again (alpha %.2f)" % [kind, frame.pillar_alpha()])
+	# photo mode (P) from the cockpit: a shot from outside wants solid pillars
+	var gs: GameState = game.get("game_state")
+	_check(gs != null, "%s: the game has a GameState" % kind)
+	if gs != null:
+		gs.toggle_photo()
+		await _frames(3)
+		_check(gs.state == GameState.State.PHOTO and absf(frame.pillar_alpha() - 1.0) < 0.01, "%s: photo mode draws the pillars solid (state %d, alpha %.2f)" % [kind, gs.state, frame.pillar_alpha()])
+		gs.close_photo()
+		await _frames(3)
+		_check(gs.state == GameState.State.PLAYING and absf(frame.pillar_alpha() - 0.4) < 0.01, "%s: back from photo mode the setting applies again (state %d, alpha %.2f)" % [kind, gs.state, frame.pillar_alpha()])
 	ViewSettings.set_pillar_see_through(ViewSettings.PILLAR_SEE_THROUGH_DEFAULT)

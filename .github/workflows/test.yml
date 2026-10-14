@@ -1,4 +1,4 @@
-# Runs the quick (headless) test suite on every pull request and push to main,
+# Runs the CI set (about 100 fast headless tests, run_tests.bat ci) on every pull request and push to main,
 # with the same Godot version and the same tests\run_tests.bat the laptop uses.
 # To block merging when this fails, make "Tests / quick" a required check in
 # Settings > Branches > branch protection for main.
@@ -49,4 +49,4 @@ jobs:
         shell: cmd
         run: |
           set "GODOT=%GITHUB_WORKSPACE%\godot\Godot_v%GODOT_VERSION%-stable_win64_console.exe"
-          call tests\run_tests.bat quick
+          call tests\run_tests.bat ci

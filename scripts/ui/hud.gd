@@ -215,7 +215,8 @@ func _ready() -> void:
 	rear_frame.add_child(rear_strip)
 
 	lbl_hint = _label(root, 14, Color(SILVER.r, SILVER.g, SILVER.b, 0.7))
-	lbl_hint.text = "Esc: pause · controls"
+	lbl_hint.text = ""   # no key hints on screen: the Controls page lists the keys
+	lbl_hint.visible = false
 	lbl_hint.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 	lbl_hint.offset_left = 16.0
 	lbl_hint.offset_top = -34.0   # relative to the bottom edge
@@ -278,7 +279,7 @@ func _ready() -> void:
 	# the columns the same separation, so the two share one vertical centre.
 	var digit_h := 0.0
 	for l in [lbl_gear, lbl_speed]:
-		var font: Font = l.get_theme_font("font")
+		var font: Font = UiTheme.font("display")   # both labels take the display role
 		digit_h = maxf(digit_h, font.get_height(l.get_theme_font_size("font_size")))
 	for l in [lbl_gear, lbl_speed]:
 		l.custom_minimum_size.y = ceilf(digit_h)
@@ -306,11 +307,11 @@ func _ready() -> void:
 	lbl_fuel.name = "Fuel"
 	lbl_fuel.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
-## The rear strip shows in the chase view when the flag is on and the cockpit
-## has mirrors to render; the cockpit view has the rearview mirror itself.
+## The rear strip shows in the chase and hood views when the flag is on and the
+## cockpit has mirrors to render; the cockpit view has the rearview mirror itself.
 func _refresh_rear_strip() -> void:
 	var mirrors: CockpitMirrors = camera.frame.mirrors if camera.frame != null else null
-	var show := camera.view == ChaseCamera.View.CHASE and FxSettings.is_on("rear_strip") and mirrors != null and mirrors.enabled
+	var show := camera.view != ChaseCamera.View.COCKPIT and FxSettings.is_on("rear_strip") and mirrors != null and mirrors.enabled
 	if show and rear_strip.texture == null:
 		rear_strip.texture = mirrors.rear_texture()
 	rear_frame.visible = show
@@ -418,10 +419,10 @@ func _refresh() -> void:
 	rpm_bar.queue_redraw()
 
 	if engine_off:
-		lbl_status.text = "ENGINE OFF · press X to start"
+		lbl_status.text = "ENGINE OFF"
 		Hud.set_font_color(lbl_status, RED)
 	elif player.damage.is_engine_dead():
-		lbl_status.text = "ENGINE DEAD · tow in the pause menu"
+		lbl_status.text = "ENGINE DEAD"
 		Hud.set_font_color(lbl_status, RED)
 	elif player.limp.is_limping():
 		lbl_status.text = "LIMP · " + LimpMode.cause_name(player.limp.cause)

@@ -57,6 +57,7 @@ Sizes are in metres. H is the overall height, including roof gear.
 | P5 Muscle hardtop | 5.00 × 1.93 × 1.33 | 2.84 | two-door 68-72 hardtop: long hood, short deck, coke-bottle hips, tunnel-back roof with buttresses, full-width tail bar |
 | P6 Perf. crossover | 4.35 × 1.84 × 1.61 | 2.62 | lifted rally hatch, black-clad box flares, roof rack with crossbars past the roof edge |
 | P17 Work pickup | 5.25 × 1.80 × 1.74 | 3.18 | low flat hood, tall double cab, long open bed on flared box sides, side stripe, one tailpipe out the rear corner (added 2026-10-10) |
+| P8 Drift coupe | 4.30 × 1.68 (1.80 over the arches) × 1.34 | 2.64 | low flat-sided box coupe, wedge nose with slim pop-ups, thin pillars, long flat trunk, four bolt-on riveted arches, three-bar tails, one primer front fender (added 2026-10-11) |
 | N1 Commuter sedan | 4.80 × 1.82 × 1.51 | 2.80 | soft tall cabin, tall nose, short high deck |
 | N2 City hatchback | 3.95 × 1.69 × 1.53 | 2.53 | tall cab-forward egg, lamps up the pillars |
 | N3 Pickup | 5.30 × 1.86 × 1.86 | 3.08 | double cab plus open bed |
@@ -119,6 +120,7 @@ patrol SUV.
   - P5 Cherry `#6A1620`
   - P6 Sand `#B8A27A`
   - P17 Camel `#C4A264` (stripe sodium `#FF8A1F`)
+  - P8 Dusty silver `#AAB0B8`, with one primer-grey front-left fender `#5F5B58` and bronze `#9C6B3A` dish wheels
 
   Each car also has four alternates.
 - **Traffic:** 9 weighted neutrals, listed in `fleet.json`.

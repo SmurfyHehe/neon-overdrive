@@ -1,6 +1,6 @@
 """Per-car swappable parts (slots -> options) and example builds."""
 import mods as M
-from cars import P1, P2, P3, P4, P5, P6, P17, N1, N2, N3, C1, C2, C3
+from cars import P1, P2, P3, P4, P5, P6, P8, P10, P17, N1, N2, N3, C1, C2, C3
 
 STOCK = {'label': 'Stock', 'ops': []}
 
@@ -131,14 +131,34 @@ P6['options'] = {
     'skirts': {'stock': {'label': 'Cladding', 'ops': []},
                'mudflaps': {'label': 'Mud flaps', 'ops': [{'op': 'add', 'part': {'type': 'mudflaps'}}]}},
     'spoiler': {'stock': {'label': 'Roof spoiler', 'ops': []},
-                'big': {'label': 'Big roof wing', 'ops': [
+                # a rally-style wing nearly the full width of the body (1.76 of 1.84 m; Roy 1475 "differ"):
+                # at 1.40 the rally build read as the hot hatch from high in front (issue #577)
+                'big': {'label': 'Big roof wing (full width)', 'ops': [
                     {'op': 'remove', 'tag': 'spoiler'},
                     {'op': 'add', 'part': {'type': 'roof_spoiler', 'tag': 'spoiler', 's0': 3.70, 's1': 4.16, 'y0': 1.54,
-                                           'y1': 1.52, 'span': 1.40, 'thick': 0.05}}]}},
+                                           'y1': 1.52, 'span': 1.76, 'thick': 0.05}}]}},
     'wheels': _wheel_set('5-spoke dark', ('rally', M.wheels('6spoke', 'Rally 6-spoke gold', 0.66, 'rim_gold')),
                          ('mesh', M.wheels('mesh', 'Mesh', 0.70))),
     'exhaust': {'stock': {'label': 'Dual (centre)', 'ops': []}, 'center': M.exhaust(P6, 'center', 0.05)},
     'stance': {'stock': STOCK, 'lowered': M.stance(0.045, 'Street-lowered 4.5 cm'), 'raised': M.stance(-0.03, 'Gravel-raised 3 cm')},
+}
+
+# ------------------------------------------------------------------ P8
+# The drift coupe's slots (the sheet): hood stock / vented, bumpers stock / street / race, a wide-body over the
+# bolt-ons, no wing stock, tips stock (one oval) / twin / cannon, all behind the axle. The parts build is the stock car.
+P8['options'] = {
+    'front_bumper': {'stock': STOCK, 'street': M.lip(P8), 'race': M.race_front(P8)},
+    'rear_bumper': {'stock': STOCK, 'diffuser': M.diffuser(P8)},
+    'hood': {'stock': STOCK, 'vented': M.vented_hood(P8, 0.60, 1.30)},
+    'skirts': {'stock': {'label': 'Bolt-on arches', 'ops': []}, 'widebody': M.widebody(P8, 0.06)},
+    'spoiler': {'stock': {'label': 'None (flat trunk)', 'ops': []}, 'ducktail': M.ducktail(P8, 0.04), 'gt': M.gt_wing(P8, 0.28)},
+    'wheels': _wheel_set('Deep dish bronze', ('mesh', M.wheels('mesh', 'Mesh', 0.72)), ('six', M.wheels('6spoke', '6-spoke', 0.72)),
+                         ('turbofan', M.wheels('turbofan', 'Turbofan', 0.72))),
+    'exhaust': {'stock': {'label': 'Single oval (right)', 'ops': []},
+                'twin': {'label': 'Twin ovals (right)', 'ops': [{'op': 'exhaust', 'tips': [
+                    {'x': 0.48, 'y': 0.26, 'r': 0.04, 'squash': 0.7}, {'x': 0.34, 'y': 0.26, 'r': 0.04, 'squash': 0.7}]}]},
+                'cannon': {'label': 'Cannon (right)', 'ops': [{'op': 'exhaust', 'tips': [{'x': 0.45, 'y': 0.30, 'r': 0.055, 'out': 0.06}]}]}},
+    'stance': _stance(),
 }
 
 # ------------------------------------------------------------------ P17
@@ -154,6 +174,11 @@ P17['options'] = {
     'exhaust': {'stock': {'label': 'Single (rear corner)', 'ops': []}, 'dual': M.exhaust(P17, 'dual', 0.042), 'side': M.exhaust(P17, 'side', 0.048)},
     'stance': {'stock': STOCK, 'lowered': M.stance(0.05, 'Street-lowered 5 cm'), 'raised': M.stance(-0.04, 'Lifted 4 cm')},
 }
+
+# ------------------------------------------------------------------ P10
+# Stock only (MC2 brief, 2026-10-11): the push bar, the bed-mounted spoiler and
+# the Diesel Row light rail are options for the crew kit, not the stock truck.
+P10['options'] = {}
 
 # ------------------------------------------------------------------ NPC trims
 N1['options'] = {
@@ -192,12 +217,19 @@ C1['options'] = {
 }
 C2['options'] = {
     'kit': {'stock': {'label': 'Full light bar + push bar', 'ops': []},
-            'nobar': {'label': 'No push bar', 'ops': [{'op': 'remove', 'tag': 'pushbar'}]}},
+            # no push bar, a tow hitch instead (Roy 1475 "differ"): a drop receiver and ball under the
+            # tailgate, so from high behind it is no outline twin of the street truck (issue #577)
+            'nobar': {'label': 'No push bar, tow hitch', 'ops': [
+                {'op': 'remove', 'tag': 'pushbar'},
+                {'op': 'add', 'part': {'type': 'box', 'tag': 'hitch', 's': 5.12, 'xy': (0.0, 0.38), 'size': (0.10, 0.10, 0.16), 'mat': 'trim'}},
+                {'op': 'add', 'part': {'type': 'box', 'tag': 'hitch', 's': 5.205, 'xy': (0.0, 0.46), 'size': (0.07, 0.07, 0.07), 'mat': 'chrome'}}]}},
 }
 C3['options'] = {
     'kit': {'stock': {'label': 'Unmarked', 'ops': []},
-            'pursuit': {'label': 'Pursuit pack (push bar)', 'ops': [
-                {'op': 'add', 'part': {'type': 'pushbar', 's': -0.10, 'y0': 0.28, 'y1': 0.80, 'w': 0.80}}]}},
+            # the low push bar is stock since Build 4 (Roy 1475); the pack swaps it for a tall one
+            'pursuit': {'label': 'Pursuit pack (tall push bar)', 'ops': [
+                {'op': 'remove', 'tag': 'pushbar'},
+                {'op': 'add', 'part': {'type': 'pushbar', 'tag': 'pushbar', 's': -0.10, 'y0': 0.30, 'y1': 0.96, 'w': 0.86}}]}},
 }
 
 # ------------------------------------------------------------------ builds
@@ -228,6 +260,11 @@ BUILDS = {
     'p6_crossover': {
         'street': {'kit': 'street', 'front_bumper': 'lip', 'hood': 'scoop', 'wheels': 'mesh', 'stance': 'lowered'},
         'full': {'kit': 'rally', 'skirts': 'mudflaps', 'hood': 'scoop', 'spoiler': 'big', 'wheels': 'rally', 'exhaust': 'center', 'stance': 'raised'},
+    },
+    'p8_driftcoupe': {
+        'street': {'front_bumper': 'street', 'wheels': 'mesh', 'exhaust': 'twin', 'stance': 'lowered'},
+        'full': {'front_bumper': 'race', 'rear_bumper': 'diffuser', 'hood': 'vented', 'skirts': 'widebody', 'spoiler': 'gt',
+                 'wheels': 'turbofan', 'exhaust': 'cannon', 'stance': 'slammed'},
     },
     'p17_work_pickup': {
         'street': {'wheels': 'six', 'exhaust': 'dual', 'stance': 'lowered'},

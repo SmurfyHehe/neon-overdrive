@@ -25,7 +25,24 @@ class ErrorCounter extends Logger:
 		pass
 
 const TestDriver := preload("res://scripts/core/test_driver.gd")
-const SETTINGS_PATH := "user://traffic_test_settings.cfg"
+## The scratch settings file Game reads in a harness test: one per test
+## script, emptied when the test starts (#584); what the test itself saves
+## between two boots still carries over. It used to be one shared file that
+## outlived the run, so on the laptop whatever an earlier test left in it (a
+## rebound key, another car, a graphics preset) reached the next test, and two
+## harness tests running side by side wrote over each other's settings.
+static var SETTINGS_PATH := _settings_path()
+
+static func _settings_path() -> String:
+	var script := "harness"
+	var args := OS.get_cmdline_args()
+	for i in args.size():
+		if args[i].begins_with("res://tests/") and args[i].ends_with(".gd"):
+			script = args[i].trim_prefix("res://tests/").trim_suffix(".gd").replace("/", "_")
+	var path := "user://test_harness/%s.cfg" % script
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(path.get_base_dir()))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	return path
 
 ## Boots Game.tscn with `car_count` traffic cars and the given draw distance.
 ## Game reads both from the settings file, so a scratch file is written first
@@ -96,13 +113,21 @@ static func flash_brake_driver(traffic: TrafficManager, lane_x: float, max_speed
 			a = minf(a, TrafficCar.follow_accel(v, max_speed, gap, lead_v, 1.0))
 			if gap < TrafficManager.FLASH_REACH - 10.0 and v > lead_v + 2.0 and traffic.now - float(last_flash[0]) > 1.0:
 				last_flash[0] = traffic.now
-				c.beams.flash()
+				flash(c.beams)
 		if a < -0.3:
 			c.throttle_input = 0.0
 			c.brake_input = clampf(-a / 9.0, 0.0, 1.0)
 		else:
 			c.throttle_input = clampf(a, 0.0, 1.0)
 			c.brake_input = 0.0
+
+## One headlight flash the way the player gives it since key map K1
+## (b455e6f removed HeadlightBeams.flash()): H held past HOLD_SECONDS counts
+## one flash, which traffic reads from `flashes`, then H comes up.
+static func flash(beams: HeadlightBeams) -> void:
+	beams.press_key()
+	beams.step(HeadlightBeams.HOLD_SECONDS + 0.01)
+	beams.release_key()
 
 ## Own-direction lane centre, lane 0 nearest the centre line (the fast lane).
 static func lane_x(i: int) -> float:

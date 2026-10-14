@@ -73,6 +73,7 @@ var _throttle_state := 0   # 1 = throttle was open (>0.6), -1 = was closed (<0.1
 var _clunk_wait := 0.0
 var _air_time := 0.0
 var _fall_speed := 0.0
+var _waiting := false      # streams not attached yet (garage boot, cold cache)
 
 func _ready() -> void:
 	_vehicle = get_parent() as Vehicle
@@ -80,37 +81,60 @@ func _ready() -> void:
 		push_error("DrivelineAudio must be a child of a Vehicle")
 		set_process(false)
 		return
-	_whine = _add_player("whine", &"Engine", true)
-	_thump = _add_player("thump", &"Engine", false)
-	_thump.stream = variants("thump")
-	_clack_up = _add_player("clack_up", &"Engine", false)
-	_clack_up.stream = variants("clack_up")
-	_clack_down = _add_player("clack_down", &"Engine", false)
-	_clack_down.stream = variants("clack_down")
+	_whine = _add_player("whine", &"Engine")
+	_thump = _add_player("thump", &"Engine")
+	_clack_up = _add_player("clack_up", &"Engine")
+	_clack_down = _add_player("clack_down", &"Engine")
 	_clack_down.max_polyphony = 2
-	_tick = _add_player("tick", &"Engine", false)
+	_tick = _add_player("tick", &"Engine")
+	_tick.max_polyphony = 2
+	_tick_rng.seed = 909
+	_clunk = _add_player("clunk", &"Engine")
+	_landing = _add_player("landing", &"Tires")
+	_last_gear = _vehicle.current_gear
+	# Booting into the garage the car stands still with the engine off: the
+	# sounds (on a cold cache still being made, #524) are attached once ready,
+	# or once the player goes out or the car moves (_process).
+	_waiting = CarAudio.garage_boot() and not _all_built()
+	if not _waiting:
+		_attach_streams()
+
+func _add_player(layer: String, bus_name: StringName) -> AudioStreamPlayer:
+	var p := AudioStreamPlayer.new()
+	p.name = layer.to_pascal_case() + "Audio"
+	if layer == "whine":
+		PlayerGain.route(p, bus_name, -80.0)   # level set every frame while it plays (#567)
+	else:
+		p.bus = bus_name
+		p.volume_db = -80.0
+	add_child(p)
+	return p
+
+func _attach_streams() -> void:
+	_waiting = false
+	_whine.stream = stream("whine")
+	_whine.play()
+	_thump.stream = variants("thump")
+	_clack_up.stream = variants("clack_up")
+	_clack_down.stream = variants("clack_down")
 	var ticks: Array[AudioStream] = []
 	for k in TICK_VARIANTS:
 		ticks.append(stream("tick%d" % k))
 	_tick.stream = AudioDsp.randomizer(ticks, 1.12, 3.0)
-	_tick.max_polyphony = 2
-	_tick_rng.seed = 909
-	_clunk = _add_player("clunk", &"Engine", false)
-	_landing = _add_player("landing", &"Tires", false)
-	_last_gear = _vehicle.current_gear
+	_clunk.stream = stream("clunk")
+	_landing.stream = stream("landing")
 
-func _add_player(layer: String, bus_name: StringName, looping: bool) -> AudioStreamPlayer:
-	var p := AudioStreamPlayer.new()
-	p.name = layer.to_pascal_case() + "Audio"
-	p.stream = stream(layer)
-	p.bus = bus_name
-	p.volume_db = -80.0
-	add_child(p)
-	if looping:
-		p.play()
-	return p
+static func _all_built() -> bool:
+	for layer in layer_names():
+		if not _streams.has(layer) and AudioDsp.building("res://scripts/audio/driveline_audio.gd", layer):
+			return false
+	return true
 
 func _process(delta: float) -> void:
+	if _waiting:
+		if not (_all_built() or GameState.garage_seen or _vehicle.linear_velocity.length() > 2.0):
+			return
+		_attach_streams()
 	var v := _vehicle
 	# --- gear whine
 	var in_gear := v.current_gear != 0 and not v.is_shifting
@@ -120,7 +144,7 @@ func _process(delta: float) -> void:
 	var target := speed_gate * gear_weight * load if in_gear else 0.0
 	var rate := ATTACK if target > whine_level else RELEASE
 	whine_level = lerpf(whine_level, target, 1.0 - exp(-rate * delta))
-	_whine.volume_db = linear_to_db(whine_level * WHINE_GAIN) if whine_level > 0.002 else -80.0
+	PlayerGain.set_db(_whine, linear_to_db(whine_level * WHINE_GAIN) if whine_level > 0.002 else -80.0)
 	_whine.pitch_scale = clampf(v.motor_rpm / 60.0 * WHINE_TEETH / WHINE_BASE_HZ, 0.3, 4.0)
 
 	# --- shift thump: when a gear change completes
@@ -200,15 +224,34 @@ func _shift_sound(up: bool, level: float) -> void:
 		_one_shot(_thump, THUMP_GAIN * 0.7 * level)
 
 func _one_shot(p: AudioStreamPlayer, gain: float) -> void:
-	p.volume_db = linear_to_db(clampf(gain, 0.001, 1.0))
-	p.play()
+	PlayerGain.play_at(p, linear_to_db(clampf(gain, 0.001, 1.0)))
 
 ## The shared stream for one layer, generated on first use. "thump",
 ## "clack_up" and "clack_down" are variant 0; "thump3" etc. pick a variant.
 static func stream(layer: String) -> AudioStreamWAV:
 	if not _streams.has(layer):
-		_streams[layer] = AudioDsp.cached("res://scripts/audio/driveline_audio.gd", layer, _clack.bind(layer) if layer.begins_with("clack") else (_tick_sound.bind(layer) if layer.begins_with("tick") else _make.bind(layer)))
+		_streams[layer] = AudioDsp.cached("res://scripts/audio/driveline_audio.gd", layer, _maker(layer))
 	return _streams[layer]
+
+static func _maker(layer: String) -> Callable:
+	return _clack.bind(layer) if layer.begins_with("clack") else (_tick_sound.bind(layer) if layer.begins_with("tick") else _make.bind(layer))
+
+## Starts making every layer _ready() asks for off the main thread (issue
+## #524); on a garage boot nothing waits for them: AudioDsp's background lane.
+static func prefetch() -> void:
+	var urgent := not CarAudio.garage_boot()
+	for layer in layer_names():
+		if not _streams.has(layer):
+			AudioDsp.prefetch("res://scripts/audio/driveline_audio.gd", layer, _maker(layer), urgent)
+
+static func layer_names() -> Array[String]:
+	var layers: Array[String] = ["whine", "clunk", "landing"]
+	for layer in ["thump", "clack_up", "clack_down"]:
+		for k in VARIANTS:
+			layers.append(layer if k == 0 else "%s%d" % [layer, k])
+	for k in TICK_VARIANTS:
+		layers.append("tick%d" % k)
+	return layers
 
 ## Every variant of a shift layer, picked at random per shift.
 static func variants(layer: String) -> AudioStreamRandomizer:

@@ -37,6 +37,7 @@ extends RefCounted
 # each tick and lists the contacts only while something is touching.
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
+const Districts := preload("res://scripts/world/districts.gd")
 const KMH := 1.0 / 3.6
 const PLAN_SECS := 0.05          # traffic and bend lookahead refresh
 const HALF_W := 1.0              # TrafficManager.PLAYER_HALF_W
@@ -47,6 +48,12 @@ const SIDE_MARGIN := 0.35        # m of air wanted each side of the body
 const LAT_DAMP_T := 3.0
 const CHANGE_DAMP_T := 1.2
 const UNDERSTEER_FF := 0.0008    # the player car's bend feed-forward (was Harness.PLAYER_UNDERSTEER_FF)
+## The feed-forward is learned from the car as it drives (#569): see _learn_understeer.
+const US_LEARN_T := 0.5          # s, how fast the estimate follows the car
+const US_MIN := 0.0              # the range the estimate is kept in
+const US_MAX := 0.003
+const US_PRIOR := 4.0            # weight of UNDERSTEER_FF: one sample at 2 m/s^2 of cornering
+const US_SAMPLE := 6             # ticks per sample (the path's turn over 0.05 s)
 ## Speed.
 const CLEAN_LAT_ACCEL := 4.0     # m/s^2 in a bend, clean and weave
 const GRIP_LAT_ACCEL := 8.0      # m/s^2, grip mode
@@ -64,9 +71,14 @@ const CHANGE_GAIN := 3.0         # m/s a lane must be faster by to be worth movi
 ## Spin recovery.
 const SPIN_SLIP := 0.45          # rad between nose and travel = spinning
 const SPIN_MIN_SPEED := 6.0
+const SLIDE_LIFT := 0.07          # rad (4 deg) of sideslip: lift, ease the brake, countersteer
+const SLIDE_BRAKE := 0.3          # most brake pedal while sliding
+const REJOIN_OFF := 1.5 * TrafficManager.LANE_W  # m off its lane: rejoin at a shallow angle
+const REJOIN_SLOPE := 3.0        # lookahead per metre off the lane (18 deg approach)
 const WRONG_WAY := 1.2           # rad off the road's heading at low speed = turn round
 const TURN_LEG_SECS := 2.5
 const TURN_DONE := 0.8           # rad: the lane keeper can take it from here
+const TURN_EDGE := 0.5           # m short of the kerb or the median a turn-round leg stops
 
 var mode := "clean"
 var target_speed := 150.0 * KMH
@@ -126,6 +138,13 @@ var _legacy_t := 0.0
 var _last_speed := 0.0
 var _bend_here := 0.0             # |road curvature| under the car, from the last plan
 var _check_spin := true
+var _understeer := UNDERSTEER_FF  # learned bend feed-forward (_learn_understeer)
+var _us_xx := 0.0                 # its weighted least-squares sums
+var _us_xy := 0.0
+var _vel_heading := 0.0           # travel direction at the sample's start, rad about up, + = left
+var _vel_tick := -10              # last tick seen
+var _us_n := -1                   # ticks in the sample so far, -1 = none started
+var _us_wheel := 0.0              # sum of the wheel's path curvature over them
 
 # ---------- starting it ----------
 
@@ -224,7 +243,85 @@ func steer_to(c: PlayerCar, lane_x: float) -> float:
 	# Less damping while it is moving over on purpose, or a lane change at
 	# town speed takes five seconds.
 	var damp := CHANGE_DAMP_T if _changing and c.speed < 60.0 else LAT_DAMP_T
-	return TrafficCar.lane_steer(c, lane_x - side_v * damp, -1.0, wheelbase, UNDERSTEER_FF)
+	# More than a lane and a half off (back from a turn-round on the shoulder):
+	# aim far enough down the road to rejoin at a shallow angle. With the 8 m
+	# town lookahead, 10 m off its lane the bot aimed 50 deg across the road,
+	# overshot, came round the wrong way and hit the median (drive_clean turn).
+	var off := absf(RoadFrame.unroll(c.global_position).x - lane_x)
+	var look := REJOIN_SLOPE * off if off > REJOIN_OFF else -1.0
+	look = maxf(look, clampf(c.speed * TrafficCar.LOOKAHEAD_SECONDS, TrafficCar.LOOKAHEAD_MIN, TrafficCar.LOOKAHEAD_MAX)) if look > 0.0 else -1.0
+	_learn_understeer(c)
+	var steer := TrafficCar.lane_steer(c, lane_x - side_v * damp, -1.0, wheelbase, _understeer, look)
+	# Countersteer (#550): lane_steer aims the car's travel, but the wheels turn
+	# from the nose. Sliding, the nose is off the travel by the slip angle, so
+	# the wheels need that much more lock the other way to point where the car
+	# goes. Without it the bot held ~0.08 of lock 23 deg sideways and spun.
+	# Faded in from SLIDE_LIFT / 2 to SLIDE_LIFT, so it does not kick.
+	var slip := slip_angle(c)
+	var share := clampf((absf(slip) - SLIDE_LIFT * 0.5) / (SLIDE_LIFT * 0.5), 0.0, 1.0)
+	if share == 0.0:
+		return steer
+	var e := maxf(c.steering_exponent, 0.1)
+	var lock := signf(steer) * pow(absf(steer), e) + share * slip / c.max_steering_angle  # + = left (GEVP)
+	lock = clampf(lock, -1.0, 1.0)
+	return signf(lock) * pow(absf(lock), 1.0 / e)
+
+## The bend feed-forward lane_steer is given, measured on the car itself
+## (#569). lane_steer models the lock a bend needs as
+##   tan(wheel angle) / wheelbase = curvature * (1 + ff * v^2)
+## (a fixed understeer gradient). UNDERSTEER_FF was fitted at 120 km/h
+## (2026-10-07), but the car's understeer is not fixed: downforce grows with
+## v^2, and braking moves weight onto the front tyres. At 230 km/h braking
+## into a 900 m bend the car turned in on 0.0008's lock and crept 2.1 m to the
+## inside of its lane (drive_bends 300 km/h; with 0.0004 that run held 0.84 m,
+## but the 150 km/h run got worse, 0.54 -> 0.73 m). So the driver does what a
+## driver does: it watches how much the car turns for the lock it has on, and
+## fits ff to the model above from the lock it has on, the speed and the
+## curvature of the car's own path over each US_SAMPLE ticks it is gripping
+## and not too slow. A least-squares fit weights each sample by its cornering
+## squared, so straights and steering noise barely move it, and it falls back
+## to UNDERSTEER_FF when there has been nothing to learn from for a while.
+func _learn_understeer(c: PlayerCar) -> void:
+	var vel := c.linear_velocity
+	vel.y = 0.0
+	var v := vel.length()
+	var heading := atan2(-vel.x, -vel.z)
+	var fresh := ticks == _vel_tick + 1
+	_vel_tick = ticks
+	# Too slow, reversing, sliding, or just teleported (place()): start over.
+	if v < 15.0 or c.current_speed() < 0.0 or absf(slip_angle(c)) > SLIDE_LIFT * 0.5 or not fresh:
+		_us_n = -1
+		return
+	if _us_n < 0:
+		_vel_heading = heading
+		_us_n = 0
+		_us_wheel = 0.0
+		return
+	# The lock asked for (GEVP's rate-limited steering_amount through its
+	# exponent), not the wheels' true angle: GEVP's countersteer assist adds
+	# lock toward the travel on top, and the feed-forward has to make up for
+	# that too, so it belongs in what is learned.
+	var asked := signf(c.steering_amount) * pow(absf(c.steering_amount), c.steering_exponent)
+	_us_wheel += tan(asked * c.max_steering_angle) / wheelbase
+	_us_n += 1
+	if _us_n < US_SAMPLE:
+		return
+	var turn := wrapf(heading - _vel_heading, -PI, PI)
+	var k_wheel := _us_wheel / float(_us_n)
+	_vel_heading = heading
+	_us_n = 0
+	_us_wheel = 0.0
+	if absf(turn) > 0.05 * US_SAMPLE:
+		return   # a hit, not a bend
+	# Weighted least squares of k_wheel - k_path = ff * (k_path v^2), fading
+	# with US_LEARN_T and pulled to UNDERSTEER_FF by US_PRIOR: on a straight
+	# there is nothing to learn from and it drifts back to the fitted value.
+	var k_path := turn / (float(US_SAMPLE) * _dt * v)   # 1/m, + = left
+	var x := k_path * v * v                             # the cornering, m/s^2
+	var fade := exp(-float(US_SAMPLE) * _dt / US_LEARN_T)
+	_us_xx = _us_xx * fade + x * x
+	_us_xy = _us_xy * fade + x * (k_wheel - k_path)
+	_understeer = clampf((_us_xy + UNDERSTEER_FF * US_PRIOR) / (_us_xx + US_PRIOR), US_MIN, US_MAX)
 
 ## 1. Pedals for `v0` m/s behind something `gap` m ahead doing `lead_v` (INF =
 ## clear road). Brakes as hard as the gap needs; reuses the traffic follower law.
@@ -237,13 +334,22 @@ func pedals_for(c: PlayerCar, v0: float, gap := INF, lead_v := 0.0) -> void:
 	if gap < INF:
 		a = minf(a, TrafficCar.follow_accel(v, v0, gap, lead_v, T_GAP))
 	c.handbrake_input = 0.0
+	# Sliding (#550): a driver lifts until the tyres grip again. Flooring it
+	# 9 deg sideways at 160 km/h spun the car on a 0.2 g bend.
+	var sliding := absf(slip_angle(c)) > SLIDE_LIFT
 	if a < -0.3:
-		# Grip is shared: the harder the car is cornering, the less brake it gets.
+		# Grip is shared: the harder the car is cornering, the less brake it
+		# gets, and none once the bend alone takes all of it (#550: a 0.39
+		# floor on a 0.94 g bend started the slide).
 		var lat := v * v * _bend_here / BRAKE_FULL
 		c.throttle_input = 0.0
-		c.brake_input = clampf(-a / BRAKE_FULL, 0.0, sqrt(maxf(0.15, 1.0 - lat * lat)))
+		c.brake_input = clampf(-a / BRAKE_FULL, 0.0, sqrt(maxf(0.0, 1.0 - lat * lat)))
+		# Brake-induced oversteer: ease off as the slide grows, to SLIDE_BRAKE
+		# at SLIDE_LIFT, until the rear grips again.
+		var slide := clampf((absf(slip_angle(c)) - SLIDE_LIFT * 0.5) / (SLIDE_LIFT * 0.5), 0.0, 1.0)
+		c.brake_input = minf(c.brake_input, lerpf(1.0, SLIDE_BRAKE, slide))
 	else:
-		c.throttle_input = clampf(a, 0.0, 1.0)
+		c.throttle_input = 0.0 if sliding else clampf(a, 0.0, 1.0)
 		c.brake_input = 0.0
 
 ## 2. Whether lane `lane_i` has room for the car right now: nothing alongside,
@@ -529,7 +635,7 @@ func _recovering(c: PlayerCar) -> bool:
 			c.toggle_reverse()
 		return true
 	_rec_t += _dt
-	if _rec_t > TURN_LEG_SECS:
+	if _rec_t > TURN_LEG_SECS or _leg_at_edge(c):
 		_rec_fwd = not _rec_fwd
 		_rec_t = 0.0
 		return true
@@ -540,6 +646,30 @@ func _recovering(c: PlayerCar) -> bool:
 	c.throttle_input = 0.45 if v < 5.0 else 0.0
 	c.brake_input = 0.0
 	return true
+
+## Whether the end of the car leading this turn-round leg (the nose going
+## forward, the tail in reverse) has reached TURN_EDGE, plus the distance
+## it needs to stop at PLAN_DECEL, short of the kerb's foot or of the median. A leg used to run its full TURN_LEG_SECS whatever
+## was there: from lane 2 the forward leg carried the nose 7 m across, over
+## the kerb, and into a gas station's lot wall (drive_bends turn, #569). A
+## three-point turn uses the road's width and no more.
+func _leg_at_edge(c: PlayerCar) -> bool:
+	var xf := c.global_transform
+	var lead := -xf.basis.z * (HALF_L if _rec_fwd else -HALF_L)
+	var side := xf.basis.x * HALF_W
+	var s := RoadFrame.s_at(RoadFrame.unroll(c.global_position).z)
+	var stop := TURN_EDGE + c.linear_velocity.length_squared() / (2.0 * PLAN_DECEL)
+	var kerb := SurfaceMap.edge_at(s, false) + Districts.shoulder_at(floori(s / RoadChunkBuilder.CHUNK_LEN)) - stop
+	var median := RoadChunkBuilder.MEDIAN_GAP + stop
+	var z := RoadFrame.unroll(c.global_position).z
+	for arm in [lead + side, lead - side]:
+		var x := RoadFrame.unroll(xf.origin + arm).x
+		# Only while that corner is still heading out: a car that starts the
+		# turn already past a limit must be able to drive back from it.
+		var out := RoadFrame.dir_to_road(z, c.linear_velocity + c.angular_velocity.cross(arm)).x
+		if (x > kerb and out > 0.0) or (x < median and out < 0.0):
+			return true
+	return false
 
 func _drive_aim(c: PlayerCar) -> void:
 	var point := aim_node.global_position if aim_node != null and is_instance_valid(aim_node) else aim_point

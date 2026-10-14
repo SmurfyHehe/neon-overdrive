@@ -2,7 +2,7 @@ extends SceneTree
 
 # Hills (#37 step R5): the GEVP car on a slope. The real Game.tscn on a hilly,
 # straight road (NEON_HILLS=1, NEON_CURVES=0, fixed road seed), no traffic.
-# The player is put on the steepest stretch in the first 900 m, standing still:
+# The player is put on the steepest plain stretch of the lap, standing still:
 # - with brake and handbrake held it holds about as well as on a flat road:
 #   under 0.2 m of creep over 10 s (GEVP's hill hold, gevp_vehicle.gd
 #   deviation 12). Measured 2026-10-07 on a 4.5% grade: 0.69 m without the
@@ -18,6 +18,8 @@ extends SceneTree
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --fixed-fps 60 --path . -s res://tests/world/hill_park.gd
 
 const Harness := preload("res://tests/traffic/traffic_harness.gd")
+const RoadMap := preload("res://scripts/world/road_map.gd")
+const GasStation := preload("res://scripts/world/gas_station.gd")
 
 const RATE := 60
 const ROAD_SEED := 2026
@@ -46,9 +48,18 @@ func _initialize() -> void:
 
 func _setup() -> void:
 	p = game.get("player")
-	# The steepest point in the first 900 m (the road starts level; the pool
-	# rebuilds round the car wherever it is put).
-	for m in range(5, 900):
+	# The steepest point on a plain stretch of the lap (the road starts level;
+	# the pool rebuilds round the car wherever it is put). It used to be the
+	# first 900 m, but since the ring sites (R2) the ring at 400 m holds its
+	# ramps on level road from 200 to 600 m and the next one from 1000 m, so
+	# the first 900 m peak at 2.2 %. Not a ring's ramp zone, the slip lane not
+	# opening or closing beside the car, no gas station's frontage, and not a
+	# tunnel's forced dip (TN1): those are other tests' features, and the dip
+	# is drawn, not rolled by the hills.
+	var reach := int(RoadMap.length()) if RoadMap.is_loop() else 900
+	for m in range(5, reach):
+		if not _plain(float(m)):
+			continue
 		var z := -float(m)
 		var i := RoadFrame._chunk_of(z)
 		var g := RoadFrame.align.grade_at(i, RoadFrame._s_in_chunk(z, i)) if RoadFrame.align != null else 0.0
@@ -109,6 +120,16 @@ func _physics_process(_delta: float) -> bool:
 		_check(downhill > 1.0, "let go on a %.1f%% grade it rolled only %.2f m downhill" % [grade * 100.0, downhill])
 		return _end("")
 	return false
+
+## Whether s metres along the road is ordinary road (the same tests as
+## prop_hit's _plain_shoulder, plus the tunnel dip).
+func _plain(s: float) -> bool:
+	var c := floori(s / RoadChunkBuilder.CHUNK_LEN)
+	var z := -(s - float(c) * RoadChunkBuilder.CHUNK_LEN)
+	if RoadMap.ramp_zone(c) or RoadMap.dip_at(c) != RoadMap.DIP_NONE or GasStation.in_frontage(c, z, 1):
+		return false
+	var aux: Vector2 = RoadMap.aux(c)
+	return is_equal_approx(aux.x, aux.y)
 
 func _check(ok: bool, msg: String) -> void:
 	if not ok:

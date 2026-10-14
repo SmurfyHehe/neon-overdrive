@@ -38,7 +38,11 @@ func _run() -> void:
 	await _frames(30)
 	dog = screen.watchdog
 	_check(dog != null and dog.is_inside_tree(), "the watchdog should be in the scene")
-	var stock := CarSpec.coupe_default()
+	# The car's own stock, the one the Tuner resets to (TunerScreen builds its
+	# model on CarSpec.player_spec). Since #538 the coupe's springs are stiffer
+	# than coupe_default()'s (resting ratio 0.4, not 0.5), so a nudge up from
+	# stock landed on exactly coupe_default()'s 0.5 and a page reset on 0.4.
+	var stock := CarSpec.player_spec(PlayerCar.chassis_kind())
 
 	# --- per-page reset ---
 	game.game_state.toggle_tuning()
@@ -96,7 +100,14 @@ func _run() -> void:
 	await _frames(2)
 	_check(not dog.dialog.visible, "Revert should close the question")
 	_check(is_equal_approx(player.spec.rear_toe, stock.rear_toe) and is_equal_approx(player.rear_toe, stock.rear_toe), "Revert should put the old rear toe back, got %f" % player.spec.rear_toe)
-	_check(player.global_transform.basis.y.y > 0.9, "Revert should set the car upright")
+	# On its roof at rest for 3 s, the roll righting (TM2, 6573bad) is lifting the
+	# car upright over 0.6 s; Revert leaves the frozen car to it. Either way the
+	# car is upright within a second and let go.
+	for i in 60:
+		if player.global_transform.basis.y.y > 0.9 and not player.freeze:
+			break
+		await physics_frame
+	_check(player.global_transform.basis.y.y > 0.9 and not player.freeze, "Revert should set the car upright (up %f, frozen %s)" % [player.global_transform.basis.y.y, player.freeze])
 
 	# --- stuck: ask, Keep ---
 	game.game_state.toggle_tuning()

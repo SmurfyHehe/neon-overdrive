@@ -88,6 +88,36 @@ var is_driven := false
 var opposite_wheel : Wheel
 var beam_axle := 0.0
 
+## (15) B0 tidy (2026-10-11), DEVIATION: same forces, fewer engine calls a tick.
+## Nothing here changes a tuning number; results differ from upstream only in
+## the last decimals (float additions happen in a different order).
+##  a. Surface: upstream asked the collider for its groups every wheel every
+##     tick (a new array each time). The groups are now read only when the wheel
+##     meets a different collider (by instance id), or when surface_epoch has
+##     moved. Whoever changes a ground body's group at runtime must bump
+##     Wheel.surface_epoch (road_chunk_builder.gd does, for its reused pavement
+##     bodies); initialize() forgets the remembered collider.
+##  b. Forces: upstream made up to five vehicle.apply_force() calls per wheel.
+##     The wheel now adds them up as one force and one torque about the car's
+##     centre of mass (tick_force, tick_torque) and Vehicle.process_forces()
+##     applies the car's total once per tick. apply_force(F, P) is by definition
+##     a central force F plus the torque (P - centre of mass) x F, so the sum is
+##     the same push. The two equal and opposite "wheel to body" forces cancel
+##     as a force and are kept as their torque only.
+##  c. Transforms: the wheel's global transform is read once per tick into
+##     locals (and _tick_origin/_tick_basis for process_suspension) instead of
+##     about ten times; is_colliding() is asked once.
+##  d. pow(x, 2) is written x * x.
+static var surface_epoch := 0
+var tick_force := Vector3.ZERO
+var tick_torque := Vector3.ZERO
+var tick_has_force := false
+var _surface_collider_id := 0
+var _surface_epoch := -1
+var _tick_origin := Vector3.ZERO
+var _tick_basis := Basis.IDENTITY
+var _tick_colliding := false
+
 var vehicle : Vehicle
 
 func _process(delta : float) -> void:
@@ -100,9 +130,10 @@ func _process(delta : float) -> void:
 		
 func initialize() -> void:
 	wheel_node.rotation_order = EULER_ORDER_ZXY
-	wheel_moment = 0.5 * wheel_mass * pow(tire_radius, 2)
+	wheel_moment = 0.5 * wheel_mass * (tire_radius * tire_radius)  # (15d)
 	set_target_position(Vector3.DOWN * (spring_length + tire_radius))
 	vehicle = get_parent()
+	_surface_collider_id = 0  # (15a) surface_type was just reset: look the ground up again
 	max_spring_length = spring_length
 	current_cof = coefficient_of_friction[surface_type]
 	current_rolling_resistance = rolling_resistance[surface_type]
@@ -161,59 +192,88 @@ func process_torque(drive : float, drive_inertia : float, brake_torque : float, 
 
 func process_forces(opposite_compression : float, braking : bool, delta : float) -> float:
 	force_raycast_update()
+	# (15c) the wheel does not move inside this call: read its transform once
+	var wheel_transform := global_transform
+	var wheel_origin := wheel_transform.origin
+	var wheel_basis := wheel_transform.basis
+	var colliding := is_colliding()
+	_tick_origin = wheel_origin
+	_tick_basis = wheel_basis
+	_tick_colliding = colliding
 	previous_velocity = local_velocity
-	local_velocity = (global_position - previous_global_position) / delta * global_transform.basis
-	previous_global_position = global_position
-	
+	local_velocity = (wheel_origin - previous_global_position) / delta * wheel_basis
+	previous_global_position = wheel_origin
+
 	## Determine the surface the tire is on. Uses node groups
-	if is_colliding():
+	if colliding:
 		last_collider = get_collider()
 		last_collision_point = get_collision_point()
 		last_collision_normal = get_collision_normal()
-		var surface_groups : Array[StringName] = last_collider.get_groups()
-		if surface_groups.size() > 0:
-			if surface_type != surface_groups[0]:
-				surface_type = surface_groups[0]
-				current_cof = coefficient_of_friction[surface_type]
-				current_rolling_resistance = rolling_resistance[surface_type]
-				current_lateral_grip_assist = lateral_grip_assist[surface_type]
-				current_longitudinal_grip_ratio = longitudinal_grip_ratio[surface_type]
-				current_tire_stiffness = 1000000.0 + 8000000.0 * tire_stiffnesses[surface_type]
+		# (15a) only ask for the groups when the ground under the wheel is a
+		# different collider, or someone changed a ground body's group
+		var collider_id : int = last_collider.get_instance_id()
+		if collider_id != _surface_collider_id or _surface_epoch != surface_epoch:
+			_surface_collider_id = collider_id
+			_surface_epoch = surface_epoch
+			var surface_groups : Array[StringName] = last_collider.get_groups()
+			if surface_groups.size() > 0:
+				if surface_type != surface_groups[0]:
+					surface_type = surface_groups[0]
+					current_cof = coefficient_of_friction[surface_type]
+					current_rolling_resistance = rolling_resistance[surface_type]
+					current_lateral_grip_assist = lateral_grip_assist[surface_type]
+					current_longitudinal_grip_ratio = longitudinal_grip_ratio[surface_type]
+					current_tire_stiffness = 1000000.0 + 8000000.0 * tire_stiffnesses[surface_type]
 	else:
 		last_collider = null
-	
+
 	var compression := process_suspension(opposite_compression, delta)
-	
-	if is_colliding() and last_collider:
+
+	if colliding and last_collider:
 		process_tires(braking, delta)
-		var contact := last_collision_point - vehicle.global_position
+		# (15b) add this wheel's forces up as one force and one torque about the
+		# car's centre of mass; Vehicle.process_forces() applies the car's total
+		var center : Vector3 = vehicle.tick_center_of_mass
+		var contact := last_collision_point - center
+		var force : Vector3
+		var torque : Vector3
 		if spring_force > 0.0:
-			vehicle.apply_force(last_collision_normal * spring_force, contact)
+			force = last_collision_normal * spring_force
+			torque = contact.cross(force)
 		else:
 			## Apply a small amount of downward force if there is no spring force
-			vehicle.apply_force(-global_transform.basis.y * vehicle.mass, global_position - vehicle.global_position)
-		
-		vehicle.apply_force(global_transform.basis.x * force_vector.x, contact)
-		vehicle.apply_force(global_transform.basis.z * force_vector.y, contact)
-		
-		## Applies a torque on the vehicle body centered on the wheel. Gives the vehicle 
+			force = -wheel_basis.y * vehicle.mass
+			torque = (wheel_origin - center).cross(force)
+
+		var tire_force := wheel_basis.x * force_vector.x + wheel_basis.z * force_vector.y
+		force += tire_force
+		torque += contact.cross(tire_force)
+
+		## Applies a torque on the vehicle body centered on the wheel. Gives the vehicle
 		## more weight transfer when the center of gravity is really low.
 		if braking:
 			wheel_to_body_torque_multiplier = 1.0 / (braking_grip_multiplier + 1.0)
-		vehicle.apply_force(-global_transform.basis.y * force_vector.y * 0.5 * wheel_to_body_torque_multiplier, to_global(Vector3.FORWARD * tire_radius))
-		vehicle.apply_force(global_transform.basis.y * force_vector.y * 0.5 * wheel_to_body_torque_multiplier, to_global(Vector3.BACK * tire_radius))
-		
+		# (15b) upstream: -y * k at the wheel's front point and +y * k at its back
+		# point (k = force_vector.y * 0.5 * multiplier, the points tire_radius
+		# either side along z). Equal and opposite, so no net force; their torque
+		# is (back - front) x (y * k) = (z * 2 * tire_radius) x (y * k).
+		torque += wheel_basis.z.cross(wheel_basis.y) * (tire_radius * force_vector.y * wheel_to_body_torque_multiplier)
+
+		tick_force = force
+		tick_torque = torque
+		tick_has_force = true
 		return compression
-	
+
 	else:
+		tick_has_force = false
 		force_vector = Vector2.ZERO
 		slip_vector = Vector2.ZERO
 		spin -= signf(spin) * delta * 2.0 / wheel_moment
 		return 0.0
 
 func process_suspension(opposite_compression : float, delta : float) -> float:
-	if is_colliding() and last_collider:
-		spring_current_length = last_collision_point.distance_to(global_position) - tire_radius
+	if _tick_colliding and last_collider:  # (15c) read once in process_forces
+		spring_current_length = last_collision_point.distance_to(_tick_origin) - tire_radius
 	else:
 		spring_current_length = spring_length
 	
@@ -242,7 +302,7 @@ func process_suspension(opposite_compression : float, delta : float) -> float:
 	var bottom_out_damping_fast := 0.0
 	var bottom_out_force := 0.0
 	if bottom_out:
-		var gravity_on_spring := clampf(global_transform.basis.y.dot(-vehicle.current_gravity.normalized()), 0.0, 1.0)
+		var gravity_on_spring := clampf(_tick_basis.y.dot(-vehicle.current_gravity.normalized()), 0.0, 1.0)
 		bottom_out_force = (((mass_over_wheel * clampf(spring_speed_mm_per_seconds * 0.001, 0.0, 5.0)) / delta) + (mass_over_wheel * vehicle.current_gravity.length() * gravity_on_spring)) * bump_stop_multiplier
 		bottom_out_damping = -slow_bump
 		bottom_out_damping_fast = -fast_bump
@@ -301,7 +361,7 @@ func process_tires(braking : bool, delta : float):
 	if slip_vector.is_zero_approx():
 		slip_vector = Vector2(0.0001, 0.0001)
 	
-	var cornering_stiffness := 0.5 * current_tire_stiffness * pow(contact_patch, 2.0) * pressure_stiffness_mult
+	var cornering_stiffness := 0.5 * current_tire_stiffness * (contact_patch * contact_patch) * pressure_stiffness_mult  # (15d)
 	# (10) load sensitivity: grip per unit of load falls as the load rises, so weight
 	# transfer costs total grip (real tyres: Fy ~ Fz^0.7-0.9). vehicle.tyre_load_sensitivity
 	# is the exponent loss (0 = off, GEVP's old linear-in-load behaviour); the
@@ -310,7 +370,9 @@ func process_tires(braking : bool, delta : float):
 	if vehicle.tyre_load_sensitivity > 0.0 and spring_force > 1.0:
 		load_factor = pow(clampf(spring_force / maxf(mass_over_wheel * 9.81, 1.0), 0.25, 4.0), -vehicle.tyre_load_sensitivity)
 	var friction := current_cof * grip_mult * pressure_grip_mult * load_factor * spring_force - (spring_force / (tire_width * contact_patch * 0.2))
-	var deflect := 1.0 / (sqrt(pow(cornering_stiffness * slip_vector.y, 2.0) + pow(cornering_stiffness * slip_vector.x, 2.0)))
+	var stiff_slip_y := cornering_stiffness * slip_vector.y  # (15d)
+	var stiff_slip_x := cornering_stiffness * slip_vector.x
+	var deflect := 1.0 / (sqrt(stiff_slip_y * stiff_slip_y + stiff_slip_x * stiff_slip_x))
 	
 	## Adds in additional longitudinal grip when braking
 	var braking_help := 1.0
@@ -342,7 +404,8 @@ func process_tires(braking : bool, delta : float):
 	force_vector.y -= process_rolling_resistance() * signf(local_velocity.z)
 
 func process_rolling_resistance() -> float:
-	var rolling_resistance_coefficient := 0.005 + (0.5 * (0.01 + (0.0095 * pow(local_velocity.z * 0.036, 2))))
+	var speed_term := local_velocity.z * 0.036  # (15d)
+	var rolling_resistance_coefficient := 0.005 + (0.5 * (0.01 + (0.0095 * (speed_term * speed_term))))
 	return rolling_resistance_coefficient * spring_force * current_rolling_resistance * pressure_roll_mult
 
 # ---------- (12) tyre pressure and camber ----------
@@ -374,7 +437,8 @@ func set_tyre_setup(pressure: float, pressure_stock: float, camber: float, cambe
 	camber_long_mult = (1.0 - CAMBER_LONG_LOSS * absf(camber)) / (1.0 - CAMBER_LONG_LOSS * absf(camber_stock))
 
 static func camber_lateral_curve(effective_deg: float) -> float:
-	return maxf(1.0 - CAMBER_FALLOFF * pow(effective_deg - CAMBER_PEAK, 2.0), 0.4)
+	var off_peak := effective_deg - CAMBER_PEAK  # (15d)
+	return maxf(1.0 - CAMBER_FALLOFF * (off_peak * off_peak), 0.4)
 
 ## Lateral grip against stock at the current body roll: as the body leans toward
 ## +x, the +x side's tyres lean out (camber goes positive), the -x side's lean in.

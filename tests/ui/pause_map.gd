@@ -9,7 +9,7 @@ extends SceneTree
 #   faces, and the caption names the district and the loop
 # - M from the road: refused (toast signal, no pause) while a cop can see you,
 #   otherwise the pause opens straight on the map; nothing on the endless road
-# - mute is on V and map on M
+# - map is on M and there is no mute key
 # - no page node exists while driving
 # Exit code 1 on failure. Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --path . -s res://tests/ui/pause_map.gd
@@ -52,7 +52,7 @@ func _run() -> void:
 
 	# ---------- keys ----------
 	_check(InputMap.has_action(&"map") and _keycode(&"map") == KEY_M, "map should be bound to M")
-	_check(_keycode(&"mute") == KEY_V, "mute should be bound to V")
+	_check(not InputMap.has_action(&"mute"), "there is no mute key (sliders in Settings > Sound)")
 
 	# ---------- nothing while driving ----------
 	_check(menu.map_view == null and menu.find_child("MapView", true, false) == null, "no map page exists while driving")
@@ -150,7 +150,7 @@ func _run() -> void:
 func _keycode(action: StringName) -> int:
 	for e in InputMap.action_get_events(action):
 		if e is InputEventKey:
-			return int((e as InputEventKey).keycode)
+			return KeyBindings.code_of(e as InputEventKey)
 	return 0
 
 func _frames(n: int) -> void:

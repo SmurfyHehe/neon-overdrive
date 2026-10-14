@@ -22,9 +22,14 @@ static var use_cache := true
 static func cached(recipe_path: String, layer: String, maker: Callable) -> AudioStream:
 	if not use_cache:
 		return maker.call()
-	var src := (load(recipe_path) as GDScript).source_code
-	var tag := "%d_%x" % [CACHE_VERSION, src.hash()]
-	var path := CACHE_DIR.path_join("%s_%s_%s.res" % [recipe_path.get_file().get_basename(), layer, tag])
+	var path := _cache_path(recipe_path, layer)
+	if _jobs.has(path):
+		# prefetch() started it: take that build instead of making it again
+		var built := _collect(path)
+		if built != null:
+			DirAccess.make_dir_recursive_absolute(CACHE_DIR)
+			ResourceSaver.save(built, path)
+			return built
 	if ResourceLoader.exists(path):
 		var res := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE)
 		if res is AudioStream:
@@ -33,6 +38,128 @@ static func cached(recipe_path: String, layer: String, maker: Callable) -> Audio
 	DirAccess.make_dir_recursive_absolute(CACHE_DIR)
 	ResourceSaver.save(made, path)
 	return made
+
+## Cold cache, first boot (issue #524): the player car's sounds took about 3.5 s
+## to make one after another on the main thread before the garage could open.
+## prefetch() starts each missing one off the main thread; the cached() call
+## that follows (same recipe and layer) takes it and saves it. Makers must be
+## pure (they run off the main thread): every one in the car's audio is a
+## static function of its arguments.
+## `urgent`: the main thread asks for it straight away, so it goes to the
+## worker pool as a high-priority task (low-priority ones share only a few
+## threads). Not urgent: nothing waits for it yet (the garage boot), so it
+## goes to one background thread of its own, in order. Not the pool: seconds
+## of these at the front of the pool's queue held up the engine's per-frame
+## audio block and its loop bake, and the main thread waits on those.
+static func prefetch(recipe_path: String, layer: String, maker: Callable, urgent := true) -> void:
+	if not use_cache:
+		return
+	var path := _cache_path(recipe_path, layer)
+	if _jobs.has(path) or ResourceLoader.exists(path):
+		return
+	var built: Array = []
+	if urgent:
+		var task := WorkerThreadPool.add_task(func() -> void: built.append(maker.call()), true, "audio bake")
+		_jobs[path] = [task, built]
+		return
+	_jobs[path] = [-1, built]
+	_lane_lock.lock()
+	_lane_queue.append([path, maker, built])
+	_lane_lock.unlock()
+	if _lane == null or not _lane.is_alive():
+		if _lane != null:
+			_lane.wait_to_finish()
+		_lane = Thread.new()
+		_lane.start(_run_lane, Thread.PRIORITY_LOW)
+
+## True while prefetch() is still making this one.
+static func building(recipe_path: String, layer: String) -> bool:
+	if not use_cache:
+		return false
+	var job: Variant = _jobs.get(_cache_path(recipe_path, layer))
+	if job == null:
+		return false
+	if int(job[0]) >= 0:
+		return not WorkerThreadPool.is_task_completed(int(job[0]))
+	_lane_lock.lock()
+	var pending: bool = (job[1] as Array).is_empty()
+	_lane_lock.unlock()
+	return pending
+
+## Call before the scene that asked for prefetches goes away: drops the
+## background jobs that have not started (made again the next time they are
+## asked for), waits for the ones running (at most one take each), and saves
+## and lets go of every finished one nobody collected. Nothing outlives it.
+static func release() -> void:
+	_lane_lock.lock()
+	for job in _lane_queue:
+		_jobs.erase(job[0])
+	_lane_queue.clear()
+	_lane_lock.unlock()
+	if _lane != null:
+		_lane.wait_to_finish()
+		_lane = null
+	for path in _jobs.keys():
+		var built := _collect(path)
+		if built != null:
+			DirAccess.make_dir_recursive_absolute(CACHE_DIR)
+			ResourceSaver.save(built, path)
+
+static var _tags := {}   # recipe script path -> cache tag (its source hash), read once
+static var _jobs := {}   # cache file path -> [pool task id or -1 on the lane, [the stream, once built]]
+static var _lane: Thread
+static var _lane_lock := Mutex.new()
+static var _lane_queue := []   # [cache path, maker, result array], oldest first
+
+static func _run_lane() -> void:
+	while true:
+		_lane_lock.lock()
+		if _lane_queue.is_empty():
+			_lane_lock.unlock()
+			return
+		var job: Array = _lane_queue.pop_front()
+		_lane_lock.unlock()
+		var made: Variant = (job[1] as Callable).call()
+		_lane_lock.lock()
+		(job[2] as Array).append(made)
+		_lane_lock.unlock()
+
+## The stream prefetch() made for this cache file, waiting for it if needed;
+## null if it failed.
+static func _collect(path: String) -> AudioStream:
+	var job: Array = _jobs[path]
+	_jobs.erase(path)
+	var built: Array = job[1]
+	if int(job[0]) >= 0:
+		WorkerThreadPool.wait_for_task_completion(int(job[0]))
+	else:
+		_lane_lock.lock()
+		var queued := -1
+		for i in _lane_queue.size():
+			if _lane_queue[i][0] == path:
+				queued = i
+		if queued >= 0:
+			# not started yet: make it here rather than wait behind the others
+			var maker: Callable = _lane_queue[queued][1]
+			_lane_queue.remove_at(queued)
+			_lane_lock.unlock()
+			built.append(maker.call())
+		else:
+			_lane_lock.unlock()
+			while true:   # on the lane right now: at most one take
+				_lane_lock.lock()
+				var done := not built.is_empty()
+				_lane_lock.unlock()
+				if done:
+					break
+				OS.delay_usec(200)
+	return built[0] if not built.is_empty() and built[0] is AudioStream else null
+
+static func _cache_path(recipe_path: String, layer: String) -> String:
+	if not _tags.has(recipe_path):
+		var src := (load(recipe_path) as GDScript).source_code
+		_tags[recipe_path] = "%d_%x" % [CACHE_VERSION, src.hash()]
+	return CACHE_DIR.path_join("%s_%s_%s.res" % [recipe_path.get_file().get_basename(), layer, _tags[recipe_path]])
 
 ## RBJ biquad, transposed direct form II. set_* return self so a filter can be
 ## made and tuned in one line; retune mid-loop for a moving centre frequency

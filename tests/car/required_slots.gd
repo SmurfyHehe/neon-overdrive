@@ -74,10 +74,22 @@ func _floor_node() -> void:
 	body.position = Vector3(0.0, -0.5, 0.0)
 	root.add_child(body)
 
+## Player cars built for a check stay in the tree until the test ends, each in
+## its own spot. Freeing one with its sounds playing and then building a
+## different car hangs Godot's audio thread (headless, Dummy driver: the main
+## thread waits forever on the audio lock in AudioDsp.cached, 2026-10-11). The
+## game's own car swap reloads the scene and does not hang (checked p0->p7,
+## p1->p2, p7->p1 through GameState.restart).
+var _parked: Array[Node] = []
+
+func _park(car: Node3D) -> void:
+	car.process_mode = Node.PROCESS_MODE_DISABLED
+	_parked.append(car)
+
 func _player(kind: String) -> PlayerCar:
 	PlayerCars.selected = kind
 	var p: PlayerCar = load("res://scripts/car/player.gd").new()
-	p.position = Vector3(0.0, 0.6, 0.0)
+	p.position = Vector3(-8.0 * _parked.size() - 12.0, 0.6, 20.0)
 	root.add_child(p)
 	await process_frame
 	return p
@@ -90,7 +102,7 @@ func _players() -> void:
 		var p := await _player(kind)
 		_assert_car("player " + kind, p, kind, p.chassis_visual)
 		_fittings_sane(kind, p.chassis_visual)
-		p.free()
+		_park(p)
 	PlayerCars.selected = PlayerCars.DEFAULT
 
 func _ai_cars() -> void:
@@ -145,15 +157,26 @@ func _fittings_sane(kind: String, visual: Node3D) -> void:
 	for s in body.mesh.get_surface_count():
 		if body.mesh.surface_get_name(s) != "glow":
 			continue
-		var cols: PackedColorArray = body.mesh.surface_get_arrays(s)[Mesh.ARRAY_COLOR]
-		for i in cols.size() / 3:
-			var a := int(round(cols[i * 3].a * 10.0))
+		var arrays := body.mesh.surface_get_arrays(s)
+		var cols: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+		# A parts body is indexed: a triangle's first corner is every third index.
+		var idx: Variant = arrays[Mesh.ARRAY_INDEX]
+		var n: int = (idx as PackedInt32Array).size() / 3 if idx != null else cols.size() / 3
+		for i in n:
+			var a := int(round(cols[(idx as PackedInt32Array)[i * 3] if idx != null else i * 3].a * 10.0))
 			if tags.has(a):
 				tags[a] += 1
 	var fit: Dictionary = visual.get_meta("fittings", {})
 	_check(int(fit.get("tris", 0)) > 0 and int(fit.get("tris", 0)) <= 150, "%s: the added lenses and plates should be 1..150 triangles, got %d" % [kind, int(fit.get("tris", 0))])
-	_check(tags[9] == int(fit.get("reverse", 0)) * 2, "%s: %d reverse-tagged triangles for %d lenses" % [kind, tags[9], int(fit.get("reverse", 0))])
-	_check(tags[8] == int(fit.get("third_brake", 0)) * 2, "%s: %d third-brake triangles for %d lenses" % [kind, tags[8], int(fit.get("third_brake", 0))])
+	if CarAssembler.surface_index(body.mesh, "trim") >= 0:
+		# A body from parts models its own lamps (CarAssembler.GLOW_TAGS tags
+		# them): every lamp the slots count has lens triangles of its kind.
+		_check(tags[9] >= int(fit.get("reverse", 0)) * 2, "%s: %d reverse-tagged triangles for %d lenses" % [kind, tags[9], int(fit.get("reverse", 0))])
+		_check(tags[8] >= int(fit.get("third_brake", 0)) * 2, "%s: %d brake-lamp triangles for %d lenses" % [kind, tags[8], int(fit.get("third_brake", 0))])
+		_check(tags[7] >= 2, "%s: %d indicator triangles" % [kind, tags[7]])
+	else:
+		_check(tags[9] == int(fit.get("reverse", 0)) * 2, "%s: %d reverse-tagged triangles for %d lenses" % [kind, tags[9], int(fit.get("reverse", 0))])
+		_check(tags[8] == int(fit.get("third_brake", 0)) * 2, "%s: %d third-brake triangles for %d lenses" % [kind, tags[8], int(fit.get("third_brake", 0))])
 
 # ---------- the check can fail ----------
 
@@ -168,7 +191,7 @@ func _negative() -> void:
 	_check(missing.size() >= 6, "a car with no fittings should report its missing slots, got %s" % [missing])
 	_check("brake_front (MISSING)" in missing and "plate_rear (MISSING)" in missing,
 		"the missing list should name the brake and plate slots: %s" % [missing])
-	p.free()
+	_park(p)
 	OS.set_environment("NEON_TEST_CAR", "")
 
 # ---------- brakes ----------
@@ -179,7 +202,7 @@ func _brake_rules() -> void:
 	for kind in ["p2_hothatch", "p4_kei"]:
 		var b := CarFittings.brakes_for(kind)
 		_check(b.front == "disc" and b.rear == "drum", "%s has front discs and rear drums, got %s" % [kind, b])
-	for kind in ["p1_coupe", "p3_tuner", "p5_muscle", "p6_crossover", "c1_patrol", "c2_patrolsuv", "c3_interceptor"]:
+	for kind in ["p1_coupe", "p3_tuner", "p5_muscle", "p6_crossover", "p10_truck", "c1_patrol", "c2_patrolsuv", "c3_interceptor"]:
 		var b := CarFittings.brakes_for(kind)
 		_check(b.front == "disc" and b.rear == "disc", "%s has discs all round, got %s" % [kind, b])
 	for kind in CarFittings.BRAKES:
@@ -212,8 +235,9 @@ func _lamps_light() -> void:
 		p.brake_input = 0.0
 		p.current_gear = 1
 		lamps.apply()
-		_check(_param(v, "brake") == 0.0 and _param(v, "reverse") == 0.0 and _param(v, "hazard") == 0.0
-			and _param(v, "turn_l") == 0.0 and _param(v, "turn_r") == 0.0, "%s: every lamp function starts off" % kind)
+		# "turn" is NpcCarBuilder's state: 0 off, 1 left, 2 right, 3 both (hazard).
+		_check(_param(v, "brake") == 0.0 and _param(v, "reverse") == 0.0 and _param(v, "turn") == 0.0,
+			"%s: every lamp function starts off" % kind)
 		p.brake_input = 1.0
 		lamps.apply()
 		_check(_param(v, "brake") == 1.0, "%s: the brake pedal lights the brake lamps" % kind)
@@ -224,16 +248,16 @@ func _lamps_light() -> void:
 		p.current_gear = 1
 		lamps.toggle_left()
 		lamps.apply()
-		_check(_param(v, "turn_l") == 1.0 and _param(v, "turn_r") == 0.0, "%s: left indicator lights the left side only" % kind)
+		_check(_param(v, "turn") == NpcCarBuilder.TURN_LEFT, "%s: left indicator lights the left side only" % kind)
 		lamps.toggle_right()
 		lamps.apply()
-		_check(_param(v, "turn_r") == 1.0 and _param(v, "turn_l") == 0.0, "%s: right replaces left" % kind)
+		_check(_param(v, "turn") == NpcCarBuilder.TURN_RIGHT, "%s: right replaces left" % kind)
 		lamps.toggle_hazard()
 		lamps.apply()
-		_check(_param(v, "hazard") == 1.0, "%s: the hazard key lights all four" % kind)
+		_check(_param(v, "turn") == NpcCarBuilder.TURN_BOTH, "%s: the hazard key lights all four" % kind)
 		lamps.toggle_hazard()
 		lamps.apply()
-		_check(_param(v, "hazard") == 0.0, "%s: pressed again, the hazards go off" % kind)
+		_check(_param(v, "turn") == NpcCarBuilder.TURN_RIGHT, "%s: pressed again, the hazards go off (the right indicator is still on)" % kind)
 		# Self-cancel: steer round the corner, straighten out.
 		p.steering_input = 0.8
 		lamps._self_cancel()
@@ -241,8 +265,8 @@ func _lamps_light() -> void:
 		p.steering_input = 0.02
 		lamps._self_cancel()
 		lamps.apply()
-		_check(not lamps.turn_right and _param(v, "turn_r") == 0.0, "%s: the indicator cancels once straight" % kind)
-		p.free()
+		_check(not lamps.turn_right and _param(v, "turn") == 0.0, "%s: the indicator cancels once straight" % kind)
+		_park(p)
 	PlayerCars.selected = PlayerCars.DEFAULT
 
 ## A kind whose body is built from parts gets no generated meshes.

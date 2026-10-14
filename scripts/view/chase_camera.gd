@@ -16,6 +16,10 @@ class_name ChaseCamera
 const MODE_NAMES := ["A: hard snap", "B: light smoothing", "C: smoothing + reverse swing"]
 const FOLLOW_RATE := 6.0  # 1/s, how fast the camera catches up sideways/vertically
 const SWING_RATE := 5.0   # 1/s, how fast it swings round for reverse (~0.6 s)
+## 1/s, how fast the rig turns to follow the car's heading (smoothing B and C;
+## A locks to it). Round the 63 m roundabout at 50 km/h the car turns 25
+## deg/s and the rig trails it by about 25/HEADING_RATE degrees.
+const HEADING_RATE := 6.0
 
 # Framing. Was distance 6.0 / height 3.2 / look 10 m ahead at 1.1 / FOV 62.
 const DIST := 5.2         # m behind the car at rest
@@ -53,6 +57,9 @@ const SURFACE_SHAKE_ROT := 0.008 # kerb/sidewalk rumble ("Kerb" surface)
 const SURFACE_SHAKE_POS := 0.02
 const IMPACT_SHAKE_ROT := 0.035  # ~2 deg at full trauma
 const IMPACT_SHAKE_POS := 0.12
+const START_SHAKE_ROT := 0.006   # ~0.35 deg: the engine rocking as it cranks and catches (PlayerCar.start_shake)
+const START_SHAKE_POS := 0.008
+const START_SHAKE_CHASE := 0.5   # from behind the car it is half what the driver feels
 const TRAUMA_DECAY := 1.6        # 1/s
 ## Velocity change in one physics tick (m/s) above which it counts as a hit.
 ## Hard braking peaks well under this (see tests/view/camera_feel.gd); a wall at
@@ -74,7 +81,12 @@ const BUMP_DECAY := 30.0         # 1/s
 ## The passenger-side door mirror is NOT in view from here (58 degrees right,
 ## past the screen edge at every FOV the slider allows); looking around
 ## (the arrow keys, below) turns the head to it.
-enum View { CHASE, COCKPIT }
+## HOOD (2026-10-11) is the third view: the camera on the bonnet just ahead of the
+## windscreen, rigid to the body, looking where the car points. F cycles
+## cockpit -> hood -> chase. The body is drawn as in the chase view, the cabin
+## is not (CockpitFrame is in its chase state), the mirror cameras are off and
+## the HUD rear strip is on; the sound is the outside perspective.
+enum View { CHASE, COCKPIT, HOOD }
 const COCKPIT_EYE := Vector3(-0.32, 1.10, 0.30)  # car-local, -x is the driver's side (left-hand drive)
 ## The eye in this car: COCKPIT_EYE moved by the car's cabin offset
 ## (CabinSpec.for_kind(kind).eye, from the CABIN in that car's data file).
@@ -156,6 +168,19 @@ var _hold_t := 0.0                 # seconds it has been held
 var _latch_dir := 0                # a tap's door mirror, held for _latch_t more seconds
 var _latch_t := 0.0
 var _look_focus := 0               # door mirror the head is turned to (-1 left, +1 right)
+## Hood view (Roy, 2026-10-11): the look keys turn the camera on the bonnet the
+## way they turn the head, with tighter limits (nothing of the cabin is there to
+## look into). Horizon levelling, the corner look and the shake run at
+## HOOD_STRENGTH of the cockpit's, and there is no head lean. B (look_back)
+## swaps to the camera on the roof, which looks straight back while held and
+## ignores the arrows. The points are CabinSpec.hood_cam / roof_back_cam.
+const HOOD_YAW_MAX := 90.0
+const HOOD_PITCH_UP := 20.0
+const HOOD_PITCH_DOWN := 15.0
+const HOOD_STRENGTH := 0.5
+const HoodFit := preload("res://scripts/view/hood_fit.gd")
+var hood_cam := Vector3(0.0, 1.0, -1.0)         # car space, from the car's CABIN, fitted to the body on entering the view
+var roof_back_cam := Vector3(0.0, 1.4, 1.0)
 ## Look around outside (Roy, 2026-10-11): in the chase view the arrow keys swing
 ## the camera round the car on a circle of the usual chase distance. Hold
 ## Left/Right: out to ORBIT_HOLD_DEG on that side of the CAR (Left always shows
@@ -188,6 +213,10 @@ var shake_enabled := true
 # Smoothed state the HUD and tests can read.
 var speed_t := 0.0     # 0..1, eased speed factor
 var accel_fov := 0.0   # current acceleration FOV term, degrees
+## A window tap made during an idle action (L), kept until the hand is back:
+## 0 none, 1 the key went down during the use, above 1 the ticks left of the replayed tap.
+const WINDOW_TAP_TICKS := 3
+var _window_tap := 0
 var trauma := 0.0      # 0..1, impact shake energy
 var bump := 0.0        # 0..1, the last road bump, decaying
 var surface_t := 0.0   # 0..1, share of wheels on a rough surface (scaled by speed)
@@ -201,10 +230,11 @@ var look_height := LOOK_HEIGHT
 var anchor := Vector3.ZERO  # chase position before shake
 var aim := Vector3.ZERO     # point the rig looks at before shake
 
-var _follow := Vector2.ZERO
-var _yaw := 0.0
-## Whether the car faces back up the road (RoadFrame's +z).
-var _up_road := false
+var _follow := Vector2.ZERO   # the point the rig follows: across, up (road space)
+var _follow_z := 0.0          # and along the road
+var _yaw := 0.0               # where the rig looks, road space (0 = down the road, -z)
+var _head := 0.0              # the car's heading, eased (HEADING_RATE)
+var _flip := 0.0              # 0 behind the car, PI in front (reversing, B), eased in mode C
 var _started := false
 var _started_fov := false
 var _prev_vel := Vector3.ZERO
@@ -238,22 +268,47 @@ func _ready() -> void:
 	# The interior lives on the car (car space), not on the camera, so the
 	# mirrors and (next PR) the driver sit where they are from any view. This
 	# camera never draws the mirror-only layer the body moves to in the cockpit.
-	eye = CabinSpec.for_kind(PlayerCar.chassis_kind()).eye   # the car's own eye (CABIN in its data file)
+	var cab := CabinSpec.for_kind(PlayerCar.chassis_kind())
+	eye = cab.eye   # the car's own eye (CABIN in its data file)
+	_hood_points()
 	if CockpitFrame.enabled and OS.get_environment("NEON_COCKPIT") != "0":
 		frame = CockpitFrame.new(target)
 		target.add_child(frame)
 	cull_mask &= ~CockpitFrame.MIRROR_ONLY_BIT
 	perspective = PerspectiveAudio.new()
 	add_child(perspective)
+	# The view F left the game in (chase unless the settings file says otherwise).
+	var saved := ViewSettings.CAMERA_VIEWS.find(ViewSettings.camera_view) if ViewSettings.remembers_view() else 0
+	if saved > 0:
+		set_view(saved as View)
 
-## Switch between the chase and cockpit views.
+## The hood view's two camera points: the car's own CABIN keys, else
+## CabinSpec's computed defaults fitted to the body as it is now (a scoop, a
+## tall bonnet or a cabin that is not this car's lifts or moves the default).
+func _hood_points() -> void:
+	var cab := CabinSpec.for_kind(PlayerCar.chassis_kind())
+	hood_cam = CabinSpec.hood_cam(cab)
+	roof_back_cam = CabinSpec.roof_back_cam(cab)
+	if (cab.has("hood_cam") and cab.has("roof_back_cam")) or target.chassis_visual == null:
+		return
+	var fit = HoodFit.new()
+	fit.build(target.chassis_visual, target.global_transform.affine_inverse())
+	if not cab.has("hood_cam"):
+		hood_cam = fit.fit_hood(hood_cam)
+	if not cab.has("roof_back_cam"):
+		roof_back_cam = fit.fit_roof(roof_back_cam)
+
+## Switch between the chase, cockpit and hood views.
 func set_view(v: View) -> void:
 	view = v
+	if v == View.HOOD:
+		_hood_points()   # the body may have changed since the last time
 	var cockpit := v == View.COCKPIT
-	if not cockpit:
+	if v == View.CHASE:
 		look_yaw = 0.0   # the chase view has no head to turn
 		look_pitch = 0.0
-		_set_look_focus(0)
+	if not cockpit:
+		_set_look_focus(0)   # no door mirror is drawn in the chase or hood view
 	reset_orbit()   # F: both ways start from the straight chase view
 	if frame != null:
 		frame.set_cockpit(cockpit)
@@ -286,28 +341,45 @@ func window_openness() -> float:
 	return perspective.window
 
 func mode_name() -> String:
+	if view == View.HOOD:
+		return "HOOD"
 	return "COCKPIT" if view == View.COCKPIT else MODE_NAMES[mode]
 
 # Polled on the physics tick like all game input (#30), and the impact check
 # needs exactly one velocity sample per tick.
 func _physics_process(delta: float) -> void:
-	if Input.is_action_just_pressed("camera_cycle"):
-		ViewSettings.set_camera_smoothing((ViewSettings.camera_smoothing + 1) % MODE_NAMES.size())
-		ViewSettings.save_settings()
-	if ViewSettings.camera_smoothing != _seen_smoothing:   # menu or C key changed it
+	if ViewSettings.camera_smoothing != _seen_smoothing:   # the Settings slider changed it
 		_seen_smoothing = ViewSettings.camera_smoothing
 		mode = _seen_smoothing
 	if Input.is_action_just_pressed("camera_view"):
-		set_view(View.CHASE if view == View.COCKPIT else View.COCKPIT)
+		# cockpit -> hood -> chase -> cockpit; remembered for the next start
+		set_view(View.HOOD if view == View.COCKPIT else (View.CHASE if view == View.HOOD else View.COCKPIT))
+		ViewSettings.set_camera_view(ViewSettings.CAMERA_VIEWS[view])
+		if ViewSettings.remembers_view():
+			ViewSettings.save_settings()
 	look_back = Input.is_action_pressed("look_back")
 	# the left hand does one thing at a time: the window key waits while it is out on a gesture
 	var gesturing := frame != null and frame.driver != null and frame.driver.is_gesturing()
-	perspective.window_key(Input.is_action_pressed("window") and not gesturing, delta)
+	# nor during a puff or a sip; a window tap in the middle of one is kept and played once the hand is back
+	var idling := frame != null and frame.driver != null and frame.driver.is_idling()
+	var window_down := Input.is_action_pressed("window")
+	if idling:
+		if window_down:
+			_window_tap = 1
+		elif _window_tap == 1:
+			_window_tap = WINDOW_TAP_TICKS + 1   # pressed and let go during the use
+	elif _window_tap == 1:
+		_window_tap = 0                          # still held: the key itself carries on
+	elif _window_tap > 1:
+		_window_tap -= 1
+		window_down = _window_tap > 1            # the kept tap: down for WINDOW_TAP_TICKS, then up
+	perspective.window_key(window_down and not gesturing and not idling, delta)
 	if frame != null:
 		frame.set_window(perspective.window, perspective.window_direction())
 		if frame.driver != null:
 			var aim := DriverModel.AIM_BACK if look_back else (DriverModel.AIM_LEFT if Input.is_action_pressed("look_left") else DriverModel.AIM_AHEAD)
 			frame.driver.gesture_key(Input.is_action_pressed("flip_off"), aim)
+			frame.driver.idle_key(Input.is_action_pressed("idle_action"))
 	# where the driver's head points, for the radio and the window's wind
 	perspective.head_yaw_deg = look_yaw + (180.0 if look_back else 0.0) if view == View.COCKPIT else 0.0
 	if perspective.car_audio == null:
@@ -351,6 +423,9 @@ func _process(delta: float) -> void:
 	bump *= exp(-BUMP_DECAY * delta)
 	if frame != null:
 		frame.steering = target.steer_fraction()  # the wheel turns the way the car does, in every view
+		# damage: the drawn wheel rests crooked by the front toe bend x this car's steering ratio
+		target.damage.steering_ratio = CockpitFrame.WHEEL_LOCK_RAD / maxf(target.max_steering_angle, 0.01)
+		frame.steer_centre = target.steer_centre_view(CockpitFrame.WHEEL_LOCK_RAD)
 	if view == View.COCKPIT:
 		_place_cockpit(delta)
 		if look_back:
@@ -358,8 +433,13 @@ func _process(delta: float) -> void:
 		if shake_enabled:
 			_shake(delta, false)
 			rotate_object_local(Vector3.RIGHT, BUMP_ROT * bump)
+	elif view == View.HOOD and not hood_open():
+		_place_hood(delta)
+		if shake_enabled:
+			_shake(delta, false, HOOD_STRENGTH)
+			rotate_object_local(Vector3.RIGHT, BUMP_ROT * bump * HOOD_STRENGTH)
 	else:
-		_place(delta)
+		_place(delta)   # the chase rig (also the hood view while the hood is up)
 		if shake_enabled:
 			_shake(delta, true)
 			global_position += global_basis.y * BUMP_POS * bump
@@ -381,15 +461,37 @@ func _place_cockpit(delta: float) -> void:
 	global_transform = Transform3D(_levelled(xf.basis) * turn * tilt, xf * (eye + head_offset))
 	fov = ViewSettings.cockpit_fov + COCKPIT_FOV_SPEED_GAIN * speed_t
 
+## On the bonnet: the interpolated body transform, levelled and leaning into
+## corners at HOOD_STRENGTH, no head sway, FOV as in the cockpit. B moves it to
+## the roof camera looking straight back.
+func _place_hood(delta: float) -> void:
+	var xf := target.get_global_transform_interpolated()
+	_update_look(delta)
+	var level := _levelled(xf.basis, HOOD_STRENGTH)
+	if look_back:
+		global_transform = Transform3D(level * Basis(Vector3.UP, PI), xf * roof_back_cam)
+	else:
+		var turn := Basis.from_euler(Vector3(deg_to_rad(look_pitch), deg_to_rad(look_yaw + corner_yaw), 0.0))
+		global_transform = Transform3D(level * turn, xf * hood_cam)
+	fov = ViewSettings.cockpit_fov + COCKPIT_FOV_SPEED_GAIN * speed_t
+
+## True while the hood is up, when the hood view shows the chase camera instead
+## (the bonnet camera would be inside the lid). No roadside hood-pop sets one
+## yet: CarDetail.panel_open (a hood, door or trunk open) is the flag the
+## roadside kit is built to set, so this follows it; nothing sets it in play.
+func hood_open() -> bool:
+	var d := target.get_node_or_null(CarDetail.NODE_NAME) as CarDetail
+	return d != null and d.panel_open
+
 ## The body's orientation with part of its roll and pitch taken out (C2): the
 ## camera's tilt against the world is (1 - HORIZON_*_LEVEL) of the body's. Yaw
 ## is untouched. The levelling fades out past HORIZON_FADE_LO_DEG..HI so a
 ## rollover is shown whole. Once per drawn frame; one Euler decompose and one
 ## compose, a few hundred nanoseconds.
-func _levelled(b: Basis) -> Basis:
+func _levelled(b: Basis, strength := 1.0) -> Basis:
 	var e := b.orthonormalized().get_euler(EULER_ORDER_YXZ)   # (pitch, yaw, roll)
-	var roll_f := HORIZON_ROLL_LEVEL * (1.0 - smoothstep(HORIZON_FADE_LO_DEG, HORIZON_FADE_HI_DEG, rad_to_deg(absf(e.z))))
-	var pitch_f := HORIZON_PITCH_LEVEL * (1.0 - smoothstep(HORIZON_FADE_LO_DEG, HORIZON_FADE_HI_DEG, rad_to_deg(absf(e.x))))
+	var roll_f := HORIZON_ROLL_LEVEL * strength * (1.0 - smoothstep(HORIZON_FADE_LO_DEG, HORIZON_FADE_HI_DEG, rad_to_deg(absf(e.z))))
+	var pitch_f := HORIZON_PITCH_LEVEL * strength * (1.0 - smoothstep(HORIZON_FADE_LO_DEG, HORIZON_FADE_HI_DEG, rad_to_deg(absf(e.x))))
 	return Basis.from_euler(Vector3(e.x * (1.0 - pitch_f), e.y, e.z * (1.0 - roll_f)), EULER_ORDER_YXZ)
 
 ## Eases the head toward where the arrow keys point it (or back to straight
@@ -397,8 +499,15 @@ func _levelled(b: Basis) -> Basis:
 ## LOOK_TAP_S) stops at the door mirror and stays there a moment; held, the head
 ## goes on turning. With no key down, the view leans toward the bend (C4).
 func _update_look(delta: float) -> void:
+	var hood := view == View.HOOD
 	var axis := Input.get_axis("look_right", "look_left")   # + = left
 	var up := Input.get_axis("look_down", "look_up")
+	if hood and look_back:
+		axis = 0.0   # B: the roof camera looks straight back, the arrows wait
+		up = 0.0
+		_hold_dir = 0
+		_hold_t = 0.0
+		_latch_t = 0.0
 	var want_yaw := 0.0
 	if axis != 0.0:
 		var dir := 1 if axis > 0.0 else -1
@@ -407,7 +516,7 @@ func _update_look(delta: float) -> void:
 			_hold_t = 0.0
 		_hold_t += delta
 		_latch_t = 0.0
-		want_yaw = axis * (LOOK_MIRROR_YAW if _hold_t < LOOK_TAP_S else LOOK_YAW_MAX)
+		want_yaw = axis * (LOOK_MIRROR_YAW if _hold_t < LOOK_TAP_S else (HOOD_YAW_MAX if hood else LOOK_YAW_MAX))
 	else:
 		if _hold_dir != 0 and _hold_t < LOOK_TAP_S:
 			_latch_dir = _hold_dir
@@ -417,7 +526,7 @@ func _update_look(delta: float) -> void:
 		if _latch_t > 0.0:
 			_latch_t -= delta
 			want_yaw = _latch_dir * LOOK_MIRROR_YAW
-	var want_pitch := up * (LOOK_PITCH_UP if up > 0.0 else LOOK_PITCH_DOWN)
+	var want_pitch := up * ((HOOD_PITCH_UP if hood else LOOK_PITCH_UP) if up > 0.0 else (HOOD_PITCH_DOWN if hood else LOOK_PITCH_DOWN))
 	var k := 1.0 - exp(-LOOK_RATE * delta)
 	look_yaw = lerpf(look_yaw, want_yaw, k)
 	look_pitch = lerpf(look_pitch, want_pitch, k)
@@ -431,9 +540,9 @@ func _update_look(delta: float) -> void:
 		var w := target.angular_velocity.y
 		var strength := clampf((absf(w) - CORNER_RATE_DEAD) / (CORNER_RATE_FULL - CORNER_RATE_DEAD), 0.0, 1.0)
 		var gate := smoothstep(CORNER_SPEED_LO, CORNER_SPEED_HI, absf(target.current_speed()))
-		want_corner = signf(w) * strength * gate * CORNER_LOOK_MAX_DEG
+		want_corner = signf(w) * strength * gate * CORNER_LOOK_MAX_DEG * (HOOD_STRENGTH if hood else 1.0)
 	corner_yaw = lerpf(corner_yaw, want_corner, corner_k)
-	_set_look_focus(0 if absf(look_yaw) < LOOK_FOCUS_YAW else (-1 if look_yaw > 0.0 else 1))
+	_set_look_focus(0 if hood or absf(look_yaw) < LOOK_FOCUS_YAW else (-1 if look_yaw > 0.0 else 1))
 
 func _set_look_focus(side: int) -> void:
 	if side == _look_focus:
@@ -479,16 +588,20 @@ func _update_feel(delta: float) -> void:
 	dist_now = base_dist * (DOLLY * widen + (1.0 - DOLLY))
 	height_now = base_height - SQUAT * speed_t
 	trauma = maxf(0.0, trauma - TRAUMA_DECAY * delta)
-	var rough := 0
-	var grounded := 0
-	for w in target.wheel_array:
-		if w.is_colliding():
-			grounded += 1
-			if w.surface_type != "Road":
-				rough += 1
-	var want_s := 0.0
-	if grounded > 0:
-		want_s = float(rough) / float(grounded) * clampf(speed / 15.0, 0.0, 1.0)
+	# How rough the ground under the wheels is (SurfaceFeel): the pavement and
+	# the kerb strip shake fully, the gritty shoulder about a third as much.
+	var want_s := target.surface_feel.rough_share() * clampf(speed / 15.0, 0.0, 1.0)
+	if not SurfaceFeel.enabled:
+		var rough := 0
+		var grounded := 0
+		for w in target.wheel_array:
+			if w.is_colliding():
+				grounded += 1
+				if w.surface_type != "Road":
+					rough += 1
+		want_s = float(rough) / float(grounded) * clampf(speed / 15.0, 0.0, 1.0) if grounded > 0 else 0.0
+	# a wheel on its rim or a bent rim shakes the car the same way (flat_tyre.gd)
+	want_s = maxf(want_s, target.wheel_shake)
 	surface_t = lerpf(surface_t, want_s, 1.0 - exp(-12.0 * delta))
 
 ## Eases orbit_yaw / orbit_lift toward the arrow keys (chase view only).
@@ -530,67 +643,110 @@ func _place(delta: float) -> void:
 	# the 60 Hz physics tick, and with vsync off the camera updates several
 	# times per tick. Following the raw position made car and road judder.
 	var p := target.get_global_transform_interpolated().origin
-	# Road space (RoadFrame, #37): across / up / along the road. The rig sits
-	# behind the car ALONG THE ROAD and looks down it, so it swings round
-	# bends with the road instead of staring down world -Z; on a straight
-	# road this is exactly the old world-axis rig.
+	# Road space (RoadFrame, #37): across / up / along the road. Everything
+	# below is worked in it and rolled back to the world at the end, so on a
+	# straight road it is the old world-axis rig.
 	var u := RoadFrame.unroll(p)
-	# Reversing flips the chase cam to the opposite side of the car looking
-	# the opposite way (2026-09-13 fix, kept); so does holding look_back.
-	# The road goes both ways (the map, 2026-10-10): the rig looks the way the
-	# car faces along the road. It changes side only once the car is well
-	# round (past 60 degrees from across the road), so a slide or a spin does
-	# not swing it back and forth.
-	var facing := RoadFrame.dir_to_road(u.z, -target.global_transform.basis.z).z
-	if absf(facing) > 0.5:
-		_up_road = facing > 0.0
-	var target_yaw := PI if (target.gear == -1 or look_back) != _up_road else 0.0
+	# The rig sits behind the CAR and looks the way the car faces (Roy,
+	# 2026-10-13). It used to sit behind the car along the ROAD and look down
+	# it, so round a roundabout it stared down the highway while the car
+	# circled, up to 120 degrees off, then flipped side at 60 degrees from
+	# across the road (tests/view/chase_ring_recenter). Now it follows the
+	# car's heading at HEADING_RATE: in a steady turn it trails the car by a
+	# few degrees (yaw rate / HEADING_RATE), never by a quarter turn.
+	var fwd := RoadFrame.dir_to_road(u.z, -target.global_transform.basis.z)
+	var head := _head
+	if Vector2(fwd.x, fwd.z).length() > 0.1:   # not pointing straight up or down
+		head = atan2(-fwd.x, -fwd.z)
+	# Reversing turns the chase cam to the other side of the car looking the
+	# other way (2026-09-13 fix, kept); so does holding look_back.
+	var want_flip := PI if (target.gear == -1 or look_back) else 0.0
 	if mode == 0 or not _started:
 		_follow = Vector2(u.x, u.y)
-		_yaw = target_yaw
+		_follow_z = u.z
+		_head = head
+		_flip = want_flip
 		_started = true
 	else:
 		# Frame-rate independent ease: the same feel at 60 or 300 fps.
-		_follow = _follow.lerp(Vector2(u.x, u.y), 1.0 - exp(-FOLLOW_RATE * delta))
+		_head = lerp_angle(_head, head, 1.0 - exp(-HEADING_RATE * delta))
+		# Distance along the rig's own line stays locked to the car (the dolly
+		# shortens it with speed); only sideways and height motion is smoothed.
+		var along := Vector2(-sin(_head), -cos(_head))
+		var d := Vector2(u.x - _follow.x, u.z - _follow_z)
+		var lock := along * d.dot(along)
+		var side := (d - lock) * (1.0 - exp(-FOLLOW_RATE * delta))
+		_follow.x += lock.x + side.x
+		_follow_z += lock.y + side.y
+		_follow.y = lerpf(_follow.y, u.y, 1.0 - exp(-FOLLOW_RATE * delta))
 		if mode == 2:
-			_yaw = lerpf(_yaw, target_yaw, 1.0 - exp(-SWING_RATE * delta))
+			_flip = lerpf(_flip, want_flip, 1.0 - exp(-SWING_RATE * delta))
 		else:
-			_yaw = target_yaw
-	# Distance along the road stays locked to the car (only sideways and
-	# height motion is smoothed); the dolly shortens it with speed.
+			_flip = want_flip
+	_yaw = _head + _flip
 	# The orbit goes round the car's own sides: with the rig behind the car
-	# (rel 0) Left is minus about +y, with it in front (rel PI: reversing, B)
-	# it is plus. Worked from the rig's yaw relative to where the car faces, so
-	# it also holds driving the other way along the road, and it runs through
-	# 0 (not a jump) while the rig swings round.
-	var rel := _yaw - (PI if _up_road else 0.0)
-	var orbit := -cos(rel) * deg_to_rad(orbit_yaw)
+	# (flip 0) Left is minus about +y, in front of it (flip PI: reversing, B)
+	# it is plus; it runs through 0 (not a jump) while the rig swings round.
+	var orbit := -cos(_flip) * deg_to_rad(orbit_yaw)
 	var back := Vector3(0, 0, dist_now).rotated(Vector3.UP, _yaw + orbit)
 	var ahead := Vector3(0, 0, -look_ahead).rotated(Vector3.UP, _yaw)
 	var h := height_now + ORBIT_LIFT_UP_M * orbit_lift
 	if orbit_lift < 0.0:
 		h = lerpf(height_now, ORBIT_LOW_ABOVE_ROAD_M - _follow.y, -orbit_lift)
-	anchor = RoadFrame.roll(Vector3(_follow.x + back.x, _follow.y + h, u.z + back.z))
-	var aim_rs := Vector3(_follow.x + ahead.x, _follow.y + look_height, u.z + ahead.z)
+	anchor = RoadFrame.roll(Vector3(_follow.x + back.x, _follow.y + h, _follow_z + back.z))
+	var aim_rs := Vector3(_follow.x + ahead.x, _follow.y + look_height, _follow_z + ahead.z)
 	var centre_t := smoothstep(ORBIT_AIM_LO_DEG, ORBIT_AIM_HI_DEG, absf(orbit_yaw))
 	if centre_t > 0.0:
-		aim_rs = aim_rs.lerp(Vector3(u.x, u.y + look_height, u.z), centre_t)
+		# the middle of the body, not the car's origin: the origin sits at the
+		# wheels' axle-line mid point, well behind and above the body's centre
+		# on most cars, which put the car off centre side-on (chase_orbit)
+		var centre := RoadFrame.unroll(target.get_global_transform_interpolated() * _body_centre())
+		aim_rs = aim_rs.lerp(centre, centre_t)
 	aim = RoadFrame.roll(aim_rs)
 	global_position = anchor
 	look_at(aim, Vector3.UP)
+
+## The middle of the car's drawn body in the car's own frame (the box round
+## every visible part of chassis_visual), for the orbit's aim. Worked out once
+## per body; the origin with look_height when there is no body yet.
+var _centre_of: Node3D = null
+var _centre_local := Vector3.ZERO
+
+func _body_centre() -> Vector3:
+	var vis := target.chassis_visual
+	if vis == null or not is_instance_valid(vis):
+		return Vector3(0.0, look_height, 0.0)
+	if vis == _centre_of:
+		return _centre_local
+	var to_car := target.global_transform.affine_inverse()
+	var box := AABB()
+	var first := true
+	for n in vis.find_children("*", "VisualInstance3D", true, false):
+		var vi := n as VisualInstance3D
+		if not vi.is_visible_in_tree():
+			continue
+		var b := (to_car * vi.global_transform) * vi.get_aabb()
+		box = b if first else box.merge(b)
+		first = false
+	if first:
+		return Vector3(0.0, look_height, 0.0)
+	_centre_of = vis
+	_centre_local = box.get_center()
+	return _centre_local
 
 ## Smooth noise shake applied on top of the chase transform. Amplitude adds
 ## the three sources; impact uses trauma^2 so small knocks stay small. In the
 ## cockpit it is rotation only (with_position false): the eye never leaves the
 ## cabin on a hit.
-func _shake(delta: float, with_position: bool) -> void:
+func _shake(delta: float, with_position: bool, strength := 1.0) -> void:
 	var buzz := pow(speed_t, 1.5)
-	var rot := SPEED_SHAKE_ROT * buzz + SURFACE_SHAKE_ROT * surface_t + IMPACT_SHAKE_ROT * trauma * trauma
-	var pos := SPEED_SHAKE_POS * buzz + SURFACE_SHAKE_POS * surface_t + IMPACT_SHAKE_POS * trauma * trauma
+	var start := target.start_shake * (START_SHAKE_CHASE if with_position else 1.0)
+	var rot := (SPEED_SHAKE_ROT * buzz + SURFACE_SHAKE_ROT * surface_t + IMPACT_SHAKE_ROT * trauma * trauma + START_SHAKE_ROT * start) * strength
+	var pos := (SPEED_SHAKE_POS * buzz + SURFACE_SHAKE_POS * surface_t + IMPACT_SHAKE_POS * trauma * trauma + START_SHAKE_POS * start) * strength
 	if rot <= 0.0 and pos <= 0.0:
 		return
 	# Faster wobble for rough surface and hits than for the speed buzz.
-	_t += delta * (6.0 + 10.0 * surface_t + 14.0 * trauma)
+	_t += delta * (6.0 + 10.0 * surface_t + 14.0 * trauma + 12.0 * start)
 	rotate_object_local(Vector3.RIGHT, rot * _noise.get_noise_2d(_t, 0.0))
 	rotate_object_local(Vector3.UP, rot * 0.6 * _noise.get_noise_2d(_t, 100.0))
 	rotate_object_local(Vector3.BACK, rot * 0.8 * _noise.get_noise_2d(_t, 200.0))

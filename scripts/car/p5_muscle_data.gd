@@ -21,7 +21,9 @@ const GLASS := ["glass"]
 ## Hand-tuned: "cluster" sits 10 cm lower than the tool's, so the top of the
 ## wide speedo band is 8.7 degrees below the eye instead of at eye height
 ## (Roy's sight-line rule: nothing above 8 degrees below the eye within 20
-## degrees of straight ahead, bar the wheel rim); "b_pillar_z" is the door's
+## degrees of straight ahead, bar the wheel rim); build 4 merge (2026-10-11):
+## 4 cm back up, so both dials clear the 35 cm race wheel's rim from the eye
+## (tests/view/gauge_layout.gd) and still stay under that line; "b_pillar_z" is the door's
 ## rear edge and "hardtop" drops the B-pillar; "door_mirror" is where the
 ## kit's chrome bullet mirrors are (tools/car_pipeline/kit_p5_muscle.py).
 const CABIN := {
@@ -33,9 +35,12 @@ const CABIN := {
 	"door_x": 0.778, "door_x_rear": 0.795, "door_x_front": 0.792, "glass_x": 0.708, "glass_top": 1.390,
 	"a_pillar": [Vector3(0.892, 0.867, -0.880), Vector3(0.568, 1.430, -0.190)],
 	"b_pillar_z": 0.385, "rear_z": 0.840,
+	# Hood view (2026-10-11, judged on screenshots): the fitted point on the long hood
+	# showed a quarter of the screen as bonnet; a hand higher keeps it in the bottom fifth.
+	"hood_cam": Vector3(0.0, 1.17, -1.90),
 	"shelf": {"y": 0.934, "z0": 0.840, "z1": 1.710, "half_w": 0.864},
 	"wheel": Vector3(-0.360, 0.816, -0.320), "wheel_tilt_deg": -25.0,
-	"cluster": Vector2(0.876, -0.489), "cluster_style": "strip", "speedo_max_kmh": 260.0,
+	"cluster": Vector2(0.916, -0.489), "cluster_style": "strip", "speedo_max_kmh": 260.0,
 	"head_unit": Vector3(0.0, 0.878, -0.394),
 	"lever": Vector3(0.0, 0.661, -0.160), "handbrake": Vector3(0.0, 0.661, 0.300),
 	"pedals": Vector3(-0.260, 0.566, -0.640),

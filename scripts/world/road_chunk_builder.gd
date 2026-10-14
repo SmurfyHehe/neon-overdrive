@@ -103,6 +103,7 @@ const WetReflections := preload("res://scripts/world/wet_reflections.gd")
 const RoadWet := preload("res://scripts/world/road_wet.gd")
 const Districts := preload("res://scripts/world/districts.gd")
 const Kit := preload("res://scripts/world/roadside_kit.gd")
+const Props := preload("res://scripts/world/roadside_props.gd")
 const LampLife := preload("res://scripts/world/lamp_life.gd")
 const PlaceNames := preload("res://scripts/world/place_names.gd")
 const RoadSigns := preload("res://scripts/world/road_signs.gd")
@@ -110,7 +111,9 @@ const RoadPaint := preload("res://scripts/world/road_paint.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
 const GasStation := preload("res://scripts/world/gas_station.gd")
 const SideStreets := preload("res://scripts/world/side_streets.gd")
+const RoadRamps := preload("res://scripts/world/road_ramps.gd")
 const StreetAnimals := preload("res://scripts/world/street_animals.gd")
+const TunnelKit := preload("res://scripts/world/tunnel_kit.gd")
 
 const LANE_W := 3.2
 const CHUNK_LEN := 50.0
@@ -189,6 +192,12 @@ const POOL_ACROSS := 13.0   # light pool size on the road, m
 const POOL_ALONG := 17.0
 const POOL_Y := 0.045       # just above the lane dashes (top at 0.035)
 const SODIUM := Color(1.0, 0.55, 0.2)
+# NIGHT LIGHTING PASS (2026-10-11): the pools measured RGB 58,34,21 at their
+# brightest on the road (tools/night_shots.gd), a tint you had to brighten a
+# screenshot 4x to find. Hotter centre, more of it: every light's pool gain
+# (Districts.LIGHTS) times this, sodium 0.42 -> 0.8. The pass's wet-road
+# streak is not added here: LampSmears (WetReflections) already does it.
+const POOL_BOOST := 0.8 / 0.42
 
 # World step 3b: the street kit a district picks from (Districts.street_at).
 # What tells two districts apart at night is light, so each kind of street
@@ -268,7 +277,7 @@ static var _own_mat: ShaderMaterial
 static var _onc_mat: ShaderMaterial
 static var _shoulder_mat: ShaderMaterial
 static var _curb_mat: StandardMaterial3D
-static var _sidewalk_mat: StandardMaterial3D
+static var _sidewalk_mat: ShaderMaterial
 static var _edge_line_mat: StandardMaterial3D
 static var _pylon_mat_own: StandardMaterial3D
 static var _pylon_mat_onc: StandardMaterial3D
@@ -330,7 +339,11 @@ static func _plain_asphalt_mat(color: Color, freq: float = 0.6, uv: Vector2 = Ve
 	tex.color_ramp = grad
 	m.albedo_texture = tex
 	m.uv1_scale = Vector3(uv.x, uv.y, 1.0)
-	m.roughness = 0.9
+	# NIGHT LIGHTING PASS (2026-10-11): roughness 0.9 -> 0.6. The asphalt now
+	# picks up a dim mirror of the sky's horizon glow at grazing angles (the
+	# damp sheen on a city road at night) from the radiance map that is already
+	# there, so it costs nothing extra.
+	m.roughness = 0.6
 	m.metallic = 0.0
 	return m
 
@@ -391,9 +404,8 @@ static func _get_gutter_mat() -> ShaderMaterial:
 ## slab lines run with the kerb and across it.
 ## TEST BUILD: stays a plain material, so the slabs do not take the wet-road
 ## look (S1a made the pavement an asphalt shader; the two need one owner).
-static func _get_sidewalk_mat() -> StandardMaterial3D:
+static func _get_sidewalk_mat() -> ShaderMaterial:
 	if _sidewalk_mat == null:
-		var m := StandardMaterial3D.new()
 		var size := 64
 		var noise := FastNoiseLite.new()
 		noise.seed = 4242
@@ -411,11 +423,9 @@ static func _get_sidewalk_mat() -> StandardMaterial3D:
 				elif x == 2 or y == 2:
 					c = c.darkened(0.2)
 				img.set_pixel(x, y, c)
-		m.albedo_texture = ImageTexture.create_from_image(img)
-		m.uv1_scale = Vector3(2.0, CHUNK_LEN, 1.0)
-		m.roughness = 0.92
-		m.metallic = 0.0
-		_sidewalk_mat = m
+		# the slab texture through the wet-road shader (S1a: sidewalks darken and
+		# sheen like the road; the pavements step's slabs kept as the albedo)
+		_sidewalk_mat = RoadWet.textured_mat(ImageTexture.create_from_image(img), Vector2(2.0, CHUNK_LEN), 0.92)
 	return _sidewalk_mat
 
 ## Hydrant: a dull painted red-orange (the palette's sodium side, no neon),
@@ -776,8 +786,8 @@ static func _get_pool_mesh() -> PlaneMesh:
 static func _get_pool_mat(light: String = "sodium") -> StandardMaterial3D:
 	if not _pool_mats.has(light):
 		var grad := Gradient.new()
-		grad.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
-		grad.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.42), Color(1, 1, 1, 0)])
+		grad.offsets = PackedFloat32Array([0.0, 0.3, 1.0])
+		grad.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.5), Color(1, 1, 1, 0)])
 		var tex := GradientTexture2D.new()
 		tex.gradient = grad
 		tex.fill = GradientTexture2D.FILL_RADIAL
@@ -791,7 +801,7 @@ static func _get_pool_mat(light: String = "sodium") -> StandardMaterial3D:
 		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 		m.albedo_texture = tex
 		var lc: Color = LIGHTS[light].color
-		var k: float = LIGHTS[light].pool
+		var k: float = LIGHTS[light].pool * POOL_BOOST
 		m.albedo_color = Color(lc.r * k, lc.g * k, lc.b * k, 1.0)
 		m.disable_fog = true
 		m.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
@@ -961,11 +971,28 @@ static func _xf(x: float, y: float, z: float, local: Basis = Basis()) -> Transfo
 ## Like _xf, for things that stand upright whatever the slope (buildings,
 ## walls, lamps, posts): placed at (x, z) on the road surface, raised y
 ## straight up, and turned only to the road's heading.
+##
+## In a tunnel's trench (TN1) the street is above the road: anything upright
+## that stands outside the trench walls (further out than _lift_x) is raised
+## to the street, _lift metres at each metre along the chunk.
 static func _xf_up(x: float, y: float, z: float, local: Basis = Basis()) -> Transform3D:
 	var f := _frame(-z)
 	var fwd := -f.basis.z
 	fwd.y = 0.0
+	if not _lift.is_empty() and absf(x) > _lift_x:
+		var sc := clampf(-z, 0.0, CHUNK_LEN)
+		var li := mini(int(sc), int(CHUNK_LEN) - 1)
+		y += lerpf(_lift[li], _lift[li + 1], sc - float(li))
 	return Transform3D(Basis.looking_at(fwd.normalized(), Vector3.UP) * local, f * Vector3(x, 0.0, 0.0) + Vector3(0.0, y, 0.0))
+
+## The street's height above the road along the chunk _apply() is laying out
+## (TunnelKit.depths; empty off a dip), and how far out the trench walls are.
+static var _lift := PackedFloat32Array()
+static var _lift_x := INF
+
+static func _set_lift(chunk_index: int, wall_x: float) -> void:
+	_lift = TunnelKit.depths(chunk_index) if wall_x < INF else PackedFloat32Array()
+	_lift_x = wall_x
 
 ## How far upright things reach below the road surface on a hilly road, so a
 ## building or wall on a slope never shows a gap under its downhill end.
@@ -1341,6 +1368,7 @@ static func _new_sidewalk_collision(body_name: String) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = body_name
 	body.add_to_group("Kerb")  # CarSpec gives the "Kerb" surface its own grip numbers
+	CarSimSwitch.note_ground(body)
 	body.collision_layer = 1 << (CarSpec.KERB_LAYER - 1)  # wheels only, see CarSpec
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
@@ -1359,6 +1387,9 @@ static func _update_sidewalk_collision(root: Node3D, body_name: String, inner0: 
 			body.remove_from_group(g)
 	if not body.is_in_group(group):
 		body.add_to_group(group)
+		# A wheel only reads a collider's group when it meets a new collider
+		# (gevp_wheel.gd, deviation 15a); this body is reused, so say it changed.
+		Wheel.surface_epoch += 1
 	# chunk start is z=0, end is z=-CHUNK_LEN; top at 0.15 like the old box.
 	# Points are in chunk-local space, so the body sits at origin.
 	#
@@ -1442,14 +1473,18 @@ static func bounds(root: Node3D) -> Vector2:
 ## never opens a gap between two straight pieces.
 const BOUNDARY_OVERLAP := 0.1
 
-static func _update_boundary(root: Node3D, body_name: String, inner_x: float, side: int) -> void:
+## `lot_x` > 0: a gas station's lot reaches into this chunk on this side, and
+## the pieces along it stand back at lot_x, behind the lot (GasStation).
+static func _update_boundary(root: Node3D, body_name: String, inner_x: float, side: int, chunk_index: int = 0, lot_x: float = 0.0) -> void:
 	var body: StaticBody3D = root.get_node(NodePath(body_name))
 	var seg := CHUNK_LEN / STATIONS
 	for k in STATIONS:
 		var col: CollisionShape3D = body.get_node(NodePath("Shape" if k == 0 else "Shape%d" % k))
 		var f := _foundation()
+		var z := -seg * (float(k) + 0.5)
+		var x := lot_x if lot_x > 0.0 and GasStation.in_lot(chunk_index, z, side) else inner_x
 		(col.shape as BoxShape3D).size = Vector3(BOUNDARY_T, BOUNDARY_H + f, seg + BOUNDARY_OVERLAP)
-		col.transform = _xf_up((inner_x + BOUNDARY_T / 2.0) * float(side), (BOUNDARY_H - f) / 2.0, -seg * (float(k) + 0.5))
+		col.transform = _xf_up((x + BOUNDARY_T / 2.0) * float(side), (BOUNDARY_H - f) / 2.0, z)
 	body.position = Vector3.ZERO
 
 # Road collision (#37 step R5). On a flat road the wheels drive on game.gd's
@@ -1516,7 +1551,9 @@ const ROAD_COL_MARGIN := 2.0
 static func _new_road_collision() -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = "RoadCol"
+	body.set_meta(SurfaceMap.BANDS_META, true)
 	body.add_to_group("Road")
+	CarSimSwitch.note_ground(body)
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
 	var tri := ConcavePolygonShape3D.new()
@@ -1766,6 +1803,33 @@ static func _clear_at_junction(root: Node3D, index: int, info: Dictionary, chunk
 	mi.set_meta("building_type", "lot")
 	return {"empty": true, "d": 0.0, "z": info.z, "side": info.side}
 
+## Ring sites (R1): no building stands beside a ramp or the pad. The draws
+## were taken by _update_building, as at a crossing.
+static func _clear_for_ramp(root: Node3D, index: int, info: Dictionary) -> Dictionary:
+	if info.empty:
+		return info
+	var mi: MeshInstance3D = root.get_node(NodePath("BuildingMesh%d" % index))
+	var body: StaticBody3D = root.get_node(NodePath("BuildingBody%d" % index))
+	mi.visible = false
+	(body.get_node(^"Shape") as CollisionShape3D).disabled = true
+	mi.set_meta("building_type", "lot")
+	return {"empty": true, "d": 0.0, "z": info.z, "side": info.side}
+
+## Tunnels (TN1): no building over a tunnel (the block at each mouth is the
+## tunnel kit's own), and none in the way of the cross street that bridges
+## the trench at a mouth. The draws were taken by _update_building.
+static func _clear_for_tunnel(root: Node3D, index: int, info: Dictionary, chunk_index: int, covered: bool) -> Dictionary:
+	if info.empty:
+		return info
+	if not covered and not TunnelKit.cleared(chunk_index, float(info.z) + float(info.d) / 2.0, float(info.z) - float(info.d) / 2.0):
+		return info
+	var mi: MeshInstance3D = root.get_node(NodePath("BuildingMesh%d" % index))
+	var body: StaticBody3D = root.get_node(NodePath("BuildingBody%d" % index))
+	mi.visible = false
+	(body.get_node(^"Shape") as CollisionShape3D).disabled = true
+	mi.set_meta("building_type", "lot")
+	return {"empty": true, "d": 0.0, "z": info.z, "side": info.side}
+
 ## World step 6 (W7): a building slot that opens onto a side street is an
 ## empty lot MOUTH_HALF * 2 wide, so the gap walls leave the mouth open the
 ## way they leave a crossing's. The draws were taken by _update_building,
@@ -1829,6 +1893,9 @@ static func _update_roofs(root: Node3D, infos: Array, signs_used: int) -> void:
 
 ## Where an area sign's post stands, past the sidewalk's outer edge, m.
 const NAME_SIGN_SETBACK := 0.25
+## A roadside-kit hydrant's slot in the props record is its Kit_hydrant index
+## plus this, to tell it from a kerb hydrant (the "Hydrants" MultiMesh).
+const KIT_SLOT := 100
 ## Where along its chunk (chunk-local z) the area gantry and the advance sign
 ## stand: the gantry in the last chunk before an area, the advance sign a
 ## whole number of chunks further back (PlaceNames.ADVANCE_M).
@@ -1840,6 +1907,8 @@ const REPEATER_Z := -25.0
 ## or "advance" (the area they announce is Districts.name_of_run(run + 1)), or
 ## "repeater": the round limit sign, every 400 m inside an area.
 static func name_sign_kind(chunk_index: int) -> String:
+	if RoadMap.dip_at(chunk_index) != RoadMap.DIP_NONE:
+		return ""  # no sign posts in a tunnel or its trench (TN1)
 	if chunk_index < 0:
 		return ""
 	var ahead := int(round(PlaceNames.ADVANCE_M / CHUNK_LEN))
@@ -1851,56 +1920,118 @@ static func name_sign_kind(chunk_index: int) -> String:
 		return "repeater"
 	return ""
 
+## The road-rule signs a chunk carries (signed U-turns, T1), decided from the
+## chunk number alone: [{part, foot_x, z, dir, kind, lamp}] where part is
+## "advance" (a roadside sign ~200 m before a signed U-turn, `side` +1 own
+## side / -1 oncoming) or "median" (on the barrier at an opening: the U-turn
+## sign, or the no-U-turn sign at an emergency crossover; the own-side one
+## carries the lamp head over a signed U-turn).
+static func rule_signs(chunk_index: int) -> Array:
+	var out: Array = []
+	var ahead := int(round(RoadSigns.UTURN_ADVANCE_M / CHUNK_LEN))
+	if RoadBarriers.uturn_at(chunk_index + ahead):
+		out.append({"part": "advance", "side": 1, "z": RoadSigns.ADVANCE_OWN_Z})
+	if RoadBarriers.uturn_at(chunk_index - ahead):
+		out.append({"part": "advance", "side": -1, "z": RoadSigns.ADVANCE_ONC_Z})
+	var kind := RoadBarriers.gap_kind(chunk_index)
+	if kind != "":
+		out.append({"part": "median", "kind": kind, "dir": 1.0, "z": RoadSigns.MEDIAN_OWN_Z, "lamp": kind == RoadBarriers.KIND_UTURN})
+		out.append({"part": "median", "kind": kind, "dir": -1.0, "z": RoadSigns.MEDIAN_ONC_Z, "lamp": false})
+	# exit gantries (ring sites R1): 400 m and 1 km before each exit's gore
+	for e in RoadMap.exit_signs(chunk_index):
+		out.append({"part": "exit", "side": int(e.side), "z": EXIT_SIGN_OWN_Z if int(e.side) > 0 else EXIT_SIGN_ONC_Z, "ring": int(e.ring), "far": bool(e.far)})
+	return out
+
+## Where an exit gantry stands in its chunk: just inside the end its traffic
+## arrives at, so it is 400 m (or 1 km) before the gore to within 3 m.
+const EXIT_SIGN_OWN_Z := -2.5
+const EXIT_SIGN_ONC_Z := -47.5
+
 ## Area signs (world step 4, "Names you can read"): the gantry in the last
 ## chunk before an area and the advance sign 400 m earlier, drawn from this
-## chunk's one NameSigns MultiMesh. Zero instances on every other chunk.
-static func _update_names(root: Node3D, chunk_index: int, walk0: float, walk1: float) -> void:
+## chunk's one NameSigns MultiMesh, then the road-rule signs (rule_signs).
+## Zero instances on every chunk with neither.
+static func _update_names(root: Node3D, chunk_index: int, walk0: float, walk1: float, onc0: float = 0.0, onc1: float = 0.0) -> void:
 	var mmi := root.get_node(^"NameSigns") as MultiMeshInstance3D
 	var mm: MultiMesh = mmi.multimesh
 	var kind := name_sign_kind(chunk_index)
+	var rules := rule_signs(chunk_index)
+	var shown := kind != "" or not rules.is_empty()
 	if RoadSigns.has_flag("hide"):
-		mmi.visible = kind != ""
-	if kind == "":
+		mmi.visible = shown
+	if not shown:
 		mm.visible_instance_count = 0
+		root.set_meta("name_sign_xfs", [])
 		return
-	var area := PlaceNames.area_name(Districts.name_of_run(Districts.run_of(chunk_index) + 1))
-	var z := GANTRY_Z if kind == "gantry" else (REPEATER_Z if kind == "repeater" else ADVANCE_Z)
-	# the gantry posts the limit of the area it leads into, a repeater its own
-	var limit := 0
-	if kind == "gantry":
-		limit = PlaceNames.limit_at(chunk_index + 1)
-	elif kind == "repeater":
-		limit = PlaceNames.limit_at(chunk_index)
-	var x := lerpf(walk0, walk1, -z / CHUNK_LEN) + NAME_SIGN_SETBACK
-	var foot := Vector3(x, 0.0, z)
-	var burnt := -1
-	if kind == "gantry":
-		var hb := posmod(hash([chunk_index, "floodlight"]), 6)
-		burnt = hb if hb < 3 else -1
-	# With "cache" the parts come laid out around a foot at the origin, once
-	# per area, and only move to this chunk's foot here.
-	var cached := RoadSigns.has_flag("cache")
-	var list: Array
-	if cached:
-		list = RoadSigns.parts_at_origin(kind, area, _foundation(), burnt, limit)
-	elif kind == "gantry":
-		list = RoadSigns.gantry(area, foot, _foundation(), burnt, limit)
-	elif kind == "repeater":
-		list = RoadSigns.repeater(limit, foot, _foundation())
-	else:
-		list = RoadSigns.advance(area, foot, _foundation())
-	var n := mini(list.size(), mm.instance_count)
 	var xfs := []
 	var anchors := PackedFloat32Array()
-	for k in n:
-		var xf: Transform3D = list[k].xf
+	var datas: Array = []
+	if kind != "":
+		var area := PlaceNames.area_name(Districts.name_of_run(Districts.run_of(chunk_index) + 1))
+		var z := GANTRY_Z if kind == "gantry" else (REPEATER_Z if kind == "repeater" else ADVANCE_Z)
+		# the gantry posts the limit of the area it leads into, a repeater its own
+		var limit := 0
+		if kind == "gantry":
+			limit = PlaceNames.limit_at(chunk_index + 1)
+		elif kind == "repeater":
+			limit = PlaceNames.limit_at(chunk_index)
+		var x := lerpf(walk0, walk1, -z / CHUNK_LEN) + NAME_SIGN_SETBACK
+		var foot := Vector3(x, 0.0, z)
+		var burnt := -1
+		if kind == "gantry":
+			var hb := posmod(hash([chunk_index, "floodlight"]), 6)
+			burnt = hb if hb < 3 else -1
+		# With "cache" the parts come laid out around a foot at the origin, once
+		# per area, and only move to this chunk's foot here.
+		var cached := RoadSigns.has_flag("cache")
+		var list: Array
 		if cached:
-			xf.origin += foot
-		xfs.append(xf)
-		anchors.append(z)
-		mm.set_instance_custom_data(k, list[k].cd)
+			list = RoadSigns.parts_at_origin(kind, area, _foundation(), burnt, limit)
+		elif kind == "gantry":
+			list = RoadSigns.gantry(area, foot, _foundation(), burnt, limit)
+		elif kind == "repeater":
+			list = RoadSigns.repeater(limit, foot, _foundation())
+		else:
+			list = RoadSigns.advance(area, foot, _foundation())
+		for item in list:
+			var xf: Transform3D = item.xf
+			if cached:
+				xf.origin += foot
+			xfs.append(xf)
+			anchors.append(z)
+			datas.append(item.cd)
+	for r in rules:
+		var list: Array
+		var rz: float = r.z
+		if r.part == "advance":
+			var side: float = r.side
+			var w := lerpf(walk0, walk1, -rz / CHUNK_LEN) if side > 0.0 else lerpf(onc0, onc1, -rz / CHUNK_LEN)
+			list = RoadSigns.uturn_advance(Vector3((w + NAME_SIGN_SETBACK) * side, 0.0, rz), _foundation(), side)
+		elif r.part == "exit":
+			var eside: float = r.side
+			var ew := lerpf(walk0, walk1, -rz / CHUNK_LEN) if eside > 0.0 else lerpf(onc0, onc1, -rz / CHUNK_LEN)
+			var ring: Dictionary = RoadMap.rings()[int(r.ring)]
+			var leads := PlaceNames.SERVICES if RoadMap.ring_has_stop(int(r.ring)) else PlaceNames.area_name(RoadMap.district_kind(RoadMap.district_of(floori(float(ring.s) / CHUNK_LEN))))
+			list = RoadSigns.exit_gantry(PlaceNames.exit_word(int(ring.number)), leads, PlaceNames.EXIT_FAR if bool(r.far) else PlaceNames.ADVANCE,
+				Vector3((ew + NAME_SIGN_SETBACK) * eside, 0.0, rz), _foundation(), eside)
+		else:
+			var moved: Array = RoadSigns.median_parts(String(r.kind), float(r.dir), bool(r.lamp))
+			list = []
+			for item in moved:
+				var xf: Transform3D = item.xf
+				xf.origin += Vector3(0.0, 0.0, rz)
+				list.append({"xf": xf, "cd": item.cd})
+		for item in list:
+			xfs.append(item.xf)
+			anchors.append(rz)
+			datas.append(item.cd)
+	var n := mini(xfs.size(), mm.instance_count)
+	xfs.resize(n)
+	for k in n:
+		mm.set_instance_custom_data(k, datas[k])
 	mm.visible_instance_count = n
-	_bend_instances(mm, 0, xfs, anchors)
+	# kept for a sign that gets knocked over (prop_break.gd bends these)
+	root.set_meta("name_sign_xfs", _bend_instances(mm, 0, xfs, anchors))
 
 ## Painted road words and arrows (RoadPaint.marks decides which): flat decals
 ## laid on the road surface through the centreline frame, so they follow a
@@ -1934,11 +2065,15 @@ static func _update_paint(root: Node3D, chunk_index: int, lanes_changed: bool, o
 ## pooled chunk rebuilt in the game is the previous occupant's. The old
 ## read-modify-write here put those stale props back, so office roof tanks
 ## hung 40 m over a one-floor lot (floating structures, 2026-10-09).
-static func _bend_instances(mm: MultiMesh, from: int, xfs: Array, anchors: PackedFloat32Array) -> void:
+static func _bend_instances(mm: MultiMesh, from: int, xfs: Array, anchors: PackedFloat32Array) -> Array:
+	var written := []
 	for k in xfs.size():
 		var t: Transform3D = xfs[k]
 		var a := float(anchors[k])
-		mm.set_instance_transform(from + k, _xf_up(0.0, 0.0, a) * Transform3D(t.basis, Vector3(t.origin.x, t.origin.y, t.origin.z - a)))
+		var xf := _xf_up(0.0, 0.0, a) * Transform3D(t.basis, Vector3(t.origin.x, t.origin.y, t.origin.z - a))
+		mm.set_instance_transform(from + k, xf)
+		written.append(xf)
+	return written
 
 # ---------- build / rebuild ----------
 
@@ -1986,7 +2121,7 @@ static func _create_nodes(root: Node3D) -> void:
 	# Pavements step 1: at most one hydrant per side, on the pavement by the kerb.
 	root.add_child(_new_multimesh("Hydrants", _get_hydrant_mesh(), _get_hydrant_mat(), 2))
 	root.add_child(_new_multimesh("Drains", _get_drain_mesh(), _get_drain_mat(), DRAIN_MAX * 2))
-	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2 + SideStreets.CAPACITY))
+	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2 + SideStreets.CAPACITY + 1))
 	# living world step 2: moths, banners, steam and litter (lamp_life.gd)
 	LampLife.create_nodes(root, _lamp_slots() * 2)
 	# Fake wet-road reflections (RESEARCH-cheap-pretty item 7): one additive
@@ -2032,6 +2167,8 @@ static func _create_nodes(root: Node3D) -> void:
 	# barriers, kerb guardrail): one MultiMesh per kind and two collision
 	# bodies, see roadside_kit.gd.
 	Kit.new_nodes(root)
+	# Ring sites (R1): the ramps and pad beside the road, see road_ramps.gd.
+	RoadRamps.new_nodes(root, _get_pool_mesh(), _get_pool_mat())
 	# area signs (names you can read) and painted road words: zero instances
 	# shown on most chunks
 	if not RoadSigns.off():
@@ -2084,10 +2221,15 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	if Junction.touches(chunk_index):
 		barrier_kind = RoadBarriers.NONE
 	var barrier := barrier_kind != RoadBarriers.NONE
-	var start_own_w := _lane_w(prev_cfg.own_lanes)
-	var end_own_w := _lane_w(own_lanes)
-	var start_onc_w := _lane_w(prev_cfg.onc_lanes)
-	var end_onc_w := _lane_w(onc_lanes)
+	# cfg.aux (ring sites R1): the slip lane outside the outside lane, metres
+	# at the chunk's start and end per side [own0, own1, onc0, onc1]. It is
+	# road surface, not a lane traffic counts: the edge line, shoulder, kerb
+	# and everything behind move out with it.
+	var aux: Array = cfg.get("aux", [0.0, 0.0, 0.0, 0.0])
+	var start_own_w := _lane_w(prev_cfg.own_lanes) + float(aux[0])
+	var end_own_w := _lane_w(own_lanes) + float(aux[1])
+	var start_onc_w := _lane_w(prev_cfg.onc_lanes) + float(aux[2])
+	var end_onc_w := _lane_w(onc_lanes) + float(aux[3])
 
 	# World step 3b: the district's street kit. The surface, the lamp shape
 	# and the light colour are shared materials and meshes this chunk points
@@ -2156,18 +2298,56 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var setback := Districts.setback_at(chunk_index)
 	var bound_own := maxf(start_own_walk, end_own_walk) + BUILDING_GAP + setback
 	var bound_onc := maxf(start_onc_walk, end_onc_walk) + BUILDING_GAP + setback
-	_update_boundary(root, "BoundaryOwn", bound_own, 1)
-	_update_boundary(root, "BoundaryOnc", bound_onc, -1)
-	root.set_meta(&"bounds", Vector2(bound_own, bound_onc))
+	# Beside a ring site's ramps the lots are cleared and the wall stands out
+	# past the ramp or the pad (RoadRamps.bound), the same on both sides.
+	var ramp_bound := RoadRamps.bound(chunk_index)
+	var ramp_bound_prev := RoadRamps.bound(chunk_index - 1)
+	if ramp_bound > 0.0:
+		bound_own = ramp_bound
+		bound_onc = ramp_bound
+	# A tunnel and its trench (TN1): the walls stand at the road's edge, where
+	# the kerb would be, and they are the out-of-bounds walls.
+	var dip := RoadMap.dip_at(chunk_index)
+	var dip_prev := RoadMap.dip_at(chunk_index - 1)
+	var covered := dip == RoadMap.DIP_TUNNEL
+	_lift = PackedFloat32Array()
+	_lift_x = INF
+	if dip != RoadMap.DIP_NONE:
+		bound_own = minf(start_own_shoulder, end_own_shoulder)
+		bound_onc = minf(start_onc_shoulder, end_onc_shoulder)
+	# A gas station's lot (GasStation): along it the wall stands LOT_DEPTH
+	# back from the road edge, behind the lot; the lot's own side walls close
+	# the step. The chunk's bounds (OffMapRescue) are the lot's there.
+	var lot_own := maxf(start_own_w, end_own_w) + GasStation.LOT_DEPTH if not is_inf(GasStation.lot_centre(chunk_index, 1)) else 0.0
+	var lot_onc := maxf(start_onc_w, end_onc_w) + GasStation.LOT_DEPTH if not is_inf(GasStation.lot_centre(chunk_index, -1)) else 0.0
+	_update_boundary(root, "BoundaryOwn", bound_own, 1, chunk_index, lot_own)
+	_update_boundary(root, "BoundaryOnc", bound_onc, -1, chunk_index, lot_onc)
+	root.set_meta(&"bounds", Vector2(maxf(bound_own, lot_own), maxf(bound_onc, lot_onc)))
 	# Where the setback changes from the previous chunk, a cross wall at this
 	# chunk's start closes the step between the two boundary lines, so the
 	# deeper lot does not open behind the shallower chunk's wall.
 	var prev_setback := Districts.setback_at(chunk_index - 1)
-	var step_own := Vector2(bound_own, start_own_walk + BUILDING_GAP + prev_setback)
-	var step_onc := Vector2(bound_onc, start_onc_walk + BUILDING_GAP + prev_setback)
-	_update_step(root, "BoundaryStepOwn", step_own, 1, absf(setback - prev_setback) > 0.01)
-	_update_step(root, "BoundaryStepOnc", step_onc, -1, absf(setback - prev_setback) > 0.01)
-	_update_road_collision(root, maxf(bound_own, bound_onc) + BOUNDARY_T + ROAD_COL_MARGIN)
+	var step_own := Vector2(bound_own, ramp_bound_prev if ramp_bound_prev > 0.0 else start_own_walk + BUILDING_GAP + prev_setback)
+	var step_onc := Vector2(bound_onc, ramp_bound_prev if ramp_bound_prev > 0.0 else start_onc_walk + BUILDING_GAP + prev_setback)
+	if dip_prev != RoadMap.DIP_NONE:
+		step_own.y = start_own_shoulder
+		step_onc.y = start_onc_shoulder
+	# ... and where a trench begins or ends, between the pavement and its wall
+	var stepped := absf(setback - prev_setback) > 0.01 or ramp_bound != ramp_bound_prev \
+		or (dip != RoadMap.DIP_NONE) != (dip_prev != RoadMap.DIP_NONE)
+	# A gas station's lot on this side, here or in the chunk before: the step
+	# would stand across the lot's yard, and the lot's own walls close it.
+	var stepped_own := stepped and is_inf(GasStation.lot_centre(chunk_index, 1)) and is_inf(GasStation.lot_centre(chunk_index - 1, 1))
+	var stepped_onc := stepped and is_inf(GasStation.lot_centre(chunk_index, -1)) and is_inf(GasStation.lot_centre(chunk_index - 1, -1))
+	_update_step(root, "BoundaryStepOwn", step_own, 1, stepped_own)
+	_update_step(root, "BoundaryStepOnc", step_onc, -1, stepped_onc)
+	_update_road_collision(root, maxf(maxf(maxf(bound_own, bound_onc), maxf(lot_own, lot_onc)),
+		maxf(start_own_walk, start_onc_walk) + BUILDING_GAP + setback) + BOUNDARY_T + ROAD_COL_MARGIN)
+	# From here on, upright things outside the trench stand at street height.
+	if dip != RoadMap.DIP_NONE:
+		_set_lift(chunk_index, minf(bound_own, bound_onc) + 0.1)
+	if job != null:
+		job.lift_x = _lift_x
 
 	if job != null:
 		job.keep(_curve_k, _vert, _strip_n)
@@ -2179,10 +2359,16 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var pylons_onc: MultiMesh = (root.get_node(^"PylonsOnc") as MultiMeshInstance3D).multimesh
 	var n_pylons := _pylon_slots()
 	var n_posts := 0
+	# every small prop laid below is also written here (roadside_props.gd)
+	var props := Props.begin()
 	for i in range(n_pylons):
 		var pz := -float(i) * PYLON_SPACING - PYLON_SPACING / 2.0
 		if Junction.in_mouth(chunk_index, pz):
 			continue  # none across the crossing's mouth
+		if ramp_bound > 0.0:
+			continue  # none beside a ring site's ramps
+		if dip != RoadMap.DIP_NONE:
+			continue  # the trench and tunnel walls stand there
 		var pt: float = -pz / CHUNK_LEN
 		var own_edge: float = lerp(start_own_shoulder, end_own_shoulder, pt)
 		var onc_edge: float = lerp(start_onc_shoulder, end_onc_shoulder, pt)
@@ -2190,8 +2376,15 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		# sides share one instance count)
 		var own_y := -50.0 if GasStation.in_bay(chunk_index, pz, 1) else PYLON_HEIGHT / 2.0
 		var onc_y := -50.0 if GasStation.in_bay(chunk_index, pz, -1) else PYLON_HEIGHT / 2.0
-		pylons_own.set_instance_transform(n_posts, _xf_up(own_edge, own_y, pz))
-		pylons_onc.set_instance_transform(n_posts, _xf_up(-onc_edge, onc_y, pz))
+		var own_post := _xf_up(own_edge, own_y, pz)
+		var onc_post := _xf_up(-onc_edge, onc_y, pz)
+		pylons_own.set_instance_transform(n_posts, own_post)
+		pylons_onc.set_instance_transform(n_posts, onc_post)
+		# the foot is straight below (_xf_up raises y straight up)
+		if own_y > 0.0:
+			Props.add(props, Props.POST, own_post.origin - Vector3(0.0, own_y, 0.0), n_posts, 1, own_edge, pz)
+		if onc_y > 0.0:
+			Props.add(props, Props.POST, onc_post.origin - Vector3(0.0, onc_y, 0.0), n_posts, -1, -onc_edge, pz)
 		n_posts += 1
 	pylons_own.visible_instance_count = n_posts
 	pylons_onc.visible_instance_count = n_posts
@@ -2215,6 +2408,12 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var onc_info := _clear_at_junction(root, i * 2 + 1, _update_building(root, i * 2 + 1, onc_edge_b, bz, -1, chunk_index, job.draws[i * 2 + 1] if job != null and not job.draws.is_empty() else []), chunk_index)
 		own_info = _clear_for_mouth(root, i * 2, own_info, SideStreets.mouth_for(mouths, 1, i))
 		onc_info = _clear_for_mouth(root, i * 2 + 1, onc_info, SideStreets.mouth_for(mouths, -1, i))
+		if ramp_bound > 0.0:
+			own_info = _clear_for_ramp(root, i * 2, own_info)
+			onc_info = _clear_for_ramp(root, i * 2 + 1, onc_info)
+		if dip != RoadMap.DIP_NONE:
+			own_info = _clear_for_tunnel(root, i * 2, own_info, chunk_index, covered)
+			onc_info = _clear_for_tunnel(root, i * 2 + 1, onc_info, chunk_index, covered)
 		infos.append(own_info)
 		infos.append(onc_info)
 		var d_own: float = own_info.d
@@ -2226,7 +2425,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	root.set_meta("signs_used", signs_used)
 	_update_roofs(root, infos, signs_used)
 	if not RoadSigns.off():
-		_update_names(root, chunk_index, start_own_walk, end_own_walk)
+		_update_names(root, chunk_index, start_own_walk, end_own_walk, start_onc_walk, end_onc_walk)
 		_update_paint(root, chunk_index, int(prev_cfg.own_lanes) != own_lanes, own_lanes)
 
 	if job != null:
@@ -2245,9 +2444,14 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var drop_types: Array = sec1.drops
 	var kh0 := float(sec0.kerb_h)
 	var kh1 := float(sec1.kerb_h)
-	var flat := maxf(kh0, kh1) < FLAT_BELOW  # a freeway's verge: no hydrants, paint or drains
+	var flat := maxf(kh0, kh1) < FLAT_BELOW or covered  # a freeway's verge: no hydrants, paint or drains
+	# In a trench or a tunnel the wall stands where the kerb was; the pavement
+	# is the tunnel kit's, at street height.
+	for strip_name in ["CurbOwn", "CurbOnc", "SidewalkOwn", "SidewalkOnc"]:
+		(root.get_node(NodePath(strip_name)) as MeshInstance3D).visible = dip == RoadMap.DIP_NONE
 	var verge := not bool(sec1.kerb)
 	var all_types := drop_types.has("*")
+	var pave_tops := {}  # side -> [hs, ts]: the pavement's drawn top, for StreetAnimals
 	for side in [1, -1]:
 		var drops: Array = []
 		var paint: Array = []
@@ -2259,6 +2463,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		for m in mouths:  # a side street's mouth drops the kerb like a crossing's (W7)
 			if int(m.side) == side:
 				drops.append([float(m.z), SideStreets.MOUTH_HALF])
+		drops.append_array(GasStation.lot_drops(chunk_index, side))  # a station lot's two driveways
 		if Junction.touches(chunk_index):
 			var jc := Junction.local_centre(chunk_index)
 			drops.append([jc, Junction.MOUTH_HALF])
@@ -2299,11 +2504,14 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var suffix := "Own" if side == 1 else "Onc"
 		_update_profile_strip(root, "Curb" + suffix, sh0 * sx, sh1 * sx, cb0 * sx, cb1 * sx, _kerb_profile(), ts, hs, cols)
 		_update_profile_strip(root, "Sidewalk" + suffix, cb0 * sx, cb1 * sx, wk0 * sx, wk1 * sx, _walk_profile(), ts, hs)
+		pave_tops[side] = [hs, ts]
 		_update_sidewalk_collision(root, "SidewalkCol" + suffix, cb0, cb1, wk0, wk1, side, ts, ch, &"Grass" if verge else &"Kerb")
 		if hydrant_ok:
 			var ht: float = -hz / CHUNK_LEN
 			var hx: float = lerpf(cb0, cb1, ht) + HYDRANT_SETBACK
-			hydrants.set_instance_transform(n_hydrants, _xf_up(hx * sx, KERB_H * _drop_at(hs, ts, hz), hz))
+			var hxf := _xf_up(hx * sx, KERB_H * _drop_at(hs, ts, hz), hz)
+			hydrants.set_instance_transform(n_hydrants, hxf)
+			Props.add(props, Props.HYDRANT, hxf.origin, n_hydrants, side, hx * sx, hz)
 			n_hydrants += 1
 		# Drains (K4): a grate in the gutter, hashed per chunk side and slot,
 		# clear of the crossing, every dropped kerb and the hydrant's paint.
@@ -2336,15 +2544,28 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# which is being worked on separately, so it is deliberately not done here.
 	var walls: MultiMesh = (root.get_node(^"GapWalls") as MultiMeshInstance3D).multimesh
 	var n_walls := 0
+	var cross_street := TunnelKit.cross_street(chunk_index)
 	for side in [1, -1]:
+		if covered:
+			break  # nothing stands over a tunnel
 		var walk0: float = start_own_walk if side == 1 else start_onc_walk
 		var walk1: float = end_own_walk if side == 1 else end_onc_walk
 		var z_from := 0.0
 		var edges: Array = spans[side].duplicate()
+		var opening := Junction.touches(chunk_index) or cross_street != Vector2.ZERO
 		if Junction.touches(chunk_index):
 			# the crossing's mouth is an opening like a building's frontage
 			var jc := Junction.local_centre(chunk_index)
 			edges.append([jc + Junction.MOUTH_HALF, jc - Junction.MOUTH_HALF])
+		var lc := GasStation.lot_centre(chunk_index, side)
+		if not is_inf(lc):
+			# so is the whole of a gas station's lot
+			opening = true
+			edges.append([lc + GasStation.LOT_HALF, lc - GasStation.LOT_HALF])
+		if cross_street != Vector2.ZERO:
+			# and so is the cross street that bridges a tunnel's trench (TN1)
+			edges.append([cross_street.x, cross_street.y])
+		if opening:
 			edges.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
 		edges.append([-CHUNK_LEN, -CHUNK_LEN])
 		for e in edges:
@@ -2353,15 +2574,17 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			if length > 0.3:
 				var zc := (z_from + z_to) / 2.0
 				var x: float = lerp(walk0, walk1, -zc / CHUNK_LEN) + BUILDING_GAP + setback + WALL_T / 2.0
+				if ramp_bound > 0.0:
+					x = ramp_bound + WALL_T / 2.0
 				var f := _foundation()
 				var basis := Basis.from_scale(Vector3(WALL_T, WALL_H + f, length))
 				walls.set_instance_transform(n_walls, _xf_up(x * float(side), (WALL_H - f) / 2.0, zc, basis))
 				n_walls += 1
-			z_from = minf(z_from, e[1]) if Junction.touches(chunk_index) else e[1]
+			z_from = minf(z_from, e[1]) if opening else e[1]
 		# the district step: a visible wall across the lot edge, where the
 		# invisible cross wall stands
 		var step: Vector2 = step_own if side == 1 else step_onc
-		if absf(setback - prev_setback) > 0.01:
+		if stepped_own if side == 1 else stepped_onc:
 			var sx := absf(step.x - step.y)
 			var basis2 := Basis.from_scale(Vector3(sx, WALL_H, WALL_T))
 			walls.set_instance_transform(n_walls, Transform3D(basis2, Vector3((step.x + step.y) / 2.0 * float(side), WALL_H / 2.0, -WALL_T / 2.0)))
@@ -2384,7 +2607,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	if kit_changed:
 		lamps.mesh = _get_lamp_mesh(street.lamp, street.light)
 		pools_mmi.material_override = _get_pool_mat(street.light)
-	var every := int(street.every)
+	var every := 0 if covered else int(street.every)  # a tunnel has its light strip
 	var reach: float = lamp_kind.reach
 	var pool_size: Vector2 = lamp_kind.pool
 	var smears: MultiMesh = (root.get_node(^"LampSmears") as MultiMeshInstance3D).multimesh
@@ -2402,6 +2625,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			var lz := -float(i) * LAMP_SPACING - (LAMP_SPACING * 0.25 if side == 1 else LAMP_SPACING * 0.75)
 			if Junction.in_mouth(chunk_index, lz):
 				continue  # the signal masts stand there
+			if RoadRamps.nose(chunk_index) or RoadRamps.under_ring(chunk_index, lz):
+				continue  # the ramp's lane crosses the pole line, or the ring's bridge is overhead
 			if GasStation.in_bay(chunk_index, lz, side):
 				continue  # the gas station canopy lights the bay
 			lamp_zs[side].append(lz)
@@ -2409,7 +2634,9 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			var curb: float = lerp(start_own_curb, end_own_curb, lt) if side == 1 else lerp(start_onc_curb, end_onc_curb, lt)
 			var pole_x := (curb + LAMP_SETBACK) * float(side)
 			var turn := Basis() if side == 1 else Basis(Vector3.UP, PI)
-			lamps.set_instance_transform(n_lamps, _xf_up(pole_x, 0.0, lz, turn))
+			var lamp_xf := _xf_up(pole_x, 0.0, lz, turn)
+			lamps.set_instance_transform(n_lamps, lamp_xf)
+			Props.add(props, Props.LAMP, lamp_xf.origin, n_lamps, side, pole_x, lz)
 			var head_x := pole_x - reach * float(side)
 			pools.set_instance_transform(n_lamps, _xf(head_x, POOL_Y, lz, Basis.from_scale(Vector3(pool_size.x, 1.0, pool_size.y))))
 			smears.set_instance_transform(n_lamps, _xf(head_x, WetReflections.SMEAR_Y, lz, WetReflections.lamp_smear_basis()))
@@ -2421,8 +2648,15 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		mouth_edges.append(lerpf(start_own_walk, end_own_walk, mt) if int(m.side) == 1 else lerpf(start_onc_walk, end_onc_walk, mt))
 	var n_road_lamps := n_lamps   # side-street lamps (below) have no smear and no lamp-post life
 	n_lamps += SideStreets.update(root, mouths, mouth_edges, lamps, pools, n_lamps)
+	# the lamp head over a signed U-turn's opening (RoadSigns.median_parts) is
+	# part of the sign MultiMesh; this is its pool of light on the road, one
+	# more pool than there are lamp posts
+	var n_pools := n_lamps
+	if RoadBarriers.gap_kind(chunk_index) == RoadBarriers.KIND_UTURN and n_pools < pools.instance_count:
+		pools.set_instance_transform(n_pools, _xf(0.0, POOL_Y, RoadSigns.MEDIAN_OWN_Z - 2.6, Basis.from_scale(Vector3(pool_size.x * 0.8, 1.0, pool_size.y * 0.8))))
+		n_pools += 1
 	lamps.visible_instance_count = n_lamps
-	pools.visible_instance_count = n_lamps
+	pools.visible_instance_count = n_pools
 	smears.visible_instance_count = n_road_lamps
 	var lamp_xfs := []
 	for k in range(n_road_lamps):
@@ -2431,7 +2665,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		-(start_onc_w + end_onc_w) * 0.5, (start_own_w + end_own_w) * 0.5)
 	# animals at shop fronts and alley mouths (A1): placed now, their eyes
 	# shine per frame from StreetAnimals.step (game.gd)
-	StreetAnimals.update(root, chunk_index, infos, mouths, [start_own_walk, end_own_walk, start_onc_walk, end_onc_walk], setback)
+	StreetAnimals.update(root, chunk_index, infos, mouths, [start_own_walk, end_own_walk, start_onc_walk, end_onc_walk], setback, pave_tops)
 
 	if job != null:
 		job.keep(_curve_k, _vert, _strip_n)
@@ -2449,7 +2683,33 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var lots := {1: [], -1: []}
 	for info in infos:
 		lots[int(info.side)].append([float(info.z), (BUILDING_SPACING * 0.6) if info.empty else float(info.d)])
-	Kit.apply(root, chunk_index, kit_edges, setback, lamp_zs, lots)
+	Kit.apply(root, chunk_index, kit_edges, setback, lamp_zs, lots, dip != RoadMap.DIP_NONE)
+	# The kit's own small pieces (slot = order within the kind, as it lays
+	# them), the name sign's foot, then the record goes on the chunk.
+	var kit_slot := {}
+	for r in root.get_meta("kit", []):
+		var kk: String = r.kind
+		var ks := int(kit_slot.get(kk, 0))
+		kit_slot[kk] = ks + 1
+		var pk := Props.NAMES.find(kk)
+		if pk < 0:
+			continue  # rails, dumpsters and jersey blocks are solid
+		var kx := float(r.x) * float(r.side)
+		# Kit hydrants get ids above the kerb hydrants' (two MultiMeshes)
+		Props.add(props, pk, r.p, ks + (KIT_SLOT if pk == Props.HYDRANT else 0), int(r.side), kx, float(r.z))
+	var sign_kind := "" if RoadSigns.off() else name_sign_kind(chunk_index)
+	if sign_kind != "":
+		var sz := GANTRY_Z if sign_kind == "gantry" else (REPEATER_Z if sign_kind == "repeater" else ADVANCE_Z)
+		var sign_x := lerpf(start_own_walk, end_own_walk, -sz / CHUNK_LEN) + NAME_SIGN_SETBACK
+		Props.add(props, Props.GANTRY if sign_kind == "gantry" else Props.SIGN, _xf_up(sign_x, 0.0, sz).origin, 0, 1, sign_x, sz)
+	Props.write(root, props)
+	RoadRamps.apply(root, chunk_index)
+	# the tunnel or its trench (TN1): walls, roof, light strip, mouths; hidden
+	# on every other chunk
+	TunnelKit.apply(root, chunk_index,
+		PackedFloat32Array([start_own_shoulder, end_own_shoulder, start_onc_shoulder, end_onc_shoulder]),
+		PackedFloat32Array([start_own_walk + BUILDING_GAP + setback, end_own_walk + BUILDING_GAP + setback,
+			start_onc_walk + BUILDING_GAP + setback, end_onc_walk + BUILDING_GAP + setback]))
 
 	# puddles: road-space s along the road (chunk c covers [c * L, (c + 1) * L))
 	# becomes chunk-local z = -(s - c * L); x is already across the road.
@@ -2508,6 +2768,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			lane.set_instance_transform(written, _xf(x2, DASH_Y, dz3))
 			written += 1
 	lane.visible_instance_count = written
+	_lift = PackedFloat32Array()
+	_lift_x = INF
 	if job != null:
 		# Into place. job.origin_index is kept current by game.gd across a
 		# floating-origin shift that lands mid-job.
@@ -2548,6 +2810,8 @@ class RebuildJob extends RefCounted:
 	var strip_n := 1
 	# the four global random draws of each building slot, taken at rebuild_begin
 	var draws: Array = []
+	# how far out a trench's walls are (INF off a dip), see _set_lift
+	var lift_x := INF
 
 	func keep(k: float, v: Array, n: int) -> void:
 		curve_k = k
@@ -2585,6 +2849,7 @@ static func _prime(root: Node3D, job: RebuildJob) -> void:
 	for i in 4:
 		_vert[i] = job.vert[i]
 	_strip_n = job.strip_n
+	_set_lift(job.index, job.lift_x)
 
 ## Starts a rebuild of a pooled chunk and returns its job; rebuild_step()
 ## runs it a stage at a time. Until the job finishes the chunk is parked and

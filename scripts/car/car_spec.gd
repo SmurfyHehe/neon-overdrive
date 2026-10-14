@@ -33,6 +33,10 @@ static func apply(v: Vehicle, spec: Dictionary) -> void:
 			continue  # sound only (B1): EngineAudio hands it to TurboSynth
 		elif key == "window_control":
 			continue  # cosmetic: how the cockpit's side window is worked (CockpitFrame)
+		elif key == "limp_fuel_share":
+			v.set_meta(&"limp_fuel_share", float(spec[key]))  # LimpMode.fuel_share, read by PlayerCar
+		elif key == "limp_max_gear":
+			v.set_meta(&"limp_max_gear", int(spec[key]))  # LimpMode.engine_max_gear, read by PlayerCar
 		elif key == "boost_kind":
 			ForcedInduction.set_kind(v, String(spec[key]))  # not a Vehicle property (C1)
 		elif key == "driver_grip_deg":
@@ -445,12 +449,31 @@ const PLAYER_AUTO := {
 	"p5_muscle": {"family": "old"},
 	"p6_crossover": {"family": "90s"},
 	"p7_wagon": {"family": "old"},
+	"p8_driftcoupe": {"family": "90s"},
+	"p10_truck": {"family": "90s"},
 }
 
 static func player_spec(kind: String) -> Dictionary:
 	var s := coupe_default()
 	s["auto"] = (PLAYER_AUTO.get(kind, {"family": AutoBox.DEFAULT_FAMILY}) as Dictionary).duplicate()
 	match kind:
+		"p1_coupe":
+			# Springs to match its downforce (2026-10-11, issue #538). The wings
+			# press it down by 0.4 g at 250 km/h and more at 300; on the base
+			# springs (half the travel used up at rest) that left the front
+			# 2.8 cm of spring at 300 on a flat road, so any dip put it on the
+			# bump stops and the body on the road. A fifth less sag at rest is a
+			# quarter more spring rate: 6.5 cm left at 300, the body 2.5 cm
+			# higher, and the same cornering grip at every speed, since grip
+			# follows the load on the tyres and not how far the springs give
+			# (tools/grip_at_speed.gd: 1.05 g at 100 km/h, 1.42 g at 250, before
+			# and after). Only this car: the others have little or no downforce.
+			s["front_resting_ratio"] = 0.4
+			s["rear_resting_ratio"] = 0.4
+			# The coupe's voices and exhaust stay coupe_default()'s, as before it
+			# had a branch of its own (it used to return at `_` below; falling
+			# through added a turbo_voice block it never had, issue #600).
+			return s
 		"p0_beater":
 			# The prologue car (Roy, 2026-10-09): a worn rear-engine, air-cooled
 			# flat four. About 290 Nm, power tier T0 (0.29 Nm/kg: under the T1
@@ -469,6 +492,9 @@ static func player_spec(kind: String) -> Dictionary:
 			s["torque_shape"] = {"low_end": 0.55, "peak_pos": 0.40, "plateau": 0.1, "falloff": 0.35}
 			s["gear_ratios"] = gears
 			s["final_drive"] = 4.1
+			# Engine limp holds 0.55 of this low redline: 3rd would be 43.5 km/h
+			# (measured, tests/car/limp_physics.gd), under the 50 km/h floor.
+			s["limp_max_gear"] = 4
 			s["coefficient_of_drag"] = 0.46
 			s["frontal_area"] = 2.0
 			s["front_tire_width"] = 155.0   # fleet.json physics_hint
@@ -544,6 +570,9 @@ static func player_spec(kind: String) -> Dictionary:
 			s["torque_shape"] = {"low_end": 0.35, "peak_pos": 0.7, "plateau": 0.15, "falloff": 0.8}
 			s["gear_ratios"] = gears
 			s["final_drive"] = 4.6
+			# A dry tank on the standard 35 % of its small, peaky torque tops out at
+			# 48 km/h (measured, tests/car/limp_physics.gd), under the 50 km/h floor.
+			s["limp_fuel_share"] = 0.45
 			s["coefficient_of_drag"] = 0.36
 			s["frontal_area"] = 1.6
 			s["front_tire_width"] = 175.0
@@ -656,6 +685,72 @@ static func player_spec(kind: String) -> Dictionary:
 			s["rear_damping_ratio"] = 0.35
 			s["front_arb_ratio"] = 0.18
 			s["rear_arb_ratio"] = 0.08
+			s["turbo_boost_max"] = 0.0
+		"p8_driftcoupe":
+			# Ashida Levant (placeholder name), T2, MC1 2026-10-11: a 1.6 twin-cam
+			# four, rear drive, 5-speed manual, about 1050 kg (a guess until the
+			# sheet weighs it), 52% on the nose. The coupe's spec (coupe_default)
+			# with the box coupe's numbers: 0.30 Nm/kg on the game's torque scale,
+			# set at 335 Nm so the test driver lands near 225 km/h and 0-100 in
+			# about 6.5 s (tests/fleet/player_cars.gd reports them), a lumpy
+			# 1100 idle, a 7800 redline with the torque high up, short close
+			# gears, 205/50 front and 195/50 rear, and the most steering lock of
+			# any stock car (44 degrees, the kei's 42, the coupe's 38). The
+			# drift-angle quirk and the hydraulic handbrake are MC10's.
+			s["shifter"] = shifter("h5_short")   # short stick, close gate
+			s["window_control"] = "crank"
+			var gears: Array[float] = [3.58, 2.20, 1.55, 1.20, 0.98]
+			s["vehicle_mass"] = 1050.0
+			s["front_weight_distribution"] = 0.52
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 335.0
+			s["max_rpm"] = 7800.0
+			s["idle_rpm"] = 1100.0
+			s["torque_shape"] = {"low_end": 0.40, "peak_pos": 0.68, "plateau": 0.15, "falloff": 0.7}
+			s["gear_ratios"] = gears
+			s["final_drive"] = 4.0   # 7800 in 5th is 225 km/h; 4.3 ran out at 210
+			s["coefficient_of_drag"] = 0.36
+			s["frontal_area"] = 1.95
+			s["front_tire_width"] = 205.0
+			s["rear_tire_width"] = 195.0
+			s["max_steering_angle"] = deg_to_rad(44.0)
+			s["front_damping_ratio"] = 0.45
+			s["rear_damping_ratio"] = 0.42
+			s["front_arb_ratio"] = 0.22
+			s["rear_arb_ratio"] = 0.14
+			s["aero_downforce_coefficient_front"] = 0.05
+			s["aero_downforce_coefficient_rear"] = 0.05
+			s["turbo_boost_max"] = 0.0
+		"p10_truck":
+			# Harlan Drover, T2 (MC2 brief, 2026-10-11): a lowered regular-cab sport
+			# truck, pushrod V8, rear drive, 4-speed automatic with overdrive (the
+			# "90s" family), 1750 kg. Cloned from the Camel and lowered: 560 Nm on
+			# the game's torque scale (0.32 Nm/kg; 680 ran 0-100 in 5.4 s and 245
+			# km/h on the sweep, 600 in 5.8 s and 228; the targets are about 6.8 s
+			# and 225 km/h, MC10 tunes the rest), torque low down, done by
+			# 5500, a tall overdrive top, street tyres 255 / 285, a high centre of
+			# gravity on stiffer springs than the Camel, a soft rear bar (the empty
+			# bed is light; MC10 tunes the rest). Data only: no new physics.
+			var gears: Array[float] = [2.74, 1.57, 1.00, 0.70]
+			s["vehicle_mass"] = 1750.0
+			s["front_weight_distribution"] = 0.58
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 560.0
+			s["max_rpm"] = 5500.0
+			s["idle_rpm"] = 650.0
+			s["torque_shape"] = {"low_end": 0.75, "peak_pos": 0.45, "plateau": 0.20, "falloff": 0.60}
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.73
+			s["coefficient_of_drag"] = 0.44
+			s["frontal_area"] = 2.80
+			s["front_tire_width"] = 255.0
+			s["rear_tire_width"] = 285.0
+			s["coefficient_of_friction"] = {"Road": 1.15, "Dirt": 1.0}
+			s["center_of_gravity_height_offset"] = 0.09
+			s["front_damping_ratio"] = 0.35
+			s["rear_damping_ratio"] = 0.32
+			s["front_arb_ratio"] = 0.16
+			s["rear_arb_ratio"] = 0.06
 			s["turbo_boost_max"] = 0.0
 		_:
 			return s  # p1_coupe, or an unknown kind: the coupe
@@ -883,6 +978,15 @@ static func npc_spec(kind: String) -> Dictionary:
 					"front_tire_width", "rear_tire_width", "coefficient_of_friction", "front_damping_ratio",
 					"rear_damping_ratio", "front_arb_ratio", "rear_arb_ratio", "center_of_gravity_height_offset"]:
 				s[k] = ps[k]
+		"p8_driftcoupe":
+			# Drift coupe (Ashida Levant) as an AI car: the player's own numbers,
+			# so Kasumi Run's car drives like the one you buy.
+			var ps := player_spec("p8_driftcoupe")
+			for k in ["vehicle_mass", "front_weight_distribution", "front_torque_split", "max_torque", "max_rpm",
+					"idle_rpm", "torque_shape", "gear_ratios", "final_drive", "coefficient_of_drag", "frontal_area",
+					"front_tire_width", "rear_tire_width", "max_steering_angle", "front_damping_ratio",
+					"rear_damping_ratio", "front_arb_ratio", "rear_arb_ratio", "engine_voice", "turbo_voice", "exhaust"]:
+				s[k] = ps[k]
 		"p17_work_pickup":
 			# Work pickup (Camel): the player_spec numbers, so a rival or a
 			# parked one drives like the player's.
@@ -904,6 +1008,28 @@ static func npc_spec(kind: String) -> Dictionary:
 			s["rear_damping_ratio"] = 0.35
 			s["front_arb_ratio"] = 0.18
 			s["rear_arb_ratio"] = 0.08
+		"p10_truck":
+			# Street truck (Harlan Drover): the player_spec numbers, so a rival or
+			# a parked one drives like the player's.
+			var gears: Array[float] = [2.74, 1.57, 1.00, 0.70]
+			s["vehicle_mass"] = 1750.0
+			s["front_weight_distribution"] = 0.58
+			s["front_torque_split"] = 0.0
+			s["max_torque"] = 560.0
+			s["max_rpm"] = 5500.0
+			s["torque_shape"] = {"low_end": 0.75, "peak_pos": 0.45, "plateau": 0.20, "falloff": 0.60}
+			s["gear_ratios"] = gears
+			s["final_drive"] = 3.73
+			s["coefficient_of_drag"] = 0.44
+			s["frontal_area"] = 2.80
+			s["front_tire_width"] = 255.0
+			s["rear_tire_width"] = 285.0
+			s["coefficient_of_friction"] = {"Road": 1.15, "Dirt": 1.0}
+			s["center_of_gravity_height_offset"] = 0.09
+			s["front_damping_ratio"] = 0.35
+			s["rear_damping_ratio"] = 0.32
+			s["front_arb_ratio"] = 0.16
+			s["rear_arb_ratio"] = 0.06
 		"c1_patrol":
 			# Patrol sedan (Crown Vic / Charger Pursuit class), V8, rear drive:
 			# heavy, police-spec damping, long gears.
@@ -994,6 +1120,11 @@ const WORLD_LAYER := 1
 const CAR_LAYER := 2
 const WALL_LAYER := 3
 const KERB_LAYER := 4
+## Knocked-over roadside props that roll (scripts/world/prop_break.gd). Left
+## out of the car body's mask above and the wheel raycast mask below on
+## purpose: a rolling bin meets the road, kerb, walls and other props, never
+## a car or a wheel.
+const PROP_LAYER := 5
 
 static func set_collision_layers(v: Vehicle) -> void:
 	v.collision_layer = 1 << (CAR_LAYER - 1)
@@ -1076,9 +1207,10 @@ static func build_wheels(v: Vehicle, kind: String, wheel_cfg: Dictionary, front_
 	v.front_right_wheel = _build_wheel(v, kind, Vector3(wheel_x, front_mount_y, -axle_z))
 	v.rear_left_wheel = _build_wheel(v, kind, Vector3(-wheel_x, rear_mount_y, axle_z))
 	v.rear_right_wheel = _build_wheel(v, kind, Vector3(wheel_x, rear_mount_y, axle_z))
+	CarSimSwitch.attach(v)  # C++ wheel physics, only while neon/sim/native is on
 
 static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
-	var w := Wheel.new()
+	var w := CarSimSwitch.new_wheel()
 	w.position = pos
 	# GEVP casts each wheel itself (force_raycast_update() in process_forces)
 	# every tick. Left enabled, RayCast3D also casts on its own right after,
@@ -1094,8 +1226,9 @@ static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
 	elif kind == P1CoupeBuilder.KIND:
 		visual = P1CoupeBuilder.build_wheel_visual(v.front_tire_radius, pos)
 	elif NpcCarBuilder.is_npc(kind):
-		# Traffic cars (TrafficCar.build names the sheet variant).
-		visual = NpcCarBuilder.wheel_visual(kind, String(v.get("build")), pos)
+		# Traffic cars (TrafficCar.build names the sheet variant), and the
+		# player's sheet car. An AI car wears the sheet wheel, as its body.
+		visual = NpcCarBuilder.wheel_visual(kind, String(v.get("build")), pos, v is TrafficCar)
 	else:
 		# CarBuilder kinds (traffic) share one merged, cached wheel mesh per
 		# kind (traffic milestone 4, draw calls).

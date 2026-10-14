@@ -4,6 +4,9 @@ extends SceneTree
 # track (TuneTrack) must stay inside the feel targets from
 # docs/research/build-phases.md, so a later tweak can't quietly break the car:
 #   top speed 235-250 km/h, 0-100 4.8-6.4 s, 100-0 36-46 m, peak lateral g 1.0-1.5
+# The g band was set on TuneTrack's old reading (speed x yaw rate, stock 1.30 g).
+# Since #572 the track reads g off the car's path (stock 1.083 g); the band is
+# the same band in the new reading, x 1.083 / 1.301: 0.83-1.25.
 # Headless, silent, about a minute. Exit code 1 on failure. Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --fixed-fps 60 --path . -s res://tests/car/chassis_targets.gd
 
@@ -24,8 +27,8 @@ func _run() -> void:
 		fails.append("0-100 %.2f outside 4.8-6.4" % m.t_0_100)
 	if not (m.brake_dist_100 >= 36.0 and m.brake_dist_100 <= 46.0):
 		fails.append("100-0 %.1f outside 36-46" % m.brake_dist_100)
-	if not (m.peak_lat_g >= 1.0 and m.peak_lat_g <= 1.5):
-		fails.append("peak lateral g %.2f outside 1.0-1.5" % m.peak_lat_g)
+	if not (m.peak_lat_g >= 0.83 and m.peak_lat_g <= 1.25):
+		fails.append("peak lateral g %.2f outside 0.83-1.25" % m.peak_lat_g)
 	for f in fails:
 		printerr("FAIL: ", f)
 	print("chassis_targets: ", "PASS" if fails.is_empty() else "FAIL")

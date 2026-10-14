@@ -64,28 +64,33 @@ func _loop_static() -> void:
 	_check(is_equal_approx(lap, 6400.0), "Loop 1 act 1 is %.0f m, expected 6400" % lap)
 	var cases := [
 		# [s, side, expected next_after]
-		[0.0, 1, 2225.0], [2225.0, 1, 2225.0], [2300.0, 1, 5425.0], [6500.0, 1, 8625.0],
-		[0.0, -1, 1825.0], [1900.0, -1, 5025.0], [5100.0, -1, 8225.0],
-		[12900.0, 1, 12800.0 + 2225.0],
+		# (the stations on the slip lanes past the ring sites' merges since R1-R4)
+		[0.0, 1, 2375.0], [2375.0, 1, 2375.0], [2450.0, 1, 5575.0], [6500.0, 1, 8775.0],
+		[0.0, -1, 1625.0], [1700.0, -1, 4875.0], [4950.0, -1, 8025.0],
+		[12900.0, 1, 12800.0 + 2375.0],
 	]
 	for c in cases:
 		var got := GasStation.next_after(float(c[0]), int(c[1]))
 		_check(is_equal_approx(got, float(c[2])), "next_after(%.0f, side %d) = %.0f, expected %.0f" % [c[0], c[1], got, c[2]])
-	for st in [2225.0, 5425.0]:
+	for st in [2375.0, 5575.0]:
 		_check(is_equal_approx(GasStation.nearest(st + 30.0, 1), st), "side +1 nearest to %.0f is %.0f" % [st + 30.0, GasStation.nearest(st + 30.0, 1)])
 		_check(absf(GasStation.nearest(st, -1) - st) > 300.0, "a side -1 station within 300 m of the side +1 one at %.0f" % st)
-	for st in [1825.0, 5025.0]:
+	for st in [1625.0, 4875.0]:
 		_check(is_equal_approx(GasStation.nearest(st - 30.0, -1), st), "side -1 nearest to %.0f is %.0f" % [st - 30.0, GasStation.nearest(st - 30.0, -1)])
 		_check(absf(GasStation.nearest(st, 1) - st) > 300.0, "a side +1 station within 300 m of the side -1 one at %.0f" % st)
 	var l := GasStation.L
-	for c in [[2225.0, 1, true], [2225.0, -1, false], [1825.0, -1, true], [1825.0, 1, false]]:
+	for c in [[2375.0, 1, true], [2375.0, -1, false], [1625.0, -1, true], [1625.0, 1, false]]:
 		var ci := int(float(c[0]) / l)
 		var z := -fmod(float(c[0]), l)
 		_check(GasStation.in_bay(ci, z, int(c[1])) == bool(c[2]), "in_bay at %.0f side %d should be %s" % [c[0], c[1], c[2]])
-	# the bay is on its own side
-	_check(GasStation.in_spot(Vector2(GasStation.own_edge(2225.0, 1) + 1.6, 2225.0), 2225.0, 1), "a car in the +1 bay is not in the spot")
-	_check(GasStation.in_spot(Vector2(-(GasStation.own_edge(1825.0, -1) + 1.6), 1825.0), 1825.0, -1), "a car in the -1 bay is not in the spot")
-	_check(not GasStation.in_spot(Vector2(GasStation.own_edge(1825.0, -1) + 1.6, 1825.0), 1825.0, -1), "a +1 car counted in the -1 bay")
+	# a pump spot of the lot (the compound replaced the shoulder bay on the
+	# loop, 2026-10-11) is on its own side
+	var own_pump := GasStation.spot_centre(2375.0, 1, "pump")
+	var onc_pump := GasStation.spot_centre(1625.0, -1, "pump")
+	_check(GasStation.in_spot(own_pump, 2375.0, 1), "a car at a +1 pump is not in the spot")
+	_check(GasStation.in_spot(onc_pump, 1625.0, -1), "a car at a -1 pump is not in the spot")
+	_check(not GasStation.in_spot(Vector2(-onc_pump.x, onc_pump.y), 1625.0, -1), "a +1 car counted at the -1 pump")
+	_check(not GasStation.in_spot(Vector2(GasStation.own_edge(2375.0, 1) + 1.6, 2375.0), 2375.0, 1), "the old shoulder bay still counts at a loop station")
 	RM.use(RM.ENDLESS)
 	GasStation.first_s = FIRST
 
@@ -185,7 +190,9 @@ func _physics_process(_delta: float) -> bool:
 			_check(w.cash == 0 and w.bank == 300, "tow banked wrong: cash %d bank %d" % [w.cash, w.bank])
 			var third := FuelTank.CAPACITY_L * FuelTank.START_FRACTION
 			_check(is_equal_approx(player.fuel.litres, third), "tow left %.1f L, expected %.1f" % [player.fuel.litres, third])
-			# Fill up from the bank.
+			# Fill up from the bank. A test build starts nights on a full tank
+			# (FuelTank.START_FULL_TANK), so burn it down to a third first.
+			player.fuel.litres = FuelTank.CAPACITY_L / 3.0
 			var want := int(ceil(FuelTank.CAPACITY_L - player.fuel.litres - 0.001))
 			clock_before = clock.minutes
 			panel.call("fill")
@@ -204,6 +211,19 @@ func _physics_process(_delta: float) -> bool:
 			_check(absf(gone - PumpPanel.FILL_GAME_MINUTES) < 0.5, "the fill took %.1f in-game minutes" % gone)
 			_check(not (_find(panel, "DriveOff") as Button).disabled, "drive off still disabled after the fill")
 			print("gas_station: fill took %.1f in-game minutes, message '%s'" % [gone, (_find(panel, "Message") as Label).text])
+			# the air machine (DP3): pumps a soft tyre back up, free, and the leak stays
+			var air_b := _find(panel, "Air") as Button
+			_check(air_b != null and air_b.disabled, "air machine: nothing to do with four good tyres")
+			player.damage.apply_kerb_strike(0, CarDamage.KERB_FREE_MS + 2.0)
+			player.damage.step_tyres(60.0)
+			panel.call("refresh")
+			var bank_before_air: int = w.bank
+			_check(player.damage.pressure[0] < 1.0 and not air_b.disabled, "air machine: offered for a soft tyre ('%s')" % air_b.text)
+			panel.call("air")
+			_check(player.damage.pressure[0] == 1.0 and w.bank == bank_before_air, "air machine: the tyre is full again and it cost nothing")
+			_check(player.damage.leak[0] > 0.0 and is_equal_approx(player.damage.leak[0], (1.0 - CarDamage.LEAK_TO) / CarDamage.LEAK_REFILL_S), "air machine: the leak is still there, slower")
+			_check(air_b.disabled, "air machine: done, the button greys out")
+			player.damage.garage_repair(null)
 			gs.close_station()
 			_check(gs.state == GameState.State.PLAYING and not get_tree_paused(), "drive off did not resume the game")
 			phase = 4

@@ -1,8 +1,10 @@
 extends SceneTree
 
 # Auto-Tune panel test (step 6): runs the real Game.tscn and checks that
-# - Y opens the panel: state AUTOTUNE, tree paused, panel shown, raw T panel and
-#   pause menu not
+# - the Auto-Tune tab opens the panel: state AUTOTUNE, tree paused, panel shown,
+#   raw T panel and pause menu not. Key map K1 (b455e6f) took Y away from
+#   Auto-Tune, so the test opens the Tuner with T and switches to the Auto-Tune
+#   tab (GameState.switch_tuner, what the tab does), and closes it with Esc
 # - Run with no goal does nothing; with a goal it starts the search process and
 #   shows progress, then the before/after result
 # - the baseline the search measured matches the headless numbers for the
@@ -23,10 +25,21 @@ extends SceneTree
 const HOLD_TICKS := 6
 # Default coupe on the headless test track (tests/tuning/tune_track.gd). The numbers depend
 # on the physics tick rate: run_tests.bat pins 60 (NEON_TICKS), the game runs 120.
-# Re-measure with `tune_track.gd` at the matching rate if the car's physics changes.
+# Re-measure with `tune_track.gd` at the matching rate if the car's physics changes
+# (last: 2026-10-11, after the lifted chassis underside of 116e790 moved 0-100 and 100-0,
+# then on the merged branch: 976d9e6 summing the wheel forces moved 100-0 to 41.7, and
+# d0c1335's tyre slide state moved 0-100 to 5.60 and 100-0 to 41.6; bisected with
+# tune_track's default coupe run; then #572 moved the track's ground a kilometre
+# up and widened it: 60 Hz 0-100 5.60 -> 5.58, 100-0 41.6 -> 41.9; 120 Hz 100-0
+# 43.3 -> 43.2, re-measured with tune_track.gd at each rate); then #538 lifted
+# the coupe's collision underside 6 cm (2c27f96): the old box's underside met the
+# track while the car settled on spawn, the new one never does, and the launch
+# runs differently from there: 60 Hz 0-100 5.58 -> 5.15 (top 244.1 and 100-0
+# 41.9 unchanged); 120 Hz 0-100 5.19 -> 5.18, 100-0 43.2 -> 43.3 (top 248.1
+# unchanged). Re-measured with tune_track.gd at each rate.
 var EXPECT_TOP := 244.1
-var EXPECT_0_100 := 5.60
-var EXPECT_100_0 := 42.7
+var EXPECT_0_100 := 5.15
+var EXPECT_100_0 := 41.9
 const TOLERANCE := 0.005
 const SLOT_FILE := "user://autotune/test_panel_slots.json"
 
@@ -34,9 +47,9 @@ var failures: Array[String] = []
 
 func _initialize() -> void:
 	if Engine.physics_ticks_per_second >= 120:
-		EXPECT_TOP = 247.1
+		EXPECT_TOP = 248.1
 		EXPECT_0_100 = 5.18
-		EXPECT_100_0 = 43.1
+		EXPECT_100_0 = 43.3
 	change_scene_to_file("res://Game.tscn")
 	_run()
 
@@ -53,12 +66,11 @@ func _run() -> void:
 	var raw: TuningPanel = screen.manual
 
 	# --- open: game paused, panel shown ---
-	await _tap(KEY_Y)
-	await _until(func(): return game.game_state.state == GameState.State.AUTOTUNE, 5.0)
-	_check(game.game_state.state == GameState.State.AUTOTUNE, "Y should open Auto-Tune")
-	_check(screen.visible and panel.is_visible_in_tree() and not _find(game, PauseMenu).visible, "Y should show the Tuner screen with Auto-Tune expanded")
-	# Tuner redesign PR 4: Y opens the Mechanic page, its simple controls first.
-	_check(screen.mechanic.is_visible_in_tree() and root.gui_get_focus_owner() == screen.mechanic.goal_buttons.values()[0], "Y should focus the Mechanic's first goal, has %s" % root.gui_get_focus_owner())
+	await _open_autotune(game)
+	_check(game.game_state.state == GameState.State.AUTOTUNE, "T then the Auto-Tune tab should open Auto-Tune")
+	_check(screen.visible and panel.is_visible_in_tree() and not _find(game, PauseMenu).visible, "the Auto-Tune tab should show the Tuner screen with Auto-Tune expanded")
+	# Tuner redesign PR 4: the Auto-Tune tab opens the Mechanic page, its simple controls first.
+	_check(screen.mechanic.is_visible_in_tree() and root.gui_get_focus_owner() == screen.mechanic.goal_buttons.values()[0], "the Auto-Tune tab should focus the Mechanic's first goal, has %s" % root.gui_get_focus_owner())
 	_check(not panel.goal_sliders.values()[0].is_visible_in_tree() and not panel.lock_boxes.values()[0].is_visible_in_tree(), "raw goal weights and locks should hide until Advanced")
 	# The simple view: one goal at full weight, Keep gearbox locks the gears.
 	screen.mechanic.set_goal("braking")
@@ -118,16 +130,15 @@ func _run() -> void:
 		_check(is_equal_approx(player.brake_force_multiplier, start_spec.brake_force_multiplier), "Undo did not restore the live car")
 
 	# --- close: game running again ---
-	await _tap(KEY_Y)
-	await _until(func(): return game.game_state.state == GameState.State.PLAYING, 5.0)
+	await _close_autotune(game)
 	_check(not paused, "closing Auto-Tune should unpause")
 
 	# --- raw panel re-syncs to what Auto-Tune (or anything) wrote ---
 	CarSpec.set_param(player, player.spec, "final_drive", 3.3)
-	await _tap(KEY_T)
+	await _tap(KeyBindings.keys(&"tuning_panel")[0])
 	await _until(func(): return game.game_state.state == GameState.State.TUNING, 5.0)
 	_check(is_equal_approx(raw.sliders.final_drive.value, 3.3), "raw panel slider shows %f, spec has 3.3" % raw.sliders.final_drive.value)
-	await _tap(KEY_T)
+	await _tap(KeyBindings.keys(&"tuning_panel")[0])
 	await _until(func(): return game.game_state.state == GameState.State.PLAYING, 5.0)
 
 	# --- tune slots ---
@@ -137,8 +148,7 @@ func _run() -> void:
 	sf = null
 	panel.slots = TuneSlots.new(SLOT_FILE)
 	panel._refresh_slots()
-	await _tap(KEY_Y)
-	await _until(func(): return game.game_state.state == GameState.State.AUTOTUNE, 5.0)
+	await _open_autotune(game)
 	_check(panel.slot_list.item_count == 0 and panel.save_button.disabled == false and panel.load_button.disabled, "empty slot list: Load should be off")
 	panel.save_button.pressed.emit()
 	_check(panel.slot_list.item_count == 0 and panel.status_label.text.contains("name"), "Save with no name should ask for one")
@@ -175,13 +185,15 @@ func _run() -> void:
 	panel.budget_override = 60
 	panel.run_button.pressed.emit()
 	_check(panel.running, "search should be running")
-	var job_pid: int = panel._job.pid
+	var job: AutoTuneJob = panel._job
 	await _ticks(90)  # ~1.5 s: the worker is mid-search
-	await _tap(KEY_Y)
-	await _until(func(): return game.game_state.state == GameState.State.PLAYING, 5.0)
+	await _close_autotune(game)
 	_check(not panel.running, "closing the panel should cancel the search")
-	await _ticks(60)
-	_check(not OS.is_process_running(job_pid), "worker still running after the panel closed")
+	# Wait on the worker's exit itself, not a fixed number of ticks. Asked of the
+	# job: on Linux and macOS OS.kill() has already reaped the worker, and asking
+	# the OS about a reaped pid is an error there (#594).
+	var worker_gone := await _until(func(): return not job.worker_running(), 10.0)
+	_check(worker_gone, "worker still running after the panel closed")
 	_check(panel.status_label.text == "Cancelled.", "status should say Cancelled, says: %s" % panel.status_label.text)
 	_end("")
 
@@ -208,16 +220,29 @@ func _until(cond: Callable, timeout_s: float) -> bool:
 		await physics_frame
 	return true
 
+# Opens the Tuner the way a player does (the tuning_panel key, T by default) and
+# switches to its Auto-Tune tab (TunerTabs calls GameState.switch_tuner).
+func _open_autotune(game: Node) -> void:
+	await _tap(KeyBindings.keys(&"tuning_panel")[0])
+	await _until(func(): return game.game_state.state == GameState.State.TUNING, 5.0)
+	game.game_state.switch_tuner(GameState.State.AUTOTUNE)
+	await _until(func(): return game.game_state.state == GameState.State.AUTOTUNE, 5.0)
+
+# Esc backs out of Auto-Tune (GameState.toggle_pause).
+func _close_autotune(game: Node) -> void:
+	await _tap(KeyBindings.keys(&"pause")[0])
+	await _until(func(): return game.game_state.state == GameState.State.PLAYING, 5.0)
+
 func _ticks(n: int) -> void:
 	for i in n:
 		await physics_frame
 
-func _tap(code: Key) -> void:
+func _tap(code: int) -> void:
 	_key(code, true)
 	await _ticks(HOLD_TICKS)
 	_key(code, false)
 
-func _key(code: Key, pressed: bool) -> void:
+func _key(code: int, pressed: bool) -> void:
 	var ev := InputEventKey.new()
 	ev.keycode = code
 	ev.physical_keycode = code

@@ -166,9 +166,13 @@ func point_count() -> int:
 	return _n
 
 ## Where a stop is in this router's table: {road, s, side} ({} if unknown).
+## A stop off an exit is at its exit; one with its own `s` and `side` (the gas
+## stations) opens straight off the road there.
 func stop_place(stop_id: String) -> Dictionary:
 	for st: Dictionary in _stops:
 		if st.id == stop_id and _roads.has(int(st.road)):
+			if st.has("s") and st.has("side"):
+				return {"road": int(st.road), "s": float(st.s), "side": int(st.side)}
 			for e: Dictionary in _roads[int(st.road)].get("exits", []):
 				if e.id == st.exit:
 					return {"road": int(st.road), "s": float(e.s), "side": int(e.side)}

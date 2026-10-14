@@ -88,6 +88,11 @@ func _ready() -> void:
 	bus = &"Engine"
 	play()
 	_playback = get_stream_playback()
+	# The playback keeps its generator alive (Godot's generator playback only has
+	# a raw pointer to it): the audio thread mixes a stopped player once more
+	# after the node is freed, and a freed generator there hangs or crashes the
+	# game, at quit too (#539).
+	_playback.set_meta(&"generator", gen)
 	turbo.mix_rate = synth.mix_rate
 	# Per-part turbo voice (B1) under the car's boost setup: C1's ForcedInduction
 	# keeps the kind in the boost_kind meta ("single" when unset or before C1).
@@ -103,6 +108,7 @@ func _ready() -> void:
 	add_child(_turbo_player)
 	_turbo_player.play()
 	_turbo_playback = _turbo_player.get_stream_playback()
+	_turbo_playback.set_meta(&"generator", tgen)   # as above (#539)
 	bank = EngineLoopPlayer.new()
 	bank.name = "Loops"
 	bank.wander = float(_spec.get("engine_voice", {}).get("wander", 0.6))
@@ -118,6 +124,12 @@ func _ready() -> void:
 # The synth is touched only by the task while one runs: every main-thread use
 # goes through _join() first, which by then is normally a no-op (the task had
 # the rest of the frame).
+# Seconds of low-priority work in the pool queued ahead of the block once held
+# the main thread in _join() for 1.7 to 3.6 s on the first boot into the garage
+# (issue #524): the loop bake is high priority now and the traffic horns build
+# on a thread of their own. The block itself stays low priority: as a
+# high-priority task every frame it held the radio's song loads back (the first
+# song went on air after ~2 s instead of ~0.2 s on a cold boot).
 func _process(delta: float) -> void:
 	if _playback == null:
 		return
@@ -167,8 +179,14 @@ func _process(delta: float) -> void:
 			blocks_full += 1
 		_task_start_usec = Time.get_ticks_usec()
 		_task = WorkerThreadPool.add_task(_render.bind(n, _vehicle.motor_rpm,
-				_vehicle.throttle_amount, _vehicle.motor_is_redline, tn,
+				_throttle(), _vehicle.motor_is_redline, tn,
 				loop_mode == LoopMode.LOOPS, f0, f1), false, "engine audio")
+
+## The throttle the voice hears: the pedal, or the blip as a key start catches
+## (PlayerCar.start_throttle), whichever is more.
+func _throttle() -> float:
+	var p := _vehicle as PlayerCar
+	return maxf(_vehicle.throttle_amount, p.start_throttle) if p != null else _vehicle.throttle_amount
 
 ## Worker thread: one block of each, straight into the streams.
 func _render(n: int, rpm: float, throttle: float, redline: bool, tn: int,
@@ -295,7 +313,7 @@ func _update_loops(delta: float) -> void:
 		_bake_cancel = {"stop": false}
 		var voice: Dictionary = (_spec.get("engine_voice", {}) as Dictionary).duplicate(true)
 		_bake_task = WorkerThreadPool.add_task(_bake_job.bind(voice, sig.x / 100.0, sig.y / 100.0,
-				_vehicle.idle_rpm, _vehicle.max_rpm, _bake_cancel), false, "engine loops")
+				_vehicle.idle_rpm, _vehicle.max_rpm, _bake_cancel), true, "engine loops")
 		return
 	if loop_mode == LoopMode.HANDOFF:
 		_handoff_t += delta / HANDOFF_SECS
@@ -304,10 +322,12 @@ func _update_loops(delta: float) -> void:
 			loop_mode = LoopMode.LOOPS
 			bank.gain = 1.0
 	if loop_mode != LoopMode.LIVE:
-		bank.update(delta, _vehicle.motor_rpm, _vehicle.throttle_amount, _vehicle.motor_is_redline,
+		bank.update(delta, _vehicle.motor_rpm, _throttle(), _vehicle.motor_is_redline,
 				_vehicle.engine_running)
 
 ## Worker thread: the bank for one voice, from the cache when it was baked before.
+## A high-priority task (#524): at low priority it queued behind the garage
+## boot's tyre and wind sounds, and leaving the scene waited for it to start.
 func _bake_job(voice: Dictionary, loudness: float, raspiness: float, idle: float, max_rpm: float,
 		cancel: Dictionary) -> void:
 	_bake_out = EngineLoops.bake_cached(voice, loudness, raspiness, idle, max_rpm, ENGINE_VOLUME, cancel)

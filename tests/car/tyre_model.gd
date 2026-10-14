@@ -11,6 +11,9 @@ extends SceneTree
 #   whole table.
 # - direction: some negative camber (-1.5 deg) corners harder than none, and
 #   high pressure does not cost top speed
+# Lateral g is the track's path measure (TuneTrack, #572): the acceleration the
+# tyres really give the car, which a spin or a gearshift's yaw kick cannot
+# inflate.
 # Run (tests/run_tests.bat does):
 #   Godot_v4.7.2-stable_win64_console.exe --headless --fixed-fps 60 --path . -s res://tests/car/tyre_model.gd
 # Exit code 1 on failure.

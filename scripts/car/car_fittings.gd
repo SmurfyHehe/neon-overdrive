@@ -62,8 +62,15 @@ const BRAKES := {
 	# Muscle (and the big sedan when it lands): discs on all four, Roy 1223.
 	"p5_muscle": {"front": "disc", "rear": "disc", "rim": "five", "caliper": Color("#C9CED6")},
 	"p6_crossover": {"front": "disc", "rear": "disc", "rim": "dish", "caliper": Color("#4A505B")},
+	# Shop wagon: small discs in front, 200 mm drums at the rear, steel wheels
+	# with hubcaps (the sheet, 98373a7).
+	"p7_wagon": {"front": "disc", "rear": "drum", "rim": "steel", "caliper": Color("#4A505B")},
 	# Camel work pickup: 300 mm front discs, drums at the back (the sheet).
 	"p17_work_pickup": {"front": "disc", "rear": "drum", "rim": "steel", "caliper": Color("#4A505B")},
+	# Drift coupe: 260 mm vented discs on all four, black single-pot calipers (the parts glb models them).
+	"p8_driftcoupe": {"front": "disc", "rear": "disc", "rim": "dish", "caliper": Color("#1B1D22")},
+	# Street truck: 330 / 300 mm vented discs on all four, generic calipers (MC2 brief).
+	"p10_truck": {"front": "disc", "rear": "disc", "rim": "five", "caliper": Color("#4A505B")},
 	"c1_patrol": {"front": "disc", "rear": "disc", "rim": "steel", "caliper": Color("#1B1D22")},
 	"c2_patrolsuv": {"front": "disc", "rear": "disc", "rim": "steel", "caliper": Color("#1B1D22")},
 	"c3_interceptor": {"front": "disc", "rear": "disc", "rim": "five", "caliper": Color("#B5261E")},
@@ -105,7 +112,7 @@ static func parts_cfg(kind: String, tyre_mm := 0.0, discs_upgrade := false) -> D
 	if tyre_mm > 0.0:
 		cfg["tyre_w"] = tyre_mm / 1000.0
 	if NpcCarBuilder.is_npc(kind):
-		cfg["rim_color"] = Color(NpcCarBuilder.KINDS[kind].data.COLORS.get("rim", "#C9CED6"))
+		cfg["rim_color"] = Color(NpcCarBuilder.data_of(kind).COLORS.get("rim", "#C9CED6"))
 	return cfg
 
 static func none_reason(kind: String, slot: String) -> String:

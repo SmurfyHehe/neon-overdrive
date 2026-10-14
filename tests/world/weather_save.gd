@@ -24,7 +24,7 @@ const SaveDirector := preload("res://scripts/save/save_director.gd")
 const SaveCore := preload("res://scripts/save/save_core.gd")
 const Weather := preload("res://scripts/world/weather.gd")
 const Plan := preload("res://scripts/world/weather_plan.gd")
-const TALK := 2
+const TALK := 0   # Graveyard Radio, Dave's talk station
 const MINUTES_130 := 330.0   # 1:30 a.m., minutes since 8 p.m.
 
 var game: Node

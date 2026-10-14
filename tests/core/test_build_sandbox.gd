@@ -274,7 +274,8 @@ func _physics_process(delta: float) -> bool:
 				began = true
 				p.fuel.litres = 0.0
 				p.damage.parts[CarDamage.Part.RADIATOR] = 1.0
-				_check(p.damage.is_engine_dead() and p.fuel.is_empty(), "could not break the car")
+				# DP0 (2026-10-11): damage never kills the engine, so only the tank is dry.
+				_check(p.fuel.is_empty(), "could not empty the tank")
 				count_before = rescue.count
 				_check(game.put_back(), "put_back refused")
 				sub = 10

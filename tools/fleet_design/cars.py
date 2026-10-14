@@ -117,11 +117,16 @@ P0 = {
         {'view': 'front', 'rect': (-0.16, 0.62, 0.16, 0.66), 'mat': 'trim', 'offset': 0.004},
         # the primer front lid: one panel that never got painted (paint2)
         {'view': 'top', 'rect': (-0.36, 0.32, 0.36, 1.22), 'mat': 'paint2', 'tag': 'hood'},
-        # the four pontoon fenders in primer (Roy, 2026-10-09: "primer grey with
-        # rust and unfinished bondo work like body work"): primer panel cut
-        # round each arch, rust blooms on the arch lips, bondo patches sanded flat.
-        {'view': 'left', 'poly': _fender(P0_AXLES[0]), 'mat': 'primer', 'mirror': True, 'cell': 0.16, 'tag': 'fender'},
-        {'view': 'left', 'poly': _fender(P0_AXLES[1]), 'mat': 'primer', 'mirror': True, 'cell': 0.16, 'tag': 'fender'},
+        # primer, rust and bondo on the pontoon fenders (Roy, 2026-10-09: "primer
+        # grey with rust and unfinished bondo work like body work"): a primer
+        # panel cut round the arch, rust blooms on the arch lips, bondo patches
+        # sanded flat. One fender in primer, the rear left (with the primer front
+        # lid that is two primer panels): the sheet body is also the AI car,
+        # which must stay within the 4,000-triangle traffic budget
+        # (tests/traffic/npc_cars.gd), and each primer fender costs 208
+        # triangles at this cell size. All four had primer up to 2026-10-12
+        # (4,572 triangles); every rust bloom and bondo patch stays.
+        {'view': 'left', 'poly': _fender(P0_AXLES[1]), 'mat': 'primer', 'cell': 0.16, 'tag': 'fender'},
         {'view': 'left', 'ellipse': (0.57, 0.46, 0.10, 0.045, 10), 'mat': 'rust', 'mirror': True, 'cell': 0.12},
         {'view': 'left', 'ellipse': (1.14, 0.50, 0.09, 0.05, 10), 'mat': 'rust', 'mirror': True, 'cell': 0.12},
         {'view': 'left', 'ellipse': (3.12, 0.47, 0.11, 0.05, 10), 'mat': 'rust', 'mirror': True, 'cell': 0.12},
@@ -402,34 +407,38 @@ P6 = {
 P17 = {
     'id': 'p17_work_pickup', 'role': 'player', 'label': 'Work pickup',
     'refs': 'the mid-size 4-door work pickups of the late 1990s (category only; no brand): a 4.0 V6, rear drive, a long bed',
-    'rule': 'Low flat hood under a tall upright double cab, one long open bed behind it on flared box sides, '
-            'a side stripe the length of the body, steel wheels in big arches, a single tailpipe out the rear corner.',
+    'rule': 'Low flat hood under a tall upright double cab, a short open bed behind it on flared box sides, '
+            'a chrome step bumper, a side stripe the length of the body, steel wheels in big arches, a single tailpipe out the rear corner.',
     'tier': 'T2 work pickup (Camel), bought from Walt after act 1; spec notes/car-sheets/p17_work_pickup-2026-10-10',
-    'L': 5.25, 'WB': 3.18, 'OHf': 0.90, 'W': 1.80,
+    'L': 4.95, 'WB': 3.18, 'OHf': 0.90, 'W': 1.80,
     # arch gap 5.5 cm: big for a player car, still under every traffic car's
     # (the design check's player/traffic rule: traffic arches are the biggest)
     'wheel': {'r': 0.37, 'w': 0.245, 'track': 1.55, 'arch_gap': 0.055, 'arch_lift': 0.02, 'rim': 'steel', 'rim_ratio': 0.58},
-    # lower, longer and rounder-nosed than the traffic pickup (N3): hood 14 cm
-    # lower, roof 10 cm lower, bed rail 8 cm lower, 10 cm more wheelbase
+    # lower and rounder-nosed than the traffic pickup (N3): hood 14 cm lower,
+    # roof 10 cm lower, bed rail 8 cm lower, 10 cm more wheelbase. Build 4 (Roy
+    # 1475 "differ"): the bed is 30 cm shorter (4.95 long, the sheet's stubby
+    # "all cab" proportion) and a chrome step bumper stands out behind the
+    # tailgate (0.96 wide, between the dual tips' spots), so the outline test no
+    # longer finds N3's twin from the high views
     'top': [(0.0, 0.86), (0.04, 0.96), (0.20, 1.02), (1.30, 1.09), (1.95, 1.70), (3.25, 1.74), (3.32, 1.16),
-            (5.22, 1.14), (5.25, 1.08)],
-    'floor': [(0, 0.46), (0.30, 0.28), (4.50, 0.28), (5.25, 0.50)],
+            (4.92, 1.14), (4.95, 1.08)],
+    'floor': [(0, 0.46), (0.30, 0.28), (4.52, 0.28), (4.95, 0.50)],
     # the bed sides flare 4 cm proud of the cab: an old-style flared box
-    'hw': [(0, 0.76), (0.08, 0.86), (0.30, 0.90), (3.32, 0.90), (3.55, 0.90), (3.75, 0.94), (4.95, 0.94), (5.12, 0.90), (5.25, 0.88)],
-    'waist': [(0, 0.76), (0.40, 0.88), (5.25, 0.88)],
-    'belt': [(0, 0.86), (0.20, 0.98), (1.30, 1.06), (3.32, 1.12), (5.25, 1.12)],
+    'hw': [(0, 0.76), (0.08, 0.86), (0.30, 0.90), (3.32, 0.90), (3.55, 0.90), (3.75, 0.94), (4.65, 0.94), (4.82, 0.90), (4.95, 0.88)],
+    'waist': [(0, 0.76), (0.40, 0.88), (4.95, 0.88)],
+    'belt': [(0, 0.86), (0.20, 0.98), (1.30, 1.06), (3.32, 1.12), (4.95, 1.12)],
     'tumble': 0.035, 'sill_in': 0.03, 'rocker_h': 0.50,
     'cabin': {'A': 1.30, 'W': 1.95, 'R': 3.25, 'C': 3.32, 'D': 3.18,
               'roof_w': [(1.95, 0.70), (3.25, 0.70)], 'roof_drop': 0.03, 'pillars': [(2.52, 2.60)]},
-    'open': [{'s0': 3.40, 's1': 5.22, 'floor': 0.84, 'wall': 0.05, 'mat': 'bed'}],
+    'open': [{'s0': 3.40, 's1': 4.92, 'floor': 0.84, 'wall': 0.05, 'mat': 'bed'}],
     'decals': [
         # wide low grille between rectangular lamps, a chrome blade bumper under it
         {'view': 'front', 'rect': (-0.50, 0.70, 0.50, 0.90), 'mat': 'grille', 'cell': 0.16},
         {'view': 'front', 'rect': (0.54, 0.74, 0.82, 0.88), 'mat': 'head', 'mirror': True},
         {'view': 'front', 'rect': (-0.84, 0.48, 0.84, 0.60), 'mat': 'chrome', 'tag': 'fbumper'},
         # the side stripe: a sodium band with a dark pinline under it, nose to tailgate
-        {'view': 'left', 'rect': (0.40, 0.74, 5.05, 0.82), 'mat': 'paint2', 'mirror': True},
-        {'view': 'left', 'rect': (0.40, 0.715, 5.05, 0.735), 'mat': 'trim', 'mirror': True},
+        {'view': 'left', 'rect': (0.40, 0.74, 4.75, 0.82), 'mat': 'paint2', 'mirror': True},
+        {'view': 'left', 'rect': (0.40, 0.715, 4.75, 0.735), 'mat': 'trim', 'mirror': True},
         # tall tail lamps either side of the tailgate, chrome rear bumper
         {'view': 'rear', 'rect': (0.78, 0.72, 0.90, 1.06), 'mat': 'tail', 'mirror': True},
         {'view': 'rear', 'rect': (-0.84, 0.50, 0.84, 0.62), 'mat': 'chrome', 'cell': 0.25, 'tag': 'rbumper'},
@@ -437,6 +446,7 @@ P17 = {
     'parts': [
         {'type': 'mirrors', 'out': 0.11, 'up': 0.09},
         {'type': 'step', 's0': 1.45, 's1': 3.20, 'y': 0.40},
+        {'type': 'box', 's': 5.02, 'xy': (0.0, 0.56), 'size': (0.96, 0.13, 0.16), 'mat': 'chrome', 'tag': 'step_bumper'},
     ],
     # one pipe out the rear corner (right side), no headache rack
     'exhaust': [{'x': 0.68, 'y': 0.40, 'r': 0.04}],
@@ -447,6 +457,60 @@ P17 = {
     ],
     'paint': {'hero': ('Camel', '#C4A264'), 'alts': [('Work white', '#E9E6DF'), ('Midnight', '#1B2A4A'), ('Forest', '#2B4A3A'), ('Oxide red', '#8E2A28')],
               'trim': '#1A1D24', 'rim': '#A9AEB6', 'extra': {'paint2': '#FF8A1F', 'chrome': '#C9CED6'}},
+    'options': {},
+}
+
+P10 = {
+    'id': 'p10_truck', 'role': 'player', 'label': 'Street truck',
+    'refs': 'the lowered regular-cab short-bed sport trucks of 1993-99 (category only; no brand): a pushrod V8, rear drive, '
+            'a covered bed, a roll-pan tail',
+    'rule': 'A workbench with a V8 bolted on, dropped two inches: a single upright cab, ONE level line from the cab back '
+            'to the tailgate top (hard cover flush with the rails), 2 cm arches, a roll-pan tail with tall corner lamps.',
+    'tier': 'T2 street truck (Harlan Drover), Diesel Row crew truck, for sale after act 2 (you pay); MC2 brief 2026-10-11',
+    'L': 5.05, 'WB': 2.95, 'OHf': 0.90, 'W': 1.92,
+    # 0.72 m tyres, 255 front / 285 rear, 2 cm arch gaps (the brief): the lowered one, not the Camel
+    'wheel': {'r': 0.36, 'w': 0.255, 'w_rear': 0.285, 'track': 1.62, 'track_rear': 1.64, 'arch_gap': 0.02,
+              'rim': '5spoke', 'rim_ratio': 0.70},
+    # low hood to a cowl at 1.02, screen raked 38 deg to a flat roof at 1.62, a 12 deg backlight down to the
+    # bed rail at 1.08, then one level line to the tailgate (the cover sits flush with the rails)
+    'top': [(0.0, 0.76), (0.05, 0.84), (0.30, 0.88), (1.25, 1.02), (1.68, 1.59), (1.78, 1.62), (2.52, 1.62), (2.60, 1.60),
+            (2.71, 1.10), (2.72, 1.08), (2.725, 1.02), (2.775, 1.02), (2.78, 1.08), (5.00, 1.08), (5.05, 1.02)],
+    # the belly at 0.20; the frame rails hang to the 0.14 ground clearance (kit)
+    'floor': [(0, 0.42), (0.22, 0.20), (4.80, 0.20), (5.05, 0.34)],
+    # flat bed sides, half width 0.96, the nose a little narrower
+    # a real 60 mm cab-to-bed gap in the loft: the sides and the top step in 60 mm between 2.72 and 2.78
+    'hw': [(0, 0.82), (0.06, 0.90), (0.30, 0.94), (0.70, 0.96), (2.72, 0.96), (2.725, 0.90), (2.775, 0.90), (2.78, 0.96),
+           (4.95, 0.96), (5.05, 0.95)],
+    # the shoulder crease at 0.82 nose to tail: the highlight line and the paint split (Bone over Black)
+    'waist': [(0, 0.72), (0.30, 0.82), (5.05, 0.82)],
+    # belt line 1.08 on the cab; behind it the bed side runs just under the rail top
+    'belt': [(0, 0.84), (0.30, 0.92), (1.25, 1.02), (1.45, 1.08), (2.74, 1.08), (5.05, 1.06)],
+    'tumble': 0.03, 'sill_in': 0.04, 'rocker_h': 0.30,
+    # regular cab: screen base 1.25, roof 1.68-2.60, a near-vertical back wall at 2.71; no pillar inside the glass
+    'cabin': {'A': 1.25, 'W': 1.68, 'R': 2.60, 'C': 2.71, 'D': 2.72,
+              'roof_w': [(1.68, 0.78), (2.60, 0.78)], 'roof_drop': 0.03, 'pillars': []},
+    'decals': [
+        # twin wide rectangles flush in a full-width black mesh grille, a thin amber marker line under each
+        {'view': 'front', 'rect': (-0.78, 0.70, 0.78, 0.92), 'mat': 'grille', 'cell': 0.2},
+        {'view': 'front', 'rect': (0.33, 0.74, 0.75, 0.88), 'mat': 'head', 'mirror': True},
+        {'view': 'front', 'rect': (0.33, 0.705, 0.75, 0.725), 'mat': 'turn', 'mirror': True},
+        # tall red blocks at the roll-pan corners, 1.76 m apart centre to centre
+        {'view': 'rear', 'rect': (0.79, 0.58, 0.91, 1.04), 'mat': 'tail', 'mirror': True},
+    ],
+    'parts': [
+        MIRRORS,
+    ],
+    # one oval tip out the right rear corner, through the roll pan (the design check wants 0.6 m clear behind a tip)
+    'exhaust': [{'x': 0.68, 'y': 0.30, 'r': 0.05, 'squash': 0.6}],
+    'stickers': [
+        {'id': 'door', 'view': 'left', 'rect': (1.32, 0.58, 2.42, 0.86), 'mirror': True},
+        {'id': 'hood', 'view': 'top', 'rect': (-0.40, 0.14, 0.40, 1.12)},
+        {'id': 'rear', 'view': 'rear', 'rect': (-0.65, 0.65, 0.65, 0.91), 'note': 'tailgate centre, between the lamp blocks'},
+    ],
+    'paint': {'hero': ('Bone', '#E7E1D3'), 'alts': [('Oxide', '#7A3A24'), ('Gunmetal', '#4A4F58'), ('Forest', '#1F4D3A'), ('Sodium', '#FF8A1F')],
+              'trim': '#15171C', 'rim': '#22252C'},
+    # T2, a working truck: bed rail and bumper scratches (the brief: 0.3)
+    'condition': 0.3,
     'options': {},
 }
 
@@ -505,6 +569,77 @@ P7 = {
 # NPC FLEET: taller, softer, small wheels in big arch gaps, tyres tucked in,
 # no aero, plain paints. They recede so the player's car always pops.
 # ----------------------------------------------------------------------------
+P8 = {
+    'id': 'p8_driftcoupe', 'role': 'player', 'label': 'Drift coupe',
+    'refs': 'the 1983-91 rear-drive box coupes (category only; no brand): a 1.6 twin-cam notchback',
+    'rule': 'A low flat-sided box with a wedge nose, thin pillars and a long flat trunk, on bolt-on arches '
+            'with no air. "Sideways is where it is comfortable."',
+    'tier': "T2 drift coupe (Ashida Levant, placeholder name; Kasumi Run's car, for sale once you beat Kasumi Run), "
+            'sheet notes/car-sheets/p8_driftcoupe, built from parts 2026-10-11 (tools/car_pipeline/kit_p8_driftcoupe.py). '
+            'Flat slab flanks (no shoulder crease, belt a dead-straight hard fold at 0.80), a 52 degree screen, a 48 '
+            'degree backlight onto a flat trunk (notchback, not a hatch), slim pop-ups in a flat wedge, four bolt-on '
+            'riveted arches 6 cm proud of the 1.68 body (1.80 over them), three-bar tail clusters, one primer front-left '
+            'fender. Differs from P1: no fastback, no hoop wing, upright glass, bolt-ons, flat trunk.',
+    'L': 4.30, 'WB': 2.64, 'OHf': 0.78, 'W': 1.68,
+    # 15 x 8 deep dish on 205/50 front, 195/50 rear (0.60 m), arch gap 1 cm, the bronze face with a polished lip
+    'wheel': {'r': 0.30, 'w': 0.205, 'w_rear': 0.195, 'track': 1.50, 'arch_gap': 0.01, 'rim': 'dish', 'rim_ratio': 0.72},
+    # wedge nose with a chin lip, flat hood (10 mm crown), screen 1.45-2.05, roof flat 2.05-3.05, backlight to the
+    # C-pillar foot at 3.45, then a flat trunk to 4.22 and a square tail edge
+    'top': [(0.0, 0.50), (0.04, 0.60), (0.22, 0.66), (0.78, 0.74), (1.45, 0.84), (2.05, 1.31), (2.20, 1.34), (2.90, 1.34),
+            (3.05, 1.32), (3.45, 0.98), (4.20, 0.965), (4.26, 0.945), (4.30, 0.88)],
+    'floor': [(0, 0.30), (0.18, 0.10), (4.12, 0.10), (4.30, 0.30)],
+    # the body is 0.84 half wide the whole way (flat slab flanks); the bolt-on arches carry it out to 0.90
+    'hw': [(0, 0.64), (0.06, 0.76), (0.28, 0.84), (4.10, 0.84), (4.24, 0.80), (4.30, 0.76)],
+    'waist': [(0, 0.40), (0.28, 0.50), (4.30, 0.52)],
+    # the belt: 0.80 dead straight from the A-pillar back; it drops with the wedge ahead of it
+    'belt': [(0, 0.44), (0.06, 0.56), (0.28, 0.64), (0.78, 0.70), (1.45, 0.80), (4.30, 0.80)],
+    'tumble': 0.03, 'sill_in': 0.03, 'rocker_h': 0.24,
+    # front, rear and top decals land as exact mirror pairs (car._project_tris): the tail panel's corners
+    # landed 2 mm apart left and right, so the trim was never mirrored and the full build lit unevenly
+    'sym_decals': True,
+    # thin pillars, a 6 cm blacked B-pillar, the roof 0.60 to 0.59 half wide
+    'cabin': {'A': 1.45, 'W': 2.05, 'R': 3.05, 'C': 3.45, 'D': 3.35,
+              'roof_w': [(2.05, 0.60), (3.05, 0.59)], 'roof_drop': 0.03, 'pillars': [(2.52, 2.58)]},
+    'decals': [
+        # nose and tail decals pin their own offset, so the car measures its sheet length.
+        # nose: a slot grille in the wedge, amber corner markers fixed in the nose corners, a black strip
+        # under the chin; the head lamps are slim pop-ups (parts)
+        {'view': 'front', 'rect': (-0.36, 0.43, 0.36, 0.49), 'mat': 'grille', 'tag': 'fbumper', 'offset': 0.004},
+        {'view': 'front', 'rect': (0.58, 0.42, 0.70, 0.50), 'mat': 'turn', 'mirror': True, 'offset': 0.006},
+        {'view': 'front', 'rect': (-0.70, 0.355, 0.70, 0.395), 'mat': 'trim', 'tag': 'fstrip', 'cell': 0.4, 'offset': 0.004},
+        # tail: a dark satin panel with a three-bar cluster a side (0.30 x 0.22), the plate between them, no high
+        # brake lamp (era); the parts build cuts the bars into tail / brake / blinker / reverse parts
+        {'view': 'rear', 'rect': (-0.74, 0.56, 0.74, 0.82), 'mat': 'trim', 'tag': 'tail_panel', 'cell': 0.2, 'offset': 0.004},
+        {'view': 'rear', 'rect': (0.40, 0.58, 0.70, 0.80), 'mat': 'tail', 'mirror': True, 'tag': 'cluster', 'offset': 0.006},
+        {'view': 'rear', 'rect': (-0.27, 0.59, 0.27, 0.72), 'mat': 'trim', 'tag': 'plate_recess', 'offset': 0.005},
+        {'view': 'rear', 'rect': (-0.68, 0.34, 0.68, 0.44), 'mat': 'trim', 'tag': 'rbumper', 'offset': 0.004},
+    ],
+    'parts': [
+        # small black door mirrors
+        {'type': 'mirrors', 's': 1.60, 'mat': 'trim'},
+        # slim pop-ups: a 0.36 x 0.09 face when up; the parts build hangs each on its own hinge, modelled down
+        {'type': 'popups', 'tag': 'popups', 's0': 0.32, 's1': 0.58, 'x0': 0.31, 'x1': 0.67, 'h': 0.09},
+        # four bolt-on riveted arches, 6 cm proud, a polished rolled lip (the highlight line), 14 rivets each
+        {'type': 'flares', 'tag': 'bolt_on', 'band': 0.09, 'proud': 0.06, 'lip_mat': 'chrome', 'rivets': 14},
+    ],
+    # one big oval tip on the right, behind the axle (0.09 x 0.06)
+    'exhaust': [{'x': 0.42, 'y': 0.26, 'r': 0.045, 'squash': 0.67}],
+    'stickers': [
+        {'id': 'door', 'view': 'left', 'rect': (1.80, 0.44, 2.70, 0.72), 'mirror': True},
+        {'id': 'hood', 'view': 'top', 'rect': (-0.25, 0.42, 0.25, 1.12)},
+        # the rear slot: a bumper sticker on the tail face between the bumper band and the tail panel (the trunk
+        # stays clear; the fleet check wants the rear slot on the upright tail, so the sheet's quarter-panel spot
+        # cannot be it)
+        {'id': 'rear', 'view': 'rear', 'rect': (-0.30, 0.455, 0.30, 0.555), 'note': 'tail face, under the tail panel'},
+    ],
+    'paint': {'hero': ('Dusty silver', '#AAB0B8'),
+              'alts': [('Chalk', '#E6E2D6'), ('Sodium', '#FF8A1F'), ('Dusk navy', '#1B2A4A'), ('Primer grey', '#6E6B68')],
+              'trim': '#1A1D24', 'rim': '#9C6B3A', 'extra': {'primer': '#5F5B58', 'chrome': '#C9CED6'}},
+    # T2 (0.2-0.35): a used drift car, one primer fender, scuffed rear bumper corners. Read by the paint work when wear lands.
+    'condition': 0.3,
+    'options': {},
+}
+
 N1 = {
     'id': 'n1_commuter', 'role': 'npc', 'label': 'Commuter sedan',
     'refs': 'Camry, Accord, Sentra',
@@ -697,7 +832,7 @@ C2 = {
 C3 = {
     'id': 'c3_interceptor', 'role': 'cop', 'label': 'Unmarked interceptor',
     'refs': 'unmarked Charger Hellcat, Mustang GT PI',
-    'rule': 'Big long-hood fastback with a pillar spotlight and a cluster of trunk antennas; no light bar, plain dark paint.',
+    'rule': 'Big long-hood fastback with a pillar spotlight, a low push bar and a cluster of trunk antennas; no light bar, plain dark paint.',
     'L': 4.82, 'WB': 2.72, 'OHf': 1.02, 'W': 1.92,
     'wheel': {'r': 0.34, 'w': 0.255, 'w_rear': 0.275, 'track': 1.60, 'arch_gap': 0.025, 'rim': 'mono', 'rim_ratio': 0.70, 'rim_mat': 'rim_dark'},
     'top': [(0.0, 0.62), (0.05, 0.74), (0.30, 0.85), (1.85, 0.97), (2.55, 1.36), (3.15, 1.38), (4.12, 1.06),
@@ -726,6 +861,8 @@ C3 = {
         MIRRORS,
         {'type': 'spotlight'},
         {'type': 'antennas', 'list': [(0.25, 4.42, 0.28), (0.0, 4.48, 0.32), (-0.25, 4.42, 0.28)]},
+        # a low black push bar (Build 4, Roy 1475): its police tell up front, so it is no outline twin of the drift coupe
+        {'type': 'pushbar', 's': -0.10, 'y0': 0.28, 'y1': 0.80, 'w': 0.84, 'tag': 'pushbar'},
     ],
     'exhaust': [{'x': 0.52, 'y': 0.26, 'r': 0.04}, {'x': 0.66, 'y': 0.26, 'r': 0.04},
                 {'x': -0.52, 'y': 0.26, 'r': 0.04}, {'x': -0.66, 'y': 0.26, 'r': 0.04}],
@@ -739,7 +876,7 @@ C3 = {
     'options': {},
 }
 
-FLEET = [P0, P1, P2, P3, P4, P5, P6, P7, P17, N1, N2, N3, C1, C2, C3]
+FLEET = [P0, P1, P2, P3, P4, P5, P6, P7, P10, P17, P8, N1, N2, N3, C1, C2, C3]
 
 
 def _add_sun_strips():

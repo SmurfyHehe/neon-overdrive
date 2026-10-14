@@ -23,6 +23,7 @@ const GameInfo := preload("res://scripts/core/game_info.gd")
 const TestBuild := preload("res://scripts/core/test_build.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
 const MapView := preload("res://scripts/ui/map_view.gd")
+const FixCar := preload("res://scripts/car/fix_car.gd")
 
 const SILVER := Color("#C9CED6")
 const AMBER := Color("#FFC066")
@@ -34,6 +35,7 @@ var map_button: Button
 ## The Map page: null unless it is up.
 var map_view: Control
 var _map_modal := false
+var fix_car_button: Button
 var lower_look_button: Button
 var restart_button: Button
 var settings_button: Button
@@ -105,6 +107,9 @@ func _ready() -> void:
 	resume_button = _add_button(box, "Resume", game_state.resume)
 	map_button = _add_button(box, "Map", show_map)
 	map_button.visible = RoadMap.is_loop()
+	# Fix the car: free and total, one press (scripts/car/fix_car.gd). Shown in every build for now.
+	fix_car_button = _add_button(box, "Fix the car", _fix_car)
+	fix_car_button.visible = FixCar.FIX_CAR_ENABLED
 	restart_button = _add_button(box, "Restart night", _ask_restart)
 	# TEST BUILD (TestBuild): the sandbox's way out of any stuck state. Hidden
 	# when the switch is off, so the release screen keeps its five rows.
@@ -132,7 +137,13 @@ func _ready() -> void:
 	add_child(confirm)
 	settings = SettingsScreen.new(game_state)
 	settings.tow_action = _call_tow
+	settings.tow_offered = _tow_offered
+	settings.wrecks_changed = func() -> void:
+		var game := get_parent()
+		if game != null and game.has_method("apply_wrecks_setting"):
+			game.apply_wrecks_setting()
 	settings.race_action = _race_pressed
+	settings.race_label = _race_text
 	add_child(settings)
 	settings.closed.connect(_on_settings_closed)
 	game_state.state_changed.connect(_on_state_changed)
@@ -182,14 +193,24 @@ func _race_pressed() -> void:
 		return
 	if race.is_racing():
 		race.give_up()
+	elif race.can_retry():
+		race.request_retry()
 	else:
 		race.start_race()
 	game_state.resume()
 
-func _refresh_race_button() -> void:
+## The race button's label: Give up mid-race, Retry after a loss or a give-up.
+func _race_text() -> String:
 	var race: Variant = get_parent().get("race")
-	if race != null:
-		race_button.text = "Give up race" if race.is_racing() else "Race a test rival"
+	if race != null and race.is_racing():
+		return "Give up race"
+	if race != null and race.can_retry():
+		return "Retry race"
+	return "Race a test rival"
+
+func _refresh_race_button() -> void:
+	if get_parent().get("race") != null:
+		race_button.text = _race_text()
 
 
 ## The refusal toast lives on its own layer beside this one, because this layer
@@ -252,17 +273,31 @@ func _ask_quit_to_title() -> void:
 		text = "Quit to the title mid-chase? That counts as a bust."
 	confirm.ask(text, "Quit", game_state.quit_to_title)
 
-## Ferris's tow (damage slice 1): only for a dead engine, never in a chase.
-## The car goes home, the night ends, and the garage at home fixes it; the
-## bank pays once it exists (null = free for now). Chases come with Stage F.
+## Fix the car from the pause screen, then carry on driving.
+func _fix_car() -> void:
+	FixCar.fix(get_parent().get("player"))
+	game_state.resume()
+
+## Ferris's tow row (TM1): offered while the car is in limp or the totalled
+## meter is at 0.60 or over, never in a chase (CarDamage.tow_offered).
+func _tow_offered() -> bool:
+	var player: Variant = get_parent().get("player")
+	if player == null or player.get("damage") == null or player.get("limp") == null:
+		return false
+	return player.damage.tow_offered(player.limp.is_limping(), GameState.chase_locked())
+
+## Ferris's tow: the car goes home and the night ends, with no cash loss
+## (tonight's cash is banked at 6 a.m.). The meter and the broken parts stay:
+## they are the bill. TODO(bill card, towing T5): the bill card repairs and
+## charges the bank here (garage_repair used to be called at this point).
+## The bank pays once it exists (null = free for now).
 func _call_tow() -> void:
 	var game := get_parent()
 	var player: Variant = game.get("player")
-	if player == null or player.get("damage") == null or not player.damage.is_engine_dead():
+	if not _tow_offered():
 		return
-	if not player.damage.tow(null, false):
+	if not player.damage.tow(null, GameState.chase_locked()):
 		return
-	player.damage.garage_repair(null)
 	player.health.repair()
 	var clock: Variant = game.get("night_clock")
 	if clock != null:

@@ -50,7 +50,7 @@ const TARGET_HEIGHT := 0.8
 ## Offences. `heat` is what it adds; `warn` = a soft offence at heat 0 gets the
 ## warning step first; `judged` = needs speed judgement (cone + JUDGE_SECS);
 ## `add` = +heat on top of what there is (the rest raise it to that level).
-enum Offence { SPEEDING, FLAGRANT, WRONG_SIDE, RED_LIGHT, RACING, CRASH, HIT_AND_RUN, TOUCH_COP, RAM_COP, MEDIAN_GAP }
+enum Offence { SPEEDING, FLAGRANT, WRONG_SIDE, RED_LIGHT, RACING, CRASH, HIT_AND_RUN, TOUCH_COP, RAM_COP, MEDIAN_GAP, PROPERTY }
 const OFFENCES := {
 	Offence.SPEEDING: {"heat": 1, "warn": true, "judged": true},
 	Offence.FLAGRANT: {"heat": 1, "warn": true, "judged": true},
@@ -62,8 +62,15 @@ const OFFENCES := {
 	Offence.TOUCH_COP: {"heat": 1, "warn": true, "judged": false},
 	Offence.RAM_COP: {"heat": 4, "warn": false, "judged": false},
 	Offence.MEDIAN_GAP: {"heat": 1, "warn": false, "judged": false, "add": true},
+	# a lamp post, hydrant or sign knocked down in a cop's sight (breakable world I3)
+	Offence.PROPERTY: {"heat": 1, "warn": true, "judged": false},
 }
-const WRONG_SIDE_SECS := 2.0    # in the oncoming lanes this long
+const WRONG_SIDE_SECS := 2.0    # travelling against the flow this long
+const WRONG_WAY_KMH := 15.0     # ...at more than this along the road
+const SHOULDER_BACK_KMH := 20.0 # backing up the shoulder under this (a missed exit) never counts
+const SHOULDER_SLACK := 0.9     # m: half a car, so a car hugging the shoulder with its middle just inside the line is on it
+const SPIN_YAW := 1.0           # rad/s: turning faster than this is a spin, not driving
+const SPIN_SLIP := 0.7          # ...and so is sliding more than ~45 degrees off the car's own axis
 const SPEED_HOLD_SECS := 1.0    # over the line this long
 const BUMP_KMH := 15.0          # contact closing speed: a bump below, a crash / ram at or above
 const FAULT_LOOKBACK := 1.0     # s: "your centre moved into their lane"
@@ -176,6 +183,47 @@ static func is_speeding(kmh: float, area: String, crackdown: bool, flow_kmh := -
 
 static func is_flagrant(kmh: float, area: String) -> bool:
 	return kmh >= posted_limit(area) + FLAGRANT_OVER_KMH
+
+## The way a carriageway (and the shoulder and ramp beside it) flows, as a
+## sign on road-space z: the +x one runs down the road (-1), the -x one back
+## up it (+1). 0 on the strip between them, which belongs to neither.
+static func flow_at(x: float) -> float:
+	if absf(x) < RoadChunkBuilder.MEDIAN_GAP:
+		return 0.0
+	return -1.0 if x > 0.0 else 1.0
+
+## Whether road-space x is on the shoulder of a carriageway `lanes` wide.
+static func on_shoulder(x: float, lanes: int) -> bool:
+	var edge := RoadChunkBuilder.MEDIAN_GAP + float(lanes) * RoadChunkBuilder.LANE_W
+	var d := absf(x)
+	return d >= edge - SHOULDER_SLACK and d <= edge + RoadChunkBuilder.SHOULDER_W + SHOULDER_SLACK
+
+## Wrong way = TRAVELLING against the flow of the carriageway the car is on,
+## at over WRONG_WAY_KMH along the road. It goes by the way the car moves, not
+## by which half of the road it is on: a car that has turned round and drives
+## with the -x traffic is legal, one that turned round on its own side and
+## drives into the +x traffic is not, and backing down the lanes is the same
+## as driving down them. Not wrong: backing up the shoulder under
+## SHOULDER_BACK_KMH, and a spin (turning fast, or sliding across its own
+## axis). `vel` and `fwd` (the car's nose) are in road space, m/s and unit.
+static func is_wrong_way(x: float, vel: Vector3, fwd: Vector3, lanes: int, yaw_rate := 0.0) -> bool:
+	var side_flow := flow_at(x)
+	if side_flow == 0.0 or vel.z * side_flow >= 0.0:
+		return false
+	var along_kmh := absf(vel.z) * 3.6
+	if along_kmh <= WRONG_WAY_KMH:
+		return false
+	if absf(yaw_rate) > SPIN_YAW:
+		return false
+	var flat := Vector2(vel.x, vel.z)
+	var nose := Vector2(fwd.x, fwd.z)
+	if nose.length_squared() > 0.0001:
+		var along_nose := flat.normalized().dot(nose.normalized())
+		if absf(along_nose) < SPIN_SLIP:
+			return false
+		if along_nose < 0.0 and along_kmh < SHOULDER_BACK_KMH and on_shoulder(x, lanes):
+			return false
+	return true
 
 ## How far a cop sees a car by its lamps. `mode`: 0 off, 1 low, 2 high.
 static func reach(mode: int, lit_here: bool) -> float:

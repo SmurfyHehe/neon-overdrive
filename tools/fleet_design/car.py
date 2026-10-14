@@ -277,14 +277,22 @@ def _tri_subdiv(a, b, c, maxlen, out):
     _tri_subdiv(ab, bc, ca, maxlen, out)
 
 
-def _project_tris(body_tris, view, tris2d, offset):
+def _project_tris(body_tris, view, tris2d, offset, sym=False):
     """Project 2D triangles onto the body vertex by vertex, so a decal hugs
-    curved panels instead of cutting through them."""
+    curved panels instead of cutting through them. With `sym` (a car's
+    'sym_decals') a point left of the centre plane in the front, rear and top
+    views is the mirror of its right-hand twin's hit: the body's triangles are
+    not mirror images of each other, so two separate hits land a millimetre or
+    two apart and the game's mirroring (CarPaint.mirrored) leaves the whole
+    material one-sided (tests/fleet/car_symmetry.gd)."""
     from geom import AXES, raycast
     d = AXES[view]
     cache = {}
 
     def P(a, b):
+        if sym and a < 0.0 and view in ('front', 'rear', 'top'):
+            q = P(-a, b)
+            return None if q is None else q * np.array([-1.0, 1.0, 1.0])
         key = (round(a, 5), round(b, 5))
         if key not in cache:
             if view in ('front', 'rear'):
@@ -345,7 +353,7 @@ def add_decal(model, body_tris, d, offset=0.006):
             cy = sum(q[1] for q in p) / len(p)
             for i in range(len(p)):
                 _tri_subdiv((cx, cy), tuple(p[i]), tuple(p[(i + 1) % len(p)]), maxlen, tris2d)
-        tris3 = _project_tris(body_tris, v, tris2d, d.get('offset', offset))
+        tris3 = _project_tris(body_tris, v, tris2d, d.get('offset', offset), D.get('sym_decals', False))
         if d.get('add', True):
             for a, b, c in tris3:
                 model.mesh.tri(a, b, c, d['mat'])

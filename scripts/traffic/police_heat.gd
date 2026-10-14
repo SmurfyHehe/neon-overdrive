@@ -170,6 +170,7 @@ func reset() -> void:
 	_warn_cooldown = 0.0
 	_cancel_warning()
 	_cs.clear()
+	_prev_side = 0   # the car is put back: that is not a crossing of the centre line
 
 func _clear_heat() -> void:
 	heat = 0.0
@@ -381,7 +382,7 @@ func _apply(dt: float) -> void:
 		flow = float(flow_kmh.call())
 	var speeding := PoliceRules.is_speeding(kmh, area, _crackdown(), flow)
 	var flagrant := PoliceRules.is_flagrant(kmh, area)
-	var wrong := p.x < -RoadChunkBuilder.MEDIAN_GAP and kmh > 5.0
+	var wrong := _wrong_way(p)
 	_x_hist.append(Vector2(_clock, p.x))
 	while _x_hist.size() > 1 and _x_hist[0].x < _clock - PoliceRules.FAULT_LOOKBACK - 0.3:
 		_x_hist.pop_front()
@@ -407,14 +408,15 @@ func _apply(dt: float) -> void:
 		_flag_t = 0.0
 		_flag_fired = false
 		_flag_extra = false
-	# The wrong way: in the oncoming lanes for 2 s, noticed.
+	# The wrong way: travelling against the flow for 2 s, noticed.
 	_wrong_t = _wrong_t + dt if wrong else 0.0
 	if wrong and notice != null and _wrong_t >= PoliceRules.WRONG_SIDE_SECS and not _wrong_fired:
 		_wrong_fired = true
 		_offence(PoliceRules.Offence.WRONG_SIDE, notice, area)
 	elif not wrong:
 		_wrong_fired = false
-	# The median gap: crossing the centre line where the barrier is open.
+	# The illegal turn: crossing the centre line where the barrier is open.
+	# (A U-turn at a city crossing is not in a gap chunk, so it adds nothing.)
 	var side := 1 if p.x >= 0.0 else -1
 	if _prev_side != 0 and side != _prev_side and notice != null:
 		if RoadMap.gap_in(floori(RoadFrame.s_at(p.z) / RoadChunkBuilder.CHUNK_LEN)):
@@ -444,6 +446,18 @@ func _apply(dt: float) -> void:
 	var offending := (speeding and judge != null) or (wrong and notice != null) or racing_now
 	_update_heat(dt, offending)
 	_update_warning(dt, speeding, flagrant, wrong)
+
+## PoliceRules.is_wrong_way for the player at road-space `p`.
+func _wrong_way(p: Vector3) -> bool:
+	var body := player as RigidBody3D
+	if body == null:
+		return false
+	var lanes := RoadChunkBuilder.MAX_OWN_LANES
+	if RoadFrame.layout != null:
+		lanes = RoadFrame.layout.lanes_at(p.x < 0.0, RoadFrame.s_at(p.z))
+	var vel := RoadFrame.dir_to_road(p.z, body.linear_velocity)
+	var fwd := RoadFrame.dir_to_road(p.z, -body.global_transform.basis.z)
+	return PoliceRules.is_wrong_way(p.x, vel, fwd, lanes, body.angular_velocity.y)
 
 func _side_by_side(kmh: float, area: String, flow: float) -> bool:
 	if racers.is_empty() or not PoliceRules.is_speeding(kmh, area, _crackdown(), flow):
@@ -501,6 +515,22 @@ func on_contact(other: Object, closing_kmh: float) -> void:
 	_crash_t = PoliceRules.FLEE_SECS
 	_flee_t = 0.0
 	_offence(PoliceRules.Offence.CRASH, notice, area)
+
+## The player knocked down a lamp post, hydrant or sign (prop_break.gd). Only
+## a cop that sees it counts (witnesses cannot call one): a warning first at
+## heat 0, one step of heat otherwise. True when a cop saw it.
+func on_property_damage() -> bool:
+	if player == null:
+		return false
+	var cop := _notice_cop()
+	if cop == null or cop in bad_cops:
+		return false
+	if level >= ONE_CAR:
+		offence_seen.emit(PoliceRules.Offence.PROPERTY, cop)
+		_add_heat(1.0)
+	else:
+		_offence(PoliceRules.Offence.PROPERTY, cop, _area(RoadFrame.unroll(player.global_position).z))
+	return true
 
 ## The fault test (PoliceRules.player_at_fault) from the cars' road-space state.
 func player_at_fault(other: Node3D) -> bool:

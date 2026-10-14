@@ -66,7 +66,7 @@ func _process(_delta: float) -> bool:
 			state.pause()
 			_check(menu.visible and menu.main_page.visible, "pausing opens the pause menu")
 			_check(menu.main_page.find_children("*", "HSlider", true, false).is_empty(), "the pause column has no sliders left")
-			_check(menu.main_page.find_children("*", "Button", true, false).filter(func(b: Button) -> bool: return b.visible and b.text != "Put me back on the road").size() == 5, "the pause column is the five rows")
+			_check(menu.main_page.find_children("*", "Button", true, false).filter(func(b: Button) -> bool: return b.visible and b.text != "Put me back on the road").size() == 6, "the pause column is the six rows (Fix the car added; Map needs a map)")
 			_check(menu.settings != null and not menu.settings.visible and menu.settings_button != null, "Settings starts closed, with a button")
 			menu.settings_button.pressed.emit()
 			_check(menu.settings.visible and menu.settings.current_page == 0, "the Settings button opens the Sound page")
@@ -106,6 +106,30 @@ func _process(_delta: float) -> bool:
 			_check(is_equal_approx(ViewSettings.cockpit_fov, 70.0), "FOV slider sets the cockpit FOV")
 			s.smoke_burnout_slider.value = 1.5
 			_check(is_equal_approx(FxSettings.smoke_burnout, 1.5), "Burnout smoke slider")
+			# Game: "Roaches and rats" saves with the rest and loads back
+			s.show_page(4)
+			_check(s.critters_check != null and s.critters_check.text == "Roaches and rats" and s.critters_check.button_pressed, "Game page has Roaches and rats, on by default")
+			s.critters_check.button_pressed = false
+			_check(not GameSettings.critters, "the switch turns the critters off")
+			var gcfg := ConfigFile.new()
+			gcfg.load(AudioSettings.path)
+			_check(gcfg.get_value("game", "critters", true) == false, "critters off is saved")
+			GameSettings.critters = true
+			GameSettings.load_settings()
+			_check(not GameSettings.critters, "critters off loads back")
+			s.critters_check.button_pressed = true
+			_check(GameSettings.critters, "and on again")
+			# Game: the Damage row (brief DP7), applied and saved at once
+			_check(s.damage_option != null and s.damage_option.item_count == 3 and s.damage_option.get_item_text(0) == "Full" and s.damage_option.get_item_text(1) == "Light" and s.damage_option.get_item_text(2) == "Looks only", "Game has a Damage row: Full / Light / Looks only")
+			s.damage_option.select(2)
+			s.damage_option.item_selected.emit(2)
+			_check(GameSettings.damage == GameSettings.Damage.LOOKS_ONLY, "Damage: Looks only applies")
+			var damage_cfg := ConfigFile.new()
+			damage_cfg.load(AudioSettings.path)
+			_check(str(damage_cfg.get_value("game", "damage", "")) == "Looks only", "the Damage setting is saved with the game settings")
+			s.damage_option.select(0)
+			s.damage_option.item_selected.emit(0)
+			_check(GameSettings.damage == GameSettings.Damage.FULL, "Damage: back to Full")
 			# Controls: rebind handbrake slot 0 to K
 			s.show_page(3)
 			_check(s.controls_save_button != null and s.controls_reset_button != null, "Controls has Save and Reset")

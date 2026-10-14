@@ -44,6 +44,13 @@ func _init(car: PlayerCar, state: GameState) -> void:
 	game_state = state
 	layer = 20
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# Look at the car before anything else steps it (issue #598). The watchdog
+	# joins the scene after the player, so at the default priority a NaN speed
+	# went through a whole tick of the car's own physics first: the drag
+	# normalised a NaN vector, the wheel forces went NaN and the visuals took a
+	# non-finite transform before it was put right. Checked first, the NaN is
+	# caught before anything reads it.
+	process_physics_priority = -100
 
 func _ready() -> void:
 	dialog = PanelContainer.new()
@@ -151,12 +158,17 @@ func keep() -> void:
 	_close()
 
 ## Puts the tune from when the Tuner last opened back on the car, and the car
-## upright where it stands.
+## upright where it stands. A frozen car is being moved by something else and
+## is left to it: since TM2 (6573bad) a car on its roof at rest rights itself
+## after 3 s (roll_righting.gd freezes it and lifts it over 0.6 s), the same
+## 3 s that asks the flip question here, so a Revert in that time used to snap
+## the car upright for one tick before the lift put it back where it was.
+## A broken (NaN) car is always put right here.
 func revert() -> void:
 	if not saved_spec.is_empty():
 		for e in TuneParams.all():
 			CarSpec.set_param(player, player.spec, e.path, TuneParams.get_value(saved_spec, e.path))
-	if not _car_finite() or player.global_transform.basis.y.y < 0.5:
+	if not _car_finite() or (not player.freeze and player.global_transform.basis.y.y < 0.5):
 		_upright()
 	reverted_count += 1
 	watching = false

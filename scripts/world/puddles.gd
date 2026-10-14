@@ -37,6 +37,8 @@ static func of_chunk(c: int) -> PackedFloat32Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([c, 0x9dd1e])
 	var n := rng.randi_range(0, MAX_PER_CHUNK)
+	if preload("res://scripts/world/road_map.gd").tunnel_at(c):
+		n = 0  # no rain falls in a tunnel (TN1)
 	for k in n:
 		rng.seed = hash([c, k])
 		var hl := rng.randf_range(HALF_LEN.x, HALF_LEN.y)

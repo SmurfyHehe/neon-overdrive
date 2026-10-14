@@ -29,14 +29,16 @@ extends SceneTree
 #   (TuneTrack.driver_profile), NOT a game AI: there is no rival AI yet.
 #   Assists off = traction control 0, stability 0, ABS threshold at its max.
 #   A corner run that slides past SPIN_DEG is a spin: its peak g (and so its
-#   lap) is shown as "-", since the track's g number is speed x yaw rate.
+#   lap) is shown as "-", since a car that spins does not hold that bend. (The
+#   track's g was speed x yaw rate, which read the spin itself as grip, until
+#   #572 made it the path's real sideways acceleration.)
 
 const DT := 1.0 / 60.0
 const CORNER_RADIUS := 50.0
 const ENGINE_EXTRAPOLATE_S := 600.0
 const MAX_STOPS := 30
-## Past this slide angle the corner run is a spin, and TuneTrack's lateral g
-## (speed x yaw rate) reads the spin, not grip: the g is dropped from the tables.
+## Past this slide angle the corner run is a spin, and a car that spins does not
+## hold the bend at its peak g: the g is dropped from the tables.
 const SPIN_DEG := 45.0
 
 const SKILLS := {
@@ -95,6 +97,8 @@ func _run() -> void:
 	print("balance sweep: %d cars x %d presets x %d skills x %d assists = %d runs" % [cars.size(), presets.size(), skills.size(), assists.size(), total])
 	for car in cars:
 		var stock := _spec_for(car)
+		# A player car on its own wheels and body (#601); the rest on the coupe's.
+		track.car_kind = car if PlayerCars.is_player_kind(car) else ""
 		for preset in presets:
 			var m := TunerModel.new(null, CarSpec.clone_spec(stock), stock)
 			if preset != "Stock":

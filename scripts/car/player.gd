@@ -95,13 +95,30 @@ const SHIFT_FLASH_DURATION := 0.2  # HUD gear-label flash window, matched to Veh
 ## full brake flare: the chase camera sits right behind them.
 const PLAYER_BRAKE_GLOW := 0.35
 var chassis_visual: Node3D
-## H toggles them (set_headlights); police heat reads this.
+## H switches them (set_headlights, lights_key_down); police heat reads this.
 var headlights_on := true
-## Low / high beam, flash and auto-dip (J; scripts/car/headlight_beams.gd).
+## Low / high beam, flash and auto-dip (all on H; scripts/car/headlight_beams.gd).
 var beams := HeadlightBeams.new()
 var _steer_smooth := 0.0
+## Auto-trim (brief DP2, Roy 2026-10-11: "the game holds most of a pull for
+## you", stronger pull on Racer): with no steer key down the keyboard steering
+## rests on the angle that cancels this share of the damage pull, not on zero.
+## The pull comes from the toe offsets (CarDamage.pull_angle), never from
+## measuring drift; braking pull, bump twitch and sag are not trimmed.
+const AUTO_TRIM_DAILY := 0.85
+const AUTO_TRIM_WEEKEND := 0.70
+const AUTO_TRIM_RACER := 0.40
+## The share comes from the difficulty (DamageDifficulty's auto_trim, through
+## CarDamage.auto_trim_share); a test or tool may set it, and that value holds
+## until it sets a negative one.
+var _auto_trim_set := -1.0
+var auto_trim_share: float:
+	get: return _auto_trim_set if _auto_trim_set >= 0.0 else damage.auto_trim_share()
+	set(v): _auto_trim_set = v
 ## Heat and wear (Phase B). Off for sim_only cars so TuneTrack stays clean.
 var health := PowertrainHealth.new()
+## Grip, slide and roughness per surface under each wheel (surface_feel.gd).
+var surface_feel := SurfaceFeel.new()
 ## Fuel and limp mode (Stage C). Off for sim_only cars, like health.
 var fuel := FuelTank.new()
 var limp := LimpMode.new()
@@ -127,6 +144,12 @@ var spec := {}
 ## engine audio, which have no effect on the physics.
 var driver := Callable()
 var sim_only := false
+## The car to build: its wheel hardpoints, collision body and fittings. "" is
+## chassis_kind(), the car the player picked. TuneTrack sets it (before
+## add_child) so a spec is measured on its own car, not on whatever the player
+## drives: the p0_beater bolt-on sweep ran on the coupe's hull and wheels, and
+## its numbers moved when the coupe's hull did (#538, #601).
+var chassis := ""
 
 ## The tune kept between runs (PlayerTune): only the game's own car, the one
 ## built from the default spec, loads and saves it.
@@ -167,7 +190,7 @@ func _ready() -> void:
 	# of the old flat-box look.
 	# The P1 sports coupe (P1CoupeBuilder), or the neutral #63 test car with
 	# NEON_TEST_CAR=1. Same physics either way; see chassis_kind().
-	var kind := chassis_kind()
+	var kind := chassis if chassis != "" else chassis_kind()
 	var cfg := wheel_config(kind)
 	if not sim_only:
 		if kind == TestCarBuilder.KIND:
@@ -225,7 +248,13 @@ func _ready() -> void:
 		# The sheet body's own box (NpcCarBuilder.config), as TrafficCar.
 		CarSpec.build_collision(self, cfg.col_size, cfg.col_y)
 	else:
-		CarSpec.build_collision(self, Vector3(1.6, 1.0, 3.4), 0.7)
+		# Underside 6 cm higher than it was (bottom face at y=0.26, top unchanged;
+		# 2026-10-11, issue #538). At y=0.2 the body rode 7.4 cm off the road at
+		# rest, 6 cm lower than every sheet car's box and half a real coupe's
+		# clearance, and the car's own downforce (7 cm of spring at 250 km/h)
+		# put it on the road. The centre of mass is set apart from the shape
+		# (Vehicle.center_of_gravity), so only the roll inertia moves, by +2 %.
+		CarSpec.build_collision(self, Vector3(1.6, 0.94, 3.4), 0.73)
 
 	# ---- Vehicle-level tuning ----
 	# CarSpec refactor (2026-09-13, Roy: "i want full physics everywhere ...
@@ -312,6 +341,15 @@ func _ready() -> void:
 	# synthesised engine driven by this car's motor_rpm/throttle. Added after
 	# CarSpec.apply() so it picks up the real idle/max rpm.
 	if not sim_only:
+		# The sounds below, made side by side off the main thread while the
+		# nodes come in (a cold cache: first boot after a change, issue #524).
+		# Waited on in this order; on a garage boot nothing waits for them
+		# (each node takes them once ready or once the car is out).
+		DamageAudio.prefetch()
+		DrivelineAudio.prefetch()
+		CabinLifeAudio.prefetch()
+		StarterAudio.prefetch(spec)
+		CarAudio.prefetch()
 		add_child(EngineAudio.new())
 		# Stage A (2026-10-04): wind, road, tyre and kerb sound next to the engine.
 		add_child(CarAudio.new())
@@ -319,6 +357,7 @@ func _ready() -> void:
 		add_child(CrashAudio.new())  # crashes and scrapes (2026-10-08)
 		add_child(DamageAudio.new())  # rattle once parts are broken (damage slice 1)
 		add_child(StarterAudio.new())  # the starter motor while X cranks a stopped engine
+		add_child(PlayerHorn.new())  # the horn on J (key map K2)
 
 		# Stage A (2026-10-04): headlights + blob shadow, since the world is dark
 		# on purpose now (Look Board B). After the body and wheels exist, because
@@ -359,9 +398,13 @@ func set_headlights(on: bool) -> void:
 	headlights_on = on
 	beams.set_lights(on)
 
-## J: high beam on / off; twice quickly is a flash (HeadlightBeams).
-func toggle_high_beam() -> void:
-	beams.press_high()
+## H went down / came up: tap, hold (flash) and double tap are HeadlightBeams'.
+func lights_key_down() -> void:
+	beams.press_key()
+	headlights_on = beams.lights_on()
+
+func lights_key_up() -> void:
+	beams.release_key()
 	headlights_on = beams.lights_on()
 
 ## The beam cops and the HUD see: HeadlightBeams.Mode OFF / LOW / HIGH.
@@ -370,12 +413,14 @@ func beam_mode() -> int:
 
 func _physics_process(delta: float) -> void:
 	beams.step(delta)
+	_step_trim_grip(delta)
 	if driver.is_valid():
 		last_keys = -1
 		driver.call(self)
 	else:
 		_read_keyboard()
 	_step_ignition(delta)
+	_limit_steering_lock()
 	_update_line_lock()
 	# Tail smears brighten with the brakes; one instance-colour write per flip.
 	var braking := brake_input > 0.05
@@ -386,10 +431,11 @@ func _physics_process(delta: float) -> void:
 		var body := chassis_visual.get_node_or_null(^"Body") as MeshInstance3D
 		if body != null:
 			body.set_instance_shader_parameter("brake", PLAYER_BRAKE_GLOW if braking else 0.0)
-	# Limp mode: the slowest active cause caps the speed by fading the throttle.
+	# Limp mode (brief LM): no speed cap; the engine and the gearbox are held back.
+	limp.engine_max_gear = int(get_meta(&"limp_max_gear", LimpMode.ENGINE_MAX_GEAR))
+	limp.fuel_share = float(get_meta(&"limp_fuel_share", LimpMode.FUEL_FLAT_SHARE))
 	limp.update(fuel.is_empty(), health.engine_temp if health.enabled else 0.0)
-	if limp.is_limping():
-		throttle_input *= limp.throttle_scale(current_speed() * 3.6)
+	_apply_limp(delta)
 	super._physics_process(delta)
 
 	# Aero (2026-09-13): applied AFTER the vendor's own _physics_process so
@@ -397,7 +443,10 @@ func _physics_process(delta: float) -> void:
 	# applied this frame. See aero.gd for the actual force math.
 	AeroModel.apply(self)
 	heat = HeatShimmer.next_heat(heat, self, delta)
+	damage.sync_settings(GameSettings.damage, GameSettings.difficulty)
 	damage.step(self, delta, health, limp)
+	_apply_damage_offsets()
+	_apply_brake_damage()
 	_apply_lamp_damage()
 	_light_reflectors()
 	health.step(self, delta)
@@ -405,14 +454,215 @@ func _physics_process(delta: float) -> void:
 	if wet.step(self, delta):
 		wet.write_over(self)
 		wet.apply_drag(self)
+	surface_feel.step(self, delta)
+	wheel_shake = _apply_flat_tyres(delta)
 	fuel.step_values(delta, health.engine_load if health.enabled else throttle_amount, engine_running)
-	if limp.is_limping():
-		torque_mult = limp.torque_mult(health.torque_mult)
 	if _keeps_tune:
 		_tune_check_left -= delta
 		if _tune_check_left <= 0.0:
 			_tune_check_left = TUNE_CHECK_SECS
 			_save_tune_if_changed()
+
+## Gear changes limp mode has refused (a shift above LimpMode.max_gear).
+## TODO: one gear-grind sound per refusal; no grind or clunk sound exists yet.
+var limp_refused_shifts := 0
+## 0..1 for the camera: a wheel on its rim shakes the car (flat_tyre.gd).
+var wheel_shake := 0.0
+var _rim_phase := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
+var _limp_was_on := false
+
+## Limp mode on the engine and the gearbox, before the vendor's own step (it
+## reads torque_mult there). No cause sets a speed: the revs are held by a
+## bouncing fuel cut, the boost is closed, torque is the worse of the health
+## derate and the limp's, and the gearbox stays at or under limp.max_gear.
+func _apply_limp(delta: float) -> void:
+	var on := limp.is_limping()
+	if not on and not _limp_was_on:
+		return
+	_limp_was_on = on
+	set_meta(ForcedInduction.BOOST_MULT_META, limp.boost_mult)
+	if auto_box != null:
+		auto_box.limp_max_gear = limp.max_gear
+		auto_box.limp_rev_frac = limp.shift_frac
+	if not on:
+		limp.step_cut(delta, motor_rpm, max_rpm, 0.0, 0.0, 0.0)
+		return
+	var lat_g := absf(angular_velocity.y) * speed / 9.81
+	var grade := -global_transform.basis.z.y
+	var cut := limp.step_cut(delta, motor_rpm, max_rpm, clampf(throttle_input, 0.0, 1.0), lat_g, grade)
+	torque_mult = 0.0 if cut else limp.torque_for(health.torque_mult if health.enabled else 1.0)
+	# SEMI: the box drops to the limp's top gear as soon as the lower gear is
+	# safe for the engine; the fuel cut then slows the car to what it allows.
+	# (AUTO does the same inside AutoBox; in MANUAL the driver holds the stick,
+	# so a higher gear stays in until they shift down, and then cannot go back.)
+	if not automatic_transmission and not realistic_clutch and current_gear > limp.max_gear and not is_shifting:
+		var lower_rpm := gear_ratios[current_gear - 2] * final_drive * speed / average_drive_wheel_radius * ANGULAR_VELOCITY_TO_RPM
+		if lower_rpm < max_rpm * 0.9:
+			shift(-1)
+
+## Wheels on their rims: grip from the offsets (after health and the wet have
+## written theirs), then drag and shake. Returns the camera shake, 0..1.
+func _apply_flat_tyres(delta: float) -> float:
+	if not damage.enabled or damage.applied.is_neutral():
+		return 0.0
+	var o := damage.applied
+	for i in mini(4, wheel_array.size()):
+		wheel_array[i].grip_mult *= o.get_wheel(i, CarDamage.DamageOffsets.GRIP_MULT)
+	return CarDamage.FlatTyre.apply(self, o, damage.rim_wear, _rim_phase, delta)
+
+## True while damage offsets are written into the wheels, so one tick of
+## neutral writes the tuned values back (a repair) and then it goes quiet.
+var _offsets_written := false
+
+## Damage offsets (brief DP0) applied on top of the tune, once per physics tick:
+## effective = tuned x mult (or + add). The tuned values stay in their own
+## places and are never written over: toe is front_toe / rear_toe, and the
+## spring and damper rates are worked out from the suspension settings exactly
+## as Vehicle.apply_suspension() does. A repair is the offsets going back to
+## neutral; nothing guesses a base from what is in a Wheel. The car reads
+## `damage.applied`, the faded-in copy (CarDamage.FADE_TICKS); the tyre and
+## cooling slots in it are live (no fade).
+## Read here (DP0 + DP1 + DP3): TOE_ADD, CAMBER_ADD (the tyre's own camber
+## term), SPRING_MULT, RIDE_DROP, DAMPER_MULT, COOLING_MULT, PRESSURE_MULT
+## (stiffness, grip, rolling resistance, radius). Read elsewhere:
+## BRAKE_MULT (_apply_brake_damage), STEER_LOCK_MULT (_limit_steering_lock),
+## the toe adds again for the auto-trim (damage_trim), STEER_CENTRE (the
+## cockpit wheel, steer_centre_view), GRIP_MULT and RUNOUT and the drag of a
+## soft or flat tyre (_apply_flat_tyres).
+## Still neutral and unread (the brief that wires each, as I understand the plan):
+##   LM:  TORQUE_MULT, BOOST_MULT, DRAG_ADD, DOWNFORCE_REAR_MULT
+const RIDE_DROP_MIN_TRAVEL := 0.02   # m of bump travel a dropped corner always keeps
+func _apply_damage_offsets() -> void:
+	if not damage.enabled:
+		return
+	var o := damage.applied
+	var DO := CarDamage.DamageOffsets
+	health.cooling_mult = o.get_car(DO.COOLING_MULT)
+	var neutral := o.is_neutral()
+	if neutral and not _offsets_written:
+		return
+	_offsets_written = not neutral
+	var tuned_toe := [-front_toe, front_toe, -rear_toe, rear_toe]
+	var front_weight := vehicle_mass * front_weight_distribution * 4.9
+	var rear_weight := vehicle_mass * (1.0 - front_weight_distribution) * 4.9
+	var front_rate := calculate_spring_rate(front_weight, front_spring_length, front_resting_ratio)
+	var rear_rate := calculate_spring_rate(rear_weight, rear_spring_length, rear_resting_ratio)
+	var front_damp := calculate_damping(front_weight, front_rate, front_damping_ratio)
+	var rear_damp := calculate_damping(rear_weight, rear_rate, rear_damping_ratio)
+	var any_camber := false
+	for i in mini(4, wheel_array.size()):
+		var w: Wheel = wheel_array[i]
+		var front := i < 2
+		var spring := o.get_wheel(i, DO.SPRING_MULT)
+		w.toe = tuned_toe[i] + o.get_wheel(i, DO.TOE_ADD)
+		w.spring_rate = (front_rate if front else rear_rate) * spring
+		# Ride drop: a shorter spring at the same rate sits the corner lower by
+		# that much. Never so far that the softer spring's resting point is
+		# within RIDE_DROP_MIN_TRAVEL of the bump stop.
+		var length := front_spring_length if front else rear_spring_length
+		var resting := length * (front_resting_ratio if front else rear_resting_ratio) / maxf(spring, 0.01)
+		var drop := clampf(o.get_wheel(i, DO.RIDE_DROP), 0.0, maxf(length - resting - RIDE_DROP_MIN_TRAVEL, 0.0))
+		var new_length := length - drop
+		if w.spring_length != new_length:
+			# keep the damper from seeing the change of length as spring travel
+			w.previous_compression += (new_length - w.spring_length) * 1000.0
+			w.spring_length = new_length
+		var damp := (front_damp if front else rear_damp) * o.get_wheel(i, DO.DAMPER_MULT)
+		var bump := front_bump_damp_multiplier if front else rear_bump_damp_multiplier
+		var rebound := front_rebound_damp_multiplier if front else rear_rebound_damp_multiplier
+		w.slow_bump = damp * bump
+		w.slow_rebound = damp * rebound
+		w.fast_bump = damp * bump * 0.5
+		w.fast_rebound = damp * rebound * 0.5
+		# Camber through the tyre's own model (set_tyre_setup's numbers, degrees).
+		var stock := front_static_camber_stock if front else rear_static_camber_stock
+		var camber := (front_static_camber if front else rear_static_camber) + rad_to_deg(o.get_wheel(i, DO.CAMBER_ADD))
+		w.static_camber = camber
+		w.camber_active = not is_equal_approx(camber, stock)
+		w.camber_long_mult = (1.0 - Wheel.CAMBER_LONG_LOSS * absf(camber)) / (1.0 - Wheel.CAMBER_LONG_LOSS * absf(stock))
+		any_camber = any_camber or w.camber_active
+		# a soft tyre (DP3): the tuned pressure x what is left of it, and the radius
+		CarDamage.FlatTyre.write_pressure(w, o.get_wheel(i, DO.PRESSURE_MULT),
+			front_tyre_pressure if front else rear_tyre_pressure, tyre_pressure_stock,
+			front_tire_radius if front else rear_tire_radius)
+	_camber_active = any_camber
+
+## A hurt brake corner (BRAKE_MULT). GEVP shares the brake torque per axle
+## inside the vendored code with no per-wheel input, so the lost share is
+## given back on our side: while braking, (1 - mult) of that tyre's braking
+## force is applied the other way at its contact patch. Same net force and
+## yaw as a weaker brake on that wheel; nothing at all when not braking.
+func _apply_brake_damage() -> void:
+	if not _offsets_written or not is_braking:
+		return
+	var o := damage.applied
+	for i in mini(4, wheel_array.size()):
+		var lost := 1.0 - o.get_wheel(i, CarDamage.DamageOffsets.BRAKE_MULT)
+		if lost <= 0.0:
+			continue
+		var w: Wheel = wheel_array[i]
+		if not w.is_colliding() or w.last_collider == null:
+			continue
+		var f := w.force_vector.y
+		if f * w.local_velocity.z >= 0.0:
+			continue   # not slowing the car (drive, or stopped)
+		apply_force(-w.global_transform.basis.z * f * lost, w.last_collision_point - global_position)
+
+## A bent rack (STEER_LOCK_MULT): whoever steers, the wheels get at most that
+## share of the lock. steering_input is before GEVP's exponent, hence the root.
+func _limit_steering_lock() -> void:
+	if not _offsets_written:
+		return
+	var lock := damage.applied.get_car(CarDamage.DamageOffsets.STEER_LOCK_MULT)
+	if lock < 1.0:
+		var cap := pow(maxf(lock, 0.0), 1.0 / maxf(steering_exponent, 0.1))
+		steering_input = clampf(steering_input, -cap, cap)
+
+## Where the keyboard steering rests with no steer key down, as a share of
+## lock, + = right: the trim that cancels auto_trim_share of the damage pull.
+## Zero on an undamaged car.
+func damage_trim() -> float:
+	if not _offsets_written:
+		return 0.0
+	var lock := maxf(max_steering_angle * front_steering_ratio, 0.01)
+	return clampf(CarDamage.pull_angle(damage.applied) * auto_trim_share * _trim_grip / lock, -1.0, 1.0)
+
+## Auto-trim and wheelspin: the trim cancels a toe pull, which only exists
+## while the tyres grip. With the driven wheels spinning hard (a floored
+## launch) a held steer offset is no correction, it just yaws a car whose
+## rear has let go (test_build_sandbox: a bent arm, floored from the kerb,
+## spun into the median). So the trim backs out while the worst driven wheel
+## slips more than TRIM_SLIP_FULL and comes back in as grip returns.
+## Slip = (wheel surface speed - road speed) / max(road speed, TRIM_SLIP_FLOOR_MS).
+const TRIM_SLIP_FULL := 0.15      # at or under this slip the trim is all there
+const TRIM_SLIP_NONE := 0.30      # at or over this slip it is gone
+const TRIM_SLIP_FLOOR_MS := 3.0   # slip of a crawling car is read against this speed
+const TRIM_GRIP_OUT := 10.0       # per second the trim backs out (0.1 s)
+const TRIM_GRIP_IN := 1.0         # per second it fades back in (1 s)
+var _trim_grip := 1.0
+
+## Worst slip of the driven wheels this tick (0 = rolling, 1 = spinning twice road speed).
+func driven_slip() -> float:
+	var worst := 0.0
+	for w in drive_wheels:
+		if not w.is_colliding():
+			continue
+		var road := absf(w.local_velocity.z)
+		var surface := absf(w.spin * w.tire_radius)
+		worst = maxf(worst, (surface - road) / maxf(road, TRIM_SLIP_FLOOR_MS))
+	return worst
+
+func _step_trim_grip(delta: float) -> void:
+	var want := 1.0 - clampf((driven_slip() - TRIM_SLIP_FULL) / (TRIM_SLIP_NONE - TRIM_SLIP_FULL), 0.0, 1.0)
+	_trim_grip = move_toward(_trim_grip, want, delta * (TRIM_GRIP_OUT if want < _trim_grip else TRIM_GRIP_IN))
+
+## What the cockpit adds to its drawn wheel (rad, + = right) so that it rests
+## on STEER_CENTRE when no steer key is down: the crooked wheel of a bent arm.
+## `wheel_lock_rad` is the drawn wheel's turn at full lock.
+func steer_centre_view(wheel_lock_rad: float) -> float:
+	if not _offsets_written:
+		return 0.0
+	return damage.applied.get_car(CarDamage.DamageOffsets.STEER_CENTRE) - damage_trim() * wheel_lock_rad
 
 ## A broken head lamp takes its half of the beam (CarFx's one spot light).
 func _apply_lamp_damage() -> void:
@@ -420,10 +670,7 @@ func _apply_lamp_damage() -> void:
 	if share == _head_share:
 		return
 	_head_share = share
-	var spot := get_node_or_null("Headlights") as SpotLight3D
-	if spot != null:
-		spot.light_energy = CarFx.HEADLIGHT_ENERGY * share
-		spot.visible = share > 0.0
+	CarFx.set_headlight_share(self, share)
 
 ## The median's reflectors shine only in this car's beam (RoadChunkBuilder).
 func _light_reflectors() -> void:
@@ -533,9 +780,9 @@ func apply_keys(k: int) -> void:
 	if k & KEY_REVERSE:
 		toggle_reverse()
 	if Input.is_action_just_pressed("headlights"):
-		set_headlights(not headlights_on)
-	if Input.is_action_just_pressed("high_beam"):
-		toggle_high_beam()
+		lights_key_down()
+	if Input.is_action_just_released("headlights"):
+		lights_key_up()
 	clutch_input = 1.0 if k & KEY_CLUTCH else 0.0
 	# X: starts a stopped engine, switches a running one off (key_off). The
 	# press that switched it off is spent: it cranks again only once X has
@@ -571,8 +818,9 @@ func apply_keys(k: int) -> void:
 	# Negating here (rather than swapping which key does what) keeps A=left/D=right
 	# reading naturally in the code while matching what the asset expects.
 	var speed_t := clampf((current_speed() - STEER_SLOW_SPEED) / (STEER_FAST_SPEED - STEER_SLOW_SPEED), 0.0, 1.0)
-	var target := steer_in * steer_lock_cap()
-	var coming_in := target != 0.0 and (_steer_smooth == 0.0 or signf(target) == signf(_steer_smooth))
+	var held := steer_in != 0.0
+	var target := steer_in * steer_lock_cap() if held else damage_trim()
+	var coming_in := held and (_steer_smooth == 0.0 or signf(target) == signf(_steer_smooth))
 	var rate := lerpf(STEER_ATTACK, STEER_ATTACK_FAST, speed_t) if coming_in else STEER_RELEASE
 	_steer_smooth = move_toward(_steer_smooth, target, rate * get_physics_process_delta_time())
 	# GEVP raises the input to steering_exponent (1.5) before it reaches the
@@ -692,14 +940,46 @@ const CRANK_RPM := 230.0
 ## switched off that let it go cold again.
 const WARM_UP_S := 25.0
 const COOL_DOWN_S := 120.0
-## The revs the engine flares to as it catches, over idle.
-const START_FLARE := 1.45
+## The catch (2026-10-11, Roy: "sounds weak"): a real blip. The revs climb to
+## START_FLARE x the idle of the moment over FLARE_RISE_S and fall back on the
+## engine's own drag; the engine voice hears part throttle (start_throttle)
+## until FLARE_THROTTLE_S.
+const START_FLARE := 1.3
+const FLARE_RISE_S := 0.22
+const FLARE_THROTTLE_S := 0.45
+## Fast idle after a key start (Roy 2026-10-10: yes to about 20 s): the idle
+## sits at FAST_IDLE_RATIO x the car's own, kept inside FAST_IDLE_MIN..MAX rpm,
+## and settles to normal over FAST_IDLE_COLD_S on a cold engine. A warm one
+## gets FAST_IDLE_WARM of that rise for FAST_IDLE_WARM_S.
+const FAST_IDLE_COLD_S := 20.0
+const FAST_IDLE_WARM_S := 3.0
+const FAST_IDLE_RATIO := 1.75
+const FAST_IDLE_MIN_RPM := 1500.0
+const FAST_IDLE_MAX_RPM := 1800.0
+const FAST_IDLE_WARM := 0.4
+## Cabin shake (ChaseCamera reads start_shake, 0..1): this much while the
+## starter turns, pulsing with the compression strokes, and a full bump at the
+## catch that dies away at SHAKE_DECAY a second.
+const CRANK_SHAKE := 0.3
+const CRANK_SHAKE_PULSE := 0.25
+const SHAKE_DECAY := 5.0
 ## How many times the key has switched the engine off, and how long the last
 ## key start cranked for (StarterAudio, tests).
 var key_offs := 0
 var crank_hold := 0.0
 var _crank_hold_left := 0.0
 var _warmth := 0.0
+## 0..1: the engine rocking the car on its mounts as it cranks and catches.
+var start_shake := 0.0
+## 0..1: throttle the engine voice hears on the blip at the catch (sound only).
+var start_throttle := 0.0
+## The car's own idle while the fast idle holds idle_rpm above it, else 0.
+var base_idle_rpm := 0.0
+## How cold the engine was when the last key start began (StarterAudio).
+var crank_cold := 0.0
+var _fast_idle_t := 0.0
+var _fast_idle_cold := 0.0
+var _flare_t := -1.0
 var _x_held := false
 var _x_spent := false
 ## Test build: what ModTree.build fitted to this car ({} when nothing was).
@@ -726,6 +1006,9 @@ func ignition_off() -> void:
 	clutch_pedal = 0.0
 	_crank_left = 0.0
 	_crank_hold_left = 0.0
+	_end_fast_idle()
+	_flare_t = -1.0
+	start_throttle = 0.0
 	if auto_box != null:
 		auto_box.reset()
 
@@ -751,8 +1034,29 @@ func coldness() -> float:
 func crank_pace() -> float:
 	return StarterAudio.pace(int((spec.get("engine_voice", {}) as Dictionary).get("cylinders", 4)))
 
+## Rpm the fast idle adds to an idle of `base`, `t` seconds after the catch of
+## an engine that was `cold` (0 warm .. 1 cold): held for the first part, then
+## easing down to nothing by fast_idle_span(cold).
+static func fast_idle_add(base: float, cold: float, t: float) -> float:
+	var top := maxf(clampf(base * FAST_IDLE_RATIO, FAST_IDLE_MIN_RPM, FAST_IDLE_MAX_RPM) - base, 0.0)
+	var x := clampf(t / fast_idle_span(cold), 0.0, 1.0)
+	return top * lerpf(FAST_IDLE_WARM, 1.0, cold) * (1.0 - smoothstep(0.15, 1.0, x))
+
+static func fast_idle_span(cold: float) -> float:
+	return lerpf(FAST_IDLE_WARM_S, FAST_IDLE_COLD_S, clampf(cold, 0.0, 1.0))
+
+func _end_fast_idle() -> void:
+	if base_idle_rpm > 0.0:
+		idle_rpm = base_idle_rpm
+		base_idle_rpm = 0.0
+
+## Compression strokes a second while the starter turns this engine.
+func crank_chugs() -> float:
+	return StarterAudio.chug_rate(int((spec.get("engine_voice", {}) as Dictionary).get("cylinders", 4)))
+
 ## A key start begins: picks how long it turns over before it fires.
 func _begin_crank() -> void:
+	crank_cold = coldness()
 	crank_hold = lerpf(CRANK_WARM_S, CRANK_COLD_S, coldness()) / crank_pace() * randf_range(1.0 - CRANK_SPREAD, 1.0 + CRANK_SPREAD)
 	_crank_hold_left = crank_hold
 
@@ -768,6 +1072,7 @@ func ignition_on() -> void:
 ## car back to its own box once the engine has caught.
 func _step_ignition(delta: float) -> void:
 	_warmth = clampf(_warmth + (delta / WARM_UP_S if engine_running else -delta / COOL_DOWN_S), 0.0, 1.0)
+	start_shake *= exp(-SHAKE_DECAY * delta)
 	if engine_running:
 		_crank_left = 0.0
 		_crank_hold_left = 0.0
@@ -777,8 +1082,31 @@ func _step_ignition(delta: float) -> void:
 			set_transmission_mode(mode)
 			if mode == Transmission.MANUAL:
 				current_gear = 0  # in gear with the pedal up it would stall at once
-			motor_rpm = maxf(motor_rpm, idle_rpm * START_FLARE)
+			# It has caught: the bump, the blip and the fast idle begin.
+			start_shake = 1.0
+			_flare_t = 0.0
+			_end_fast_idle()
+			base_idle_rpm = idle_rpm
+			_fast_idle_t = 0.0
+			_fast_idle_cold = crank_cold
+		if base_idle_rpm > 0.0:
+			_fast_idle_t += delta
+			if _fast_idle_t >= fast_idle_span(_fast_idle_cold):
+				_end_fast_idle()
+			else:
+				idle_rpm = base_idle_rpm + fast_idle_add(base_idle_rpm, _fast_idle_cold, _fast_idle_t)
+		if _flare_t >= 0.0:
+			_flare_t += delta
+			if _flare_t < FLARE_RISE_S:
+				var k := 1.0 - pow(1.0 - _flare_t / FLARE_RISE_S, 2.0)
+				motor_rpm = maxf(motor_rpm, lerpf(STARTER_RPM, idle_rpm * START_FLARE, k))
+			start_throttle = 0.8 * clampf((FLARE_THROTTLE_S - _flare_t) / (FLARE_THROTTLE_S - FLARE_RISE_S), 0.0, 1.0)
+			if _flare_t >= FLARE_THROTTLE_S:
+				_flare_t = -1.0
+				start_throttle = 0.0
 		return
+	_flare_t = -1.0
+	start_throttle = 0.0
 	if _crank_left > 0.0:
 		_crank_left -= delta
 		starter_input = true
@@ -791,6 +1119,8 @@ func _step_ignition(delta: float) -> void:
 			_crank_hold_left -= delta
 			if _crank_hold_left > 0.0:
 				motor_rpm = minf(motor_rpm, CRANK_RPM * crank_pace())
+				var stroke := sin((crank_hold - _crank_hold_left) * crank_chugs() * PI)
+				start_shake = maxf(start_shake, CRANK_SHAKE + CRANK_SHAKE_PULSE * stroke * stroke)
 			else:
 				motor_rpm = maxf(motor_rpm, STARTER_RPM + 30.0)
 	if _ignition_mode >= 0:
@@ -815,6 +1145,10 @@ func manual_shift(count: int) -> void:
 	# the car is held in the manual model whatever was picked, and Q and E
 	# walked a switched-off automatic into 3rd, neutral or reverse.
 	if transmission_mode() == Transmission.AUTO:
+		return
+	# limp-home holds the gearbox down: a shift above its top gear is refused
+	if count > 0 and not automatic_transmission and current_gear >= 1 and current_gear + count > limp.max_gear:
+		limp_refused_shifts += 1
 		return
 	if clutch_ready():
 		super.manual_shift(count)

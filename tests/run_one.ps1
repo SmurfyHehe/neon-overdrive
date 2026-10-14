@@ -14,6 +14,14 @@ param(
 	[string] $Log = ""
 )
 
+# Run on its own, a test still keeps out of the player's user folder (#608);
+# run_tests.bat has already set APPDATA to the test folder.
+if (-not $env:NEON_TEST_APPDATA) {
+	$env:NEON_TEST_APPDATA = Join-Path $env:LOCALAPPDATA "BoostSimcadeTests"
+	New-Item -ItemType Directory -Force -Path $env:NEON_TEST_APPDATA | Out-Null
+	$env:APPDATA = $env:NEON_TEST_APPDATA
+}
+
 $all = @()
 foreach ($part in ($Audio + " " + $Flags).Split(" ", [StringSplitOptions]::RemoveEmptyEntries)) { $all += $part }
 $all += @("--path", ".", "-s", "res://tests/$Name.gd")

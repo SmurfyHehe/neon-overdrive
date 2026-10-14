@@ -56,6 +56,12 @@ var deep := 0
 var _fill := 0.0
 ## mult changed since write() last copied it into the wheels.
 var dirty := false
+## Water on the road that is not weather: how full the shallow water under
+## each wheel is (0 none .. 1), set every tick by whoever owns it while
+## `patch_on` (a burst hydrant's wet patch, hydrant_water.gd). Works on a dry
+## night, when the fast path below would never look.
+var patch := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
+var patch_on := false
 ## Puddles within NEAR_MARGIN of the car when last looked (Puddles.gather),
 ## and how many more metres that list holds good for. Until it runs out the
 ## car reads no road position at all: RoadFrame.unroll is the dear part.
@@ -132,7 +138,7 @@ func step(v: Vehicle, delta: float) -> bool:
 	var moved := absf(v.speed) * delta
 	_valid -= moved
 	_free -= moved
-	if _settled and _wver == Weather.version and (_wfill == 0.0 or (_valid > 0.0 and (near.is_empty() or _free > 0.0))):
+	if not patch_on and _settled and _wver == Weather.version and (_wfill == 0.0 or (_valid > 0.0 and (near.is_empty() or _free > 0.0))):
 		return not _one
 	_settled = false
 	var rg := Weather.rain_grip()
@@ -165,6 +171,17 @@ func step(v: Vehicle, delta: float) -> bool:
 				t[i] = wheel_target(rg, fill, d, speed)
 			for i in range(n, 4):
 				t[i] = maxf(rg, MIN_GRIP)
+	if patch_on and (patch[0] > 0.0 or patch[1] > 0.0 or patch[2] > 0.0 or patch[3] > 0.0):
+		if not in_water:
+			t.fill(maxf(rg, MIN_GRIP))   # the puddle pass above wrote nothing
+			depth.fill(Puddles.Depth.NONE)
+		in_water = true
+		var pspeed := v.linear_velocity.length()
+		for i in 4:
+			if patch[i] > 0.0:
+				t[i] = minf(t[i], wheel_target(rg, patch[i], Puddles.Depth.SHALLOW, pspeed))
+				if depth[i] == Puddles.Depth.NONE:
+					depth[i] = Puddles.Depth.SHALLOW
 	if not in_water:
 		var g := maxf(rg, MIN_GRIP)
 		if was_wet:

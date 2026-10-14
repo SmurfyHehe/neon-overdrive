@@ -5,10 +5,13 @@ extends SceneTree
 # a lane, then puts or drives it somewhere and watches what happens.
 #
 # Placed (the guard itself): under the road, outside each wall, far above the
-# road, on its roof outside the wall, behind the built road's end.
+# road, on its roof outside the wall, behind the built road (Loop 1, 4773651:
+# the road is a closed loop driven both ways, so it has no end; the pool
+# builds the road wherever the car is put, and no rescue is due).
 # Driven (the walls and the guard together): launched at the wall at
 # LAUNCH_SPEEDS x LAUNCH_ANGLES, launched up and over the wall, turned round
-# and driven back the wrong way until the road runs out.
+# and driven back the wrong way for 40 s (the loop never runs out: the road
+# must keep coming, with no rescue).
 # First of all a plain drive down a lane, which must NOT trigger a rescue.
 #
 # Asserts (exit code 1 on failure):
@@ -73,13 +76,13 @@ func _initialize() -> void:
 		scenarios.append({"name": "placed outside the left wall", "kind": "place", "side": -1.0, "out": 4.0, "expect": OffMapRescue.REASON_OUTSIDE})
 		scenarios.append({"name": "placed on its roof outside the wall", "kind": "place", "side": 1.0, "out": 4.0, "roof": true, "expect": OffMapRescue.REASON_OUTSIDE})
 		scenarios.append({"name": "placed 100 m above the road", "kind": "place", "x": 0.0, "y": 100.0, "expect": OffMapRescue.REASON_ABOVE})
-		scenarios.append({"name": "placed 80 m behind the road's end", "kind": "behind", "expect": "any"})
+		scenarios.append({"name": "placed 80 m behind the built road", "kind": "behind", "expect": "road"})
 	for v: float in LAUNCH_SPEEDS:
 		for a: float in LAUNCH_ANGLES:
 			scenarios.append({"name": "into the wall, %3.0f m/s at %2.0f deg" % [v, a], "kind": "launch", "speed": v, "angle": a, "expect": "inside", "secs": 4.0})
 	for v: float in [30.0, 60.0]:
 		scenarios.append({"name": "thrown up and over the wall, %2.0f m/s" % v, "kind": "lob", "speed": v, "expect": "inside"})
-	scenarios.append({"name": "turned round, driven back off the road's end", "kind": "reverse", "expect": "any", "secs": 40.0})
+	scenarios.append({"name": "turned round, driven back the wrong way", "kind": "reverse", "expect": "road", "secs": 40.0})
 	var only := OS.get_environment("NEON_OFFMAP_ONLY")
 	if only != "":
 		scenarios = scenarios.filter(func(d: Dictionary) -> bool: return (d.name as String).contains(only))
@@ -229,6 +232,15 @@ func _report() -> void:
 		if n != 0:
 			bad.append("rescued %d time(s) on a plain drive (%s)" % [n, rescue.last_reason])
 		note = "no rescue"
+	elif s.expect == "road":
+		# the loop has no end: the road is built under the car, no rescue
+		note = "on the road"
+		if n != 0:
+			bad.append("rescued %d time(s) (%s), but the road is built here" % [n, rescue.last_reason])
+		if _bounds(u.z) == Vector2.ZERO:
+			bad.append("no road built under the car at z %.0f" % u.z)
+		elif not ok_inside:
+			bad.append("left off the road (x %.1f, y %.1f)" % [u.x, u.y])
 	elif s.expect == "inside":
 		if n == 0:
 			held += 1

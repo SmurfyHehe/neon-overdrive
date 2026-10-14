@@ -172,10 +172,22 @@ func _set_muffle(on: bool) -> void:
 		_quieter.volume_db = MUFFLE_DB
 		AudioServer.add_bus_effect(bus, _muffle)
 		AudioServer.add_bus_effect(bus, _quieter)
+	if on:
+		set_muffle(MUFFLE_HZ, MUFFLE_DB)   # the pause voicing; the title re-voices it
 	for i in AudioServer.get_bus_effect_count(bus):
 		var e := AudioServer.get_bus_effect(bus, i)
 		if e == _muffle or e == _quieter:
 			AudioServer.set_bus_effect_enabled(bus, i, on)
+
+## The title screen re-voices the same filter for its theme song (900 Hz at
+## rest, opened by the turbo); every new muffle starts from the pause voicing.
+func set_muffle(hz: float, db: float) -> void:
+	if _muffle != null:
+		_muffle.cutoff_hz = hz
+		_quieter.volume_db = db
+
+func muffle_hz() -> float:
+	return _muffle.cutoff_hz if _muffle != null else 0.0
 
 func muffled() -> bool:
 	var bus := AudioServer.get_bus_index(&"Music")

@@ -60,12 +60,40 @@ happened. The benchmark adds them to its result line.
 ## Record my drive (F9)
 
 The game always keeps the last 60 s of driving keys and, every 5 s, where the
-car and the road were. **F9** writes that to
-`user://drives/drive_<time>.json` (next to the saves). Play it back with:
+car and the road were. **F9** saves one bug-report folder,
+`user://bug_reports/<date>_<time>/` (next to the saves), holding `drive.json`
+(the recording), `screen.png` (the game view on the press), `log.txt` (Godot's
+log so far), `errors.txt` (this run's errors and warnings with their script
+call stacks) and `info.txt` (version, git branch and commit when run from the
+project folder, car, night and act, graphics preset, rebound keys, and the
+last 10 seconds of game state). A camera
+click confirms it; nothing is drawn on screen. The newest 20 folders are kept,
+older ones go to the recycle bin. Play a recording back with:
 
 ```
-NeonOverdrive.exe -- --replay=last          (or --replay=<path to the file>)
+NeonOverdrive.exe -- --replay=last          (or --replay=<drive.json or its folder>)
 ```
+
+## Errors and crashes (no key needed)
+
+`scripts/core/error_log.gd` (an autoload) writes every script error, engine
+error and warning to `user://logs/errors.log` as it happens, with the script
+line and call stack; an error repeating every frame is written 3 times, then
+counted. It also rewrites `user://logs/session.txt` every 2 s with the last
+10 s of game state (screen, car, speed, gear, rpm, place, night, fps).
+
+If the game crashes, freezes and is ended, or loses power, the next start
+finds `session.txt` still marked running and makes
+`user://bug_reports/<date>_<time>_crash/` with `info.txt` (how it ended and its
+last game state), `log.txt` (that run's Godot log, with Godot's crash
+backtrace) and `errors.txt`. A playtester sends that folder like an F9 one.
+
+Copied text has the home folder, user folder and project folder turned into
+`~`, `user://` and `res://`, so no account name is in a report. Godot's own
+`godot.log` in the log folder is not changed.
+
+A replay only repeats the driving keys (W S A D, gears, X), not lights, horn
+or blinkers.
 
 The game boots on the recording's road with the same car, puts the car where
 it was at the start of the kept stretch, and presses the same keys on the same
@@ -92,6 +120,7 @@ Quick driving set, on every PR (`tests\run_tests.bat quick` and CI):
 | `core/drive_fuzz` | `fuzz` | Two seeds of random keys in traffic: no engine error, no NaN, car never under the road; same seed = same keys |
 | `core/drive_spawn` | `clean` + `place()` | Spawning at 0, 50, 100, 200, 300, 400 km/h: no speed jump, no spin, upright, in lane |
 | `core/drive_replay` | `fuzz` then `replay` | F9's file is written, loads, and replays to within 15 m |
+| `core/bug_bundle` | `fuzz` | F9's folder has its four files, the recording loads, the 21st folder removes the oldest |
 
 Long driving set, full tier only (before a big merge): `drive_clean` for 90 s
 per speed among 40 cars; `core/drive_bends` (the clean run on bends and

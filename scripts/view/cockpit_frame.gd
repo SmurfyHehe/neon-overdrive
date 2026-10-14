@@ -31,6 +31,7 @@ const PlaceNames := preload("res://scripts/world/place_names.gd")
 const Districts := preload("res://scripts/world/districts.gd")
 
 const Weather := preload("res://scripts/world/weather.gd")
+const WheelStyles := preload("res://scripts/view/wheel_styles.gd")
 const INTERIOR_LAYER := 3
 const DRIVER_LAYER := 4
 const MIRROR_ONLY_LAYER := 5
@@ -84,6 +85,8 @@ const CLUSTER_Z := -0.349
 ## and through the top of the rim (centres 1 degree above the rim top).
 const CLUSTER_Y := 0.93
 const DIAL_R := 0.05
+## How far each dial of the "panel" cluster sits from the steering axis.
+const PANEL_DX := 0.13
 ## Everything the cockpit adds is visual only; this switch (and NEON_COCKPIT=0)
 ## leaves it out, for the isolation test and for A/B frame-cost runs.
 static var enabled := true
@@ -161,6 +164,11 @@ const DIAL_FACE := Color("#0B0E14")
 ##   retro    the kei roadster: tan seats, a painted navy dash
 ##   wood     the muscle sedan: oxblood bench, a wood-grain dash face, chrome trim
 ##   utility  the crossover: two-tone grey cloth, hard grey plastics
+##   drift    the drift coupe: hard dark-grey plastics, a black cloth bucket with a red-stitched
+##            centre beside the old brown velour passenger seat, an amber strip
+##   truck    the street truck: charcoal cloth bench, grey-black plastics, a sodium strip
+##   estate   the shop wagon: beige vinyl bench, cream plastics, a brown carpet, no strip
+##   work     the work pickup: grey vinyl bench, rubber mats, hard black plastics, no strip
 const TRIMS := {
 	"stock": {"plastic": PLASTIC, "plastic_light": PLASTIC_LIGHT, "trim": TRIM, "seat": SEAT, "seat_pass": SEAT, "seat_panel": SEAT_PANEL,
 		"leather": LEATHER, "carpet": CARPET, "strip": Color("#FFC06659"), "dash": PLASTIC, "dash_face": PLASTIC_LIGHT},
@@ -176,6 +184,14 @@ const TRIMS := {
 		"leather": Color("#2A1612"), "carpet": Color("#120D0B"), "strip": Color("#C9CED640"), "dash": Color("#201A16"), "dash_face": Color("#5A3A22")},
 	"utility": {"plastic": Color("#24272B"), "plastic_light": Color("#33373C"), "trim": Color("#44484E"), "seat": Color("#2B2E33"), "seat_pass": Color("#2B2E33"), "seat_panel": Color("#50545A"),
 		"leather": Color("#1D1F23"), "carpet": Color("#111214"), "strip": Color("#FFC06633"), "dash": Color("#24272B"), "dash_face": Color("#2E3136")},
+	"drift": {"plastic": Color("#2A2C30"), "plastic_light": Color("#383B40"), "trim": Color("#3C3F45"), "seat": Color("#141518"), "seat_pass": Color("#6E5238"), "seat_panel": Color("#8A1F22"),
+		"leather": Color("#121318"), "carpet": Color("#17181B"), "strip": Color("#FFC06640"), "dash": Color("#2A2C30"), "dash_face": Color("#34373C")},
+	"truck": {"plastic": Color("#202226"), "plastic_light": Color("#2C2F34"), "trim": Color("#3A3D43"), "seat": Color("#2A2B2E"), "seat_pass": Color("#2A2B2E"), "seat_panel": Color("#3C3E42"),
+		"leather": Color("#1E1F22"), "carpet": Color("#121316"), "strip": Color("#FF8A1F4D"), "dash": Color("#202226"), "dash_face": Color("#2A2D32")},
+	"estate": {"plastic": Color("#4E473C"), "plastic_light": Color("#6A6152"), "trim": Color("#7A7060"), "seat": Color("#8C7B60"), "seat_pass": Color("#8C7B60"), "seat_panel": Color("#9C8A6C"),
+		"leather": Color("#5C5040"), "carpet": Color("#2E241B"), "strip": Color("#FFC06600"), "dash": Color("#4E473C"), "dash_face": Color("#3E3830")},
+	"work": {"plastic": Color("#1C1D20"), "plastic_light": Color("#2A2C30"), "trim": Color("#3A3C40"), "seat": Color("#3E4248"), "seat_pass": Color("#3E4248"), "seat_panel": Color("#4A4E55"),
+		"leather": Color("#18191C"), "carpet": Color("#0D0E10"), "strip": Color("#FFC06600"), "dash": Color("#1C1D20"), "dash_face": Color("#26282C")},
 }
 const BACKLIGHT_ENERGY := 1.6
 
@@ -199,6 +215,16 @@ var limit_tick: Node3D
 var limit_kmh := 0.0
 var _limit_wait := 0.0
 var lamps: MultiMeshInstance3D
+## The gear digit in the tach face (cab.gear_window): 7 more instances in the
+## lamp MultiMesh after the 4 lamps. gear_window_colours is what they were given
+## (headless can't read a MultiMesh back).
+## Left of the needle hub at hub level: the lower part of the face is behind the
+## dash lip from the eye, and the needle only crosses this spot at 15-20% revs.
+const GEAR_WIN_AT := Vector2(-0.027, 0.011)
+const GEAR_WIN_SIZE := Vector2(0.016, 0.020)
+const GEAR_DIGIT := Vector3(0.0075, 0.012, 0.0018)   # w, h, stroke
+var gear_window_colours := PackedColorArray()
+var _gear_window_ch := ""
 var lamp_text: Label3D
 var trinket: DashTrinket        # the charm on the rear-view mirror (CabinMods.trinket)
 var bobble: BobbleHead          # the bobble head on the passenger-side dash (CabinMods.bobble_for)
@@ -209,7 +235,11 @@ var handbrake: Node3D
 var pedals := {}                 # "throttle" / "brake" / "clutch" -> pivot Node3D
 var cabin_light: OmniLight3D
 var driver: DriverModel
+var clutter: CabinClutter          # receipts, dust, cans... (CabinDirt says how much)
 var steering := 0.0              # -1..1 from the car, set by the camera (tests set it too)
+## Radians added to the drawn wheel, + = right: a bent steering arm leaves the
+## wheel crooked when the car runs straight (PlayerCar.steer_centre_view).
+var steer_centre := 0.0
 var window := 0.0                # 0 closed .. 1 down, set by the camera (PerspectiveAudio's value)
 var window_direction := 0        # +1 rolling down, -1 rolling up, 0 at rest (same source)
 var window_control := DEFAULT_WINDOW_CONTROL
@@ -218,6 +248,9 @@ var crank: Node3D                # the crank's hub pivot (crank cars), else null
 var window_switch: Node3D        # the rocker's pivot (switch cars), else null
 var _window_parts: Node3D        # whatever set_window_control() built
 var _area_run := -1              # the district run the car was last in (area name on the head unit)
+var _wheel_kind := ""            # the car the wheel picks are read for
+var _wheel_sig := ""             # CabinMods.wheel_signature the wheel was built from
+var _mods_version := -1
 var wheel_angle := 0.0           # the drawn wheel, radians, + = right (chases steering)
 var _wheel_vel := 0.0            # rad/s
 var cockpit := false
@@ -278,6 +311,8 @@ func _ready() -> void:
 	bobble = BobbleHead.new(player, PlayerCar.chassis_kind())
 	add_child(bobble)
 	add_child(ShifterMods.new(self))
+	clutter = CabinClutter.new(self)   # before the layer pass, like the trinket
+	add_child(clutter)
 	mirrors = CockpitMirrors.new()
 	mirrors.name = "Mirrors"
 	mirrors.cab = cab
@@ -560,6 +595,16 @@ func _build_static() -> void:
 ##           its left (the muscle sedan); the needles sweep STRIP_SWEEP degrees
 ##   wide    a wide square binnacle, the dials apart with an info panel
 ##           between them (the crossover)
+##   centre  a big tach dead centre with a small speedo to its right and two
+##           small fuel / temp cans to its left, plus a low three-pod holder on
+##           the centre stack under the cluster's top (the drift coupe)
+##   panel   a flat full-width face with no hood: the tach and speedo each in
+##           a square bezel, the warning-lamp row between them and two small
+##           fuel / temp windows under it (the street truck)
+##   estate  a flat wide binnacle, a big speedo left of centre and a small tach
+##           low to its right (the shop wagon)
+##   quad    two plain dials in a wide binnacle with a small fuel and a small
+##           temp can at its outer ends (the work pickup)
 ## tach and speedo needle pivots come from dial_centres(). Nothing here stands
 ## above the sight line, 8 degrees below the eye (tests/fleet/sight_line.gd).
 func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vector2) -> void:
@@ -589,6 +634,47 @@ func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vec
 			# the info panel between the dials (the warning lamps light in it)
 			k.box(Vector3(0.096, 0.062, 0.004), Vector3(seat_x, cl.x + 0.004, cl.y - 0.003), TRIM)
 			lit.box(Vector3(0.086, 0.052, 0.002), Vector3(seat_x, cl.x + 0.004, cl.y), Color(DIAL_FACE, 0.15))
+		"panel":
+			# the flat face, a little proud of the dash, no hood over it
+			var pt := trim_colours()
+			k.box(Vector3(0.44, 0.15, 0.03), Vector3(seat_x, cl.x - 0.005, cl.y - 0.017), pt.plastic)
+			for i in 2:   # the square bezels
+				var bc: Vector3 = centres[i]
+				var br := float(radii[i]) + 0.012
+				k.box(Vector3(br * 2.0, br * 2.0, 0.006), bc + Vector3(0.0, 0.0, -0.004), TRIM)
+			# fuel and temp: two small windows under the lamp row
+			for i in 2:
+				var wc := Vector3(seat_x - 0.026 + 0.052 * i, cl.x - 0.038, cl.y)
+				k.box(Vector3(0.040, 0.026, 0.004), wc + Vector3(0, 0, -0.003), TRIM)
+				lit.box(Vector3(0.034, 0.020, 0.002), wc, Color(DIAL_FACE, 0.15))
+				lit.box(Vector3(0.002, 0.014, 0.002), wc + Vector3(0.0, -0.002, 0.001), Color(SODIUM, 0.7), Basis(Vector3.BACK, deg_to_rad(-30.0 + 60.0 * i)))
+		"centre":
+			_binnacle(k, seat_x + 0.02, 0.40, cl, 0.052, 0.09)
+			for i in 2:   # fuel and temp, two small cans stacked left of the tach
+				var cc := Vector3(seat_x - 0.118, cl.x + 0.022 - 0.044 * i, cl.y)
+				lit.cylinder(0.015, -0.004, 0.0, cc, Color(DIAL_FACE, 0.15), 10, flat)
+				k.cylinder(0.020, -0.008, -0.002, cc + Vector3(0, 0, -0.001), TRIM, 10, flat)
+				lit.box(Vector3(0.002, 0.010, 0.002), cc + Vector3(0.0, -0.002, 0.001), Color(SODIUM, 0.7), Basis(Vector3.BACK, deg_to_rad(-20.0 + 40.0 * i)))
+			# the three-pod holder: on the centre stack, under the dash top, turned to the driver
+			var eye_c: Vector3 = cab.eye
+			var mid_c := Vector3(0.0, cl.x - 0.075, float(cab.dash_face_z) - 0.035)
+			var turn_c := Basis(Vector3.UP, atan2(eye_c.x - mid_c.x, eye_c.z - mid_c.z))
+			k.box(Vector3(0.20, 0.052, 0.06), mid_c, PLASTIC, turn_c)
+			var tilt_c := turn_c * Basis(Vector3.RIGHT, deg_to_rad(80.0))
+			for i in 3:
+				var c := mid_c + turn_c * Vector3(-0.062 + 0.062 * i, 0.002, 0.031)
+				lit.cylinder(0.020, -0.004, 0.0, c, Color(DIAL_FACE, 0.15), 12, tilt_c)
+				k.cylinder(0.025, -0.008, -0.002, c + turn_c * Vector3(0, 0, 0.001), TRIM, 12, tilt_c)
+				lit.box(Vector3(0.003, 0.014, 0.002), c + tilt_c * Vector3(0.0, 0.0, -0.010), Color(SODIUM, 0.6), tilt_c)
+		"estate":   # a short hood: the wagon's screen comes down close over the dash
+			_binnacle(k, seat_x + 0.03, 0.36, cl, 0.060, 0.07)
+		"quad":
+			_binnacle(k, seat_x, 0.50, cl)
+			for i in 2:   # fuel and temp, a small can at each end of the binnacle
+				var cc := Vector3(seat_x + (-0.205 if i == 0 else 0.205), cl.x - 0.012, cl.y)
+				lit.cylinder(0.017, -0.004, 0.0, cc, Color(DIAL_FACE, 0.15), 10, flat)
+				k.cylinder(0.022, -0.008, -0.002, cc + Vector3(0, 0, -0.001), TRIM, 10, flat)
+				lit.box(Vector3(0.002, 0.011, 0.002), cc + Vector3(0.0, -0.002, 0.001), Color(SODIUM, 0.7), Basis(Vector3.BACK, deg_to_rad(-25.0 + 50.0 * i)))
 		"triple":
 			_binnacle(k, seat_x, 0.34, cl)
 			# three aux gauges in a low hood in the middle of the dash top, turned to the driver
@@ -623,6 +709,9 @@ func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vec
 		else:
 			lit.cylinder(r, -0.004, 0.0, c, Color(DIAL_FACE, 0.15), 16, flat)
 			k.cylinder(r + 0.008, -0.008, -0.002, c + Vector3(0, 0, -0.001), ring_col, 16, flat)
+		if i == 0 and cab.get("gear_window", false):
+			# the black square the gear digit sits on, left of the needle hub
+			k.box(Vector3(GEAR_WIN_SIZE.x, GEAR_WIN_SIZE.y, 0.002), c + Vector3(GEAR_WIN_AT.x, GEAR_WIN_AT.y, 0.0005), Color("#050608"))
 		var ticks := 9 if i == 0 else 7
 		for t in ticks:
 			var a := deg_to_rad(a_start - dial_sweep * float(t) / (ticks - 1))
@@ -691,6 +780,14 @@ func dial_centres() -> Array:
 			return [Vector3(seat_x - 0.062, cl.x, cl.y), Vector3(seat_x + 0.062, cl.x, cl.y)]
 		"wide":
 			return [Vector3(seat_x - 0.125, cl.x, cl.y), Vector3(seat_x + 0.125, cl.x, cl.y)]
+		"panel":
+			return [Vector3(seat_x - PANEL_DX, cl.x, cl.y), Vector3(seat_x + PANEL_DX, cl.x, cl.y)]
+		"centre":   # the big tach dead ahead, the small speedo to its right
+			return [Vector3(seat_x - 0.010, cl.x, cl.y), Vector3(seat_x + 0.118, cl.x - 0.008, cl.y)]
+		"estate":   # the big speedo left of centre, the small tach on its right
+			return [Vector3(seat_x + 0.105, cl.x + 0.006, cl.y), Vector3(seat_x - 0.030, cl.x, cl.y)]
+		"quad":
+			return [Vector3(seat_x - 0.080, cl.x, cl.y), Vector3(seat_x + 0.080, cl.x, cl.y)]
 		_:
 			return [Vector3(seat_x - 0.085, cl.x, cl.y), Vector3(seat_x + 0.085, cl.x, cl.y)]
 
@@ -719,6 +816,12 @@ func dial_radii() -> Array:
 		"tacho":
 			return [0.052, 0.040]
 		"cans":
+			return [0.046, 0.046]
+		"centre":
+			return [0.060, 0.034]
+		"estate":
+			return [0.034, 0.056]
+		"quad":
 			return [0.046, 0.046]
 		_:
 			return [DIAL_R, DIAL_R]
@@ -849,19 +952,32 @@ func _build_wheel() -> void:
 	add_child(wheel_mount)
 	wheel = SteeringWheel.new()
 	wheel.name = "Wheel"
-	if String(cab.get("trim", "stock")) == "worn":
-		# the beater: a thin ivory rim, grey seam, painted spokes to match the dash
-		wheel.rim_colour = Color("#D9D2BC")
-		wheel.seam_colour = Color("#9A947F")
-		wheel.spoke_colour = Color("#6B7668")
-		wheel.carbon_colour = Color("#7E8A7B")
-		wheel.carbon_alt_colour = Color("#6B7668")
+	# The shape, grip and stitching are the car's picks (CabinMods, saved per
+	# car); the beater's worn ivory colourway is WheelStyles.apply's default.
+	_wheel_kind = PlayerCar.chassis_kind()
+	_wheel_sig = CabinMods.wheel_signature(_wheel_kind)
+	_mods_version = CabinMods.version
+	WheelStyles.apply(wheel, _wheel_kind, CabinMods.wheel_picks(_wheel_kind))
 	wheel_mount.add_child(wheel)
 	# A short column stub behind the hub (the long pole down the middle of the
 	# view is gone, Roy 2026-10-06); the shroud is on the dash face, under the cluster.
 	var k := CockpitKit.new()
 	k.cylinder(0.024, -0.09, -0.03, Vector3.ZERO, PLASTIC_LIGHT, 8, Basis(Vector3.RIGHT, -PI / 2.0))
 	wheel_mount.add_child(k.instance(CockpitKit.material(), "Column"))
+
+## Rebuilds the wheel when the car's shape, grip or stitching pick changed
+## (CabinMods.version moved and the signature differs). The node stays, so the
+## hands and the tests keep their reference.
+func _refresh_wheel() -> void:
+	var sig := CabinMods.wheel_signature(_wheel_kind)
+	if sig == _wheel_sig:
+		return
+	_wheel_sig = sig
+	WheelStyles.apply(wheel, _wheel_kind, CabinMods.wheel_picks(_wheel_kind))
+	wheel.rebuild()
+	_set_layers(wheel, INTERIOR_BIT)
+	for n in wheel.find_children("*", "GeometryInstance3D", true, false):
+		(n as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 # ---------- instrument cluster ----------
 
@@ -890,16 +1006,28 @@ func _build_cluster() -> void:
 		lamp_c = tach_c + Vector3(0.0, 0.022, 0.0)
 	elif cab.cluster_style == "wide":   # in the info panel
 		lamp_c = (tach_c + speedo_c) * 0.5 + Vector3(0.0, 0.012, 0.0)
+	elif cab.cluster_style == "panel":   # the row between the square dials
+		lamp_c = (tach_c + speedo_c) * 0.5 + Vector3(0.0, 0.016, 0.0)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
 	var box := BoxMesh.new()
 	box.size = Vector3(0.018, 0.009, 0.003)
 	mm.mesh = box
-	mm.instance_count = 4
+	var has_gear_window: bool = cab.get("gear_window", false)
+	mm.instance_count = 4 + (SevenSeg.SEG_COUNT if has_gear_window else 0)
 	for i in 4:
 		mm.set_instance_transform(i, Transform3D(Basis().scaled(Vector3(0.7, 0.7, 1.0)), lamp_c + Vector3(-0.027 + 0.018 * i, 0.0, 0.002)))
 		mm.set_instance_color(i, Color(AMBER, 0.0))
+	if has_gear_window:
+		var rects := SevenSeg.segment_rects(GEAR_DIGIT.x, GEAR_DIGIT.y, GEAR_DIGIT.z)
+		gear_window_colours.resize(SevenSeg.SEG_COUNT)
+		for s in SevenSeg.SEG_COUNT:
+			var r: Rect2 = rects[s]
+			var sc := Vector3(r.size.x / box.size.x, r.size.y / box.size.y, 0.001 / box.size.z)
+			mm.set_instance_transform(4 + s, Transform3D(Basis().scaled(sc), tach_c + Vector3(GEAR_WIN_AT.x + r.position.x, GEAR_WIN_AT.y + r.position.y, 0.0022)))
+			gear_window_colours[s] = SevenSeg.colour(AMBER, false)
+			mm.set_instance_color(4 + s, gear_window_colours[s])
 	lamps = MultiMeshInstance3D.new()
 	lamps.name = "Lamps"
 	lamps.multimesh = mm
@@ -962,24 +1090,26 @@ func _build_radio() -> void:
 ## Next station: the key only asks; the driver's right hand reaches the screen
 ## and RadioManager.next_station() runs on the finger's contact
 ## (_on_hand_contact). Waits for the hand if it is busy (a shift, the handbrake).
-func request_radio() -> void:
-	driver.request_radio()
+func request_radio(kind := DriverModel.RADIO_NEXT) -> void:
+	driver.request_radio(kind)
 
-## Where the finger lands for the next station, car space, and which contact
-## that is: the next tile, or past the last one the knob (radio off).
-func radio_touch() -> Dictionary:
-	var count := RadioStations.station_count()
-	var s := _find_radio().station if _find_radio() != null else -1
-	if s + 1 < count:
-		return {"pos": head_unit.transform * head_unit.tile_point(s + 1), "contact": DriverModel.CONTACT_RADIO_TILE}
-	return {"pos": head_unit.transform * head_unit.off_point(), "contact": DriverModel.CONTACT_RADIO_KNOB}
+## Where the finger lands, car space, and which contact that is. Next station
+## (N): the centre of the glass, the ring's card. Power (V): the knob (older
+## cars) or the power spot (modern screens).
+func radio_touch(kind := DriverModel.RADIO_NEXT) -> Dictionary:
+	if kind == DriverModel.RADIO_POWER:
+		return {"pos": head_unit.transform * head_unit.off_point(), "contact": DriverModel.CONTACT_RADIO_KNOB}
+	return {"pos": head_unit.transform * head_unit.centre_point(), "contact": DriverModel.CONTACT_RADIO_TILE}
 
 ## The one place a hand touching something has an effect.
 func _on_hand_contact(target: StringName) -> void:
 	if target == DriverModel.CONTACT_RADIO_TILE or target == DriverModel.CONTACT_RADIO_KNOB:
 		var r := _find_radio()
 		if r != null:
-			r.next_station()
+			if target == DriverModel.CONTACT_RADIO_KNOB:
+				r.toggle_power()
+			else:
+				r.next_station()
 		head_unit.tap(target == DriverModel.CONTACT_RADIO_KNOB and head_unit.has_knob)
 		_update_radio(0.0)
 
@@ -1308,7 +1438,7 @@ func _build_light() -> void:
 ## spring overshoot or blow up.
 const WHEEL_SUBSTEP := 1.0 / 120.0
 func _step_wheel(delta: float) -> void:
-	var target := clampf(steering, -1.0, 1.0) * WHEEL_LOCK_RAD
+	var target := clampf(clampf(steering, -1.0, 1.0) * WHEEL_LOCK_RAD + steer_centre, -WHEEL_LOCK_RAD, WHEEL_LOCK_RAD)
 	var w := TAU * WHEEL_SPRING_HZ
 	var vmax := deg_to_rad(WHEEL_RATE_DEG)
 	var n := maxi(int(ceil(delta / WHEEL_SUBSTEP)), 1)
@@ -1326,6 +1456,13 @@ func _step_wheel(delta: float) -> void:
 func wheel_rate() -> float:
 	return _wheel_vel
 
+## The pod reads the car, so it runs on the car's tick (#580): on a busy
+## machine several ticks pass between two drawn frames, and per frame it was
+## fitted late and its needles lagged the car.
+func _physics_process(delta: float) -> void:
+	if visible:
+		_update_pod(delta)
+
 func _process(delta: float) -> void:
 	if not visible:
 		return
@@ -1334,8 +1471,11 @@ func _process(delta: float) -> void:
 	var frac := clampf(p.motor_rpm / max_rpm, 0.0, 1.0)
 	var cue := Hud.shift_cue(p, frac)
 	var blink := Hud.blink()
+	if CabinMods.version != _mods_version:
+		_mods_version = CabinMods.version
+		_refresh_wheel()
 	_step_wheel(delta)
-	wheel.update(frac, cue, blink, p.motor_rpm, Hud.kmh(p.current_speed()), Hud.cluster_gear(p))
+	wheel.update(frac, cue, blink, Hud.kmh(p.current_speed()), p.gear, delta)
 	var rest := dial_sweep * 0.5   # the needle points at the first tick (lower left, or the band's left end)
 	tach_needle.rotation = Vector3(0.0, 0.0, deg_to_rad(rest - dial_sweep * frac))
 	var kmh := clampf(absf(p.current_speed()) * Hud.KMH_PER_MS / float(cab.speedo_max_kmh), 0.0, 1.0)
@@ -1348,7 +1488,7 @@ func _process(delta: float) -> void:
 		limit_tick.visible = lt <= 1.0
 		limit_tick.rotation = Vector3(0.0, 0.0, deg_to_rad(rest - dial_sweep * lt))
 	_update_lamps()
-	_update_pod(delta)
+	_update_gear_window()
 	var inputs := pedal_inputs()
 	for key in pedals:
 		(pedals[key] as Node3D).rotation_degrees = Vector3(PEDAL_TRAVEL_DEG * float(inputs[key]), 0.0, 0.0)
@@ -1386,6 +1526,32 @@ func _process(delta: float) -> void:
 			move_lever_to(p.gear, p.shift_time)
 	_step_lever(delta)
 	_update_radio(delta)
+
+## The tach-face gear digit follows the car's gear the instant it changes
+## (colours are only set on a change). Same code as the wheel screen.
+func _update_gear_window() -> void:
+	if gear_window_colours.is_empty():
+		return
+	var ch := SevenSeg.gear_char(player.gear)
+	if ch == _gear_window_ch:
+		return
+	_gear_window_ch = ch
+	var mask := SevenSeg.mask_for(ch)
+	for s in SevenSeg.SEG_COUNT:
+		gear_window_colours[s] = SevenSeg.colour(AMBER, (mask & (1 << s)) != 0)
+		lamps.multimesh.set_instance_color(4 + s, gear_window_colours[s])
+
+## What the gear window shows ("" before its first update or on a car without
+## one), and which of its segments are lit as letters a..g (tests).
+func gear_window_char() -> String:
+	return _gear_window_ch
+
+func gear_window_lit() -> String:
+	var out := ""
+	for s in gear_window_colours.size():
+		if SevenSeg.is_lit(gear_window_colours[s]):
+			out += "abcdefg"[s]
+	return out
 
 func _update_lamps() -> void:
 	var h := player.health
@@ -1450,7 +1616,9 @@ func _update_radio(delta: float) -> void:
 	if bus >= 0 and r.station >= 0:
 		var db := maxf(AudioServer.get_bus_peak_volume_left_db(bus, 0), AudioServer.get_bus_peak_volume_right_db(bus, 0))
 		lvl = clampf((db + 36.0) / 36.0, 0.0, 1.0)
-	head_unit.show_state(r.station, r.now_playing, lvl, delta)
+	r.view_is_cockpit = cockpit
+	head_unit.show_state(r.station if r.station >= 0 else (r.shown_card() if r.lit() else -1), r.now_playing, lvl, delta)
+	head_unit.show_ring(r.shown_card(), r.slide_count, r.slide_secs, delta, r.lit(), r.band)
 
 ## Triangles drawn by the cabin (static meshes, wheel, moving parts, mirrors).
 func triangle_count() -> int:
@@ -1462,5 +1630,5 @@ func triangle_count() -> int:
 				n += (mesh as ArrayMesh).surface_get_array_len(s) / 3
 		elif mesh is QuadMesh:
 			n += 2
-	n += 12 * (SteeringWheel.LED_COUNT + 4 + 4)
+	n += wheel.screen_triangles() + 12 * (4 + (SevenSeg.SEG_COUNT if cab.get("gear_window", false) else 0))
 	return n

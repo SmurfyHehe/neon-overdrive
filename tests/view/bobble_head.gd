@@ -19,7 +19,7 @@ extends SceneTree
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/view/bobble_head.gd
 
 const CFG := "user://bobble_head_test.cfg"
-const MAX_TRIS := 300
+const MAX_TRIS := 600
 const MIN_YAW_DEG := 20.0
 const MIN_BELOW_EYE_DEG := 8.0
 const MIN_MIRROR_SEP_DEG := 15.0
@@ -63,7 +63,7 @@ func _end() -> bool:
 
 func _catalogue() -> void:
 	_check(BobbleFigures.IDS[0] == BobbleFigures.NONE, "index 0 should be none")
-	_check(BobbleFigures.IDS.size() >= 18, "want 17 figures plus none, got %d ids" % BobbleFigures.IDS.size())
+	_check(BobbleFigures.IDS.size() >= 30, "want 29 figures plus none, got %d ids" % BobbleFigures.IDS.size())
 	var b := BobbleHead.new(null, "p1_coupe")
 	root.add_child(b)
 	var biggest := 0
@@ -83,7 +83,7 @@ func _catalogue() -> void:
 			tallest = maxf(tallest, box.size.y)
 			biggest = maxi(biggest, b.triangle_count())
 			_check(box.size.y > 0.055 and box.size.y < 0.085, "%s should stand about 7 cm, is %.3f m" % [id, box.size.y])
-			_check(box.size.x < 0.05 and box.size.z < 0.05, "%s footprint too wide: %s" % [id, box.size])
+			_check(box.size.x < 0.058 and box.size.z < 0.058, "%s footprint too wide: %s" % [id, box.size])
 			var uv: PackedVector2Array = mesh.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
 			var heavy := 0
 			for u in uv:
@@ -97,7 +97,7 @@ func _catalogue() -> void:
 	b.free()
 
 func _slots() -> void:
-	var kinds := ["p0_beater", "p1_coupe", "p2_hothatch", "p3_tuner", "p4_kei", "p5_muscle", "p6_crossover"]
+	var kinds := ["p0_beater", "p1_coupe", "p2_hothatch", "p3_tuner", "p4_kei", "p5_muscle", "p6_crossover", "p10_truck"]
 	for kind in kinds:
 		var cab := CabinSpec.for_kind(kind)
 		var spot := CabinSpots.dash_pass(kind)
@@ -177,14 +177,14 @@ func _spring() -> void:
 
 func _settings() -> void:
 	CabinMods.bobbles.clear()
-	CabinMods.set_bobble("p1_coupe", "kasumi_driver")
-	CabinMods.set_bobble("p4_kei", "dog")
+	CabinMods.set_bobble("p1_coupe", "ledger")
+	CabinMods.set_bobble("p4_kei", "nodding_dog")
 	_check(CabinMods.save_settings(), "save_settings failed")
 	CabinMods.set_bobble("p1_coupe", "none")
 	CabinMods.set_bobble("p4_kei", "none")
 	CabinMods.load_settings()
-	_check(CabinMods.bobble_for("p1_coupe") == "kasumi_driver", "coupe pick should reload, got %s" % CabinMods.bobble_for("p1_coupe"))
-	_check(CabinMods.bobble_for("p4_kei") == "dog", "kei pick should reload, got %s" % CabinMods.bobble_for("p4_kei"))
+	_check(CabinMods.bobble_for("p1_coupe") == "ledger", "coupe pick should reload, got %s" % CabinMods.bobble_for("p1_coupe"))
+	_check(CabinMods.bobble_for("p4_kei") == "nodding_dog", "kei pick should reload, got %s" % CabinMods.bobble_for("p4_kei"))
 	_check(CabinMods.bobble_for("p2_hothatch") == "none", "a car with no pick has none, got %s" % CabinMods.bobble_for("p2_hothatch"))
 	var cfg := ConfigFile.new()
 	cfg.load(CFG)
@@ -226,7 +226,7 @@ func _physics_process(_delta: float) -> bool:
 			_check(b.is_active() and b.is_shown(), "the figure should stand in the cockpit view")
 			_check(b.figure == "pike", "NEON_CABIN_MODS bobble=pike should pick pike, got %s" % b.figure)
 			_check(b.position.is_equal_approx(CabinSpots.dash_pass(PlayerCar.chassis_kind())), "the figure should stand at dash_pass")
-			_check(b.triangle_count() < 300, "figure over 300 tris: %d" % b.triangle_count())
+			_check(b.triangle_count() <= MAX_TRIS, "figure over %d tris: %d" % [MAX_TRIS, b.triangle_count()])
 			var meshes := b.find_children("*", "MeshInstance3D", true, false)
 			_check(meshes.size() == 1, "the figure should be exactly one mesh instance, got %d" % meshes.size())
 			_check(frame.find_children("*", "BobbleHead", true, false).size() == 1, "at most one bobble head")

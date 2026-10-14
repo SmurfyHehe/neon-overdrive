@@ -39,12 +39,23 @@ func _ready() -> void:
 		return
 	_audio = AudioStreamPlayer.new()
 	_audio.name = "RattleAudio"
-	_audio.bus = &"Tires"
-	_audio.volume_db = -80.0
-	_audio.stream = AudioDsp.cached("res://scripts/audio/damage_audio.gd", "rattle", make_rattle)
+	PlayerGain.route(_audio, &"Tires", -80.0)   # level set every tick while it plays (#567)
 	add_child(_audio)
+	# garage boot: taken once ready or once the car is out (#524; see CarAudio)
+	if not CarAudio.garage_boot():
+		_audio.stream = AudioDsp.cached("res://scripts/audio/damage_audio.gd", "rattle", make_rattle)
+
+## Starts making the rattle off the main thread (issue #524); on a garage boot
+## nothing waits for it: AudioDsp's background lane.
+static func prefetch() -> void:
+	AudioDsp.prefetch("res://scripts/audio/damage_audio.gd", "rattle", make_rattle, not CarAudio.garage_boot())
 
 func _physics_process(delta: float) -> void:
+	if _audio.stream == null:
+		if not (GameState.garage_seen or _player.speed > 2.0 \
+				or not AudioDsp.building("res://scripts/audio/damage_audio.gd", "rattle")):
+			return
+		_audio.stream = AudioDsp.cached("res://scripts/audio/damage_audio.gd", "rattle", make_rattle)
 	var loose := _player.damage.rattle_level()
 	var target := 0.0
 	if loose > 0.0:
@@ -58,7 +69,7 @@ func _physics_process(delta: float) -> void:
 		target = loose * shake
 	level = move_toward(level, target, delta * (ATTACK if target > level else RELEASE))
 	if level > 0.001:
-		_audio.volume_db = linear_to_db(level * GAIN)
+		PlayerGain.set_db(_audio, linear_to_db(level * GAIN))
 		if not _audio.playing:
 			_audio.play(randf() * SECONDS)
 	elif _audio.playing:

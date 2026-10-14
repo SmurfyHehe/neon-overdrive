@@ -58,8 +58,15 @@ func _check_chunk(chunk: Node3D, label: String, headless: bool) -> void:
 		_fail("%s: LampSmears do not use the shared lamp smear material" % label)
 	var pools := pools_mmi.multimesh
 	var smears := smears_mmi.multimesh
-	if smears.visible_instance_count != pools.visible_instance_count:
-		_fail("%s: %d smears for %d pools" % [label, smears.visible_instance_count, pools.visible_instance_count])
+	# The pool MultiMesh also holds one pool per side-street mouth (W7, 382: no
+	# smear, the lamp stands on the side street) and, after those, the lamp head
+	# over a signed U-turn's opening.
+	var ci := int(chunk.get_meta("chunk_index"))
+	var extra_pools: int = (chunk.get_meta("side_streets") as Array).size()
+	if RoadBarriers.gap_kind(ci) == RoadBarriers.KIND_UTURN:
+		extra_pools += 1
+	if smears.visible_instance_count + extra_pools != pools.visible_instance_count:
+		_fail("%s: %d smears + %d extra for %d pools" % [label, smears.visible_instance_count, extra_pools, pools.visible_instance_count])
 		return
 	if headless:
 		return

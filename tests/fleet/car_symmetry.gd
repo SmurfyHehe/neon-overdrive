@@ -142,7 +142,7 @@ func _run() -> void:
 	var m1 := Marshalls.base64_to_raw(d1.b64(d1.BODY_MAT))
 	_report("p1_coupe", P1CoupeBuilder._get_body_mesh(), _before(d1, t1, m1), _left_alone(d1, t1, m1))
 	for kind: String in NpcCarBuilder.KINDS:
-		var data: GDScript = NpcCarBuilder.KINDS[kind].data
+		var data: GDScript = NpcCarBuilder.data_of(kind)
 		for build: String in NpcCarBuilder.builds(kind):
 			var b: Dictionary = data.BUILDS[build]
 			var tris := P1CoupeBuilder.decode_points(data.b64(b.body_pos))

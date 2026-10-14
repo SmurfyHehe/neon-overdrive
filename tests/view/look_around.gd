@@ -111,7 +111,7 @@ func _physics_process(_delta: float) -> bool:
 				var keys := []
 				for ev in InputMap.action_get_events(pair[0]):
 					if ev is InputEventKey:
-						keys.append((ev as InputEventKey).keycode)
+						keys.append(KeyBindings.code_of(ev as InputEventKey))
 				_check(keys.has(pair[1]), "%s is on the arrow key (%s)" % [pair[0], keys])
 				var listed := false
 				for group in SettingsScreen.controls_groups():
@@ -122,7 +122,7 @@ func _physics_process(_delta: float) -> bool:
 			for act in ["accelerate", "brake", "steer_left", "steer_right"]:
 				for ev in InputMap.action_get_events(act):
 					if ev is InputEventKey:
-						var k := (ev as InputEventKey).keycode
+						var k := KeyBindings.code_of(ev as InputEventKey)
 						_check(k != KEY_LEFT and k != KEY_RIGHT and k != KEY_UP and k != KEY_DOWN, "%s is not on an arrow key" % act)
 			cam.shake_enabled = false
 			root.size = Vector2i(1280, 720)   # headless defaults to 64x64; the angles assume 16:9

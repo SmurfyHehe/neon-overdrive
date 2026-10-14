@@ -18,8 +18,12 @@ class_name RoadBarriers
 #   chunk (GAP_MAX_K), clear of the district's first and blend chunks and of
 #   any planned lane change, exit or split.
 #   Both barrier ends at the opening get a crash cushion facing the traffic
-#   that runs toward it. Cops will use the gaps to turn round (F2); the
+#   that runs toward it. A crossover is emergency, cops only: it carries a
+#   "no U-turn" sign, and a cop that sees you use one adds heat (F2); the
 #   chunk data says where they are (gap_chunk / gap_s).
+# - The map's own gaps (RoadMap.gaps, two per district) are the signed,
+#   legal U-turns. They open the barrier the same way, so gap_kind() says
+#   which kind a chunk's opening is: "uturn", "emergency" or "".
 # - Every type is real collision on the wall layer (one box per centreline
 #   station, like the out-of-bounds walls), and each hits differently. The
 #   surface does most of it (PhysicsMaterial per type); PlayerCar adds what a
@@ -39,11 +43,15 @@ class_name RoadBarriers
 # two cushion boxes; pieces in a gap are disabled, not freed.
 
 const Districts := preload("res://scripts/world/districts.gd")
+const RoadMap := preload("res://scripts/world/road_map.gd")
 
 const CONCRETE := "concrete"
 const GUARDRAIL := "guardrail"
 const CABLE := "cable"
 const NONE := ""
+## Kinds of opening in the barrier (gap_kind).
+const KIND_UTURN := "uturn"
+const KIND_EMERGENCY := "emergency"
 
 ## District -> barrier type.
 const BY_DISTRICT := {
@@ -159,6 +167,22 @@ static func gap_chunk(run: int) -> int:
 static func has_gap(chunk_index: int) -> bool:
 	return gap_chunk(Districts.run_of(chunk_index)) == chunk_index
 
+## Whether a chunk holds a signed U-turn (a map gap; only on a loop).
+static func uturn_at(chunk_index: int) -> bool:
+	return RoadMap.is_loop() and RoadMap.gap_in(chunk_index)
+
+## What kind of opening a chunk's barrier has: "uturn" (a map gap on a loop:
+## signed, legal), "emergency" (a crossover: cops only) or "" (none). A chunk
+## that holds both is a "uturn". Pure function of the chunk number and the
+## road, so a pooled chunk rebuilt later gets the same answer.
+static func gap_kind(chunk_index: int) -> String:
+	chunk_index = RoadMap.lap_chunk(chunk_index)
+	if uturn_at(chunk_index):
+		return KIND_UTURN
+	if has_gap(chunk_index):
+		return KIND_EMERGENCY
+	return NONE
+
 ## Distance along the road of run `run`'s crossover centre, or -1.
 static func gap_s(run: int) -> float:
 	var c := gap_chunk(run)
@@ -180,6 +204,60 @@ static func _gap_ok(c: int) -> bool:
 ## Whether station k of a gap chunk is open.
 static func is_open(k: int) -> bool:
 	return k >= GAP_FROM and k <= GAP_TO
+
+# ---------- collision pieces ----------
+#
+# The barrier's collision is one convex piece per station. They used to be
+# plain boxes overlapping by BOUNDARY_OVERLAP, so every join had the next
+# box's square end standing just inside the face of the one before. A car
+# sliding along the face with its side pressed a few centimetres into it
+# (a 10 degree glance at 45 m/s does that) reached the join, met that end
+# face, and the solver pushed it out along the road: 45 to 13 m/s in one
+# tick (tests/world/barrier_hit.gd, concrete; the coupe's hull since #538
+# leans on the face lower and further forward, so it found the joins).
+# Now a piece that continues into a neighbour runs TAPER metres on into it
+# and narrows to a sliver there, inside the neighbour's full-width part: the
+# face along the barrier is continuous, and a car pressed into it meets a
+# slope of a few degrees at a join, not a wall across its path. Where the
+# barrier ends (an opening, a change of type, none) the piece ends square,
+# as before.
+const TAPER := 1.5
+## Half-width left at a taper's tip (m).
+const TAPER_TIP := 0.02
+
+## Whether station `k` of this chunk (or of a neighbour chunk, k < 0 or past
+## the last station) carries the same barrier, so a piece may run into it.
+static func _continues(chunk_index: int, k: int, kind: String, gap: bool) -> bool:
+	var n := RoadChunkBuilder.STATIONS
+	if k >= 0 and k < n:
+		return not (gap and is_open(k))
+	var c := chunk_index + (-1 if k < 0 else 1)
+	var kk := posmod(k, n)
+	if kind_at(c) != kind:
+		return false
+	return not (gap_kind(c) != NONE and is_open(kk))
+
+## The points of one piece: `size` (width, height, station length) centred on
+## the origin, +z toward the chunk's start. A side that continues into its
+## neighbour (front: +z, back: -z) tapers over TAPER to TAPER_TIP.
+static func piece_points(size: Vector3, front: bool, back: bool) -> PackedVector3Array:
+	var hx := size.x / 2.0
+	var hy := size.y / 2.0
+	var hz := size.z / 2.0 + RoadChunkBuilder.BOUNDARY_OVERLAP / 2.0
+	var pts := PackedVector3Array()
+	for z in [hz, -hz]:
+		for x in [hx, -hx]:
+			for y in [hy, -hy]:
+				pts.append(Vector3(x, y, z))
+	for end in [[front, 1.0], [back, -1.0]]:
+		if not bool(end[0]):
+			continue
+		var tip_z := float(end[1]) * (size.z / 2.0 + TAPER)
+		var tip_x := minf(TAPER_TIP, hx)
+		for x in [tip_x, -tip_x]:
+			for y in [hy, -hy]:
+				pts.append(Vector3(x, y, tip_z))
+	return pts
 
 # ---------- meshes (shared) ----------
 
@@ -342,7 +420,10 @@ static func new_bodies(root: Node3D) -> void:
 	for k in RoadChunkBuilder.STATIONS:
 		var col := CollisionShape3D.new()
 		col.name = "Shape%d" % k
-		col.shape = BoxShape3D.new()
+		var piece := ConvexPolygonShape3D.new()   # a piece with tapered ends (piece_points)
+		piece.points = piece_points(Vector3(0.5, 1.0, RoadChunkBuilder.CHUNK_LEN / RoadChunkBuilder.STATIONS), false, false)
+		col.shape = piece
+		col.disabled = true
 		body.add_child(col)
 	root.add_child(body)
 	var cush := StaticBody3D.new()
@@ -396,7 +477,8 @@ static func apply(root: Node3D, chunk_index: int, kind: String, gap: bool) -> vo
 			n += 1
 			nr += 1
 			var size: Vector2 = COLLISION[kind]
-			(col.shape as BoxShape3D).size = Vector3(size.x, size.y + f, seg + RoadChunkBuilder.BOUNDARY_OVERLAP)
+			(col.shape as ConvexPolygonShape3D).points = piece_points(Vector3(size.x, size.y + f, seg),
+				_continues(chunk_index, k - 1, kind, gap), _continues(chunk_index, k + 1, kind, gap))
 			col.transform = RoadChunkBuilder._xf_up(0.0, (size.y - f) / 2.0, z)
 	else:
 		for k in RoadChunkBuilder.STATIONS:

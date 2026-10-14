@@ -50,6 +50,13 @@ class_name RoadAlignment
 # works the same way: a bend is never allowed to leave more heading than the
 # chunks still to come can turn back, so a lap nets no turn, and that
 # correcting bend falls on the last free chunks of the lap.
+#
+# Forced chunks (`forced`, lap chunk -> vertical curvature; tunnels, TN1): a
+# pinned stretch may carry a height profile of its own instead of level road
+# (the dip into a tunnel). The grade is level going in, as before any pinned
+# chunk, and the forced curvatures must bring it back to level by the end of
+# the stretch (road_map.gd lays them out so). A road with a forced chunk has
+# hills even at hilliness 0.
 
 const L := RoadChunkBuilder.CHUNK_LEN
 const MIN_RADIUS := 300.0
@@ -94,6 +101,9 @@ var _closed := false
 ## lap's end; 0 on a pinned chunk).
 var _free_from := PackedInt32Array()
 var _to_level := PackedInt32Array()
+## A loop: 1 on the chunks that must not bend.
+var _straight := PackedByteArray()
+var _forced := {}
 
 var _rng := RandomNumberGenerator.new()
 var _k := PackedFloat64Array()    # curvature of chunk i
@@ -116,13 +126,18 @@ var _vseg_target := 0.0  # grade the current vertical segment is heading for
 var _vseg_c := 0.0
 var _vseg_left := 0
 
-func _init(seed_value: int, curviness_value: float, hilliness_value: float = 0.0, kicker_value: float = 0.0, period_value: int = 0, pins: PackedByteArray = PackedByteArray()) -> void:
+func _init(seed_value: int, curviness_value: float, hilliness_value: float = 0.0, kicker_value: float = 0.0, period_value: int = 0, pins: PackedByteArray = PackedByteArray(), forced: Dictionary = {}) -> void:
 	period = maxi(period_value, 0)
+	_forced = forced if period > 0 else {}
 	_free_from.resize(period + 1)
 	_to_level.resize(period + 1)
+	_straight.resize(period + 1)
 	for i in range(period - 1, -1, -1):
 		var pinned := i < pins.size() and pins[i] != 0
-		_free_from[i] = _free_from[i + 1] + (0 if pinned else 1)
+		# Pinned 2 (RoadMap.PIN_LEVEL, a ramp beside the road): level, free to bend.
+		var straight := i < pins.size() and pins[i] == 1
+		_straight[i] = 1 if straight else 0
+		_free_from[i] = _free_from[i + 1] + (0 if straight else 1)
 		_to_level[i] = 0 if pinned else _to_level[i + 1] + 1
 	_rng.seed = seed_value
 	_vrng.seed = seed_value ^ 0x5EED_4111
@@ -133,7 +148,7 @@ func _init(seed_value: int, curviness_value: float, hilliness_value: float = 0.0
 ## Whether the road ever leaves y = 0 (game.gd keeps the flat ground plane
 ## when it does not).
 func has_hills() -> bool:
-	return hilliness > 0.0
+	return hilliness > 0.0 or not _forced.is_empty()
 
 ## A loop: chunk i's place on the lap (the lap is rolled on first use).
 func _at(i: int) -> int:
@@ -198,15 +213,24 @@ func vstep(i: int) -> float:
 	return _dc[i]
 
 ## Height of the road above the start of chunk i, s metres into it.
+## The endless road reads its arrays straight (same numbers as the calls in
+## the loop branch): this runs for every car several times a tick, and the
+## four getters cost more than the sum (issue #526).
 func rise(i: int, s: float) -> float:
-	return ease_rise(start_grade(i), vcurve(i), vstep(i), vstep(i + 1), s)
+	if period > 0 or i < 0:
+		return ease_rise(start_grade(i), vcurve(i), vstep(i), vstep(i + 1), s)
+	_ensure(i + 1)
+	return ease_rise(_g0[i], _vc[i], _dc[i], _dc[i + 1], s)
 
 ## Height and grade at distance s into chunk i.
 func height_at(i: int, s: float) -> float:
 	return start_height(i) + rise(i, s)
 
 func grade_at(i: int, s: float) -> float:
-	return ease_grade(start_grade(i), vcurve(i), vstep(i), vstep(i + 1), s)
+	if period > 0 or i < 0:
+		return ease_grade(start_grade(i), vcurve(i), vstep(i), vstep(i + 1), s)
+	_ensure(i + 1)
+	return ease_grade(_g0[i], _vc[i], _dc[i], _dc[i + 1], s)
 
 # One chunk's eased vertical profile: start grade g0, its own curvature c,
 # and the curvature steps at its start (dc_in) and end (dc_out). A step of 1
@@ -299,7 +323,7 @@ func _extend() -> void:
 	if absf(end) > MAX_HEADING:
 		k = (signf(end) * MAX_HEADING - psi) / L
 	if period > 0 and i < period:
-		if _to_level[i] == 0:
+		if _straight[i] == 1:
 			k = 0.0  # pinned: straight
 		else:
 			# Never more heading than the free chunks still to come can undo.
@@ -332,6 +356,10 @@ func _extend_vertical(i: int) -> void:
 			var end := clampf(g + c * L, -n * L / SAG_MIN_RADIUS, n * L / CREST_MIN_RADIUS)
 			if end != g + c * L:
 				c = clampf((end - g) / L, -1.0 / CREST_MIN_RADIUS, 1.0 / SAG_MIN_RADIUS)
+	if i < period and _to_level[i] == 0 and not _forced.is_empty():
+		# A pinned stretch with its own profile: its curvature where one is
+		# forced, and the grade that leaves is held (not levelled) between.
+		c = float(_forced.get(i, 0.0))
 	_vc.append(c)
 	# Eased start of this chunk: half of its own curvature step is behind it.
 	var dc := c - (_vc[i - 1] if i > 0 else 0.0)

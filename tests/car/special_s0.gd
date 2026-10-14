@@ -10,11 +10,13 @@ extends SceneTree
 #     once unlocked; the unlock round-trips through the save;
 #   - each boots as the player's car and drives 10 s headless: finite, upright,
 #     no errors; the chase camera uses the per-kind framing table;
-#   - the run end hook fires on the per-kind upside-down thresholds.
+#   - a flip does not end the run (TM2): each is righted after 3 s at rest and
+#     the roll costs its step once.
 #
 # Run: <godot> --headless --fixed-fps 120 --path . -s res://tests/car/special_s0.gd
 const Harness := preload("res://tests/traffic/traffic_harness.gd")
 const SaveStore := preload("res://scripts/save/save_store.gd")
+const RollRighting := preload("res://scripts/car/roll_righting.gd")
 const RATE := 120
 const DRIVE_SECS := 10.0
 const SPECIALS := ["m1_monster", "l1_lowrider"]
@@ -64,9 +66,8 @@ func _keys() -> void:
 	for action in SpecialKeys.KEYS:
 		_check(InputMap.has_action(action), "action %s is not registered" % action)
 	_check(SpecialKeys.KEYS.special == KEY_CTRL, "special is not Ctrl")
-	var want := {"hyd_pump_left": KEY_7, "hyd_pump_front": KEY_8, "hyd_pump_back": KEY_9, "hyd_pump_right": KEY_0,
-		"hyd_dump_left": KEY_U, "hyd_dump_front": KEY_I, "hyd_dump_back": KEY_O, "hyd_dump_right": KEY_P,
-		"hyd_three": KEY_6, "hyd_dump_all": KEY_MINUS}
+	var want := {"hyd_pump_front": KEY_KP_8, "hyd_pump_back": KEY_KP_2, "hyd_pump_left": KEY_KP_4,
+		"hyd_pump_right": KEY_KP_6, "hyd_drop": KEY_KP_0, "hyd_three": KEY_KP_5}
 	for a in want:
 		_check(SpecialKeys.KEYS[a] == want[a], "%s is not on its column key" % a)
 	# nothing in ordinary cars; hydraulics only in the lowrider; special in both
@@ -75,10 +76,11 @@ func _keys() -> void:
 		_check(not SpecialKeys.applies(a, "p0_beater"), "%s does something in the beater" % a)
 	_check(SpecialKeys.applies("special", "m1_monster") and SpecialKeys.applies("special", "l1_lowrider"), "special should work in both")
 	_check(not SpecialKeys.applies("hyd_pump_left", "m1_monster"), "hydraulics work in the truck")
-	_check(SpecialKeys.applies("hyd_pump_left", "l1_lowrider") and SpecialKeys.applies("hyd_dump_all", "l1_lowrider"), "hydraulics do not work in the lowrider")
-	# the Controls page lists them under "Special vehicles"
+	_check(SpecialKeys.applies("hyd_pump_left", "l1_lowrider") and SpecialKeys.applies("hyd_drop", "l1_lowrider"), "hydraulics do not work in the lowrider")
+	# the Controls page lists them under "Special vehicles" (the Controls page
+	# moved from PauseMenu to SettingsScreen in 29a6442)
 	var listed := false
-	for g in PauseMenu.controls_groups():
+	for g in SettingsScreen.controls_groups():
 		if g[0] == "Special vehicles":
 			listed = g[1].size() == SpecialKeys.LABELS.size()
 	_check(listed, "the Controls page does not list the special vehicle keys")
@@ -94,8 +96,12 @@ func _lists() -> void:
 	_check(not "m1_monster" in PlayerCars.garage_ids({}), "a locked special is in the garage")
 	var g := PlayerCars.garage_ids({"l1_lowrider": true})
 	_check("l1_lowrider" in g and not "m1_monster" in g, "garage_ids ignores the unlock map: %s" % [g])
+	# every car has a complete cabin (the CABIN_OFFSET table went in c516864;
+	# CabinSpec serves each car's own CABIN, or the coupe's for one without)
 	for k in SPECIALS:
-		_check(PlayerCars.CABIN_OFFSET.has(k), "%s has no CABIN_OFFSET entry" % k)
+		var cabin := CabinSpec.for_kind(k)
+		for key in CabinSpec.REQUIRED:
+			_check(cabin.has(key), "%s's cabin has no %s" % [k, key])
 	# save round trip (test saves folder, see TestMode)
 	SaveStore.save_special({})
 	var unlocked: Dictionary = SaveStore.load_special().unlocked
@@ -112,31 +118,39 @@ func _lists() -> void:
 	gs.free()
 
 func _run_end() -> void:
-	var cases := {"m1_monster": 2.0, "l1_lowrider": 1.0}
+	# TM2 (2026-10-11): a flip no longer ends the run for the truck or the
+	# lowrider. Every kind is righted after 3 s at rest and the roll costs
+	# meter (roll_righting.gd; the full checks are tests/car/roll_righting.gd).
+	var cases := {"m1_monster": 0.20, "l1_lowrider": 0.50, "p1_coupe": 0.25}
+	var secs: float = RollRighting.HOLD_SECS
 	for k in cases:
-		var secs: float = cases[k]
-		var r := SpecialRunEnd.new(null, k)
-		var fired := [0]
-		r.run_ended.connect(func(_w: String) -> void: fired[0] += 1)
+		var r := RollRighting.new(null, k)
+		var steps: Array = []
+		var righted := [0]
+		r.rolled.connect(func(s: float, _counted: bool) -> void: steps.append(s))
 		for i in int((secs - 0.2) * RATE):
-			r.step(1.0 / RATE, 0.1)
-		_check(fired[0] == 0, "%s ended the run 0.2 s early" % k)
-		r.step(0.1, 0.9)  # the car rights itself: the clock resets
+			if r.step(0.1, 0.0):
+				righted[0] += 1
+		_check(righted[0] == 0, "%s was righted 0.2 s early" % k)
+		r.step(0.9, 0.0)  # the car rights itself: the clock resets
 		for i in int((secs - 0.2) * RATE):
-			r.step(1.0 / RATE, 0.1)
-		_check(fired[0] == 0, "%s did not reset the upside-down clock" % k)
+			if r.step(0.1, 0.0):
+				righted[0] += 1
+		_check(righted[0] == 0, "%s did not reset the at-rest clock" % k)
 		for i in int(0.4 * RATE):
-			r.step(1.0 / RATE, 0.1)
-		_check(fired[0] == 1, "%s fired %d times after %.1f s upside down" % [k, fired[0], secs])
-		for i in RATE:
-			r.step(1.0 / RATE, 0.1)
-		_check(fired[0] == 1, "%s fired again" % k)
+			if r.step(0.1, 0.0):
+				righted[0] += 1
+		_check(righted[0] == 1, "%s was righted %d times after %.1f s on its side" % [k, righted[0], secs])
+		_check(steps.size() == 1 and is_equal_approx(steps[0], cases[k]), "%s: the roll costs %.2f once (%s)" % [k, cases[k], steps])
 		# a tilt just above 0.3 never counts
-		var r2 := SpecialRunEnd.new(null, k)
+		var r2 := RollRighting.new(null, k)
 		for i in int(secs * 3.0 * RATE):
-			r2.step(1.0 / RATE, 0.35)
-		_check(not r2.fired, "%s ended the run at basis.y.y 0.35" % k)
-	_check(not SpecialRunEnd.has_limit("p1_coupe"), "the coupe has a flip limit")
+			if r2.step(0.35, 0.0):
+				righted[0] += 1
+		_check(righted[0] == 1 and r2.rolls == 0, "%s was righted at basis.y.y 0.35" % k)
+		_check(not r.has_signal("run_ended"), "%s: a flip still has a run end" % k)
+		r.free()
+		r2.free()
 
 func _drive(kind: String) -> void:
 	OS.set_environment("NEON_CAR", kind)

@@ -16,7 +16,7 @@ extends SceneTree
 #   Godot_v4.7.2-stable_win64_console.exe --headless --fixed-fps 60 --path . -s res://tests/world/night_bands.gd
 
 const TIMEOUT_TICKS := 1800
-const TALK := 2   # The Dave Show
+const TALK := 0   # Graveyard Radio, Dave's talk station
 ## Ticks allowed for the road to thin out / fill back up.
 const SETTLE_TICKS := 3600
 
@@ -72,7 +72,7 @@ func _helper_tests() -> void:
 		_check(lines.size() == RadioStations.STATIONS[TALK].dj.size() + NightBands.band_lines(b).size(), "Dave's band %d lines join his rotation" % b)
 		for l in NightBands.band_lines(b):
 			_check(String(l).begins_with("Dave:"), "band line in Dave's voice: %s" % l)
-		for s in [0, 1, 3]:
+		for s in [1, 2, 3, 4]:
 			_check(RadioStations.dj_lines(s, b).is_empty(), "music station %d gets no Dave lines" % s)
 			_check(not RadioStations.break_state(s, 3.0, b).in_break, "music station %d has no breaks" % s)
 	_check(RadioStations.dj_lines(TALK).size() == RadioStations.STATIONS[TALK].dj.size(), "no band: plain rotation")

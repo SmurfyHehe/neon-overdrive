@@ -61,12 +61,9 @@ func _physics_process(_delta: float) -> bool:
 	_check(expect > 0, "kmh() of a reversing car (%.2f m/s) should be > 0, got %d" % [v, expect])
 	hud._refresh()
 	_check(int(hud.lbl_speed.text) == expect and expect > 0, "HUD speed label '%s' should read %d km/h backwards (%.2f m/s)" % [hud.lbl_speed.text, expect, v])
-	frame._process(0.016)
-	var lcd: Label3D = frame.wheel.lcd
-	if lcd != null:
-		_check(lcd.text.contains("%d km/h" % expect), "wheel LCD '%s' should show %d km/h backwards" % [lcd.text.replace("\n", " | "), expect])
-	else:
-		_check(false, "the wheel should have an LCD")
+	frame._process(0.25)   # a quarter second: the wheel screen's speed digits refresh at 5 Hz
+	var lcd_text: String = frame.wheel.lcd_text()
+	_check(lcd_text.ends_with("%3d" % expect), "wheel screen '%s' should show %d km/h backwards" % [lcd_text, expect])
 	_check(frame.speedo_needle.rotation.z < deg_to_rad(135.0) - 0.001, "the speedo needle should have left its rest position backwards")
 
 	phase += 1

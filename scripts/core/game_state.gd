@@ -147,7 +147,7 @@ signal special_unlocked_changed
 # name) would also switch tabs or close the tuner. _input() runs before the GUI
 # sees the key, so it can tell whether a text control had focus when the key went
 # down; the poll then skips that press.
-const TEXT_GUARDED := [&"pause", &"map", &"tuning_panel", &"autotune_panel", &"photo_mode"]
+const TEXT_GUARDED := [&"pause", &"map", &"tuning_panel", &"photo_mode"]
 var _typed_into_text: Dictionary = {}
 
 # The Settings screen (scripts/ui/settings_screen.gd) sits on top of the pause
@@ -285,8 +285,6 @@ func _physics_process(_delta: float) -> void:
 		toggle_tuning()
 	elif Input.is_action_just_pressed("photo_mode") and not blocked.has(&"photo_mode"):
 		toggle_photo()
-	elif Input.is_action_just_pressed("autotune_panel") and not blocked.has(&"autotune_panel"):
-		toggle_autotune()
 
 ## P: free-camera photo mode (scripts/ui/photo_mode.gd). Paused like the other screens.
 func toggle_photo() -> void:

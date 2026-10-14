@@ -280,8 +280,8 @@ func _check_players() -> void:
 		var player := audio.get_node_or_null(NodePath(n)) as AudioStreamPlayer
 		if player == null:
 			_fail("missing %s" % n)
-		elif not player.playing or player.bus != want[n] or AudioServer.get_bus_index(want[n]) < 0:
-			_fail("%s: playing=%s bus=%s" % [n, player.playing, player.bus])
+		elif not player.playing or PlayerGain.target(player) != want[n] or AudioServer.get_bus_index(want[n]) < 0:
+			_fail("%s: playing=%s bus=%s" % [n, player.playing, PlayerGain.target(player)])
 
 func _finish() -> void:
 	if quit_in > 0 or game == null:

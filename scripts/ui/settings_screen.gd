@@ -21,6 +21,8 @@ const GameInfo := preload("res://scripts/core/game_info.gd")
 const LogFolder := preload("res://scripts/core/log_folder.gd")
 const DiscordPresence := preload("res://scripts/core/discord_presence.gd")
 const TestBuild := preload("res://scripts/core/test_build.gd")
+const WheelStyles := preload("res://scripts/view/wheel_styles.gd")
+const ErrorLog := preload("res://scripts/core/error_log.gd")
 
 const PAGES: Array[String] = ["Sound", "Picture", "Driving", "Controls", "Game"]
 ## What a mixer channel is called on the Sound page (the rest use their own name).
@@ -35,19 +37,42 @@ const AMBER := Color("#FFC066")
 # the plain-words labels; an action missing from it still shows up, under
 # "Other", so a new binding is never silently left off the page.
 const GROUPS := [
-	["Drive", [
-		["accelerate", "Throttle"], ["brake", "Brake / reverse"], ["handbrake", "Handbrake"],
-		["steer_left", "Steer left"], ["steer_right", "Steer right"], ["reverse", "Reverse gear (when stopped)"]]],
-	["Gears & Engine", [
-		["shift_up", "Shift up (manual)"], ["shift_down", "Shift down (manual)"], ["toggle_gearbox", "Gearbox: auto / semi / manual"],
-		["clutch", "Clutch (hold, manual)"], ["starter", "Start / stop the engine"]]],
-	["Camera", [["camera_cycle", "Camera smoothing"], ["camera_view", "Chase / cockpit view"], ["look_back", "Look back (hold)"], ["look_left", "Look left (hold)"], ["look_right", "Look right (hold)"], ["look_up", "Look up (hold)"], ["look_down", "Look down (hold)"], ["window", "Side window (hold: down, tap: up)"]]],
-	["Lights", [["turn_left", "Indicator left"], ["turn_right", "Indicator right"], ["hazard", "Hazard lights"]]],
+	["Driving", [
+		["accelerate", "Gas"], ["brake", "Brake / reverse"], ["steer_left", "Steer left"],
+		["steer_right", "Steer right"], ["handbrake", "Handbrake"],
+		["reverse", "Reverse gear (when stopped)"]]],
+	["Gears and engine", [
+		["starter", "Engine on / off"], ["toggle_gearbox", "Gearbox automatic / manual"],
+		["shift_up", "Shift up (semi and manual only)"], ["shift_down", "Shift down (semi and manual only)"], ["clutch", "Clutch (hold)"]]],
+	["Lights and signals", [
+		["headlights", "Lights (hold to flash)"], ["horn", "Horn"], ["turn_left", "Blinker left"],
+		["turn_right", "Blinker right"], ["hazard", "Hazards"]]],
+	["Looking", [
+		["look_left", "Look left (hold)"], ["look_right", "Look right (hold)"],
+		["look_up", "Look up (hold)"], ["look_down", "Look down (hold)"],
+		["look_back", "Look back (hold)"], ["camera_view", "Change camera"],
+		["window", "Side window (hold down, tap up)"]]],
+	["Menus", [["pause", "Pause / back"], ["map", "Map"], ["tuning_panel", "Tuner"]]],
+	["Radio", [["radio_next", "Next station"], ["radio_power", "Radio on / off"]]],
+	["Car", [["hood_trunk", "Hood / trunk"]]],
 	["Driver", [["flip_off", "Flip off"], ["idle_action", "Idle action"]]],
-	["Audio & Radio", [["mute", "Mute"], ["map", "Map"], ["radio_next", "Next radio station"]]],
-	["Photo mode", [["photo_mode", "Photo mode"], ["photo_forward", "Forward"], ["photo_back", "Back"], ["photo_left", "Left"], ["photo_right", "Right"], ["photo_down", "Down"], ["photo_up", "Up"], ["photo_fast", "Faster (hold)"], ["photo_look_left", "Look left"], ["photo_look_right", "Look right"], ["photo_look_up", "Look up"], ["photo_look_down", "Look down"], ["photo_fov_narrow", "Zoom in"], ["photo_fov_wide", "Zoom out"], ["photo_shot", "Save photo"]]],
-	["Menus", [["pause", "Pause / back"], ["tuning_panel", "Tuning panel"], ["autotune_panel", "Auto-Tune panel"], ["put_back", "Put me back on the road (test build)"]]],
+	["Special vehicles", [
+		["special", "Special move (truck: crab steer, hold / lowrider: dance, tap)"],
+		["hyd_pump_front", "Lowrider: pump front up (hold)"], ["hyd_pump_back", "Lowrider: pump back up (hold)"],
+		["hyd_pump_left", "Lowrider: pump left up (hold)"], ["hyd_pump_right", "Lowrider: pump right up (hold)"],
+		["hyd_drop", "Lowrider: drop (hold + a pump key: that side, tap: all four)"],
+		["hyd_three", "Lowrider: three-wheel pose (tap on / off)"]]],
+	["Photo mode", [
+		["photo_mode", "Photo mode"], ["photo_forward", "Forward"], ["photo_back", "Back"],
+		["photo_left", "Left"], ["photo_right", "Right"], ["photo_down", "Down"], ["photo_up", "Up"],
+		["photo_fast", "Faster (hold)"], ["photo_look_left", "Look left"], ["photo_look_right", "Look right"],
+		["photo_look_up", "Look up"], ["photo_look_down", "Look down"], ["photo_fov_narrow", "Zoom in"],
+		["photo_fov_wide", "Zoom out"], ["photo_shot", "Save photo"]]],
 ]
+
+## Actions that exist only in the test build: never on the Controls page, not
+## even under "Other".
+const TEST_ONLY := ["put_back", "fix_car", "debug_add_cash", "record_drive"]
 
 var game_state: GameState   # null on the title screen
 var tab_buttons: Array[Button] = []
@@ -56,6 +81,7 @@ var current_page := 0
 
 # Sound
 var volume_sliders := {}   # channel -> HSlider
+var song_names_check: CheckButton
 # Picture
 var fullscreen_check: CheckButton
 var resolution_option: OptionButton
@@ -84,15 +110,28 @@ var controls_save_button: Button
 var controls_reset_button: Button
 var back_button: Button
 var tips_check: CheckButton
+var critters_check: CheckButton
+var damage_option: OptionButton   # Full / Light / Looks only (GameSettings.damage)
 var copy_log_button: Button
 var log_status: Label
+var idle_item_option: OptionButton    # Driver: what the L key does
+var beer_moving_option: OptionButton
 var car_option: OptionButton
 var car_restart_button: Button
 var tow_button: Button
 ## Test stand-ins the pause menu hands over (they act on the running game).
 var tow_action: Callable
+## Optional: returns whether the tow row is on offer right now (limp or a
+## meter at 0.60 or over, not in a chase). Unset = always on while paused.
+var tow_offered: Callable
+## Called after the test build's "Wrecks" row changes, so the running game can
+## switch its wreck sensor at once.
+var wrecks_changed: Callable
+var wrecks_option: OptionButton
 var race_action: Callable   # start (or give up) a race against a test rival, until meet spots exist
+var race_label: Callable    # its label: Race a test rival / Give up race / Retry race
 var race_button: Button
+var clean_button: Button      # Walt's free cabin clean (CabinDirt)
 var keys_dirty := false   # rebinds not saved yet
 
 var _capture := {}        # {action, slot, button} while waiting for a key
@@ -210,7 +249,7 @@ func _input(event: InputEvent) -> void:
 		return
 	if not _capture.is_empty():
 		get_viewport().set_input_as_handled()   # before the GUI: Enter / Space can be bound
-		_finish_capture(event.keycode if event.keycode != 0 else event.physical_keycode)
+		_finish_capture(event.physical_keycode if event.physical_keycode != 0 else event.keycode)
 		return
 	if event.is_action_pressed(&"ui_cancel") and not _popup_open():
 		get_viewport().set_input_as_handled()
@@ -339,6 +378,10 @@ func _sync_all() -> void:
 	for channel in volume_sliders:
 		volume_sliders[channel].value = AudioSettings.volumes[channel]
 	tips_check.button_pressed = GameSettings.tips
+	critters_check.button_pressed = GameSettings.critters
+	if wrecks_option != null:
+		wrecks_option.selected = 1 if GameSettings.wrecks_meter else 0
+	damage_option.select(GameSettings.damage)
 	fullscreen_check.button_pressed = DisplaySettings.fullscreen
 	for i in resolution_option.item_count:
 		if resolution_option.get_item_metadata(i) == DisplaySettings.resolution:
@@ -373,6 +416,10 @@ func _build_sound_page(parent: Control) -> Control:
 			func(v: float) -> void:
 				AudioSettings.set_volume(channel, v)
 				AudioSettings.save_settings())
+	_heading(page, "Radio")
+	song_names_check = _add_check(page, "Song names", AudioSettings.song_names, func(on: bool) -> void:
+		AudioSettings.song_names = on
+		AudioSettings.save_settings())
 	return _page_of(page)
 
 # ---------- Picture ----------
@@ -528,6 +575,26 @@ func _build_game_page(parent: Control) -> Control:
 	_add_check(page, "Show on Discord", DiscordPresence.enabled, func(on: bool) -> void:
 		DiscordPresence.set_enabled(on)
 		DiscordPresence.save_settings())
+	# the roaches, the rats and the flies on the title (and wherever they turn
+	# up later); the title set polls GameSettings.critters, so this applies live
+	critters_check = _add_check(page, "Roaches and rats", GameSettings.critters, func(on: bool) -> void:
+		GameSettings.set_critters(on)
+		GameSettings.save_settings())
+	# Damage: Full / Light / Looks only (brief DP7); the car reads it live and
+	# Looks only also keeps the totalled meter still (TotalledMeter.counts).
+	damage_option = _add_option(page, "Damage", GameSettings.DAMAGE_NAMES, func(i: int) -> void:
+		GameSettings.set_damage(i)
+		GameSettings.save_settings())
+	damage_option.select(GameSettings.damage)
+	# Test build only: whether crashes count on the totalled meter. Outside it
+	# the sensor is always on and there is no row.
+	if GameSettings.test_build():
+		wrecks_option = _add_option(page, "Wrecks", ["Off", "Meter"], func(i: int) -> void:
+			GameSettings.set_wrecks_meter(i == 1)
+			GameSettings.save_settings()
+			if wrecks_changed.is_valid():
+				wrecks_changed.call())
+		wrecks_option.selected = 1 if GameSettings.wrecks_meter else 0
 	copy_log_button = _add_button(page, "Copy my log", _copy_log)
 	log_status = Label.new()
 	log_status.add_theme_color_override("font_color", AMBER)
@@ -561,6 +628,24 @@ func _build_game_page(parent: Control) -> Control:
 		CabinMods.set_bobble(bobble_kind, BobbleFigures.IDS[clampi(i, 0, BobbleFigures.IDS.size() - 1)])
 		CabinMods.save_settings())
 	bobble.selected = BobbleFigures.index_of(CabinMods.bobble_for(bobble_kind))
+	# Steering wheel (W1): shape, grip and stitching, saved per car. The race
+	# wheel is the default; a car with nothing stored shows its own grip and
+	# stitching colour in the lists.
+	var wheel_kind := PlayerCar.chassis_kind()
+	var wheel_shape := _add_option(page, "Steering wheel", WheelStyles.shape_names(), func(i: int) -> void:
+		CabinMods.set_wheel_shape(wheel_kind, WheelStyles.SHAPE_IDS[clampi(i, 0, WheelStyles.SHAPE_IDS.size() - 1)])
+		CabinMods.save_settings())
+	wheel_shape.selected = maxi(WheelStyles.SHAPE_IDS.find(CabinMods.wheel_shape_for(wheel_kind)), 0)
+	var wheel_grip := _add_option(page, "Wheel grip", WheelStyles.grip_names(), func(i: int) -> void:
+		CabinMods.set_wheel_grip(wheel_kind, WheelStyles.GRIP_IDS[clampi(i, 0, WheelStyles.GRIP_IDS.size() - 1)])
+		CabinMods.save_settings())
+	var grip_id := CabinMods.wheel_grip_for(wheel_kind)
+	wheel_grip.selected = maxi(WheelStyles.GRIP_IDS.find(grip_id if grip_id != "" else WheelStyles.default_grip(wheel_kind)), 0)
+	var wheel_stitch := _add_option(page, "Stitching", WheelStyles.stitch_names(), func(i: int) -> void:
+		CabinMods.set_wheel_stitch(wheel_kind, WheelStyles.STITCH_IDS[clampi(i, 0, WheelStyles.STITCH_IDS.size() - 1)])
+		CabinMods.save_settings())
+	var stitch_id := CabinMods.wheel_stitch_for(wheel_kind)
+	wheel_stitch.selected = maxi(WheelStyles.STITCH_IDS.find(stitch_id if stitch_id != "" else WheelStyles.default_stitch(wheel_kind)), 0)
 	var knob_names := []
 	for id in CabinMods.KNOB_IDS:
 		knob_names.append(CabinMods.KNOB_NAMES[id])
@@ -579,6 +664,20 @@ func _build_game_page(parent: Control) -> Control:
 		_sync_strut_bar())
 	strut.selected = 1 if CabinMods.strut_bar else 0
 
+	# What the L key does (IdleActions; the garage's "You" tab will own it later).
+	_heading(page, "Driver")
+	var item_names := []
+	for id in IdleActions.IDS:
+		item_names.append(IdleActions.NAMES[id])
+	idle_item_option = _add_option(page, "In the car", item_names, func(i: int) -> void:
+		IdleActions.set_item(IdleActions.IDS[clampi(i, 0, IdleActions.IDS.size() - 1)])
+		IdleActions.save_settings())
+	idle_item_option.selected = IdleActions.item_index()
+	beer_moving_option = _add_option(page, "Beer while driving", ["Off", "On"], func(i: int) -> void:
+		IdleActions.set_beer_while_moving(i == 1)
+		IdleActions.save_settings())
+	beer_moving_option.selected = 1 if IdleActions.beer_while_moving else 0
+
 	# Test stand-ins; only usable from the pause screen or the garage. Service car
 	# and Wash car are not here any more: they live in the garage (garage G0). The
 	# car picker is the test build's (TestBuild); the garage's key board replaces
@@ -593,13 +692,17 @@ func _build_game_page(parent: Control) -> Control:
 	if not TestBuild.on():
 		car_option.get_parent().visible = false
 		car_restart_button.visible = false
-	tow_button = _add_button(page, "Call a tow (engine dead)", func() -> void:
+	tow_button = _add_button(page, "Call a tow (limping or badly hurt)", func() -> void:
 		if tow_action.is_valid():
 			tow_action.call())
 	race_button = _add_button(page, "Race a test rival", func() -> void:
 		if race_action.is_valid():
 			close()
 			race_action.call())
+	# Walt's clean (MA6): the cabin back to Clean, cans and receipts gone. Free for now.
+	clean_button = _add_button(page, "Clean the car", func() -> void:
+		CabinDirt.clean(PlayerCar.chassis_kind())
+		_refresh_game_page())
 
 	return _page_of(page)
 
@@ -615,8 +718,13 @@ func _refresh_game_page() -> void:
 	var in_garage := game_state != null and game_state.state == GameState.State.GARAGE
 	car_option.disabled = not (paused or in_garage)
 	car_restart_button.disabled = not (paused or in_garage)
-	tow_button.disabled = not paused or not tow_action.is_valid()
+	tow_button.disabled = not paused or not tow_action.is_valid() or (tow_offered.is_valid() and not tow_offered.call())
 	race_button.disabled = not paused or not race_action.is_valid()
+	if race_label.is_valid():
+		race_button.text = race_label.call()
+	var dirt := CabinDirt.level(now)
+	clean_button.text = "Clean the car (Walt, free)" if dirt > CabinDirt.CLEAN or CabinDirt.cans(now) > 0 else "Clean the car (already clean)"
+	clean_button.disabled = not paused
 
 func _pick_car() -> void:
 	if car_option.selected < 0 or game_state == null:
@@ -625,7 +733,7 @@ func _pick_car() -> void:
 	PlayerCars.save_settings()
 	game_state.restart()
 
-## The end of godot.log on the clipboard, for a bug report.
+## The end of godot.log on the clipboard, for a bug report (account name scrubbed).
 func _copy_log() -> void:
 	var f := FileAccess.open(LogFolder.log_file(), FileAccess.READ)
 	if f == null:
@@ -635,7 +743,7 @@ func _copy_log() -> void:
 	if n > LOG_TAIL_BYTES:
 		f.seek(n - LOG_TAIL_BYTES)
 	var text := f.get_buffer(mini(n, LOG_TAIL_BYTES)).get_string_from_utf8()
-	DisplayServer.clipboard_set("%s\n\n%s" % [GameInfo.title(), text])
+	DisplayServer.clipboard_set("%s\n\n%s" % [GameInfo.title(), ErrorLog.scrub(text)])
 	log_status.text = "Copied the end of the log."
 
 # ---------- Controls ----------
@@ -663,7 +771,7 @@ func _refresh_controls() -> void:
 	for group in controls_groups():
 		_heading(inner, String(group[0]).to_upper())
 		var grid := GridContainer.new()
-		grid.columns = 2 + KeyBindings.SLOTS
+		grid.columns = 1 + KeyBindings.SLOTS
 		grid.add_theme_constant_override("h_separation", 16)
 		inner.add_child(grid)
 		for entry in group[1]:
@@ -678,7 +786,6 @@ func _refresh_controls() -> void:
 				b.set_meta("bind", [StringName(entry[0]), slot])
 				b.pressed.connect(_start_capture.bind(StringName(entry[0]), slot, b))
 				grid.add_child(b)
-			_grid_label(grid, gamepad_text(entry[0]), SILVER, 140)
 		var gap := Control.new()
 		gap.custom_minimum_size = Vector2(0, 8)
 		inner.add_child(gap)
@@ -756,13 +863,13 @@ static func controls_groups() -> Array:
 		var rows: Array = []
 		for entry in g[1]:
 			known[entry[0]] = true
-			if InputMap.has_action(entry[0]):
+			if InputMap.has_action(entry[0]) and not (entry[0] in TEST_ONLY):
 				rows.append(entry)
 		groups.append([g[0], rows])
 	var other: Array = []
 	for a in InputMap.get_actions():
 		var name := String(a)
-		if not known.has(name) and not name.begins_with("ui_"):
+		if not known.has(name) and not name.begins_with("ui_") and not (name in TEST_ONLY):
 			other.append([name, name.capitalize()])
 	if not other.is_empty():
 		groups.append(["Other", other])
@@ -773,8 +880,7 @@ static func keyboard_text(action: String) -> String:
 	var parts: Array[String] = []
 	for ev in InputMap.action_get_events(action):
 		if ev is InputEventKey:
-			var t: String = ev.as_text_keycode() if ev.keycode != 0 else ev.as_text_physical_keycode()
-			parts.append(t)
+			parts.append(KeyBindings.key_name(KeyBindings.code_of(ev)))
 	return " / ".join(parts) if not parts.is_empty() else "-"
 
 ## Gamepad bindings of an action, e.g. "RT".

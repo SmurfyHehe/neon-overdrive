@@ -52,6 +52,7 @@ static func base_spec(car_id: String) -> Dictionary:
 ## preceded by nothing: the baseline is rows' "base" key on every row.
 static func sweep(track: TuneTrack, car_id := "p0_beater", only: Array = []) -> Array:
 	var base := base_spec(car_id)
+	track.car_kind = car_id  # on the car's own wheels and body (#601)
 	track.corner_steer = BEND_STEER
 	track.driver_profile = TuneTrack.DEFAULT_PROFILE
 	var m0: Dictionary = (await track.evaluate([base]))[0]
@@ -88,6 +89,7 @@ static func sweep(track: TuneTrack, car_id := "p0_beater", only: Array = []) -> 
 		rows.append(r)
 	track.corner_steer = TuneTrack.CORNER_STEER
 	track.driver_profile = TuneTrack.DEFAULT_PROFILE
+	track.car_kind = ""
 	return rows
 
 ## The upshift point (of SHIFT_CANDIDATES) with the quickest standing 400 m.
@@ -132,7 +134,7 @@ static func score(it: Dictionary, m: Dictionary, ref: Dictionary, m0: Dictionary
 	var loop_ref := float(loop.gap_s) + _loop_variable_s(ref, cfg)
 	var loop_m := float(loop.gap_s) + _loop_variable_s(m, cfg)
 	row["pace_s"] = loop_ref - loop_m
-	# A bend that ends in a spin reads spin, not grip (speed x yaw rate): no
+	# A bend that ends in a spin is not a bend the car holds at its peak g: no
 	# lap-time credit, and it is shown. Same rule as tools/balance_sweep.gd.
 	row["spins"] = float(m.get("max_slip_deg", 0.0)) > SPIN_DEG and not float(ref.get("max_slip_deg", 0.0)) > SPIN_DEG
 	if row.spins:

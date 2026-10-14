@@ -10,9 +10,13 @@ extends SceneTree
 #   level, is not silent, sits within RANGE_DB of its pool's average loudness;
 #   loop takes all differ in length and their loop point doesn't jump
 # - firing every hit size off every surface many times: the right layers play
-#   (tap / thud / sparks / debris / crunch / glass, per surface), no pool ever
-#   plays the same take twice in a row, every take gets used, and every play's
-#   volume and pitch stay in range
+#   (tap / thud / sparks / debris / crunch or smash / glass / tail, per
+#   surface), no pool ever plays the same take twice in a row, every take gets
+#   used, and every play's volume and pitch stay in range
+# - a highway-speed hit in real time: nothing sounds in the tick of the hit,
+#   the thump comes first, the smash, the bits and the rattle follow it over
+#   the next second; a second hit 0.4 s later does not rattle again
+# - every crash and scrape player is on the Crash bus
 # - grounding hits: same no-repeat and range checks
 # - each scrape surface held at speed: it loops, crossfades to new takes
 #   without repeating one, bites on a fast start (not the underbody), and
@@ -24,7 +28,7 @@ extends SceneTree
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/audio/crash_variety.gd
 
 const TIMEOUT := 180.0
-const FIRES := 40        # hits per surface and size (x5 layers stays under PLAY_LOG)
+const FIRES := 40        # hits per surface and size (x6 layers stays under PLAY_LOG)
 const RANGE_DB := 7.0    # a take's RMS may sit this far from its pool's average
 const DB_MIN := -30.0
 const DB_MAX := 0.5
@@ -112,12 +116,47 @@ func _process(delta: float) -> bool:
 			_check_hits()
 			_check_ground()
 			_check_classify()
-			_go("scrape_forced")
+			_check_bus()
+			_go("stagger")
+		"stagger":
+			# one 16 m/s wall hit, left to play out in real time
+			if not samples.has("stagger"):
+				samples.stagger = true
+				crash.plays.clear()
+				crash._wait = 0.0
+				crash._tail_wait = 0.0
+				crash.impact(16.0, "concrete")
+				_check(crash.plays.is_empty(), "no layer should sound in the tick of the hit (%d did)" % crash.plays.size())
+				_check(crash._pending.size() >= 4, "a 16 m/s hit should queue the thump, the smash, the bits and the rattle (%d queued)" % crash._pending.size())
+			elif step_t > 0.4 and not samples.has("stagger_again"):
+				# a second big hit inside the rattle's cooldown
+				samples.stagger_again = true
+				crash._wait = 0.0
+				crash.impact(16.0, "concrete")
+			elif step_t > 1.6:
+				var order := []
+				for e in crash.plays:
+					order.append(e.pool)
+				print("two 16 m/s wall hits 0.4 s apart, in the order they sounded: %s" % ", ".join(order))
+				_check(crash._pending.is_empty(), "every queued layer should have sounded by now (%d left)" % crash._pending.size())
+				_check(not order.is_empty() and order[0] == "thud_concrete", "the thump should sound first")
+				for pool in ["thud_concrete", "smash", "debris"]:
+					_check(order.count(pool) == 2, "two 16 m/s hits should play %s twice (%d)" % [pool, order.count(pool)])
+				_check(not ("crunch" in order), "a 16 m/s hit is a smash, not a crunch")
+				_check(order.count("tail") == 1, "a hit inside the rattle's %.0f s cooldown should not rattle again (%d rattles)" % [CrashAudio.TAIL_COOLDOWN, order.count("tail")])
+				_check(order.find("tail") > order.find("smash"), "the rattle should follow the smash")
+				crash.plays.clear()
+				_go("scrape_forced")
 		"scrape_forced":
 			# each surface held at 20 m/s for 9 s, then let go
 			var kinds := CrashAudio.SCRAPE_KINDS
 			var kind: String = kinds[scrape_i]
-			if step_t < delta * 1.5:
+			# once per surface, on its first frame (#574: "step_t < 1.5 delta"
+			# also held on the second frame when that frame was over twice as
+			# long as the first, so on a loaded machine the bite fired in the
+			# first frame was left out of the count)
+			if samples.get("scrape_kind", "") != kind:
+				samples.scrape_kind = kind
 				samples.plays0 = crash.plays.size()
 				samples.peak = 0.0
 				samples.spark = 0.0
@@ -280,14 +319,17 @@ func _check_hits() -> void:
 			var count0 := crash.impact_count
 			for i in FIRES:
 				crash._wait = 0.0
+				crash._tail_wait = 0.0
 				crash.impact(dv, surface)
+				crash.flush_pending()   # the layers are staggered; this is every hit in one frame
 			_check(crash.impact_count - count0 == FIRES, "%d hits fired, %d counted" % [FIRES, crash.impact_count - count0])
 			var by := _plays_since(from)
 			var want := ["tap_" + surface] if dv < CrashAudio.THUD_DV else ["thud_" + surface]
 			if dv >= CrashAudio.DEBRIS_DV:
 				want.append("debris")
 			if dv >= CrashAudio.CRUNCH_DV:
-				want.append("crunch")
+				want.append("smash" if dv >= CrashAudio.SMASH_DV else "crunch")
+				want.append("tail")
 			var maybe := []
 			if dv >= CrashAudio.SPARK_DV and surface != "car":
 				maybe.append("sparks")
@@ -329,6 +371,17 @@ func _check_ground() -> void:
 		_check(used.ground_hit.size() == CrashAudio.VARIANTS, "ground_hit used only %d takes" % used.ground_hit.size())
 	print("ground_hit x%d: no repeats, levels in range" % FIRES)
 	crash.plays.clear()
+
+func _check_bus() -> void:
+	_check(AudioServer.get_bus_index(CrashAudio.BUS) >= 0, "there is no %s bus" % CrashAudio.BUS)
+	var players := 0
+	for c in crash.get_children():
+		if c is AudioStreamPlayer:
+			players += 1
+			# the scrape loops sit on gain buses that send to it (#567): where the sound ends up
+			var bus := PlayerGain.target(c)
+			_check(bus == CrashAudio.BUS, "%s plays on %s, not %s" % [c.name, bus, CrashAudio.BUS])
+	_check(players == CrashAudio.VOICES + CrashAudio.LOOPS.size() * 2, "CrashAudio should have %d players, has %d" % [CrashAudio.VOICES + CrashAudio.LOOPS.size() * 2, players])
 
 func _check_classify() -> void:
 	var car := Vehicle.new()

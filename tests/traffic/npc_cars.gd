@@ -7,7 +7,7 @@ extends SceneTree
 #   - the body's bounding box is the sheet's length and height (fleet.json dims,
 #     3 cm, stock build) and at least its body width (the mirrors stick out past it);
 #   - triangles within the 4,000 traffic budget, and 8 draw calls (+1 underside);
-#   - two tail flares (one per side), behind the rear axle;
+#   - two tail flares (one per side; the Bug has one, its right lamp is gone), behind the rear axle;
 #   - no magenta or cyan in any vertex colour or paint (tests/core/palette.gd rule);
 #   - exhaust tips behind the rear axle, 4 sticker slot placements on the body.
 # Drive checks, per car (stock build), on the game's road with nothing else
@@ -29,7 +29,17 @@ const Palette := preload("res://tests/core/palette.gd")
 const RATE := 120
 ## Stock builds whose sheet body length leaves out a fitted kit: the cops'
 ## push bars (the sheet's "nobar" builds measure the body alone).
-const STOCK_KIT_LEN := {"c1_patrol": 0.16, "c2_patrolsuv": 0.16}
+## Stock parts that stick out past the sheet's body length: the patrol cars'
+## push bars, and since Build 4 (Roy 1475 "differ", outline twins) the
+## interceptor's low push bar and the Camel's rear step bumper.
+const STOCK_KIT_LEN := {"c1_patrol": 0.16, "c2_patrolsuv": 0.16, "c3_interceptor": 0.16, "p17_work_pickup": 0.16}
+## Of those, parts every variant keeps at the other end from its kit: the
+## Camel's step bumper stays on behind its bull bar build.
+const KEPT_KIT_LEN := {"p17_work_pickup": 0.16}
+## Cars with one working tail lamp, so one flare quad, on this side (-1 left).
+## The Bug's right tail-lamp lens is gone, a dark socket (missing bit 4 on
+## Roy's decided sheet, e5c65c9; tools/fleet_design/cars.py P0).
+const ONE_TAIL_LAMP := {"p0_beater": -1}
 const CRUISE := 120.0 / 3.6
 
 var fails: Array[String] = []
@@ -58,10 +68,11 @@ func _model_checks(kind: String, build: String, d: Dictionary) -> void:
 	var aabb := mesh.get_aabb()
 	for w in [false, true]:
 		var wm := NpcCarBuilder.wheel_mesh(kind, build, w)
-		var hub: Vector3 = NpcCarBuilder.KINDS[kind].data.BUILDS[build].wheels[1 if w else 0].hub
+		var hub: Vector3 = NpcCarBuilder.data_of(kind).BUILDS[build].wheels[1 if w else 0].hub
 		aabb = aabb.merge(AABB(wm.get_aabb().position + hub, wm.get_aabb().size))
-	var tris := NpcCarBuilder.triangle_count(kind, build)
-	var calls := NpcCarBuilder.draw_call_count(kind, build)
+	# As the game drives it (TrafficCar): the AI build, ai = true.
+	var tris := NpcCarBuilder.triangle_count(kind, build, true)
+	var calls := NpcCarBuilder.draw_call_count(kind, build, "", true)
 	print("npc_cars: %-22s %.2f x %.2f x %.2f m (sheet %.2f x %.2f x %.2f), %d tris, %d draw calls" % [
 		tag, aabb.size.z, aabb.size.x, aabb.size.y, d.length, d.width_body, d.height, tris, calls])
 	# The sheet's sizes are the stock build's body; variant kits (a sport bumper,
@@ -72,7 +83,9 @@ func _model_checks(kind: String, build: String, d: Dictionary) -> void:
 		_check(over > -0.03 and over < kit + 0.03, "%s is %.3f m long, the sheet says %.2f" % [tag, aabb.size.z, d.length])
 		_check(absf(aabb.size.y - float(d.height)) < 0.03, "%s is %.3f m tall, the sheet says %.2f" % [tag, aabb.size.y, d.height])
 	else:
-		_check(over > -0.03 and over < 0.16, "%s is %.3f m long, the sheet says %.2f" % [tag, aabb.size.z, d.length])
+		# a variant kit adds up to 16 cm on top of the stock parts it keeps
+		var kept: float = KEPT_KIT_LEN.get(kind, 0.0)
+		_check(over > -0.03 and over < kept + 0.16, "%s is %.3f m long, the sheet says %.2f" % [tag, aabb.size.z, d.length])
 	_check(aabb.size.x >= float(d.width_body) - 0.01, "%s is %.3f m wide, narrower than the sheet's %.2f body" % [tag, aabb.size.x, d.width_body])
 	_check(tris <= 4000, "%s has %d triangles, over the 4,000 traffic budget" % [tag, tris])
 	# 8 for the body and wheels, +1 for the underside the player and cop classes
@@ -100,11 +113,18 @@ func _model_checks(kind: String, build: String, d: Dictionary) -> void:
 	if flare >= 0:
 		var fv: PackedVector3Array = mesh.surface_get_arrays(flare)[Mesh.ARRAY_VERTEX]
 		var rear_axle: float = NpcCarBuilder.KINDS[kind].axle_z
-		_check(fv.size() == 12, "%s has %d flare vertices, not 12 (two quads)" % [tag, fv.size()])
+		if ONE_TAIL_LAMP.has(kind):
+			var side: int = ONE_TAIL_LAMP[kind]
+			_check(fv.size() == 6, "%s has %d flare vertices, not 6 (one quad, one tail lamp)" % [tag, fv.size()])
+			if fv.size() == 6:
+				_check(signf(fv[0].x) == side, "%s tail flare is on the wrong side" % tag)
+				_check(fv[0].z > rear_axle, "%s tail flare ahead of the rear axle" % tag)
+		else:
+			_check(fv.size() == 12, "%s has %d flare vertices, not 12 (two quads)" % [tag, fv.size()])
 		if fv.size() == 12:
 			_check(fv[0].x * fv[6].x < 0.0, "%s tail flares are not one per side" % tag)
 			_check(fv[0].z > rear_axle and fv[6].z > rear_axle, "%s tail flare ahead of the rear axle" % tag)
-	var vis := NpcCarBuilder.chassis_visual(kind, build, Color.WHITE)
+	var vis := NpcCarBuilder.chassis_visual(kind, build, Color.WHITE, "", true)
 	var axle: float = NpcCarBuilder.KINDS[kind].axle_z
 	for t in vis.get_meta("exhaust_tips"):
 		# Rear-facing tips sit behind the rear axle; side pipes (P5 street) exit

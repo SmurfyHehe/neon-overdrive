@@ -23,6 +23,13 @@ const AREAS := {
 	"residential": {"name": "RESIDENTIAL", "bus": false},
 	"strip": {"name": "THE STRIP", "bus": false},
 	"industrial": {"name": "INDUSTRIAL", "bus": false},
+	"old_town": {"name": "OLD TOWN", "bus": true},
+	"lofts": {"name": "THE LOFTS", "bus": false},
+	"hillside": {"name": "HILLSIDE", "bus": false},
+	"airport": {"name": "AIRPORT", "bus": false},
+	"docks": {"name": "THE DOCKS", "bus": false},
+	"freeway": {"name": "ROUTE 9", "bus": false},
+	"canyon": {"name": "CANYON", "bus": false},
 }
 
 ## How far apart the round repeater signs stand inside an area, in chunks
@@ -46,7 +53,9 @@ const CROSS_STREETS := ["5TH ST", "ELM ST", "DOCK RD", "HIGH ST"]
 const PAINT_WORDS := ["SLOW", "BUS", "STOP"]
 ## Painted arrows are drawn into the atlas as shapes, not text; the "#" marks
 ## them. Order matters: the atlas row follows it.
-const ARROWS := ["#STRAIGHT", "#LEFT", "#RIGHT"]
+## "#UTURN" is the turn-round arrow (up the lane, over toward the median, back
+## down); "#NOUTURN" is the red ring and slash drawn over it on a no-U-turn sign.
+const ARROWS := ["#STRAIGHT", "#LEFT", "#RIGHT", "#UTURN", "#NOUTURN"]
 
 static func area_name(district: String) -> String:
 	if AREAS.has(district):
@@ -72,6 +81,14 @@ static func has_bus(district: String) -> bool:
 static func cross_street(k: int) -> String:
 	return CROSS_STREETS[posmod(k, CROSS_STREETS.size())]
 
+## Exit gantries (ring sites): "EXIT 3" over where it leads over how far.
+const SERVICES := "SERVICES"
+const EXIT_FAR := "1 km"
+const EXIT_MAX := 16
+
+static func exit_word(number: int) -> String:
+	return "EXIT %d" % number
+
 ## Every text the atlas has to draw, in layer order, without repeats.
 static func atlas_words() -> Array:
 	var out: Array = [ENTERING, ADVANCE, MAIN_STREET]
@@ -86,4 +103,9 @@ static func atlas_words() -> Array:
 			out.append(w)
 	for a in ARROWS:
 		out.append(a)
+	# after everything older, so no existing layer moves
+	out.append(SERVICES)
+	out.append(EXIT_FAR)
+	for n in range(1, EXIT_MAX + 1):
+		out.append(exit_word(n))
 	return out

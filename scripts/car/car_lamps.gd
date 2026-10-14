@@ -82,4 +82,11 @@ func apply() -> void:
 	if key == _key:
 		return
 	_key = key
-	NpcCarBuilder.set_lamps(visual, 1.0 if brake else 0.0, hazard, reverse, turn_left, turn_right)
+	var turn := NpcCarBuilder.TURN_OFF
+	if hazard:
+		turn = NpcCarBuilder.TURN_BOTH
+	elif turn_left:
+		turn = NpcCarBuilder.TURN_LEFT
+	elif turn_right:
+		turn = NpcCarBuilder.TURN_RIGHT
+	NpcCarBuilder.set_lamps(visual, 1.0 if brake else 0.0, turn, reverse)

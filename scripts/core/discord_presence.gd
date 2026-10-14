@@ -16,7 +16,9 @@ extends Node
 #
 # No class_name on purpose: preload it, so no class cache refresh is needed.
 
-const Rich := preload("res://scripts/vendor/discord_rich_presence/discord_rich_presence.gd")
+## Loaded in _ready only when the run talks to Discord (wanted()): every other
+## boot skips compiling the vendor script.
+const RICH := "res://scripts/vendor/discord_rich_presence/discord_rich_presence.gd"
 const TestMode := preload("res://scripts/core/test_mode.gd")
 const Districts := preload("res://scripts/world/districts.gd")
 
@@ -36,6 +38,13 @@ const AREA_NAMES := {
 	"residential": "Residential",
 	"strip": "The Strip",
 	"industrial": "Industrial",
+	"old_town": "Old Town",
+	"lofts": "The Lofts",
+	"hillside": "Hillside",
+	"airport": "Airport",
+	"docks": "The Docks",
+	"freeway": "Route 9",
+	"canyon": "Canyon",
 }
 
 ## On by default, saved in [discord] of the shared settings file.
@@ -93,7 +102,7 @@ func _ready() -> void:
 	if not wanted() or _game == null:
 		return
 	_started = int(Time.get_unix_time_from_system())
-	_rich = Rich.new()
+	_rich = load(RICH).new()
 	_rich.app_id = app_id()
 	add_child(_rich)
 	_timer = Timer.new()

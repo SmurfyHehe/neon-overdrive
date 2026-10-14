@@ -14,7 +14,8 @@ extends RefCounted
 #
 # Files, all in user://autotune/ and overwritten per job (never deleted):
 #   request.json   {values: {path: float}, request: {goals, locks}, budget,
-#                   trace: bool, stock: {path: float} (both optional, Test run)}
+#                   trace: bool, stock: {path: float} (both optional, Test run),
+#                   car: the PlayerCar.chassis to drive it on}
 #   progress.json  {done, total, best}
 #   result.json    {ok: true, ...AutoTuneSearch result with spec as values,
 #                  stock_metrics when a stock spec was sent} or {ok: false, error}
@@ -49,6 +50,8 @@ var error := ""
 var progress := {"done": 0, "total": 0, "best": 0.0}
 var result := {}
 var exe := ""
+## The worker has exited and been reaped (poll saw it end, or cancel killed it).
+var _gone := false
 
 # ---------- game side ----------
 
@@ -67,7 +70,10 @@ func start(spec: Dictionary, request: Dictionary, budget: int, options := {}) ->
 	# Truncate the previous job's files so a stale result can't be mistaken for this one.
 	write_json(dir.path_join(RESULT_FILE), {})
 	write_json(dir.path_join(PROGRESS_FILE), {})
-	var req := {"values": values_from_spec(spec), "request": request, "budget": budget, "trace": options.get("trace", false)}
+	# car: the worker drives the spec on the player's car (#601), not on
+	# whatever its own process would pick.
+	var req := {"values": values_from_spec(spec), "request": request, "budget": budget, "trace": options.get("trace", false),
+		"car": PlayerCar.chassis_kind()}
 	if options.has("stock"):
 		req.stock = values_from_spec(options.stock)
 	write_json(dir.path_join(REQUEST_FILE), req)
@@ -80,6 +86,7 @@ func start(spec: Dictionary, request: Dictionary, budget: int, options := {}) ->
 		args.append_array(["--path", ProjectSettings.globalize_path("res://")])
 		args.append_array(["-s", "res://scripts/tuning/auto_tune_worker.gd", "--", dir])
 	pid = OS.create_process(exe, args)
+	_gone = false
 	if pid <= 0:
 		error = "Could not start %s" % exe
 		state = State.FAILED
@@ -100,6 +107,7 @@ func poll() -> State:
 		progress = p
 	if OS.is_process_running(pid):
 		return state
+	_gone = true
 	var r := read_json(dir.path_join(RESULT_FILE))
 	if r.is_empty():
 		error = "The search process ended without a result (see the Godot console)."
@@ -114,8 +122,22 @@ func poll() -> State:
 
 func cancel() -> void:
 	if state == State.RUNNING:
-		OS.kill(pid)
+		if OS.kill(pid) == OK:
+			_gone = true
 		state = State.CANCELLED
+
+## True while the worker process is alive. Ask this, not OS.is_process_running:
+## on Linux and macOS OS.kill() waits for the killed worker and reaps it, and
+## OS.is_process_running() on a reaped pid prints "The process ... does not
+## exist or is not a child of the calling process" (issue #594). A worker that
+## has ended is never asked about again.
+func worker_running() -> bool:
+	if pid <= 0 or _gone:
+		return false
+	if OS.is_process_running(pid):
+		return true
+	_gone = true
+	return false
 
 ## The Auto-Tune values of the result's spec as a spec dictionary: `base` with
 ## the result's values written in.
@@ -161,6 +183,7 @@ static func run_worker(tree: SceneTree, dir: String) -> void:
 	var base := spec_from_values(req.values)
 	var track := TuneTrack.new()
 	track.record_trace = req.get("trace", false)
+	track.car_kind = String(req.get("car", ""))
 	tree.root.add_child(track)
 	var stock_metrics := {}
 	if req.has("stock"):  # first, in the same lanes, so the two runs compare like for like

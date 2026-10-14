@@ -43,7 +43,7 @@ const FITTINGS := [
 ]
 const ON_DOOR := ["door_%s", "glass_door_%s", "seal_door_%s", "handle_%s", "mirror_%s"]
 const BODY_MATERIALS := ["paint", "under_paint", "plastic", "chrome", "rubber", "plate", "mirror", "lens_red", "glass",
-	"glow_head", "glow_lens", "glow_tail", "glow_turn"]
+	"glow_head", "glow_lens", "glow_tail", "glow_turn", "glow_brake", "glow_reverse"]
 const CEILING := 7000
 const MIN_TRIS := 5000
 

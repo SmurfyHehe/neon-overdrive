@@ -10,6 +10,14 @@ extends Node3D
 #   brake  : accelerate to 100 km/h, full brake -> brake_dist_100 (m)
 #   corner : fixed steering, rising speed       -> peak_lat_g, max_slip_deg
 #
+# peak_lat_g is the car's real sideways acceleration: how fast its velocity
+# turns, times its speed (2026-10-12, #572). Until then it was speed x yaw rate,
+# which equals that only while the body is not rotating under the car: a spin
+# read as grip (the coupe on -4 deg camber read 1.79 g at 83 deg of slip, its
+# path never passed 1.06 g) and each upshift's yaw kick set the peak (the stock
+# coupe read 1.30 g; its path peaks at 1.08). Spins are told apart by
+# max_slip_deg, which this does not change.
+#
 # The three runs of a spec go side by side in three lanes (40 m apart, outside
 # aero draft range, so the cars don't affect each other), and specs are
 # evaluated one after another in the SAME lanes on the same ground. That is
@@ -38,10 +46,29 @@ const LANE_SPACING := 40.0
 ## x=0 the accel car rear-ended the coasting player (tests/car/tyres.gd,
 ## 2026-10-05). Note: positions move the single-precision results a hair.
 const LANE_X0 := -120.0
+## Height of the track's ground (2026-10-12, #572). Tests run the track inside
+## the live Game.tscn, and there a corner run at ground level was not on the
+## track at all: Game's road is an infinite plane at y=0 (a WorldBoundaryShape3D,
+## solid below), so the cars drove on the road's plane with its bands (SurfaceMap
+## reads shoulder, kerb and pavement grip off x), and a run that spiralled 225 m
+## out (see CORNER_REACH) went into the town: the coupe without load sensitivity
+## hit something at x 32 m, 125 g in one tick, in tests/car/tyres.gd. Below y=0
+## is inside that plane, so the track sits a kilometre up, clear of everything.
+## Only the player car is watched by OffMapRescue.
+const TRACK_Y := 1000.0
 const SETTLE_TIME := 1.0       # car held on the brakes while the suspension settles
 const SHIFT_RPM_FRACTION := 0.97  # upshift at this fraction of the spec's max_rpm
 const ACCEL_TIME := 35.0
 const CORNER_TIME := 30.0
+## How far from its start a corner run can get, in metres, so the ground can
+## reach past it. The driver holds the speed to 4 + 1.2 t m/s (40 m/s at
+## CORNER_TIME), so even a car with no grip at all, running straight, covers
+## at most 4 x 30 + 0.6 x 30^2 = 660 m. Measured (2026-10-12, #572, every
+## player car at steering 0.3, -0.3 and the bolt-on bend's 0.7): the most any
+## got from its start was 225 m (the wagon, 0.75 g at 123 km/h). The old
+## ground ended 120 m to one side of the corner lane, and corner runs at about
+## 130 km/h drove off it near the end of their 30 s (tuner_presets' Street).
+const CORNER_REACH := 700.0
 const CORNER_STEER := 0.3
 ## First slip this big (degrees) in the corner run is "the car has started to
 ## slide": the speed it happened at is metrics.v_slide_ms (bolt-on worth sweep).
@@ -88,12 +115,16 @@ class Run extends RefCounted:
 	var trace_ticks := 0
 	var profile: Dictionary = DEFAULT_PROFILE
 	var corner_steer := CORNER_STEER
+	var gone_hold := 0.0
+	var gone_t := 0.0
+	var prev_vel := Vector3.ZERO
 	# heat telemetry (record_heat only): one [speed m/s, engine load 0..1, on limiter, brake power W]
 	# per tick, replayed through PowertrainHealth offline by the balance sweep
 	var record_heat := false
 	var heat_log: Array = []
 	var start_pos := Vector3.ZERO
 	var has_start := false
+	var prev_dist := 0.0  # accel run: distance from start_pos at the last tick
 
 	func drive(c: PlayerCar) -> void:
 		if done:
@@ -169,9 +200,15 @@ class Run extends RefCounted:
 		if not has_start:
 			start_pos = c.global_position
 			has_start = true
-		# Standing 400 m (balance sweep): the "lap" is built from this.
-		if not m.has("t_400") and c.global_position.distance_to(start_pos) >= 400.0:
-			m.t_400 = t
+		# Standing 400 m (balance sweep): the "lap" is built from this. Timed
+		# where the line is crossed between two ticks, not at the tick after
+		# (2026-10-12, #601): in whole ticks a small gain read as nothing or as
+		# a full 1/60 s depending on where the ticks fell.
+		var dist := c.global_position.distance_to(start_pos)
+		if not m.has("t_400") and dist >= 400.0:
+			var k := clampf((400.0 - prev_dist) / maxf(dist - prev_dist, 1e-6), 0.0, 1.0)
+			m.t_400 = t - dt + dt * k
+		prev_dist = dist
 		if t >= ACCEL_TIME:
 			_finish()
 
@@ -206,7 +243,11 @@ class Run extends RefCounted:
 		var vel := c.linear_velocity
 		vel.y = 0.0
 		var sp := vel.length()
-		var a_lat := sp * absf(c.angular_velocity.y)
+		# How fast the velocity itself turns: the car's real sideways acceleration
+		# (see the top of the file for why not speed x yaw rate).
+		var acc := (vel - prev_vel) / dt
+		var a_lat := absf(acc.cross(vel / sp).y) if sp > 1.0 else 0.0
+		prev_vel = vel
 		lat_g_smooth = lerpf(lat_g_smooth, a_lat / 9.81, clampf(dt / 0.25, 0.0, 1.0))
 		peak_lat_g = maxf(peak_lat_g, lat_g_smooth)
 		if sp > 5.0:
@@ -223,20 +264,40 @@ class Run extends RefCounted:
 			m.turn_radius_m = minf(float(m.get("turn_radius_m", INF)), sp / yaw)
 		m.peak_lat_g = peak_lat_g
 		m.max_slip_deg = max_slip
-		# Past the limit the car just plows out; stop once the grip has clearly gone.
-		if t >= CORNER_TIME or (t > 4.0 and peak_lat_g > 0.3 and lat_g_smooth < 0.6 * peak_lat_g):
+		# Past the limit the car just plows out; stop once the grip has clearly gone
+		# (for gone_hold seconds when the caller asks for that, see corner_gone_hold).
+		if t > 4.0 and peak_lat_g > 0.3 and lat_g_smooth < 0.6 * peak_lat_g:
+			gone_t += dt
+		else:
+			gone_t = 0.0
+		if t >= CORNER_TIME or (gone_t > 0.0 and gone_t >= gone_hold):
 			_finish()
 
 ## -1 runs the cars exactly as the game does (PlayerCar.LINEAR_DAMP, 0). 0 or
 ## more replaces the RigidBody's linear damping with that value, for what-if
 ## runs: Godot's old default of 0.1 capped the car near 124 km/h.
 var linear_damp_override := -1.0
+## The car each spec is driven on (PlayerCar.chassis: its wheel hardpoints,
+## collision body and fittings). Set it to the car the specs belong to; ""
+## builds on the player's picked car, which is right only for that car's specs
+## (2026-10-12, #601: the p0_beater bolt-on sweep was timed on the coupe).
+var car_kind := ""
 ## Keep the brake run's telemetry trace (see the top of the file).
 var record_trace := false
 ## Steering input of the corner run (CORNER_STEER = the track's usual number).
 var corner_steer := CORNER_STEER
 ## The scripted driver's limits (DEFAULT_PROFILE = the track's usual driver).
 var driver_profile: Dictionary = DEFAULT_PROFILE
+## How long (seconds) the corner run's lateral g must stay under 60% of its
+## peak before the run calls the grip gone. 0 = the first tick under it, the
+## track's usual. Since tyre and surface feel (#498, d0c1335) a tyre that has
+## let go grips less until it hooks up again, so a rear-drive car's back end can
+## step out under power mid-corner and catch a moment later; with 0 that dip
+## ends the run as if the car had plowed out. tests/car/mod_tree.gd sets 1.0.
+## Since #572 the track sits a kilometre above the game world (TRACK_Y) on
+## ground wide enough for any corner run (CORNER_REACH), so a longer corner
+## run no longer meets the town.
+var corner_gone_hold := 0.0
 ## Keep per-tick heat telemetry of the accel and brake runs as metrics.heat_accel
 ## and metrics.heat_brake (see Run.heat_log), for the balance sweep's offline
 ## PowertrainHealth replay. Off by default.
@@ -309,10 +370,17 @@ func _make_ground() -> StaticBody3D:
 	body.add_to_group("Road")  # the wheels pick their tire numbers from the collider's group
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = Vector3(3 * LANE_SPACING + 200.0, 2.0, 6000.0)
+	# x: every lane plus CORNER_REACH either side of the outer ones. z: the
+	# accel run's 35 s heads down -z (5400 m as before), the corner run may come
+	# back CORNER_REACH the other way.
+	var x_lo := LANE_X0 - CORNER_REACH
+	var x_hi := LANE_X0 + 2 * LANE_SPACING + CORNER_REACH
+	var z_lo := -5400.0
+	var z_hi := CORNER_REACH
+	box.size = Vector3(x_hi - x_lo, 2.0, z_hi - z_lo)
 	shape.shape = box
 	body.add_child(shape)
-	body.position = Vector3(LANE_X0 + LANE_SPACING, -1.0, -2400.0)  # centred on the middle lane
+	body.position = Vector3((x_lo + x_hi) * 0.5, TRACK_Y - 1.0, (z_lo + z_hi) * 0.5)
 	add_child(body)
 	return body
 
@@ -323,16 +391,18 @@ func _spawn(spec: Dictionary, lane: int, kind: int) -> Run:
 	r.t = -SETTLE_TIME
 	r.profile = driver_profile
 	r.corner_steer = corner_steer
+	r.gone_hold = corner_gone_hold
 	r.record_heat = record_heat and kind != Kind.CORNER
 	if record_trace and kind == Kind.BRAKE:
 		r.trace = {"step": TRACE_STEP, "speed": [], "throttle": [], "brake": []}
 	var car := PlayerCar.new()
 	car.sim_only = true
+	car.chassis = car_kind
 	car.spec = CarSpec.clone_spec(spec)
 	# TuneTrack shifts by itself (_shift); the game default is automatic now.
 	car.spec["automatic_transmission"] = false
 	car.driver = r.drive
-	car.position = Vector3(LANE_X0 + lane * LANE_SPACING, 0.3, 0.0)
+	car.position = Vector3(LANE_X0 + lane * LANE_SPACING, TRACK_Y + 0.3, 0.0)
 	add_child(car)
 	if linear_damp_override >= 0.0:  # after _ready(), which sets the game's value
 		car.linear_damp = linear_damp_override

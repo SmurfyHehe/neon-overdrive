@@ -286,7 +286,7 @@ func _tick_flash() -> bool:
 	if phase == 0 and t >= 1.0:
 		phase = 1
 		mark = t
-		p.beams.flash()
+		Harness.flash(p.beams)
 	if phase == 0:
 		return false
 	var since := t - mark

@@ -16,6 +16,11 @@ extends Control
 #
 # Time is injected: advance(dt). _process calls it with the frame time unless
 # `auto` is false (tests). A held key is one press: key echo is ignored.
+#
+# Per frame (issue #579) the bar does no _draw: the steel bar is drawn once,
+# and the zone (with its sweet spot) and the needle are two child canvas items
+# built once per step; a frame only moves them (one transform each, and only
+# when they moved). _process runs only while the bar is running on its own.
 # Nothing here names a key on screen.
 # No class_name on purpose: preload it.
 
@@ -36,8 +41,14 @@ const RUSH_CAP := 3.0
 const HOLD_NEEDLE := 0.5
 const HOLD_DRIFT_RATE := 0.9   # radians per second at speed 1.0
 
-var auto := true
-var running := false
+var auto := true:
+	set(v):
+		auto = v
+		_sync_process()
+var running := false:
+	set(v):
+		running = v
+		_sync_process()
 var style := "sweep"
 var zone := 0.2                # width as a share of the bar
 var speed := 1.0               # from the data, 0.8-1.6
@@ -49,9 +60,15 @@ var center := 0.5              # zone centre, 0..1
 
 var _grind: AudioStreamPlayer
 static var _grind_stream: AudioStreamWAV
+## The moving parts: child canvas items of this one (drawn on top of the bar).
+var _zone_ci := RID()
+var _needle_ci := RID()
+var _zone_x := NAN     # where they were last put, so a still frame costs nothing
+var _needle_x := NAN
 
 func _ready() -> void:
 	custom_minimum_size = Vector2(480, 40)
+	_sync_process()
 	_grind = AudioStreamPlayer.new()
 	_grind.stream = _grind_wave()
 	_grind.volume_db = -8.0
@@ -78,7 +95,7 @@ func _restart() -> void:
 	if style == "hold":
 		phase = PI * 0.5  # the zone starts at one end and drifts across
 	_update_needle()
-	queue_redraw()
+	queue_redraw()   # once per step: the zone's width and place change
 
 func sweet_half_width() -> float:
 	return zone * WorkOrders.NEEDLE_CLEAN_SHARE * 0.5
@@ -95,7 +112,7 @@ func advance(dt: float) -> void:
 	else:
 		phase += dt * rate
 	_update_needle()
-	queue_redraw()
+	_place()
 
 func _update_needle() -> void:
 	match style:
@@ -143,8 +160,11 @@ func press() -> void:
 	step_missed.emit(misses)
 
 func _process(delta: float) -> void:
-	if auto:
-		advance(delta)
+	advance(delta)
+
+## Process only while there is a needle to move on its own.
+func _sync_process() -> void:
+	set_process(running and auto)
 
 func _input(event: InputEvent) -> void:
 	handle_event(event)
@@ -157,18 +177,52 @@ func handle_event(event: InputEvent) -> void:
 		if vp != null:
 			vp.set_input_as_handled()
 
+## The steel bar, and the zone and needle shapes (on a resize or a new step).
+## The same rectangles as ever: the zone and sweet spot are drawn around the
+## zone centre and the needle around x = 0, then moved into place.
 func _draw() -> void:
 	var w := size.x
 	var h := size.y
 	draw_rect(Rect2(0, 0, w, h), COL_EDGE)
 	draw_rect(Rect2(3, 3, w - 6, h - 6), COL_BAR)
+	var rs := RenderingServer
+	var me := get_canvas_item()
+	if not _zone_ci.is_valid():
+		_zone_ci = rs.canvas_item_create()
+		rs.canvas_item_set_parent(_zone_ci, me)
+		rs.canvas_item_set_draw_index(_zone_ci, 0)
+		_needle_ci = rs.canvas_item_create()
+		rs.canvas_item_set_parent(_needle_ci, me)
+		rs.canvas_item_set_draw_index(_needle_ci, 1)
 	var inner := w - 6.0
-	var zx := 3.0 + (center - zone * 0.5) * inner
-	draw_rect(Rect2(zx, 3, zone * inner, h - 6), COL_ZONE)
+	rs.canvas_item_clear(_zone_ci)
+	rs.canvas_item_add_rect(_zone_ci, Rect2(-zone * 0.5 * inner, 3, zone * inner, h - 6), COL_ZONE)
 	var sw := sweet_half_width() * 2.0 * inner
-	draw_rect(Rect2(3.0 + center * inner - sw * 0.5, 3, sw, h - 6), COL_SWEET)
+	rs.canvas_item_add_rect(_zone_ci, Rect2(-sw * 0.5, 3, sw, h - 6), COL_SWEET)
+	rs.canvas_item_clear(_needle_ci)
+	rs.canvas_item_add_rect(_needle_ci, Rect2(-2, 0, 4, h), COL_NEEDLE)
+	_zone_x = NAN
+	_needle_x = NAN
+	_place()
+
+## Moves the zone and the needle to where they are now; nothing if unmoved.
+func _place() -> void:
+	if not _zone_ci.is_valid():
+		return
+	var inner := size.x - 6.0
+	var zx := 3.0 + center * inner
+	if zx != _zone_x:
+		_zone_x = zx
+		RenderingServer.canvas_item_set_transform(_zone_ci, Transform2D(0.0, Vector2(zx, 0.0)))
 	var nx := 3.0 + needle * inner
-	draw_rect(Rect2(nx - 2, 0, 4, h), COL_NEEDLE)
+	if nx != _needle_x:
+		_needle_x = nx
+		RenderingServer.canvas_item_set_transform(_needle_ci, Transform2D(0.0, Vector2(nx, 0.0)))
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE and _zone_ci.is_valid():
+		RenderingServer.free_rid(_zone_ci)
+		RenderingServer.free_rid(_needle_ci)
 
 ## A short grinding burst, generated here (no asset): decaying noise through
 ## a coarse saw so it reads as gears biting.

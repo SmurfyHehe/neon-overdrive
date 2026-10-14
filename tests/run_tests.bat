@@ -2,6 +2,7 @@
 rem Run every test in tests\ and print one pass/fail summary (GitHub #39).
 rem
 rem   tests\run_tests.bat          all tests; a game window opens for ~1 min
+rem   tests\run_tests.bat ci       the GitHub check: ~100 fast headless tests, about 12 min
 rem   tests\run_tests.bat quick    headless tests only, no window: about 15 min of test
 rem                                time over 85 tests (CI wall clock about 23 of its 30)
 rem
@@ -20,6 +21,11 @@ if not exist "%GODOT%" (
 cd /d "%~dp0.."
 rem A fresh checkout has no import cache yet; scripts fail to load without it.
 if not exist ".godot" "%GODOT%" --headless --path . --import >nul 2>&1
+rem Tests get their own user folder, so their saves, logs and shader pipeline
+rem cache stay out of the player's (the cache had grown to 277 MB, #608).
+if "%NEON_TEST_APPDATA%"=="" set "NEON_TEST_APPDATA=%LOCALAPPDATA%\BoostSimcadeTests"
+if not exist "%NEON_TEST_APPDATA%" mkdir "%NEON_TEST_APPDATA%"
+set "APPDATA=%NEON_TEST_APPDATA%"
 rem Tests are silent unless you set SOUND=1 (the Dummy audio driver plays nothing).
 set "AUDIO=--audio-driver Dummy"
 rem Most tests count physics ticks as sixtieths of a second, so they run at 60 Hz; the game itself runs at 120 (see tick_rate.gd and tests/core/tick_rate_120.gd).
@@ -43,6 +49,7 @@ echo Started %DATE% %TIME:~0,8%
 
 set "FAILED="
 set "CRASHED="
+if /i "%~1"=="ci" goto ci
 call :run low_fps_watch --headless
 call :run core/perf_ladder --headless
 call :run core/smoke --headless
@@ -50,14 +57,19 @@ call :run core/game_info --headless
 call :run core/palette --headless
 call :run ui/fonts --headless
 call :run world/names --headless
+call :run world/uturn_signs --headless
 call :run ui/hud --headless
 call :run ui/settings_screen --headless
+call :run ui/key_map --headless
+call :run ui/key_map_drive --headless
 call :run ui/title_and_pause --headless
 call :run ui/pause_map --headless
 call :run ui/title_kerbside --headless
 call :run ui/pause_look --headless
 call :run ui/mod_tree_panel --headless
 call :run audio/menu_sfx --headless
+call :run audio/player_horn --headless
+call :run audio/player_gain --headless
 call :run core/key_bindings --headless
 call :run fleet/car_loft_normals --headless
 call :run fleet/test_car --headless
@@ -65,12 +77,16 @@ call :run fleet/p1_coupe --headless
 call :run car/undercarriage --headless
 rem Under a second: the sat-nav's route finder on the map's numbers (no game): exits, turn-rounds at gaps only, the lap seam, acts 2-3, a made-up interchange, missed turns.
 call :run car/sat_nav_route --headless
+call :run car/cabin_dirt "--headless --fixed-fps 60 --audio-driver Dummy"
 call :run world/road_strip_winding --headless
 call :run world/sidewalk_collision_taper --headless
 call :run world/kerb_profile --headless
 call :run world/cross_section --headless
 call :run world/side_streets --headless
 call :run car/kerb_strike --headless
+call :run car/damage_offsets --headless
+rem ~1 min: wheel-corner damage (DP1+DP2): the table, the caps, the fade, auto-trim drift and brake pull on the road.
+call :run car/damage_handling "--headless --fixed-fps 120"
 call :run car/aero_draft_equivalence --headless
 call :run view/camera_feel --headless
 call :run audio/car_audio --headless
@@ -95,8 +111,11 @@ call :run car_wash_scene --headless
 call :run view/cockpit --headless
 call :run view/limit_tick --headless
 call :run view/cockpit_interior --headless
+call :run view/wheel_screen --headless
+call :run view/cabin_clearance --headless
 call :run view/dash_trinket --headless
 call :run view/bobble_head --headless
+call :run view/bobble_figures --headless
 call :run view/cabin_mods --headless
 call :run view/cockpit_isolation "--headless --fixed-fps 120"
 call :run view/cockpit_head_motion --headless
@@ -104,6 +123,8 @@ call :run ui/hud_rear_strip --headless
 call :run view/look_back --headless
 call :run view/look_around --headless
 call :run view/chase_orbit "--headless --fixed-fps 60"
+call :run view/chase_ring_recenter "--headless --fixed-fps 60"
+call :run view/hood_view "--headless --fixed-fps 60"
 call :run view/cockpit_horizon --headless
 call :run view/cockpit_eye_inside --headless
 call :run view/cockpit_shake_rotation_only --headless
@@ -114,6 +135,7 @@ call :run view/fov_step_limit --headless
 call :run view/cockpit_driver --headless
 call :run view/cockpit_window --headless
 call :run view/gesture_flip_off "--headless --fixed-fps 60"
+call :run view/idle_actions "--headless --fixed-fps 60"
 call :run view/gauge_pod --headless
 call :run view/gauge_layout --headless
 call :run view/cockpit_steering_hands --headless
@@ -121,20 +143,26 @@ call :run view/cockpit_shifter "--headless --fixed-fps 60"
 call :run view/cockpit_shifter_rnd "--headless --fixed-fps 60"
 rem the shift animation runs on the frame clock, so the gate test (every
 rem player car) and the shifter tests get a fixed 60 fps headless
-for %%c in (p0_beater p1_coupe p2_hothatch p3_tuner p4_kei p5_muscle p6_crossover) do (
+for %%c in (p0_beater p1_coupe p2_hothatch p3_tuner p4_kei p5_muscle p6_crossover p10_truck) do (
 	set "NEON_CAR=%%c"
 	call :run view/cockpit_shift_gate "--headless --fixed-fps 60"
 )
 set "NEON_CAR="
 call :run ui/touch_radio --headless
 call :run car/tyres "--headless --fixed-fps 60"
+call :run car/surface_feel "--headless --fixed-fps 60"
 call :run car/clutch_model --headless
 call :run audio/driveline_audio --headless
 call :run audio/sound_fixes --headless
 call :run audio/road_sounds --headless
 call :run audio/crash_variety --headless
+call :run audio/crash_timbre --headless
+call :run audio/cabin_life --headless
 call :run audio/audio_mix --headless
 call :run audio/radio --headless
+call :run audio/radio_power --headless
+call :run audio/song_names --headless
+call :run ui/radio_carousel --headless
 call :run world/person_body --headless
 call :run world/night_clock --headless
 call :run world/night_bands "--headless --fixed-fps 60"
@@ -150,7 +178,11 @@ call :run core/view_settings --headless
 call :run core/discord_presence --headless
 call :run view/camera_smoothing_setting --headless
 call :run core/log_folder --headless
+rem Errors and warnings into errors.log (scrubbed, capped), and a crashed last run makes a crash folder.
+call :run core/error_log --headless
 call :run car/powertrain_health "--headless --fixed-fps 60"
+call :run car/fix_car "--headless --fixed-fps 60"
+call :run ui/fix_car_button --headless
 call :run car/car_parts --headless
 call :run car/car_detail --headless
 call :run car/car_paint --headless
@@ -193,6 +225,8 @@ rem Save core S2: old saves upgrade (frozen fixtures in tests/save/fixtures); fa
 call :run save/save_upgrade --headless
 rem Build 3 + save core: a fresh slot boots, and the frozen build 3 save (shop day, receipts, weather seed, known stops, gearbox) boots into its night.
 call :run save/save_build3_boot --headless
+rem Free mode F0: the flag, the night 30 dawn, whole city open, plate lines.
+call :run core/freemode --headless
 rem F0: cash and bank through reloads, chases and 6 a.m. (and the HUD and pause screen).
 call :run core/wallet --headless
 rem Work board W0: pay rules, the daily draw, shop pay into the bank once.
@@ -208,21 +242,38 @@ rem Police F0/F1: heat levels and icons, cop_can_see_player, headlights off hide
 call :run traffic/police_heat --headless
 rem Police P1/P2: the rulebook table, sight, offences, warning step, heat times.
 call :run traffic/police_rules --headless
+rem More-alive MA4 (T8): the oncoming warning flash before a speed trap, once per trap.
+call :run traffic/trap_warning_flash --headless
+rem W0: wrong way = travelling against the flow (8 cases, shoulder, spin); heat with a mocked cop; the flow flip hold.
+call :run traffic/wrong_way_pure --headless
+call :run traffic/police_wrong_way --headless
+call :run traffic/flow_flip --headless
 call :run traffic/free_driver_pure --headless
 call :run traffic/cop_brain_pure --headless
-rem Ending a run on a crash: the rules, the hit sensor, the crash screen; then the real restart.
-call :run core/run_end "--headless --fixed-fps 120"
-call :run core/run_end_restart "--headless --fixed-fps 120"
 rem Test build sandbox: free money and fuel, no run-ending, parked start, X start, put back on the road.
 call :run core/test_build_sandbox "--headless --fixed-fps 120"
 rem The key: X starts the engine and switches it off; starter, catch and shutdown sounds.
 call :run car/engine_key "--headless --fixed-fps 120"
+rem The start itself: per-engine starter rendered offline (length, coughs, catch, level, weight), fast idle curve.
+call :run audio/starter_render "--headless"
+rem After the key start in the game: cabin shake, coughs, rev blip, 20 s fast idle.
+call :run car/fast_idle "--headless --fixed-fps 120"
 rem Delete a save: the store, and the title's Load > Delete a save with its question.
 call :run core/save_delete --headless
 rem Test build: every player car with everything its mod tree offers fitted.
 call :run car/test_build_mods --headless
+rem Hard hits and the end of the night: the rules, the hit sensor, the crash screen; then the real restart.
+call :run core/run_end "--headless --fixed-fps 120"
+call :run core/run_end_restart "--headless --fixed-fps 120"
+rem Totalled meter (TM1): no single hit ends a run; the meter, the free first total, bad cops, the tow row, the test build setting.
+call :run car/totalled_meter --headless
+call :run core/totalled_run_end "--headless --fixed-fps 120"
+rem No roll ends a run (TM2): a car on its side or roof rights itself after 3 s and the roll costs meter. Three game boots, about 2 min of driving time.
+call :run car/roll_righting "--headless --fixed-fps 120"
 call :run world/gas_station --headless
 call :run world/gas_station_sides --headless
+rem ~4-5 min: the four compound station lots driven for real (in, every spot kind, out) at 60 and 120 km/h.
+call :run world/station_lot "--headless --fixed-fps 60"
 call :run traffic/traffic_spawn "--headless --fixed-fps 60"
 rem Near-band traffic: hand-overs between the 60 m physics band and the rails, both ways, no visible jump.
 call :run traffic/traffic_near_band "--headless --fixed-fps 120"
@@ -236,8 +287,9 @@ call :run traffic/rival_line "--headless --fixed-fps 120"
 call :run traffic/rival_pace "--headless --fixed-fps 120"
 rem The race as the game runs it: traffic, bends and hills, the rival handed back to traffic at the end.
 call :run traffic/rival_race "--headless --fixed-fps 120"
+call :run core/race_retry "--headless --fixed-fps 60"
 rem ~40 s: the traffic cars (stage B step 5) against their sheets, then a drive each at the game's 120 Hz.
-rem npc_cars drives every kind (14 since the player and cop cars joined), about 16 min: give it 20.
+rem npc_cars drives every kind (15 since the player and cop cars joined), about 17 min: give it 20.
 set "TT_SAVED=%TEST_TIMEOUT%"
 if %TEST_TIMEOUT% LSS 1200 set "TEST_TIMEOUT=1200"
 call :run traffic/npc_cars "--headless --fixed-fps 120"
@@ -261,6 +313,9 @@ call :run fx/exhaust_flames --headless
 call :run world/boundary_walls --headless
 rem Roadside kit: where hydrants, bins, dumpsters, cones, jersey runs and kerb rails land, per district; collision; determinism.
 call :run world/roadside_kit --headless
+call :run world/prop_ghosts "--headless --fixed-fps 60"
+call :run world/prop_hit "--headless --fixed-fps 120"
+call :run world/hydrant_break "--headless --fixed-fps 120"
 rem ~1 min: the player into the out-of-bounds wall at 16 speeds and angles, at the game's 120 Hz.
 call :run car/wall_hit "--headless --fixed-fps 120"
 rem ~4 min: off the map (under the road, outside or over the walls, off the road's end): faded and put back, free.
@@ -285,6 +340,7 @@ rem ~1 min: the median barriers (R1): each type at 9 speeds and angles, crash cu
 call :run world/barrier_hit "--headless --fixed-fps 120"
 rem Lamp-post life (world step 2): moths and a bat, banners, steam, litter. Placement, caps, meshes and the wind number; chunk instances are checked when a window is open.
 call :run world/lamp_life --headless
+call :run world/graffiti --headless
 rem The quick driving set (shared test driver, scripts/core/test_driver.gd; docs/TEST_DRIVER.md),
 rem at the game's 120 Hz: a clean run at 150 and 300 km/h in traffic plus spin recovery, crashes
 rem on purpose, seeded random keys, spawning at 0 to 400 km/h, and record-then-replay.
@@ -293,6 +349,8 @@ call :run core/drive_crash "--headless --fixed-fps 120"
 call :run core/drive_fuzz "--headless --fixed-fps 120"
 call :run core/drive_spawn "--headless --fixed-fps 120"
 call :run core/drive_replay "--headless --fixed-fps 120"
+rem F9 saves one bug-report folder: the four files, the recording loads, the 21st folder removes the oldest.
+call :run core/bug_bundle "--headless --fixed-fps 120"
 if /i not "%~1"=="quick" (
 	rem The long driving set, for before a big merge: the same tests with more of everything.
 	set "DRIVE_SECS=90"
@@ -333,12 +391,16 @@ if /i not "%~1"=="quick" (
 	call :run traffic/near_miss_log "--headless --fixed-fps 120"
 	rem ~60 s: the near-miss fix's staged cases (pull-out, no flash, flash, blind spot, abort, edge away, rule breakers, cut-off, swerve, horns, siren). The flow checks (near_miss_flow: spawn safety 5 min, blinker 60 s), the before/after bots (near_miss_scenarios) and the script-cost check (near_miss_cost) are run by hand, one at a time.
 	call :run traffic/near_miss_cases "--headless --fixed-fps 120"
+call :run traffic/more_alive_traffic "--headless --fixed-fps 120"
 	rem ~50 s: staggered traffic controller (every 2nd tick, cars alternate) and hidden cars skip wheel visuals.
 	call :run traffic/ai_stagger "--headless --fixed-fps 120"
 	rem ~70 s: City lights, the signalised crossing (J0/J1a): red queue, amber, 1 a.m. flash.
 	call :run world/junction_lights "--headless --fixed-fps 120"
+	call :run world/junction_uturn "--headless --fixed-fps 120"
 	rem ~100 s: the map, loop 1: the road repeats each lap, drives both ways, and the save names the road.
 	call :run world/loop_road "--headless --fixed-fps 60"
+	call :run world/exits_live "--headless --fixed-fps 60"
+	call :run world/ring_drive "--headless --fixed-fps 60"
 	rem ~3 min: the road both ways: 2 km out, 3 km back across the lap seam, ten turns; road under the car every tick, no chunk rebuilt in view.
 	call :run world/two_way_drive "--headless --fixed-fps 60"
 	call :run traffic/traffic_perf "--headless --fixed-fps 120"
@@ -346,6 +408,8 @@ if /i not "%~1"=="quick" (
 	call :run world/hill_drive "--headless --fixed-fps 120"
 	rem ~4 min: 10 km of the default hilly, bending road at 120 and 200 km/h, watching the springs for bumps.
 	call :run world/hill_bumps "--headless --fixed-fps 120"
+	rem The tunnel under Downtown (TN1): map, dip profile, a pass with traffic at 200 km/h and one at 250.
+	call :run world/tunnel "--headless --fixed-fps 120"
 	rem ~3 min: more than a lap of the default loop at 140 km/h: no step in the road and no launch at any of 140 chunk borders.
 	call :run world/chunk_border_launch "--headless --fixed-fps 120"
 	call :run world/hill_park "--headless --fixed-fps 60"
@@ -353,12 +417,19 @@ if /i not "%~1"=="quick" (
 	call :run world/water_drive "--headless --fixed-fps 120"
 	rem ~8 s: brake + throttle from a stop holds the fronts only (line lock burnout).
 	call :run car/burnout_line_lock "--headless --fixed-fps 120"
-	rem ~3 min: fuel burn calibration, a dry tank in every gearbox, limp causes (slowest wins), refuel from the bank.
+	rem ~3 min: fuel burn calibration, a dry tank in every gearbox (the engine starves, 50 km/h or more), dry + hot, refuel from the bank.
 	call :run car/fuel_limp "--headless --fixed-fps 60"
 	rem ~5 s: every start is a full tank (START_FULL_TANK), two player cars.
 	call :run car/fuel_start "--headless --fixed-fps 60"
+	rem ~1 min: limp by physics: multipliers per cause, worst wins, the stumble pattern, a wheel on its rim, and each cause's top speed (50 km/h or more).
+	rem This runs the selected car; for the per-car table set NEON_CAR=<kind> and run it once per car.
+	call :run car/limp_physics "--headless --fixed-fps 60"
+	rem ~40 s: tyres (DP3): slow leaks and their timing, the air machine, bent rims, flat spots, the pull and the wobble on the car.
+	call :run car/tyre_damage "--headless --fixed-fps 120"
 	rem ~25 s: damage slice 1: hits by direction, crash pull, rear sag, dead engine, lamps, steam, rattle, garage/station/tow.
 	call :run car/car_damage "--headless --fixed-fps 120"
+	rem ~2 min: the Damage setting (Full / Light / Looks only), difficulty, and the radiator heat window per difficulty.
+	call :run car/damage_settings "--headless --fixed-fps 60"
 	rem No car or road chunk pops in or out where a camera can see it (Roy, 2026-10-09): flat road, then the hilly one.
 	call :run traffic/no_visible_spawn "--headless --fixed-fps 60"
 	set "NEON_HILLS=1"
@@ -417,21 +488,133 @@ if /i not "%~1"=="quick" (
 	call :run world/sky_probe
 	call :run world/sky_dawn
 	call :run world/sky_clouds --headless
+	call :run world/moon_path --headless
 	call :run audio/mute --headless
 	call :run car/feel_pass_1 --headless
 )
+:report
 echo.
 echo Per-test times:
 type "%TIMES%"
 echo Finished %DATE% %TIME:~0,8%
 rem A negative exit code is Godot crashing (often at shutdown, after the test printed PASS). The old script never counted those either; they are only listed.
 if defined CRASHED echo CRASHED, not counted as failed:!CRASHED!
+if defined CRASHED if defined GITHUB_ACTIONS echo ::warning::CRASHED:!CRASHED!
 if defined FAILED (
 	echo FAILED:!FAILED!
+	rem On GitHub, also as an annotation: the job log is not readable from every client.
+	if defined GITHUB_ACTIONS echo ::error::FAILED:!FAILED!
 	exit /b 1
 )
 if defined CRASHED (echo No test failed, but see CRASHED above.) else echo All tests passed.
 exit /b 0
+
+rem The GitHub check (.github/workflows/test.yml): about 100 of the fastest quick tests,
+rem one or more from every area, so it finishes inside the runner's 30 minutes. The full
+rem quick and window sets still run before every merge.
+:ci
+call :run core/work_orders_data --headless
+call :run audio/song_names --headless
+call :run car/bolt_ons --headless
+call :run car/damage_offsets --headless
+call :run car/kerb_strike --headless
+call :run core/discord_presence --headless
+call :run core/perf_ladder --headless
+call :run core/save_system --headless
+call :run core/view_settings --headless
+call :run fleet/car_loft_normals --headless
+call :run fleet/interior_unique --headless
+call :run low_fps_watch --headless
+call :run traffic/cop_brain_pure --headless
+call :run traffic/flow_flip --headless
+call :run traffic/free_driver_pure --headless
+call :run traffic/police_heat --headless
+call :run traffic/police_wrong_way --headless
+call :run traffic/trap_warning_flash --headless
+call :run traffic/wrong_way_pure --headless
+call :run ui/radio_carousel --headless
+call :run ui/timing_bar --headless
+call :run world/person_body --headless
+call :run world/side_streets --headless
+call :run world/water_rules --headless
+call :run audio/exhaust_pops --headless
+call :run audio/menu_sfx --headless
+call :run audio/radio_power --headless
+call :run car/car_assembler --headless
+call :run car/fix_car "--headless --fixed-fps 60"
+call :run car/sat_nav_route --headless
+call :run car/totalled_meter --headless
+call :run car_dirt --headless
+call :run core/error_log --headless
+call :run core/key_bindings --headless
+call :run core/setting_danger --headless
+call :run core/work_orders --headless
+call :run fleet/car_pipeline_p1 --headless
+call :run traffic/police_rules --headless
+call :run traffic/rival_plan_pure --headless
+call :run view/cabin_mods --headless
+call :run view/dash_trinket --headless
+call :run world/road_frame --headless
+call :run world/season_calendar --headless
+call :run world/uturn_signs --headless
+call :run world/weather_plan --headless
+call :run car/chassis_targets "--headless --fixed-fps 60"
+call :run car/test_build_mods --headless
+call :run car/undercarriage --headless
+call :run core/game_info --headless
+call :run core/log_folder --headless
+call :run core/save_gearbox "--headless --fixed-fps 120"
+call :run core/settings_safety --headless
+call :run fleet/car_parts_kits --headless
+call :run tuning/auto_tune_rules --headless
+call :run ui/fonts --headless
+call :run ui/key_map --headless
+call :run ui/settings_screen --headless
+call :run world/cross_section --headless
+call :run world/graffiti --headless
+call :run world/kerb_profile --headless
+call :run world/lamp_life --headless
+call :run world/names --headless
+call :run world/sidewalk_collision_taper --headless
+call :run audio/exhaust_tune --headless
+call :run core/palette --headless
+call :run view/wheel_screen --headless
+call :run world/road_strip_winding --headless
+call :run fleet/fleet_design_check --headless
+call :run world/road_space --headless
+call :run car/car_paint --headless
+call :run tuning/tune_params --headless
+call :run ui/mod_tree_panel --headless
+call :run world/chunk_builder_equivalence --headless
+call :run world/district_kinds --headless
+call :run world/road_alignment --headless
+call :run world/road_centerline --headless
+call :run audio/starter_render --headless
+call :run fleet/p1_coupe --headless
+call :run fleet/test_car --headless
+call :run world/chunk_rebuild_perf --headless
+call :run world/road_layout --headless
+call :run view/camera_rate_independent --headless
+call :run world/roadside_kit --headless
+call :run audio/audio_master --headless
+call :run car/anti_lag_turbo --headless
+call :run car/car_parts --headless
+call :run car_wash_scene --headless
+call :run save/save_upgrade --headless
+call :run ui/hud_rear_strip --headless
+call :run ui/work_board --headless
+call :run audio/crash_timbre --headless
+call :run car/car_detail --headless
+call :run core/shop_day --headless
+call :run fleet/car_symmetry --headless
+call :run tuning/tune_slots --headless
+call :run view/camera_smoothing_setting --headless
+call :run view/cockpit_shake_rotation_only --headless
+call :run world/boundary_walls --headless
+call :run world/night_bands "--headless --fixed-fps 60"
+call :run car/auto_key_hold "--headless --fixed-fps 120"
+call :run core/freemode --headless
+goto report
 
 :run
 echo.

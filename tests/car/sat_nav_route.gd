@@ -4,12 +4,16 @@ extends SceneTree
 # logic on the map's numbers, so no game is booted.
 #
 # Checks:
-# 1. Loop 1, act 1: the Shop's exit 300 m ahead is one exit step, 300 m.
-# 2. The Shop's exit just behind: turning round twice (at the gaps at 625 and
-#    225) beats going round the loop with the 1500 m penalty and loses to it
+# 1. Loop 1, act 1: the Shop's exit 100 m ahead is one exit step, 100 m.
+# 2. The Shop's exit just behind: turning round twice (at the gaps at 825 and
+#    25) beats going round the loop with the 1500 m penalty and loses to it
 #    with a 3000 m one; every turn sits on a gap or a crossing.
-# 3. Fuel 2 is on the other carriageway: one turn at a legal spot, then an
-#    exit on side -1.
+# (The map since the ring sites, R1-R4: an exit's gore is 200 m before its
+# ring, x1a at 200; one signed U-turn per district, 25 m in; the gas stations
+# on the slip lanes past each merge, Fuel 7B at 4875 on side -1.)
+# 3. Fuel 7B is on the other carriageway: one turn at a legal spot, then
+#    arrive on side -1 (the gas stations open straight off the road, no exit,
+#    since the four fixed stations of 2026-10-11, eac968f).
 # 4. A route across the lap seam.
 # 5. Acts 2 and 3: the same answers where the loop is the same, and routes
 #    into the new districts use their gaps and exits.
@@ -71,53 +75,53 @@ func _initialize() -> void:
 	var r: Dictionary = nav.plan_to_stop({"road": 0, "s": 100.0, "dir": 1}, "shop")
 	print("1. s 100 dir +1 to the Shop: ", _line(r))
 	_check(r.ok and r.steps.size() == 1 and r.steps[0].kind == "exit" and r.steps[0].id == "x1a"
-		and is_equal_approx(r.steps[0].s, 400.0) and is_equal_approx(r.total_m, 300.0), "1: want one exit step at 400, 300 m")
+		and is_equal_approx(r.steps[0].s, 200.0) and is_equal_approx(r.total_m, 100.0), "1: want one exit step at 200, 100 m")
 
 	r = nav.plan_to_stop({"road": 0, "s": 500.0, "dir": 1}, "shop")
 	print("2. s 500 dir +1 to the Shop, penalty 1500: ", _line(r))
-	_check(_turn_count(r) == 2 and r.steps.size() == 3 and is_equal_approx(r.steps[0].s, 625.0)
-		and is_equal_approx(r.steps[1].s, 225.0) and r.steps[2].kind == "exit", "2: want turns at 625 and 225, then the exit")
-	_check(is_equal_approx(r.total_m, 700.0) and is_equal_approx(r.cost_m, 3700.0), "2: want 700 m driven, cost 3700")
+	_check(_turn_count(r) == 2 and r.steps.size() == 3 and is_equal_approx(r.steps[0].s, 825.0)
+		and is_equal_approx(r.steps[1].s, 25.0) and r.steps[2].kind == "exit", "2: want turns at 825 and 25, then the exit")
+	_check(is_equal_approx(r.total_m, 1300.0) and is_equal_approx(r.cost_m, 4300.0), "2: want 1300 m driven, cost 4300")
 	_check(int(r.steps[0].dir) == 1 and int(r.steps[1].dir) == -1 and int(r.steps[2].dir) == 1, "2: leg directions +1, -1, +1")
 	_check(_turns_legal(r), "2: a turn off a gap or crossing")
 	var dear: RefCounted = SatNavRoute.new().build({}, RoadMap.STOPS, RoadMap.INTERCHANGES, 3000.0)
 	var r2: Dictionary = dear.plan_to_stop({"road": 0, "s": 500.0, "dir": 1}, "shop")
 	print("2. the same, penalty 3000: ", _line(r2))
-	_check(_turn_count(r2) == 0 and r2.steps.size() == 1 and is_equal_approx(r2.total_m, RoadMap.length() - 100.0),
+	_check(_turn_count(r2) == 0 and r2.steps.size() == 1 and is_equal_approx(r2.total_m, RoadMap.length() - 300.0),
 		"2: with a 3000 m penalty, want straight on round the loop")
 
-	r = nav.plan_to_stop({"road": 0, "s": 100.0, "dir": 1}, "fuel_2")
-	print("3. s 100 dir +1 to Fuel 2: ", _line(r))
-	_check(_turn_count(r) == 1 and _turns_legal(r) and r.steps[-1].kind == "exit" and r.steps[-1].id == "x7b"
-		and int(r.steps[-1].dir) == -1, "3: want one legal turn and the exit on side -1")
-	_check(is_equal_approx(r.steps[0].s, 225.0) and is_equal_approx(r.total_m, 125.0 + 225.0 + 1200.0), "3: want the first gap ahead (225), 1550 m")
+	r = nav.plan_to_stop({"road": 0, "s": 100.0, "dir": 1}, "fuel_7b")
+	print("3. s 100 dir +1 to Fuel 7B: ", _line(r))
+	_check(_turn_count(r) == 1 and _turns_legal(r) and r.steps[-1].kind == "arrive" and is_equal_approx(r.steps[-1].s, 4875.0)
+		and int(r.steps[-1].dir) == -1, "3: want one legal turn and arrive at 4875 on side -1")
+	_check(is_equal_approx(r.steps[0].s, 825.0) and is_equal_approx(r.total_m, 725.0 + 825.0 + 1525.0), "3: want the first gap ahead (825), 3075 m")
 
 	r = nav.plan_to_stop({"road": 0, "s": 6300.0, "dir": 1}, "shop")
 	print("4. s 6300 dir +1 to the Shop (over the seam): ", _line(r))
-	_check(r.steps.size() == 1 and is_equal_approx(r.total_m, 500.0), "4: want 500 m, no turn")
+	_check(r.steps.size() == 1 and is_equal_approx(r.total_m, 300.0), "4: want 300 m, no turn")
 
 	# --- 7: progress and replan, still act 1 ---
 	r = nav.plan_to_stop({"road": 0, "s": 100.0, "dir": 1}, "shop")
 	var missed := 0
 	var p: Dictionary = {}
 	var log_7: Array = []
-	for s in [100.0, 250.0, 390.0, 410.0, 450.0, 520.0]:
+	for s in [100.0, 150.0, 190.0, 210.0, 250.0, 320.0]:
 		p = nav.progress(r, {"road": 0, "s": s, "dir": 1})
 		log_7.append("%d:%s%d" % [int(s), "MISSED " if p.missed else "", int(p.next_m)])
 		if p.missed:
 			missed += 1
-		if is_equal_approx(s, 250.0):
-			_check(p.next_kind == "exit" and is_equal_approx(p.next_m, 150.0) and is_equal_approx(p.left_m, 150.0), "7: 150 m to the exit at s 250")
+		if is_equal_approx(s, 150.0):
+			_check(p.next_kind == "exit" and is_equal_approx(p.next_m, 50.0) and is_equal_approx(p.left_m, 50.0), "7: 50 m to the exit at s 150")
 	print("7. driving past the Shop's exit (s:next_m): ", " ".join(log_7))
 	_check(missed == 1, "7: missed must be true exactly once, got %d" % missed)
-	var again: Dictionary = nav.replan(r, {"road": 0, "s": 410.0, "dir": 1})
-	print("7. replan from s 410: ", _line(again))
-	_check(again.ok and _turn_count(again) == 2 and is_equal_approx(again.steps[0].s, 625.0) and _turns_legal(again)
-		and again.steps[-1].id == "x1a", "7: replan wants the gap at 625, then 225, then the exit")
+	var again: Dictionary = nav.replan(r, {"road": 0, "s": 210.0, "dir": 1})
+	print("7. replan from s 210: ", _line(again))
+	_check(again.ok and _turn_count(again) == 2 and is_equal_approx(again.steps[0].s, 825.0) and _turns_legal(again)
+		and again.steps[-1].id == "x1a", "7: replan wants the gap at 825, then 25, then the exit")
 	# Following the new route: turn-rounds tick themselves off, the exit by advance().
 	var log_f: Array = []
-	for place: Dictionary in [{"s": 500.0, "dir": 1}, {"s": 620.0, "dir": 1}, {"s": 630.0, "dir": -1}, {"s": 300.0, "dir": -1},
-			{"s": 220.0, "dir": 1}, {"s": 390.0, "dir": 1}]:
+	for place: Dictionary in [{"s": 300.0, "dir": 1}, {"s": 820.0, "dir": 1}, {"s": 830.0, "dir": -1}, {"s": 100.0, "dir": -1},
+			{"s": 20.0, "dir": 1}, {"s": 190.0, "dir": 1}]:
 		place.road = 0
 		p = nav.progress(again, place)
 		log_f.append("%d/%+d:%s %d (left %d)" % [int(place.s), int(place.dir), p.next_kind, int(p.next_m), int(p.left_m)])
@@ -125,7 +129,7 @@ func _initialize() -> void:
 	print("7. following it: ", ", ".join(log_f))
 	_check(p.next_kind == "exit" and is_equal_approx(p.next_m, 10.0) and is_equal_approx(p.left_m, 10.0), "7: 10 m to the exit at the end")
 	nav.advance(again)
-	_check(nav.progress(again, {"road": 0, "s": 400.0, "dir": 1}).done, "7: done after the exit is taken")
+	_check(nav.progress(again, {"road": 0, "s": 200.0, "dir": 1}).done, "7: done after the exit is taken")
 	# Heading flipped away from any turn spot: missed.
 	r = nav.plan_to_stop({"road": 0, "s": 100.0, "dir": 1}, "shop")
 	_check(nav.progress(r, {"road": 0, "s": 150.0, "dir": -1}).missed, "7: facing the wrong way is a miss")
@@ -143,37 +147,39 @@ func _initialize() -> void:
 		var lap := RoadMap.length()
 		var a: Dictionary = big.plan_to_stop({"road": 0, "s": 100.0, "dir": 1}, "shop")
 		var b: Dictionary = big.plan_to_stop({"road": 0, "s": 500.0, "dir": 1}, "shop")
-		var c: Dictionary = big.plan_to_stop({"road": 0, "s": 100.0, "dir": 1}, "fuel_2")
-		# Into the act's new districts: exit x10b (7600, side -1) from s 7000 dir +1.
-		var d: Dictionary = big.plan({"road": 0, "s": 7000.0, "dir": 1}, {"road": 0, "s": 7600.0, "side": -1})
-		print("5. act %d (%d m, %d points): shop ahead %s | shop behind %s | fuel 2 %s | x10b %s" % [act, int(lap),
+		var c: Dictionary = big.plan_to_stop({"road": 0, "s": 100.0, "dir": 1}, "fuel_7b")
+		# Into the act's new districts: exit x10b (its gore at 7800, side -1) from s 7000 dir +1.
+		var d: Dictionary = big.plan({"road": 0, "s": 7000.0, "dir": 1}, {"road": 0, "s": 7800.0, "side": -1})
+		print("5. act %d (%d m, %d points): shop ahead %s | shop behind %s | fuel 7B %s | x10b %s" % [act, int(lap),
 			big.point_count(), _line(a), _line(b), _line(c), _line(d)])
-		_check(is_equal_approx(a.total_m, 300.0) and a.steps.size() == 1, "5: act %d shop ahead" % act)
-		_check(is_equal_approx(b.total_m, 700.0) and _turn_count(b) == 2 and _turns_legal(b), "5: act %d shop behind" % act)
-		# Fuel 2 (5200, side -1): turn at the first gap (225) and drive back over
-		# the seam, or drive on to the gap past it (5425) and come back 225 m,
-		# whichever is shorter on a loop this long.
-		var back := 125.0 + 225.0 + (lap - 5200.0)
-		var on := 5325.0 + 225.0
-		_check(_turn_count(c) == 1 and _turns_legal(c) and c.steps[-1].id == "x7b"
-			and is_equal_approx(c.steps[0].s, 225.0 if back < on else 5425.0)
-			and is_equal_approx(c.total_m, minf(back, on)), "5: act %d fuel 2" % act)
-		_check(_turn_count(d) == 1 and _turns_legal(d) and is_equal_approx(d.steps[0].s, 7825.0) and d.steps[-1].id == "x10b"
-			and is_equal_approx(d.total_m, 825.0 + 225.0), "5: act %d x10b by the gap at 7825" % act)
+		_check(is_equal_approx(a.total_m, 100.0) and a.steps.size() == 1, "5: act %d shop ahead" % act)
+		_check(is_equal_approx(b.total_m, 1300.0) and _turn_count(b) == 2 and _turns_legal(b), "5: act %d shop behind" % act)
+		# Fuel 7B (4875, side -1): turn at the first gap (825) and drive back
+		# over the seam, or drive on to the first gap past it (g8, 5625) and
+		# turn there, whichever is shorter on a loop this long (a tie may go
+		# either way).
+		var back := 725.0 + 825.0 + (lap - 4875.0)
+		var on := 5525.0 + 750.0
+		var turn_s := float(c.steps[0].s) if c.ok else -1.0
+		var turn_ok := (is_equal_approx(turn_s, 825.0) and back <= on) or (is_equal_approx(turn_s, 5625.0) and on <= back)
+		_check(_turn_count(c) == 1 and _turns_legal(c) and c.steps[-1].kind == "arrive" and turn_ok
+			and is_equal_approx(c.total_m, minf(back, on)), "5: act %d fuel 7B" % act)
+		_check(_turn_count(d) == 1 and _turns_legal(d) and is_equal_approx(d.steps[0].s, 8025.0) and d.steps[-1].id == "x10b"
+			and is_equal_approx(d.total_m, 1025.0 + 225.0), "5: act %d x10b by the gap at 8025" % act)
 
 	# --- 8: timing on the act 3 loop (RoadMap is on act 3 here) ---
 	var t0 := Time.get_ticks_usec()
 	var act3: RefCounted = SatNavRoute.new().build()
 	var build_ms := float(Time.get_ticks_usec() - t0) / 1000.0
 	var lap3 := RoadMap.length()
-	var stops := ["shop", "fuel_1", "fuel_2"]
+	var stops := ["shop", "fuel_3a", "fuel_7b"]
 	var sum := 0.0
 	t0 = Time.get_ticks_usec()
 	for i in 1000:
 		var route: Dictionary = act3.plan_to_stop({"road": 0, "s": fmod(float(i) * 137.0, lap3), "dir": 1 if i % 2 == 0 else -1}, stops[i % 3])
 		sum += route.total_m
 	var mean_ms := float(Time.get_ticks_usec() - t0) / 1000.0 / 1000.0
-	var live: Dictionary = act3.plan_to_stop({"road": 0, "s": 100.0, "dir": 1}, "fuel_2")
+	var live: Dictionary = act3.plan_to_stop({"road": 0, "s": 100.0, "dir": 1}, "fuel_7b")
 	t0 = Time.get_ticks_usec()
 	for i in 10000:
 		act3.progress(live, {"road": 0, "s": 100.0 + float(i) * 0.01, "dir": 1})

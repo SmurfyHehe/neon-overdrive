@@ -45,7 +45,7 @@ func _physics_process(_delta: float) -> bool:
 		Step.BOOT:
 			var bound := false
 			for e in InputMap.action_get_events("camera_view"):
-				if e is InputEventKey and e.keycode == KEY_F:
+				if e is InputEventKey and KeyBindings.code_of(e) == KEY_F:
 					bound = true
 			_check(bound, "camera_view should be bound to F")
 			_check(cam.view == ChaseCamera.View.CHASE, "the game should start in the chase view")

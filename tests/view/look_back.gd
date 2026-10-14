@@ -86,7 +86,7 @@ func _physics_process(_delta: float) -> bool:
 			var keys := []
 			for ev in InputMap.action_get_events("look_back"):
 				if ev is InputEventKey:
-					keys.append((ev as InputEventKey).keycode)
+					keys.append(KeyBindings.code_of(ev as InputEventKey))
 			_check(keys.has(KEY_B), "look_back is on B (%s)" % [keys])
 			var listed := false
 			for group in SettingsScreen.controls_groups():

@@ -8,6 +8,10 @@ extends Node3D
 # This script owns the world (chunks, ground collision, camera)
 # and the player instance.
 
+const FixCar := preload("res://scripts/car/fix_car.gd")
+## Loaded only when the title shows (_setup_game_state).
+const TITLE_SCREEN := "res://scripts/ui/title_screen.gd"
+
 const CHUNKS_AHEAD := 6
 const CHUNKS_BEHIND := 4
 ## Road behind the player is rebuilt (it vanishes) only once no camera can see
@@ -57,6 +61,9 @@ var traffic: TrafficManager
 ## City lights (junction.gd): the one signalised crossing, or null when the
 ## switch is off.
 var junction: Junction
+var ring_site: Node3D
+## Where the player is off the main road ({} on it): RoadRamps.place_of.
+var off_main := {}
 var game_state: GameState
 
 # Chase camera, its three smoothing modes (#31, C to cycle) and the stage A
@@ -69,6 +76,7 @@ var night_clock: NightClock  # 8 p.m. to 6 a.m., saved (night_clock.gd); windows
 var race: RaceController  # race core RC1 (race_controller.gd)
 var garage_flow: GarageFlow  # the garage plumbing (G0, garage_flow.gd)
 var _bands := false  # hour bands drive traffic and Dave (bands_on)
+var breaker: Node3D  # breakable roadside props (prop_break.gd); null when off
 var moments: MomentSpots  # roadside moment spots, dealt nightly (moment_spots.gd); null when off
 var world_mood: WorldMood  # tonight's events: rule-breaker share, bar close, meets, crackdowns
 var police_heat: PoliceHeat  # heat level + cop_can_see_player (police F0/F1)
@@ -83,6 +91,7 @@ const TestBuild := preload("res://scripts/core/test_build.gd")
 var perf_ladder: PerfLadder  # lowers the load when the PC falls behind (perf_ladder.gd); real play only
 var rescue: OffMapRescue  # off-map rescue (off_map_rescue.gd)
 const Weather := preload("res://scripts/world/weather.gd")
+const PropBreak := preload("res://scripts/world/prop_break.gd")
 var fx: FxPack  # effects pack v1: vignette, speed lines, skid marks, exhaust flames (fx_pack.gd)
 
 const DiscordPresence := preload("res://scripts/core/discord_presence.gd")
@@ -92,9 +101,13 @@ const DiscordPresence := preload("res://scripts/core/discord_presence.gd")
 # saved run rebuilds the same road; run is what read_run() gave back ({} =
 # a fresh start at the beginning of the road).
 const SaveDirector := preload("res://scripts/save/save_director.gd")
+const SaveCore := preload("res://scripts/save/save_core.gd")
+const Freemode := preload("res://scripts/core/freemode.gd")
 const UserDirMigration := preload("res://scripts/save/user_dir_migration.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
 const ColorGrade := preload("res://scripts/world/color_grade.gd")
+const RingSite := preload("res://scripts/world/ring_site.gd")
+const RoadRamps := preload("res://scripts/world/road_ramps.gd")
 # The shared test driver and the F9 drive recorder (2026-10-10). `bot` is the
 # driver when the game was started with -- --bot=<mode> / NEON_BOT (watching
 # the bot in a window uses the same switch the headless tests do), with
@@ -109,12 +122,17 @@ var saver: SaveDirector
 var wallet: Node
 const Wallet := preload("res://scripts/core/wallet.gd")
 const ShopDay := preload("res://scripts/core/shop_day.gd")
-const WorkBoardScreen := preload("res://scripts/ui/work_board_screen.gd")
+## Walt's board screen: loaded only when the shop is on (_setup_game_state), so
+## a run without it never compiles the board.
+const WORK_BOARD_SCREEN := "res://scripts/ui/work_board_screen.gd"
 ## Walt's board for the day (W2); null-less: always exists, `enabled` says if it is live.
 var shop_day: Node
 ## A hard hit ends the run: rules, crash screen, morning (scripts/core/run_end.gd).
 var run_end: Node
 const RunEnd := preload("res://scripts/core/run_end.gd")
+## A car on its side or roof rights itself (scripts/car/roll_righting.gd).
+var roll_righting: Node
+const RollRighting := preload("res://scripts/car/roll_righting.gd")
 ## Gas stations on the road and the pump menu (stops, first slice).
 var gas_station: Node3D
 var gas_station_onc: Node3D
@@ -138,12 +156,15 @@ var _change_waits := false
 var _weather_seen := -1
 var _wet_pinned := false
 const StreetAnimals := preload("res://scripts/world/street_animals.gd")
+const TunnelAudio := preload("res://scripts/audio/tunnel_audio.gd")
 var road_seed := 0
 var run := {}
 ## Whether `run` puts the car back where it was: false for a fresh run, and for
 ## a save from a road this build does not have (or from before the map), which
 ## starts at the top of the default road and keeps only the clock and the radio.
 var resume_place := false
+## Metres into the origin chunk a fresh run starts at (NEON_START_S).
+var start_in_chunk := 0.0
 ## The act the road is in (road_map.gd: the loop grows by act).
 var road_act := 1
 
@@ -163,6 +184,7 @@ func _ready() -> void:
 	ViewSettings.load_settings()
 	CabinMods.load_settings()   # interior mods: trinket, shift knob, short shifter, strut bar ([interior])
 	DiscordPresence.load_settings()   # Rich Presence on/off ([discord] in settings.cfg)
+	IdleActions.load_settings() # what the L key does: vape, beer or nothing ([driver])
 	GraphicsSettings.load_settings()   # preset, edge smoothing, render scale ([graphics])
 	DisplaySettings.load_settings()    # fullscreen, window size ([display]); applied below in a play session
 	KeyBindings.load_settings()        # the player's rebound keys ([keys])
@@ -323,6 +345,7 @@ func _start_bot(bot_mode: String) -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	var lbl := Label.new()
+	UiTheme.apply(lbl, "menu")
 	lbl.position = Vector2(16, 56)
 	lbl.add_theme_color_override("font_color", Color(1.0, 0.54, 0.12))  # sodium #FF8A1F
 	lbl.text = "BOT: %s" % bot_mode + ("" if bot_mode in ["replay", "fuzz", "hold"] else " at %d km/h" % roundi(bot.target_speed / TestDriver.KMH))
@@ -466,6 +489,10 @@ func _setup_ground_collision() -> void:
 	# slightly higher and is tagged "Dirt", so a wheel over the sidewalk hits
 	# that closer box first regardless of this plane extending underneath it.
 	body.add_to_group("Road")
+	# The shoulder, kerb strip and paint are bands of this one plane: SurfaceMap
+	# tells them apart by position (tyre and surface feel, 2026-10-11).
+	body.set_meta(SurfaceMap.BANDS_META, true)
+	SurfaceMap.read_env()
 	add_child(body)
 
 # ---------- road shape (#37 curves) ----------
@@ -487,6 +514,7 @@ func _setup_ground_collision() -> void:
 ## a loop is fixed by the map; its bends and hills come from the night's road
 ## seed, new each night and the same on every pass that night.
 func _pick_road() -> int:
+	Freemode.refresh(SaveCore.career())   # also for a resumed run: later systems ask Freemode.is_active()
 	if not run.is_empty():
 		var saved: Variant = run.road.get("id")
 		if (saved is float or saved is int) and float(saved) == floorf(saved) and RoadMap.knows(int(saved)):
@@ -495,7 +523,11 @@ func _pick_road() -> int:
 			return int(saved)
 		print("save: this run was on road '%s', which this build does not have; starting at the top of road %d" % [saved, RoadMap.DEFAULT])
 	var act_env := OS.get_environment("NEON_ACT")
-	road_act = int(act_env) if act_env.is_valid_int() else 1
+	if act_env.is_valid_int():
+		road_act = int(act_env)
+	else:
+		# Free mode opens the whole city; otherwise the story's act (1 until it sets it).
+		road_act = maxi(Freemode.road_act(), 1)
 	var env := OS.get_environment("NEON_ROAD")
 	if env == "endless":
 		return RoadMap.ENDLESS
@@ -521,6 +553,11 @@ func _setup_road_shape() -> void:
 	# A benchmark run with --curves or --hills gets a fixed road, so runs compare.
 	road_seed = int(seed_env) if seed_env.is_valid_int() else (Benchmark.SEED if Benchmark.requested() else randi())
 	var road := _pick_road()
+	# Tunnels (TN1): the dip needs the per-chunk road surface of a hilly road,
+	# so a road rolled flat (the older drive tests, the default benchmark) has
+	# none and keeps the exit the tunnel replaces. NEON_TUNNEL=0 also turns it off.
+	var hills_now := float(run.road.hilliness) if resume_place else hilliness
+	RoadMap.tunnel_live = OS.get_environment("NEON_TUNNEL") != "0" and hills_now > 0.0
 	RoadMap.use(road, road_act)
 	RoadMap.known_stops = {}
 	if RoadMap.is_loop() and not seed_env.is_valid_int():
@@ -542,8 +579,15 @@ func _setup_road_shape() -> void:
 		# (_section_at), and a save from either time may hold a bool or a type
 		# name there. Comparing a type name with true was a script error that
 		# stopped this function before the road was set up.
+	# NEON_START_S=<metres round the loop>: a fresh run starts there instead of
+	# at the top of the road (tests and screenshot tools of a far-off place).
+	var start_env := OS.get_environment("NEON_START_S")
+	if start_env.is_valid_float() and not resume_place and RoadMap.is_loop():
+		var start_s := RoadMap.wrap_s(float(start_env))
+		origin_index = floori(start_s / RoadChunkBuilder.CHUNK_LEN)
+		start_in_chunk = start_s - float(origin_index) * RoadChunkBuilder.CHUNK_LEN
 	RoadFrame.origin_index = origin_index
-	RoadFrame.align = RoadAlignment.new(road_seed, curviness, hilliness, kicker_chance, RoadMap.period, RoadMap.pins()) if curviness > 0.0 or hilliness > 0.0 else null
+	RoadFrame.align = RoadAlignment.new(road_seed, curviness, hilliness, kicker_chance, RoadMap.period, RoadMap.pins(), RoadMap.dip_vcurves()) if curviness > 0.0 or hilliness > 0.0 else null
 	# Lane adds and drops, median splits and exits (road lane proposal): a
 	# third stream from the same seed. NEON_LAYOUT=0 keeps the plain 4+4,
 	# NEON_LAYOUT=<metres> forces a change that often (the tests' sweep).
@@ -571,7 +615,16 @@ func _section_at(idx: int) -> Dictionary:
 		var p := lay.lanes_pair(float(idx) * RoadChunkBuilder.CHUNK_LEN)
 		own = p.x
 		onc = p.y
-	var cfg := {"own_lanes": own, "onc_lanes": onc, "barrier": RoadBarriers.kind_at(idx), "gap": RoadBarriers.has_gap(idx) or (RoadMap.is_loop() and RoadMap.gap_in(idx))}   # the map's gaps too (loop 1)
+	# gap: the barrier opens here. gap_kind: "uturn" (a map gap, signed and
+	# legal), "emergency" (a crossover, cops only) or "" (RoadBarriers.gap_kind).
+	var gap_kind := RoadBarriers.gap_kind(idx)
+	var cfg := {"own_lanes": own, "onc_lanes": onc, "barrier": RoadBarriers.kind_at(idx), "gap": gap_kind != "", "gap_kind": gap_kind}
+	# The slip lane beside the outside lane at a ring site (R1), the same on
+	# both sides: its width at this chunk's start and end.
+	if lay != null:
+		var aux := lay.aux(idx)
+		if aux != Vector2.ZERO:
+			cfg["aux"] = [aux.x, aux.y, aux.x, aux.y]
 	section_cache[key] = cfg
 	return cfg
 
@@ -586,6 +639,13 @@ func _setup_chunk_pool() -> void:
 		moments.night_clock = night_clock
 		moments.pool = chunk_pool
 		add_child(moments)
+	if PropBreak.enabled:
+		breaker = PropBreak.new()
+		breaker.name = "PropBreak"
+		breaker.pool = chunk_pool
+		breaker.night_clock = night_clock
+		breaker.game = self
+		add_child(breaker)
 	var start := 0
 	if resume_place:
 		var z := RoadFrame.unroll(SaveDirector.v3(run.car.xform.slice(9, 12))).z
@@ -599,6 +659,8 @@ func _setup_chunk_pool() -> void:
 		chunk_pool.append({"root": root, "index": idx})
 		if moments != null:
 			moments.dress_chunk(root, idx)
+		if breaker != null:
+			breaker.dress_chunk(root, idx)
 	_pool_centre = start
 
 ## Tests: called as (chunk_root, gap) just before a chunk is rebuilt (it vanishes
@@ -739,6 +801,8 @@ func _rebuilt(job: RoadChunkBuilder.RebuildJob) -> void:
 	rebuild_count += 1
 	if moments != null and is_instance_valid(job.root):
 		moments.dress_chunk(job.root, job.index)
+	if breaker != null and is_instance_valid(job.root):
+		breaker.dress_chunk(job.root, job.index)
 
 ## Finishes every rebuild in flight now (tests that walk the pool by hand).
 func flush_rebuilds() -> void:
@@ -764,19 +828,29 @@ func _physics_process(_delta: float) -> void:
 	# shifted consistently.
 	# Road-space z (RoadFrame, #37): distance along the road, which is what
 	# the whole-chunk shift counts in.
-	var z := RoadFrame.unroll(player.global_position).z
+	var ru := RoadFrame.unroll(player.global_position)
+	var z := ru.z
+	# Off the main road (ring sites R3): on a ramp, the ring or a spur. Kept
+	# for traffic, the police, the save and the put-back.
+	off_main = RoadRamps.place_of(ru, RoadFrame.s_at(z))
+	if not off_main.is_empty():
+		off_main["wrong_way"] = RoadRamps.wrong_way(off_main, RoadFrame.dir_to_road(z, player.linear_velocity))
+	RoadRamps.player_place = off_main
 	if absf(z) >= recenter_dist:
 		var t0 := Time.get_ticks_usec()
 		_shift_origin(int(floor(-z / RoadChunkBuilder.CHUNK_LEN)))
 		recenter_us_max = maxi(recenter_us_max, Time.get_ticks_usec() - t0)
 	Weather.step(_delta)  # before the cars: they read this tick's wetness
 	_sync_wetness()
-	if Input.is_action_just_pressed("mute"):
-		toggle_mute()
+	# F6: fix the car while driving (same as the pause row). Shown in every build for now.
+	if Input.is_action_just_pressed("fix_car") and FixCar.FIX_CAR_ENABLED and game_state.state == GameState.State.PLAYING:
+		FixCar.fix(player)
 	if Input.is_action_just_pressed("radio_next") and radio != null:
 		request_next_station()
 	if Input.is_action_just_pressed("put_back") and game_state.state == GameState.State.PLAYING:
 		put_back()
+	if Input.is_action_just_pressed("radio_power") and radio != null:
+		request_radio_power()
 
 ## Next station (N): with the cockpit built the driver's hand reaches the touch
 ## screen and the station changes on the tap (CockpitFrame.request_radio), in
@@ -787,6 +861,15 @@ func request_next_station() -> void:
 		f.request_radio()
 	else:
 		radio.next_station()
+
+## Radio on/off (V): the hand presses the knob or the power spot and the radio
+## switches on the finger's contact; with no cockpit it switches at once.
+func request_radio_power() -> void:
+	var f: CockpitFrame = camera.frame if camera != null else null
+	if f != null and f.driver != null:
+		f.request_radio(DriverModel.RADIO_POWER)
+	else:
+		radio.toggle_power()
 
 ## Moves the world back by shift_chunks whole chunks (positive = the car had
 ## driven forward, -z). Whole chunks keep chunk positions exact integers x 50.
@@ -833,6 +916,8 @@ func _shift_origin(shift_chunks: int) -> void:
 	if police != null:
 		police.shift_world(offset)
 	fx.shift_world(offset)  # skid marks are laid in world space
+	if breaker != null:
+		breaker.shift_world(offset)  # so are flying and rolling props
 	SpikeLog.mark("recenter", SpikeLog.since(t0))
 	# The ground plane stays put: it is infinite.
 	# The camera follows the car's interpolated position in _process, so it
@@ -845,12 +930,27 @@ const PLAYER_SPAWN_LANE := 1
 
 func _setup_player() -> void:
 	player = PlayerCar.new()
-	player.position = RoadFrame.roll(Vector3(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, 0))
+	player.position = RoadFrame.roll(Vector3(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, -start_in_chunk))
+	if start_in_chunk > 0.0 or origin_index != 0:
+		# Away from the top of the road it does not run down world -Z: face along it.
+		player.transform = RoadFrame.pose(TrafficManager.lane_centre(PLAYER_SPAWN_LANE, false), 0.0, -start_in_chunk, 0.0)
 	if resume_place:
 		player.transform = SaveDirector.array_to_xform(run.car.xform)
 	add_child(player)
 	if resume_place:
 		saver.restore_car(player, run.car)
+		# Saved on a ramp, the ring or a spur: the save names the place, and if
+		# the car's saved position is not on it any more (the site was
+		# rebuilt since), the car is stood on it.
+		var rec: Variant = run.road.get("off")
+		if rec is Dictionary and not (rec as Dictionary).is_empty():
+			var ru := RoadFrame.unroll(player.global_position)
+			var saved_place := RoadRamps.from_save(rec, RoadFrame.s_at(ru.z))
+			var now_place := RoadRamps.place_of(ru, RoadFrame.s_at(ru.z))
+			if not saved_place.is_empty() and (now_place.is_empty() or now_place.part != saved_place.part or now_place.site != saved_place.site):
+				player.global_transform = RoadRamps.pose_of(saved_place)
+				player.linear_velocity = Vector3.ZERO
+				player.angular_velocity = Vector3.ZERO
 	# Interior mods batch 1 (2026-10-09): the fitted parts' sim effects (short
 	# shifter, strut bar) held on the built car, and the bar itself under the hood.
 	CabinMods.attach(player)
@@ -862,9 +962,17 @@ func _setup_player() -> void:
 func _park_at_start() -> void:
 	if not OffMapRescue.parked_start():
 		return
-	var s := 0.0
+	# beside where the car is: the top of the road, a saved place, or
+	# NEON_START_S (TN1)
+	var ru := RoadFrame.unroll(player.global_position)
+	var s := RoadFrame.s_at(ru.z)
 	if resume_place:
-		s = RoadFrame.s_at(RoadFrame.unroll(player.global_position).z)
+		# resumed on a ramp, the ring or a spur (ring sites R3): park up there,
+		# not at the kerb of the highway under it
+		var place := RoadRamps.place_of(ru, s)
+		if not place.is_empty():
+			rescue.park_place(place)
+			return
 	rescue.park_at(s)
 
 ## "Put me back on the road" (the pause menu row and the put_back key): the
@@ -882,8 +990,12 @@ func put_back() -> bool:
 func _setup_traffic() -> void:
 	if moments != null:
 		moments.player = player
+	if breaker != null:
+		breaker.player = player
 	traffic = TrafficManager.new()
 	traffic.player = player
+	if moments != null:
+		moments.traffic = traffic
 	traffic.night_clock = night_clock
 	traffic.own_lanes = OWN_LANES
 	traffic.onc_lanes = ONC_LANES
@@ -891,15 +1003,30 @@ func _setup_traffic() -> void:
 	traffic.detail_distance = TrafficSettings.detail_distance
 	traffic.add_to_group(GraphicsSettings.GROUP)   # a graphics tier sets count and distance
 	add_child(traffic)
+	if breaker != null:
+		breaker.traffic = traffic
 	# Auto-dip: the high beam drops to low when a car is in its way.
 	player.beams.dip_probe = traffic.beam_blocked
 	if Junction.enabled:
 		junction = Junction.new()
 		junction.night_clock = night_clock
+		junction.player = player
 		# A random point in the cycle, so the first arrival is not always green.
 		junction.t = randf() * Junction.CYCLE
 		add_child(junction)
 		traffic.junction = junction
+	# cigarette ends out of windows: one pooled burst, a car ahead now and then
+	# and the player's own cigarette (IdleActions.CIGARETTE) both use it
+	var flicks := EmberFlick.new()
+	flicks.player = player
+	flicks.traffic = traffic
+	add_child(flicks)
+	# The raised ring at the nearest ring site (R2), moved like the crossing.
+	# (Placed for where the car is now: a run resumed on a ring needs it
+	# under the wheels on the first tick.)
+	RingSite.focus_s = RoadFrame.s_at(RoadFrame.unroll(player.global_position).z)
+	ring_site = RingSite.new()
+	add_child(ring_site)
 
 # ---------- camera ----------
 func _setup_camera() -> void:
@@ -954,7 +1081,9 @@ func _setup_game_state() -> void:
 	gas_station_onc.side = -1
 	gas_station_onc.player = player
 	add_child(gas_station_onc)
-	add_child(PumpPanel.new(game_state, player, wallet, night_clock))
+	var pump := PumpPanel.new(game_state, player, wallet, night_clock)
+	pump.filled.connect(func(_l: float) -> void: CabinDirt.fuel_stop(PlayerCar.chassis_kind()))   # a receipt for the dash
+	add_child(pump)
 	gas_station.pulled_up.connect(func(_s: float) -> void: game_state.open_station())
 	gas_station_onc.pulled_up.connect(func(_s: float) -> void: game_state.open_station())
 	add_child(WashScreen.new(game_state))
@@ -978,25 +1107,32 @@ func _setup_game_state() -> void:
 		shop_day.reload()
 		game_state.workboard_gate = shop_day.want_board
 		garage_screen.shop_day = shop_day
-		add_child(WorkBoardScreen.new(game_state, shop_day, wallet))
-	# Special vehicles: a flip ends the run (SpecialRunEnd). A restart is the
-	# stand-in until the run loop (stage C) owns what "ends the night" means.
-	var kind := PlayerCar.chassis_kind()
-	if SpecialRunEnd.has_limit(kind) and not TestBuild.on():  # sandbox: a flip does not restart
-		var special_end := SpecialRunEnd.new(player, kind)
-		special_end.run_ended.connect(func(_why: String) -> void: game_state.restart())
-		add_child(special_end)
+		add_child(load(WORK_BOARD_SCREEN).new(game_state, shop_day, wallet))
 	radio = RadioManager.new()
 	radio.listener = player  # reception follows the car (tunnels, bridges)
 	radio.process_mode = Node.PROCESS_MODE_ALWAYS   # plays on, muffled, while paused (PauseLook)
+	# No song captions during a chase or a race (R4): the checks read what exists by then.
+	radio.busy_check = func() -> bool:
+		return (race != null and race.is_racing()) or (police_heat != null and police_heat.level > PoliceHeat.NONE)
 	add_child(radio)
+	# Tunnels (TN1): the car's own sounds echo while it is under cover.
+	var tunnel_audio := TunnelAudio.new()
+	tunnel_audio.name = "TunnelAudio"
+	tunnel_audio.listener = player
+	add_child(tunnel_audio)
 	add_child(PauseLook.new(game_state, player, camera))
-	add_child(TitleScreen.new(game_state))
+	# The title only ever opens here, at boot (enter_title below; Quit to title
+	# reloads the scene). A boot without it never builds it, nor compiles its
+	# scripts (the title street, rats, roaches, graffiti: about 0.4 s of a cold
+	# start), so it is loaded by path, not named.
+	var title := GameState.wants_title()
+	if title:
+		add_child(load(TITLE_SCREEN).new(game_state))
 	menu_sfx = MenuSfx.new()
 	add_child(menu_sfx)
 	if run.get("radio") is float or run.get("radio") is int:
-		radio.tune_to(int(run.radio))
-	if GameState.wants_title():
+		radio.restore(run)
+	if title:
 		game_state.enter_title()   # the title shows over the frozen world; Drive is instant
 	else:
 		game_state.enter_garage_boot()   # no title: the dawn card and garage first
@@ -1005,6 +1141,7 @@ func _setup_game_state() -> void:
 	game_state.quitting.connect(saver.on_quit)
 	# 6 a.m.: tonight's cash goes into the bank (F0).
 	night_clock.night_ended.connect(func(n: int) -> void: wallet.bank_night(n))
+	night_clock.night_ended.connect(func(_n: int) -> void: CabinDirt.night_ended(PlayerCar.chassis_kind()))   # the cabin gets lived in
 	night_clock.night_ended.connect(func(_n: int) -> void: saver.save_now.call_deferred())
 	night_clock.night_ended.connect(game_state.request_dawn)   # after the bank, so the card shows it
 	run_end = RunEnd.new()
@@ -1015,8 +1152,22 @@ func _setup_game_state() -> void:
 	run_end.game_state = game_state
 	add_child(run_end)
 	run_end.sensor.enabled = wrecks_on()
+	# No roll ends a run (TM2): any vehicle left on its side or roof rights
+	# itself, and the roll costs meter (roll_righting.gd). On in the test build
+	# too; the meter step follows the Wrecks setting like the hits do.
+	roll_righting = RollRighting.new(player, PlayerCar.chassis_kind())
+	roll_righting.run_end = run_end
+	roll_righting.counts = wrecks_on
+	roll_righting.rescue = rescue
+	roll_righting.camera = camera
+	add_child(roll_righting)
+	# The totalled meter survives a restart: the new car takes it back (a
+	# quit is not a free repair). TODO(save core): the saved car replaces this.
+	player.damage.take_carried()
+	game_state.restarting.connect(func() -> void: CarDamage.carry_over(player.damage))
+	game_state.quitting.connect(func() -> void: CarDamage.carry_over(player.damage))
 	if moments != null:
-		moments.announce = radio.announce
+		moments.announce = func(text: String) -> bool: return radio.announce(text, true)
 	world_mood = WorldMood.new()
 	add_child(world_mood)
 	_start_weather()
@@ -1040,7 +1191,7 @@ func _setup_police(benchmark: bool) -> void:
 	heat_icons = HeatIcons.new(police_heat)
 	add_child(heat_icons)
 	police_heat.line_said.connect(func(text: String) -> void:
-		if not radio.announce(text):
+		if not radio.announce(text, true):
 			heat_icons.say(text))
 	game_state.restarting.connect(police_heat.reset)
 	if PolicePatrol.enabled(benchmark):
@@ -1089,18 +1240,28 @@ func _on_hour(hour24: int) -> void:
 	# would be overwritten in the same frame and never heard).
 	if hour24 != NightClock.START_HOUR and not weather_spoke:
 		if hour24 == 2 and world_mood.crackdown_until < 0.0:
-			radio.announce(WorldMood.BAR_CLOSE_LINE)  # bar close starts on the hour
+			radio.announce(WorldMood.BAR_CLOSE_LINE, true)  # bar close starts on the hour
 		else:
 			radio.announce_hour(hour24)
 
-## A hard hit ends the run (run_end.gd). Off in the benchmark, and in tests
-## unless the test asks with NEON_WRECK=1: the older drive tests crash on
-## purpose and must not be restarted halfway. NEON_WRECK=0 turns it off in play.
+## Hard hits count on the totalled meter (run_end.gd). Off in the benchmark,
+## and in tests unless the test asks with NEON_WRECK=1: the older drive tests
+## crash on purpose and must not be totalled halfway. NEON_WRECK=0 turns it
+## off in play. In the test build the Settings > Game "Wrecks" row decides.
 func wrecks_on() -> bool:
 	var env := OS.get_environment("NEON_WRECK")
-	if Benchmark.requested() or env == "0" or TestBuild.on():
-		return false  # the test build's sandbox: crashes just happen
-	return not TestMode.active() or env == "1"
+	if Benchmark.requested() or env == "0":
+		return false
+	if env == "1":
+		return true
+	if TestMode.active():
+		return false
+	return GameSettings.wrecks_enabled()
+
+## The "Wrecks" row changed: the sensor follows at once.
+func apply_wrecks_setting() -> void:
+	if run_end != null and run_end.phase == RunEnd.Phase.DRIVING:
+		run_end.sensor.enabled = wrecks_on()
 
 ## Tonight's weather (weather.gd, planned by weather_plan.gd): NEON_WEATHER
 ## pins it; otherwise the benchmark and tests stay dry, so their numbers keep
@@ -1174,7 +1335,7 @@ func _begin_night(boot: bool) -> void:
 		var night := night_clock.night
 		get_tree().create_timer(FORECAST_DELAY, false).timeout.connect(func() -> void:
 			if night_clock.night == night and radio != null:
-				radio.announce(WeatherPlan.forecast_line(e)))
+				radio.announce(WeatherPlan.forecast_line(e), true))
 
 ## A saved weather block is used only if its stage is one this build knows
 ## (a save from a newer build has stages past SLUSH: the plan's stage is used).
@@ -1210,7 +1371,7 @@ func _apply_weather_change(e: Dictionary) -> bool:
 	Weather.set_level(int(e.change_to), false, e.snow_roads)
 	_refresh_frost()
 	var line := WeatherPlan.change_line(e)
-	return line != "" and radio != null and radio.announce(line)
+	return line != "" and radio != null and radio.announce(line, true)
 
 func _on_race_ended_weather(_result: int) -> void:
 	if _change_waits and not Weather.tonight.is_empty() and _plan_active():
@@ -1243,7 +1404,7 @@ func _on_event(e: int) -> void:
 	if e == WorldMood.Event.CRACKDOWN:
 		traffic.reform_all()
 	if WorldMood.EVENT_LINES.has(e):
-		radio.announce(WorldMood.EVENT_LINES[e])
+		radio.announce(WorldMood.EVENT_LINES[e], true)
 
 func _process(delta: float) -> void:
 	_update_bands()
@@ -1254,6 +1415,7 @@ func _process(delta: float) -> void:
 			limit_line_said = radio.announce(RadioStations.LIMIT_LINE)
 	var pz := RoadFrame.unroll(player.position).z
 	Junction.focus_z = pz
+	RingSite.focus_s = RoadFrame.s_at(pz)
 	_update_chunk_pool(pz)
 	# eyes in the headlights (world step 6, A1): one angle check per animal
 	# on the chunks round the car

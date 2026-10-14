@@ -21,6 +21,13 @@ extends SceneTree
 const PlayerTune := preload("res://scripts/car/player_tune.gd")
 const ARB := "rear_arb_ratio"
 
+## The player's stock car, what the game's Tuner calls "Stock" (TunerScreen
+## builds its model on CarSpec.player_spec). Since #538 that is not
+## coupe_default(): the coupe's springs are stiffer (resting ratio 0.4, not 0.5),
+## so a tune saved from coupe_default() came back as "Stock (modified)".
+static func stock() -> Dictionary:
+	return CarSpec.player_spec(PlayerCar.chassis_kind())
+
 var game: Node
 var phase := 0
 var wait := 0
@@ -33,7 +40,7 @@ func _initialize() -> void:
 	PlayerTune.enabled = true
 	ExhaustTune.save_path = "user://test_tune_persist_exhaust.json"
 	# Start from stock: overwrite whatever an earlier run left (never deleted).
-	PlayerTune.save(CarSpec.coupe_default())
+	PlayerTune.save(stock())
 	ExhaustTune.save_car(EngineAudio.START_PRESET, ExhaustTune.for_car(EngineAudio.START_PRESET).to_dict())
 	_boot()
 
@@ -78,7 +85,7 @@ func _physics_process(_delta: float) -> bool:
 	match phase:
 		0:
 			# Tune the live car the way the Tuner does: Grip, then the rear bar by hand.
-			var model := TunerModel.new(p, p.spec, CarSpec.coupe_default())
+			var model := TunerModel.new(p, p.spec, stock())
 			model.apply_preset("Grip")
 			CarSpec.set_param(p, p.spec, ARB, TuneParams.get_value(p.spec, ARB) + 0.07)
 			# Roy's named settings, set by hand so each is checked on its own:
@@ -119,13 +126,13 @@ func _physics_process(_delta: float) -> bool:
 			if absf(loud - exhaust_loud) > 0.001:
 				_fail("exhaust loudness after reset %.3f, want %.3f" % [loud, exhaust_loud])
 			# Back to stock through the Tuner's preset.
-			var model := TunerModel.new(p, p.spec, CarSpec.coupe_default())
+			var model := TunerModel.new(p, p.spec, stock())
 			model.apply_preset("Stock")
 			expected = PlayerTune.values_from(p.spec)
 			phase = 3
 			_boot()
 		3:
-			var d := _differs(p.spec, PlayerTune.values_from(CarSpec.coupe_default()))
+			var d := _differs(p.spec, PlayerTune.values_from(stock()))
 			if not d.is_empty():
 				_fail("not stock after picking Stock and resetting: %s" % ", ".join(d.slice(0, 3)))
 			var m := _tuner_model()
@@ -142,14 +149,14 @@ func _physics_process(_delta: float) -> bool:
 			if absf(TuneParams.get_value(own.spec, ARB) - TuneParams.get_value(CarSpec.coupe_default(), ARB)) > 0.0005:
 				_fail("a car built from a given spec picked up the saved tune")
 			own.queue_free()
-			PlayerTune.save(CarSpec.coupe_default())
+			PlayerTune.save(stock())
 			print("tune_persist: %s" % ("PASS" if fails.is_empty() else "%d failure(s)" % fails.size()))
 			quit(0 if fails.is_empty() else 1)
 			return true
 	return false
 
 func _spec_from(values: Dictionary) -> Dictionary:
-	var s := CarSpec.coupe_default()
+	var s := stock()
 	for k in values:
 		TuneParams.set_value(s, k, float(values[k]))
 	return s

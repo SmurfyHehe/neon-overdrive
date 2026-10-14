@@ -118,7 +118,7 @@ func _physics_process(delta: float) -> void:
 	for i in _player.wheel_array.size():
 		var w: Wheel = _player.wheel_array[i]
 		var strength := 0.0
-		if w.is_colliding() and w.surface_type == "Road":
+		if w.is_colliding() and w.surface_type == "Road" and _player.surface_feel.lays_rubber(i):
 			var lat := smoothstep(CarAudio.LAT_START, CarAudio.LAT_FULL, absf(w.slip_vector.x))
 			var lon := smoothstep(CarAudio.LON_START, CarAudio.LON_FULL, absf(w.slip_vector.y))
 			if w.slip_vector.y < 0.0:
@@ -147,6 +147,12 @@ func _physics_process(delta: float) -> void:
 		_last[i] = p
 		_peak[i] = strength
 	_reap_expired()
+
+## One dark quad from a to b that is not a skid: wet tyre tracks after a
+## burst hydrant's water (hydrant_water.gd). Same pool, same fade.
+func lay_track(a: Vector3, b: Vector3, strength: float) -> void:
+	if enabled and a.distance_squared_to(b) > 0.0025:
+		_lay(a, b, strength)
 
 func _lay(a: Vector3, b: Vector3, strength: float) -> void:
 	var dir := b - a

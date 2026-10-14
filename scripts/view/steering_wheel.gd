@@ -6,13 +6,14 @@ extends Node3D
 # black grips with a red stitch seam, carbon top and bottom sections, a row of
 # 15 shift LEDs across the top that fill inward from both ends as the revs rise
 # (green, amber, red) and all flash at the shift point, a small LCD at 12
-# o'clock with rpm, km/h and the gear, a plain centre pad, backlit spoke buttons
-# and two paddles behind the rim.
+# o'clock with the gear (big) and km/h, as seven-segment digits drawn from the
+# LED MultiMesh, a plain centre pad, backlit spoke buttons and two paddles
+# behind the rim.
 #
 # Wheel space: X right, Y up, +Z toward the driver. The parent tilts and
 # places it; set_angle() turns it about its own axis (+ = turning right, i.e.
 # clockwise as the driver sees it). Draw calls: rim+spokes+pad+plate 1, LEDs
-# and buttons 1 (a MultiMesh), LCD label 1, paddles 2.
+# buttons and screen digits 1 (a MultiMesh), paddles 2.
 
 const RADIUS := 0.175       # rim centreline, a 35 cm wheel
 const GRIP_R := 0.017       # rim tube radius at the grips
@@ -39,29 +40,128 @@ var seam_colour := STITCH
 var spoke_colour := SPOKE
 var carbon_colour := CARBON
 var carbon_alt_colour := CARBON_ALT
+const DEFAULT_ROUGHNESS := 0.7
+var rim_roughness := DEFAULT_ROUGHNESS
+
+## The shape (W1, 2026-10-11), set before add_child by WheelStyles.apply; keys
+## missing here fall back to the race wheel's numbers:
+##   radius, grip_r, thin_r   rim centreline and tube radii (m)
+##   spokes                   spoke angles, degrees, 0 = 3 o'clock
+##   spoke_kind               "flat", "round", "drilled", "thin"
+##   dish                     hub behind the rim plane (m, toward the dash)
+##   flat_y                   flat bottom chord, share of radius; -1 = round
+##   screen                   LED plate, window, digits, buttons, paddles
+##   horn_ring                a chrome ring inside the rim
+##   pad                      "race", "plain", "button"
+##   stripe                   top-centre marker colour (alpha 0 = none)
+var style := {}
+const DEFAULT_STYLE := {
+	"radius": RADIUS, "grip_r": GRIP_R, "thin_r": CARBON_R, "spokes": [0.0, 180.0, 270.0],
+	"spoke_kind": "flat", "dish": 0.0, "flat_y": FLAT_Y, "screen": true, "horn_ring": false,
+	"pad": "race", "stripe": Color(0, 0, 0, 0),
+}
+var _st := DEFAULT_STYLE
+var _radius := RADIUS
+var _flat_y := FLAT_Y
 const LCD_BG := Color("#0A0C10")
 const AMBER := Color("#FFC066")
 const SILVER := Color("#C9CED6")
 const RED := Color("#E5262B")
 const GREEN := Hud.RPM_GREEN       # the one allowed green (tests/core/palette.gd)
 
+## The screen (Roy 2026-10-11): a 100 x 56 mm window, 78 mm above the hub, with
+## one 40 mm gear digit on the left and three 18 mm speed digits on the right,
+## 4 mm margins. Its top corners sit at radius 0.1167 m, inside the LED plate's
+## inner edge (0.118); its bottom (0.050) clears the centre pad top (0.0425).
+const WIN_W := 0.100
+const WIN_H := 0.056
+const WIN_Y := 0.078
+const GEAR_W := 0.033
+const GEAR_H := 0.040
+const GEAR_T := 0.0055
+const GEAR_X := -0.0295     # digit centre (left edge at -0.046)
+const SPEED_W := 0.012
+const SPEED_H := 0.018
+const SPEED_T := 0.0026
+const SPEED_X0 := 0.008     # centre of the hundreds digit (right edge of the last at 0.046)
+const SPEED_PITCH := 0.016
+const SEG_MESH := Vector3(0.011, 0.007, 0.004)   # the LED box the segments scale from
+const SEG_DEPTH := 0.0015
+const SEG_Z := 0.0112       # just proud of the bezel face (0.010)
+## MultiMesh layout: 15 LEDs, 4 button dots, then 4 digits x 7 segments.
+const SEG_FIRST := LED_COUNT + 4
+const SCREEN_SEGS := 28
+## Speed digits refresh at most this often (a number that flickers can't be read).
+const SPEED_INTERVAL := 0.2
+
 var body: MeshInstance3D
-var leds: MultiMeshInstance3D
-var lcd: Label3D
+var shiny_body: MeshInstance3D   # chrome ring, wood rim, polished spokes (null when none)
+var leds: MultiMeshInstance3D    # null on a wheel without a screen
 var paddle_l: Node3D
 var paddle_r: Node3D
 var angle := 0.0          # radians, + = right
 var lit_count := 0
 var flashing := false
 var led_colours := PackedColorArray()   # per LED, alpha 1 = lit
+var seg_colours := PackedColorArray()   # per screen segment (gear then speed), see SevenSeg.colour
+var seg_rects: Array[Rect2] = []        # per screen segment, wheel plane, metres (headless can't read transforms back)
 var _paddle_t := {-1: 0.0, 1: 0.0}
+var _gear_ch := "n"
+var _speed_str := "  0"
+var _clock := 0.0
+var _speed_at := -1.0e9
 
 func _ready() -> void:
+	_build_all()
+
+func _build_all() -> void:
+	_st = DEFAULT_STYLE.merged(style, true)
+	_radius = float(_st.radius)
+	_flat_y = float(_st.flat_y)
 	_build_body()
-	_build_leds()
-	_build_lcd()
-	paddle_l = _paddle(-1.0)
-	paddle_r = _paddle(1.0)
+	if bool(_st.screen):
+		_build_leds()
+		paddle_l = _paddle(-1.0)
+		paddle_r = _paddle(1.0)
+
+## Throws the built wheel away and builds it again from `style` and the colour
+## fields (a pick changed). The node, its turn and every reference to it stay.
+func rebuild() -> void:
+	for n in [body, shiny_body, leds, paddle_l, paddle_r]:
+		if n != null and is_instance_valid(n):
+			remove_child(n)
+			n.queue_free()
+	body = null
+	shiny_body = null
+	leds = null
+	paddle_l = null
+	paddle_r = null
+	seg_rects.clear()
+	led_colours.clear()
+	seg_colours.clear()
+	lit_count = 0
+	flashing = false
+	_paddle_t = {-1: 0.0, 1: 0.0}
+	_gear_ch = "n"
+	_speed_str = "  0"
+	_speed_at = -1.0e9
+	_build_all()
+
+## True when this wheel has the LED plate, screen and paddles.
+func has_screen() -> bool:
+	return leds != null
+
+## The rim tube radius at the grips (m).
+func grip_radius() -> float:
+	return float(_st.grip_r)
+
+## The hub's distance behind the rim plane (m).
+func dish() -> float:
+	return float(_st.dish)
+
+## The rim's centreline radius (m).
+func radius() -> float:
+	return _radius
 
 ## Turn the wheel: + is right (clockwise for the driver).
 func set_angle(a: float) -> void:
@@ -77,8 +177,8 @@ func rim_point(deg: float) -> Vector3:
 
 ## Rim centreline with the flat bottom.
 func _centreline(t: float) -> Vector2:
-	var p := Vector2(cos(t), sin(t)) * RADIUS
-	p.y = maxf(p.y, FLAT_Y * RADIUS)
+	var p := Vector2(cos(t), sin(t)) * _radius
+	p.y = maxf(p.y, _flat_y * _radius)
 	return p
 
 static func _is_grip(deg: float) -> bool:
@@ -86,58 +186,124 @@ static func _is_grip(deg: float) -> bool:
 	return d <= 50.0 or d >= 310.0 or (d >= 130.0 and d <= 230.0)
 
 func _build_body() -> void:
-	var kit := CockpitKit.new()
-	# Rim: a tube swept round the D-shaped centreline, 8-sided, one colour per
-	# face; the grips are leather with a red seam on the face that looks at the
-	# driver and inward, the top and bottom sections carbon with alternating
-	# shades for the weave.
-	const SEGS := 56
+	var screen: bool = _st.screen
+	var race: bool = String(_st.pad) == "race"
+	var kit := CockpitKit.new()      # matte: spokes, pad, and the rim unless it is wood-like
+	var shiny := CockpitKit.new()    # chrome horn ring, wood or ivory rim, polished spokes
+	var rim_kit := shiny if (rim_roughness < 0.5 and not screen) else kit
+	_build_rim(rim_kit, screen)
+	var grip_r := float(_st.grip_r)
+	var thin_r := float(_st.thin_r)
+	var dish := float(_st.dish)
+	if screen:
+		# Top plate inside the rim that carries the LEDs (carbon), and the LCD bezel.
+		kit.ring_sector(0.118, RADIUS - CARBON_R + 0.004, deg_to_rad(38.0), deg_to_rad(142.0), -0.006, 0.006, carbon_colour, 14, carbon_alt_colour)
+		kit.box(Vector3(WIN_W, WIN_H, 0.012), Vector3(0.0, WIN_Y, 0.004), LCD_BG)
+	if race:
+		# Spokes: 9, 3 and 6 o'clock, flat bars from the pad to the rim.
+		kit.box(Vector3(0.12, 0.034, 0.012), Vector3(-0.105, 0.0, 0.0), spoke_colour)
+		kit.box(Vector3(0.12, 0.034, 0.012), Vector3(0.105, 0.0, 0.0), spoke_colour)
+		kit.box(Vector3(0.034, 0.10, 0.012), Vector3(0.0, -0.085, 0.0), spoke_colour)
+		# Centre pad (plain, no badge) and a hub ring behind it.
+		kit.box(Vector3(0.115, 0.085, 0.030), Vector3(0.0, 0.0, 0.012), PAD)
+		kit.cylinder(0.055, -0.03, 0.0, Vector3.ZERO, SPOKE, 10, Basis(Vector3.RIGHT, PI / 2.0))
+		# Button housings on the side spokes (the lit dots are MultiMesh instances).
+		for sx in [-1.0, 1.0]:
+			kit.box(Vector3(0.028, 0.026, 0.006), Vector3(sx * 0.085, 0.0, 0.008), PAD)
+	else:
+		_build_spokes(kit, shiny, dish)
+		var hub := Vector3(0.0, 0.0, -dish)
+		kit.cylinder(0.042, -0.03, 0.0, hub, SPOKE, 10, Basis(Vector3.RIGHT, PI / 2.0))
+		if String(_st.pad) == "button":
+			kit.cylinder(0.038, -0.004, 0.026, hub, PAD, 12, Basis(Vector3.RIGHT, PI / 2.0))
+		else:
+			kit.box(Vector3(0.07, 0.06, 0.028), hub + Vector3(0.0, 0.0, 0.010), PAD)
+		if bool(_st.horn_ring):
+			var r1 := _radius - thin_r - 0.006
+			shiny.ring_sector(r1 - 0.012, r1, 0.0, TAU, -0.005, 0.005, SILVER, 24)
+	var stripe: Color = _st.stripe
+	if stripe.a > 0.0:
+		# a marker band round the rim at 12 o'clock
+		rim_kit.box(Vector3(0.010, thin_r * 2.0 + 0.003, thin_r * 2.0 + 0.003), Vector3(0.0, _radius, 0.0), stripe)
+	body = kit.instance(CockpitKit.material(rim_roughness, 0.1, 0.15), "WheelBody")
+	add_child(body)
+	if not shiny.is_empty():
+		shiny_body = shiny.instance(CockpitKit.material(0.3, 0.45, 0.3), "WheelShiny")
+		add_child(shiny_body)
+	if grip_r < 0.0:
+		return   # unreachable; keeps grip_r used
+
+## The rim: a tube swept round the centreline (D-shaped when flat_y > -1), 9
+## faces round. On the screen wheel the grips are leather with a seam and the
+## top and bottom sections carbon with alternating shades for the weave; on a
+## plain wheel the whole rim is the rim colour, the seam apart.
+func _build_rim(kit: CockpitKit, screen: bool) -> void:
+	var segs := 56 if screen else 48
 	# Tube cross-section angles: 0 = outward, 90 = toward the driver, 180 =
 	# inward; the narrow 118..130 face is the stitch seam (about 3.5 mm).
 	const PHIS := [0.0, 45.0, 90.0, 118.0, 130.0, 180.0, 225.0, 270.0, 315.0]
 	const SEAM := 3
-	var SIDES := PHIS.size()
+	var grip_r := float(_st.grip_r)
+	var thin_r := float(_st.thin_r)
+	var flat := _flat_y > -0.999
+	var sides := PHIS.size()
 	var rings := []
-	for s in SEGS + 1:
-		var t := TAU * float(s % SEGS) / SEGS
+	for s in segs + 1:
+		var t := TAU * float(s % segs) / segs
 		var deg := rad_to_deg(t)
 		var c := _centreline(t)
-		var r := GRIP_R if _is_grip(deg) else CARBON_R
+		var r := grip_r if _is_grip(deg) else thin_r
 		var radial := Vector3(cos(t), sin(t), 0.0)
-		if c.y <= FLAT_Y * RADIUS + 1e-4:
+		if flat and c.y <= _flat_y * _radius + 1e-4:
 			radial = Vector3(0.0, -1.0, 0.0)   # the flat chord: tube offset straight down
 		var ring := []
-		for j in SIDES:
+		for j in sides:
 			var phi := deg_to_rad(float(PHIS[j]))
 			ring.append(Vector3(c.x, c.y, 0.0) + radial * (r * cos(phi)) + Vector3(0, 0, r * sin(phi)))
 		rings.append(ring)
-	for s in SEGS:
-		var deg := rad_to_deg(TAU * (float(s) + 0.5) / SEGS)
+	for s in segs:
+		var deg := rad_to_deg(TAU * (float(s) + 0.5) / segs)
 		var grip := _is_grip(deg)
-		for j in SIDES:
-			var k := (j + 1) % SIDES
+		for j in sides:
+			var k := (j + 1) % sides
 			var col := rim_colour
 			if grip:
 				if j == SEAM:
 					col = seam_colour     # the seam, between the driver-facing and inward faces
-			else:
+			elif screen:
 				col = carbon_colour if (s % 2 == 0) else carbon_alt_colour
 			kit.quad(rings[s][j], rings[s + 1][j], rings[s + 1][k], rings[s][k], col)
-	# Top plate inside the rim that carries the LEDs (carbon), and the LCD bezel.
-	kit.ring_sector(0.118, RADIUS - CARBON_R + 0.004, deg_to_rad(38.0), deg_to_rad(142.0), -0.006, 0.006, carbon_colour, 14, carbon_alt_colour)
-	kit.box(Vector3(0.090, 0.046, 0.012), Vector3(0.0, 0.088, 0.004), LCD_BG)
-	# Spokes: 9, 3 and 6 o'clock, flat bars from the pad to the rim.
-	kit.box(Vector3(0.12, 0.034, 0.012), Vector3(-0.105, 0.0, 0.0), spoke_colour)
-	kit.box(Vector3(0.12, 0.034, 0.012), Vector3(0.105, 0.0, 0.0), spoke_colour)
-	kit.box(Vector3(0.034, 0.10, 0.012), Vector3(0.0, -0.085, 0.0), spoke_colour)
-	# Centre pad (plain, no badge) and a hub ring behind it.
-	kit.box(Vector3(0.115, 0.085, 0.030), Vector3(0.0, 0.0, 0.012), PAD)
-	kit.cylinder(0.055, -0.03, 0.0, Vector3.ZERO, SPOKE, 10, Basis(Vector3.RIGHT, PI / 2.0))
-	# Button housings on the side spokes (the lit dots are MultiMesh instances).
-	for sx in [-1.0, 1.0]:
-		kit.box(Vector3(0.028, 0.026, 0.006), Vector3(sx * 0.085, 0.0, 0.008), PAD)
-	body = kit.instance(CockpitKit.material(0.7, 0.1, 0.15), "WheelBody")
-	add_child(body)
+
+## Spokes from the hub (set back by `dish`) to the rim centreline: flat bars,
+## round rods, drilled (two rails and cross bars) or thin wires.
+func _build_spokes(kit: CockpitKit, shiny: CockpitKit, dish: float) -> void:
+	var kind := String(_st.spoke_kind)
+	var hub := Vector3(0.0, 0.0, -dish)
+	for deg in _st.spokes:
+		var t := deg_to_rad(float(deg))
+		var c := _centreline(t)
+		var from := hub + Vector3(cos(t), sin(t), 0.0) * 0.03
+		var to := Vector3(c.x, c.y, 0.0)
+		var d := to - from
+		var len := d.length()
+		var dir := d / len
+		var side := Vector3.BACK.cross(dir).normalized()   # in the rim plane, across the spoke
+		var face := dir.cross(side).normalized()           # toward the driver
+		var mid := (from + to) * 0.5
+		var basis := Basis(dir, side, face)
+		match kind:
+			"round":
+				kit.cylinder(0.009, 0.0, len, from, spoke_colour, 6, Basis(side, dir, face))
+			"thin":
+				shiny.box(Vector3(len, 0.014, 0.010), mid, spoke_colour, basis)
+			"drilled":
+				for sgn in [-1.0, 1.0]:
+					shiny.box(Vector3(len, 0.008, 0.010), mid + side * (0.013 * sgn), spoke_colour, basis)
+				for i in 3:
+					var at := from + dir * (len * (0.2 + 0.3 * float(i)))
+					shiny.box(Vector3(0.008, 0.026, 0.010), at, spoke_colour, basis)
+			_:
+				kit.box(Vector3(len, 0.034, 0.012), mid, spoke_colour, basis)
 
 ## LED positions along the top plate, outer ends first (index 0 and 14 at the
 ## ends, 7 in the middle), plus the four button dots after them.
@@ -148,8 +314,9 @@ func _build_leds() -> void:
 	var box := BoxMesh.new()
 	box.size = Vector3(0.011, 0.007, 0.004)
 	mm.mesh = box
-	mm.instance_count = LED_COUNT + 4
+	mm.instance_count = SEG_FIRST + SCREEN_SEGS
 	led_colours.resize(LED_COUNT)
+	seg_colours.resize(SCREEN_SEGS)
 	for i in LED_COUNT:
 		led_colours[i] = _led_colour(i, false, false)
 		var deg := lerpf(138.0, 42.0, float(i) / (LED_COUNT - 1))
@@ -164,26 +331,54 @@ func _build_leds() -> void:
 			mm.set_instance_transform(LED_COUNT + b, Transform3D(Basis().scaled(Vector3(0.5, 0.5, 0.5)), Vector3(sx * 0.085, sy * 0.006, 0.012)))
 			mm.set_instance_color(LED_COUNT + b, Color(AMBER.r, AMBER.g, AMBER.b, 0.35))
 			b += 1
+	# The screen: one gear digit and three speed digits as segment instances.
+	var gear_rects := SevenSeg.segment_rects(GEAR_W, GEAR_H, GEAR_T)
+	var speed_rects := SevenSeg.segment_rects(SPEED_W, SPEED_H, SPEED_T)
+	for d in 4:
+		var rects: Array = gear_rects if d == 0 else speed_rects
+		var cx := GEAR_X if d == 0 else SPEED_X0 + SPEED_PITCH * float(d - 1)
+		for s in SevenSeg.SEG_COUNT:
+			var r: Rect2 = rects[s]
+			var sc := Vector3(r.size.x / SEG_MESH.x, r.size.y / SEG_MESH.y, SEG_DEPTH / SEG_MESH.z)
+			var at := Vector3(cx + r.position.x, WIN_Y + r.position.y, SEG_Z)
+			var i := SEG_FIRST + d * SevenSeg.SEG_COUNT + s
+			seg_rects.append(Rect2(Vector2(at.x, at.y) - r.size * 0.5, r.size))
+			mm.set_instance_transform(i, Transform3D(Basis().scaled(sc), at))
+			mm.set_instance_color(i, SevenSeg.colour(AMBER, false))
 	leds = MultiMeshInstance3D.new()
 	leds.name = "Leds"
 	leds.multimesh = mm
 	leds.material_override = CockpitKit.glow_material(LED_ENERGY)   # instance colour, alpha = lit
 	add_child(leds)
+	_show_gear("n")
+	_show_speed("  0")
 
-func _build_lcd() -> void:
-	lcd = Label3D.new()
-	lcd.name = "Lcd"
-	lcd.text = "0 rpm\n0 km/h  N"
-	lcd.font = UiTheme.font("lcd")   # DSEG7: car digital displays
-	lcd.font_size = 30
-	lcd.pixel_size = 0.00048
-	lcd.modulate = AMBER
-	lcd.outline_size = 0
-	lcd.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lcd.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lcd.alpha_cut = Label3D.ALPHA_CUT_DISCARD
-	lcd.position = Vector3(0.0, 0.088, 0.011)
-	add_child(lcd)
+## Light the gear digit for one character ("r", "n", "1".."9").
+func _show_gear(ch: String) -> void:
+	_gear_ch = ch
+	_paint_digit(0, SevenSeg.mask_for(ch))
+
+## Light the three speed digits for a 3-character string, e.g. " 99".
+func _show_speed(s: String) -> void:
+	_speed_str = s
+	for d in 3:
+		_paint_digit(d + 1, SevenSeg.mask_for(s.substr(d, 1)))
+
+func _paint_digit(d: int, mask: int) -> void:
+	var mm := leds.multimesh
+	for s in SevenSeg.SEG_COUNT:
+		var lit := (mask & (1 << s)) != 0
+		var c := SevenSeg.colour(AMBER, lit)
+		var i := SEG_FIRST + d * SevenSeg.SEG_COUNT + s
+		seg_colours[d * SevenSeg.SEG_COUNT + s] = c
+		mm.set_instance_color(i, c)
+
+## What the screen shows right now, "4 245" (gear, space, 3 speed characters;
+## blanks are spaces). The tests read this instead of a label.
+func lcd_text() -> String:
+	if leds == null:
+		return ""
+	return _gear_ch + " " + _speed_str
 
 ## A paddle behind the rim at 9 (side -1) or 3 (side +1); pivots at its inner end.
 func _paddle(side: float) -> Node3D:
@@ -220,11 +415,16 @@ func _led_colour(i: int, lit: bool, flash: bool) -> Color:
 	var c := SILVER if (lit and flash) else led_base_colour(i)
 	return Color(c.r, c.g, c.b, 1.0 if lit else 0.0)
 
-## Per frame from the cockpit: rpm share, the HUD's shift cue and blink, and
-## what the LCD shows.
-func update(frac: float, cue: bool, blink: bool, rpm: float, kmh: int, gear_text: String) -> void:
+## Per frame from the cockpit: rpm share, the HUD's shift cue and blink, the
+## speed in km/h, the gear (-1 reverse, 0 neutral) and the frame time. The gear
+## shows the instant it changes; the speed digits refresh at most 5 times a
+## second, and a segment's colour is only set when its value changes. No rpm
+## number: the LEDs carry the revs.
+func update(frac: float, cue: bool, blink: bool, kmh: int, gear: int, delta: float) -> void:
 	lit_count = lit_count_for(frac)
 	flashing = cue and blink
+	if leds == null:
+		return   # a plain wheel: no LEDs, no screen
 	var mm := leds.multimesh
 	for i in LED_COUNT:
 		var k := mini(i, LED_COUNT - 1 - i)
@@ -232,11 +432,21 @@ func update(frac: float, cue: bool, blink: bool, rpm: float, kmh: int, gear_text
 		var c := _led_colour(i, lit, flashing)
 		led_colours[i] = c   # what the MultiMesh was given (headless can't read it back)
 		mm.set_instance_color(i, c)
-	lcd.text = "%d rpm\n%d km/h  %s" % [int(rpm), kmh, gear_text]
+	var g := SevenSeg.gear_char(gear)
+	if g != _gear_ch:
+		_show_gear(g)
+	_clock += delta
+	if _clock - _speed_at >= SPEED_INTERVAL - 1e-6:
+		var s := SevenSeg.speed_chars(kmh)
+		if s != _speed_str:
+			_show_speed(s)
+			_speed_at = _clock
 
 ## Flick a paddle (-1 left/down, +1 right/up): it rotates toward the driver's
 ## pull and springs back over ~0.25 s.
 func flick(side: int) -> void:
+	if paddle_l == null:
+		return   # a plain wheel has no paddles
 	_paddle_t[side] = 0.25
 
 func _process(delta: float) -> void:
@@ -257,5 +467,9 @@ func triangle_count() -> int:
 		if mesh is ArrayMesh:
 			for s in mesh.get_surface_count():
 				n += (mesh as ArrayMesh).surface_get_array_len(s) / 3
-	n += 12 * (LED_COUNT + 4)
+	n += screen_triangles()
 	return n
+
+## The LED and digit instances' triangles (12 a box); 0 on a plain wheel.
+func screen_triangles() -> int:
+	return 12 * (LED_COUNT + 4 + SCREEN_SEGS) if leds != null else 0

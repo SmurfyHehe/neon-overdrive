@@ -229,14 +229,23 @@ func _ready() -> void:
 
 	game_state.state_changed.connect(_on_state_changed)
 	if wallet != null and wallet.has_signal("changed"):
-		wallet.changed.connect(func(_c: int, b: int) -> void: _bank_target = b)
+		wallet.changed.connect(func(_c: int, b: int) -> void:
+			_bank_target = b
+			_sync_tick())
 	if wallet != null:
 		_bank_target = wallet.bank
 		_bank_shown = wallet.bank
 	_show_only(null)
+	_sync_tick()
+
+## The only per-frame work on these screens is the bank ticking up on a slip
+## (issue #579): _process runs only while it has something to tick.
+func _sync_tick() -> void:
+	set_process(visible and wallet != null and _bank_shown < _bank_target)
 
 func _process(delta: float) -> void:
 	if not visible or wallet == null:
+		set_process(false)
 		return
 	if _bank_shown < _bank_target:
 		_tick = minf(_tick + delta / TICK_SECS, 1.0)
@@ -244,6 +253,8 @@ func _process(delta: float) -> void:
 		if _tick >= 1.0 or _bank_target - _bank_shown < 1.0:
 			_bank_shown = _bank_target
 		_bank_text()
+	if _bank_shown >= _bank_target:
+		set_process(false)
 
 func _bank_text() -> void:
 	bank_label.text = "Bank %s" % WorkOrders.money(int(round(_bank_shown)))
@@ -263,6 +274,7 @@ func _on_state_changed(new_state: GameState.State, _old: GameState.State) -> voi
 	visible = new_state == GameState.State.WORKBOARD
 	if visible:
 		_open()
+	_sync_tick()
 
 ## Opens on whichever stage today is at (a reopened board or a reload).
 func _open() -> void:
@@ -617,6 +629,7 @@ func _show_slip() -> void:
 		_bank_shown = float(maxi(wallet.bank - maxi(paid, 0), 0))
 		_tick = 0.0
 		_bank_text()
+		_sync_tick()
 	if shop.offer_stay_late():
 		var late_tag := _make_tag("Stay late", "Night starts at 9 p.m.")
 		slip_box.add_child(late_tag)

@@ -60,6 +60,7 @@ const LANE_W := RoadChunkBuilder.LANE_W
 const Weather := preload("res://scripts/world/weather.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
 const NearMissLog := preload("res://scripts/traffic/near_miss_log.gd")
+const RoadRamps := preload("res://scripts/world/road_ramps.gd")
 
 var player: Node3D
 var own_lanes := 4
@@ -149,12 +150,17 @@ var oncoming_share := 0.4
 ## z: -1 = down the road (the +x lanes are the player's side), +1 = back up it
 ## (the map, 2026-10-10: the road is driven both ways, and then the -x lanes
 ## are the player's side). "Ahead", "behind", "oncoming" and the lane speeds
-## all follow it. It flips only once the player is doing FLOW_FLIP m/s the
-## other way, so backing up or a spin does not turn the traffic round.
+## all follow it. It flips only once the player has done FLOW_FLIP m/s the
+## other way for FLOW_FLIP_SECS, so backing up or a spin does not turn the
+## traffic round.
 var flow := -1.0
 const FLOW_FLIP := 6.0
+const FLOW_FLIP_SECS := 1.0
+var _flip_since := -1.0
 ## Times the flow has turned round (tests).
 var flow_flips := 0
+## The player is (or was until now) off the main road: no flip until it rejoins.
+var _flow_held := false
 ## Own-direction / oncoming lanes traffic may use, for spawns and lane
 ## changes; empty = all. Tests keep the player's lane clear with this.
 var own_lanes_used: Array[int] = []
@@ -315,11 +321,31 @@ var honk_count := 0
 var honk_log: Array[Dictionary] = []
 var _horn_until := PackedFloat32Array([0.0, 0.0])
 var _horn_cars: Array = [null, null]
-var _horn_players: Array[AudioStreamPlayer3D] = []
+var _horn_players: Array[Sound3D] = []   # not AudioStreamPlayer3D: issue #567
 var _horns_live := false
 ## Draws that must not disturb the game's random sequence (reaction times):
 ## tests and the benchmark keep the placements they had before.
 var _own_rng := RandomNumberGenerator.new()
+
+## More-alive traffic (MA2, 2026-10-11): a tailgater for a slow player in the
+## fast lane, and phone drivers. Drawn from their own generator so the game's
+## random sequence and _own_rng stay exactly as they were.
+const PHONE_SHARE := 1.0 / 12.0
+const TG_SLOW_KMH := 15.0        # the player this far under the lane's flow ...
+const TG_SLOW_S := 6.0           # ... for this long
+const TG_EVERY := 90.0           # at most one tailgater this often
+const TG_BEHIND := Vector2(8.0, 140.0)   # m behind the player a car can be picked from
+const PHONE_HONK_RANGE := 25.0   # the car behind a waiting phone driver taps its horn
+var tailgate_enabled := true
+var phone_share := PHONE_SHARE
+var tailgater: TrafficCar
+var tailgate_count := 0
+var phone_spawns := 0
+var phone_honk_count := 0
+var _life_rng := RandomNumberGenerator.new()
+var _tg_slow_since := -1.0
+var _tg_last := -1000.0
+var _phone_honks: Array = []     # [{car, at}]
 
 # Occupancy index: entry 0 is the player, entry i + 1 is cars[i].
 var _lo := PackedFloat32Array()
@@ -338,6 +364,7 @@ func _ready() -> void:
 	if NearMissLog.enabled():
 		near_miss = NearMissLog.new(self)
 	_own_rng.seed = 90817
+	_life_rng.seed = 40117
 	if not sim_only:
 		TrafficHorns.warm()
 	target_count = car_count
@@ -399,9 +426,29 @@ func _physics_process(_delta: float) -> void:
 		return
 	_build_index()
 	var pz := _player_z()
-	if _vz[0] * flow < -FLOW_FLIP:
-		flow = -flow
-		flow_flips += 1
+	# Off the main road (a ramp, the ring, a spur: ring sites R3) the flow is
+	# held: round the ring the player drives every way there is. It is decided
+	# once on rejoining, from the carriageway the player came down onto.
+	if not RoadRamps.player_place.is_empty():
+		_flow_held = true
+		_flip_since = -1.0
+	elif _flow_held:
+		_flow_held = false
+		_flip_since = -1.0
+		var joined := -1.0 if RoadFrame.unroll(player.global_position).x > 0.0 else 1.0
+		if joined != flow:
+			flow = joined
+			flow_flips += 1
+	elif _vz[0] * flow < -FLOW_FLIP:
+		if _flip_since < 0.0:
+			_flip_since = now
+		elif now - _flip_since >= FLOW_FLIP_SECS:
+			_flip_since = -1.0
+			flow = -flow
+			flow_flips += 1
+	else:
+		_flip_since = -1.0
+	_life_step()
 	var pv := _player_speed()
 	var band_hi := _spawn_band().y
 	var frame := Engine.get_physics_frames()
@@ -469,6 +516,8 @@ func _physics_process(_delta: float) -> void:
 		_build_index()
 	if _pool_size() > target_count:
 		_trim_cars()
+	# after this pass's moves into and out of the sim
+	_deal_ai_phases()
 	if not cars.is_empty():
 		# its own counter: this point is reached every other tick, so _tick
 		# would only ever land on every other car
@@ -564,6 +613,22 @@ func _rail_tier(car: TrafficCar, d: float) -> int:
 	if d > RAIL_FAR_M or (car.rail_tier == TrafficCar.RAIL_FAR and d > RAIL_FAR_M - RAIL_FAR_HYSTERESIS):
 		return TrafficCar.RAIL_FAR
 	return TrafficCar.RAIL_NEAR
+
+## Race retry (race_controller.gd): every pool car within `half` m of road-space
+## z is parked out of sight, like a deferred spawn, and takes a slot again when
+## its retry frame comes. The pinned rival is left alone. Returns how many.
+func clear_zone(z: float, half: float) -> int:
+	var n := 0
+	for car in cars:
+		if car.race_pinned or absf(RoadFrame.unroll(car.global_position).z - z) > half:
+			continue
+		car.set_shown(false)
+		car.set_detailed(false)
+		car.place(car.lane_x, car.direction, z - flow * PARK_BEHIND, car.rest_y, 0.0)
+		car.retry_frame = Engine.get_physics_frames() + DEFER_TICKS
+		_put(car)
+		n += 1
+	return n
 
 ## The same show/hide and physics band for a car that is not in the pool (the
 ## patrol car): d is its distance from the player along the road.
@@ -707,6 +772,11 @@ func _respawn(car: TrafficCar) -> void:
 	car.pace_far = slot.pace_far
 	car.pace_city = slot.pace_city
 	car.set_rule_breaker(breaker, weave_m if breaker and weave_share > 0.0 and randf() < weave_share else 0.0)
+	var phone := not breaker and phone_share > 0.0 and _life_rng.randf() < phone_share
+	car.set_phone(phone, _life_rng.randf_range(TrafficCar.PHONE_DELAY.x, TrafficCar.PHONE_DELAY.y),
+		_life_rng.randf_range(TrafficCar.PHONE_PERIOD.x, TrafficCar.PHONE_PERIOD.y), _life_rng.randf() * TAU)
+	if phone:
+		phone_spawns += 1
 	if breaker:
 		rule_breaker_spawns += 1
 	car.set_detailed(absf(slot.dist) <= minf(physics_distance, detail_distance))
@@ -781,6 +851,10 @@ func _find_slot(car: TrafficCar, pz: float, extra_speed := 0.0) -> Dictionary:
 			speed += lane_speed(lane_i, far_side, true) - lane_speed(lane_i, far_side)
 			if behind and speed <= pv + BEHIND_DV:
 				continue  # at the city pace it would never catch the player up
+		# Not under cover (TN1): a car appearing in a lit tunnel is in plain
+		# sight of anyone looking in at the mouth. Traffic drives in instead.
+		if RoadMap.tunnel_at(floori(RoadFrame.s_at(z) / RoadChunkBuilder.CHUNK_LEN)):
+			continue
 		var check := _slot_check(car, lane_x, z, dir, speed)
 		if check.is_empty():
 			continue
@@ -906,6 +980,94 @@ func flash_ahead() -> TrafficCar:
 		flashed_car = best
 	return best
 
+# ---------- more alive (MA2) ----------
+
+func life_randf_range(from: float, to: float) -> float:
+	return _life_rng.randf_range(from, to)
+
+## The lane the player drives in, and the fastest lane of its carriageway
+## (the lowest one traffic may use), as {lane, fastest, lanes, oncoming}.
+func _player_lane() -> Dictionary:
+	var px := (_lo[0] + _hi[0]) * 0.5
+	var onc := px < 0.0
+	var lanes := onc_lanes if onc else own_lanes
+	var fastest := -1
+	for i in lanes:
+		if lane_allowed(i, onc):
+			fastest = i
+			break
+	return {"lane": RoadChunkBuilder.lane_at(absf(px)), "fastest": fastest, "lanes": lanes, "oncoming": onc, "x": px}
+
+## At the bookkeeping rate: picks a tailgater when the player has been crawling
+## in the fast lane, and runs the phone drivers' honks.
+func _life_step() -> void:
+	if not _phone_honks.is_empty():
+		_phone_honk_step()
+	if tailgater != null and (not is_instance_valid(tailgater) or tailgater.tg_phase == TrafficCar.TG_NONE):
+		tailgater = null
+	if not tailgate_enabled or not react_to_player or tailgater != null or _index_cars != cars.size():
+		return
+	var pl := _player_lane()
+	var slow := false
+	if pl.fastest >= 0 and pl.lane == pl.fastest and pl.lanes >= 2 and lane_allowed(pl.lane + 1, pl.oncoming) and _vz[0] * flow > 0.0:
+		var flow_v := lane_speed(pl.lane, pl.oncoming, city_at(_z[0]))
+		slow = absf(_vz[0]) < flow_v - TG_SLOW_KMH / 3.6
+	if not slow:
+		_tg_slow_since = -1.0
+		return
+	if _tg_slow_since < 0.0:
+		_tg_slow_since = now
+		return
+	if now - _tg_slow_since < TG_SLOW_S or now - _tg_last < TG_EVERY:
+		return
+	# The next car that comes up behind in the player's lane.
+	var best: TrafficCar = null
+	var best_d := INF
+	var pv := absf(_vz[0])
+	for car in cars:
+		if car.benched or car.direction != flow or car.rule_breaker or car.phone or car.changing or car.wrecked \
+				or car.racer != null or car.free_driver != null or car.is_in_group("patrol_cars") or car.lane_i != pl.lane:
+			continue
+		var k := car._idx
+		var behind := (_z[0] - _z[k]) * flow
+		if behind < TG_BEHIND.x or behind > TG_BEHIND.y or car.lane_speed() < pv + 2.0:
+			continue
+		if behind < best_d:
+			best_d = behind
+			best = car
+	if best != null:
+		tailgater = best
+		tailgate_count += 1
+		_tg_last = now
+		best.tg_begin()
+
+## A phone driver is sitting through a green light: the car right behind it in
+## its lane gives one short tap once its own reaction time has passed.
+func note_phone_wait(car: TrafficCar) -> void:
+	var k := car._idx
+	if k < 0 or k >= _lo.size():
+		return
+	var gap := scan(_z[k], car.direction, _lo[k], _hi[k], false, k, car._hl_self(), PHONE_HONK_RANGE, true)
+	if gap == INF or q_idx < 1 or q_player:
+		return
+	var follower := cars[q_idx - 1]
+	if follower.direction != car.direction or follower.benched:
+		return
+	_phone_honks.append({"car": follower, "at": now + follower.reaction_s + 0.4, "until": car._ph_until})
+
+func _phone_honk_step() -> void:
+	var keep: Array = []
+	for e in _phone_honks:
+		var car: TrafficCar = e.car
+		if not is_instance_valid(car) or now > float(e.until):
+			continue
+		if now >= float(e.at):
+			if honk(car, false):
+				phone_honk_count += 1
+			continue
+		keep.append(e)
+	_phone_honks = keep
+
 # ---------- sirens ----------
 
 ## A car with its emergency lights on (any TrafficCar with a `lights_on`
@@ -968,7 +1130,7 @@ func _play_horn(voice: int, car: TrafficCar, horn: String, long: bool) -> void:
 		return   # still being built: this one is silent
 	if _horn_players.is_empty():
 		for i in HORN_VOICES:
-			var pl := AudioStreamPlayer3D.new()
+			var pl := Sound3D.new()
 			pl.bus = &"Traffic"
 			pl.unit_size = 14.0
 			pl.max_distance = 160.0
@@ -1089,6 +1251,56 @@ func _build_index() -> void:
 	for i in cars.size():
 		cars[i]._idx = i + 1
 		_put(cars[i])
+
+## The staggered controller (TrafficCar.AI_STRIDE), dealt at the end of each
+## bookkeeping pass: each car in the sim keeps the tick it was dealt; a car
+## coming into the sim gets the least used one, and when cars leaving have
+## tipped the split, cars move over until it is even again (a move costs that
+## car one early run, never a late one). Cars out of the sim give theirs back.
+var _ai_load := PackedInt32Array()
+var _ai_new: Array[TrafficCar] = []
+func _deal_ai_phases() -> void:
+	var stride := maxi(TrafficCar.AI_STRIDE, 1)
+	if _ai_load.size() != stride:
+		_ai_load.resize(stride)
+	_ai_load.fill(0)
+	_ai_new.clear()
+	for car in cars:
+		if not car.detailed or car.benched:
+			car._ai_phase = -1
+		elif car._ai_phase < 0:
+			_ai_new.append(car)
+		else:
+			car._ai_phase %= stride
+			_ai_load[car._ai_phase] += 1
+	for car in _ai_new:
+		var ph := _ai_least()
+		car._ai_phase = ph
+		_ai_load[ph] += 1
+	var lo := _ai_least()
+	var hi := 0
+	for k in stride:
+		if _ai_load[k] > _ai_load[hi]:
+			hi = k
+	while _ai_load[hi] - _ai_load[lo] > 1:
+		for car in cars:
+			if car._ai_phase == hi:
+				car._ai_phase = lo
+				break
+		_ai_load[hi] -= 1
+		_ai_load[lo] += 1
+		lo = _ai_least()
+		hi = 0
+		for k in stride:
+			if _ai_load[k] > _ai_load[hi]:
+				hi = k
+
+func _ai_least() -> int:
+	var best := 0
+	for k in _ai_load.size():
+		if _ai_load[k] < _ai_load[best]:
+			best = k
+	return best
 
 ## Writes a car's entry (footprint across the road, z, z-velocity, all in
 ## road space: RoadFrame) and adds

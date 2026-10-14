@@ -95,7 +95,7 @@ LICENCE_HEADER = (
 )
 CREDITS_SECTION = "## Treblo imports"
 CREDITS_HEADER = "| File | Station | Title | Hour band | Source | Source WAV sha256 |"
-TRACKS_HEADER = "| NN | File | Title | Hour band | Length | Loudness |"
+TRACKS_HEADER = "| NN | File | Title | Hour band | Length | Loudness | Artist |"
 
 
 class Reject(Exception):
@@ -289,10 +289,12 @@ def update_tracks(path, label, entry):
             c = [x.strip() for x in line.strip().strip("|").split("|")]
             if line.startswith("|") and len(c) >= 6 and c[0].isdigit():
                 entries[c[0]] = c
-    entries[entry[0]] = entry
+    # the Artist column (7th) is written by hand: a re-import keeps it
+    old = entries.get(entry[0], [])
+    entries[entry[0]] = list(entry[:6]) + [old[6] if len(old) > 6 else ""]
     out = ["# %s - Treblo tracks" % label, "",
            "Written by tools/radio_import/import_treblo.py. Hour band: dusk, late, dead, dawn.", "",
-           TRACKS_HEADER, "|---|---|---|---|---|---|"]
+           TRACKS_HEADER, "|---|---|---|---|---|---|---|"]
     for nn in sorted(entries):
         out.append("| " + " | ".join(entries[nn]) + " |")
     path.write_text("\n".join(out) + "\n", encoding="utf-8")

@@ -372,7 +372,8 @@ func _check_streets() -> void:
 				_fail("chunk %d (%s): not its kind's pool material" % [idx, D.ORDER[r]])
 			if (chunk.get_node(^"RoadOwn") as MeshInstance3D).material_override != B._get_road_mats(st.road)[0]:
 				_fail("chunk %d (%s): not its kind's road material" % [idx, D.ORDER[r]])
-			var want: int = {0: 0, 1: 4, 2: 2, 4: 1}[int(st.every)]
+			# plus one lamp per side-street mouth (World step 6, W7)
+			var want: int = {0: 0, 1: 4, 2: 2, 4: 1}[int(st.every)] + B.SideStreets.mouths_at(idx).size()
 			if lamps.multimesh.visible_instance_count != want:
 				_fail("chunk %d (%s): %d lamps, expected %d" % [idx, D.ORDER[r], lamps.multimesh.visible_instance_count, want])
 			chunk.free()

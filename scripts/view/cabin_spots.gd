@@ -42,15 +42,25 @@ const CABIN := {
 
 ## Per car: cabin overrides (none yet: one shared cabin) and the car spots.
 const CARS := {
-	"p0_beater": {"strut_bar": {"x": 0.48, "y": 0.93, "z": -1.05}},
+	"p0_beater": {"strut_bar": {"x": 0.48, "y": 0.93, "z": -1.05}, "bobble": {"along": 0.8, "scale": 0.65, "tilt": 0.2}},
 	"p1_coupe": {"strut_bar": {"x": 0.595, "y": 0.71, "z": -1.11}},
 	"p2_hothatch": {"strut_bar": {"x": 0.62, "y": 0.85, "z": -1.13}},
 	"p3_tuner": {"strut_bar": {"x": 0.59, "y": 0.79, "z": -1.16}},
 	# the kei's dash is a 6 cm ledge a hand's width under the screen: its
 	# bobble head stands nearer the cowl and a size smaller (BobbleHead)
-	"p4_kei": {"strut_bar": {"x": 0.445, "y": 0.67, "z": -0.98}, "bobble": {"along": 0.2, "scale": 0.8}},
-	"p5_muscle": {"strut_bar": {"x": 0.66, "y": 0.87, "z": -1.42}},
+	"p4_kei": {"strut_bar": {"x": 0.445, "y": 0.67, "z": -0.98}, "bobble": {"along": 0.05, "scale": 0.45, "tilt": 0.15}},
+	"p5_muscle": {"strut_bar": {"x": 0.66, "y": 0.87, "z": -1.33}},
 	"p6_crossover": {"strut_bar": {"x": 0.61, "y": 1.00, "z": -1.16}},
+	"p8_driftcoupe": {"strut_bar": {"x": 0.60, "y": 0.76, "z": -1.18}},
+	"p10_truck": {"strut_bar": {"x": 0.70, "y": 0.92, "z": -1.45}},
+	# the shop wagon and the work pickup: towers by the same rule, y from
+	# their built bodies' hood top over the tower (2026-10-11)
+	"p7_wagon": {"strut_bar": {"x": 0.56, "y": 0.89, "z": -1.15}},
+	"p17_work_pickup": {"strut_bar": {"x": 0.605, "y": 0.92, "z": -1.44}},
+	# the specials wear the P1 coupe body until their body steps land
+	# (m1_monster_data.gd / l1_lowrider_data.gd), so they brace its towers
+	"m1_monster": {"strut_bar": {"x": 0.595, "y": 0.71, "z": -1.11}},
+	"l1_lowrider": {"strut_bar": {"x": 0.595, "y": 0.71, "z": -1.11}},
 }
 
 ## A cabin spot for a car (CockpitFrame space). Unknown spot: Vector3.ZERO.
@@ -98,7 +108,7 @@ static func dash_pass(kind: String) -> Vector3:
 	x = minf(x, minf(dash_half - 0.06, door_x - 0.25))
 	return Vector3(x, y, z)
 
-## Per-car bobble head fit overrides: {"along", "scale"} (empty for most cars).
+## Per-car bobble head fit overrides: {"along", "scale", "tilt"} (empty for most cars).
 static func bobble_fit(kind: String) -> Dictionary:
 	var car: Dictionary = CARS.get(kind, {})
 	return car.get("bobble", {})

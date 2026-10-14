@@ -17,11 +17,14 @@ extends Node3D
 #
 # What differs from site to site is built once per look and kept:
 # - the bridge and wall colour follows the district (concrete; steel in the
-#   docks; rust in industrial areas);
+#   docks; rust in industrial areas), and so does the bridge itself (ramps
+#   doc 2.6): a plain slab, a steel truss over each span in the Docks with
+#   the light line on its top chord and white "harbour" lamps, a deep rusty
+#   girder with drip stains in industrial areas;
 # - a "stop" or "lot" site has a spur: a stub of an arm off the ring on the
 #   stop's side, ending at a barrier until the stops are built;
-# - a "landmark" site has something on the ground inside the ring (one
-#   shared placeholder for now: a dead tree and a shopping trolley).
+# - what stands on the island (RoadMap.rings `island`): a dead tree and a
+#   shopping trolley, a water tower, a toppled crane wreck, or nothing.
 #
 # The lane leans in 4 % (RoadRamps.BANK). Each bridge's outside face carries
 # the exit's number, lit, over the carriageway that drives at it, and beside
@@ -80,7 +83,19 @@ const UNDER_ZONE := Vector3(2.0 * BRIDGE_HALF, 5.5, 14.0)
 const DECK_ZONE := Vector3(2.0 * BRIDGE_HALF, 3.0, 9.0)
 ## Graffiti on the piers' faces, downtown and in the Docks (doc section 3).
 const PIER_TAGS := 4
-const GRAFFITI_STYLES := ["concrete_downtown", "steel"]
+## The steel truss over each span (Docks): posts every other rim piece up to
+## TRUSS_H above the parapet, a top chord, a diagonal in every bay.
+const TRUSS_H := 3.6
+const TRUSS_T := 0.16
+## The rusty girder under each span (industrial): this deep below the slab's
+## edge, with dark drip stains down its face.
+const GIRDER_D := 1.3
+const GIRDER_T := 0.25
+const C_STAIN := Color(0.16, 0.1, 0.06, 0.0)
+## The water tower on x4's island and the crane wreck on x8's.
+const C_TANK := Color(0.33, 0.3, 0.27, 0.0)
+const C_WRECK := Color(0.3, 0.2, 0.12, 0.0)
+const C_WRECK_CAB := Color(0.5, 0.44, 0.12, 0.0)
 
 const C_UNDER := Color(0.07, 0.07, 0.075, 0.0)
 const C_BOARD := Color(0.03, 0.03, 0.03, 0.0)
@@ -143,7 +158,9 @@ static func look_of(ring: int) -> Dictionary:
 		style = "rust"
 	elif String(info.zone) == "The Docks":
 		style = "steel"
-	return {"style": style, "spur": RoadMap.ring_spur_side(ring), "landmark": String(r.kind) == "landmark",
+	var island := String(r.get("island", "tree" if String(r.kind) == "landmark" else ""))
+	return {"style": style, "spur": RoadMap.ring_spur_side(ring), "landmark": island == "tree", "island": island,
+		"bridge": {"steel": "truss", "rust": "girder"}.get(style, "slab"),
 		"graffiti": style == "steel" or String(info.kind) == "downtown"}
 
 func _ready() -> void:
@@ -235,11 +252,12 @@ func _place() -> void:
 			(c as Node3D).force_update_transform()
 
 func _dress(look: Dictionary) -> void:
-	var key := "%s|%d|%s" % [look.style, look.spur, look.landmark]
+	var key := "%s|%d|%s" % [look.style, look.spur, look.get("island", "")]
 	if not _looks.has(key):
 		_looks[key] = build(look)
 	var made: Dictionary = _looks[key]
 	_mesh.mesh = made.mesh
+	_pools.material_override = RoadChunkBuilder._get_pool_mat(lamp_light(look))
 	(_deck.shape as ConcavePolygonShape3D).set_faces(made.faces)
 	_deck.disabled = false
 	var boxes: Array = made.boxes
@@ -377,6 +395,11 @@ func counts() -> Dictionary:
 
 # ---------- geometry ----------
 
+## The lamps' light at a look: the Docks' steel rings get the cooler white
+## "harbour" lamps the cranes use; everywhere else sodium.
+static func lamp_light(look: Dictionary) -> String:
+	return "white" if String(look.style) == "steel" else "sodium"
+
 ## Lays one look of the ring out: {mesh, faces, boxes, pools}.
 static func build(look: Dictionary) -> Dictionary:
 	R.begin_flat()
@@ -423,6 +446,8 @@ static func build(look: Dictionary) -> Dictionary:
 	# the light line: a small lamp on each parapet at every rim piece over the
 	# road, both rims, both bridges; a wash of light on the road under each slab
 	var line_col: Color = C_LINE_STEEL if String(look.style) == "steel" else R.C_HEAD
+	var bridge := String(look.get("bridge", "slab"))
+	var head_col: Color = C_LINE_STEEL if String(look.style) == "steel" else R.C_HEAD
 	for i in SEGS:
 		var a := step * (float(i) + 0.5)
 		if absf(R.RING_OUT * cos(a)) >= BRIDGE_HALF:
@@ -431,7 +456,13 @@ static func build(look: Dictionary) -> Dictionary:
 			var top: float = y + R.BARRIER_H + LINE_LAMP.y * 0.5
 			if r < R.RING_IN:
 				top -= R.ring_drop(R.RING_IN)
+			if bridge == "truss":
+				top += TRUSS_H + TRUSS_T * 0.5   # on the truss's top chord
 			R._box(Vector3(r * cos(a), top, r * sin(a)), LINE_LAMP, line_col)
+	if bridge == "truss":
+		_truss(y)
+	elif bridge == "girder":
+		_girder(y)
 	for vz in [-1.0, 1.0]:
 		var wmid := (R.RING_IN + R.RING_OUT) * 0.5
 		R._pools.append(Transform3D(Basis.from_scale(Vector3(WASH.x, 1.0, WASH.y)), R._p(0.0, 0.05, vz * wmid)))
@@ -442,7 +473,7 @@ static func build(look: Dictionary) -> Dictionary:
 		var a := deg_to_rad(deg)
 		var r: float = R.RING_OUT + R.BARRIER_W * 0.5
 		R._box(Vector3(r * cos(a), y + LAMP_H * 0.5, r * sin(a)), Vector3(0.16, LAMP_H, 0.16), R.C_POLE)
-		R._box(Vector3(r * cos(a), y + LAMP_H + 0.06, r * sin(a)), Vector3(0.8, 0.14, 0.8), R.C_HEAD)
+		R._box(Vector3(r * cos(a), y + LAMP_H + 0.06, r * sin(a)), Vector3(0.8, 0.14, 0.8), head_col)
 		var mid := (R.RING_IN + R.RING_OUT) * 0.5
 		# the pool lies on the leaning deck
 		var tip := Basis(Quaternion(Vector3.UP, R.ring_normal(a)))
@@ -462,8 +493,13 @@ static func build(look: Dictionary) -> Dictionary:
 			R._box(Vector3(r * cos(a), y + R.BARRIER_H + 0.25, r * sin(a)), Vector3(0.36, 0.5, 0.36), C_NOSE)
 	if spur != 0:
 		_spur(float(spur), y)
-	if bool(look.landmark):
-		_landmark()
+	match String(look.get("island", "")):
+		"tree":
+			_landmark()
+		"tower":
+			_water_tower()
+		"wreck":
+			_crane_wreck()
 	var made := R.end_flat()
 	R.wall_colour = R.C_WALL
 	var mesh := ArrayMesh.new()
@@ -555,6 +591,125 @@ static func _spur(side: float, y: float) -> void:
 	var end_out: Array[Vector2] = [Vector2(side, 0.0), Vector2(side, 0.0)]
 	R._edge(end_pts, end_out, full, PackedFloat32Array(), [C_SPLIT_A])
 	R._box(Vector3(side * (x1 - 0.2), y + R.BARRIER_H + 0.2, 0.0), Vector3(0.3, 0.4, 0.3), C_NOSE)
+
+## A thin bar between two points of the flat description (x, y, v), `t`
+## thick: four long faces (for trusses, legs and wrecks, where a box square
+## to the axes will not do).
+static func _bar(p0: Vector3, p1: Vector3, t: float, col: Color) -> void:
+	var a := R._p(p0.x, p0.y, p0.z)
+	var b := R._p(p1.x, p1.y, p1.z)
+	var along := (b - a)
+	if along.length() < 0.01:
+		return
+	var dir := along.normalized()
+	var ref := Vector3.UP if absf(dir.y) < 0.9 else Vector3.RIGHT
+	var u := dir.cross(ref).normalized() * t * 0.5
+	var w := dir.cross(u).normalized() * t * 0.5
+	for pair in [[u, w], [w, -u], [-u, -w], [-w, u]]:
+		var e0: Vector3 = pair[0]
+		var e1: Vector3 = pair[1]
+		R._quad(a + e0, b + e0, a + e1, b + e1, col, (e0 + e1).normalized())
+
+## The rim pieces over one span of the bridge: those whose outer-rim point
+## is within BRIDGE_HALF of the centre line, for vz = -1 and +1.
+static func _span_pieces(vz: float) -> Array:
+	var step := TAU / float(SEGS)
+	var out: Array = []
+	for i in SEGS:
+		var a := step * float(i)
+		if absf(R.RING_OUT * cos(a)) < BRIDGE_HALF and signf(sin(a)) == vz:
+			out.append(i)
+	return out
+
+## A steel truss over each span, on both rims: posts every other piece, a top
+## chord, and a diagonal in every bay, the light line on the chord.
+static func _truss(y: float) -> void:
+	var step := TAU / float(SEGS)
+	for vz in [-1.0, 1.0]:
+		var pieces := _span_pieces(vz)
+		for r in [R.RING_OUT + R.BARRIER_W * 0.5, R.RING_IN - R.BARRIER_W * 0.5]:
+			var base: float = y + R.BARRIER_H - (R.ring_drop(R.RING_IN) if r < R.RING_IN else 0.0)
+			var top := base + TRUSS_H
+			for j in pieces.size():
+				var i: int = pieces[j]
+				var a0 := step * float(i)
+				var a1 := step * float(i + 1)
+				var p0 := Vector2(r * cos(a0), r * sin(a0))
+				var p1 := Vector2(r * cos(a1), r * sin(a1))
+				# the top chord over this piece, and a post at every other joint
+				_bar(Vector3(p0.x, top, p0.y), Vector3(p1.x, top, p1.y), TRUSS_T, R.wall_colour)
+				if j % 2 == 0:
+					_bar(Vector3(p0.x, base, p0.y), Vector3(p0.x, top, p0.y), TRUSS_T, R.wall_colour)
+					# a diagonal across the two-piece bay
+					if j + 2 <= pieces.size():
+						var a2 := step * float(i + 2)
+						var p2 := Vector2(r * cos(a2), r * sin(a2))
+						_bar(Vector3(p0.x, base, p0.y), Vector3(p2.x, top, p2.y), TRUSS_T * 0.8, R.wall_colour)
+				if j == pieces.size() - 1:
+					_bar(Vector3(p1.x, base, p1.y), Vector3(p1.x, top, p1.y), TRUSS_T, R.wall_colour)
+
+## A deep rusty girder under each span's edges, with drip stains down its face.
+static func _girder(y: float) -> void:
+	var step := TAU / float(SEGS)
+	for vz in [-1.0, 1.0]:
+		var pieces := _span_pieces(vz)
+		for r in [R.RING_OUT + R.BARRIER_W + GIRDER_T * 0.5, R.RING_IN - R.BARRIER_W - GIRDER_T * 0.5]:
+			var top: float = y - SLAB * 0.5 - (R.ring_drop(R.RING_IN) if r < R.RING_IN else 0.0)
+			for j in pieces.size():
+				var i: int = pieces[j]
+				var a0 := step * float(i)
+				var a1 := step * float(i + 1)
+				var am := step * (float(i) + 0.5)
+				var p0 := Vector2(r * cos(a0), r * sin(a0))
+				var p1 := Vector2(r * cos(a1), r * sin(a1))
+				var c0 := R._p(p0.x, top, p0.y)
+				var c1 := R._p(p1.x, top, p1.y)
+				var d0 := R._p(p0.x, top - GIRDER_D, p0.y)
+				var d1 := R._p(p1.x, top - GIRDER_D, p1.y)
+				var outward := Vector3(cos(am), 0.0, -sin(am)) * signf(r - (R.RING_IN + R.RING_OUT) * 0.5)
+				R._quad(c0, c1, d0, d1, R.wall_colour, outward)
+				R._quad(c0, c1, d0, d1, R.wall_colour, -outward)
+				R._quad(d0, d1, d0 - outward * GIRDER_T, d1 - outward * GIRDER_T, R.wall_colour, Vector3.DOWN)
+				# a drip stain on the outer face of every third piece
+				if j % 3 == 1:
+					var sm := R._p(r * cos(am), top - 0.1, r * sin(am)) + outward * 0.01
+					var sb := R._p(r * cos(am), top - GIRDER_D + 0.1, r * sin(am)) + outward * 0.01
+					var sw := Vector3(-sin(am), 0.0, -cos(am)) * 0.18
+					R._quad(sm - sw, sm + sw, sb - sw * 0.5, sb + sw * 0.5, C_STAIN, outward)
+
+## A water tower on the island (x4): four splayed legs, a squat tank, a
+## short cap, a ladder stripe, on the +x side.
+static func _water_tower() -> void:
+	var cx := 24.5
+	var leg_h := 11.0
+	for sx in [-1.0, 1.0]:
+		for sv in [-1.0, 1.0]:
+			_bar(Vector3(cx + sx * 2.6, 0.0, sv * 2.6), Vector3(cx + sx * 1.5, leg_h, sv * 1.5), 0.22, C_TANK)
+			# a brace half way up
+			_bar(Vector3(cx + sx * 2.05, leg_h * 0.5, sv * 2.05), Vector3(cx - sx * 2.05, leg_h * 0.5, sv * 2.05), 0.1, C_TANK)
+	R._box(Vector3(cx, leg_h + 0.1, 0.0), Vector3(4.2, 0.2, 4.2), C_TANK)   # the platform
+	R._box(Vector3(cx, leg_h + 2.6, 0.0), Vector3(4.6, 4.8, 4.6), C_TANK)   # the tank
+	R._box(Vector3(cx, leg_h + 5.3, 0.0), Vector3(3.2, 0.6, 3.2), C_TANK)   # the cap
+	R._box(Vector3(cx, leg_h + 5.9, 0.0), Vector3(0.14, 0.6, 0.14), R.C_POLE)  # the vent
+	R._box(Vector3(cx + 2.4, leg_h * 0.5 + 1.5, 0.0), Vector3(0.08, leg_h + 3.0, 0.5), R.C_POLE)  # the ladder
+
+## A toppled lattice crane on the island (x8): the cab on its side, the jib
+## lying across the island, the hook block on the ground.
+static func _crane_wreck() -> void:
+	R._box(Vector3(23.5, 1.0, -8.0), Vector3(2.4, 2.0, 2.8), C_WRECK_CAB)        # the cab, on its side
+	R._box(Vector3(23.5, 0.35, -8.0), Vector3(3.2, 0.7, 3.6), C_WRECK)           # its base
+	var foot := Vector3(23.8, 1.6, -6.4)
+	var tip := Vector3(25.6, 0.8, 10.5)
+	_bar(foot + Vector3(-0.5, 0.0, 0.0), tip + Vector3(-0.4, 0.0, 0.0), 0.2, C_WRECK)
+	_bar(foot + Vector3(0.5, 0.0, 0.0), tip + Vector3(0.4, 0.0, 0.0), 0.2, C_WRECK)
+	_bar(foot + Vector3(0.0, 0.8, 0.0), tip + Vector3(0.0, 0.5, 0.0), 0.2, C_WRECK)
+	for k in 6:
+		var t := float(k) / 5.0
+		var at := foot.lerp(tip, t)
+		_bar(at + Vector3(-0.5, 0.0, 0.0), at + Vector3(0.0, 0.8 - 0.3 * t, 0.0), 0.1, C_WRECK)
+		_bar(at + Vector3(0.5, 0.0, 0.0), at + Vector3(0.0, 0.8 - 0.3 * t, 0.0), 0.1, C_WRECK)
+	R._box(Vector3(25.9, 0.3, 11.5), Vector3(0.5, 0.6, 0.7), R.C_POLE)          # the hook block
+	_bar(Vector3(25.6, 0.9, 10.5), Vector3(25.9, 0.6, 11.5), 0.04, R.C_POLE)     # the cable
 
 ## The shared placeholder landmark: a dead tree and a shopping trolley on the
 ## ground inside the ring, on the +x side.

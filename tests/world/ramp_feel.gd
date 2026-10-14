@@ -25,6 +25,10 @@ extends SceneTree
 #    under each bridge (the radio breaks up, the car's own noise echoes:
 #    TunnelAudio.bridge_amount) and on each deck, and graffiti on the piers'
 #    faces downtown and in the Docks only.
+# 5. Variety (doc 2.6): a steel truss over each span at a Docks ring, with
+#    the light line on its top chord and white harbour lamps; a deep rusty
+#    girder under each span at an industrial ring; a water tower on x4's
+#    island and a toppled crane on x8's, the dead tree on x2's.
 #
 # Exit code 1 on failure. Run (headless):
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/world/ramp_feel.gd
@@ -257,6 +261,10 @@ func _pools() -> void:
 	var c: Dictionary = node.counts()
 	_check(int(c.pools) == RingSite.LAMP_DEG.size() + 4, "ring x2: %d light pools (%d lamps + 2 boards + 2 washes wanted)" % [c.pools, RingSite.LAMP_DEG.size()])
 	_check(int(c.draws) == 3 and int(c.tags) == 0, "ring x2 (residential): %d draw calls, %d tags (3 and 0 wanted)" % [c.draws, c.tags])
+	var islands := {}
+	for ri in RoadMap.rings().size():
+		islands[String(RingSite.look_of(ri).island)] = true
+	_check(islands.has("tree") and islands.has("tower") and islands.has("wreck"), "act 1's islands carry %s" % [islands.keys()])
 	# the light line: lamps on both parapets of both bridges, lit
 	for ri in RoadMap.rings().size():
 		var look := RingSite.look_of(ri)
@@ -266,14 +274,34 @@ func _pools() -> void:
 		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 		var cols: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
 		var want: Color = RingSite.C_LINE_STEEL if String(look.style) == "steel" else RoadRamps.C_HEAD
+		var bridge := String(look.bridge)
+		var lift := RingSite.TRUSS_H if bridge == "truss" else 0.0   # on the truss's top chord
 		var line := 0
 		var line_in := 0
+		var truss := 0
+		var girder := 0
+		var tower := 0
+		var wreck := 0
 		for t in range(0, verts.size(), 3):
 			var mid := (verts[t] + verts[t + 1] + verts[t + 2]) / 3.0
-			if _is(cols[t], want) and absf(mid.x) < RingSite.BRIDGE_HALF and mid.y > RoadRamps.RAMP_H + RoadRamps.BARRIER_H - 0.4 and mid.y < RoadRamps.RAMP_H + RoadRamps.BARRIER_H + 0.3:
+			var over_span := absf(mid.x) < RingSite.BRIDGE_HALF and Vector2(mid.x, mid.z).length() > RoadRamps.RING_IN - 1.0
+			if _is(cols[t], want) and absf(mid.x) < RingSite.BRIDGE_HALF and mid.y > RoadRamps.RAMP_H + RoadRamps.BARRIER_H + lift - 0.4 and mid.y < RoadRamps.RAMP_H + RoadRamps.BARRIER_H + lift + 0.3:
 				line += 1
 				if Vector2(mid.x, mid.z).length() < RoadRamps.RING_IN:
 					line_in += 1
+			elif _is(cols[t], RingSite.WALLS[look.style]) and over_span and mid.y > RoadRamps.RAMP_H + RoadRamps.BARRIER_H + 1.0:
+				truss += 1
+			elif _is(cols[t], RingSite.WALLS[look.style]) and over_span and mid.y < RoadRamps.RAMP_H - RingSite.SLAB - 0.3 and mid.y > RoadRamps.RAMP_H - RingSite.SLAB - RingSite.GIRDER_D - 0.5:
+				girder += 1
+			elif _is(cols[t], RingSite.C_TANK) and mid.y > 10.0:
+				tower += 1
+			elif _is(cols[t], RingSite.C_WRECK) and mid.y < 3.0:
+				wreck += 1
+		_check((truss > 100) == (bridge == "truss"), "ring %s (%s bridge): %d truss triangles" % [RoadMap.rings()[ri].id, bridge, truss])
+		_check((girder > 50) == (bridge == "girder"), "ring %s (%s bridge): %d girder triangles" % [RoadMap.rings()[ri].id, bridge, girder])
+		var island := String(look.island)
+		_check((tower > 20) == (island == "tower") and (wreck > 20) == (island == "wreck"), "ring %s (island %s): %d tower and %d wreck triangles" % [RoadMap.rings()[ri].id, island, tower, wreck])
+		_check(RingSite.lamp_light(look) == ("white" if String(look.style) == "steel" else "sodium"), "ring %s: the lamps are %s" % [RoadMap.rings()[ri].id, RingSite.lamp_light(look)])
 		# 13 pieces x 2 rims x 2 bridges, 12 triangles a lamp, less the 2 hidden faces
 		_check(line >= 40 * 8 and line_in >= 20 * 8, "ring %s: %d light-line triangles (%d on the inner rims)" % [RoadMap.rings()[ri].id, line, line_in])
 		_check(want.a >= 1.0, "the light line's lamps do not glow")

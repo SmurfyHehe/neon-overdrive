@@ -87,16 +87,18 @@ const ROADS := {
 		],
 		# Ring sites, one per district, 400 m in: s = the ring's centre (a raised
 		# roundabout over the highway, R2; in R1 a turning pad either side).
-		# `number` is what the exit signs say. `kind` is what the ring leads to:
+		# `number` is what the exit signs say. `island` is what stands on the
+		# island (RingSite: "tree" at a landmark ring, "tower", "wreck"; nothing
+		# when left out). `kind` is what the ring leads to:
 		# "stop" (a spur to a stop, see STOPS), "lot", "landmark" (something on
 		# the island), "plain", or "tunnel" (no ring and no exits: the road goes
 		# under, built separately). The exits and the gaps are worked out from
 		# these (exits(), gaps()).
 		"rings": [
 			{"id": "x1", "s": 400.0, "number": 1, "kind": "stop"}, {"id": "x2", "s": 1200.0, "number": 2, "kind": "landmark"},
-			{"id": "x3", "s": 2000.0, "number": 3, "kind": "stop"}, {"id": "x4", "s": 2800.0, "number": 4, "kind": "plain"},
+			{"id": "x3", "s": 2000.0, "number": 3, "kind": "stop"}, {"id": "x4", "s": 2800.0, "number": 4, "kind": "plain", "island": "tower"},
 			{"id": "x5", "s": 3600.0, "number": 5, "kind": "lot"}, {"id": "x6", "s": 4400.0, "number": 6, "kind": "tunnel"},
-			{"id": "x7", "s": 5200.0, "number": 7, "kind": "stop"}, {"id": "x8", "s": 6000.0, "number": 8, "kind": "plain"},
+			{"id": "x7", "s": 5200.0, "number": 7, "kind": "stop"}, {"id": "x8", "s": 6000.0, "number": 8, "kind": "plain", "island": "wreck"},
 			{"id": "x9", "s": 6800.0, "number": 9, "kind": "plain"}, {"id": "x10", "s": 7600.0, "number": 10, "kind": "plain"},
 			{"id": "x11", "s": 8400.0, "number": 11, "kind": "plain"}, {"id": "x12", "s": 9200.0, "number": 12, "kind": "plain"},
 			{"id": "x13", "s": 10000.0, "number": 13, "kind": "plain"}, {"id": "x14", "s": 10800.0, "number": 14, "kind": "plain"},

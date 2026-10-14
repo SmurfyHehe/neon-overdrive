@@ -269,7 +269,7 @@ func _ready() -> void:
 	if CockpitFrame.enabled and OS.get_environment("NEON_COCKPIT") != "0":
 		frame = CockpitFrame.new(target)
 		target.add_child(frame)
-	cull_mask &= ~CockpitFrame.MIRROR_ONLY_BIT
+	cull_mask &= ~(CockpitFrame.MIRROR_ONLY_BIT | CockpitFrame.MIRROR_SHELL_BIT)
 	perspective = PerspectiveAudio.new()
 	add_child(perspective)
 	# The view F left the game in (chase unless the settings file says otherwise).

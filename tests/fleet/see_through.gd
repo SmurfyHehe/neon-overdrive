@@ -68,21 +68,6 @@ const OFFSET := Vector3(0.0, 800.0, 0.0)
 
 ## car -> {check: issue}
 const KNOWN := {
-	# #763: the rear-view camera sits inside the cabin and the body is drawn
-	# single-sided, so from in there the rear deck, the C-pillars and the
-	# trunk are not drawn: the strip shows the road behind through the car
-	# (the crossover's own tail lamps too). The kei, the Camel and the truck
-	# are closed by their rear glass and bulkhead.
-	"p0_beater": {"mirror_hole": 763},
-	"p1_coupe": {"mirror_hole": 763},
-	"p2_hothatch": {"mirror_hole": 763},
-	"p7_wagon": {"mirror_hole": 763},
-	"p3_tuner": {"mirror_hole": 763},
-	"p5_muscle": {"mirror_hole": 763},
-	"p6_crossover": {"mirror_hole": 763, "mirror_lamps": 763},
-	"p8_driftcoupe": {"mirror_hole": 763},
-	"m1_monster": {"mirror_hole": 763},
-	"l1_lowrider": {"mirror_hole": 763},
 }
 
 var fails := 0
@@ -347,6 +332,23 @@ func _car_checks(kind: String) -> void:
 						if _verbose:
 							print("  %s %s view reaches the core at %s with no face" % [kind, view, target])
 	_count(kind, "shell", see_in, "the shell has holes or inside-out panels: %d of %d rays from outside reach the core" % [see_in, rays])
+
+	# ---- cameras: the mirror shell (CockpitFrame.MIRROR_SHELL_BIT) is for
+	# the mirror cameras only; every other camera in the game (chase, hood and
+	# cockpit are one camera; photo mode's; a pause orbit copies the chase
+	# mask) must leave it out, or the inside of the body shows from outside.
+	var shell := body.get_node_or_null(^"MirrorShell") as MeshInstance3D
+	_check(shell != null and shell.layers == CockpitFrame.MIRROR_SHELL_BIT and shell.mesh != null and shell.mesh.get_surface_count() >= 1, "%s: no mirror shell on the body" % kind)
+	var mirror_cams := 0
+	for n in root.find_children("*", "Camera3D", true, false):
+		var c := n as Camera3D
+		var is_mirror := cam.frame != null and cam.frame.mirrors != null and cam.frame.mirrors.is_ancestor_of(c)
+		if is_mirror:
+			mirror_cams += 1
+			_check((c.cull_mask & CockpitFrame.MIRROR_SHELL_BIT) != 0, "%s: mirror camera %s does not draw the mirror shell" % [kind, c.name])
+		else:
+			_check((c.cull_mask & CockpitFrame.MIRROR_SHELL_BIT) == 0, "%s: camera %s draws the mirror shell from outside" % [kind, c.get_path()])
+	_check(mirror_cams >= 1, "%s: no mirror camera found" % kind)
 
 	# ---- paint: CarPaint, with the street lamps on Medium and up
 	var paint_mat := vis.get_meta("body_mat") as ShaderMaterial if vis.has_meta("body_mat") else null

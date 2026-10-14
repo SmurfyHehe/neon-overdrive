@@ -59,6 +59,7 @@ func _ready() -> void:
 	ensure_actions()
 	free_cam = Camera3D.new()
 	free_cam.name = "PhotoCamera"
+	free_cam.cull_mask &= ~CockpitFrame.MIRROR_SHELL_BIT   # the inside of the body is for the mirrors
 	add_child(free_cam)
 	game_state.state_changed.connect(_on_state_changed)
 

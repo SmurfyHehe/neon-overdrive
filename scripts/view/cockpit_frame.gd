@@ -35,12 +35,19 @@ const WheelStyles := preload("res://scripts/view/wheel_styles.gd")
 const INTERIOR_LAYER := 3
 const DRIVER_LAYER := 4
 const MIRROR_ONLY_LAYER := 5
+## The mirror shell (#763): the body's panels drawn from the inside, for the
+## mirror cameras only (layer 6 is HeatShimmer's).
+const MIRROR_SHELL_LAYER := 7
 const INTERIOR_BIT := 1 << (INTERIOR_LAYER - 1)
 const DRIVER_BIT := 1 << (DRIVER_LAYER - 1)
 const MIRROR_ONLY_BIT := 1 << (MIRROR_ONLY_LAYER - 1)
+const MIRROR_SHELL_BIT := 1 << (MIRROR_SHELL_LAYER - 1)
 const CAR_BIT := 1 << (CarFx.CAR_LAYER - 1)
-## What the mirror cameras draw: the world, every car's layer and the player's own body.
-const MIRROR_CULL := 1 | CAR_BIT | MIRROR_ONLY_BIT
+## What the mirror cameras draw: the world, every car's layer, the player's
+## own body and the inside of its shell.
+const MIRROR_CULL := 1 | CAR_BIT | MIRROR_ONLY_BIT | MIRROR_SHELL_BIT
+## The mirror shell's colour: the dark inside of the body, like the headliner.
+const SHELL_COLOR := Color("#1A1B1E")
 
 ## Lock to lock, in turns of the wheel: the rack is quick, like the reference
 ## wheel's car. Full keyboard lock (steer_fraction 1) is half of this each way.
@@ -325,11 +332,74 @@ func _ready() -> void:
 	# the shelf is also what the rearview camera sees under the rear glass
 	if has_node("Shelf"):
 		(get_node("Shelf") as VisualInstance3D).layers = INTERIOR_BIT | MIRROR_ONLY_BIT
+	_build_shell()
 	_last_gear = player.gear
 	set_lever_mode(player.transmission_mode())
 	driver = DriverModel.new(self)
 	add_child(driver)
 	driver.hand_contact.connect(_on_hand_contact)
+
+## The mirror shell (#763): the rear-view camera sits inside the cabin, and the
+## body is drawn single-sided, so from in there the rear deck, the trunk and
+## the C-pillars were not drawn at all: the strip showed the road through the
+## car with the tail lamp flares floating on it. This copies the body's
+## painted surfaces (body and trim, never the glass or the lamps) into one
+## mesh drawn from the inside only (cull_front), unlit and dark, on a layer
+## only the mirror cameras draw. A few thousand triangles at the mirror's
+## size, every other frame; nothing for the main camera.
+func _build_shell() -> void:
+	if OS.get_environment("NEON_MIRROR_SHELL") == "0":
+		return   # for a before/after look and the test
+	var body := player.chassis_visual.get_node_or_null(^"Body") as MeshInstance3D if player.chassis_visual != null else null
+	if body == null or body.mesh == null:
+		return
+	var shell := body.get_node_or_null(^"MirrorShell") as MeshInstance3D
+	if shell != null and shell.get_meta("source", null) == body.mesh:
+		return
+	if shell != null:
+		shell.queue_free()
+	var mesh := shell_mesh(body.mesh)
+	if mesh == null:
+		return
+	shell = MeshInstance3D.new()
+	shell.name = "MirrorShell"
+	shell.mesh = mesh
+	shell.material_override = shell_material()
+	shell.layers = MIRROR_SHELL_BIT
+	shell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	shell.extra_cull_margin = body.extra_cull_margin
+	shell.set_meta("source", body.mesh)
+	body.add_child(shell)
+
+## The body's painted surfaces ("body", "trim") copied into one mesh, null
+## when the body has none.
+static func shell_mesh(src: Mesh) -> ArrayMesh:
+	if not src is ArrayMesh:
+		return null
+	var out: ArrayMesh = null
+	for i in src.get_surface_count():
+		var sname := (src as ArrayMesh).surface_get_name(i)
+		if sname != "body" and sname != "trim":
+			continue
+		if out == null:
+			out = ArrayMesh.new()
+		var arrays := src.surface_get_arrays(i)
+		var slim := []
+		slim.resize(Mesh.ARRAY_MAX)
+		slim[Mesh.ARRAY_VERTEX] = arrays[Mesh.ARRAY_VERTEX]
+		slim[Mesh.ARRAY_INDEX] = arrays[Mesh.ARRAY_INDEX]
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, slim)
+		out.surface_set_name(out.get_surface_count() - 1, "shell_" + sname)
+	return out
+
+static var _shell_mat: StandardMaterial3D
+static func shell_material() -> StandardMaterial3D:
+	if _shell_mat == null:
+		_shell_mat = StandardMaterial3D.new()
+		_shell_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_shell_mat.cull_mode = BaseMaterial3D.CULL_FRONT
+		_shell_mat.albedo_color = SHELL_COLOR
+	return _shell_mat
 
 ## Cockpit view on or off: starts or stops the mirrors, hides the driver's head
 ## and torso (the camera is the head) and moves the car's own body and wheels
@@ -344,6 +414,7 @@ func set_cockpit(on: bool) -> void:
 	var bit := MIRROR_ONLY_BIT if on else CAR_BIT
 	if player.chassis_visual != null:
 		_set_layers(player.chassis_visual, bit)
+		_build_shell()   # the body mesh may have been rebuilt since
 	for w in player.wheel_array:
 		if w.wheel_node != null:
 			_set_layers(w.wheel_node, bit)
@@ -353,16 +424,19 @@ func body_hidden_from_camera() -> bool:
 	if player.chassis_visual == null:
 		return true
 	for n in player.chassis_visual.find_children("*", "VisualInstance3D", true, false):
-		if n is Light3D:
+		if n is Light3D or n.name == "MirrorShell":
 			continue
 		if (n as VisualInstance3D).layers != MIRROR_ONLY_BIT:
 			return false
 	return true
 
+## Every visual under `root` onto layer `bit`; the mirror shell keeps its own.
 static func _set_layers(root: Node, bit: int) -> void:
 	if root is VisualInstance3D and not root is Light3D:
 		(root as VisualInstance3D).layers = bit
 	for n in root.find_children("*", "VisualInstance3D", true, false):
+		if n.name == "MirrorShell":
+			continue
 		if n is Light3D:
 			continue   # a light's layers decide whether it lights at all
 		(n as VisualInstance3D).layers = bit
@@ -1466,6 +1540,7 @@ func _physics_process(delta: float) -> void:
 func _process(delta: float) -> void:
 	if not visible:
 		return
+	_build_shell()   # follows a rebuilt body (a swapped panel, a repair); a reference check when nothing changed
 	var p := player
 	var max_rpm := maxf(p.max_rpm, 1.0)
 	var frac := clampf(p.motor_rpm / max_rpm, 0.0, 1.0)

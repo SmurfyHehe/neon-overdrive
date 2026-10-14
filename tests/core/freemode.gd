@@ -1,7 +1,9 @@
 extends SceneTree
 
 # Free mode F0 (scripts/core/freemode.gd). Checks
-# - a fresh career is not free; stops() is false and road_act() is -1
+# - a NEW save (no career file yet) starts in free mode from night 1; an old
+#   career without the block stays a story one (Roy 1541, 2026-10-14)
+# - story mode (NEON_FREEMODE=0 here): stops() is false and road_act() is -1
 # - enter() sets the flag and entered_night 31; again changes nothing; the
 #   on_entered hook fires once; KEEPS are not stopped, STOPS are
 # - round trip through SaveCore: still free, entered_night kept, an unknown
@@ -35,12 +37,15 @@ func _initialize() -> void:
 	OS.set_environment("NEON_CAR", "")
 	OS.set_environment("NEON_ACT", "")
 	OS.set_environment("NEON_FREEMODE", "")
+	_new_save()
+	# The story machinery still works for a story career (forced with NEON_FREEMODE=0).
+	OS.set_environment("NEON_FREEMODE", "0")
 	_fresh("units")
 	_units()
 	_dawn()
 	_chase()
 	_plate_lines()
-	# The game itself, on its own slot.
+	# The game itself, on its own slot: a story boot first, then free boots.
 	_fresh("game")
 	_boot()
 
@@ -59,10 +64,52 @@ func _fresh(name: String) -> void:
 
 # ---------- units ----------
 
-func _units() -> void:
+# ---------- a new save ----------
+
+func _new_save() -> void:
+	_fresh("new_save")
 	var c := {}
 	SaveCore.fill_career(c)
-	_check(not Freemode.active(c) and c.freemode.unlocked == false and c.freemode.entered_night == 0, "a fresh career should not be free: %s" % str(c.freemode))
+	_check(Freemode.active(c) and c.freemode.entered_night == 1, "a new career should start free at night 1: %s" % str(c.freemode))
+	Freemode.refresh({})
+	_check(Freemode.is_active() and Freemode.road_act() == RoadMap.MAX_ACT, "an empty slot should boot free")
+	for id in Freemode.STOPS:
+		_check(Freemode.stops(id), "%s should be stopped on a new save" % id)
+	_check(SaveCore.commit("first"), "the first commit failed")
+	SaveCore.forget()
+	var back := SaveCore.career()
+	_check(Freemode.active(back) and int(back.freemode.entered_night) == 1, "free mode did not persist: %s" % str(back.freemode))
+	var p: Dictionary = SaveCore.summary(1).plate
+	_check(p.mode == "free" and int(p.night) == 1 and p.freemode_season == "", "plate: %s" % str(p))
+	_check(Freemode.plate_line(1) == "Free mode · night 1" and Freemode.plate_line(0) == "Free mode · night 1", "plate line before the first season")
+	# Nights go on, the dawn at 30 changes nothing and fires nothing.
+	SaveCore.set_cash(100)
+	SaveCore.commit("dawn", {"close_night": 1})
+	_check(Freemode.active(SaveCore.career()) and int(SaveCore.career().story.night) == 2, "night 1 should close into 2, still free")
+	var hooked := [0]
+	var cb := func(_n: int) -> void: hooked[0] += 1
+	Freemode.on_entered.append(cb)
+	SaveCore.commit("dawn", {"close_night": 30})
+	_check(hooked[0] == 0 and int(SaveCore.career().freemode.entered_night) == 1, "the night 30 dawn should not re-enter free mode")
+	Freemode.on_entered.erase(cb)
+	# An old career (blocks on disk, none for free mode) stays a story career.
+	var old := {"gen": 4, "wallet": {"bank": 10}}
+	SaveCore.fill_career(old)
+	_check(not Freemode.active(old) and old.freemode.unlocked == false, "an old career should stay story: %s" % str(old.freemode))
+	# Story forced for a new slot (the road tests).
+	OS.set_environment("NEON_FREEMODE", "0")
+	var forced := {}
+	SaveCore.fill_career(forced)
+	Freemode.refresh({})
+	_check(not Freemode.active(forced) and not Freemode.is_active(), "NEON_FREEMODE=0 should force a story start")
+	OS.set_environment("NEON_FREEMODE", "")
+
+# ---------- units ----------
+
+func _units() -> void:
+	var c := {"gen": 1}   # a career already on disk
+	SaveCore.fill_career(c)
+	_check(not Freemode.active(c) and c.freemode.unlocked == false and c.freemode.entered_night == 0, "an old career should not be free: %s" % str(c.freemode))
 	Freemode.refresh(c)
 	_check(not Freemode.is_active() and not Freemode.stops("pike_debt") and Freemode.road_act() == -1, "story mode: stops / road_act")
 	var cb := func(_n: int) -> void: fired += 1
@@ -90,6 +137,7 @@ func _units() -> void:
 	_check(SaveCore.career().freemode.get("later_field", {}).has("season"), "a later commit dropped the unknown field")
 	# A career with no freemode block.
 	_fresh("no_block")
+	SaveCore.commit("seed")   # the slot has a career now, so the next fill is not a new one
 	SaveCore.commit("test", {}, func(cc: Dictionary) -> void: cc.erase("freemode"))
 	SaveCore.forget()
 	_check(not SaveCore.career().has("freemode") and not Freemode.active(SaveCore.career()), "a career with no block should load as not free")
@@ -156,7 +204,7 @@ func _physics_process(_delta: float) -> bool:
 		0:
 			if ticks < 10:
 				return false
-			_check(RoadMap.act == 1 and not Freemode.is_active(), "a story boot should be on act 1 (act %d)" % RoadMap.act)
+			_check(RoadMap.act == 1 and not Freemode.is_active(), "a story boot (NEON_FREEMODE=0) should be on act 1 (act %d)" % RoadMap.act)
 			var clock: NightClock = game.night_clock
 			game.wallet.add_cash(300)
 			clock.night = 30
@@ -184,6 +232,16 @@ func _physics_process(_delta: float) -> bool:
 			if ticks < 10:
 				return false
 			_check(RoadMap.act == 1, "NEON_ACT should still win (act %d)" % RoadMap.act)
+			# A brand-new slot, no env: free, the whole city, from the first boot.
+			OS.set_environment("NEON_ACT", "")
+			OS.set_environment("NEON_FREEMODE", "")
+			_fresh("new_boot")
+			phase = 3
+			_boot()
+		3:
+			if ticks < 10:
+				return false
+			_check(Freemode.is_active() and RoadMap.act == RoadMap.MAX_ACT, "a new-save boot should have the whole city (act %d)" % RoadMap.act)
 			return _end()
 	return false
 

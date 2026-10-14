@@ -585,7 +585,7 @@ func _fill_load_list() -> void:
 		if not s.empty:
 			text = "SAVE %d   $%s" % [n, _thousands(int(s.cash))]
 			if s.plate.get("mode") == "free":
-				text = "SAVE %d   %s   $%s" % [n, Freemode.plate_line(int(s.plate.get("night", 31))), _thousands(int(s.cash))]
+				text = "SAVE %d   %s   $%s" % [n, Freemode.plate_line(int(s.plate.get("night", 1))), _thousands(int(s.cash))]
 			if int(s.saved_at) > 0:
 				text += "   %s" % Time.get_date_string_from_unix_time(int(s.saved_at))
 		if n == active:

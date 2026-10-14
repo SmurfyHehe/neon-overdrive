@@ -22,6 +22,8 @@ Every file has `"save_version": 2`, is written by `atomic_json.gd`, has `.bak1..
 | `career.json` | `gen` (commit counter), `world` (seed, weather_seed, difficulty, difficulty_next), `wallet` (bank, receipts), `shop` (Walt's board for the day), `cars` (per car id: parts_owned, fitted, wear, damage, fuel, dirt), `current_car`, `tunes` (per car id: live, exhaust, slots), `story` (night, act, night_closed), `special` (unlocked), `walt` (first_total_used), `stats` (play_secs) |
 | `night.json` | the run to resume (road, car transform and motion, gearbox mode, clock, radio, `weather`, `known_stops`), `base_gen`, `night`, `cash`, `car_live` (wear, damage, fuel, dirt of the car you are in), `tunes_live` (tune changes since the last commit), `play_secs` |
 
+**New saves start in free mode** (2026-10-14, simcade first): a slot with no `career.json` gets `freemode.unlocked = true`, `entered_night = 1`, the whole city open and the story's machinery stopped (`Freemode.STOPS`). The story code stays; the story becomes a later side mode. An older career that has no free-mode block stays a story career and still enters free mode at the dawn of night 30. In test mode `NEON_FREEMODE=0` makes a new slot a story one.
+
 A new system adds its own block to `career.json` and writes it through `SaveCore.commit()`. A block or field a build does not know is kept and written back untouched. No new files per system.
 
 Build 3 blocks (work board, weather, map, delete), all through the old `SaveStore` names:

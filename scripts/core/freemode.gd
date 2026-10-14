@@ -1,9 +1,11 @@
 extends RefCounted
 
-# Free mode, step F0 (2026-10-11): the endless mode after the story. One flag in
+# Free mode, step F0 (2026-10-11): the endless mode. Since 2026-10-14 (Roy 1541,
+# simcade first) a NEW save starts in free mode; the story is a later side mode.
+# An older save that never entered free mode keeps its story state and still
+# enters it at the dawn of night 30. One flag in
 # the career (career.json "freemode" block) turns the story off and keeps every
-# other system running. The same slot goes on after the credits: no new file, no
-# locked copy. A new story is a new slot.
+# other system running. The story's code stays; nothing on a free save starts it.
 #
 # This script is the one place every later system asks "is the story on?":
 #   Freemode.is_active()        cached after load (refresh) and after a commit
@@ -54,10 +56,12 @@ static func active(career: Dictionary) -> bool:
 static func is_active() -> bool:
 	return _free
 
-## Re-reads the flag from a career (the game calls it at boot). NEON_FREEMODE=1
-## makes a test game free from the start (test mode only).
+## Re-reads the flag from a career (the game calls it at boot). A slot with no
+## career file yet is a new save, so it is free; the first commit writes the flag.
+## In test mode NEON_FREEMODE=1 makes any game free, NEON_FREEMODE=0 makes a new
+## slot a story one (road tests that want the story's act 1).
 static func refresh(career: Dictionary) -> bool:
-	_free = active(career) or _test_override()
+	_free = active(career) or _test_override() or (career.is_empty() and _env() != "0")
 	return _free
 
 static func stops(id: String) -> bool:
@@ -77,9 +81,12 @@ static func season_name(night: int) -> String:
 		return ""
 	return SEASONS[season_index(night) % SEASONS.size()]
 
-## "Free mode · Winter · night 47"
+## "Free mode · Winter · night 47"; "Free mode · night 3" before the first season.
 static func plate_line(night: int) -> String:
-	return "Free mode · %s · night %d" % [season_name(maxi(night, FIRST_NIGHT)), maxi(night, FIRST_NIGHT)]
+	var n := maxi(night, 1)
+	if n < FIRST_NIGHT:
+		return "Free mode · night %d" % n
+	return "Free mode · %s · night %d" % [season_name(n), n]
 
 
 # ---------- writing ----------
@@ -118,19 +125,26 @@ static func dawn_stand_in(career: Dictionary, closed_night: int) -> int:
 		return closed_night + 1
 	return 0
 
-## Test mode, NEON_FREEMODE=1: a fresh career starts in free mode.
-static func _test_override() -> bool:
-	return TestMode.active() and OS.get_environment("NEON_FREEMODE") == "1"
+## NEON_FREEMODE in test mode ("" outside it): "1" free, "0" story.
+static func _env() -> String:
+	return OS.get_environment("NEON_FREEMODE") if TestMode.active() else ""
 
-## Fills the freemode block's defaults in a working career.
-static func fill(career: Dictionary, current_night: int) -> void:
+## Test mode, NEON_FREEMODE=1: any career is free.
+static func _test_override() -> bool:
+	return _env() == "1"
+
+## Fills the freemode block's defaults in a working career. `is_new`: the career
+## has no file yet, so it starts in free mode (an old career without the block
+## stays a story one).
+static func fill(career: Dictionary, current_night: int, is_new := false) -> void:
 	if not career.get("freemode") is Dictionary:
 		career.freemode = {}
 	var b: Dictionary = career.freemode
+	var start_free := is_new and _env() != "0"
 	if not b.has("unlocked"):
-		b.unlocked = false
+		b.unlocked = start_free
 	if not b.has("entered_night"):
-		b.entered_night = 0
+		b.entered_night = maxi(current_night, 1) if start_free else 0
 	if _test_override() and b.unlocked != true:
 		b.unlocked = true
 		b.entered_night = maxi(current_night, FIRST_NIGHT)

@@ -70,7 +70,7 @@ func _run() -> void:
 
 	# --- each district's row
 	var seen := {}
-	for name in ["downtown", "residential", "strip", "industrial"]:
+	for name in Districts.CROSS:
 		var c := _first_chunk_of(name)
 		_check(c > 0, "no %s chunk found" % name)
 		if c < 0:
@@ -89,7 +89,7 @@ func _run() -> void:
 		seen["%s/%s/%s" % [row.walk, row.shoulder, row.kerb_h]] = true
 		holder.remove_child(chunk)
 		chunk.free()
-	_check(seen.size() == 4, "the four districts do not have four different sections (%d)" % seen.size())
+	_check(seen.size() == Districts.CROSS.size(), "the %d kerbed districts do not have %d different sections (%d)" % [Districts.CROSS.size(), Districts.CROSS.size(), seen.size()])
 
 	# --- continuity across a district boundary
 	var boundary := -1

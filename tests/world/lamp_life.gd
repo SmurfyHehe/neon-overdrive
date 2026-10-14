@@ -10,7 +10,7 @@ extends SceneTree
 # - caps: at most one swarm and one banner per lamp, one vent per chunk;
 #   shares land where the design says (moths on about half the lamps, a banner
 #   on every third, a vent in about a quarter of the chunks, a few per district)
-# - the four districts get four different banner slots
+# - every district kind gets its own banner slot
 # - every mesh is small (budget) and its custom AABB covers where the shader
 #   moves it, so it is never culled while it is on screen
 # - one shared shader material per effect; the wind uniform is one number,
@@ -129,14 +129,15 @@ func _check_plan() -> void:
 				return
 
 func _check_districts() -> void:
+	# every district kind its own banner (#653: the newer seven had industrial's)
 	var slots := {}
-	for d in ["downtown", "residential", "strip", "industrial"]:
+	for d in B.Districts.SPECS:
 		slots[L.district_slot(d)] = d
-	if slots.size() != 4:
+	if slots.size() != B.Districts.SPECS.size():
 		_fail("districts share banner slots: %s" % str(slots))
 	for s in slots:
-		if s < 0 or s > 3:
-			_fail("banner slot %d outside 0..3" % s)
+		if s < 0 or s >= B.Districts.SPECS.size():
+			_fail("banner slot %d outside 0..%d" % [s, B.Districts.SPECS.size() - 1])
 	# a few vents per 16-chunk district run
 	var total := 0
 	var runs := 40

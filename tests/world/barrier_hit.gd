@@ -89,6 +89,14 @@ func _initialize() -> void:
 	OS.set_environment("NEON_CURVES", "0")
 	OS.set_environment("NEON_HILLS", "0")
 	OS.set_environment("NEON_LAYOUT", "0")
+	# One roadside the whole way, with open shoulders (the freeway's: no kerb,
+	# no pavement, the wall set well back). The fast glancing hits throw the
+	# car back across all four lanes, and where it lands then is the far
+	# kerb's doing, not the barrier's: on main a 45 m/s, 30 deg guardrail hit
+	# crosses to x 16, climbs a downtown kerb and leans on the building wall at
+	# 19 deg, and the 8-look loop (2026-10-13) moved the runs onto old town's
+	# kerb, which rolls the 45 m/s, 10 deg concrete hit (#702: the kerb roll).
+	Districts.force = "freeway"
 	RoadBarriers.force_kind = scenarios[0][0]
 	game = Harness.boot(self, 0, 300.0, 4242)
 

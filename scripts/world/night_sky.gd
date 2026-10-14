@@ -60,6 +60,17 @@ const GLOW := {
 	"strip": {"color": Color(0.20, 0.115, 0.055), "height_deg": 14.0},
 	"residential": {"color": Color(0.16, 0.09, 0.047), "height_deg": 13.0},
 	"industrial": {"color": Color(0.13, 0.07, 0.04), "height_deg": 12.0},
+	# The newer kinds (#653; they took downtown's dome). Brighter where the
+	# streets are lit and built up, darker and lower out of town: the lofts'
+	# white lamps pale the dome, the lantern-lit old town keeps it warm, the
+	# docks sit under a flat sodium haze, and the canyon has almost none.
+	"old_town": {"color": Color(0.17, 0.095, 0.045), "height_deg": 12.0},
+	"lofts": {"color": Color(0.19, 0.12, 0.07), "height_deg": 14.0},
+	"hillside": {"color": Color(0.10, 0.06, 0.04), "height_deg": 9.0},
+	"airport": {"color": Color(0.15, 0.105, 0.07), "height_deg": 13.0},
+	"docks": {"color": Color(0.12, 0.075, 0.05), "height_deg": 11.0},
+	"freeway": {"color": Color(0.11, 0.065, 0.04), "height_deg": 10.0},
+	"canyon": {"color": Color(0.045, 0.03, 0.025), "height_deg": 6.0},
 }
 const DEFAULT_DISTRICT := "downtown"
 
@@ -99,6 +110,49 @@ const DAWN_START_MINUTES := 540.0
 ## 0 until 5 a.m., 1 at 6 a.m., eased.
 static func dawn_for_minutes(minutes: float) -> float:
 	return smoothstep(DAWN_START_MINUTES, 600.0, minutes)
+
+## The air per district (better world B8, 2026-10-13): fog density as a
+## multiple of the base (FOG_DENSITY), the fog's colour (what the distance
+## fades into) and a saturation factor on the grade. SkyDirector blends them
+## with the glow dome when the road changes district; they are Environment
+## values the post pass already uses, so they cost nothing per frame.
+## Never thinner than the base: chunks appear 250-350 m out, and the base
+## fog (93 % at 300 m) is what keeps them from popping in. So the canyon is
+## "clear" by a darker fog, not a thinner one. Colours stay in Amber vs.
+## Dusk: browns and greys, the docks a cold grey that leans to navy.
+const FOG_DENSITY := 0.009
+const FOG_COLOR := Color(0.1, 0.066, 0.042)
+const AIR := {
+	"downtown": {"fog": 1.0, "color": FOG_COLOR, "sat": 1.0},
+	"residential": {"fog": 1.0, "color": Color(0.095, 0.064, 0.044), "sat": 1.0},
+	"strip": {"fog": 1.05, "color": Color(0.105, 0.068, 0.042), "sat": 1.02},
+	"industrial": {"fog": 1.25, "color": Color(0.11, 0.072, 0.04), "sat": 0.9},
+	"old_town": {"fog": 1.1, "color": Color(0.105, 0.068, 0.044), "sat": 0.96},
+	"lofts": {"fog": 1.0, "color": Color(0.092, 0.07, 0.056), "sat": 1.0},
+	"hillside": {"fog": 1.05, "color": Color(0.072, 0.056, 0.048), "sat": 0.95},
+	"airport": {"fog": 1.1, "color": Color(0.085, 0.075, 0.068), "sat": 0.93},
+	"docks": {"fog": 1.4, "color": Color(0.07, 0.072, 0.085), "sat": 0.88},
+	"freeway": {"fog": 1.0, "color": Color(0.09, 0.062, 0.042), "sat": 1.0},
+	"canyon": {"fog": 1.0, "color": Color(0.035, 0.03, 0.032), "sat": 0.94},
+}
+## Ground mist before dawn: the fog thickens toward 4:30 a.m. (minute 510)
+## by up to MIST_PEAK and is gone again at 6 a.m. (dawn takes over).
+const MIST_START_MINUTES := 435.0   # 3:15 a.m.
+const MIST_PEAK_MINUTES := 510.0    # 4:30 a.m.
+const MIST_END_MINUTES := 600.0     # 6 a.m.
+const MIST_PEAK := 0.3
+
+static func air(district: String) -> Dictionary:
+	return AIR.get(district, AIR["downtown"])
+
+## The mist multiplier on the fog density at a clock time (minutes since
+## 8 p.m.): 1 outside 3:15-6 a.m., 1 + MIST_PEAK at 4:30.
+static func mist_for_minutes(minutes: float) -> float:
+	if minutes <= MIST_START_MINUTES or minutes >= MIST_END_MINUTES:
+		return 1.0
+	if minutes < MIST_PEAK_MINUTES:
+		return 1.0 + MIST_PEAK * smoothstep(MIST_START_MINUTES, MIST_PEAK_MINUTES, minutes)
+	return 1.0 + MIST_PEAK * (1.0 - smoothstep(MIST_PEAK_MINUTES, MIST_END_MINUTES, minutes))
 
 const SHADER := """
 shader_type sky;

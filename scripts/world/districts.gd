@@ -113,6 +113,22 @@ const LIGHTS := {
 # the walls, so a whole street takes its lamps' colour.
 const WASH_REACH := {"cobra": 10.0, "post": 5.5, "mast": 14.0, "flood": 20.0}
 const WASH_BY_EVERY := {0: 0.0, 1: 1.0, 2: 0.7, 4: 0.4}
+
+## Lane paint wear (better world B3, Roy 1516 "worn and dim"): per kind,
+## [cover, fade]. cover: the share of a dash or line still painted (the rest
+## is worn through to the road; the centre line and the edge line lose long
+## stretches to the shoulder dirt). fade: how bright what is left still is,
+## against fresh paint. Downtown and the freeway are kept up, the yards and
+## the quays are not. RoadChunkBuilder's paint shader reads both.
+const PAINT := {
+	"downtown": [0.70, 0.75], "residential": [0.60, 0.70], "strip": [0.55, 0.65],
+	"industrial": [0.42, 0.55], "old_town": [0.50, 0.60], "lofts": [0.65, 0.72],
+	"hillside": [0.50, 0.62], "airport": [0.70, 0.80], "docks": [0.40, 0.52],
+	"freeway": [0.68, 0.80], "canyon": [0.45, 0.55],
+}
+
+static func paint_of(name: String) -> Array:
+	return PAINT.get(name, PAINT["downtown"])
 const SPECS := {
 	"downtown": {
 		"mix": [["office", 35], ["parking", 15], ["apartment", 25], ["shop", 25]],
@@ -417,6 +433,15 @@ const CROSS := {
 	"residential": {"walk": 2.4, "shoulder": 2.2, "kerb_h": 0.13, "kerb": true, "drops": ["parking", "garage"]},
 	"strip": {"walk": 2.0, "shoulder": 1.4, "kerb_h": 0.10, "kerb": true, "drops": ["*"]},
 	"industrial": {"walk": 1.5, "shoulder": 1.4, "kerb_h": 0.10, "kerb": true, "drops": ["warehouse", "garage", "parking"]},
+	# The newer kinds (#653; they borrowed a row before). Old town: a stone
+	# kerb, cars parked along it; the lofts: a wide nightlife pavement and a
+	# parking lane; the hills: a narrow pavement and a driveway at every
+	# house; the airport and the docks: thin pavements, wide gates.
+	"old_town": {"walk": 2.8, "shoulder": 2.2, "kerb_h": 0.16, "kerb": true, "drops": ["garage"]},
+	"lofts": {"walk": 3.2, "shoulder": 2.4, "kerb_h": 0.14, "kerb": true, "drops": ["parking"]},
+	"hillside": {"walk": 1.8, "shoulder": 1.8, "kerb_h": 0.12, "kerb": true, "drops": ["house", "garage"]},
+	"airport": {"walk": 1.6, "shoulder": 1.6, "kerb_h": 0.11, "kerb": true, "drops": ["parking", "hangar", "warehouse"]},
+	"docks": {"walk": 1.3, "shoulder": 1.6, "kerb_h": 0.09, "kerb": true, "drops": ["warehouse", "containers", "hangar", "garage"]},
 }
 ## A freeway stretch (the layout's "outskirts"): no raised kerb, a wide hard
 ## shoulder, and a flat verge instead of a pavement (K5).
@@ -426,21 +451,15 @@ const FREEWAY := {"walk": 1.2, "shoulder": 3.0, "kerb_h": 0.0, "kerb": false, "d
 ## district's kerb and drops carry on).
 const JUNCTION := {"walk": 2.2, "shoulder": 1.4, "kerb_h": 0.1}
 
-## TEST BUILD (integration): the seven newer district kinds (world step 3,
-## #378) have no CROSS row yet, so each borrows the nearest of the four
-## that do. Placeholder picks, not design: the kerbs owner sets real rows.
-const CROSS_LIKE := {
-	"lofts": "downtown", "old_town": "downtown", "hillside": "residential",
-	"docks": "industrial", "airport": "industrial",
-}
-const CROSS_OPEN := ["freeway", "canyon"]   # no raised kerb: the FREEWAY section
+## The kinds with no raised kerb: the FREEWAY section.
+const CROSS_OPEN := ["freeway", "canyon"]
 
 static func cross_of(name: String) -> Dictionary:
 	if CROSS.has(name):
 		return CROSS[name]
 	if name in CROSS_OPEN:
 		return FREEWAY
-	return CROSS[CROSS_LIKE.get(name, "residential")]
+	return CROSS["residential"]
 
 ## The section at the END of chunk `chunk_index` (the road builder tapers
 ## from cross_at(i - 1) to cross_at(i) across chunk i). Keyed by the same

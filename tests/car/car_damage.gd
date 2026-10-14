@@ -32,6 +32,7 @@ extends SceneTree
 
 const Harness := preload("res://tests/traffic/traffic_harness.gd")
 const DamageOffsets := preload("res://scripts/car/damage_offsets.gd")
+const Districts := preload("res://scripts/world/districts.gd")
 
 class StubBank:
 	extends RefCounted
@@ -60,6 +61,12 @@ var wall_x := 0.0
 func _initialize() -> void:
 	OS.set_environment("NEON_CURVES", "0")
 	OS.set_environment("NEON_HILLS", "0")
+	# Downtown's roadside the whole way. The night starts in District 1's
+	# first chunk, which blends with the district before it; since the 8-look
+	# loop (2026-10-13) that is the freeway, whose wall stands 3 m further
+	# out, so the car began the wall run 8 m from it but already on the kerb
+	# and hit the wall with its left side first.
+	Districts.force = "downtown"
 	_unit_tests()
 	game = Harness.boot(self, 0, 300.0, 4242)
 

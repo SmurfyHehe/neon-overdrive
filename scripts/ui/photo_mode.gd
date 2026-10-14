@@ -81,6 +81,11 @@ func _enter() -> void:
 	_pitch = e.x
 	_yaw = e.y
 	free_cam.current = true
+	# from the cockpit view the A-pillars are drawn see-through (#738); a
+	# photo from outside the car wants them solid (the chase camera puts the
+	# setting back each frame once the view is current again)
+	if chase.frame != null:
+		chase.frame.set_pillar_alpha(1.0)
 	hidden_layers.clear()
 	for layer in get_tree().root.find_children("*", "CanvasLayer", true, false):
 		if layer.visible and not _keeps(layer):

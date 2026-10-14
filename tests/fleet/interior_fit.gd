@@ -175,10 +175,14 @@ func _fit(kind: String) -> void:
 			where += " (%.1f,%.1f,%.1f):%.2f" % [c.x / 10.0, c.y / 10.0, c.z / 10.0, cells[c]]
 		print("       worst cells:%s" % where)
 	_check(worst.is_empty(), "%s: %d cabin parts poke out of the body" % [kind, worst.size()])
-	# The eye: under the roof, inside the shell.
-	var eye: Vector3 = cam.eye
+	# The eye: under the roof, inside the shell. The headroom rule is the seated
+	# driver's (CABIN.eye); the camera's arcade eye (#737) sits 8 cm higher and
+	# is checked inside the shell as well.
+	var eye: Vector3 = frame.cab.eye
 	var eye_out := _outside(space, base + eye)
 	_check(eye_out <= 0.0 or bool(frame.cab.open_top), "%s: the cockpit eye %s is outside the body (%.3f m)" % [kind, str(eye), eye_out])
+	var cam_out := _outside(space, base + cam.eye)
+	_check(cam_out <= 0.0 or bool(frame.cab.open_top), "%s: the camera's arcade eye %s is outside the body (%.3f m)" % [kind, str(cam.eye), cam_out])
 	var roof := space.intersect_ray(_ray(base + eye, Vector3.UP))
 	if roof.is_empty():
 		_check(open_top, "%s: no roof above the eye" % kind)

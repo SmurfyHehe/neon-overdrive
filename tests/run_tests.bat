@@ -126,6 +126,7 @@ call :run view/chase_orbit "--headless --fixed-fps 60"
 call :run view/chase_ring_recenter "--headless --fixed-fps 60"
 call :run view/chase_wall "--headless --fixed-fps 60"
 call :run view/hood_view "--headless --fixed-fps 60"
+call :run view/cockpit_pillars --headless
 call :run view/cockpit_horizon --headless
 call :run view/cockpit_eye_inside --headless
 call :run view/cockpit_shake_rotation_only --headless

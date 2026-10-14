@@ -136,8 +136,11 @@ func _physics_process(_delta: float) -> bool:
 				var left := _on_screen(cam, m.views[1].quad)
 				var right := _on_screen(cam, m.views[2].quad)
 				print("straight ahead, FOV %.0f: rearview %.0f%%, left %.0f%%, right %.0f%% on screen" % [cam.fov, rear * 100, left * 100, right * 100])
-				_check(rear > 0.9, "the rearview is on screen looking ahead (%.2f)" % rear)
-				_check(left > 0.5, "the left door mirror is on screen looking ahead (%.2f)" % left)
+				# From the arcade eye (#737) the mirrors sit beside the eye: none is on
+				# screen looking ahead, the HUD rear strip shows the road behind, and
+				# a tap or a turn of the head brings a door mirror in (the steps below).
+				_check(rear == 0.0 and left == 0.0, "looking ahead no mirror is on screen from the arcade eye (rear %.2f, left %.2f)" % [rear, left])
+				_check(hud.rear_frame.visible and m.strip, "the HUD rear strip is on in the cockpit view")
 				_check(right == 0.0 and not CockpitMirrors.glass_on_screen(cam, m.views[2].quad), "the right door mirror is off screen looking ahead (%.2f)" % right)
 				_check(right_queued == 0, "an off-screen mirror is never queued to render (%d ticks)" % right_queued)
 				Input.action_press("look_right")

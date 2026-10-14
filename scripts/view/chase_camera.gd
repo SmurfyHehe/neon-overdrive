@@ -340,7 +340,7 @@ func _ready() -> void:
 	# mirrors and (next PR) the driver sit where they are from any view. This
 	# camera never draws the mirror-only layer the body moves to in the cockpit.
 	var cab := CabinSpec.for_kind(PlayerCar.chassis_kind())
-	eye = cab.eye   # the car's own eye (CABIN in its data file)
+	eye = CabinSpec.arcade_eye(cab)   # the car's own eye (CABIN in its data file), moved up and forward (#737)
 	_hood_points()
 	if CockpitFrame.enabled and OS.get_environment("NEON_COCKPIT") != "0":
 		frame = CockpitFrame.new(target)
@@ -387,6 +387,7 @@ func set_view(v: View) -> void:
 	_started = false
 	wall_f = 1.0
 	if frame != null:
+		frame.show_body_for_look_back(false)
 		frame.set_cockpit(cockpit)
 	elif target.chassis_visual != null:
 		target.chassis_visual.visible = not cockpit   # no cockpit built: the Phase C behaviour
@@ -509,8 +510,6 @@ func _process(delta: float) -> void:
 		frame.steer_centre = target.steer_centre_view(CockpitFrame.WHEEL_LOCK_RAD)
 	if view == View.COCKPIT:
 		_place_cockpit(delta)
-		if look_back:
-			global_transform.basis = global_transform.basis * Basis(Vector3.UP, PI)
 		if shake_enabled:
 			_shake(delta, false)
 			rotate_object_local(Vector3.RIGHT, BUMP_ROT * bump * AccessSettings.shake_scale)
@@ -535,11 +534,20 @@ func _process(delta: float) -> void:
 ## FOV that widens a touch with speed.
 func _place_cockpit(delta: float) -> void:
 	var xf := target.get_global_transform_interpolated()
+	if frame != null:
+		frame.set_pillar_alpha(1.0 - ViewSettings.pillar_see_through)   # the View page slider, live
+		frame.show_body_for_look_back(look_back)
 	_update_head(delta)
 	_update_look(delta)
-	var turn := Basis.from_euler(Vector3(deg_to_rad(look_pitch), deg_to_rad(look_yaw + corner_yaw), 0.0))
-	var tilt := Basis.from_euler(Vector3(deg_to_rad(head_tilt.x), 0.0, deg_to_rad(head_tilt.y)))
-	global_transform = Transform3D(_levelled(xf.basis) * turn * tilt, xf * (eye + head_offset))
+	if look_back:
+		# B (#739): the seats, head restraints and rear pillars left under half
+		# of the rear view clear from the eye, so the cockpit borrows the hood
+		# view's roof camera looking straight back, body drawn, arrows waiting.
+		global_transform = Transform3D(_levelled(xf.basis) * Basis(Vector3.UP, PI), xf * roof_back_cam)
+	else:
+		var turn := Basis.from_euler(Vector3(deg_to_rad(look_pitch), deg_to_rad(look_yaw + corner_yaw), 0.0))
+		var tilt := Basis.from_euler(Vector3(deg_to_rad(head_tilt.x), 0.0, deg_to_rad(head_tilt.y)))
+		global_transform = Transform3D(_levelled(xf.basis) * turn * tilt, xf * (eye + head_offset))
 	fov = ViewSettings.cockpit_fov + _widening() * COCKPIT_FOV_SPEED_GAIN * speed_t
 
 ## On the bonnet: the interpolated body transform, levelled and leaning into

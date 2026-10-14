@@ -61,7 +61,7 @@ func _physics_process(_delta: float) -> bool:
 		Step.COCKPIT:
 			if waited == 20:
 				var xf := p.get_global_transform_interpolated()
-				var eye := xf * ChaseCamera.COCKPIT_EYE
+				var eye := xf * cam.eye   # the car's arcade eye (#737), not the coupe constant
 				_check(cam.global_position.distance_to(eye) < 0.2, "the cockpit camera should sit at the eye point (%.2f m away)" % cam.global_position.distance_to(eye))
 				var fwd := -cam.global_basis.z
 				var car_fwd := -xf.basis.z

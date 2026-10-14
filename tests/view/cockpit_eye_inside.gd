@@ -26,7 +26,12 @@ func _step(n: int) -> bool:
 	if n == 0:
 		var cab := CabinSpec.for_kind(PlayerCar.chassis_kind())
 		var hdr: Vector2 = cab.header
-		box_lo = Vector3(-float(cab.door_x), float(cab.floor_y), hdr.y)
+		# the front of the box is the windscreen at the eye's height (the arcade
+		# eye sits ahead of the header's z on every car, behind the glass)
+		var cowl: Vector2 = cab.cowl
+		var e0: Vector3 = cam.eye
+		var tg := clampf((e0.y - cowl.x) / maxf(hdr.x - cowl.x, 0.01), 0.0, 1.0)
+		box_lo = Vector3(-float(cab.door_x), float(cab.floor_y), lerpf(cowl.y, hdr.y, tg) + 0.04)
 		box_hi = Vector3(float(cab.door_x), float(cab.roof_y), float(cab.rear_z))
 		cam.shake_enabled = true
 		# the eye, plus the head's full sway each way, must fit: static margin check

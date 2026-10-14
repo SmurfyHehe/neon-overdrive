@@ -15,14 +15,16 @@ extends RefCounted
 # night (car_dirt.gd), washed off in the garage wash (wash_screen.gd).
 
 # Heat shimmer (2026-10-10, HeatShimmer): its own switch, "heat_shimmer".
-const EFFECTS := ["vignette", "speed_lines", "skid_marks", "exhaust_flames", "mirrors", "head_motion", "rear_strip", "tyre_smoke", "heat_shimmer", "dirt"]
+# Falling rain (2026-10-14, RainFall): "rain" (the streaks only; the wet
+# road and the wipers stay, they are the weather, not an effect).
+const EFFECTS := ["vignette", "speed_lines", "skid_marks", "exhaust_flames", "mirrors", "head_motion", "rear_strip", "tyre_smoke", "heat_shimmer", "dirt", "rain"]
 ## Mirror render size as a share of CockpitMirrors' base sizes: 0 = low (half),
 ## 1 = medium (base), 2 = high (double). Default medium.
 const MIRROR_QUALITIES := ["low", "medium", "high"]
 const MIRROR_QUALITY_DEFAULT := 1
 const SMOKE_MAX := 2.0
 
-static var enabled := {"vignette": true, "speed_lines": true, "skid_marks": true, "exhaust_flames": true, "mirrors": true, "head_motion": true, "rear_strip": true, "tyre_smoke": true, "heat_shimmer": true, "dirt": true}
+static var enabled := {"vignette": true, "speed_lines": true, "skid_marks": true, "exhaust_flames": true, "mirrors": true, "head_motion": true, "rear_strip": true, "tyre_smoke": true, "heat_shimmer": true, "dirt": true, "rain": true}
 static var mirror_quality := MIRROR_QUALITY_DEFAULT
 ## Tyre smoke amounts, 0 (none) .. SMOKE_MAX; 1 is the default.
 static var smoke_burnout := 1.0

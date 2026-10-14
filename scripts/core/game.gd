@@ -842,6 +842,8 @@ func _physics_process(_delta: float) -> void:
 		recenter_us_max = maxi(recenter_us_max, Time.get_ticks_usec() - t0)
 	Weather.step(_delta)  # before the cars: they read this tick's wetness
 	_sync_wetness()
+	if fx != null:
+		fx.tick()  # the falling rain follows the weather and the car's speed
 	# F6: fix the car while driving (same as the pause row). Shown in every build for now.
 	if Input.is_action_just_pressed("fix_car") and FixCar.FIX_CAR_ENABLED and game_state.state == GameState.State.PLAYING:
 		FixCar.fix(player)

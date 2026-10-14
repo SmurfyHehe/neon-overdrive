@@ -558,7 +558,7 @@ func _wait_cases() -> void:
 		await _ticks(1)
 		guard += 1
 		together = together or d.is_idling()
-	_check(not together and not d.is_gesturing(), "L during a flip-off did not wait for it")
+	_check(not together and not d.is_gesturing(), "L during a flip-off did not wait for it (%s, %d ticks, hand %s)" % ["the use began with the finger out" if together else "the finger stayed out", guard, DriverModel.LeftAct.keys()[d.left_act]])
 	_check(await _wait_for(d.is_idling, 2.0), "the waiting L never happened after the flip-off")
 	await _secs(BACK_SECS)
 	_check(d.idle_uses - uses == 1, "L during a flip-off: %d uses" % (d.idle_uses - uses))

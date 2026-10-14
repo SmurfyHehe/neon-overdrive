@@ -117,11 +117,21 @@ const LEVER_ALONE_SECS := 0.25
 ## (DriverModel.hand_boxes, 3.3 cm palm to fingertips) with a little air.
 const KNOB_R := 0.015
 const PEDAL_TRAVEL_DEG := 22.0
+## The pad's bottom edge over the toe board, at rest and pressed.
+const PEDAL_FLOOR_CLEAR := 0.02
+## The footwell's toe board: how far it rises from the floor to the firewall,
+## at most (lower where the pedal pads hang over it: _fit_toe_rise).
+const TOE_BOARD_RISE := 0.16
+## Each pedal: name, x from the throttle pivot, pad width, pad height.
+const PEDALS := [["throttle", 0.0, 0.045, 0.10], ["brake", -0.12, 0.065, 0.075], ["clutch", -0.24, 0.060, 0.075]]
 
 ## The driver's side window (2026-10-09, Roy: "the Z to roll up and roll down
-## needs an animation"). The glass is a pane just inside the door skin that
-## slides into the door card by GLASS_TRAVEL as the window opens; below the
-## belt line it is inside the card, so it simply disappears. What works it
+## needs an animation"). The glass is a pane in the door, its foot at the belt
+## inside the door card, leaning in above it with the tumblehome. Opening the
+## window slides it down along its own lean into the door (outward, like a
+## real pane) by GLASS_TRAVEL or its own height, whichever is more, and
+## whatever has gone below the belt is cut off: the pane never shows inside
+## the cabin and nothing stands above the belt fully down (issue #677). What works it
 ## follows the car's spec ("window_control": "crank" or "switch"): an old car
 ## has a crank on the door card the driver's left hand turns (CRANK_TURNS from
 ## shut to open), a modern one a rocker on the armrest the thumb presses. Both
@@ -133,8 +143,11 @@ const GLASS_TOP := 1.30
 const GLASS_TRAVEL := 0.36
 const CRANK_POS := Vector3(-0.826, 0.65, -0.18)   # hub on the door card, forward of and below the armrest (the hand on the knob stays under the sightline)
 const CRANK_ARM := 0.085
-const CRANK_KNOB_X := 0.03                        # knob mid-length, inward from the arm
+const CRANK_KNOB_X := 0.05                        # where the hand holds the knob, inward from the card (at 3 cm the mitten was 1.5 cm into the card, #680)
 const CRANK_TURNS := 2.5
+## Half extents of the disc the crank and the hand on its knob sweep, from the
+## card face inward (x) and about the hub (y, z): arm and knob, plus the mitten.
+const CRANK_SWEEP := Vector3(0.045, 0.125, 0.125)
 const SWITCH_POS := Vector3(-0.80, 0.787, 0.02)   # rocker on the outboard edge of the armrest
 const SWITCH_TILT_DEG := 14.0
 const WINDOW_CONTROLS := ["crank", "switch"]
@@ -201,6 +214,20 @@ var dial_sweep := DIAL_SWEEP     # degrees of needle travel for this car's clust
 var crank_pos := CRANK_POS
 var switch_pos := SWITCH_POS
 var glass_bottom := GLASS_BOTTOM
+var glass_travel := GLASS_TRAVEL  # this car's: at least the pane's own height, so fully down leaves none above the belt
+var _pane: PackedVector3Array     # the shut pane's corners a, b, c, d
+var _pane_slide := Vector3.DOWN   # its lean, per metre of drop (y = -1)
+var _pane_tint := Color.WHITE
+var _pane_window := -1.0          # the window the drawn pane was cut for
+## The cabin solids the driver's hands must keep out of (issues #678-#681,
+## #683), as the boxes are built: [box -> car Transform3D, half extents, the
+## way out (unit, car space; or an Array of them, the shortest taken)]. DriverModel fits its poses against these once
+## per pose, not every frame.
+var keepout: Array = []
+var toe_rise := TOE_BOARD_RISE   # this car's toe board rise (_fit_toe_rise)
+## The crank's keepout entry (in keepout while the car has the crank): the
+## disc its arm, knob and the hand on it sweep, left downward or inboard.
+var crank_keep: Array = []
 var radio: RadioManager          # found lazily; the game adds it after the camera
 var wheel: SteeringWheel
 var wheel_mount: Node3D          # tilt and place; the wheel turns inside it
@@ -291,6 +318,7 @@ func _init(car: PlayerCar) -> void:
 func _ready() -> void:
 	# Always drawn: in the chase view the cabin and driver show through the glass.
 	visible = true
+	toe_rise = _fit_toe_rise()
 	_build_static()
 	_build_wheel()
 	_build_cluster()
@@ -419,6 +447,7 @@ func _build_static() -> void:
 	var top_near := cl.x
 	var top_far := cowl.x   # the lip's top is the cowl line itself
 	k.wedge(Vector3(dash_w, 0.06, dash_depth), Vector3(0.0, cowl.x - 0.03, (cowl.y + face_z) * 0.5), c_dash, 0.0, top_near - top_far)
+	_keep(Vector3(dash_w, top_near - cowl.x + 0.06, dash_depth), Vector3(0.0, (top_near + cowl.x - 0.06) * 0.5, (cowl.y + face_z) * 0.5), Vector3.BACK)   # the wedge's box: its top at the near edge
 	# The dash face and the knee panel under it, in three runs across the car.
 	# In front of the driver both stop above his legs (the footwell is open
 	# there: tests/fleet/driver_fit.gd; before, the panel was one solid block
@@ -434,10 +463,10 @@ func _build_static() -> void:
 			continue
 		var xc := (x0 + x1) * 0.5
 		if run[2]:
-			k.box(Vector3(x1 - x0, top_near - 0.02 - well_y, 0.12), Vector3(xc, (top_near - 0.02 + well_y) * 0.5, face_z), c_dash_face)
+			_kbox(k, Vector3(x1 - x0, top_near - 0.02 - well_y, 0.12), Vector3(xc, (top_near - 0.02 + well_y) * 0.5, face_z), c_dash_face, Vector3.BACK)
 		else:
-			k.box(Vector3(x1 - x0, 0.36, 0.12), Vector3(xc, top_near - 0.20, face_z), c_dash_face)
-			k.box(Vector3(x1 - x0, 0.22, knee_depth), Vector3(xc, top_near - 0.45, face_z + 0.03 - knee_depth * 0.5), c_plastic)
+			_kbox(k, Vector3(x1 - x0, 0.36, 0.12), Vector3(xc, top_near - 0.20, face_z), c_dash_face, Vector3.BACK)
+			_kbox(k, Vector3(x1 - x0, 0.22, knee_depth), Vector3(xc, top_near - 0.45, face_z + 0.03 - knee_depth * 0.5), c_plastic, Vector3.BACK)
 	k.box(Vector3(dash_w - 0.08, 0.03, 0.06), Vector3(0.0, cowl.x - 0.015, cowl.y), c_trim)  # cowl lip, under the glass line
 	lit.box(Vector3(dash_w - 0.14, 0.006, 0.01), Vector3(0.0, top_near - 0.018, face_z + 0.055), strip)   # dash edge strip
 	# Cluster binnacle and its hood in front of the driver, then the dial faces.
@@ -453,14 +482,14 @@ func _build_static() -> void:
 		var con_len := (hb.z + 0.20) - (face_z + 0.06)
 		var con_z := (face_z + 0.06 + hb.z + 0.20) * 0.5
 		var con_w := console_width()   # 26 cm; the kei's is narrow, its seats sit close
-		k.box(Vector3(con_w, 0.20, con_len), Vector3(0.0, lever.y - 0.095, con_z), c_plastic)
+		_kbox(k, Vector3(con_w, 0.20, con_len), Vector3(0.0, lever.y - 0.095, con_z), c_plastic, Vector3.UP)
 		k.box(Vector3(con_w + 0.04, 0.18, con_len + 0.38), Vector3(0.0, floor_y + 0.06, con_z - 0.01), c_carpet)   # tunnel
-		k.box(Vector3(con_w - 0.06, 0.05, 0.22), Vector3(0.0, lever.y + 0.03, hb.z - 0.06), c_leather)              # armrest
+		_kbox(k, Vector3(con_w - 0.06, 0.05, 0.22), Vector3(0.0, lever.y + 0.03, hb.z + 0.13), c_leather, Vector3.UP)              # armrest, behind the handbrake's pivot (it ran over the lever, #683)
 		lit.box(Vector3(0.006, 0.004, con_len - 0.2), Vector3(-con_w * 0.5 - 0.003, lever.y + 0.007, con_z - 0.06), Color(strip, strip.a * 0.86))
 		lit.box(Vector3(0.006, 0.004, con_len - 0.2), Vector3(con_w * 0.5 + 0.003, lever.y + 0.007, con_z - 0.06), Color(strip, strip.a * 0.86))
 	else:
 		# flat floor (rear-engine beater): a low hump with the gate plate on it
-		k.box(Vector3(0.24, 0.07, 0.60), Vector3(0.0, lever.y - 0.035, lever.z + 0.18), c_carpet)
+		_kbox(k, Vector3(0.24, 0.07, 0.60), Vector3(0.0, lever.y - 0.035, lever.z + 0.18), c_carpet, Vector3.UP)
 		k.box(Vector3(0.16, 0.03, 0.18), Vector3(0.0, lever.y - 0.004, lever.z), c_plastic)
 	k.box(Vector3(0.13, 0.012, 0.15), Vector3(0.0, lever.y + 0.011, lever.z), c_trim)
 	# one H column per pair of forward gears (3 for a six-speed, 2 for a four)
@@ -476,6 +505,7 @@ func _build_static() -> void:
 		# one cushion and backrest across the car, a fold-down armrest hump in the middle
 		var bw := door_x * 2.0 - 0.06
 		k.wedge(Vector3(bw, 0.10, 0.50), Vector3(0.0, seat_h - 0.05, seat_z), c_seat, 0.03, 0.0)
+		_keep(Vector3(bw, 0.13, 0.50), Vector3(0.0, seat_h - 0.035, seat_z), Vector3.UP)   # the cushion runs to the door: the crank turns over it
 		k.box(Vector3(bw, 0.58, 0.10), Vector3(0.0, seat_h + 0.28, seat_z + 0.25), c_seat, recline)
 		k.box(Vector3(bw, 0.06, 0.30), Vector3(0.0, seat_h - 0.12, seat_z + 0.03), c_plastic)
 		for sx in [seat_x, -seat_x]:
@@ -487,6 +517,8 @@ func _build_static() -> void:
 			k.wedge(Vector3(seat_w, 0.10, 0.50), Vector3(sx, seat_h - 0.05, seat_z), c_this, 0.03, 0.0)
 			if cab.seats == "bucket":
 				k.box(Vector3(0.10, 0.10, 0.46), Vector3(sx - seat_w * 0.42, seat_h + 0.02, seat_z - 0.02), c_seat_panel)  # cushion bolsters
+				if sx == seat_x:   # the driver's outer one, by the door (the kei's is near the crank)
+					_keep(Vector3(0.10, 0.10, 0.46), Vector3(sx - seat_w * 0.42, seat_h + 0.02, seat_z - 0.02), Vector3.UP)
 				k.box(Vector3(0.10, 0.10, 0.46), Vector3(sx + seat_w * 0.42, seat_h + 0.02, seat_z - 0.02), c_seat_panel)
 				k.box(Vector3(0.09, 0.50, 0.14), Vector3(sx - seat_w * 0.44, seat_h + 0.28, seat_z + 0.23), c_seat_panel, recline)
 				k.box(Vector3(0.09, 0.50, 0.14), Vector3(sx + seat_w * 0.44, seat_h + 0.28, seat_z + 0.23), c_seat_panel, recline)
@@ -502,31 +534,32 @@ func _build_static() -> void:
 	var front_len := door_len * 0.5
 	for side in [-1.0, 1.0]:
 		# the front half of the card sits at the narrower front width, the rear half by the seat
-		k.box(Vector3(0.06, card_h, front_len), Vector3(side * (minf(door_x, door_x_f) + 0.03), (card_top + floor_y + 0.26) * 0.5, door_z0 + front_len * 0.5), c_plastic_light)
-		k.box(Vector3(0.06, card_h, door_len - front_len), Vector3(side * (door_x + 0.03), (card_top + floor_y + 0.26) * 0.5, b_z - (door_len - front_len) * 0.5), c_plastic_light)
-		k.box(Vector3(0.06, 0.08, front_len), Vector3(side * (minf(door_x, door_x_f) + 0.03), belt - 0.055, door_z0 + front_len * 0.5), c_leather)   # belt line pad, its top just under the belt (the glass leans in above it)
-		k.box(Vector3(0.06, 0.08, door_len - front_len), Vector3(side * (door_x + 0.03), belt - 0.055, b_z - (door_len - front_len) * 0.5), c_leather)
-		k.box(Vector3(0.12, 0.04, 0.32), Vector3(side * (door_x - 0.04), seat_h + 0.28, eye.z - 0.22), c_leather)       # armrest
-		k.box(Vector3(0.05, 0.03, 0.12), Vector3(side * (door_x - 0.025), seat_h + 0.36, eye.z - 0.52), c_trim)        # door pull
+		var inboard := Vector3(-side, 0.0, 0.0)
+		_kbox(k, Vector3(0.06, card_h, front_len), Vector3(side * (minf(door_x, door_x_f) + 0.03), (card_top + floor_y + 0.26) * 0.5, door_z0 + front_len * 0.5), c_plastic_light, inboard)
+		_kbox(k, Vector3(0.06, card_h, door_len - front_len), Vector3(side * (door_x + 0.03), (card_top + floor_y + 0.26) * 0.5, b_z - (door_len - front_len) * 0.5), c_plastic_light, inboard)
+		_kbox(k, Vector3(0.06, 0.08, front_len), Vector3(side * (minf(door_x, door_x_f) + 0.03), belt - 0.055, door_z0 + front_len * 0.5), c_leather, inboard)   # belt line pad, its top just under the belt (the glass leans in above it)
+		_kbox(k, Vector3(0.06, 0.08, door_len - front_len), Vector3(side * (door_x + 0.03), belt - 0.055, b_z - (door_len - front_len) * 0.5), c_leather, inboard)
+		_kbox(k, Vector3(0.12, 0.04, 0.32), Vector3(side * (door_x - 0.04), seat_h + 0.28, eye.z - 0.22), c_leather, [Vector3.UP, Vector3.FORWARD, inboard])       # armrest (a reach past its front end goes ahead of or beside it, not over it)
+		_kbox(k, Vector3(0.05, 0.03, 0.12), Vector3(side * (door_x - 0.025), seat_h + 0.36, eye.z - 0.52), c_trim, inboard)        # door pull
 		lit.box(Vector3(0.004, 0.004, door_len - 0.25), Vector3(side * (door_x - 0.002), card_top, door_zc), Color(strip, strip.a * 0.86))
 		k.box(Vector3(0.14, 0.12, door_len + 0.10), Vector3(side * (minf(door_x, door_x_f) - 0.04), floor_y + 0.04, door_zc + 0.05), c_plastic)   # sill
 		# B-pillar inner face and the rear quarter trim behind the door
 		if open_top or bool(cab.get("hardtop", false)):   # a pillarless hardtop: only the stub at the belt
-			k.box(Vector3(0.06, 0.08, 0.08), Vector3(side * (door_x_r - 0.05), belt + 0.02, b_z), c_plastic)
+			_kbox(k, Vector3(0.06, 0.08, 0.08), Vector3(side * (door_x_r - 0.05), belt + 0.02, b_z), c_plastic, Vector3.UP)
 		else:   # up the tumblehome to the roof's edge
-			_bar(k, Vector3(side * (door_x_r - 0.05), belt, b_z), Vector3(side * (pillar_top.x - 0.04), roof_y - 0.05, b_z), 0.07, c_plastic)
+			_bar(k, Vector3(side * (door_x_r - 0.05), belt, b_z), Vector3(side * (pillar_top.x - 0.04), roof_y - 0.05, b_z), 0.07, c_plastic, keepout, Vector3.FORWARD)
 		var q_top := (belt + 0.14) if not open_top else belt + 0.02
 		var q_len := minf(rear_z - b_z, 0.35)   # the body tucks in over the rear arch
-		k.box(Vector3(0.08, q_top - (floor_y + 0.26), q_len), Vector3(side * (door_x_r - 0.15), (q_top + floor_y + 0.26) * 0.5, b_z + q_len * 0.5), c_plastic_light)
+		_kbox(k, Vector3(0.08, q_top - (floor_y + 0.26), q_len), Vector3(side * (door_x_r - 0.15), (q_top + floor_y + 0.26) * 0.5, b_z + q_len * 0.5), c_plastic_light, Vector3.FORWARD)
 	# A-pillars: from the cowl corners to the roof corners (body lines from the data).
 	for side in [-1.0, 1.0]:   # the ends tucked 4 cm in and 3 cm down from the skin's corners
-		_bar(k, Vector3(side * (pillar_foot.x - 0.04), pillar_foot.y, pillar_foot.z + 0.02), Vector3(side * (pillar_top.x - 0.13), pillar_top.y - 0.09, pillar_top.z + 0.03), 0.075, c_plastic)
+		_bar(k, Vector3(side * (pillar_foot.x - 0.04), pillar_foot.y, pillar_foot.z + 0.02), Vector3(side * (pillar_top.x - 0.13), pillar_top.y - 0.09, pillar_top.z + 0.03), 0.075, c_plastic, keepout, Vector3.BACK)
 	# Roof liner, windshield header, sun visors. The header's underside sits on
 	# the glass-top line, not under it (Roy's clear-glass target, 2026-10-06).
 	var liner_half := pillar_top.x - 0.10   # the roof is narrower than the belt line, and crowned
 	if open_top:
 		# a roadster: the windshield frame's top bar only, and two roll hoops behind the seats
-		k.box(Vector3(pillar_top.x * 2.0 - 0.06, 0.05, 0.08), Vector3(0.0, header.x - 0.075, header.y + 0.05), c_plastic)
+		_kbox(k, Vector3(pillar_top.x * 2.0 - 0.06, 0.05, 0.08), Vector3(0.0, header.x - 0.075, header.y + 0.05), c_plastic, Vector3.BACK)
 		for sx in [seat_x, -seat_x]:
 			_bar(k, Vector3(sx - 0.14, seat_h + 0.10, seat_z + 0.38), Vector3(sx - 0.10, seat_h + 0.72, seat_z + 0.40), 0.04, c_trim)
 			_bar(k, Vector3(sx + 0.14, seat_h + 0.10, seat_z + 0.38), Vector3(sx + 0.10, seat_h + 0.72, seat_z + 0.40), 0.04, c_trim)
@@ -554,7 +587,7 @@ func _build_static() -> void:
 	var floor_half := door_x + 0.02
 	var floor_len := rear_z - (cowl.y + 0.12)
 	k.box(Vector3(floor_half * 2.0, 0.04, floor_len), Vector3(0.0, floor_y, (cowl.y + 0.12 + rear_z) * 0.5), c_carpet)
-	k.wedge(Vector3((minf(door_x, door_x_f) - 0.12) * 2.0, 0.04, 0.30), Vector3(0.0, floor_y + 0.02, cowl.y + 0.09), c_carpet, 0.16, 0.0)   # footwell, between the arches
+	k.wedge(Vector3((minf(door_x, door_x_f) - 0.12) * 2.0, 0.04, 0.30), Vector3(0.0, floor_y + 0.02, cowl.y + 0.09), c_carpet, toe_rise, 0.0)   # footwell, between the arches (toe_board_y)
 	k.box(Vector3(minf(dash_half, minf(door_x, door_x_f)) * 2.0, cowl.x - 0.10 - floor_y, 0.04), Vector3(0.0, (cowl.x - 0.10 + floor_y) * 0.5, cowl.y - 0.03), c_plastic)
 	var bulk_top := (belt + 0.26) if not open_top else belt - 0.02
 	if not (cab.shelf as Dictionary).is_empty():
@@ -827,7 +860,7 @@ func dial_radii() -> Array:
 			return [DIAL_R, DIAL_R]
 
 ## A box from a to b, `w` across, for pillars.
-static func _bar(k: CockpitKit, a: Vector3, b: Vector3, w: float, col: Color) -> void:
+static func _bar(k: CockpitKit, a: Vector3, b: Vector3, w: float, col: Color, keep: Array = [], out := Vector3.ZERO) -> void:
 	var d := b - a
 	var len := d.length()
 	var y := d / len
@@ -836,34 +869,84 @@ static func _bar(k: CockpitKit, a: Vector3, b: Vector3, w: float, col: Color) ->
 		x = Vector3.RIGHT
 	var z := x.cross(y).normalized()
 	k.box(Vector3(w, len, w * 1.2), (a + b) * 0.5, col, Basis(x, y, z))
+	if out != Vector3.ZERO:
+		keep.append([Transform3D(Basis(x, y, z), (a + b) * 0.5), Vector3(w, len, w * 1.2) * 0.5, out])
+
+## A cabin box the hands keep out of, leaving by `out` (see keepout).
+func _kbox(k: CockpitKit, size: Vector3, center: Vector3, col: Color, out: Variant) -> void:
+	k.box(size, center, col)
+	_keep(size, center, out)
+
+func _keep(size: Vector3, center: Vector3, out: Variant) -> void:
+	keepout.append([Transform3D(Basis.IDENTITY, center), size * 0.5, out])
 
 # ---------- the side window ----------
 
 func _build_glass() -> void:
-	var k := CockpitKit.new()
-	var tint := Color(Color(P1CoupeBuilder.Data.COLORS.glass), 0.55)
+	_pane_tint = Color(Color(P1CoupeBuilder.Data.COLORS.glass), 0.55)
 	var gx := -float(cab.glass_x)
 	var top := float(cab.get("glass_top", float(cab.roof_y) - 0.03)) if not cab.open_top else float(cab.belt_y) + 0.30
 	var gx_top := -minf(float(cab.glass_x), float((cab.a_pillar[1] as Vector3).x) - 0.01)   # tumblehome: the pane leans in
 	var z0 := float((cab.a_pillar[0] as Vector3).z) + 0.20   # at the A-pillar foot
-	var z1 := float(cab.b_pillar_z) - 0.04                     # at the B-pillar
+	var z1 := float(cab.b_pillar_z) - 0.045                    # at the B-pillar, clear of its 8.4 cm deep bar
 	var zt := float((cab.a_pillar[1] as Vector3).z) - 0.04     # top front, where the A-pillar meets the roof
 	# the body narrows toward the pillar's foot: the pane's front bottom corner follows the door card there
 	var a := Vector3(-minf(float(cab.glass_x), float(cab.get("door_x_front", cab.door_x)) + 0.01), glass_bottom, z0)
 	var b := Vector3(gx, glass_bottom, z1)
 	var c := Vector3(gx_top, top, z1)
 	var d := Vector3(gx_top, top, maxf(zt + 0.30, z0 + 0.10))   # the raked pillar: the top edge starts well behind the foot
-	k.quad(a, b, c, d, tint)
-	k.quad(a, d, c, b, tint)
+	_pane = PackedVector3Array([a, b, c, d])
+	_pane_slide = (b - c) / maxf(c.y - b.y, 0.01)
+	glass_travel = maxf(GLASS_TRAVEL, top - glass_bottom)
 	var m := StandardMaterial3D.new()
 	m.vertex_color_use_as_albedo = true
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	m.metallic = 0.6
 	m.roughness = 0.08
 	m.cull_mode = BaseMaterial3D.CULL_DISABLED
-	glass = k.instance(m, "WindowGlass")
+	glass = MeshInstance3D.new()
+	glass.name = "WindowGlass"
+	glass.mesh = ArrayMesh.new()
+	glass.material_override = m
 	glass.visible = float(cab.glass_x) > 0.0
 	add_child(glass)
+	_cut_pane()
+
+## Redraws the pane for the current window: slid down along its lean and cut
+## at the belt (its foot line), so what is in the door is not drawn. Two to
+## four triangles a side, rebuilt only while the window moves.
+func _cut_pane() -> void:
+	if glass == null or _pane.is_empty() or window == _pane_window:
+		return
+	_pane_window = window
+	var drop := _pane_slide * glass_travel * window
+	var poly := PackedVector3Array()
+	var n := _pane.size()
+	for i in n:   # Sutherland-Hodgman against y >= glass_bottom
+		var p := _pane[i] + drop
+		var q := _pane[(i + 1) % n] + drop
+		var p_in := p.y >= glass_bottom
+		var q_in := q.y >= glass_bottom
+		if p_in:
+			poly.append(p)
+		if p_in != q_in:
+			poly.append(p.lerp(q, (glass_bottom - p.y) / (q.y - p.y)))
+	var mesh := glass.mesh as ArrayMesh
+	mesh.clear_surfaces()
+	if poly.size() < 3:
+		return
+	var k := CockpitKit.new()
+	for i in range(1, poly.size() - 1):
+		k.tri(poly[0], poly[i], poly[i + 1], _pane_tint)
+		k.tri(poly[0], poly[i + 1], poly[i], _pane_tint)
+	if k.is_empty():
+		return
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = k._v
+	arrays[Mesh.ARRAY_NORMAL] = k._n
+	arrays[Mesh.ARRAY_COLOR] = k._c
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 
 ## Builds (or rebuilds) what works the window: "crank" or "switch". Called at
 ## build from the car's spec; the screenshot tool switches it live.
@@ -873,9 +956,15 @@ func set_window_control(control: String) -> void:
 		control = DEFAULT_WINDOW_CONTROL
 	window_control = control
 	if _window_parts != null:
+		remove_child(_window_parts)   # out of the tree now, so the new one keeps the name
 		_window_parts.queue_free()
 	crank = null
 	window_switch = null
+	keepout.erase(crank_keep)
+	crank_keep = []
+	if control == "crank":   # the door pocket and the reaches keep out from under the turning hand
+		crank_keep = [Transform3D(Basis.IDENTITY, crank_pos + Vector3(CRANK_SWEEP.x, 0.0, 0.0)), CRANK_SWEEP, [Vector3.DOWN, Vector3.RIGHT]]   # under it, or inboard past the knob
+		keepout.append(crank_keep)
 	_window_parts = Node3D.new()
 	_window_parts.name = "WindowControl"
 	add_child(_window_parts)
@@ -893,13 +982,16 @@ func set_window_control(control: String) -> void:
 		var k := CockpitKit.new()
 		k.box(Vector3(0.014, CRANK_ARM + 0.03, 0.022), Vector3(0.016, CRANK_ARM * 0.5, 0.0), SILVER)
 		k.cylinder(0.011, 0.012, 0.022, Vector3(0.0, 0.0, 0.0), SILVER, 8, Basis(Vector3.BACK, -PI / 2.0))   # hub cap
-		k.cylinder(0.011, 0.008, 0.052, Vector3(0.0, CRANK_ARM, 0.0), PLASTIC, 10, Basis(Vector3.BACK, -PI / 2.0))   # the peg knob
+		k.cylinder(0.011, 0.008, 0.072, Vector3(0.0, CRANK_ARM, 0.0), PLASTIC, 10, Basis(Vector3.BACK, -PI / 2.0))   # the peg knob, long enough for the hand to stand off the card
 		crank.add_child(k.instance(mat, "Arm"))
 	else:
 		# A small bezel let into the armrest with one rocker in it, an amber
 		# index mark on the rocker so it reads in the dark.
 		var bezel := CockpitKit.new()
 		bezel.box(Vector3(0.05, 0.006, 0.07), switch_pos + Vector3(0.0, -0.006, 0.0), PLASTIC)
+		var lift := switch_pos.y - (cab.switch as Vector3).y
+		if lift > 0.002:   # moved up off the armrest to meet the hand: a pod under it down to the armrest
+			bezel.box(Vector3(0.05, lift, 0.07), switch_pos + Vector3(0.0, -0.009 - lift * 0.5, 0.0), PLASTIC)
 		bezel.box(Vector3(0.026, 0.004, 0.044), switch_pos + Vector3(0.0, -0.004, 0.0), DIAL_FACE)
 		_window_parts.add_child(bezel.instance(mat, "SwitchBezel"))
 		window_switch = Node3D.new()
@@ -915,6 +1007,32 @@ func set_window_control(control: String) -> void:
 		(n as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_apply_window()
 
+## Moves the window switch (the driver's hand fit, DriverModel._fit_cabin)
+## and rebuilds it; raised above the armrest it stands on a pod.
+func move_switch(by: Vector3) -> void:
+	switch_pos += by
+	if window_control == "switch":
+		set_window_control("switch")
+
+## The air outside the shut pane as a solid the hand keeps out of (the flip-off
+## behind the glass): a slab 20 cm thick on the pane's outer side, leaving inward.
+func pane_keepout() -> Array:
+	if _pane.size() < 4 or float(cab.glass_x) <= 0.0:
+		return [Transform3D(Basis.IDENTITY, Vector3(0.0, -100.0, 0.0)), Vector3.ONE * 0.01, Vector3.UP]
+	var a := _pane[0]
+	var b := _pane[1]
+	var c := _pane[2]
+	var d := _pane[3]
+	var up := (c - b).normalized()
+	var along := Vector3(0.0, 0.0, 1.0)
+	var out := up.cross(along).normalized()
+	if out.x > 0.0:
+		out = -out   # the driver's door is on -x
+	along = out.cross(up).normalized()
+	var mid := (a + b + c + d) * 0.25
+	var h := Vector3(0.10, (c - b).length() * 0.5 + 0.02, absf(b.z - a.z) * 0.5 + 0.05)
+	return [Transform3D(Basis(out, up, along), mid + out * 0.10), h, -out]
+
 ## The window value and which way it is going, from the camera each physics
 ## tick (PerspectiveAudio.window). Tests call it directly.
 func set_window(openness: float, direction: int) -> void:
@@ -923,16 +1041,15 @@ func set_window(openness: float, direction: int) -> void:
 	_apply_window()
 
 func _apply_window() -> void:
-	if glass != null:
-		glass.position = Vector3(0.0, -GLASS_TRAVEL * window, 0.0)
+	_cut_pane()
 	if crank != null:
 		crank.rotation = Vector3(-window * CRANK_TURNS * TAU, 0.0, 0.0)
 	if window_switch != null:
 		window_switch.rotation_degrees = Vector3(SWITCH_TILT_DEG * float(window_direction), 0.0, 0.0)
 
-## Where the glass's bottom edge is now, car space y (tests).
+## Where the glass's bottom edge is now, car space y, in the door (tests).
 func glass_bottom_y() -> float:
-	return glass_bottom + glass.position.y
+	return glass_bottom - glass_travel * window
 
 ## The crank's knob, mid-length, car space: where the hand holds it.
 func crank_knob_position() -> Vector3:
@@ -1215,7 +1332,7 @@ func _build_handbrake() -> void:
 	handbrake.position = cab.handbrake
 	var k := CockpitKit.new()
 	k.box(Vector3(0.024, 0.024, 0.22), Vector3(0.0, 0.012, -0.11), TRIM)
-	k.box(Vector3(0.034, 0.034, 0.08), Vector3(0.0, 0.017, -0.21), LEATHER)
+	k.cylinder(0.017, -0.04, 0.04, Vector3(0.0, 0.017, -0.21), LEATHER, 8, Basis(Vector3.RIGHT, PI / 2.0))   # round, in the hand's grip (a square one's corners stood in the glove)
 	k.box(Vector3(0.016, 0.010, 0.016), Vector3(0.0, 0.034, -0.24), SILVER)     # release button
 	handbrake.add_child(k.instance(CockpitKit.material(0.6, 0.3)))
 	add_child(handbrake)
@@ -1396,16 +1513,53 @@ func _step_lever(delta: float) -> void:
 
 func _build_pedals() -> void:
 	var at: Vector3 = cab.pedals   # the throttle pivot; brake and clutch step 12 cm left each
-	for p in [["throttle", 0.0, 0.045, 0.10], ["brake", -0.12, 0.065, 0.075], ["clutch", -0.24, 0.060, 0.075]]:
+	for p in PEDALS:
 		var pivot := Node3D.new()
 		pivot.name = String(p[0]).capitalize() + "Pedal"
 		pivot.position = at + Vector3(p[1], 0.0, 0.0)
+		# the toe board is already low enough under the pads (_fit_toe_rise);
+		# where even the flat floor is too high, the pedal hangs higher
+		var lift := 0.0
+		for c in _pad_corners(pivot.position, p):
+			lift = maxf(lift, toe_board_y(c.z) + PEDAL_FLOOR_CLEAR - c.y)
+		pivot.position.y += lift
 		var k := CockpitKit.new()
 		k.box(Vector3(0.018, 0.17, 0.012), Vector3(0.0, -0.085, 0.0), TRIM)
 		k.box(Vector3(p[2], p[3], 0.012), Vector3(0.0, -0.17, 0.004), PLASTIC_LIGHT)
 		pivot.add_child(k.instance(CockpitKit.material(0.7, 0.3)))
 		add_child(pivot)
 		pedals[p[0]] = pivot
+
+## The top of the floor under the pedals at car z: the toe board rising to
+## the firewall (the footwell wedge in _build_static), else the floor.
+func toe_board_y(z: float) -> float:
+	return maxf(float(cab.floor_y) + 0.04 + toe_rise * (1.0 - _toe_t(z)), float(cab.floor_y) + 0.02)
+
+## 0 at the toe board's front (top) edge .. 1 at its foot.
+func _toe_t(z: float) -> float:
+	return clampf((z - ((cab.cowl as Vector2).y + 0.09 - 0.15)) / 0.30, 0.0, 1.0)
+
+## The pad's bottom edge, front and back, at rest and pressed (car space).
+static func _pad_corners(pivot: Vector3, p: Array) -> Array:
+	var out := []
+	for deg in [0.0, PEDAL_TRAVEL_DEG]:
+		var r := Basis(Vector3.RIGHT, deg_to_rad(deg))
+		for corner in [Vector3(0.0, -0.17 - float(p[3]) * 0.5, -0.002), Vector3(0.0, -0.17 - float(p[3]) * 0.5, 0.010)]:
+			out.append(pivot + r * corner)
+	return out
+
+## How far the toe board may rise and still keep PEDAL_FLOOR_CLEAR under every
+## pad at rest and pressed: the pads stood in it on 9 cars (#682). Lowering
+## the board, not raising the pedals, keeps the feet and knees where they were.
+func _fit_toe_rise() -> float:
+	var rise := TOE_BOARD_RISE
+	var base := float(cab.floor_y) + 0.04
+	for p in PEDALS:
+		for c in _pad_corners((cab.pedals as Vector3) + Vector3(p[1], 0.0, 0.0), p):
+			var t := _toe_t((c as Vector3).z)
+			if t < 1.0:
+				rise = minf(rise, ((c as Vector3).y - PEDAL_FLOOR_CLEAR - base) / (1.0 - t))
+	return maxf(rise, 0.0)
 
 ## Pedal travel 0..1 as it reads from the car.
 func pedal_inputs() -> Dictionary:

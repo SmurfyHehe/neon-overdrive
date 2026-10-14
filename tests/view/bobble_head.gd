@@ -111,8 +111,11 @@ func _slots() -> void:
 		_check(yaw > MIN_YAW_DEG, "%s: figure is %.1f deg right of straight ahead, needs more than %.0f" % [kind, yaw, MIN_YAW_DEG])
 		# on the dash top: between the cowl and the driver's face, on the slope
 		_check(spot.z > cowl.y and spot.z < face_z, "%s: z %.3f is off the dash (%.3f .. %.3f)" % [kind, spot.z, cowl.y, face_z])
-		var dash_y := lerpf(cowl.x, cl.x, (spot.z - cowl.y) / (face_z - cowl.y))
-		_check(absf(spot.y - dash_y) < 0.005, "%s: foot at y %.3f, dash top %.3f" % [kind, spot.y, dash_y])
+		# the foot's centre over the slope by the base's uphill rise, so the flat base sits on it (#684)
+		var dash_y := lerpf(cowl.x, cl.x, (spot.z - cowl.y) / (face_z - cowl.y)) + BobbleHead.BASE_R * scale * (cl.x - cowl.x) / (face_z - cowl.y)
+		if spot.z + BobbleHead.BASE_R * scale > face_z - 0.06:   # over the dash face run's flat top (the kei, #684)
+			dash_y = maxf(dash_y, cl.x - 0.02)
+		_check(absf(spot.y - dash_y) < 0.005, "%s: foot at y %.3f, dash top %.3f under its uphill edge" % [kind, spot.y, dash_y])
 		# the fit box: foot radius inside the dash both ways, head under the glass line
 		var door_x := float(cab.door_x)
 		var pillar_foot: Vector3 = cab.a_pillar[0]

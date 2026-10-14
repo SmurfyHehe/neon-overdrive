@@ -515,6 +515,7 @@ static func player_spec(kind: String) -> Dictionary:
 			s["shift_time"] = 0.35
 			s["automatic_time_between_shifts"] = 1200.0
 			s["shifter"] = shifter("dogleg")   # old box: R forward, left of 1
+			s["window_control"] = "crank"   # wind-up door glass (Roy 2026-10-13, 1531)
 		"p2_hothatch":
 			# Kobo, T1: 2.0 four, front drive, light, short gears. Launches. No
 				# turbo from the factory (Roy, 2026-10-09): the 340 Nm table peak was
@@ -581,6 +582,7 @@ static func player_spec(kind: String) -> Dictionary:
 			s["center_of_gravity_height_offset"] = -0.12
 		"p5_muscle":
 			s["shifter"] = shifter("h5_long")   # long lazy throw
+			s["window_control"] = "crank"   # wind-up door glass (Roy 2026-10-13, 1531)
 			# Marlowe, T3: 5.7 V8, rear drive, lazy 4-speed auto, 1800 kg. Torque.
 			# (The sheet's 4-speed, real since gear count is per car: first and
 			# top are the old five-speed's, so launch and top speed are unchanged;
@@ -623,6 +625,7 @@ static func player_spec(kind: String) -> Dictionary:
 			s["coefficient_of_friction"] = {"Road": 1.2, "Dirt": 1.05}
 			s["center_of_gravity_height_offset"] = 0.05
 		"p7_wagon":
+			s["window_control"] = "crank"   # wind-up door glass (Roy 2026-10-13, 1531)
 			# Bramley 240 Estate (placeholder name), T1, free. PROVISIONAL STAND-IN
 			# NUMBERS, kept for the playtest (2026-10-11), Roy has not set them: the sheet gives the layout and the feel, no torque,
 			# mass, ratios or times. Known and used: small inline four, no turbo,

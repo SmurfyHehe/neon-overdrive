@@ -43,7 +43,10 @@ const CABIN := {
 	"head_unit": Vector3(0.030, 0.765, -0.639),
 	"lever": Vector3(0.0, 0.565, -0.405), "handbrake": Vector3(0.0, 0.565, 0.055),
 	"pedals": Vector3(-0.131, 0.526, -0.885),
-	"crank": Vector3(-0.450, 0.616, -0.565), "switch": Vector3(-0.424, 0.753, -0.365),
+	"crank": Vector3(-0.470, 0.485, -0.175), "switch": Vector3(-0.424, 0.753, -0.365),
+	# the door pocket by the hip, behind the armrest: ahead of it the rim sat in
+	# the beer can and the lift ran up through the armrest (#727)
+	"pocket_z": -0.09,
 	"rear_mirror": Vector3(0.0, 1.105, -0.433),
 	"door_mirror": Vector3(0.741, 0.892, -0.635),
 	"console": "tunnel", "console_w": 0.10, "seats": "bucket", "trim": "retro",

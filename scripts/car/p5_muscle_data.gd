@@ -32,7 +32,7 @@ const CABIN := {
 	"floor_y": 0.296, "belt_y": 0.992,
 	"cowl": Vector2(0.867, -0.880), "dash_face_z": -0.470,
 	"header": Vector2(1.430, -0.190), "roof_y": 1.420, "roof_z1": 0.920, "open_top": false, "hardtop": true,
-	"door_x": 0.778, "door_x_rear": 0.795, "door_x_front": 0.792, "glass_x": 0.708, "glass_top": 1.390,
+	"door_x": 0.778, "door_x_rear": 0.795, "door_x_front": 0.792, "glass_x": 0.788, "glass_top": 1.390,
 	"a_pillar": [Vector3(0.892, 0.867, -0.880), Vector3(0.568, 1.430, -0.190)],
 	"b_pillar_z": 0.385, "rear_z": 0.840,
 	# Hood view (2026-10-11, judged on screenshots): the fitted point on the long hood
@@ -44,7 +44,7 @@ const CABIN := {
 	"head_unit": Vector3(0.0, 0.878, -0.394),
 	"lever": Vector3(0.0, 0.661, -0.160), "handbrake": Vector3(0.0, 0.661, 0.300),
 	"pedals": Vector3(-0.260, 0.566, -0.640),
-	"crank": Vector3(-0.774, 0.696, -0.320), "switch": Vector3(-0.748, 0.833, -0.120),
+	"crank": Vector3(-0.778, 0.706, 0.220), "switch": Vector3(-0.748, 0.833, -0.120),
 	"rear_mirror": Vector3(0.0, 1.305, -0.290),
 	"door_mirror": Vector3(0.891, 1.071, -0.640),
 	"console": "tunnel", "seats": "bench", "trim": "wood",

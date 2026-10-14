@@ -43,7 +43,7 @@ const GLASS := ["glass"]
 const CABIN := {
 	"seat_x": -0.360, "seat_h": 0.740, "seat_z": -0.120,
 	"eye": Vector3(-0.360, 1.360, -0.180),
-	"floor_y": 0.560, "belt_y": 1.165,
+	"floor_y": 0.460, "belt_y": 1.165,
 	"cowl": Vector2(1.019, -1.050), "dash_face_z": -0.670,
 	"header": Vector2(1.715, -0.685), "roof_y": 1.700, "roof_z1": 0.150, "open_top": false,
 	"door_x": 0.840, "door_x_rear": 0.820, "door_x_front": 0.840, "glass_x": 0.860, "glass_top": 1.685,
@@ -57,7 +57,7 @@ const CABIN := {
 	"head_unit": Vector3(0.0, 1.040, -0.590),
 	"lever": Vector3(0.0, 0.900, -0.360), "handbrake": Vector3(0.0, 0.900, 0.060),
 	"pedals": Vector3(-0.260, 0.720, -0.840),
-	"crank": Vector3(-0.800, 0.980, -0.420), "switch": Vector3(-0.780, 1.120, -0.200),
+	"crank": Vector3(-0.840, 0.920, -0.120), "switch": Vector3(-0.780, 1.120, -0.200),
 	"rear_mirror": Vector3(0.0, 1.540, -0.700),
 	"door_mirror": Vector3(1.019, 1.215, -0.963),
 	"console": "flat", "seats": "bench", "trim": "truck",

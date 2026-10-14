@@ -54,6 +54,9 @@ const TIP_DRAG := 3.6
 const CIG_PUFFS := 3             # puffs per drag
 const CIG_FLICK_LOCAL_Y := -0.14  # the window gap, below the eye
 
+## The pocket's centre at least this far behind the dash face's centre line
+## (the face is 12 cm deep; the pocket 7.5 cm long).
+const POCKET_FROM_DASH := 0.10
 const CAN_R := 0.031
 const CAN_HALF := 0.0575
 ## The hand's origin over the pocket floor when it holds an item standing in it.
@@ -65,6 +68,8 @@ const MAX_PUFFS := 10
 const EXHALE_PUFFS := 8
 const EXHALE_GAP := 0.05         # seconds between puffs
 const SHUT_LIFE := 2.0
+## A shut-window puff stays this far behind the wheel's centre (the rim's tube and its tilt).
+const WHEEL_CLEAR := 0.06
 const OPEN_LIFE := 1.4
 const SHUT_ALPHA := 0.13
 const OPEN_ALPHA := 0.30
@@ -118,7 +123,8 @@ func _init(model: DriverModel) -> void:
 func _ready() -> void:
 	var eye: Vector3 = cab.eye
 	var door := minf(float(cab.door_x), float(cab.get("door_x_front", cab.door_x)))
-	_pocket_floor = Vector3(-(door - 0.043), float(cab.seat_h) + 0.10, eye.z - 0.47)
+	# behind the dash's lower face (on the truck and the drift coupe it reached into it)
+	_pocket_floor = Vector3(-(door - 0.043), float(cab.seat_h) + float(cab.get("pocket_h", 0.10)), maxf(float(cab.get("pocket_z", eye.z - 0.47)), float(cab.dash_face_z) + POCKET_FROM_DASH))
 	var mat := CockpitKit.material(0.6, 0.0, 0.15)
 	var k := CockpitKit.new()
 	# open on top: the cup's open face (+z) turned up
@@ -284,6 +290,16 @@ func _build_cloud() -> void:
 	cloud.custom_aabb = AABB(Vector3(-4.0, -1.0, -3.0), Vector3(8.0, 4.0, 45.0))   # it trails back along the car
 	add_child(cloud)
 
+## Moves the pocket (and where the items stand in it) by `by`, car space: the
+## driver's hand fit (DriverModel._fit_cabin) needs room for the hand above it.
+func move_pocket(by: Vector3) -> void:
+	_pocket_floor += by
+	pocket.position += by
+
+## The item's mesh (VAPE, BEER or CIGARETTE).
+func item_mesh(item: String) -> MeshInstance3D:
+	return {IdleActions.VAPE: vape, IdleActions.BEER: can, IdleActions.CIGARETTE: cig}[item]
+
 ## The hand's transform when it holds an item standing in the pocket (car space).
 func holder_xf() -> Transform3D:
 	return Transform3D(Basis.IDENTITY, _pocket_floor + Vector3(0.0, STAND, 0.0))
@@ -442,7 +458,7 @@ func _process(delta: float) -> void:
 			if not _open:
 				p.y = minf(p.y, eye.y - LOW_CABIN - r)
 				p.x = clampf(p.x, -(door - r), door - r)
-				p.z = maxf(p.z, float(cab.dash_face_z) + r)
+				p.z = maxf(p.z, maxf(float(cab.dash_face_z), (cab.wheel as Vector3).z + WHEEL_CLEAR) + r)   # and behind the wheel, not through its rim
 		_pos[i] = p
 		_vel[i] = v
 		var t := _age[i] / _life[i]

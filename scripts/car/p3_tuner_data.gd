@@ -23,7 +23,7 @@ const CABIN := {
 	"floor_y": 0.256, "belt_y": 0.972,
 	"cowl": Vector2(0.844, -0.820), "dash_face_z": -0.510,
 	"header": Vector2(1.455, -0.230), "roof_y": 1.450, "roof_z1": 0.680, "open_top": false,
-	"door_x": 0.740, "door_x_rear": 0.742, "door_x_front": 0.737, "glass_x": 0.711, "glass_top": 1.425,
+	"door_x": 0.740, "door_x_rear": 0.742, "door_x_front": 0.737, "glass_x": 0.770, "glass_top": 1.425,
 	"a_pillar": [Vector3(0.798, 0.844, -0.820), Vector3(0.540, 1.455, -0.230)],
 	"b_pillar_z": 0.280, "rear_z": 0.740,
 	# Hood view (2026-10-11, judged on screenshots): the long flat bonnet filled a
@@ -35,7 +35,7 @@ const CABIN := {
 	"head_unit": Vector3(0.0, 0.828, -0.434),
 	"lever": Vector3(0.0, 0.611, -0.200), "handbrake": Vector3(0.0, 0.611, 0.260),
 	"pedals": Vector3(-0.251, 0.526, -0.680),
-	"crank": Vector3(-0.736, 0.646, -0.360), "switch": Vector3(-0.710, 0.783, -0.160),
+	"crank": Vector3(-0.740, 0.576, 0.030), "switch": Vector3(-0.710, 0.783, -0.160),
 	"rear_mirror": Vector3(0.0, 1.300, -0.300),
 	"door_mirror": Vector3(0.919, 1.022, -0.680),
 	"console": "tunnel", "seats": "bucket", "trim": "carbon",

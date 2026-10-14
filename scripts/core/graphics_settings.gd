@@ -63,7 +63,8 @@ const FPS_CAP_NAMES := ["V-sync", "30 fps", "60 fps", "120 fps", "144 fps", "No 
 ## more times, draw distance moves how many cars run the full sim. Dynamic
 ## resolution, the frame cap and the lamp glow strength are close to free.
 ## Car paint (2026-10-11, busy laptop, 1080p, MSAA 2x, coupe in the chase
-## view): reflections about +0.5 ms over plain, lamp light about +0.5 ms more.
+## view): reflections about +0.5 ms over plain, lamp light about +0.5 ms more
+## (Medium carries both since 2026-10-14; flake on High is close to free).
 const COST := {"aa": 2, "render_scale": 3, "mirrors": 2, "dynamic_res": 1, "fps_cap": 1,
 	"cars": 3, "draw_distance": 2, "night_lights": 1, "car_paint": 2}
 const COST_NAMES := ["", "Low cost", "Medium cost", "High cost"]
@@ -75,14 +76,15 @@ const COST_NAMES := ["", "Low cost", "Medium cost", "High cost"]
 ## CPU side: traffic = car count, detail = traffic sim/draw distance (m),
 ## mirror_q = FxSettings mirror quality (0 low, 1 medium, 2 high). Medium is
 ## today's defaults, so Roy's laptop plays exactly as before at Medium.
-## car_paint = the car paint tier (CarPaint: 0 plain, 1 mirrors the city,
-## 2 + street-lamp light and metal flake).
+## car_paint = the car paint tier (CarPaint: 0 plain, 1 mirrors the city and
+## takes the street-lamp light, 2 + metal flake). Lamp light moved from 2 to
+## 1 on 2026-10-14 (Roy 1526): a dark car at night read as two red dots.
 const PRESET_VALUES := {
 	"low": {"aa": "msaa2", "render_scale": 0.75, "traffic": 10, "detail": 100.0, "mirror_q": 0, "car_paint": 0},
 	"medium": {"aa": "msaa2", "render_scale": 1.0, "traffic": 16, "detail": 150.0, "mirror_q": 1, "car_paint": 1},
 	"high": {"aa": "msaa4", "render_scale": 1.0, "traffic": 25, "detail": 200.0, "mirror_q": 2, "car_paint": 2},
 }
-const CAR_PAINT_NAMES := ["Plain", "Reflections", "Reflections + lamp light"]
+const CAR_PAINT_NAMES := ["Plain", "Lamp light", "Lamp light + flake"]
 
 ## Nodes that switch with these settings join this group and implement
 ## apply_graphics().
@@ -170,8 +172,9 @@ static func apply(tree: SceneTree) -> void:
 	# Wet-road mirrors (road_wet.gd) are off on Low; a hand-tuned "custom"
 	# set keeps them, like every other Medium default.
 	RoadWet.set_reflections(preset != "low")
-	# Car paint (car_paint.gd): plain, mirrors the city, or the street lamps
-	# too. Its own row on the Picture page; each preset picks one.
+	# Car paint (car_paint.gd): plain, the city and the street lamps on the
+	# body, or metal flake too. Its own row on the Picture page; each preset
+	# picks one.
 	CarPaint.set_tier(car_paint)
 	tree.call_group(GROUP, "apply_graphics")
 
@@ -218,7 +221,7 @@ static func load_settings() -> void:
 		set_fps_cap(int(cap) if (cap is float or cap is int) else 0)
 		auto_picked = FxSettings._to_bool(cfg.get_value("graphics", "auto", false))
 		# A file from before the row existed: what its preset showed then
-		# (Low plain, High with the lamps, anything else the city).
+		# (Low plain, High with the flake, anything else the lamps).
 		var saved := str(cfg.get_value("graphics", "preset", PRESET_DEFAULT))
 		var was: int = PRESET_VALUES[saved if PRESET_VALUES.has(saved) else PRESET_DEFAULT].car_paint
 		var cp: Variant = cfg.get_value("graphics", "car_paint", was)

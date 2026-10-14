@@ -17,14 +17,19 @@ class_name CarPaint
 # - Medium and up reflect a made-up night city (no probe, no texture, no
 #   extra camera): a dusk sky, a band of lit windows on the horizon, sodium
 #   light overhead.
-# - High adds the street lamps themselves: the two nearest lamps of the row
-#   the player is driving under light the body and slide across it as
-#   highlights (CarLampSweep feeds four global uniforms once a frame).
+# - Medium also takes the street lamps themselves: the two nearest lamps of
+#   the row the player is driving under light the body and slide across it
+#   as highlights (CarLampSweep feeds four global uniforms once a frame).
+#   Lamp light was High only until 2026-10-14 (Roy 1526: a dark car at
+#   night read as two red dots, so the lamps now light bodies at Medium,
+#   about +0.5 ms on the graphics chip), and dark paint takes a broad coat
+#   sheen under them so its shoulder line shows between the pools.
+# - High adds metal flake in the lamp highlights.
 #
 # Tiers follow GraphicsSettings.car_paint (the "Car paint" row on the Picture
-# page; each Quality preset picks one): Plain = paint only, Reflections =
-# + city reflection and the moon's rim light (and CarFx's soft contact
-# shadow), Lamp light = + the street lamps and metal flake. A change of tier
+# page; each Quality preset picks one): Plain = paint only, Lamp light =
+# + city reflection, the moon's rim light, the street lamps (and CarFx's soft
+# contact shadow), Lamp light + flake = + metal flake. A change of tier
 # rewrites the shader code once.
 #
 # Look upgrade (2026-10-11): the coupe assembled from parts (CarAssembler)
@@ -296,9 +301,17 @@ void fragment() {
 	// 0.55: a full-strength wash turned bright paints pale under the tone map.
 	lit += lamp_c * base * (1.0 - METALLIC) * lamp.x * 0.55;
 	lit += lamp_c * tint * lamp.y * mix(0.08, 2.5, gloss) * (0.35 + 0.65 * coat + edges);
+	// Dark paint: the colour wash above is black times black, so the clear
+	// coat carries the lamp instead, a broad grey-sodium sheen on the faces
+	// that look up at it (real black paint under a street lamp). Panels in
+	// baked shade and the sills, which face sideways, stay dark: the
+	// shoulder line between them is the car's shape at night.
+	lit += lamp_c * lamp.x * dark * p * mix(0.06, 0.16, gloss) * shade * (1.0 - METALLIC);
+#ifdef FLAKE
 	// Metal flake: sparks in the paint where a lamp's highlight falls.
 	float cell = fract(sin(dot(floor(obj_pos * 260.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
 	lit += lamp_c * step(0.975, cell) * (lamp.y * 3.0 + lamp.x * 0.15) * finish.z * p * gloss * clamp(0.006 / px, 0.0, 1.0);
+#endif
 #endif
 	EMISSION = lit;
 }
@@ -456,12 +469,15 @@ static func code(variant: String, at_tier: int) -> String:
 	var head := "shader_type spatial;\n"
 	head += "render_mode cull_back;\n"
 	head += "#define EDGE_W %s\n" % EDGE_W
+	# Medium: the city reflection and the street lamps on the body (lamp
+	# light at Medium: Roy 1526, 2026-10-14). High: metal flake on top.
 	if at_tier >= TIER_MEDIUM:
 		head += "#define PANO\n"
-	if at_tier >= TIER_HIGH:
 		head += "#define LAMPS\n"
+	if at_tier >= TIER_HIGH:
+		head += "#define FLAKE\n"
 	# With the real lamps drawn, the overhead glow is only the far ones.
-	head += "#define OVERHEAD %s\n" % (0.12 if at_tier >= TIER_HIGH else 0.35)
+	head += "#define OVERHEAD %s\n" % (0.12 if at_tier >= TIER_MEDIUM else 0.35)
 	match variant:
 		"body_instance":
 			return head + "#define PAINT_INSTANCE\n" + _LIB + _BODY

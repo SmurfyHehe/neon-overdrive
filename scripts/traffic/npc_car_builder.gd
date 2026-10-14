@@ -546,8 +546,13 @@ static func chassis_visual(kind: String, build: String, paint: Color, role := ""
 	if uses_parts(kind, ai):
 		# Cars from parts: the body is assembled from the real parts in
 		# assets/cars/<kind>/body.glb (CarAssembler: one mesh, 4 surfaces).
+		# CarPaint's parts variant, as the coupe wears (P1CoupeBuilder): the
+		# city reflection, the moon's rim and the street lamps on the body.
+		# Until 2026-10-14 these cars wore the plain pre-look-upgrade shader
+		# (PARTS_BODY_SHADER), so at night the muscle car read as a black
+		# blob with two red glows (better-exteriors note, Roy 1526).
 		var paint_mat := ShaderMaterial.new()
-		paint_mat.shader = CarAssembler.paint_shader(P1CoupeBuilder.PARTS_BODY_SHADER)
+		paint_mat.shader = CarPaint.parts_body_shader()
 		paint_mat.set_shader_parameter("paint", paint)
 		var body := CarAssembler.build(kind, parts_config(), paint_mat)
 		body.position = lift

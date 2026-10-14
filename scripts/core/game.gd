@@ -1087,6 +1087,7 @@ func _setup_game_state() -> void:
 	gas_station.pulled_up.connect(func(_s: float) -> void: game_state.open_station())
 	gas_station_onc.pulled_up.connect(func(_s: float) -> void: game_state.open_station())
 	add_child(WashScreen.new(game_state))
+	add_child(HoodPanel.new(game_state, player, wallet, night_clock))   # the sheet under the hood (engine bays, roadside menu)
 	# Garage G0: the dawn card, the garage behind it and the plumbing around them.
 	# Live in real play (or NEON_GARAGE=1); every other run never meets them.
 	game_state.garage_enabled = GameState.wants_garage()

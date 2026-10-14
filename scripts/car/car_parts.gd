@@ -65,6 +65,16 @@ const DEFAULT_CFG := {
 	# back, the Bug on all four (Roy 1172).
 	"brake_front": "disc",
 	"brake_rear": "disc",
+	# Rim diameter in inches (CarFittings.TYRES, from the car's class); 0 = the
+	# old 70% of the tyre radius.
+	"rim_in": 0.0,
+	# Car-space height the top of a drawn tyre never rises past, front and
+	# rear (CarFittings.TYRES "top", measured on the body; issue #670).
+	# 0 = no stop.
+	"arch_top_f": 0.0,
+	"arch_top_r": 0.0,
+	# Vented discs show dark slots across the glow band (CarFittings.VENTED).
+	"vented": false,
 }
 
 const COL_TYRE := Color("#15171C")
@@ -79,13 +89,23 @@ const COL_ROD := Color("#C9CED6")
 const WHEEL_SHADER := """
 shader_type spatial;
 render_mode cull_back;
-// Vertex alpha: 0 = rim (tinted by `rim`), 0.5 = brake disc (glows with brake_heat), 1 = as coloured.
+// Vertex alpha: 0 = rim (tinted by `rim`), 0.5 = brake disc or drum (glows with
+// brake_heat), 1 = as coloured. UV.x = this wheel's disc radius (m), UV.y = 1 on
+// a vented disc, 0 on a solid one, -1 on a drum.
 uniform vec3 rim : source_color = vec3(0.79, 0.81, 0.84);
 uniform float rim_metallic = 0.8;
 uniform float rim_roughness = 0.3;
 instance uniform float brake_heat : instance_index(3) = 0.0;
-const vec3 GLOW_RED = vec3(0.60, 0.07, 0.01);
-const vec3 GLOW_ORANGE = vec3(1.0, 0.54, 0.12);
+// The inner ring's heat: brake_heat followed about 2 s behind (CarParts), so
+// the pad band heats from the edge in and cools from the hat out.
+instance uniform float brake_heat_lag : instance_index(4) = 0.0;
+// Brake glow (Roy 1514): a dull cherry, orange only at the very top.
+const vec3 GLOW_CHERRY = vec3(0.27, 0.012, 0.003);   // #8F1A08
+const vec3 GLOW_ORANGE = vec3(1.0, 0.25, 0.014);     // #FF8A1F
+varying vec3 wheel_pos;
+void vertex() {
+	wheel_pos = VERTEX;
+}
 void fragment() {
 	float is_rim = 1.0 - step(0.25, COLOR.a);
 	float is_disc = step(0.25, COLOR.a) * (1.0 - step(0.75, COLOR.a));
@@ -93,10 +113,23 @@ void fragment() {
 	METALLIC = mix(mix(0.1, 0.45, is_disc), rim_metallic, is_rim);
 	ROUGHNESS = mix(mix(0.75, 0.55, is_disc), rim_roughness, is_rim);
 	SPECULAR = 0.5;
-	float h = clamp(brake_heat, 0.0, 1.0);
-	// Dull cherry red after one hard stop (h ~0.4), orange only near the top; kept
-	// low so the glow post-process does not bloom it into a lamp.
-	EMISSION = mix(GLOW_RED, GLOW_ORANGE, h * h) * (h * h * 0.9) * is_disc;
+	// Patterns on the disc, all in the wheel's own space so they turn with it.
+	float rn = length(wheel_pos.yz) / max(UV.x, 0.01);   // 0 hub .. 1 disc edge
+	float ang = atan(wheel_pos.z, wheel_pos.y);
+	float drum = step(UV.y, -0.5);
+	// Edge first, centre last: the outer ring reads brake_heat, the inner the lagged copy.
+	float h = clamp(mix(brake_heat_lag, brake_heat, smoothstep(0.55, 0.95, rn)), 0.0, 1.0);
+	// Pad band: only where the pads rub, not the hat or the outer lip (a drum glows all over its face).
+	float band = mix(smoothstep(0.50, 0.60, rn) * (1.0 - smoothstep(0.93, 1.0, rn) * 0.6), 1.0, drum);
+	// Hot spots: uneven pad deposits, brighter patches round the ring.
+	float spots = 0.75 + 0.5 * (0.5 + 0.5 * sin(ang * 5.0 + 1.3)) * (0.5 + 0.5 * sin(ang * 3.0 - 0.7));
+	// Vent slots on a vented disc: dark radial lines across the band.
+	float vents = mix(1.0, 0.55 + 0.45 * smoothstep(-0.2, 0.4, sin(ang * 30.0)), step(0.5, UV.y));
+	// About half the old light at the top (h 1 ~0.27 luminance, was ~0.55) and a
+	// quarter of it at h 0.8: kept under the glow threshold so it never reads as a lamp.
+	float top = smoothstep(0.8, 1.0, h);
+	vec3 col = mix(GLOW_CHERRY * 1.8, GLOW_ORANGE * 0.7, top);
+	EMISSION = col * (h * h) * band * spots * vents * is_disc;
 }
 """
 
@@ -119,6 +152,14 @@ var _shocks: MultiMeshInstance3D
 var _disc_x: float = 0.0
 var _disc_r := 0.0
 var _last_heat: Array[float] = [-1.0, -1.0, -1.0, -1.0]
+var _lag_heat: Array[float] = [0.0, 0.0, 0.0, 0.0]
+var _last_lag: Array[float] = [-1.0, -1.0, -1.0, -1.0]
+## Highest car-space hub height each drawn wheel may reach (arch top less the
+## tyre radius); INF with no arch data. The sim's wheel keeps its own travel.
+var _arch_limit: Array[float] = [INF, INF, INF, INF]
+## How far each drawn wheel is held below the sim's hub this frame, m.
+var _held: Array[float] = [0.0, 0.0, 0.0, 0.0]
+var _mesh_x: Array[float] = []
 ## "disc" or "drum" at FL FR RL RR, as built (tests/car/required_slots.gd reads it).
 var brake_kinds: Array[String] = []
 ## The transforms last written to the two MultiMeshes, FL FR RL RR in car
@@ -142,6 +183,9 @@ static func rim_for_style(style: String) -> String:
 		_:
 			return "five"
 
+## Seconds the inner ring of a disc lags its outer ring (the glow's fade).
+const HEAT_LAG := 2.0
+
 ## Hangs the parts on a car whose 4 Wheel nodes already exist.
 static func attach(v: Vehicle, overrides: Dictionary = {}) -> CarParts:
 	var p := CarParts.new()
@@ -159,6 +203,8 @@ func _build() -> void:
 	var radius: float = vehicle.front_tire_radius
 	var tyre_w: float = cfg.tyre_w
 	var rim_r := radius * 0.70
+	if float(cfg.rim_in) > 0.0:
+		rim_r = clampf(float(cfg.rim_in) * 0.0254 * 0.5, radius * CarFittings.RIM_MIN, radius * CarFittings.RIM_MAX)
 	var style := String(cfg.rim)
 	var lod: bool = cfg.lod
 	var mat := _get_wheel_material(cfg.rim_color)
@@ -172,12 +218,16 @@ func _build() -> void:
 		var rear := i >= 2
 		var brake := String(cfg.brake_rear if rear else cfg.brake_front)
 		brake_kinds.append(brake)
-		mi.mesh = wheel_mesh(radius, tyre_w, rim_r, style, rear, brake)
+		mi.mesh = wheel_mesh(radius, tyre_w, rim_r, style, rear, brake, bool(cfg.vented))
 		mi.set_surface_override_material(0, mat)
 		mi.position = Vector3(side * hub_x - w.position.x, 0.0, 0.0)
 		if side < 0.0:
 			mi.rotation.y = PI
 		mi.set_instance_shader_parameter("brake_heat", 0.0)
+		mi.set_instance_shader_parameter("brake_heat_lag", 0.0)
+		var arch_top := float(cfg.arch_top_r if rear else cfg.arch_top_f)
+		if arch_top > 0.0:
+			_arch_limit[i] = arch_top - (vehicle.rear_tire_radius if rear else radius)
 		var visual := w.wheel_node
 		# The design's closed wheel stays as child 0, hidden (tests and the
 		# P1 builder still find it there); ours draws in its place.
@@ -186,6 +236,7 @@ func _build() -> void:
 				(c as VisualInstance3D).visible = false
 		visual.add_child(mi)
 		_wheel_meshes_inst.append(mi)
+		_mesh_x.append(mi.position.x)
 	_disc_r = _disc_radius(rim_r, false)
 	_disc_x = _disc_offset(tyre_w, style)
 	var disc_t := _disc_thickness()
@@ -238,11 +289,11 @@ func _physics_process(delta: float) -> void:
 	var cool: float = (PowertrainHealth.BRAKE_COOL_BASE + PowertrainHealth.BRAKE_COOL_SPEED * speed) * (brake_temp - PowertrainHealth.AMBIENT_C)
 	brake_temp = clampf(brake_temp + (heat_in - cool) / PowertrainHealth.BRAKE_C * delta, PowertrainHealth.AMBIENT_C, 1000.0)
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if not vehicle.visible:
 		return
 	_update_transforms()
-	_update_heat()
+	_update_heat(delta)
 
 ## Disc temperature this car's glow reads, degC.
 func disc_temp() -> float:
@@ -255,14 +306,29 @@ func disc_temp() -> float:
 static func heat_for(temp_c: float) -> float:
 	return clampf((temp_c - GLOW_START) / (GLOW_FULL - GLOW_START), 0.0, 1.0)
 
-func _update_heat() -> void:
+func _update_heat(delta: float) -> void:
 	var h := heat_for(disc_temp())
+	var k := clampf(delta / HEAT_LAG, 0.0, 1.0)
 	for i in 4:
 		var hi := h if i < 2 else h * REAR_HEAT_SHARE
+		_lag_heat[i] = lerpf(_lag_heat[i], hi, k)
 		hi = floorf(hi / HEAT_STEP) * HEAT_STEP
 		if hi != _last_heat[i]:
 			_last_heat[i] = hi
 			_wheel_meshes_inst[i].set_instance_shader_parameter("brake_heat", hi)
+		var lag := floorf(_lag_heat[i] / HEAT_STEP) * HEAT_STEP
+		if lag != _last_lag[i]:
+			_last_lag[i] = lag
+			_wheel_meshes_inst[i].set_instance_shader_parameter("brake_heat_lag", lag)
+
+## How far (m) the drawn wheel i is held under the sim's hub by the arch stop.
+func held(i: int) -> float:
+	return _held[i]
+
+## Car-space height the drawn hub of wheel i (FL FR RL RR) never rises past
+## (INF without arch data).
+func arch_limit(i: int) -> float:
+	return _arch_limit[i]
 
 func _update_transforms() -> void:
 	var cal := _calipers.multimesh
@@ -271,8 +337,17 @@ func _update_transforms() -> void:
 	for i in 4:
 		var w := _wheels[i]
 		var side := _sides[i]
-		var hub_y: float = w.wheel_node.position.y
-		var mesh_x: float = _wheel_meshes_inst[i].position.x
+		var mi := _wheel_meshes_inst[i]
+		var mesh_x: float = _mesh_x[i]
+		# The arch stop (issue #670): the sim's spring can push the hub higher
+		# than the arch allows (a bump, a landing); the drawn wheel stops at
+		# the arch top instead of passing through the fender. The offset is
+		# written in the spinning wheel node's frame so it stays straight down.
+		var held := maxf(0.0, w.position.y + w.wheel_node.position.y - _arch_limit[i])
+		if held != _held[i] or held > 0.0:
+			_held[i] = held
+			mi.position = Vector3(mesh_x, 0.0, 0.0) + w.wheel_node.transform.basis.inverse() * Vector3(0.0, -held, 0.0)
+		var hub_y: float = w.wheel_node.position.y - held
 		# Caliper: behind the hub (toward +z, the car's rear), level with the
 		# disc, steering with the Wheel, not spinning with the wheel_node.
 		var cal_local := Transform3D(Basis(), Vector3(mesh_x + side * _disc_x, hub_y, 0.0))
@@ -361,13 +436,16 @@ static func _spoke_depth(style: String) -> float:
 
 ## Tyre, rim and brake disc as one surface. The wheel axis is +x (outboard for
 ## a right-hand wheel); the left wheel is the same mesh turned round.
-static func wheel_mesh(radius: float, tyre_w: float, rim_r: float, style: String, rear: bool, brake := "disc") -> ArrayMesh:
-	var key := "%.3f|%.3f|%.3f|%s|%s|%s" % [radius, tyre_w, rim_r, style, "r" if rear else "f", brake]
+static func wheel_mesh(radius: float, tyre_w: float, rim_r: float, style: String, rear: bool, brake := "disc", vented := false) -> ArrayMesh:
+	var key := "%.3f|%.3f|%.3f|%s|%s|%s|%s" % [radius, tyre_w, rim_r, style, "r" if rear else "f", brake, "v" if vented else "s"]
 	if _wheel_meshes.has(key):
 		return _wheel_meshes[key]
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)   # flat shaded, the PS2 look
+	# Every vertex carries the disc radius and the brake kind for the glow's
+	# patterns (WHEEL_SHADER): the shader only reads them on the disc faces.
+	st.set_uv(Vector2(_disc_radius(rim_r, rear), -1.0 if brake == "drum" else (1.0 if vented else 0.0)))
 	var hw := tyre_w * 0.5
 	var sh := radius * 0.055          # shoulder bevel
 	var bead := rim_r + 0.012

@@ -1228,7 +1228,9 @@ static func _build_wheel(v: Vehicle, kind: String, pos: Vector3) -> Wheel:
 	elif NpcCarBuilder.is_npc(kind):
 		# Traffic cars (TrafficCar.build names the sheet variant), and the
 		# player's sheet car. An AI car wears the sheet wheel, as its body.
-		visual = NpcCarBuilder.wheel_visual(kind, String(v.get("build")), pos, v is TrafficCar)
+		# The player's car draws CarParts' wheels instead (PlayerCar._ready), so
+		# its design wheel is only a hidden placeholder (issue #649).
+		visual = NpcCarBuilder.wheel_visual(kind, String(v.get("build")), pos, v is TrafficCar, v is PlayerCar)
 	else:
 		# CarBuilder kinds (traffic) share one merged, cached wheel mesh per
 		# kind (traffic milestone 4, draw calls).

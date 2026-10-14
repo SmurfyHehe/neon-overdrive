@@ -76,6 +76,42 @@ const BRAKES := {
 	"c3_interceptor": {"front": "disc", "rear": "disc", "rim": "five", "caliper": Color("#B5261E")},
 }
 
+## Stock tyres per car (issue #648, Roy 1513): the rim diameter in inches
+## from the car's real-world class, so the sidewall is tall on cheap and old
+## cars (the muscle car's era rubber, the Camel's work tyres) and thin on the
+## coupe and the drift coupe, instead of every rim at 70% of the tyre. The
+## tyre radius stays the car's own (CarSpec); only the drawn rim changes.
+##
+## "top" is the arch (issue #670): the highest the top of a drawn tyre may
+## reach, in car space (m, front and rear), measured on the real body by
+## tests/car/wheel_arch_clearance.gd (rounded down, less 1 mm). Straight
+## ahead and, for the fronts, at full lock. "ai" is the same for the car
+## as a cop, rival or crew car (the sheet body, the AI's rest height). The
+## coupe is never an AI car; its "ai" row is its own.
+## CarParts never draws a tyre above it, whatever the spring does.
+const TYRES := {
+	"p0_beater": {"rim_in": 15, "top": [0.731, 0.734], "ai": [0.724, 0.672]},
+	"p1_coupe": {"rim_in": 17, "top": [0.761, 0.763], "ai": [0.761, 0.763]},
+	"p2_hothatch": {"rim_in": 15, "top": [0.759, 0.759], "ai": [0.761, 0.761]},
+	"p3_tuner": {"rim_in": 16, "top": [0.779, 0.779], "ai": [0.779, 0.779]},
+	"p4_kei": {"rim_in": 13, "top": [0.697, 0.697], "ai": [0.697, 0.697]},
+	"p5_muscle": {"rim_in": 15, "top": [0.830, 0.830], "ai": [0.830, 0.830]},
+	"p6_crossover": {"rim_in": 17, "top": [0.845, 0.815], "ai": [0.845, 0.815]},
+	"p7_wagon": {"rim_in": 14, "top": [0.770, 0.716], "ai": [0.771, 0.732]},
+	"p17_work_pickup": {"rim_in": 15, "top": [0.901, 0.896], "ai": [0.901, 0.896]},
+	"p8_driftcoupe": {"rim_in": 16, "top": [0.721, 0.722], "ai": [0.721, 0.722]},
+	"p10_truck": {"rim_in": 17, "top": [0.850, 0.850], "ai": [0.849, 0.850]},
+	"c1_patrol": {"rim_in": 16, "top": [0.825, 0.825], "ai": [0.825, 0.825]},
+	"c2_patrolsuv": {"rim_in": 17, "top": [0.910, 0.910], "ai": [0.910, 0.910]},
+	"c3_interceptor": {"rim_in": 17, "top": [0.815, 0.817], "ai": [0.815, 0.817]},
+}
+## Cars whose discs are vented: the glow shows dark slots across its band.
+const VENTED := ["p1_coupe", "p3_tuner", "p5_muscle", "p8_driftcoupe", "p10_truck", "c1_patrol", "c2_patrolsuv", "c3_interceptor"]
+## The drawn rim never leaves this share of the tyre radius (a modded tyre
+## size keeps a believable wheel).
+const RIM_MIN := 0.45
+const RIM_MAX := 0.75
+
 const PLATE_COLOR := Color("#E9E6DF")
 const PLATE_EDGE := Color("#8E8B84")
 const PLATE_INK := Color("#15171C")
@@ -104,8 +140,9 @@ static func brakes_for(kind: String, discs_upgrade := false) -> Dictionary:
 	return {"front": f, "rear": r}
 
 ## CarParts.attach() overrides for a car kind. `tyre_mm` is the car's tyre
-## width from its CarSpec (0 keeps CarParts' default).
-static func parts_cfg(kind: String, tyre_mm := 0.0, discs_upgrade := false) -> Dictionary:
+## width from its CarSpec (0 keeps CarParts' default); `ai` for a cop, rival or
+## crew car (TrafficCar), whose sheet body has its own arch heights.
+static func parts_cfg(kind: String, tyre_mm := 0.0, discs_upgrade := false, ai := false) -> Dictionary:
 	var b: Dictionary = BRAKES.get(kind, BRAKES["p1_coupe"])
 	var br := brakes_for(kind, discs_upgrade)
 	var cfg := {"rim": b.rim, "caliper_color": b.caliper, "brake_front": br.front, "brake_rear": br.rear}
@@ -113,7 +150,28 @@ static func parts_cfg(kind: String, tyre_mm := 0.0, discs_upgrade := false) -> D
 		cfg["tyre_w"] = tyre_mm / 1000.0
 	if NpcCarBuilder.is_npc(kind):
 		cfg["rim_color"] = Color(NpcCarBuilder.data_of(kind).COLORS.get("rim", "#C9CED6"))
+	cfg["vented"] = kind in VENTED
+	if TYRES.has(kind):
+		cfg["rim_in"] = float(TYRES[kind].rim_in)
+		var top: Array = TYRES[kind].ai if ai else TYRES[kind].top
+		cfg["arch_top_f"] = float(top[0])
+		cfg["arch_top_r"] = float(top[1])
 	return cfg
+
+# ---------- tyres and arches ----------
+
+## The car's design tyre radius (the sheet's), m.
+static func tyre_radius(kind: String) -> float:
+	if kind == P1CoupeBuilder.KIND:
+		return P1CoupeBuilder.DESIGN_WHEEL_R
+	return float(NpcCarBuilder.KINDS[kind].wheel_r)
+
+## Rim radius CarParts draws inside a tyre of radius `tyre_r`.
+static func rim_radius(kind: String, tyre_r: float) -> float:
+	var t: Dictionary = TYRES.get(kind, {})
+	if t.is_empty():
+		return tyre_r * 0.70
+	return clampf(float(t.rim_in) * 0.0254 * 0.5, tyre_r * RIM_MIN, tyre_r * RIM_MAX)
 
 static func none_reason(kind: String, slot: String) -> String:
 	var n: Dictionary = NONE.get(kind, {})

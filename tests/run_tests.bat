@@ -184,6 +184,8 @@ call :run car/powertrain_health "--headless --fixed-fps 60"
 call :run car/fix_car "--headless --fixed-fps 60"
 call :run ui/fix_car_button --headless
 call :run car/car_parts --headless
+rem Wheels never through the body: measured arch line per car and the visual stop (issue #670).
+call :run car/wheel_arch_clearance --headless
 call :run car/car_detail --headless
 call :run car/car_paint --headless
 call :run fleet/car_symmetry --headless

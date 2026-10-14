@@ -10,13 +10,26 @@ extends RefCounted
 ##
 ## Static like RoadFrame: one road, one answer for every car.
 
-enum Kind { ASPHALT, PAINT, GRIT, KERB, PAVEMENT }
-const NAMES := ["asphalt", "paint", "grit", "kerb", "pavement"]
+## CONCRETE, JOINT and RUMBLE are the ramps' and the ring's deck (ramps doc
+## step 2): concrete from the nose up, the expansion joint where a ramp's deck
+## meets the bridge slab (one thump per axle), and the rumble strip along the
+## deck's inside edge for the first RUMBLE_LEN m after the gore.
+enum Kind { ASPHALT, PAINT, GRIT, KERB, PAVEMENT, CONCRETE, JOINT, RUMBLE }
+const NAMES := ["asphalt", "paint", "grit", "kerb", "pavement", "concrete", "joint", "rumble"]
 
 ## Set on the ground bodies the bands are drawn on (game.gd's plane, a hilly
 ## chunk's RoadCol). A "Road" body without it (the Auto-Tune track) is plain
 ## asphalt everywhere.
 const BANDS_META := &"road_bands"
+## Set on a ramp's or the ring's deck body (RoadRamps, RingSite): concrete,
+## with the joint and the rumble strip worked out from where on the deck.
+const DECK_META := &"ramp_deck"
+const RoadRamps := preload("res://scripts/world/road_ramps.gd")
+## The joint's half width across the lane, m, and the rumble strip: how far
+## along the deck from the gore and how wide, from the deck's inside edge.
+const JOINT_HALF := 0.2
+const RUMBLE_LEN := 20.0
+const RUMBLE_W := 0.5
 
 const L := RoadChunkBuilder.CHUNK_LEN
 # The solid edge line, from RoadChunkBuilder's EdgeLine strips: 0.12 m inside
@@ -90,10 +103,26 @@ static func kind_at(u: Vector3) -> int:
 			return Kind.PAINT
 	return Kind.ASPHALT
 
+## The band at road-space position `u` on a ramp's or the ring's deck.
+static func deck_kind_at(u: Vector3) -> int:
+	var place := RoadRamps.place_of(u, RoadFrame.s_at(u.z))
+	if place.is_empty() or String(place.part) != "ramp":
+		return Kind.CONCRETE
+	var v := float(place.v)
+	if absf(v - RoadRamps.V_TOP) <= JOINT_HALF + TYRE_HALF:
+		return Kind.JOINT
+	if v > RoadRamps.V_GORE - RUMBLE_LEN and absf(u.x) < RoadRamps.x_at(v) - RoadRamps.HALF + RUMBLE_W:
+		return Kind.RUMBLE
+	return Kind.CONCRETE
+
 ## The band under one wheel that is touching the ground.
 static func kind_under(w: Wheel) -> int:
 	if w.surface_type != "Road":
 		return Kind.PAVEMENT
-	if w.last_collider == null or not w.last_collider.has_meta(BANDS_META):
+	if w.last_collider == null:
+		return Kind.ASPHALT
+	if w.last_collider.has_meta(DECK_META):
+		return deck_kind_at(RoadFrame.unroll(w.last_collision_point))
+	if not w.last_collider.has_meta(BANDS_META):
 		return Kind.ASPHALT
 	return kind_at(RoadFrame.unroll(w.last_collision_point))

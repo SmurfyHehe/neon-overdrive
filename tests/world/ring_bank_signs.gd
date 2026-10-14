@@ -11,15 +11,15 @@ extends SceneTree
 #    that traffic, inside the parapet's face; beside it, to the reader's right,
 #    a plate naming the next exit along and how far its gore is (within 50 m
 #    of the true distance). Every word is in the sign atlas, which stays at
-#    48 layers or fewer.
+#    56 layers or fewer (48 before the pockets).
 # 3. The lean: the ring's lane leans in 4 % (inside edge 28 cm low, outside at
 #    RAMP_H); every drivable triangle of every look tilts in by 4 % +- 0.1 %.
 #    Where a ramp's deck runs over the lane it lies LIFT above it (within
 #    1 cm), so there is no step onto the ring; nowhere does the ramp's deck
 #    get steeper across than the lean. The put-back pose on the ring is
 #    tipped in by the lean.
-# 4. Cost: the ring node is 3 draw calls (mesh, pools, lettering) and 8
-#    lettering instances, the same at every site.
+# 4. Cost: the ring node is 3 draw calls (mesh, pools, lettering), 4 where
+#    the piers carry graffiti, and 8 lettering instances at every site.
 #
 # Exit code 1 on failure. Run (headless):
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/world/ring_bank_signs.gd
@@ -36,7 +36,7 @@ const OUTSIDE_LANE_EDGE := 13.2   # RoadRamps.X_LANE: the carriageway's outer ed
 const BANK_TOL := 0.001
 const SEAM_TOL := 0.01
 const DIST_TOL := 50.0
-const ATLAS_MAX := 48
+const ATLAS_MAX := 60   # 48 plus a layer per pocket and street word (ramps doc steps 7, 8, 9, 11, 12)
 
 var fails: Array[String] = []
 var checks := 0
@@ -214,7 +214,9 @@ func _cost() -> void:
 		_check(c.has("draws") and c.has("signs"), "the ring node's counts are %s" % [c])
 		if not c.has("draws") or not c.has("signs"):
 			break
-		_check(int(c.draws) == 3 and int(c.signs) == 8, "ring %s: the ring node is %d draw calls and %d lettering parts (3 and 8 wanted)" % [RoadMap.rings()[ri].id, c.draws, c.signs])
+		# mesh, pools, lettering; and the piers' graffiti where there is some
+		var want := 4 if int(c.get("tags", 0)) > 0 else 3
+		_check(int(c.draws) == want and int(c.signs) == 8, "ring %s: the ring node is %d draw calls and %d lettering parts (%d and 8 wanted)" % [RoadMap.rings()[ri].id, c.draws, c.signs, want])
 		if first.is_empty():
 			first = c
 	print("ring_bank_signs: the ring node %s" % [first])

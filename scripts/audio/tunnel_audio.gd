@@ -33,6 +33,9 @@ const PREDELAY_FEEDBACK := 0.12
 ## 1/s: how fast the echo follows where the car is (a teleport or a restart
 ## does not click).
 const RATE := 8.0
+## Under a ring's bridge (a SoundZone of kind UNDER_BRIDGE, RingSite): a
+## short "whum" at this share of the tunnel's echo for the 14 m under the slab.
+const BRIDGE_WET := 0.55
 
 var listener: Node3D
 ## 0 outside .. 1 fully inside; what the reverb's wet level follows.
@@ -88,8 +91,14 @@ func listener_depth() -> float:
 		return -INF
 	return RoadMap.tunnel_depth(RoadFrame.s_at(RoadFrame.unroll(listener.global_position).z))
 
+## The echo's share under a bridge: BRIDGE_WET inside an UNDER_BRIDGE zone.
+func bridge_amount() -> float:
+	if forced_depth >= 0.0 or not is_instance_valid(listener):
+		return 0.0
+	return BRIDGE_WET if SoundZone.find(SoundZone.Kind.UNDER_BRIDGE, listener.global_position) != null else 0.0
+
 func _process(delta: float) -> void:
-	var want := amount_at(listener_depth())
+	var want := maxf(amount_at(listener_depth()), bridge_amount())
 	amount = lerpf(amount, want, 1.0 - exp(-RATE * delta))
 	if absf(amount - want) < 0.002:
 		amount = want

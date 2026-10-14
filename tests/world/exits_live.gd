@@ -61,6 +61,10 @@ var run_ticks := 0
 var top_y := 0.0
 var wall_hits := 0
 var off_deck := 0
+## Ticks on a ramp's climb or the ring where the tyres did not read the
+## concrete deck (SurfaceMap.Kind.CONCRETE or JOINT; ramps doc 2.2).
+var band_bad := 0
+var band_ticks := 0
 var worst_grade := 0.0
 var _last_pos := Vector3.ZERO
 var _grade_from := Vector3.ZERO
@@ -211,7 +215,10 @@ func _chunks() -> void:
 		if ramp:
 			_check(want.verts > 0 and want.faces > 0 and want.boxes > 0, "ramp chunk %d (k %d) is missing parts: %s" % [c, k, want])
 			_check(want.buildings == 0, "ramp chunk %d (k %d) still has %d buildings" % [c, k, want.buildings])
-			_check((want.bounds as Vector2).x == RoadRamps.bound(c) and (want.bounds as Vector2).y == RoadRamps.bound(c), "ramp chunk %d: walls at %s, expected %.0f" % [c, want.bounds, RoadRamps.bound(c)])
+			# a pocket's lot pushes its side's wall out further than the ramp
+			var want_b := Vector2(maxf(maxf(RoadRamps.bound(c), RoadRamps.pocket_bound(c, 1)), RoadRamps.street_bound(c, 1)),
+				maxf(maxf(RoadRamps.bound(c), RoadRamps.pocket_bound(c, -1)), RoadRamps.street_bound(c, -1)))
+			_check(want.bounds == want_b, "ramp chunk %d: walls at %s, expected %s" % [c, want.bounds, want_b])
 		else:
 			_check(want.faces == 0 and want.boxes == 0, "slip-lane chunk %d (k %d) has ramp collision" % [c, k])
 			_check(want.verts > 0, "slip-lane chunk %d (k %d) has no lane line" % [c, k])
@@ -234,12 +241,12 @@ func _chunks() -> void:
 		var made := RingSite.build(look)
 		var open := 0
 		for i in RingSite.SEGS:
-			if RingSite.rim_open(i, int(look.spur)):
+			if RingSite.rim_open(i, look.spurs):
 				open += 1
-		_check(open == (14 if int(look.spur) != 0 else 12), "ring %s: %d rim pieces open (spur %d)" % [RoadMap.rings()[r].id, open, look.spur])
+		_check(open == 12 + 2 * (look.spurs as Array).size(), "ring %s: %d rim pieces open (spurs %s)" % [RoadMap.rings()[r].id, open, look.spurs])
 		_check((made.faces as PackedVector3Array).size() >= RingSite.SEGS * 6 and (made.boxes as Array).size() > RingSite.SEGS and (made.pools as Array).size() >= 7,
 			"ring %s is missing parts: %d face points, %d boxes, %d pools" % [RoadMap.rings()[r].id, (made.faces as PackedVector3Array).size(), (made.boxes as Array).size(), (made.pools as Array).size()])
-		_check((RoadMap.ring_kind(r) in ["stop", "lot"]) == (int(look.spur) != 0), "ring %s (%s) has spur %d" % [RoadMap.rings()[r].id, RoadMap.ring_kind(r), look.spur])
+		_check((RoadMap.ring_kind(r) in ["stop", "lot"] or not RoadMap.pockets_of_ring(r).is_empty()) == (int(look.spur) != 0), "ring %s (%s) has spur %d" % [RoadMap.rings()[r].id, RoadMap.ring_kind(r), look.spur])
 	# the ramps end on the rim pieces the mouths are cut at
 	_check(absf(RoadRamps.V_RING_OUT - RoadRamps.RING_OUT * sin(deg_to_rad(3.0 * RoadRamps.RING_SEG_DEG))) < 0.01
 		and absf(RoadRamps.V_RING_IN - RoadRamps.RING_OUT * sin(deg_to_rad(6.0 * RoadRamps.RING_SEG_DEG))) < 0.01, "the ramps do not end on the rim pieces of the ring")
@@ -362,6 +369,14 @@ func _watch(p: PlayerCar) -> void:
 			off_deck += 1
 			if off_deck <= 3:
 				_fail("exit %s: off the deck %.0f m from the ring's centre (%.1f m out, %.2f m up, deck at %.2f, up %.2f)" % [_name(), w, u.x * float(side), u.y, deck, p.global_basis.y.y])
+		# the deck is concrete under every tyre (the rumble strip is at the gore)
+		if on_ring or absf(w) > RoadRamps.V_TOP + 3.0:
+			band_ticks += 1
+			var feel: SurfaceFeel = p.surface_feel
+			if feel.share(SurfaceMap.Kind.CONCRETE) + feel.share(SurfaceMap.Kind.JOINT) < 0.99:
+				band_bad += 1
+				if band_bad <= 3:
+					_fail("exit %s: %.0f m from the ring's centre the tyres read %s, not the concrete deck" % [_name(), w, feel.kind])
 	# the grade it climbs, over each 8 m of ground covered
 	var flat := Vector2(p.global_position.x - _grade_from.x, p.global_position.z - _grade_from.z).length()
 	if flat >= 8.0:
@@ -436,6 +451,15 @@ func _finish() -> void:
 	_check(wall_hits == 0, "the bot touched a wall on %d ticks" % wall_hits)
 	_check(off_deck == 0, "the bot was off the deck on %d ticks" % off_deck)
 	_check(ring_wrong == 0, "the ring node was not at the site being driven on %d ticks" % ring_wrong)
+	_check(band_ticks > 100 and band_bad == 0, "the tyres missed the concrete deck on %d of %d deck ticks" % [band_bad, band_ticks])
+	# every run crosses the joint at the top of each ramp: a thump per axle
+	var p: PlayerCar = game.get("player")
+	var audio: CarAudio = null
+	for c in p.get_children():
+		if c is CarAudio:
+			audio = c
+	_check(audio != null and audio.deck_joint_count >= runs.size() * 2, "%d joint thumps over %d runs (2 per run at least)" % [audio.deck_joint_count if audio != null else -1, runs.size()])
+	print("exits_live: %d joint thumps, %d deck ticks" % [audio.deck_joint_count if audio != null else -1, band_ticks])
 	print("exits_live: %d of %d exits driven, steepest grade driven %.2f %%, %d wall ticks, %d off-deck ticks" % [done_runs, runs.size(), worst_grade * 100.0, wall_hits, off_deck])
 	print("exits_live: %d checks, %d failed" % [checks, fails.size()])
 	quit(1 if not fails.is_empty() else 0)

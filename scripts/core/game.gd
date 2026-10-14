@@ -62,6 +62,7 @@ var traffic: TrafficManager
 ## switch is off.
 var junction: Junction
 var ring_site: Node3D
+var pocket_sites: Array[Node3D] = []
 ## Where the player is off the main road ({} on it): RoadRamps.place_of.
 var off_main := {}
 var game_state: GameState
@@ -107,6 +108,7 @@ const UserDirMigration := preload("res://scripts/save/user_dir_migration.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
 const ColorGrade := preload("res://scripts/world/color_grade.gd")
 const RingSite := preload("res://scripts/world/ring_site.gd")
+const PocketSite := preload("res://scripts/world/pocket_site.gd")
 const RoadRamps := preload("res://scripts/world/road_ramps.gd")
 # The shared test driver and the F9 drive recorder (2026-10-10). `bot` is the
 # driver when the game was started with -- --bot=<mode> / NEON_BOT (watching
@@ -911,6 +913,14 @@ func _shift_origin(shift_chunks: int) -> void:
 		# Now, not at the next transform flush: a stale chunk collider is
 		# invisible on a straight road but lies across a curved one (#37).
 		RoadChunkBuilder.sync_collision(c.root)
+	# The ring and the pockets stand by their own rule: moved now, not in
+	# their next _physics_process, which can run after the car's step, so
+	# the deck would be a kilometre away for one tick (exits_live caught the
+	# wheels in the air for one tick at ring 3, whose centre is a shift point).
+	if ring_site != null:
+		ring_site.call("_place")
+	for site in pocket_sites:
+		site.call("_place")
 	# Traffic (milestone 3): every car gets the same bookkeeping as the player.
 	traffic.shift_world(offset)
 	if police != null:
@@ -1027,6 +1037,15 @@ func _setup_traffic() -> void:
 	RingSite.focus_s = RoadFrame.s_at(RoadFrame.unroll(player.global_position).z)
 	ring_site = RingSite.new()
 	add_child(ring_site)
+	# The pockets at the end of the rings' arms (ramps doc step 7: the Docks
+	# pier), one node each, standing at their ring.
+	for pk in RoadMap.POCKETS:
+		if String(pk.kind) == "street_end":
+			continue   # a street's far end: its first entry's node holds it
+		var site: Node3D = PocketSite.new()
+		site.pocket = pk
+		add_child(site)
+		pocket_sites.append(site)
 
 # ---------- camera ----------
 func _setup_camera() -> void:

@@ -45,6 +45,7 @@ class_name RoadsideKit
 
 const Districts := preload("res://scripts/world/districts.gd")
 const GasStation := preload("res://scripts/world/gas_station.gd")
+const ParkedCars := preload("res://scripts/world/parked_cars.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
 
 const HYDRANT := "hydrant"
@@ -113,6 +114,19 @@ void fragment() {
 """
 static var _flasher_mesh: ArrayMesh
 static var _flasher_mat: ShaderMaterial
+## Parked cars (street life L5, scripts/world/parked_cars.gd): laid out here
+## beside the kit so they never share a slot with a work zone, a crossing,
+## a side-street mouth or a hydrant's painted kerb. One MultiMesh per chunk
+## ("KitCars") and a box each on the metal wall body ("KitColCars").
+const CAR := "car"
+## Bin night (street life L7): one weeknight the houses have their bins out
+## along the kerb, BIN_NIGHT_PER_SIDE per chunk side instead of one at a
+## lamp foot now and then. game.gd sets `bin_night` from the calendar
+## (SeasonCalendar.weekday(night) == BIN_WEEKDAY); NEON_BIN_NIGHT=1 forces it.
+const BIN_WEEKDAY := 1   # Tuesday
+const BIN_NIGHT_DISTRICTS := ["residential", "hillside", "old_town", "lofts"]
+const BIN_NIGHT_PER_SIDE := 4.0
+static var bin_night := OS.get_environment("NEON_BIN_NIGHT") == "1"
 
 ## Shapes (m).
 const HYDRANT_H := 0.75
@@ -379,6 +393,32 @@ static func new_nodes(root: Node3D) -> void:
 	fmmi.visibility_range_end = 220.0
 	fmmi.visible = false
 	root.add_child(fmmi)
+	var cmm := MultiMesh.new()
+	cmm.transform_format = MultiMesh.TRANSFORM_3D
+	cmm.use_custom_data = true
+	cmm.mesh = ParkedCars.mesh()
+	cmm.instance_count = ParkedCars.CAP
+	cmm.visible_instance_count = 0
+	var cmmi := MultiMeshInstance3D.new()
+	cmmi.name = "KitCars"
+	cmmi.multimesh = cmm
+	cmmi.material_override = ParkedCars.material()
+	cmmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	cmmi.visibility_range_end = 220.0
+	cmmi.visible = false
+	root.add_child(cmmi)
+	var cars_body := StaticBody3D.new()
+	cars_body.name = "KitColCars"
+	CarSpec.make_wall(cars_body)
+	cars_body.physics_material_override = RoadBarriers.physics_material(RoadBarriers.GUARDRAIL)
+	cars_body.set_meta(&"audio_surface", "metal")
+	for i in ParkedCars.CAP:
+		var col := CollisionShape3D.new()
+		col.name = "Shape%d" % i
+		col.shape = BoxShape3D.new()
+		col.disabled = true
+		cars_body.add_child(col)
+	root.add_child(cars_body)
 	var metal := StaticBody3D.new()
 	metal.name = "KitColMetal"
 	CarSpec.make_wall(metal)
@@ -410,9 +450,12 @@ static func new_nodes(root: Node3D) -> void:
 ## them); `setback` the district's lot depth behind the sidewalk; `lamps`
 ## the lamp poles' chunk-local z per side; `lots` the empty or set-back
 ## building slots per side as [z, frontage] (from _update_building's infos).
-static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: float, lamps: Dictionary, lots: Dictionary, off: bool = false) -> void:
+## keep_clear: per side, [z_from, z_to] runs (z_from > z_to) no parked car
+## may stand on: side-street mouths, a hydrant's painted kerb, dropped kerbs.
+static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: float, lamps: Dictionary, lots: Dictionary, off: bool = false, keep_clear: Dictionary = {}) -> void:
 	_read_density()
-	var spec: Dictionary = BY_DISTRICT.get(Districts.name_at(chunk_index), BY_DISTRICT["downtown"]).duplicate()
+	var district := Districts.name_at(chunk_index)
+	var spec: Dictionary = BY_DISTRICT.get(district, BY_DISTRICT["downtown"]).duplicate()
 	spec.merge(force, true)
 	if RoadMap.ramp_zone(chunk_index):  # a ring site's ramps stand here
 		for key in spec.keys():
@@ -473,6 +516,17 @@ static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: fl
 				# posts on the kerb, the beam's face at the kerb's inner edge
 				var x: float = _lerp(e.curb_in, tt)
 				placed.append(_rec(RAIL, side, x, 0.0, z, 0.0, seg))
+		# Bin night: a bin per BIN_NIGHT_PER_SIDE along the kerb (street life L7).
+		if bin_night and district in BIN_NIGHT_DISTRICTS and d > 0.0:
+			var n_night := _count(BIN_NIGHT_PER_SIDE * d)
+			for i in n_night:
+				var z := -2.0 - (float(i) + _rng.randf() * 0.6) * (L - 4.0) / maxf(float(n_night), 1.0)
+				if Junction.in_mouth(chunk_index, z) or _taken(taken, z):
+					continue
+				var tt := -z / L
+				var x: float = _lerp(e.curb_out, tt) + BIN_FROM_KERB
+				placed.append(_rec(BIN, side, x, 0.0, z, 0.0, BIN_W))
+				taken.append([z + 0.6, z - 0.6])
 		# Bins at the foot of the lamps.
 		var bins := _count(float(spec.bin) * d)
 		var lamp_zs: Array = lamps[side].duplicate()  # picked with our RNG, never the global one
@@ -513,23 +567,70 @@ static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: fl
 				var tt := -z / L
 				var x: float = _lerp(e.walk, tt) + RoadChunkBuilder.BUILDING_GAP + setback - DUMPSTER_WALL_GAP - DUMPSTER_SIZE.z / 2.0
 				placed.append(_rec(DUMPSTER, side, x, 0.0, z, 0.0, DUMPSTER_SIZE.x))
+	# Parked cars on the shoulder (street life L5): one per SLOT of kerb at
+	# most, clear of everything on this side that is on the shoulder (the
+	# work zone, cones) and of the keep-clear runs.
+	for side in [1, -1]:
+		var e: Dictionary = edges[side]
+		var shoulder: float = minf(_lerp(e.curb_in, 0.0) - _lerp(e.road, 0.0), _lerp(e.curb_in, 1.0) - _lerp(e.road, 1.0))
+		var want := _count(ParkedCars.expected(district, shoulder) * d)
+		if want <= 0:
+			continue
+		var clear: Array = keep_clear.get(side, [])
+		for r in placed:
+			if int(r.side) == side and (String(r.kind) == CONE or String(r.kind) == JERSEY):
+				clear.append([float(r.z) + float(r.len) / 2.0 + 1.0, float(r.z) - float(r.len) / 2.0 - 1.0])
+		var n_slots := int(L / ParkedCars.SLOT)
+		var order := []  # slot order picked with our RNG (Array.shuffle would use the global one)
+		for k in n_slots:
+			order.insert(_rng.randi_range(0, order.size()), k)
+		var got := 0
+		for k in order:
+			if got >= want:
+				break
+			var z := -(float(k) + 0.5) * ParkedCars.SLOT - _rng.randf_range(-0.6, 0.6)
+			var half := ParkedCars.SIZE.z / 2.0
+			if z + half > 0.0 or z - half < -L:
+				continue
+			if Junction.cleared(chunk_index, z + half, z - half):
+				continue
+			var blocked := false
+			for run in clear:
+				if z + half > float(run[1]) and z - half < float(run[0]):
+					blocked = true
+					break
+			if blocked:
+				continue
+			var tt := -z / L
+			var x: float = _lerp(e.curb_in, tt) - ParkedCars.ON_SHOULDER
+			var rec := _rec(CAR, side, x, 0.0, z, 0.0, ParkedCars.SIZE.z)
+			rec["tint"] = _rng.randi_range(0, ParkedCars.TINTS.size() - 1)
+			rec["mode"] = ParkedCars.mode_of(_rng.randi_range(0, 99))
+			rec["phase"] = _rng.randf()
+			placed.append(rec)
+			got += 1
 	# Clamp to the buffers, then write transforms, collision and the record.
 	var counts := {}
 	for kind in KINDS:
 		counts[kind] = 0
+	counts[CAR] = 0
 	var kept: Array = []
 	for r in placed:
 		var kind: String = r.kind
 		# nothing along a gas station's lot or the taper before its entry
 		if GasStation.in_frontage(chunk_index, float(r.z), int(r.side)):
 			continue
-		if int(counts[kind]) >= int(CAP[kind]):
+		if int(counts[kind]) >= int(CAP[kind] if kind != CAR else ParkedCars.CAP):
 			continue
 		counts[kind] = int(counts[kind]) + 1
 		kept.append(r)
 	var n := {}
 	for kind in KINDS:
 		n[kind] = 0
+	n[CAR] = 0
+	var cars_mmi := root.get_node(^"KitCars") as MultiMeshInstance3D
+	var cars: MultiMesh = cars_mmi.multimesh
+	var cars_body := root.get_node(^"KitColCars") as StaticBody3D
 	var metal := root.get_node(^"KitColMetal") as StaticBody3D
 	var concrete := root.get_node(^"KitColConcrete") as StaticBody3D
 	var n_metal := 0
@@ -540,7 +641,7 @@ static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: fl
 	for r in kept:
 		var kind: String = r.kind
 		var side := float(r.side)
-		var mm: MultiMesh = (root.get_node(NodePath(_mmi_name(kind))) as MultiMeshInstance3D).multimesh
+		var mm: MultiMesh = cars if kind == CAR else (root.get_node(NodePath(_mmi_name(kind))) as MultiMeshInstance3D).multimesh
 		# The mesh's +x is "away from the road"; on the own side that is +x
 		# already, on the oncoming side the piece is turned round.
 		var turn := Basis() if side > 0.0 else Basis(Vector3.UP, PI)
@@ -561,6 +662,13 @@ static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: fl
 				col.transform = RoadChunkBuilder._xf_up(float(r.x) * side, (DUMPSTER_SIZE.y - f) / 2.0, float(r.z))
 				col.disabled = false
 				n_metal += 1
+			CAR:
+				var ci := int(n[kind]) - 1
+				cars.set_instance_custom_data(ci, ParkedCars.custom(int(r.tint), int(r.mode), float(r.phase)))
+				var col := cars_body.get_node(NodePath("Shape%d" % ci)) as CollisionShape3D
+				(col.shape as BoxShape3D).size = Vector3(ParkedCars.SIZE.x, ParkedCars.SIZE.y + f, ParkedCars.SIZE.z)
+				col.transform = RoadChunkBuilder._xf_up(float(r.x) * side, (ParkedCars.SIZE.y - f) / 2.0, float(r.z))
+				col.disabled = false
 			JERSEY:
 				var col := concrete.get_node(NodePath("Shape%d" % n_concrete)) as CollisionShape3D
 				(col.shape as BoxShape3D).size = Vector3(COL_JERSEY.x, COL_JERSEY.y + f, JERSEY_LEN)
@@ -576,7 +684,7 @@ static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: fl
 					n_flash += 1
 	# unused shapes are switched off and put back at the origin, so a pooled
 	# chunk holds the same state whatever chunk it was before
-	for body_n in [[metal, n_metal], [concrete, n_concrete]]:
+	for body_n in [[metal, n_metal], [concrete, n_concrete], [cars_body, int(n[CAR])]]:
 		var body: StaticBody3D = body_n[0]
 		for i in range(int(body_n[1]), body.get_child_count()):
 			var col := body.get_child(i) as CollisionShape3D
@@ -587,6 +695,8 @@ static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: fl
 		var mmi := root.get_node(NodePath(_mmi_name(kind))) as MultiMeshInstance3D
 		mmi.multimesh.visible_instance_count = int(n[kind])
 		mmi.visible = int(n[kind]) > 0
+	cars.visible_instance_count = int(n[CAR])
+	cars_mmi.visible = int(n[CAR]) > 0
 	flashers.visible_instance_count = n_flash
 	flashers_mmi.visible = n_flash > 0
 	root.set_meta("kit", kept)

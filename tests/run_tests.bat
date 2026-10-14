@@ -340,6 +340,7 @@ call :run world/barrier_hit "--headless --fixed-fps 120"
 rem Lamp-post life (world step 2): moths and a bat, banners, steam, litter. Placement, caps, meshes and the wind number; chunk instances are checked when a window is open.
 call :run world/lamp_life --headless
 call :run world/street_life --headless
+call :run world/street_life2 --headless
 call :run world/graffiti --headless
 rem Better world, first batch (B1-B4, B8): 8-look loop, every district kind on its own rows, moths and banners on every lamp shape, worn paint shares, fog and mist.
 call :run world/better_world --headless
@@ -577,6 +578,7 @@ call :run world/graffiti --headless
 call :run world/kerb_profile --headless
 call :run world/lamp_life --headless
 call :run world/street_life --headless
+call :run world/street_life2 --headless
 call :run world/better_world --headless
 call :run world/names --headless
 call :run world/sidewalk_collision_taper --headless

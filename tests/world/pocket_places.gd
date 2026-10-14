@@ -12,11 +12,11 @@ extends SceneTree
 # layout; the exit gantries' words are in the atlas; the arms' grades; the
 # parking deck's two levels and ramp read right from deck_y_near.
 #
-# Driven, on the curved, hilly loop: a bot takes exit 3b from the -1
-# carriageway, a quarter round the ring, out the -1 spur, down the arm into
-# the diner's lot, round it and back up to the spur; then exit 3a the same
-# way from the +1 carriageway into the truck stop; then exit 1b into the
-# parking deck, up its ramp, round the roof and back down. On each it is
+# Driven, on the curved, hilly loop, every pocket in turn (Roy 1566: a
+# change reaches everything it touches, and the test loops over them): a
+# bot takes the exit on the pocket's side, a lap of the ring, out the spur,
+# down the arm into the lot, round it and back up to the spur (the parking
+# deck: up its ramp, round the roof and back down). On each it is
 # "off the main road" as part "pocket" on that side, on the deck (the
 # level nearest the car at the parking deck), never rescued; a save taken
 # in each lot names the ring and the side.
@@ -103,8 +103,10 @@ func _static() -> void:
 	var truck := _pk("truck")
 	var diner := _pk("diner")
 	_check(not truck.is_empty() and not diner.is_empty() and int(truck.side) == 1 and int(diner.side) == -1, "the truck stop and the diner are not on opposite sides of exit 3: %s / %s" % [truck, diner])
-	# every pocket's arm is driveable
+	# every pocket's arm is driveable (the streets have their own test)
 	for pk in RoadMap.POCKETS:
+		if RoadMap.is_street(pk):
+			continue
 		_check(PocketSite.max_grade(pk) < 0.065, "%s: the arm's grade is %.3f" % [pk.id, PocketSite.max_grade(pk)])
 		_check(PocketSite.reach_v(pk) <= float(RoadMap.POCKET_CHUNKS) * L, "%s reaches %.0f m, past the %d pinned chunks" % [pk.id, PocketSite.reach_v(pk), RoadMap.POCKET_CHUNKS])
 		_check(PocketSite.LOT_X1 < 100.0, "the lot reaches %.0f m out (RoadFrame.unroll stops at 100)" % PocketSite.LOT_X1)
@@ -112,7 +114,7 @@ func _static() -> void:
 	var words: Array = PlaceNames.atlas_words()
 	for pk in RoadMap.POCKETS:
 		_check(words.has(String(pk.word)), "the atlas has no layer for '%s'" % pk.word)
-	_check(words.size() <= 56, "the atlas has %d words" % words.size())
+	_check(words.size() <= 60, "the atlas has %d words" % words.size())
 	# the parking deck's levels: the floor, the ramp, the roof, the landing
 	var deck := _pk("deck")
 	var dv0: float = PocketSite.ARC_R + PocketSite.ARM_STRAIGHT
@@ -127,6 +129,8 @@ func _static() -> void:
 	_check(ramp_grade < 0.065, "the deck's ramp climbs at %.3f" % ramp_grade)
 	# every pocket builds on its own side, right-handed, within the pool capacity
 	for pk in RoadMap.POCKETS:
+		if RoadMap.is_street(pk):
+			continue
 		var made: Dictionary = PocketSite.build(pk)
 		var sgn := float(pk.side)
 		var verts: PackedVector3Array = (made.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
@@ -255,12 +259,18 @@ func _line(pk: Dictionary) -> Array[Vector3]:
 			Vector2(78.0, v0 + 14.0 * turn), Vector2(82.0, v0 + 40.0 * turn), Vector2(82.0, v0 + (top + 2.5) * turn), Vector2(rx, v0 + (top + 3.0) * turn),
 			Vector2(rx, v0 + (top - 2.0) * turn), Vector2(rx, v0 + 12.0 * turn), Vector2(mouth + 5.0, v0 + 2.0 * turn), Vector2(mouth, v0)]
 	else:
-		# round the lot along its road-side drive lane and back along the far end
-		var inner := PocketSite.LOT_X0 + 7.0
-		var outer := PocketSite.LOT_X1 - 10.0 if String(pk.kind) == "truck" else PocketSite.LOT_X1 - 12.0
-		var far := v0 + (len - 8.0) * turn
-		lot = [Vector2(mouth, v0 + 10.0 * turn), Vector2(inner, v0 + 24.0 * turn), Vector2(inner, far),
-			Vector2(outer, far), Vector2(outer, v0 + 60.0 * turn), Vector2(mouth, v0 + 10.0 * turn), Vector2(mouth, v0)]
+		# round the lot along its road-side drive lane and back along the far
+		# end: [inner x, in at v, far v, outer x, back out at v] per kind, between
+		# what stands in each lot (the pier's cranes, the laundromat's block, the
+		# salvage yard's mast, stacks and crane, the lay-by's shelter and cop)
+		var lanes: Dictionary = {
+			"truck": [65.0, 24.0, len - 8.0, 86.0, 60.0], "diner": [65.0, 24.0, len - 8.0, 84.0, 60.0],
+			"pier": [72.0, 30.0, len - 12.0, 84.0, 30.0], "laundry": [65.5, 20.0, len - 4.5, 89.5, 60.0],
+			"salvage": [70.0, 12.0, 78.0, 86.5, 16.0], "layby": [65.0, 16.0, len - 8.0, 84.0, 24.0]}
+		var ln: Array = lanes.get(String(pk.kind), [65.0, 24.0, len - 8.0, 84.0, 60.0])
+		var far := v0 + float(ln[2]) * turn
+		lot = [Vector2(mouth, v0 + 10.0 * turn), Vector2(ln[0], v0 + float(ln[1]) * turn), Vector2(ln[0], far),
+			Vector2(ln[3], far), Vector2(ln[3], v0 + float(ln[4]) * turn), Vector2(mouth, v0 + 10.0 * turn), Vector2(mouth, v0)]
 	for i in lot.size() - 1:
 		var n := ceili(lot[i].distance_to(lot[i + 1]) / 2.0)
 		for j in n:
@@ -384,8 +394,16 @@ func _physics_process(_delta: float) -> bool:
 			for c in game.get_children():
 				if String(c.name).begins_with("Pocket_"):
 					nodes += 1
-			_check(nodes == RoadMap.POCKETS.size(), "%d pocket nodes for %d pockets" % [nodes, RoadMap.POCKETS.size()])
-			runs = [_pk("diner"), _pk("truck"), _pk("deck")]
+			var want_nodes := 0
+			for pk in RoadMap.POCKETS:
+				if String(pk.kind) != "street_end":
+					want_nodes += 1
+			_check(nodes == want_nodes, "%d pocket nodes for %d pockets" % [nodes, want_nodes])
+			# every pocket but the streets (tests/world/streets.gd drives those)
+			runs = []
+			for pk in RoadMap.POCKETS:
+				if not RoadMap.is_street(pk):
+					runs.append(pk)
 			# NEON_POCKET_ONLY=deck drives one of them (debugging)
 			var only := OS.get_environment("NEON_POCKET_ONLY")
 			if only != "":

@@ -118,7 +118,7 @@ static func mouths_at(chunk_index: int) -> Array:
 			continue
 		# nor across a pocket's arm or lot (PocketSite; a 60 m street reaches
 		# the arm's lane 80 m out)
-		if RoadRamps.pocket_bound(chunk_index, side) > 0.0:
+		if RoadRamps.pocket_bound(chunk_index, side) > 0.0 or RoadRamps.street_bound(chunk_index, side) > 0.0:
 			continue
 		# nor through the run's landmark (world step 1 pins it to one slot)
 		if Districts.landmark_at(chunk_index, slot * 2 + (0 if side == 1 else 1)) != "":

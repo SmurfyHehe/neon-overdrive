@@ -216,7 +216,8 @@ func _chunks() -> void:
 			_check(want.verts > 0 and want.faces > 0 and want.boxes > 0, "ramp chunk %d (k %d) is missing parts: %s" % [c, k, want])
 			_check(want.buildings == 0, "ramp chunk %d (k %d) still has %d buildings" % [c, k, want.buildings])
 			# a pocket's lot pushes its side's wall out further than the ramp
-			var want_b := Vector2(maxf(RoadRamps.bound(c), RoadRamps.pocket_bound(c, 1)), maxf(RoadRamps.bound(c), RoadRamps.pocket_bound(c, -1)))
+			var want_b := Vector2(maxf(maxf(RoadRamps.bound(c), RoadRamps.pocket_bound(c, 1)), RoadRamps.street_bound(c, 1)),
+				maxf(maxf(RoadRamps.bound(c), RoadRamps.pocket_bound(c, -1)), RoadRamps.street_bound(c, -1)))
 			_check(want.bounds == want_b, "ramp chunk %d: walls at %s, expected %s" % [c, want.bounds, want_b])
 		else:
 			_check(want.faces == 0 and want.boxes == 0, "slip-lane chunk %d (k %d) has ramp collision" % [c, k])

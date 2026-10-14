@@ -119,7 +119,7 @@ func _static() -> void:
 	_check(is_inf(PocketSite.deck_y(pk_of(), 10.0, -100.0)), "deck_y off the pocket is %s" % PocketSite.deck_y(pk_of(), 10.0, -100.0))
 	# the atlas has the pocket's word, within the texture array's cap
 	var words: Array = PlaceNames.atlas_words()
-	_check(words.has("PIER") and words.size() <= 56, "the atlas has %d words, PIER %s" % [words.size(), words.has("PIER")])
+	_check(words.has("PIER") and words.size() <= 60, "the atlas has %d words, PIER %s" % [words.size(), words.has("PIER")])
 
 func pk_of() -> Dictionary:
 	if pk.is_empty():
@@ -269,7 +269,7 @@ func _physics_process(_delta: float) -> bool:
 		0:
 			_check(RoadMap.is_loop(), "no loop")
 			_check(String(RoadMap.rings()[SITE].id) == "x5" and RoadMap.pocket_of_ring(SITE).get("id") == "pier", "ring %d is %s, pocket %s" % [SITE, RoadMap.rings()[SITE].id, RoadMap.pocket_of_ring(SITE)])
-			_check(RoadMap.pocket_at(SITE, -1).is_empty() and RoadMap.pockets_of_ring(SITE).size() == 1, "ring %d has %d pockets, -1 side %s" % [SITE, RoadMap.pockets_of_ring(SITE).size(), RoadMap.pocket_at(SITE, -1)])
+			_check(RoadMap.pocket_at(SITE, -1).get("kind") == "street_end" and RoadMap.pockets_of_ring(SITE).size() == 2, "ring %d has %d pockets, -1 side %s" % [SITE, RoadMap.pockets_of_ring(SITE).size(), RoadMap.pocket_at(SITE, -1)])
 			site_s = float(RoadMap.rings()[SITE].s)
 			var rc := floori(site_s / L)
 			# the wall stands out past the pocket on its side only, along its reach
@@ -278,7 +278,7 @@ func _physics_process(_delta: float) -> bool:
 			_check(RoadMap.pins()[RoadMap.lap_chunk(rc + 5)] == RoadMap.PIN_STRAIGHT, "chunk 5 past the ring is not pinned straight")
 			# the ring's spur is open at its end: no nose box at SPUR_END
 			var look: Dictionary = RingSite.look_of(SITE)
-			_check(String(look.pocket) == "pier" and int(look.spur) == 1, "the ring's look: %s" % [look])
+			_check(String(look.pocket).begins_with("pier") and int(look.spur) == 1 and (look.pocket_sides as Array).has(1), "the ring's look: %s" % [look])
 			path = _line()
 			path_i = 0
 			_stand(p, RoadFrame.pose(path[0].x, 0.45, _z_of(path[0].y), 0.0))

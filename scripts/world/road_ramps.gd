@@ -175,6 +175,9 @@ static var _side := 1.0
 ## RingSite lays the ring out with the same tools in its own flat space
 ## (x across, y up, -z the way the chunks count) instead of a chunk's frame.
 static var _flat := false
+## Added to v in flat space (PocketSite lays a street's far arm out with the
+## arm's own code, shifted to the far ring).
+static var flat_v_off := 0.0
 
 static func begin_flat() -> void:
 	_verts = PackedVector3Array()
@@ -188,10 +191,12 @@ static func begin_flat() -> void:
 	_lam = 1.0
 	_side = 1.0
 	_flat = true
+	flat_v_off = 0.0
 
 ## What was laid out since begin_flat(): {arrays, faces, boxes, pools}.
 static func end_flat() -> Dictionary:
 	_flat = false
+	flat_v_off = 0.0
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = _verts
@@ -318,9 +323,41 @@ static func pocket_bound(chunk_index: int, side: int) -> float:
 	var b := float(k + 1) * L * float(pk.turn)
 	var lo := minf(a, b)
 	var hi := maxf(a, b)
-	if hi < -5.0 or lo > float(ps.reach_v(pk)):
+	if hi < -5.0 or lo >= float(ps.clear_v(pk)):
 		return 0.0
 	return float(ps.BOUND)
+
+## A service street (PocketSite kind "street") along `side` of this chunk:
+## the chunk's bounds (OffMapRescue) reach out to PocketSite.STREET_BOUND
+## there, while the out-of-bounds wall and the buildings stay where they
+## are: the street runs behind them, walled by its own kit. 0 where none.
+static func street_bound(chunk_index: int, side: int) -> float:
+	if not enabled or not ring or not RoadMap.is_loop():
+		return 0.0
+	var r := RoadMap.ring_at(chunk_index)
+	if r < 0:
+		return 0.0
+	var pk := RoadMap.pocket_at(r, side)
+	if pk.is_empty() or not RoadMap.is_street(pk):
+		return 0.0
+	var ps := pocket_site()
+	var k := RoadMap.ring_k(chunk_index)
+	var a := float(k) * L * float(pk.turn)
+	var b := float(k + 1) * L * float(pk.turn)
+	if maxf(a, b) < float(ps.STREET_V0) - 5.0 or minf(a, b) > float(ps.reach_v(pk)):
+		return 0.0
+	return float(ps.STREET_BOUND)
+
+## Where a street's lane crosses the start of this chunk on `side`: the x
+## range (out on that side) the boundary step wall leaves open there, or
+## Vector2.ZERO where no street runs across it.
+static func street_gap(chunk_index: int, side: int) -> Vector2:
+	if street_bound(chunk_index, side) <= 0.0 or street_bound(chunk_index - 1, side) <= 0.0:
+		return Vector2.ZERO
+	var r := RoadMap.ring_at(chunk_index)
+	var pk := RoadMap.pocket_at(r, side)
+	var v := float(RoadMap.ring_k(chunk_index)) * L
+	return pocket_site().lane_gap(pk, v)
 
 ## Where a point of a site is in road space: x metres out on `side` (+1 the
 ## carriageway driven the way the chunks count), `u` metres along the road
@@ -621,7 +658,7 @@ static func _write(root: Node3D, on: bool) -> void:
 ## Chunk-local point for (x out on this side, y up, v from the ring's centre).
 static func _p(x: float, y: float, v: float) -> Vector3:
 	if _flat:
-		return Vector3(x, y, -v)
+		return Vector3(x, y, -(v + flat_v_off))
 	return RoadChunkBuilder._at(_side * x, y, float(_k) * L - _lam * v)
 
 ## A triangle seen from the `want` side (chunk-local direction).

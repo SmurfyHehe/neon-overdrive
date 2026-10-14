@@ -1630,20 +1630,35 @@ static func _new_step(body_name: String) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = body_name
 	CarSpec.make_wall(body)
-	var col := CollisionShape3D.new()
-	col.name = "Shape"
-	col.shape = BoxShape3D.new()
-	body.add_child(col)
+	for shape_name in ["Shape", "Shape2"]:
+		var col := CollisionShape3D.new()
+		col.name = shape_name
+		col.shape = BoxShape3D.new()
+		body.add_child(col)
 	return body
 
-static func _update_step(root: Node3D, body_name: String, xs: Vector2, side: int, on: bool) -> void:
+## The step wall across [xs.x, xs.y] at the chunk's start. With `gap` (an x
+## range, out on this side) the wall is two pieces either side of it: a
+## service street's lane (PocketSite, RoadRamps.street_gap) runs through.
+static func _update_step(root: Node3D, body_name: String, xs: Vector2, side: int, on: bool, gap: Vector2 = Vector2.ZERO) -> void:
 	var body: StaticBody3D = root.get_node(NodePath(body_name))
-	var col: CollisionShape3D = body.get_node(^"Shape")
-	col.disabled = not on
 	var x0 := minf(xs.x, xs.y)
 	var x1 := maxf(xs.x, xs.y) + BOUNDARY_T
-	(col.shape as BoxShape3D).size = Vector3(maxf(x1 - x0, 0.1), BOUNDARY_H, BOUNDARY_T)
-	body.transform = _xf_up((x0 + x1) / 2.0 * float(side), BOUNDARY_H / 2.0, -BOUNDARY_T / 2.0)
+	var centre := (x0 + x1) / 2.0
+	body.transform = _xf_up(centre * float(side), BOUNDARY_H / 2.0, -BOUNDARY_T / 2.0)
+	var pieces: Array = [[x0, x1]]
+	if on and gap != Vector2.ZERO and gap.x > x0 and gap.y < x1:
+		pieces = [[x0, gap.x], [gap.y, x1]]
+	for i in 2:
+		var col: CollisionShape3D = body.get_node(^"Shape" if i == 0 else ^"Shape2")
+		if not on or i >= pieces.size():
+			col.disabled = true
+			continue
+		var a: float = pieces[i][0]
+		var b: float = pieces[i][1]
+		col.disabled = false
+		(col.shape as BoxShape3D).size = Vector3(maxf(b - a, 0.1), BOUNDARY_H, BOUNDARY_T)
+		col.transform = Transform3D(Basis.IDENTITY, Vector3(((a + b) / 2.0 - centre) * float(side), 0.0, 0.0))
 	body.set_meta("step", on)
 
 # ---------- buildings (reused nodes) ----------
@@ -2318,6 +2333,12 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var pocket_onc_prev := RoadRamps.pocket_bound(chunk_index - 1, -1)
 	bound_own = maxf(bound_own, pocket_own)
 	bound_onc = maxf(bound_onc, pocket_onc)
+	# A service street (PocketSite kind "street") behind this side's buildings:
+	# the wall and the buildings stay, the chunk's bounds reach out past the
+	# street (its own kit walls it), and the step wall where the arm's cleared
+	# chunks end leaves its lane open.
+	var street_own := RoadRamps.street_bound(chunk_index, 1)
+	var street_onc := RoadRamps.street_bound(chunk_index, -1)
 	# A tunnel and its trench (TN1): the walls stand at the road's edge, where
 	# the kerb would be, and they are the out-of-bounds walls.
 	var dip := RoadMap.dip_at(chunk_index)
@@ -2335,7 +2356,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var lot_onc := maxf(start_onc_w, end_onc_w) + GasStation.LOT_DEPTH if not is_inf(GasStation.lot_centre(chunk_index, -1)) else 0.0
 	_update_boundary(root, "BoundaryOwn", bound_own, 1, chunk_index, lot_own)
 	_update_boundary(root, "BoundaryOnc", bound_onc, -1, chunk_index, lot_onc)
-	root.set_meta(&"bounds", Vector2(maxf(bound_own, lot_own), maxf(bound_onc, lot_onc)))
+	root.set_meta(&"bounds", Vector2(maxf(maxf(bound_own, lot_own), street_own), maxf(maxf(bound_onc, lot_onc), street_onc)))
 	# Where the setback changes from the previous chunk, a cross wall at this
 	# chunk's start closes the step between the two boundary lines, so the
 	# deeper lot does not open behind the shallower chunk's wall.
@@ -2353,8 +2374,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# would stand across the lot's yard, and the lot's own walls close it.
 	var stepped_own := stepped and is_inf(GasStation.lot_centre(chunk_index, 1)) and is_inf(GasStation.lot_centre(chunk_index - 1, 1))
 	var stepped_onc := stepped and is_inf(GasStation.lot_centre(chunk_index, -1)) and is_inf(GasStation.lot_centre(chunk_index - 1, -1))
-	_update_step(root, "BoundaryStepOwn", step_own, 1, stepped_own)
-	_update_step(root, "BoundaryStepOnc", step_onc, -1, stepped_onc)
+	_update_step(root, "BoundaryStepOwn", step_own, 1, stepped_own, RoadRamps.street_gap(chunk_index, 1))
+	_update_step(root, "BoundaryStepOnc", step_onc, -1, stepped_onc, RoadRamps.street_gap(chunk_index, -1))
 	_update_road_collision(root, maxf(maxf(maxf(bound_own, bound_onc), maxf(lot_own, lot_onc)),
 		maxf(start_own_walk, start_onc_walk) + BUILDING_GAP + setback) + BOUNDARY_T + ROAD_COL_MARGIN)
 	# From here on, upright things outside the trench stand at street height.

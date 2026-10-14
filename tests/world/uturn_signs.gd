@@ -124,7 +124,7 @@ func _signs() -> void:
 	# 48 since the exit gantries (ring sites): "EXIT 1" .. "EXIT 16", "SERVICES"
 	# and "1 km" joined the lettering (a layer is 512 x 64 px). The bridge
 	# plates (#645) swapped "1 km" for "600 m" and "1400 m".
-	_check(WordAtlas.layer_count() <= 56, "the atlas has %d layers (56 max: 48 plus a layer per pocket word)" % WordAtlas.layer_count())
+	_check(WordAtlas.layer_count() <= 60, "the atlas has %d layers (60 max: 48 plus a layer per pocket and street word)" % WordAtlas.layer_count())
 
 func _paint() -> void:
 	var n := RoadMap.period

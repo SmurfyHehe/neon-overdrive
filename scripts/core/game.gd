@@ -1040,6 +1040,8 @@ func _setup_traffic() -> void:
 	# The pockets at the end of the rings' arms (ramps doc step 7: the Docks
 	# pier), one node each, standing at their ring.
 	for pk in RoadMap.POCKETS:
+		if String(pk.kind) == "street_end":
+			continue   # a street's far end: its first entry's node holds it
 		var site: Node3D = PocketSite.new()
 		site.pocket = pk
 		add_child(site)

@@ -75,7 +75,7 @@ func _atlas() -> void:
 	# "1400 m".
 	# 56 since the pockets (ramps doc steps 7, 8, 12): a layer per place the
 	# exit gantries lead to ("PIER", "TRUCK STOP", "DINER", ...); 128 KB each.
-	_check(WordAtlas.layer_count() <= 56, "atlas has %d layers (56 max)" % WordAtlas.layer_count())
+	_check(WordAtlas.layer_count() <= 60, "atlas has %d layers (60 max)" % WordAtlas.layer_count())
 	for w in words:
 		var l := WordAtlas.layer(w)
 		_check(l >= 0, "word '%s' has no atlas layer" % w)

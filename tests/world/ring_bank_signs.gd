@@ -36,7 +36,7 @@ const OUTSIDE_LANE_EDGE := 13.2   # RoadRamps.X_LANE: the carriageway's outer ed
 const BANK_TOL := 0.001
 const SEAM_TOL := 0.01
 const DIST_TOL := 50.0
-const ATLAS_MAX := 56   # 48 plus a layer per pocket word (ramps doc steps 7, 8, 12)
+const ATLAS_MAX := 60   # 48 plus a layer per pocket and street word (ramps doc steps 7, 8, 9, 11, 12)
 
 var fails: Array[String] = []
 var checks := 0

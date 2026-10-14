@@ -406,6 +406,7 @@ call :run traffic/more_alive_traffic "--headless --fixed-fps 120"
 	call :run world/pocket_pier "--headless --fixed-fps 60"
 	rem ~2 min: the truck stop and the diner (ramps doc step 8): both sides of ring 3, the mirrored kit, drives into both.
 	call :run world/pocket_places "--headless --fixed-fps 60"
+	call :run world/streets "--headless --fixed-fps 60"
 	rem ~3 min: the road both ways: 2 km out, 3 km back across the lap seam, ten turns; road under the car every tick, no chunk rebuilt in view.
 	call :run world/two_way_drive "--headless --fixed-fps 60"
 	call :run traffic/traffic_perf "--headless --fixed-fps 120"

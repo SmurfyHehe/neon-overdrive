@@ -176,6 +176,8 @@ const RAMP_CHUNKS := 4
 ## How many chunks a pocket reaches along the road from its ring's chunk,
 ## the way its arm turns (PocketSite: the arm and the longest lot, 260 m).
 const POCKET_CHUNKS := 6
+## A street's end: the chunks its arm lies along before its ring's centre.
+const STREET_ARM_CHUNKS := 3
 ## Chunks of slip lane beyond those, and how many of them it opens over.
 const AUX_CHUNKS := 4
 const AUX_TAPER := 2
@@ -302,7 +304,7 @@ static func use(id: int, act_value: int = 1) -> void:
 		# a pocket's arm and lot (PocketSite) lie in the ring's flat frame along
 		# the road: the chunks it reaches along stay straight and level too
 		for pk in pockets_of_ring(ri):
-			for k in (range(0, POCKET_CHUNKS) if int(pk.turn) > 0 else range(-POCKET_CHUNKS, 0)):
+			for k in pocket_chunks(pk):
 				_pins[posmod(rc + k, period)] = PIN_STRAIGHT
 		for side in [1, -1]:
 			_exits.append({"id": "%s%s" % [r.id, "a" if side > 0 else "b"], "s": float(r.s) - float(side) * RING_GORE,
@@ -316,6 +318,15 @@ static func use(id: int, act_value: int = 1) -> void:
 			if not _exit_signs.has(at):
 				_exit_signs[at] = []
 			_exit_signs[at].append({"side": side, "ring": ri})
+	# a pocket's arm and lot (PocketSite) lie in the ring's flat frame along
+	# the road, and a street's lane runs on in it to the next ring: the
+	# chunks they reach along stay straight and level too (after every ring
+	# is in, since a street's span reads the next ring's s)
+	for ri in _rings.size():
+		var rc := floori(float(_rings[ri].s) / L)
+		for pk in pockets_of_ring(ri):
+			for k in pocket_chunks(pk):
+				_pins[posmod(rc + k, period)] = PIN_STRAIGHT
 	for n in ds.size():
 		var gs := float(_starts[n]) * L + GAP_INSET
 		var clear := true
@@ -644,15 +655,74 @@ static func _own_spur_side(ring: int) -> int:
 ## "truck", "diner"), `word` what the exit gantry says it leads to (an atlas
 ## layer each, PlaceNames.atlas_words). One pocket per ring and side at most.
 ## The arms bend away from the fuel stations (STOPS) and the gores.
+##
+## Service streets (steps 9 and 11) are pockets with two arms: kind "street"
+## hangs off the ring it starts at and runs behind the highway's buildings
+## to the ring `to` (always the next ring the way the chunks count, turn 1),
+## where a kind "street_end" entry `of` it holds that ring's spur, bound and
+## gantry word; the street's node is the first entry's. `street` names its
+## look: "shop" (Shop Street, downtown backs), "diesel" (Diesel Row, dead
+## straight between warehouses), "lanes" (the container lanes, a lane that
+## winds between container stacks). The lay-by sits at x8a so the container
+## lanes get both sides of exit 7b and 8b (Fuel 7A stands on 7a's stretch).
 const POCKETS := [
+	{"id": "shop_st", "road": 0, "ring": "x1", "side": 1, "turn": 1, "kind": "street", "street": "shop", "to": "x2", "word": "SHOP"},
 	{"id": "deck", "road": 0, "ring": "x1", "side": -1, "turn": 1, "kind": "deck", "word": "PARKING"},
+	{"id": "shop_st_end", "road": 0, "ring": "x2", "side": 1, "turn": -1, "kind": "street_end", "street": "shop", "of": "shop_st", "word": "SHOP"},
 	{"id": "laundry", "road": 0, "ring": "x2", "side": -1, "turn": -1, "kind": "laundry", "word": "LAUNDRY"},
 	{"id": "truck", "road": 0, "ring": "x3", "side": 1, "turn": 1, "kind": "truck", "word": "TRUCK STOP"},
 	{"id": "diner", "road": 0, "ring": "x3", "side": -1, "turn": -1, "kind": "diner", "word": "DINER"},
 	{"id": "salvage", "road": 0, "ring": "x4", "side": 1, "turn": 1, "kind": "salvage", "word": "SALVAGE"},
+	{"id": "diesel", "road": 0, "ring": "x4", "side": -1, "turn": 1, "kind": "street", "street": "diesel", "to": "x5", "word": "DIESEL ROW"},
 	{"id": "pier", "road": 0, "ring": "x5", "side": 1, "turn": 1, "kind": "pier", "word": "PIER"},
-	{"id": "layby", "road": 0, "ring": "x7", "side": -1, "turn": 1, "kind": "layby", "word": "LAY-BY"},
+	{"id": "diesel_end", "road": 0, "ring": "x5", "side": -1, "turn": -1, "kind": "street_end", "street": "diesel", "of": "diesel", "word": "DIESEL ROW"},
+	{"id": "lanes", "road": 0, "ring": "x7", "side": -1, "turn": 1, "kind": "street", "street": "lanes", "to": "x8", "word": "CONTAINERS"},
+	{"id": "layby", "road": 0, "ring": "x8", "side": 1, "turn": -1, "kind": "layby", "word": "LAY-BY"},
+	{"id": "lanes_end", "road": 0, "ring": "x8", "side": -1, "turn": -1, "kind": "street_end", "street": "lanes", "of": "lanes", "word": "CONTAINERS"},
 ]
+
+## Whether a pocket entry is a service street's start or end.
+static func is_street(pk: Dictionary) -> bool:
+	var k := String(pk.get("kind", ""))
+	return k == "street" or k == "street_end"
+
+## A street's first entry (the one with the node and the geometry) for either
+## of its entries; the entry itself for any other pocket.
+static func street_main(pk: Dictionary) -> Dictionary:
+	if String(pk.get("kind", "")) != "street_end":
+		return pk
+	for other in POCKETS:
+		if String(other.id) == String(pk.of):
+			return other
+	return pk
+
+## How far a street runs from its first ring's centre to its last's, m (0 for
+## any other pocket).
+static func pocket_span(pk: Dictionary) -> float:
+	var main := street_main(pk)
+	if String(main.get("kind", "")) != "street":
+		return 0.0
+	var a := _ring_s(String(main.ring))
+	var b := _ring_s(String(main.to))
+	return b - a if a >= 0.0 and b > a else 0.0
+
+static func _ring_s(id: String) -> float:
+	for r in _rings:
+		if String(r.id) == id:
+			return float(r.s)
+	return -1.0
+
+## The chunks (offsets k from the ring's own chunk) a pocket's arm and lot lie
+## along, which stay straight and level: POCKET_CHUNKS the arm's way for a
+## pocket, the whole stretch to the next ring for a street, the three chunks
+## of its arm for a street's end.
+static func pocket_chunks(pk: Dictionary) -> Array:
+	match String(pk.get("kind", "")):
+		"street":
+			return range(0, maxi(ceili(pocket_span(pk) / L), POCKET_CHUNKS))
+		"street_end":
+			return range(-STREET_ARM_CHUNKS, 0)
+	return range(0, POCKET_CHUNKS) if int(pk.turn) > 0 else range(-POCKET_CHUNKS, 0)
 
 ## The pockets hanging off this ring on this road (0, 1 or 2).
 static func pockets_of_ring(ring: int) -> Array:

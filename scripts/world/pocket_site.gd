@@ -34,9 +34,28 @@ extends Node3D
 #   salvage the salvage yard (x4a): a chain gate, crushed cars stacked
 #          three high, a mobile crane, one floodlight on a mast, puddles,
 #          sparks from a welder behind a wall.
-#   layby  the lay-by (x7b): a short lit bay with a bus shelter and a cop
+#   layby  the lay-by (x8a): a short lit bay with a bus shelter and a cop
 #          car parked with its lights off; the dark pocket behind the
 #          shelter's wall.
+#   street a service street (steps 9 and 11): two arms, one off each of two
+#          neighbouring rings, and a two-lane LANE between them that runs
+#          behind the highway's buildings (STREET_X out, pavements both
+#          sides), so an exit takes you somewhere and brings you back to the
+#          highway at the next one. Its look is the entry's `street`:
+#            shop   Shop Street (x1a to x2a): downtown backs, a brick wall
+#                   with roller doors, fire escapes, bins, a corner bar's
+#                   amber window, one lamp flickering, parked cars, and The
+#                   Shop's door half open with the light on, halfway along.
+#            diesel Diesel Row (x4b to x5b): dead straight between
+#                   warehouses, loading doors, sodium wall lights, bollards;
+#                   a painted start line with a light tree and a finish line:
+#                   the drag strip.
+#            lanes  the container lanes (x7b to x8b): the lane winds left
+#                   and right between walls of stacked containers, under
+#                   three gantry cranes whose legs stand at the kerb and
+#                   whose floodlights light the lane.
+#          The far ring's entry is kind "street_end": no node, it only holds
+#          that ring's spur, bound and gantry word (RoadMap.street_main).
 #
 # A pocket on side -1 is laid out as if on side +1 and mirrored (_mirror).
 #
@@ -96,10 +115,27 @@ const DECK_RAMP_V := Vector2(4.0, 64.0)
 ## The out-of-bounds wall stands this far out along the pocket, and the
 ## pocket's footprint along the road (for place_of and the builder).
 const BOUND := 130.0
+## A service street: the lane's centre line out from the road (where the
+## arms end), its half width, the pavements', where the lane starts from
+## each ring's centre, the chunks cleared for the arm (STREET_CLEAR_V from
+## the centre), the chunk bounds along the lane (RoadFrame.BESIDE: the
+## lane keeps inside what unroll() can read), and the walls' heights.
+const STREET_X := ARM_START + ARC_R
+const STREET_HALF := ARM_HALF
+const WALK_W := 2.0
+const STREET_V0 := ARC_R + ARM_STRAIGHT
+const STREET_CLEAR_V := 150.0
+const STREET_BOUND := 100.0
+const KERB_UP := 0.12
+const LANE_ROW := 5.0
+## The container lanes' line: (fraction of the lane's length, x out).
+const LANES_LINE := [Vector2(0.0, 80.0), Vector2(0.12, 80.0), Vector2(0.22, 91.0), Vector2(0.34, 69.0), Vector2(0.46, 91.0),
+	Vector2(0.58, 69.0), Vector2(0.70, 91.0), Vector2(0.82, 80.0), Vector2(1.0, 80.0)]
 const REACH_V := 240.0          # the pier's; see reach_v()
 ## Shown while the player is within this of the ring, metres along the road.
 const SHOW_WITHIN := 600.0
 const POOL_CAPACITY := 20
+const STREET_POOL_CAPACITY := 72
 const BOLLARD_EVERY := 8.0
 const EDGE_H := 0.45     # the pier's edge wall
 const LAMP_H := 12.0
@@ -142,7 +178,6 @@ const C_MACHINE := Color(0.75, 0.78, 0.8, 0.2)
 const C_WRECK_PAINTS: Array[Color] = [Color(0.4, 0.1, 0.08, 0.0), Color(0.3, 0.3, 0.32, 0.0), Color(0.1, 0.15, 0.3, 0.0), Color(0.5, 0.45, 0.25, 0.0), Color(0.2, 0.3, 0.2, 0.0)]
 const C_RUST := Color(0.35, 0.18, 0.1, 0.0)
 const C_PUDDLE := Color(0.03, 0.04, 0.06, 0.0)
-const C_FLOOD := Color(0.9, 0.95, 1.0, 0.5)
 const C_SPARK := Color(0.7, 0.85, 1.0, 0.6)        # in the shader's blink band
 const C_GATE := Color(0.5, 0.5, 0.5, 0.0)
 const C_SHELTER := Color(0.25, 0.3, 0.35, 0.0)
@@ -150,6 +185,23 @@ const C_SHELTER_GLASS := Color(0.5, 0.6, 0.7, 0.12)
 const C_COP := Color(0.92, 0.92, 0.9, 0.0)
 const C_COP_DOOR := Color(0.08, 0.1, 0.25, 0.0)
 const C_LIGHTBAR := Color(0.2, 0.2, 0.25, 0.0)
+const C_PAVE := Color(0.3, 0.3, 0.3, 0.0)
+const C_LANE := Color(0.12, 0.12, 0.125, 0.0)
+const C_BRICK := Color(0.36, 0.22, 0.17, 0.0)
+const C_DOOR := Color(0.3, 0.34, 0.38, 0.0)
+const C_DOOR_LIT := Color(1.0, 0.75, 0.4, 0.4)
+const C_STRIPE := Color(0.9, 0.75, 0.1, 0.25)
+const C_FACADES: Array[Color] = [Color(0.32, 0.26, 0.22, 0.0), Color(0.26, 0.26, 0.27, 0.0), Color(0.3, 0.2, 0.16, 0.0), Color(0.22, 0.24, 0.26, 0.0), Color(0.34, 0.3, 0.24, 0.0)]
+const C_WINDOW_DARK := Color(0.08, 0.09, 0.11, 0.0)
+const C_BAR := Color(1.0, 0.55, 0.15, 0.45)
+const C_FLICKER := Color(1.0, 0.8, 0.55, 0.6)   # in the shader's blink band
+const C_WAREHOUSE := Color(0.4, 0.42, 0.42, 0.0)
+const C_WALL_LAMP := Color(1.0, 0.65, 0.25, 0.45)
+const C_TREE_AMBER := Color(1.0, 0.65, 0.1, 0.5)
+const C_TREE_GREEN := Color(0.2, 1.0, 0.3, 0.5)
+const C_TREE_RED := Color(1.0, 0.1, 0.08, 0.5)
+const C_CONTAINERS: Array[Color] = [Color(0.5, 0.14, 0.1, 0.0), Color(0.1, 0.2, 0.45, 0.0), Color(0.15, 0.35, 0.2, 0.0), Color(0.45, 0.45, 0.42, 0.0), Color(0.6, 0.5, 0.12, 0.0), Color(0.35, 0.2, 0.12, 0.0)]
+const C_FLOOD := Color(0.9, 0.95, 1.0, 0.5)
 const C_CARS: Array[Color] = [Color(0.55, 0.12, 0.1, 0.0), Color(0.15, 0.18, 0.4, 0.0), Color(0.7, 0.7, 0.68, 0.0), Color(0.1, 0.1, 0.1, 0.0), Color(0.55, 0.5, 0.2, 0.0), Color(0.2, 0.4, 0.3, 0.0)]
 
 static var enabled := true
@@ -181,12 +233,55 @@ static func lot_len(pk: Dictionary) -> float:
 ## How far a pocket reaches along the road from its ring's centre (the way
 ## its arm turns): the arm, the lot and a little past it.
 static func reach_v(pk: Dictionary) -> float:
+	if RoadMap.is_street(pk):
+		# to the middle of the street, where the next ring's reach takes over
+		return RoadMap.pocket_span(pk) * 0.5 + 5.0
 	return ARC_R + ARM_STRAIGHT + lot_len(pk) + 18.0
+
+## How far from the ring's centre the chunks are cleared for the pocket and
+## the out-of-bounds wall stands out at BOUND: the whole pocket, or a
+## street's arm (its lane runs behind the buildings from there).
+static func clear_v(pk: Dictionary) -> float:
+	return STREET_CLEAR_V if RoadMap.is_street(pk) else reach_v(pk)
 
 ## Which light the pocket's lamps throw on the ground (RoadChunkBuilder's
 ## pool materials).
 static func pool_light(pk: Dictionary) -> String:
-	return "sodium" if String(pk.kind) in ["truck", "laundry"] else "white"
+	if String(pk.kind) in ["truck", "laundry"] or String(pk.get("street", "")) in ["shop", "diesel"]:
+		return "sodium"
+	return "white"
+
+## How many light pools the pocket's node can show.
+static func pool_capacity(pk: Dictionary) -> int:
+	return STREET_POOL_CAPACITY if RoadMap.is_street(pk) else POOL_CAPACITY
+
+## A street's lane centre, x out from the road, `va` metres from its first
+## ring's centre: STREET_X, or the container lanes' winding line.
+static func lane_x(pk: Dictionary, va: float) -> float:
+	var main := RoadMap.street_main(pk)
+	if String(main.get("street", "")) != "lanes":
+		return STREET_X
+	var span := RoadMap.pocket_span(main)
+	var t := clampf((va - STREET_V0) / (span - 2.0 * STREET_V0), 0.0, 1.0)
+	for i in LANES_LINE.size() - 1:
+		var a: Vector2 = LANES_LINE[i]
+		var b: Vector2 = LANES_LINE[i + 1]
+		if t <= b.x:
+			var u := clampf((t - a.x) / (b.x - a.x), 0.0, 1.0)
+			return lerpf(a.y, b.y, u * u * (3.0 - 2.0 * u))
+	return (LANES_LINE[LANES_LINE.size() - 1] as Vector2).y
+
+## `v` from either entry's ring (signed the way the chunks count) as metres
+## from the street's first ring.
+static func street_va(pk: Dictionary, v: float) -> float:
+	return RoadMap.pocket_span(pk) + v if String(pk.get("kind", "")) == "street_end" else v
+
+## The x range (out on the street's side) a boundary step wall leaves open
+## where the lane crosses it, `v` from this entry's ring: the lane and its
+## pavements with a little to spare.
+static func lane_gap(pk: Dictionary, v: float) -> Vector2:
+	var lx := lane_x(pk, street_va(pk, v))
+	return Vector2(lx - STREET_HALF - WALK_W - 0.5, lx + STREET_HALF + WALK_W + 0.5)
 
 ## A point of the arm's centre line `s` metres from the stub's end, for a
 ## pocket on side +1 bending toward +v: {p (x, v), t (unit tangent), n (unit
@@ -238,11 +333,25 @@ static func max_grade(pk: Dictionary) -> float:
 ## Whether (x out on the pocket's side, v signed along the road) is on the
 ## pocket's footprint: the arm's deck (within `slack` of its edge) or the lot.
 static func covers(pk: Dictionary, x: float, v: float, slack: float = 0.6) -> bool:
+	if RoadMap.is_street(pk):
+		var main := RoadMap.street_main(pk)
+		var span := RoadMap.pocket_span(main)
+		var va := street_va(pk, v)
+		if va <= STREET_V0 + 5.0 and _arm_near(x, va, slack):
+			return true
+		if va >= span - STREET_V0 - 5.0 and _arm_near(x, span - va, slack):
+			return true
+		return va >= STREET_V0 - slack and va <= span - STREET_V0 + slack \
+			and absf(x - lane_x(main, va)) <= STREET_HALF + WALK_W + slack
 	var turn := float(pk.turn)
 	var vv := v * turn
 	if x >= LOT_X0 - slack and x <= LOT_X1 + slack and vv >= ARC_R + ARM_STRAIGHT - slack and vv <= ARC_R + ARM_STRAIGHT + lot_len(pk) + slack:
 		return true
-	# the arm: nearest point of its line
+	return _arm_near(x, vv, slack)
+
+## Whether (x, vv) is within `slack` of the arm's deck (the +1 layout, vv
+## the arm's way).
+static func _arm_near(x: float, vv: float, slack: float) -> bool:
 	var best := INF
 	var s := 0.0
 	var run := arm_len()
@@ -274,10 +383,29 @@ static func deck_y_near(pk: Dictionary, x: float, v: float, y: float) -> float:
 
 ## Height of the pocket's deck under (x, v signed), or -INF off it.
 static func deck_y(pk: Dictionary, x: float, v: float) -> float:
+	if RoadMap.is_street(pk):
+		var main := RoadMap.street_main(pk)
+		var span := RoadMap.pocket_span(main)
+		var va := street_va(pk, v)
+		if va <= STREET_V0 + 5.0:
+			var ya := _arm_deck_y(main, x, va)
+			if not is_inf(ya):
+				return ya
+		if va >= span - STREET_V0 - 5.0:
+			var yb := _arm_deck_y(main, x, span - va)
+			if not is_inf(yb):
+				return yb
+		if va >= STREET_V0 - 0.5 and va <= span - STREET_V0 + 0.5 and absf(x - lane_x(main, va)) <= STREET_HALF + WALK_W + 0.6:
+			return GROUND_Y + R.LIFT
+		return -INF
 	var turn := float(pk.turn)
 	var vv := v * turn
 	if x >= LOT_X0 and x <= LOT_X1 and vv >= ARC_R + ARM_STRAIGHT - 0.5 and vv <= ARC_R + ARM_STRAIGHT + lot_len(pk):
 		return floor_y(pk) + R.LIFT
+	return _arm_deck_y(pk, x, vv)
+
+## Height of the arm's deck under (x, vv the arm's way), or -INF off it.
+static func _arm_deck_y(pk: Dictionary, x: float, vv: float) -> float:
 	var best := INF
 	var at_s := 0.0
 	var s := 0.0
@@ -304,7 +432,7 @@ func _ready() -> void:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = RoadChunkBuilder._get_pool_mesh()
-	mm.instance_count = POOL_CAPACITY
+	mm.instance_count = pool_capacity(pocket)
 	mm.visible_instance_count = 0
 	_pools = MultiMeshInstance3D.new()
 	_pools.name = "PocketPools"
@@ -343,8 +471,10 @@ func _place() -> void:
 	var on := enabled and RoadRamps.enabled and RoadRamps.ring and RoadMap.is_loop() and ring >= 0
 	if on:
 		var lap := RoadMap.length()
-		var d := absf(fposmod(RingSite.focus_s - float(RoadMap.rings()[ring].s) + lap * 0.5, lap) - lap * 0.5)
-		on = d < SHOW_WITHIN
+		var d := fposmod(RingSite.focus_s - float(RoadMap.rings()[ring].s) + lap * 0.5, lap) - lap * 0.5
+		# a street runs on to the next ring: its distance is to the whole stretch
+		var span := RoadMap.pocket_span(pocket)
+		on = (minf(absf(d), absf(d - span)) if d < 0.0 or d > span else 0.0) < SHOW_WITHIN
 	if not on:
 		if visible:
 			visible = false
@@ -422,6 +552,16 @@ static func build(pk: Dictionary) -> Dictionary:
 	R.begin_flat()
 	R.wall_colour = RingSite.WALLS["steel"] if String(pk.kind) == "pier" else R.C_WALL
 	var turn := float(pk.turn)
+	if String(pk.kind) == "street_end":
+		# the street's first entry builds the whole street, this arm included
+		return _finish(pk, R.end_flat())
+	if String(pk.kind) == "street":
+		_arm(pk, 1.0)
+		R.flat_v_off = RoadMap.pocket_span(pk)
+		_arm(pk, -1.0)
+		R.flat_v_off = 0.0
+		_street(pk)
+		return _finish(pk, R.end_flat())
 	_arm(pk, turn)
 	_lot(pk, turn)
 	match String(pk.kind):
@@ -439,12 +579,16 @@ static func build(pk: Dictionary) -> Dictionary:
 			_salvage(turn)
 		"layby":
 			_layby(turn)
-	var made := R.end_flat()
+	return _finish(pk, R.end_flat())
+
+## What was laid out, mirrored for side -1, as the node takes it.
+static func _finish(pk: Dictionary, made: Dictionary) -> Dictionary:
 	R.wall_colour = R.C_WALL
 	if int(pk.side) < 0:
 		made = _mirror(made)
 	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, made.arrays)
+	if not (made.arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, made.arrays)
 	return {"mesh": mesh, "faces": made.faces, "boxes": made.boxes, "pools": made.pools}
 
 ## The layout mirrored across the road (x -> -x): vertices and normals
@@ -542,13 +686,13 @@ static func _arm(pk: Dictionary, turn: float) -> void:
 
 ## A white lamp: a pole from the ground to `y` + height, an arm `reach`
 ## toward `toward`, a head and a pool of light under it.
-static func _lamp(at: Vector2, y: float, toward: Vector2, reach: float, height: float) -> void:
+static func _lamp(at: Vector2, y: float, toward: Vector2, reach: float, height: float, head: Color = C_LAMP_WHITE) -> void:
 	var top := y + height
 	R._box(Vector3(at.x, (top + R.SKIRT) * 0.5 - R.SKIRT * 0.5, at.y), Vector3(0.18, top + R.SKIRT, 0.18), R.C_POLE)
 	var hx := at.x + toward.x * reach
 	var hv := at.y + toward.y * reach
 	R._box(Vector3((at.x + hx) * 0.5, top, (at.y + hv) * 0.5), Vector3(absf(hx - at.x) + 0.12, 0.1, absf(hv - at.y) + 0.12), R.C_POLE)
-	R._box(Vector3(hx, top - 0.1, hv), Vector3(0.5, 0.14, 0.7), C_LAMP_WHITE)
+	R._box(Vector3(hx, top - 0.1, hv), Vector3(0.5, 0.14, 0.7), head)
 	var px := at.x + toward.x * (reach + 1.0)
 	var pv := at.y + toward.y * (reach + 1.0)
 	R._pools.append(Transform3D(Basis.from_scale(Vector3(height * 1.3, 1.0, height * 1.6)), R._p(px, y + 0.06, pv)))
@@ -1061,3 +1205,353 @@ static func _layby(turn: float) -> void:
 	# two lamps light the bay; the pocket behind the wall has none
 	_lamp(Vector2(LOT_X0 + 0.9, v0 + 12.0 * turn), GROUND_Y, Vector2(1.0, 0.0), 2.5, 8.0)
 	_lamp(Vector2(LOT_X0 + 0.9, v0 + 30.0 * turn), GROUND_Y, Vector2(1.0, 0.0), 2.5, 8.0)
+
+# ---------- service streets (steps 9 and 11) ----------
+
+## The street between the two arms: the lane with its pavements and centre
+## line, then what lines it, by the entry's `street`.
+static func _street(pk: Dictionary) -> void:
+	var span := RoadMap.pocket_span(pk)
+	var y := GROUND_Y + R.LIFT
+	var v0 := STREET_V0
+	var v1 := span - STREET_V0
+	var st := String(pk.get("street", "shop"))
+	_lane(pk, v0, v1, y, st != "diesel")
+	match st:
+		"shop":
+			_shop_street(pk, v0, v1, y)
+		"diesel":
+			_diesel_row(pk, v0, v1, y)
+		"lanes":
+			_container_lanes(pk, v0, v1, y)
+
+## The lane's centre, tangent and left normal (toward the road) `va` along.
+static func _lane_at(pk: Dictionary, va: float) -> Dictionary:
+	var c := Vector2(lane_x(pk, va), va)
+	var t := Vector2(lane_x(pk, va + 0.5) - lane_x(pk, va - 0.5), 1.0).normalized()
+	return {"c": c, "t": t, "n": Vector2(-t.y, t.x)}
+
+## A point `off` to the left of the lane's centre (toward the road; negative
+## = away from it) `va` along, as (x, v).
+static func _lane_off(pk: Dictionary, va: float, off: float) -> Vector2:
+	var a := _lane_at(pk, va)
+	return (a.c as Vector2) + (a.n as Vector2) * off
+
+## The lane: rows every LANE_ROW m, the dark lane between them and a raised
+## pavement WALK_W wide each side with a kerb face, all in the deck's
+## collision; a dashed centre line (none on the drag strip).
+static func _lane(pk: Dictionary, v0: float, v1: float, y: float, dashes: bool) -> void:
+	var n := ceili((v1 - v0) / LANE_ROW)
+	var prev: Array = []
+	var hw := STREET_HALF + WALK_W
+	for i in n + 1:
+		var va := minf(v0 + float(i) * LANE_ROW, v1)
+		var a := _lane_at(pk, va)
+		var c: Vector2 = a.c
+		var nn: Vector2 = a.n
+		# left pavement edge, left kerb, right kerb, right pavement edge
+		var row: Array = [c + nn * hw, c + nn * STREET_HALF, c - nn * STREET_HALF, c - nn * hw]
+		if i > 0:
+			var p0: Vector2 = prev[1]
+			var p1: Vector2 = prev[2]
+			var q0: Vector2 = row[1]
+			var q1: Vector2 = row[2]
+			# the lane
+			R._quad(R._p(p0.x, y, p0.y), R._p(p1.x, y, p1.y), R._p(q0.x, y, q0.y), R._p(q1.x, y, q1.y), C_LANE, Vector3.UP)
+			R._deck_faces([R._p(p0.x, y, p0.y), R._p(p1.x, y, p1.y), R._p(q0.x, y, q0.y), R._p(p1.x, y, p1.y), R._p(q1.x, y, q1.y), R._p(q0.x, y, q0.y)])
+			# the pavements, KERB_UP above it, and the kerb faces
+			for side_k: Array in [[0, 1], [3, 2]]:
+				var e0: Vector2 = prev[side_k[0]]
+				var k0: Vector2 = prev[side_k[1]]
+				var e1: Vector2 = row[side_k[0]]
+				var k1: Vector2 = row[side_k[1]]
+				R._quad(R._p(e0.x, y + KERB_UP, e0.y), R._p(k0.x, y + KERB_UP, k0.y), R._p(e1.x, y + KERB_UP, e1.y), R._p(k1.x, y + KERB_UP, k1.y), C_PAVE, Vector3.UP)
+				R._deck_faces([R._p(e0.x, y + KERB_UP, e0.y), R._p(k0.x, y + KERB_UP, k0.y), R._p(e1.x, y + KERB_UP, e1.y),
+					R._p(k0.x, y + KERB_UP, k0.y), R._p(k1.x, y + KERB_UP, k1.y), R._p(e1.x, y + KERB_UP, e1.y)])
+				var toward := Vector3(signf(c.x - k0.x), 0.0, 0.0)
+				R._quad(R._p(k0.x, y, k0.y), R._p(k1.x, y, k1.y), R._p(k0.x, y + KERB_UP, k0.y), R._p(k1.x, y + KERB_UP, k1.y), R.C_KERB, toward)
+				R._deck_faces([R._p(k0.x, y, k0.y), R._p(k1.x, y, k1.y), R._p(k0.x, y + KERB_UP, k0.y), R._p(k1.x, y, k1.y), R._p(k1.x, y + KERB_UP, k1.y), R._p(k0.x, y + KERB_UP, k0.y)])
+			if dashes and i % 2 == 1:
+				var c0: Vector2 = (p0 + p1) * 0.5
+				var c1: Vector2 = (q0 + q1) * 0.5
+				var along := (c1 - c0).normalized() * 0.6
+				var across := Vector2(-along.y, along.x).normalized() * 0.07
+				R._quad(R._p(c0.x + along.x - across.x, y + R.PAINT_LIFT, c0.y + along.y - across.y), R._p(c0.x + along.x + across.x, y + R.PAINT_LIFT, c0.y + along.y + across.y),
+					R._p(c1.x - along.x - across.x, y + R.PAINT_LIFT, c1.y - along.y - across.y), R._p(c1.x - along.x + across.x, y + R.PAINT_LIFT, c1.y - along.y + across.y), R.C_PAINT, Vector3.UP)
+		prev = row
+
+## A wall along the lane's edge, `off` from its centre (positive toward the
+## road), from va0 to va1, `h` high, in `col`: drawn as a thin slab and in
+## the collision.
+static func _street_wall(pk: Dictionary, va0: float, va1: float, off: float, h: float, col: Color, thick: float = 0.4) -> void:
+	var step := 10.0
+	var va := va0
+	while va < va1 - 0.01:
+		var vb := minf(va + step, va1)
+		var a := _lane_off(pk, va, off)
+		var b := _lane_off(pk, vb, off)
+		_slab(a, b, GROUND_Y, GROUND_Y + h, thick, col)
+		R._wall_box(R._p(a.x, 0.0, a.y), R._p(b.x, 0.0, b.y), GROUND_Y, GROUND_Y + h, thick)
+		va = vb
+
+## An upright slab from (x, v) `a` to `b`, `bottom` to `top`, `thick` across
+## its length: four faces and a top (the wall's look).
+static func _slab(a: Vector2, b: Vector2, bottom: float, top: float, thick: float, col: Color) -> void:
+	var along := (b - a).normalized()
+	var across := Vector2(-along.y, along.x) * thick * 0.5
+	var a0 := a + across
+	var a1 := a - across
+	var b0 := b + across
+	var b1 := b - across
+	R._quad(R._p(a0.x, bottom, a0.y), R._p(b0.x, bottom, b0.y), R._p(a0.x, top, a0.y), R._p(b0.x, top, b0.y), col, Vector3(across.x, 0.0, -across.y))
+	R._quad(R._p(a1.x, bottom, a1.y), R._p(b1.x, bottom, b1.y), R._p(a1.x, top, a1.y), R._p(b1.x, top, b1.y), col, Vector3(-across.x, 0.0, across.y))
+	R._quad(R._p(a0.x, top, a0.y), R._p(b0.x, top, b0.y), R._p(a1.x, top, a1.y), R._p(b1.x, top, b1.y), col, Vector3.UP)
+	R._quad(R._p(a0.x, bottom, a0.y), R._p(a1.x, bottom, a1.y), R._p(a0.x, top, a0.y), R._p(a1.x, top, a1.y), col, Vector3(-along.x, 0.0, along.y))
+	R._quad(R._p(b0.x, bottom, b0.y), R._p(b1.x, bottom, b1.y), R._p(b0.x, top, b0.y), R._p(b1.x, top, b1.y), col, Vector3(along.x, 0.0, -along.y))
+
+## A flat mark on a wall's face at x (facing `face` = +1 toward +x), from
+## v0 to v1, bottom to top.
+static func _wall_mark(x: float, face: float, v0: float, v1: float, bottom: float, top: float, col: Color) -> void:
+	R._quad(R._p(x, bottom, v0), R._p(x, bottom, v1), R._p(x, top, v0), R._p(x, top, v1), col, Vector3(face, 0.0, 0.0))
+
+## A building box from x0 to x1 (x0 the face on the lane), v0 to v1, `h`
+## high, in `body`, with its collision; windows in a grid on the lane face,
+## lit at random in `rng`.
+static func _facade(rng: RandomNumberGenerator, x0: float, x1: float, v0: float, v1: float, y: float, h: float, body: Color, face: float, lit_share: float) -> void:
+	var cx := (x0 + x1) * 0.5
+	var cv := (v0 + v1) * 0.5
+	R._box(Vector3(cx, y + h * 0.5, cv), Vector3(absf(x1 - x0), h, absf(v1 - v0)), body)
+	R._wall_box(R._p(cx, 0.0, v0), R._p(cx, 0.0, v1), y, y + h, absf(x1 - x0))
+	var floors := maxi(int(h / 3.0), 1)
+	var fx := x0 + face * 0.02
+	var wv := minf(v0, v1) + 1.2
+	while wv + 1.4 < maxf(v0, v1) - 0.8:
+		for f in floors:
+			var wb := y + 1.0 + float(f) * 3.0
+			if wb + 1.5 > y + h - 0.4:
+				break
+			var col := C_WINDOW if rng.randf() < lit_share else C_WINDOW_DARK
+			_wall_mark(fx, face, wv, wv + 1.4, wb, wb + 1.5, col)
+		wv += 2.8
+
+## A fire escape on a facade's lane face at x (face toward `face`), between
+## v0 and v1: a platform at each floor with a rail, a stair bar between.
+static func _fire_escape(x: float, face: float, v0: float, v1: float, y: float, h: float) -> void:
+	var floors := int(h / 3.0)
+	var px := x + face * 0.55
+	for f in range(1, floors):
+		var fy := y + float(f) * 3.0
+		R._box(Vector3(px, fy, (v0 + v1) * 0.5), Vector3(1.0, 0.08, absf(v1 - v0)), C_CRANE)
+		R._box(Vector3(x + face * 1.02, fy + 0.5, (v0 + v1) * 0.5), Vector3(0.05, 1.0, absf(v1 - v0)), C_CRANE)
+		RingSite._bar(Vector3(px, fy, v0), Vector3(px, fy + 3.0 if f < floors - 1 else fy, v1), 0.12, C_CRANE)
+
+## A wheelie bin pair on a pavement at (x, v).
+static func _bins(x: float, v: float, y: float) -> void:
+	for dv: float in [-0.7, 0.7]:
+		R._box(Vector3(x, y + 0.6, v + dv), Vector3(0.9, 1.2, 1.1), C_CRANE)
+		R._box(Vector3(x, y + 1.24, v + dv), Vector3(0.95, 0.08, 1.15), C_HOUSE_ROOF)
+
+## A car parked along the lane (nose the way the chunks count) at (cx, cv),
+## with its collision.
+static func _parked_car_v(cx: float, cv: float, y: float, paint: Color) -> void:
+	R._box(Vector3(cx, y + 0.55, cv), Vector3(1.85, 0.65, 4.4), paint)
+	R._box(Vector3(cx, y + 1.1, cv - 0.3), Vector3(1.6, 0.55, 2.2), C_GLASS)
+	R._box(Vector3(cx, y + 1.38, cv - 0.3), Vector3(1.5, 0.08, 1.9), paint)
+	for dx: float in [-0.85, 0.85]:
+		for dv: float in [-1.4, 1.4]:
+			R._box(Vector3(cx + dx, y + 0.32, cv + dv), Vector3(0.24, 0.64, 0.64), C_TYRE)
+	R._wall_box(R._p(cx, 0.0, cv - 2.2), R._p(cx, 0.0, cv + 2.2), y, y + 1.4, 1.85)
+
+## A sodium lamp on a wall at (x, v), `face` toward the lane: a hooded
+## lantern and its pool on the pavement and lane.
+static func _wall_lamp(x: float, face: float, v: float, y: float, height: float) -> void:
+	R._box(Vector3(x + face * 0.3, y + height, v), Vector3(0.6, 0.25, 0.5), R.C_POLE)
+	R._box(Vector3(x + face * 0.35, y + height - 0.2, v), Vector3(0.4, 0.14, 0.4), C_WALL_LAMP)
+	R._pools.append(Transform3D(Basis.from_scale(Vector3(height * 1.4, 1.0, height * 1.5)), R._p(x + face * (height * 0.5), y + 0.06, v)))
+
+# ---------- Shop Street (x1a to x2a) ----------
+
+## Downtown backs: a brick wall along the road side with roller doors, The
+## Shop's door halfway along with its light on, bins, a lamp every so often
+## (one flickering), tenement backs with fire escapes across the lane, a
+## corner bar's amber window by the first arm, cars parked along the kerb.
+static func _shop_street(pk: Dictionary, v0: float, v1: float, y: float) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([String(pk.id), "shop street"])
+	var span := RoadMap.pocket_span(pk)
+	var near_x := STREET_X - STREET_HALF - WALK_W   # the wall's lane face
+	var far_x := STREET_X + STREET_HALF + WALK_W
+	var shop_v := span * 0.5
+	# the near wall, in two runs either side of The Shop
+	for run: Array in [[v0, shop_v - 6.0], [shop_v + 6.0, v1]]:
+		_street_wall(pk, run[0], run[1], STREET_HALF + WALK_W + 0.2, 2.8, C_BRICK)
+	# roller doors in the wall every 24 m, bins by every other
+	var dv := v0 + 12.0
+	var k := 0
+	while dv < v1 - 8.0:
+		if absf(dv - shop_v) > 12.0:
+			_wall_mark(near_x - 0.01, 1.0, dv - 1.75, dv + 1.75, y, y + 2.4, C_DOOR)
+			if k % 2 == 0:
+				_bins(near_x + 0.7, dv + 3.5, y)
+		dv += 24.0
+		k += 1
+	# The Shop: its back stands out to the pavement, the roller door half
+	# open with the light on inside, an amber lamp over it, a pool out front
+	var sx0 := near_x - 10.0
+	var sx1 := near_x + 0.6
+	R._box(Vector3((sx0 + sx1) * 0.5, y + 2.75, shop_v), Vector3(sx1 - sx0, 5.5, 12.0), Color(0.3, 0.12, 0.1, 0.0))
+	R._box(Vector3((sx0 + sx1) * 0.5, y + 5.6, shop_v), Vector3(sx1 - sx0 + 0.6, 0.3, 12.6), C_HOUSE_ROOF)
+	R._wall_box(R._p((sx0 + sx1) * 0.5, 0.0, shop_v - 6.0), R._p((sx0 + sx1) * 0.5, 0.0, shop_v + 6.0), y, y + 5.5, sx1 - sx0)
+	_wall_mark(sx1 + 0.02, 1.0, shop_v - 2.2, shop_v + 2.2, y + 1.7, y + 3.6, C_DOOR)
+	_wall_mark(sx1 + 0.03, 1.0, shop_v - 2.2, shop_v + 2.2, y, y + 1.7, C_DOOR_LIT)
+	R._box(Vector3(sx1 + 0.3, y + 4.2, shop_v), Vector3(0.6, 0.25, 1.2), C_SIGN_AMBER)
+	R._pools.append(Transform3D(Basis.from_scale(Vector3(9.0, 1.0, 9.0)), R._p(sx1 + 3.0, y + 0.06, shop_v)))
+	_parked_car_v(far_x - 1.1, shop_v + 9.0, y, C_CARS[1])
+	# tenement backs across the lane: a building per 24 m, fire escapes on
+	# every other, the corner bar first with its window lit amber
+	var bv := v0
+	var i := 0
+	while bv < v1 - 4.0:
+		var len := minf(24.0, v1 - bv)
+		var h := 9.0 + 3.0 * float(rng.randi_range(0, 2))
+		var body: Color = C_FACADES[rng.randi_range(0, C_FACADES.size() - 1)]
+		if len < 10.0:
+			_street_wall(pk, bv, v1, -(STREET_HALF + WALK_W + 0.2), 2.4, C_BRICK)
+			break
+		_facade(rng, far_x, far_x + 12.0, bv + 0.5, bv + len - 0.5, y, h, body, -1.0, 0.3)
+		if i == 0:
+			# the corner bar: the ground floor's window band and a sign
+			_wall_mark(far_x - 0.04, -1.0, bv + 2.0, bv + len - 2.0, y + 0.9, y + 2.4, C_BAR)
+			R._box(Vector3(far_x - 0.5, y + 3.4, bv + 4.0), Vector3(0.9, 0.7, 2.4), C_SIGN_RED)
+		elif i % 2 == 1:
+			_fire_escape(far_x, -1.0, bv + 4.0, bv + 8.0, y, h)
+		bv += len
+		i += 1
+	# lamps on the far pavement, one of them flickering; cars along its kerb
+	var lv := v0 + 18.0
+	var j := 0
+	while lv < v1 - 10.0:
+		_lamp(Vector2(far_x - 0.5, lv), GROUND_Y, Vector2(-1.0, 0.0), 2.5, 7.0, C_FLICKER if j == 3 else C_LAMP_WHITE)
+		lv += 36.0
+		j += 1
+	var cv := v0 + 30.0
+	var m := 0
+	while cv < v1 - 20.0:
+		if absf(cv - shop_v) > 14.0:
+			_parked_car_v(far_x - 1.1, cv, y, C_CARS[m % C_CARS.size()])
+		cv += 44.0 + 13.0 * float(m % 3)
+		m += 1
+
+# ---------- Diesel Row (x4b to x5b) ----------
+
+## Warehouses both sides of a dead straight lane: 6 m backs on the road
+## side with loading doors and sodium wall lights, bigger sheds across the
+## lane with a yard gap or two, bollards along both kerbs; a start line
+## with a light tree and a finish line 500 m on: the drag strip.
+static func _diesel_row(pk: Dictionary, v0: float, v1: float, y: float) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([String(pk.id), "diesel row"])
+	var near_x := STREET_X - STREET_HALF - WALK_W
+	var far_x := STREET_X + STREET_HALF + WALK_W
+	_street_wall(pk, v0, v1, STREET_HALF + WALK_W + 0.3, 6.0, C_WAREHOUSE, 0.6)
+	# loading doors every 20 m with a yellow stripe at the foot, a wall light
+	# over every other
+	var dv := v0 + 10.0
+	var k := 0
+	while dv < v1 - 6.0:
+		_wall_mark(near_x - 0.01, 1.0, dv - 2.0, dv + 2.0, y + 0.3, y + 4.2, C_DOOR)
+		_wall_mark(near_x - 0.02, 1.0, dv - 2.0, dv + 2.0, y, y + 0.3, C_STRIPE)
+		if k % 2 == 0:
+			_wall_lamp(near_x, 1.0, dv, y, 4.8)
+		dv += 20.0
+		k += 1
+	# sheds across the lane: 30 m each, 7 to 9 m high, every fourth bay a
+	# fenced yard instead
+	var bv := v0
+	var i := 0
+	while bv < v1 - 4.0:
+		var len := minf(30.0, v1 - bv)
+		if i % 4 == 3 or len < 12.0:
+			_street_wall(pk, bv, bv + len, -(STREET_HALF + WALK_W + 0.2), 1.6, C_GATE, 0.1)
+		else:
+			var h := 7.0 + float(rng.randi_range(0, 2))
+			R._box(Vector3(far_x + 7.0, y + h * 0.5, bv + len * 0.5), Vector3(14.0, h, len - 1.0), C_WAREHOUSE)
+			R._box(Vector3(far_x + 7.0, y + h + 0.2, bv + len * 0.5), Vector3(14.4, 0.4, len - 0.6), C_HOUSE_ROOF)
+			R._wall_box(R._p(far_x + 7.0, 0.0, bv + 0.5), R._p(far_x + 7.0, 0.0, bv + len - 0.5), y, y + h, 14.0)
+			_wall_mark(far_x - 0.01, -1.0, bv + len * 0.5 - 2.5, bv + len * 0.5 + 2.5, y + 0.3, y + 4.5, C_DOOR)
+			_wall_mark(far_x - 0.02, -1.0, bv + len * 0.5 - 2.5, bv + len * 0.5 + 2.5, y, y + 0.3, C_STRIPE)
+			_wall_lamp(far_x, -1.0, bv + len * 0.5, y, 5.2)
+		bv += len
+		i += 1
+	# bollards along both kerbs
+	var pv := v0 + 4.0
+	while pv < v1 - 2.0:
+		for bx: float in [near_x + 0.6, far_x - 0.6]:
+			R._box(Vector3(bx, y + KERB_UP + 0.45, pv), Vector3(0.26, 0.9, 0.26), C_BOLLARD)
+		pv += 8.0
+	# the strip: solid edge lines, a start line 40 m in with the light tree
+	# beside it, a finish line 40 m before the far arm
+	for ex: float in [STREET_X - STREET_HALF + 0.3, STREET_X + STREET_HALF - 0.3]:
+		R._quad(R._p(ex - 0.07, y + R.PAINT_LIFT, v0 + 2.0), R._p(ex + 0.07, y + R.PAINT_LIFT, v0 + 2.0), R._p(ex - 0.07, y + R.PAINT_LIFT, v1 - 2.0), R._p(ex + 0.07, y + R.PAINT_LIFT, v1 - 2.0), R.C_PAINT, Vector3.UP)
+	for lv: float in [v0 + 40.0, v1 - 40.0]:
+		R._quad(R._p(STREET_X - STREET_HALF + 0.3, y + R.PAINT_LIFT, lv - 0.25), R._p(STREET_X + STREET_HALF - 0.3, y + R.PAINT_LIFT, lv - 0.25),
+			R._p(STREET_X - STREET_HALF + 0.3, y + R.PAINT_LIFT, lv + 0.25), R._p(STREET_X + STREET_HALF - 0.3, y + R.PAINT_LIFT, lv + 0.25), R.C_PAINT, Vector3.UP)
+	var tx := far_x - 0.7
+	var tv := v0 + 40.0
+	R._box(Vector3(tx, y + 1.8, tv), Vector3(0.14, 3.6, 0.14), R.C_POLE)
+	for n in 3:
+		R._box(Vector3(tx, y + 3.2 - float(n) * 0.5, tv), Vector3(0.3, 0.3, 0.3), C_TREE_AMBER)
+	R._box(Vector3(tx, y + 1.5, tv), Vector3(0.3, 0.3, 0.3), C_TREE_GREEN)
+	R._box(Vector3(tx, y + 1.0, tv), Vector3(0.3, 0.3, 0.3), C_TREE_RED)
+
+# ---------- the container lanes (x7b to x8b) ----------
+
+## Walls of stacked containers along both sides of the winding lane (one to
+## three high, a second row behind), an unbroken wall in the collision so
+## the stacks' corners at the bends do not open a way out, and three gantry
+## cranes over the lane with their legs at the kerbs and floodlights on the
+## lane.
+static func _container_lanes(pk: Dictionary, v0: float, v1: float, y: float) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([String(pk.id), "container lanes"])
+	var hw := STREET_HALF + WALK_W
+	for side: float in [1.0, -1.0]:
+		# the wall in the collision, along the lane's line
+		var off := side * (hw + 0.2)
+		var va := v0
+		while va < v1 - 0.01:
+			var vb := minf(va + 10.0, v1)
+			var a := _lane_off(pk, va, off)
+			var b := _lane_off(pk, vb, off)
+			R._wall_box(R._p(a.x, 0.0, a.y), R._p(b.x, 0.0, b.y), y, y + 2.6, 0.3)
+			va = vb
+		# the stacks: a container every 12.2 m, standing square to the road,
+		# its near face on the wall's line; a second row behind, taller
+		var cv := v0 + 6.1
+		while cv < v1 - 6.0:
+			for row in 2:
+				var at := _lane_off(pk, cv, off + side * (1.22 + float(row) * 2.5))
+				var high := rng.randi_range(1, 3) if row == 0 else rng.randi_range(2, 3)
+				for level in high:
+					var col: Color = C_CONTAINERS[rng.randi_range(0, C_CONTAINERS.size() - 1)]
+					R._box(Vector3(at.x, y + 1.3 + 2.6 * float(level), cv), Vector3(2.44, 2.6, 12.2), col)
+			cv += 12.2
+	# the gantry cranes: legs at both kerbs, a beam across, a floodlight on
+	# the beam lighting the lane
+	for f: float in [0.18, 0.5, 0.82]:
+		var gv := lerpf(v0, v1, f)
+		var a := _lane_at(pk, gv)
+		var c: Vector2 = a.c
+		var nn: Vector2 = a.n
+		var hgt := 13.0
+		for side: float in [1.0, -1.0]:
+			var leg := c + nn * side * (hw - 0.5)
+			for dv: float in [-1.5, 1.5]:
+				R._box(Vector3(leg.x, y + hgt * 0.5, gv + dv), Vector3(0.9, hgt, 0.9), C_CRANE)
+			R._wall_box(R._p(leg.x, 0.0, gv - 1.5), R._p(leg.x, 0.0, gv + 1.5), y, y + hgt, 0.9)
+			R._box(Vector3(leg.x, y + hgt * 0.5, gv), Vector3(0.5, hgt, 3.6), C_CRANE)
+		R._box(Vector3(c.x, y + hgt + 0.6, gv), Vector3(2.0 * hw + 2.0, 1.2, 1.6), C_CRANE)
+		R._box(Vector3(c.x, y + hgt + 2.0, gv), Vector3(2.0 * hw + 6.0, 1.6, 2.0), C_RUST)
+		for dx: float in [-3.0, 3.0]:
+			R._box(Vector3(c.x + dx, y + hgt - 0.2, gv), Vector3(0.6, 0.3, 0.6), C_FLOOD)
+		R._pools.append(Transform3D(Basis.from_scale(Vector3(hgt * 1.3, 1.0, hgt * 1.8)), R._p(c.x, y + 0.06, gv)))

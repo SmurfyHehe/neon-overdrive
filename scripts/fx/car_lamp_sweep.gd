@@ -3,10 +3,11 @@ class_name CarLampSweep
 
 # Street-lamp light on car paint (look pass, 2026-10-10). The lamps are not
 # lights (their pools are painted quads), so nothing lit a car as it passed
-# under one. On the High preset the car shaders (CarPaint, LAMPS) light the
-# body from the two nearest lamps of the row and slide their highlights
-# across it. This node, a child of the player car, tells them where the row
-# is: four global uniforms once a frame, no lights, no per-car work.
+# under one. On Medium and High (Medium since 2026-10-14, Roy 1526) the car
+# shaders (CarPaint, LAMPS) light the body from the two nearest lamps of the
+# row and slide their highlights across it. This node, a child of the player
+# car, tells them where the row is: four global uniforms once a frame, no
+# lights, no per-car work.
 #
 #   car_lamp_origin  the player's world position
 #   car_lamp_fwd     the road's direction there
@@ -15,8 +16,8 @@ class_name CarLampSweep
 #                    w = the player's distance right of the centre line
 #   car_lamp_light   rgb = the district's lamp colour times strength (0 on a
 #                    dark road), w = how far the lamp heads sit from the
-#                    centre line. Medium reads this one too: its soft light
-#                    from above takes the district's colour.
+#                    centre line. Low reads none of these; its paint has no
+#                    city and no lamps.
 #
 # The row follows RoadChunkBuilder's placement (25 m apart a side, the sides
 # staggered, thinned by the district's `every`); junction and gas-station

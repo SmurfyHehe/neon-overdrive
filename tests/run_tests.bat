@@ -297,6 +297,7 @@ rem Player cars (stage D): every PlayerCars.KINDS car boots as the player and ge
 call :run fleet/player_cars "--headless --fixed-fps 120"
 call :run fleet/interior_fit --headless
 call :run fleet/exterior_fit --headless
+call :run fleet/see_through --headless
 rem every player car's cabin: its own look, the road band clear, the driver fits
 call :run fleet/interior_unique --headless
 call :run fleet/sight_line --headless

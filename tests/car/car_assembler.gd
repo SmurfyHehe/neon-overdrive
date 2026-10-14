@@ -104,8 +104,8 @@ func _initialize() -> void:
 	var snames := []
 	for i in mesh.get_surface_count():
 		snames.append(mesh.surface_get_name(i))
-	_check(snames == ["body", "trim", "glass", "glow"], "want surfaces body, trim, glass, glow, got %s" % [snames])
-	_check(CarAssembler.draw_call_count(ID) == 4, "the closed body should be 4 draw calls, got %d" % CarAssembler.draw_call_count(ID))
+	_check(snames == ["body", "trim", "glass", "glow", "flare"], "want surfaces body, trim, glass, glow, flare, got %s" % [snames])
+	_check(CarAssembler.draw_call_count(ID) == 5, "the closed body should be 5 draw calls (4 surfaces + the lamp flares), got %d" % CarAssembler.draw_call_count(ID))
 	for i in mesh.get_surface_count():
 		_check((mesh.surface_get_format(i) & Mesh.ARRAY_FORMAT_CUSTOM0) != 0, "surface %s should carry CUSTOM0 (ao, shut)" % snames[i])
 		_check(body.get_surface_override_material(i) != null or snames[i] == "body", "surface %s should have its material" % snames[i])
@@ -182,7 +182,7 @@ func _initialize() -> void:
 			panel_tris += CarAssembler._mesh_tris(pm.mesh)
 			n_panels += 1
 	_check(n_panels == 4, "want 4 open panels, got %d" % n_panels)
-	_check(CarAssembler.draw_call_count(ID, {"panels": "open"}) == 8, "open should be 4 + 4 draw calls, got %d" % CarAssembler.draw_call_count(ID, {"panels": "open"}))
+	_check(CarAssembler.draw_call_count(ID, {"panels": "open"}) == 9, "open should be 5 + 4 draw calls, got %d" % CarAssembler.draw_call_count(ID, {"panels": "open"}))
 	_check(CarAssembler._mesh_tris(open.mesh) + panel_tris == tris, "open body %d + panels %d should be the closed %d" % [CarAssembler._mesh_tris(open.mesh), panel_tris, tris])
 	var hood_top := _panel_aabb(open, "hinge_hood").end.y
 	_check(hood_top > CarAssembler.part_aabb(ID, "hood").end.y + 0.25, "the open hood should rise (top %.2f)" % hood_top)
@@ -190,7 +190,7 @@ func _initialize() -> void:
 	_check(door_out > CarAssembler.part_aabb(ID, "door_r").end.x + 0.3, "the open right door should swing out (x %.2f)" % door_out)
 	var door_out_l := _panel_aabb(open, "hinge_door_l").position.x
 	_check(door_out_l < CarAssembler.part_aabb(ID, "door_l").position.x - 0.3, "the open left door should swing out (x %.2f)" % door_out_l)
-	_check((open.mesh as ArrayMesh).get_surface_count() == 4, "the open body keeps its 4 surfaces")
+	_check((open.mesh as ArrayMesh).get_surface_count() == 5, "the open body keeps its 5 surfaces")
 	open.free()
 
 	# ---- swap_part: a different front bumper, the rest untouched
@@ -202,7 +202,7 @@ func _initialize() -> void:
 	_check(CarAssembler.swap_part(holder, "bumper_f", bumper), "swap_part should find the body under its parent and swap the bumper")
 	var swapped := body.mesh as ArrayMesh
 	_check(swapped != mesh, "a swap should give a new merged mesh")
-	_check(swapped.get_surface_count() == 4, "a swapped body is still 4 surfaces, got %d" % swapped.get_surface_count())
+	_check(swapped.get_surface_count() == 5, "a swapped body is still 5 surfaces, got %d" % swapped.get_surface_count())
 	_check(CarAssembler._mesh_tris(swapped) == tris - before_bumper + 12, "swapped body %d triangles, want %d" % [CarAssembler._mesh_tris(swapped), tris - before_bumper + 12])
 	_check(absf(swapped.get_aabb().end.z - box.end.z) < 0.01, "the tail should not move when the nose is swapped")
 	_check(CarAssembler.surface_index(swapped, "body") == 0, "the body surface stays first")
@@ -229,7 +229,7 @@ func _initialize() -> void:
 	var cbody := car.get_node_or_null("Body") as MeshInstance3D
 	_check(cbody != null and cbody.has_meta("car_id") and cbody.mesh == mesh, "the coupe's Body should be the assembled, cached mesh")
 	_check(car.get_node_or_null("Mirrors") == null, "from parts the door mirrors are in the body mesh, not a mesh of their own")
-	_check(P1CoupeBuilder.draw_call_count() == 9, "the coupe should still be 9 draw calls, got %d" % P1CoupeBuilder.draw_call_count())
+	_check(P1CoupeBuilder.draw_call_count() == 10, "the coupe should be 10 draw calls (the lamp flares since 2026-10-14), got %d" % P1CoupeBuilder.draw_call_count())
 	_check(car.get_child(0) == cbody, "the body should be the first child (before the effects attach)")
 	var paint_m := car.get_meta("body_mat") as ShaderMaterial
 	_check(paint_m != null and cbody.get_surface_override_material(0) == paint_m, "body_mat should be the material on the body surface")

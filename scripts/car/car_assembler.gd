@@ -43,6 +43,13 @@ class_name CarAssembler
 
 const GLB := "res://assets/cars/%s/body.glb"
 const SURFACES := ["body", "trim", "glass", "glow"]
+## Plus "flare": one camera-facing quad per head and tail lamp (tail flare,
+## head halo; NpcCarBuilder.FLARE_SHADER), added when the car has them.
+const FLARE_SURFACE := "flare"
+## The halo and flare colours, linear: the warm head lamp white and the tail
+## red every parts car's glow materials use (kits.py LAMP colours).
+const FLARE_HEAD := Color(1.0, 0.82, 0.52)
+const FLARE_TAIL := Color(1.0, 0.16, 0.05)
 const NODE_NAME := "Body"
 
 const CLASS_PLASTIC := 1
@@ -551,6 +558,7 @@ static func _merged(car_id: String, parts: Dictionary) -> Dictionary:
 	for sname in SURFACES:
 		if surf.has(sname):
 			_add_surface(body, surf[sname], sname)
+	_add_flares(body, car)
 	var panel_meshes := {}
 	for hname in panels:
 		var pm := ArrayMesh.new()
@@ -559,6 +567,44 @@ static func _merged(car_id: String, parts: Dictionary) -> Dictionary:
 	var built := {"body": body, "panels": panel_meshes}
 	_meshes[key] = built
 	return built
+
+## The flare surface: a quad at each side's head lamp centre (halo) and tail
+## lamp centre (flare), as NpcCarBuilder._flare_quads does for a sheet body.
+## One draw call for the player's car; the quads sit at the lamp centres and
+## FLARE_SHADER spreads them facing the camera.
+static func _add_flares(body: ArrayMesh, car: Dictionary) -> void:
+	var out := [PackedVector3Array(), PackedVector3Array(), PackedColorArray(), PackedVector2Array()]
+	for kind in ["head", "tail"]:
+		var pair := [Vector3.ZERO, Vector3.ZERO]
+		var n := [0, 0]
+		for pname in car.parts:
+			var mats: Dictionary = car.parts[pname].mats
+			if not mats.has("glow_" + kind):
+				continue
+			for v in (mats["glow_" + kind].v as PackedVector3Array):
+				var side := 0 if v.x < 0.0 else 1
+				pair[side] += v
+				n[side] += 1
+		for side in 2:
+			if n[side] == 0:
+				continue
+			NpcCarBuilder.append_flare_quad(out, pair[side] / float(n[side]), kind == "head",
+				FLARE_HEAD if kind == "head" else FLARE_TAIL)
+	if (out[0] as PackedVector3Array).is_empty():
+		return
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = out[0]
+	arrays[Mesh.ARRAY_NORMAL] = out[1]
+	arrays[Mesh.ARRAY_COLOR] = out[2]
+	arrays[Mesh.ARRAY_TEX_UV] = out[3]
+	# CUSTOM0 (ao, shut) like every other surface, all clear.
+	var ao := PackedByteArray()
+	ao.resize((out[0] as PackedVector3Array).size() * 4)
+	ao.fill(0)
+	arrays[Mesh.ARRAY_CUSTOM0] = ao
+	body.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, CUSTOM0_FLAGS)
+	body.surface_set_name(body.get_surface_count() - 1, FLARE_SURFACE)
 
 static func _builder() -> Dictionary:
 	return {"v": PackedVector3Array(), "n": PackedVector3Array(), "c": PackedColorArray(), "ao": PackedByteArray(), "i": PackedInt32Array()}
@@ -605,10 +651,16 @@ static func _dress(body: MeshInstance3D, paint_mat: Material) -> void:
 				body.set_surface_override_material(i, glass_material())
 			"glow":
 				body.set_surface_override_material(i, glow_material())
+			FLARE_SURFACE:
+				body.set_surface_override_material(i, NpcCarBuilder._get_flare_material())
 
+## Model triangles: the lamp flare quads (FLARE_SURFACE) are not counted,
+## they are not part of the car's shape (body.json counts without them).
 static func _mesh_tris(mesh: Mesh) -> int:
 	var n := 0
 	for i in mesh.get_surface_count():
+		if mesh is ArrayMesh and (mesh as ArrayMesh).surface_get_name(i) == FLARE_SURFACE:
+			continue
 		var arrays := mesh.surface_get_arrays(i)
 		var idx: Variant = arrays[Mesh.ARRAY_INDEX]
 		n += (idx as PackedInt32Array).size() / 3 if idx != null else (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3

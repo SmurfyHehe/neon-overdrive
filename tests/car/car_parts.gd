@@ -164,7 +164,7 @@ func _player() -> void:
 	_check(calipers != null and calipers.visibility_range_end == 0.0, "the player's parts have no distance cut-off")
 	_check(calipers != null and calipers.layers == 1 << (CarFx.CAR_LAYER - 1), "the calipers are on the car layer")
 	var draws_driving := P1CoupeBuilder.draw_call_count() + CarParts.extra_draw_calls()
-	_check(draws_driving == 10, "the player driving should be 10 draw calls (8 + underside + calipers), got %d" % draws_driving)
+	_check(draws_driving == 11, "the player driving should be 11 draw calls (8 + lamp flares + underside + calipers), got %d" % draws_driving)
 
 	# Detail on (photo mode, the garage, stopped with a panel open): the
 	# shocks appear, on the car layer, and go when detail turns off.
@@ -191,7 +191,7 @@ func _player() -> void:
 	var budget := 13500 if from_parts else 10000
 	print("car_parts: player %d triangles as drawn (parts %d), %d draw calls in detail" % [tris, parts.triangle_count(), draws])
 	_check(tris <= budget, "the player with parts should stay inside the %d triangle budget, got %d" % [budget, tris])
-	_check(draws == 11, "the player in detail should be 11 draw calls (8 + underside + calipers + shocks), got %d" % draws)
+	_check(draws == 12, "the player in detail should be 12 draw calls (8 + lamp flares + underside + calipers + shocks), got %d" % draws)
 
 	# Settle on the floor, then the shock follows the spring and the caliper the hub.
 	for i in 180:

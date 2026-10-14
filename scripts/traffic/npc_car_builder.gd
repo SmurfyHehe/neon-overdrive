@@ -264,6 +264,12 @@ const FLARE_NEAR_R := 0.14
 const FLARE_MIN_SCREEN := 0.006
 const FLARE_TINT := Color(1.0, 0.16, 0.05)
 const FLARE_ENERGY := 1.1
+## Head lamp halo (Roy 1554, 2026-10-14): the same camera-facing quad on
+## each head lamp, warm white, on the light switch (and the flash), never the
+## brake. A little wider than the tail flare (x this) and dimmer (x this),
+## so a car coming at you is two soft warm points and not a white-out.
+const HALO_R := 1.35
+const HALO_K := 0.55
 const PAINT_MATS := ["paint", "roof"]
 const RIM_MATS := ["rim", "rim_face"]
 
@@ -344,8 +350,11 @@ void fragment() {
 }
 """
 
-## The tail flares: one quad per tail lamp, all four corners at the lamp's
-## centre with UV = the corner, spread out here facing the camera. The radius
+## The tail flares and head lamp halos: one quad per lamp, all four corners
+## at the lamp's centre with UV = the corner, spread out here facing the
+## camera. The vertex normal says which: +z a tail lamp (the uniform tint, on
+## the switch or the brake), -z a head lamp (the vertex colour, on the switch
+## or the flash). The radius
 ## is the larger of `near_r` metres and `min_screen` of the screen height, so it stays a point
 ## at any distance; it is pulled 0.25 m toward the camera so the lamp's own
 ## body never hides it. Additive and depth-tested: no sorting, and a car in
@@ -363,19 +372,30 @@ instance uniform float turn : instance_index(2) = 0.0;
 instance uniform float flash : instance_index(3) = 0.0;
 // The light switch, as GLOW_SHADER: off, a tail lamp only flares on the brake.
 instance uniform float lamps : instance_index(7) = 1.0;
+uniform float halo_r = 1.35;
+uniform float halo_k = 0.55;
 varying float v_face;
+varying float v_head;
+varying vec3 v_tint;
 void vertex() {
+	// -z normal: a head lamp halo; +z: a tail flare.
+	float head = step(NORMAL.z, 0.0);
+	v_head = head;
+	v_tint = mix(tint, COLOR.rgb, head);
 	// The left tail lamp is out (turn carries + 4): no flare on that side.
-	float lamp_out = step(3.5, turn) * step(VERTEX.x, 0.0);
+	float lamp_out = step(3.5, turn) * step(VERTEX.x, 0.0) * (1.0 - head);
 	vec3 c = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	float d = max(-c.z, 0.05);
-	vec3 rear = normalize((MODELVIEW_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
-	v_face = smoothstep(0.05, 0.35, dot(-normalize(c), rear));
+	vec3 facing = normalize((MODELVIEW_MATRIX * vec4(0.0, 0.0, 1.0 - 2.0 * head, 0.0)).xyz);
+	v_face = smoothstep(0.05, 0.35, dot(-normalize(c), facing));
 	// The view's height at distance d is 2d / |P[1][1]| (negative under
 	// Vulkan's flipped Y, hence the abs).
 	float far_r = min_screen * 2.0 * d / abs(PROJECTION_MATRIX[1][1]);
-	float lit = max(max(step(0.5, lamps), step(0.5, flash)), step(0.01, brake));
-	float r = max(near_r, far_r) * (1.0 + 0.6 * brake) * v_face * step(0.001, gain) * (1.0 - lamp_out) * lit;
+	float on = max(step(0.5, lamps), step(0.5, flash));
+	float lit = mix(max(on, step(0.01, brake)), on, head);
+	// Tail flares grow on the brake, head halos on a flash.
+	float grow = mix(0.6 * brake, 0.8 * step(0.5, flash), head);
+	float r = max(near_r * mix(1.0, halo_r, head), far_r) * (1.0 + grow) * v_face * step(0.001, gain) * (1.0 - lamp_out) * lit;
 	c *= max(d - 0.25, 0.05) / d;
 	c.xy += UV * r;
 	VERTEX = c;
@@ -384,7 +404,8 @@ void fragment() {
 	// A flat core to half the radius, then a soft edge: a few pixels out
 	// there still read as a lamp, not a smear.
 	float f = 1.0 - smoothstep(0.45, 1.0, length(UV));
-	ALBEDO = tint * energy * gain * (1.0 + 1.5 * brake) * f * v_face;
+	float k = mix(1.0 + 1.5 * brake, halo_k * (1.0 + 1.2 * step(0.5, flash)), v_head);
+	ALBEDO = v_tint * energy * gain * k * f * v_face;
 }
 """
 
@@ -546,11 +567,18 @@ static func chassis_visual(kind: String, build: String, paint: Color, role := ""
 	if uses_parts(kind, ai):
 		# Cars from parts: the body is assembled from the real parts in
 		# assets/cars/<kind>/body.glb (CarAssembler: one mesh, 4 surfaces).
+		# CarPaint's parts variant, as the coupe wears (P1CoupeBuilder): the
+		# city reflection, the moon's rim and the street lamps on the body.
+		# Until 2026-10-14 these cars wore the plain pre-look-upgrade shader
+		# (PARTS_BODY_SHADER), so at night the muscle car read as a black
+		# blob with two red glows (better-exteriors note, Roy 1526).
 		var paint_mat := ShaderMaterial.new()
-		paint_mat.shader = CarAssembler.paint_shader(P1CoupeBuilder.PARTS_BODY_SHADER)
+		paint_mat.shader = CarPaint.parts_body_shader()
 		paint_mat.set_shader_parameter("paint", paint)
 		var body := CarAssembler.build(kind, parts_config(), paint_mat)
 		body.position = lift
+		# The lamp flares and halos grow past the body's box at a distance.
+		body.extra_cull_margin = 2.0
 		# Gloss, rust and flake (the Bug is rusty and dull), as the sheet body
 		# and the parts coupe get them.
 		body.set_instance_shader_parameter("finish", CarPaint.finish_for(kind))
@@ -796,35 +824,45 @@ static func _append_fittings(groups: Dictionary, fit: Dictionary) -> void:
 				g[6].append_array(CarPaint._NO_EDGES)
 
 ## One flare quad per side at the area-weighted centre of that side's tail
-## lamp faces (two triangles, all corners at the centre, UV = the corner).
-## Arrays as _build_mesh's groups, plus UVs.
+## lamp faces, and one halo quad per side at its head lamp faces (two
+## triangles each, all corners at the centre, UV = the corner, the normal
+## +z for a tail and -z for a head: FLARE_SHADER reads it). Arrays as
+## _build_mesh's groups, plus UVs.
 static func _flare_quads(data: GDScript, tris: PackedVector3Array, mats: PackedByteArray) -> Array:
-	var tail: int = data.NAMES.find("tail")
-	var sums := {-1: Vector3.ZERO, 1: Vector3.ZERO}
-	var areas := {-1: 0.0, 1: 0.0}
-	for t in mats.size():
-		if mats[t] != tail:
-			continue
-		var a := tris[t * 3]
-		var b := tris[t * 3 + 1]
-		var c := tris[t * 3 + 2]
-		var area := (b - a).cross(c - a).length() / 2.0
-		var side := 1 if (a + b + c).x > 0.0 else -1
-		sums[side] += (a + b + c) / 3.0 * area
-		areas[side] += area
 	var out := [PackedVector3Array(), PackedVector3Array(), PackedColorArray(), PackedVector2Array()]
-	var col := Color(data.COLORS["tail"]).srgb_to_linear()
-	var corners := [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, -1), Vector2(1, 1), Vector2(-1, 1)]
-	for side in [-1, 1]:
-		if float(areas[side]) <= 0.0:
+	for lamp in ["tail", "head"]:
+		var mat: int = data.NAMES.find(lamp)
+		if mat < 0:
 			continue
-		var centre: Vector3 = sums[side] / float(areas[side])
-		for uv in corners:
-			out[0].append(centre)
-			out[1].append(Vector3(0.0, 0.0, 1.0))
-			out[2].append(col)
-			out[3].append(uv)
+		var sums := {-1: Vector3.ZERO, 1: Vector3.ZERO}
+		var areas := {-1: 0.0, 1: 0.0}
+		for t in mats.size():
+			if mats[t] != mat:
+				continue
+			var a := tris[t * 3]
+			var b := tris[t * 3 + 1]
+			var c := tris[t * 3 + 2]
+			var area := (b - a).cross(c - a).length() / 2.0
+			var side := 1 if (a + b + c).x > 0.0 else -1
+			sums[side] += (a + b + c) / 3.0 * area
+			areas[side] += area
+		var col := Color(data.COLORS[lamp]).srgb_to_linear()
+		for side in [-1, 1]:
+			if float(areas[side]) <= 0.0:
+				continue
+			append_flare_quad(out, sums[side] / float(areas[side]), lamp == "head", col)
 	return out
+
+const FLARE_CORNERS := [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, -1), Vector2(1, 1), Vector2(-1, 1)]
+
+## Six corners of one flare (tail) or halo (head) quad at `centre` into the
+## [verts, normals, colours, uvs] arrays. CarAssembler uses it for parts bodies.
+static func append_flare_quad(out: Array, centre: Vector3, head: bool, col: Color) -> void:
+	for uv in FLARE_CORNERS:
+		out[0].append(centre)
+		out[1].append(Vector3(0.0, 0.0, -1.0 if head else 1.0))
+		out[2].append(col)
+		out[3].append(uv)
 
 # ---------- materials (one of each for every traffic car) ----------
 
@@ -913,5 +951,7 @@ static func _get_flare_material() -> ShaderMaterial:
 		_flare_mat.set_shader_parameter("energy", FLARE_ENERGY)
 		_flare_mat.set_shader_parameter("near_r", FLARE_NEAR_R)
 		_flare_mat.set_shader_parameter("min_screen", FLARE_MIN_SCREEN)
+		_flare_mat.set_shader_parameter("halo_r", HALO_R)
+		_flare_mat.set_shader_parameter("halo_k", HALO_K)
 		_flare_mat.set_shader_parameter("gain", _light_glow)
 	return _flare_mat

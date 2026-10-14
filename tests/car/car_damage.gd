@@ -27,6 +27,9 @@ extends SceneTree
 # - LIMP: radiator at 1.0, full throttle from rest: the car still drives
 # - LAMPS: both head lamps broken switch the beam off
 # - STEAM / RATTLE: a hurt radiator steams; a loose car at speed rattles
+# - WRECK: the totalled look (wreck_look.gd) at meter 0.95, ~70 km/h: bonnet
+#   smoke and sparks come out of the tyre smoke pool, one head lamp is dark
+#   (half the beam), the rattle is up, and the garage repair clears it all
 # Exit code 1 on failure. Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --fixed-fps 120 --audio-driver Dummy --path . -s res://tests/car/car_damage.gd
 
@@ -44,7 +47,7 @@ class StubBank:
 		bank -= amount
 		return true
 
-enum Step { BOOT, WALL, PULL_BASE, PULL_FL, PULL_FR, SAG, LIMP, LAMPS, STEAM, DONE }
+enum Step { BOOT, WALL, PULL_BASE, PULL_FL, PULL_FR, SAG, LIMP, LAMPS, STEAM, WRECK, DONE }
 
 var game: Node
 var step := Step.BOOT
@@ -339,6 +342,33 @@ func _physics_process(_delta: float) -> bool:
 				else:
 					_check(false, "DamageAudio is on the car")
 				_check(p.damage.hits == 0, "steady driving makes no hits (%d)" % p.damage.hits)
+				_fresh(p)
+				p.damage.totalled = 0.95
+				p.damage.parts[CarDamage.Part.STEER_FR] = 0.5
+				p.damage.rebuild_offsets()
+				if smoke != null:
+					smoke.clear()
+				_launch(p, 20.0)
+				p.driver = _hold(0.5, 0.0)
+				step = Step.WRECK
+		Step.WRECK:
+			if t >= hz * 2:
+				var smoke := _find(game, "TyreSmoke") as TyreSmoke
+				var rattle := _find(p, "DamageAudio") as DamageAudio
+				var kmh := p.current_speed() * 3.6
+				_check(p.damage.look_stage() == 3, "meter 0.95 is look stage 3 (%d)" % p.damage.look_stage())
+				if smoke != null:
+					print("wreck smoke puffs in 2 s: %d, sparks: %d at %.0f km/h" % [smoke.emitted_wreck, smoke.emitted_sparks, kmh])
+					_check(not smoke.enabled or smoke.emitted_wreck > 0, "a stage 3 car smokes off the bonnet")
+					_check(not smoke.enabled or smoke.emitted_sparks > 0, "a stage 3 car at %.0f km/h throws sparks" % kmh)
+				var spot := p.get_node_or_null("Headlights") as SpotLight3D
+				_check(spot == null or (spot.visible and is_equal_approx(spot.light_energy, CarFx.HEADLIGHT_ENERGY * 0.5)), "stage 2+: one head lamp dark, half the beam")
+				_check(p.damage.head_lamp_dark(1) and not p.damage.head_lamp_dark(0), "the right lamp (the side that took the hit)")
+				if rattle != null:
+					print("rattle level at stage 3: %.2f" % rattle.level)
+					_check(rattle.level > 0.3, "a stage 3 car rattles hard at speed (%.2f)" % rattle.level)
+				_fresh(p)
+				_check(p.damage.look_stage() == 0 and is_equal_approx(p.damage.headlight_share(), 1.0), "the garage repair clears the look")
 				return _end("")
 	return false
 

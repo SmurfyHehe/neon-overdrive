@@ -115,6 +115,7 @@ extends RefCounted
 const DamageOffsets := preload("res://scripts/car/damage_offsets.gd")
 const DamageDifficulty := preload("res://scripts/car/damage_difficulty.gd")
 const FlatTyre := preload("res://scripts/car/flat_tyre.gd")
+const WreckLook := preload("res://scripts/car/wreck_look.gd")
 
 enum Part { RADIATOR, STEER_FL, STEER_FR, SUSP_RL, SUSP_RR, BODY,
 	TOE_RL, TOE_RR, CAMBER_FL, CAMBER_FR, CAMBER_RL, CAMBER_RR, SAG_FL, SAG_FR,
@@ -648,9 +649,22 @@ func spring_mult(i: int) -> float:
 			return 1.0 - SPRING_LOSS * effect(parts[Part.SUSP_RR])
 	return 1.0
 
+## The totalled look's stage, 0..4 (scripts/car/wreck_look.gd): the smoke,
+## the sparks, the stage lamp and the rattle floor all read it.
+func look_stage() -> int:
+	return WreckLook.stage(totalled) if enabled else 0
+
+## True while head lamp i (0 left, 1 right) is dark: broken by a hit, or put
+## out by the totalled look from stage 2 (the side that took the most front
+## damage). The stage lamp is a look, never written into `lamps`.
+func head_lamp_dark(i: int) -> bool:
+	if lamps[Lamp.HEAD_L if i == 0 else Lamp.HEAD_R]:
+		return true
+	return WreckLook.dark_lamp(look_stage(), parts[Part.STEER_FL], parts[Part.STEER_FR]) == i
+
 ## Head lamp beam left 0..1: each working head lamp gives half.
 func headlight_share() -> float:
-	return (0.0 if lamps[Lamp.HEAD_L] else 0.5) + (0.0 if lamps[Lamp.HEAD_R] else 0.5)
+	return (0.0 if head_lamp_dark(0) else 0.5) + (0.0 if head_lamp_dark(1) else 0.5)
 
 ## How loose the car is, 0..1, for the rattle.
 func rattle_level() -> float:
@@ -661,7 +675,9 @@ func rattle_level() -> float:
 	for i in Part.BODY + 1:   # the slice 1 parts; the corner parts ride on the same hits
 		worst = maxf(worst, parts[i])
 		total += parts[i]
-	return clampf(maxf(worst, total * 0.4) - RATTLE_FROM, 0.0, 1.0) / (1.0 - RATTLE_FROM)
+	var level := clampf(maxf(worst, total * 0.4) - RATTLE_FROM, 0.0, 1.0) / (1.0 - RATTLE_FROM)
+	# the totalled look (wreck_look.gd): a car well up the meter is loose whatever its parts say
+	return maxf(level, WreckLook.rattle_floor(look_stage()))
 
 ## Steam puffs per second off the radiator.
 func steam_rate() -> float:

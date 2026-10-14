@@ -30,6 +30,15 @@ class_name TyreSmoke
 # Colour hook: a car spec may carry "tyre_smoke_colour" (a Color) and the
 # smoke is tinted by it. Nothing sets it yet; coloured smoke is a garage mod
 # for later.
+#
+# The same pool also draws the damage looks, so a hurt car adds no draw call:
+# - steam off a broken radiator (_step_steam, damage slice 1);
+# - the totalled look (_step_wreck, scripts/car/wreck_look.gd, Roy 1555):
+#   bonnet smoke that gets darker and thicker with the totalled meter's stage,
+#   and sparks from under the car at speed from stage 3. A puff's "mode"
+#   rides in the seed channel (custom.w = seed + 10 x darkness steps + 1000
+#   for a spark): dark smoke is the grey puff pulled toward black, a spark is
+#   a tiny hot amber point that falls under gravity instead of lifting.
 
 const MAX_PUFFS := 256
 ## Puffs per second per wheel at full slip, full scorch, hot tyre, slider 1.
@@ -48,6 +57,13 @@ const TEMP_COLD := 45.0      # degC: a tyre this cool smokes at COLD_SHARE
 const TEMP_HOT := 110.0
 const COLD_SHARE := 0.55
 const DEFAULT_COLOUR := Color(0.78, 0.78, 0.8)
+## A spark's colour (sodium pulled toward amber, hot) and where under the
+## nose the dragged part throws them from.
+const SPARK_COLOUR := Color(1.0, 0.66, 0.25)
+const SPARK_DROP := 0.08     # m above the road under the car
+const SPARK_AHEAD := 0.35    # share of half_l ahead of the origin
+
+const WreckLook := preload("res://scripts/car/wreck_look.gd")
 
 const SHADER := """
 shader_type spatial;
@@ -55,6 +71,7 @@ render_mode blend_mix, unshaded, cull_disabled, depth_draw_never, shadows_disabl
 
 uniform float now = 0.0;
 uniform vec3 smoke_colour : source_color = vec3(0.78, 0.78, 0.8);
+uniform vec3 spark_colour : source_color = vec3(1.0, 0.66, 0.25);
 uniform vec3 sodium : source_color = vec3(1.0, 0.54, 0.12);
 uniform vec3 amber : source_color = vec3(1.0, 0.75, 0.4);
 uniform vec3 dusk : source_color = vec3(0.106, 0.165, 0.29);
@@ -75,28 +92,37 @@ uniform float screen_cap = 0.16;
 varying float v_alpha;
 varying vec3 v_col;
 varying float v_seed;
+varying float v_spark;
 
 void vertex() {
 	// Instance layout (TyreSmoke._emit): basis X = velocity, basis Y =
 	// (start size, growth, 0), origin = start point; custom = (birth, life,
-	// strength, seed).
+	// strength, seed + 10 x darkness steps + 1000 for a spark).
 	float age = now - INSTANCE_CUSTOM.x;
 	float life = INSTANCE_CUSTOM.y;
 	float t = clamp(age / life, 0.0, 1.0);
 	float a = max(age, 0.0);
+	float mode = INSTANCE_CUSTOM.w;
+	float spark = step(999.0, mode);
+	mode -= 1000.0 * spark;
+	float dark = floor(mode / 10.0) / 10.0;
 	vec3 vel = MODEL_MATRIX[0].xyz;
 	float size = MODEL_MATRIX[1].x + MODEL_MATRIX[1].y * sqrt(a);
-	// air drag on the throw-off, then a slow lift as the warm smoke rises
-	vec3 world = MODEL_MATRIX[3].xyz + vel * (1.0 - exp(-1.8 * a)) / 1.8 + vec3(0.0, 0.35 * a, 0.0);
+	// air drag on the throw-off, then a slow lift as the warm smoke rises;
+	// a spark falls instead
+	float lift = mix(0.35 * a, -4.9 * a * a, spark);
+	vec3 world = MODEL_MATRIX[3].xyz + vel * (1.0 - exp(-1.8 * a)) / 1.8 + vec3(0.0, lift, 0.0);
 	vec3 view_c = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
 	float dist = -view_c.z;
 	float near = smoothstep(near_start, near_end, dist);
 	// PROJECTION_MATRIX[1][1] = 1 / tan(fov / 2): the view height at dist is 2 * dist / it
 	size = min(size, screen_cap * 2.0 * dist / PROJECTION_MATRIX[1][1]);
 	float alive = step(0.0, age) * step(age, life);
-	v_alpha = alpha_peak * INSTANCE_CUSTOM.z * smoothstep(0.0, 0.06, t) * (1.0 - smoothstep(0.3, 1.0, t)) * near * alive;
+	float fade = mix(smoothstep(0.0, 0.06, t) * (1.0 - smoothstep(0.3, 1.0, t)), 1.0 - t * t, spark);
+	v_alpha = alpha_peak * INSTANCE_CUSTOM.z * fade * near * alive;
 	float k = v_alpha > 0.02 ? size : 0.0;   // invisible: collapse, no fill cost
-	v_seed = INSTANCE_CUSTOM.w;
+	v_seed = fract(mode);
+	v_spark = spark;
 	float r = v_seed * 6.2832 + a * (v_seed - 0.5);
 	mat2 rot = mat2(vec2(cos(r), sin(r)), vec2(-sin(r), cos(r)));
 	VERTEX = view_c + vec3(rot * VERTEX.xy * k, 0.0);
@@ -108,7 +134,8 @@ void vertex() {
 	float lamp = own * (1.0 - smoothstep(pool_inner, pool_outer, min(zo, lamp_spacing - zo)))
 		+ (1.0 - own) * (1.0 - smoothstep(pool_inner, pool_outer, min(zn, lamp_spacing - zn)));
 	vec3 lit = mix(dusk * dusk_level + vec3(0.06), mix(sodium, amber, 0.35) * lamp_level, lamp);
-	v_col = smoke_colour * lit;
+	// dark smoke: the lit grey pulled toward a sooty black; a spark: hot amber, lit by itself
+	v_col = mix(smoke_colour * lit * mix(1.0, 0.14, dark), spark_colour * 2.2, spark);
 }
 
 void fragment() {
@@ -117,8 +144,10 @@ void fragment() {
 	float soft = clamp(1.0 - r * r, 0.0, 1.0);
 	// a lopsided centre per puff, so the cloud is not a stack of perfect discs
 	float lump = 1.0 - 0.3 * clamp(dot(d, vec2(cos(v_seed * 6.2832), sin(v_seed * 6.2832))) * 2.0, 0.0, 1.0);
+	// a spark is a hard bright point, not a soft puff
+	float core = mix(soft * soft * lump, pow(soft, 6.0), v_spark);
 	ALBEDO = v_col;
-	ALPHA = v_alpha * soft * soft * lump;
+	ALPHA = v_alpha * core;
 }
 """
 
@@ -137,6 +166,12 @@ var emitted_drift := 0
 ## Steam puffs off a broken radiator (CarDamage), from the same pool.
 var emitted_steam := 0
 var _steam_carry := 0.0
+## The totalled look (WreckLook): bonnet smoke puffs and sparks, same pool.
+var emitted_wreck := 0
+var emitted_sparks := 0
+var _wreck_carry := 0.0
+var _spark_carry := 0.0
+var _wreck_side := 1.0
 
 var _player: PlayerCar
 var _mat: ShaderMaterial
@@ -186,6 +221,7 @@ func _ready() -> void:
 	_mat.set_shader_parameter("lamp_onc", RoadChunkBuilder.LAMP_SPACING * 0.75)
 	_mat.set_shader_parameter("pool_outer", RoadChunkBuilder.POOL_ALONG * 0.5)
 	_mat.set_shader_parameter("alpha_peak", ALPHA)
+	_mat.set_shader_parameter("spark_colour", SPARK_COLOUR)
 	material_override = _mat
 	set_colour(colour_from_spec(_player.spec))
 	var stock_road: Variant = CarSpec.coupe_default().get("tire_stiffnesses", {}).get("Road")
@@ -240,6 +276,7 @@ func _physics_process(delta: float) -> void:
 			_carry[i] -= 1.0
 			_emit(w, fwd, lat, lon, burnout)
 	_step_steam(delta, fwd)
+	_step_wreck(delta, fwd)
 
 ## Steam off a broken radiator (damage slice 1: the hood stays shut, the
 ## radiator shows its damage this way). Rises from the grille, thin and slow.
@@ -266,6 +303,69 @@ func _step_steam(delta: float, fwd: Vector3) -> void:
 		_life[_next] = life
 		_next = (_next + 1) % MAX_PUFFS
 		emitted_steam += 1
+
+## The totalled look (scripts/car/wreck_look.gd, Roy 1555): smoke off the
+## bonnet edges that thickens and darkens with the meter's stage, and sparks
+## from under the car at speed from stage 3. Same pool as the tyre smoke.
+func _step_wreck(delta: float, fwd: Vector3) -> void:
+	var st: int = _player.damage.look_stage()
+	if st <= 0:
+		_wreck_carry = 0.0
+		_spark_carry = 0.0
+		return
+	var xf := _player.global_transform
+	var half_l := 2.2
+	if _player.chassis_visual != null:
+		half_l = float(_player.chassis_visual.get_meta("half_l", 2.2))
+	var right := xf.basis.x
+	var up := xf.basis.y
+	var vel := _player.linear_velocity
+	# bonnet smoke: from the bonnet's side edges (stages 1-2, so the cockpit
+	# view keeps the road), the whole bonnet from stage 3
+	_wreck_carry += WreckLook.smoke_rate(st, _player.throttle_input) * delta
+	var dark := WreckLook.smoke_dark(st)
+	var life := WreckLook.smoke_life(st)
+	var size := WreckLook.smoke_size(st)
+	var bonnet := xf.origin + fwd * (half_l - 0.9) + up * 0.72
+	while _wreck_carry >= 1.0:
+		_wreck_carry -= 1.0
+		_wreck_side = -_wreck_side
+		var across := _wreck_side * randf_range(0.45, 0.75) if st < 3 else randf_range(-0.8, 0.8)
+		var p := bonnet + right * across + fwd * randf_range(-0.5, 0.4)
+		var v := vel * 0.8 + up * randf_range(0.8, 1.6) - fwd * randf_range(0.0, 0.8) + right * across * 0.6
+		_emit_mode(p, v, size * randf_range(0.85, 1.15), SIZE_GROW * (0.35 + 0.4 * dark), life * randf_range(0.85, 1.15),
+			clampf(0.55 + 0.45 * dark, 0.0, 1.0), dark, false)
+		emitted_wreck += 1
+	# sparks: a dragged part under the nose scrapes the road
+	_spark_carry += WreckLook.spark_rate(st, _player.speed * 3.6) * delta
+	# the road under the nose: the front wheels' contact height, a hand above it
+	var ground := xf.origin.y - 0.4
+	var n := 0
+	for i in mini(2, _player.wheel_array.size()):
+		var w: Wheel = _player.wheel_array[i]
+		if w.is_colliding():
+			ground = w.last_collision_point.y if n == 0 else (ground + w.last_collision_point.y) * 0.5
+			n += 1
+	var sump := xf.origin + fwd * (half_l * SPARK_AHEAD)
+	sump.y = ground + SPARK_DROP
+	while _spark_carry >= 1.0:
+		_spark_carry -= 1.0
+		var p := sump + right * randf_range(-0.35, 0.35)
+		var v := vel * 0.9 - fwd * randf_range(2.0, 6.0) + up * randf_range(0.6, 2.4) + right * randf_range(-1.5, 1.5)
+		_emit_mode(p, v, WreckLook.SPARK_SIZE * randf_range(0.7, 1.3), 0.0, WreckLook.SPARK_LIFE * randf_range(0.7, 1.2), 1.0, 0.0, true)
+		emitted_sparks += 1
+
+## One puff into the ring with its look mode: `dark` 0..1 pulls the grey
+## toward soot, `spark` makes it a falling hot point.
+func _emit_mode(p: Vector3, vel: Vector3, size: float, grow: float, life: float, strength: float, dark: float, spark: bool) -> void:
+	var xf := Transform3D(Basis(vel, Vector3(size, grow, 0.0), Vector3.ZERO), p)
+	var mode := randf() + 10.0 * roundf(clampf(dark, 0.0, 1.0) * 10.0) + (1000.0 if spark else 0.0)
+	multimesh.set_instance_transform(_next, xf)
+	multimesh.set_instance_custom_data(_next, Color(_t, life, strength, mode))
+	_xf[_next] = xf
+	_birth[_next] = _t
+	_life[_next] = life
+	_next = (_next + 1) % MAX_PUFFS
 
 ## Advance wheel i's scorch toward the current slip strength and return it.
 func step_scorch(i: int, strength: float, dt: float) -> float:
@@ -345,6 +445,9 @@ func clear() -> void:
 	for i in _scorch.size():
 		_scorch[i] = 0.0
 		_carry[i] = 0.0
+	_steam_carry = 0.0
+	_wreck_carry = 0.0
+	_spark_carry = 0.0
 
 static func _dead_xf() -> Transform3D:
 	return Transform3D(Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), Vector3.ZERO)

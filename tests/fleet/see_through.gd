@@ -11,9 +11,10 @@ extends SceneTree
 #            lamp faces, and no ray may leave the car without crossing a
 #            face at all. The body is drawn single-sided (cull_back), so the
 #            rays only count faces that face the camera, as the renderer
-#            does; glass counts from either side (it is see-through on
-#            purpose: the world through the rear window is right, the car's
-#            own tail lamps are not).
+#            does (the mirror shell, CockpitFrame, is drawn from the back
+#            only and counts that way round); glass counts from either side
+#            (it is see-through on purpose: the world through the rear
+#            window is right, the car's own tail lamps are not).
 #   outside  from six outside viewpoints (chase, front and rear three-quarter,
 #            side, top, low front) every ray aimed at the car's core (a box
 #            well inside the body) crosses a face before it gets there: no
@@ -68,19 +69,18 @@ const OFFSET := Vector3(0.0, 800.0, 0.0)
 ## car -> {check: issue}
 const KNOWN := {
 	# #763: the rear-view camera sits inside the cabin and the body is drawn
-	# single-sided, so the rear deck and trunk are not there from the inside;
-	# every car's mirror strip shows the road behind through the car.
+	# single-sided, so from in there the rear deck, the C-pillars and the
+	# trunk are not drawn: the strip shows the road behind through the car
+	# (the crossover's own tail lamps too). The kei, the Camel and the truck
+	# are closed by their rear glass and bulkhead.
 	"p0_beater": {"mirror_hole": 763},
 	"p1_coupe": {"mirror_hole": 763},
 	"p2_hothatch": {"mirror_hole": 763},
 	"p7_wagon": {"mirror_hole": 763},
 	"p3_tuner": {"mirror_hole": 763},
-	"p4_kei": {"mirror_hole": 763},
 	"p5_muscle": {"mirror_hole": 763},
-	"p6_crossover": {"mirror_hole": 763},
-	"p17_work_pickup": {"mirror_hole": 763},
+	"p6_crossover": {"mirror_hole": 763, "mirror_lamps": 763},
 	"p8_driftcoupe": {"mirror_hole": 763},
-	"p10_truck": {"mirror_hole": 763},
 	"m1_monster": {"mirror_hole": 763},
 	"l1_lowrider": {"mirror_hole": 763},
 }
@@ -191,12 +191,21 @@ func _car_checks(kind: String) -> void:
 				else:
 					for v in verts:
 						faces.append(to_car * v)
+				if _cull_front(mi, s):
+					# drawn from the back only (the mirror shell): flip the winding
+					for i in range(0, faces.size() - 2, 3):
+						var t := faces[i + 1]
+						faces[i + 1] = faces[i + 2]
+						faces[i + 2] = t
 				var into := solid
 				if sname == "glass" or _is_glass(mi, s):
 					into = glass
 				elif sname == "glow":
 					into = glow
 				into.append_array(faces)
+				if _verbose:
+					print("  %s faces: %s/%s surface %d '%s' %d vertices, %s%s" % [kind, root_node.name, mi.name, s, sname, faces.size(),
+						"glass" if into == glass else ("lamp" if into == glow else "solid"), " (drawn from the back)" if _cull_front(mi, s) else ""])
 				if root_node == vis:
 					for v in faces:
 						if first:
@@ -266,7 +275,7 @@ func _car_checks(kind: String) -> void:
 			elif nearest == INF and _face(space, mirror_pos, dir, exit) == INF:
 				holes += 1
 				if _verbose:
-					print("  %s mirror ray %d,%d leaves the car with no face (dir %s)" % [kind, ix, iy, dir])
+					print("  %s mirror ray %d,%d leaves the car with no face at %s" % [kind, ix, iy, mirror_pos + dir * exit])
 	_count(kind, "mirror_lamps", lamps_seen, "the rear-view mirror sees the car's own tail lamps (%d of %d rays)" % [lamps_seen, mirror_rays])
 	_count(kind, "mirror_hole", holes, "the rear-view mirror looks out through the shell with no face in the way (%d of %d rays)" % [holes, mirror_rays])
 
@@ -394,6 +403,15 @@ static func CarPaint_surface(mesh: ArrayMesh, sname: String) -> int:
 
 ## A sheet body's glass is a surface named "glass"; a cabin window piece or
 ## any other mesh whose material is CarPaint's glass shader counts too.
+## True for a surface drawn from its back only (cull_front).
+static func _cull_front(mi: MeshInstance3D, s: int) -> bool:
+	var m := mi.get_active_material(s)
+	if m is BaseMaterial3D:
+		return (m as BaseMaterial3D).cull_mode == BaseMaterial3D.CULL_FRONT
+	if m is ShaderMaterial and (m as ShaderMaterial).shader != null:
+		return (m as ShaderMaterial).shader.code.contains("cull_front")
+	return false
+
 static func _is_glass(mi: MeshInstance3D, s: int) -> bool:
 	var m := mi.get_active_material(s) as ShaderMaterial
 	return m != null and (m.shader == CarPaint.glass_shader(true) or m.shader == CarPaint.glass_shader(false))
@@ -433,7 +451,9 @@ func _face_once(space: PhysicsDirectSpaceState3D, from: Vector3, dir: Vector3, m
 ## Distance along the ray (car space) to the nearest face on `layer`, INF for none.
 func _ray(space: PhysicsDirectSpaceState3D, from: Vector3, dir: Vector3, max_d: float, layer: int) -> float:
 	var q := PhysicsRayQueryParameters3D.create(from + OFFSET, from + OFFSET + dir * max_d, layer)
-	q.hit_back_faces = false
+	# The query must allow back faces for the shape's own backface_collision
+	# to count (glass and a sheet car's lamps); the body is one-sided.
+	q.hit_back_faces = layer != LAYER_SOLID
 	var hit := space.intersect_ray(q)
 	if hit.is_empty():
 		return INF

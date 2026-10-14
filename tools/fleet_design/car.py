@@ -60,7 +60,7 @@ def half_section(D, s):
     ledge = D.get('ledge', 0.012)
     rocker_h = D.get('rocker_h', yf + 0.16)
 
-    xin = min(wh['track'] / 2 - wh['w'] / 2 - 0.035, hw - 0.12)
+    xin = min(D.get('well_x', wh['track'] / 2 - wh['w'] / 2 - 0.035), hw - 0.12)
     ya = yf
     Ra = wh['r'] + wh.get('arch_gap', 0.03)
     yc = wh['r'] + wh.get('arch_lift', 0.0)

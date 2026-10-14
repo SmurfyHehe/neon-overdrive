@@ -15,6 +15,14 @@ extends CanvasLayer
 #   of it or beyond it)                                         -> after GRACE
 # - beside or beyond road that is not built (off either end of
 #   the chunk pool: the road is only recycled forward)          -> after GRACE
+# - wedged near a wall: within WEDGE_NEAR of a wall's inner face,
+#   engine running and gas on, but going nowhere: WEDGE_S of
+#   gas in all, forward or reverse, without getting WEDGE_MOVE
+#   from where it began                                         -> then
+#   (fuzz runs, 2026-10-13: about one run in 80 left the car
+#   jammed between the wall and a building front, where neither
+#   gear nor steering got it out; the release build has no
+#   put-back key, so nothing else could)
 # The two timed ones wait in case the car is only passing over (a hop along
 # the top of the wall) and comes back by itself.
 #
@@ -50,6 +58,7 @@ const REASON_OUTSIDE := "outside the walls"
 const REASON_NO_ROAD := "off the end of the road"
 const REASON_FLIPPED := "on its roof or side"
 const REASON_ASKED := "asked to be put back"
+const REASON_WEDGED := "wedged by the wall"
 
 ## Sandbox only: on its roof or side (basis.y.y under FLIP_UP) and slower than
 ## FLIP_SPEED m/s for this many seconds.
@@ -107,6 +116,15 @@ const CLEAR_X := 2.4
 ## How far back it looks for a clear spot, in steps of CLEAR_Z.
 const BACK_STEPS := 6
 
+## Wedged: the car's centre this close to a wall's inner face, m (the driving
+## lanes stay well clear of it: the walls stand past the sidewalk and the
+## building fronts), this much time with the gas on (and under WEDGE_SPEED
+## m/s) while never more than WEDGE_MOVE m from where it began.
+const WEDGE_NEAR := 4.0
+const WEDGE_S := 8.0
+const WEDGE_SPEED := 0.5
+const WEDGE_MOVE := 1.5
+
 enum Phase { WATCH, FADE_OUT, HOLD, FADE_IN }
 
 ## Tests: false switches the watch off (the car can be left out of bounds).
@@ -134,6 +152,8 @@ var _good_place := {}
 var _chunk := {}  # the chunk_pool entry the car was last in
 var _tick := 0
 var _flipped_for := 0.0
+var _wedged_for := 0.0
+var _wedged_at := Vector3.ZERO
 
 func _init(game: Node, player: PlayerCar) -> void:
 	_game = game
@@ -206,6 +226,9 @@ func _watch(delta: float) -> void:
 			_flipped_for = 0.0
 			request(REASON_FLIPPED)
 			return
+	if reason == "" and _wedged(delta):
+		request(REASON_WEDGED)
+		return
 	if reason == "":
 		_out_for = 0.0
 		_tick += 1
@@ -218,6 +241,28 @@ func _watch(delta: float) -> void:
 	_reason = reason
 	phase = Phase.FADE_OUT
 	_t = 0.0
+
+## True once the car has been jammed near a wall for WEDGE_S of gas: time
+## with the gas on adds up, time off it pauses the count (a player rocking
+## between forward and reverse is still stuck), and the count starts over
+## once the car gets WEDGE_MOVE from where it began or leaves the wall.
+func _wedged(delta: float) -> bool:
+	var p := _player.global_position
+	var u := RoadFrame.unroll(p)
+	var b := _bounds_at(u.z)
+	var near := b != Vector2.ZERO and (u.x > b.x - WEDGE_NEAR or u.x < -(b.y - WEDGE_NEAR))
+	if not near or (_wedged_for > 0.0 and p.distance_to(_wedged_at) > WEDGE_MOVE):
+		_wedged_for = 0.0
+		return false
+	if not (_player.engine_running and _player.throttle_input > 0.5 and _player.linear_velocity.length() < WEDGE_SPEED):
+		return false
+	if _wedged_for == 0.0:
+		_wedged_at = p
+	_wedged_for += delta
+	if _wedged_for < WEDGE_S:
+		return false
+	_wedged_for = 0.0
+	return true
 
 ## Inner faces of the two walls (own side, oncoming side; both |x|) of the
 ## built chunk at road-space z; ZERO where no road is built.

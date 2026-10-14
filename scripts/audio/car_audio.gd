@@ -94,6 +94,8 @@ const JOINTS_EVERYWHERE := true   # the whole road is highway for now; false = o
 const JOINT_GAIN := 0.35
 const MANHOLE_GAIN := 0.55
 const DECK_GAIN := 0.45
+## The tyre note rises this much on the ramps' and the ring's concrete.
+const DECK_PITCH := 0.05
 const ROAD_VARIANTS := 5
 
 ## A joint or a manhole under a wheel, 0..1: the chase camera kicks a little.
@@ -178,6 +180,8 @@ var _spin_prev := 0.0
 var _wheelbase := 2.6
 var _on_cover := {}        # wheel index -> on a manhole last frame
 var _on_kerb := {}         # wheel index -> on the kerb strip or pavement last frame
+var _on_joint := {}        # wheel index -> on a ramp's expansion joint last frame
+var deck_joint_count := 0  # wheels over a ramp's expansion joint (tests)
 var _feel: SurfaceFeel     # the car's per-wheel surface state; null on a car without one
 
 func _ready() -> void:
@@ -261,7 +265,7 @@ static func _all_built() -> bool:
 ## What the car is doing this frame, as plain numbers (so the listen pack can
 ## set them directly).
 func _read_car() -> Dictionary:
-	var st := {"speed": 0.0, "on_road": 0.0, "on_rough": 0.0, "on_grit": 0.0, "grit_slip": 0.0, "wet": 0.0, "deck": 0.0, "concrete": 0.0}
+	var st := {"speed": 0.0, "on_road": 0.0, "on_rough": 0.0, "on_grit": 0.0, "grit_slip": 0.0, "wet": 0.0, "deck": 0.0, "concrete": 0.0, "ramp_deck": 0.0}
 	for kind in KINDS:
 		st[kind + "_l"] = 0.0
 		st[kind + "_r"] = 0.0
@@ -272,6 +276,7 @@ func _read_car() -> Dictionary:
 	var rough := 0   # off the asphalt altogether (the pavement)
 	var kerb := 0    # on the kerb strip: rumbles, and still squeals
 	var grit := 0    # on the shoulder: crunches, never squeals
+	var ramp_deck := 0   # on a ramp's or the ring's concrete
 	var water := 0.0
 	var feel := _feel if _feel != null and SurfaceFeel.enabled else null
 	var static_load := _vehicle.mass * 9.81 / 4.0
@@ -293,6 +298,17 @@ func _read_car() -> Dictionary:
 		if up and not _on_kerb.get(i, true):
 			hit_kerb(st.speed)
 		_on_kerb[i] = up
+		# The ramps' and the ring's concrete deck (ramps doc 2.2): the
+		# expansion joint where a ramp meets the bridge is one "ka-thunk" per
+		# axle; the rumble strip at the gore buzzes like the kerb strip.
+		var joint := band == SurfaceMap.Kind.JOINT
+		if joint and not _on_joint.get(i, false):
+			hit_deck_joint(st.speed, w.position.z < 0.0)
+		_on_joint[i] = joint
+		if band == SurfaceMap.Kind.RUMBLE:
+			band = SurfaceMap.Kind.KERB
+		elif band == SurfaceMap.Kind.CONCRETE or joint:
+			ramp_deck += 1
 		if band == SurfaceMap.Kind.PAVEMENT:
 			rough += 1
 			continue
@@ -319,6 +335,7 @@ func _read_car() -> Dictionary:
 	# The shoulder is still tarmac under the grit: half the road roar stays.
 	st.on_road = (float(grounded - rough) - 0.5 * float(grit)) / 4.0
 	st.on_grit = float(grit) / 4.0
+	st.ramp_deck = float(ramp_deck) / 4.0
 	st.wet = water / 4.0
 	rough += kerb
 	var here := _vehicle.global_position
@@ -362,8 +379,8 @@ func _process(delta: float) -> void:
 		lv[0] = _approach(lv[0], st[kind + "_l"] * gate, delta)
 		lv[1] = _approach(lv[1], st[kind + "_r"] * gate, delta)
 		squeal_level = maxf(squeal_level, maxf(lv[0], lv[1]))
-		# wet rubber sings lower
-		var pitch := _tyre_pitch(kind, maxf(lv[0], lv[1]), speed) * (1.0 - 0.12 * float(st.wet))
+		# wet rubber sings lower; the ramps' concrete a little higher
+		var pitch := _tyre_pitch(kind, maxf(lv[0], lv[1]), speed) * (1.0 - 0.12 * float(st.wet)) * (1.0 + DECK_PITCH * float(st.ramp_deck))
 		_drive_layer(_players[kind + "_l"], lv[0] * TYRE_GAIN[kind], pitch)
 		_drive_layer(_players[kind + "_r"], lv[1] * TYRE_GAIN[kind], pitch * 1.01)
 		if kind == "spin":
@@ -426,6 +443,14 @@ func _joint(strength: float, pitch: float) -> void:
 	joint_count += 1
 	PlayerGain.play_at(_players.joint, linear_to_db(maxf(JOINT_GAIN * strength, 0.001)), pitch)
 	road_bump.emit(strength * 0.5)
+
+## One wheel over the expansion joint where a ramp's deck meets the ring's
+## bridge (SurfaceMap.Kind.JOINT): the joint hit, the rear axle pitched down.
+func hit_deck_joint(speed: float, front: bool) -> void:
+	if speed < 1.0:
+		return
+	deck_joint_count += 1
+	_joint(smoothstep(1.0, 30.0, speed) * 0.9 + 0.1, 1.0 if front else 0.85)
 
 ## One wheel over a manhole cover. Public for the listen pack and tests.
 func hit_manhole(speed: float) -> void:

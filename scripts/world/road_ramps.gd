@@ -38,6 +38,9 @@ extends RefCounted
 
 const RoadMap := preload("res://scripts/world/road_map.gd")
 
+const RoadPaint := preload("res://scripts/world/road_paint.gd")
+const PlaceNames := preload("res://scripts/world/place_names.gd")
+
 const L := 50.0
 ## The outside lane's outer edge on the plain 4-lane road (_lane_w(4)).
 const X_LANE := 13.2
@@ -92,7 +95,34 @@ const C_POLE := Color(0.2, 0.2, 0.21, 0.0)
 const C_HEAD := Color(1.0, 0.55, 0.2, 1.0)
 const C_CUSHION := Color(0.86, 0.62, 0.12, 0.03)
 const C_CUSHION_BAND := Color(0.07, 0.07, 0.07, 0.0)
+## Kerb studs (ramps doc 2.5): small amber dots on the kerb at every row of a
+## ramp and every piece of the ring's rims, what you steer by in the dark.
+const C_STUD := Color(1.0, 0.62, 0.22, 0.45)
+const STUD := 0.14
+## The expansion joint where a ramp's deck meets the bridge slab (doc 2.2):
+## a ridge JOINT_H high and JOINT_W wide across the lane at V_TOP, in the
+## drawn deck and its collision, so each axle goes "ka-thunk" over it
+## (SurfaceMap.Kind.JOINT, CarAudio.hit_deck_joint).
+const JOINT_H := 0.015
+const JOINT_W := 0.4
+## The give-way row (doc 2.4): triangles painted across an up-ramp's deck
+## this far before the ring's rim, pointing into the ring.
+const GIVE_WAY_V := 1.0
+const GIVE_WAY_N := 5
+const GIVE_WAY_LEN := 0.9
+## The painted marks (RoadPaint decals): the left-curving arrow this far
+## from the ring's centre on an up-ramp, and the exit's word on the slip
+## lane this far before the gore (about 50 m).
+const ARROW_V := 40.0
+const EXIT_WORD_BEFORE_GORE := 45.0
 
+## The nose markers (alpha NOSE_ALPHA, RingSite.C_NOSE) pulse once a second
+## (doc 2.5: "something is here" from 300 m), between BLINK_LOW and full. A
+## slow sine, well under the photosensitive band (2.5-15 Hz, SAFETY), and
+## nothing else in the colour's alpha range blinks.
+const NOSE_ALPHA := 0.6
+const BLINK_HZ := 1.0
+const BLINK_LOW := 0.4
 const SHADER := """
 shader_type spatial;
 render_mode diffuse_lambert, specular_disabled;
@@ -100,7 +130,9 @@ render_mode diffuse_lambert, specular_disabled;
 void fragment() {
 	ALBEDO = COLOR.rgb;
 	ROUGHNESS = 0.9;
-	EMISSION = COLOR.rgb * (0.07 + COLOR.a * 4.0);
+	float nose = step(0.55, COLOR.a) * step(COLOR.a, 0.65);
+	float pulse = mix(1.0, 0.4 + 0.6 * (0.5 + 0.5 * sin(TIME * 6.2831853 * 1.0)), nose);
+	EMISSION = COLOR.rgb * (0.07 + COLOR.a * 4.0 * pulse);
 }
 """
 
@@ -202,10 +234,16 @@ static func ring_drop(r: float) -> float:
 		return 0.0
 	return BANK * clampf(RING_OUT - r, 0.0, RING_OUT - RING_IN)
 
+## The expansion joint's ridge at v metres from the ring's centre: JOINT_H
+## at V_TOP, nothing JOINT_W / 2 either side.
+static func joint_lift(v: float) -> float:
+	return JOINT_H * clampf(1.0 - absf(v - V_TOP) / (JOINT_W * 0.5), 0.0, 1.0) if ring else 0.0
+
 ## Height of a ramp's deck above the road at x metres out, v from the ring's
-## centre: the climb, less the ring's lean where the deck runs over its lane.
+## centre: the climb, less the ring's lean where the deck runs over its lane,
+## plus the joint's ridge.
 static func deck_y(x: float, v: float) -> float:
-	return y_at(v) + LIFT - ring_drop(Vector2(x, v).length())
+	return y_at(v) + LIFT - ring_drop(Vector2(x, v).length()) + joint_lift(v)
 
 ## The ring deck's up direction at angle `a` (radians anticlockwise from the
 ## +x point), in the ring's flat space (x across, y up, -z the way the chunks
@@ -403,6 +441,7 @@ static func new_nodes(root: Node3D, pool_mesh: Mesh, pool_mat: Material) -> void
 	var deck := StaticBody3D.new()
 	deck.name = "RampDeck"
 	deck.add_to_group("Road")
+	deck.set_meta(SurfaceMap.DECK_META, true)
 	# One shape per side: a single shape's bounds would span the road between
 	# them, and every car on it would be tested against the deck each tick.
 	for shape_name in ["Shape", "ShapeOnc"]:
@@ -616,9 +655,39 @@ static func _edge(pts: Array[Vector3], out: Array[Vector2], hs: PackedFloat32Arr
 		var wants := [-outward, Vector3.UP, -outward, Vector3.UP, outward]
 		for q in 5:
 			_quad(r0[q], r1[q], r0[q + 1], r1[q + 1], cols[q], wants[q])
+		# a stud on the kerb's top at this row (and the last row's at the end)
+		for j in ([i, i + 1] if i == pts.size() - 2 else [i]):
+			if hs[j] > 0.0:
+				_stud(pts[j], out[j], minf(KERB_H, hs[j]))
 		var a: Vector3 = ((r0[3] as Vector3) + (r0[4] as Vector3)) * 0.5
 		var b: Vector3 = ((r1[3] as Vector3) + (r1[4] as Vector3)) * 0.5
 		_wall_box(a, b, minf((r0[5] as Vector3).y, (r1[5] as Vector3).y), maxf((r0[3] as Vector3).y, (r1[3] as Vector3).y), BARRIER_W)
+
+## One kerb stud: a small amber dot on the kerb's top at `p` (x, v, deck
+## height), the kerb being KERB_W wide on the deck side of `o`.
+static func _stud(p: Vector3, o: Vector2, kh: float) -> void:
+	var cx := p.x - o.x * KERB_W * 0.5
+	var cv := p.y - o.y * KERB_W * 0.5
+	var h := p.z + kh + 0.012
+	var ax := Vector2(-o.y, o.x) * STUD * 0.5   # along the kerb
+	var ao := o * STUD * 0.4                     # across it
+	_quad(_p(cx - ax.x - ao.x, h, cv - ax.y - ao.y), _p(cx + ax.x - ao.x, h, cv + ax.y - ao.y),
+		_p(cx - ax.x + ao.x, h, cv - ax.y + ao.y), _p(cx + ax.x + ao.x, h, cv + ax.y + ao.y), C_STUD, Vector3.UP)
+
+## The give-way row across an up-ramp's deck: GIVE_WAY_N painted triangles
+## side by side, pointing into the ring, GIVE_WAY_V before the rim where the
+## inner barrier ends.
+static func _give_way() -> void:
+	var v0 := V_RING_IN + GIVE_WAY_V
+	var x := x_at(v0)
+	var w := (HALF * 2.0 - 0.9) / float(GIVE_WAY_N)
+	for i in GIVE_WAY_N:
+		var x0 := x - HALF + 0.45 + float(i) * w + 0.08
+		var x1 := x0 + w - 0.16
+		var xm := (x0 + x1) * 0.5
+		var v1 := v0 - GIVE_WAY_LEN
+		_tri(_p(x0, deck_y(x0, v0) + PAINT_LIFT, v0), _p(x1, deck_y(x1, v0) + PAINT_LIFT, v0),
+			_p(xm, deck_y(xm, v1) + PAINT_LIFT, v1), C_PAINT, Vector3.UP)
 
 ## A flat painted quad on a surface at height y: x0..x1 across, v0..v1 along.
 static func _paint(x0: float, x1: float, v0: float, v1: float, y0: float, y1: float) -> void:
@@ -657,9 +726,17 @@ static func _leg(v_lo: float, v_hi: float) -> void:
 		vs.append(v)
 		v -= ROW
 	vs.append(maxf(v_lo, vp))
+	var extra := PackedFloat32Array()
 	if ring and v_lo < V_RING_IN:
 		# a row where the inner barrier ends, at the ring's rim
-		vs.append(V_RING_IN)
+		extra.append(V_RING_IN)
+	if ring:
+		# rows for the joint's ridge where the deck meets the bridge slab
+		for jv in [V_TOP - JOINT_W * 0.5, V_TOP, V_TOP + JOINT_W * 0.5]:
+			if jv > v_lo and jv < v_hi and jv > vp:
+				extra.append(jv)
+	if not extra.is_empty():
+		vs.append_array(extra)
 		vs.sort()
 		vs.reverse()
 	# traffic drives at the nose on the leg it leaves the road by
@@ -715,6 +792,8 @@ static func _leg(v_lo: float, v_hi: float) -> void:
 	_edge(outer, outer_out, outer_h)
 	if diverge and v_hi >= V_NOSE and v_lo < V_NOSE:
 		_cushion()
+	if diverge and ring and v_lo < V_RING_IN + GIVE_WAY_V and v_hi >= V_RING_IN + GIVE_WAY_V:
+		_give_way()
 	for lv in LAMP_VS:
 		if lv > v_lo and lv <= v_hi and lv > vp:
 			_lamp(x_at(lv) + HALF + BARRIER_W + 0.15, lv, y_at(lv), Vector2(-1.0, 0.0))
@@ -772,6 +851,40 @@ static func _pad() -> void:
 		var r := PAD_R + BARRIER_W + 0.15
 		# a short arm: the box that draws it is square to the road, not to the rim
 		_lamp(PAD_X + r * cos(a), r * sin(a), RAMP_H, Vector2(-cos(a), -sin(a)), 0.5)
+
+## The painted marks (RoadPaint decals) on chunk `chunk_index`, in the
+## chunk's straight description: [{x, y, z, basis, cd}], `y` above the road
+## at (x, z) (a mark on a ramp's deck sits on the deck, tilted with its
+## climb). On each up-ramp a left-curving arrow at ARROW_V, and the exit's
+## word ("EXIT 5") on the slip lane EXIT_WORD_BEFORE_GORE before its gore.
+static func paint_marks(chunk_index: int) -> Array:
+	var out: Array = []
+	var ri := RoadMap.ring_at(chunk_index) if enabled else -1
+	if ri < 0:
+		return out
+	var k := RoadMap.ring_k(chunk_index)
+	var lam := -1.0 if k < 0 else 1.0
+	var d := -k - 1 if k < 0 else k
+	for side in [1.0, -1.0]:
+		if lam != -side:
+			continue   # the up-ramp's leg on this side is the one traffic leaves the road by
+		var yaw := 0.0 if side > 0.0 else PI
+		if RoadMap.ramp_zone(chunk_index):
+			if ARROW_V >= float(d) * L and ARROW_V < float(d + 1) * L:
+				var m := RoadPaint.item("#LEFT", side * x_at(ARROW_V), float(k) * L - lam * ARROW_V, yaw)
+				# the slope of the deck along the chunk's z: tilt the decal with it
+				var dy := (y_at(ARROW_V - 1.0) - y_at(ARROW_V + 1.0)) * 0.5   # per metre of v, as v falls
+				m["y"] = deck_y(x_at(ARROW_V), ARROW_V) + RoadPaint.PAINT_Y
+				m["basis"] = Basis(Vector3.RIGHT, atan(-lam * dy)) * (m.basis as Basis)
+				out.append(m)
+		else:
+			var v := V_GORE + EXIT_WORD_BEFORE_GORE
+			var aux := RoadMap.aux(chunk_index)
+			if v >= float(d) * L and v < float(d + 1) * L and minf(aux.x, aux.y) >= RoadMap.AUX_W * 0.9:
+				var m := RoadPaint.item(PlaceNames.exit_word(int(RoadMap.rings()[ri].number)), side * (X_LANE + HALF), float(k) * L - lam * v, yaw)
+				m["y"] = RoadPaint.PAINT_Y
+				out.append(m)
+	return out
 
 ## The broken line between the outside lane and the slip lane, on a chunk
 ## where the slip lane is at least half open.

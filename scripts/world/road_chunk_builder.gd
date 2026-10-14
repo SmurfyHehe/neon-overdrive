@@ -2041,12 +2041,13 @@ static func _update_paint(root: Node3D, chunk_index: int, lanes_changed: bool, o
 	var mm: MultiMesh = mmi.multimesh
 	var crossing := Junction.local_centre(chunk_index) if Junction.enabled else INF
 	var marks := RoadPaint.marks(chunk_index, Districts.name_at(chunk_index), Districts.RUN, own_lanes, lanes_changed, crossing, MEDIAN_GAP, LANE_W, CHUNK_LEN)
+	marks.append_array(RoadRamps.paint_marks(chunk_index))
 	var n := mini(marks.size(), mm.instance_count)
 	if RoadSigns.has_flag("hide"):
 		mmi.visible = n > 0
 	for k in n:
 		var m: Dictionary = marks[k]
-		mm.set_instance_transform(k, _xf(m.x, RoadPaint.PAINT_Y, m.z, m.basis))
+		mm.set_instance_transform(k, _xf(m.x, float(m.get("y", RoadPaint.PAINT_Y)), m.z, m.basis))
 		mm.set_instance_custom_data(k, m.cd)
 	mm.visible_instance_count = n
 

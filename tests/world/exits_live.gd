@@ -61,6 +61,10 @@ var run_ticks := 0
 var top_y := 0.0
 var wall_hits := 0
 var off_deck := 0
+## Ticks on a ramp's climb or the ring where the tyres did not read the
+## concrete deck (SurfaceMap.Kind.CONCRETE or JOINT; ramps doc 2.2).
+var band_bad := 0
+var band_ticks := 0
 var worst_grade := 0.0
 var _last_pos := Vector3.ZERO
 var _grade_from := Vector3.ZERO
@@ -362,6 +366,14 @@ func _watch(p: PlayerCar) -> void:
 			off_deck += 1
 			if off_deck <= 3:
 				_fail("exit %s: off the deck %.0f m from the ring's centre (%.1f m out, %.2f m up, deck at %.2f, up %.2f)" % [_name(), w, u.x * float(side), u.y, deck, p.global_basis.y.y])
+		# the deck is concrete under every tyre (the rumble strip is at the gore)
+		if on_ring or absf(w) > RoadRamps.V_TOP + 3.0:
+			band_ticks += 1
+			var feel: SurfaceFeel = p.surface_feel
+			if feel.share(SurfaceMap.Kind.CONCRETE) + feel.share(SurfaceMap.Kind.JOINT) < 0.99:
+				band_bad += 1
+				if band_bad <= 3:
+					_fail("exit %s: %.0f m from the ring's centre the tyres read %s, not the concrete deck" % [_name(), w, feel.kind])
 	# the grade it climbs, over each 8 m of ground covered
 	var flat := Vector2(p.global_position.x - _grade_from.x, p.global_position.z - _grade_from.z).length()
 	if flat >= 8.0:
@@ -436,6 +448,15 @@ func _finish() -> void:
 	_check(wall_hits == 0, "the bot touched a wall on %d ticks" % wall_hits)
 	_check(off_deck == 0, "the bot was off the deck on %d ticks" % off_deck)
 	_check(ring_wrong == 0, "the ring node was not at the site being driven on %d ticks" % ring_wrong)
+	_check(band_ticks > 100 and band_bad == 0, "the tyres missed the concrete deck on %d of %d deck ticks" % [band_bad, band_ticks])
+	# every run crosses the joint at the top of each ramp: a thump per axle
+	var p: PlayerCar = game.get("player")
+	var audio: CarAudio = null
+	for c in p.get_children():
+		if c is CarAudio:
+			audio = c
+	_check(audio != null and audio.deck_joint_count >= runs.size() * 2, "%d joint thumps over %d runs (2 per run at least)" % [audio.deck_joint_count if audio != null else -1, runs.size()])
+	print("exits_live: %d joint thumps, %d deck ticks" % [audio.deck_joint_count if audio != null else -1, band_ticks])
 	print("exits_live: %d of %d exits driven, steepest grade driven %.2f %%, %d wall ticks, %d off-deck ticks" % [done_runs, runs.size(), worst_grade * 100.0, wall_hits, off_deck])
 	print("exits_live: %d checks, %d failed" % [checks, fails.size()])
 	quit(1 if not fails.is_empty() else 0)

@@ -39,6 +39,7 @@ const RoadRamps := preload("res://scripts/world/road_ramps.gd")
 const R := preload("res://scripts/world/road_ramps.gd")   # short, for the layout code
 const PlaceNames := preload("res://scripts/world/place_names.gd")
 const RoadSigns := preload("res://scripts/world/road_signs.gd")
+const Graffiti := preload("res://scripts/world/graffiti.gd")
 
 const L := 50.0
 const SEGS := 64                 # rim pieces, RoadRamps.RING_SEG_DEG each
@@ -65,6 +66,21 @@ const NEXT_X := 11.0
 const NEXT_LINE_H := 0.5
 const SIGN_PROUD := 0.06         # out from the parapet's outside face
 const SIGN_CAP := 12
+## The bridge as the landmark (ramps doc section 3). The light line: a small
+## lamp on top of each parapet at every rim piece over the road, both rims of
+## both bridges; sodium amber, steel-white at a Docks (steel) ring.
+const LINE_LAMP := Vector3(0.22, 0.12, 0.22)
+const C_LINE_STEEL := Color(0.9, 0.92, 0.95, 1.0)
+## The wash of light on the road under each slab: a pool this big.
+const WASH := Vector2(2.0 * BRIDGE_HALF + 4.0, 20.0)
+## Sound zones under and on each bridge (SoundZone): the radio breaks up
+## and the car's own noise echoes under the slab (TunnelAudio), and the
+## tyres hum on the deck (CarAudio).
+const UNDER_ZONE := Vector3(2.0 * BRIDGE_HALF, 5.5, 14.0)
+const DECK_ZONE := Vector3(2.0 * BRIDGE_HALF, 3.0, 9.0)
+## Graffiti on the piers' faces, downtown and in the Docks (doc section 3).
+const PIER_TAGS := 4
+const GRAFFITI_STYLES := ["concrete_downtown", "steel"]
 
 const C_UNDER := Color(0.07, 0.07, 0.075, 0.0)
 const C_BOARD := Color(0.03, 0.03, 0.03, 0.0)
@@ -72,6 +88,12 @@ const C_CHEVRON := Color(0.88, 0.88, 0.84, 0.05)
 const C_SPLIT_A := Color(1.0, 0.54, 0.12, 0.035)
 const C_SPLIT_B := Color(0.85, 0.85, 0.8, 0.035)
 const C_NOSE := Color(1.0, 0.54, 0.12, 0.6)
+## The lane's painted edge (doc 2.4): a dash on every other rim piece, this
+## far in from each kerb.
+const DASH_IN := 0.45
+const DASH_W := 0.12
+## The light pool under each chevron board (doc 2.5), on the lane's inside.
+const BOARD_POOL := Vector2(6.0, 4.0)
 const C_TREE := Color(0.1, 0.085, 0.07, 0.0)
 const C_TROLLEY := Color(0.5, 0.52, 0.54, 0.0)
 const WALLS := {
@@ -96,6 +118,7 @@ var _pools: MultiMeshInstance3D
 var _deck: CollisionShape3D
 var _walls: StaticBody3D
 var _signs: MultiMeshInstance3D
+var _zones: Array[SoundZone] = []
 
 # ---------- where ----------
 
@@ -120,7 +143,8 @@ static func look_of(ring: int) -> Dictionary:
 		style = "rust"
 	elif String(info.zone) == "The Docks":
 		style = "steel"
-	return {"style": style, "spur": RoadMap.ring_spur_side(ring), "landmark": String(r.kind) == "landmark"}
+	return {"style": style, "spur": RoadMap.ring_spur_side(ring), "landmark": String(r.kind) == "landmark",
+		"graffiti": style == "steel" or String(info.kind) == "downtown"}
 
 func _ready() -> void:
 	name = "RingSite"
@@ -133,7 +157,7 @@ func _ready() -> void:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = RoadChunkBuilder._get_pool_mesh()
-	mm.instance_count = LAMP_DEG.size()
+	mm.instance_count = LAMP_DEG.size() + 4   # + one under each chevron board, a wash under each bridge
 	mm.visible_instance_count = 0
 	_pools = MultiMeshInstance3D.new()
 	_pools.name = "RingPools"
@@ -144,6 +168,7 @@ func _ready() -> void:
 	var deck := StaticBody3D.new()
 	deck.name = "RingDeck"
 	deck.add_to_group("Road")
+	deck.set_meta(SurfaceMap.DECK_META, true)
 	_deck = CollisionShape3D.new()
 	_deck.name = "Shape"
 	var tri := ConcavePolygonShape3D.new()
@@ -158,6 +183,19 @@ func _ready() -> void:
 	_signs = RoadSigns.new_multimesh(SIGN_CAP)
 	_signs.name = "BridgeSigns"
 	add_child(_signs)
+	Graffiti.create(self, PIER_TAGS)
+	var mid := (R.RING_IN + R.RING_OUT) * 0.5
+	for vz in [-1.0, 1.0]:
+		var under := SoundZone.make(SoundZone.Kind.UNDER_BRIDGE, UNDER_ZONE)
+		under.name = "UnderBridge%s" % ("A" if vz < 0.0 else "B")
+		under.position = Vector3(0.0, UNDER_ZONE.y * 0.5, vz * mid)
+		add_child(under)
+		_zones.append(under)
+		var deck_zone := SoundZone.make(SoundZone.Kind.BRIDGE_DECK, DECK_ZONE)
+		deck_zone.name = "BridgeDeck%s" % ("A" if vz < 0.0 else "B")
+		deck_zone.position = Vector3(0.0, R.RAMP_H + DECK_ZONE.y * 0.5 - 0.5, vz * mid)
+		add_child(deck_zone)
+		_zones.append(deck_zone)
 	_place()
 
 func _physics_process(_delta: float) -> void:
@@ -172,6 +210,8 @@ func _place() -> void:
 			_deck.disabled = true
 			for c in _walls.get_children():
 				(c as CollisionShape3D).disabled = true
+			for z in _zones:
+				z.size = Vector3.ZERO
 			site = -1
 		return
 	var near := RoadMap.ring_near(focus_s)
@@ -186,6 +226,8 @@ func _place() -> void:
 		site = int(near.index)
 		_dress(look_of(site))
 		_letter(site)
+		for z in _zones:
+			z.size = UNDER_ZONE if z.kind == SoundZone.Kind.UNDER_BRIDGE else DECK_ZONE
 	visible = true
 	force_update_transform()
 	for c in get_children():
@@ -219,6 +261,7 @@ func _dress(look: Dictionary) -> void:
 	for i in n:
 		mm.set_instance_transform(i, pools[i])
 	mm.visible_instance_count = n
+	Graffiti.place(self, pier_graffiti(look))
 
 ## The bridge lettering for this site (it differs per site, so it is not
 ## part of the cached look).
@@ -283,6 +326,38 @@ static func _on_face(x: float, sd: float, face: float, y: float) -> Dictionary:
 	var n := Vector3(x, 0.0, z) / face
 	return {"c": n * (face + SIGN_PROUD) + Vector3(0.0, y, 0.0), "n": n}
 
+## Tags on the piers' faces toward the road, downtown and in the Docks: the
+## same few at every such ring (one look, cached like the rest). Items for
+## Graffiti.place, in the ring's flat space.
+static func pier_graffiti(look: Dictionary) -> Array:
+	if not bool(look.get("graffiti", false)):
+		return []
+	var seed := 71 if String(look.style) == "steel" else 37
+	var planned := Graffiti.plan(seed, 1.6, 3.0, PIER_TAGS, ["tag", "piece"])
+	var mid := (R.RING_IN + R.RING_OUT) * 0.5
+	var out: Array = []
+	for i in planned.size():
+		var it: Dictionary = planned[i]
+		# the four piers' faces that look along the road: the centre pier's two
+		# faces, then the edge piers' faces toward the road, one tag each
+		var vz := -1.0 if i % 2 == 0 else 1.0
+		var at: Vector3
+		var normal: Vector3
+		if i < 2:
+			at = Vector3(0.0, 0.0, vz * mid)
+			normal = Vector3(1.0 if i == 0 else -1.0, 0.0, 0.0)
+			at.x += normal.x * 0.36
+		else:
+			var sx := 1.0 if i == 2 else -1.0
+			at = Vector3(sx * PIER_X, 0.0, vz * sqrt(mid * mid - PIER_X * PIER_X))
+			normal = Vector3(-sx, 0.0, 0.0)
+			at.x += normal.x * 0.51
+		var xf: Transform3D = it.xf
+		var y: float = xf.origin.y
+		var basis := Basis.looking_at(-normal, Vector3.UP) * xf.basis
+		out.append({"xf": Transform3D(basis, at + Vector3(0.0, y, 0.0)), "cell": it.cell, "fade": it.fade, "tint": it.tint})
+	return out
+
 ## What the node holds now: {verts, faces, boxes, pools, draws}. Tests.
 func counts() -> Dictionary:
 	var verts := 0
@@ -295,9 +370,10 @@ func counts() -> Dictionary:
 			boxes += 1
 	@warning_ignore("integer_division")
 	var faces := (_deck.shape as ConcavePolygonShape3D).get_faces().size() / 3
+	var tags := (get_node(^"Graffiti") as MultiMeshInstance3D).multimesh.visible_instance_count
 	return {"verts": verts, "faces": faces, "boxes": boxes, "pools": _pools.multimesh.visible_instance_count,
-		"signs": _signs.multimesh.visible_instance_count,
-		"draws": (1 if verts > 0 else 0) + (1 if _pools.multimesh.visible_instance_count > 0 else 0) + (1 if _signs.multimesh.visible_instance_count > 0 else 0)}
+		"signs": _signs.multimesh.visible_instance_count, "tags": tags,
+		"draws": (1 if verts > 0 else 0) + (1 if _pools.multimesh.visible_instance_count > 0 else 0) + (1 if _signs.multimesh.visible_instance_count > 0 else 0) + (1 if tags > 0 else 0)}
 
 # ---------- geometry ----------
 
@@ -319,6 +395,10 @@ static func build(look: Dictionary) -> Dictionary:
 		var i1 := R._p(R.RING_IN * cos(a1), y_in, R.RING_IN * sin(a1))
 		var o1 := R._p(R.RING_OUT * cos(a1), y, R.RING_OUT * sin(a1))
 		R._deck_quad(i0, o0, i1, o1)
+		if i % 2 == 0:
+			# the lane's dashed edge lines, on the leaning deck
+			for r in [R.RING_IN + DASH_IN, R.RING_OUT - DASH_IN]:
+				_dash(r, a0, a1, y)
 		var down := Vector3(0.0, -SLAB, 0.0)
 		R._quad(i0 + down, o0 + down, i1 + down, o1 + down, C_UNDER, Vector3.DOWN)
 	# the outside edge, in runs between the mouths; then the inside edge, whole
@@ -340,6 +420,21 @@ static func build(look: Dictionary) -> Dictionary:
 		_pier(0.0, vz * mid, 0.7, 2.0, y)
 		for sx in [-1.0, 1.0]:
 			_pier(sx * PIER_X, vz * sqrt(mid * mid - PIER_X * PIER_X), 1.0, 1.6, y)
+	# the light line: a small lamp on each parapet at every rim piece over the
+	# road, both rims, both bridges; a wash of light on the road under each slab
+	var line_col: Color = C_LINE_STEEL if String(look.style) == "steel" else R.C_HEAD
+	for i in SEGS:
+		var a := step * (float(i) + 0.5)
+		if absf(R.RING_OUT * cos(a)) >= BRIDGE_HALF:
+			continue
+		for r in [R.RING_OUT + R.BARRIER_W * 0.5, R.RING_IN - R.BARRIER_W * 0.5]:
+			var top: float = y + R.BARRIER_H + LINE_LAMP.y * 0.5
+			if r < R.RING_IN:
+				top -= R.ring_drop(R.RING_IN)
+			R._box(Vector3(r * cos(a), top, r * sin(a)), LINE_LAMP, line_col)
+	for vz in [-1.0, 1.0]:
+		var wmid := (R.RING_IN + R.RING_OUT) * 0.5
+		R._pools.append(Transform3D(Basis.from_scale(Vector3(WASH.x, 1.0, WASH.y)), R._p(0.0, 0.05, vz * wmid)))
 	# tall sodium lamps on the outside barrier, a pool of light under each
 	for deg in LAMP_DEG:
 		if (deg == 0.0 and spur > 0) or (deg == 180.0 and spur < 0):
@@ -352,9 +447,15 @@ static func build(look: Dictionary) -> Dictionary:
 		# the pool lies on the leaning deck
 		var tip := Basis(Quaternion(Vector3.UP, R.ring_normal(a)))
 		R._pools.append(Transform3D(tip * Basis.from_scale(Vector3(POOL, 1.0, POOL)), R._p(mid * cos(a), y - R.ring_drop(mid) + 0.05, mid * sin(a))))
-	# chevron boards on the inside, past each entry; a lit marker on each nose
+	# chevron boards on the inside, past each entry, each lit from a pool on
+	# the lane below it; a lit marker on each nose
 	for base in [0.0, 180.0]:
-		_board(deg_to_rad(base + BOARD_DEG), y_in)
+		var ba := deg_to_rad(base + BOARD_DEG)
+		_board(ba, y_in)
+		var br: float = R.RING_IN + BOARD_POOL.y * 0.5 + 0.3
+		var btip := Basis(Quaternion(Vector3.UP, R.ring_normal(ba)))
+		R._pools.append(Transform3D(btip * Basis(Vector3.UP, -ba) * Basis.from_scale(Vector3(BOARD_POOL.x, 1.0, BOARD_POOL.y)),
+			R._p(br * cos(ba), y - R.ring_drop(br) + 0.05, br * sin(ba))))
 		for d in [-6.0, 6.0]:
 			var a := deg_to_rad(base + d * R.RING_SEG_DEG)
 			var r: float = R.RING_OUT + R.BARRIER_W * 0.5
@@ -368,6 +469,20 @@ static func build(look: Dictionary) -> Dictionary:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, made.arrays)
 	return {"mesh": mesh, "faces": made.faces, "boxes": made.boxes, "pools": made.pools}
+
+## One painted dash of the lane's edge line at radius r between angles a0
+## and a1, on the leaning deck.
+static func _dash(r: float, a0: float, a1: float, y: float) -> void:
+	var hi: float = y - R.ring_drop(r - DASH_W * 0.5) + R.PAINT_LIFT
+	var ho: float = y - R.ring_drop(r + DASH_W * 0.5) + R.PAINT_LIFT
+	var ri := r - DASH_W * 0.5
+	var ro := r + DASH_W * 0.5
+	# a short gap at each end so the dashes read as dashes
+	var g := (a1 - a0) * 0.12
+	a0 += g
+	a1 -= g
+	R._quad(R._p(ri * cos(a0), hi, ri * sin(a0)), R._p(ro * cos(a0), ho, ro * sin(a0)),
+		R._p(ri * cos(a1), hi, ri * sin(a1)), R._p(ro * cos(a1), ho, ro * sin(a1)), R.C_PAINT, Vector3.UP)
 
 ## Kerb, barrier and wall along the rim at radius r, pieces from..to (to may
 ## run past SEGS). side +1 = the outside edge, -1 the inside one.

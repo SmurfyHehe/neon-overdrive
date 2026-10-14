@@ -18,8 +18,8 @@ extends SceneTree
 #    1 cm), so there is no step onto the ring; nowhere does the ramp's deck
 #    get steeper across than the lean. The put-back pose on the ring is
 #    tipped in by the lean.
-# 4. Cost: the ring node is 3 draw calls (mesh, pools, lettering) and 8
-#    lettering instances, the same at every site.
+# 4. Cost: the ring node is 3 draw calls (mesh, pools, lettering), 4 where
+#    the piers carry graffiti, and 8 lettering instances at every site.
 #
 # Exit code 1 on failure. Run (headless):
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/world/ring_bank_signs.gd
@@ -214,7 +214,9 @@ func _cost() -> void:
 		_check(c.has("draws") and c.has("signs"), "the ring node's counts are %s" % [c])
 		if not c.has("draws") or not c.has("signs"):
 			break
-		_check(int(c.draws) == 3 and int(c.signs) == 8, "ring %s: the ring node is %d draw calls and %d lettering parts (3 and 8 wanted)" % [RoadMap.rings()[ri].id, c.draws, c.signs])
+		# mesh, pools, lettering; and the piers' graffiti where there is some
+		var want := 4 if int(c.get("tags", 0)) > 0 else 3
+		_check(int(c.draws) == want and int(c.signs) == 8, "ring %s: the ring node is %d draw calls and %d lettering parts (%d and 8 wanted)" % [RoadMap.rings()[ri].id, c.draws, c.signs, want])
 		if first.is_empty():
 			first = c
 	print("ring_bank_signs: the ring node %s" % [first])

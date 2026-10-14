@@ -219,6 +219,7 @@ call :run core/save_system --headless
 rem ~15 s: a saved run brings back the gearbox mode, the gear, and the automatic as it was.
 call :run core/save_gearbox "--headless --fixed-fps 120"
 call :run core/garage_g0 --headless
+call :run ui/garage_bay --headless
 rem Save core S1: one save per slot (career + night + meta), the commit order, a kill at every step, tunes per slot, wear and damage kept.
 call :run save/save_core --headless
 rem Save core S2: old saves upgrade (frozen fixtures in tests/save/fixtures); fails when the save version is bumped without an upgrade step.

@@ -14,6 +14,11 @@ extends CanvasLayer
 #
 # These replace the stand-ins that sat in Settings > Game (and before that the
 # pause menu). Keyboard only; nothing on screen names a key.
+#
+# Behind the buttons is the bay (garage_bay.gd, 2026-10-14): the player's own
+# car under a work lamp with the roller door half up. Built on the way in,
+# its camera takes over, and it is freed on the way out so the road never
+# pays for it. The buttons sit on a dark band down the left of the picture.
 
 const GarageService := preload("res://scripts/car/garage_service.gd")
 const WorkOrders := preload("res://scripts/core/work_orders.gd")
@@ -35,6 +40,8 @@ var root_box: MarginContainer
 var services := 0   # times Service car was pressed (tests read it)
 ## Walt's board (work board W2): set by Game when the shop is on, null when off.
 var shop_day: Node
+## The room behind the buttons; null while the garage is closed.
+var bay: GarageBay
 ## How long the "Walt did it" slip shows on the way out, seconds.
 var out_delay := 1.4
 var _leaving := false
@@ -49,9 +56,11 @@ func _ready() -> void:
 	layer = 10
 	visible = false
 
+	# the band the buttons sit on, over the bay's left third
 	var bg := ColorRect.new()
-	bg.color = Color("#0E1424")
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0.055, 0.078, 0.14, 0.78)
+	bg.set_anchors_preset(Control.PRESET_LEFT_WIDE)
+	bg.anchor_right = 0.36
 	add_child(bg)
 
 	root_box = MarginContainer.new()
@@ -102,7 +111,23 @@ func _on_state_changed(new_state: GameState.State, old_state: GameState.State) -
 	var open := new_state == GameState.State.GARAGE
 	var was := visible
 	visible = open
+	# no speedo or mirror over the bay (as the title does)
+	var hud: Node = null
+	for c in get_parent().get_children():
+		if c is Hud:
+			hud = c
+	if hud != null and (open or old_state == GameState.State.GARAGE):
+		hud.visible = not open
+	if open and bay == null:
+		bay = GarageBay.new(PlayerCar.chassis_kind())
+		get_parent().add_child(bay)
+	elif not open and bay != null and not game_state.in_garage():
+		bay.queue_free()   # the game camera takes over again
+		bay = null
 	if open:
+		if bay.kind != PlayerCar.chassis_kind():
+			bay.set_car(PlayerCar.chassis_kind())
+		bay.camera.make_current()
 		# The board row shows while today's board is not settled.
 		board_button.visible = shop_day != null and shop_day.can_reopen()
 		# Back from the wash or the settings screen: say what happened, keep focus.

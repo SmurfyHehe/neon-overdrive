@@ -108,14 +108,23 @@ starts at night 31 and stops `boss_races`; that changes in step S5.
 
 | Step | What you get | Size |
 |---|---|---|
-| **S1 Stakes (this PR)** | Race wins pay real cash; busts charge ticket and tow from the bank by heat, +1 h; bad cops take tonight's cash; night-one warning; escapes pay; a bust ends a race; money stamp effect | S |
+| **S1 Stakes** | Race wins pay real cash; busts charge ticket and tow from the bank by heat, +1 h; bad cops take tonight's cash; night-one warning; escapes pay; a bust ends a race; money stamp effect | S |
 | S2 Rolling challenge | Marked racers in traffic (sticker + halo), flash to challenge, hazards, rolling start, finish at the next landmark | M |
 | S3 First meet spot | One ramp destination as a meet spot, flyer card, flashlight standing start, tow there after a bust | M |
 | S4 Crews and bosses | Crew per area, boss on the flyer after N wins | M |
 | S5 Free mode from night 1 | New save starts free, boss races on | S |
 | S6 Sounds | Cash register, stamp, honks | S |
 
-## 8. Question for Roy (to the coordinator, not numbered here)
+## 8. Decided
 
-Meet races: **no buy-in (my pick, matches the no-fee retry)**, or a buy-in
-you lose when you lose?
+- **No entry fee for meet races** (Roy 1547, 2026-10-14).
+
+## 9. Built so far
+
+- **S1 Stakes**: built (race pay, escape pay, bust bills, money stamp).
+- **S2 Rolling challenge**: built as a first version. One traffic car ahead
+  going your way is the racer (sport builds first), with a pulsing amber
+  halo within 60 m. Flash it from within 35 m: hazards, halo flare, three
+  honks, "GO!", and that car races you to a line 1.5 km down the road
+  ($250 a win). With cops on you it waves you off. Placeholders: fixed
+  distance instead of the next landmark, no crew sticker yet.

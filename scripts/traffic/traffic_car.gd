@@ -126,6 +126,10 @@ var race_released := false
 ## hands the wheel and pedals to it instead of the traffic controller below.
 ## Null on every traffic car, which is untouched.
 var racer: RivalDriver
+## A street racer you can flash to race (street_racers.gd): it carries the
+## halo. Hazards blink while traffic.now < hazards_until (its yes).
+var street_racer := false
+var hazards_until := -1.0
 ## The free driver (police P4): chases a target off the lane grid while the
 ## car is in the full sim. On the rails the car is plain traffic.
 var free_driver: FreeDriver
@@ -700,7 +704,8 @@ func _physics_process(delta: float) -> void:
 func _update_lamps() -> void:
 	if chassis_visual == null or not NpcCarBuilder.is_npc(kind):
 		return
-	var sig := NpcCarBuilder.TURN_BOTH if hazard else turn
+	var waving := traffic != null and traffic.now < hazards_until
+	var sig := NpcCarBuilder.TURN_BOTH if hazard or waving else turn
 	if tail_dark:
 		sig += NpcCarBuilder.TAIL_OUT
 	var key := (1 if brake_input > 0.05 or _tap_left > 0.0 else 0) + sig * 2

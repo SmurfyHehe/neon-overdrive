@@ -124,6 +124,9 @@ const Wallet := preload("res://scripts/core/wallet.gd")
 ## Race pay, escape pay and bust bills (scripts/core/stakes.gd).
 var stakes: Node
 const Stakes := preload("res://scripts/core/stakes.gd")
+## Street racers you flash to race (scripts/core/street_racers.gd).
+var street_racers: Node
+const StreetRacers := preload("res://scripts/core/street_racers.gd")
 const ShopDay := preload("res://scripts/core/shop_day.gd")
 ## Walt's board screen: loaded only when the shop is on (_setup_game_state), so
 ## a run without it never compiles the board.
@@ -1213,6 +1216,12 @@ func _setup_police(benchmark: bool) -> void:
 	stakes = Stakes.new()
 	add_child(stakes)
 	stakes.bind(race, police, police_heat, wallet, night_clock)
+	# A street racer in the traffic you can flash to race (S2). Not in the
+	# benchmark: its halo is a light the benchmark must not count.
+	if traffic != null and not benchmark:
+		street_racers = StreetRacers.new()
+		add_child(street_racers)
+		street_racers.bind(traffic, race, player, police_heat, stakes)
 
 ## The rulebook's inputs (P1): tonight's crackdown, the crossing, the lane's
 ## flow (matching it is never speeding), lit districts, and contacts from the

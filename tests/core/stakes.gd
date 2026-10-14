@@ -79,6 +79,7 @@ func _check(ok: bool, msg: String) -> void:
 
 func _rules() -> void:
 	_check(Stakes.race_pay(1) == 450 and Stakes.race_pay(2) == 0 and Stakes.race_pay(4) == 0, "race pay is not $450 for a win and 0 otherwise")
+	_check(Stakes.race_pay(1, "rolling") == 250 and Stakes.race_pay(2, "rolling") == 0, "a rolling challenge win does not pay $250")
 	var esc := [0, 75, 150, 225, 375, 525]
 	for lvl in 6:
 		_check(Stakes.escape_pay(lvl) == esc[lvl], "escape pay at heat %d is %d, want %d" % [lvl, Stakes.escape_pay(lvl), esc[lvl]])

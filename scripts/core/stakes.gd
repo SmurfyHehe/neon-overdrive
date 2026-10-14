@@ -3,7 +3,8 @@ extends Node
 # Stakes, step S1 of races in the world (docs/planning/races-in-the-world-2026-10-14.md,
 # Roy 1542): what a race, an escape and a bust are worth.
 #
-#   race won      +PAY_SPRINT_WIN into tonight's cash
+#   race won      +PAY_SPRINT_WIN into tonight's cash (a rolling challenge
+#                 against a street racer you flashed: +PAY_ROLLING_WIN)
 #   escape        + cash by the highest heat the chase reached (ESCAPE_BY_HEAT)
 #   honest bust   ticket and tow from the BANK by that heat (BUST_BY_HEAT,
 #                 x difficulty), tonight's cash kept, clock +1 h
@@ -29,6 +30,9 @@ extends Node
 const Wallet := preload("res://scripts/core/wallet.gd")
 
 const PAY_SPRINT_WIN := 450
+## Economy doc: a rolling challenge pays 0.1-0.25 night ($150-375); the middle
+## until racers have tiers.
+const PAY_ROLLING_WIN := 250
 ## Index = heat level 0..5.
 const ESCAPE_BY_HEAT := [0, 75, 150, 225, 375, 525]
 const BUST_BY_HEAT := [0, 120, 225, 375, 600, 825]
@@ -82,8 +86,10 @@ var _base_y := 150.0
 
 # ---------- pure rules (tests use these) ----------
 
-static func race_pay(result: int) -> int:
-	return PAY_SPRINT_WIN if result == RESULT_WIN else 0
+static func race_pay(result: int, kind := "sprint") -> int:
+	if result != RESULT_WIN:
+		return 0
+	return PAY_ROLLING_WIN if kind == "rolling" else PAY_SPRINT_WIN
 
 static func escape_pay(peak: int) -> int:
 	return ESCAPE_BY_HEAT[clampi(peak, 0, ESCAPE_BY_HEAT.size() - 1)]
@@ -119,7 +125,8 @@ func _ready() -> void:
 		_build_ui()
 
 func _on_race_ended(result: int) -> void:
-	var pay := race_pay(result)
+	var kind: Variant = race.get("race_kind")
+	var pay := race_pay(result, str(kind) if kind != null else "sprint")
 	if pay <= 0 or wallet == null:
 		return
 	wallet.add_cash(pay)
@@ -195,9 +202,20 @@ func _announce(amount: int, account: String, reason: String) -> void:
 		"warning":
 			big = "BUSTED"
 			small = "WARNING THIS TIME"
-	_queue.append({"big": big, "small": small, "gain": amount > 0, "colour": AMBER if account == "cash" else SILVER})
+	shout(big, small, AMBER if account == "cash" else SILVER, amount > 0)
+
+## Any big stamp (the street racers' "CHALLENGE" and "GO!" use it too).
+## `gain` flashes amber; otherwise the flash is dark.
+func shout(big: String, small: String, colour: Color = AMBER, gain := true) -> void:
+	_queue.append({"big": big, "small": small, "gain": gain, "colour": colour})
 	if _stamp_t < 0.0:
 		_next_stamp()
+
+## Drops stamps still waiting (a "GO!" must not wait behind a money stamp).
+func cut_queue() -> void:
+	_queue.clear()
+	if _stamp_t >= 0.0:
+		_stamp_t = STAMP_IN + STAMP_HOLD + STAMP_OUT
 
 func _next_stamp() -> void:
 	if _queue.is_empty():

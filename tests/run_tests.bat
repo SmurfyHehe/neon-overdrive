@@ -230,6 +230,8 @@ rem F0: cash and bank through reloads, chases and 6 a.m. (and the HUD and pause 
 call :run core/wallet --headless
 rem S1 stakes: race pay, escape pay, bust bills move real money (and Stakes is wired in the game).
 call :run core/stakes --headless
+rem S2 street racers: a racer in traffic, flash to race, rolling start with that car, no retry.
+call :run core/street_racers "--headless --fixed-fps 60"
 rem Work board W0: pay rules, the daily draw, shop pay into the bank once.
 call :run core/work_orders --headless
 rem Work board W4: lint for data/work_orders.json.

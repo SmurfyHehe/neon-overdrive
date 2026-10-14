@@ -94,20 +94,21 @@ func _offset_left(cam: ChaseCamera) -> float:
 func _drive_menu(game: Node) -> void:
 	var menu := _menu(game)
 	_check(menu.visible, "pause menu should be visible while paused")
-	var s: HSlider = menu.settings.smoothing_slider
+	var s: OptionButton = menu.settings.smoothing_option
 	_check(s != null, "pause menu has no camera smoothing selector")
 	if s == null:
 		return
 	var last := ChaseCamera.MODE_NAMES.size() - 1
 	var label := (s.get_parent().get_child(0) as Label).text
-	_check(label.to_lower().contains("camera"), "selector label should say Camera, got '%s'" % label)
-	_check(is_equal_approx(s.min_value, 0.0) and is_equal_approx(s.max_value, float(last)) and is_equal_approx(s.step, 1.0),
-		"selector should step 0..%d, one notch per mode (got %.1f..%.1f step %.1f)" % [last, s.min_value, s.max_value, s.step])
-	_check(is_equal_approx(s.value, 2.0), "selector should show the loaded mode 2, got %.0f" % s.value)
+	_check(label.to_lower().contains("follow"), "selector label should say Chase follow, got '%s'" % label)
+	_check(s.item_count == last + 1, "selector should have one item per mode (%d), got %d" % [last + 1, s.item_count])
+	_check(s.selected == 2, "selector should show the loaded mode 2, got %d" % s.selected)
 	for v in range(last + 1):
-		s.value = v
-		_check(ViewSettings.camera_smoothing == v, "selector notch %d should set the setting, got %d" % [v, ViewSettings.camera_smoothing])
-	s.value = 0
+		s.select(v)
+		s.item_selected.emit(v)
+		_check(ViewSettings.camera_smoothing == v, "selector item %d should set the setting, got %d" % [v, ViewSettings.camera_smoothing])
+	s.select(0)
+	s.item_selected.emit(0)
 	var cfg := ConfigFile.new()
 	_check(cfg.load(CFG) == OK and int(cfg.get_value("view", "camera_smoothing", -1)) == 0,
 		"choosing A should save camera_smoothing=0 to the settings file")

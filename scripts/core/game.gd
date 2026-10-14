@@ -182,6 +182,7 @@ func _ready() -> void:
 	TrafficSettings.load_settings()
 	FxSettings.load_settings()   # cockpit mirrors on/off and quality ([fx] in settings.cfg)
 	ViewSettings.load_settings()
+	AccessSettings.load_settings()   # camera shake and FOV widening (the View page)
 	CabinMods.load_settings()   # interior mods: trinket, shift knob, short shifter, strut bar ([interior])
 	DiscordPresence.load_settings()   # Rich Presence on/off ([discord] in settings.cfg)
 	IdleActions.load_settings() # what the L key does: vape, beer or nothing ([driver])

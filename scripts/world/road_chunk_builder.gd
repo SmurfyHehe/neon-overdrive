@@ -2769,7 +2769,6 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			var smear_basis := Basis.from_scale(Vector3.ZERO) if dead else WetReflections.lamp_smear_basis()
 			smears.set_instance_transform(n_lamps, _xf(head_x, WetReflections.SMEAR_Y, lz, smear_basis))
 			n_lamps += 1
-	root.set_meta("lamp_wear", wear)
 	# side-street mouths (W7): the kit, its props, and one more lamp and pool each
 	var mouth_edges := PackedFloat32Array()
 	for m in mouths:
@@ -2777,6 +2776,17 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		mouth_edges.append(lerpf(start_own_walk, end_own_walk, mt) if int(m.side) == 1 else lerpf(start_onc_walk, end_onc_walk, mt))
 	var n_road_lamps := n_lamps   # side-street lamps (below) have no smear and no lamp-post life
 	n_lamps += SideStreets.update(root, mouths, mouth_edges, lamps, pools, n_lamps)
+	# a side street's lamp wears like the street's (slot = its index, side 0)
+	for k in range(n_road_lamps, n_lamps):
+		var sw := LampWear.roll(chunk_index, 0, k, district_name, street.light)
+		lamps.set_instance_custom_data(k, sw)
+		pools.set_instance_custom_data(k, sw)
+		if LampWear.is_dead(sw):
+			wear.dead = int(wear.dead) + 1
+		elif sw.g > 0.5:
+			wear.buzz = int(wear.buzz) + 1
+		if sw.a > 0.5:
+			wear.swap = int(wear.swap) + 1
 	# the lamp head over a signed U-turn's opening (RoadSigns.median_parts) is
 	# part of the sign MultiMesh; this is its pool of light on the road, one
 	# more pool than there are lamp posts
@@ -2784,6 +2794,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	if RoadBarriers.gap_kind(chunk_index) == RoadBarriers.KIND_UTURN and n_pools < pools.instance_count:
 		pools.set_instance_transform(n_pools, _xf(0.0, POOL_Y, RoadSigns.MEDIAN_OWN_Z - 2.6, Basis.from_scale(Vector3(pool_size.x * 0.8, 1.0, pool_size.y * 0.8))))
 		n_pools += 1
+	root.set_meta("lamp_wear", wear)
 	lamps.visible_instance_count = n_lamps
 	pools.visible_instance_count = n_pools
 	smears.visible_instance_count = n_road_lamps

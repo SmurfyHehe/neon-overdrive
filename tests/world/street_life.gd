@@ -110,7 +110,24 @@ func _check_materials() -> void:
 			_fail("%s lamp mesh head is not lamp wear's material" % light)
 	if not Kit.flasher_material().shader.code.contains("TIME"):
 		_fail("flasher shader does not blink with time")
-	print("materials: %d lights, head and pool shaders cached" % Districts.LIGHTS.size())
+	# every lamp shape, in every light colour, carries the wear head
+	for kind in B.LAMP_KINDS:
+		for light in Districts.LIGHTS:
+			if B._get_lamp_mesh(kind, light).surface_get_material(1) != W.head_mat(light):
+				_fail("%s/%s lamp head is not lamp wear's material" % [kind, light])
+	# every district kind rolls wear (its own row or the default) and plans
+	# vents only where its table says
+	var fake := [{"empty": false, "type": "shop", "side": 1, "z": -20.0, "d": 12.0, "front_x_abs": 14.0}]
+	for district in Districts.SPECS.keys():
+		var w := W.roll(3, 1, 0, district, "sodium")
+		if w.b < 0.0 or w.b > 1.0:
+			_fail("%s: no wear roll" % district)
+		var n_v := 0
+		for c in 200:
+			n_v += V.plan(c, district, fake).size()
+		if V.BY_DISTRICT.has(district) == (n_v == 0):
+			_fail("%s: %d vents over 200 chunks, table row %s" % [district, n_v, V.BY_DISTRICT.has(district)])
+	print("materials: %d lights x %d lamp shapes, head and pool shaders cached; every district rolled" % [Districts.LIGHTS.size(), B.LAMP_KINDS.size()])
 
 func _chunk_rolls(chunk: Node3D) -> Dictionary:
 	# what the builder should have rolled for this chunk's street lamps
@@ -119,9 +136,20 @@ func _chunk_rolls(chunk: Node3D) -> Dictionary:
 	var district := Districts.name_at(ci)
 	var every := int(st.every)
 	var out := {"dead": 0, "buzz": 0, "swap": 0}
+	var n := 0
+	# side-street lamps: slot = instance index after the street's lamps, side 0
+	var n_street: int = (chunk.get_meta("side_streets") as Array).size() if chunk.has_meta("side_streets") else 0
+	var first_side: int = int((chunk.get_node(^"Lamps") as MultiMeshInstance3D).multimesh.visible_instance_count) - n_street
+	for k in range(first_side, first_side + n_street):
+		var sw := W.roll(ci, 0, k, district, st.light)
+		if sw.r > 0.5:
+			out.dead += 1
+		elif sw.g > 0.5:
+			out.buzz += 1
+		if sw.a > 0.5:
+			out.swap += 1
 	if every == 0:
 		return out
-	var n := 0
 	for i in B._lamp_slots():
 		for side in [1, -1]:
 			if every == 2 and (i == 0) != (side == 1):

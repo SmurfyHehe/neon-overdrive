@@ -68,21 +68,6 @@ const OFFSET := Vector3(0.0, 800.0, 0.0)
 
 ## car -> {check: issue}
 const KNOWN := {
-	# #763: the rear-view camera sits inside the cabin and the body is drawn
-	# single-sided, so from in there the rear deck, the C-pillars and the
-	# trunk are not drawn: the strip shows the road behind through the car
-	# (the crossover's own tail lamps too). The kei, the Camel and the truck
-	# are closed by their rear glass and bulkhead.
-	"p0_beater": {"mirror_hole": 763},
-	"p1_coupe": {"mirror_hole": 763},
-	"p2_hothatch": {"mirror_hole": 763},
-	"p7_wagon": {"mirror_hole": 763},
-	"p3_tuner": {"mirror_hole": 763},
-	"p5_muscle": {"mirror_hole": 763},
-	"p6_crossover": {"mirror_hole": 763, "mirror_lamps": 763},
-	"p8_driftcoupe": {"mirror_hole": 763},
-	"m1_monster": {"mirror_hole": 763},
-	"l1_lowrider": {"mirror_hole": 763},
 }
 
 var fails := 0

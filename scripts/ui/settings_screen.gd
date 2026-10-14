@@ -610,6 +610,10 @@ func _build_game_page(parent: Control) -> Control:
 	_add_check(page, "Heat shimmer (not on Low)", FxSettings.is_on("heat_shimmer"), func(on: bool) -> void:
 		FxSettings.set_on("heat_shimmer", on)
 		FxSettings.save_settings())
+	# Falling rain (RainFall): the streaks. The wet road and the wipers stay.
+	_add_check(page, "Rain streaks", FxSettings.is_on("rain"), func(on: bool) -> void:
+		FxSettings.set_on("rain", on)
+		FxSettings.save_settings())
 
 	# Interior mods batch 1 (CabinMods; the garage will own these later). They
 	# sat on the pause menu, where they covered its five rows (TEST BUILD move).

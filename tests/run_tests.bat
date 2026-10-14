@@ -306,6 +306,7 @@ rem ~17 s: full throttle at ~245 km/h across floating-origin recenters (the old 
 call :run world/recenter_kick "--headless --fixed-fps 120"
 call :run fx/fx_pack --headless
 call :run fx/tyre_smoke --headless
+call :run fx/rain_fall --headless
 call :run core/graphics_settings --headless
 call :run core/graphics_tiers --headless
 call :run core/shader_warmup --headless

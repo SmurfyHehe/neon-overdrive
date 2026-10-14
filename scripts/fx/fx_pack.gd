@@ -13,6 +13,7 @@ var flames: ExhaustFlames
 var smoke: TyreSmoke
 var shimmer: HeatShimmer  # heat shimmer behind the tailpipes (2026-10-10)
 var dirt: CarDirt  # road grime on the player body (2026-10-09), washed in WashScreen
+var rain: RainFall  # falling rain streaks (2026-10-14), follows Weather.rain
 
 var _player: PlayerCar
 var _camera: ChaseCamera
@@ -37,6 +38,9 @@ func _ready() -> void:
 	add_child(shimmer)
 	dirt = CarDirt.new(_player)
 	add_child(dirt)
+	# On the car too: the shader reads the headlight cone off the car's frame.
+	rain = RainFall.new(_player)
+	_player.add_child(rain)
 	apply_settings()
 
 ## Push the FxSettings flags to the nodes.
@@ -48,6 +52,12 @@ func apply_settings() -> void:
 	smoke.enabled = FxSettings.is_on("tyre_smoke")
 	shimmer.enabled = FxSettings.is_on("heat_shimmer")
 	dirt.enabled = FxSettings.is_on("dirt")
+	rain.enabled = FxSettings.is_on("rain")
+
+## Once per physics tick, after Weather.step (game.gd): the rain follows the
+## weather and the car's speed. A few compares when nothing moved.
+func tick() -> void:
+	rain.sync()
 
 ## Flip one effect (FxSettings.EFFECTS) live, and remember it.
 func set_effect(effect: String, on: bool) -> void:
@@ -59,3 +69,4 @@ func shift_world(offset: Vector3) -> void:
 	skids.shift_world(offset)
 	smoke.shift_world(offset)
 	flames.shift_world(offset)  # shed fire left behind in world space (the shimmer quads are re-placed every frame)
+	rain.shift_world(offset)

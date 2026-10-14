@@ -2,8 +2,8 @@ extends SceneTree
 
 # Screenshots of the falling rain (scripts/fx/rain_fall.gd) for judging it by
 # eye: the chase view and a low eye-level view, dry, in steady rain and in a
-# downpour, standing still and at speed (the streaks lean back), and the
-# downpour on the Low preset. Boots the real game scene with no traffic and
+# downpour, standing still and at speed (the streaks lean back), the
+# downpour on the Low preset, and the cockpit with drops on the glass. Boots the real game scene with no traffic and
 # pins the weather stage (Weather.set_level, instant: wet road, puddles and
 # wipers come with it). Needs the real renderer (no --headless). Writes PNGs
 # to user://rain_shots/.
@@ -55,6 +55,19 @@ func _run() -> void:
 		eye.look_at(p.global_position + Vector3(0.0, 0.6, -60.0))
 		eye.make_current()
 		await _shoot("%s/%s_eye.png" % [dir, name])
+	# cockpit: drops on the glass, the wipers mid-sweep
+	Weather.set_level(Weather.Level.DOWNPOUR, true)
+	GraphicsSettings.set_preset("medium")
+	GraphicsSettings.apply(self)
+	var cam: ChaseCamera = game.get("camera")
+	cam.set_view(ChaseCamera.View.COCKPIT)
+	for i in 150:
+		await physics_frame
+	await _shoot("%s/downpour_cockpit.png" % dir)
+	for i in 40:
+		await physics_frame
+	await _shoot("%s/downpour_cockpit_b.png" % dir)
+	cam.set_view(ChaseCamera.View.CHASE)
 	# at speed: the streaks lean back
 	Weather.set_level(Weather.Level.DOWNPOUR, true)
 	GraphicsSettings.set_preset("medium")

@@ -16,6 +16,9 @@ extends SceneTree
 #   stops while the tree is paused (pause menu, photo mode)
 # - the headlight cone starts at the car's own "Headlights" lamp, for EVERY
 #   playable car (the scene is rebooted once per PlayerCars.KINDS entry)
+# - the windscreen drops (WindscreenDrops): shown only in the cockpit view,
+#   only in rain, not on Low, off with the "rain" switch; their clock stops
+#   with the game too; present on every car
 # - the car's velocity reaches the shader only when it has moved by
 #   VEL_STEP (no per-tick writes), and the headlight switch reaches it
 # - nothing in RainFall runs per frame or per physics tick (no _process)
@@ -49,6 +52,7 @@ var stage_tick := 0
 var failures: Array[String] = []
 const FREEZES := ["photo", "pause"]
 var _paused_now := -1.0
+var _drops_now := 0.0
 var _freeze_index := 0
 var car_index := 0
 var _prev_game: Node
@@ -123,10 +127,31 @@ func _physics_process(_delta: float) -> bool:
 			r.apply_graphics()
 			# every view's camera, and the mirrors, see the rain's layer
 			var cam: ChaseCamera = game.camera
+			var d: WindscreenDrops = fx.drops
 			for v in ChaseCamera.View.values():
 				cam.set_view(v)
 				_check((cam.cull_mask & r.layers) != 0, "view %d should see the rain layer" % v)
+				d.sync()
+				_check(d.visible == (v == ChaseCamera.View.COCKPIT), "windscreen drops should show in the cockpit view only (view %d: %s)" % [v, d.visible])
+			cam.set_view(ChaseCamera.View.COCKPIT)
+			d.sync()
+			for preset in GraphicsSettings.PRESETS:
+				GraphicsSettings.preset = preset
+				d.apply_graphics()
+				_check(d.visible == (preset != "low"), "%s: drops should %s" % [preset, "hide" if preset == "low" else "show"])
+			GraphicsSettings.preset = was
+			d.apply_graphics()
+			fx.set_effect("rain", false)
+			d.sync()
+			_check(not d.visible, "the rain switch should hide the drops")
+			fx.set_effect("rain", true)
+			d.sync()
+			_check(d.visible, "the rain switch should show the drops again")
+			var dn := d.now
+			d.sync()
+			_check(d.now > dn, "the drops' clock should move while playing")
 			cam.set_view(ChaseCamera.View.CHASE)
+			d.sync()
 			_check((CockpitFrame.MIRROR_CULL & r.layers) != 0, "the cockpit mirrors should see the rain layer")
 			# the clock: moves while the game runs, stops in photo mode and on
 			# the pause screen (the game's own states)
@@ -171,10 +196,12 @@ func _physics_process(_delta: float) -> bool:
 			if _paused_now < 0.0:
 				_check(paused, "%s should pause the tree" % fz)
 				_paused_now = r.now
+				_drops_now = fx.drops.now
 				return false
 			if waited < 8:
 				return false
 			_check(r.now == _paused_now, "now should not move in %s (%.3f vs %.3f)" % [fz, r.now, _paused_now])
+			_check(fx.drops.now == _drops_now, "the drops' clock should not move in %s" % fz)
 			if fz == "photo":
 				gs.close_photo()
 			else:
@@ -214,6 +241,10 @@ func _physics_process(_delta: float) -> bool:
 			r.sync()
 			var spot := p.get_node_or_null("Headlights") as Node3D
 			_check(r.get_parent() == p and r.visible, "%s: rain should ride on the car and show in a downpour" % kind)
+			game.camera.set_view(ChaseCamera.View.COCKPIT)
+			fx.drops.sync()
+			_check(fx.drops.visible, "%s: windscreen drops should show in its cockpit" % kind)
+			game.camera.set_view(ChaseCamera.View.CHASE)
 			_check(spot != null and r.head_offset() == spot.position,
 				"%s: the cone should start at the car's own headlamp (%s vs %s)" % [kind, r.head_offset(), spot.position if spot else "no lamp"])
 			print("rain_fall: %s ok" % kind)

@@ -63,6 +63,8 @@ call :run ui/settings_screen --headless
 call :run ui/key_map --headless
 call :run ui/key_map_drive --headless
 call :run ui/title_and_pause --headless
+call :run ui/photo_mode --headless
+call :run ui/photo_mode_fleet --headless
 call :run ui/pause_map --headless
 call :run ui/title_kerbside --headless
 call :run ui/pause_look --headless

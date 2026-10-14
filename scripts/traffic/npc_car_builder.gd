@@ -301,6 +301,11 @@ instance uniform float reverse : instance_index(6) = 0.0;
 // lamp go dark and the tail lamps only light with the brake; a flash lights
 // the heads again.
 instance uniform float lamps : instance_index(7) = 1.0;
+// The police light bar (#665): 0 off (dark lenses), 1 flashing: the halves
+// alternate, blue then red, each as a double strobe, like a real bar.
+instance uniform float bar : instance_index(8) = 0.0;
+const float BAR_HZ = 1.6;
+const float BAR_GAIN = 4.0;
 varying float v_side;
 void vertex() {
 	v_side = sign(VERTEX.x);  // + = the car's right (it faces -Z)
@@ -309,15 +314,17 @@ void fragment() {
 	vec3 c = COLOR.rgb;
 	// Vertex alpha tags the lenses CarFittings adds: 0.7 indicator, 0.8
 	// third brake light, 0.9 reverse. 1.0 is a sheet lamp, classed by colour.
+	// 0.6 is the police light bar (CarPaint.LIGHT_BAR_TAG), either half.
 	float tag = COLOR.a;
 	float t_turn = step(0.65, tag) * (1.0 - step(0.75, tag));
 	float t_third = step(0.75, tag) * (1.0 - step(0.85, tag));
 	float t_rev = step(0.85, tag) * (1.0 - step(0.95, tag));
+	float t_bar = step(0.55, tag) * (1.0 - step(0.65, tag));
 	// 0.5: a parts body's head lamp or lens (and plate lamp), on the switch.
 	float t_head = step(0.45, tag) * (1.0 - step(0.55, tag));
 	// Linear colours: the tail red is the only lamp with green and blue near 0,
 	// the amber turn lamp the only one with green between 0.3 and 0.7.
-	float tail = step(0.4, c.r) * step(c.g, 0.06) * step(c.b, 0.06) * (1.0 - t_third);
+	float tail = step(0.4, c.r) * step(c.g, 0.06) * step(c.b, 0.06) * (1.0 - t_third) * (1.0 - t_bar);
 	// Lights switched off: the tail lamps are dark red lenses unless braking.
 	float on = max(step(0.5, lamps), step(0.5, flash));
 	float tail_off = tail * (1.0 - on) * (1.0 - step(0.01, brake));
@@ -339,6 +346,14 @@ void fragment() {
 	k *= mix(1.0, mix(0.15, 2.5, blink), amber * lit);
 	// The head lamps (warm white: the only lamp with all three channels up).
 	float head = max(step(0.8, c.r) * step(0.7, c.g) * step(0.3, c.b) * (1.0 - t_rev), t_head);
+	// The light bar: the red half flashes in the first half of each beat, the
+	// blue half in the second, two strobes per half; off, both are dark lenses.
+	float red_half = step(c.b, c.r);
+	float beat = fract(TIME * BAR_HZ);
+	float my_half = mix(step(0.5, beat), 1.0 - step(0.5, beat), red_half);
+	float strobe = step(0.3, fract(beat * 4.0)) * step(fract(beat * 4.0), 0.75);
+	float bar_lit = my_half * strobe * step(0.5, bar);
+	k = mix(k, mix(0.08, BAR_GAIN, bar_lit), t_bar);
 	k *= mix(1.0, FLASH_GAIN, head * flash);
 	// Off: no glow, and the lens itself dims to unlit glass (unshaded, so
 	// ALBEDO is what shows).
@@ -471,6 +486,13 @@ static func set_lamps(vis: Node3D, brake: float, turn = 0, reverse := false,
 		mi.set_instance_shader_parameter("brake", brake)
 		mi.set_instance_shader_parameter("turn", float(state))
 		mi.set_instance_shader_parameter("reverse", 1.0 if reverse else 0.0)
+
+## The police light bar on or off (#665): PatrolCar.lights_on and the P2
+## warning flash drive it. Nothing on a car without a bar.
+static func set_light_bar(vis: Node3D, on: bool) -> void:
+	var mi := vis.get_node_or_null(^"Body") as MeshInstance3D
+	if mi != null:
+		mi.set_instance_shader_parameter("bar", 1.0 if on else 0.0)
 
 ## A kind's data script (base64 shapes, builds, colours), loaded the first
 ## time that kind is used. They used to be preloaded in KINDS, which kept all

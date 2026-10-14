@@ -512,6 +512,12 @@ static func finish_for(kind: String) -> Vector4:
 ## - custom0 / custom1 = 1 - distance / EDGE_W to the triangle's crease edges
 ##   and paint-boundary edges (NO_EDGE for an edge that is neither).
 ## Each design triangle is written a, c, b for Godot's clockwise front faces.
+## The police light bar's two halves on a sheet: tagged in the glow surface's
+## vertex alpha so the lamp shader flashes them instead of classing the red
+## half as a tail lamp (#665). CarAssembler uses the same tag for a parts body.
+const LIGHT_BAR_MATS := ["pol_b", "pol_r"]
+const LIGHT_BAR_TAG := 0.6
+
 static func build_groups(data: GDScript, tris: PackedVector3Array, mats: PackedByteArray,
 		tint_mats: Array, opts := {}) -> Dictionary:
 	var is_wheel: bool = opts.get("is_wheel", false)
@@ -537,6 +543,8 @@ static func build_groups(data: GDScript, tris: PackedVector3Array, mats: PackedB
 		m_class.append(cls)
 		var col := Color(data.COLORS[mname]).srgb_to_linear() if data.COLORS.has(mname) else Color.BLACK
 		col.a = 0.0 if cls == 0 else 1.0
+		if mname in LIGHT_BAR_MATS:
+			col.a = LIGHT_BAR_TAG   # the cop's light bar halves, not tail lamps (#665)
 		m_col.append(col)
 		var fin: Array = FINISH.get(mname, FINISH_DEFAULT)
 		m_fin.append(Vector2(fin[0], fin[1]))

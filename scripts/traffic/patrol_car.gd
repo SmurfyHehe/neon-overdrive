@@ -9,17 +9,26 @@ extends TrafficCar
 
 const KIND := "c1_patrol"
 
-## Emergency lights (and siren) on. Nothing turns them on yet (pursuit is a
-## later stage); this is the hook traffic already answers: with them on, cars
-## ahead pull over to the right and slow (TrafficManager.add_siren).
+## Emergency lights (and siren) on: CopBrain sets it for a pursuit, a lost
+## target and a search. The light bar flashes (NpcCarBuilder.set_light_bar,
+## #665) and traffic answers: cars ahead pull over to the right and slow
+## (TrafficManager.add_siren).
 var lights_on := false:
 	set(on):
 		lights_on = on
+		if chassis_visual != null and is_instance_valid(chassis_visual):
+			NpcCarBuilder.set_light_bar(chassis_visual, on or _warning)
 		if traffic != null:
 			if on:
 				traffic.add_siren(self)
 			else:
 				traffic.remove_siren(self)
+
+## The body is built in TrafficCar._ready: lights set before that reach it here.
+func _ready() -> void:
+	super()
+	if chassis_visual != null:
+		NpcCarBuilder.set_light_bar(chassis_visual, lights_on or _warning)
 
 func _exit_tree() -> void:
 	if traffic != null:
@@ -43,16 +52,17 @@ func _consider_lane_change(v: float) -> void:
 	if _idx >= 0:
 		super(v)
 
-## P2 warning (police_heat.gd): the light bar goes once and the cop gives one
-## whoop. Stand-in: the hazard/brake lamps flash for FLASH_SECS; the whoop is a
-## short rising sweep on the Sirens bus.
+## P2 warning (police_heat.gd): the light bar goes once (one beat of the
+## flasher) and the cop gives one whoop, a short rising sweep on the Sirens
+## bus. The hazards no longer stand in for the bar (#665).
 const FLASH_SECS := 0.6
 static var _whoop: AudioStreamWAV
+var _warning := false
 
 func warn_flash() -> void:
 	if chassis_visual != null:
-		NpcCarBuilder.set_lamps(chassis_visual, 1.0, true)
-		_lamp_key = -1
+		_warning = true
+		NpcCarBuilder.set_light_bar(chassis_visual, true)
 		get_tree().create_timer(FLASH_SECS).timeout.connect(_end_flash)
 	var p := Sound3D.new()   # not AudioStreamPlayer3D: issue #567
 	p.stream = _whoop_stream()
@@ -64,9 +74,9 @@ func warn_flash() -> void:
 	p.play()
 
 func _end_flash() -> void:
+	_warning = false
 	if chassis_visual != null and is_instance_valid(chassis_visual):
-		NpcCarBuilder.set_lamps(chassis_visual, 0.0, false)
-		_lamp_key = -1
+		NpcCarBuilder.set_light_bar(chassis_visual, lights_on)
 
 ## 0.4 s rising 600 -> 1500 Hz with a fade, 16-bit mono.
 static func _whoop_stream() -> AudioStreamWAV:

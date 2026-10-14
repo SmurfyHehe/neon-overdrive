@@ -2013,8 +2013,8 @@ static func _update_names(root: Node3D, chunk_index: int, walk0: float, walk1: f
 			var ring: Dictionary = RoadMap.rings()[int(r.ring)]
 			var leads := PlaceNames.SERVICES if RoadMap.ring_has_stop(int(r.ring)) else PlaceNames.area_name(RoadMap.district_kind(RoadMap.district_of(floori(float(ring.s) / CHUNK_LEN))))
 			# an exit on a pocket's side leads to the pocket (step 7: "PIER")
-			var pk := RoadMap.pocket_of_ring(int(r.ring))
-			if not pk.is_empty() and int(pk.side) == int(eside):
+			var pk := RoadMap.pocket_at(int(r.ring), int(eside))
+			if not pk.is_empty():
 				leads = String(pk.word)
 			list = RoadSigns.exit_gantry(PlaceNames.exit_word(int(ring.number)), leads, PlaceNames.ADVANCE,
 				Vector3((ew + NAME_SIGN_SETBACK) * eside, 0.0, rz), _foundation(), eside)

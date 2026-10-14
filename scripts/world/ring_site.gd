@@ -140,12 +140,12 @@ var _zones: Array[SoundZone] = []
 ## Which rim pieces of the outside edge are open, counted anticlockwise from
 ## the +x point: three pieces either side of each ramp point where a ramp's
 ## lane comes in or goes out, and two at the spur.
-static func rim_open(i: int, spur_side: int) -> bool:
+static func rim_open(i: int, spurs: Array) -> bool:
 	for base in [0, HALF_SEGS]:
 		var d := posmod(i - base, SEGS)
 		if (d >= 3 and d <= 5) or (d >= SEGS - 6 and d <= SEGS - 4):
 			return true
-		if (d == 0 or d == SEGS - 1) and spur_side == (1 if base == 0 else -1):
+		if (d == 0 or d == SEGS - 1) and spurs.has(1 if base == 0 else -1):
 			return true
 	return false
 
@@ -159,8 +159,12 @@ static func look_of(ring: int) -> Dictionary:
 	elif String(info.zone) == "The Docks":
 		style = "steel"
 	var island := String(r.get("island", "tree" if String(r.kind) == "landmark" else ""))
-	return {"style": style, "spur": RoadMap.ring_spur_side(ring), "landmark": island == "tree", "island": island,
-		"pocket": String(RoadMap.pocket_of_ring(ring).get("id", "")),
+	var pockets: Array = []
+	for pk in RoadMap.pockets_of_ring(ring):
+		pockets.append(String(pk.id))
+	return {"style": style, "spur": RoadMap.ring_spur_side(ring), "spurs": RoadMap.ring_spur_sides(ring),
+		"landmark": island == "tree", "island": island,
+		"pocket": ",".join(pockets), "pocket_sides": RoadMap.pockets_of_ring(ring).map(func(pk: Dictionary) -> int: return int(pk.side)),
 		"bridge": {"steel": "truss", "rust": "girder"}.get(style, "slab"),
 		"graffiti": style == "steel" or String(info.kind) == "downtown"}
 
@@ -253,7 +257,7 @@ func _place() -> void:
 			(c as Node3D).force_update_transform()
 
 func _dress(look: Dictionary) -> void:
-	var key := "%s|%d|%s|%s" % [look.style, look.spur, look.get("island", ""), look.get("pocket", "")]
+	var key := "%s|%s|%s|%s" % [look.style, look.get("spurs", []), look.get("island", ""), look.get("pocket", "")]
 	if not _looks.has(key):
 		_looks[key] = build(look)
 	var made: Dictionary = _looks[key]
@@ -408,7 +412,8 @@ static func build(look: Dictionary) -> Dictionary:
 	var y: float = R.RAMP_H
 	# the lane leans in: its inside edge is lower (RoadRamps.BANK)
 	var y_in: float = y - R.ring_drop(R.RING_IN)
-	var spur: int = look.spur
+	var spurs: Array = look.get("spurs", [look.spur] if int(look.spur) != 0 else [])
+	var pocket_sides: Array = look.get("pocket_sides", [])
 	var step := TAU / float(SEGS)
 	# the lane and the slab's underside
 	for i in SEGS:
@@ -427,11 +432,11 @@ static func build(look: Dictionary) -> Dictionary:
 		R._quad(i0 + down, o0 + down, i1 + down, o1 + down, C_UNDER, Vector3.DOWN)
 	# the outside edge, in runs between the mouths; then the inside edge, whole
 	var first_open := 0
-	while not rim_open(first_open, spur):
+	while not rim_open(first_open, spurs):
 		first_open += 1
 	var run_from := -1
 	for j in range(first_open, first_open + SEGS + 1):
-		var open := rim_open(j % SEGS, spur)
+		var open := rim_open(j % SEGS, spurs)
 		if not open and run_from < 0:
 			run_from = j
 		elif open and run_from >= 0:
@@ -469,7 +474,7 @@ static func build(look: Dictionary) -> Dictionary:
 		R._pools.append(Transform3D(Basis.from_scale(Vector3(WASH.x, 1.0, WASH.y)), R._p(0.0, 0.05, vz * wmid)))
 	# tall sodium lamps on the outside barrier, a pool of light under each
 	for deg in LAMP_DEG:
-		if (deg == 0.0 and spur > 0) or (deg == 180.0 and spur < 0):
+		if (deg == 0.0 and spurs.has(1)) or (deg == 180.0 and spurs.has(-1)):
 			continue
 		var a := deg_to_rad(deg)
 		var r: float = R.RING_OUT + R.BARRIER_W * 0.5
@@ -492,8 +497,8 @@ static func build(look: Dictionary) -> Dictionary:
 			var a := deg_to_rad(base + d * R.RING_SEG_DEG)
 			var r: float = R.RING_OUT + R.BARRIER_W * 0.5
 			R._box(Vector3(r * cos(a), y + R.BARRIER_H + 0.25, r * sin(a)), Vector3(0.36, 0.5, 0.36), C_NOSE)
-	if spur != 0:
-		_spur(float(spur), y, String(look.get("pocket", "")) == "")
+	for spur in spurs:
+		_spur(float(spur), y, not pocket_sides.has(int(spur)))
 	match String(look.get("island", "")):
 		"tree":
 			_landmark()

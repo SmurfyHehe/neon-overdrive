@@ -11,7 +11,7 @@ extends SceneTree
 #    that traffic, inside the parapet's face; beside it, to the reader's right,
 #    a plate naming the next exit along and how far its gore is (within 50 m
 #    of the true distance). Every word is in the sign atlas, which stays at
-#    48 layers or fewer.
+#    56 layers or fewer (48 before the pockets).
 # 3. The lean: the ring's lane leans in 4 % (inside edge 28 cm low, outside at
 #    RAMP_H); every drivable triangle of every look tilts in by 4 % +- 0.1 %.
 #    Where a ramp's deck runs over the lane it lies LIFT above it (within
@@ -36,7 +36,7 @@ const OUTSIDE_LANE_EDGE := 13.2   # RoadRamps.X_LANE: the carriageway's outer ed
 const BANK_TOL := 0.001
 const SEAM_TOL := 0.01
 const DIST_TOL := 50.0
-const ATLAS_MAX := 48
+const ATLAS_MAX := 56   # 48 plus a layer per pocket word (ramps doc steps 7, 8, 12)
 
 var fails: Array[String] = []
 var checks := 0

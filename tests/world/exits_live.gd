@@ -238,12 +238,12 @@ func _chunks() -> void:
 		var made := RingSite.build(look)
 		var open := 0
 		for i in RingSite.SEGS:
-			if RingSite.rim_open(i, int(look.spur)):
+			if RingSite.rim_open(i, look.spurs):
 				open += 1
-		_check(open == (14 if int(look.spur) != 0 else 12), "ring %s: %d rim pieces open (spur %d)" % [RoadMap.rings()[r].id, open, look.spur])
+		_check(open == 12 + 2 * (look.spurs as Array).size(), "ring %s: %d rim pieces open (spurs %s)" % [RoadMap.rings()[r].id, open, look.spurs])
 		_check((made.faces as PackedVector3Array).size() >= RingSite.SEGS * 6 and (made.boxes as Array).size() > RingSite.SEGS and (made.pools as Array).size() >= 7,
 			"ring %s is missing parts: %d face points, %d boxes, %d pools" % [RoadMap.rings()[r].id, (made.faces as PackedVector3Array).size(), (made.boxes as Array).size(), (made.pools as Array).size()])
-		_check((RoadMap.ring_kind(r) in ["stop", "lot"]) == (int(look.spur) != 0), "ring %s (%s) has spur %d" % [RoadMap.rings()[r].id, RoadMap.ring_kind(r), look.spur])
+		_check((RoadMap.ring_kind(r) in ["stop", "lot"] or not RoadMap.pockets_of_ring(r).is_empty()) == (int(look.spur) != 0), "ring %s (%s) has spur %d" % [RoadMap.rings()[r].id, RoadMap.ring_kind(r), look.spur])
 	# the ramps end on the rim pieces the mouths are cut at
 	_check(absf(RoadRamps.V_RING_OUT - RoadRamps.RING_OUT * sin(deg_to_rad(3.0 * RoadRamps.RING_SEG_DEG))) < 0.01
 		and absf(RoadRamps.V_RING_IN - RoadRamps.RING_OUT * sin(deg_to_rad(6.0 * RoadRamps.RING_SEG_DEG))) < 0.01, "the ramps do not end on the rim pieces of the ring")

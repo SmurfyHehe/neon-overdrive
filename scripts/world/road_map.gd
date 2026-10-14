@@ -173,6 +173,9 @@ const PIN_APPROACH := 1
 const RING_GORE := 200.0
 ## Chunks either side of the centre with ramps beside the road.
 const RAMP_CHUNKS := 4
+## How many chunks a pocket reaches along the road from its ring's chunk,
+## the way its arm turns (PocketSite: the arm and the longest lot, 260 m).
+const POCKET_CHUNKS := 6
 ## Chunks of slip lane beyond those, and how many of them it opens over.
 const AUX_CHUNKS := 4
 const AUX_TAPER := 2
@@ -298,9 +301,8 @@ static func use(id: int, act_value: int = 1) -> void:
 				_pins[posmod(rc + k, period)] = PIN_LEVEL
 		# a pocket's arm and lot (PocketSite) lie in the ring's flat frame along
 		# the road: the chunks it reaches along stay straight and level too
-		var pk := pocket_of_ring(ri)
-		if not pk.is_empty():
-			for k in (range(0, 5) if int(pk.turn) > 0 else range(-5, 0)):
+		for pk in pockets_of_ring(ri):
+			for k in (range(0, POCKET_CHUNKS) if int(pk.turn) > 0 else range(-POCKET_CHUNKS, 0)):
 				_pins[posmod(rc + k, period)] = PIN_STRAIGHT
 		for side in [1, -1]:
 			_exits.append({"id": "%s%s" % [r.id, "a" if side > 0 else "b"], "s": float(r.s) - float(side) * RING_GORE,
@@ -607,8 +609,24 @@ static func ring_near(s: float) -> Dictionary:
 	return {"index": which, "s": s + best}
 
 ## Which side a ring's spur leaves on: +1 / -1 for a "stop" (its STOPS exit's
-## side) or +1 for a "lot"; 0 = no spur.
+## side) or +1 for a "lot"; 0 = no spur. The first of ring_spur_sides().
 static func ring_spur_side(ring: int) -> int:
+	var sides := ring_spur_sides(ring)
+	return int(sides[0]) if not sides.is_empty() else 0
+
+## Every side a ring has a spur on: the stop's or the lot's side, and each
+## pocket's (a ring can have one on each side, exit 3's truck stop and diner).
+static func ring_spur_sides(ring: int) -> Array:
+	var out: Array = []
+	var own := _own_spur_side(ring)
+	if own != 0:
+		out.append(own)
+	for pk in pockets_of_ring(ring):
+		if not out.has(int(pk.side)):
+			out.append(int(pk.side))
+	return out
+
+static func _own_spur_side(ring: int) -> int:
 	var kind := String(_rings[ring].kind)
 	if kind == "lot":
 		return 1
@@ -619,23 +637,40 @@ static func ring_spur_side(ring: int) -> int:
 			return 1 if String(st.get("exit", "")).ends_with("a") else -1
 	return 1
 
-## Pockets (ramps doc step 7): a place at the end of a ring's arm, built by
-## PocketSite. `ring` the ring whose spur it hangs off, `side` the spur's side
-## (must match ring_spur_side), `turn` +1 the arm bends to run the way the
-## chunks count, -1 the other way, `kind` what stands there ("pier"), `word`
-## what the exit gantry says it leads to.
+## Pockets (ramps doc steps 7, 8, 12): a place at the end of a ring's arm,
+## built by PocketSite. `ring` the ring it hangs off, `side` which side of
+## the road (the ring gets a spur there), `turn` +1 the arm bends to run the
+## way the chunks count, -1 the other way, `kind` what stands there ("pier",
+## "truck", "diner"), `word` what the exit gantry says it leads to (an atlas
+## layer each, PlaceNames.atlas_words). One pocket per ring and side at most.
+## The arms bend away from the fuel stations (STOPS) and the gores.
 const POCKETS := [
+	{"id": "truck", "road": 0, "ring": "x3", "side": 1, "turn": 1, "kind": "truck", "word": "TRUCK STOP"},
+	{"id": "diner", "road": 0, "ring": "x3", "side": -1, "turn": -1, "kind": "diner", "word": "DINER"},
 	{"id": "pier", "road": 0, "ring": "x5", "side": 1, "turn": 1, "kind": "pier", "word": "PIER"},
 ]
 
-## The pocket hanging off this ring on this road, or {}.
-static func pocket_of_ring(ring: int) -> Dictionary:
+## The pockets hanging off this ring on this road (0, 1 or 2).
+static func pockets_of_ring(ring: int) -> Array:
+	var out: Array = []
 	if ring < 0 or ring >= _rings.size():
-		return {}
+		return out
 	for pk in POCKETS:
-		if int(pk.road) == road_id and String(pk.ring) == String(_rings[ring].id) and int(pk.side) == ring_spur_side(ring):
+		if int(pk.road) == road_id and String(pk.ring) == String(_rings[ring].id):
+			out.append(pk)
+	return out
+
+## The pocket on `side` of this ring, or {}.
+static func pocket_at(ring: int, side: int) -> Dictionary:
+	for pk in pockets_of_ring(ring):
+		if int(pk.side) == side:
 			return pk
 	return {}
+
+## The first pocket hanging off this ring, or {} (tests; see pockets_of_ring).
+static func pocket_of_ring(ring: int) -> Dictionary:
+	var all := pockets_of_ring(ring)
+	return all[0] if not all.is_empty() else {}
 
 ## Whether a stop (STOPS) hangs off this ring.
 static func ring_has_stop(ring: int) -> bool:

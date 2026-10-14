@@ -308,8 +308,8 @@ static func pocket_bound(chunk_index: int, side: int) -> float:
 	var r := RoadMap.ring_at(chunk_index)
 	if r < 0:
 		return 0.0
-	var pk := RoadMap.pocket_of_ring(r)
-	if pk.is_empty() or int(pk.side) != side:
+	var pk := RoadMap.pocket_at(r, side)
+	if pk.is_empty():
 		return 0.0
 	var ps := pocket_site()
 	# the chunk's span, metres from the ring's centre, turned the arm's way
@@ -318,7 +318,7 @@ static func pocket_bound(chunk_index: int, side: int) -> float:
 	var b := float(k + 1) * L * float(pk.turn)
 	var lo := minf(a, b)
 	var hi := maxf(a, b)
-	if hi < -5.0 or lo > float(ps.REACH_V):
+	if hi < -5.0 or lo > float(ps.reach_v(pk)):
 		return 0.0
 	return float(ps.BOUND)
 
@@ -372,22 +372,24 @@ static func place_of(u: Vector3, s: float) -> Dictionary:
 			out["part"] = "ring"
 			out["angle"] = fposmod(atan2(w, u.x), TAU)
 			return out
-		var spur := RoadMap.ring_spur_side(int(near.index))
-		if spur != 0 and u.x * float(spur) > RING_OUT and u.x * float(spur) < SPUR_REACH and v < 4.0:
-			out["part"] = "spur"
-			return out
-	# a pocket's arm and lot (ramps doc step 7): any height, its footprint
-	var pk := RoadMap.pocket_of_ring(int(near.index))
-	if not pk.is_empty() and ring and u.x * float(pk.side) > RING_OUT:
-		var ps := pocket_site()
-		var px := u.x * float(pk.side)
-		if px < float(ps.BOUND) and u.y < RAMP_H + ON_DECK and ps.covers(pk, px, w):
-			var dy := float(ps.deck_y(pk, px, w))
-			if not is_inf(dy) and absf(u.y - dy) < ON_DECK:
-				out["part"] = "pocket"
-				out["side"] = int(pk.side)
-				out["v"] = v
+		for spur in RoadMap.ring_spur_sides(int(near.index)):
+			if u.x * float(spur) > RING_OUT and u.x * float(spur) < SPUR_REACH and v < 4.0:
+				out["part"] = "spur"
+				out["side"] = int(spur)
 				return out
+	# a pocket's arm and lot (ramps doc step 7): any height, its footprint
+	if ring:
+		var pk := RoadMap.pocket_at(int(near.index), 1 if u.x >= 0.0 else -1)
+		if not pk.is_empty() and u.x * float(pk.side) > RING_OUT:
+			var ps := pocket_site()
+			var px := u.x * float(pk.side)
+			if px < float(ps.BOUND) and u.y < RAMP_H + ON_DECK and ps.covers(pk, px, w):
+				var dy := float(ps.deck_y(pk, px, w))
+				if not is_inf(dy) and absf(u.y - dy) < ON_DECK:
+					out["part"] = "pocket"
+					out["side"] = int(pk.side)
+					out["v"] = v
+					return out
 	if v > V_GORE:
 		return {}
 	if absf(absf(u.x) - x_at(v)) < HALF + 0.6 and absf(u.y - y_at(v)) < ON_DECK:
@@ -401,11 +403,11 @@ const SPUR_REACH := 50.5
 ## Whether a pocket off ring `index` reaches `w` metres from the ring's centre
 ## (signed, the way the chunks count).
 static func pocket_reach(index: int, w: float) -> bool:
-	var pk := RoadMap.pocket_of_ring(index)
-	if pk.is_empty():
-		return false
-	var t := w * float(pk.turn)
-	return t > -5.0 and t < float(pocket_site().REACH_V)
+	for pk in RoadMap.pockets_of_ring(index):
+		var t := w * float(pk.turn)
+		if t > -5.0 and t < float(pocket_site().reach_v(pk)):
+			return true
+	return false
 
 ## Whether a car at `place` moving at `vel` (road space: RoadFrame.dir_to_road)
 ## is going the wrong way: clockwise on the ring, or against a ramp (each

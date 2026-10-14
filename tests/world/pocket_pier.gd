@@ -96,16 +96,16 @@ func _static() -> void:
 	var am: Dictionary = PocketSite.arm_at(arc, -1.0)
 	_check((am.t as Vector2).is_equal_approx(Vector2(0.0, -1.0)), "turn -1 mirrors the bend: %s" % [am])
 	var run: float = PocketSite.arm_len()
-	_check(absf(PocketSite.arm_y(0.0) - RoadRamps.RAMP_H) < 0.001 and absf(PocketSite.arm_y(run) - PocketSite.PIER_Y) < 0.001, "the arm drops from %.1f to %.1f" % [PocketSite.arm_y(0.0), PocketSite.arm_y(run)])
+	_check(absf(PocketSite.arm_y(pk_of(), 0.0) - RoadRamps.RAMP_H) < 0.001 and absf(PocketSite.arm_y(pk_of(), run) - PocketSite.PIER_Y) < 0.001, "the arm drops from %.1f to %.1f" % [PocketSite.arm_y(pk_of(), 0.0), PocketSite.arm_y(pk_of(), run)])
 	# the drop is smooth: no step of more than the grade in any metre, and never climbs
 	var worst := 0.0
 	var s := 0.0
 	while s < run:
-		var d: float = PocketSite.arm_y(s) - PocketSite.arm_y(s + 1.0)
+		var d: float = PocketSite.arm_y(pk_of(), s) - PocketSite.arm_y(pk_of(), s + 1.0)
 		worst = maxf(worst, d)
 		_check(d >= -0.0001, "the arm climbs at %.0f m" % s)
 		s += 1.0
-	_check(worst <= PocketSite.max_grade() + 0.001 and PocketSite.max_grade() < 0.065, "the arm's steepest metre drops %.3f (grade %.3f)" % [worst, PocketSite.max_grade()])
+	_check(worst <= PocketSite.max_grade(pk_of()) + 0.001 and PocketSite.max_grade(pk_of()) < 0.065, "the arm's steepest metre drops %.3f (grade %.3f)" % [worst, PocketSite.max_grade(pk_of())])
 	# the footprint: on the arm, on the lot, off both
 	var mid: Dictionary = PocketSite.arm_at(run * 0.5, 1.0)
 	var mp: Vector2 = mid.p
@@ -114,11 +114,12 @@ func _static() -> void:
 	_check(PocketSite.covers(pk_of(), (PocketSite.LOT_X0 + PocketSite.LOT_X1) * 0.5, PocketSite.ARC_R + PocketSite.ARM_STRAIGHT + 50.0), "the lot's middle is not covered")
 	_check(not PocketSite.covers(pk_of(), PocketSite.LOT_X1 + 5.0, PocketSite.ARC_R + PocketSite.ARM_STRAIGHT + 50.0), "the water is covered")
 	_check(not PocketSite.covers(pk_of(), RoadRamps.X_TOP, 0.0), "the ring's lane is covered")
-	_check(absf(PocketSite.deck_y(pk_of(), mp.x, mp.y) - (PocketSite.arm_y(run * 0.5) + RoadRamps.LIFT)) < 0.01, "deck_y on the arm's middle is %.2f" % PocketSite.deck_y(pk_of(), mp.x, mp.y))
+	# deck_y samples the arm's line every metre: within half a metre of grade
+	_check(absf(PocketSite.deck_y(pk_of(), mp.x, mp.y) - (PocketSite.arm_y(pk_of(), run * 0.5) + RoadRamps.LIFT)) < 0.05, "deck_y on the arm's middle is %.2f" % PocketSite.deck_y(pk_of(), mp.x, mp.y))
 	_check(is_inf(PocketSite.deck_y(pk_of(), 10.0, -100.0)), "deck_y off the pocket is %s" % PocketSite.deck_y(pk_of(), 10.0, -100.0))
 	# the atlas has the pocket's word, within the texture array's cap
 	var words: Array = PlaceNames.atlas_words()
-	_check(words.has("PIER") and words.size() <= 48, "the atlas has %d words, PIER %s" % [words.size(), words.has("PIER")])
+	_check(words.has("PIER") and words.size() <= 56, "the atlas has %d words, PIER %s" % [words.size(), words.has("PIER")])
 
 func pk_of() -> Dictionary:
 	if pk.is_empty():
@@ -244,7 +245,7 @@ func _next(to_phase: int) -> void:
 
 func _pocket_node() -> Node3D:
 	for c in game.get_children():
-		if String(c.name).begins_with("Pocket_"):
+		if String(c.name) == "Pocket_pier":
 			return c as Node3D
 	return null
 
@@ -268,13 +269,13 @@ func _physics_process(_delta: float) -> bool:
 		0:
 			_check(RoadMap.is_loop(), "no loop")
 			_check(String(RoadMap.rings()[SITE].id) == "x5" and RoadMap.pocket_of_ring(SITE).get("id") == "pier", "ring %d is %s, pocket %s" % [SITE, RoadMap.rings()[SITE].id, RoadMap.pocket_of_ring(SITE)])
-			_check(RoadMap.pocket_of_ring(SITE - 1).is_empty(), "ring %d has a pocket: %s" % [SITE - 1, RoadMap.pocket_of_ring(SITE - 1)])
+			_check(RoadMap.pocket_of_ring(SITE - 1).is_empty() and RoadMap.pockets_of_ring(SITE).size() == 1, "ring %d has a pocket: %s; ring %d has %d" % [SITE - 1, RoadMap.pocket_of_ring(SITE - 1), SITE, RoadMap.pockets_of_ring(SITE).size()])
 			site_s = float(RoadMap.rings()[SITE].s)
 			var rc := floori(site_s / L)
 			# the wall stands out past the pocket on its side only, along its reach
 			_check(RoadRamps.pocket_bound(rc + 2, 1) == PocketSite.BOUND and RoadRamps.pocket_bound(rc + 4, 1) == PocketSite.BOUND, "the pocket's bound beside chunks 2 and 4: %.0f, %.0f" % [RoadRamps.pocket_bound(rc + 2, 1), RoadRamps.pocket_bound(rc + 4, 1)])
 			_check(RoadRamps.pocket_bound(rc + 2, -1) == 0.0 and RoadRamps.pocket_bound(rc - 2, 1) == 0.0 and RoadRamps.pocket_bound(rc + 5, 1) == 0.0, "the pocket's bound where it has none: %.0f, %.0f, %.0f" % [RoadRamps.pocket_bound(rc + 2, -1), RoadRamps.pocket_bound(rc - 2, 1), RoadRamps.pocket_bound(rc + 5, 1)])
-			_check(RoadMap.pins()[RoadMap.lap_chunk(rc + 4)] == RoadMap.PIN_STRAIGHT, "chunk 4 past the ring is not pinned straight")
+			_check(RoadMap.pins()[RoadMap.lap_chunk(rc + 5)] == RoadMap.PIN_STRAIGHT, "chunk 5 past the ring is not pinned straight")
 			# the ring's spur is open at its end: no nose box at SPUR_END
 			var look: Dictionary = RingSite.look_of(SITE)
 			_check(String(look.pocket) == "pier" and int(look.spur) == 1, "the ring's look: %s" % [look])
@@ -357,7 +358,8 @@ func _physics_process(_delta: float) -> bool:
 				_check(not place.is_empty() and String(place.part) == "pocket", "a car stood on the pier is at %s" % [place])
 				game.rescue.call("_put_back")
 				return false
-			if phase_ticks < 90:
+			# put back half a metre over the deck: let it settle before reading it
+			if phase_ticks < 90 or (p.linear_velocity.length() > 0.3 and phase_ticks < 60 + hz * 6):
 				return false
 			var fwd := RoadFrame.dir_to_road(u.z, -p.global_transform.basis.z)
 			_check(not place.is_empty() and (String(place.part) == "spur" or String(place.part) == "pocket") and absf(w) < 4.0 and u.x > RoadRamps.RING_OUT and u.x < RingSite.SPUR_END, "put back %.0f m from the centre, %.1f m out, at %s" % [w, u.x, place])

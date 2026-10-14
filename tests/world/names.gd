@@ -73,7 +73,9 @@ func _atlas() -> void:
 	# .. "EXIT 16", "SERVICES" and "1 km" joined the lettering (a layer is
 	# 512 x 64 px). The bridge plates (#645) swapped "1 km" for "600 m" and
 	# "1400 m".
-	_check(WordAtlas.layer_count() <= 48, "atlas has %d layers (48 max)" % WordAtlas.layer_count())
+	# 56 since the pockets (ramps doc steps 7, 8, 12): a layer per place the
+	# exit gantries lead to ("PIER", "TRUCK STOP", "DINER", ...); 128 KB each.
+	_check(WordAtlas.layer_count() <= 56, "atlas has %d layers (56 max)" % WordAtlas.layer_count())
 	for w in words:
 		var l := WordAtlas.layer(w)
 		_check(l >= 0, "word '%s' has no atlas layer" % w)

@@ -34,11 +34,17 @@ enum State { PATROL, CHECKING, PURSUIT, LOST, SEARCH, CALLED_OFF }
 ##   chaser   tails 12 m behind, pulls right up when you are slow, and nudges
 ##            your tail if you are slower than it inside 3 m.
 ##   blocker  gets in front of you in your lane (it passes in a free lane, or
-##            it was put on the road ahead of you) and then drives slower.
+##            it was put on the road ahead of you), a second of your speed
+##            ahead at least, and then drives slower, slowing gently.
 ##   flanker  holds its nose by your rear wheel, one side or the other.
-enum Role { CHASER, BLOCKER, FLANKER }
-const ROLE_NAMES := ["chaser", "blocker", "flanker"]
+##   heavy    heat 4: the patrol SUV with a push bar. Sits close behind and
+##            rams a rear corner when you are slower than it.
+## None of them crosses in front of you closer than you could stop, or brakes
+## hard in front of you (FreeDriver, issue #625).
+enum Role { CHASER, BLOCKER, FLANKER, HEAVY }
+const ROLE_NAMES := ["chaser", "blocker", "flanker", "heavy"]
 const NAMES := ["patrol", "checking", "pursuit", "lost", "search", "called off"]
+const WAIT_MARGIN := 40.0       # m past where a blocker is sent ahead that it still counts as waiting for you
 
 signal state_changed(from: int, to: int)
 ## A line for the police radio (heard only with a scanner fitted: P10).
@@ -98,7 +104,11 @@ func step(dt: float) -> void:
 	# The cops in a chase talk: what one sees they all know (PoliceHeat.seen is
 	# any cop that has not stood down). A blocker in front of you rarely sees
 	# you itself; it must not go looking for you while the chaser is on your tail.
-	sees = heat.seen or heat.cop_can_see_player(car)
+	# The helicopter (heat 5) calls you in wherever it can see you. A blocker
+	# sent out in front of you is told where you are while it waits for you to
+	# come up (it faces away from you): without that it went Lost and swept
+	# the road at the search speed right in front of you (issue #625).
+	sees = heat.seen or heat.helicopter_sees or _waiting_ahead() or heat.cop_can_see_player(car)
 	if sees:
 		_note_seen()
 	if stood_down_at >= 0 and heat.level == PoliceHeat.NONE:
@@ -158,6 +168,18 @@ func step(dt: float) -> void:
 				fast = minf(fast, maxf(absf(heat._kmh_of(player)) / 3.6 * 0.6, 12.0))
 		car.target_speed = fast
 
+## A blocker in Pursuit on your road, going your way, out in front of you no
+## farther than it is sent (the reveal distance and a margin).
+func _waiting_ahead() -> bool:
+	if role != Role.BLOCKER or state != State.PURSUIT or traffic == null:
+		return false
+	var u := RoadFrame.unroll(car.global_position)
+	var pu := RoadFrame.unroll(player.global_position)
+	if (u.x < 0.0) != (pu.x < 0.0):
+		return false
+	var ahead := (u.z - pu.z) * car.direction
+	return ahead > 0.0 and ahead < traffic.reveal_distance() + PolicePatrol.SPAWN_PAST_REVEAL + WAIT_MARGIN
+
 ## Metres from the cop to the last place it saw the player, along its own
 ## direction (negative = it has driven past).
 func _to_last_seen() -> float:
@@ -190,7 +212,8 @@ func _role_step() -> void:
 			driver.ram_dv = PoliceRules.RAM_DV
 		Role.BLOCKER:
 			var boxing := kmh < PoliceRules.BOX_KMH
-			driver.offset_back = -(PoliceRules.BOX_AHEAD if boxing else PoliceRules.BLOCK_AHEAD)
+			var ahead := maxf(PoliceRules.BLOCK_AHEAD, PoliceRules.BLOCK_HEADWAY * kmh / 3.6 + FreeDriver.TARGET_HALF_L + car.half_l)
+			driver.offset_back = -(PoliceRules.BOX_AHEAD if boxing else ahead)
 			# in front of you and in your lane: now it slows, and you have to go round
 			var u := RoadFrame.unroll(car.global_position)
 			var pu := RoadFrame.unroll(player.global_position)
@@ -211,6 +234,14 @@ func _role_step() -> void:
 				flank_side = side
 			driver.offset_back = PoliceRules.FLANK_BACK
 			driver.offset_x = flank_side * PoliceRules.FLANK_SIDE
+		Role.HEAVY:
+			if flank_side == 0.0:
+				flank_side = 1.0 if car.get_instance_id() % 2 == 0 else -1.0
+			driver.offset_back = PoliceRules.CLOSE_BACK if kmh < PoliceRules.CLOSE_KMH else PoliceRules.HEAVY_BACK
+			driver.offset_x = flank_side * PoliceRules.HEAVY_CORNER
+			driver.ram = true
+			driver.ram_gap = PoliceRules.HEAVY_RAM_GAP
+			driver.ram_dv = PoliceRules.HEAVY_RAM_KMH / 3.6
 
 ## The dispatcher's word that the chase is terminated (another cop called it).
 func call_off() -> void:

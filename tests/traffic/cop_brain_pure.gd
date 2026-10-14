@@ -13,6 +13,7 @@ func _check(ok: bool, msg: String) -> void:
 func _initialize() -> void:
 	_danger()
 	_bust()
+	_slots()
 	for f in failures:
 		printerr("FAIL: " + f)
 	print("cop_brain_pure: %s" % ("PASS" if failures.is_empty() else "FAIL (%d)" % failures.size()))
@@ -55,3 +56,28 @@ func _bust() -> void:
 	_check(absf(n * dt - PoliceRules.BUST_DRAIN_SECS) < 0.05, "the ring drained in %.2f s (%.1f expected)" % [n * dt, PoliceRules.BUST_DRAIN_SECS])
 	_check(PoliceRules.bust_step(0.0, dt, 40.0, 2.0) == 0.0, "the ring went below empty")
 	_check(PoliceRules.bust_step(1.0, dt, 0.0, 2.0) == 1.0, "the ring went over full")
+
+## Cops by heat and graphics tier (Roy 1490), the roles sent (issue #631).
+func _slots() -> void:
+	var want := [0, 1, 2, 3, 5, 6]
+	for preset in ["low", "medium", "high", "custom"]:
+		var cap := PoliceRules.near_cops(preset)
+		_check(cap == int(PoliceRules.NEAR_COPS.get(preset, PoliceRules.NEAR_COPS["medium"])), "%s allows %d cops near you" % [preset, cap])
+		_check(cap <= PoliceRules.MAX_COPS, "%s allows %d cops, more than %d" % [preset, cap, PoliceRules.MAX_COPS])
+		for l in range(0, 6):
+			_check(PoliceRules.cops_wanted(l, preset) == mini(want[l], cap), "heat %d on %s wants %d cops" % [l, preset, PoliceRules.cops_wanted(l, preset)])
+	_check(PoliceRules.near_cops("low") == 3 and PoliceRules.near_cops("medium") == 4 and PoliceRules.near_cops("high") == 6, "tier caps are not 3 / 4 / 6")
+	# heat 4 and 5 add cops where the tier has room, and a heavy unit on every tier
+	_check(PoliceRules.cops_wanted(4, "high") > PoliceRules.cops_wanted(3, "high"), "heat 4 adds no cops on high")
+	_check(PoliceRules.cops_wanted(5, "high") > PoliceRules.cops_wanted(4, "high"), "heat 5 adds no cops on high")
+	var H := CopBrain.Role.HEAVY
+	for slots in [3, 4, 6]:
+		for l in [4, 5]:
+			var r := PolicePatrol.roles_wanted(l, slots)
+			_check(r.has(H), "heat %d with %d slots sends no heavy unit (%s)" % [l, slots, r])
+			_check(r.count(H) <= PoliceRules.MAX_HEAVY, "heat %d with %d slots sends %d heavies" % [l, slots, r.count(H)])
+			_check(r.size() == mini(slots, want[l]), "heat %d with %d slots sends %d cops" % [l, slots, r.size()])
+		for l in [1, 2, 3]:
+			_check(not PolicePatrol.roles_wanted(l, slots).has(H), "heat %d sends a heavy unit" % l)
+	_check(PolicePatrol.roles_wanted(1, 6) == [CopBrain.Role.CHASER], "heat 1 is not one chaser")
+	_check(PolicePatrol.roles_wanted(0, 6).is_empty(), "heat 0 sends cops")

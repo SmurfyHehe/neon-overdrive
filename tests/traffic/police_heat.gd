@@ -80,6 +80,9 @@ func _icon_names() -> void:
 		_check(k != "" and not seen.has(k), "level %d icon '%s' is empty or repeats" % [l, k])
 		seen[k] = true
 	_check(PoliceHeat.MAX_LEVEL == 5 and seen.size() == 5, "expected 5 levels with 5 icons")
+	# no spike strips anywhere: heat 4 is the heavy ramming truck (issue #631)
+	_check(PoliceHeat.icon_for(PoliceHeat.HEAVY) == "heavy_truck", "level 4 icon is '%s', not the heavy truck" % PoliceHeat.icon_for(4))
+	_check(not seen.has("spikes"), "a level still shows a spike strip")
 
 func _place(cop_z: float, lights: bool, kmh: float) -> void:
 	cop.global_position = Vector3(0, 0, cop_z)

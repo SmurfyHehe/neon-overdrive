@@ -258,7 +258,7 @@ func _scenarios() -> void:
 	_setup(10.0, 2.0, true, 8.0)
 	_run(0.3)
 	heat.on_contact(cop, 20.0)
-	_check(heat.level == PoliceHeat.SPIKES and warnings == 0, "ramming a cop at 20 km/h: level %d" % heat.level)
+	_check(heat.level == PoliceHeat.HEAVY and warnings == 0, "ramming a cop at 20 km/h: level %d" % heat.level)
 	# Bump with a non-cop, non-traffic thing: nothing.
 	_fresh()
 	_setup(10.0, 2.0, true, 8.0)

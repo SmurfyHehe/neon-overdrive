@@ -27,6 +27,18 @@ extends RefCounted
 #             `recycle_due` goes true and recycle() moves it behind the target,
 #             out of view, as soon as no camera can see it.
 #
+# In front of its target (issue #625: cops cut into your lane ahead of you and
+# braked, and every crash the clean test bot had in an hour was into one):
+#   - it only moves onto the target's line in front of it when the target
+#     could stop for it at TARGET_DECEL with REACT_S to react, at CUT_HEADWAY
+#     or more (cut_in_ok); a role spot behind the target (the chaser, the
+#     heavy) is never reached by crossing in front: it drops back on a line
+#     beside the target's and moves in once it is behind;
+#   - on the target's line in front of it, it never slows harder than
+#     GENTLE_DECEL, and not below the target's pace at all while the target
+#     could not stop for it (only traffic in its own way brakes it harder,
+#     as it would anybody).
+
 # Not here (later steps): turning round and crossing the centre. A target
 # going the other way sets `wrong_way` and the driver just stops safely; a
 # target on the other carriageway is shadowed from this one. Median gaps and
@@ -54,6 +66,7 @@ const EDGE := 1.1                # m kept between the car's centre and the road'
 ## Speed.
 const K_CLOSE := 0.7             # 1/s: metres short of the spot -> closing speed
 const CLOSE_MAX := 22.0          # m/s faster than the target at most while catching up
+const WAIT_CLOSE := 6.0          # m/s slower than the target at most while waiting for its spot to come up
 const T_GAP := 0.7               # s gap to traffic in pursuit (traffic keeps 1.5)
 const T_GAP_TARGET := 0.35       # s gap to the target's own bumper
 const BEND_K := 1.5              # bends at this times the traffic car's bend speed
@@ -61,6 +74,16 @@ const BRAKE_READ := 0.6           # s ahead a braking target's speed is read
 const PASS_CLEAR := 6.5          # m of clear road in front of a target before moving over in front of it
 const B_PLAN := 5.5              # m/s^2 it counts on when closing on its spot
 const WAIT_SHARE := 0.6          # of the target's pace: a blocker in front of its spot rolls on at this
+## In front of the target (issue #625; the header).
+const TARGET_DECEL := 4.0        # m/s^2 the target may be asked to brake at for a cop cutting in
+const REACT_S := 0.5             # s of closing speed on top, to react
+const CUT_HEADWAY := 0.8         # s of the target's speed: the least gap cut in at
+const CUT_SLOW_KMH := 40.0       # under this (box-in) the headway is not asked for, only S0
+const GENTLE_DECEL := 2.0        # m/s^2: the hardest it slows on the target's line in front of it
+const FLIP_SLOWER := 2.0         # m/s: traffic this much slower than the target on its side makes it go round the other side
+const FLIP_SECS := 3.0           # ...at most this often
+const TARGET_HALF_W := 1.0       # the target's half width (TrafficManager.PLAYER_HALF_W)
+const TARGET_HALF_L := 2.2       # and half length
 ## Stuck.
 const STUCK_SECS := 5.0
 const STUCK_V := 1.0
@@ -78,7 +101,9 @@ var stand_gap := 2.0
 var ram := false
 var ram_gap := 3.0
 var ram_dv := 3.0
-## Which side it goes round a target it has to get in front of (0 = not passing).
+## Which side of the target it keeps to while it may not be on the target's
+## line: going round to get in front, or dropping back to a spot behind
+## (0 = not out to a side).
 var pass_side := 0.0
 var v_max := INF
 ## Read back by its owner and by tests.
@@ -87,6 +112,8 @@ var aim_x := 0.0                 # the line it is steering for now
 var line_x := 0.0                # the line it has chosen (aim_x slews to it)
 var gap_along := 0.0             # m from the car to its spot, along its direction
 var blocked := false             # no open line: holding and braking
+var in_front := false            # on the target's line, in front of it (issue #625)
+var cut_ok := true               # ...and the target could stop for it there
 var wrong_way := false           # the target is going the other way
 var stuck_t := 0.0
 var recycle_due := false
@@ -107,6 +134,13 @@ var _started := false
 var _vt_last := NAN
 var _t_acc := 0.0
 var _bend_v := INF               # the bend limit ahead, from the last plan
+var _t_gap := INF                # body gap to the target ahead of it, + = the car is in front
+var _t_close := 0.0              # m/s the target closes on the car (+ = closing)
+var _t_v := 0.0                  # the target's speed along the car's direction
+var _t_x := 0.0                  # the target's line (road x)
+var _flip_t := 0.0
+var _t_rel := -INF               # m the car's centre is in front of the target's, along the target's way
+var _t_ahead := false            # the car is not behind the target (in front of it or beside it), going its way
 
 ## Reads the car (after it is in the tree): top speed, where it is.
 func setup(car: TrafficCar) -> void:
@@ -134,9 +168,12 @@ static func release(car: TrafficCar, cruise: float) -> void:
 ## Acceleration wanted at speed v to arrive at a spot `gap` m ahead that moves
 ## at `vt` along the car's direction, cruising at most at v0: close at
 ## K_CLOSE of the distance (CLOSE_MAX at most), and brake in time to match the
-## spot's speed there. A spot behind the car (gap < 0) is waited for.
+## spot's speed there. A spot behind the car (gap < 0) is waited for, at no
+## more than WAIT_CLOSE under the spot's pace: a car out in front of you that
+## wants to be behind you, or a blocker waiting for you, is never far slower
+## than you (issue #625: they dropped to walking pace in front of you).
 static func approach_accel(v: float, v0: float, gap: float, vt: float) -> float:
-	var v_des := clampf(vt + clampf(K_CLOSE * gap, -CLOSE_MAX, CLOSE_MAX), 0.0, v0)
+	var v_des := clampf(vt + clampf(K_CLOSE * gap, -WAIT_CLOSE, CLOSE_MAX), 0.0, v0)
 	if gap > 0.0 and v_des > vt:
 		# never faster than it can still shed before the spot
 		v_des = minf(v_des, sqrt(maxf(vt, 0.0) * maxf(vt, 0.0) + 2.0 * B_PLAN * gap))
@@ -161,6 +198,26 @@ static func side_clear(v: float, gap: float, vf: float) -> bool:
 	if gap < SIDE_GAP:
 		return false
 	return vf <= v or gap / (vf - v) >= SIDE_TTC
+
+## Whether a car `gap` m (bumper to bumper) in front of a target doing `vt`
+## and closing on it at `closing` m/s may be on the target's line: the target
+## sheds the closing speed at TARGET_DECEL after REACT_S, and keeps
+## CUT_HEADWAY of its own speed (S0 when it is slower than CUT_SLOW_KMH).
+static func cut_in_ok(gap: float, closing: float, vt: float) -> bool:
+	if gap <= 0.0:
+		return false
+	var need := TrafficCar.S0 if vt * 3.6 < CUT_SLOW_KMH else maxf(TrafficCar.S0, CUT_HEADWAY * vt)
+	if closing > 0.0:
+		need += closing * closing / (2.0 * TARGET_DECEL) + closing * REACT_S
+	return gap >= need
+
+## The hardest a car on the target's line in front of it may change speed at
+## (an acceleration floor, m/s^2): GENTLE_DECEL while the target could stop
+## for it, else none below the target's own pace.
+static func front_floor(v: float, vt: float, ok: bool) -> float:
+	if ok:
+		return -GENTLE_DECEL
+	return clampf(TrafficCar.K_V * 2.0 * (vt - v), -GENTLE_DECEL, 6.0)
 
 ## The road's drivable span for a car on the +x side (far = false) or the -x
 ## side, as [lo, hi] for its centre.
@@ -213,13 +270,37 @@ func drive(car: TrafficCar, delta: float) -> void:
 	# A spot in front of the target (a blocker) while the car is still behind
 	# or beside it: it goes round, one lane to the side with road, and only
 	# moves over to the spot once it is clear in front.
+	# The same goes for a spot BEHIND the target while the car is in front of
+	# it or beside it (issue #625): it drops back beside the target's line,
+	# never on it, and moves in once it is behind.
 	var rel := (u.z - tu.z) * td   # + = the car is in front of the target
-	if offset_back < 0.0 and rel < car.half_l + PASS_CLEAR:
+	var reach := car.half_l + TARGET_HALF_L
+	_t_gap = rel - reach
+	_t_v = vt
+	_t_close = vt - v if td == car.direction else 0.0
+	var corridor := car.half_w + TARGET_HALF_W + TrafficCar.CORRIDOR_MARGIN
+	in_front = td == car.direction and rel > 0.0 and absf(u.x - tu.x) < corridor
+	cut_ok = cut_in_ok(_t_gap, _t_close, maxf(vt, 0.0))
+	_t_x = tu.x
+	_t_ahead = td == car.direction and rel > -reach
+	_t_rel = rel if td == car.direction else -INF
+	var going_round := offset_back < 0.0 and (rel < car.half_l + PASS_CLEAR or not cut_ok)
+	var dropping_back := offset_back >= 0.0 and absf(offset_x) < corridor and rel > -reach
+	_flip_t -= delta
+	if td == car.direction and (going_round or dropping_back):
 		if pass_side == 0.0:
 			pass_side = signf(u.x - tu.x) if absf(u.x - tu.x) > 1.0 else 1.0
 			var px := tu.x + pass_side * RoadChunkBuilder.LANE_W
 			if px < span.x or px > span.y:
 				pass_side = -pass_side
+		elif going_round and rel < -reach and _flip_t <= 0.0 and _lead_gap < LOOK_M and _lead_v < vt - FLIP_SLOWER:
+			# going round, still behind the target, and its side is held up by
+			# slower traffic: the other side, if there is road there (it crosses
+			# behind the target, which is allowed)
+			var ox := tu.x - pass_side * RoadChunkBuilder.LANE_W
+			if ox >= span.x and ox <= span.y:
+				pass_side = -pass_side
+				_flip_t = FLIP_SECS
 		spot_x = tu.x + pass_side * RoadChunkBuilder.LANE_W
 	else:
 		pass_side = 0.0
@@ -250,6 +331,9 @@ func drive(car: TrafficCar, delta: float) -> void:
 	if offset_back < 0.0 and gap_along < 0.0:
 		var dawdle := minf(WAIT_SHARE * maxf(vt, 0.0), v0)
 		a = maxf(a, clampf(TrafficCar.K_V * 2.0 * (dawdle - v), -TrafficCar.A_BRAKE_FULL, 6.0))
+	# On the target's line in front of it: no brake-checking (issue #625).
+	if in_front:
+		a = maxf(a, front_floor(v, minf(maxf(vt, 0.0), v0), cut_ok))
 	var body_gap := (tu.z - u.z) * car.direction - car.half_l - 2.2
 	if body_gap > -4.0 and absf(tu.x - u.x) < car.half_w + 1.0 + TrafficCar.CORRIDOR_MARGIN:
 		if ram and body_gap < ram_gap and vt < v0 and vt > 1.0:
@@ -349,9 +433,16 @@ func _line_free(car: TrafficCar, traffic: TrafficManager, u: Vector3, v: float, 
 		return false
 	if absf(x - u.x) < 0.15:
 		return true   # on it already
+	# Onto the target's line in front of it only where the target could stop
+	# for it (issue #625).
+	if _t_ahead and absf(x - _t_x) < car.half_w + TARGET_HALF_W + TrafficCar.CORRIDOR_MARGIN and not cut_ok:
+		return false
 	var air := car.half_w + SIDE_AIR
 	var lo := u.x + car.half_w if x > u.x else x - air
 	var hi := x + air if x > u.x else u.x - car.half_w
+	# the target beside it is not in the index scans when it is the player
+	if _t_ahead and absf(_t_rel) < car.half_l + TARGET_HALF_L + SIDE_GAP and _t_x + TARGET_HALF_W > lo and _t_x - TARGET_HALF_W < hi:
+		return false
 	var b := traffic.scan(u.z, car.direction, lo, hi, false, car._idx, car.half_l, 60.0, skip_player)
 	if b < INF and not _is_target(traffic) and not side_clear(v, b, traffic.q_speed):
 		return false

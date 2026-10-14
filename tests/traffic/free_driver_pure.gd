@@ -14,6 +14,7 @@ func _initialize() -> void:
 	_no_rubber_band()
 	_lines()
 	_span()
+	_in_front()
 	for f in failures:
 		printerr("FAIL: " + f)
 	print("free_driver_pure: %s" % ("PASS" if failures.is_empty() else "FAIL (%d)" % failures.size()))
@@ -77,3 +78,31 @@ func _span() -> void:
 	_check(own.y <= RoadChunkBuilder.MEDIAN_GAP + 4.0 * RoadChunkBuilder.LANE_W - 1.0, "own span reaches %.2f, the road ends at %.2f" % [own.y, RoadChunkBuilder.MEDIAN_GAP + 4.0 * RoadChunkBuilder.LANE_W])
 	var one := FreeDriver.side_span(1, false)
 	_check(one.y >= one.x, "a one-lane road has an inverted span %s" % one)
+
+## In front of the target (issue #625): when it may be on the target's line,
+## and how hard it may slow there.
+func _in_front() -> void:
+	# the issue's two crashes: never allowed
+	_check(not FreeDriver.cut_in_ok(17.0, (98.0 - 44.0) / 3.6, 98.0 / 3.6), "a chaser 17 m ahead at 44 km/h may cut in front of 98 km/h")
+	_check(not FreeDriver.cut_in_ok(24.0, (150.0 - 20.0) / 3.6, 150.0 / 3.6), "a blocker 24 m ahead at 20 km/h may cut in front of 150 km/h")
+	# matched speed: a headway of CUT_HEADWAY is needed, not less
+	var vt := 150.0 / 3.6
+	_check(FreeDriver.cut_in_ok(vt * FreeDriver.CUT_HEADWAY + 0.5, 0.0, vt), "at matched speed %.0f m ahead (more than %.1f s) it may not move over" % [vt * FreeDriver.CUT_HEADWAY + 0.5, FreeDriver.CUT_HEADWAY])
+	_check(not FreeDriver.cut_in_ok(vt * FreeDriver.CUT_HEADWAY - 0.5, 0.0, vt), "at matched speed it may move over under %.1f s ahead" % FreeDriver.CUT_HEADWAY)
+	# closing: the target sheds it at TARGET_DECEL after REACT_S
+	var c := 10.0
+	var need := vt * FreeDriver.CUT_HEADWAY + c * c / (2.0 * FreeDriver.TARGET_DECEL) + c * FreeDriver.REACT_S
+	_check(FreeDriver.cut_in_ok(need + 0.5, c, vt) and not FreeDriver.cut_in_ok(need - 0.5, c, vt), "closing at %.0f m/s the line is not at %.0f m" % [c, need])
+	# box-in speeds: only S0, so the cops can close in round a slow car
+	_check(FreeDriver.cut_in_ok(TrafficCar.S0 + 0.1, 0.0, 30.0 / 3.6), "at 30 km/h it may not move over at %.1f m" % (TrafficCar.S0 + 0.1))
+	_check(not FreeDriver.cut_in_ok(0.0, 0.0, 0.0), "it may move over onto the target itself")
+	# braking in front: never harder than GENTLE_DECEL while the target could stop
+	_check(is_equal_approx(FreeDriver.front_floor(30.0, 30.0, true), -FreeDriver.GENTLE_DECEL), "the floor in front is not -%.1f" % FreeDriver.GENTLE_DECEL)
+	# and not below the target's pace while it could not: a slow car in front speeds up
+	_check(FreeDriver.front_floor(12.0, 27.0, false) > 1.0, "slower than a target that could not stop for it, it does not speed up (%.2f)" % FreeDriver.front_floor(12.0, 27.0, false))
+	_check(FreeDriver.front_floor(30.0, 27.0, false) >= -FreeDriver.GENTLE_DECEL, "faster than the target it brakes harder than %.1f" % FreeDriver.GENTLE_DECEL)
+	# waiting for a spot behind it: never more than WAIT_CLOSE under the target's pace
+	var v := 30.0
+	for i in 600:
+		v = maxf(v + FreeDriver.approach_accel(v, 60.0, -200.0, 30.0) / 60.0, 0.0)
+	_check(v >= 30.0 - FreeDriver.WAIT_CLOSE - 0.5, "200 m past its spot it slowed to %.1f m/s in front of a 30 m/s target" % v)

@@ -1,19 +1,21 @@
 extends SceneTree
 
 # Police P6 proof in the real game (spec section 11): the dispatcher never has
-# more than 3 driving cops, and no cop is ever put on the road in view.
+# more driving cops than the graphics tier allows (PoliceRules.near_cops: 3
+# Low, 4 Medium, 6 High), and no cop is ever put on the road in view.
 # 16 traffic cars, the weave bot as the fleeing player, heat held at 1, then
 # 2, then 3, then 5 (the test holds it there; what raises heat is P1's).
 #
-# Checked every tick: at most PoliceRules.MAX_COPS cops; no cop off its wheels;
+# Checked every tick: at most PoliceRules.near_cops() cops; no cop off its wheels;
 # none stuck in view for over 5 s; none driven over the patrol car's top speed.
 # Checked at every spawn: the place is not in any camera's view and is out
 # past the reveal distance; a blocker is put AHEAD of the player, the others
 # behind.
 # Checked by the end: heat 1 had one cop chasing, heat 2 brought a blocker
 # that got in front of the player in its lane, heat 3 a flanker that got
-# beside it; then the player slows and stops, the cops close in (box-in) and
-# the ring busts it.
+# beside it, heat 5 the heavy unit (issue #631) and as many cops as the tier
+# allows; then the player slows and stops, the cops close in (box-in) and the
+# ring busts it.
 # Needs --fixed-fps 60 (about 3 min):
 #   <godot> --headless --fixed-fps 60 --path . -s res://tests/traffic/police_dispatch.gd
 
@@ -21,7 +23,7 @@ const Harness := preload("res://tests/traffic/traffic_harness.gd")
 const TestDriver := preload("res://scripts/core/test_driver.gd")
 const R := CopBrain.Role
 ## [heat level, seconds held]
-const PLAN := [[1, 25.0], [2, 50.0], [3, 60.0], [5, 20.0]]
+const PLAN := [[1, 25.0], [2, 50.0], [3, 60.0], [5, 30.0]]
 const CARS := 16
 const BOT_KMH := 110.0
 
@@ -43,7 +45,9 @@ var flip_ticks := 0
 var stuck := {}
 var stuck_max := 0.0
 var fastest := 0.0
+var fastest_heavy := 0.0
 var chasing_at := {}        # level -> most cops in the chase at once
+var chasing_in := {}        # phase -> most cops in the chase at once (a level's own phase only)
 var block_secs := 0.0
 var flank_secs := 0.0
 var busts := 0
@@ -124,7 +128,7 @@ func _physics_process(delta: float) -> bool:
 	game_t += delta
 	# every tick, whatever the phase
 	most = maxi(most, police.units.size())
-	_check(police.units.size() <= PoliceRules.MAX_COPS, "%d cops on the road (max %d)" % [police.units.size(), PoliceRules.MAX_COPS])
+	_check(police.units.size() <= PoliceRules.near_cops(), "%d cops on the road (max %d)" % [police.units.size(), PoliceRules.near_cops()])
 	var pu := RoadFrame.unroll(p.global_position)
 	var in_chase := 0
 	for u in police.units:
@@ -135,7 +139,10 @@ func _physics_process(delta: float) -> bool:
 			stuck.erase(c)
 			touching.erase(c)
 			continue
-		fastest = maxf(fastest, c.current_speed() * 3.6)
+		if c.kind == PolicePatrol.HEAVY_KIND:
+			fastest_heavy = maxf(fastest_heavy, c.current_speed() * 3.6)
+		else:
+			fastest = maxf(fastest, c.current_speed() * 3.6)
 		if c.global_transform.basis.y.y < FreeDriver.FLIP_UP:
 			flip_ticks += 1
 		if u.brain.in_chase() and c.current_speed() < FreeDriver.STUCK_V and p.current_speed() > 5.0 and traffic.in_view(c.global_position):
@@ -159,6 +166,7 @@ func _physics_process(delta: float) -> bool:
 			touching.erase(c)
 	if heat.level >= PoliceHeat.ONE_CAR:
 		chasing_at[heat.level] = maxi(int(chasing_at.get(heat.level, 0)), in_chase)
+		chasing_in[phase] = maxi(int(chasing_in.get(phase, 0)), in_chase)
 		level_ticks[heat.level] = int(level_ticks.get(heat.level, 0)) + 1
 	match phase:
 		-1:
@@ -217,15 +225,16 @@ func _physics_process(delta: float) -> bool:
 func _finish() -> bool:
 	for s in spawns:
 		print("police_dispatch: spawn: " + s)
-	print("police_dispatch: %.0f s; most cops at once %d; most in the chase by heat level %s; fastest cop %.0f km/h" % [game_t, most, chasing_at, fastest])
+	print("police_dispatch: %.0f s on %s (%d cops near you at most); most cops at once %d; most in the chase by heat level %s; fastest patrol car %.0f km/h, heavy %.0f km/h" % [game_t, GraphicsSettings.preset, PoliceRules.near_cops(), most, chasing_at, fastest, fastest_heavy])
 	print("police_dispatch: blocker in front of the player in its lane %.0f s, flanker beside it %.0f s; cop bodies met the player's %d times; heat went past the held level on %d ticks" % [block_secs, flank_secs, cop_touches, heat_jumps])
 	print("police_dispatch: flips %d ticks, longest stuck in view %.1f s; busts while fleeing %d (first at %.0f s); at the end busted %s after %.0f s stopped with %d cops within 15 m" % [flip_ticks, stuck_max, busts - (1 if busted else 0), first_bust, busted, stop_t, near_at_bust])
 	if bot != null:
 		print("police_dispatch: bot " + String(bot.call("summary")))
-	_check(most <= PoliceRules.MAX_COPS, "%d cops at once" % most)
+	_check(most <= PoliceRules.near_cops(), "%d cops at once (the tier allows %d)" % [most, PoliceRules.near_cops()])
 	_check(flip_ticks == 0, "a cop was off its wheels for %d ticks" % flip_ticks)
 	_check(stuck_max <= FreeDriver.STUCK_SECS + 0.5, "a cop was stuck in view for %.1f s" % stuck_max)
 	_check(fastest <= PoliceRules.PATROL_TOP_KMH + 5.0, "a patrol car was driven at %.0f km/h (top %.0f)" % [fastest, PoliceRules.PATROL_TOP_KMH])
+	_check(fastest_heavy <= PoliceRules.HEAVY_TOP_KMH + 5.0, "the heavy unit was driven at %.0f km/h (top %.0f)" % [fastest_heavy, PoliceRules.HEAVY_TOP_KMH])
 	if phase >= 1:
 		_check(int(chasing_at.get(1, 0)) >= 1, "heat 1: nobody chased")
 		_check(int(chasing_at.get(1, 0)) <= 1, "heat 1: %d cops chased (one car on the icon)" % int(chasing_at.get(1, 0)))
@@ -234,7 +243,10 @@ func _finish() -> bool:
 		_check(int(chasing_at.get(2, 0)) <= 2, "heat 2: %d cops chased (two cars on the icon)" % int(chasing_at.get(2, 0)))
 	if phase >= 3:
 		_check(roles_spawned.has(R.FLANKER), "heat 3 for %.0f s and no flanker was sent" % float(PLAN[2][1]))
-		_check(most == PoliceRules.MAX_COPS, "heat 3 and up never had %d cops (most %d)" % [PoliceRules.MAX_COPS, most])
+		_check(int(chasing_in.get(2, 0)) == mini(3, PoliceRules.near_cops()), "heat 3 had %d cops in the chase at most (wants 3)" % int(chasing_in.get(2, 0)))
+	if phase >= 4:
+		_check(roles_spawned.has(R.HEAVY), "heat 5 for %.0f s and no heavy unit was sent" % float(PLAN[3][1]))
+		_check(most == PoliceRules.cops_wanted(5), "heat 5 never had %d cops (most %d)" % [PoliceRules.cops_wanted(5), most])
 	if phase >= 4:
 		_check(block_secs >= 2.0, "the blocker was in front of the player in its lane for only %.1f s" % block_secs)
 		_check(flank_secs >= 2.0, "the flanker was beside the player for only %.1f s" % flank_secs)

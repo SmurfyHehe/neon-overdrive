@@ -4,7 +4,8 @@ extends CanvasLayer
 # Police heat on screen (F0): one icon for the current level, top centre,
 # drawn in code like the RPM bar. Each level has its own picture, so a glance
 # says what is coming, not how many stars: one patrol car, two cars, a
-# sawhorse, a spike strip, a helicopter (PoliceHeat.ICONS). No icon at 0 and
+# sawhorse, a heavy ramming truck, a helicopter (PoliceHeat.ICONS; there are
+# no spike strips anywhere, Roy 2026-10-10). No icon at 0 and
 # none for bad cops. A new level flashes red/blue for FLASH_SECS.
 #
 # Also the caption for police lines (night one's warning and jab) when Dave's
@@ -46,8 +47,8 @@ class HeatIcon extends Control:
 				_car(Vector2(s.x * 0.68, s.y * 0.58), 0.72)
 			"sawhorse":
 				_sawhorse(Vector2(s.x * 0.5, s.y * 0.5))
-			"spikes":
-				_spikes(Vector2(s.x * 0.5, s.y * 0.6))
+			"heavy_truck":
+				_heavy_truck(Vector2(s.x * 0.5, s.y * 0.6))
 			"helicopter":
 				_helicopter(Vector2(s.x * 0.5, s.y * 0.55))
 
@@ -76,13 +77,25 @@ class HeatIcon extends Control:
 			draw_colored_polygon(PackedVector2Array([c + Vector2(x0, -1), c + Vector2(x0 + 7, -1),
 				c + Vector2(x0 + 12, -12), c + Vector2(x0 + 5, -12)]), RED)
 
-	## A spike strip seen from the side: a bar with a row of teeth.
-	func _spikes(c: Vector2) -> void:
-		draw_rect(Rect2(c + Vector2(-38, 2), Vector2(76, 6)), SILVER)
-		for i in 9:
-			var x := -36.0 + i * 9.0
-			draw_colored_polygon(PackedVector2Array([c + Vector2(x, 2), c + Vector2(x + 7, 2),
-				c + Vector2(x + 3.5, -10)]), SILVER)
+	## The heavy unit (heat 4): a tall boxy patrol SUV from the side, light
+	## bar on the roof and a push bar standing proud of its nose (on the left,
+	## the way the car icons face).
+	func _heavy_truck(c: Vector2) -> void:
+		var pts := PackedVector2Array([
+			Vector2(-28, 8), Vector2(-28, -4), Vector2(-21, -6), Vector2(-15, -18),
+			Vector2(26, -18), Vector2(29, -6), Vector2(29, 8)])
+		for i in pts.size():
+			pts[i] = c + pts[i]
+		draw_colored_polygon(pts, SILVER)
+		# push bar: two uprights and a cross bar ahead of the nose
+		draw_line(c + Vector2(-34, -8), c + Vector2(-34, 9), SILVER, 3.0)
+		draw_line(c + Vector2(-34, -6), c + Vector2(-28, -6), SILVER, 2.0)
+		draw_line(c + Vector2(-34, 6), c + Vector2(-28, 6), SILVER, 2.0)
+		draw_rect(Rect2(c + Vector2(-4, -23), Vector2(9, 5)), RED if flash else POLICE_BLUE)
+		draw_rect(Rect2(c + Vector2(5, -23), Vector2(9, 5)), POLICE_BLUE if flash else RED)
+		for wx in [-17.0, 18.0]:
+			draw_circle(c + Vector2(wx, 9), 6.5, DUSK)
+			draw_circle(c + Vector2(wx, 9), 4.0, SILVER)
 
 	## A helicopter: cabin, tail boom, rotor, skids.
 	func _helicopter(c: Vector2) -> void:

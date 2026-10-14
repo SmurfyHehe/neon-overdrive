@@ -26,14 +26,16 @@ func _exit_tree() -> void:
 		traffic.remove_siren(self)
 
 ## A patrol car ready to add to the tree (TrafficCar's setup runs in _ready).
-static func make() -> PatrolCar:
+## `body` is a cop kind: the C1 patrol sedan, or the C2 patrol SUV for the
+## heat-4 heavy unit ("stock" is its push-bar build).
+static func make(body := KIND) -> PatrolCar:
 	var c := PatrolCar.new()
-	c.kind = KIND
+	c.kind = body
 	c.build = "stock"
 	c.role = Undercarriage.ROLE_COP
-	c.spec = CarSpec.clone_spec(CarSpec.npc_spec(KIND))
+	c.spec = CarSpec.clone_spec(CarSpec.npc_spec(body))
 	c.spec["parts"] = "full"   # real wheels and brakes, like the fleet's cops
-	c.color = NpcCarBuilder.sheet_paint(KIND)
+	c.color = NpcCarBuilder.sheet_paint(body)
 	c.add_to_group("patrol_cars")   # the near-miss log looks at it (near_miss_log.gd)
 	return c
 

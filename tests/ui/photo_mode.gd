@@ -102,6 +102,8 @@ func _physics_process(_delta: float) -> bool:
 			# camera keeps looking at it, W runs into the near limit.
 			_check(photo.orbit, "photo mode should open in orbit")
 			var c := photo.aim_point()
+			photo.orbit_dist = 6.0   # clear of the near limit, which follows the body's shape round the car
+			photo.step(0.0)
 			var d0 := photo.free_cam.global_position.distance_to(c)
 			var yaw0 := photo.orbit_yaw
 			_press("photo_left", true)
@@ -115,9 +117,11 @@ func _physics_process(_delta: float) -> bool:
 			_press("photo_forward", true)
 			photo.step(10.0)
 			_press("photo_forward", false)
-			_check(absf(photo.orbit_dist - PhotoMode.ORBIT_DIST_MIN) < 0.01, "W stops at the near limit (%.2f m)" % photo.orbit_dist)
+			_check(absf(photo.orbit_dist - photo.near_limit()) < 0.01, "W stops at the near limit (%.2f vs %.2f m)" % [photo.orbit_dist, photo.near_limit()])
+			_check(photo.near_limit() >= PhotoMode.ORBIT_DIST_MIN, "the near limit is never under %.1f m (%.2f)" % [PhotoMode.ORBIT_DIST_MIN, photo.near_limit()])
 			var flat := Vector2(photo.free_cam.global_position.x - c.x, photo.free_cam.global_position.z - c.z).length()
-			_check(absf(flat - PhotoMode.ORBIT_DIST_MIN) < 0.05, "the camera sits at the near limit (%.2f m across)" % flat)
+			_check(absf(flat - photo.near_limit()) < 0.05, "the camera sits at the near limit (%.2f m across)" % flat)
+			_check(photo.car_box().size.x > 1.0 and photo.car_box().size.z > 2.0, "the car's body should measure as a car (%s)" % str(photo.car_box().size))
 			# Shift + Left tilts the shot and stops at the limit; the fly keys and
 			# the field of view are untouched by it.
 			var fov1 := photo.free_cam.fov
@@ -152,7 +156,7 @@ func _physics_process(_delta: float) -> bool:
 			photo.step(0.5)
 			_press("photo_forward", false)
 			_check(photo.free_cam.global_position.distance_to(before) > 3.0, "in free the W key flies forward (%.2f m)" % photo.free_cam.global_position.distance_to(before))
-			_check(photo.focus_distance() > 0.5, "free focus distance should be a real distance (%.1f m)" % photo.focus_distance())
+			_check(photo.focus_distance() >= 0.5, "free focus distance should be a real distance (%.1f m)" % photo.focus_distance())
 			photo.toggle_orbit()
 			_check(photo.orbit, "Tab again goes back to orbit")
 			var path := photo.save_shot()

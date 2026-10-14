@@ -9,8 +9,9 @@ extends Node
 #
 # Two camera modes, Tab switches (camera proposal 2026-10-13, section 3):
 #   ORBIT (the start): the car stays centred. A/D circle it, W/S closer/further
-#     (ORBIT_DIST_MIN..MAX), Q/E lower/higher, arrows nudge the aim so the car
-#     can sit off centre (AIM_MAX_DEG).
+#     (from just outside the car's own body, measured on entering, to
+#     ORBIT_DIST_MAX), Q/E lower/higher (never under its floor), arrows nudge
+#     the aim so the car can sit off centre (AIM_MAX_DEG).
 #   FREE: as before. W/S forward/back, A/D left/right, Q/E down/up, arrows look.
 #   Both: hold Shift for fast; Shift + Left/Right tilts the shot (ROLL_MAX_DEG);
 #     Z/X narrower/wider field of view; Shift + Z/X background blur 0..BLUR_STEPS
@@ -35,9 +36,10 @@ const ORBIT_DIST_RATE := 6.0       # m/s in and out (W/S)
 const ORBIT_HEIGHT_RATE := 3.0     # m/s up and down (Q/E)
 const ORBIT_DIST_MIN := 1.5
 const ORBIT_DIST_MAX := 30.0
-const ORBIT_HEIGHT_MIN := -0.4     # metres relative to the aim point: never under the car's floor
 const ORBIT_HEIGHT_MAX := 12.0
-const AIM_HEIGHT := 0.6            # aim a little above the car's origin, like the pause look
+const FLOOR_CLEAR := 0.25          # the orbit never drops under the car's floor plus this
+const BODY_CLEAR := 0.5            # the orbit never comes closer than this to the car's skin
+const AIM_HEIGHT := 0.6            # aim above the car's origin when its body cannot be measured
 const AIM_MAX_DEG := 30.0          # how far the arrows push the car off centre in orbit
 const ROLL_RATE := 45.0            # degrees per second (Shift + Left/Right)
 const ROLL_MAX_DEG := 45.0
@@ -74,6 +76,7 @@ var _yaw := 0.0             # free camera, radians
 var _pitch := 0.0
 var hidden_layers: Array = []
 var _dof: CameraAttributesPractical
+var _box := AABB()          # the car's body and wheels in car space, measured on entering
 
 static func ensure_actions() -> void:
 	for action in KEYS:
@@ -121,6 +124,10 @@ func _enter() -> void:
 	aim_yaw = 0.0
 	aim_pitch = 0.0
 	orbit = true
+	_box = car_box()
+	# See what the chase camera sees, plus the body the cockpit view moves to
+	# the mirror-only layer: every car is in shot whichever view P was pressed in.
+	free_cam.cull_mask = chase.cull_mask | CockpitFrame.MIRROR_ONLY_BIT
 	_orbit_from(free_cam.global_position)
 	free_cam.attributes = _dof
 	_apply_blur()
@@ -151,11 +158,67 @@ func _process(delta: float) -> void:
 	if Input.is_action_just_pressed("photo_shot"):
 		save_shot()
 
-## The point the orbit circles and the blur focuses on: the frozen car.
+## The point the orbit circles and the blur focuses on: the middle of the
+## frozen car's body (a kei car and the Camel are centred alike).
 func aim_point() -> Vector3:
 	if chase == null or chase.target == null:
 		return free_cam.global_position + free_cam.global_basis * Vector3(0.0, 0.0, -orbit_dist)
-	return chase.target.global_position + Vector3(0.0, AIM_HEIGHT, 0.0)
+	if _box.size == Vector3.ZERO:
+		return chase.target.global_position + Vector3(0.0, AIM_HEIGHT, 0.0)
+	return chase.target.global_transform * _box.get_center()
+
+## The car's body and wheels as one box in car space (empty when the car has
+## no built body yet). Lights are not geometry; the underside plate is.
+func car_box() -> AABB:
+	var box := AABB()
+	if chase == null or chase.target == null or chase.target.chassis_visual == null:
+		return box
+	var to_car := chase.target.global_transform.affine_inverse()
+	var roots: Array = [chase.target.chassis_visual]
+	for w in chase.target.wheel_array:
+		if w.wheel_node != null:
+			roots.append(w.wheel_node)
+	var first := true
+	for r in roots:
+		var nodes: Array = r.find_children("*", "VisualInstance3D", true, false)
+		nodes.append(r)
+		for n in nodes:
+			if n is Light3D or not (n is VisualInstance3D):
+				continue
+			var vi := n as VisualInstance3D
+			var local := vi.get_aabb()
+			if local.size == Vector3.ZERO:
+				continue
+			var xf: Transform3D = to_car * vi.global_transform
+			for i in 8:
+				var corner := xf * local.get_endpoint(i)
+				if first:
+					box = AABB(corner, Vector3.ZERO)
+					first = false
+				else:
+					box = box.expand(corner)
+	return box
+
+## The nearest the orbit may come to the car at this angle: the body's edge
+## along the camera's direction plus BODY_CLEAR, never under ORBIT_DIST_MIN.
+func near_limit() -> float:
+	if _box.size == Vector3.ZERO:
+		return ORBIT_DIST_MIN
+	var half := _box.size * 0.5
+	var dir := Vector3(sin(orbit_yaw), 0.0, cos(orbit_yaw))
+	var edge := INF
+	if absf(dir.x) > 0.001:
+		edge = minf(edge, half.x / absf(dir.x))
+	if absf(dir.z) > 0.001:
+		edge = minf(edge, half.z / absf(dir.z))
+	return maxf(ORBIT_DIST_MIN, edge + BODY_CLEAR)
+
+## The lowest the orbit may sit: the car's floor plus FLOOR_CLEAR, relative
+## to the aim point.
+func height_min() -> float:
+	if _box.size == Vector3.ZERO:
+		return -AIM_HEIGHT + FLOOR_CLEAR
+	return _box.position.y - _box.get_center().y + FLOOR_CLEAR
 
 ## Tab: orbit <-> free. Either way the camera stays where it is: orbit reads the
 ## free pose as yaw/distance/height, free picks up the orbit's look direction.
@@ -179,9 +242,9 @@ func set_orbit(on: bool) -> void:
 func _orbit_from(pos: Vector3) -> void:
 	var d := pos - aim_point()
 	var flat := Vector2(d.x, d.z)
-	orbit_dist = clampf(flat.length(), ORBIT_DIST_MIN, ORBIT_DIST_MAX)
 	orbit_yaw = atan2(d.x, d.z) if flat.length() > 0.01 else 0.0
-	orbit_height = clampf(d.y, ORBIT_HEIGHT_MIN, ORBIT_HEIGHT_MAX)
+	orbit_dist = clampf(flat.length(), near_limit(), ORBIT_DIST_MAX)
+	orbit_height = clampf(d.y, height_min(), ORBIT_HEIGHT_MAX)
 
 ## One frame of camera control; split out so tests can drive it.
 func step(delta: float) -> void:
@@ -198,8 +261,8 @@ func step(delta: float) -> void:
 	var mult := FAST_MULT if fast else 1.0
 	if orbit:
 		orbit_yaw -= Input.get_axis("photo_left", "photo_right") * ORBIT_RATE * mult * delta
-		orbit_dist = clampf(orbit_dist - Input.get_axis("photo_back", "photo_forward") * ORBIT_DIST_RATE * mult * delta, ORBIT_DIST_MIN, ORBIT_DIST_MAX)
-		orbit_height = clampf(orbit_height + Input.get_axis("photo_down", "photo_up") * ORBIT_HEIGHT_RATE * mult * delta, ORBIT_HEIGHT_MIN, ORBIT_HEIGHT_MAX)
+		orbit_dist = clampf(orbit_dist - Input.get_axis("photo_back", "photo_forward") * ORBIT_DIST_RATE * mult * delta, near_limit(), ORBIT_DIST_MAX)
+		orbit_height = clampf(orbit_height + Input.get_axis("photo_down", "photo_up") * ORBIT_HEIGHT_RATE * mult * delta, height_min(), ORBIT_HEIGHT_MAX)
 		aim_yaw = clampf(aim_yaw - side * LOOK_SPEED * delta, -AIM_MAX_DEG, AIM_MAX_DEG)
 		aim_pitch = clampf(aim_pitch + updown * LOOK_SPEED * delta, -AIM_MAX_DEG, AIM_MAX_DEG)
 	else:

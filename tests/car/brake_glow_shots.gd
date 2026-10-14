@@ -50,6 +50,13 @@ func _initialize() -> void:
 	wheel.set_instance_shader_parameter("brake_heat", 0.0)
 	wheel.set_instance_shader_parameter("brake_heat_lag", 0.0)
 	root.add_child(wheel)
+	# The caliper, as CarParts hangs it on the car: on the hub (it steers, it
+	# does not spin), level with the disc, behind it toward the car's rear.
+	var caliper := MeshInstance3D.new()
+	caliper.mesh = CarParts.caliper_mesh(CarParts._disc_radius(rim_r, false), CarParts._disc_thickness(), CarParts.DEFAULT_CFG.caliper_color)
+	caliper.set_surface_override_material(0, CarParts._get_part_material())
+	caliper.position = Vector3(CarParts._disc_offset(0.245, style), 0.0, 0.0)
+	root.add_child(caliper)
 	cam = Camera3D.new()
 	cam.fov = 40.0
 	root.add_child(cam)

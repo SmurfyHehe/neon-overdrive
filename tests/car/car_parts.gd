@@ -230,10 +230,13 @@ func _player() -> void:
 	_check(float(fl_mesh.get_instance_shader_parameter("brake_heat")) == 0.0, "cold discs give no glow")
 	player.health.brake_temp = 400.0
 	# The drawn edge heat follows the sim at HEAT_RISE per second (glow speed
-	# 1): a frame in it has started, not arrived.
-	await process_frame
+	# 1): a tenth of a second in it has started, not arrived. (process_frame
+	# fires before the nodes' _process, so one awaited frame may show nothing
+	# yet; the bound allows for a long frame on a loaded runner.)
+	var t := await _seconds(0.1)
 	var first := float(fl_mesh.get_instance_shader_parameter("brake_heat"))
-	_check(first > 0.0 and first < 0.5, "the glow should build over time, not snap on: %.2f after one frame" % first)
+	_check(first > 0.0 and first <= CarParts.HEAT_RISE * t + CarParts.HEAT_STEP + 1e-6 and first < 0.9,
+		"the glow should build over time, not snap on: %.2f after %.2f s" % [first, t])
 	await _seconds(1.0)
 	var front := float(fl_mesh.get_instance_shader_parameter("brake_heat"))
 	var rear := float(rl_mesh.get_instance_shader_parameter("brake_heat"))
@@ -260,12 +263,17 @@ func _player() -> void:
 	FxSettings.set_brake_glow_speed(1.0)
 	player.free()
 
-## Waits about `s` seconds of frames (process delta, not wall time).
-func _seconds(s: float) -> void:
+## Waits about `s` seconds of frames (process delta, not wall time) and
+## returns the time that passed, plus one frame so the nodes' _process has
+## seen the last delta (process_frame fires before it).
+func _seconds(s: float) -> float:
 	var t := 0.0
 	while t < s:
 		await process_frame
 		t += root.get_process_delta_time()
+	await process_frame
+	t += root.get_process_delta_time()
+	return t
 
 # ---------- traffic ----------
 

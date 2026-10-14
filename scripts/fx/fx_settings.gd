@@ -16,8 +16,13 @@ extends RefCounted
 
 # Heat shimmer (2026-10-10, HeatShimmer): its own switch, "heat_shimmer".
 const EFFECTS := ["vignette", "speed_lines", "skid_marks", "exhaust_flames", "mirrors", "head_motion", "rear_strip", "tyre_smoke", "heat_shimmer", "dirt"]
-## Mirror render size as a share of CockpitMirrors' base sizes: 0 = low (half),
-## 1 = medium (base), 2 = high (double). Default medium.
+## Mirror quality: 0 low, 1 medium, 2 high. Default medium. The laptop is
+## bound by the processor, not the graphics chip, so a mirror's cost is the
+## extra pass (culling, draw calls), not its pixels: the tiers change how often
+## the mirrors redraw (mirror_period: low every third frame, medium every
+## other, high every frame) and keep the glass readable; only high doubles the
+## render size (mirror_scale). Low used to halve the size instead, which left
+## a car 20 m back about 15 pixels wide and saved nothing the laptop felt.
 const MIRROR_QUALITIES := ["low", "medium", "high"]
 const MIRROR_QUALITY_DEFAULT := 1
 const SMOKE_MAX := 2.0
@@ -51,7 +56,11 @@ static func set_smoke(burnout: float, drift: float) -> void:
 
 ## Render-size multiplier for the mirrors at the current quality.
 static func mirror_scale() -> float:
-	return [0.5, 1.0, 2.0][mirror_quality]
+	return [1.0, 1.0, 2.0][mirror_quality]
+
+## Frames between two redraws of the same mirror at the current quality.
+static func mirror_period() -> int:
+	return [3, 2, 1][mirror_quality]
 
 ## Reads the file (missing or damaged means all on) and applies NEON_FX=0.
 static func load_settings() -> void:

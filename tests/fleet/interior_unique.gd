@@ -26,10 +26,13 @@ func _check(ok: bool, msg: String) -> void:
 func _initialize() -> void:
 	var looks := {}
 	var borrowed := []
+	# the coupe's cabin as the game hands it out (its rearview mirror fitted), so
+	# a car that borrows it is still seen as borrowing
+	var coupe := CabinSpec.for_kind(P1CoupeBuilder.KIND)
 	for k in PlayerCars.KINDS:
 		var id := String(k.id)
 		var cab := CabinSpec.for_kind(id)
-		if id != P1CoupeBuilder.KIND and cab == P1CoupeBuilder.Data.CABIN:
+		if id != P1CoupeBuilder.KIND and cab == coupe:
 			borrowed.append(id)
 			continue
 		var spec := CarSpec.player_spec(id)

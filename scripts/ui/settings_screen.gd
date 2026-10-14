@@ -454,7 +454,9 @@ func _build_picture_page(parent: Control) -> Control:
 			_graphics_changed())
 	gfx_scale_label = Label.new()
 	gfx_scale.get_parent().add_child(gfx_scale_label)
-	# Tiers: the CPU side of a preset is the traffic sliders below plus the mirror render size.
+	# Tiers: the CPU side of a preset is the traffic sliders below plus how often the
+	# mirrors redraw (FxSettings.mirror_period: Low every third frame, Medium every
+	# other, High every frame at double size).
 	gfx_mirrors = _add_option(page, "Mirrors", ["Low", "Medium", "High"], func(i: int) -> void:
 		FxSettings.set_mirror_quality(i)
 		GraphicsSettings.refresh_preset()

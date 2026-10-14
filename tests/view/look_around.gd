@@ -5,8 +5,9 @@ extends SceneTree
 # - look_left/right/up/down are bound to the arrow keys and listed on the
 #   Controls page; the arrows no longer steer or drive; look_glance is gone
 # - cockpit view, straight ahead, FOV 62: the rearview and left door mirror
-#   glass are on screen, the right door mirror is not, and it is never queued
-#   to render
+#   glass are on screen, the right door mirror is not; it still renders, for
+#   the HUD's right-edge inset that shows it (#743, 2026-10-14), and the inset
+#   goes away once the head turns and the glass itself is on screen
 # - hold Right: the head turns right until the right door mirror is on screen,
 #   it is the focused mirror at twice the resolution; the car does not steer
 # - release: the head eases back straight ahead, focus cleared
@@ -49,6 +50,7 @@ var seen_right := -1.0
 var seen_left := -1.0
 var seen_focus := 0
 var seen_size := Vector2i.ZERO
+var seen_inset := true
 
 func _initialize() -> void:
 	ExhaustTune.save_path = "user://autotune/test_look_around_exhaust.json"
@@ -139,7 +141,8 @@ func _physics_process(_delta: float) -> bool:
 				_check(rear > 0.9, "the rearview is on screen looking ahead (%.2f)" % rear)
 				_check(left > 0.5, "the left door mirror is on screen looking ahead (%.2f)" % left)
 				_check(right == 0.0 and not CockpitMirrors.glass_on_screen(cam, m.views[2].quad), "the right door mirror is off screen looking ahead (%.2f)" % right)
-				_check(right_queued == 0, "an off-screen mirror is never queued to render (%d ticks)" % right_queued)
+				_check(m.inset[1] and right_queued > 0, "the off-screen right mirror renders for its HUD inset (inset %s, %d ticks)" % [m.inset[1], right_queued])
+				_check(not m.inset[0], "the left mirror, on screen, has no inset")
 				Input.action_press("look_right")
 				_go(Step.LOOK_RIGHT)
 		Step.LOOK_RIGHT:
@@ -149,12 +152,14 @@ func _physics_process(_delta: float) -> bool:
 				seen_right = _on_screen(cam, m.views[2].quad)
 				seen_focus = m.focus
 				seen_size = m.views[2].vp.size
+				seen_inset = m.inset[1]
 			if waited == SETTLE:
 				print("look right: yaw %.1f, right mirror %.0f%% on screen at 55 deg" % [cam.look_yaw, seen_right * 100])
 				_check(cam.look_yaw < -90.0, "holding Right turns the head right (%.1f)" % cam.look_yaw)
 				_check(seen_right >= 0.9, "turning right, the right door mirror comes on screen (%.2f)" % seen_right)
 				_check(seen_focus == 1, "and is the focused mirror (%d)" % seen_focus)
 				_check(seen_size == CockpitMirrors._scaled(CockpitMirrors.SIDE_SIZE) * 2, "rendering at twice the size (%s)" % seen_size)
+				_check(not seen_inset, "with the glass on screen the right inset is gone")
 				_check(Input.get_axis("steer_left", "steer_right") == 0.0, "looking right does not steer")
 				Input.action_release("look_right")
 				_go(Step.BACK)

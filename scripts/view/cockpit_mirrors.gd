@@ -5,9 +5,12 @@ extends Node3D
 # door mirrors, each a SubViewport with its own Camera3D drawn onto a quad,
 # flipped left-to-right like glass. Budgeted for the i5-1235U:
 #   - they only render in the cockpit view (UPDATE_DISABLED otherwise);
-#   - small render targets (rear 320x96, sides 160x112 at medium quality;
-#     FxSettings.mirror_quality halves or doubles them);
-#   - the rearview renders on even frames, both door mirrors on odd frames;
+#   - small render targets (rear 320x96, sides 160x112; FxSettings
+#     mirror_quality high doubles them);
+#   - the rearview and the door mirrors take turns: at medium quality the
+#     rearview renders on even frames and both door mirrors on odd frames; low
+#     spreads them over three frames, high draws all of them every frame
+#     (FxSettings.mirror_period);
 #   - the cameras see the world, traffic and the player's own body (the layer
 #     the cockpit camera does not draw), never the interior or the driver, with
 #     a 250 m far clip and no glow pass.
@@ -23,6 +26,12 @@ extends Node3D
 # even with mirrors off.
 # The HUD's rear strip (chase view) reuses the rearview render: with `strip`
 # on and the cockpit off, only the rear camera renders, every other frame.
+# Door-mirror insets (2026-10-14, #743, Roy 1568): the right door glass sits
+# 55-63 degrees right of the eye in every car, off the screen's 47-degree edge,
+# so the HUD draws that mirror's render as a small screen at the window's edge
+# (Hud, like the camera-mirror screens in cars that have no glass) and asks for
+# the render with set_inset; the glass itself is then drawn whether or not it
+# is on screen. No extra pass: it is the same render the glass shows.
 #
 # Car space, like the rest of the cockpit. The glass is angled so the camera's
 # straight-back view is what the driver's eye would see reflected.
@@ -31,9 +40,19 @@ const ColorGrade := preload("res://scripts/world/color_grade.gd")
 const FAR := 250.0
 const NEAR := 0.25
 const REAR_SIZE := Vector2i(320, 96)
+## The rear render while only the HUD strip shows it (chase and hood views):
+## the strip's own pixels (Hud.STRIP_SIZE), drawn 1:1. Pixels are cheap on the
+## laptop; the pass is the cost, and it is the same pass.
+const STRIP_RENDER := Vector2i(480, 144)
 const SIDE_SIZE := Vector2i(160, 112)
-const REAR_FOV := 18.0      # vertical; with the 10:3 glass that is ~56 deg wide
-const SIDE_FOV := 30.0      # ~42 deg wide on the 10:7 door glass
+## Mirror camera fields (mirrors pass, 2026-10-14). The glass is 19 degrees
+## wide from the eye (rear) and 9 (door), so what the camera sees is squeezed
+## into it: at the old 56 / 42 degrees wide a car 20 m back was 37 pixels on a
+## 1080p screen, 25 on 720p, a smear. Real mirrors show about 25-30 degrees
+## (rear) and 15-20 (door); these are a little wider than that, so a chasing
+## car fills the glass sooner and two lanes still fit.
+const REAR_FOV := 14.0      # vertical; with the 10:3 glass that is ~45 deg wide
+const SIDE_FOV := 22.0      # ~31 deg wide on the 10:7 door glass
 const SIDE_YAW := 8.0       # degrees outward from straight back
 const SIDE_PITCH := -2.0
 const GLASS_TINT := Color(0.86, 0.87, 0.92)
@@ -68,6 +87,7 @@ var views := []            # [{vp, cam, quad, mat}] rear, left, right
 var _frame := 0
 var focus := 0             # -1 left door mirror, +1 right, 0 none (ChaseCamera look around)
 var dots := []             # [left, right] MeshInstance3D
+var inset := [false, false]   # [left, right]: the HUD shows this mirror's render at the screen edge
 var cull_mask := 0
 
 func _ready() -> void:
@@ -183,11 +203,19 @@ func apply_graphics() -> void:
 	for i in views.size():
 		var glanced: bool = i > 0 and focus == (-1 if i == 1 else 1)
 		views[i].vp.size = _scaled(views[i].base_px) * (2 if glanced else 1)
+	_size_rear()
+
+## The rear render: the glass's size in the cockpit, the strip's when only
+## the strip shows it.
+func _size_rear() -> void:
+	if not views.is_empty():
+		views[0].vp.size = _scaled(STRIP_RENDER if (strip and not active) else REAR_SIZE)
 
 ## Cockpit view on or off: nothing renders while off, unless the strip asks.
 func set_active(on: bool) -> void:
 	active = on
 	_sync_view_group()
+	_size_rear()
 	if not on:
 		set_focus(0)
 		for v in views:
@@ -197,6 +225,7 @@ func set_active(on: bool) -> void:
 func set_strip(on: bool) -> void:
 	strip = on
 	_sync_view_group()
+	_size_rear()
 	if not on and not active:
 		views[0].vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 
@@ -233,6 +262,15 @@ static func glass_on_screen(cam: Camera3D, glass: MeshInstance3D) -> bool:
 ## The rearview render target, for the HUD strip.
 func rear_texture() -> ViewportTexture:
 	return views[0].vp.get_texture()
+
+## A door mirror's render target (side 0 left, 1 right), for the HUD inset.
+func side_texture(side: int) -> ViewportTexture:
+	return views[1 + side].vp.get_texture()
+
+## The HUD shows (or stops showing) a door mirror's render at the screen edge;
+## while it does, that mirror renders even with its glass off screen.
+func set_inset(side: int, on: bool) -> void:
+	inset[side] = on
 
 ## Warms the rearview glass by `level` (0 = plain glass, 1 = a car right behind).
 func set_rear_cue(level: float) -> void:
@@ -287,13 +325,16 @@ func _process(_delta: float) -> void:
 	_frame += 1
 	# UPDATE_ONCE draws on the next frame and drops back to DISABLED by itself.
 	# In the cockpit, a mirror off screen is skipped; the door mirror looked at
-	# mirror renders every frame.
+	# mirror renders every frame. The rearview takes frame 0 of each period,
+	# the door mirrors the last one (the same frame when the period is 1).
+	var period := FxSettings.mirror_period()
+	var slot := _frame % period
 	var cam := get_viewport().get_camera_3d() if active else null
-	if _frame % 2 == 0 and (not active or glass_on_screen(cam, views[0].quad)):
+	if slot == 0 and (not active or glass_on_screen(cam, views[0].quad)):
 		views[0].vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 	if not active:
 		return
 	for i in [1, 2]:
 		var focused := focus == (-1 if i == 1 else 1)
-		if (focused or _frame % 2 == 1) and glass_on_screen(cam, views[i].quad):
+		if (focused or slot == period - 1) and (inset[i - 1] or glass_on_screen(cam, views[i].quad)):
 			views[i].vp.render_target_update_mode = SubViewport.UPDATE_ONCE

@@ -1,8 +1,13 @@
 class_name HeatIcons
 extends CanvasLayer
 
-# Police heat on screen (F0): one icon for the current level, top centre,
-# drawn in code like the RPM bar. Each level has its own picture, so a glance
+# Police heat on screen (F0): one icon for the current level, drawn in code
+# like the RPM bar. It sits at the top, just LEFT of the rear strip's place
+# (2026-10-14, Roy: "we need a different place to put the cop warning, it
+# blocks out the mirror"): top centre was exactly on the chase view's rear
+# strip. Left of centre is clear in every view: the cockpit's rearview glass
+# hangs right of centre and its door mirrors are at the far edges, half way
+# down. A third bigger than it was, so it still reads at a glance from there. Each level has its own picture, so a glance
 # says what is coming, not how many stars: one patrol car, two cars, a
 # sawhorse, a spike strip, a helicopter (PoliceHeat.ICONS). No icon at 0 and
 # none for bad cops. A new level flashes red/blue for FLASH_SECS.
@@ -14,7 +19,15 @@ const SILVER := Hud.SILVER
 const POLICE_BLUE := Color("#2E4FD8")
 const RED := Hud.RED
 const DUSK := Hud.DUSK
-const ICON_SIZE := Vector2(96, 52)
+const ICON_SIZE := Vector2(128, 70)
+## Gap between the icon's right edge and the rear strip's frame.
+const STRIP_GAP := 16.0
+## Top of the icon, level with the rear strip (Hud.STRIP_TOP).
+const TOP := 12.0
+
+## Where the icon's top-left sits, relative to the top centre of the screen.
+static func icon_offset() -> Vector2:
+	return Vector2(-(Hud.STRIP_SIZE.x * 0.5 + Hud.STRIP_BORDER + STRIP_GAP + ICON_SIZE.x), TOP)
 const FLASH_SECS := 2.0
 const CAPTION_SECS := 7.0
 
@@ -110,7 +123,7 @@ func _ready() -> void:
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	icon.size = ICON_SIZE
-	icon.position = Vector2(-ICON_SIZE.x * 0.5, 14)
+	icon.position = icon_offset()
 	icon.visible = false
 	add_child(icon)
 	bust_bar = ColorRect.new()
@@ -118,7 +131,7 @@ func _ready() -> void:
 	bust_bar.color = RED
 	bust_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bust_bar.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	bust_bar.position = Vector2(-ICON_SIZE.x * 0.5, 14 + ICON_SIZE.y + 4)
+	bust_bar.position = icon_offset() + Vector2(0.0, ICON_SIZE.y + 4)
 	bust_bar.size = Vector2(0, 6)
 	bust_bar.visible = false
 	add_child(bust_bar)

@@ -10,6 +10,13 @@ const AMBER := Color(1.0, 0.54, 0.12)
 const RED := Color(0.95, 0.15, 0.15)
 
 var player: PlayerCar
+var row: HBoxContainer
+
+## The row hangs this far in from the right edge. 330 clears the 480-wide rear
+## strip (Hud.STRIP_SIZE) at the smallest window, 1280x720, where the strip's
+## frame ends 882 px in; at the old 400 the row started on top of it.
+const ROW_INSET := 330.0
+const ROW_TOP := 12.0
 var eng_label: Label
 var brk_label: Label
 var tyre_label: Label
@@ -21,10 +28,10 @@ func _init(car: PlayerCar) -> void:
 
 func _ready() -> void:
 	layer = 9
-	var row := HBoxContainer.new()
+	row = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 16)
 	row.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	row.position = Vector2(-400, 12)
+	row.position = Vector2(-ROW_INSET, ROW_TOP)
 	add_child(row)
 	eng_label = _light(row, "ENG")
 	brk_label = _light(row, "BRK")

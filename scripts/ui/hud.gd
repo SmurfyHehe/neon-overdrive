@@ -10,6 +10,13 @@ extends CanvasLayer
 # by FxSettings "rear_strip". Proximity cue (2026-10-06): as a car closes in
 # behind, the strip's frame thickens and warms to sodium, and in the cockpit
 # the rearview glass warms the same way; rear_threat() is the 0..1 level.
+# Door-mirror insets (2026-10-14, #743, Roy 1568), cockpit view only: when a
+# door mirror's glass is off screen (the right one is, in every car, 55-63
+# degrees right of the eye against a 47-degree screen edge) its render is drawn
+# as a small screen at that window edge, like the camera-mirror screens in cars
+# without door glass. It hides again when the driver looks round and the glass
+# itself comes on screen, and while looking back. The blind-spot cue warms and
+# thickens its frame, the way the rear strip's does.
 #
 # Everything is anchored to the window edges, so it scales with the window.
 # Palette: "Amber vs Dusk" (ROADMAP). The one exception is the RPM bar, which
@@ -25,9 +32,23 @@ const RPM_GREEN := Color("#3FD060") # RPM bar only (allowlisted in tests/core/pa
 
 const KMH_PER_MS := 3.6
 ## Rear strip: the rearview render drawn at this size, this far below the top edge.
-const STRIP_SIZE := Vector2(320, 96)
+## 480x144 (Roy 1552, 2026-10-14: bigger; it was 320x96, 17% of a 1080p width
+## and the same squeezed view). CockpitMirrors renders the rear at this size
+## while the strip is up, so it is drawn 1:1; HeatIcons sits just left of it.
+const STRIP_SIZE := Vector2(480, 144)
 const STRIP_TOP := 12.0
 const STRIP_BORDER := 2.0
+## Door-mirror inset: the door glass render (160x112, 10:7) drawn this big at the
+## window's side edge, its centre this far down the window. 220x154 is the
+## glass's size at arm's length on a 1080p screen, a touch bigger. At 62% down
+## it sits where a camera-mirror screen does, low by the A-pillar, under the
+## rearview glass (which hangs right of centre, 21-42% down, in these left-hand
+## drive cars) and clear of the warning lights (top right) at every window size.
+const INSET_SIZE := Vector2(220, 154)
+const INSET_EDGE := 16.0
+const INSET_Y := 0.62
+const INSET_BORDER := 2.0
+const INSET_FADE_RATE := 10.0
 ## Proximity cue: a car behind, same way, within this corridor and range.
 const THREAT_HALF_WIDTH := 4.5   # m either side (own lane and the next)
 const THREAT_NEAR := 3.0         # m behind the car's origin: full cue
@@ -73,6 +94,10 @@ var rear_frame: Panel
 var rear_style: StyleBoxFlat
 var rear_threat := 0.0   # 0..1, smoothed
 var side_threat := [0.0, 0.0]   # left, right; 0..1, smoothed
+var side_frame: Array[Panel] = []        # [left, right] door-mirror insets
+var side_inset: Array[TextureRect] = []
+var side_style: Array[StyleBoxFlat] = []
+var side_alpha := [0.0, 0.0]
 
 ## Segmented RPM bar. Draws itself from frac / shift_frac / cue.
 class RpmBar extends Control:
@@ -214,6 +239,43 @@ func _ready() -> void:
 	rear_strip.offset_bottom = -STRIP_BORDER
 	rear_frame.add_child(rear_strip)
 
+	for side in 2:
+		var frame := Panel.new()
+		frame.name = "LeftMirrorInset" if side == 0 else "RightMirrorInset"
+		frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(DUSK, 0.85)
+		style.border_color = Color(SILVER, 0.35)
+		style.set_border_width_all(1)
+		frame.add_theme_stylebox_override("panel", style)
+		var r := inset_rect(side)
+		frame.anchor_left = 0.0 if side == 0 else 1.0
+		frame.anchor_right = frame.anchor_left
+		frame.anchor_top = INSET_Y
+		frame.anchor_bottom = INSET_Y
+		frame.offset_left = r.position.x
+		frame.offset_right = r.end.x
+		frame.offset_top = r.position.y
+		frame.offset_bottom = r.end.y
+		frame.visible = false
+		frame.modulate.a = 0.0
+		root.add_child(frame)
+		var tex := TextureRect.new()
+		tex.name = "Glass"
+		tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tex.flip_h = true   # a mirror: left is right
+		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tex.stretch_mode = TextureRect.STRETCH_SCALE
+		tex.set_anchors_preset(Control.PRESET_FULL_RECT)
+		tex.offset_left = INSET_BORDER
+		tex.offset_top = INSET_BORDER
+		tex.offset_right = -INSET_BORDER
+		tex.offset_bottom = -INSET_BORDER
+		frame.add_child(tex)
+		side_frame.append(frame)
+		side_inset.append(tex)
+		side_style.append(style)
+
 	lbl_hint = _label(root, 14, Color(SILVER.r, SILVER.g, SILVER.b, 0.7))
 	lbl_hint.text = ""   # no key hints on screen: the Controls page lists the keys
 	lbl_hint.visible = false
@@ -318,6 +380,40 @@ func _refresh_rear_strip() -> void:
 	if mirrors != null and mirrors.strip != show:
 		mirrors.set_strip(show)
 
+## A door-mirror inset's frame, in pixels from its anchor: x from the window's
+## side edge (left inset: from the left edge, right: from the right, negative),
+## y about the INSET_Y line.
+static func inset_rect(side: int) -> Rect2:
+	var w := INSET_SIZE.x + 2.0 * INSET_BORDER
+	var h := INSET_SIZE.y + 2.0 * INSET_BORDER
+	var x := INSET_EDGE if side == 0 else -(INSET_EDGE + w)
+	return Rect2(x, -h * 0.5, w, h)
+
+## The rule: a door mirror's inset shows in the cockpit view, with mirrors on,
+## while that glass is off screen and the driver is not looking back.
+static func inset_wanted(cockpit: bool, glass_on_screen: bool, look_back: bool, mirrors_on: bool) -> bool:
+	return cockpit and mirrors_on and not look_back and not glass_on_screen
+
+func _refresh_side_insets() -> void:
+	var mirrors: CockpitMirrors = camera.frame.mirrors if camera.frame != null else null
+	var cam3d := get_viewport().get_camera_3d()
+	var k := 1.0 - exp(-INSET_FADE_RATE * get_process_delta_time())
+	for side in 2:
+		var want := false
+		if mirrors != null and mirrors.views.size() == 3:
+			var on_screen := CockpitMirrors.glass_on_screen(cam3d, mirrors.views[1 + side].quad)
+			want = inset_wanted(camera.view == ChaseCamera.View.COCKPIT, on_screen, camera.look_back, mirrors.enabled)
+			if mirrors.inset[side] != want:
+				mirrors.set_inset(side, want)
+			if want and side_inset[side].texture == null:
+				side_inset[side].texture = mirrors.side_texture(side)
+		side_alpha[side] = lerpf(side_alpha[side], 1.0 if want else 0.0, k)
+		if want and side_alpha[side] < 0.02:
+			side_alpha[side] = 0.02
+		var frame := side_frame[side]
+		frame.visible = side_alpha[side] > 0.01
+		frame.modulate.a = side_alpha[side]
+
 ## Closest car behind, going the same way, in the corridor: 0 none or far,
 ## 1 right on the bumper. Raw, unsmoothed.
 func rear_threat_now() -> float:
@@ -362,6 +458,9 @@ func _refresh_side_cue() -> void:
 		side_threat[i] = lerpf(side_threat[i], now[i], k)
 		if camera.frame != null:
 			camera.frame.mirrors.set_side_cue(i, side_threat[i])
+		var level: float = side_threat[i] if side_threat[i] > 0.02 else 0.0
+		side_style[i].border_color = Color(SILVER, 0.35).lerp(SODIUM, level)
+		side_style[i].set_border_width_all(1 + int(round(3.0 * level)))
 
 func _refresh_rear_cue() -> void:
 	var delta := get_process_delta_time()
@@ -391,6 +490,7 @@ func _refresh() -> void:
 	# (Roy, 2026-10-06); the warning lights and radio toast are other layers.
 	cluster.visible = camera.view != ChaseCamera.View.COCKPIT
 	_refresh_rear_strip()
+	_refresh_side_insets()
 	_refresh_rear_cue()
 	_refresh_side_cue()
 	var max_rpm := maxf(player.max_rpm, 1.0)

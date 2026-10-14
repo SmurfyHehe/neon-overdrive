@@ -6,8 +6,9 @@ extends SceneTree
 #   - F cycles cockpit -> hood -> chase -> cockpit (real key presses)
 #   - the camera sits at the car's hood_cam (CabinSpec: its own key or the
 #     computed default), above the highest body point (hood and anything bolted
-#     to it) inside a 0.6 m box round it, and a ray from it to the road 10 m
-#     ahead is not blocked by the car
+#     to it) inside a 0.6 m box round it, a ray from it to the road 10 m
+#     ahead is not blocked by the car, and the road is in view from under
+#     ROAD_FROM_MAX ahead of the camera; it rests HOOD_TILT_DOWN degrees down
 #   - no door mirror renders, the rear mirror renders only for the HUD strip,
 #     the cabin is not in front of the camera, the sound is the outside one
 # On the coupe, parked:
@@ -28,6 +29,10 @@ const BOX_HALF := 0.3          # the 0.6 m box round the camera
 const GRID := 7
 const RATES := [60, 120, 144]
 const SAMPLES := [0.5, 0.75, 1.0, 1.25, 1.5]   # s; the keys are released at 1.0
+## The road must be in view from this close ahead of the hood camera (#731).
+## With the old default point the coupe's would have seen it from 3.4 m and
+## the wagon from 3.0; the points in use see it from 1.0 to 2.4 m.
+const ROAD_FROM_MAX := 2.8
 
 var fails := 0
 var logger := Harness.ErrorCounter.new()
@@ -137,7 +142,12 @@ func _hood_checks(kind: String) -> void:
 			"%s: hood_cam %s is the CabinSpec default %s, only risen or moved forward" % [kind, cam.hood_cam, dflt])
 	var fwd := -cam.global_basis.z
 	var car_fwd := -p.global_basis.z
-	_check(fwd.angle_to(car_fwd) < deg_to_rad(3.0), "%s: looks where the car points (%.1f deg)" % [kind, rad_to_deg(fwd.angle_to(car_fwd))])
+	var flat := Vector3(fwd.x, 0.0, fwd.z).normalized()
+	var car_flat := Vector3(car_fwd.x, 0.0, car_fwd.z).normalized()
+	_check(flat.angle_to(car_flat) < deg_to_rad(3.0), "%s: looks where the car points (%.1f deg)" % [kind, rad_to_deg(flat.angle_to(car_flat))])
+	# rests tilted down (#731): the horizon sits above the middle of the screen
+	var pitch := rad_to_deg(asin(clampf(-fwd.y, -1.0, 1.0)))
+	_check(absf(pitch - ChaseCamera.HOOD_TILT_DOWN) < 1.5, "%s: rests %.1f deg down, expected %.1f +- 1.5" % [kind, pitch, ChaseCamera.HOOD_TILT_DOWN])
 	_check(absf(cam.fov - ViewSettings.hood_fov) < 0.8, "%s: FOV %.1f is the hood FOV setting %.1f (its own since the View page)" % [kind, cam.fov, ViewSettings.hood_fov])
 	# mirrors: the door mirrors never render in this view; the rear one only for the HUD strip
 	var mirrors: CockpitMirrors = cam.frame.mirrors
@@ -233,6 +243,19 @@ func _shell_checks(kind: String) -> void:
 	q2.hit_back_faces = true
 	var blocked := space.intersect_ray(q2)
 	_check(blocked.is_empty(), "%s: the car blocks the view of the road 10 m ahead (hit at %s)" % [kind, str(blocked.get("position", Vector3.ZERO) - base)])
+	# and the road is in view from close in front of the camera (#731, #732):
+	# the nearest point on the centre line the bonnet does not hide
+	var from := INF
+	var d := 1.0
+	while d <= ROAD_FROM_MAX + 0.05:
+		var q3 := PhysicsRayQueryParameters3D.create(base + at, base + Vector3(0.0, low_y, at.z - d), SHELL_LAYER)
+		q3.hit_back_faces = true
+		if space.intersect_ray(q3).is_empty():
+			from = d
+			break
+		d += 0.1
+	table.append("  %-16s road in view from %.1f m ahead of the camera" % [kind, from])
+	_check(from <= ROAD_FROM_MAX, "%s: the bonnet hides the road out to %.1f m ahead of the camera (limit %.1f)" % [kind, from, ROAD_FROM_MAX])
 	var own := cab.has("hood_cam")
 	var roof: Vector3 = cam.roof_back_cam
 	var roof_top := -1.0e9
@@ -262,8 +285,11 @@ func _rel() -> Vector3:
 	return p.get_global_transform_interpolated().affine_inverse() * cam.global_position
 
 ## Angle (deg) between where the camera looks and the car's heading.
+## Yaw between where the camera and the car point, ignoring the rest tilt.
 func _yaw_off() -> float:
-	return rad_to_deg((-cam.global_basis.z).angle_to(-p.global_basis.z))
+	var f := -cam.global_basis.z
+	var c := -p.global_basis.z
+	return rad_to_deg(Vector3(f.x, 0.0, f.z).normalized().angle_to(Vector3(c.x, 0.0, c.z).normalized()))
 
 func _behaviour() -> void:
 	await _boot(PlayerCars.DEFAULT, "hood")

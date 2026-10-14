@@ -25,7 +25,10 @@ const HEADING_RATE := 6.0
 const DIST := 5.2         # m behind the car at rest
 const HEIGHT := 1.85      # m above the car's origin at rest
 const LOOK_AHEAD := 12.0  # m ahead of the car the camera aims at
-const LOOK_HEIGHT := 0.95
+## Playtest 4 (#730): at 0.95 the rig aimed only 3 degrees down, so the
+## horizon sat at 45% from the top and the road ahead was a 10% band above
+## the roof. 0.3 pitches it 5 degrees down: horizon at 41%, roof at 51%.
+const LOOK_HEIGHT := 0.3
 ## Per-car framing (special vehicles, S0): kind -> [dist, height, look_ahead,
 ## look_height], same four numbers as the constants above, which are the
 ## default for every car not listed. Starting points; the body steps tune them.
@@ -211,6 +214,10 @@ var _look_focus := 0               # door mirror the head is turned to (-1 left,
 const HOOD_YAW_MAX := 90.0
 const HOOD_PITCH_UP := 20.0
 const HOOD_PITCH_DOWN := 15.0
+## The bonnet camera rests tilted this far down (#731): level, half the screen
+## was sky; 4 degrees puts the horizon at 44% and keeps the coupe's bonnet in
+## the bottom fifth. The arrows (Up/Down) add to it.
+const HOOD_TILT_DOWN := 4.0
 const HOOD_STRENGTH := 0.5
 const HoodFit := preload("res://scripts/view/hood_fit.gd")
 var hood_cam := Vector3(0.0, 1.0, -1.0)         # car space, from the car's CABIN, fitted to the body on entering the view
@@ -545,7 +552,7 @@ func _place_hood(delta: float) -> void:
 	if look_back:
 		global_transform = Transform3D(level * Basis(Vector3.UP, PI), xf * roof_back_cam)
 	else:
-		var turn := Basis.from_euler(Vector3(deg_to_rad(look_pitch), deg_to_rad(look_yaw + corner_yaw), 0.0))
+		var turn := Basis.from_euler(Vector3(deg_to_rad(look_pitch - HOOD_TILT_DOWN), deg_to_rad(look_yaw + corner_yaw), 0.0))
 		global_transform = Transform3D(level * turn, xf * hood_cam)
 	fov = ViewSettings.hood_fov + _widening() * COCKPIT_FOV_SPEED_GAIN * speed_t
 

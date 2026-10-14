@@ -268,6 +268,7 @@ call :run core/run_end_restart "--headless --fixed-fps 120"
 rem Totalled meter (TM1): no single hit ends a run; the meter, the free first total, bad cops, the tow row, the test build setting.
 call :run car/totalled_meter --headless
 call :run car/wreck_look --headless
+call :run car/wreck_parts "--headless --fixed-fps 120"
 call :run core/totalled_run_end "--headless --fixed-fps 120"
 rem No roll ends a run (TM2): a car on its side or roof rights itself after 3 s and the roll costs meter. Three game boots, about 2 min of driving time.
 call :run car/roll_righting "--headless --fixed-fps 120"
@@ -546,6 +547,7 @@ call :run car/fix_car "--headless --fixed-fps 60"
 call :run car/sat_nav_route --headless
 call :run car/totalled_meter --headless
 call :run car/wreck_look --headless
+call :run car/wreck_parts "--headless --fixed-fps 120"
 call :run car_dirt --headless
 call :run core/error_log --headless
 call :run core/key_bindings --headless

@@ -186,6 +186,46 @@ static func swap_part(root: Node, part: String, mesh: Mesh) -> bool:
 	_dress(body, paint_mat)
 	return true
 
+## Put a part swapped out by swap_part back as the glb has it and re-merge.
+## Returns false if there is no assembled body under root.
+static func restore_part(root: Node, part: String) -> bool:
+	var body := body_of(root)
+	if body == null:
+		return false
+	var parts: Dictionary = (body.get_meta("car_parts") as Dictionary).duplicate()
+	if not parts.has(part):
+		return true
+	parts.erase(part)
+	var paint_mat := body.get_surface_override_material(surface_index(body.mesh, "body"))
+	var built := _merged(body.get_meta("car_id"), parts)
+	body.mesh = built.body
+	body.set_meta("car_parts", parts)
+	_dress(body, paint_mat)
+	return true
+
+## One part on its own as a one-surface mesh drawn with the paint material
+## (paint keeps alpha 0, everything else rides along as a fixed colour, like
+## an open panel), with its vertices moved so `pivot` (car space) is the
+## origin: a loose part that hangs, swings or falls off (wreck_parts.gd).
+## Null if the car has no such part. Cached per car, part and pivot.
+static func part_mesh(car_id: String, part: String, pivot: Vector3) -> ArrayMesh:
+	var key := "%s|part:%s|%s" % [car_id, part, str(pivot)]
+	if _meshes.has(key):
+		return _meshes[key]
+	var p: Dictionary = _load(car_id).parts.get(part, {})
+	if p.is_empty():
+		return null
+	var b := _builder()
+	for mname in p.mats:
+		var m: Dictionary = p.mats[mname]
+		var col := (m.albedo as Color).srgb_to_linear()
+		col.a = 0.0 if mname == "paint" else 1.0
+		_append(b, m, col, -pivot)
+	var mesh := ArrayMesh.new()
+	_add_surface(mesh, b, "body")
+	_meshes[key] = mesh
+	return mesh
+
 ## The assembled body under (or at) a node, or null.
 static func body_of(root: Node) -> MeshInstance3D:
 	if root == null:

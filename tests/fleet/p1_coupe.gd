@@ -3,9 +3,10 @@ extends SceneTree
 # P1 sports coupe, the player's car (stage D step 1, Roy 2026-10-06):
 #   - the model builds from the design data and is the sheet's size
 #     (4.42 x 1.80 x 1.24 m, mirrors excluded)
-#   - budget: at most 10,000 triangles and 9 draw calls (body surfaces + door
-#     mirrors + underside + 4 wheels); the mirror cups are a few dozen
-#     triangles on top, the underside (car-parts plan 5b) under 1,000
+#   - budget: at most 10,000 triangles and 10 draw calls (body surfaces
+#     including the lamp flare quads since PR #753 + door mirrors + underside
+#     + 4 wheels); the mirror cups are a few dozen triangles on top, the
+#     underside (car-parts plan 5b) under 1,000
 #   - from parts (cars from parts, 2026-10-10: the body is assembled from
 #     assets/cars/p1_coupe/body.glb, see tests/car/car_assembler.gd) the door
 #     mirrors are part of the Body mesh, so its width includes them and the
@@ -24,7 +25,7 @@ extends SceneTree
 
 const TOL := 0.05
 const TRI_BUDGET := 10000
-const DRAW_CALL_BUDGET := 9
+const DRAW_CALL_BUDGET := 10   # +1 for the head lamp halo / tail flare surface (PR #753)
 ## Phase B hardpoints (player.gd CFG) and the collision box from player._ready.
 const CFG := {"wheel_r": 0.34, "axle_z": 1.25, "wheel_x": 0.88}
 ## The box is 0.94 m tall since #538 (2026-10-11): the underside was lifted 6 cm

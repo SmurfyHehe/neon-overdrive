@@ -2,8 +2,12 @@ class_name Hud
 extends CanvasLayer
 
 # HUD v1 (replaces the temporary debug readout that lived in game.gd).
-# Bottom-right: gear + A/M, speed in km/h, an RPM bar, boost and engine status.
-# Top-left: one small camera/traffic line. Bottom-left: a short controls hint
+# Bottom-right: gear + A/M, speed in km/h, an RPM bar, engine status, and
+# under the bar a drawn fuel gauge (pump glyph, eight blocks) and boost bar
+# (AuxGauges; 2026-10-14, HUD and gauges look: they were "FUEL ▮▮▮▯▯▯▯▯",
+# "BOOST 0.45 / 1.20 bar" and "6400 rpm" in text, and the HUD has no text).
+# Top-left: one small camera/traffic line, test mode only (it is a debug
+# readout, not part of the look). Bottom-left: a short controls hint
 # (the full list lives on the pause menu's Controls page). Top-centre, chase
 # view only: the rear strip, a mirror-image of the cockpit's rearview render
 # (CockpitMirrors; nothing extra is rendered for it), framed in dusk, switched
@@ -24,6 +28,9 @@ const DUSK := Color("#0B1220")      # text outline, darker than the sky
 const RPM_GREEN := Color("#3FD060") # RPM bar only (allowlisted in tests/core/palette.gd)
 
 const KMH_PER_MS := 3.6
+const TestMode := preload("res://scripts/core/test_mode.gd")
+## Fuel gauge: blocks, and the share of the tank each lights (eight bars).
+const FUEL_BARS := 8
 ## Rear strip: the rearview render drawn at this size, this far below the top edge.
 ## 480x144 (Roy 1552, 2026-10-14: bigger; it was 320x96, 17% of a 1080p width
 ## and the same squeezed view). CockpitMirrors renders the rear at this size
@@ -62,9 +69,7 @@ var lbl_mode: Label
 var lbl_speed: Label
 var lbl_unit: Label
 var lbl_status: Label
-var lbl_boost: Label
-var lbl_rpm: Label
-var lbl_fuel: Label
+var aux: AuxGauges     # fuel blocks and the boost bar, under the RPM bar
 var lbl_info: Label
 var lbl_clock: Label
 var lbl_cash: Label
@@ -104,6 +109,65 @@ class RpmBar extends Control:
 		var x := size.x * Hud.SHIFT_POINT
 		var tick := Hud.AMBER if cue else Color(Hud.SILVER.r, Hud.SILVER.g, Hud.SILVER.b, 0.7)
 		draw_line(Vector2(x, -5.0), Vector2(x, -1.0), tick, 2.0)
+
+## Fuel and boost, drawn with no words (the HUD has no text): on the left a
+## pump glyph and FUEL_BARS blocks, amber, red and blinking when low; on the
+## right a boost bar that fills amber to the setup's max with a sodium tip at
+## full boost, only on a car with a boost setup. Redrawn only when a block,
+## the boost (in 1/40ths) or the blink changes, so it costs nothing at cruise.
+class AuxGauges extends Control:
+	var fuel_bars := -1      # -1: no fuel sim, the gauge is left off
+	var fuel_low := false
+	var fuel_empty := false
+	var blink := false
+	var boost_q := -1        # boost in 1/40ths of max; -1: no boost setup
+	var _drawn := []
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(320, 16)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	## Sets the state and redraws only if something the eye sees changed.
+	func set_state(bars: int, low: bool, empty: bool, blink_on: bool, boost: int) -> void:
+		var state := [bars, low, empty, blink_on and low and not empty, boost]
+		if state == _drawn:
+			return
+		_drawn = state
+		fuel_bars = bars
+		fuel_low = low
+		fuel_empty = empty
+		blink = blink_on
+		boost_q = boost
+		queue_redraw()
+
+	func _draw() -> void:
+		var h := size.y
+		if fuel_bars >= 0:
+			var col := Hud.RED if fuel_low else Hud.AMBER
+			if fuel_low and not fuel_empty and not blink:
+				col = Color(col, 0.3)
+			# the pump: a body, a hose up the right side, a nozzle
+			draw_rect(Rect2(0.0, 2.0, 9.0, h - 2.0), col)
+			draw_rect(Rect2(2.0, 4.0, 5.0, 4.0), Hud.DUSK)
+			draw_line(Vector2(11.0, h - 2.0), Vector2(11.0, 4.0), col, 2.0)
+			draw_line(Vector2(11.0, 4.0), Vector2(14.0, 7.0), col, 2.0)
+			var x := 20.0
+			var w := 12.0
+			var gap := 3.0
+			for i in Hud.FUEL_BARS:
+				var lit := i < fuel_bars
+				var c := col if lit else Color(Hud.AMBER, 0.16)
+				draw_rect(Rect2(x + i * (w + gap), 3.0, w, h - 3.0), c)
+		if boost_q >= 0:
+			var x0 := size.x * 0.56
+			var w := size.x - x0
+			var y := h * 0.5 - 3.0
+			draw_rect(Rect2(x0, y, w, 6.0), Color(Hud.AMBER, 0.16))
+			var f := float(boost_q) / 40.0
+			if f > 0.0:
+				draw_rect(Rect2(x0, y, w * f, 6.0), Hud.SODIUM if boost_q >= 38 else Hud.AMBER)
+			# the max mark at the end of the track
+			draw_line(Vector2(size.x - 1.0, y - 3.0), Vector2(size.x - 1.0, y + 9.0), Hud.SILVER, 2.0)
 
 ## Bar colour at a fraction (0..1) of max_rpm: green, then amber, then red.
 static func rpm_colour(t: float) -> Color:
@@ -145,10 +209,9 @@ static func cluster_gear(p: PlayerCar) -> String:
 		return selector_strip(p.gear)
 	return gear_label(p)
 
-## "FUEL ▮▮▮▯▯▯▯▯" with eight bars, rounded up so a drop left shows one bar.
-static func fuel_text(f: FuelTank) -> String:
-	var bars := clampi(ceili(f.fraction() * 8.0 - 0.001), 0, 8)
-	return "FUEL " + "▮".repeat(bars) + "▯".repeat(8 - bars)
+## Lit fuel blocks, rounded up so a drop left shows one block.
+static func fuel_bars(f: FuelTank) -> int:
+	return clampi(ceili(f.fraction() * FUEL_BARS - 0.001), 0, FUEL_BARS)
 
 static func kmh(speed_ms: float) -> int:
 	# Magnitude, not signed: reversing reads the same km/h as driving forward
@@ -188,6 +251,7 @@ func _ready() -> void:
 	lbl_info = _label(root, 14, Color(SILVER.r, SILVER.g, SILVER.b, 0.7))
 	lbl_info.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	lbl_info.position = Vector2(16, 12)
+	lbl_info.visible = TestMode.active()
 
 	rear_frame = Panel.new()
 	rear_frame.name = "RearFrame"
@@ -297,18 +361,10 @@ func _ready() -> void:
 	rpm_bar = RpmBar.new()
 	cluster.add_child(rpm_bar)
 
-	var under := HBoxContainer.new()
-	under.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	cluster.add_child(under)
-	lbl_boost = _label(under, 14, AMBER, "numbers")
-	lbl_boost.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lbl_rpm = _label(under, 14, SILVER, "numbers")
-	lbl_rpm.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-
-	# Fuel gauge (Stage C): eight bars, amber, red and blinking when low.
-	lbl_fuel = _label(cluster, 14, AMBER, "numbers")
-	lbl_fuel.name = "Fuel"
-	lbl_fuel.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	# Fuel gauge (Stage C) and boost bar, drawn, under the RPM bar.
+	aux = AuxGauges.new()
+	aux.name = "AuxGauges"
+	cluster.add_child(aux)
 
 ## The rear strip shows in the chase and hood views when the flag is on and the
 ## cockpit has mirrors to render; the cockpit view has the rearview mirror itself.
@@ -407,7 +463,6 @@ func _refresh() -> void:
 	lbl_gear.text = gear_label(player)
 	lbl_mode.text = PlayerCar.TRANSMISSION_LETTERS[player.transmission_mode()]
 	lbl_speed.text = str(kmh(player.current_speed()))
-	lbl_rpm.text = "%d rpm" % int(rpm)
 
 	# BUG FIX (2026-09-13): shift_flash_t was tracked since milestone 2 but
 	# nothing read it, so shifting had no feedback. The gear now flashes.
@@ -436,14 +491,12 @@ func _refresh() -> void:
 	else:
 		lbl_status.text = ""
 
-	lbl_fuel.text = fuel_text(player.fuel) if player.fuel.enabled else ""
-	lbl_fuel.add_theme_color_override("font_color", RED if player.fuel.is_low() else AMBER)
-	lbl_fuel.modulate.a = 1.0 if not player.fuel.is_low() or blink or player.fuel.is_empty() else 0.25
-
+	var boost_q := -1
 	if player.turbo_boost_max > 0.0:
-		lbl_boost.text = "BOOST %.2f / %.2f bar" % [player.boost, player.turbo_boost_max]
-	else:
-		lbl_boost.text = ""
+		boost_q = clampi(int(round(player.boost / player.turbo_boost_max * 40.0)), 0, 40)
+	aux.set_state(fuel_bars(player.fuel) if player.fuel.enabled else -1,
+		player.fuel.is_low(), player.fuel.is_empty(), blink, boost_q)
 
-	lbl_info.text = "%s cam · %d cars (%d full-sim)" % [
-		camera.mode_name().to_lower(), traffic.cars.size(), traffic.detailed_count()]
+	if lbl_info.visible:
+		lbl_info.text = "%s cam · %d cars (%d full-sim)" % [
+			camera.mode_name().to_lower(), traffic.cars.size(), traffic.detailed_count()]

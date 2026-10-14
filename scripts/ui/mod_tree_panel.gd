@@ -108,6 +108,7 @@ func accept() -> void:
 		ticket = ""
 		var r: Dictionary = model.buy(id)
 		if r.ok:
+			_bay_changed()
 			bought.emit(id, int(r.price))
 		else:
 			_say(String(r.reason))
@@ -122,9 +123,16 @@ func accept() -> void:
 				ticket = selected
 		GarageMods.OWNED:
 			if model.swap_to(selected):
+				_bay_changed()
 				swapped.emit(selected)
 		GarageMods.LOCKED:
 			_say(model.lock_reason(selected))
+
+## A fitted mod changes what sits in the engine bay (B4): every car's bay is
+## built again the next time it is looked at.
+func _bay_changed() -> void:
+	if is_inside_tree():
+		get_tree().call_group(CarDetail.GROUP, "drop_part", "bay")
 
 func cancel() -> void:
 	if ticket != "":

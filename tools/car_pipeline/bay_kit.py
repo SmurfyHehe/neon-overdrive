@@ -44,6 +44,29 @@ TOUCHING = {
     ('bay_shroud', 'bay_radiator'),
 }
 
+# the mod parts (B4) and the stock parts they are built onto: the turbo on
+# its manifold, the charge pipe into the throttle body, the bar on the strut
+# caps. The pair check is by whole-part box, so a pipe that runs past a part
+# without touching it still needs a line here.
+MOD_TOUCHING = {
+    ('bay_mod_ts_turbo', 'engine'), ('bay_mod_tb_turbo', 'engine'), ('bay_mod_tt_turbos', 'engine'),
+    ('bay_mod_ts_pipe_l', 'bay_mod_ts_turbo'), ('bay_mod_ts_pipe_l', 'bay_mod_tb_turbo'), ('bay_mod_ts_pipe_l', 'bay_mod_tt_turbos'),
+    ('bay_mod_ts_pipe_l', 'bay_mod_ts_intercooler'), ('bay_mod_ts_pipe_f', 'bay_mod_ts_intercooler'),
+    ('bay_mod_ts_pipe_f', 'bay_mod_ts_pipe_l'), ('bay_mod_ts_pipe_f', 'bay_mod_ts_pipe_r'), ('bay_mod_ts_pipe_f', 'bay_hoses'),
+    ('bay_mod_ts_pipe_r', 'engine'), ('bay_mod_ts_pipe_r', 'bay_hoses'),
+    ('bay_mod_na_cone', 'engine'), ('bay_mod_na_cone', 'bay_hoses'),
+    ('bay_mod_itb', 'engine'),
+    ('bay_mod_stroker_strip', 'engine'), ('bay_mod_stroker_damper', 'engine'), ('bay_mod_stroker_damper', 'bay_belt'), ('bay_mod_stroker_damper', 'bay_hoses'),
+    ('bay_mod_cai', 'engine'), ('bay_mod_cai', 'bay_hoses'),
+    ('bay_mod_pulley', 'engine'), ('bay_mod_pulley', 'bay_belt'),
+    ('bay_mod_light_battery', 'bay_cables'),
+    ('bay_mod_strut_bar', 'bay_strut_fl'), ('bay_mod_strut_bar', 'bay_strut_fr'),
+    # the tier finish plates lie on the cam cover (the engine part)
+    ('bay_mod_tier2_cover', 'engine'), ('bay_mod_tier3_cover', 'engine'), ('bay_mod_tier4_cover', 'engine'), ('bay_mod_tier5_cover', 'engine'),
+    ('bay_mod_tier2_cover', 'bay_mod_stroker_strip'), ('bay_mod_tier5_cover', 'bay_mod_stroker_strip'),
+}
+TOUCHING |= {tuple(sorted(p)) for p in MOD_TOUCHING}
+
 HOOD_CLEAR = 0.040     # tallest fixed item this far under the hood (checker: 25 mm)
 WALL_CLEAR = 0.020     # this far inside the fender's inner wall (checker: 10 mm)
 HINGE_CLEAR = 0.060    # nothing within this of the hinge line
@@ -339,6 +362,117 @@ def coupe_bay(ctx):
     by = hood(0.38, firewall_z - 0.05) - HOOD_CLEAR - 0.04
     _box(bu, (0.38, by, firewall_z - 0.025), (0.09, 0.03, 0.03), 'plastic')
     _box(bu, (0.38, by, firewall_z - 0.045), (0.07, 0.022, 0.012), 'glow_lens')
+
+    coupe_mods(ctx, locals())
+
+
+def coupe_mods(ctx, c):
+    """The parts a fitted mod adds to the coupe's bay (engine bays B4, Roy
+    2026-10-14: "the engine bay should change based off the performance/mods").
+    `ctx.part(name, mod=key, hides=[...])` marks a part as belonging to the
+    mod `key` (a mod tree template or a workshop bolt-on id); the game draws
+    it only when that key is fitted, and drops the stock parts it names in
+    `hides`. Keys on a branch stack: B1's big single hides B's small turbo but
+    keeps B's charge pipes and intercooler. `c` is coupe_bay's locals."""
+    part = ctx.part
+    hood = ctx.hood_under
+    A = ctx.anchors
+    z0, z1, zc, L = c['z0'], c['z1'], c['zc'], c['L']
+    px, py, pz = c['px'], c['py'], c['pz']
+    bx, bz = c['bx'], c['bz']
+    cover_top = c['cover_top']
+    crank = c['crank']
+
+    def mp(name, key, hides=()):
+        return part(name, bevel=0, mod=key, hides=list(hides))
+
+    # ---- the turbos: on the exhaust side, down the left of the block, a cone filter on the inlet
+    tx, ty = -0.40, 0.54
+
+    def snail(p, z_t, r, cone=0.12, inlet=True):
+        cyl(p, (tx, ty, z_t + 0.09), (tx, ty, z_t), r, 8, 'cast')                           # turbine housing
+        cyl(p, (tx, ty, z_t), (tx, ty, z_t - 0.05), r * 0.55, 8, 'steel')                   # the centre cartridge
+        cyl(p, (tx, ty, z_t - 0.05), (tx, ty, z_t - 0.13), r * 1.05, 8, 'alloy')            # compressor housing
+        if inlet:
+            cyl(p, (tx, ty, z_t - 0.13), (tx, ty, z_t - 0.20), r * 0.6, 8, 'alloy')             # the inlet
+            cyl(p, (tx, ty, z_t - 0.20), (tx, ty, z_t - 0.20 - cone), r * 0.95, 8, 'plastic', r_b=r * 0.7)   # cone filter
+            cyl(p, (tx, ty, z_t - 0.20 - cone), (tx, ty, z_t - 0.21 - cone), r * 0.45, 8, 'chrome')        # its tip
+        cyl(p, (tx, ty, z_t + 0.09), (tx, ty - 0.17, z_t + 0.09), r * 0.5, 7, 'cast')        # downpipe
+    # the small turbo takes the airbox and the washer bottle away (the side-mount intercooler sits there)
+    snail(mp('bay_mod_ts_turbo', 'turbo_small', hides=('bay_airbox', 'bay_washer', 'bay_mod_cai')), zc + 0.01, 0.058)
+    snail(mp('bay_mod_tb_turbo', 'turbo_big_single', hides=('bay_mod_ts_turbo',)), zc + 0.03, 0.080)
+    tt = mp('bay_mod_tt_turbos', 'turbo_twin', hides=('bay_mod_ts_turbo',))
+    snail(tt, zc - 0.18, 0.045, cone=0.08)
+    snail(tt, zc + 0.10, 0.045, inlet=False)
+    # charge air: compressor -> the side-mount intercooler in the washer bottle's corner
+    # -> along the front under the pulleys -> up the right into the throttle body
+    ic_x, ic_z = -0.49, c['rz'] + 0.26
+    ic = mp('bay_mod_ts_intercooler', 'turbo_small')
+    _box(ic, (ic_x, 0.46, ic_z), (0.030, 0.20, 0.16), 'cast')                 # the core, stood on its side
+    _box(ic, (ic_x, 0.58, ic_z), (0.045, 0.04, 0.17), 'alloy')                # top tank
+    _box(ic, (ic_x, 0.34, ic_z), (0.045, 0.04, 0.17), 'alloy')                # bottom tank
+    pl = mp('bay_mod_ts_pipe_l', 'turbo_small')
+    _seg(pl, [(tx, ty + 0.05, zc - 0.09), (-0.385, 0.62, zc - 0.26), (-0.44, 0.60, ic_z + 0.09), (ic_x, 0.58, ic_z + 0.04)], 0.025, 7, 'alloy')
+    pf = mp('bay_mod_ts_pipe_f', 'turbo_small')
+    _seg(pf, [(ic_x, 0.34, ic_z - 0.04), (-0.44, 0.34, ic_z - 0.08), (-0.30, 0.36, z0 - 0.20), (0.30, 0.36, z0 - 0.20)], 0.025, 7, 'alloy')
+    pr = mp('bay_mod_ts_pipe_r', 'turbo_small')
+    _seg(pr, [(0.30, 0.36, z0 - 0.20), (0.42, 0.48, z0 - 0.20), (0.33, 0.55, z0 - 0.10), (px, py, z0 - 0.075)], 0.025, 7, 'alloy')
+
+    # ---- stay NA: a cone filter on a short pipe off the throttle body (the airbox goes)
+    nc = mp('bay_mod_na_cone', 'na_breathe', hides=('bay_airbox', 'bay_mod_cai'))
+    cyl(nc, (px + 0.02, py, z0 - 0.055), (0.33, 0.52, z0 - 0.175), 0.035, 8, 'alloy')
+    cyl(nc, (0.33, 0.52, z0 - 0.175), (0.33, 0.50, z0 - 0.315), 0.060, 8, 'plastic', r_b=0.045)
+    cyl(nc, (0.33, 0.50, z0 - 0.315), (0.33, 0.50, z0 - 0.33), 0.028, 8, 'chrome')
+    # screamer: six velocity stacks over the plenum, on a rail
+    itb = mp('bay_mod_itb', 'na_screamer', hides=('bay_mod_na_cone',))
+    _box(itb, (0.31, 0.60, zc), (0.03, 0.02, L - 0.12), 'alloy')
+    for k in range(6):
+        zz = z0 + 0.07 + k * (L - 0.14) / 5
+        cyl(itb, (0.30, 0.60, zz), (0.40, 0.64, zz), 0.020, 8, 'chrome', r_b=0.034)
+    # stroker: a polished strip down the cover and a big billet crank damper
+    # (two parts, so the strip's box up on the cover and the damper's box
+    # down on the crank are not one box that swallows the tier plates)
+    st = mp('bay_mod_stroker_strip', 'na_stroker')
+    _box(st, (-0.11, cover_top + 0.027, zc), (0.03, 0.012, L - 0.12), 'chrome')   # outboard of the crown, over the tier plates
+    sd = mp('bay_mod_stroker_damper', 'na_stroker', hides=('bay_mod_pulley',))
+    cyl(sd, (crank[0][0], crank[0][1], pz - 0.012), (crank[0][0], crank[0][1], pz - 0.030), 0.085, 10, 'alloy')
+
+    # ---- workshop bolt-ons that live in the bay
+    cai = mp('bay_mod_cai', 'cold_air_intake', hides=('bay_airbox',))
+    _seg(cai, [(px + 0.02, py, z0 - 0.055), (0.40, 0.50, z0 - 0.155), (0.50, 0.40, z0 - 0.255)], 0.030, 7, 'alloy')
+    cyl(cai, (0.50, 0.40, z0 - 0.255), (0.50, 0.39, z0 - 0.33), 0.058, 8, 'plastic', r_b=0.045)
+    cyl(cai, (0.50, 0.39, z0 - 0.33), (0.50, 0.39, z0 - 0.342), 0.028, 8, 'chrome')
+    pu = mp('bay_mod_pulley', 'underdrive_pulley')
+    cyl(pu, (crank[0][0], crank[0][1], pz - 0.012), (crank[0][0], crank[0][1], pz - 0.024), 0.045, 10, 'alloy')
+    lb = mp('bay_mod_light_battery', 'light_battery', hides=('bay_battery',))
+    _box(lb, (bx, 0.42, bz), (0.13, 0.11, 0.11), 'plastic')
+    _box(lb, (bx, 0.479, bz), (0.13, 0.012, 0.11), 'plastic')
+    for sx in (1, -1):
+        cyl(lb, (bx + sx * 0.055, 0.485, bz - 0.04), (bx + sx * 0.055, 0.510, bz - 0.04), 0.010, 6, 'chrome')
+    _box(lb, (bx, 0.49, bz + 0.045), (0.15, 0.014, 0.012), 'steel')
+    oc = mp('bay_mod_oil_cooler', 'oil_cooler')
+    _box(oc, (-0.44, 0.52, c['rz'] + 0.03), (0.16, 0.08, 0.030), 'cast')
+    _box(oc, (-0.44, 0.52, c['rz'] + 0.03), (0.17, 0.09, 0.010), 'alloy')
+    # front strut bar: clamps on the towers' inboard sides, the tube just under the hood
+    sb = mp('bay_mod_strut_bar', 'strut_bar_front')
+    zs = A['strut_top_fr'][2]
+    bar_y = min(hood(x, zs) for x in np.linspace(-0.46, 0.46, 12)) - HOOD_CLEAR - 0.010
+    for sx in (1, -1):
+        _box(sb, (sx * 0.445, bar_y - 0.016, zs), (0.05, 0.05, 0.06), 'alloy')
+    cyl(sb, (-0.42, bar_y, zs), (0.42, bar_y, zs), 0.010, 8, 'alloy')
+
+    # ---- the cover's finish climbs with the car's tier (Roy 1570, 2026-10-14):
+    # T0/T1 brushed alloy as cast; T2 a polished crown; T3 the whole lid
+    # polished; T4 the lid in the car's own paint; T5 painted lid with a
+    # polished crown. One key per tier ("tier_T2"..), the car wears one at a time.
+    crown = ((0.0, cover_top + 0.012 + 0.003, zc), (0.19, 0.006, L - 0.08))
+    lid = ((0.0, cover_top + 0.003, zc), (0.24, 0.006, L - 0.04))
+    _box(mp('bay_mod_tier2_cover', 'tier_T2'), crown[0], crown[1], 'chrome')
+    _box(mp('bay_mod_tier3_cover', 'tier_T3'), lid[0], lid[1], 'chrome')
+    _box(mp('bay_mod_tier4_cover', 'tier_T4'), lid[0], lid[1], 'paint')
+    t5 = mp('bay_mod_tier5_cover', 'tier_T5')
+    _box(t5, lid[0], lid[1], 'paint')
+    _box(t5, crown[0], crown[1], 'chrome')
 
 
 BAYS = {'p1_coupe': coupe_bay}

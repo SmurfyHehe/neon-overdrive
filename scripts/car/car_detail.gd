@@ -95,6 +95,19 @@ func register(part_name: String, build: Callable) -> void:
 	if on:
 		_show_part(_parts.back())
 
+## Throw a built part away so it is built again (the bay after the garage
+## fits a mod: `get_tree().call_group(CarDetail.GROUP, "drop_part", "bay")`).
+## Rebuilt at once while detail is on, else the next time it is wanted.
+func drop_part(part_name: String) -> void:
+	for p in _parts:
+		if p.name != part_name:
+			continue
+		if p.node != null and is_instance_valid(p.node):
+			(p.node as Node).queue_free()
+		p.node = null
+		if on:
+			_show_part(p)
+
 ## The built node of a registered part, or null while it has not been needed.
 func node_of(part_name: String) -> Node:
 	for p in _parts:
@@ -189,7 +202,7 @@ func _register_bay() -> void:
 		if not is_instance_valid(body):
 			return null
 		var paint_mat := body.get_surface_override_material(CarAssembler.surface_index(body.mesh, "body"))
-		var bay := CarAssembler.build_bay(car_id, paint_mat)
+		var bay := CarAssembler.build_bay(car_id, paint_mat, FittedMods.keys(car_id, FittedMods.ids(vehicle, car_id), vehicle.get("spec") if vehicle.get("spec") is Dictionary else {}))
 		bay.layers = body.layers
 		body.add_child(bay)
 		return bay)

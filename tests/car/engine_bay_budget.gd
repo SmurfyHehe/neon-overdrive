@@ -75,6 +75,8 @@ func _static(id: String) -> void:
 		id, closed_tris, all_tris - bay_tris, all_tris, bay_tris])
 	_check(closed.mesh.get_surface_count() <= CarAssembler.SURFACES.size(), "%s: closed body has %d surfaces" % [id, closed.mesh.get_surface_count()])
 	_check(closed.get_node_or_null(CarAssembler.BAY_NODE_NAME) == null, "%s: the closed body carries a Bay node" % id)
+	var active := CarAssembler.bay_active_names(id)
+	var active_tris := _tris_of(id, active)
 	var bay := CarAssembler.build_bay(id)
 	if bay_parts.is_empty():
 		_check(bay == null, "%s: no bay parts but build_bay made a mesh" % id)
@@ -84,7 +86,7 @@ func _static(id: String) -> void:
 		if bay != null:
 			var t := CarAssembler._mesh_tris(bay.mesh)
 			var calls := bay.mesh.get_surface_count()
-			_check(t == bay_tris, "%s: Bay mesh %d triangles, the bay parts have %d" % [id, t, bay_tris])
+			_check(t == active_tris, "%s: Bay mesh %d triangles, the stock bay parts have %d" % [id, t, active_tris])
 			_check(t <= BAY_TRIS, "%s: bay %d triangles, budget %d" % [id, t, BAY_TRIS])
 			_check(calls <= BAY_CALLS, "%s: bay %d draw calls, budget %d" % [id, calls, BAY_CALLS])
 			print("%s: bay %s, %d triangles, %d draw calls; body %d -> %d triangles while driving" % [
@@ -93,9 +95,37 @@ func _static(id: String) -> void:
 		# the pictures with the lids up still show what is under them
 		var open := CarAssembler.build(id, {"panels": "open"})
 		var open_tris := CarAssembler.triangle_count(id, {"panels": "open"})
-		_check(open_tris == all_tris, "%s: open-panels body %d triangles, want all %d with the bay" % [id, open_tris, all_tris])
+		_check(open_tris == all_tris - bay_tris + active_tris, "%s: open-panels body %d triangles, want %d (the body with the stock bay)" % [id, open_tris, all_tris - bay_tris + active_tris])
 		open.free()
+		# every set of mods the car can wear at once (B4) stays in budget and
+		# draws exactly its parts: the fitted mods' on, what they hide off
+		var variants := CarAssembler.bay_variants(id)
+		var worst := 0
+		for keys: Array in FittedMods.combos(id, variants):
+			var names := CarAssembler.bay_active_names(id, keys)
+			var want := _tris_of(id, names)
+			var b := CarAssembler.build_bay(id, null, keys)
+			var t := CarAssembler._mesh_tris(b.mesh)
+			_check(t == want, "%s with %s: Bay mesh %d triangles, its parts have %d" % [id, keys, t, want])
+			_check(t <= BAY_TRIS, "%s with %s: bay %d triangles, budget %d" % [id, keys, t, BAY_TRIS])
+			_check(b.mesh.get_surface_count() <= BAY_CALLS, "%s with %s: bay %d draw calls, budget %d" % [id, keys, b.mesh.get_surface_count(), BAY_CALLS])
+			for k in keys:
+				for pname: String in variants[k].parts:
+					_check(names.has(pname) or _hidden_by(variants, keys, pname), "%s with %s: %s should be drawn" % [id, keys, pname])
+				for pname: String in variants[k].hides:
+					_check(not names.has(pname), "%s with %s: %s should be off the bay" % [id, keys, pname])
+			worst = maxi(worst, t)
+			b.free()
+		if not variants.is_empty():
+			print("%s: %d mod variants, %d fitted sets, worst %d triangles" % [id, variants.size(), FittedMods.combos(id, variants).size(), worst])
 	closed.free()
+
+## True when another fitted key hides this part (a big single over the small turbo).
+func _hidden_by(variants: Dictionary, keys: Array, pname: String) -> bool:
+	for k in keys:
+		if (variants[k].hides as PackedStringArray).has(pname):
+			return true
+	return false
 
 func _floor() -> StaticBody3D:
 	var body := StaticBody3D.new()

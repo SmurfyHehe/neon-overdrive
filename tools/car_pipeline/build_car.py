@@ -1035,10 +1035,16 @@ def write_bay(root, meta, Dr, out_dir):
         return float(np.nanmin(t))
 
     parts = []
+    mods = {}
 
-    def part(name, bevel=0):
+    def part(name, bevel=0, mod=None, hides=()):
         p = fparts.Part(name, bevel=bevel)
         parts.append(p)
+        if mod:
+            # a mod part (B4): drawn only when `mod` is fitted; `hides` names the stock
+            # parts (or other mod parts) it replaces. Written as the node's extras
+            # for the game (CarAssembler) and as bay.json "variants" for the checkers.
+            mods[name] = {'mod': mod, 'hides': sorted(hides)}
         return p
 
     ctx = types.SimpleNamespace(D=Dr, part=part, anchors=anchors, hood_under=hood_under, hood_edge=hood_edge, wall_x=wall_x)
@@ -1046,7 +1052,7 @@ def write_bay(root, meta, Dr, out_dir):
     bay_root = Node(Dr['id'] + '_bay', extras={'build': 'bay', 'generator': GENERATOR})
     for p in parts:
         if len(p):
-            bay_root.add(Node(p.name, mesh=p)).origin = np.zeros(3)
+            bay_root.add(Node(p.name, mesh=p, extras=mods.get(p.name))).origin = np.zeros(3)
     cols = material_colours(Dr)
     used = sorted({m for p in parts for m in p.mats})
     bmeta = {
@@ -1064,15 +1070,33 @@ def write_bay(root, meta, Dr, out_dir):
     bmeta['parts'] = sorted(counts)
     bmeta['tris'] = counts
     bmeta['tris_total'] = int(sum(counts.values()))
+    # the mod variants (B4): key -> its parts and what they hide; the budget
+    # holds for the heaviest set of mods the tree lets you fit at once
+    variants = {}
+    for name, m in mods.items():
+        if name in counts:
+            v = variants.setdefault(m['mod'], {'parts': [], 'hides': []})
+            v['parts'].append(name)
+            v['hides'] = sorted(set(v['hides']) | set(m['hides']))
+    for v in variants.values():
+        v['parts'].sort()
+    bmeta['variants'] = variants
+    from fit_check import bay_combos, active_parts
+    combos = bay_combos(Dr['id'], variants)
+    per_combo = {' '.join(keys) or 'stock': sum(counts[n] for n in active_parts(sorted(counts), variants, keys)) for keys in combos}
+    worst = max(per_combo, key=per_combo.get)
+    bmeta['tris_stock'] = per_combo['stock']
+    bmeta['tris_worst'] = per_combo[worst]
+    bmeta['worst_combo'] = worst
     bmeta['budget_tris'] = BAY_TRI_BUDGET
     with open(os.path.join(out_dir, 'bay.json'), 'w') as f:
         json.dump(bmeta, f, indent=1)
-    print('%s bay: %d triangles in %d parts (budget %d), materials %s -> %s' % (
-        Dr['id'], bmeta['tris_total'], len(counts), BAY_TRI_BUDGET, ', '.join(used), os.path.relpath(glb, ROOT)))
+    print('%s bay: %d triangles in %d parts, stock %d, worst %d with %s (budget %d), materials %s -> %s' % (
+        Dr['id'], bmeta['tris_total'], len(counts), per_combo['stock'], per_combo[worst], worst, BAY_TRI_BUDGET, ', '.join(used), os.path.relpath(glb, ROOT)))
     for k, v in sorted(counts.items()):
-        print('  %-18s %5d' % (k, v))
-    if bmeta['tris_total'] > BAY_TRI_BUDGET:
-        raise SystemExit('%d bay triangles is over the budget of %d' % (bmeta['tris_total'], BAY_TRI_BUDGET))
+        print('  %-24s %5d%s' % (k, v, '  (%s)' % mods[k]['mod'] if k in mods else ''))
+    if per_combo[worst] > BAY_TRI_BUDGET:
+        raise SystemExit('%d bay triangles with %s is over the budget of %d' % (per_combo[worst], worst, BAY_TRI_BUDGET))
 
 
 ## Engine bay budget while a lid is up (notes/engine-bays-better-2026-10-13.md section 5).

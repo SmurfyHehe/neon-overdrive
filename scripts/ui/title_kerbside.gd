@@ -223,6 +223,7 @@ func _init(car_kind: String) -> void:
 	kind = car_kind
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	position = SITE
+	add_to_group(GraphicsSettings.GROUP)
 	_build_street()
 	_build_graffiti()
 	_build_lamp()
@@ -528,7 +529,7 @@ func _build_lamp() -> void:
 	lamp_light.spot_angle = LAMP_CONE
 	lamp_light.spot_angle_attenuation = 0.7
 	lamp_light.spot_attenuation = 0.8
-	lamp_light.shadow_enabled = true
+	lamp_light.shadow_enabled = lamp_shadow_for(GraphicsSettings.preset)
 	lamp_light.shadow_bias = LAMP_SHADOW_BIAS
 	lamp_light.shadow_blur = 1.5
 	lamp_light.position = post.position + Vector3(0.0, RoadChunkBuilder.LAMP_POLE_H - 0.3, 1.7)
@@ -537,6 +538,18 @@ func _build_lamp() -> void:
 	lamp_light.rotation.x = -PI * 0.5 - 0.12
 	add_child(lamp_light)
 	_lamp_xf = Transform3D(Basis(Vector3.UP, PI * 0.5), post.position)
+
+## Whether the lamp casts its shadow on this graphics preset: off on Low,
+## like the wet-road mirrors (GraphicsSettings.apply); the dark quad under
+## the car stays on every preset.
+static func lamp_shadow_for(preset: String) -> bool:
+	return preset != "low"
+
+## GraphicsSettings.apply calls this on every node in its group when the
+## preset changes while the title is up.
+func apply_graphics() -> void:
+	if lamp_light != null:
+		lamp_light.shadow_enabled = lamp_shadow_for(GraphicsSettings.preset)
 
 ## The rim light, behind the car on the wall side, a little past its far end:
 ## a cool edge along the roof and the far flank that lifts the car off the

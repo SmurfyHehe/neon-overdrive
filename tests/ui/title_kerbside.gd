@@ -109,6 +109,8 @@ func _run() -> void:
 		var shadows := lights.filter(func(l): return l.shadow_enabled)
 		_check(shadows.size() == 1 and shadows[0] == set_node.lamp_light, "the lamp is the one light with a shadow")
 		_check(set_node.rim_light != null and set_node.rim_light.light_color.b > set_node.rim_light.light_color.r, "the rim light is cool, not sodium")
+		_check_every_car(set_node)
+		_check_every_preset(set_node)
 
 	# ---------- lamp life ----------
 	if set_node != null:
@@ -632,3 +634,46 @@ func _finish(abort: String) -> void:
 		printerr("FAIL: ", f)
 	print("title_kerbside: ", "PASS" if failures.is_empty() else "FAIL")
 	quit(0 if failures.is_empty() else 1)
+
+
+## Roy's rule (2026-10-14): a change reaches every car. The relight is laid
+## out per car (set_car places the rim light and the camera from the car's
+## size), so every playable kind is parked in turn: the car is in the
+## picture, the rim light sits behind it on the wall side, and the set's
+## fixed points (manhole, lamp head, poster) are still in frame around it.
+func _check_every_car(set_node: TitleKerbside) -> void:
+	var was := set_node.kind
+	# The camera asks the viewport's shape: headless the window is 64x64, so
+	# anything right of centre would read as out of frame. Give it the
+	# game's shape for these checks.
+	var was_size := root.size
+	root.size = Vector2i(1152, 648)
+	var poster: Vector3 = set_node.graffiti_items[set_node.graffiti_items.size() - 1].xf.origin
+	var head := set_node.to_global(set_node.life["moth_xf"].origin + set_node.life["moth_xf"].basis * LampLife.HEAD)
+	for kind in PlayerCars.ids():
+		set_node.set_car(kind)
+		var cam := set_node.camera
+		var car := set_node.car
+		var half_l: float = car.get_meta("half_l")
+		var half_w: float = car.get_meta("half_w")
+		for p: Vector3 in [Vector3(-half_l, 0.5, car.position.z), Vector3(half_l, 0.5, car.position.z), Vector3(0.0, 1.3, car.position.z)]:
+			_check(cam.is_position_in_frustum(set_node.to_global(p)), "%s: the car is in the picture at %s" % [kind, p])
+		var rim := set_node.rim_light.position
+		_check(rim.x > half_l and rim.z < car.position.z - half_w, "%s: the rim light is behind the car on the wall side" % kind)
+		_check(cam.is_position_in_frustum(set_node.to_global(TitleKerbside.VENT_AT)), "%s: the manhole stays in frame" % kind)
+		_check(cam.is_position_in_frustum(set_node.to_global(poster)), "%s: the poster stays in frame" % kind)
+		_check(cam.is_position_in_frustum(head), "%s: the lamp head stays in frame" % kind)
+	set_node.set_car(was)
+	root.size = was_size
+
+## And every graphics preset: the lamp shadow is off on Low (as the wet-road
+## mirrors are) and on elsewhere; the rim light never shadows.
+func _check_every_preset(set_node: TitleKerbside) -> void:
+	var was := GraphicsSettings.preset
+	for p in GraphicsSettings.PRESETS + ["custom"]:
+		GraphicsSettings.preset = p
+		set_node.apply_graphics()
+		_check(set_node.lamp_light.shadow_enabled == (p != "low"), "preset %s: lamp shadow %s" % [p, "off" if p == "low" else "on"])
+		_check(not set_node.rim_light.shadow_enabled, "preset %s: the rim light has no shadow" % p)
+	GraphicsSettings.preset = was
+	set_node.apply_graphics()

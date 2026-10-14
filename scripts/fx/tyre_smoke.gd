@@ -151,12 +151,11 @@ void fragment() {
 }
 """
 
-var enabled := true:
-	set(v):
-		enabled = v
-		visible = v
-		set_physics_process(v)
-		set_process(v)
+## The pause menu's tyre smoke switch (FxSettings "tyre_smoke"): off stops the
+## tyre puffs only. The damage looks from the same pool (radiator steam, the
+## totalled look's smoke and sparks) are not an effect you can switch off, so
+## the node keeps drawing and stepping.
+var enabled := true
 
 ## Total puffs emitted so far (tests).
 var emitted := 0
@@ -230,7 +229,6 @@ func _ready() -> void:
 	var n := _player.wheel_array.size()
 	_scorch.resize(n)
 	_carry.resize(n)
-	enabled = enabled
 
 ## The garage hook: the smoke colour a car spec asks for, white-grey if none.
 static func colour_from_spec(spec: Dictionary) -> Color:
@@ -251,7 +249,7 @@ func _physics_process(delta: float) -> void:
 	var mods := amount_mods()
 	var fwd := -_player.global_transform.basis.z
 	var health := _player.health
-	for i in _player.wheel_array.size():
+	for i in (_player.wheel_array.size() if enabled else 0):
 		var w: Wheel = _player.wheel_array[i]
 		var lat := 0.0
 		var lon := 0.0

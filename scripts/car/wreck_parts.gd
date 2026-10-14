@@ -94,10 +94,12 @@ func hit_side() -> float:
 	return 1.0 if player.damage.head_lamp_dark(1) and not player.damage.head_lamp_dark(0) else -1.0
 
 func _apply(st: int) -> void:
+	if player.chassis_visual == null:
+		return   # the body is not built yet (a save loading): try again next tick
 	shown = st
 	var body := CarAssembler.body_of(player.chassis_visual)
 	if body == null:
-		return
+		return   # a sheet car (tuner, crossover, Camel, the specials): no parts to hang
 	if st < HANG_STAGE:
 		# back as the glb has it (the garage, F6, a new car)
 		_free_node(loose_bumper)

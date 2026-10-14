@@ -664,13 +664,18 @@ func steer_centre_view(wheel_lock_rad: float) -> float:
 		return 0.0
 	return damage.applied.get_car(CarDamage.DamageOffsets.STEER_CENTRE) - damage_trim() * wheel_lock_rad
 
-## A broken head lamp takes its half of the beam (CarFx's one spot light).
+## A broken head lamp takes its half of the beam (CarFx's one spot light),
+## the beams keep that share through H (HeadlightBeams re-applies the spot on
+## every mode change), and its lens goes dark (the glow shader's head_out).
 func _apply_lamp_damage() -> void:
 	var share := damage.headlight_share()
 	if share == _head_share:
 		return
 	_head_share = share
 	CarFx.set_headlight_share(self, share)
+	beams.set_damage_share(share)
+	if chassis_visual != null:
+		NpcCarBuilder.set_head_out(chassis_visual, (1 if damage.head_lamp_dark(0) else 0) | (2 if damage.head_lamp_dark(1) else 0))
 
 ## The median's reflectors shine only in this car's beam (RoadChunkBuilder).
 func _light_reflectors() -> void:

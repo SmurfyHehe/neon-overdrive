@@ -284,6 +284,9 @@ instance uniform float flash : instance_index(3) = 0.0;
 // 1 while the car is in reverse (player cars: the CarFittings reverse lens).
 // Slot 6: the paint's finish holds slot 4 on the same body (CarPaint._BODY).
 instance uniform float reverse : instance_index(6) = 0.0;
+// Head lamps out (CarDamage.head_lamp_dark, set_head_out): 0 none, 1 the
+// left, 2 the right, 3 both. A dark lens, not just a missing beam.
+instance uniform float head_out : instance_index(7) = 0.0;
 varying float v_side;
 void vertex() {
 	v_side = sign(VERTEX.x);  // + = the car's right (it faces -Z)
@@ -318,6 +321,8 @@ void fragment() {
 	// The head lamps (warm white: the only lamp with all three channels up).
 	float head = step(0.8, c.r) * step(0.7, c.g) * step(0.3, c.b) * (1.0 - t_rev);
 	k *= mix(1.0, FLASH_GAIN, head * flash);
+	float out_here = head_out > 2.5 ? 1.0 : (head_out > 1.5 ? step(0.0, v_side) : (head_out > 0.5 ? step(v_side, 0.0) : 0.0));
+	k *= mix(1.0, 0.03, head * out_here);
 	ALBEDO = c;
 	EMISSION = c * energy * k;
 }
@@ -393,6 +398,13 @@ static func set_flash(vis: Node3D, on: bool) -> void:
 	var mi := vis.get_node_or_null(^"Body") as MeshInstance3D
 	if mi != null:
 		mi.set_instance_shader_parameter("flash", 1.0 if on else 0.0)
+
+## Head lamps the damage put out: a dark lens on that side (the glow
+## shader's head_out). `state` is 1 left, 2 right, 3 both, 0 none.
+static func set_head_out(vis: Node3D, state: int) -> void:
+	var mi := vis.get_node_or_null(^"Body") as MeshInstance3D
+	if mi != null:
+		mi.set_instance_shader_parameter("head_out", float(state))
 
 ## Turn lamp states for set_lamps.
 const TURN_OFF := 0

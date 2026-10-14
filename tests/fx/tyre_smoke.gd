@@ -3,7 +3,8 @@ extends SceneTree
 # Tyre smoke (2026-10-07), headless and silent: boots the real Game.tscn and
 # checks that
 # - game.fx.smoke (TyreSmoke) is in the tree, the tyre_smoke flag defaults on
-#   and turns the node off and on, and the pause menu has the two sliders
+#   and turns the tyre puffs off and on (the node keeps running: the damage
+#   looks share its pool), and the pause menu has the two sliders
 # - the rate rules hold: a chirp's scorch makes no smoke, a burnout pours more
 #   than a drift at the same slip, a hot tyre more than a cold one, a slider at
 #   0 makes none, the colour hook reads a spec's tyre_smoke_colour
@@ -88,9 +89,10 @@ func _physics_process(_delta: float) -> bool:
 			_check(s != null and s.is_inside_tree(), "TyreSmoke should be in the tree")
 			_check(FxSettings.is_on("tyre_smoke"), "tyre_smoke should default on")
 			fx.set_effect("tyre_smoke", false)
-			_check(not s.enabled and not s.visible and not s.is_physics_processing(), "tyre_smoke off should hide and stop TyreSmoke")
+			# off stops the tyre puffs only: the node keeps running for the damage looks (steam, the totalled look)
+			_check(not s.enabled and s.visible and s.is_physics_processing(), "tyre_smoke off should stop the tyre puffs but keep TyreSmoke running")
 			fx.set_effect("tyre_smoke", true)
-			_check(s.enabled and s.visible and s.is_physics_processing(), "tyre_smoke on should restart TyreSmoke")
+			_check(s.enabled and s.visible and s.is_physics_processing(), "tyre_smoke on should restart the tyre puffs")
 			var menu: PauseMenu = null
 			for c in game.get_children():
 				if c is PauseMenu:

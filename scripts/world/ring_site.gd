@@ -160,6 +160,7 @@ static func look_of(ring: int) -> Dictionary:
 		style = "steel"
 	var island := String(r.get("island", "tree" if String(r.kind) == "landmark" else ""))
 	return {"style": style, "spur": RoadMap.ring_spur_side(ring), "landmark": island == "tree", "island": island,
+		"pocket": String(RoadMap.pocket_of_ring(ring).get("id", "")),
 		"bridge": {"steel": "truss", "rust": "girder"}.get(style, "slab"),
 		"graffiti": style == "steel" or String(info.kind) == "downtown"}
 
@@ -252,7 +253,7 @@ func _place() -> void:
 			(c as Node3D).force_update_transform()
 
 func _dress(look: Dictionary) -> void:
-	var key := "%s|%d|%s" % [look.style, look.spur, look.get("island", "")]
+	var key := "%s|%d|%s|%s" % [look.style, look.spur, look.get("island", ""), look.get("pocket", "")]
 	if not _looks.has(key):
 		_looks[key] = build(look)
 	var made: Dictionary = _looks[key]
@@ -492,7 +493,7 @@ static func build(look: Dictionary) -> Dictionary:
 			var r: float = R.RING_OUT + R.BARRIER_W * 0.5
 			R._box(Vector3(r * cos(a), y + R.BARRIER_H + 0.25, r * sin(a)), Vector3(0.36, 0.5, 0.36), C_NOSE)
 	if spur != 0:
-		_spur(float(spur), y)
+		_spur(float(spur), y, String(look.get("pocket", "")) == "")
 	match String(look.get("island", "")):
 		"tree":
 			_landmark()
@@ -577,8 +578,9 @@ static func _board(a: float, y: float) -> void:
 			R._quad(R._p(tip0.x, cy, tip0.y), R._p(tip1.x, cy, tip1.y),
 				R._p(back0.x, cy + half * (BOARD_H * 0.5 - 0.08), back0.y), R._p(back1.x, cy + half * (BOARD_H * 0.5 - 0.08), back1.y), C_CHEVRON, want)
 
-## The spur: a stub of an arm off the ring on `side`, to a barrier.
-static func _spur(side: float, y: float) -> void:
+## The spur: a stub of an arm off the ring on `side`, to a barrier; with
+## `closed` false the end is open (a pocket's arm, PocketSite, goes on from it).
+static func _spur(side: float, y: float, closed: bool = true) -> void:
 	var x0: float = R.RING_OUT - 0.6
 	var x1 := SPUR_END
 	R._deck_quad(R._p(side * x0, y, -SPUR_HALF), R._p(side * x0, y, SPUR_HALF), R._p(side * x1, y, -SPUR_HALF), R._p(side * x1, y, SPUR_HALF))
@@ -587,6 +589,8 @@ static func _spur(side: float, y: float) -> void:
 		var pts: Array[Vector3] = [Vector3(side * (R.RING_OUT + 0.1), e * SPUR_HALF, y), Vector3(side * x1, e * SPUR_HALF, y)]
 		var out: Array[Vector2] = [Vector2(0.0, e), Vector2(0.0, e)]
 		R._edge(pts, out, full)
+	if not closed:
+		return
 	var end_pts: Array[Vector3] = [Vector3(side * x1, -SPUR_HALF, y), Vector3(side * x1, SPUR_HALF, y)]
 	var end_out: Array[Vector2] = [Vector2(side, 0.0), Vector2(side, 0.0)]
 	R._edge(end_pts, end_out, full, PackedFloat32Array(), [C_SPLIT_A])

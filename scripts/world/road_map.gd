@@ -296,6 +296,12 @@ static func use(id: int, act_value: int = 1) -> void:
 		for k in [-4, -3, 2, 3]:
 			if _pins[posmod(rc + k, period)] == 0:
 				_pins[posmod(rc + k, period)] = PIN_LEVEL
+		# a pocket's arm and lot (PocketSite) lie in the ring's flat frame along
+		# the road: the chunks it reaches along stay straight and level too
+		var pk := pocket_of_ring(ri)
+		if not pk.is_empty():
+			for k in (range(0, 5) if int(pk.turn) > 0 else range(-5, 0)):
+				_pins[posmod(rc + k, period)] = PIN_STRAIGHT
 		for side in [1, -1]:
 			_exits.append({"id": "%s%s" % [r.id, "a" if side > 0 else "b"], "s": float(r.s) - float(side) * RING_GORE,
 				"side": side, "number": int(r.number), "ring": String(r.id), "centre": float(r.s)})
@@ -612,6 +618,24 @@ static func ring_spur_side(ring: int) -> int:
 		if int(st.road) == road_id and String(st.get("exit", "")).trim_suffix("a").trim_suffix("b") == String(_rings[ring].id):
 			return 1 if String(st.get("exit", "")).ends_with("a") else -1
 	return 1
+
+## Pockets (ramps doc step 7): a place at the end of a ring's arm, built by
+## PocketSite. `ring` the ring whose spur it hangs off, `side` the spur's side
+## (must match ring_spur_side), `turn` +1 the arm bends to run the way the
+## chunks count, -1 the other way, `kind` what stands there ("pier"), `word`
+## what the exit gantry says it leads to.
+const POCKETS := [
+	{"id": "pier", "road": 0, "ring": "x5", "side": 1, "turn": 1, "kind": "pier", "word": "PIER"},
+]
+
+## The pocket hanging off this ring on this road, or {}.
+static func pocket_of_ring(ring: int) -> Dictionary:
+	if ring < 0 or ring >= _rings.size():
+		return {}
+	for pk in POCKETS:
+		if int(pk.road) == road_id and String(pk.ring) == String(_rings[ring].id) and int(pk.side) == ring_spur_side(ring):
+			return pk
+	return {}
 
 ## Whether a stop (STOPS) hangs off this ring.
 static func ring_has_stop(ring: int) -> bool:

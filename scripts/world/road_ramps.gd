@@ -290,6 +290,38 @@ static func bound(chunk_index: int) -> float:
 		return BOUND_RING if ring else BOUND_PAD
 	return BOUND_NOSE if d == RoadMap.RAMP_CHUNKS - 1 else BOUND_RAMP
 
+## The pocket script (PocketSite), loaded when first asked for: it preloads
+## this one, so this cannot preload it.
+static var _pocket_script: Script
+
+static func pocket_site() -> Script:
+	if _pocket_script == null:
+		_pocket_script = load("res://scripts/world/pocket_site.gd")
+	return _pocket_script
+
+## Where the out-of-bounds wall stands on `side` of a chunk a pocket (ramps
+## doc step 7, RoadMap.POCKETS) reaches along: PocketSite.BOUND, or 0 where
+## no pocket reaches. Beyond bound(): the chunk builder takes the larger.
+static func pocket_bound(chunk_index: int, side: int) -> float:
+	if not enabled or not ring or not RoadMap.is_loop():
+		return 0.0
+	var r := RoadMap.ring_at(chunk_index)
+	if r < 0:
+		return 0.0
+	var pk := RoadMap.pocket_of_ring(r)
+	if pk.is_empty() or int(pk.side) != side:
+		return 0.0
+	var ps := pocket_site()
+	# the chunk's span, metres from the ring's centre, turned the arm's way
+	var k := RoadMap.ring_k(chunk_index)
+	var a := float(k) * L * float(pk.turn)
+	var b := float(k + 1) * L * float(pk.turn)
+	var lo := minf(a, b)
+	var hi := maxf(a, b)
+	if hi < -5.0 or lo > float(ps.REACH_V):
+		return 0.0
+	return float(ps.BOUND)
+
 ## Where a point of a site is in road space: x metres out on `side` (+1 the
 ## carriageway driven the way the chunks count), `u` metres along the road
 ## from the ring's centre (+ = the way the chunks count), on the ramp or pad.
@@ -308,7 +340,7 @@ static func deck_point(side: int, u: float) -> Vector2:
 #   site   index into RoadMap.rings()
 #   id     the ring's id ("x3"): what the save writes
 #   s      the ring's centre, metres along the road (the lap the car is on)
-#   part   "ramp", "ring" or "spur"
+#   part   "ramp", "ring", "spur" or "pocket" (a pocket's arm or lot, step 7)
 #   side   +1 / -1: which side of the road (ramps and spurs)
 #   leg    -1 the ramp before the centre the way the chunks count, +1 after
 #   v      ramps: metres from the ring's centre along the road
@@ -330,7 +362,7 @@ static func place_of(u: Vector3, s: float) -> Dictionary:
 		return {}
 	var w := s - float(near.s)
 	var v := absf(w)
-	if v > V_GORE:
+	if v > V_GORE and not pocket_reach(int(near.index), w):
 		return {}
 	var out := {"site": int(near.index), "id": String(RoadMap.rings()[int(near.index)].id), "s": float(near.s),
 		"side": 1 if u.x >= 0.0 else -1, "leg": 1 if w >= 0.0 else -1, "v": v, "angle": 0.0, "wrong_way": false}
@@ -344,6 +376,20 @@ static func place_of(u: Vector3, s: float) -> Dictionary:
 		if spur != 0 and u.x * float(spur) > RING_OUT and u.x * float(spur) < SPUR_REACH and v < 4.0:
 			out["part"] = "spur"
 			return out
+	# a pocket's arm and lot (ramps doc step 7): any height, its footprint
+	var pk := RoadMap.pocket_of_ring(int(near.index))
+	if not pk.is_empty() and ring and u.x * float(pk.side) > RING_OUT:
+		var ps := pocket_site()
+		var px := u.x * float(pk.side)
+		if px < float(ps.BOUND) and u.y < RAMP_H + ON_DECK and ps.covers(pk, px, w):
+			var dy := float(ps.deck_y(pk, px, w))
+			if not is_inf(dy) and absf(u.y - dy) < ON_DECK:
+				out["part"] = "pocket"
+				out["side"] = int(pk.side)
+				out["v"] = v
+				return out
+	if v > V_GORE:
+		return {}
 	if absf(absf(u.x) - x_at(v)) < HALF + 0.6 and absf(u.y - y_at(v)) < ON_DECK:
 		out["part"] = "ramp"
 		return out
@@ -351,6 +397,15 @@ static func place_of(u: Vector3, s: float) -> Dictionary:
 
 ## How far out a spur's stub reaches (RingSite.SPUR_END, plus its barrier).
 const SPUR_REACH := 50.5
+
+## Whether a pocket off ring `index` reaches `w` metres from the ring's centre
+## (signed, the way the chunks count).
+static func pocket_reach(index: int, w: float) -> bool:
+	var pk := RoadMap.pocket_of_ring(index)
+	if pk.is_empty():
+		return false
+	var t := w * float(pk.turn)
+	return t > -5.0 and t < float(pocket_site().REACH_V)
 
 ## Whether a car at `place` moving at `vel` (road space: RoadFrame.dir_to_road)
 ## is going the wrong way: clockwise on the ring, or against a ramp (each
@@ -383,7 +438,9 @@ static func pose_of(place: Dictionary) -> Transform3D:
 			var up := (road * ring_normal(a)).normalized()
 			xf.basis = Basis(Quaternion(xf.basis.y.normalized(), up)) * xf.basis
 			return xf
-		"spur":
+		"spur", "pocket":
+			# at the top of the arm, facing the ring (a car put back from a
+			# pocket drives back down the arm to get there, Roy 1506)
 			var sd: float = float(place.side)
 			return RoadFrame.pose(sd * (RING_OUT + 7.0), RAMP_H + ride, cz, PI * 0.5 * sd)
 	var side: float = float(place.side)

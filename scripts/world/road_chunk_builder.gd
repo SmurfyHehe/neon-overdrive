@@ -2012,6 +2012,10 @@ static func _update_names(root: Node3D, chunk_index: int, walk0: float, walk1: f
 			var ew := lerpf(walk0, walk1, -rz / CHUNK_LEN) if eside > 0.0 else lerpf(onc0, onc1, -rz / CHUNK_LEN)
 			var ring: Dictionary = RoadMap.rings()[int(r.ring)]
 			var leads := PlaceNames.SERVICES if RoadMap.ring_has_stop(int(r.ring)) else PlaceNames.area_name(RoadMap.district_kind(RoadMap.district_of(floori(float(ring.s) / CHUNK_LEN))))
+			# an exit on a pocket's side leads to the pocket (step 7: "PIER")
+			var pk := RoadMap.pocket_of_ring(int(r.ring))
+			if not pk.is_empty() and int(pk.side) == int(eside):
+				leads = String(pk.word)
 			list = RoadSigns.exit_gantry(PlaceNames.exit_word(int(ring.number)), leads, PlaceNames.ADVANCE,
 				Vector3((ew + NAME_SIGN_SETBACK) * eside, 0.0, rz), _foundation(), eside)
 		else:
@@ -2306,6 +2310,14 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	if ramp_bound > 0.0:
 		bound_own = ramp_bound
 		bound_onc = ramp_bound
+	# A pocket (PocketSite) along this chunk: its lot is cleared and the wall
+	# stands out past it, on its side only.
+	var pocket_own := RoadRamps.pocket_bound(chunk_index, 1)
+	var pocket_onc := RoadRamps.pocket_bound(chunk_index, -1)
+	var pocket_own_prev := RoadRamps.pocket_bound(chunk_index - 1, 1)
+	var pocket_onc_prev := RoadRamps.pocket_bound(chunk_index - 1, -1)
+	bound_own = maxf(bound_own, pocket_own)
+	bound_onc = maxf(bound_onc, pocket_onc)
 	# A tunnel and its trench (TN1): the walls stand at the road's edge, where
 	# the kerb would be, and they are the out-of-bounds walls.
 	var dip := RoadMap.dip_at(chunk_index)
@@ -2328,13 +2340,14 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# chunk's start closes the step between the two boundary lines, so the
 	# deeper lot does not open behind the shallower chunk's wall.
 	var prev_setback := Districts.setback_at(chunk_index - 1)
-	var step_own := Vector2(bound_own, ramp_bound_prev if ramp_bound_prev > 0.0 else start_own_walk + BUILDING_GAP + prev_setback)
-	var step_onc := Vector2(bound_onc, ramp_bound_prev if ramp_bound_prev > 0.0 else start_onc_walk + BUILDING_GAP + prev_setback)
+	var step_own := Vector2(bound_own, maxf(ramp_bound_prev if ramp_bound_prev > 0.0 else start_own_walk + BUILDING_GAP + prev_setback, pocket_own_prev))
+	var step_onc := Vector2(bound_onc, maxf(ramp_bound_prev if ramp_bound_prev > 0.0 else start_onc_walk + BUILDING_GAP + prev_setback, pocket_onc_prev))
 	if dip_prev != RoadMap.DIP_NONE:
 		step_own.y = start_own_shoulder
 		step_onc.y = start_onc_shoulder
 	# ... and where a trench begins or ends, between the pavement and its wall
 	var stepped := absf(setback - prev_setback) > 0.01 or ramp_bound != ramp_bound_prev \
+		or pocket_own != pocket_own_prev or pocket_onc != pocket_onc_prev \
 		or (dip != RoadMap.DIP_NONE) != (dip_prev != RoadMap.DIP_NONE)
 	# A gas station's lot on this side, here or in the chunk before: the step
 	# would stand across the lot's yard, and the lot's own walls close it.
@@ -2409,8 +2422,9 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		var onc_info := _clear_at_junction(root, i * 2 + 1, _update_building(root, i * 2 + 1, onc_edge_b, bz, -1, chunk_index, job.draws[i * 2 + 1] if job != null and not job.draws.is_empty() else []), chunk_index)
 		own_info = _clear_for_mouth(root, i * 2, own_info, SideStreets.mouth_for(mouths, 1, i))
 		onc_info = _clear_for_mouth(root, i * 2 + 1, onc_info, SideStreets.mouth_for(mouths, -1, i))
-		if ramp_bound > 0.0:
+		if ramp_bound > 0.0 or pocket_own > 0.0:
 			own_info = _clear_for_ramp(root, i * 2, own_info)
+		if ramp_bound > 0.0 or pocket_onc > 0.0:
 			onc_info = _clear_for_ramp(root, i * 2 + 1, onc_info)
 		if dip != RoadMap.DIP_NONE:
 			own_info = _clear_for_tunnel(root, i * 2, own_info, chunk_index, covered)

@@ -107,6 +107,7 @@ const UserDirMigration := preload("res://scripts/save/user_dir_migration.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
 const ColorGrade := preload("res://scripts/world/color_grade.gd")
 const RingSite := preload("res://scripts/world/ring_site.gd")
+const PocketSite := preload("res://scripts/world/pocket_site.gd")
 const RoadRamps := preload("res://scripts/world/road_ramps.gd")
 # The shared test driver and the F9 drive recorder (2026-10-10). `bot` is the
 # driver when the game was started with -- --bot=<mode> / NEON_BOT (watching
@@ -1027,6 +1028,12 @@ func _setup_traffic() -> void:
 	RingSite.focus_s = RoadFrame.s_at(RoadFrame.unroll(player.global_position).z)
 	ring_site = RingSite.new()
 	add_child(ring_site)
+	# The pockets at the end of the rings' arms (ramps doc step 7: the Docks
+	# pier), one node each, standing at their ring.
+	for pk in RoadMap.POCKETS:
+		var site: Node3D = PocketSite.new()
+		site.pocket = pk
+		add_child(site)
 
 # ---------- camera ----------
 func _setup_camera() -> void:

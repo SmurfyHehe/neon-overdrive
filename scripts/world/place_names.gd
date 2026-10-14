@@ -116,4 +116,7 @@ static func atlas_words() -> Array:
 		out.append(exit_word(n))
 	for m in NEXT_EXIT_M:
 		out.append(metres_word(m))
+	for pk in RoadMap.POCKETS:
+		if not out.has(String(pk.word)):
+			out.append(String(pk.word))
 	return out

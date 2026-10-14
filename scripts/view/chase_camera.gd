@@ -182,6 +182,8 @@ const HOOD_YAW_MAX := 90.0
 const BAY_STAND_BACK := 0.55       # m behind the bumper
 const BAY_EYE_UP := 1.15           # m above the hinge line, leaning in over the nose
 const BAY_AIM_DOWN := 0.35         # m under the hinge line, so the view looks into the bay
+const BAY_EYE_UP_SHEET := 0.55     # with the hood sheet up: crouch, so the lid's underside faces the eye
+const BAY_AIM_DOWN_SHEET := 0.05
 const BAY_YAW_MAX := 40.0
 const BAY_PITCH_MAX := 20.0
 const HOOD_PITCH_UP := 20.0
@@ -501,6 +503,8 @@ func _place_hood(delta: float) -> void:
 	fov = ViewSettings.cockpit_fov + COCKPIT_FOV_SPEED_GAIN * speed_t
 
 var _bay_was := false
+## The hood sheet (HoodPanel) takes Up and Down while it is up: no pitch then.
+var bay_menu_up := false
 
 ## The lid the camera stands at, or "" when none is up (CarLids.view_lid).
 func _bay_lid() -> String:
@@ -518,10 +522,12 @@ func _place_bay(delta: float, lid: String) -> void:
 	var half_l := 2.2
 	if target.chassis_visual != null:
 		half_l = float(target.chassis_visual.get_meta("half_l", half_l))
-	var stand := Vector3(0.0, hinge.y + BAY_EYE_UP, end * (half_l + BAY_STAND_BACK))
-	var aim := Vector3(0.0, hinge.y - BAY_AIM_DOWN, lerpf(end * half_l, hinge.z, 0.5))
+	var eye_up := BAY_EYE_UP_SHEET if bay_menu_up else BAY_EYE_UP
+	var aim_down := BAY_AIM_DOWN_SHEET if bay_menu_up else BAY_AIM_DOWN
+	var stand := Vector3(0.0, hinge.y + eye_up, end * (half_l + BAY_STAND_BACK))
+	var aim := Vector3(0.0, hinge.y - aim_down, lerpf(end * half_l, hinge.z, 0.5))
 	var axis := Input.get_axis("look_right", "look_left")   # + = left
-	var up := Input.get_axis("look_down", "look_up")
+	var up := 0.0 if bay_menu_up else Input.get_axis("look_down", "look_up")
 	var k := 1.0 - exp(-LOOK_RATE * delta)
 	look_yaw = lerpf(look_yaw, axis * BAY_YAW_MAX, k)
 	look_pitch = lerpf(look_pitch, up * BAY_PITCH_MAX, k)

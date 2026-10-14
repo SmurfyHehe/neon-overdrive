@@ -32,6 +32,12 @@ extends Node
 # the same race again: same distance, same line. The +15 min is taken once
 # per race and its retries (at the first ending); a retry adds none.
 #
+# Rolling challenge (S2, docs/planning/races-in-the-world-2026-10-14.md): a
+# street racer you flashed on the road becomes the rival as it is, where it is
+# (start_rolling). Each car's progress counts from where it was at the go, so
+# the few metres it had on you are not a head start. Lost or given up, there
+# is no retry: that racer drives off and is gone for the night.
+#
 # The phase is kept here, not as a GameState state: the game must stay
 # PLAYING during a race (pause, photo mode and every PLAYING check keep
 # working). GameState.race_active only blocks the Tuner mid-race.
@@ -84,6 +90,11 @@ var rival: TrafficCar
 ## Which car and crew the next race's rival gets.
 var rival_kind := RIVAL_KIND
 var rival_crew := RivalPersonality.DOCKS
+## "sprint" (the test rival, meet races later) or "rolling" (a street racer
+## you flashed). Stakes pays by it.
+var race_kind := "sprint"
+## Road distance where the rival was at the go (its progress counts from here).
+var rival_start_d := 0.0
 ## Seed of the last race: the rival's one random stream. NEON_RACE_SEED=<n>
 ## fixes it (tests); otherwise each race rolls its own.
 var race_seed := 0
@@ -177,9 +188,35 @@ func start_race(dist: float = DEFAULT_DISTANCE) -> bool:
 		v = maxf(-RoadFrame.dir_to_road(u.z, (player as RigidBody3D).linear_velocity).z, 0.0)
 	_start = {"d": start_d, "x": u.x, "y": u.y, "distance": dist, "road_id": RoadMap.road_id,
 		"where": RoadMap.where(u.z, -player.global_transform.basis.z)}
+	race_kind = "sprint"
+	_begin(traffic.add_rival(rival_kind, rival_lane_x(u.x, traffic.own_lanes), u.z, maxf(v, 1.0), DUMMY_PAINT), dist)
+	return true
+
+## Rolling challenge: `car` (a traffic car, a street racer that said yes) is
+## the rival from where it is now. False if a race is on or the car is gone.
+func start_rolling(car: TrafficCar, dist: float = DEFAULT_DISTANCE) -> bool:
+	if phase == Phase.RACING or player == null or traffic == null or car == null or not is_instance_valid(car):
+		return false
+	distance = dist
+	start_d = road_distance(player.global_position)
+	finish_d = start_d + distance
+	retries = 0
+	_chain_paid = false
+	race_time = 0.0
+	rival_finished = false
+	result = Result.NONE
+	_start = {}   # no retry for a rolling challenge
+	race_kind = "rolling"
+	car.race_pinned = true
+	car.flashed_at = -1000.0
+	_begin(car, dist)
+	return true
+
+func _begin(car: TrafficCar, dist: float) -> void:
+	rival = car
+	rival_start_d = road_distance(car.global_position)
 	var seed_env := OS.get_environment("NEON_RACE_SEED")
 	race_seed = int(seed_env) if seed_env.is_valid_int() else int(randi())
-	rival = traffic.add_rival(rival_kind, rival_lane_x(u.x, traffic.own_lanes), u.z, maxf(v, 1.0), DUMMY_PAINT)
 	rival.racer = RivalDriver.new(RivalPersonality.row(rival_crew), race_seed)
 	rival.racer.setup(rival)
 	_pinned_before = traffic.pinned_distance
@@ -188,9 +225,8 @@ func start_race(dist: float = DEFAULT_DISTANCE) -> bool:
 	races_run += 1
 	if game_state != null:
 		game_state.race_active = true
-	_show_caption("RACE  %.1f km" % (distance / 1000.0))
-	race_started.emit(distance)
-	return true
+	_show_caption("RACE  %.1f km" % (dist / 1000.0))
+	race_started.emit(dist)
 
 ## The lane beside the player's (to the left when there is one, so the rival
 ## is never squeezed onto the shoulder).
@@ -239,7 +275,7 @@ func end_race(r: Result) -> void:
 ## Whether the last race can be run again: it ended LOSE or GAVE_UP, nothing
 ## is running, and the road is the one it was on.
 func can_retry() -> bool:
-	if phase == Phase.RACING or _retry_state != 0 or _start.is_empty() or player == null or traffic == null:
+	if phase == Phase.RACING or _retry_state != 0 or _start.is_empty() or race_kind != "sprint" or player == null or traffic == null:
 		return false
 	return (result == Result.LOSE or result == Result.GAVE_UP) and int(_start.road_id) == RoadMap.road_id
 
@@ -291,7 +327,7 @@ func player_progress() -> float:
 func rival_progress() -> float:
 	if rival == null or not is_instance_valid(rival):
 		return -INF
-	return road_distance(rival.global_position) - start_d
+	return road_distance(rival.global_position) - rival_start_d
 
 ## Rival progress minus the player's: positive when the rival is ahead.
 func gap() -> float:

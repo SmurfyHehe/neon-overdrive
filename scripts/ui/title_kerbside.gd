@@ -9,8 +9,12 @@ extends Node3D
 # sidewalk, a wall, one lamp and one car. The loaded world is out of the
 # camera's range and is not drawn, which is what keeps the title cheap. The car
 # is a copy of the player's car body and wheels with no physics and no script.
-# One real light (the lamp, no shadows); the shadow under the car is a dark
-# quad. The title screen frees the whole set when the drive starts.
+# Two real lights: the lamp, the only one with a shadow (one spot shadow at
+# the title's 30 fps), and a cool dusk rim light behind the car so its roof
+# line comes off the wall. The asphalt is wet (low roughness), so the lamp
+# pools on it and the car reflects. The soft dark quad under the car stays as
+# contact shadow. The title screen frees the whole set when the drive starts.
+# (Relight 2026-10-14, step 1 of notes/garage-title-look-2026-10-14.md.)
 #
 # Lamp life (menu litter M2, 2026-10-11): the lamp post's own small life from
 # the road chunks (lamp_life.gd) is switched on here too: newspaper and leaves
@@ -55,7 +59,30 @@ const STREET_LEN := 90.0
 const ROAD_W := 30.0
 const WALL_H := 7.0
 const CAM_FAR := 110.0
-const CAM_FOV := 48.0
+const CAM_FOV := 46.0
+## The camera's rest, from the car's nose corner: back along the street,
+## out into the road, and up. A step closer and tighter than the first cut
+## (6.0, 7.0, fov 48); the manhole at the bottom of the picture and the poster
+## at its left edge pin it there (tests/ui/title_kerbside.gd), so the big
+## reframe (car 55-60 % of the width) waits until the set is laid out again.
+const CAM_BACK := 5.0
+const CAM_OUT := 7.0
+const CAM_UP := 0.55
+const LOOK_UP := 3.3
+## The lamp: a sodium spot with the one shadow on the title. The shadow map is
+## kept small; the set is 20 m across and the light 7 m up.
+const LAMP_ENERGY := 26.0
+const LAMP_CONE := 46.0
+const LAMP_SHADOW_BIAS := 0.06
+## The rim light: dusk blue, a spot behind the car on the wall side aimed
+## at the car, so it edges the roof and the far flank and misses the wall.
+const RIM_LIGHT := Color(0.42, 0.52, 0.78)
+const RIM_ENERGY := 3.0
+const RIM_RANGE := 9.0
+const RIM_CONE := 32.0
+## Wet asphalt: how rough the road is (dry was 0.82).
+const ROAD_ROUGH := 0.34
+const ROAD_METAL := 0.12
 ## The camera breathes a little so the picture is not a still.
 const SWAY_M := 0.18
 const SWAY_SECS := 17.0
@@ -120,6 +147,7 @@ var kind := ""
 var camera: Camera3D
 var car: Node3D
 var lamp_light: SpotLight3D
+var rim_light: SpotLight3D
 var _t := 0.0
 var _cam_home := Vector3.ZERO
 var _look := Vector3.ZERO
@@ -195,6 +223,7 @@ func _init(car_kind: String) -> void:
 	kind = car_kind
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	position = SITE
+	add_to_group(GraphicsSettings.GROUP)
 	_build_street()
 	_build_graffiti()
 	_build_lamp()
@@ -271,6 +300,7 @@ func set_car(car_kind: String) -> void:
 	car.position = Vector3(0.0, 0.0, half_w + 0.3)
 	add_child(car)
 	car.add_child(_ground_shadow(half_w, half_l))
+	_place_rim(half_w, half_l)
 	_place_roaches()
 	if is_inside_tree():
 		_place_camera()
@@ -281,12 +311,12 @@ func set_car(car_kind: String) -> void:
 func _camera_home() -> Vector3:
 	var half_l: float = car.get_meta("half_l")
 	var half_w: float = car.get_meta("half_w")
-	return Vector3(-(half_l + 6.0), 0.55, car.position.z + half_w + 7.0)
+	return Vector3(-(half_l + CAM_BACK), CAM_UP, car.position.z + half_w + CAM_OUT)
 
 func _place_camera() -> void:
 	var half_l: float = car.get_meta("half_l")
 	_cam_home = _camera_home()
-	_look = Vector3(-half_l - 1.5, 3.0, car.position.z - 2.2)
+	_look = Vector3(-half_l - 1.5, LOOK_UP, car.position.z - 2.2)
 	_aim()
 
 ## The lid ajar and the roaches' runs, laid out for this car: the lid slides
@@ -428,7 +458,7 @@ func _ease_wind(delta: float) -> void:
 func _build_street() -> void:
 	# Asphalt: the road, from the kerb out past the camera.
 	_slab(Vector3(STREET_LEN, 0.2, ROAD_W), Vector3(0.0, -0.1, ROAD_W * 0.5),
-		_flat(Color(0.075, 0.075, 0.08), 0.82))
+		_flat(Color(0.06, 0.06, 0.065), ROAD_ROUGH, ROAD_METAL))
 	# Kerb and sidewalk, at the heights the road chunks use.
 	var kerb_h := RoadChunkBuilder.KERB_H
 	var kerb_w := RoadChunkBuilder.CURB_W
@@ -494,16 +524,49 @@ func _build_lamp() -> void:
 	add_child(post)
 	lamp_light = SpotLight3D.new()
 	lamp_light.light_color = SODIUM_LIGHT
-	lamp_light.light_energy = 14.0
-	lamp_light.spot_range = 16.0
-	lamp_light.spot_angle = 58.0
+	lamp_light.light_energy = LAMP_ENERGY
+	lamp_light.spot_range = 17.0
+	lamp_light.spot_angle = LAMP_CONE
 	lamp_light.spot_angle_attenuation = 0.7
 	lamp_light.spot_attenuation = 0.8
-	lamp_light.shadow_enabled = false
+	lamp_light.shadow_enabled = lamp_shadow_for(GraphicsSettings.preset)
+	lamp_light.shadow_bias = LAMP_SHADOW_BIAS
+	lamp_light.shadow_blur = 1.5
 	lamp_light.position = post.position + Vector3(0.0, RoadChunkBuilder.LAMP_POLE_H - 0.3, 1.7)
-	lamp_light.rotation.x = -PI * 0.5   # straight down
+	# A touch past straight down, toward the road, so the pool's hot centre
+	# sits on the car and not on the kerb.
+	lamp_light.rotation.x = -PI * 0.5 - 0.12
 	add_child(lamp_light)
 	_lamp_xf = Transform3D(Basis(Vector3.UP, PI * 0.5), post.position)
+
+## Whether the lamp casts its shadow on this graphics preset: off on Low,
+## like the wet-road mirrors (GraphicsSettings.apply); the dark quad under
+## the car stays on every preset.
+static func lamp_shadow_for(preset: String) -> bool:
+	return preset != "low"
+
+## GraphicsSettings.apply calls this on every node in its group when the
+## preset changes while the title is up.
+func apply_graphics() -> void:
+	if lamp_light != null:
+		lamp_light.shadow_enabled = lamp_shadow_for(GraphicsSettings.preset)
+
+## The rim light, behind the car on the wall side, a little past its far end:
+## a cool edge along the roof and the far flank that lifts the car off the
+## wall. Placed again for each car (set_car).
+func _place_rim(half_w: float, half_l: float) -> void:
+	if rim_light == null:
+		rim_light = SpotLight3D.new()
+		rim_light.name = "RimLight"
+		rim_light.light_color = RIM_LIGHT
+		rim_light.light_energy = RIM_ENERGY
+		rim_light.spot_range = RIM_RANGE
+		rim_light.spot_angle = RIM_CONE
+		rim_light.spot_angle_attenuation = 0.8
+		rim_light.shadow_enabled = false
+		add_child(rim_light)
+	rim_light.position = Vector3(half_l + 2.2, 1.7, car.position.z - half_w - 0.9)
+	rim_light.look_at_from_position(rim_light.position, Vector3(0.0, 0.7, car.position.z), Vector3.UP)
 
 ## Lamp life for this one lamp (see the header). Lamp life wants chunk space,
 ## with the road along Z and the wind across it (+X); here the street runs along

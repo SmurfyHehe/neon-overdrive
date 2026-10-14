@@ -97,7 +97,7 @@ func _run(z: float, night: int = 1) -> Dictionary:
 func _live(car: String, tyre: float) -> Dictionary:
 	return {"car": car, "wear": {"engine_temp": 91.0, "brake_temp": 180.0, "clutch_wear": 0.25, "tyre_wear": [tyre, tyre, 0.1, 0.1]},
 		"damage": {"radiator": 0.4, "steer_fl": 0.0, "steer_fr": 0.3, "susp_rl": 0.0, "susp_rr": 0.0, "body": 0.55, "lamps": [true, false, false, false], "patched_night": -1},
-		"fuel": {"litres": 7.5}, "dirt": 0.4}
+		"fuel": {"litres": 7.5}, "dirt": 0.4, "bay_dirt": 0.2}
 
 # ---------- 1: round trip ----------
 

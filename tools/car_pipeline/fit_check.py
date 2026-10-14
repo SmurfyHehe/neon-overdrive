@@ -32,7 +32,11 @@ from symmetry_check import ROOT, read_glb  # noqa: E402
 LID_CLEAR = 0.025
 WALL_CLEAR = 0.010
 PART_OVERLAP = 0.005
-TOUCHING = {}   # (a, b) sorted -> why
+# bay part pairs built touching (a hose on its tank, the belt on its pulleys):
+# bay_kit.TOUCHING, the same list tests/car/part_fit.gd carries
+sys.path.insert(0, os.path.join(ROOT, 'tools', 'fleet_design'))
+from bay_kit import TOUCHING as _T  # noqa: E402
+TOUCHING = {tuple(sorted(p)) for p in _T}
 
 
 def is_bay_part(name):
@@ -59,6 +63,10 @@ def ray_hits(o, d, T):
 def check(car_id):
     path = os.path.join(ROOT, 'assets', 'cars', car_id, 'body.glb')
     parts = {k: v for k, v in read_glb(path).items() if not k.startswith('wheel_')}
+    # the bay of its own (build_car.py --bay): its parts replace the body's placeholders by name
+    bay_path = os.path.join(ROOT, 'assets', 'cars', car_id, 'bay.glb')
+    if os.path.exists(bay_path):
+        parts.update(read_glb(bay_path))
     bay = sorted(k for k in parts if is_bay_part(k))
     others = [k for k in parts if not is_bay_part(k)]
     T = np.concatenate([parts[k] for k in others])
@@ -67,6 +75,7 @@ def check(car_id):
     for b in bay:
         verts = np.unique(parts[b].reshape(-1, 3).round(4), axis=0)
         worst_up, worst_side, bare_up, bare_side = {}, {}, 0, 0
+        bare_at = {}
         for v in verts:
             for d, rule in (((0, 1, 0), 'up'), ((1, 0, 0), 'side'), ((-1, 0, 0), 'side')):
                 t = ray_hits(v, np.array(d, float), T)
@@ -75,17 +84,19 @@ def check(car_id):
                         bare_up += 1
                     else:
                         bare_side += 1
+                    bare_at.setdefault(rule, []).append(v)
                     continue
                 i = int(np.nanargmin(t))
                 worst, clear = (worst_up, LID_CLEAR) if rule == 'up' else (worst_side, WALL_CLEAR)
                 if t[i] < clear:
                     worst[owner[i]] = min(worst.get(owner[i], np.inf), t[i])
+        where = lambda rule: ', '.join('(%.2f, %.2f, %.2f)' % tuple(v) for v in bare_at.get(rule, [])[:3])
         if bare_up:
-            out.append('%s: lid shut: %d corners of %s have no panel above them' % (car_id, bare_up, b))
+            out.append('%s: lid shut: %d corners of %s have no panel above them, e.g. %s' % (car_id, bare_up, b, where('up')))
         for p, t in worst_up.items():
             out.append('%s: lid shut: %s is %.1f mm under %s, want %.0f' % (car_id, b, t * 1000, p, LID_CLEAR * 1000))
         if bare_side:
-            out.append('%s: walls: %d rays from %s leave the car sideways' % (car_id, bare_side, b))
+            out.append('%s: walls: %d rays from %s leave the car sideways, e.g. %s' % (car_id, bare_side, b, where('side')))
         for p, t in worst_side.items():
             out.append('%s: walls: %s is %.1f mm from %s, want %.0f' % (car_id, b, t * 1000, p, WALL_CLEAR * 1000))
     for i, a in enumerate(bay):

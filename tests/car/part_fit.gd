@@ -59,7 +59,14 @@ const RETURN_DEPTH := 0.015
 ## an issue, with the deepest crossing measured then. See _compare_known.
 const KNOWN_PATH := "res://tests/car/part_fit_known.json"
 ## Bay part pairs that sit against each other on purpose: "a|b" (sorted) -> why.
-const TOUCHING := {}
+## Bay part pairs built touching (a hose on its tank, the belt on its pulleys):
+## the same list as tools/car_pipeline/bay_kit.py TOUCHING, "a|b" sorted.
+const TOUCHING := {
+	"bay_hoses|bay_radiator": true, "bay_hoses|bay_shroud": true, "bay_hoses|engine": true,
+	"bay_belt|engine": true, "bay_airbox|engine": true,
+	"bay_battery|bay_cables": true, "bay_cables|engine": true,
+	"bay_radiator|bay_shroud": true,
+}
 ## The car the checker proves itself on (_self_test): it has an engine, a
 ## battery, a radiator and a hood.
 const SELF_TEST_CAR := "p7_wagon"

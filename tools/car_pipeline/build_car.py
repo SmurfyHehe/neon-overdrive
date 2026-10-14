@@ -544,10 +544,11 @@ def _material_json(name, meta):
 # --------------------------------------------------------------------------
 # Backend: pure-Python glTF 2.0 writer
 # --------------------------------------------------------------------------
-def write_glb_python(root, meta, out_path):
-    # triangles, corner normals and the bake, per node
+def write_glb_python(root, meta, out_path, extra_occluders=None):
+    # triangles, corner normals and the bake, per node; extra_occluders (n,3,3)
+    # are triangles that shade the bake without being written (the body round a bay)
     data = {}
-    occ = []
+    occ = [] if extra_occluders is None else [np.asarray(extra_occluders, float)]
     flip = lambda A: A[:, ::-1, :] * fparts.MIRROR      # mirror triangles (or their normals), winding kept outward
     for node in root.walk():
         src = node.mirror_of or node
@@ -967,6 +968,117 @@ def write_glb_blender(root, meta, out_path, D, bevel=True, keep_blend=None):
     return counts, bevelled
 
 
+# --------------------------------------------------------------------------
+# The engine bay as a file of its own (engine bays B3, bay_kit.py)
+# --------------------------------------------------------------------------
+def fparts_is_bay(name):
+    return name == 'engine' or name.startswith('bay_')
+
+
+def write_bay(root, meta, Dr, out_dir):
+    """assets/cars/<id>/bay.glb + bay.json: the car's bay parts (`engine`,
+    `bay_*`) as bay_kit.py builds them, in car space, on the Python backend.
+    The body scene gives the anchors and the real hood and fenders, so the
+    kit can measure its headroom from them and the ao is baked against them."""
+    import bay_kit
+    from fit_check import ray_hits
+    build = bay_kit.BAYS.get(Dr['id'])
+    if build is None:
+        raise SystemExit('%s: bay_kit.py has no bay for this car' % Dr['id'])
+    # the body's triangles in car space, by part, for the kit's measurements and
+    # the bake: the body.glb on disk when there is one (what the game and the
+    # fit checkers see, Blender bevels included), else this scene's parts
+    from symmetry_check import read_glb
+    body = {}
+    body_glb = os.path.join(out_dir, 'body.glb')
+    if os.path.exists(body_glb):
+        body = {k: v for k, v in read_glb(body_glb).items() if not k.startswith('wheel_')}
+    for node in [] if body else root.walk():
+        src = node.mirror_of or node
+        if src.mesh is None or not len(src.mesh) or node.name.startswith('wheel_'):
+            continue
+        T, M, K, S = src.mesh.tris()
+        if src.mesh.sym == 'centre':
+            T = np.concatenate([T, T[:, ::-1, :] * fparts.MIRROR])
+        if node.mirror_of is not None:
+            T = T[:, ::-1, :] * fparts.MIRROR
+        body[node.name] = T + node.origin
+    shell_T = np.concatenate([body[k] for k in body if not fparts_is_bay(k)])
+    anchors = {n.name: np.asarray(n.translation, float) for n in root.walk() if n.mesh is None and n.mirror_of is None}
+
+    FLOOR = 0.30   # the bay floor: above the underbody tray, where the rays start
+
+    def hood_under(x, z):
+        """The underside of whatever closes the bay above (x, z): the hood, the
+        nose, a pop-up housing; the first body face hit going up from the floor."""
+        t = ray_hits(np.array([x, FLOOR, z]), np.array([0.0, 1.0, 0.0]), shell_T)
+        if np.all(np.isnan(t)):
+            raise SystemExit('bay: nothing above (%.2f, %.2f)' % (x, z))
+        return FLOOR + float(np.nanmin(t))
+
+    hood_V = body['hood'].reshape(-1, 3)
+
+    def hood_edge(z):
+        """How far out the hood reaches (its half width) at station z: the
+        tub wall stands a step inside it, so the hood's shut line never runs
+        over bare air."""
+        d = np.abs(hood_V[:, 2] - z)
+        near = hood_V[d <= d.min() + 0.06]     # the nearest station (ahead of the hood: its nose edge)
+        return float(np.abs(near[:, 0]).max())
+
+    def wall_x(y, z):
+        """The bay's side wall (the fender's inner face) at height y, station z:
+        the first body face hit going right from the centre line."""
+        t = ray_hits(np.array([0.0, y, z]), np.array([1.0, 0.0, 0.0]), shell_T)
+        if np.all(np.isnan(t)):
+            raise SystemExit('bay: no wall beside (%.2f, %.2f)' % (y, z))
+        return float(np.nanmin(t))
+
+    parts = []
+
+    def part(name, bevel=0):
+        p = fparts.Part(name, bevel=bevel)
+        parts.append(p)
+        return p
+
+    ctx = types.SimpleNamespace(D=Dr, part=part, anchors=anchors, hood_under=hood_under, hood_edge=hood_edge, wall_x=wall_x)
+    build(ctx)
+    bay_root = Node(Dr['id'] + '_bay', extras={'build': 'bay', 'generator': GENERATOR})
+    for p in parts:
+        if len(p):
+            bay_root.add(Node(p.name, mesh=p)).origin = np.zeros(3)
+    cols = material_colours(Dr)
+    used = sorted({m for p in parts for m in p.mats})
+    bmeta = {
+        'id': Dr['id'], 'build': 'bay', 'generator': GENERATOR,
+        'godot_axes': meta['godot_axes'],
+        'materials': {m: cols.get(m, '#C9CED6') for m in used},
+        'emissive': sorted(m for m in used if m.startswith('glow_')),
+        'attributes': meta['attributes'],
+    }
+    glb = os.path.join(out_dir, 'bay.glb')
+    occ = np.concatenate([body[k] for k in body])
+    counts = write_glb_python(bay_root, bmeta, glb, extra_occluders=occ)
+    bmeta['backend'] = 'python'
+    bmeta['source_commit'] = git_head()
+    bmeta['parts'] = sorted(counts)
+    bmeta['tris'] = counts
+    bmeta['tris_total'] = int(sum(counts.values()))
+    bmeta['budget_tris'] = BAY_TRI_BUDGET
+    with open(os.path.join(out_dir, 'bay.json'), 'w') as f:
+        json.dump(bmeta, f, indent=1)
+    print('%s bay: %d triangles in %d parts (budget %d), materials %s -> %s' % (
+        Dr['id'], bmeta['tris_total'], len(counts), BAY_TRI_BUDGET, ', '.join(used), os.path.relpath(glb, ROOT)))
+    for k, v in sorted(counts.items()):
+        print('  %-18s %5d' % (k, v))
+    if bmeta['tris_total'] > BAY_TRI_BUDGET:
+        raise SystemExit('%d bay triangles is over the budget of %d' % (bmeta['tris_total'], BAY_TRI_BUDGET))
+
+
+## Engine bay budget while a lid is up (notes/engine-bays-better-2026-10-13.md section 5).
+BAY_TRI_BUDGET = 3000
+
+
 def choose_backend(name):
     if name == 'python':
         return 'python'
@@ -1002,6 +1114,7 @@ def main(argv=None):
     ap.add_argument('--backend', default='auto', choices=['auto', 'blender', 'python'])
     ap.add_argument('--no-bevel', action='store_true', help='Blender backend: skip the crease bevel')
     ap.add_argument('--blend', default=None, help='Blender backend: also save the scene as this .blend to look at')
+    ap.add_argument('--bay', action='store_true', help='write the engine bay (bay_kit.py) as bay.glb instead of the body')
     args = ap.parse_args(argv)
 
     D = definition(args.car_id)
@@ -1009,6 +1122,9 @@ def main(argv=None):
     backend = choose_backend(args.backend)
     out_dir = os.path.join(args.out, args.car_id)
     os.makedirs(out_dir, exist_ok=True)
+    if args.bay:
+        write_bay(root, meta, Dr, out_dir)
+        return
     stem = 'body' if args.build in (None, 'stock') else 'body_%s' % args.build
     glb = os.path.join(out_dir, stem + '.glb')
     bevelled = {}

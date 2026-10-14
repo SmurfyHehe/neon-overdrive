@@ -66,7 +66,7 @@ const DEFAULT_CAR := SaveUpgrade.DEFAULT_CAR
 const DEFAULT_DIFFICULTY := "weekend_warrior"
 const NIGHTS_TOTAL := 30   # stand-in for the plate until the story sets it
 ## What a car carries from night to night.
-const LIVE_KEYS := ["wear", "damage", "fuel", "dirt"]
+const LIVE_KEYS := ["wear", "damage", "fuel", "dirt", "bay_dirt"]
 ## night.json fields that are not the run itself: kept when the run is cleared.
 const NIGHT_KEEP := ["night", "cash", "clock", "play_secs"]
 const NIGHT_BOOKKEEPING := ["save_version", "base_gen", "night", "cash", "clock", "play_secs", "car_live", "tunes_live"]
@@ -225,7 +225,7 @@ static func current_car(n: int = 0) -> String:
 	return id if id is String and id != "" else DEFAULT_CAR
 
 ## What the car carries: {"parts_owned", "fitted", "wear", "damage", "fuel",
-## "dirt"} (only what was saved), the live state of the night on top.
+## "dirt", "bay_dirt"} (only what was saved), the live state of the night on top.
 static func car_state(car_id: String, n: int = 0) -> Dictionary:
 	var out := _block(_block(career(n), "cars"), car_id).duplicate(true)
 	var live := _block(night(n), "car_live")

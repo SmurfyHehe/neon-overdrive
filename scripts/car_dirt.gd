@@ -18,9 +18,17 @@ extends Node
 # and tests that set `path` still use a .cfg file. The FxSettings
 # "dirt" flag (pause menu) turns both the build-up and the drawing off; the
 # saved level is kept, so turning it back on shows the car as it was.
+#
+# The engine bay has its own level (engine bays 2e, Roy 1509): `bay_level`
+# grows at half the body's rate (the hood keeps most of it out) and is drawn
+# as the `grime` instance uniform on the Bay mesh (CarPaint's trim shader:
+# dust on the flat tops, an oily film down the sides) while a lid is up. The
+# wash takes it off on its second page, after the body. Saved as `bay_dirt`
+# next to `dirt`.
 
 const FULL_NIGHT_METRES := 24000.0   # a 20-minute night at about 70 km/h covers 24 km: that is a fully dirty car
 const OFF_ROAD_RATE := 4.0           # kerbs, verges and dirt shoulders coat it four times as fast
+const BAY_RATE := 0.5                # the bay dirties at half the body's rate
 const SAVE_EVERY_SECS := 5.0
 const DEFAULT_PATH := "user://car_dirt.cfg"
 const TestMode := preload("res://scripts/core/test_mode.gd")
@@ -30,6 +38,8 @@ static var path := TestMode.path(DEFAULT_PATH)
 
 ## 0..1, the stored amount of grime.
 var level := 0.0
+## 0..1, the engine bay's grime (engine bays 2e).
+var bay_level := 0.0
 ## From FxSettings "dirt" (FxPack.apply_settings). Off: nothing drawn, nothing added.
 var enabled := true:
 	set(v):
@@ -39,8 +49,11 @@ var enabled := true:
 var _player: Node
 var _mat: ShaderMaterial
 var _shown := -1.0
+var _bay: MeshInstance3D
+var _bay_shown := -1.0
 var _save_left := SAVE_EVERY_SECS
 var _saved_level := 0.0
+var _saved_bay := 0.0
 
 func _init(player: Node) -> void:
 	_player = player
@@ -53,6 +66,11 @@ func _ready() -> void:
 		var m: Variant = visual.get_meta("body_mat")
 		if m is ShaderMaterial:
 			_mat = m
+	var detail := CarDetail.of(_player as Vehicle) if _player is Vehicle else null
+	if detail != null:
+		detail.changed.connect(func(_on: bool) -> void:
+			_bay_shown = -1.0   # the bay mesh is built when a lid first opens: push the grime again
+			apply())
 	apply()
 
 func _physics_process(delta: float) -> void:
@@ -73,46 +91,75 @@ func _exit_tree() -> void:
 func add_distance(metres: float, off_road: bool) -> void:
 	if not is_finite(metres) or metres <= 0.0:
 		return
-	set_level(level + metres * (OFF_ROAD_RATE if off_road else 1.0) / FULL_NIGHT_METRES)
+	var step := metres * (OFF_ROAD_RATE if off_road else 1.0) / FULL_NIGHT_METRES
+	bay_level = clampf(bay_level + step * BAY_RATE, 0.0, 1.0)
+	set_level(level + step)
 
 func set_level(v: float) -> void:
 	level = clampf(v, 0.0, 1.0) if is_finite(v) else 0.0
+	apply()
+
+func set_bay_level(v: float) -> void:
+	bay_level = clampf(v, 0.0, 1.0) if is_finite(v) else 0.0
 	apply()
 
 ## What the body is drawn with: the level, or 0 when the effect is off.
 func shown_level() -> float:
 	return level if enabled else 0.0
 
+func shown_bay_level() -> float:
+	return bay_level if enabled else 0.0
+
 ## Push the level into the body material (skipped when it has not changed, so a
-## parked car costs nothing).
+## parked car costs nothing), and the bay's into the Bay mesh when the car has
+## one built (CarDetail builds it the first time a lid is up).
 func apply() -> void:
 	var v := shown_level()
 	if _mat != null and absf(v - _shown) > 0.002:
 		_mat.set_shader_parameter("dirt", v)
 		_shown = v
+	var b := shown_bay_level()
+	if absf(b - _bay_shown) > 0.002:
+		if _bay == null or not is_instance_valid(_bay):
+			var detail := CarDetail.of(_player as Vehicle) if _player is Vehicle else null
+			_bay = detail.node_of("bay") as MeshInstance3D if detail != null else null
+		if _bay != null:
+			_bay.set_instance_shader_parameter("grime", b)
+			_bay_shown = b
 
 func load_state() -> void:
 	var v: Variant
+	var bv: Variant
 	if path == DEFAULT_PATH:
 		if not SaveCore.persist:
 			return
-		v = SaveCore.car_state(PlayerCar.chassis_kind()).get("dirt", 0.0)
+		var st := SaveCore.car_state(PlayerCar.chassis_kind())
+		v = st.get("dirt", 0.0)
+		bv = st.get("bay_dirt", 0.0)
 	else:
 		var cfg := ConfigFile.new()
 		if cfg.load(path) != OK:
 			return
 		v = cfg.get_value("dirt", "level", 0.0)
-	var f: float = float(v) if (v is float or v is int) else 0.0
-	level = clampf(f, 0.0, 1.0) if is_finite(f) else 0.0
+		bv = cfg.get_value("dirt", "bay", 0.0)
+	level = _clean(v)
+	bay_level = _clean(bv)
 	_saved_level = level
+	_saved_bay = bay_level
+
+static func _clean(v: Variant) -> float:
+	var f: float = float(v) if (v is float or v is int) else 0.0
+	return clampf(f, 0.0, 1.0) if is_finite(f) else 0.0
 
 func save_state() -> bool:
-	if is_equal_approx(level, _saved_level) or path == DEFAULT_PATH:
+	if (is_equal_approx(level, _saved_level) and is_equal_approx(bay_level, _saved_bay)) or path == DEFAULT_PATH:
 		return true   # in the slot the level goes with the night save (SaveDirector)
 	var cfg := ConfigFile.new()
 	cfg.load(path)  # a missing file is fine
 	cfg.set_value("dirt", "level", level)
+	cfg.set_value("dirt", "bay", bay_level)
 	if cfg.save(path) != OK:
 		return false
 	_saved_level = level
+	_saved_bay = bay_level
 	return true

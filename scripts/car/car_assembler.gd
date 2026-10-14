@@ -52,6 +52,9 @@ class_name CarAssembler
 # configuration (pictures with the lids up) keeps them in the body.
 
 const GLB := "res://assets/cars/%s/body.glb"
+## The engine bay built as a file of its own (build_car.py --bay, engine bays
+## B3): its parts replace the body.glb's placeholder bay parts by name.
+const GLB_BAY := "res://assets/cars/%s/bay.glb"
 const SURFACES := ["body", "trim", "glass", "glow"]
 const NODE_NAME := "Body"
 const BAY_NODE_NAME := "Bay"
@@ -63,6 +66,8 @@ const CLASS_PLATE := 4
 const CLASS_MIRROR := 5
 const CLASS_LENS := 6
 const CLASS_STEEL := 7
+## Class 0 on the trim surface (never paint there): brushed alloy, the engine bay's covers (CarPaint._TRIM FINISH[0]).
+const CLASS_ALLOY := 0
 ## glTF material name -> [surface, class]. On the body surface class 0 is
 ## paint (tinted at runtime), 8 is a fixed colour; on trim it picks the finish.
 const MATERIALS := {
@@ -80,6 +85,9 @@ const MATERIALS := {
 	"lens_red": ["trim", CLASS_LENS],
 	"steel": ["trim", CLASS_STEEL],
 	"rim": ["trim", CLASS_STEEL],
+	# the engine bay (bay_kit.py): dark castings, brushed alloy covers
+	"cast": ["trim", CLASS_STEEL],
+	"alloy": ["trim", CLASS_ALLOY],
 	"glass": ["glass", 8],
 	"glow_head": ["glow", 8],
 	"glow_lens": ["glow", 8],
@@ -490,6 +498,16 @@ static func _load(car_id: String) -> Dictionary:
 	var root := scene.instantiate()
 	_walk(root, Transform3D.IDENTITY, "", car)
 	root.free()
+	if ResourceLoader.exists(GLB_BAY % car_id):
+		var bay_scene := load(GLB_BAY % car_id) as PackedScene
+		if bay_scene != null:
+			var bay_root := bay_scene.instantiate()
+			var bay := {"parts": {}, "hinges": {}, "anchors": {}, "wheels": {}}
+			_walk(bay_root, Transform3D.IDENTITY, "", bay)
+			bay_root.free()
+			for pname in bay.parts:
+				if is_bay_part(pname):
+					car.parts[pname] = bay.parts[pname]
 	return car
 
 static func _walk(node: Node, xf: Transform3D, hinge: String, car: Dictionary) -> void:

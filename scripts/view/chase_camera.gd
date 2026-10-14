@@ -176,9 +176,12 @@ const HOOD_YAW_MAX := 90.0
 ## from the lid, looking down into it; the arrows look round the bay a little.
 ## Back to the view it was in, with a cut, once the lid is shut. No walking,
 ## no hands (1276).
-const BAY_STAND_BACK := 1.05       # m behind the bumper
-const BAY_EYE_UP := 0.62           # m above the hinge line: a standing person's eyes
-const BAY_AIM_DOWN := 0.22         # m under the hinge line, so the view looks into the bay
+# Judged on the coupe's bay sheet (engine-bays/p1_coupe_bay_sheet): a standing
+# person's eyes 1.05 m back showed a slot of engine under the hood; closer and
+# higher, like leaning in over the bumper, shows the whole bay and the hood.
+const BAY_STAND_BACK := 0.55       # m behind the bumper
+const BAY_EYE_UP := 1.15           # m above the hinge line, leaning in over the nose
+const BAY_AIM_DOWN := 0.35         # m under the hinge line, so the view looks into the bay
 const BAY_YAW_MAX := 40.0
 const BAY_PITCH_MAX := 20.0
 const HOOD_PITCH_UP := 20.0

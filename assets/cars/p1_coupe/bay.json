@@ -1,0 +1,73 @@
+{
+ "id": "p1_coupe",
+ "build": "bay",
+ "generator": "neon-overdrive tools/car_pipeline/build_car.py",
+ "godot_axes": "X right, Y up, -Z forward; origin on the ground midway between the axles",
+ "materials": {
+  "alloy": "#8A9097",
+  "cast": "#2F3338",
+  "chrome": "#C9CED6",
+  "glow_lens": "#8A7350",
+  "plastic": "#1A1D24",
+  "rubber": "#08090C",
+  "steel": "#4A4E55",
+  "under_paint": "#0B0D12"
+ },
+ "emissive": [
+  "glow_lens"
+ ],
+ "attributes": {
+  "COLOR_0.r": "ao: baked vertex ambient occlusion, 32 rays, 1 = open",
+  "COLOR_0.g": "shut: 1 on a shut line, 0 at 6 mm from it"
+ },
+ "backend": "python",
+ "source_commit": "bb039f8",
+ "parts": [
+  "bay_airbox",
+  "bay_battery",
+  "bay_belt",
+  "bay_brake",
+  "bay_bulb",
+  "bay_cables",
+  "bay_firewall",
+  "bay_floor",
+  "bay_fusebox",
+  "bay_hoses",
+  "bay_loom",
+  "bay_prop_rod",
+  "bay_rad_support",
+  "bay_radiator",
+  "bay_shroud",
+  "bay_strut_fl",
+  "bay_strut_fr",
+  "bay_wall_l",
+  "bay_wall_r",
+  "bay_washer",
+  "engine"
+ ],
+ "tris": {
+  "bay_wall_r": 72,
+  "bay_wall_l": 72,
+  "bay_firewall": 12,
+  "bay_floor": 16,
+  "bay_rad_support": 80,
+  "engine": 640,
+  "bay_belt": 36,
+  "bay_radiator": 64,
+  "bay_shroud": 164,
+  "bay_hoses": 200,
+  "bay_airbox": 112,
+  "bay_battery": 76,
+  "bay_cables": 84,
+  "bay_fusebox": 24,
+  "bay_brake": 44,
+  "bay_washer": 32,
+  "bay_strut_fr": 124,
+  "bay_strut_fl": 124,
+  "bay_loom": 20,
+  "bay_prop_rod": 44,
+  "bay_bulb": 24
+ },
+ "tris_total": 2064,
+ "budget_tris": 3000
+}

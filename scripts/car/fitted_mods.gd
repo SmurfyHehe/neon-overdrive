@@ -27,9 +27,12 @@ static func ids(player: Node, kind: String) -> Array[String]:
 	return out
 
 ## The ids as mod keys: a tree node becomes its template, anything else (a
-## bolt-on) stays as it is. No doubles.
-static func keys(kind: String, fitted: Array) -> Array[String]:
+## bolt-on) stays as it is. No doubles. With the car's spec, the car's tier
+## comes along as "tier_T2".. (the cover's finish climbs with it, Roy 1570).
+static func keys(kind: String, fitted: Array, spec: Dictionary = {}) -> Array[String]:
 	var out: Array[String] = []
+	if not spec.is_empty():
+		out.append("tier_" + ModTree.tier_of(spec))
 	for id in fitted:
 		var sid := String(id)
 		var node := ModTree.node(kind, sid)
@@ -46,18 +49,25 @@ static func keys(kind: String, fitted: Array) -> Array[String]:
 static func combos(kind: String, variants: Dictionary) -> Array:
 	var out: Array = [[]]
 	var nodes: Dictionary = ModTree.tree(kind).get("nodes", {}) if ModTree.has_tree(kind) else {}
+	# a "tier_*" key is the car's tier finish: one at a time, on top of every set
+	var tiers: Array = []
+	for k in variants:
+		if String(k).begins_with("tier_"):
+			tiers.append(String(k))
+	tiers.sort()
 	if nodes.is_empty():
 		var vkeys: Array = variants.keys()
 		vkeys.sort()
 		for k in vkeys:
-			out.append([String(k)])
-		return out
+			if not String(k).begins_with("tier_"):
+				out.append([String(k)])
+		return _with_tiers(out, tiers)
 	var templates := {}
 	for nid in nodes:
 		templates[String(nodes[nid].get("template", ""))] = true
 	var bolt_ons: Array = []
 	for k in variants:
-		if not templates.has(String(k)):
+		if not templates.has(String(k)) and not String(k).begins_with("tier_"):
 			bolt_ons.append(String(k))
 	bolt_ons.sort()
 	var seen := {}
@@ -78,5 +88,14 @@ static func combos(kind: String, variants: Dictionary) -> Array:
 		var tag := ",".join(PackedStringArray(keys))
 		if not seen.has(tag):
 			seen[tag] = true
+			out.append(keys)
+	return _with_tiers(out, tiers)
+
+static func _with_tiers(sets: Array, tiers: Array) -> Array:
+	var out: Array = sets.duplicate()
+	for c in sets:
+		for t in tiers:
+			var keys: Array = (c as Array).duplicate()
+			keys.append(t)
 			out.append(keys)
 	return out

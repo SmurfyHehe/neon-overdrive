@@ -74,11 +74,13 @@ const TOUCHING := {
 	"bay_mod_ts_pipe_r|engine": true, "bay_hoses|bay_mod_ts_pipe_r": true,
 	"bay_mod_na_cone|engine": true, "bay_hoses|bay_mod_na_cone": true,
 	"bay_mod_itb|engine": true,
-	"bay_mod_stroker|engine": true, "bay_belt|bay_mod_stroker": true, "bay_hoses|bay_mod_stroker": true,
+	"bay_mod_stroker_strip|engine": true, "bay_mod_stroker_damper|engine": true, "bay_belt|bay_mod_stroker_damper": true, "bay_hoses|bay_mod_stroker_damper": true,
 	"bay_mod_cai|engine": true, "bay_hoses|bay_mod_cai": true,
 	"bay_mod_pulley|engine": true, "bay_belt|bay_mod_pulley": true,
 	"bay_cables|bay_mod_light_battery": true,
 	"bay_mod_strut_bar|bay_strut_fl": true, "bay_mod_strut_bar|bay_strut_fr": true,
+	"bay_mod_tier2_cover|engine": true, "bay_mod_tier3_cover|engine": true, "bay_mod_tier4_cover|engine": true, "bay_mod_tier5_cover|engine": true,
+	"bay_mod_stroker_strip|bay_mod_tier2_cover": true, "bay_mod_stroker_strip|bay_mod_tier5_cover": true,
 }
 ## The car the checker proves itself on (_self_test): it has an engine, a
 ## battery, a radiator and a hood.

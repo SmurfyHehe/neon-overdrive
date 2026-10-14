@@ -73,10 +73,13 @@ def bay_combos(car_id, variants):
         with open(tree_path) as f:
             nodes = {n['id']: n for n in json.load(f).get('nodes', [])}
     templates = {n.get('template') for n in nodes.values()}
-    bolt_ons = sorted(k for k in variants if k not in templates)
+    # a "tier_*" key is the car's tier finish: one at a time, never a bolt-on
+    tiers = sorted(k for k in variants if k.startswith('tier_'))
+    bolt_ons = sorted(k for k in variants if k not in templates and not k.startswith('tier_'))
     combos = [[]]
     if not nodes:
-        return combos + [[k] for k in sorted(variants)]
+        combos += [[k] for k in sorted(variants) if not k.startswith('tier_')]
+        return combos + [c + [t] for c in list(combos) for t in tiers]
     chains = []
     for nid, n in nodes.items():
         chain = []
@@ -93,7 +96,7 @@ def bay_combos(car_id, variants):
         if tag not in seen:
             seen.add(tag)
             combos.append(keys)
-    return combos
+    return combos + [c + [t] for c in list(combos) for t in tiers]
 
 
 def active_parts(names, variants, keys):

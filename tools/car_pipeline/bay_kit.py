@@ -56,11 +56,14 @@ MOD_TOUCHING = {
     ('bay_mod_ts_pipe_r', 'engine'), ('bay_mod_ts_pipe_r', 'bay_hoses'),
     ('bay_mod_na_cone', 'engine'), ('bay_mod_na_cone', 'bay_hoses'),
     ('bay_mod_itb', 'engine'),
-    ('bay_mod_stroker', 'engine'), ('bay_mod_stroker', 'bay_belt'), ('bay_mod_stroker', 'bay_hoses'),
+    ('bay_mod_stroker_strip', 'engine'), ('bay_mod_stroker_damper', 'engine'), ('bay_mod_stroker_damper', 'bay_belt'), ('bay_mod_stroker_damper', 'bay_hoses'),
     ('bay_mod_cai', 'engine'), ('bay_mod_cai', 'bay_hoses'),
     ('bay_mod_pulley', 'engine'), ('bay_mod_pulley', 'bay_belt'),
     ('bay_mod_light_battery', 'bay_cables'),
     ('bay_mod_strut_bar', 'bay_strut_fl'), ('bay_mod_strut_bar', 'bay_strut_fr'),
+    # the tier finish plates lie on the cam cover (the engine part)
+    ('bay_mod_tier2_cover', 'engine'), ('bay_mod_tier3_cover', 'engine'), ('bay_mod_tier4_cover', 'engine'), ('bay_mod_tier5_cover', 'engine'),
+    ('bay_mod_tier2_cover', 'bay_mod_stroker_strip'), ('bay_mod_tier5_cover', 'bay_mod_stroker_strip'),
 }
 TOUCHING |= {tuple(sorted(p)) for p in MOD_TOUCHING}
 
@@ -427,9 +430,12 @@ def coupe_mods(ctx, c):
         zz = z0 + 0.07 + k * (L - 0.14) / 5
         cyl(itb, (0.30, 0.60, zz), (0.40, 0.64, zz), 0.020, 8, 'chrome', r_b=0.034)
     # stroker: a polished strip down the cover and a big billet crank damper
-    st = mp('bay_mod_stroker', 'na_stroker', hides=('bay_mod_pulley',))
-    _box(st, (-0.10, cover_top + 0.018, zc), (0.03, 0.012, L - 0.12), 'chrome')
-    cyl(st, (crank[0][0], crank[0][1], pz - 0.012), (crank[0][0], crank[0][1], pz - 0.030), 0.085, 10, 'alloy')
+    # (two parts, so the strip's box up on the cover and the damper's box
+    # down on the crank are not one box that swallows the tier plates)
+    st = mp('bay_mod_stroker_strip', 'na_stroker')
+    _box(st, (-0.11, cover_top + 0.027, zc), (0.03, 0.012, L - 0.12), 'chrome')   # outboard of the crown, over the tier plates
+    sd = mp('bay_mod_stroker_damper', 'na_stroker', hides=('bay_mod_pulley',))
+    cyl(sd, (crank[0][0], crank[0][1], pz - 0.012), (crank[0][0], crank[0][1], pz - 0.030), 0.085, 10, 'alloy')
 
     # ---- workshop bolt-ons that live in the bay
     cai = mp('bay_mod_cai', 'cold_air_intake', hides=('bay_airbox',))
@@ -454,6 +460,19 @@ def coupe_mods(ctx, c):
     for sx in (1, -1):
         _box(sb, (sx * 0.445, bar_y - 0.016, zs), (0.05, 0.05, 0.06), 'alloy')
     cyl(sb, (-0.42, bar_y, zs), (0.42, bar_y, zs), 0.010, 8, 'alloy')
+
+    # ---- the cover's finish climbs with the car's tier (Roy 1570, 2026-10-14):
+    # T0/T1 brushed alloy as cast; T2 a polished crown; T3 the whole lid
+    # polished; T4 the lid in the car's own paint; T5 painted lid with a
+    # polished crown. One key per tier ("tier_T2"..), the car wears one at a time.
+    crown = ((0.0, cover_top + 0.012 + 0.003, zc), (0.19, 0.006, L - 0.08))
+    lid = ((0.0, cover_top + 0.003, zc), (0.24, 0.006, L - 0.04))
+    _box(mp('bay_mod_tier2_cover', 'tier_T2'), crown[0], crown[1], 'chrome')
+    _box(mp('bay_mod_tier3_cover', 'tier_T3'), lid[0], lid[1], 'chrome')
+    _box(mp('bay_mod_tier4_cover', 'tier_T4'), lid[0], lid[1], 'paint')
+    t5 = mp('bay_mod_tier5_cover', 'tier_T5')
+    _box(t5, lid[0], lid[1], 'paint')
+    _box(t5, crown[0], crown[1], 'chrome')
 
 
 BAYS = {'p1_coupe': coupe_bay}

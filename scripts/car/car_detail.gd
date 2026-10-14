@@ -202,7 +202,7 @@ func _register_bay() -> void:
 		if not is_instance_valid(body):
 			return null
 		var paint_mat := body.get_surface_override_material(CarAssembler.surface_index(body.mesh, "body"))
-		var bay := CarAssembler.build_bay(car_id, paint_mat, FittedMods.keys(car_id, FittedMods.ids(vehicle, car_id)))
+		var bay := CarAssembler.build_bay(car_id, paint_mat, FittedMods.keys(car_id, FittedMods.ids(vehicle, car_id), vehicle.get("spec") if vehicle.get("spec") is Dictionary else {}))
 		bay.layers = body.layers
 		body.add_child(bay)
 		return bay)

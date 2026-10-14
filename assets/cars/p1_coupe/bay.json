@@ -8,6 +8,7 @@
   "cast": "#2F3338",
   "chrome": "#C9CED6",
   "glow_lens": "#8A7350",
+  "paint": "#FF8A1F",
   "plastic": "#1A1D24",
   "rubber": "#08090C",
   "steel": "#4A4E55",
@@ -21,7 +22,7 @@
   "COLOR_0.g": "shut: 1 on a shut line, 0 at 6 mm from it"
  },
  "backend": "python",
- "source_commit": "815c2ae",
+ "source_commit": "981f2cf",
  "parts": [
   "bay_airbox",
   "bay_battery",
@@ -40,9 +41,14 @@
   "bay_mod_na_cone",
   "bay_mod_oil_cooler",
   "bay_mod_pulley",
-  "bay_mod_stroker",
+  "bay_mod_stroker_damper",
+  "bay_mod_stroker_strip",
   "bay_mod_strut_bar",
   "bay_mod_tb_turbo",
+  "bay_mod_tier2_cover",
+  "bay_mod_tier3_cover",
+  "bay_mod_tier4_cover",
+  "bay_mod_tier5_cover",
   "bay_mod_ts_intercooler",
   "bay_mod_ts_pipe_f",
   "bay_mod_ts_pipe_l",
@@ -91,14 +97,19 @@
   "bay_mod_ts_pipe_r": 100,
   "bay_mod_na_cone": 84,
   "bay_mod_itb": 180,
-  "bay_mod_stroker": 48,
+  "bay_mod_stroker_strip": 12,
+  "bay_mod_stroker_damper": 36,
   "bay_mod_cai": 118,
   "bay_mod_pulley": 36,
   "bay_mod_light_battery": 76,
   "bay_mod_oil_cooler": 24,
-  "bay_mod_strut_bar": 52
+  "bay_mod_strut_bar": 52,
+  "bay_mod_tier2_cover": 12,
+  "bay_mod_tier3_cover": 12,
+  "bay_mod_tier4_cover": 12,
+  "bay_mod_tier5_cover": 24
  },
- "tris_total": 3702,
+ "tris_total": 3762,
  "variants": {
   "turbo_small": {
    "parts": [
@@ -149,7 +160,8 @@
   },
   "na_stroker": {
    "parts": [
-    "bay_mod_stroker"
+    "bay_mod_stroker_damper",
+    "bay_mod_stroker_strip"
    ],
    "hides": [
     "bay_mod_pulley"
@@ -188,10 +200,34 @@
     "bay_mod_strut_bar"
    ],
    "hides": []
+  },
+  "tier_T2": {
+   "parts": [
+    "bay_mod_tier2_cover"
+   ],
+   "hides": []
+  },
+  "tier_T3": {
+   "parts": [
+    "bay_mod_tier3_cover"
+   ],
+   "hides": []
+  },
+  "tier_T4": {
+   "parts": [
+    "bay_mod_tier4_cover"
+   ],
+   "hides": []
+  },
+  "tier_T5": {
+   "parts": [
+    "bay_mod_tier5_cover"
+   ],
+   "hides": []
   }
  },
  "tris_stock": 2064,
- "tris_worst": 2668,
- "worst_combo": "turbo_small turbo_twin cold_air_intake light_battery oil_cooler strut_bar_front underdrive_pulley",
+ "tris_worst": 2692,
+ "worst_combo": "turbo_small turbo_twin cold_air_intake light_battery oil_cooler strut_bar_front underdrive_pulley tier_T5",
  "budget_tris": 3000
 }

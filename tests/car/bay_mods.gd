@@ -98,8 +98,22 @@ func _static() -> void:
 	# the garage's ids become the keys the bay is built by
 	var keys := FittedMods.keys(ID, ["service", "B", "B1", "strut_bar_front", "short_shifter"])
 	_check(keys == ["service", "turbo_small", "turbo_big_single", "strut_bar_front", "short_shifter"], "keys from ids: %s" % [keys])
+	# the cover's finish by tier (Roy 1570): one plate per tier T2..T5, one at a time
+	for t in ["T2", "T3", "T4", "T5"]:
+		_check(v.has("tier_" + t), "no cover finish for tier %s" % t)
+	var spec := CarSpec.player_spec(ID)
+	var tk := FittedMods.keys(ID, ["service"], spec)
+	_check(tk[0] == "tier_" + ModTree.tier_of(spec) and tk.size() == 2, "keys with the spec lead with the car's tier: %s" % [tk])
+	var t3 := CarAssembler.bay_active_names(ID, ["na_breathe", "na_stroker", "tier_T3"])
+	_check(t3.has("bay_mod_tier3_cover") and t3.has("bay_mod_stroker_strip") and t3.has("bay_mod_stroker_damper") and not t3.has("bay_mod_tier2_cover"), "T3: the polished lid with the stroker's strip, no T2 crown")
 	var combos := FittedMods.combos(ID, v)
-	_check(combos.size() >= 8 and combos[0].is_empty(), "%d fitted sets, stock first" % combos.size())
+	for c: Array in combos:
+		var n_tier := 0
+		for k in c:
+			if String(k).begins_with("tier_"):
+				n_tier += 1
+		_check(n_tier <= 1, "a set wears one tier at most: %s" % [c])
+	_check(combos.size() >= 40 and combos[0].is_empty(), "%d fitted sets (8 x 5 tiers), stock first" % combos.size())
 	var has_b1 := false
 	for c: Array in combos:
 		if c.has("turbo_big_single"):
@@ -138,7 +152,7 @@ func _in_game() -> void:
 	var bay := detail.node_of("bay") as MeshInstance3D
 	_check(bay != null, "no Bay node with the hood up")
 	if bay != null:
-		var want := _bay_tris(["turbo_small", "strut_bar_front"])
+		var want := _bay_tris(["tier_" + ModTree.tier_of(p.spec), "turbo_small", "strut_bar_front"])
 		_check(CarAssembler._mesh_tris(bay.mesh) == want and want != _bay_tris([]), "the bay in game should be the small-turbo bay with a strut bar (%d vs %d)" % [CarAssembler._mesh_tris(bay.mesh), want])
 	var panel := HoodPanel.of(game)
 	if panel != null:
@@ -149,7 +163,7 @@ func _in_game() -> void:
 	call_group(CarDetail.GROUP, "drop_part", "bay")
 	await _frames(2)
 	var bay2 := detail.node_of("bay") as MeshInstance3D
-	_check(bay2 != null and bay2 != bay and CarAssembler._mesh_tris(bay2.mesh) == _bay_tris([]), "after the refit the bay should be stock again")
+	_check(bay2 != null and bay2 != bay and CarAssembler._mesh_tris(bay2.mesh) == _bay_tris(["tier_" + ModTree.tier_of(p.spec)]), "after the refit the bay should be stock again (at the car's tier)")
 
 func _run() -> void:
 	_static()

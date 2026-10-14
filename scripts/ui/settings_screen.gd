@@ -103,6 +103,7 @@ var fov_slider: HSlider
 var smoothing_slider: HSlider
 var smoke_burnout_slider: HSlider
 var smoke_drift_slider: HSlider
+var brake_glow_slider: HSlider
 # Controls
 var controls_scroll: ScrollContainer
 var controls_status: Label
@@ -405,6 +406,7 @@ func _sync_all() -> void:
 	smoothing_slider.value = float(ViewSettings.camera_smoothing)
 	smoke_burnout_slider.value = FxSettings.smoke_burnout
 	smoke_drift_slider.value = FxSettings.smoke_drift
+	brake_glow_slider.value = FxSettings.brake_glow_speed
 	_syncing = false
 
 # ---------- Sound ----------
@@ -561,6 +563,13 @@ func _build_driving_page(parent: Control) -> Control:
 	smoke_drift_slider = _add_slider(page, "Drift", 0.0, FxSettings.SMOKE_MAX, 0.1, FxSettings.smoke_drift,
 		func(v: float) -> void:
 			FxSettings.set_smoke(FxSettings.smoke_burnout, v)
+			FxSettings.save_settings())
+	# Brake glow: how fast the discs' heat pattern changes (0.25 slow soak and
+	# a long afterglow .. 4 snaps hot and fades in seconds). Read live by CarParts.
+	_heading(page, "Brake glow")
+	brake_glow_slider = _add_slider(page, "Heat speed", FxSettings.BRAKE_GLOW_MIN, FxSettings.BRAKE_GLOW_MAX, 0.25, FxSettings.brake_glow_speed,
+		func(v: float) -> void:
+			FxSettings.set_brake_glow_speed(v)
 			FxSettings.save_settings())
 	return _page_of(page)
 

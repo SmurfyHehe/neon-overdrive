@@ -96,15 +96,37 @@ uniform vec3 rim : source_color = vec3(0.79, 0.81, 0.84);
 uniform float rim_metallic = 0.8;
 uniform float rim_roughness = 0.3;
 instance uniform float brake_heat : instance_index(3) = 0.0;
-// The inner ring's heat: brake_heat followed about 2 s behind (CarParts), so
-// the pad band heats from the edge in and cools from the hat out.
+// The inner ring's heat: brake_heat followed behind (CarParts.HEAT_LAG over
+// the glow speed setting), so the pad band heats from the edge in and cools
+// from the hat out.
 instance uniform float brake_heat_lag : instance_index(4) = 0.0;
-// Brake glow (Roy 1514): a dull cherry, orange only at the very top.
+// Brake glow (Roy 1514, and 2026-10-14: not one flat cherry plate). A real
+// disc under heat is a dull cherry only where the pads sweep it, hottest at
+// the outer edge where the rubbing speed is highest, scored with fine
+// circumferential grooves, blotched with hot spots where pad material has
+// built up, and cross-drilled or slotted for cooling. Exaggerated here (an
+// arcade on a real base): deeper cherry, brighter spots, a near-orange rim.
 const vec3 GLOW_CHERRY = vec3(0.27, 0.012, 0.003);   // #8F1A08
 const vec3 GLOW_ORANGE = vec3(1.0, 0.25, 0.014);     // #FF8A1F
+const vec3 GLOW_HOT = vec3(1.0, 0.55, 0.12);         // the hottest spots at the top
 varying vec3 wheel_pos;
 void vertex() {
 	wheel_pos = VERTEX;
+}
+// Cheap value noise on a polar grid: one hash per cell, smoothed, so hot
+// spots are blotches rather than tidy sine lobes.
+float hash2(vec2 p) {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+float vnoise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	float a = hash2(i);
+	float b = hash2(i + vec2(1.0, 0.0));
+	float c = hash2(i + vec2(0.0, 1.0));
+	float d = hash2(i + vec2(1.0, 1.0));
+	return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 void fragment() {
 	float is_rim = 1.0 - step(0.25, COLOR.a);
@@ -117,19 +139,47 @@ void fragment() {
 	float rn = length(wheel_pos.yz) / max(UV.x, 0.01);   // 0 hub .. 1 disc edge
 	float ang = atan(wheel_pos.z, wheel_pos.y);
 	float drum = step(UV.y, -0.5);
-	// Edge first, centre last: the outer ring reads brake_heat, the inner the lagged copy.
+	float vented = step(0.5, UV.y);
+	// Edge first, centre last: the outer third reads brake_heat, the inner the lagged copy.
 	float h = clamp(mix(brake_heat_lag, brake_heat, smoothstep(0.55, 0.95, rn)), 0.0, 1.0);
-	// Pad band: only where the pads rub, not the hat or the outer lip (a drum glows all over its face).
-	float band = mix(smoothstep(0.50, 0.60, rn) * (1.0 - smoothstep(0.93, 1.0, rn) * 0.6), 1.0, drum);
-	// Hot spots: uneven pad deposits, brighter patches round the ring.
-	float spots = 0.75 + 0.5 * (0.5 + 0.5 * sin(ang * 5.0 + 1.3)) * (0.5 + 0.5 * sin(ang * 3.0 - 0.7));
-	// Vent slots on a vented disc: dark radial lines across the band.
-	float vents = mix(1.0, 0.55 + 0.45 * smoothstep(-0.2, 0.4, sin(ang * 30.0)), step(0.5, UV.y));
-	// About half the old light at the top (h 1 ~0.27 luminance, was ~0.55) and a
-	// quarter of it at h 0.8: kept under the glow threshold so it never reads as a lamp.
-	float top = smoothstep(0.8, 1.0, h);
-	vec3 col = mix(GLOW_CHERRY * 1.8, GLOW_ORANGE * 0.7, top);
-	EMISSION = col * (h * h) * band * spots * vents * is_disc;
+	// Pad band: only where the pads rub. The hat (inner 55%) stays cold, the
+	// outer lip past the pad is a thin cooler edge. A drum glows all over its
+	// face, hottest at its rim.
+	float band_in = smoothstep(0.52, 0.62, rn);
+	float band = band_in * (1.0 - smoothstep(0.95, 1.0, rn) * 0.7);
+	band = mix(band, 0.35 + 0.65 * smoothstep(0.3, 1.0, rn), drum);
+	// Hotter towards the edge: rubbing speed grows with radius, so the glow
+	// climbs from a dull inner band to its brightest just inside the lip.
+	float radial = mix(0.55, 1.15, smoothstep(0.58, 0.93, rn));
+	// Score rings: fine circumferential grooves the pads cut, dark hairlines
+	// that break the band into rings (the "pattern", not one plate).
+	// (Lighter on a vented disc, so the slots and rings do not make a grid.)
+	float rings = 1.0 - 0.38 * (1.0 - 0.6 * vented) * smoothstep(0.35, 0.95, sin(rn * 110.0 + 0.4));
+	rings *= 1.0 - 0.22 * (1.0 - 0.6 * vented) * smoothstep(0.5, 1.0, sin(rn * 37.0 - 1.1));
+	// Hot spots: blotches of pad deposit on a polar grid, two octaves, that
+	// creep round the disc as it soaks (a slow drift, so they shimmer).
+	vec2 pc = vec2(ang * 2.2 + brake_heat_lag * 1.3, rn * 9.0);
+	float spots = vnoise(pc) * 0.65 + vnoise(pc * 2.7 + vec2(3.1, 7.7)) * 0.35;
+	spots = 0.45 + 1.3 * smoothstep(0.3, 0.8, spots);
+	// A few bright heat blooms that only show at the top of the range, where
+	// the hottest deposits flare near orange-white.
+	float bloom = smoothstep(0.62, 0.9, vnoise(vec2(ang * 1.6 + 11.0, rn * 6.0)));
+	// Cooling holes: cross-drilled on a solid disc (two staggered rows of dark
+	// dots), straight vent slots on a vented one (dark radial lines).
+	float row = step(0.5, fract(rn * 7.3 + 0.25));
+	vec2 hole_cell = vec2(fract((ang / 6.2831853) * 24.0 + row * 0.5) - 0.5, fract(rn * 7.3 + 0.25) - 0.5);
+	float holes = 1.0 - smoothstep(0.16, 0.24, length(hole_cell * vec2(1.0, 1.6)));
+	holes = 1.0 - holes * band_in * (1.0 - smoothstep(0.90, 0.95, rn));
+	float vents = 0.35 + 0.65 * smoothstep(0.45, 0.8, sin(ang * 30.0));
+	float cooling = mix(mix(holes, vents, vented), 1.0, drum);
+	// Colour: cherry at the bottom, orange across the band at the top, the
+	// blooms past that to a near-white. The rings and holes stay dark
+	// whatever the heat, so the disc always reads as metal with a pattern.
+	float top = smoothstep(0.55, 1.0, h);
+	vec3 col = mix(GLOW_CHERRY * 2.2, GLOW_ORANGE * 0.95, top);
+	col = mix(col, GLOW_HOT, bloom * smoothstep(0.75, 1.0, h) * 0.8);
+	float glow = (h * h) * band * radial * rings * spots * cooling;
+	EMISSION = col * glow * is_disc * 1.25;
 }
 """
 
@@ -153,6 +203,10 @@ var _disc_x: float = 0.0
 var _disc_r := 0.0
 var _last_heat: Array[float] = [-1.0, -1.0, -1.0, -1.0]
 var _lag_heat: Array[float] = [0.0, 0.0, 0.0, 0.0]
+## The drawn edge heat: follows heat_for(disc_temp()) at HEAT_RISE / HEAT_FALL
+## per second times FxSettings.brake_glow_speed, so the glow setting changes
+## how fast the pattern comes and goes without touching the sim's temperature.
+var _vis_heat: Array[float] = [0.0, 0.0, 0.0, 0.0]
 var _last_lag: Array[float] = [-1.0, -1.0, -1.0, -1.0]
 ## Highest car-space hub height each drawn wheel may reach (arch top less the
 ## tyre radius); INF with no arch data. The sim's wheel keeps its own travel.
@@ -183,8 +237,14 @@ static func rim_for_style(style: String) -> String:
 		_:
 			return "five"
 
-## Seconds the inner ring of a disc lags its outer ring (the glow's fade).
+## Seconds the inner ring of a disc lags its outer ring (the glow's fade), at
+## glow speed 1; the setting divides it.
 const HEAT_LAG := 2.0
+## Fastest the drawn edge heat may rise and fall, per second at glow speed 1
+## (0..1 units). At 1 the edge keeps up with any stop the sim can make; the
+## fall is slower so a hot disc visibly cools rather than switching off.
+const HEAT_RISE := 1.5
+const HEAT_FALL := 0.35
 
 ## Hangs the parts on a car whose 4 Wheel nodes already exist.
 static func attach(v: Vehicle, overrides: Dictionary = {}) -> CarParts:
@@ -308,9 +368,13 @@ static func heat_for(temp_c: float) -> float:
 
 func _update_heat(delta: float) -> void:
 	var h := heat_for(disc_temp())
-	var k := clampf(delta / HEAT_LAG, 0.0, 1.0)
+	var speed: float = FxSettings.brake_glow_speed
+	var k := clampf(delta * speed / HEAT_LAG, 0.0, 1.0)
 	for i in 4:
-		var hi := h if i < 2 else h * REAR_HEAT_SHARE
+		var target := h if i < 2 else h * REAR_HEAT_SHARE
+		var rate := (HEAT_RISE if target > _vis_heat[i] else HEAT_FALL) * speed
+		_vis_heat[i] = move_toward(_vis_heat[i], target, rate * delta)
+		var hi := _vis_heat[i]
 		_lag_heat[i] = lerpf(_lag_heat[i], hi, k)
 		hi = floorf(hi / HEAT_STEP) * HEAT_STEP
 		if hi != _last_heat[i]:

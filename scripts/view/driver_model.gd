@@ -3,14 +3,20 @@ extends Node3D
 
 # The driver (cockpit milestone 2, 2026-10-06): a low-poly humanoid built from
 # code in the PS2 way, rigid segments, no skinning. Seated in the driver's seat
-# of the CockpitFrame (car space): head with a cap, torso in a dark jacket with
-# sodium shoulder stripes, legs in dark jeans, boots on the pedals, and a pair
-# of floating gloved hands. No arms: Roy (2026-10-06) "fuck forearms", so the
-# hands end in a clean closed cuff, like the first-person racers of the era,
-# and nothing reaches up across the view. The glove style follows the car
-# (GLOVE_STYLES by PlayerCar.chassis_kind()). The right wrist wears a gold
-# Cuban-link bracelet (Roy, same day), modelled as a ring of flat interlocking
-# links over the cuff.
+# of the CockpitFrame (car space). The body comes from the people pipeline
+# (PersonKit, 2026-10-09, Roy: "i hate that his lower body is just black
+# legs"): a `look` picks the build, skin, hair or cap, jacket (with its
+# trousers and shoes), gloves and trinket; PersonKit builds the head, torso,
+# sleeves, trouser legs and shoes as separate rigid parts and this script
+# seats them. Hands are the gloved mittens ending in a closed cuff; the
+# sleeves run from the shoulders to those cuffs by two-bone IK, in the chase
+# view and the cockpit view both (Roy, 2026-10-09: "we definitely need arms
+# for our user in the car as well", reversing the 2026-10-06 no-forearms
+# call). Nothing reaches up across the view: the elbows hang low and the
+# hands keep their sightline cap. The glove style follows
+# the car (GLOVE_STYLES by PlayerCar.chassis_kind()) unless the look names a
+# pair. The right wrist wears a gold Cuban-link bracelet (Roy, same day),
+# modelled as a ring of flat interlocking links over the cuff.
 #
 # Hands grip the wheel rim at the car's grip height (the spec's driver_grip_deg,
 # nine and three by default) and steer it push-pull like a driving-school
@@ -21,10 +27,13 @@ extends Node3D
 # and grips again. With the wheel still the free hands settle where they are,
 # and once the wheel is near straight both drift back to their grip points.
 # The wheel itself rolls through CockpitFrame's spring (never snaps to lock).
-# Legs: analytic two-bone IK
-# from the hips to the pedals (right foot throttle or brake, whichever is
-# pressed; left foot on the clutch with the clutch model on, else on the dead
-# pedal).
+# Legs: analytic two-bone IK from the hips to the ankles. The feet work the
+# pedals the way feet do: the ball of the foot rides the pedal pad as it
+# travels (CockpitFrame rotates the pedals with the inputs), the heel rests on
+# the carpet behind it and skids forward as the pad swings away, so the shoe
+# pitches and slides with every press. Right foot throttle or brake, whichever
+# is pressed; left foot on the clutch with the clutch model on, else on the
+# dead pedal.
 #
 # Animations are a small state machine on the right hand, all procedural and
 # interruptible, driven by what the car and radio actually do (not by keys):
@@ -57,22 +66,18 @@ extends Node3D
 # rise above HAND_TOP_MIN_DEG below the eye, so the road band stays clear
 # (tests/view/cockpit_driver.gd).
 
-const SKIN := Color("#B9896A")
-const HAIR := Color("#2A1E16")
-const CAP := Color("#1B1E25")
-const JACKET := Color("#1E2229")
-const JACKET_TRIM := Color("#FF8A1F")   # sodium
+## The player's look (PersonKit rows). Set before the frame builds (the
+## character screen, tools/player_body_shots.gd); missing rows take the defaults.
+static var player_look := {}
 ## Glove per car: colour of the glove and of the closed cuff at the wrist.
-## Keyed by PlayerCar.chassis_kind(); DEFAULT_GLOVE for anything unlisted.
+## Keyed by PlayerCar.chassis_kind(); DEFAULT_GLOVE for anything unlisted. A
+## look whose gloves row is not "car" wears that pair instead (PersonKit.GLOVES).
 const GLOVE_STYLES := {
 	"p1_coupe": {"glove": Color("#111216"), "cuff": Color("#8A5A2A")},   # black leather, dull amber band
 	"test": {"glove": Color("#2A2E36"), "cuff": Color("#C9CED6")},       # grey fabric, silver band
 }
 const DEFAULT_GLOVE := "p1_coupe"
 const GOLD := Color("#D9A441")
-const JEANS := Color("#171C28")
-const BOOT := Color("#121318")
-const SOLE := Color("#2C3038")
 
 ## Hand space (see _hand_mesh): the wrist runs along +z; the cuff closes it.
 ## The cuff is glove-coloured with a thin band in the style's accent colour:
@@ -92,8 +97,18 @@ const LINK_LEN := 0.028        # along the chain (links overlap: the pitch is 0.
 const LINK_WIDE := 0.012       # across the chain
 const LINK_BAR := 0.0045
 const LINK_TILT_DEG := 35.0
-const THIGH := 0.47
-const SHIN := 0.45
+## Limb lengths are the look's (body.lengths, the height row); these are the
+## average man's, for tests and the pelvis maths.
+const THIGH := PersonKit.THIGH
+const SHIN := PersonKit.SHIN
+## The feet: the carpet top under the pedals (CockpitFrame's floor), the
+## heel-to-ball length of the shoe, where the ball sits on a pad (pedal
+## space, the pad face), and the dead pedal's rest (car space).
+const FLOOR_Y := 0.29
+const BALL_LEN := 0.20
+const PAD_BALL := Vector3(0.0, -0.17, 0.012)
+const DEAD_BALL := Vector3(-0.62, 0.37, -0.52)
+const FOOT_RATE := 1.6           # m/s the right foot moves between pedals
 ## Where the hands hold the rim at rest, in degrees round the rim for the right
 ## hand (0 = 3 o'clock, up is positive; the left hand mirrors it about 12
 ## o'clock). Per car: the spec's "driver_grip_deg" (CarSpec), DEFAULT_GRIP_DEG
@@ -122,7 +137,7 @@ const STILL_RATE := 6.0          # deg/s: below this the wheel counts as still
 ## Seated geometry, car space: the pelvis pivot and the head on the torso.
 const PELVIS := Vector3(CockpitFrame.SEAT_X, 0.50, 0.34)
 const RECLINE_DEG := 12.0
-const HEAD_Y := 0.49
+const HEAD_Y := PersonKit.TORSO + PersonKit.NECK
 const REACH_SECS := 0.22
 const RETURN_SECS := 0.22
 const PRESS_SECS := 0.12
@@ -132,7 +147,7 @@ const WINDOW_REACH_SECS := 0.25
 const WINDOW_LINGER_SECS := 0.3   # the hand stays this long after the window stops
 const HEAD_YAW_RAD := 0.20       # at full steer fraction
 const LEAN_RAD_PER_G := 0.08
-const HIP_HALF := 0.09
+const HIP_HALF := PersonKit.HIP_HALF
 
 ## hand_contact targets.
 const CONTACT_GEAR := &"gear_knob"
@@ -154,9 +169,14 @@ var torso_mesh: MeshInstance3D
 var head: Node3D             # on the neck, yaws into turns
 var head_mesh: MeshInstance3D
 var hands := {}              # side (-1 left, +1 right) -> MeshInstance3D
-var bracelet: MeshInstance3D # on the right hand
+var bracelet: MeshInstance3D # on the right hand (the "bracelet" trinket)
 var legs := {}               # side -> {thigh, shin, foot}
+var arms := {}               # side -> {upper, fore}; chase view only
+var look := {}               # the completed look (PersonKit.complete)
+var body := {}               # PersonKit.build(look)
+var body_tris := 0           # the body kit's triangles (hands and trinkets apart)
 var glove_style := DEFAULT_GLOVE
+var _glove := {}             # the pair worn: {"glove": Color, "cuff": Color}
 var grip_deg := DEFAULT_GRIP_DEG   # this car's rest grip, right hand
 ## Per hand (side -> {}): "w" the hand's angle round the rim in car space
 ## (degrees, 0 = 3 o'clock, up positive, unwrapped), "rim" its angle on the
@@ -195,7 +215,7 @@ var _lat_g := 0.0
 var _head_bob := 0.0
 var _prev_vy := 0.0
 var _breath := 0.0
-var _foot_target := Vector3.ZERO
+var _ball := {}                  # side -> where the ball of the foot is, car space
 var _mat: StandardMaterial3D
 var tri_count := 0
 ## How far the shin ends fall short of the ankle targets (0 when the leg can
@@ -211,6 +231,10 @@ func _ready() -> void:
 	_mat = CockpitKit.material(0.9, 0.0, 0.05)
 	var kind := PlayerCar.chassis_kind()
 	glove_style = kind if GLOVE_STYLES.has(kind) else DEFAULT_GLOVE
+	look = PersonKit.complete(player_look)
+	_glove = PersonKit.GLOVES[look.gloves] if look.gloves != "car" else GLOVE_STYLES[glove_style]
+	body = PersonKit.build(look)
+	body_tris = body.tris
 	grip_deg = float(player.spec.get("driver_grip_deg", DEFAULT_GRIP_DEG))
 	_reset_rim()
 	_build_torso()
@@ -218,7 +242,13 @@ func _ready() -> void:
 	for side in [-1, 1]:
 		hands[side] = _build_hand(side)
 		legs[side] = _build_leg(side)
-	_build_bracelet()
+		arms[side] = _build_arm(side)
+	if look.trinket == "bracelet":
+		_build_bracelet()
+	if look.trinket == "watch":
+		var watch := (body.parts.watch as PersonKit).instance(CockpitKit.material(0.6, 0.4, 0.4), "Watch")
+		tri_count += (body.parts.watch as PersonKit).tri_count()
+		(hands[-1] as Node3D).add_child(watch)
 	for n in find_children("*", "VisualInstance3D", true, false):
 		(n as VisualInstance3D).layers = CockpitFrame.DRIVER_BIT
 		if n is GeometryInstance3D:
@@ -226,9 +256,13 @@ func _ready() -> void:
 	_last_gear = player.gear
 	_hand_xf = _grip_transform(1)
 	_left_xf = _grip_transform(-1)
-	_foot_target = _pedal_ankle("throttle")
+	_ball[1] = _pad_ball("throttle")
+	_ball[-1] = _pad_ball("clutch") if player.realistic_clutch else DEAD_BALL
 
-## Cockpit view: the camera is the head, so head and torso go.
+## Cockpit view: the camera is the head, so head and torso go. The sleeves
+## stay (Roy, 2026-10-09: "we definitely need arms for our user in the car
+## as well"): they run from behind the eye down to the gloves on the rim, so
+## they sit under the sightline the hands already keep.
 func set_cockpit(on: bool) -> void:
 	head.visible = not on
 	torso_mesh.visible = not on
@@ -241,54 +275,24 @@ func _part(kit: CockpitKit, node_name: String, parent: Node = self) -> MeshInsta
 	parent.add_child(mi)
 	return mi
 
-## A limb segment along +y from 0 to `len`, with a joint at the start.
-static func _segment(kit: CockpitKit, len: float, r0: float, r1: float, col: Color, sides := 10) -> void:
-	# tapered: two stacked cylinders
-	kit.cylinder(r0, 0.0, len * 0.55, Vector3.ZERO, col, sides)
-	kit.cylinder(r1, len * 0.5, len, Vector3.ZERO, col, sides)
-	kit.cylinder(r0 * 1.05, -0.02, 0.02, Vector3.ZERO, col, 8)
-
 func _build_torso() -> void:
 	torso = Node3D.new()
 	torso.name = "Torso"
 	torso.position = PELVIS
 	torso.rotation_degrees = Vector3(RECLINE_DEG, 0.0, 0.0)   # reclined with the seat
 	add_child(torso)
-	var k := CockpitKit.new()
-	# pelvis and belly, chest, shoulders: boxes with a jacket colour, trim strips
-	k.box(Vector3(0.36, 0.12, 0.24), Vector3(0.0, 0.06, 0.0), JEANS)
-	k.box(Vector3(0.015, 0.05, 0.25), Vector3(0.0, 0.12, 0.0), SOLE)             # belt buckle line
-	k.box(Vector3(0.38, 0.16, 0.24), Vector3(0.0, 0.20, 0.0), JACKET)
-	k.box(Vector3(0.42, 0.12, 0.26), Vector3(0.0, 0.34, 0.0), JACKET)             # chest
-	k.box(Vector3(0.46, 0.07, 0.24), Vector3(0.0, 0.41, 0.0), JACKET)             # shoulders
-	k.box(Vector3(0.012, 0.26, 0.012), Vector3(0.0, 0.28, 0.13), SOLE)            # zip
-	for sx in [-1.0, 1.0]:
-		k.box(Vector3(0.05, 0.012, 0.25), Vector3(sx * 0.19, 0.45, 0.0), JACKET_TRIM)    # shoulder stripe
-		k.box(Vector3(0.025, 0.07, 0.14), Vector3(sx * 0.10, 0.38, 0.13), JACKET_TRIM)   # chest flash
-	k.box(Vector3(0.16, 0.04, 0.16), Vector3(0.0, 0.46, 0.0), JACKET)             # collar
-	k.cylinder(0.045, 0.44, 0.50, Vector3.ZERO, SKIN, 8)                          # neck
-	torso_mesh = _part(k, "TorsoMesh", torso)
+	torso_mesh = _part(body.parts.torso, "TorsoMesh", torso)
 
 func _build_head() -> void:
 	head = Node3D.new()
 	head.name = "Head"
-	head.position = Vector3(0.0, HEAD_Y, 0.0)
+	head.position = body.joints.neck
 	torso.add_child(head)
-	var k := CockpitKit.new()
-	k.box(Vector3(0.17, 0.21, 0.19), Vector3(0.0, 0.105, 0.0), SKIN)
-	k.box(Vector3(0.04, 0.05, 0.03), Vector3(0.0, 0.08, 0.105), SKIN)             # nose
-	k.box(Vector3(0.18, 0.08, 0.20), Vector3(0.0, 0.17, -0.005), HAIR)            # hair
-	k.box(Vector3(0.19, 0.045, 0.21), Vector3(0.0, 0.215, 0.0), CAP)              # cap
-	k.box(Vector3(0.17, 0.012, 0.09), Vector3(0.0, 0.195, 0.14), CAP)             # peak
-	k.box(Vector3(0.05, 0.02, 0.012), Vector3(0.0, 0.215, 0.106), JACKET_TRIM)    # cap mark
-	for sx in [-1.0, 1.0]:
-		k.box(Vector3(0.03, 0.012, 0.02), Vector3(sx * 0.04, 0.12, 0.096), HAIR)   # brows
-		k.box(Vector3(0.025, 0.035, 0.015), Vector3(sx * 0.09, 0.09, 0.0), SKIN)   # ears
-	head_mesh = _part(k, "HeadMesh", head)
+	head_mesh = _part(body.parts.head, "HeadMesh", head)
 
 func _build_hand(side: int) -> MeshInstance3D:
 	var k := CockpitKit.new()
-	_hand_mesh(k, side, GLOVE_STYLES[glove_style].glove, GLOVE_STYLES[glove_style].cuff)
+	_hand_mesh(k, side, _glove.glove, _glove.cuff)
 	return _part(k, "Hand" + ("L" if side < 0 else "R"))
 
 ## A gloved mitten gripping a tube that runs along local y through the origin:
@@ -340,20 +344,18 @@ func _build_bracelet() -> void:
 	(hands[1] as Node3D).add_child(bracelet)
 
 func _build_leg(side: int) -> Dictionary:
-	var th := CockpitKit.new()
-	_segment(th, THIGH, 0.075, 0.06, JEANS)
-	var sh := CockpitKit.new()
-	_segment(sh, SHIN, 0.055, 0.045, JEANS)
-	sh.box(Vector3(0.09, 0.05, 0.10), Vector3(0.0, 0.02, 0.0), JEANS)             # knee
-	var ft := CockpitKit.new()
-	# foot along -z from the ankle: boot and sole, toe up a little
-	ft.box(Vector3(0.09, 0.07, 0.24), Vector3(0.0, -0.035, -0.09), BOOT)
-	ft.box(Vector3(0.095, 0.02, 0.26), Vector3(0.0, -0.08, -0.10), SOLE)
-	ft.box(Vector3(0.09, 0.08, 0.08), Vector3(0.0, -0.03, 0.02), BOOT)            # heel/ankle
-	var thigh := _part(th, "Thigh" + ("L" if side < 0 else "R"))
-	var shin := _part(sh, "Shin" + ("L" if side < 0 else "R"))
-	var foot := _part(ft, "Foot" + ("L" if side < 0 else "R"))
-	return {"thigh": thigh, "shin": shin, "foot": foot}
+	var s := "_l" if side < 0 else "_r"
+	var n := "L" if side < 0 else "R"
+	return {"thigh": _part(body.parts["thigh" + s], "Thigh" + n),
+		"shin": _part(body.parts["shin" + s], "Shin" + n),
+		"foot": _part(body.parts["foot" + s], "Foot" + n)}
+
+## The sleeves, shoulder to the cuff.
+func _build_arm(side: int) -> Dictionary:
+	var s := "_l" if side < 0 else "_r"
+	var n := "L" if side < 0 else "R"
+	return {"upper": _part(body.parts["upper_arm" + s], "UpperArm" + n),
+		"fore": _part(body.parts["forearm" + s], "Forearm" + n)}
 
 # ---------- IK ----------
 
@@ -387,7 +389,10 @@ func _aim(node: Node3D, from: Vector3, to: Vector3, hint: Vector3) -> void:
 	node.transform = Transform3D(Basis(x, y, z), from)
 
 func _hip(side: int) -> Vector3:
-	return torso.transform * Vector3(float(side) * HIP_HALF, 0.02, 0.0)
+	return torso.transform * (body.joints["hip_l" if side < 0 else "hip_r"] as Vector3)
+
+func _shoulder(side: int) -> Vector3:
+	return torso.transform * (body.joints["shoulder_l" if side < 0 else "shoulder_r"] as Vector3)
 
 ## Where a hand is on the rim this frame, car space: the rim point at its
 ## car-space angle (see _rim), lifted a little while it slides. Hand space as
@@ -550,14 +555,21 @@ func _switch_hand_transform(pressed: float) -> Transform3D:
 	var p := frame.switch_press_position() - b * thumb + Vector3(0.0, 0.012 * (1.0 - pressed), 0.0)
 	return Transform3D(b, p)
 
-## Ankle position for a pedal, car space: behind and a little below the pad.
-func _pedal_ankle(pedal: String) -> Vector3:
-	var pivot: Node3D = frame.pedals[pedal]
-	var pad := pivot.transform * Vector3(0.0, -0.17, 0.004)
-	return pad + Vector3(0.0, -0.03, 0.11)
+## Where the ball of the foot sits on a pedal's pad this frame, car space
+## (the pad swings with the pedal's travel, so this moves with the press).
+func _pad_ball(pedal: String) -> Vector3:
+	return (frame.pedals[pedal] as Node3D).transform * PAD_BALL
 
-func _dead_pedal_ankle() -> Vector3:
-	return Vector3(-0.52, 0.33, -0.33)
+## A shoe with its ball at `ball`, car space: the heel on the carpet behind
+## it (skidding forward when the pad is too far to reach), the toe pointing
+## at the pad. Foot space as PersonKit._foot: origin at the heel, toe along -z.
+func _foot_transform(ball: Vector3) -> Transform3D:
+	var rise := clampf(ball.y - FLOOR_Y, 0.0, BALL_LEN * 0.95)
+	var heel := Vector3(ball.x, FLOOR_Y, ball.z + sqrt(BALL_LEN * BALL_LEN - rise * rise))
+	var z := (heel - ball).normalized()
+	var x := Vector3.RIGHT
+	var y := z.cross(x).normalized()
+	return Transform3D(Basis(x, y, z), heel)
 
 # ---------- per frame ----------
 
@@ -577,7 +589,7 @@ func _process(delta: float) -> void:
 	# head: yaw into the turn, bob
 	var steer := frame.steering
 	head.rotation = Vector3(0.0, lerp_angle(head.rotation.y, -steer * HEAD_YAW_RAD, 1.0 - exp(-5.0 * delta)), 0.0)
-	head.position = Vector3(0.0, HEAD_Y + _head_bob, 0.0)
+	head.position = (body.joints.neck as Vector3) + Vector3(0.0, _head_bob, 0.0)
 
 	_update_events()
 	_step_rim(delta)
@@ -585,6 +597,7 @@ func _process(delta: float) -> void:
 	_step_left(delta)
 	_place_hands()
 	_place_legs(delta)
+	_place_arms()
 
 ## Watch the car and radio for things to animate.
 func _update_events() -> void:
@@ -756,23 +769,34 @@ func _place_hands() -> void:
 
 func _place_legs(delta: float) -> void:
 	var p := player
-	var want := _pedal_ankle("brake") if p.brake_amount > 0.05 else _pedal_ankle("throttle")
-	_foot_target = _foot_target.move_toward(want, 1.6 * delta)
-	var targets := {1: _foot_target, -1: _pedal_ankle("clutch") if p.realistic_clutch else _dead_pedal_ankle()}
+	# the right foot: on the brake while it is pressed, else over the throttle;
+	# the left on the clutch (clutch model) or the dead pedal. A foot that is on
+	# a pedal rides its pad (the pad moves with the input); between pedals it
+	# crosses at FOOT_RATE.
+	var want := {1: _pad_ball("brake") if p.brake_amount > 0.05 else _pad_ball("throttle"),
+		-1: _pad_ball("clutch") if p.realistic_clutch else DEAD_BALL}
 	for side in [-1, 1]:
+		_ball[side] = (_ball[side] as Vector3).move_toward(want[side], FOOT_RATE * delta)
 		var l: Dictionary = legs[side]
+		var foot_xf := _foot_transform(_ball[side])
+		(l.foot as Node3D).transform = foot_xf
+		var ankle := foot_xf * PersonKit.ANKLE
 		var hip := _hip(side)
-		var ankle: Vector3 = targets[side]
-		var ik := two_bone(hip, ankle, THIGH, SHIN, Vector3(0.0, 1.0, -0.4))
+		var ik := two_bone(hip, ankle, body.lengths.thigh, body.lengths.shin, Vector3(0.0, 1.0, -0.4))
 		_aim(l.thigh, hip, ik[0], Vector3.RIGHT)
 		_aim(l.shin, ik[0], ik[1], Vector3.RIGHT)
-		var foot: Node3D = l.foot
-		# the boot (built along -z) points from the ankle up at the pedal pad
-		var z := -(Vector3(0.0, 0.05, -0.22)).normalized()
-		var x := Vector3.RIGHT
-		var y := z.cross(x).normalized()
-		foot.transform = Transform3D(Basis(x, y, z), ik[1])
 		_leg_gap[side] = ik[1].distance_to(ankle)
+
+## The sleeves: two-bone IK from the shoulder to the hand's cuff, elbows out
+## and down.
+func _place_arms() -> void:
+	for side in [-1, 1]:
+		var a: Dictionary = arms[side]
+		var shoulder := _shoulder(side)
+		var wrist := wrist_position(side)
+		var ik := two_bone(shoulder, wrist, body.lengths.arm_upper, body.lengths.arm_lower, Vector3(float(side) * 0.6, -1.0, 0.1))
+		_aim(a.upper, shoulder, ik[0], Vector3.RIGHT)
+		_aim(a.fore, ik[0], ik[1], Vector3.RIGHT)
 
 ## Hand position and the rim grip it belongs on, for tests (car space).
 func hand_position(side: int) -> Vector3:
@@ -799,6 +823,18 @@ func wheel_rate_deg() -> float:
 
 func leg_gap(side: int) -> float:
 	return _leg_gap[side]
+
+## The heel and the ball of a foot, car space (tests: the heel on the carpet,
+## the ball on the pad).
+func heel_position(side: int) -> Vector3:
+	return (legs[side].foot as Node3D).position
+
+func ball_position(side: int) -> Vector3:
+	return _ball[side]
+
+## The pad point the foot is over for a pedal, car space (tests).
+func pad_ball(pedal: String) -> Vector3:
+	return _pad_ball(pedal)
 
 func is_busy() -> bool:
 	return act != Act.GRIP

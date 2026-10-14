@@ -50,6 +50,9 @@ call :run world/road_strip_winding --headless
 call :run world/sidewalk_collision_taper --headless
 call :run car/aero_draft_equivalence --headless
 call :run view/camera_feel --headless
+rem The people pipeline's body kit (every row option builds, 7 heads, under 1,500 tris) and the driver's feet on the pedals.
+call :run view/person_kit --headless
+call :run view/driver_feet --headless
 call :run audio/car_audio --headless
 call :run fleet/fleet_design_check --headless
 rem Car pipeline step 1: the P1 body.glb from tools/car_pipeline/build_car.py loads, splits into panels, sits on the sheet's numbers.

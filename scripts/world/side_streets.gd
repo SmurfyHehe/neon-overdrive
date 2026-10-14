@@ -27,6 +27,7 @@ extends RefCounted
 const Districts := preload("res://scripts/world/districts.gd")
 const GasStation := preload("res://scripts/world/gas_station.gd")
 const RoadMap := preload("res://scripts/world/road_map.gd")
+const RoadRamps := preload("res://scripts/world/road_ramps.gd")
 
 const LANE_W := 3.0           # the side street's lanes are narrower than the main road's
 const KERB_W := 0.3
@@ -114,6 +115,10 @@ static func mouths_at(chunk_index: int) -> Array:
 			continue
 		# nor into a gas station's lot
 		if GasStation.in_lot(chunk_index, bz, side):
+			continue
+		# nor across a pocket's arm or lot (PocketSite; a 60 m street reaches
+		# the arm's lane 80 m out)
+		if RoadRamps.pocket_bound(chunk_index, side) > 0.0:
 			continue
 		# nor through the run's landmark (world step 1 pins it to one slot)
 		if Districts.landmark_at(chunk_index, slot * 2 + (0 if side == 1 else 1)) != "":

@@ -259,7 +259,9 @@ func _pools() -> void:
 	RingSite.focus_s = float(RoadMap.rings()[1].s)
 	node.call("_place")
 	var c: Dictionary = node.counts()
-	_check(int(c.pools) == RingSite.LAMP_DEG.size() + 4, "ring x2: %d light pools (%d lamps + 2 boards + 2 washes wanted)" % [c.pools, RingSite.LAMP_DEG.size()])
+	# a spur takes the lamp at its end (the pocket's arm goes on from there)
+	var spurs: int = RoadMap.ring_spur_sides(1).size()
+	_check(int(c.pools) == RingSite.LAMP_DEG.size() - spurs + 4, "ring x2: %d light pools (%d lamps - %d spurs + 2 boards + 2 washes wanted)" % [c.pools, RingSite.LAMP_DEG.size(), spurs])
 	_check(int(c.draws) == 3 and int(c.tags) == 0, "ring x2 (residential): %d draw calls, %d tags (3 and 0 wanted)" % [c.draws, c.tags])
 	var islands := {}
 	for ri in RoadMap.rings().size():

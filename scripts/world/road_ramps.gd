@@ -384,7 +384,7 @@ static func place_of(u: Vector3, s: float) -> Dictionary:
 			var ps := pocket_site()
 			var px := u.x * float(pk.side)
 			if px < float(ps.BOUND) and u.y < RAMP_H + ON_DECK and ps.covers(pk, px, w):
-				var dy := float(ps.deck_y(pk, px, w))
+				var dy := float(ps.deck_y_near(pk, px, w, u.y))
 				if not is_inf(dy) and absf(u.y - dy) < ON_DECK:
 					out["part"] = "pocket"
 					out["side"] = int(pk.side)

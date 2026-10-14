@@ -269,7 +269,7 @@ func _physics_process(_delta: float) -> bool:
 		0:
 			_check(RoadMap.is_loop(), "no loop")
 			_check(String(RoadMap.rings()[SITE].id) == "x5" and RoadMap.pocket_of_ring(SITE).get("id") == "pier", "ring %d is %s, pocket %s" % [SITE, RoadMap.rings()[SITE].id, RoadMap.pocket_of_ring(SITE)])
-			_check(RoadMap.pocket_of_ring(SITE - 1).is_empty() and RoadMap.pockets_of_ring(SITE).size() == 1, "ring %d has a pocket: %s; ring %d has %d" % [SITE - 1, RoadMap.pocket_of_ring(SITE - 1), SITE, RoadMap.pockets_of_ring(SITE).size()])
+			_check(RoadMap.pocket_at(SITE, -1).is_empty() and RoadMap.pockets_of_ring(SITE).size() == 1, "ring %d has %d pockets, -1 side %s" % [SITE, RoadMap.pockets_of_ring(SITE).size(), RoadMap.pocket_at(SITE, -1)])
 			site_s = float(RoadMap.rings()[SITE].s)
 			var rc := floori(site_s / L)
 			# the wall stands out past the pocket on its side only, along its reach

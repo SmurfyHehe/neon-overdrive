@@ -24,6 +24,19 @@ extends Node3D
 #   diner  the drive-in diner (x3b, step 8): a round lit sign, the diner
 #          with its long window, a canopy with a row of cars parked under it
 #          with their lights on, a loop lot.
+#   deck   the parking deck (x1b, step 12): two levels. The ground floor
+#          under a slab on columns, strip lights by the mouth and dark at
+#          the back (the hiding spot); a straight ramp up the far side to
+#          the open roof with its lamps, parapet and lit stair tower.
+#   laundry the laundromat block (x2b): a block of low houses in the middle
+#          of the lot you drive round, the laundromat's white window on the
+#          road side, the back lane behind it dark (the hiding spot).
+#   salvage the salvage yard (x4a): a chain gate, crushed cars stacked
+#          three high, a mobile crane, one floodlight on a mast, puddles,
+#          sparks from a welder behind a wall.
+#   layby  the lay-by (x7b): a short lit bay with a bus shelter and a cop
+#          car parked with its lights off; the dark pocket behind the
+#          shelter's wall.
 #
 # A pocket on side -1 is laid out as if on side +1 and mirrored (_mirror).
 #
@@ -74,7 +87,12 @@ const GROUND_Y := 0.12
 const LOT_X0 := 58.0
 const LOT_X1 := 96.0
 const LOT_LEN := 100.0          # the pier's; see lot_len()
-const LOT_LENS := {"pier": 100.0, "truck": 130.0, "diner": 80.0}
+const LOT_LENS := {"pier": 100.0, "truck": 130.0, "diner": 80.0, "deck": 70.0, "laundry": 90.0, "salvage": 100.0, "layby": 40.0}
+## The parking deck: the roof's height over the ground floor, the ramp's
+## lane (x out from the centre line) and its run along the lot.
+const DECK_H := 3.4
+const DECK_RAMP_X := Vector2(LOT_X1 - 9.0, LOT_X1 - 1.0)
+const DECK_RAMP_V := Vector2(4.0, 64.0)
 ## The out-of-bounds wall stands this far out along the pocket, and the
 ## pocket's footprint along the road (for place_of and the builder).
 const BOUND := 130.0
@@ -114,6 +132,24 @@ const C_ISLAND := Color(0.5, 0.5, 0.48, 0.0)
 const C_DINER := Color(0.7, 0.68, 0.6, 0.0)
 const C_DINER_ROOF := Color(0.3, 0.1, 0.1, 0.0)
 const C_DINER_TRIM := Color(0.9, 0.3, 0.5, 0.4)     # the neon-ish trim band
+const C_CONCRETE := Color(0.36, 0.36, 0.35, 0.0)
+const C_STRIP := Color(0.85, 0.9, 1.0, 0.3)       # a ceiling strip light
+const C_STAIR_WINDOW := Color(0.6, 0.8, 1.0, 0.35)
+const C_HOUSE_WALL := Color(0.45, 0.4, 0.36, 0.0)
+const C_HOUSE_ROOF := Color(0.22, 0.2, 0.19, 0.0)
+const C_LAUNDRY := Color(1.0, 1.0, 0.95, 0.42)
+const C_MACHINE := Color(0.75, 0.78, 0.8, 0.2)
+const C_WRECK_PAINTS: Array[Color] = [Color(0.4, 0.1, 0.08, 0.0), Color(0.3, 0.3, 0.32, 0.0), Color(0.1, 0.15, 0.3, 0.0), Color(0.5, 0.45, 0.25, 0.0), Color(0.2, 0.3, 0.2, 0.0)]
+const C_RUST := Color(0.35, 0.18, 0.1, 0.0)
+const C_PUDDLE := Color(0.03, 0.04, 0.06, 0.0)
+const C_FLOOD := Color(0.9, 0.95, 1.0, 0.5)
+const C_SPARK := Color(0.7, 0.85, 1.0, 0.6)        # in the shader's blink band
+const C_GATE := Color(0.5, 0.5, 0.5, 0.0)
+const C_SHELTER := Color(0.25, 0.3, 0.35, 0.0)
+const C_SHELTER_GLASS := Color(0.5, 0.6, 0.7, 0.12)
+const C_COP := Color(0.92, 0.92, 0.9, 0.0)
+const C_COP_DOOR := Color(0.08, 0.1, 0.25, 0.0)
+const C_LIGHTBAR := Color(0.2, 0.2, 0.25, 0.0)
 const C_CARS: Array[Color] = [Color(0.55, 0.12, 0.1, 0.0), Color(0.15, 0.18, 0.4, 0.0), Color(0.7, 0.7, 0.68, 0.0), Color(0.1, 0.1, 0.1, 0.0), Color(0.55, 0.5, 0.2, 0.0), Color(0.2, 0.4, 0.3, 0.0)]
 
 static var enabled := true
@@ -150,7 +186,7 @@ static func reach_v(pk: Dictionary) -> float:
 ## Which light the pocket's lamps throw on the ground (RoadChunkBuilder's
 ## pool materials).
 static func pool_light(pk: Dictionary) -> String:
-	return "sodium" if String(pk.kind) == "truck" else "white"
+	return "sodium" if String(pk.kind) in ["truck", "laundry"] else "white"
 
 ## A point of the arm's centre line `s` metres from the stub's end, for a
 ## pocket on side +1 bending toward +v: {p (x, v), t (unit tangent), n (unit
@@ -216,6 +252,25 @@ static func covers(pk: Dictionary, x: float, v: float, slack: float = 0.6) -> bo
 		best = minf(best, d)
 		s += 2.0
 	return best <= 0.0
+
+## Height of the deck nearest `y` under (x, v): the parking deck has two
+## levels and a ramp between them; every other pocket is deck_y().
+static func deck_y_near(pk: Dictionary, x: float, v: float, y: float) -> float:
+	if String(pk.kind) != "deck":
+		return deck_y(pk, x, v)
+	var vv := v * float(pk.turn)
+	var v0 := ARC_R + ARM_STRAIGHT
+	var ground := GROUND_Y + R.LIFT
+	if x >= LOT_X0 and x <= LOT_X1 and vv >= v0 - 0.5 and vv <= v0 + lot_len(pk):
+		if x >= DECK_RAMP_X.x - 0.5 and x <= DECK_RAMP_X.y + 0.5:
+			if vv >= v0 + DECK_RAMP_V.y:
+				return ground + DECK_H   # the landing at the top
+			if vv >= v0 + DECK_RAMP_V.x:
+				return ground + DECK_H * (vv - v0 - DECK_RAMP_V.x) / (DECK_RAMP_V.y - DECK_RAMP_V.x)
+			return ground
+		# the floor or the roof, whichever the car is nearer
+		return ground + DECK_H if y - ground > DECK_H * 0.5 else ground
+	return deck_y(pk, x, v)
 
 ## Height of the pocket's deck under (x, v signed), or -INF off it.
 static func deck_y(pk: Dictionary, x: float, v: float) -> float:
@@ -376,6 +431,14 @@ static func build(pk: Dictionary) -> Dictionary:
 			_truck(turn)
 		"diner":
 			_diner(turn)
+		"deck":
+			_parking_deck(turn)
+		"laundry":
+			_laundry(turn)
+		"salvage":
+			_salvage(turn)
+		"layby":
+			_layby(turn)
 	var made := R.end_flat()
 	R.wall_colour = R.C_WALL
 	if int(pk.side) < 0:
@@ -777,3 +840,224 @@ static func _parked_car_x(cx: float, cv: float, y: float, paint: Color) -> void:
 		R._quad(R._p(cx + 2.21, y + 0.7, cv + dv - 0.2), R._p(cx + 2.21, y + 0.7, cv + dv + 0.2), R._p(cx + 2.21, y + 0.85, cv + dv - 0.2), R._p(cx + 2.21, y + 0.85, cv + dv + 0.2), C_HEADLIGHT, Vector3(1.0, 0.0, 0.0))
 		R._quad(R._p(cx - 2.21, y + 0.7, cv + dv - 0.2), R._p(cx - 2.21, y + 0.7, cv + dv + 0.2), R._p(cx - 2.21, y + 0.85, cv + dv - 0.2), R._p(cx - 2.21, y + 0.85, cv + dv + 0.2), C_TAIL, Vector3(-1.0, 0.0, 0.0))
 	R._wall_box(R._p(cx - 2.2, 0.0, cv), R._p(cx + 2.2, 0.0, cv), y, y + 1.4, 1.85)
+
+# ---------- the parking deck ----------
+
+static func _parking_deck(turn: float) -> void:
+	var y := GROUND_Y + R.LIFT
+	var v0 := (ARC_R + ARM_STRAIGHT) * turn
+	var len := float(LOT_LENS.deck)
+	var v1 := v0 + len * turn
+	var top := y + DECK_H
+	var rx0: float = DECK_RAMP_X.x
+	var rx1: float = DECK_RAMP_X.y
+	var rv0 := v0 + DECK_RAMP_V.x * turn
+	var rv1 := v0 + DECK_RAMP_V.y * turn
+	# the roof slab over everything but the ramp's slot, drivable, with a
+	# soffit underneath
+	var roof_x1 := rx0 - 0.5
+	var strips := 7
+	for i in strips:
+		var va := lerpf(v0, v1, float(i) / float(strips))
+		var vb := lerpf(v0, v1, float(i + 1) / float(strips))
+		R._deck_quad(R._p(LOT_X0, top, va), R._p(roof_x1, top, va), R._p(LOT_X0, top, vb), R._p(roof_x1, top, vb))
+		R._quad(R._p(LOT_X0, top - 0.5, va), R._p(roof_x1, top - 0.5, va), R._p(LOT_X0, top - 0.5, vb), R._p(roof_x1, top - 0.5, vb), C_CONCRETE, Vector3.DOWN)
+	# the landing at the top of the ramp, over the slot's far end
+	R._deck_quad(R._p(rx0 - 0.6, top, rv1), R._p(rx1, top, rv1), R._p(rx0 - 0.6, top, v1), R._p(rx1, top, v1))
+	# the slab's edges
+	for e: Array in [[LOT_X0, v0, LOT_X0, v1], [roof_x1, v0, roof_x1, rv1], [rx1, rv1, rx1, v1], [LOT_X0, v1, rx1, v1], [LOT_X0, v0, roof_x1, v0]]:
+		R._quad(R._p(e[0], top, e[1]), R._p(e[2], top, e[3]), R._p(e[0], top - 0.5, e[1]), R._p(e[2], top - 0.5, e[3]), C_CONCRETE, Vector3(signf(e[0] + e[2] - LOT_X0 - LOT_X1), 0.0, 0.0))
+	# the ramp up the far side, two lanes, kerbs along it
+	var n := 15
+	for i in n:
+		var va := lerpf(rv0, rv1, float(i) / float(n))
+		var vb := lerpf(rv0, rv1, float(i + 1) / float(n))
+		var ya := y + DECK_H * float(i) / float(n)
+		var yb := y + DECK_H * float(i + 1) / float(n)
+		R._deck_quad(R._p(rx0, ya, va), R._p(rx1, ya, va), R._p(rx0, yb, vb), R._p(rx1, yb, vb))
+		R._quad(R._p(rx0, ya - 0.4, va), R._p(rx1, ya - 0.4, va), R._p(rx0, yb - 0.4, vb), R._p(rx1, yb - 0.4, vb), C_CONCRETE, Vector3.DOWN)
+	var full := PackedFloat32Array([EDGE_H, EDGE_H])
+	# the inner kerb starts 10 m up the ramp, so the turn in off the mouth is
+	# not a squeeze against it
+	var ramp_in: Array[Vector3] = [Vector3(rx0, rv0 + 10.0 * turn, y + DECK_H * 10.0 / DECK_RAMP_V.y), Vector3(rx0, rv1, top)]
+	var ramp_in_out: Array[Vector2] = [Vector2(-1.0, 0.0), Vector2(-1.0, 0.0)]
+	R._edge(ramp_in, ramp_in_out, full, PackedFloat32Array([y - 0.4, top - 0.5]))
+	var ramp_out: Array[Vector3] = [Vector3(rx1, rv0, y), Vector3(rx1, rv1, top)]
+	var ramp_out_out: Array[Vector2] = [Vector2(1.0, 0.0), Vector2(1.0, 0.0)]
+	R._edge(ramp_out, ramp_out_out, full, PackedFloat32Array([y - 0.4, top - 0.5]))
+	# the parapet round the roof, and along the slot
+	for e: Array in [[LOT_X0, v0, LOT_X0, v1, Vector2(-1.0, 0.0)], [LOT_X0, v1, rx1, v1, Vector2(0.0, turn)], [rx1, v1, rx1, rv1, Vector2(1.0, 0.0)],
+			[roof_x1, rv1 - 0.5 * turn, roof_x1, v0, Vector2(1.0, 0.0)], [roof_x1, v0, LOT_X0, v0, Vector2(0.0, -turn)]]:
+		var pts: Array[Vector3] = [Vector3(e[0], e[1], top), Vector3(e[2], e[3], top)]
+		var outs: Array[Vector2] = [e[4], e[4]]
+		# bottoms are absolute heights: the wall stops just under the slab,
+		# not at the ground, or it would close the lot's mouth
+		R._edge(pts, outs, full, PackedFloat32Array([top - 0.5, top - 0.5]))
+	# columns on a grid under the slab (none in the drive lanes by the mouth)
+	for cx: float in [LOT_X0 + 1.0, LOT_X0 + 13.0, LOT_X0 + 23.0]:
+		var k := 0
+		while float(k) * 9.0 < len - 2.0:
+			var cv := v0 + (3.0 + float(k) * 9.0) * turn
+			if not (cx > LOT_X0 + 10.0 and cx < LOT_X0 + 26.0 and float(k) * 9.0 < 14.0):
+				R._box(Vector3(cx, y + DECK_H * 0.5, cv), Vector3(0.6, DECK_H, 0.6), C_CONCRETE)
+				R._wall_box(R._p(cx, 0.0, cv - 0.3), R._p(cx, 0.0, cv + 0.3), y, top, 0.6)
+			k += 1
+	# strip lights on the ceiling by the mouth; the back half stays dark
+	for k in 4:
+		var sv := v0 + (6.0 + 8.0 * float(k)) * turn
+		for sx: float in [LOT_X0 + 7.0, LOT_X0 + 19.0]:
+			R._quad(R._p(sx - 0.6, top - 0.52, sv - 0.08), R._p(sx + 0.6, top - 0.52, sv - 0.08), R._p(sx - 0.6, top - 0.52, sv + 0.08), R._p(sx + 0.6, top - 0.52, sv + 0.08), C_STRIP, Vector3.DOWN)
+			R._pools.append(Transform3D(Basis.from_scale(Vector3(5.0, 1.0, 7.0)), R._p(sx, y + 0.06, sv)))
+	# the stair tower at the road-side far corner, over the roof, lit
+	var tx := LOT_X0 + 3.0
+	var tv := v1 - 4.0 * turn
+	R._box(Vector3(tx, y + 4.8, tv), Vector3(5.0, 9.6, 6.0), C_CONCRETE)
+	R._quad(R._p(tx - 2.51, top + 0.8, tv - 1.2), R._p(tx - 2.51, top + 0.8, tv + 1.2), R._p(tx - 2.51, top + 5.2, tv - 1.2), R._p(tx - 2.51, top + 5.2, tv + 1.2), C_STAIR_WINDOW, Vector3(-1.0, 0.0, 0.0))
+	R._quad(R._p(tx - 1.2, top + 0.8, tv - 3.01 * turn), R._p(tx + 1.2, top + 0.8, tv - 3.01 * turn), R._p(tx - 1.2, top + 5.2, tv - 3.01 * turn), R._p(tx + 1.2, top + 5.2, tv - 3.01 * turn), C_STAIR_WINDOW, Vector3(0.0, 0.0, turn))
+	R._wall_box(R._p(tx, 0.0, tv - 3.0 * turn), R._p(tx, 0.0, tv + 3.0 * turn), y, top + 6.0, 5.0)
+	# roof lamps
+	for lv: float in [v0 + 18.0 * turn, v0 + 50.0 * turn]:
+		_lamp(Vector2(LOT_X0 + 14.0, lv), top - R.LIFT, Vector2(0.0, turn), 0.0, 6.0)
+	# a few cars parked on the ground floor and the roof
+	_parked_car_x(LOT_X0 + 7.0, v0 + 40.0 * turn, y, C_CARS[1])
+	_parked_car_x(LOT_X0 + 7.0, v0 + 60.0 * turn, y, C_CARS[3])
+	_parked_car_x(LOT_X0 + 14.0, v0 + 30.0 * turn, top, C_CARS[0])
+
+# ---------- the laundromat block ----------
+
+static func _laundry(turn: float) -> void:
+	var y := GROUND_Y + R.LIFT
+	var v0 := (ARC_R + ARM_STRAIGHT) * turn
+	var len := float(LOT_LENS.laundry)
+	var v1 := v0 + len * turn
+	# the block in the middle: three low houses and the laundromat, between
+	# the road-side street and the back lane
+	var bx0 := LOT_X0 + 11.0
+	var bx1 := LOT_X1 - 11.0
+	var hv := v0 + 18.0 * turn
+	var hlen := (len - 26.0) / 4.0
+	for k in 4:
+		var va := hv + hlen * float(k) * turn
+		var vb := va + (hlen - 1.5) * turn
+		var h := 5.5 if k != 1 else 4.2
+		var body := C_HOUSE_WALL if k != 1 else C_DINER
+		var cx := (bx0 + bx1) * 0.5
+		var cv := (va + vb) * 0.5
+		R._box(Vector3(cx, y + h * 0.5, cv), Vector3(bx1 - bx0, h, absf(vb - va)), body)
+		R._box(Vector3(cx, y + h + 0.25, cv), Vector3(bx1 - bx0 + 0.8, 0.5, absf(vb - va) + 0.8), C_HOUSE_ROOF)
+		R._wall_box(R._p(cx, 0.0, va), R._p(cx, 0.0, vb), y, y + h, bx1 - bx0)
+		if k == 1:
+			# the laundromat: a white window the whole front, machines in a row
+			var lo := minf(va, vb) + 1.0
+			var hi := maxf(va, vb) - 1.0
+			R._quad(R._p(bx0 - 0.02, y + 0.6, lo), R._p(bx0 - 0.02, y + 0.6, hi), R._p(bx0 - 0.02, y + h - 0.6, lo), R._p(bx0 - 0.02, y + h - 0.6, hi), C_LAUNDRY, Vector3(-1.0, 0.0, 0.0))
+			var mv := lo + 1.5
+			while mv < hi - 1.5:
+				R._quad(R._p(bx0 - 0.04, y + 1.0, mv - 0.5), R._p(bx0 - 0.04, y + 1.0, mv + 0.5), R._p(bx0 - 0.04, y + 2.0, mv - 0.5), R._p(bx0 - 0.04, y + 2.0, mv + 0.5), C_MACHINE, Vector3(-1.0, 0.0, 0.0))
+				mv += 1.8
+			R._pools.append(Transform3D(Basis.from_scale(Vector3(7.0, 1.0, hi - lo)), R._p(bx0 - 2.5, y + 0.06, (lo + hi) * 0.5)))
+		else:
+			# a lit window or two on the houses' fronts
+			var wv := (va + vb) * 0.5
+			R._quad(R._p(bx0 - 0.02, y + 1.4, wv - 0.7), R._p(bx0 - 0.02, y + 1.4, wv + 0.7), R._p(bx0 - 0.02, y + 2.6, wv - 0.7), R._p(bx0 - 0.02, y + 2.6, wv + 0.7), C_WINDOW, Vector3(-1.0, 0.0, 0.0))
+	# a wall along the back lane's far side (the lot's edge is the kit's), bins
+	for k in 3:
+		var bv := v0 + (30.0 + 20.0 * float(k)) * turn
+		R._box(Vector3(LOT_X1 - 1.4, y + 0.6, bv), Vector3(1.2, 1.2, 1.0), C_CRANE)
+		R._wall_box(R._p(LOT_X1 - 1.4, 0.0, bv - 0.5), R._p(LOT_X1 - 1.4, 0.0, bv + 0.5), y, y + 1.2, 1.2)
+	# one street lamp on the road side; the back lane has none
+	_lamp(Vector2(LOT_X0 + 0.9, v0 + 40.0 * turn), GROUND_Y, Vector2(1.0, 0.0), 2.0, 7.0)
+	_parked_car_x(LOT_X0 + 3.2, v0 + 70.0 * turn, y, C_CARS[2])
+
+# ---------- the salvage yard ----------
+
+static func _salvage(turn: float) -> void:
+	var y := GROUND_Y + R.LIFT
+	var v0 := (ARC_R + ARM_STRAIGHT) * turn
+	var len := float(LOT_LENS.salvage)
+	var v1 := v0 + len * turn
+	var mouth := ARM_START + ARC_R
+	# the chain gate at the mouth: two posts and the gate panels swung open
+	for gx: float in [mouth - ARM_HALF - 0.6, mouth + ARM_HALF + 0.6]:
+		R._box(Vector3(gx, y + 1.5, v0 + 1.0 * turn), Vector3(0.3, 3.0, 0.3), C_GATE)
+		R._wall_box(R._p(gx, 0.0, v0 + 0.85 * turn), R._p(gx, 0.0, v0 + 1.15 * turn), y, y + 3.0, 0.3)
+		var dirx := -1.0 if gx < mouth else 1.0
+		R._quad(R._p(gx + dirx * 0.2, y + 0.3, v0 + 1.0 * turn), R._p(gx + dirx * 4.0, y + 0.3, v0 + 4.0 * turn), R._p(gx + dirx * 0.2, y + 2.6, v0 + 1.0 * turn), R._p(gx + dirx * 4.0, y + 2.6, v0 + 4.0 * turn), C_GATE, Vector3(0.0, 0.0, -turn))
+	# crushed cars stacked three high along the back and in a row down the middle
+	var stack_x := [LOT_X1 - 4.0, LOT_X1 - 4.0, LOT_X1 - 4.0, LOT_X1 - 4.0, LOT_X1 - 4.0, LOT_X1 - 15.0, LOT_X1 - 15.0, LOT_X1 - 15.0]
+	var stack_v := [10.0, 22.0, 34.0, 60.0, 72.0, 30.0, 45.0, 60.0]
+	for i in stack_x.size():
+		var sx: float = stack_x[i]
+		var sv: float = v0 + float(stack_v[i]) * turn
+		var high := 3 if i % 3 != 2 else 2
+		for k in high:
+			R._box(Vector3(sx + 0.2 * float(k % 2), y + 0.45 + 0.9 * float(k), sv + 0.3 * float(k % 2)), Vector3(4.3, 0.85, 1.9), C_WRECK_PAINTS[(i + k) % C_WRECK_PAINTS.size()])
+		R._wall_box(R._p(sx - 2.2, 0.0, sv), R._p(sx + 2.2, 0.0, sv), y, y + 0.9 * float(high), 2.2)
+	# the mobile crane: a base on tracks, a cab, a boom up over the stacks
+	var kx := LOT_X1 - 24.0
+	var kv := v0 + 85.0 * turn
+	R._box(Vector3(kx, y + 0.6, kv), Vector3(4.0, 1.2, 5.0), C_TYRE)
+	R._box(Vector3(kx, y + 2.2, kv), Vector3(3.0, 2.0, 3.6), C_RUST)
+	R._wall_box(R._p(kx, 0.0, kv - 2.5), R._p(kx, 0.0, kv + 2.5), y, y + 3.2, 4.0)
+	RingSite._bar(Vector3(kx + 0.5, y + 3.0, kv), Vector3(kx + 14.0, y + 15.0, kv - 2.0 * turn), 0.5, C_RUST)
+	R._box(Vector3(kx + 14.0, y + 11.5, kv - 2.0 * turn), Vector3(0.08, 7.0, 0.08), R.C_POLE)   # the cable
+	R._box(Vector3(kx + 14.0, y + 7.8, kv - 2.0 * turn), Vector3(1.6, 0.4, 1.6), C_RUST)         # the magnet
+	# one floodlight on a mast by the gate, its light across the yard
+	var mx := LOT_X0 + 6.0
+	var mv := v0 + 8.0 * turn
+	R._box(Vector3(mx, y + 8.0, mv), Vector3(0.4, 16.0, 0.4), R.C_POLE)
+	R._wall_box(R._p(mx, 0.0, mv - 0.25), R._p(mx, 0.0, mv + 0.25), y, y + 3.0, 0.4)
+	for k in 3:
+		R._box(Vector3(mx + 0.5, y + 15.2 + 0.7 * float(k), mv + (float(k) - 1.0) * 0.9 * turn), Vector3(0.7, 0.5, 0.8), C_FLOOD)
+	R._pools.append(Transform3D(Basis.from_scale(Vector3(30.0, 1.0, 44.0)), R._p(mx + 14.0, y + 0.06, mv + 22.0 * turn)))
+	# puddles on the yard's floor
+	for pd: Array in [[LOT_X0 + 12.0, 30.0, 5.0, 3.0], [LOT_X0 + 20.0, 58.0, 7.0, 4.0], [LOT_X1 - 20.0, 15.0, 4.0, 6.0]]:
+		var px: float = pd[0]
+		var pv: float = v0 + float(pd[1]) * turn
+		R._quad(R._p(px - pd[2] * 0.5, y + 0.01, pv - pd[3] * 0.5), R._p(px + pd[2] * 0.5, y + 0.01, pv - pd[3] * 0.5), R._p(px - pd[2] * 0.5, y + 0.01, pv + pd[3] * 0.5), R._p(px + pd[2] * 0.5, y + 0.01, pv + pd[3] * 0.5), C_PUDDLE, Vector3.UP)
+	# the welder's wall at the far end, sparks blinking behind it
+	var wx := LOT_X0 + 10.0
+	var wv := v1 - 6.0 * turn
+	R._box(Vector3(wx, y + 1.3, wv), Vector3(10.0, 2.6, 0.4), C_CONCRETE)
+	R._wall_box(R._p(wx - 5.0, 0.0, wv), R._p(wx + 5.0, 0.0, wv), y, y + 2.6, 0.4)
+	for k in 5:
+		var sx := wx - 2.0 + float(k) * 1.0
+		R._quad(R._p(sx, y + 2.7 + 0.3 * float(k % 2), wv + 0.6 * turn), R._p(sx + 0.15, y + 2.7 + 0.3 * float(k % 2), wv + 0.6 * turn),
+			R._p(sx, y + 2.85 + 0.3 * float(k % 2), wv + 0.6 * turn), R._p(sx + 0.15, y + 2.85 + 0.3 * float(k % 2), wv + 0.6 * turn), C_SPARK, Vector3(0.0, 0.0, -turn))
+	R._pools.append(Transform3D(Basis.from_scale(Vector3(8.0, 1.0, 6.0)), R._p(wx, y + 0.06, wv + 2.5 * turn)))
+
+# ---------- the lay-by ----------
+
+static func _layby(turn: float) -> void:
+	var y := GROUND_Y + R.LIFT
+	var v0 := (ARC_R + ARM_STRAIGHT) * turn
+	var len := float(LOT_LENS.layby)
+	var v1 := v0 + len * turn
+	# the bus shelter against the back, glass on three sides, lit inside
+	var sx := LOT_X1 - 3.0
+	var sv := v0 + 20.0 * turn
+	R._box(Vector3(sx, y + 2.6, sv), Vector3(2.6, 0.2, 6.0), C_SHELTER)
+	R._box(Vector3(sx + 1.1, y + 1.3, sv), Vector3(0.1, 2.6, 6.0), C_SHELTER)
+	for ev: float in [sv - 2.95 * turn, sv + 2.95 * turn]:
+		R._quad(R._p(sx - 1.2, y + 0.3, ev), R._p(sx + 1.0, y + 0.3, ev), R._p(sx - 1.2, y + 2.5, ev), R._p(sx + 1.0, y + 2.5, ev), C_SHELTER_GLASS, Vector3(0.0, 0.0, signf(ev - sv) * -turn))
+	R._quad(R._p(sx - 1.0, y + 2.49, sv - 2.5), R._p(sx + 1.0, y + 2.49, sv - 2.5), R._p(sx - 1.0, y + 2.49, sv + 2.5), R._p(sx + 1.0, y + 2.49, sv + 2.5), C_STRIP, Vector3.DOWN)
+	R._box(Vector3(sx + 0.2, y + 0.5, sv), Vector3(0.5, 0.1, 4.0), C_SHELTER)   # the bench
+	R._wall_box(R._p(sx, 0.0, sv - 3.0 * turn), R._p(sx, 0.0, sv + 3.0 * turn), y, y + 2.7, 2.6)
+	R._pools.append(Transform3D(Basis.from_scale(Vector3(6.0, 1.0, 8.0)), R._p(sx - 2.0, y + 0.06, sv)))
+	# the wall behind the shelter, and the dark pocket past it
+	R._box(Vector3(LOT_X1 - 1.0, y + 1.4, sv + 5.5 * turn), Vector3(1.0, 2.8, 5.0), C_CONCRETE)
+	R._wall_box(R._p(LOT_X1 - 1.0, 0.0, sv + 3.0 * turn), R._p(LOT_X1 - 1.0, 0.0, sv + 8.0 * turn), y, y + 2.8, 1.0)
+	# the cop car parked facing the arm, lights off
+	var cx := LOT_X1 - 8.0
+	var cv := v0 + 9.0 * turn
+	R._box(Vector3(cx, y + 0.55, cv), Vector3(1.9, 0.65, 4.8), C_COP)
+	R._box(Vector3(cx, y + 0.6, cv), Vector3(1.92, 0.3, 2.2), C_COP_DOOR)
+	R._box(Vector3(cx, y + 1.1, cv + 0.2 * turn), Vector3(1.65, 0.55, 2.4), C_GLASS)
+	R._box(Vector3(cx, y + 1.42, cv), Vector3(1.2, 0.12, 0.35), C_LIGHTBAR)
+	for dx: float in [-0.85, 0.85]:
+		for dv: float in [-1.5, 1.5]:
+			R._box(Vector3(cx + dx, y + 0.32, cv + dv), Vector3(0.24, 0.64, 0.64), C_TYRE)
+	R._wall_box(R._p(cx, 0.0, cv - 2.4), R._p(cx, 0.0, cv + 2.4), y, y + 1.5, 1.9)
+	# two lamps light the bay; the pocket behind the wall has none
+	_lamp(Vector2(LOT_X0 + 0.9, v0 + 12.0 * turn), GROUND_Y, Vector2(1.0, 0.0), 2.5, 8.0)
+	_lamp(Vector2(LOT_X0 + 0.9, v0 + 30.0 * turn), GROUND_Y, Vector2(1.0, 0.0), 2.5, 8.0)

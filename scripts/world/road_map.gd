@@ -645,9 +645,13 @@ static func _own_spur_side(ring: int) -> int:
 ## layer each, PlaceNames.atlas_words). One pocket per ring and side at most.
 ## The arms bend away from the fuel stations (STOPS) and the gores.
 const POCKETS := [
+	{"id": "deck", "road": 0, "ring": "x1", "side": -1, "turn": 1, "kind": "deck", "word": "PARKING"},
+	{"id": "laundry", "road": 0, "ring": "x2", "side": -1, "turn": -1, "kind": "laundry", "word": "LAUNDRY"},
 	{"id": "truck", "road": 0, "ring": "x3", "side": 1, "turn": 1, "kind": "truck", "word": "TRUCK STOP"},
 	{"id": "diner", "road": 0, "ring": "x3", "side": -1, "turn": -1, "kind": "diner", "word": "DINER"},
+	{"id": "salvage", "road": 0, "ring": "x4", "side": 1, "turn": 1, "kind": "salvage", "word": "SALVAGE"},
 	{"id": "pier", "road": 0, "ring": "x5", "side": 1, "turn": 1, "kind": "pier", "word": "PIER"},
+	{"id": "layby", "road": 0, "ring": "x7", "side": -1, "turn": 1, "kind": "layby", "word": "LAY-BY"},
 ]
 
 ## The pockets hanging off this ring on this road (0, 1 or 2).

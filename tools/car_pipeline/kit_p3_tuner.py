@@ -174,19 +174,21 @@ class _on_skin:
 VIEW_AB = {'front': (0, 1), 'rear': (0, 1), 'left': (2, 1), 'right': (2, 1), 'top': (0, 2)}
 
 
-def _skin_decal(ctx, part, view, rect, mat, off):
+def _skin_decal(ctx, part, view, rect, mat, off, skin=SKIN_PARTS):
     """A rect laid on the skin as the skin itself: every skin face the view
     sees under the rect, clipped to it and moved `off` out along the view.
     It follows each fold of the panel exactly, where a grid decal's flat
     cells cut through the fold between their corners. A face that is not a
     triangle may be split either way when it is drawn, so its copy stands
-    off a little more, by how far the face is from flat."""
+    off a little more, by how far the face is from flat. `skin`: the parts
+    whose faces count (a kit with its own cut panels or glass in its skin set
+    passes its own list, with ctx.skin_tris built from the same)."""
     from geom import AXES, raycast
     d = AXES[view]
     ia, ib = VIEW_AB[view]
     x0, y0, x1, y1 = rect
     planes = [(ia, x0, 1), (ia, x1, -1), (ib, y0, 1), (ib, y1, -1)]
-    for name in SKIN_PARTS:
+    for name in skin:
         src = ctx.parts.get(name)
         if src is None:
             continue

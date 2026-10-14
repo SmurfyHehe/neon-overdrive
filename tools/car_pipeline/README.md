@@ -190,18 +190,44 @@ sheet decided (Roy kept them, 2026-10-11): the driver's mirror, the left tail
 lamp (the right lens is gone), the filler on the right front quarter, the one
 tail pipe.
 
-**P7, the shop wagon** (`p7_wagon`): 4,298 body triangles in 82 parts, 776
-more in the wheels; 0.000 mm over 44 mirrored parts and pairs. No deck lid
-(`no_trunk`): the tail is two barn doors cut out of the tail face (`cuts`),
-each on its own hinge, 5 mm apart (Roy), with its half of the rear glass (`split_backlight`), a
-handle, and on the right one the rear wiper. Tall lamp columns at the rear
-corners (blinker, running lamp, brake lamp, three parts a side), a brake lamp
-on the roof edge, reversing lamps in the bumper. Roof rails (the drip-rail
-gutter), a rub strip in three lengths a side so the door's piece opens with
-the door. Small discs in the front wheels with the caliper on the body,
-200 mm drums at the rear, hubcaps on three wheels (left rear bare). Strut and
-torsion beam ends in the wheel wells, the spare in its cradle under the floor,
-a transverse engine under the bonnet.
+**P7, the shop wagon** (`p7_wagon`, kit in `kit_p7_wagon.py`, rebuilt for
+looks 2026-10-14, Roy 1546): 7,000 body triangles in 96 parts, 776 more in
+the wheels; 0.000 mm over 49 mirrored parts and pairs. Everything is laid on
+the built skin with the tuner kit's helpers (`_skin_decal`, `_rim`,
+`_on_skin`), and the kit's skin list (`SKIN`) adds its own doors and every
+glass, so `tests/fleet/exterior_fit.gd` holds it to zero clashes. No deck lid
+(`no_trunk`): the tail is two barn doors cut out of the tail (`cuts`: the
+bumper band to the header glass, 5 mm apart on the centre line, Roy), each
+with its half of the rear glass (`glass_panels`), a handle, and on the right
+one the rear wiper. The hinges are exposed, as on a van: the axis 12 mm
+outboard of the door's edge and 12 mm behind the tail face (`barn_hinge_*`,
+two straps and knuckles a door), so every point of the door is ahead of its
+axis and swings back and inward, clear of the lamp column. Black plastic
+bumper bands (`bumper_f_band`, `bumper_r_band`): the skin's own faces copied
+out along their normals, 3 cm at the face easing to 12 mm along the sides to
+the arch, walled back to the skin; the plates, blinkers, reversing lamps and
+the plate lamp sit on the band's flat face. Square flush headlamps in chrome
+bezels, a slot grille with two slats. Tall lamp columns at the rear corners
+(blinker, running lamp, brake lamp, three lit parts a side on one ribbed
+housing in two halves round the tail's ledge), a brake lamp on the roof edge
+on the fixed header glass; outboard of the doors the loft's backlight is the
+columns' pillar in paint (`glass_to_paint`). The 40 mm rub strip just over
+the arch lips in three lengths a side (the door's piece opens with the door),
+each laid in stretches between the plan's knots. The sheet's wear: the old
+shop name sanded nearly off both flanks (`ghost_*`, 5 x 7 block letters in
+`paint_bondo`, reading left to right on both sides, so not a mirror pair),
+rust bloom round the rear arches (`rust_*`, laid cell by cell), a primer
+patch on the right barn door, the left rear hubcap gone. The A-pillar strip
+is in two legs: over the windshield it stays on the body, over the door's
+glass it rides on the door (`pillar_a_door_*`), since a fixed strip over
+glass that swings out is crossed by it. Roof rails (the drip-rail gutter), a
+mast on the left front fender. Small discs in the front wheels with the
+caliper on the body, 200 mm drums at the rear. Strut and torsion beam ends in
+the wheel wells, a transverse engine, radiator and battery under the bonnet;
+nothing hangs under the floor (the spare's cradle is an anchor only). The
+loft's nose is 8 cm taller than the first build's (cars.py P7 `top`, a
+stand-in anyway) so the lamps and grille sit on a face; the body's length,
+width, height, wheelbase, collision box, physics and tune are unchanged.
 
 **P2, the hot hatch** (`p2_hothatch`, kit in `kit_p2_hothatch.py`): 4,400 body
 triangles in 86 parts, 948 more in the wheels; 0.000 mm over 48 mirrored parts

@@ -64,10 +64,14 @@ const CARS := {
 	},
 	"p7_wagon": {
 		## no deck lid: the tail is two barn doors, each with its half of the rear glass
-		"without": ["trunk", "glass_backlight", "seal_backlight"],
+		## (the glass above the doors is a fixed header strip, glass_backlight, with the roof brake lamp on it)
+		"without": ["trunk"],
 		"parts": ["barn_l", "barn_r", "glass_barn_l", "glass_barn_r", "seal_barn_l", "seal_barn_r", "handle_barn_l", "handle_barn_r",
-			"wiper_rear", "roof_rails", "grille", "mirror_l", "mirror_r", "bumper_f_insert", "bumper_r_insert", "rub_strip",
-			"rub_door_l", "rub_door_r", "caliper_fl", "caliper_fr", "engine", "spare", "susp_fl", "susp_fr", "susp_rl", "susp_rr"],
+			"barn_hinge_l", "barn_hinge_r", "wiper_rear", "roof_rails", "grille", "mirror_l", "mirror_r",
+			"bumper_f_band", "bumper_r_band", "lamp_column_l", "lamp_column_r", "plate_lamp", "pillar_a_door_l", "pillar_a_door_r",
+			"rub_fender_l", "rub_fender_r", "rub_door_l", "rub_door_r", "rub_quarter_l", "rub_quarter_r",
+			"ghost_l", "ghost_r", "ghost_door_l", "ghost_door_r", "rust_l", "rust_r", "primer_patch", "antenna",
+			"caliper_fl", "caliper_fr", "engine", "bay_radiator_core", "bay_battery", "susp_fl", "susp_fr", "susp_rl", "susp_rr"],
 		"lamps": {"head_l": "glow_head", "head_r": "glow_head", "turn_fl": "glow_turn", "turn_fr": "glow_turn",
 			"turn_rl": "glow_turn", "turn_rr": "glow_turn", "tail_l": "glow_tail", "tail_r": "glow_tail",
 			"brake_l": "glow_brake", "brake_r": "glow_brake", "brake_c": "glow_brake",

@@ -739,13 +739,19 @@ def build_parts(D, tips_out=None):
             side, False, [False, True, True])
     sets['body'] = (pool, rest_planes)
 
-    def piece_of(name, mat, tag, cen):
+    glass_panels = kit.get('glass_panels', {})     # a kit's cut panel -> the node its glass goes to (the wagon's barn doors)
+
+    def piece_of(name, mat, tag, cen, kind=SKIN):
         """Which glTF node a body or door polygon ends up in."""
         lr = 'r' if cen[0] > 0 else 'l'
         if name.startswith('door_'):
             return ('glass_' + name) if mat == 'glass' else name   # door_l -> glass_door_l, a kit's door_rr -> glass_door_rr
+        if name in glass_panels:
+            return glass_panels[name] if mat == 'glass' else name
         if name != 'body':
             return name
+        if kind != SKIN and kit.get('floors_to_body'):
+            return 'body'       # a shut line's dark floor is the body's, whatever skin it hangs from (not a sail's or a pillar's)
         if mat == 'glass':
             if tag[0] >= 8:
                 if s_of(cen) < 0.5 * (cab['W'] + cab['R']):
@@ -789,10 +795,12 @@ def build_parts(D, tips_out=None):
         counts[name] = {'wall': sum(len(r[0]) - 2 for r in rows if r[2] == WALL),
                         'floor': sum(len(r[0]) - 2 for r in rows if r[2] == FLOOR)}
         for poly, mat, kind, shut, tag in rows:
-            pn = piece_of(name, mat if kind == SKIN else _skin_mat(tag, D, sts), tag, poly.mean(axis=0))
+            pn = piece_of(name, mat if kind == SKIN else _skin_mat(tag, D, sts), tag, poly.mean(axis=0), kind)
             m = MATMAP.get(mat, mat)
             if pn.startswith('sail_') and kind == SKIN:
                 m = 'plastic'
+            if kind == SKIN and mat == 'glass' and kit.get('glass_to_paint') and kit['glass_to_paint'](poly.mean(axis=0)):
+                pn, m = 'body', 'paint'      # a kit's pillar where the loft drew glass (the wagon's lamp columns)
             if m == 'paint' and pn in panel_mats:
                 m = panel_mats[pn]
             part(pn).add(poly, m, kind, shut)

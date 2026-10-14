@@ -61,7 +61,7 @@ extends SceneTree
 # NEON_PARTS_CAR=<id> checks one car only.
 
 ## The cars this test holds to zero clashes. A car joins when its kit passes.
-const CARS := ["p3_tuner"]
+const CARS := ["p3_tuner", "p7_wagon"]
 const PEN := 0.002
 const REACH := 0.03
 const CELL := 0.06
@@ -76,7 +76,7 @@ const TAIL_TALL := 0.08
 ## How deep a shut line's turned-in edge reaches into the dark floor under its gap (README, "Shut lines").
 const RETURN_DEPTH := 0.015
 const CUT := ["body", "hood", "trunk", "door_l", "door_r", "door_rl", "door_rr", "fender_fl", "fender_fr", "bumper_f", "bumper_r",
-	"underbody"]
+	"underbody", "barn_l", "barn_r"]
 ## Parts that sit inside the car or the wheel wells by design (running gear,
 ## engine bay boxes): the float check does not ask them to touch anything.
 const INNER_PREFIX := ["susp_", "caliper_", "bay_", "engine", "arch_liner_", "exhaust"]
@@ -372,7 +372,12 @@ func _swing(id: String, parts: Dictionary, hinges: Dictionary, hinge_of: Diction
 			for pname: String in moving:
 				var t: PackedVector3Array = parts[pname].t
 				for j in range(0, t.size(), 3):
-					var hit := cross.crossing(xf * t[j], xf * t[j + 1], xf * t[j + 2], {})
+					# a panel's turned-in edge (rubber, or its own paint where the skin is paint) slides over the dark
+					# floor under its gap as it opens: its reach into that floor up to RETURN_DEPTH is the shut line's
+					# own construction (the overlap rule), not a clash. A floor lies only under a gap, so nothing but
+					# a turned-in edge gets within RETURN_DEPTH of one.
+					var shut: bool = _shut_part(pname)
+					var hit := cross.crossing(xf * t[j], xf * t[j + 1], xf * t[j + 2], {}, shut)
 					if hit.is_empty() or hit.depth <= PEN:
 						continue
 					var key := "%s|%s" % [pname, hit.part]
@@ -385,7 +390,7 @@ func _swing(id: String, parts: Dictionary, hinges: Dictionary, hinge_of: Diction
 func _tyres(id: String, parts: Dictionary, grid: Dictionary) -> void:
 	var spec := CarSpec.player_spec(id)
 	var lock := rad_to_deg(float(spec.get("max_steering_angle", deg_to_rad(38.0))))
-	var gap_sheet := 0.03
+	var gap_sheet := _arch_gap(id)
 	for corner: String in CarAssembler.wheel_corners(id):
 		var hub := CarAssembler.anchor(id, "wheel_" + corner).origin
 		# the tyre alone (the wheel's rubber, hub frame): the disc and caliper inboard of it are not what fills the arch
@@ -726,3 +731,20 @@ class _Cross:
 			if (da >= 0.0) != (db >= 0.0):
 				out.append(a + (b - a) * (da / (da - db)))
 		return out
+
+## The car's own arch gap from the design sheet (docs/design/fleet/fleet.json,
+## cars[].wheel.arch_gap, plus arch_lift where the arch sits higher than the
+## hub): the tyre fills that, not a fleet-wide 30 mm.
+static func _arch_gap(id: String) -> float:
+	var gap := 0.03
+	var f := FileAccess.open("res://docs/design/fleet/fleet.json", FileAccess.READ)
+	if f == null:
+		return gap
+	var data: Variant = JSON.parse_string(f.get_as_text())
+	if typeof(data) != TYPE_DICTIONARY:
+		return gap
+	for car: Variant in data.get("cars", []):
+		if car.get("id", "") == id:
+			var wheel: Dictionary = car.get("wheel", {})
+			return float(wheel.get("arch_gap", gap)) + float(wheel.get("arch_lift", 0.0))
+	return gap

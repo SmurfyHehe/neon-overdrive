@@ -1540,6 +1540,7 @@ func _physics_process(delta: float) -> void:
 func _process(delta: float) -> void:
 	if not visible:
 		return
+	_build_shell()   # follows a rebuilt body (a swapped panel, a repair); a reference check when nothing changed
 	var p := player
 	var max_rpm := maxf(p.max_rpm, 1.0)
 	var frac := clampf(p.motor_rpm / max_rpm, 0.0, 1.0)

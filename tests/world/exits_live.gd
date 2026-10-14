@@ -88,6 +88,7 @@ func _initialize() -> void:
 	OS.set_environment("NEON_TRAFFIC", "0")
 	OS.set_environment("NEON_ROAD", "")
 	OS.set_environment("NEON_ACT", "")
+	OS.set_environment("NEON_FREEMODE", "0")   # story act 1 (a new save is free)
 	OS.set_environment("NEON_ROAD_SEED", "4242")
 	game = (load("res://Game.tscn") as PackedScene).instantiate()
 	root.add_child.call_deferred(game)

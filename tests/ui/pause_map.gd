@@ -28,6 +28,7 @@ func _initialize() -> void:
 	OS.set_environment("NEON_TITLE", "0")
 	OS.set_environment("NEON_ROAD", "")
 	OS.set_environment("NEON_ACT", "")
+	OS.set_environment("NEON_FREEMODE", "0")   # story act 1 (a new save is free)
 	OS.set_environment("NEON_ROAD_SEED", "31337")
 	SaveStore.root = "user://test_pause_map"
 	SaveStore.slot = 0

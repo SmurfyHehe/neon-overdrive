@@ -61,6 +61,7 @@ func _initialize() -> void:
 	OS.set_environment("NEON_TRAFFIC", "14")
 	OS.set_environment("NEON_ROAD", "")
 	OS.set_environment("NEON_ACT", "")
+	OS.set_environment("NEON_FREEMODE", "0")   # story act 1 (a new save is free)
 	# One night's road, so the drive is the same every run (the game rolls a new
 	# one each night when this is not set).
 	OS.set_environment("NEON_ROAD_SEED", "31337")
@@ -591,6 +592,7 @@ func _physics_process(_delta: float) -> bool:
 				_fail("the act 2 save says act %s" % two.road.get("act"))
 			SaveStore.save_run(two)
 			OS.set_environment("NEON_ACT", "")
+			OS.set_environment("NEON_FREEMODE", "0")   # story act 1 (a new save is free)
 			phase = 6
 			_boot()
 	return false

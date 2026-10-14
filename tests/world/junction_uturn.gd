@@ -71,6 +71,7 @@ func _initialize() -> void:
 		OS.set_environment(key, "0")
 	OS.set_environment("NEON_ROAD", "")
 	OS.set_environment("NEON_ACT", "")
+	OS.set_environment("NEON_FREEMODE", "0")   # story act 1 (a new save is free)
 	OS.set_environment("NEON_ROAD_SEED", "31337")
 	OS.set_environment("NEON_CITY_LIGHTS", "1")
 	OS.set_environment("NEON_LAYOUT", "0")

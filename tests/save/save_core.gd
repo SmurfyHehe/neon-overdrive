@@ -152,7 +152,7 @@ func _round_trip() -> void:
 		_check(int(d.get("save_version", 0)) == 2, "%s.json has no save_version 2" % name)
 	var s := SaveCore.summary(1)
 	_check(not s.empty and s.cash == 240 and s.bank == 1830 and s.plate.car == "p0_beater" and int(s.plate.act) == 2 \
-		and int(s.plate.play_secs) == 15460 and s.plate.mode == "story" and s.plate.difficulty == "weekend_warrior", "the plate: %s" % str(s))
+		and int(s.plate.play_secs) == 15460 and s.plate.mode == "free" and s.plate.difficulty == "weekend_warrior", "the plate: %s" % str(s))   # a new save starts in free mode (2026-10-14)
 	# An unknown block survives later commits by code that never heard of it.
 	SaveStore.save_garage(["exhaust_a", "turbo_s1", "wheels_mesh", "seat_b"])
 	SaveCore.forget()

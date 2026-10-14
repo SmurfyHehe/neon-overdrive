@@ -393,6 +393,7 @@ static func commit(reason: String, changes: Dictionary = {}, edit: Callable = Ca
 ## Adds the blocks and fields `c` is missing, with their defaults. Nothing is
 ## removed: a block or field this build does not know stays.
 static func fill_career(c: Dictionary) -> void:
+	var is_new := c.is_empty()   # no career on disk yet: a new save, which starts in free mode
 	var defaults := {
 		"world": {"seed": 0, "difficulty": DEFAULT_DIFFICULTY, "difficulty_next": DEFAULT_DIFFICULTY},
 		"wallet": {"bank": 0, "receipts": []},
@@ -413,7 +414,7 @@ static func fill_career(c: Dictionary) -> void:
 		for k in defaults[block]:
 			if not c[block].has(k):
 				c[block][k] = defaults[block][k]
-	Freemode.fill(c, maxi(_int(c.story.get("night", 1)), 1))
+	Freemode.fill(c, maxi(_int(c.story.get("night", 1)), 1), is_new)
 	if not c.get("current_car") is String or c.current_car == "":
 		c.current_car = DEFAULT_CAR
 	if not _is_num(c.get("gen")):

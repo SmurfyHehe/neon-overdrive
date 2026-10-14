@@ -66,6 +66,7 @@ func _initialize() -> void:
 	OS.set_environment("NEON_HILLS", "0.5")
 	OS.set_environment("NEON_ROAD", "")
 	OS.set_environment("NEON_ACT", "")
+	OS.set_environment("NEON_FREEMODE", "0")   # story act 1 (a new save is free)
 	OS.set_environment("NEON_ROAD_SEED", "4242")
 	SaveStore.root = "user://test_ring_drive"
 	SaveStore.slot = 0

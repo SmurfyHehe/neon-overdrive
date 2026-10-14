@@ -102,8 +102,13 @@ func _run() -> void:
 		_check(set_node.kind == PlayerCar.chassis_kind(), "the parked car is the player's car")
 		_check(set_node.car.find_children("*", "MeshInstance3D", true, false).size() > 4, "the parked car has a body and wheels")
 		_check(set_node.global_position.y < -300.0, "the set is clear of the road")
+		# two lights (relight 2026-10-14): the sodium lamp, the only one with a
+		# shadow, and the dusk rim light behind the car
 		var lights := set_node.find_children("*", "Light3D", true, false)
-		_check(lights.size() == 1, "one lamp lights the set, got %d" % lights.size())
+		_check(lights.size() == 2, "the lamp and the rim light light the set, got %d" % lights.size())
+		var shadows := lights.filter(func(l): return l.shadow_enabled)
+		_check(shadows.size() == 1 and shadows[0] == set_node.lamp_light, "the lamp is the one light with a shadow")
+		_check(set_node.rim_light != null and set_node.rim_light.light_color.b > set_node.rim_light.light_color.r, "the rim light is cool, not sodium")
 
 	# ---------- lamp life ----------
 	if set_node != null:

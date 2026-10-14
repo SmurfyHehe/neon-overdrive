@@ -35,6 +35,23 @@ extends RefCounted
 #   hood_cam      Vector3   the hood camera, on the bonnet ahead of the windscreen
 #   roof_back_cam Vector3   the roof camera that looks straight back (B in hood view)
 
+## Rearview mirror fit (mirrors pass, 2026-10-14): the glass is where the eye
+## can read it without looking up or round. Measured at build 4, straight
+## ahead at the default FOV 62: the pickup's mirror hung 30 degrees above the
+## eye (off the top of the screen), the drift coupe's 48 degrees to the right
+## (off the right edge), the beater's and tuner's were half out, and even the
+## coupe's right edge sat on the edge of the screen. The data point stays the
+## car's own; it is slid forward along the windscreen, and down it, until the
+## glass centre is within REAR_MIRROR_MAX_UP_DEG of the eye and its outer
+## edge within REAR_MIRROR_MAX_EDGE_DEG (a real mirror sits about 30-35
+## degrees right of the driver's line and 10-15 up). Together these keep all
+## four corners on a 16:9 screen at FOV 62 (its edge is 47 degrees out). The
+## housing and stalk (CockpitFrame) follow, since they read the same point.
+const REAR_MIRROR_MAX_UP_DEG := 18.0
+const REAR_MIRROR_MAX_EDGE_DEG := 41.0   # on the flat; the yawed glass reads about 3 deg further out from the eye
+## A glass that moved forward hangs at least this far behind the windscreen.
+const REAR_MIRROR_GLASS_GAP := 0.06
+
 ## Defaults for the hood camera: above and ahead of the cowl.
 const HOOD_CAM_UP := 0.18
 const HOOD_CAM_FORWARD := 0.35
@@ -61,8 +78,51 @@ static func for_kind(kind: String) -> Dictionary:
 			# data file is generated, so its points cannot live there)
 			cab = cab.duplicate()
 			cab.merge(HOOD_POINTS[kind], true)
+		return _with_rear_mirror(cab)
+	return _with_rear_mirror(data.CABIN)
+
+## The cabin with its rearview mirror fitted (fit_rear_mirror); the data's
+## own dictionary when nothing moves.
+static func _with_rear_mirror(cab: Dictionary) -> Dictionary:
+	if not (cab.has("rear_mirror") and cab.has("eye") and cab.has("cowl") and cab.has("header")):
 		return cab
-	return data.CABIN
+	var fitted := fit_rear_mirror(cab)
+	if fitted.is_equal_approx(cab.rear_mirror):
+		return cab
+	var out := cab.duplicate()
+	out.rear_mirror = fitted
+	return out
+
+## Where the rearview glass hangs in this cabin: the data's point, slid
+## forward along the windscreen until the glass's outer edge is no more than
+## REAR_MIRROR_MAX_EDGE_DEG to the side of the eye, and down it until the
+## centre is no more than REAR_MIRROR_MAX_UP_DEG above the eye. The glass
+## stays REAR_MIRROR_GLASS_GAP behind the windscreen plane (cowl to header)
+## when it has moved, and never below the eye line. A point the data already
+## has within the angles is returned as it is.
+static func fit_rear_mirror(cab: Dictionary) -> Vector3:
+	var m: Vector3 = cab.rear_mirror
+	var eye: Vector3 = cab.eye
+	var cowl: Vector2 = cab.cowl       # (y, z)
+	var header: Vector2 = cab.header   # (y, z)
+	var dx := absf(m.x - eye.x)
+	# to the side: pull the glass forward along the windscreen
+	var edge_x := dx + CockpitMirrors.REAR_SIZE_M.x * 0.5
+	var side := rad_to_deg(atan2(edge_x, maxf(eye.z - m.z, 0.001)))
+	if side > REAR_MIRROR_MAX_EDGE_DEG:
+		m.z = eye.z - edge_x / tan(deg_to_rad(REAR_MIRROR_MAX_EDGE_DEG))
+		# moved forward: keep it behind the windscreen, whose height at that z
+		# is on the line from the cowl to the header
+		var slope := (header.x - cowl.x) / maxf(header.y - cowl.y, 0.1)   # dy per dz; the header is behind the cowl (z grows rearward)
+		var screen_y := header.x + (m.z - header.y) * slope
+		m.y = minf(m.y, screen_y - REAR_MIRROR_GLASS_GAP)
+	# too high: slide it down
+	var flat := Vector2(dx, eye.z - m.z).length()
+	var up := rad_to_deg(atan2(m.y - eye.y, flat))
+	if up > REAR_MIRROR_MAX_UP_DEG:
+		m.y = eye.y + flat * tan(deg_to_rad(REAR_MIRROR_MAX_UP_DEG))
+	m.y = maxf(m.y, eye.y + 0.05)
+	return m
 
 ## Hood-view points for kinds whose data file has no CABIN (they wear the
 ## coupe's cabin): hood_cam / roof_back_cam, car space. The monster and the

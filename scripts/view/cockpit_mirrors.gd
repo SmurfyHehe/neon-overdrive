@@ -5,9 +5,12 @@ extends Node3D
 # door mirrors, each a SubViewport with its own Camera3D drawn onto a quad,
 # flipped left-to-right like glass. Budgeted for the i5-1235U:
 #   - they only render in the cockpit view (UPDATE_DISABLED otherwise);
-#   - small render targets (rear 320x96, sides 160x112 at medium quality;
-#     FxSettings.mirror_quality halves or doubles them);
-#   - the rearview renders on even frames, both door mirrors on odd frames;
+#   - small render targets (rear 320x96, sides 160x112; FxSettings
+#     mirror_quality high doubles them);
+#   - the rearview and the door mirrors take turns: at medium quality the
+#     rearview renders on even frames and both door mirrors on odd frames; low
+#     spreads them over three frames, high draws all of them every frame
+#     (FxSettings.mirror_period);
 #   - the cameras see the world, traffic and the player's own body (the layer
 #     the cockpit camera does not draw), never the interior or the driver, with
 #     a 250 m far clip and no glow pass.
@@ -32,8 +35,14 @@ const FAR := 250.0
 const NEAR := 0.25
 const REAR_SIZE := Vector2i(320, 96)
 const SIDE_SIZE := Vector2i(160, 112)
-const REAR_FOV := 18.0      # vertical; with the 10:3 glass that is ~56 deg wide
-const SIDE_FOV := 30.0      # ~42 deg wide on the 10:7 door glass
+## Mirror camera fields (mirrors pass, 2026-10-14). The glass is 19 degrees
+## wide from the eye (rear) and 9 (door), so what the camera sees is squeezed
+## into it: at the old 56 / 42 degrees wide a car 20 m back was 37 pixels on a
+## 1080p screen, 25 on 720p, a smear. Real mirrors show about 25-30 degrees
+## (rear) and 15-20 (door); these are a little wider than that, so a chasing
+## car fills the glass sooner and two lanes still fit.
+const REAR_FOV := 14.0      # vertical; with the 10:3 glass that is ~45 deg wide
+const SIDE_FOV := 22.0      # ~31 deg wide on the 10:7 door glass
 const SIDE_YAW := 8.0       # degrees outward from straight back
 const SIDE_PITCH := -2.0
 const GLASS_TINT := Color(0.86, 0.87, 0.92)
@@ -287,13 +296,16 @@ func _process(_delta: float) -> void:
 	_frame += 1
 	# UPDATE_ONCE draws on the next frame and drops back to DISABLED by itself.
 	# In the cockpit, a mirror off screen is skipped; the door mirror looked at
-	# mirror renders every frame.
+	# mirror renders every frame. The rearview takes frame 0 of each period,
+	# the door mirrors the last one (the same frame when the period is 1).
+	var period := FxSettings.mirror_period()
+	var slot := _frame % period
 	var cam := get_viewport().get_camera_3d() if active else null
-	if _frame % 2 == 0 and (not active or glass_on_screen(cam, views[0].quad)):
+	if slot == 0 and (not active or glass_on_screen(cam, views[0].quad)):
 		views[0].vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 	if not active:
 		return
 	for i in [1, 2]:
 		var focused := focus == (-1 if i == 1 else 1)
-		if (focused or _frame % 2 == 1) and glass_on_screen(cam, views[i].quad):
+		if (focused or slot == period - 1) and glass_on_screen(cam, views[i].quad):
 			views[i].vp.render_target_update_mode = SubViewport.UPDATE_ONCE

@@ -47,11 +47,14 @@ func _secs(t: float) -> void:
 	while Engine.get_physics_frames() < until:
 		await process_frame
 
+## A short press timed on the physics clock (as tests/car/hood_panel.gd taps):
+## CarLids reads a press held past HOLD_S as the other lid, and on a slow
+## runner two drawn frames can take longer than that.
 func _tap(action: String) -> void:
 	Input.action_press(action)
-	await _frames(2)
+	await _secs(0.05)
 	Input.action_release(action)
-	await _frames(2)
+	await _secs(0.05)
 
 func _tris(names: PackedStringArray) -> int:
 	var n := 0

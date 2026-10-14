@@ -27,6 +27,11 @@ extends SceneTree
 # - LIMP: radiator at 1.0, full throttle from rest: the car still drives
 # - LAMPS: both head lamps broken switch the beam off
 # - STEAM / RATTLE: a hurt radiator steams; a loose car at speed rattles
+# - WRECK: the totalled look (wreck_look.gd) at meter 0.95, ~70 km/h: bonnet
+#   smoke and sparks come out of the tyre smoke pool, one head lamp is dark
+#   (half the beam, a dark lens, the beams keep the share), the rattle is up;
+#   with the tyre smoke effect switched off the wreck smoke still comes; and
+#   the garage repair clears it all
 # Exit code 1 on failure. Run:
 #   Godot_v4.7.2-stable_win64_console.exe --headless --fixed-fps 120 --audio-driver Dummy --path . -s res://tests/car/car_damage.gd
 
@@ -44,7 +49,7 @@ class StubBank:
 		bank -= amount
 		return true
 
-enum Step { BOOT, WALL, PULL_BASE, PULL_FL, PULL_FR, SAG, LIMP, LAMPS, STEAM, DONE }
+enum Step { BOOT, WALL, PULL_BASE, PULL_FL, PULL_FR, SAG, LIMP, LAMPS, STEAM, WRECK, WRECK_OFF, DONE }
 
 var game: Node
 var step := Step.BOOT
@@ -318,7 +323,8 @@ func _physics_process(_delta: float) -> bool:
 				p.damage.lamps[CarDamage.Lamp.HEAD_L] = false
 			elif t >= 6:
 				var spot2 := p.get_node_or_null("Headlights") as SpotLight3D
-				_check(spot2 == null or (spot2.visible and is_equal_approx(spot2.light_energy, CarFx.HEADLIGHT_ENERGY * 0.5)), "one head lamp: half the beam")
+				# half of the beams' own energy for the current mode (HeadlightBeams owns the spot, so H keeps the share)
+				_check(spot2 == null or (spot2.visible and is_equal_approx(spot2.light_energy, HeadlightBeams._energy_for(p.beams.mode) * 0.5)), "one head lamp: half the beam")
 				_fresh(p)
 				p.damage.parts[CarDamage.Part.RADIATOR] = 0.6
 				p.damage.parts[CarDamage.Part.SUSP_RR] = 0.6
@@ -339,6 +345,63 @@ func _physics_process(_delta: float) -> bool:
 				else:
 					_check(false, "DamageAudio is on the car")
 				_check(p.damage.hits == 0, "steady driving makes no hits (%d)" % p.damage.hits)
+				_fresh(p)
+				p.damage.totalled = 0.95
+				p.damage.parts[CarDamage.Part.STEER_FR] = 0.5
+				p.damage.rebuild_offsets()
+				if smoke != null:
+					smoke.clear()
+				_launch(p, 20.0)
+				p.driver = _hold(0.5, 0.0)
+				step = Step.WRECK
+		Step.WRECK:
+			if t >= hz * 2:
+				var smoke := _find(game, "TyreSmoke") as TyreSmoke
+				var rattle := _find(p, "DamageAudio") as DamageAudio
+				var kmh := p.current_speed() * 3.6
+				_check(p.damage.look_stage() == 3, "meter 0.95 is look stage 3 (%d)" % p.damage.look_stage())
+				if smoke != null:
+					print("wreck smoke puffs in 2 s: %d, sparks: %d at %.0f km/h" % [smoke.emitted_wreck, smoke.emitted_sparks, kmh])
+					_check(not smoke.enabled or smoke.emitted_wreck > 0, "a stage 3 car smokes off the bonnet")
+					_check(not smoke.enabled or smoke.emitted_sparks > 0, "a stage 3 car at %.0f km/h throws sparks" % kmh)
+				var spot := p.get_node_or_null("Headlights") as SpotLight3D
+				_check(spot == null or (spot.visible and is_equal_approx(spot.light_energy, HeadlightBeams._energy_for(p.beams.mode) * 0.5)), "stage 2+: one head lamp dark, half the beam")
+				_check(p.damage.head_lamp_dark(1) and not p.damage.head_lamp_dark(0), "the right lamp (the side that took the hit)")
+				var body := p.chassis_visual.get_node_or_null(^"Body") as MeshInstance3D if p.chassis_visual != null else null
+				if body != null:
+					var out: Variant = body.get_instance_shader_parameter("head_out")
+					_check(out != null and is_equal_approx(float(out), 2.0), "the right lens is dark (head_out %s)" % str(out))
+				_check(is_equal_approx(p.beams.damage_share, 0.5), "the beams carry the share through H (%.2f)" % p.beams.damage_share)
+				if rattle != null:
+					print("rattle level at stage 3: %.2f" % rattle.level)
+					_check(rattle.level > 0.3, "a stage 3 car rattles hard at speed (%.2f)" % rattle.level)
+				# the tyre smoke switch off: the damage look is not an effect
+				var fx: Variant = game.get("fx")
+				if fx != null:
+					fx.set_effect("tyre_smoke", false)
+				if smoke != null:
+					smoke.emitted_wreck = 0
+					smoke.emitted_sparks = 0
+				step = Step.WRECK_OFF
+				t = 0
+		Step.WRECK_OFF:
+			if t >= hz * 1:
+				var smoke := _find(game, "TyreSmoke") as TyreSmoke
+				if smoke != null:
+					print("tyre smoke off, 1 s: wreck puffs %d, sparks %d, tyre puffs live %d" % [smoke.emitted_wreck, smoke.emitted_sparks, smoke.live_count()])
+					_check(not smoke.enabled and smoke.emitted_wreck > 0 and smoke.emitted_sparks > 0, "the wreck look stays with the tyre smoke effect off")
+				var fx: Variant = game.get("fx")
+				if fx != null:
+					fx.set_effect("tyre_smoke", true)
+				_fresh(p)
+				_check(p.damage.look_stage() == 0 and is_equal_approx(p.damage.headlight_share(), 1.0), "the garage repair clears the look")
+				step = Step.DONE
+				t = 0
+		Step.DONE:
+			if t >= 3:
+				var body := p.chassis_visual.get_node_or_null(^"Body") as MeshInstance3D if p.chassis_visual != null else null
+				if body != null:
+					_check(is_equal_approx(float(body.get_instance_shader_parameter("head_out")), 0.0), "both lenses lit again after the repair")
 				return _end("")
 	return false
 

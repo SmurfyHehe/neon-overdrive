@@ -13,6 +13,9 @@ var flames: ExhaustFlames
 var smoke: TyreSmoke
 var shimmer: HeatShimmer  # heat shimmer behind the tailpipes (2026-10-10)
 var dirt: CarDirt  # road grime on the player body (2026-10-09), washed in WashScreen
+var wreck: Node3D  # the totalled look's loose parts and puddle (2026-10-14, wreck_parts.gd)
+
+const WreckParts := preload("res://scripts/car/wreck_parts.gd")
 
 var _player: PlayerCar
 var _camera: ChaseCamera
@@ -37,6 +40,10 @@ func _ready() -> void:
 	add_child(shimmer)
 	dirt = CarDirt.new(_player)
 	add_child(dirt)
+	# The totalled look's loose parts and puddle (wreck_parts.gd); here, not
+	# on the car, so a dropped bumper lying on the road gets the origin shift.
+	wreck = WreckParts.new(_player)
+	add_child(wreck)
 	apply_settings()
 
 ## Push the FxSettings flags to the nodes.
@@ -59,3 +66,4 @@ func shift_world(offset: Vector3) -> void:
 	skids.shift_world(offset)
 	smoke.shift_world(offset)
 	flames.shift_world(offset)  # shed fire left behind in world space (the shimmer quads are re-placed every frame)
+	wreck.shift_world(offset)   # a bumper that fell off lies on the road

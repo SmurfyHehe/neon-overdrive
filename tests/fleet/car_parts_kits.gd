@@ -366,7 +366,7 @@ func _car(id: String, want: Dictionary) -> void:
 	var draws := NpcCarBuilder.draw_call_count(id, "stock")
 	var car := NpcCarBuilder.chassis_visual(id, "stock", NpcCarBuilder.sheet_paint(id))
 	var body := car.get_node("Body") as MeshInstance3D
-	_check(body.mesh.get_surface_count() == 4 and body.has_meta("car_id"), "%s: the body should be the assembled one, 4 surfaces" % id)
+	_check(body.mesh.get_surface_count() == 5 and body.has_meta("car_id"), "%s: the body should be the assembled one, 5 surfaces (lamp flares included)" % id)
 	_check(car.has_meta("body_mat") and (car.get_meta("body_mat") as ShaderMaterial).get_shader_parameter("paint") != null,
 		"%s: the paint material should keep its `paint` uniform" % id)
 	_check((car.get_meta("body_mat") as ShaderMaterial).shader.code.contains("uniform float dirt"), "%s: the paint shader should keep `dirt`" % id)
@@ -387,7 +387,9 @@ func _car(id: String, want: Dictionary) -> void:
 	_check(not (old.get_node("Body") as MeshInstance3D).has_meta("car_id"), "%s: NEON_PARTS_LEGACY=1 should build the sheet body" % id)
 	old.free()
 	OS.set_environment("NEON_PARTS_LEGACY", "")
-	_check(draws <= old_draws, "%s: %d draw calls from parts, the sheet body costs %d" % [id, draws, old_draws])
+	# The parts body carries its lamp flares and head halos as one surface of
+	# its own (2026-10-14); the sheet proxy folds them into its glow pass.
+	_check(draws <= old_draws + 1, "%s: %d draw calls from parts, the sheet body costs %d (one more is the lamp flares)" % [id, draws, old_draws])
 
 	# ---- the underside of a rear-engined car
 	if want.get("rear_engine", false):

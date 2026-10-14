@@ -53,7 +53,10 @@ func _initialize() -> void:
 		_check(is_equal_approx(under.visibility_range_end, Undercarriage.LOD0_END), "the player's underside has the LOD too (ends at %.0f m)" % Undercarriage.LOD0_END)
 		var pplate := car.get_node_or_null(Undercarriage.PLATE_NAME) as MeshInstance3D
 		_check(pplate != null and is_equal_approx(pplate.visibility_range_begin, Undercarriage.LOD0_END) and is_equal_approx(pplate.visibility_range_end, Undercarriage.LOD1_END), "the player gets the distance plate from %.0f to %.0f m" % [Undercarriage.LOD0_END, Undercarriage.LOD1_END])
-		_check(P1CoupeBuilder.draw_call_count() == (P1CoupeBuilder._get_body_mesh().get_surface_count() + 6), "draw_call_count counts the underside")
+		# Body surfaces + underside + 4 wheels, plus the Mirrors mesh on the
+		# sheet proxy (from parts the mirrors and the lamp flares are surfaces).
+		var body_surfaces: int = (car.get_node("Body") as MeshInstance3D).mesh.get_surface_count()
+		_check(P1CoupeBuilder.draw_call_count() == body_surfaces + (5 if P1CoupeBuilder.uses_parts() else 6), "draw_call_count counts the underside")
 		# The tail pipes reach the tips.
 		var tip: Vector3 = p.tips[0].pos
 		_check(box.end.z >= tip.z - 0.12, "the tail pipe should reach the exhaust tip (%.3f vs %.3f)" % [box.end.z, tip.z])

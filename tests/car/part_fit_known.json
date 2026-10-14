@@ -1,0 +1,509 @@
+{
+	"about": "Panel clashes tests/car/part_fit.gd found on 2026-10-13, deepest crossing in mm over the sweep, ceilings: the test fails if one gets deeper or a new one appears, and asks for an entry to be removed once its clash is gone. Key: lid|moving part|fixed part. Never raise a number to make a car pass.",
+	"cars": {
+		"p0_beater": {
+			"door_l|door_l|fender_fl": {
+				"mm": 8.0,
+				"issue": 674
+			},
+			"door_l|glass_door_l|glass_windshield": {
+				"mm": 1.9,
+				"issue": 673
+			},
+			"door_l|mirror_l|pillar_a_l": {
+				"mm": 8.1,
+				"issue": 673
+			},
+			"door_l|seal_door_l|pillar_a_l": {
+				"mm": 2.8,
+				"issue": 673
+			},
+			"door_r|door_r|fender_fr": {
+				"mm": 8.0,
+				"issue": 674
+			},
+			"door_r|mirror_r|pillar_a_r": {
+				"mm": 16.1,
+				"issue": 673
+			},
+			"door_r|seal_door_r|pillar_a_r": {
+				"mm": 2.8,
+				"issue": 673
+			},
+			"fuel_flap|fuel_flap|fender_fr": {
+				"mm": 2.3,
+				"issue": 676
+			},
+			"fuel_flap|fuel_flap|fuel_recess": {
+				"mm": 8.1,
+				"issue": 676
+			},
+			"trunk|louvres|body": {
+				"mm": 3.1,
+				"issue": 675
+			},
+			"trunk|trunk|body": {
+				"mm": 6.7,
+				"issue": 675
+			}
+		},
+		"p10_truck": {
+			"door_l|door_l|fender_fl": {
+				"mm": 8.7,
+				"issue": 674
+			},
+			"door_l|glass_door_l|glass_windshield": {
+				"mm": 3.8,
+				"issue": 673
+			},
+			"door_l|seal_door_l|pillar_a_l": {
+				"mm": 2.9,
+				"issue": 673
+			},
+			"door_r|door_r|fender_fr": {
+				"mm": 8.7,
+				"issue": 674
+			},
+			"door_r|seal_door_r|pillar_a_r": {
+				"mm": 2.9,
+				"issue": 673
+			},
+			"fuel_flap|fuel_flap|fuel_recess": {
+				"mm": 1.3,
+				"issue": 676
+			},
+			"hood|hood|fender_fl": {
+				"mm": 8.0,
+				"issue": 675
+			},
+			"hood|hood|fender_fr": {
+				"mm": 8.0,
+				"issue": 675
+			},
+			"hood|hood|grille": {
+				"mm": 9.2,
+				"issue": 675
+			}
+		},
+		"p1_coupe": {
+			"door_l|door_l|fender_fl": {
+				"mm": 10.3,
+				"issue": 674
+			},
+			"door_l|glass_door_l|glass_windshield": {
+				"mm": 1.9,
+				"issue": 673
+			},
+			"door_l|glass_door_l|pillar_a_l": {
+				"mm": 5.1,
+				"issue": 673
+			},
+			"door_l|seal_door_l|pillar_a_l": {
+				"mm": 3.4,
+				"issue": 674
+			},
+			"door_r|door_r|fender_fr": {
+				"mm": 10.3,
+				"issue": 674
+			},
+			"door_r|glass_door_r|pillar_a_r": {
+				"mm": 5.1,
+				"issue": 673
+			},
+			"door_r|seal_door_r|pillar_a_r": {
+				"mm": 3.4,
+				"issue": 674
+			},
+			"hood|hood|fender_fl": {
+				"mm": 4.2,
+				"issue": 675
+			},
+			"hood|hood|fender_fr": {
+				"mm": 4.2,
+				"issue": 675
+			},
+			"trunk|trunk|body": {
+				"mm": 2.2,
+				"issue": 675
+			},
+			"trunk|trunk|spoiler": {
+				"mm": 34.6,
+				"issue": 675
+			}
+		},
+		"p2_hothatch": {
+			"door_l|door_l|blister_fl": {
+				"mm": 8.4,
+				"issue": 674
+			},
+			"door_l|door_l|fender_fl": {
+				"mm": 22.5,
+				"issue": 674
+			},
+			"door_l|glass_door_l|glass_windshield": {
+				"mm": 2.1,
+				"issue": 673
+			},
+			"door_l|glass_door_l|pillar_a_l": {
+				"mm": 4.3,
+				"issue": 673
+			},
+			"door_l|rub_door_l|blister_fl": {
+				"mm": 14.9,
+				"issue": 674
+			},
+			"door_l|seal_door_l|pillar_a_l": {
+				"mm": 3.0,
+				"issue": 673
+			},
+			"door_r|door_r|blister_fr": {
+				"mm": 8.4,
+				"issue": 674
+			},
+			"door_r|door_r|fender_fr": {
+				"mm": 22.5,
+				"issue": 674
+			},
+			"door_r|glass_door_r|pillar_a_r": {
+				"mm": 4.3,
+				"issue": 673
+			},
+			"door_r|rub_door_r|blister_fr": {
+				"mm": 14.9,
+				"issue": 674
+			},
+			"door_r|seal_door_r|pillar_a_r": {
+				"mm": 3.0,
+				"issue": 673
+			},
+			"fuel_flap|fuel_flap|body": {
+				"mm": 4.1,
+				"issue": 676
+			},
+			"fuel_flap|fuel_flap|fuel_recess": {
+				"mm": 5.5,
+				"issue": 676
+			},
+			"hatch|glass_backlight|body": {
+				"mm": 39.1,
+				"issue": 675
+			},
+			"hatch|glass_backlight|brake_c": {
+				"mm": 12.7,
+				"issue": 675
+			},
+			"hatch|glass_backlight|spoiler": {
+				"mm": 22.0,
+				"issue": 675
+			},
+			"hatch|seal_backlight|body": {
+				"mm": 8.4,
+				"issue": 675
+			},
+			"hatch|seal_backlight|spoiler": {
+				"mm": 6.2,
+				"issue": 675
+			},
+			"hood|hood|antenna": {
+				"mm": 3.5,
+				"issue": 675
+			},
+			"hood|hood|fender_fl": {
+				"mm": 6.5,
+				"issue": 675
+			},
+			"hood|hood|fender_fr": {
+				"mm": 6.5,
+				"issue": 675
+			}
+		},
+		"p4_kei": {
+			"door_l|door_l|body": {
+				"mm": 2.9,
+				"issue": 673
+			},
+			"door_l|door_l|fender_fl": {
+				"mm": 26.7,
+				"issue": 674
+			},
+			"door_l|door_l|glass_windshield": {
+				"mm": 2.7,
+				"issue": 673
+			},
+			"door_l|door_l|seal_windshield": {
+				"mm": 1.1,
+				"issue": 673
+			},
+			"door_r|door_r|body": {
+				"mm": 2.9,
+				"issue": 673
+			},
+			"door_r|door_r|fender_fr": {
+				"mm": 26.7,
+				"issue": 674
+			},
+			"door_r|door_r|glass_windshield": {
+				"mm": 2.7,
+				"issue": 673
+			},
+			"door_r|door_r|seal_windshield": {
+				"mm": 1.1,
+				"issue": 673
+			},
+			"fuel_flap|fuel_flap|body": {
+				"mm": 6.0,
+				"issue": 676
+			},
+			"fuel_flap|fuel_flap|fuel_recess": {
+				"mm": 2.1,
+				"issue": 676
+			},
+			"hood|hood|fender_fl": {
+				"mm": 6.2,
+				"issue": 675
+			},
+			"hood|hood|fender_fr": {
+				"mm": 6.2,
+				"issue": 675
+			},
+			"popup_l|popup_l|fender_fl": {
+				"mm": 50.3,
+				"issue": 676
+			},
+			"popup_r|popup_r|fender_fr": {
+				"mm": 50.3,
+				"issue": 676
+			},
+			"trunk|trunk|body": {
+				"mm": 2.6,
+				"issue": 675
+			}
+		},
+		"p5_muscle": {
+			"door_l|belt_trim_door_l|pillar_a_l": {
+				"mm": 9.6,
+				"issue": 673
+			},
+			"door_l|door_l|fender_fl": {
+				"mm": 9.0,
+				"issue": 674
+			},
+			"door_l|glass_door_l|glass_windshield": {
+				"mm": 28.3,
+				"issue": 673
+			},
+			"door_l|glass_door_l|pillar_a_l": {
+				"mm": 4.0,
+				"issue": 673
+			},
+			"door_l|seal_door_l|pillar_a_l": {
+				"mm": 3.0,
+				"issue": 673
+			},
+			"door_r|belt_trim_door_r|pillar_a_r": {
+				"mm": 9.6,
+				"issue": 673
+			},
+			"door_r|door_r|fender_fr": {
+				"mm": 9.0,
+				"issue": 674
+			},
+			"door_r|glass_door_r|pillar_a_r": {
+				"mm": 4.0,
+				"issue": 673
+			},
+			"door_r|seal_door_r|pillar_a_r": {
+				"mm": 3.0,
+				"issue": 673
+			},
+			"hood|hood|fender_fl": {
+				"mm": 4.9,
+				"issue": 675
+			},
+			"hood|hood|fender_fr": {
+				"mm": 4.9,
+				"issue": 675
+			},
+			"trunk|trunk|body": {
+				"mm": 2.6,
+				"issue": 675
+			},
+			"trunk|trunk|buttress_l": {
+				"mm": 32.1,
+				"issue": 675
+			},
+			"trunk|trunk|buttress_r": {
+				"mm": 32.0,
+				"issue": 675
+			}
+		},
+		"p7_wagon": {
+			"barn_l|barn_l|body": {
+				"mm": 7.1,
+				"issue": 675
+			},
+			"barn_l|glass_barn_l|body": {
+				"mm": 10.1,
+				"issue": 675
+			},
+			"barn_l|seal_barn_l|body": {
+				"mm": 9.8,
+				"issue": 675
+			},
+			"barn_r|barn_r|body": {
+				"mm": 7.1,
+				"issue": 675
+			},
+			"barn_r|glass_barn_r|body": {
+				"mm": 10.1,
+				"issue": 675
+			},
+			"barn_r|seal_barn_r|body": {
+				"mm": 9.8,
+				"issue": 675
+			},
+			"door_l|door_l|fender_fl": {
+				"mm": 8.7,
+				"issue": 674
+			},
+			"door_l|door_l|rub_strip": {
+				"mm": 5.8,
+				"issue": 674
+			},
+			"door_l|glass_door_l|pillar_a_l": {
+				"mm": 5.2,
+				"issue": 674
+			},
+			"door_l|glass_door_l|roof_rails": {
+				"mm": 10.0,
+				"issue": 673
+			},
+			"door_l|rub_door_l|fender_fl": {
+				"mm": 6.8,
+				"issue": 674
+			},
+			"door_l|seal_door_l|pillar_a_l": {
+				"mm": 4.0,
+				"issue": 674
+			},
+			"door_l|seal_door_l|roof_rails": {
+				"mm": 9.9,
+				"issue": 673
+			},
+			"door_r|door_r|fender_fr": {
+				"mm": 8.7,
+				"issue": 674
+			},
+			"door_r|door_r|rub_strip": {
+				"mm": 5.8,
+				"issue": 674
+			},
+			"door_r|glass_door_r|pillar_a_r": {
+				"mm": 5.2,
+				"issue": 674
+			},
+			"door_r|glass_door_r|roof_rails": {
+				"mm": 10.0,
+				"issue": 673
+			},
+			"door_r|rub_door_r|fender_fr": {
+				"mm": 6.8,
+				"issue": 674
+			},
+			"door_r|seal_door_r|pillar_a_r": {
+				"mm": 4.0,
+				"issue": 674
+			},
+			"door_r|seal_door_r|roof_rails": {
+				"mm": 9.8,
+				"issue": 673
+			},
+			"fuel_flap|fuel_flap|body": {
+				"mm": 2.2,
+				"issue": 676
+			},
+			"fuel_flap|fuel_flap|fuel_recess": {
+				"mm": 3.8,
+				"issue": 676
+			},
+			"hood|hood|antenna": {
+				"mm": 5.1,
+				"issue": 675
+			}
+		},
+		"p8_driftcoupe": {
+			"door_l|door_l|fender_fl": {
+				"mm": 10.2,
+				"issue": 674
+			},
+			"door_l|glass_door_l|drip_rail_l": {
+				"mm": 34.9,
+				"issue": 673
+			},
+			"door_l|glass_door_l|pillar_a_l": {
+				"mm": 5.1,
+				"issue": 674
+			},
+			"door_l|glass_door_l|seal_windshield": {
+				"mm": 1.8,
+				"issue": 673
+			},
+			"door_l|seal_door_l|drip_rail_l": {
+				"mm": 8.5,
+				"issue": 673
+			},
+			"door_l|seal_door_l|pillar_a_l": {
+				"mm": 4.4,
+				"issue": 674
+			},
+			"door_r|door_r|fender_fr": {
+				"mm": 22.5,
+				"issue": 674
+			},
+			"door_r|glass_door_r|drip_rail_r": {
+				"mm": 34.9,
+				"issue": 673
+			},
+			"door_r|glass_door_r|pillar_a_r": {
+				"mm": 5.1,
+				"issue": 674
+			},
+			"door_r|glass_door_r|seal_windshield": {
+				"mm": 1.8,
+				"issue": 673
+			},
+			"door_r|seal_door_r|drip_rail_r": {
+				"mm": 8.5,
+				"issue": 673
+			},
+			"door_r|seal_door_r|pillar_a_r": {
+				"mm": 4.4,
+				"issue": 674
+			},
+			"fuel_flap|fuel_flap|fuel_recess": {
+				"mm": 1.5,
+				"issue": 676
+			},
+			"hood|hood|fender_fl": {
+				"mm": 6.2,
+				"issue": 675
+			},
+			"hood|hood|fender_fr": {
+				"mm": 6.2,
+				"issue": 675
+			},
+			"popup_l|popup_l|fender_fl": {
+				"mm": 20.1,
+				"issue": 676
+			},
+			"popup_r|popup_r|fender_fr": {
+				"mm": 20.1,
+				"issue": 676
+			},
+			"trunk|trunk|body": {
+				"mm": 2.6,
+				"issue": 675
+			}
+		}
+	}
+}

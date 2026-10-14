@@ -5,10 +5,10 @@ extends Node
 # Part 1): one node per car that decides when its "detail" parts exist and
 # show. Detail parts are the ones only visible with a panel open or from a
 # camera that walks round the car: the spring and damper units in the arches
-# (CarParts), and later the engine bay, door and trunk contents (PRs #299 and
-# #323 register theirs here). They are built the first time they are needed
-# and hidden again after, so a drive pays nothing for them: no node, no draw
-# call, no per-frame transform work.
+# (CarParts), the engine bay's parts (CarAssembler.build_bay), and later
+# door and trunk contents (PR #323 registers its here). They are built the
+# first time they are needed and hidden again after, so a drive pays nothing
+# for them: no node, no draw call, no per-frame transform work.
 #
 # Detail is on when any of these holds:
 #   - photo mode (GameState.PHOTO)
@@ -83,6 +83,7 @@ func _ready() -> void:
 	add_to_group(GraphicsSettings.GROUP)
 	add_to_group(GROUP)
 	_find_underside()
+	_register_bay()
 	refresh()
 	_apply_underside()
 
@@ -170,6 +171,28 @@ func _show_part(p: Dictionary) -> void:
 		p.node = (p.build as Callable).call()
 	if p.node != null:
 		(p.node as Node).set("visible", true)
+
+# ---------- the engine bay ----------
+
+## The engine bay parts of a car assembled from parts (CarAssembler.build_bay,
+## engine bays B0): out of the driving body, made here the first time detail
+## is wanted, under the body so they sit and move with it. The open-panels
+## picture body already carries its bay.
+func _register_bay() -> void:
+	var body := CarAssembler.body_of(vehicle)
+	if body == null or String((body.get_meta("car_parts", {}) as Dictionary).get("panels", "closed")) == "open":
+		return
+	var car_id: String = body.get_meta("car_id")
+	if CarAssembler.bay_part_names(car_id).is_empty():
+		return
+	register("bay", func() -> Node:
+		if not is_instance_valid(body):
+			return null
+		var paint_mat := body.get_surface_override_material(CarAssembler.surface_index(body.mesh, "body"))
+		var bay := CarAssembler.build_bay(car_id, paint_mat)
+		bay.layers = body.layers
+		body.add_child(bay)
+		return bay)
 
 # ---------- the undercarriage on Low ----------
 

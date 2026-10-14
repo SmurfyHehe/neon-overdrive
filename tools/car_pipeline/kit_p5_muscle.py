@@ -241,7 +241,7 @@ def _fittings(ctx):
     # ---- under the hood: a dark bay floor and the radiator. No engine model yet.
     hood_mid = 0.5 * (R['nose_s'] + cab['A'])
     P.obox(part('bay_floor', bevel=0), (0.0, 0.42, z(hood_mid)), (1.30, 0.02, cab['A'] - R['nose_s'] - 0.10), np.eye(3), 'rubber')
-    P.obox(part('bay_radiator_core', bevel=0), (0.0, 0.58, z(R['nose_s'] + 0.10)), (0.80, 0.36, 0.05), np.eye(3), 'rubber')
+    P.obox(part('bay_radiator_core', bevel=0), (0.0, 0.595, z(R['nose_s'] + 0.10)), (0.80, 0.33, 0.05), np.eye(3), 'rubber')  # stands on the floor (part_fit)
 
 
 def _wheel(D, tag, sx, axle, part):

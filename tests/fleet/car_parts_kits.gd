@@ -355,7 +355,13 @@ func _car(id: String, want: Dictionary) -> void:
 	var tris := CarAssembler.triangle_count(id)
 	_check(tris <= CEILING, "%s: %d body triangles, ceiling %d" % [id, tris, CEILING])
 	if not meta.is_empty():
-		_check(tris == int(meta.tris_body), "%s: merged %d triangles, body.json says %d" % [id, tris, int(meta.tris_body)])
+		# the bay parts (engine, bay_*) are in body.json's count but not in the
+		# driving body: they are their own mesh (CarAssembler.build_bay, #642)
+		var bay := CarAssembler.build_bay(id)
+		var bay_tris := CarAssembler._mesh_tris(bay.mesh) if bay != null else 0
+		if bay != null:
+			bay.free()
+		_check(tris + bay_tris == int(meta.tris_body), "%s: merged %d + bay %d triangles, body.json says %d" % [id, tris, bay_tris, int(meta.tris_body)])
 		for mname in meta.materials:
 			_check(CarAssembler.MATERIALS.has(mname), "%s: material %s is not one the assembler knows" % [id, mname])
 	var wheel_tris := 0

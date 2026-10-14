@@ -34,7 +34,7 @@ the proximity cue (glass warms as a car closes in) and the blind-spot dots.
 | 3 | **Rearview redraws every frame while a car is within ~15 m behind** (the proximity cue already knows), so a chasing cop reads smoothly. | One extra pass, only during a chase: estimate 0.3-0.6 ms; measure. | After 1. |
 | 4 | **Door mirror glass per car**: angle from the car's own `door_mirror` point so the glass faces the eye; closes #688. | None. | Fable, laptop shots. |
 | 5 | **Right mirror**: a short automatic glance toward it when a car enters the right blind spot (zero keys; the 2026-10-07 auto-look proposal, never decided). | None. | Roy's yes first. |
-| 6 | **Chase rear strip** 480x144 and the narrower rear camera from step 1. | Pixels only, about free. | Roy's yes first. |
+| 6 | **Chase rear strip** 480x144, drawn 1:1 (the rear renders at the strip's size while only the strip shows it) with the narrower rear camera from step 1. | Pixels only, about free; same pass. | **Roy 1552 yes; in PR 741.** |
 
 Cost basis: the three mirrors cost about 1.05 ms at 3 traffic cars when they
 were built (PR #130 notes, alternating frames); with 16 parts-built cars behind
@@ -59,8 +59,8 @@ The kei (open top) keeps its own point: its screen top is a hand above the eye.
 ## 4. For Roy (the coordinator numbers these)
 
 - Look back in the cockpit: **roof camera looking straight back** (my pick, the hood view already does it) or the eye lifted to the roof liner and the middle (still partly blocked on the hatch and coupe)?
-- Mirror camera widths as picked in step 1 (45 / 31 degrees, cars bigger) or keep the wide view and make the glass bigger instead (door glass 17.5 -> 22 cm, which changes the housings on every body)?
-- Rear strip in the chase view bigger (480x144)?
+- Mirror camera widths: **1551 narrower, as built.**
+- Rear strip in the chase view bigger (480x144): **1552 yes, in PR 741.**
 
 ## 5. Needs the laptop (Fable by eye)
 
@@ -68,7 +68,7 @@ Cockpit screenshots in the coupe, wagon, pickup and drift coupe with a car 10 m
 and 25 m behind and one alongside on the left, before and after step 1: the
 rearview's new place (coupe: 8 cm forward and down, onto the windscreen), the
 size of cars in the glass, and the Low tier's 20 Hz glass at the laptop's frame
-rate. No cloud screenshots: headless Godot has no renderer.
+rate; the chase view's 480x144 strip and the cop warning beside it with a chase on. No cloud screenshots: headless Godot has no renderer.
 
 ## Steelman / premortem
 

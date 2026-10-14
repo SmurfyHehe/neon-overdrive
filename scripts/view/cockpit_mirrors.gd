@@ -34,6 +34,10 @@ const ColorGrade := preload("res://scripts/world/color_grade.gd")
 const FAR := 250.0
 const NEAR := 0.25
 const REAR_SIZE := Vector2i(320, 96)
+## The rear render while only the HUD strip shows it (chase and hood views):
+## the strip's own pixels (Hud.STRIP_SIZE), drawn 1:1. Pixels are cheap on the
+## laptop; the pass is the cost, and it is the same pass.
+const STRIP_RENDER := Vector2i(480, 144)
 const SIDE_SIZE := Vector2i(160, 112)
 ## Mirror camera fields (mirrors pass, 2026-10-14). The glass is 19 degrees
 ## wide from the eye (rear) and 9 (door), so what the camera sees is squeezed
@@ -192,11 +196,19 @@ func apply_graphics() -> void:
 	for i in views.size():
 		var glanced: bool = i > 0 and focus == (-1 if i == 1 else 1)
 		views[i].vp.size = _scaled(views[i].base_px) * (2 if glanced else 1)
+	_size_rear()
+
+## The rear render: the glass's size in the cockpit, the strip's when only
+## the strip shows it.
+func _size_rear() -> void:
+	if not views.is_empty():
+		views[0].vp.size = _scaled(STRIP_RENDER if (strip and not active) else REAR_SIZE)
 
 ## Cockpit view on or off: nothing renders while off, unless the strip asks.
 func set_active(on: bool) -> void:
 	active = on
 	_sync_view_group()
+	_size_rear()
 	if not on:
 		set_focus(0)
 		for v in views:
@@ -206,6 +218,7 @@ func set_active(on: bool) -> void:
 func set_strip(on: bool) -> void:
 	strip = on
 	_sync_view_group()
+	_size_rear()
 	if not on and not active:
 		views[0].vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 

@@ -25,7 +25,10 @@ const RPM_GREEN := Color("#3FD060") # RPM bar only (allowlisted in tests/core/pa
 
 const KMH_PER_MS := 3.6
 ## Rear strip: the rearview render drawn at this size, this far below the top edge.
-const STRIP_SIZE := Vector2(320, 96)
+## 480x144 (Roy 1552, 2026-10-14: bigger; it was 320x96, 17% of a 1080p width
+## and the same squeezed view). CockpitMirrors renders the rear at this size
+## while the strip is up, so it is drawn 1:1; HeatIcons sits just left of it.
+const STRIP_SIZE := Vector2(480, 144)
 const STRIP_TOP := 12.0
 const STRIP_BORDER := 2.0
 ## Proximity cue: a car behind, same way, within this corridor and range.

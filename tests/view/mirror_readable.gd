@@ -15,6 +15,8 @@ extends "res://tests/view/parked_cockpit.gd"
 # - the police heat icon (HeatIcons) covers neither the rearview glass in the
 #   cockpit nor the chase view's rear strip (Roy, 2026-10-14: it blocked the
 #   mirror at top centre)
+# - the chase view's rear strip (480x144, Roy 1552) is drawn 1:1: the rear
+#   renders at the strip's size while only the strip shows it
 # Exit code 1 on failure. Run (once per car):
 #   NEON_CAR=p17_work_pickup Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/view/mirror_readable.gd
 
@@ -67,6 +69,13 @@ func _step(n: int) -> bool:
 	_check(not icon.intersects(glass), "%s: the heat icon %s stays off the rearview glass %s" % [kind, icon, glass])
 	_check(not icon.intersects(strip), "the heat icon %s stays off the rear strip %s" % [icon, strip])
 	_check(icon.position.x >= 0.0 and icon.end.y <= 1.0, "the heat icon is on screen (%s)" % icon)
+	# the chase view's strip is drawn 1:1: the rear renders at the strip's size there
+	_check(rear.vp.size == CockpitMirrors._scaled(CockpitMirrors.REAR_SIZE), "in the cockpit the rear renders at the glass size (%s)" % rear.vp.size)
+	mirrors.set_active(false)
+	mirrors.set_strip(true)
+	_check(rear.vp.size == CockpitMirrors._scaled(CockpitMirrors.STRIP_RENDER) and CockpitMirrors.STRIP_RENDER == Vector2i(Hud.STRIP_SIZE), "with only the strip up the rear renders at the strip's %s (%s)" % [Hud.STRIP_SIZE, rear.vp.size])
+	mirrors.set_strip(false)
+	mirrors.set_active(true)
 	var q := FxSettings.mirror_quality
 	FxSettings.set_mirror_quality(0)
 	_check(FxSettings.mirror_scale() == 1.0 and FxSettings.mirror_period() == 3, "low quality keeps the render size and redraws every third frame")

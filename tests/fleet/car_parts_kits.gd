@@ -185,6 +185,38 @@ const CARS := {
 			["trunk", "body", Vector3.RIGHT, Vector3.UP, 2, 1.65],
 		],
 	},
+	"p3_tuner": {
+		## a four-door sedan: rear doors on the B-pillar line with their own glass, box flares (the rear ones on the
+		## rear doors, opening with them); no high brake lamp (era), so no brake_c
+		"without": ["brake_c"],
+		"parts": ["door_rl", "door_rr", "glass_door_rl", "glass_door_rr", "seal_door_rl", "seal_door_rr", "handle_rl", "handle_rr",
+			"flare_fl", "flare_fr", "flare_rl", "flare_rr", "flare_door_rl", "flare_door_rr",
+			"glass_quarter_l", "glass_quarter_r", "seal_quarter_l", "seal_quarter_r", "pillar_b_l", "pillar_b_r",
+			"tail_panel", "plate_lamp", "grille", "bumper_r_insert", "spoiler", "mirror_l", "mirror_r", "antenna",
+			"caliper_fl", "caliper_fr", "caliper_rl", "caliper_rr", "susp_fl", "susp_fr", "susp_rl", "susp_rr",
+			"bay_floor", "bay_radiator_core",
+			"brake_c"],   # listed so that `without` is checked
+		"lamps": {"head_l": "glow_head", "head_r": "glow_head", "turn_fl": "glow_turn", "turn_fr": "glow_turn",
+			"turn_rl": "glow_turn", "turn_rr": "glow_turn", "tail_l": "glow_tail", "tail_r": "glow_tail",
+			"brake_l": "glow_brake", "brake_r": "glow_brake", "reverse_l": "glow_reverse", "reverse_r": "glow_reverse",
+			"plate_lamp": "glow_lens"},
+		"anchors": ["bay_engine", "bay_turbo", "bay_radiator", "bay_intercooler", "tank", "fuel_filler", "diff", "subframe_f",
+			"strut_top_fl", "strut_top_fr"],
+		"hinges": ["hinge_hood", "hinge_trunk", "hinge_door_l", "hinge_door_r", "hinge_door_rl", "hinge_door_rr"],
+		"on_hinge": {"hinge_door_rl": ["door_rl", "glass_door_rl", "handle_rl", "flare_door_rl"],
+			"hinge_door_rr": ["door_rr", "glass_door_rr", "handle_rr", "flare_door_rr"]},
+		## 300 mm vented discs on all four
+		"brakes": {"fl": 0.15, "fr": 0.15, "rl": 0.15, "rr": 0.15},
+		"no_hubcap": [],
+		"gaps": [
+			## at a vertex of the merged outline (merge_flat leaves none between corners)
+			["hood", "fender_fr", Vector3.RIGHT, Vector3.UP, 2, -1.71],
+			["fender_fr", "door_r", Vector3.BACK, Vector3.RIGHT, 1, 0.6],
+			["door_r", "door_rr", Vector3.BACK, Vector3.RIGHT, 1, 0.6],
+			["door_rr", "body", Vector3.BACK, Vector3.RIGHT, 1, 0.6],
+			["trunk", "body", Vector3.RIGHT, Vector3.UP, 2, 1.76],
+		],
+	},
 	"p10_truck": {
 		## a regular cab (no B-pillar inside the glass), no deck lid: the tail is the
 		## tailgate on its own hinge and the deck the fixed hard bed cover
@@ -212,6 +244,46 @@ const CARS := {
 			["door_r", "body", Vector3.BACK, Vector3.RIGHT, 1, 0.82],
 			["bed_cover", "body", Vector3.RIGHT, Vector3.UP, 2, 0.88],
 			["tailgate", "body", Vector3.RIGHT, Vector3.BACK, 1, 1.00],
+		],
+	},
+	"p17_work_pickup": {
+		## the Camel: four doors (the rear pair cut by the kit, each on its own
+		## hinge), the bed a bolted-on box with the tailgate on its bottom hinge,
+		## no deck lid; stacked tail lamps (red brake, clear, red running lamp) at the bed corners;
+		## nothing hangs under the belly (the game's Undercarriage draws it)
+		"without": ["trunk", "frame", "fuel_tank"],
+		"parts": ["door_rl", "door_rr", "glass_door_rl", "glass_door_rr", "seal_door_rl", "seal_door_rr",
+			"handle_rl", "handle_rr", "bed", "bed_rails", "bed_hooks", "tailgate", "handle_tailgate",
+			"grille", "bumper_blade_f", "step_bumper", "step", "lamp_block_l", "lamp_block_r",
+			"glass_slider", "seal_slider", "plate_lamp", "mirror_l", "mirror_r", "antenna", "pillar_b_l", "pillar_b_r",
+			"caliper_fl", "caliper_fr", "bay_floor", "bay_radiator_core", "susp_fl", "susp_fr",
+			"trunk", "frame", "fuel_tank"],   # listed so that `without` is checked
+		## the clear middle of each lamp: reversing lamp inboard, the blinker's amber bulb outboard
+		"lamps": {"head_l": "glow_head", "head_r": "glow_head", "turn_fl": "glow_turn", "turn_fr": "glow_turn",
+			"turn_rl": "glow_turn", "turn_rr": "glow_turn", "tail_l": "glow_tail", "tail_r": "glow_tail",
+			"brake_l": "glow_brake", "brake_r": "glow_brake", "brake_c": "glow_brake",
+			"reverse_l": "glow_reverse", "reverse_r": "glow_reverse", "plate_lamp": "glow_lens"},
+		"anchors": ["bay_engine", "bay_radiator", "tank", "fuel_filler", "diff"],
+		"hinges": ["hinge_hood", "hinge_tailgate", "hinge_door_l", "hinge_door_r", "hinge_door_rl", "hinge_door_rr"],
+		"on_hinge": {"hinge_tailgate": ["tailgate", "handle_tailgate"],
+			"hinge_door_rr": ["door_rr", "glass_door_rr", "seal_door_rr", "handle_rr"],
+			"hinge_door_rl": ["door_rl", "glass_door_rl", "seal_door_rl", "handle_rl"],
+			"hinge_door_r": ["door_r", "glass_door_r", "mirror_r"]},
+		"off_hinge": {"hinge_door_r": ["door_rr"], "hinge_door_rr": ["door_r"]},
+		## 300 mm discs in front, 260 mm drums at the rear (CarFittings: disc / drum)
+		"brakes": {"fl": 0.15, "fr": 0.15, "rl": 0.13, "rr": 0.13},
+		"no_hubcap": [],
+		"gaps": [
+			## at vertices of the merged outline (merge_flat leaves none between corners), above the stripe
+			["hood", "fender_fr", Vector3.RIGHT, Vector3.UP, 2, -1.74],
+			["fender_fr", "door_r", Vector3.BACK, Vector3.RIGHT, 1, 0.88],
+			["door_r", "body", Vector3.BACK, Vector3.RIGHT, 1, 0.88],
+			## the rear door's front edge to the B-pillar, its rear edge to the C-pillar,
+			## the bed's front edge to the cab's back wall
+			["door_rr", "body", Vector3.FORWARD, Vector3.RIGHT, 1, 0.88],
+			["door_rr", "body", Vector3.BACK, Vector3.RIGHT, 1, 0.88],
+			["bed", "body", Vector3.FORWARD, Vector3.RIGHT, 1, 0.88],
+			["tailgate", "bed", Vector3.RIGHT, Vector3.BACK, 1, 1.08],
 		],
 	},
 }

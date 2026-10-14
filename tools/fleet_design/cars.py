@@ -410,7 +410,7 @@ P17 = {
     'rule': 'Low flat hood under a tall upright double cab, a short open bed behind it on flared box sides, '
             'a chrome step bumper, a side stripe the length of the body, steel wheels in big arches, a single tailpipe out the rear corner.',
     'tier': 'T2 work pickup (Camel), bought from Walt after act 1; spec notes/car-sheets/p17_work_pickup-2026-10-10',
-    'L': 4.95, 'WB': 3.18, 'OHf': 0.90, 'W': 1.80,
+    'L': 4.80, 'WB': 3.18, 'OHf': 0.90, 'W': 1.80,
     # arch gap 5.5 cm: big for a player car, still under every traffic car's
     # (the design check's player/traffic rule: traffic arches are the biggest)
     'wheel': {'r': 0.37, 'w': 0.245, 'track': 1.55, 'arch_gap': 0.055, 'arch_lift': 0.02, 'rim': 'steel', 'rim_ratio': 0.58},
@@ -419,34 +419,37 @@ P17 = {
     # 1475 "differ"): the bed is 30 cm shorter (4.95 long, the sheet's stubby
     # "all cab" proportion) and a chrome step bumper stands out behind the
     # tailgate (0.96 wide, between the dual tips' spots), so the outline test no
-    # longer finds N3's twin from the high views
+    # longer finds N3's twin from the high views. Roy 1219 (the shorter truck
+    # from his photo, ~4.8 m): the bed 15 cm shorter again, body 4.80, the step
+    # bumper reaching 4.95. Visual only: NpcCarBuilder keeps the 4.95 collision
+    # box and overhangs (the step bumper fills it)
     'top': [(0.0, 0.86), (0.04, 0.96), (0.20, 1.02), (1.30, 1.09), (1.95, 1.70), (3.25, 1.74), (3.32, 1.16),
-            (4.92, 1.14), (4.95, 1.08)],
-    'floor': [(0, 0.46), (0.30, 0.28), (4.52, 0.28), (4.95, 0.50)],
+            (4.77, 1.14), (4.80, 1.08)],
+    'floor': [(0, 0.46), (0.30, 0.28), (4.45, 0.28), (4.80, 0.50)],
     # the bed sides flare 4 cm proud of the cab: an old-style flared box
-    'hw': [(0, 0.76), (0.08, 0.86), (0.30, 0.90), (3.32, 0.90), (3.55, 0.90), (3.75, 0.94), (4.65, 0.94), (4.82, 0.90), (4.95, 0.88)],
-    'waist': [(0, 0.76), (0.40, 0.88), (4.95, 0.88)],
-    'belt': [(0, 0.86), (0.20, 0.98), (1.30, 1.06), (3.32, 1.12), (4.95, 1.12)],
+    'hw': [(0, 0.76), (0.08, 0.86), (0.30, 0.90), (3.32, 0.90), (3.55, 0.90), (3.75, 0.94), (4.55, 0.94), (4.70, 0.90), (4.80, 0.88)],
+    'waist': [(0, 0.76), (0.40, 0.88), (4.80, 0.88)],
+    'belt': [(0, 0.86), (0.20, 0.98), (1.30, 1.06), (3.32, 1.12), (4.80, 1.12)],
     'tumble': 0.035, 'sill_in': 0.03, 'rocker_h': 0.50,
     'cabin': {'A': 1.30, 'W': 1.95, 'R': 3.25, 'C': 3.32, 'D': 3.18,
               'roof_w': [(1.95, 0.70), (3.25, 0.70)], 'roof_drop': 0.03, 'pillars': [(2.52, 2.60)]},
-    'open': [{'s0': 3.40, 's1': 4.92, 'floor': 0.84, 'wall': 0.05, 'mat': 'bed'}],
+    'open': [{'s0': 3.40, 's1': 4.77, 'floor': 0.84, 'wall': 0.05, 'mat': 'bed'}],
     'decals': [
         # wide low grille between rectangular lamps, a chrome blade bumper under it
         {'view': 'front', 'rect': (-0.50, 0.70, 0.50, 0.90), 'mat': 'grille', 'cell': 0.16},
         {'view': 'front', 'rect': (0.54, 0.74, 0.82, 0.88), 'mat': 'head', 'mirror': True},
         {'view': 'front', 'rect': (-0.84, 0.48, 0.84, 0.60), 'mat': 'chrome', 'tag': 'fbumper'},
         # the side stripe: a sodium band with a dark pinline under it, nose to tailgate
-        {'view': 'left', 'rect': (0.40, 0.74, 4.75, 0.82), 'mat': 'paint2', 'mirror': True},
-        {'view': 'left', 'rect': (0.40, 0.715, 4.75, 0.735), 'mat': 'trim', 'mirror': True},
+        {'view': 'left', 'rect': (0.40, 0.74, 4.60, 0.82), 'mat': 'paint2', 'mirror': True},
+        {'view': 'left', 'rect': (0.40, 0.715, 4.60, 0.735), 'mat': 'trim', 'mirror': True},
         # tall tail lamps either side of the tailgate, chrome rear bumper
         {'view': 'rear', 'rect': (0.78, 0.72, 0.90, 1.06), 'mat': 'tail', 'mirror': True},
         {'view': 'rear', 'rect': (-0.84, 0.50, 0.84, 0.62), 'mat': 'chrome', 'cell': 0.25, 'tag': 'rbumper'},
     ],
     'parts': [
-        {'type': 'mirrors', 'out': 0.11, 'up': 0.09},
+        {'type': 'mirrors', 'out': 0.15, 'up': 0.09, 'long_arm': True},   # wide work-truck mirrors (also keeps the outline off the street truck's),
         {'type': 'step', 's0': 1.45, 's1': 3.20, 'y': 0.40},
-        {'type': 'box', 's': 5.02, 'xy': (0.0, 0.56), 'size': (0.96, 0.13, 0.16), 'mat': 'chrome', 'tag': 'step_bumper'},
+        {'type': 'box', 's': 4.87, 'xy': (0.0, 0.56), 'size': (0.96, 0.13, 0.16), 'mat': 'chrome', 'tag': 'step_bumper'},
     ],
     # one pipe out the rear corner (right side), no headache rack
     'exhaust': [{'x': 0.68, 'y': 0.40, 'r': 0.04}],
@@ -456,7 +459,7 @@ P17 = {
         {'id': 'rear', 'view': 'rear', 'rect': (-0.45, 0.88, 0.45, 1.08), 'note': 'tailgate'},
     ],
     'paint': {'hero': ('Camel', '#C4A264'), 'alts': [('Work white', '#E9E6DF'), ('Midnight', '#1B2A4A'), ('Forest', '#2B4A3A'), ('Oxide red', '#8E2A28')],
-              'trim': '#1A1D24', 'rim': '#A9AEB6', 'extra': {'paint2': '#FF8A1F', 'chrome': '#C9CED6'}},
+              'trim': '#1A1D24', 'rim': '#A9AEB6', 'extra': {'paint2': '#FF8A1F', 'primer': '#FF8A1F', 'chrome': '#C9CED6'}},
     'options': {},
 }
 

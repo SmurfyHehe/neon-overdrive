@@ -103,6 +103,7 @@ rem Engine bays B1+B2: the hood and trunk open on Y when stopped, the bay-view c
 call :run car/car_lids --headless
 call :run car/bay_dirt --headless
 call :run car/hood_panel --headless
+call :run car/bay_mods --headless
 call :run audio/exhaust_tune --headless
 call :run audio/exhaust_pops --headless
 rem Engine loops: baked rpm x load bank is seamless, the player stays under its voice cap and never swaps a stream under a sounding voice, events stay live, in-game hand-over.
@@ -577,6 +578,7 @@ call :run car/part_fit --headless
 call :run car/car_lids --headless
 call :run car/bay_dirt --headless
 call :run car/hood_panel --headless
+call :run car/bay_mods --headless
 call :run tuning/auto_tune_rules --headless
 call :run ui/fonts --headless
 call :run ui/key_map --headless

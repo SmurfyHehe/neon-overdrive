@@ -20,6 +20,7 @@ to make a car pass: fix the part. One line per failure, exit code 1 on any.
 
 Numpy only (symmetry_check.read_glb reads the glb), with or without Blender.
 """
+import json
 import os
 import sys
 
@@ -60,6 +61,51 @@ def ray_hits(o, d, T):
     return np.where(hit, t, np.nan)
 
 
+def bay_combos(car_id, variants):
+    """Every set of mod keys the car can wear at once, as the fit checks and the
+    budget must hold for each: [] (stock), then each path up the car's mod tree
+    (data/mod_trees/<id>.json, node templates root to leaf) with every bay
+    bolt-on (a variant key that is no tree template) on top. A car with no
+    tree gets stock and each key alone."""
+    tree_path = os.path.join(ROOT, 'data', 'mod_trees', car_id + '.json')
+    nodes = {}
+    if os.path.exists(tree_path):
+        with open(tree_path) as f:
+            nodes = {n['id']: n for n in json.load(f).get('nodes', [])}
+    templates = {n.get('template') for n in nodes.values()}
+    bolt_ons = sorted(k for k in variants if k not in templates)
+    combos = [[]]
+    if not nodes:
+        return combos + [[k] for k in sorted(variants)]
+    chains = []
+    for nid, n in nodes.items():
+        chain = []
+        at = nid
+        while at in nodes and at not in chain:
+            chain.append(at)
+            parent = nodes[at].get('parent', '')
+            at = parent[0] if isinstance(parent, list) else parent
+        chains.append([nodes[i].get('template', '') for i in reversed(chain)])
+    seen = set()
+    for keys in chains:
+        keys = [k for k in keys if k in variants] + bolt_ons
+        tag = tuple(keys)
+        if tag not in seen:
+            seen.add(tag)
+            combos.append(keys)
+    return combos
+
+
+def active_parts(names, variants, keys):
+    """The bay parts drawn with `keys` fitted: every stock part (no variant owns
+    it) plus the fitted variants' parts, minus what those variants hide."""
+    owned = {p: k for k, v in variants.items() for p in v['parts']}
+    hidden = set()
+    for k in keys:
+        hidden |= set(variants.get(k, {}).get('hides', []))
+    return [n for n in names if (n not in owned or owned[n] in keys) and n not in hidden]
+
+
 def check(car_id):
     path = os.path.join(ROOT, 'assets', 'cars', car_id, 'body.glb')
     parts = {k: v for k, v in read_glb(path).items() if not k.startswith('wheel_')}
@@ -68,6 +114,11 @@ def check(car_id):
     if os.path.exists(bay_path):
         parts.update(read_glb(bay_path))
     bay = sorted(k for k in parts if is_bay_part(k))
+    variants = {}
+    bay_json = os.path.join(ROOT, 'assets', 'cars', car_id, 'bay.json')
+    if os.path.exists(bay_json):
+        with open(bay_json) as f:
+            variants = json.load(f).get('variants', {})
     others = [k for k in parts if not is_bay_part(k)]
     T = np.concatenate([parts[k] for k in others])
     owner = np.concatenate([[k] * len(parts[k]) for k in others])
@@ -99,16 +150,22 @@ def check(car_id):
             out.append('%s: walls: %d rays from %s leave the car sideways, e.g. %s' % (car_id, bare_side, b, where('side')))
         for p, t in worst_side.items():
             out.append('%s: walls: %s is %.1f mm from %s, want %.0f' % (car_id, b, t * 1000, p, WALL_CLEAR * 1000))
-    for i, a in enumerate(bay):
-        for b in bay[i + 1:]:
-            if (a, b) in TOUCHING:
-                continue
-            A, B = parts[a].reshape(-1, 3), parts[b].reshape(-1, 3)
-            over = np.minimum(A.max(0), B.max(0)) - np.maximum(A.min(0), B.min(0))
-            over = max(0.0, float(over.min()))
-            if over > PART_OVERLAP:
-                out.append('%s: bay parts: %s and %s overlap %.1f mm, want at most %.0f' % (
-                    car_id, a, b, over * 1000, PART_OVERLAP * 1000))
+    # part against part, for every set of mods the car can wear at once
+    # (B4): a small turbo and a big one never meet, a turbo and the airbox never meet
+    seen = set()
+    for keys in bay_combos(car_id, variants):
+        active = active_parts(bay, variants, keys)
+        for i, a in enumerate(active):
+            for b in active[i + 1:]:
+                if (a, b) in TOUCHING or (a, b) in seen:
+                    continue
+                seen.add((a, b))
+                A, B = parts[a].reshape(-1, 3), parts[b].reshape(-1, 3)
+                over = np.minimum(A.max(0), B.max(0)) - np.maximum(A.min(0), B.min(0))
+                over = max(0.0, float(over.min()))
+                if over > PART_OVERLAP:
+                    out.append('%s: bay parts: %s and %s overlap %.1f mm, want at most %.0f (with %s)' % (
+                        car_id, a, b, over * 1000, PART_OVERLAP * 1000, ' '.join(keys) or 'stock'))
     return bay, out
 
 

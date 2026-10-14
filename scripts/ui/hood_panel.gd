@@ -442,14 +442,7 @@ static func dyno(spec: Dictionary, kind: String) -> Dictionary:
 ## The garage's fitted mods by name (the tree's nodes, the Workshop items, the
 ## ladder rungs); a test build lists what ModTree fitted. [] when stock.
 func fitted_names(kind: String) -> Array[String]:
-	var ids: Array = []
-	var mb: Variant = player.get("mod_build")
-	if mb is Dictionary and not (mb as Dictionary).is_empty():
-		ids = (mb as Dictionary).get("nodes", []).duplicate()
-		for b in (mb as Dictionary).get("bolt_ons", []):
-			ids.append(b)
-	else:
-		ids = SaveStore.load_mod_tree().cars.get(kind, {}).get("installed", [])
+	var ids := FittedMods.ids(player, kind)
 	var names: Array[String] = []
 	var bolt := {}
 	for it in BoltOns.items():

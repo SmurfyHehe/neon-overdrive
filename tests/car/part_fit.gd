@@ -66,6 +66,19 @@ const TOUCHING := {
 	"bay_belt|engine": true, "bay_airbox|engine": true,
 	"bay_battery|bay_cables": true, "bay_cables|engine": true,
 	"bay_radiator|bay_shroud": true,
+	# the mod parts (B4) on the stock parts they are built onto (bay_kit.py MOD_TOUCHING)
+	"bay_mod_ts_turbo|engine": true, "bay_mod_tb_turbo|engine": true, "bay_mod_tt_turbos|engine": true,
+	"bay_mod_ts_pipe_l|bay_mod_ts_turbo": true, "bay_mod_tb_turbo|bay_mod_ts_pipe_l": true, "bay_mod_ts_pipe_l|bay_mod_tt_turbos": true,
+	"bay_mod_ts_intercooler|bay_mod_ts_pipe_l": true, "bay_mod_ts_intercooler|bay_mod_ts_pipe_f": true,
+	"bay_mod_ts_pipe_f|bay_mod_ts_pipe_l": true, "bay_mod_ts_pipe_f|bay_mod_ts_pipe_r": true, "bay_hoses|bay_mod_ts_pipe_f": true,
+	"bay_mod_ts_pipe_r|engine": true, "bay_hoses|bay_mod_ts_pipe_r": true,
+	"bay_mod_na_cone|engine": true, "bay_hoses|bay_mod_na_cone": true,
+	"bay_mod_itb|engine": true,
+	"bay_mod_stroker|engine": true, "bay_belt|bay_mod_stroker": true, "bay_hoses|bay_mod_stroker": true,
+	"bay_mod_cai|engine": true, "bay_hoses|bay_mod_cai": true,
+	"bay_mod_pulley|engine": true, "bay_belt|bay_mod_pulley": true,
+	"bay_cables|bay_mod_light_battery": true,
+	"bay_mod_strut_bar|bay_strut_fl": true, "bay_mod_strut_bar|bay_strut_fr": true,
 }
 ## The car the checker proves itself on (_self_test): it has an engine, a
 ## battery, a radiator and a hood.
@@ -83,7 +96,7 @@ func _initialize() -> void:
 			_fail("%s: no body.glb" % id)
 			continue
 		_car(id)
-	print("part_fit: %d cars in %.1f s; prop rod and bay mods not checked (no such parts yet, B3/B4)" % [
+	print("part_fit: %d cars in %.1f s; bay mods checked per fitted set (B4)" % [
 		CARS.size() if only == "" else 1, (Time.get_ticks_msec() - t0) / 1000.0])
 	print("PASS" if fails == 0 else "FAILURES: %d" % fails)
 	quit(1 if fails > 0 else 0)
@@ -156,15 +169,20 @@ static func _check(id: String, tris: Dictionary, mats: Dictionary, hinges: Dicti
 		for p: String in worst_side:
 			out.append("%s: walls: %s is %.1f mm from %s, want %.0f" % [id, b, worst_side[p] * 1000.0, p, WALL_CLEAR * 1000.0])
 
-	# bay part against bay part
-	for i in bay.size():
-		for j in range(i + 1, bay.size()):
-			var key := "%s|%s" % [bay[i], bay[j]]
-			if TOUCHING.has(key):
-				continue
-			var over := _overlap(_box(tris[bay[i]]), _box(tris[bay[j]]))
-			if over > PART_OVERLAP:
-				out.append("%s: bay parts: %s and %s overlap %.1f mm, want at most %.0f" % [id, bay[i], bay[j], over * 1000.0, PART_OVERLAP * 1000.0])
+	# bay part against bay part, for every set of mods the car can wear at
+	# once (B4): the small and the big turbo never meet, nor a turbo and the airbox
+	var seen := {}
+	for keys: Array in FittedMods.combos(id, CarAssembler.bay_variants(id)):
+		var active := CarAssembler.bay_active_names(id, keys)
+		for i in active.size():
+			for j in range(i + 1, active.size()):
+				var key := "%s|%s" % [active[i], active[j]]
+				if TOUCHING.has(key) or seen.has(key):
+					continue
+				seen[key] = true
+				var over := _overlap(_box(tris[active[i]]), _box(tris[active[j]]))
+				if over > PART_OVERLAP:
+					out.append("%s: bay parts: %s and %s overlap %.1f mm, want at most %.0f (with %s)" % [id, active[i], active[j], over * 1000.0, PART_OVERLAP * 1000.0, str(keys) if not keys.is_empty() else "stock"])
 
 	# panels swung on their hinges
 	var bay_boxes := {}

@@ -243,10 +243,10 @@ static func set_split(body: MeshInstance3D, hinge_names: PackedStringArray) -> D
 ## The engine bay parts as one MeshInstance3D named "Bay" in car space (the
 ## same frame as build()'s body, so it goes under that body), surfaces as
 ## build()'s. Null if the car has no bay parts.
-static func build_bay(car_id: String, paint_mat: Material = null) -> MeshInstance3D:
+static func build_bay(car_id: String, paint_mat: Material = null, fitted: Array = []) -> MeshInstance3D:
 	if bay_part_names(car_id).is_empty():
 		return null
-	var built := _merged(car_id, {"bay": "only"})
+	var built := _merged(car_id, {"bay": "only", "fitted": PackedStringArray(fitted)})
 	var bay := MeshInstance3D.new()
 	bay.name = BAY_NODE_NAME
 	bay.mesh = built.body
@@ -259,7 +259,44 @@ static func build_bay(car_id: String, paint_mat: Material = null) -> MeshInstanc
 static func is_bay_part(part: String) -> bool:
 	return part == "engine" or part.begins_with("bay_")
 
-## The car's bay parts, sorted.
+## The bay's mod variants (B4): mod key -> {parts: its parts, hides: the parts
+## it takes off the bay}. Empty for a bay without mod parts.
+static func bay_variants(car_id: String) -> Dictionary:
+	var out := {}
+	for pname: String in bay_part_names(car_id):
+		var p: Dictionary = _load(car_id).parts[pname]
+		if not p.has("mod"):
+			continue
+		var v: Dictionary = out.get_or_add(p.mod, {"parts": PackedStringArray(), "hides": PackedStringArray()})
+		v.parts.append(pname)
+		for h: String in p.hides:
+			if not v.hides.has(h):
+				v.hides.append(h)
+	for k in out:
+		out[k].parts.sort()
+		out[k].hides.sort()
+	return out
+
+## The bay parts drawn with these mod keys fitted (a mod tree template such
+## as "turbo_small", or a workshop bolt-on id): every stock part, plus the
+## fitted mods' parts, minus what those mods hide. No keys: the stock bay.
+static func bay_active_names(car_id: String, fitted: Array = []) -> PackedStringArray:
+	var parts: Dictionary = _load(car_id).parts
+	var hidden := PackedStringArray()
+	for pname: String in parts:
+		var p: Dictionary = parts[pname]
+		if p.has("mod") and fitted.has(p.mod):
+			for h: String in p.hides:
+				hidden.append(h)
+	var out := PackedStringArray()
+	for pname: String in bay_part_names(car_id):
+		var p: Dictionary = parts[pname]
+		if hidden.has(pname) or (p.has("mod") and not fitted.has(p.mod)):
+			continue
+		out.append(pname)
+	return out
+
+## The car's bay parts, sorted: the stock ones and every mod variant's.
 static func bay_part_names(car_id: String) -> PackedStringArray:
 	var out := PackedStringArray()
 	for pname: String in _load(car_id).parts:
@@ -530,6 +567,12 @@ static func _walk(node: Node, xf: Transform3D, hinge: String, car: Dictionary) -
 			under = nm
 		elif n3 is MeshInstance3D and (n3 as MeshInstance3D).mesh != null:
 			car.parts[nm] = {"hinge": hinge, "xf": t, "mats": read_mesh((n3 as MeshInstance3D).mesh, t)}
+			# a bay mod part (B4, build_car.py --bay): drawn only with its mod
+			# fitted, and it takes the parts it names in "hides" off the bay
+			var ex: Dictionary = n3.get_meta("extras", {})
+			if ex.has("mod"):
+				car.parts[nm].mod = String(ex.mod)
+				car.parts[nm].hides = PackedStringArray(ex.get("hides", []))
 			if hinge != "":
 				car.hinges[hinge].parts.append(nm)
 		else:
@@ -633,6 +676,8 @@ static func _merged(car_id: String, parts: Dictionary) -> Dictionary:
 	var split: Array = Array(parts.get("split", []))
 	# closed: no bay parts; open (pictures): the bay stays in; "only": just the bay
 	var bay_only := String(parts.get("bay", "")) == "only"
+	# the bay as the fitted mods leave it ("fitted": mod keys; none = stock)
+	var active := bay_active_names(car_id, Array(parts.get("fitted", [])))
 	var surf := {}      # surface name -> builder
 	var panels := {}    # hinge name -> builder (one surface)
 	var names: Array = car.parts.keys()
@@ -641,6 +686,8 @@ static func _merged(car_id: String, parts: Dictionary) -> Dictionary:
 		var p: Dictionary = car.parts[pname]
 		var in_bay := is_bay_part(pname)
 		if (bay_only and not in_bay) or (in_bay and not bay_only and not open):
+			continue
+		if in_bay and not active.has(pname):
 			continue
 		var mats: Dictionary = p.mats
 		if parts.has(pname):

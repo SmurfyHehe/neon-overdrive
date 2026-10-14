@@ -74,6 +74,7 @@ var _tap_high := false
 var _dip_t := 0.0
 var _applied := -1
 var _applied_share := -1.0
+var _applied_flash := false
 
 static var _cutoff_tex: GradientTexture2D
 
@@ -177,14 +178,17 @@ func _refresh() -> void:
 	mode = _wanted()
 	if _spot == null or not is_instance_valid(_spot):
 		return
-	if mode == _applied and damage_share == _applied_share:
+	if mode == _applied and damage_share == _applied_share and _hold_active == _applied_flash:
 		return
 	var rewrite := mode != _applied
+	var car := _spot.get_parent()
+	if rewrite or _hold_active != _applied_flash:
+		_light_body(car)
 	_applied = mode
 	_applied_share = damage_share
+	_applied_flash = _hold_active
 	_spot.visible = mode != Mode.OFF and damage_share > 0.0
 	# The painted beam on the road (CarFx "HeadlightBeam") goes with the lamp.
-	var car := _spot.get_parent()
 	var beam: Decal = car.get_node_or_null(^"HeadlightBeam") as Decal if car != null else null
 	if beam != null:
 		beam.visible = _spot.visible
@@ -210,6 +214,19 @@ func _refresh() -> void:
 			_spot.shadow_caster_mask = NO_CASTERS
 			_spot.shadow_enabled = true
 	_spot.light_energy = _energy_for(mode) * damage_share
+
+## The lamps drawn on the body (NpcCarBuilder.GLOW_SHADER, Roy 1521): dark
+## with the lights off, lit again while H is held for a flash. Two instance
+## uniforms on the car's "Body", written only when the state changes.
+func _light_body(car: Node) -> void:
+	var vis: Variant = car.get("chassis_visual") if car != null else null
+	if not (vis is Node3D):
+		return
+	var body := (vis as Node3D).get_node_or_null(^"Body") as MeshInstance3D
+	if body == null:
+		return
+	body.set_instance_shader_parameter("lamps", 0.0 if mode == Mode.OFF else 1.0)
+	body.set_instance_shader_parameter("flash", 1.0 if _hold_active else 0.0)
 
 static func _energy_for(m: int) -> float:
 	return HIGH_ENERGY if m == Mode.HIGH else LOW_ENERGY

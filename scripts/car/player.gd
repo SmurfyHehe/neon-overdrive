@@ -192,6 +192,7 @@ func _ready() -> void:
 	# NEON_TEST_CAR=1. Same physics either way; see chassis_kind().
 	var kind := chassis if chassis != "" else chassis_kind()
 	var cfg := wheel_config(kind)
+	var wears_coupe_body := false
 	if not sim_only:
 		if kind == TestCarBuilder.KIND:
 			chassis_visual = TestCarBuilder.build_chassis_visual()
@@ -199,8 +200,11 @@ func _ready() -> void:
 			# A sheet car (P0, P2-P6): the same mesh path as the AI cars, in
 			# the sheet's own paint.
 			chassis_visual = NpcCarBuilder.chassis_visual(kind, build, NpcCarBuilder.sheet_paint(kind))
+			# The cabin and driver show through the windows (Roy 1523).
+			NpcCarBuilder.see_through_glass(chassis_visual)
 		else:
 			chassis_visual = P1CoupeBuilder.build_chassis_visual()
+			wears_coupe_body = true
 		add_child(chassis_visual)
 		# Wet-road tail smears (wet_reflections.gd): ride with the visual.
 		var tail: Dictionary = WetReflections.tail_info(chassis_visual)
@@ -369,7 +373,10 @@ func _ready() -> void:
 		# drums per axle from CarFittings.BRAKES, not just the coupe.
 		if kind != TestCarBuilder.KIND:
 			var parts_cfg := CarFittings.parts_cfg(kind, float(get("front_tire_width")))
-			if kind == P1CoupeBuilder.KIND:
+			# Every car in the coupe's body (the coupe, and the monster truck
+			# and lowrider until their own bodies: Roy 1525) slides its wheels
+			# in under the coupe's arches.
+			if wears_coupe_body:
 				parts_cfg["hub_x"] = P1CoupeBuilder.DESIGN_WHEEL_X
 			CarParts.attach(self, parts_cfg)
 		# Wipers that sweep in rain and the fuel flap + nozzle (Roy 1175, 1177):

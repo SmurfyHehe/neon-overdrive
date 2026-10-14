@@ -252,6 +252,9 @@ const PAINTS := [
 ]
 
 const GLOW_ENERGY := 2.5
+## How much of the cabin shows through see-through glass (CarPaint's `see`:
+## 1 opaque); the coupe's value since cockpit milestone 2.
+const SEE_THROUGH := 0.5
 ## Tail lamps x (1 + this) with the brake fully on (instance uniform brake = 1).
 const BRAKE_GAIN := 2.2
 ## Tail flare: near radius (m), the radius held at distance (share of the
@@ -275,6 +278,9 @@ uniform float energy = 2.5;
 uniform float tail_gain = 1.0;
 uniform float brake_gain = 2.2;
 const float FLASH_GAIN = 3.5;
+// What is left of a lens's colour with its lamp off.
+const float HEAD_OFF = 0.06;
+const float TAIL_OFF = 0.18;
 instance uniform float brake : instance_index(1) = 0.0;
 // Turn lamps: 0 off, 1 left, 2 right, 3 both (hazard). Plus 4: the left tail
 // lamp is out (a weaving driver's tell).
@@ -284,6 +290,11 @@ instance uniform float flash : instance_index(3) = 0.0;
 // 1 while the car is in reverse (player cars: the CarFittings reverse lens).
 // Slot 6: the paint's finish holds slot 4 on the same body (CarPaint._BODY).
 instance uniform float reverse : instance_index(6) = 0.0;
+// The light switch (Roy 1521): 1 lights on (the default: traffic and cops
+// always run them), 0 off. Off, the head lamps, their lenses and the plate
+// lamp go dark and the tail lamps only light with the brake; a flash lights
+// the heads again.
+instance uniform float lamps : instance_index(7) = 1.0;
 varying float v_side;
 void vertex() {
 	v_side = sign(VERTEX.x);  // + = the car's right (it faces -Z)
@@ -296,9 +307,14 @@ void fragment() {
 	float t_turn = step(0.65, tag) * (1.0 - step(0.75, tag));
 	float t_third = step(0.75, tag) * (1.0 - step(0.85, tag));
 	float t_rev = step(0.85, tag) * (1.0 - step(0.95, tag));
+	// 0.5: a parts body's head lamp or lens (and plate lamp), on the switch.
+	float t_head = step(0.45, tag) * (1.0 - step(0.55, tag));
 	// Linear colours: the tail red is the only lamp with green and blue near 0,
 	// the amber turn lamp the only one with green between 0.3 and 0.7.
 	float tail = step(0.4, c.r) * step(c.g, 0.06) * step(c.b, 0.06) * (1.0 - t_third);
+	// Lights switched off: the tail lamps are dark red lenses unless braking.
+	float on = max(step(0.5, lamps), step(0.5, flash));
+	float tail_off = tail * (1.0 - on) * (1.0 - step(0.01, brake));
 	float amber = max(step(0.8, c.r) * step(0.3, c.g) * step(c.g, 0.7) * step(c.b, 0.2), t_turn);
 	float k = mix(1.0, tail_gain * (1.0 + brake * brake_gain), tail);
 	// Third brake light: out until the brake is on.
@@ -316,8 +332,13 @@ void fragment() {
 	float lit = sig > 2.5 ? 1.0 : (sig > 1.5 ? step(0.0, v_side) : (sig > 0.5 ? step(v_side, 0.0) : 0.0));
 	k *= mix(1.0, mix(0.15, 2.5, blink), amber * lit);
 	// The head lamps (warm white: the only lamp with all three channels up).
-	float head = step(0.8, c.r) * step(0.7, c.g) * step(0.3, c.b) * (1.0 - t_rev);
+	float head = max(step(0.8, c.r) * step(0.7, c.g) * step(0.3, c.b) * (1.0 - t_rev), t_head);
 	k *= mix(1.0, FLASH_GAIN, head * flash);
+	// Off: no glow, and the lens itself dims to unlit glass (unshaded, so
+	// ALBEDO is what shows).
+	float off = max(head * (1.0 - on), tail_off);
+	c *= mix(1.0, mix(HEAD_OFF, TAIL_OFF, tail_off), off);
+	k *= 1.0 - off;
 	ALBEDO = c;
 	EMISSION = c * energy * k;
 }
@@ -339,6 +360,9 @@ uniform float near_r = 0.14;
 uniform float min_screen = 0.006;
 instance uniform float brake : instance_index(1) = 0.0;
 instance uniform float turn : instance_index(2) = 0.0;
+instance uniform float flash : instance_index(3) = 0.0;
+// The light switch, as GLOW_SHADER: off, a tail lamp only flares on the brake.
+instance uniform float lamps : instance_index(7) = 1.0;
 varying float v_face;
 void vertex() {
 	// The left tail lamp is out (turn carries + 4): no flare on that side.
@@ -350,7 +374,8 @@ void vertex() {
 	// The view's height at distance d is 2d / |P[1][1]| (negative under
 	// Vulkan's flipped Y, hence the abs).
 	float far_r = min_screen * 2.0 * d / abs(PROJECTION_MATRIX[1][1]);
-	float r = max(near_r, far_r) * (1.0 + 0.6 * brake) * v_face * step(0.001, gain) * (1.0 - lamp_out);
+	float lit = max(max(step(0.5, lamps), step(0.5, flash)), step(0.01, brake));
+	float r = max(near_r, far_r) * (1.0 + 0.6 * brake) * v_face * step(0.001, gain) * (1.0 - lamp_out) * lit;
 	c *= max(d - 0.25, 0.05) / d;
 	c.xy += UV * r;
 	VERTEX = c;
@@ -369,8 +394,9 @@ static var _fit_counts := {}    # "kind|build" -> CarFittings counts
 static var _fit_points := {}    # "kind|build" -> CarFittings points
 static var _fit_frames := {}    # "kind|build" -> windscreen frame and fuel flap site
 static var _body_mat: ShaderMaterial
-static var _wheel_mat: ShaderMaterial
+static var _wheel_mats := {}    # rim colour (html) -> ShaderMaterial
 static var _glass_mat: ShaderMaterial
+static var _see_glass_mat: ShaderMaterial
 static var _glow_mat: ShaderMaterial
 static var _parts_glow_mat: ShaderMaterial
 static var _flare_mat: ShaderMaterial
@@ -812,13 +838,18 @@ static func _get_body_material() -> ShaderMaterial:
 ## rim faces get the glossy finish without taking the car's paint. All three
 ## traffic cars share the same rim colour (proxies.json).
 static func _get_wheel_material(data: GDScript) -> ShaderMaterial:
-	if _wheel_mat == null:
-		_wheel_mat = ShaderMaterial.new()
-		_wheel_mat.shader = CarPaint.body_shader(false)
-		_wheel_mat.set_shader_parameter("paint", Color(data.COLORS.rim))
-		_wheel_mat.set_shader_parameter("paint_metallic", 0.8)
-		_wheel_mat.set_shader_parameter("paint_roughness", 0.3)
-	return _wheel_mat
+	# One per rim colour: a single shared one took the colour of whichever
+	# kind loaded first, so cops wore the tuner's bronze rims (#661).
+	var rim := Color(data.COLORS.get("rim", data.COLORS.get("rim_dark", "#C9CED6")))
+	var key := rim.to_html()
+	if not _wheel_mats.has(key):
+		var m := ShaderMaterial.new()
+		m.shader = CarPaint.body_shader(false)
+		m.set_shader_parameter("paint", rim)
+		m.set_shader_parameter("paint_metallic", 0.8)
+		m.set_shader_parameter("paint_roughness", 0.3)
+		_wheel_mats[key] = m
+	return _wheel_mats[key]
 
 static func _get_glass_material() -> ShaderMaterial:
 	if _glass_mat == null:
@@ -826,6 +857,26 @@ static func _get_glass_material() -> ShaderMaterial:
 		_glass_mat.shader = CarPaint.glass_shader(false)
 		_glass_mat.set_shader_parameter("glass", Color("#151D2E"))
 	return _glass_mat
+
+## The see-through glass every car with a cabin wears (Roy 1523): the coupe's
+## (P1CoupeBuilder), so the driver and cabin show from the chase camera.
+## Traffic and cops keep the opaque glass: a sheet body has nothing inside.
+static func see_glass_material() -> ShaderMaterial:
+	if _see_glass_mat == null:
+		_see_glass_mat = ShaderMaterial.new()
+		_see_glass_mat.shader = CarPaint.glass_shader(true)
+		_see_glass_mat.set_shader_parameter("glass", Color("#151D2E"))
+		_see_glass_mat.set_shader_parameter("see", SEE_THROUGH)
+	return _see_glass_mat
+
+## Puts see_glass_material() on a sheet body's glass (the player's sheet cars).
+static func see_through_glass(vis: Node3D) -> void:
+	var mi := vis.get_node_or_null(^"Body") as MeshInstance3D
+	if mi == null or mi.mesh == null:
+		return
+	var gi := CarAssembler.surface_index(mi.mesh, "glass")
+	if gi >= 0:
+		mi.set_surface_override_material(gi, see_glass_material())
 
 ## The same lamp shader for a body assembled from parts, one-sided: a parts
 ## lamp is wound outward, and a lamp laid on the rear glass (the wagon's tall

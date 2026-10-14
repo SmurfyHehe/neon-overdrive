@@ -79,9 +79,10 @@ const MATERIALS := {
 	"glow_reverse": ["glow", 8],
 }
 ## Vertex alpha of the switched lamps on the glow surface, the tags the lamp
-## shader reads (NpcCarBuilder.GLOW_SHADER): 0.7 indicator, 0.8 brake lamp,
-## 0.9 reverse. Every other glow material is 1.0, lit all the time.
-const GLOW_TAGS := {"glow_turn": 0.7, "glow_brake": 0.8, "glow_reverse": 0.9}
+## shader reads (NpcCarBuilder.GLOW_SHADER): 0.5 head lamp and lens (plate
+## lamp too: on the light switch), 0.7 indicator, 0.8 brake lamp, 0.9 reverse.
+## Every other glow material is 1.0, lit all the time.
+const GLOW_TAGS := {"glow_head": 0.5, "glow_lens": 0.5, "glow_turn": 0.7, "glow_brake": 0.8, "glow_reverse": 0.9}
 const GLOW_ENERGY := 2.5
 const CUSTOM0_FLAGS := Mesh.ARRAY_CUSTOM_RGBA8_UNORM << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
 
@@ -128,7 +129,6 @@ static var _meshes := {}        # cache key -> {"body": ArrayMesh, "panels": {hi
 static var _paint_shaders := {} # base shader code -> Shader with the ao/shut hook
 static var _trim_mat: ShaderMaterial
 static var _glow_mat: ShaderMaterial
-static var _glass_mat: StandardMaterial3D
 
 # ---------- public ----------
 
@@ -350,15 +350,10 @@ static func glow_material() -> ShaderMaterial:
 		_glow_mat.set_shader_parameter("energy", GLOW_ENERGY)
 	return _glow_mat
 
-static func glass_material() -> StandardMaterial3D:
-	if _glass_mat == null:
-		_glass_mat = StandardMaterial3D.new()
-		_glass_mat.vertex_color_use_as_albedo = false
-		_glass_mat.albedo_color = Color(Color("#151D2E"), 0.5)
-		_glass_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		_glass_mat.metallic = 0.6
-		_glass_mat.roughness = 0.08
-	return _glass_mat
+## Every car from parts wears the coupe's see-through glass (Roy 1523): the
+## cabin shows through it and it mirrors the street like the coupe's did.
+static func glass_material() -> ShaderMaterial:
+	return NpcCarBuilder.see_glass_material()
 
 ## Forget every loaded car and merged mesh (tests; a rebuilt glb).
 static func clear_cache() -> void:

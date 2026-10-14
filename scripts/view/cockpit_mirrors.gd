@@ -26,6 +26,12 @@ extends Node3D
 # even with mirrors off.
 # The HUD's rear strip (chase view) reuses the rearview render: with `strip`
 # on and the cockpit off, only the rear camera renders, every other frame.
+# Door-mirror insets (2026-10-14, #743, Roy 1568): the right door glass sits
+# 55-63 degrees right of the eye in every car, off the screen's 47-degree edge,
+# so the HUD draws that mirror's render as a small screen at the window's edge
+# (Hud, like the camera-mirror screens in cars that have no glass) and asks for
+# the render with set_inset; the glass itself is then drawn whether or not it
+# is on screen. No extra pass: it is the same render the glass shows.
 #
 # Car space, like the rest of the cockpit. The glass is angled so the camera's
 # straight-back view is what the driver's eye would see reflected.
@@ -81,6 +87,7 @@ var views := []            # [{vp, cam, quad, mat}] rear, left, right
 var _frame := 0
 var focus := 0             # -1 left door mirror, +1 right, 0 none (ChaseCamera look around)
 var dots := []             # [left, right] MeshInstance3D
+var inset := [false, false]   # [left, right]: the HUD shows this mirror's render at the screen edge
 var cull_mask := 0
 
 func _ready() -> void:
@@ -256,6 +263,15 @@ static func glass_on_screen(cam: Camera3D, glass: MeshInstance3D) -> bool:
 func rear_texture() -> ViewportTexture:
 	return views[0].vp.get_texture()
 
+## A door mirror's render target (side 0 left, 1 right), for the HUD inset.
+func side_texture(side: int) -> ViewportTexture:
+	return views[1 + side].vp.get_texture()
+
+## The HUD shows (or stops showing) a door mirror's render at the screen edge;
+## while it does, that mirror renders even with its glass off screen.
+func set_inset(side: int, on: bool) -> void:
+	inset[side] = on
+
 ## Warms the rearview glass by `level` (0 = plain glass, 1 = a car right behind).
 func set_rear_cue(level: float) -> void:
 	rear_cue = clampf(level, 0.0, 1.0)
@@ -320,5 +336,5 @@ func _process(_delta: float) -> void:
 		return
 	for i in [1, 2]:
 		var focused := focus == (-1 if i == 1 else 1)
-		if (focused or slot == period - 1) and glass_on_screen(cam, views[i].quad):
+		if (focused or slot == period - 1) and (inset[i - 1] or glass_on_screen(cam, views[i].quad)):
 			views[i].vp.render_target_update_mode = SubViewport.UPDATE_ONCE

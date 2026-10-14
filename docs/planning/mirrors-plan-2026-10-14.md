@@ -33,7 +33,7 @@ the proximity cue (glass warms as a car closes in) and the blind-spot dots.
 | 2 | **Look back in the cockpit**: B swaps to the roof camera looking straight back (the hood view already does this), or lifts the eye to the roof liner and the middle. | None. | Roy picks (section 4). |
 | 3 | **Rearview redraws every frame while a car is within ~15 m behind** (the proximity cue already knows), so a chasing cop reads smoothly. | One extra pass, only during a chase: estimate 0.3-0.6 ms; measure. | After 1. |
 | 4 | **Door mirror glass per car**: angle from the car's own `door_mirror` point so the glass faces the eye; closes #688. | None. | Fable, laptop shots. |
-| 5 | **Right mirror**: a short automatic glance toward it when a car enters the right blind spot (zero keys; the 2026-10-07 auto-look proposal, never decided). | None. | Roy's yes first. |
+| 5 | **Right mirror as a screen** (Roy 1568 yes): in the cockpit, a door mirror whose glass is off screen (the right one, in every car) is drawn as a small screen (220x154) at that window edge, 62% down, like the camera-mirror screens in cars without door glass; it fades out when the head turns and the real glass comes on screen, and while looking back. The blind-spot cue warms and thickens its frame, so a car on the right finally shows. Not the 2026-10-07 automatic glance: that turns the whole view mid-chase and lives in the camera code another thread is changing. | None: the same render the glass shows, one pass per period as before (the off-screen skip no longer applies to it). | **In PR 741**; `view/mirror_readable` + `view/look_around`. |
 | 6 | **Chase rear strip** 480x144, drawn 1:1 (the rear renders at the strip's size while only the strip shows it) with the narrower rear camera from step 1. | Pixels only, about free; same pass. | **Roy 1552 yes; in PR 741.** |
 
 Cost basis: the three mirrors cost about 1.05 ms at 3 traffic cars when they
@@ -76,7 +76,7 @@ rate; the chase view's 480x144 strip and the cop warning beside it with a chase 
 |---|---|---|
 | 11 playable cars + monster truck + lowrider (borrow the coupe cabin) | `CabinSpec.for_kind` fits every cabin | `view/mirror_readable` looped over all 13 in `run_tests.bat` |
 | NPC / traffic / cop cars | not applicable: no cockpit, no mirrors rendered; they appear *in* the glass, which the fit rule does not change | `fleet/interior_unique` still passes |
-| Cockpit view (mirrors on) | glass fitted, cameras 14/22, tier cadence | `mirror_readable` |
+| Cockpit view (mirrors on) | glass fitted, cameras 14/22, tier cadence; right-mirror inset when the glass is off screen, gone when looked at or looking back | `mirror_readable` (rule table, live state, inset inside the window and off glass/strip/icon/warning lights at all 5 sizes), `look_around` |
 | Chase and hood views (rear strip) | strip 480x144 drawn 1:1, rear renders at strip size | `mirror_readable` strip check |
 | Photo mode, garage, title, pause orbit | no mirrors or strip there (set_active only in cockpit, strip only outside it) | unchanged |
 | Cop warning (HeatIcons), warning lights, info line | icon left of the strip; warning lights inset 330 (was 400, which started on the strip at 1280x720); info line measured against the icon | `mirror_readable` loops `DisplaySettings.RESOLUTIONS` (1280x720 .. 2560x1440) |
@@ -85,8 +85,9 @@ rate; the chase view's 480x144 strip and the cop warning beside it with a chase 
 
 Missed before this check: the two specials were not in the test loop, and the
 warning-lights row overlapped the wider strip at 1280x720 (the default windowed
-size). Both fixed in PR 741. Still open: right door mirror off screen (#743),
-look back (#742, camera thread), door glass angles per car (#688).
+size). Both fixed in PR 741. Right door mirror off screen: #743, step 5, in
+PR 741 (laptop shot still owed). Still open: look back (#742, camera thread),
+door glass angles per car (#688).
 
 ## Steelman / premortem
 

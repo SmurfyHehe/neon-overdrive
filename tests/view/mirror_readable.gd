@@ -18,6 +18,11 @@ extends "res://tests/view/parked_cockpit.gd"
 #   at every window size on the Display page (1280x720 up to 2560x1440)
 # - the chase view's rear strip (480x144, Roy 1552) is drawn 1:1: the rear
 #   renders at the strip's size while only the strip shows it
+# - door-mirror insets (#743, Roy 1568): a door glass off screen (the right one,
+#   in every car) shows as a small screen at that window edge in the cockpit
+#   view; the rule's truth table, the live state per side, the inset inside the
+#   window and off the glass, strip, heat icon and warning lights at every
+#   window size, and the off-screen right mirror still rendering for it
 # Exit code 1 on failure. Run (once per car):
 #   NEON_CAR=p17_work_pickup Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --path . -s res://tests/view/mirror_readable.gd
 
@@ -29,9 +34,21 @@ const LEFT_MIN_ON_SCREEN := 0.4   # the kei's and beater's sit 46 deg left, half
 func _init() -> void:
 	name_ = "mirror_readable"
 
+var _right_drew := false
+
 func _step(n: int) -> bool:
 	if n < SETTLE_TICKS * 2:
 		return false
+	if n > SETTLE_TICKS * 2:
+		# after the main checks: the right door mirror, off screen, still draws on
+		# its slot because the HUD inset wants its render
+		var m: CockpitMirrors = cam.frame.mirrors
+		if m.views[2].vp.render_target_update_mode != SubViewport.UPDATE_DISABLED:
+			_right_drew = true
+		if n < SETTLE_TICKS * 2 + 8:
+			return false
+		_check(_right_drew or not m.inset[1], "the right door mirror renders for its inset while its glass is off screen")
+		return _end("")
 	var kind := PlayerCar.chassis_kind()
 	var cab := CabinSpec.for_kind(kind)
 	var mirrors: CockpitMirrors = cam.frame.mirrors
@@ -111,7 +128,41 @@ func _step(n: int) -> bool:
 	FxSettings.set_mirror_quality(2)
 	_check(FxSettings.mirror_scale() == 2.0 and FxSettings.mirror_period() == 1, "high quality: double size, every frame")
 	FxSettings.set_mirror_quality(q)
-	return _end("")
+	# door-mirror insets (#743): a door glass off screen shows as a small screen at
+	# that window edge; the rule as a truth table, then the live state per side
+	for cockpit in [false, true]:
+		for on_screen in [false, true]:
+			for back in [false, true]:
+				for on in [false, true]:
+					var want: bool = cockpit and on and not back and not on_screen
+					_check(Hud.inset_wanted(cockpit, on_screen, back, on) == want, "inset rule cockpit=%s glass_on_screen=%s look_back=%s mirrors=%s -> %s" % [cockpit, on_screen, back, on, want])
+	var cam3d: Camera3D = root.get_camera_3d()
+	for side in 2:
+		var on_screen := CockpitMirrors.glass_on_screen(cam3d, mirrors.views[1 + side].quad)
+		var label := "left" if side == 0 else "right"
+		_check(mirrors.inset[side] == (not on_screen), "%s: the %s inset is asked for exactly when that glass is off screen (glass on screen %s, inset %s)" % [kind, label, on_screen, mirrors.inset[side]])
+		# the frame fades out over a few frames, so only its presence is asserted
+		_check(hud == null or not mirrors.inset[side] or hud.side_frame[side].visible, "%s: the %s inset frame is up while its mirror is asked for" % [kind, label])
+	_check(mirrors.inset[1], "%s: the right door glass is off screen straight ahead, so its inset is up" % kind)
+	# (the left glass is 40%+ on a 16:9 screen, checked above, so the game shows no
+	# left inset; the headless viewport is not 16:9, so that is not asserted here)
+	# the insets stay inside the window and off the rearview glass, the heat icon,
+	# the rear strip and the warning lights at every window size
+	for res in DisplaySettings.RESOLUTIONS:
+		var vp := Vector2(res)
+		var icon := Rect2(Vector2(0.5 + io.x / vp.x, io.y / vp.y), Vector2(HeatIcons.ICON_SIZE.x / vp.x, (HeatIcons.ICON_SIZE.y + 10.0) / vp.y))
+		var strip := Rect2(Vector2(0.5 - (Hud.STRIP_SIZE.x * 0.5 + Hud.STRIP_BORDER) / vp.x, Hud.STRIP_TOP / vp.y), Vector2((Hud.STRIP_SIZE.x + 2.0 * Hud.STRIP_BORDER) / vp.x, (Hud.STRIP_SIZE.y + 2.0 * Hud.STRIP_BORDER) / vp.y))
+		var lights_box := Rect2(Vector2((vp.x - WarningLights.ROW_INSET) / vp.x, WarningLights.ROW_TOP / vp.y), Vector2(WarningLights.ROW_INSET / vp.x, 30.0 / vp.y))
+		for side in 2:
+			var ir := Hud.inset_rect(side)
+			var ax := 0.0 if side == 0 else 1.0
+			var box := Rect2(Vector2(ax + ir.position.x / vp.x, Hud.INSET_Y + ir.position.y / vp.y), ir.size / vp)
+			var label := "left" if side == 0 else "right"
+			_check(box.position.x >= 0.0 and box.end.x <= 1.0 and box.position.y >= 0.0 and box.end.y <= 1.0, "at %s the %s inset is inside the window (%s)" % [res, label, box])
+			_check(not box.intersects(glass), "%s at %s: the %s inset stays off the rearview glass %s" % [kind, res, label, glass])
+			_check(not box.intersects(icon) and not box.intersects(strip), "at %s the %s inset stays off the heat icon and the rear strip" % [res, label])
+			_check(not box.intersects(lights_box), "at %s the %s inset stays off the warning lights (%s vs %s)" % [res, label, box, lights_box])
+	return false
 
 ## Angles of a glass quad from the camera (yaw + = left, pitch + = up, degrees),
 ## its angular size, and how much of its projected rectangle is on a 16:9 screen.

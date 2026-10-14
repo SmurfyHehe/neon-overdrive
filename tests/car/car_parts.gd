@@ -229,21 +229,43 @@ func _player() -> void:
 	var rl_mesh := player.rear_left_wheel.wheel_node.get_node("Parts") as MeshInstance3D
 	_check(float(fl_mesh.get_instance_shader_parameter("brake_heat")) == 0.0, "cold discs give no glow")
 	player.health.brake_temp = 400.0
+	# The drawn edge heat follows the sim at HEAT_RISE per second (glow speed
+	# 1): a frame in it has started, not arrived.
 	await process_frame
+	var first := float(fl_mesh.get_instance_shader_parameter("brake_heat"))
+	_check(first > 0.0 and first < 0.5, "the glow should build over time, not snap on: %.2f after one frame" % first)
+	await _seconds(1.0)
 	var front := float(fl_mesh.get_instance_shader_parameter("brake_heat"))
 	var rear := float(rl_mesh.get_instance_shader_parameter("brake_heat"))
 	_check(front > 0.7 and front <= 1.0, "400 degC should glow strongly on the front: %.2f" % front)
 	_check(rear > 0.0 and rear < front, "the rear should glow less than the front: %.2f vs %.2f" % [rear, front])
 	# The inner ring follows about 2 s behind (Roy 1514: edge first, centre last).
-	for i in 30:
-		await process_frame
 	var lag := float(fl_mesh.get_instance_shader_parameter("brake_heat_lag"))
 	_check(lag > 0.0 and lag < front, "the disc's inner ring should lag its edge: %.2f vs %.2f" % [lag, front])
 	player.health.brake_temp = PowertrainHealth.AMBIENT_C
 	await process_frame
-	_check(float(fl_mesh.get_instance_shader_parameter("brake_heat")) == 0.0, "back at ambient the glow is off")
+	_check(float(fl_mesh.get_instance_shader_parameter("brake_heat")) > 0.5, "back at ambient the edge should still be cooling, not off")
+	# HEAT_FALL 0.35/s: gone within about 3 s at glow speed 1.
+	await _seconds(3.5)
+	_check(float(fl_mesh.get_instance_shader_parameter("brake_heat")) == 0.0, "back at ambient the glow is off after the fade")
 	_check(float(fl_mesh.get_instance_shader_parameter("brake_heat_lag")) > 0.0, "the inner ring is still cooling when the edge is cold")
+	# The glow speed setting (Roy 2026-10-14) scales the whole change: at 4
+	# the same fade takes a quarter of the time.
+	player.health.brake_temp = 400.0
+	await _seconds(1.5)
+	FxSettings.set_brake_glow_speed(4.0)
+	player.health.brake_temp = PowertrainHealth.AMBIENT_C
+	await _seconds(0.9)
+	_check(float(fl_mesh.get_instance_shader_parameter("brake_heat")) == 0.0, "at glow speed 4 the fade should be done inside a second")
+	FxSettings.set_brake_glow_speed(1.0)
 	player.free()
+
+## Waits about `s` seconds of frames (process delta, not wall time).
+func _seconds(s: float) -> void:
+	var t := 0.0
+	while t < s:
+		await process_frame
+		t += root.get_process_delta_time()
 
 # ---------- traffic ----------
 
@@ -287,7 +309,7 @@ func _traffic() -> void:
 	_check(parts.brake_temp < t1, "coasting should cool them: %.0f -> %.0f" % [t1, parts.brake_temp])
 	_check(absf(parts.disc_temp() - parts.brake_temp) < 1e-6, "disc_temp() reads the own estimate when there is no health")
 	parts.brake_temp = 400.0
-	await process_frame
+	await _seconds(1.0)
 	var fl_mesh := cop.front_left_wheel.wheel_node.get_node("Parts") as MeshInstance3D
 	_check(float(fl_mesh.get_instance_shader_parameter("brake_heat")) > 0.7, "a hot cop disc glows")
 	cop.free()

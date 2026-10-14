@@ -27,6 +27,13 @@ static var mirror_quality := MIRROR_QUALITY_DEFAULT
 ## Tyre smoke amounts, 0 (none) .. SMOKE_MAX; 1 is the default.
 static var smoke_burnout := 1.0
 static var smoke_drift := 1.0
+## Brake glow speed (Roy 2026-10-14): how fast the disc's heat pattern
+## changes, BRAKE_GLOW_MIN (slow soak, long afterglow) .. BRAKE_GLOW_MAX
+## (snaps hot, fades in seconds); 1 follows the sim's disc temperature.
+## Read by CarParts; visual only, the brake temperature itself is untouched.
+const BRAKE_GLOW_MIN := 0.25
+const BRAKE_GLOW_MAX := 4.0
+static var brake_glow_speed := 1.0
 
 static func is_on(effect: String) -> bool:
 	return bool(enabled.get(effect, false))
@@ -49,6 +56,9 @@ static func set_smoke(burnout: float, drift: float) -> void:
 	smoke_burnout = clampf(burnout, 0.0, SMOKE_MAX)
 	smoke_drift = clampf(drift, 0.0, SMOKE_MAX)
 
+static func set_brake_glow_speed(v: float) -> void:
+	brake_glow_speed = clampf(v, BRAKE_GLOW_MIN, BRAKE_GLOW_MAX) if is_finite(v) else 1.0
+
 ## Render-size multiplier for the mirrors at the current quality.
 static func mirror_scale() -> float:
 	return [0.5, 1.0, 2.0][mirror_quality]
@@ -62,6 +72,7 @@ static func load_settings() -> void:
 	set_mirror_quality(int(cfg.get_value("fx", "mirror_quality", MIRROR_QUALITY_DEFAULT)) if ok else MIRROR_QUALITY_DEFAULT)
 	set_smoke(float(cfg.get_value("fx", "smoke_burnout", 1.0)) if ok else 1.0,
 		float(cfg.get_value("fx", "smoke_drift", 1.0)) if ok else 1.0)
+	set_brake_glow_speed(float(cfg.get_value("fx", "brake_glow_speed", 1.0)) if ok else 1.0)
 	if OS.get_environment("NEON_FX") == "0":
 		for e in EFFECTS:
 			enabled[e] = false
@@ -74,4 +85,5 @@ static func save_settings() -> bool:
 	cfg.set_value("fx", "mirror_quality", mirror_quality)
 	cfg.set_value("fx", "smoke_burnout", smoke_burnout)
 	cfg.set_value("fx", "smoke_drift", smoke_drift)
+	cfg.set_value("fx", "brake_glow_speed", brake_glow_speed)
 	return cfg.save(AudioSettings.path) == OK

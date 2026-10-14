@@ -89,7 +89,8 @@ const MATERIALS := {
 ## shader reads (NpcCarBuilder.GLOW_SHADER): 0.5 head lamp and lens (plate
 ## lamp too: on the light switch), 0.7 indicator, 0.8 brake lamp, 0.9 reverse.
 ## Every other glow material is 1.0, lit all the time.
-const GLOW_TAGS := {"glow_head": 0.5, "glow_lens": 0.5, "glow_turn": 0.7, "glow_brake": 0.8, "glow_reverse": 0.9}
+const GLOW_TAGS := {"glow_head": 0.5, "glow_lens": 0.5, "glow_turn": 0.7, "glow_brake": 0.8, "glow_reverse": 0.9,
+	"pol_b": CarPaint.LIGHT_BAR_TAG, "pol_r": CarPaint.LIGHT_BAR_TAG}
 const GLOW_ENERGY := 2.5
 const CUSTOM0_FLAGS := Mesh.ARRAY_CUSTOM_RGBA8_UNORM << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
 

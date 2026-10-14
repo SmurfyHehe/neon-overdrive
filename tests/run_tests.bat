@@ -239,6 +239,7 @@ call :run core/shop_day --headless
 call :run ui/work_board --headless
 rem Police F0/F1: heat levels and icons, cop_can_see_player, headlights off hides, night one lines.
 call :run traffic/police_heat --headless
+call :run traffic/light_bar --headless
 rem Police P1/P2: the rulebook table, sight, offences, warning step, heat times.
 call :run traffic/police_rules --headless
 rem More-alive MA4 (T8): the oncoming warning flash before a speed trap, once per trap.
@@ -530,6 +531,7 @@ call :run traffic/cop_brain_pure --headless
 call :run traffic/flow_flip --headless
 call :run traffic/free_driver_pure --headless
 call :run traffic/police_heat --headless
+call :run traffic/light_bar --headless
 call :run traffic/police_wrong_way --headless
 call :run traffic/trap_warning_flash --headless
 call :run traffic/wrong_way_pure --headless

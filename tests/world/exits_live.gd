@@ -11,8 +11,8 @@ extends SceneTree
 # 2. Chunks: a ramp chunk built fresh, a pooled chunk rebuilt into it, and the
 #    same chunk rebuilt again all hold the same things (ramp mesh, collision,
 #    light pools, every MultiMesh's instance count); rebuilt into a plain
-#    chunk, the ramps are gone. Exit gantries stand 400 m and 1 km before each
-#    gore.
+#    chunk, the ramps are gone. Exit gantries stand 400 m before each gore
+#    (the 1 km one is gone, #645).
 # 3. Driving, on the curved, hilly loop with no traffic: at every site and on
 #    both carriageways a bot leaves the outside lane, drives up the ramp, goes
 #    once round the ring (anticlockwise), comes down the other ramp of its own
@@ -153,7 +153,7 @@ func _map() -> void:
 	_check(worst <= MAX_GRADE and absf(worst - RoadRamps.max_grade()) < 0.002, "the ramp climbs at up to %.2f %% (limit 6)" % (worst * 100.0))
 	_check(absf(RoadRamps.y_at(RoadRamps.V_TOP) - RoadRamps.RAMP_H) < 1e-4 and RoadRamps.y_at(RoadRamps.V_NOSE) == 0.0, "the ramp does not run from the road to the pad's height")
 	_check(absf(RoadRamps.x_at(RoadRamps.V_GORE) - SLIP_X) < 1e-4 and absf(RoadRamps.x_at(0.0) - RoadRamps.X_TOP) < 1e-4, "the ramp does not run from the slip lane to the pad")
-	# signs: 400 m and 1 km before each gore, on that exit's side
+	# signs: 400 m before each gore, on that exit's side, and no 1 km one (#645)
 	var signs := 0
 	for c in RoadMap.period:
 		for sg in RoadMap.exit_signs(c):
@@ -162,8 +162,8 @@ func _map() -> void:
 			var gore := float(ring.s) - float(sg.side) * RoadMap.RING_GORE
 			var at := (float(c) * L + 2.5) if int(sg.side) > 0 else (float(c) * L + 47.5)
 			var before := fposmod((gore - at) * float(sg.side), RoadMap.length())
-			_check(absf(before - (1000.0 if sg.far else 400.0)) < 3.0, "an exit %d sign stands %.0f m before its gore" % [ring.number, before])
-	_check(signs == rings.size() * 4, "%d exit signs for %d ring sites (expected 4 each)" % [signs, rings.size()])
+			_check(absf(before - 400.0) < 3.0, "an exit %d sign stands %.0f m before its gore" % [ring.number, before])
+	_check(signs == rings.size() * 2, "%d exit signs for %d ring sites (expected 2 each)" % [signs, rings.size()])
 	print("exits_live: %d ring sites, %d exits, %d gaps, %d exit signs, steepest %.2f %%" % [rings.size(), RoadMap.exits().size(), gaps.size(), signs, worst * 100.0])
 
 # ---------- 2. chunks ----------

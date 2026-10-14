@@ -83,8 +83,15 @@ static func cross_street(k: int) -> String:
 
 ## Exit gantries (ring sites): "EXIT 3" over where it leads over how far.
 const SERVICES := "SERVICES"
-const EXIT_FAR := "1 km"
 const EXIT_MAX := 16
+## How far the next exit is, on the plate on each bridge (RingSite): from the
+## bridge to the next exit's gore, to the nearest 100 m. Rings stand 800 m
+## apart and a gore 200 m before its ring, so it is 600 m, or 1400 m past a
+## tunnel district, which has no ring. One atlas layer each.
+const NEXT_EXIT_M: Array[int] = [600, 1400]
+
+static func metres_word(m: int) -> String:
+	return "%d m" % m
 
 static func exit_word(number: int) -> String:
 	return "EXIT %d" % number
@@ -105,7 +112,8 @@ static func atlas_words() -> Array:
 		out.append(a)
 	# after everything older, so no existing layer moves
 	out.append(SERVICES)
-	out.append(EXIT_FAR)
 	for n in range(1, EXIT_MAX + 1):
 		out.append(exit_word(n))
+	for m in NEXT_EXIT_M:
+		out.append(metres_word(m))
 	return out

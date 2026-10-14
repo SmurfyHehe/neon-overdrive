@@ -15,6 +15,7 @@ extends SceneTree
 # 3. Clockwise round the ring is the wrong way (off_main.wrong_way), as
 #    driving against the flow is on the highway; the flow still does not turn.
 # 4. Saved on the ring, then loaded: the car is on the ring where it was.
+#    Stopped there, it leans in with the ring's 4 % (RoadRamps.BANK).
 #
 # Exit code 1 on failure. Run (headless):
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --fixed-fps 60 --path . -s res://tests/world/ring_drive.gd
@@ -36,6 +37,10 @@ var game: Node
 var ticks := 0
 var phase := 0
 var phase_ticks := 0
+## A car at rest on the ring leans in this much (sine of its tilt toward the
+## centre against the road): the deck's 4 % is 0.040; flat would read 0.
+const LEAN_LO := 0.03
+const LEAN_HI := 0.05
 var fails: Array[String] = []
 var checks := 0
 var path: Array[Vector3] = []   # (x across, w metres past the ring's centre the way the chunks count, speed)
@@ -286,6 +291,12 @@ func _physics_process(_delta: float) -> bool:
 			if p.linear_velocity.length() > 0.3 and phase_ticks < hz * 20:
 				return false
 			_check(not place.is_empty() and String(place.part) == "ring", "stopped off the ring at %s" % [place])
+			# the ring leans in 4 % (RoadRamps.BANK): a car at rest on it leans in with it
+			var up_r := RoadFrame.dir_to_road(u.z, p.global_basis.y)
+			var rr := Vector2(u.x, w).length()
+			var lean_in := -(up_r.x * u.x + up_r.z * -w) / maxf(rr, 0.1)
+			_check(lean_in > LEAN_LO and lean_in < LEAN_HI, "a car at rest on the ring leans in %.3f (the deck leans %.3f)" % [lean_in, sin(atan(RoadRamps.BANK))])
+			print("ring_drive: at rest on the ring, leaning in %.3f (%.2f deg), deck %.3f" % [lean_in, rad_to_deg(asin(clampf(lean_in, -1.0, 1.0))), sin(atan(RoadRamps.BANK))])
 			saved_place = place.duplicate()
 			saved_u = Vector3(u.x, u.y, w)
 			_check(game.saver.save_now(), "the save on the ring failed")

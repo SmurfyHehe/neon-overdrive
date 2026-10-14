@@ -1937,13 +1937,13 @@ static func rule_signs(chunk_index: int) -> Array:
 	if kind != "":
 		out.append({"part": "median", "kind": kind, "dir": 1.0, "z": RoadSigns.MEDIAN_OWN_Z, "lamp": kind == RoadBarriers.KIND_UTURN})
 		out.append({"part": "median", "kind": kind, "dir": -1.0, "z": RoadSigns.MEDIAN_ONC_Z, "lamp": false})
-	# exit gantries (ring sites R1): 400 m and 1 km before each exit's gore
+	# exit gantries (ring sites R1): 400 m before each exit's gore
 	for e in RoadMap.exit_signs(chunk_index):
-		out.append({"part": "exit", "side": int(e.side), "z": EXIT_SIGN_OWN_Z if int(e.side) > 0 else EXIT_SIGN_ONC_Z, "ring": int(e.ring), "far": bool(e.far)})
+		out.append({"part": "exit", "side": int(e.side), "z": EXIT_SIGN_OWN_Z if int(e.side) > 0 else EXIT_SIGN_ONC_Z, "ring": int(e.ring)})
 	return out
 
 ## Where an exit gantry stands in its chunk: just inside the end its traffic
-## arrives at, so it is 400 m (or 1 km) before the gore to within 3 m.
+## arrives at, so it is 400 m before the gore to within 3 m.
 const EXIT_SIGN_OWN_Z := -2.5
 const EXIT_SIGN_ONC_Z := -47.5
 
@@ -2012,7 +2012,7 @@ static func _update_names(root: Node3D, chunk_index: int, walk0: float, walk1: f
 			var ew := lerpf(walk0, walk1, -rz / CHUNK_LEN) if eside > 0.0 else lerpf(onc0, onc1, -rz / CHUNK_LEN)
 			var ring: Dictionary = RoadMap.rings()[int(r.ring)]
 			var leads := PlaceNames.SERVICES if RoadMap.ring_has_stop(int(r.ring)) else PlaceNames.area_name(RoadMap.district_kind(RoadMap.district_of(floori(float(ring.s) / CHUNK_LEN))))
-			list = RoadSigns.exit_gantry(PlaceNames.exit_word(int(ring.number)), leads, PlaceNames.EXIT_FAR if bool(r.far) else PlaceNames.ADVANCE,
+			list = RoadSigns.exit_gantry(PlaceNames.exit_word(int(ring.number)), leads, PlaceNames.ADVANCE,
 				Vector3((ew + NAME_SIGN_SETBACK) * eside, 0.0, rz), _foundation(), eside)
 		else:
 			var moved: Array = RoadSigns.median_parts(String(r.kind), float(r.dir), bool(r.lamp))

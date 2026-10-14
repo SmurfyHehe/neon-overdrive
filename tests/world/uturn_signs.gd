@@ -122,7 +122,8 @@ func _signs() -> void:
 			red = true
 	_check(red, "the no-U-turn sign has no red ring")
 	# 48 since the exit gantries (ring sites): "EXIT 1" .. "EXIT 16", "SERVICES"
-	# and "1 km" joined the lettering (a layer is 512 x 64 px).
+	# and "1 km" joined the lettering (a layer is 512 x 64 px). The bridge
+	# plates (#645) swapped "1 km" for "600 m" and "1400 m".
 	_check(WordAtlas.layer_count() <= 48, "the atlas has %d layers (48 max)" % WordAtlas.layer_count())
 
 func _paint() -> void:

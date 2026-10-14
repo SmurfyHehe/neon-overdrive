@@ -198,7 +198,7 @@ static var _rings: Array = []
 static var _ring_of := PackedInt32Array()   # per lap chunk: index into _rings, -1 = none
 static var _ring_k := PackedInt32Array()    # per lap chunk: its offset k from that ring's chunk
 static var _held := PackedByteArray()       # per lap chunk: a crossing's chunk or a neighbour
-static var _exit_signs := {}                # lap chunk -> [{side, ring, far}]
+static var _exit_signs := {}                # lap chunk -> [{side, ring}]
 static var _gap_chunk := PackedByteArray()
 static var _pins := PackedByteArray()
 ## Tunnels (TN1). Live = the road has them: on unless NEON_TUNNEL=0, and
@@ -297,13 +297,15 @@ static func use(id: int, act_value: int = 1) -> void:
 		for side in [1, -1]:
 			_exits.append({"id": "%s%s" % [r.id, "a" if side > 0 else "b"], "s": float(r.s) - float(side) * RING_GORE,
 				"side": side, "number": int(r.number), "ring": String(r.id), "centre": float(r.s)})
-			# its two gantries stand 400 m and 1 km before the gore
-			for far in [false, true]:
-				var chunks := roundi((1000.0 if far else 400.0) / L)
-				var at := posmod(rc - RAMP_CHUNKS - chunks if side > 0 else rc + RAMP_CHUNKS + chunks - 1, period)
-				if not _exit_signs.has(at):
-					_exit_signs[at] = []
-				_exit_signs[at].append({"side": side, "ring": ri, "far": far})
+			# its gantry stands 400 m before the gore. There is no 1 km one:
+			# 1 km before the gore is the previous exit's slip lane, so it was
+			# the last sign read before that exit and named the wrong one
+			# (#645). The bridge names the next exit instead (RingSite).
+			var chunks := roundi(400.0 / L)
+			var at := posmod(rc - RAMP_CHUNKS - chunks if side > 0 else rc + RAMP_CHUNKS + chunks - 1, period)
+			if not _exit_signs.has(at):
+				_exit_signs[at] = []
+			_exit_signs[at].append({"side": side, "ring": ri})
 	for n in ds.size():
 		var gs := float(_starts[n]) * L + GAP_INSET
 		var clear := true

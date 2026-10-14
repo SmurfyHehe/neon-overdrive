@@ -177,6 +177,8 @@ What a kit car has that the pilot does not:
 | Other paints | `paint_primer`, `paint_rust`, `paint_bondo`: fixed colours on the body surface. `panel_mats` paints a whole cut panel, `paint_regions` a stretch of the side skin, split on the region's edges |
 | Own panels | `cuts` cuts panels the common recipe does not have (barn doors), `hinge_of` hangs parts on a kit hinge, `no_trunk` drops the deck lid |
 | Fewer triangles | `merge_flat`: runs of flat quads along the loft (a wheel arch puts nine stations across the roof and the floor) become one quad when the fourth corner stays within 3 mm of the plane of the other three. Outline and long edges do not move |
+| Loft changes | `defn`: keys laid over the car's sheet definition for the parts build only (the tuner's `well_x`, its wheel wells' inner wall). The sheet car and the physics do not see them |
+| Stance | `stance`: ride height, arch gap, rake, camber and how far the wheels push out, written to `body.json` for the shared stance pass; nothing applies them yet |
 
 **P0, the Bug** (`p0_beater`): 6,050 body triangles in 69 parts with the
 Blender backend, 782 more in the four wheels; worst mirror deviation 0.000 mm
@@ -188,18 +190,45 @@ sheet decided (Roy kept them, 2026-10-11): the driver's mirror, the left tail
 lamp (the right lens is gone), the filler on the right front quarter, the one
 tail pipe.
 
-**P7, the shop wagon** (`p7_wagon`): 4,298 body triangles in 82 parts, 776
-more in the wheels; 0.000 mm over 44 mirrored parts and pairs. No deck lid
-(`no_trunk`): the tail is two barn doors cut out of the tail face (`cuts`),
-each on its own hinge, 5 mm apart (Roy), with its half of the rear glass (`split_backlight`), a
-handle, and on the right one the rear wiper. Tall lamp columns at the rear
-corners (blinker, running lamp, brake lamp, three parts a side), a brake lamp
-on the roof edge, reversing lamps in the bumper. Roof rails (the drip-rail
-gutter), a rub strip in three lengths a side so the door's piece opens with
-the door. Small discs in the front wheels with the caliper on the body,
-200 mm drums at the rear, hubcaps on three wheels (left rear bare). Strut and
-torsion beam ends in the wheel wells, the spare in its cradle under the floor,
-a transverse engine under the bonnet.
+**P7, the shop wagon** (`p7_wagon`, kit in `kit_p7_wagon.py`, rebuilt for
+looks 2026-10-14, Roy 1546): 6,872 body triangles in 98 parts, 776 more in
+the wheels; 0.000 mm over 50 mirrored parts and pairs. Everything is laid on
+the built skin with the tuner kit's helpers (`_skin_decal`, `_rim`,
+`_on_skin`), and the kit's skin list (`SKIN`) adds its own doors and every
+glass, so `tests/fleet/exterior_fit.gd` holds it to zero clashes. No deck lid
+(`no_trunk`): the tail is two barn doors cut out of the tail (`cuts`: the
+bumper band to the header glass, 5 mm apart on the centre line, Roy), each
+with its half of the rear glass (`glass_panels`), a handle, and on the right
+one the rear wiper. The hinges are exposed, as on a van: the axis 12 mm
+outboard of the door's edge and 12 mm behind the tail face (`barn_hinge_*`,
+two straps and knuckles a door), so every point of the door is ahead of its
+axis and swings back and inward, clear of the lamp column. Black plastic
+bumper bands (`bumper_f_band`, `bumper_r_band`): the skin's own faces copied
+out along their normals, 3 cm at the face easing to 12 mm along the sides to
+the arch, walled back to the skin; the plates, blinkers, reversing lamps and
+the plate lamp sit on the band's flat face. Square flush headlamps in chrome
+bezels, a slot grille with two slats. Tall lamp columns at the rear corners
+(blinker, running lamp, brake lamp, three lit parts a side on one ribbed
+housing in two halves round the tail's ledge), a brake lamp on the roof edge
+on the fixed header glass; outboard of the doors the loft's backlight is the
+columns' pillar in paint (`glass_to_paint`). The 40 mm rub strip just over
+the arch lips in three lengths a side (the door's piece opens with the door),
+each laid in stretches between the plan's knots. The sheet's wear: the old
+shop name sanded nearly off both flanks (`ghost_*`, 5 x 7 block letters in
+`paint_bondo`, reading left to right on both sides, so not a mirror pair),
+rust bloom round the rear arches (`rust_*`, laid cell by cell), a primer
+patch on the right barn door, the left rear hubcap gone. The A-pillar strip
+is in two legs: over the windshield it stays on the body, over the door's
+glass it rides on the door (`pillar_a_door_*`), since a fixed strip over
+glass that swings out is crossed by it. Roof rails (the drip-rail gutter), a
+mast on the left front fender. Small discs in the front wheels with the
+caliper on the body, 200 mm drums at the rear. Strut and torsion beam ends in
+the wheel wells, a transverse engine, radiator and battery under the bonnet;
+nothing hangs under the floor (the spare's cradle is an anchor only). The
+loft's nose is 4 cm taller than the first build's (cars.py P7 `top`, a
+stand-in anyway) so the lamps and grille sit on a face (8 cm made it an
+outline twin of the truck from a high front angle); the body's length,
+width, height, wheelbase, collision box, physics and tune are unchanged.
 
 **P2, the hot hatch** (`p2_hothatch`, kit in `kit_p2_hothatch.py`): 4,400 body
 triangles in 86 parts, 948 more in the wheels; 0.000 mm over 48 mirrored parts
@@ -271,6 +300,52 @@ on purpose: the primer-grey front-left fender (`panel_mats`), so the right
 front fender is written as it is too; the rear bumper's corners are scuffed
 (`paint_regions` in primer, both sides). `_primer_lip` rolls the primer
 fender's arch edge, which `parts.add_arch_lips` only does for `paint`.
+
+**P3, the tuner sedan** (`p3_tuner`, kit in `kit_p3_tuner.py`): 6,470 body
+triangles in 85 parts, 1,304 more in the wheels; 48 mirrored parts and pairs
+within 0.05 mm. Four doors: the kit cuts the rear pair (`door_rl/rr`) on the
+B-pillar line, each with its glass, seal and handle on `hinge_door_rl/rr`;
+the B-pillar strip stays on the body between the door glasses, and the rear
+quarter glass is fixed. Box overfenders laid on the skin (`flare_*`, the rear
+ones on the rear doors as `flare_door_*`, so they open with them). Slim bar
+headlamps, amber blinkers beside the plate, a slot grille, round tail lamps
+on a dark `tail_panel` with the brake, reverse and rear blinker lamps as parts
+of their own, a plate lamp, no high brake lamp (era). A pedestal wing on the
+deck lid, its feet following the lid's curve; wipers rebuilt on the glass
+(the merged windshield is up to 15 mm off the loft); the mirrors on a foot down
+to the door top; a short mast on the left rear quarter. 300 mm vented discs
+with bronze calipers, a strut and arm in the front wells and a multi-link rear.
+Its wheel wells are 30 cm deep instead of the fleet's 16 (`defn`: `well_x`
+0.46), so a front tyre at full lock clears the inner wall (on the other cars
+it swings 24-30 mm through it).
+
+Two things the tuner does that the next car can copy: lamps, rims, handles
+and grilles are laid on the car's own merged panels (`_on_skin`: every way a
+merged face can be cut into triangles, so what is laid on it clears it however
+Blender splits it), and a flat rect on a folded panel is cut from the panel
+itself (`_skin_decal`: each skin face under the rect, clipped and moved out),
+not from a grid whose flat cells let the fold through.
+
+## The exterior fit test
+
+`tests/fleet/exterior_fit.gd` holds a car from parts to zero clashes (a car
+joins its `CARS` list when its kit passes):
+
+- no two parts cross by more than 2 mm. The depth of a crossing is how far
+  one triangle goes through the other within the other's outline, so a part
+  that only touches an edge is not a clash. A shut line's turned-in edge and
+  dark floor reaching up to 15 mm into another's in the gap is how the shut
+  line is built and does not count
+- every open edge of a glass is in its seal or against an opaque part
+- doors, lids and the fuel flap swing open (every 10 degrees) without going
+  through anything
+- the tyres clear the body at rest, rise at least 5 mm before they touch, and
+  clear it at full steering lock (the car's own `max_steering_angle`); the arch
+  edge sits no more than arch gap + 10 mm over the tyre
+- nothing floats (every outside part within 3 mm of another), nothing below
+  the ground, the tail lamps apart and tall enough
+
+    godot --headless --path . -s res://tests/fleet/exterior_fit.gd
 
 A new car's kit goes in a file of its own (`kit_<id>.py`, a dict `KIT`) with
 one import line in `kits.py`.

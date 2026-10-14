@@ -525,7 +525,9 @@ P7 = {
             's=1.05 with screen top s=1.55 over this bonnet gives 40 degrees.',
     'L': 4.30, 'WB': 2.60, 'OHf': 0.72, 'W': 1.74,
     'wheel': {'r': 0.305, 'w': 0.185, 'track': 1.46, 'arch_gap': 0.05, 'rim': 'steel', 'rim_ratio': 0.60},
-    'top': [(0.0, 0.66), (0.04, 0.80), (0.14, 0.86), (1.05, 0.96), (1.55, 1.55), (4.22, 1.55), (4.27, 0.88), (4.30, 0.56)],
+    # the nose face is 4 cm taller than the first build's (0.66): the lamps and grille sit on a face, not on the hood's
+    # roll (8 cm made it an outline twin of the truck from a high front angle: tests/fleet/fleet_silhouette_sweep.gd)
+    'top': [(0.0, 0.70), (0.05, 0.80), (0.14, 0.86), (1.05, 0.96), (1.55, 1.55), (4.22, 1.55), (4.27, 0.88), (4.30, 0.56)],
     'floor': [(0, 0.34), (0.20, 0.16), (3.95, 0.16), (4.30, 0.30)],
     # pinched 2 cm at the doors: 0.85 there, 0.87 over the arches
     'hw': [(0, 0.74), (0.06, 0.83), (0.20, 0.87), (1.10, 0.87), (1.25, 0.85), (2.80, 0.85), (2.95, 0.87), (3.75, 0.87),
@@ -537,20 +539,22 @@ P7 = {
     'cabin': {'A': 1.05, 'W': 1.55, 'R': 4.22, 'C': 4.27, 'D': 4.22,
               'roof_w': [(1.55, 0.72), (4.22, 0.74)], 'roof_drop': 0.02, 'pillars': [(2.10, 2.17), (3.15, 3.22)]},
     'decals': [
-        # slot grille 0.90 x 0.06 between single square flush lamps 0.18 x 0.16
-        {'view': 'front', 'rect': (-0.45, 0.70, 0.45, 0.76), 'mat': 'grille'},
-        {'view': 'front', 'rect': (0.50, 0.66, 0.68, 0.82), 'mat': 'head', 'mirror': True},
-        # black plastic bumpers, an amber indicator in the front one
+        # the parts kit (tools/car_pipeline/kit_p7_wagon.py) builds every one of these as a part of its own;
+        # these rects are where they sit, for the design sheet
+        # slot grille 0.94 x 0.06 between single square flush lamps 0.18 x 0.14, on the nose face
+        {'view': 'front', 'rect': (-0.47, 0.61, 0.47, 0.67), 'mat': 'grille'},
+        {'view': 'front', 'rect': (0.50, 0.57, 0.68, 0.71), 'mat': 'head', 'mirror': True},
+        # black plastic bumpers, 3 cm proud; an amber indicator in the front one beside the plate
         {'view': 'front', 'rect': (-0.84, 0.36, 0.84, 0.54), 'mat': 'trim', 'cell': 0.3, 'tag': 'fbumper'},
-        {'view': 'front', 'rect': (0.52, 0.42, 0.66, 0.48), 'mat': 'turn', 'mirror': True},
+        {'view': 'front', 'rect': (0.54, 0.41, 0.68, 0.49), 'mat': 'turn', 'mirror': True},
         # tall lamp columns at the rear corners, bumper top to the gutter:
         # amber bottom third, red above; a brake lamp on the roof edge
-        {'view': 'rear', 'rect': (0.70, 0.56, 0.82, 0.875), 'mat': 'turn', 'mirror': True},
-        {'view': 'rear', 'rect': (0.70, 0.875, 0.82, 1.51), 'mat': 'tail', 'mirror': True},
-        {'view': 'rear', 'rect': (-0.15, 1.495, 0.15, 1.535), 'mat': 'tail', 'tag': 'roof_brake'},
-        {'view': 'rear', 'rect': (-0.84, 0.36, 0.84, 0.54), 'mat': 'trim', 'cell': 0.3, 'tag': 'rbumper'},
-        # the 40 mm black rub strip along the waist
-        {'view': 'left', 'rect': (0.22, 0.58, 4.20, 0.62), 'mat': 'trim', 'mirror': True, 'cell': 0.5, 'tag': 'rub'},
+        {'view': 'rear', 'rect': (0.62, 0.57, 0.725, 0.835), 'mat': 'turn', 'mirror': True},
+        {'view': 'rear', 'rect': (0.62, 0.85, 0.725, 1.44), 'mat': 'tail', 'mirror': True},
+        {'view': 'rear', 'rect': (-0.16, 1.45, 0.16, 1.535), 'mat': 'tail', 'tag': 'roof_brake'},
+        {'view': 'rear', 'rect': (-0.84, 0.36, 0.84, 0.53), 'mat': 'trim', 'cell': 0.3, 'tag': 'rbumper'},
+        # the 40 mm black rub strip the full length, just over the arch lips
+        {'view': 'left', 'rect': (0.26, 0.69, 4.20, 0.73), 'mat': 'trim', 'mirror': True, 'cell': 0.5, 'tag': 'rub'},
     ],
     'parts': [MIRRORS],
     'exhaust': [{'x': -0.45, 'y': 0.26, 'r': 0.035}],
@@ -561,7 +565,10 @@ P7 = {
     ],
     'paint': {'hero': ('Shop white', '#E4DDD0'),
               'alts': [('Primer grey', '#7E7F82'), ('Fleet tan', '#B89B6E'), ('Sodium', '#FF8A1F'), ('Dusk navy', '#1B2A4A')],
-              'trim': '#1A1D24', 'rim': '#B9BEC6', 'extra': {'chrome': '#C9CED6'}},
+              'trim': '#1A1D24', 'rim': '#B9BEC6',
+              # the wear (sheet part 7): primer patch on the right barn door, rust round the rear arches,
+              # the old shop name sanded nearly off the flanks (bondo: a shade off the paint)
+              'extra': {'chrome': '#C9CED6', 'primer': '#7E7F82', 'rust': '#5A3220', 'bondo': '#CFC6B7'}},
     'options': {},
 }
 

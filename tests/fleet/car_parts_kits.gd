@@ -64,10 +64,14 @@ const CARS := {
 	},
 	"p7_wagon": {
 		## no deck lid: the tail is two barn doors, each with its half of the rear glass
-		"without": ["trunk", "glass_backlight", "seal_backlight"],
+		## (the glass above the doors is a fixed header strip, glass_backlight, with the roof brake lamp on it)
+		"without": ["trunk"],
 		"parts": ["barn_l", "barn_r", "glass_barn_l", "glass_barn_r", "seal_barn_l", "seal_barn_r", "handle_barn_l", "handle_barn_r",
-			"wiper_rear", "roof_rails", "grille", "mirror_l", "mirror_r", "bumper_f_insert", "bumper_r_insert", "rub_strip",
-			"rub_door_l", "rub_door_r", "caliper_fl", "caliper_fr", "engine", "spare", "susp_fl", "susp_fr", "susp_rl", "susp_rr"],
+			"barn_hinge_l", "barn_hinge_r", "wiper_rear", "roof_rails", "grille", "mirror_l", "mirror_r",
+			"bumper_f_band", "bumper_r_band", "lamp_column_l", "lamp_column_r", "plate_lamp", "pillar_a_door_l", "pillar_a_door_r",
+			"rub_fender_l", "rub_fender_r", "rub_door_l", "rub_door_r", "rub_quarter_l", "rub_quarter_r",
+			"ghost_l", "ghost_r", "ghost_door_l", "ghost_door_r", "rust_l", "rust_r", "primer_patch", "antenna",
+			"caliper_fl", "caliper_fr", "engine", "bay_radiator_core", "bay_battery", "susp_fl", "susp_fr", "susp_rl", "susp_rr"],
 		"lamps": {"head_l": "glow_head", "head_r": "glow_head", "turn_fl": "glow_turn", "turn_fr": "glow_turn",
 			"turn_rl": "glow_turn", "turn_rr": "glow_turn", "tail_l": "glow_tail", "tail_r": "glow_tail",
 			"brake_l": "glow_brake", "brake_r": "glow_brake", "brake_c": "glow_brake",
@@ -183,6 +187,38 @@ const CARS := {
 			["fender_fr", "door_r", Vector3.BACK, Vector3.RIGHT, 1, 0.51],
 			["door_r", "body", Vector3.BACK, Vector3.RIGHT, 1, 0.51],
 			["trunk", "body", Vector3.RIGHT, Vector3.UP, 2, 1.65],
+		],
+	},
+	"p3_tuner": {
+		## a four-door sedan: rear doors on the B-pillar line with their own glass, box flares (the rear ones on the
+		## rear doors, opening with them); no high brake lamp (era), so no brake_c
+		"without": ["brake_c"],
+		"parts": ["door_rl", "door_rr", "glass_door_rl", "glass_door_rr", "seal_door_rl", "seal_door_rr", "handle_rl", "handle_rr",
+			"flare_fl", "flare_fr", "flare_rl", "flare_rr", "flare_door_rl", "flare_door_rr",
+			"glass_quarter_l", "glass_quarter_r", "seal_quarter_l", "seal_quarter_r", "pillar_b_l", "pillar_b_r",
+			"tail_panel", "plate_lamp", "grille", "bumper_r_insert", "spoiler", "mirror_l", "mirror_r", "antenna",
+			"caliper_fl", "caliper_fr", "caliper_rl", "caliper_rr", "susp_fl", "susp_fr", "susp_rl", "susp_rr",
+			"bay_floor", "bay_radiator_core",
+			"brake_c"],   # listed so that `without` is checked
+		"lamps": {"head_l": "glow_head", "head_r": "glow_head", "turn_fl": "glow_turn", "turn_fr": "glow_turn",
+			"turn_rl": "glow_turn", "turn_rr": "glow_turn", "tail_l": "glow_tail", "tail_r": "glow_tail",
+			"brake_l": "glow_brake", "brake_r": "glow_brake", "reverse_l": "glow_reverse", "reverse_r": "glow_reverse",
+			"plate_lamp": "glow_lens"},
+		"anchors": ["bay_engine", "bay_turbo", "bay_radiator", "bay_intercooler", "tank", "fuel_filler", "diff", "subframe_f",
+			"strut_top_fl", "strut_top_fr"],
+		"hinges": ["hinge_hood", "hinge_trunk", "hinge_door_l", "hinge_door_r", "hinge_door_rl", "hinge_door_rr"],
+		"on_hinge": {"hinge_door_rl": ["door_rl", "glass_door_rl", "handle_rl", "flare_door_rl"],
+			"hinge_door_rr": ["door_rr", "glass_door_rr", "handle_rr", "flare_door_rr"]},
+		## 300 mm vented discs on all four
+		"brakes": {"fl": 0.15, "fr": 0.15, "rl": 0.15, "rr": 0.15},
+		"no_hubcap": [],
+		"gaps": [
+			## at a vertex of the merged outline (merge_flat leaves none between corners)
+			["hood", "fender_fr", Vector3.RIGHT, Vector3.UP, 2, -1.71],
+			["fender_fr", "door_r", Vector3.BACK, Vector3.RIGHT, 1, 0.6],
+			["door_r", "door_rr", Vector3.BACK, Vector3.RIGHT, 1, 0.6],
+			["door_rr", "body", Vector3.BACK, Vector3.RIGHT, 1, 0.6],
+			["trunk", "body", Vector3.RIGHT, Vector3.UP, 2, 1.76],
 		],
 	},
 	"p10_truck": {

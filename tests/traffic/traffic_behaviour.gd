@@ -33,6 +33,7 @@ extends SceneTree
 # NEON_SCENES=highway,wreck (comma list) runs only those scenes.
 
 const Harness := preload("res://tests/traffic/traffic_harness.gd")
+const RingVisitors := preload("res://scripts/traffic/ring_visitors.gd")
 
 const RATE := 120
 const KMH := 1.0 / 3.6
@@ -94,6 +95,10 @@ var first_drift := ""
 var max_player_err := 0.0
 
 func _initialize() -> void:
+	# The scenes script lane cars (a leader and its follower, the car the
+	# player flashes): no ring visitors (#630) taking them off up a ramp.
+	# tests/traffic/ring_traffic.gd tests those.
+	RingVisitors.enabled = false
 	var only := OS.get_environment("NEON_SCENES")
 	if only != "":
 		SCENES = Array(only.split(","))

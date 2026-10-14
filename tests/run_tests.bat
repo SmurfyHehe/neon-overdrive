@@ -401,6 +401,8 @@ call :run traffic/more_alive_traffic "--headless --fixed-fps 120"
 	call :run world/loop_road "--headless --fixed-fps 60"
 	call :run world/exits_live "--headless --fixed-fps 60"
 	call :run world/ring_drive "--headless --fixed-fps 60"
+	rem ~3 min: traffic on the ramps and rings (#630): 1 in 8 outside-lane cars take a ring, give way at its entry, rejoin; nobody touches.
+	call :run traffic/ring_traffic "--headless --fixed-fps 60"
 	rem ~3 min: the road both ways: 2 km out, 3 km back across the lap seam, ten turns; road under the car every tick, no chunk rebuilt in view.
 	call :run world/two_way_drive "--headless --fixed-fps 60"
 	call :run traffic/traffic_perf "--headless --fixed-fps 120"

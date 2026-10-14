@@ -374,6 +374,37 @@ var _siren_edge := 0.0
 var _my_x := 0.0
 var _my_z := 0.0
 
+## Ring visitor (#630, RingVisitors): the route this car is driving at a ring
+## site, empty on the main lanes. visit_s is the site's centre, metres along
+## the road on this lap; visit_d how far along the route the car is.
+const RingVisitors := preload("res://scripts/traffic/ring_visitors.gd")
+var visit: Dictionary = {}
+## The same as `not visit.is_empty()`, as a plain bool for the hot loops.
+var visiting := false
+var visit_s := 0.0
+var visit_d := 0.0
+## Past the give-way line (it does not stop there again), and committed to
+## joining the outside lane at the end.
+var visit_go := false
+var visit_join := false
+## Where it is in the site's flat space (x across, w along, y up), its speed
+## along the route and its heading (road-space yaw): what the other visitors
+## and the manager read, kept current by the car itself.
+var visit_xwy := Vector3.ZERO
+var visit_v := 0.0
+var visit_yaw := 0.0
+## Seconds stopped at the give-way line now, and the longest so far (tests).
+var visit_wait := 0.0
+var visit_wait_max := 0.0
+## The site (its centre's s) this car last had its pick roll for: one roll
+## per site passed. NAN = none.
+var visit_rolled := NAN
+## The chunk the manager last looked at this car in for a pick (it looks once
+## per chunk).
+var visit_chunk := -1000000
+## Routes finished (tests).
+var visits_done := 0
+
 ## What this car is doing, for the near-miss log (near_miss_log.gd). Set where
 ## each behaviour starts (_start_lane_change, _abort, _decide_doing) and
 ## replaced by the next decision when it ends. The DO_ names that no behaviour
@@ -741,6 +772,9 @@ func _drive(delta: float) -> void:
 		return
 	if free_driver != null:
 		free_driver.drive(self, delta)
+		return
+	if visiting:
+		_visit_drive(delta)
 		return
 	var v := current_speed()
 	if changing:
@@ -1459,6 +1493,8 @@ func _start_lane_change(lane: int, urgent: bool, why := DO_PASSING) -> void:
 ## Where the car's path is across the road now: the lane centre, or the
 ## lane-change S.
 func path_x() -> float:
+	if visiting:
+		return RingVisitors.at(visit, visit_d).x
 	return _path_x_at(_lc_t) if changing else lane_x
 
 ## Where the lane change steers: along the path's tangent, t_look + LC_AIM_LEAD
@@ -1613,6 +1649,9 @@ func place(lane: float, dir: float, z: float, y: float, speed: float) -> void:
 		_set_flash(false)
 	_lead_k = -1
 	_scan_in = 0
+	_leave_visit()
+	visit_rolled = NAN
+	visit_wait = 0.0
 	var yaw := 0.0 if dir < 0.0 else PI
 	global_transform = RoadFrame.pose(lane, y, z, yaw)
 	set_moving(self, speed)
@@ -1645,7 +1684,8 @@ func set_shown(on: bool) -> void:
 			# Coming into view: stand where the car is by now, not where its
 			# last step left it (up to 2 m back).
 			_rail_z = rail_z_now()
-			_rail_pose(_rail_z)
+			if not visiting:
+				_rail_pose(_rail_z)
 		_owed = 0
 		# A hidden car moves once per think: no smear into view.
 		reset_physics_interpolation()
@@ -1679,6 +1719,9 @@ func set_detailed(on: bool) -> void:
 		freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 		freeze = true
 		var u := RoadFrame.unroll(global_position)
+		if visiting:
+			_visit_to_rails(u)
+			return
 		if shown:
 			_rail_dx = u.x - path_x() - _edge
 			_rail_dy = u.y - rest_y
@@ -1702,6 +1745,9 @@ func can_rail() -> bool:
 		return false
 	var u := RoadFrame.unroll(global_position)
 	var b := RoadFrame.basis_to_road(u.z, global_transform.basis)
+	if visiting:
+		var off := _visit_offset(u, b)
+		return b.y.y > RAIL_UP and absf(off.x) < RAIL_OFF_PATH and absf(off.z) < RAIL_YAW
 	return b.y.y > RAIL_UP and absf(u.x - path_x()) < RAIL_OFF_PATH and absf(_yaw_error(b)) < RAIL_YAW
 
 ## Yaw (road space) of the basis b against the heading the rails would give it.
@@ -1748,6 +1794,9 @@ func _think_phase() -> int:
 ## On rails: down the lane path, with the follower law on its speed and, in
 ## view, the same lane changes as the sim; hidden, it holds its lane. See "Rails, the cheap half" in the header for what runs when.
 func _cruise(delta: float) -> void:
+	if visiting:
+		_visit_cruise(delta)
+		return
 	_think_in -= 1
 	var think := _think_in <= 0
 	if not (think or (shown and rail_tier != RAIL_FAR)):
@@ -1890,3 +1939,336 @@ func shift_world(offset: Vector3) -> void:
 	if flames != null:
 		flames.shift_world(offset)
 	reset_physics_interpolation()
+
+# ---------- ring visitors (#630) ----------
+#
+# A car on a route at a ring site (RingVisitors) drives it instead of its lane:
+# on rails it is posed from its distance along the route; in the full sim it
+# steers at a route point with the same pure pursuit as the lane keeper. Its
+# speed is the same follower law, behind whatever is on its route ahead, held
+# at the give-way line while the ring is busy and at the end of the slip lane
+# until the outside lane has a gap. At the route's end it is a lane car again.
+
+## Pure pursuit: metres of route ahead aimed at, per m/s, and its limits.
+const VISIT_LOOK_T := 0.8
+const VISIT_LOOK := Vector2(5.0, 14.0)
+## How far along its route a visitor looks for something in the way.
+const VISIT_REACH := 60.0
+## The light on the blinker this far before a ramp's or the slip lane's turn.
+const VISIT_BLINK_M := 25.0
+
+## Starts route `r` at the site centred at `site_s`, `d` metres along it.
+## A car on rails is moved there at once; one in the sim drives on from where
+## it is (it is picked where the route starts on its own lane).
+func start_visit(r: Dictionary, site_s: float, d: float) -> void:
+	visit = r
+	if not visiting and traffic != null:
+		traffic.visitors.append(self)
+	visiting = true
+	visit_s = site_s
+	visit_d = d
+	visit_go = false
+	visit_join = false
+	visit_wait = 0.0
+	changing = false
+	_sig_lane = -1
+	turn = 0
+	_edge = 0.0
+	_edge_want = 0.0
+	_lead_k = -1
+	_scan_in = 0
+	direction = -1.0 if int(r.side) > 0 else 1.0
+	if not detailed:
+		_rail_dx = 0.0
+		_rail_dy = 0.0
+		_rail_dyaw = 0.0
+		_owed = 0
+		_visit_pose()
+	else:
+		var u := RoadFrame.unroll(global_position)
+		visit_xwy = Vector3(u.x, RoadFrame.s_at(u.z) - visit_s, u.y)
+		visit_v = maxf(current_speed(), 0.0)
+		visit_yaw = RingVisitors.yaw_at(visit, visit_d)
+
+## The route is done: back on the outside lane as an ordinary car.
+func end_visit() -> void:
+	var r := visit
+	_leave_visit()
+	visits_done += 1
+	lane_x = float(r.end_x)
+	lane_i = RoadChunkBuilder.lane_at(absf(lane_x))
+	direction = float(r.end_dir)
+	changing = false
+	turn = 0
+	_lc_cooldown = LC_COOLDOWN
+	_lead_k = -1
+	_scan_in = 0
+	_rail_dx = 0.0
+	_rail_dy = 0.0
+	_rail_dyaw = 0.0
+	_rail_z = NAN
+	_rail_fwd = Vector3.ZERO
+	_think_in = 0
+	if traffic != null:
+		var far := lane_x < 0.0
+		var z := road_z()
+		var city := traffic.city_at(z, direction)
+		target_speed = traffic.lane_speed(lane_i, far, city) + traffic.ring_randf_range(-TrafficManager.SPEED_JITTER, TrafficManager.SPEED_JITTER)
+		pace_lane = lane_i
+		pace_far = far
+		pace_city = city
+
+func _leave_visit() -> void:
+	if visiting and traffic != null:
+		traffic.visitors.erase(self)
+	visiting = false
+	visit = {}
+
+## Offset of the body from its route point: (across, up, yaw), road space u
+## and road-space basis b. Also brings visit_d up to the body.
+func _visit_offset(u: Vector3, b: Basis) -> Vector3:
+	var w := RoadFrame.s_at(u.z) - visit_s
+	visit_d = RingVisitors.project(visit, u.x, w, visit_d)
+	_visit_come_down()
+	var p := RingVisitors.at(visit, visit_d)
+	var yaw := RingVisitors.yaw_at(visit, visit_d)
+	var across := (u.x - p.x) * cos(yaw) + (w - p.y) * sin(yaw)
+	return Vector3(across, u.y - p.z - rest_y, wrapf(atan2(b.z.x, b.z.z) - yaw, -PI, PI))
+
+## Leaving the sim for the rails mid route (set_detailed): the offset from the
+## route eases out in view, as on a lane.
+func _visit_to_rails(u: Vector3) -> void:
+	var b := RoadFrame.basis_to_road(u.z, global_transform.basis)
+	var off := _visit_offset(u, b)
+	if shown:
+		_rail_dx = off.x
+		_rail_dy = off.y
+		_rail_dyaw = off.z
+		for w in wheel_array:
+			w.rotation.y = 0.0
+	else:
+		_rail_dx = 0.0
+		_rail_dy = 0.0
+		_rail_dyaw = 0.0
+	_visit_pose()
+	if not shown:
+		reset_physics_interpolation()
+
+## On rails: stands the car at visit_d (plus the easing offset).
+func _visit_pose() -> void:
+	var p := RingVisitors.at(visit, visit_d)
+	var yaw := RingVisitors.yaw_at(visit, visit_d)
+	var x := p.x + cos(yaw) * _rail_dx
+	var w := p.y + sin(yaw) * _rail_dx
+	var z := RingVisitors.road_z(visit_s, w)
+	var xf := RoadFrame.pose(x, p.z + rest_y + _rail_dy, z, yaw + _rail_dyaw)
+	xf.basis = xf.basis * Basis(Vector3.RIGHT, RingVisitors.pitch_at(visit, visit_d))
+	global_transform = xf
+	previous_global_position = xf.origin
+	_rail_fwd = -xf.basis.z
+	_rail_z = z
+	linear_velocity = _rail_fwd * _cruise_speed
+	local_velocity = Vector3(0.0, 0.0, -_cruise_speed)
+	visit_xwy = Vector3(x, w, p.z)
+	visit_v = _cruise_speed
+	visit_yaw = yaw
+
+## On rails, every tick (only a handful of cars are ever on a route).
+func _visit_cruise(delta: float) -> void:
+	var t0 := Time.get_ticks_usec()
+	_visit_cruise_step(delta)
+	RingVisitors.cost_usec += Time.get_ticks_usec() - t0
+
+## Back at road level past the ramp: the car belongs to the carriageway it is
+## coming down onto from this tick on (the U-turn's is the other one).
+func _visit_come_down() -> void:
+	if visit_d >= float(visit.road_down) and direction != float(visit.end_dir):
+		direction = float(visit.end_dir)
+		lane_x = float(visit.end_x)
+
+func _visit_cruise_step(delta: float) -> void:
+	_think_in -= 1
+	if _think_in <= 0:
+		_think_in = think_ticks
+		_rail_a = _rail_stop_accel(clampf(_visit_accel(_cruise_speed, delta * float(think_ticks)), -A_BRAKE_FULL, 2.0))
+	_cruise_speed = maxf(_cruise_speed + _rail_a * delta, 0.0)
+	visit_d += _cruise_speed * delta
+	_visit_come_down()
+	if _rail_dx != 0.0 or _rail_dy != 0.0 or _rail_dyaw != 0.0:
+		var k := exp(-delta / RAIL_EASE)
+		_rail_dx *= k
+		_rail_dy *= k
+		_rail_dyaw *= k
+	if visit_d >= float(visit.end):
+		visit_d = float(visit.end)
+		_visit_pose()
+		end_visit()
+		return
+	if _think_in != think_ticks and _rail_fwd != Vector3.ZERO:
+		# between thinks straight on from the last pose, as RAIL_NEAR does
+		# (a third of a metre at ring speed: under a millimetre off the arc)
+		var o := global_position + _rail_fwd * (_cruise_speed * delta)
+		global_position = o
+		previous_global_position = o
+		linear_velocity = _rail_fwd * _cruise_speed
+		local_velocity = Vector3(0.0, 0.0, -_cruise_speed)
+		var t := Vector2(-sin(visit_yaw), cos(visit_yaw)) * (_cruise_speed * delta)
+		visit_xwy.x += t.x
+		visit_xwy.y += t.y
+		visit_v = _cruise_speed
+		_rail_z = RingVisitors.road_z(visit_s, visit_xwy.y)
+		return
+	_visit_pose()
+	if shown:
+		brake_input = 1.0 if _rail_a < -A_COAST else 0.0
+		for w in wheel_array:
+			w.spin = _cruise_speed / w.tire_radius
+		_update_lamps()
+
+## In the sim, at the controller's rate (_drive).
+func _visit_drive(delta: float) -> void:
+	var t0 := Time.get_ticks_usec()
+	_visit_drive_step(delta)
+	RingVisitors.cost_usec += Time.get_ticks_usec() - t0
+
+func _visit_drive_step(delta: float) -> void:
+	var v := current_speed()
+	var u := RoadFrame.unroll(global_position)
+	var b := RoadFrame.basis_to_road(u.z, global_transform.basis)
+	var off := _visit_offset(u, b)
+	visit_xwy = Vector3(u.x, RoadFrame.s_at(u.z) - visit_s, u.y)
+	visit_v = maxf(v, 0.0)
+	visit_yaw = RingVisitors.yaw_at(visit, visit_d) + off.z
+	if visit_d >= float(visit.end) - 0.5:
+		end_visit()
+		return
+	var a := _visit_accel(v, delta)
+	# wrecked: on its roof, or slow and pointing well off or off the route
+	var bad := global_transform.basis.y.y < WRECK_UP or ((cos(off.z) < WRECK_HEADING or absf(off.x) > WRECK_OFF_PATH) and absf(v) < WRECK_MAX_SPEED)
+	_wreck_t = _wreck_t + delta if bad else 0.0
+	if _wreck_t > WRECK_SECONDS:
+		wrecked = true
+	hazard = bad or wrecked
+	var look := clampf(absf(v) * VISIT_LOOK_T, VISIT_LOOK.x, VISIT_LOOK.y)
+	var tp := RingVisitors.at(visit, visit_d + look)
+	var target := RoadFrame.roll(Vector3(tp.x, u.y, RingVisitors.road_z(visit_s, tp.y)))
+	var bend := wrapf(RingVisitors.yaw_at(visit, visit_d + 3.0) - RingVisitors.yaw_at(visit, visit_d - 3.0), -PI, PI) / 6.0
+	steering_input = steer_to(self, target, wheelbase, bend)
+	handbrake_input = 0.0
+	if hazard:
+		throttle_input = 0.0
+		brake_input = 1.0
+		return
+	_apply_accel(v, a)
+
+## Pure pursuit at a world point (the lane keeper's maths, lane_steer, for a
+## point that is not on a lane): steering_input for vehicle v. `bend` is the
+## path's own curvature there (1/m, + = left), for the understeer feed-forward.
+static func steer_to(v: Vehicle, target: Vector3, wb: float, bend: float, understeer_ff: float = UNDERSTEER_FF) -> float:
+	var fwd := -v.global_transform.basis.z
+	var vel := v.linear_velocity
+	vel.y = 0.0
+	if vel.length() > VELOCITY_FRAME_MIN_SPEED and vel.dot(fwd) > 0.0:
+		fwd = vel.normalized()
+	else:
+		fwd.y = 0.0
+		fwd = fwd.normalized()
+	var right := fwd.cross(Vector3.UP)
+	var to_target := target - v.global_position
+	var ahead := to_target.dot(fwd)
+	var lateral := to_target.dot(right)
+	var dist := maxf(Vector2(lateral, ahead).length(), 0.01)
+	var curvature := 2.0 * sin(atan2(lateral, ahead)) / dist
+	curvature -= understeer_ff * v.speed * v.speed * bend
+	var want := clampf(atan(wb * curvature) / v.max_steering_angle, -1.0, 1.0)
+	return -signf(want) * pow(absf(want), 1.0 / maxf(v.steering_exponent, 0.1))
+
+## The acceleration a visitor wants: the route's speed, the follower law behind
+## what is on its route (and, at road height, behind main-road traffic), the
+## give-way line and the join. Sets lead_gap / lead_speed / _bind_* and the
+## blinker. dt: seconds since the last call (the wait timer).
+func _visit_accel(v: float, dt: float) -> float:
+	var r := visit
+	var d := visit_d
+	# the speed the route allows a moment ahead (the follower lags its target
+	# by about 1 / K_V seconds)
+	var cap := minf(RingVisitors.cap_at(r, d), RingVisitors.cap_at(r, d + maxf(v, 0.0) / K_V))
+	var v0 := minf(target_speed * _speed_k * Weather.ai_speed_factor(), cap * Weather.ai_bend_factor())
+	lead_gap = INF
+	lead_speed = 0.0
+	lead_is_player = false
+	if traffic != null:
+		traffic.visit_lead(self, VISIT_REACH)
+		lead_gap = traffic.q_gap
+		lead_speed = traffic.q_speed
+		lead_is_player = traffic.q_player
+		if RingVisitors.road_level(r, d):
+			var p := visit_xwy
+			_my_x = p.x
+			_my_z = RingVisitors.road_z(visit_s, p.y)
+			var lo := p.x - half_w - CORRIDOR_MARGIN
+			var hi := p.x + half_w + CORRIDOR_MARGIN
+			if visit_join:
+				lo = minf(lo, float(r.end_x) - half_w - CORRIDOR_MARGIN)
+				hi = maxf(hi, float(r.end_x) + half_w + CORRIDOR_MARGIN)
+			var g := traffic.scan(_my_z, direction, lo, hi, true, _idx, half_l, LOOK_AHEAD, false)
+			if g < lead_gap:
+				lead_gap = g
+				lead_speed = traffic.q_speed
+				lead_is_player = traffic.q_player
+	var a := follow_accel(v, v0, lead_gap, lead_speed, _t_gap())
+	_bind_gap = lead_gap
+	_bind_vl = lead_speed
+	turn = 0
+	# the give-way line: a stopped car while the ring is busy
+	var held := false
+	var gw := float(r.gw)
+	if gw >= 0.0 and not visit_go and traffic != null:
+		var to_line := gw - d - half_l
+		if to_line < 0.5:
+			visit_go = true
+		elif to_line < 40.0:
+			# time to get the whole car into the stretch where the ramp overlaps the ring
+			var t_me := RingVisitors.time_to(float(r.zone) - d + 2.0 * half_l, v)
+			var busy := traffic.ring_busy(self, float(r.zone_angle), t_me)
+			# too close to stop without a hard stamp: go (ring cars follow it)
+			if busy and v * v / (2.0 * B_SAFE) > to_line + 1.0:
+				busy = false
+			if busy:
+				held = true
+				var sg := to_line + S0 - Junction.STOP_SHORT
+				var a_gw := follow_accel(v, v0, sg, 0.0, _t_gap())
+				if a_gw < a:
+					a = a_gw
+					_bind_gap = sg
+					_bind_vl = 0.0
+			elif to_line < 3.0:
+				visit_go = true
+	if held and absf(v) < 0.5:
+		visit_wait += dt
+		visit_wait_max = maxf(visit_wait_max, visit_wait)
+	elif not held:
+		visit_wait = 0.0
+	signal_held = held
+	# the join: through a gap the ordinary lane change would take
+	var merge := float(r.merge)
+	if merge >= 0.0 and not visit_join and traffic != null and d > merge - 40.0:
+		direction = float(r.end_dir)
+		lane_x = float(r.end_x)
+		if _merge_safe(float(r.end_x), v):
+			visit_join = true
+		else:
+			var sg := merge - d - half_l + S0
+			var a_m := follow_accel(v, v0, sg, 0.0, _t_gap())
+			if a_m < a:
+				a = a_m
+				_bind_gap = sg
+				_bind_vl = 0.0
+	# blinkers: out onto the slip lane, off the ring, back into the lane
+	if d < float(r.road_up) and d < RingVisitors.LEAD_IN.y - RingVisitors.START_W:
+		turn = 2
+	elif RingVisitors.on_ring(r, d) and (r.ring as Vector2).y - d < VISIT_BLINK_M:
+		turn = 2
+	elif merge >= 0.0 and d > merge - VISIT_BLINK_M and d < merge + 50.0:
+		turn = 1   # the slip lane is on the outside: back in is always left
+	return a

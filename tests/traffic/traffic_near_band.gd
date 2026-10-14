@@ -36,6 +36,7 @@ extends SceneTree
 #   Godot_v4.7.2-stable_win64_console.exe --headless --audio-driver Dummy --fixed-fps 120 --path . -s res://tests/traffic/traffic_near_band.gd
 
 const Harness := preload("res://tests/traffic/traffic_harness.gd")
+const RingVisitors := preload("res://scripts/traffic/ring_visitors.gd")
 
 const RATE := 120
 const KMH := 1.0 / 3.6
@@ -85,6 +86,8 @@ var speed_sum := 0.0
 var last_z := {}
 var last_shown := {}
 var hidden_moved := 0.0
+var last_prog := {}
+var last_vis := {}
 var hidden_want := 0.0
 var rail_still := 0
 var last_far := {}
@@ -145,15 +148,20 @@ func _physics_process(_delta: float) -> bool:
 		var far: bool = car.rail_tier == TrafficCar.RAIL_FAR and not car.detailed
 		if car == rival:
 			_watch_rival()
-		if last_z.has(car) and not respawned and not car.benched and car.global_position.z < 5000.0:
+		# Ground covered this tick: along the lane, or for a ring visitor (#630,
+		# up a ramp and round the ring) along its route; nothing to compare
+		# across the tick it starts or ends one.
+		var prog := car.visit_d if car.visiting else cz * car.direction
+		var same_way: bool = last_vis.get(car, false) == car.visiting
+		if last_z.has(car) and same_way and not respawned and not car.benched and car.global_position.z < 5000.0:
 			var hidden: bool = not car.shown and not car.detailed and not last_shown[car] and not last_detailed[car]
 			var on_rails_drawn: bool = car.shown and last_shown[car] and not car.detailed and not last_detailed[car]
 			if hidden:
-				hidden_moved += (cz - float(last_z[car])) * car.direction
+				hidden_moved += prog - float(last_prog[car])
 				hidden_want += car.lane_speed() * dt
 			elif on_rails_drawn and far and last_far[car]:
 				far_ticks += 1
-				far_moved += (cz - float(last_z[car])) * car.direction
+				far_moved += prog - float(last_prog[car])
 				far_want += car.lane_speed() * dt
 				nearest_far = minf(nearest_far, d)
 				# What the step looks like from the player: its part across the line of sight.
@@ -168,11 +176,13 @@ func _physics_process(_delta: float) -> bool:
 					rail_still += 1
 				if car.rail_tier == TrafficCar.RAIL_NEAR:
 					near_ticks += 1
-					worst_near_off = maxf(worst_near_off, absf(RoadFrame.unroll(car.global_position).x - (car.path_x() + car._rail_dx)))
+					worst_near_off = maxf(worst_near_off, _off_path(car))
 		# A car coming into view at the fog line takes the travel it was owed
 		# while hidden in one step (TrafficCar.set_shown): not a jump anyone sees.
 		var came_into_view: bool = car.shown and last_shown.has(car) and not last_shown[car]
 		last_z[car] = cz
+		last_prog[car] = prog
+		last_vis[car] = car.visiting
 		last_shown[car] = car.shown
 		if last_detailed.has(car):
 			var was: bool = last_detailed[car]
@@ -296,3 +306,15 @@ func _end(msg: String) -> bool:
 	print("traffic_near_band: ", "PASS" if fails.is_empty() else "FAIL (%d)" % fails.size())
 	quit(0 if fails.is_empty() else 1)
 	return true
+
+## How far a rail car is off where its path puts it: across its lane, or for a
+## ring visitor from its route point (plus the hand-over offset, which is
+## across the route), on the ground.
+func _off_path(car: TrafficCar) -> float:
+	var u := RoadFrame.unroll(car.global_position)
+	if not car.visiting:
+		return absf(u.x - (car.path_x() + car._rail_dx))
+	var q := RingVisitors.at(car.visit, car.visit_d)
+	var yaw := RingVisitors.yaw_at(car.visit, car.visit_d)
+	var w := RoadFrame.s_at(u.z) - car.visit_s
+	return Vector2(u.x - (q.x + cos(yaw) * car._rail_dx), w - (q.y + sin(yaw) * car._rail_dx)).length()

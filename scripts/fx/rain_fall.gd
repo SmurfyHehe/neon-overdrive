@@ -12,7 +12,9 @@ class_name RainFall
 # How it draws, and why it costs the CPU nothing per frame:
 # - One MultiMesh of thin quads, one draw call, like the tyre smoke. Each
 #   drop carries a seed in its custom data and the VERTEX shader does the
-#   rest against TIME: the drop sits at a fixed spot in the world, wrapped
+#   rest against `now` (the game clock, fed once per physics tick, so the
+#   rain freezes with the game in the pause menu and in photo mode): the
+#   drop sits at a fixed spot in the world, wrapped
 #   into a box around whichever camera is drawing (CAMERA_POSITION_WORLD), so
 #   the rain never follows the car and the box never has to be moved. Nothing
 #   is simulated on the CPU; no transforms are ever written after boot.
@@ -23,7 +25,9 @@ class_name RainFall
 # - Lit like the smoke: a dim dusk grey everywhere, sodium under each lamp
 #   pool (the lamps' fixed 25 m grid), and amber inside the headlight cone.
 #   The node hangs on the player car, so the cone's place and direction are
-#   the MODEL_MATRIX for free; `head_on` is written only when H flips.
+#   the MODEL_MATRIX for free; the cone starts at that car's own "Headlights"
+#   lamp (every playable car, CarFx.attach); `head_on` is written only when
+#   H flips.
 # - `amount` (Weather.rain, 0..1) scales the brightness, and the visible
 #   instance count follows it, so drizzle is a few faint streaks and a
 #   downpour fills the box. Both are written only when the amount moves.
@@ -45,9 +49,9 @@ const BOX_LIFT := 2.5
 const FALL := 11.0
 ## "Exposure": a streak is the drop's relative velocity x this, m. Longer than
 ## a real shutter would give, on purpose (arcade).
-const EXPOSURE := 0.07
+const EXPOSURE := 0.05
 const LEN_MIN := 0.4
-const LEN_MAX := 4.0
+const LEN_MAX := 2.2
 ## Streak width, m, and the least it may shrink to on screen, px.
 const WIDTH := 0.04
 const MIN_PX := 1.8
@@ -62,7 +66,7 @@ const SODIUM := Color(1.0, 0.54, 0.12)
 const BEAM := Color(1.0, 0.78, 0.45)
 const DUSK_LEVEL := 0.45
 const LAMP_LEVEL := 1.0
-const BEAM_LEVEL := 1.6
+const BEAM_LEVEL := 1.1
 ## Headlight cone the streaks flare in (CarFx.HEADLIGHT_ANGLE 30 deg half-angle,
 ## range 55 m), a touch wider so the edge is soft.
 const BEAM_COS := 0.84
@@ -82,11 +86,12 @@ shader_type spatial;
 render_mode blend_add, unshaded, cull_disabled, depth_draw_never, shadows_disabled, skip_vertex_transform;
 
 uniform float amount = 0.0;
+uniform float now = 0.0;
 uniform vec3 box = vec3(30.0, 16.0, 40.0);
 uniform float box_lift = 2.5;
 uniform float fall = 11.0;
-uniform float exposure = 0.07;
-uniform vec2 len_range = vec2(0.4, 4.0);
+uniform float exposure = 0.05;
+uniform vec2 len_range = vec2(0.4, 2.2);
 uniform float width = 0.04;
 uniform float min_px = 1.8;
 uniform vec2 near_fade = vec2(0.45, 1.4);
@@ -103,7 +108,7 @@ uniform vec3 sodium : source_color = vec3(1.0, 0.54, 0.12);
 uniform vec3 beam : source_color = vec3(1.0, 0.78, 0.45);
 uniform float dusk_level = 0.45;
 uniform float lamp_level = 1.0;
-uniform float beam_level = 1.6;
+uniform float beam_level = 1.1;
 uniform float lamp_spacing = 25.0;
 uniform float lamp_own = 6.25;
 uniform float lamp_onc = 18.75;
@@ -121,7 +126,7 @@ void vertex() {
 	// The drop's home point drifts down (and with the wind) forever; it is
 	// wrapped into the box around the camera, so it stays put in the world
 	// while the camera slides past.
-	vec3 seed_pos = c.xyz * box + vec3(0.0, -TIME * spd, 0.0) + wind * TIME * c.w;
+	vec3 seed_pos = c.xyz * box + vec3(0.0, -now * spd, 0.0) + wind * now * c.w;
 	vec3 lo = cam + vec3(0.0, box_lift, 0.0) - 0.5 * box;
 	vec3 p = lo + mod(seed_pos - lo, box);
 	// The streak runs along the drop's velocity as seen from the moving car.
@@ -156,7 +161,8 @@ void vertex() {
 		* (1.0 - smoothstep(beam_range * 0.6, beam_range, hd));
 	float lit_beam = head_on * in_cone;
 	v_col = dusk * dusk_level + sodium * (lamp_level * lamp) + beam * (beam_level * lit_beam);
-	v_alpha = alpha * amount * near * far * (0.6 + 0.4 * c.w);
+	// a stretched streak spreads the same drop's light over more screen
+	v_alpha = alpha * amount * near * far * (0.6 + 0.4 * c.w) * clamp(0.9 / len, 0.4, 1.0);
 	float k = v_alpha > 0.003 ? 1.0 : 0.0;   // invisible: collapse, no fill cost
 	vec3 world = p + dir * (VERTEX.y * len * k) + side * (VERTEX.x * w * k);
 	VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
@@ -189,6 +195,9 @@ var _player: PlayerCar
 var _mat: ShaderMaterial
 var _vel := Vector3(INF, INF, INF)
 var _head_on := -1.0
+var _head_set := false
+## The game clock the streaks fall against (s); stops when the game does.
+var now := 0.0
 var _rng := RandomNumberGenerator.new()
 
 func _init(player: PlayerCar) -> void:
@@ -280,6 +289,10 @@ func sync() -> void:
 		_apply_visible()
 	if not visible or _player == null:
 		return
+	now += 1.0 / float(Engine.physics_ticks_per_second)
+	_mat.set_shader_parameter("now", now)
+	if not _head_set:
+		_set_head_offset()
 	var v := _player.linear_velocity
 	if v.distance_squared_to(_vel) >= VEL_STEP * VEL_STEP:
 		_vel = v
@@ -288,6 +301,19 @@ func sync() -> void:
 	if on != _head_on:
 		_head_on = on
 		_mat.set_shader_parameter("head_on", on)
+
+## The cone starts at this car's own headlamp (CarFx's "Headlights" spot):
+## long and short cars alike. Falls back to a coupe's lamp until it exists.
+func _set_head_offset() -> void:
+	var spot := _player.get_node_or_null("Headlights") as Node3D
+	if spot == null:
+		return
+	_mat.set_shader_parameter("head_offset", spot.position)
+	_head_set = true
+
+## Where the cone starts, car space (tests).
+func head_offset() -> Vector3:
+	return _mat.get_shader_parameter("head_offset")
 
 ## Visible drops: the count follows the rain (drizzle is sparse); the node
 ## hides altogether when there is none, so a dry night costs no draw call.

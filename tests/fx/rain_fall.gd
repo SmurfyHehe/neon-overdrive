@@ -8,7 +8,14 @@ extends SceneTree
 # - setting Weather to RAIN (instant) shows it with about 70% of the drops,
 #   DOWNPOUR shows every drop, DRY hides it again; the `amount` uniform
 #   follows Weather.rain
-# - the preset changes the drop count (Low 600, Medium 1400, High 2400)
+# - the preset changes the drop count (Low 600, Medium 1400, High 2400;
+#   "custom" keeps Medium's), looping over every preset
+# - every view (chase, cockpit, hood) and the cockpit mirrors can see the
+#   rain's render layer, looping over the views
+# - the streaks fall on the game clock: `now` moves while the game runs and
+#   stops while the tree is paused (pause menu, photo mode)
+# - the headlight cone starts at the car's own "Headlights" lamp, for EVERY
+#   playable car (the scene is rebooted once per PlayerCars.KINDS entry)
 # - the car's velocity reaches the shader only when it has moved by
 #   VEL_STEP (no per-tick writes), and the headlight switch reaches it
 # - nothing in RainFall runs per frame or per physics tick (no _process)
@@ -40,6 +47,11 @@ var tick := 0
 var stage := 0
 var stage_tick := 0
 var failures: Array[String] = []
+const FREEZES := ["photo", "pause"]
+var _paused_now := -1.0
+var _freeze_index := 0
+var car_index := 0
+var _prev_game: Node
 
 func _initialize() -> void:
 	OS.add_logger(logger)
@@ -100,14 +112,27 @@ func _physics_process(_delta: float) -> bool:
 			_check(r.multimesh.visible_instance_count == r.capacity, "a downpour should draw every drop (%d of %d)" % [r.multimesh.visible_instance_count, r.capacity])
 			# presets
 			var was := GraphicsSettings.preset
-			for preset in ["low", "high", "medium"]:
+			for preset in GraphicsSettings.PRESETS + ["custom"]:
 				GraphicsSettings.preset = preset
 				r.apply_graphics()
-				_check(r.capacity == RainFall.COUNT[preset] and r.multimesh.instance_count == RainFall.COUNT[preset],
-					"%s should hold %d drops (got %d)" % [preset, RainFall.COUNT[preset], r.capacity])
+				var want_n: int = RainFall.COUNT.get(preset, RainFall.COUNT_DEFAULT)
+				_check(r.capacity == want_n and r.multimesh.instance_count == want_n,
+					"%s should hold %d drops (got %d)" % [preset, want_n, r.capacity])
 				_check(r.multimesh.visible_instance_count == r.capacity, "%s in a downpour should draw every drop" % preset)
 			GraphicsSettings.preset = was
 			r.apply_graphics()
+			# every view's camera, and the mirrors, see the rain's layer
+			var cam: ChaseCamera = game.camera
+			for v in ChaseCamera.View.values():
+				cam.set_view(v)
+				_check((cam.cull_mask & r.layers) != 0, "view %d should see the rain layer" % v)
+			cam.set_view(ChaseCamera.View.CHASE)
+			_check((CockpitFrame.MIRROR_CULL & r.layers) != 0, "the cockpit mirrors should see the rain layer")
+			# the clock: moves while the game runs, stops in photo mode and on
+			# the pause screen (the game's own states)
+			_check(r.now > 0.0, "now should have moved by now")
+			_freeze_index = 0
+			_go(21)
 			# velocity reaches the shader in steps, not every tick
 			var v0: Vector3 = r.material_override.get_shader_parameter("car_vel")
 			p.linear_velocity = Vector3(0.0, 0.0, -0.4)
@@ -126,10 +151,40 @@ func _physics_process(_delta: float) -> bool:
 			_check(float(r.material_override.get_shader_parameter("head_on")) == 1.0, "lights on should reach the shader")
 			Weather.set_level(Weather.Level.DRY, true)
 			_go(3)
+		21:
+			var gs: GameState = game.game_state
+			if _freeze_index >= FREEZES.size():
+				_check(not paused and gs.state == GameState.State.PLAYING, "the game should be playing again after the freeze checks")
+				Weather.set_level(Weather.Level.DRY, true)
+				_go(3)
+				return false
+			var fz: String = FREEZES[_freeze_index]
+			if waited == 0:
+				if fz == "photo":
+					gs.toggle_photo()
+				else:
+					gs.pause()
+				_paused_now = -1.0
+				return false
+			if waited < 4:
+				return false
+			if _paused_now < 0.0:
+				_check(paused, "%s should pause the tree" % fz)
+				_paused_now = r.now
+				return false
+			if waited < 8:
+				return false
+			_check(r.now == _paused_now, "now should not move in %s (%.3f vs %.3f)" % [fz, r.now, _paused_now])
+			if fz == "photo":
+				gs.close_photo()
+			else:
+				gs.resume()
+			_freeze_index += 1
+			_go(21)
 		3:
 			if waited < 3:
 				return false
-			_check(not r.visible and r.multimesh.visible_instance_count == 0, "back to dry should hide the rain")
+			_check(not r.visible and r.multimesh.visible_instance_count == 0, "back to dry should hide the rain (visible %s amount %.2f weather.rain %.2f paused %s level %d)" % [r.visible, r.amount, Weather.rain, paused, Weather.level])
 			# the pin wins over the weather
 			RainFall.pin = 0.5
 			r.sync()
@@ -137,7 +192,33 @@ func _physics_process(_delta: float) -> bool:
 			RainFall.pin = -1.0
 			r.sync()
 			_check(not r.visible, "clearing the pin should follow the weather again")
-			return _end("")
+			_go(4)
+		4:
+			# every playable car: reboot the scene with NEON_CAR and check the
+			# rain rides on it and its cone starts at that car's own lamp
+			if car_index >= PlayerCars.KINDS.size():
+				return _end("")
+			var kind: String = PlayerCars.KINDS[car_index].id
+			OS.set_environment("NEON_CAR", kind)
+			Weather.reset()
+			_prev_game = game
+			change_scene_to_file("res://Game.tscn")
+			_go(5)
+		5:
+			if waited < 8:
+				return false
+			var kind: String = PlayerCars.KINDS[car_index].id
+			if game == _prev_game:
+				return waited > 1200 and _end("%s never booted" % kind)
+			Weather.set_level(Weather.Level.DOWNPOUR, true)
+			r.sync()
+			var spot := p.get_node_or_null("Headlights") as Node3D
+			_check(r.get_parent() == p and r.visible, "%s: rain should ride on the car and show in a downpour" % kind)
+			_check(spot != null and r.head_offset() == spot.position,
+				"%s: the cone should start at the car's own headlamp (%s vs %s)" % [kind, r.head_offset(), spot.position if spot else "no lamp"])
+			print("rain_fall: %s ok" % kind)
+			car_index += 1
+			_go(4)
 	return false
 
 func _go(s: int) -> void:

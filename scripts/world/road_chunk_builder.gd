@@ -113,6 +113,8 @@ const GasStation := preload("res://scripts/world/gas_station.gd")
 const SideStreets := preload("res://scripts/world/side_streets.gd")
 const RoadRamps := preload("res://scripts/world/road_ramps.gd")
 const StreetAnimals := preload("res://scripts/world/street_animals.gd")
+const LampWear := preload("res://scripts/world/lamp_wear.gd")
+const WallVents := preload("res://scripts/world/wall_vents.gd")
 const TunnelKit := preload("res://scripts/world/tunnel_kit.gd")
 
 const LANE_W := 3.2
@@ -364,7 +366,7 @@ static var _lamp_mesh: ArrayMesh
 static var _lamp_mesh_dark: ArrayMesh
 static var _lamp_meshes := {}  # "kind/light" -> ArrayMesh
 static var _pool_mesh: PlaneMesh
-static var _pool_mats := {}    # light -> StandardMaterial3D
+static var _pool_mats := {}    # light -> ShaderMaterial (LampWear.pool_mat)
 static var _road_mats := {}    # road -> [own, onc, shoulder]
 static var _wall_mesh: BoxMesh
 static var _reflector_mesh: ArrayMesh
@@ -816,7 +818,9 @@ static func _get_lamp_mesh(kind: String = "cobra", light: String = "sodium") -> 
 		return _lamp_meshes[key]
 	var metal := _flat_mat(Color(0.2, 0.2, 0.21))
 	metal.roughness = 0.6
-	var head := _flat_mat(LIGHTS[light].color, true, 4.0)
+	# the head reads the lamp's wear (dead, buzzing, swapped) from the
+	# instance's custom data (scripts/world/lamp_wear.gd)
+	var head := LampWear.head_mat(light)
 	var h: float = LAMP_KINDS[kind].h
 	var poles := []  # [centre, size]
 	var heads := []
@@ -896,31 +900,11 @@ static func _get_pool_mesh() -> PlaneMesh:
 		_pool_mesh.size = Vector2.ONE
 	return _pool_mesh
 
-static func _get_pool_mat(light: String = "sodium") -> StandardMaterial3D:
+static func _get_pool_mat(light: String = "sodium") -> ShaderMaterial:
+	# the old radial additive pool, now a shader that also reads the lamp's
+	# wear from the instance's custom data (scripts/world/lamp_wear.gd)
 	if not _pool_mats.has(light):
-		var grad := Gradient.new()
-		grad.offsets = PackedFloat32Array([0.0, 0.3, 1.0])
-		grad.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.5), Color(1, 1, 1, 0)])
-		var tex := GradientTexture2D.new()
-		tex.gradient = grad
-		tex.fill = GradientTexture2D.FILL_RADIAL
-		tex.fill_from = Vector2(0.5, 0.5)
-		tex.fill_to = Vector2(1.0, 0.5)
-		tex.width = 128
-		tex.height = 128
-		var m := StandardMaterial3D.new()
-		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-		m.albedo_texture = tex
-		var lc: Color = LIGHTS[light].color
-		var k: float = LIGHTS[light].pool * POOL_BOOST
-		m.albedo_color = Color(lc.r * k, lc.g * k, lc.b * k, 1.0)
-		m.disable_fog = true
-		m.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
-		m.distance_fade_min_distance = 170.0  # min > max: fade OUT with distance
-		m.distance_fade_max_distance = 110.0
-		_pool_mats[light] = m
+		_pool_mats[light] = LampWear.pool_mat(light, POOL_BOOST)
 	return _pool_mats[light]
 
 static func _get_wall_mesh() -> BoxMesh:
@@ -1439,9 +1423,10 @@ static func _puddles() -> GDScript:
 		_puddles_script = load("res://scripts/world/puddles.gd")
 	return _puddles_script
 
-static func _new_multimesh(mm_name: String, mesh: Mesh, mat: Material, capacity: int) -> MultiMeshInstance3D:
+static func _new_multimesh(mm_name: String, mesh: Mesh, mat: Material, capacity: int, custom: bool = false) -> MultiMeshInstance3D:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_custom_data = custom  # before instance_count: it cannot change after
 	mm.mesh = mesh
 	mm.instance_count = capacity
 	mm.visible_instance_count = 0
@@ -2230,11 +2215,11 @@ static func _create_nodes(root: Node3D) -> void:
 	# light pools, and the walls between buildings. Capacity is the worst case,
 	# allocated once, like the dashes and pylons above.
 	# World step 6 (W7): plus one lamp and pool per side-street mouth.
-	root.add_child(_new_multimesh("Lamps", _get_lamp_mesh(), null, _lamp_slots() * 2 + SideStreets.CAPACITY))
+	root.add_child(_new_multimesh("Lamps", _get_lamp_mesh(), null, _lamp_slots() * 2 + SideStreets.CAPACITY, true))
 	# Pavements step 1: at most one hydrant per side, on the pavement by the kerb.
 	root.add_child(_new_multimesh("Hydrants", _get_hydrant_mesh(), _get_hydrant_mat(), 2))
 	root.add_child(_new_multimesh("Drains", _get_drain_mesh(), _get_drain_mat(), DRAIN_MAX * 2))
-	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2 + SideStreets.CAPACITY + 1))
+	root.add_child(_new_multimesh("LampPools", _get_pool_mesh(), _get_pool_mat(), _lamp_slots() * 2 + SideStreets.CAPACITY + 1, true))
 	# living world step 2: moths, banners, steam and litter (lamp_life.gd)
 	LampLife.create_nodes(root, _lamp_slots() * 2)
 	# Fake wet-road reflections (RESEARCH-cheap-pretty item 7): one additive
@@ -2250,6 +2235,7 @@ static func _create_nodes(root: Node3D) -> void:
 	for n in SideStreets.new_nodes():
 		root.add_child(n)
 	root.add_child(StreetAnimals.new_multimesh())
+	root.add_child(WallVents.new_multimesh())
 	# Per side: a gap either side of each building, +1 for the district step
 	# wall, +1 more
 	# where a crossing's mouth (Junction) splits a gap in two
@@ -2739,6 +2725,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	var smears: MultiMesh = (root.get_node(^"LampSmears") as MultiMeshInstance3D).multimesh
 	var n_lamps := 0
 	var lamp_zs := {1: [], -1: []}  # pole z per side, for the roadside kit's bins
+	var wear := {"dead": 0, "buzz": 0, "swap": 0}  # this chunk's lamp wear, for tests
+	var district_name := Districts.name_at(chunk_index)
 	for i in range(_lamp_slots()):
 		for side in [1, -1]:
 			if every == 0:
@@ -2765,7 +2753,21 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 			Props.add(props, Props.LAMP, lamp_xf.origin, n_lamps, side, pole_x, lz)
 			var head_x := pole_x - reach * float(side)
 			pools.set_instance_transform(n_lamps, _xf(head_x, POOL_Y, lz, Basis.from_scale(Vector3(pool_size.x, 1.0, pool_size.y))))
-			smears.set_instance_transform(n_lamps, _xf(head_x, WetReflections.SMEAR_Y, lz, WetReflections.lamp_smear_basis()))
+			# the lamp's wear (street life L1 + L2): dead, buzzing or swapped
+			# to a cool-white head; the head and pool shaders read it, a
+			# dead lamp's wet-road smear is scaled away
+			var w := LampWear.roll(chunk_index, side, i, district_name, street.light)
+			lamps.set_instance_custom_data(n_lamps, w)
+			pools.set_instance_custom_data(n_lamps, w)
+			var dead := LampWear.is_dead(w)
+			if dead:
+				wear.dead = int(wear.dead) + 1
+			elif w.g > 0.5:
+				wear.buzz = int(wear.buzz) + 1
+			if w.a > 0.5:
+				wear.swap = int(wear.swap) + 1
+			var smear_basis := Basis.from_scale(Vector3.ZERO) if dead else WetReflections.lamp_smear_basis()
+			smears.set_instance_transform(n_lamps, _xf(head_x, WetReflections.SMEAR_Y, lz, smear_basis))
 			n_lamps += 1
 	# side-street mouths (W7): the kit, its props, and one more lamp and pool each
 	var mouth_edges := PackedFloat32Array()
@@ -2774,6 +2776,17 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 		mouth_edges.append(lerpf(start_own_walk, end_own_walk, mt) if int(m.side) == 1 else lerpf(start_onc_walk, end_onc_walk, mt))
 	var n_road_lamps := n_lamps   # side-street lamps (below) have no smear and no lamp-post life
 	n_lamps += SideStreets.update(root, mouths, mouth_edges, lamps, pools, n_lamps)
+	# a side street's lamp wears like the street's (slot = its index, side 0)
+	for k in range(n_road_lamps, n_lamps):
+		var sw := LampWear.roll(chunk_index, 0, k, district_name, street.light)
+		lamps.set_instance_custom_data(k, sw)
+		pools.set_instance_custom_data(k, sw)
+		if LampWear.is_dead(sw):
+			wear.dead = int(wear.dead) + 1
+		elif sw.g > 0.5:
+			wear.buzz = int(wear.buzz) + 1
+		if sw.a > 0.5:
+			wear.swap = int(wear.swap) + 1
 	# the lamp head over a signed U-turn's opening (RoadSigns.median_parts) is
 	# part of the sign MultiMesh; this is its pool of light on the road, one
 	# more pool than there are lamp posts
@@ -2781,6 +2794,7 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	if RoadBarriers.gap_kind(chunk_index) == RoadBarriers.KIND_UTURN and n_pools < pools.instance_count:
 		pools.set_instance_transform(n_pools, _xf(0.0, POOL_Y, RoadSigns.MEDIAN_OWN_Z - 2.6, Basis.from_scale(Vector3(pool_size.x * 0.8, 1.0, pool_size.y * 0.8))))
 		n_pools += 1
+	root.set_meta("lamp_wear", wear)
 	lamps.visible_instance_count = n_lamps
 	pools.visible_instance_count = n_pools
 	smears.visible_instance_count = n_road_lamps
@@ -2792,6 +2806,8 @@ static func _apply(root: Node3D, chunk_index: int, prev_cfg: Dictionary, cfg: Di
 	# animals at shop fronts and alley mouths (A1): placed now, their eyes
 	# shine per frame from StreetAnimals.step (game.gd)
 	StreetAnimals.update(root, chunk_index, infos, mouths, [start_own_walk, end_own_walk, start_onc_walk, end_onc_walk], setback, pave_tops)
+	# wall vents steaming on shop and warehouse fronts (street life L4)
+	WallVents.update(root, chunk_index, district_name, infos)
 
 	if job != null:
 		job.keep(_curve_k, _vert, _strip_n)

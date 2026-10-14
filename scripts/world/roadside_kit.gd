@@ -86,6 +86,33 @@ static var force := {}
 
 ## Buffer sizes per chunk (worst case, allocated once).
 const CAP := {HYDRANT: 6, BIN: 8, DUMPSTER: 6, CONE: 16, JERSEY: 10, RAIL: 20}
+## Work-zone flashers (street life L3, 2026-10-14): an amber barricade lamp
+## on every jersey piece, blinking out of step with its neighbours, drawn
+## from one more MultiMesh per chunk ("KitFlashers", custom data r = phase)
+## with its own unshaded blink shader reading TIME. Zero per-frame script
+## work; a chunk without a work zone shows none and costs no draw call.
+const FLASHER_CAP := CAP[JERSEY]
+const FLASHER_SIZE := Vector3(0.3, 0.16, 0.16)
+const FLASHER_ENERGY := 3.0
+const FLASHER_RATE := 1.4   # blinks a second
+const C_FLASHER := Color(1.0, 0.62, 0.15)
+const FLASHER_SHADER := """
+shader_type spatial;
+render_mode unshaded, cull_back;
+uniform vec3 color = vec3(1.0, 0.62, 0.15);
+uniform vec3 off_color = vec3(0.12, 0.08, 0.03);
+uniform float energy = 3.0;
+uniform float rate = 1.4;
+varying float on;
+void vertex() {
+	on = step(0.5, fract(TIME * rate + INSTANCE_CUSTOM.r));
+}
+void fragment() {
+	ALBEDO = mix(off_color, color * energy, on);
+}
+"""
+static var _flasher_mesh: ArrayMesh
+static var _flasher_mat: ShaderMaterial
 
 ## Shapes (m).
 const HYDRANT_H := 0.75
@@ -304,6 +331,25 @@ static func mesh(kind: String) -> ArrayMesh:
 static func _mmi_name(kind: String) -> String:
 	return "Kit_" + kind
 
+static func flasher_mesh() -> ArrayMesh:
+	if _flasher_mesh == null:
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		_box(st, C_FLASHER, Vector3(0.0, FLASHER_SIZE.y / 2.0, 0.0), FLASHER_SIZE)
+		_flasher_mesh = st.commit()
+	return _flasher_mesh
+
+static func flasher_material() -> ShaderMaterial:
+	if _flasher_mat == null:
+		var sh := Shader.new()
+		sh.code = FLASHER_SHADER
+		_flasher_mat = ShaderMaterial.new()
+		_flasher_mat.shader = sh
+		_flasher_mat.set_shader_parameter("color", Vector3(C_FLASHER.r, C_FLASHER.g, C_FLASHER.b))
+		_flasher_mat.set_shader_parameter("energy", FLASHER_ENERGY)
+		_flasher_mat.set_shader_parameter("rate", FLASHER_RATE)
+	return _flasher_mat
+
 static func new_nodes(root: Node3D) -> void:
 	for kind in KINDS:
 		var mm := MultiMesh.new()
@@ -319,6 +365,20 @@ static func new_nodes(root: Node3D) -> void:
 		mmi.visibility_range_end = 120.0 if kind in [HYDRANT, BIN, CONE] else 220.0
 		mmi.visible = false
 		root.add_child(mmi)
+	var fmm := MultiMesh.new()
+	fmm.transform_format = MultiMesh.TRANSFORM_3D
+	fmm.use_custom_data = true
+	fmm.mesh = flasher_mesh()
+	fmm.instance_count = FLASHER_CAP
+	fmm.visible_instance_count = 0
+	var fmmi := MultiMeshInstance3D.new()
+	fmmi.name = "KitFlashers"
+	fmmi.multimesh = fmm
+	fmmi.material_override = flasher_material()
+	fmmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	fmmi.visibility_range_end = 220.0
+	fmmi.visible = false
+	root.add_child(fmmi)
 	var metal := StaticBody3D.new()
 	metal.name = "KitColMetal"
 	CarSpec.make_wall(metal)
@@ -474,6 +534,9 @@ static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: fl
 	var concrete := root.get_node(^"KitColConcrete") as StaticBody3D
 	var n_metal := 0
 	var n_concrete := 0
+	var flashers_mmi := root.get_node(^"KitFlashers") as MultiMeshInstance3D
+	var flashers: MultiMesh = flashers_mmi.multimesh
+	var n_flash := 0
 	for r in kept:
 		var kind: String = r.kind
 		var side := float(r.side)
@@ -504,6 +567,13 @@ static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: fl
 				col.transform = RoadChunkBuilder._xf_up(float(r.x) * side, (COL_JERSEY.y - f) / 2.0, float(r.z))
 				col.disabled = false
 				n_concrete += 1
+				# its amber flasher: on the top, at the road-side edge, out of
+				# step with the piece before it (street life L3)
+				if n_flash < FLASHER_CAP:
+					var fx := (float(r.x) - JERSEY_TOP / 2.0 + FLASHER_SIZE.x / 2.0) * side
+					flashers.set_instance_transform(n_flash, RoadChunkBuilder._xf_up(fx, JERSEY_H, float(r.z), turn))
+					flashers.set_instance_custom_data(n_flash, Color(fmod(float(n_flash) * 0.37, 1.0), 0.0, 0.0, 0.0))
+					n_flash += 1
 	# unused shapes are switched off and put back at the origin, so a pooled
 	# chunk holds the same state whatever chunk it was before
 	for body_n in [[metal, n_metal], [concrete, n_concrete]]:
@@ -517,7 +587,10 @@ static func apply(root: Node3D, chunk_index: int, edges: Dictionary, setback: fl
 		var mmi := root.get_node(NodePath(_mmi_name(kind))) as MultiMeshInstance3D
 		mmi.multimesh.visible_instance_count = int(n[kind])
 		mmi.visible = int(n[kind]) > 0
+	flashers.visible_instance_count = n_flash
+	flashers_mmi.visible = n_flash > 0
 	root.set_meta("kit", kept)
+	root.set_meta("kit_flashers", n_flash)
 
 static func _rec(kind: String, side: int, x: float, y: float, z: float, yaw: float, length: float) -> Dictionary:
 	return {"kind": kind, "side": side, "x": x, "y": y, "z": z, "yaw": yaw, "len": length}

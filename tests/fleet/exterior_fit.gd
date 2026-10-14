@@ -61,7 +61,7 @@ extends SceneTree
 # NEON_PARTS_CAR=<id> checks one car only.
 
 ## The cars this test holds to zero clashes. A car joins when its kit passes.
-const CARS := ["p3_tuner"]
+const CARS := ["p3_tuner", "p17_work_pickup"]
 const PEN := 0.002
 const REACH := 0.03
 const CELL := 0.06
@@ -385,7 +385,7 @@ func _swing(id: String, parts: Dictionary, hinges: Dictionary, hinge_of: Diction
 func _tyres(id: String, parts: Dictionary, grid: Dictionary) -> void:
 	var spec := CarSpec.player_spec(id)
 	var lock := rad_to_deg(float(spec.get("max_steering_angle", deg_to_rad(38.0))))
-	var gap_sheet := 0.03
+	var gap_sheet := _arch_gap(id)
 	for corner: String in CarAssembler.wheel_corners(id):
 		var hub := CarAssembler.anchor(id, "wheel_" + corner).origin
 		# the tyre alone (the wheel's rubber, hub frame): the disc and caliper inboard of it are not what fills the arch
@@ -439,8 +439,24 @@ func _tyres(id: String, parts: Dictionary, grid: Dictionary) -> void:
 		# the arch edge over the tyre: the lowest body point straight above the tread's outer face
 		var top := hub.y + r
 		var gap := _gap_above(grid, hub + Vector3(x_out - out_sign * 0.01, 0, 0), top)
-		if gap > arch + FLOAT_TOL:
+		# _gap_above reads in whole mm: the limit is compared in whole mm too, so float
+		# noise in the sum (0.055 + 0.02 + 0.01 > 0.085) does not fail a gap that reads exactly it
+		if roundi(gap * 1000.0) > roundi((arch + FLOAT_TOL) * 1000.0):
 			_fail("%s: tyre: %s has %.1f mm of air over it (arch gap %.0f + %.0f mm): floating" % [id, corner, gap * 1000.0, arch * 1000.0, FLOAT_TOL * 1000.0])
+
+## The air the sheet puts over the tyre: its arch is a circle of the tyre's
+## radius + arch_gap, centred arch_lift over the hub (tools/fleet_design/car.py,
+## 30 mm and 0 where the sheet sets none), so arch_gap + arch_lift at the top.
+## Each car's own design, not one gap for all (Roy, question 1536).
+func _arch_gap(id: String) -> float:
+	var fleet: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://docs/design/fleet/fleet.json"))
+	if fleet is Dictionary:
+		for car: Dictionary in (fleet as Dictionary).get("cars", []):
+			if car.get("id", "") == id:
+				var wh: Dictionary = car.get("wheel", {})
+				return float(wh.get("arch_gap", 0.03)) + float(wh.get("arch_lift", 0.0))
+	_fail("%s: no fleet.json sheet to read its arch gap from" % id)
+	return 0.03
 
 ## Tread and outer-face sample points, hub frame (x_out the outer face: +x on the right, -x on the left).
 static func _tyre_points(r: float, x_in: float, x_out: float, top_only := false) -> PackedVector3Array:

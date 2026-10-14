@@ -33,6 +33,10 @@ const HOOD_FOV_MIN := 55.0
 const HOOD_FOV_MAX := 85.0
 ## Chase follow, the smoothing modes A / B / C by their View page names.
 const FOLLOW_NAMES := ["Tight", "Smooth", "Loose"]
+## Pillars see-through (#738, Roy 1549): in the cockpit view the A-pillar trim
+## is drawn this much see-through, 0 = solid. Capped so a pillar never vanishes.
+const PILLAR_SEE_THROUGH_DEFAULT := 0.35
+const PILLAR_SEE_THROUGH_MAX := 0.7
 
 const CAMERA_SMOOTHING_DEFAULT := 1   # chase-cam smoothing (#31): 0 A hard snap, 1 B light (default, #119), 2 C smoothing + swing
 const CAMERA_SMOOTHING_MAX := 2
@@ -47,6 +51,7 @@ static var camera_view := CAMERA_VIEW_DEFAULT
 static var chase_distance := CHASE_DISTANCE_DEFAULT
 static var chase_fov := CHASE_FOV_DEFAULT
 static var hood_fov := HOOD_FOV_DEFAULT
+static var pillar_see_through := PILLAR_SEE_THROUGH_DEFAULT
 ## Off: every start is in the chase view, whatever F left.
 static var remember_view := true
 
@@ -73,6 +78,9 @@ static func set_chase_fov(v: float) -> void:
 static func set_hood_fov(v: float) -> void:
 	hood_fov = clampf(v, HOOD_FOV_MIN, HOOD_FOV_MAX) if is_finite(v) else HOOD_FOV_DEFAULT
 
+static func set_pillar_see_through(v: float) -> void:
+	pillar_see_through = clampf(v, 0.0, PILLAR_SEE_THROUGH_MAX) if is_finite(v) else PILLAR_SEE_THROUGH_DEFAULT
+
 static func set_chase_distance(i: int) -> void:
 	chase_distance = clampi(i, 0, CHASE_DISTANCES.size() - 1)
 
@@ -89,6 +97,7 @@ static func reset_view() -> void:
 	cockpit_fov = COCKPIT_FOV_DEFAULT
 	chase_fov = CHASE_FOV_DEFAULT
 	hood_fov = HOOD_FOV_DEFAULT
+	pillar_see_through = PILLAR_SEE_THROUGH_DEFAULT
 	chase_distance = CHASE_DISTANCE_DEFAULT
 	camera_smoothing = CAMERA_SMOOTHING_DEFAULT
 	remember_view = true
@@ -106,6 +115,7 @@ static func load_settings() -> void:
 	set_chase_distance(int(cfg.get_value("view", "chase_distance", CHASE_DISTANCE_DEFAULT)) if ok else CHASE_DISTANCE_DEFAULT)
 	set_chase_fov(float(cfg.get_value("view", "chase_fov", CHASE_FOV_DEFAULT)) if ok else CHASE_FOV_DEFAULT)
 	set_hood_fov(float(cfg.get_value("view", "hood_fov", HOOD_FOV_DEFAULT)) if ok else HOOD_FOV_DEFAULT)
+	set_pillar_see_through(float(cfg.get_value("view", "pillar_see_through", PILLAR_SEE_THROUGH_DEFAULT)) if ok else PILLAR_SEE_THROUGH_DEFAULT)
 	remember_view = FxSettings._to_bool(cfg.get_value("view", "remember_view", true)) if ok else true
 
 ## Rewrites only the [view] section; the other sections stay.
@@ -118,5 +128,6 @@ static func save_settings() -> bool:
 	cfg.set_value("view", "chase_distance", chase_distance)
 	cfg.set_value("view", "chase_fov", chase_fov)
 	cfg.set_value("view", "hood_fov", hood_fov)
+	cfg.set_value("view", "pillar_see_through", pillar_see_through)
 	cfg.set_value("view", "remember_view", remember_view)
 	return cfg.save(AudioSettings.path) == OK

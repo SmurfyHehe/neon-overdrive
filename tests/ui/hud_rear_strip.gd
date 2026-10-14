@@ -5,6 +5,7 @@ extends SceneTree
 #   cockpit's rearview SubViewport (nothing extra is rendered), flipped like a
 #   mirror, and the rear viewport renders while the door mirrors do not
 # - in the cockpit view the strip hides (the rearview mirror is there)
+# - the strip stays on in the cockpit view too (#737, the arcade eye)
 # - with FxSettings "rear_strip" off the strip hides and nothing renders in
 #   the chase view; on again it comes back
 # - no engine errors
@@ -87,8 +88,9 @@ func _physics_process(_delta: float) -> bool:
 				_go(Step.COCKPIT)
 		Step.COCKPIT:
 			if waited == 10:
-				_check(not hud.rear_frame.visible, "the strip hides in the cockpit view")
-				_check(not mirrors.strip, "the mirrors drop the strip request in the cockpit")
+				# #737: from the arcade eye the rearview mirror is beside the eye, so the strip stays on in the cockpit
+				_check(hud.rear_frame.visible, "the strip stays on in the cockpit view")
+				_check(mirrors.strip, "the mirrors keep the strip request in the cockpit")
 				cam.set_view(ChaseCamera.View.CHASE)
 				FxSettings.set_on("rear_strip", false)
 				rear_rendered = false

@@ -84,6 +84,12 @@ const DEFAULT_STYLE := "p1_coupe"
 const UP_PILLAR := 0.40
 const CLEAR := 0.10
 const MIN_YAW_DEG := 23.5
+const MIN_EYE_DIST := 0.30   # m, the pod stays at least this far from the camera eye
+## The lower gauge's rim stays this far over the cluster hood where the pod
+## overlaps it (CockpitFrame.binnacle_of); the lower gauge hangs this far
+## under the pod's origin.
+const HOOD_GAP := 0.02
+const LOWER_DROP := 0.09
 ## Half the pod's width as the eye sees it (the bezel and the holder).
 const HALF_W := 0.046
 
@@ -107,14 +113,34 @@ static func mount_of(cab: Dictionary) -> Dictionary:
 	foot += Vector3(0.04, 0.0, 0.02)
 	top += Vector3(0.13, -0.09, 0.03)
 	var along_v := top - foot
-	var eye: Vector3 = cab.eye
+	var eye := CabinSpec.arcade_eye(cab)   # where the cockpit camera sits (#737), not the seated eye
 	var on_trim := foot + along_v * UP_PILLAR
 	var to_eye := eye - on_trim
 	var axis := along_v.normalized()
 	# how far off the pillar's line a step toward the eye gets: all of it for
 	# an upright pillar, little for a raked one that runs at the eye
 	var off_axis := (to_eye - axis * to_eye.dot(axis)).length() / maxf(to_eye.length(), 0.01)
-	var pos := on_trim + to_eye.normalized() * minf(CLEAR / maxf(off_axis, 0.2), to_eye.length() * 0.6)
+	# ... but never nearer the eye than MIN_EYE_DIST: the arcade eye (#737) sits
+	# 30 cm nearer the pillar, and a pod 20 cm from the face is unreadable
+	var step := minf(CLEAR / maxf(off_axis, 0.2), to_eye.length() * 0.6)
+	step = minf(step, maxf(to_eye.length() - MIN_EYE_DIST, 0.0))
+	var pos := on_trim + to_eye.normalized() * step
+	# ... and over the cluster's hood: with the eye 30 cm nearer the pillar the
+	# pod stops low on the pillar, and on the wagon (a short screen, the hood
+	# 6 cm over the cluster and out to the pillar) its lower gauge sat behind
+	# the hood's corner; where the pod's inner rim reaches over the hood it
+	# climbs the pillar until the rim clears the hood's top
+	# (or, where the climb would bring it nearer the eye than MIN_EYE_DIST as
+	# on the coupe, slides outboard past the hood's corner instead)
+	var hood := CockpitFrame.binnacle_of(cab)
+	if not hood.is_empty() and pos.x + GAUGE_R + HOOD_GAP > float(hood.x0):
+		var min_y := float(hood.top) + HOOD_GAP + LOWER_DROP
+		if pos.y < min_y:
+			var climbed := pos + axis * ((min_y - pos.y) / maxf(axis.y, 0.3))
+			if climbed.distance_to(eye) >= MIN_EYE_DIST:
+				pos = climbed
+			else:
+				pos.x = float(hood.x0) - GAUGE_R - HOOD_GAP
 	# out of the road band: the inner edge at least MIN_YAW_DEG left of straight ahead
 	var ahead := maxf(eye.z - pos.z, 0.05)
 	var inner_limit := eye.x - tan(deg_to_rad(MIN_YAW_DEG)) * ahead - HALF_W

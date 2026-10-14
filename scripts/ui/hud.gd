@@ -307,11 +307,14 @@ func _ready() -> void:
 	lbl_fuel.name = "Fuel"
 	lbl_fuel.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
-## The rear strip shows in the chase and hood views when the flag is on and the
-## cockpit has mirrors to render; the cockpit view has the rearview mirror itself.
+## The rear strip shows in every view when the flag is on and the cockpit has
+## mirrors to render. It used to stay off in the cockpit, which had the
+## rearview mirror in front of the eye; from the arcade eye (#737, 30 cm
+## nearer the glass) the mirrors sit beside the eye, off screen until the
+## head turns, so the strip is the cockpit's rear view too.
 func _refresh_rear_strip() -> void:
 	var mirrors: CockpitMirrors = camera.frame.mirrors if camera.frame != null else null
-	var show := camera.view != ChaseCamera.View.COCKPIT and FxSettings.is_on("rear_strip") and mirrors != null and mirrors.enabled
+	var show := FxSettings.is_on("rear_strip") and mirrors != null and mirrors.enabled
 	if show and rear_strip.texture == null:
 		rear_strip.texture = mirrors.rear_texture()
 	rear_frame.visible = show

@@ -11,7 +11,8 @@ extends SceneTree
 #
 # Each car boots as the player's car (NEON_CAR) in the cockpit view, at rest,
 # wheel straight, with the bolt-on boost pod fitted (any car can get one from
-# its first boost setup). Rays leave the car's own eye (CABIN.eye) across
+# its first boost setup). Rays leave the cockpit camera's eye (the car's
+# CABIN.eye moved up and forward, CabinSpec.arcade_eye, #737) across
 # yaw -20..+20 and pitch -8..+8 degrees (above +8 is the header's and the
 # rear-view mirror's business, not the road's) and are tested against every
 # visible, solid cabin, driver and pod triangle.
@@ -90,7 +91,7 @@ func _sight(kind: String) -> void:
 		frame.add_child(frame.pod)
 	for i in RATE:
 		await physics_frame
-	var eye: Vector3 = frame.cab.eye
+	var eye := CabinSpec.arcade_eye(frame.cab)   # where the cockpit camera sits (#737): what the player sees
 	var to_car := p.global_transform.affine_inverse()
 	var wheel_inv: Transform3D = (to_car * frame.wheel.global_transform).affine_inverse()
 	var yaw_lim := deg_to_rad(YAW_MAX)

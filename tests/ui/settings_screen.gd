@@ -103,9 +103,9 @@ func _process(_delta: float) -> bool:
 			# View (camera proposal section 4): nine rows and Reset
 			s.show_page(2)
 			var view_page: Control = s.pages[2]
-			var rows := [s.chase_distance_option, s.chase_fov_slider, s.smoothing_option, s.fov_slider, s.hood_fov_slider,
+			var rows := [s.chase_distance_option, s.chase_fov_slider, s.smoothing_option, s.fov_slider, s.hood_fov_slider, s.pillar_slider,
 				s.widening_check, s.shake_slider, s.head_motion_check, s.remember_view_check]
-			_check(rows.all(func(c: Control) -> bool: return c != null and view_page.is_ancestor_of(c)), "the View page has the nine rows")
+			_check(rows.all(func(c: Control) -> bool: return c != null and view_page.is_ancestor_of(c)), "the View page has the ten rows")
 			_check(s.reset_view_button != null and view_page.is_ancestor_of(s.reset_view_button), "the View page has Reset view")
 			_check(s.chase_distance_option.item_count == 3 and s.chase_distance_option.get_item_text(2) == "Far" and s.chase_distance_option.selected == 1, "Chase distance: Near / Normal / Far, Normal shown")
 			_check(s.smoothing_option.get_item_text(0) == "Tight" and s.smoothing_option.get_item_text(1) == "Smooth" and s.smoothing_option.get_item_text(2) == "Loose", "Chase follow: Tight / Smooth / Loose")
@@ -117,6 +117,9 @@ func _process(_delta: float) -> bool:
 			s.chase_fov_slider.value = 66
 			s.hood_fov_slider.value = 80
 			_check(is_equal_approx(ViewSettings.chase_fov, 66.0) and is_equal_approx(ViewSettings.hood_fov, 80.0), "Chase FOV and Hood FOV sliders apply")
+			_check(is_equal_approx(s.pillar_slider.max_value, 0.7) and is_equal_approx(s.pillar_slider.value, 0.35), "Pillars see-through: 0-70%, 35% shown")
+			s.pillar_slider.value = 0.6
+			_check(is_equal_approx(ViewSettings.pillar_see_through, 0.6), "Pillars see-through slider applies")
 			s.shake_slider.value = 0.4
 			s.widening_check.button_pressed = false
 			s.head_motion_check.button_pressed = false
@@ -126,7 +129,7 @@ func _process(_delta: float) -> bool:
 			vcfg.load(AudioSettings.path)
 			_check(int(vcfg.get_value("view", "chase_distance", -1)) == 2 and is_equal_approx(float(vcfg.get_value("access", "shake_scale", -1.0)), 0.4) and vcfg.get_value("fx", "head_motion", true) == false, "the View rows are saved")
 			s.reset_view_button.pressed.emit()
-			_check(ViewSettings.chase_distance == 1 and is_equal_approx(ViewSettings.chase_fov, 58.0) and is_equal_approx(ViewSettings.hood_fov, 65.0) and is_equal_approx(ViewSettings.cockpit_fov, 62.0), "Reset view puts the view rows back")
+			_check(ViewSettings.chase_distance == 1 and is_equal_approx(ViewSettings.chase_fov, 58.0) and is_equal_approx(ViewSettings.hood_fov, 65.0) and is_equal_approx(ViewSettings.cockpit_fov, 62.0) and is_equal_approx(ViewSettings.pillar_see_through, 0.35), "Reset view puts the view rows back")
 			_check(is_equal_approx(AccessSettings.shake_scale, 1.0) and AccessSettings.fov_widening and FxSettings.is_on("head_motion") and ViewSettings.remember_view, "Reset view puts the comfort rows back")
 			_check(s.chase_distance_option.selected == 1 and is_equal_approx(s.chase_fov_slider.value, 58.0) and s.head_motion_check.button_pressed, "and the rows show it")
 			vcfg.load(AudioSettings.path)

@@ -341,7 +341,26 @@ func set_cockpit(on: bool) -> void:
 	if bobble != null:
 		bobble.set_active(on)   # built and bobbing only in this view
 	driver.set_cockpit(on)
+	set_pillar_alpha(1.0 - ViewSettings.pillar_see_through if on else 1.0)
+	_body_for_look_back = false
 	var bit := MIRROR_ONLY_BIT if on else CAR_BIT
+	if player.chassis_visual != null:
+		_set_layers(player.chassis_visual, bit)
+	for w in player.wheel_array:
+		if w.wheel_node != null:
+			_set_layers(w.wheel_node, bit)
+
+## B in the cockpit view (#739): the roof camera looks back at the car, so the
+## body is drawn while the key is held and hidden again on release.
+var _body_for_look_back := false
+
+func show_body_for_look_back(on: bool) -> void:
+	if on == _body_for_look_back:
+		return
+	_body_for_look_back = on
+	if not cockpit:
+		return
+	var bit := CAR_BIT if on else MIRROR_ONLY_BIT
 	if player.chassis_visual != null:
 		_set_layers(player.chassis_visual, bit)
 	for w in player.wheel_array:
@@ -518,9 +537,18 @@ func _build_static() -> void:
 		var q_top := (belt + 0.14) if not open_top else belt + 0.02
 		var q_len := minf(rear_z - b_z, 0.35)   # the body tucks in over the rear arch
 		k.box(Vector3(0.08, q_top - (floor_y + 0.26), q_len), Vector3(side * (door_x_r - 0.15), (q_top + floor_y + 0.26) * 0.5, b_z + q_len * 0.5), c_plastic_light)
-	# A-pillars: from the cowl corners to the roof corners (body lines from the data).
+	# A-pillars: from the cowl corners to the roof corners (body lines from the
+	# data). Their own mesh (#738): the width is capped per car so the pillar
+	# is at most PILLAR_MAX_DEG wide from the eye, and in the cockpit view the
+	# trim is drawn see-through by the View page's amount (set_pillar_alpha).
+	var pillars := CockpitKit.new()
+	var cam_eye := CabinSpec.arcade_eye(cab)   # where the cockpit camera sits
 	for side in [-1.0, 1.0]:   # the ends tucked 4 cm in and 3 cm down from the skin's corners
-		_bar(k, Vector3(side * (pillar_foot.x - 0.04), pillar_foot.y, pillar_foot.z + 0.02), Vector3(side * (pillar_top.x - 0.13), pillar_top.y - 0.09, pillar_top.z + 0.03), 0.075, c_plastic)
+		var a := Vector3(side * (pillar_foot.x - 0.04), pillar_foot.y, pillar_foot.z + 0.02)
+		var b := Vector3(side * (pillar_top.x - 0.13), pillar_top.y - 0.09, pillar_top.z + 0.03)
+		_bar(pillars, a, b, pillar_width(cam_eye, a, b, c_plastic), c_plastic)
+	pillar_mat = CockpitKit.material(0.85, 0.05)
+	add_child(pillars.instance(pillar_mat, "Pillars"))
 	# Roof liner, windshield header, sun visors. The header's underside sits on
 	# the glass-top line, not under it (Roy's clear-glass target, 2026-10-06).
 	var liner_half := pillar_top.x - 0.10   # the roof is narrower than the belt line, and crowned
@@ -621,16 +649,16 @@ func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vec
 			var tc: Vector3 = centres[0]
 			k.cylinder(float(radii[0]) + 0.006, -minf(depth, 0.05), -0.003, tc, TRIM, 12, flat)
 		"strip":
-			_binnacle(k, seat_x + 0.08, 0.62, cl, 0.054, 0.09)
+			_hood(k, "strip", seat_x, cl)
 		"tacho":
-			_binnacle(k, seat_x + 0.02, 0.36, cl, 0.061, 0.09)
+			_hood(k, "tacho", seat_x, cl)
 		"cans":
 			for i in 2:
 				var cc: Vector3 = centres[i]
 				k.cylinder(float(radii[i]) + 0.010, -depth - 0.03, -0.003, cc, PLASTIC, 14, flat)
 			k.box(Vector3(0.20, 0.03, 0.05), Vector3(seat_x, cl.x - 0.062, cl.y - 0.03), PLASTIC)   # the stalk they share
 		"wide":
-			_binnacle(k, seat_x, 0.46, cl)
+			_hood(k, "wide", seat_x, cl)
 			# the info panel between the dials (the warning lamps light in it)
 			k.box(Vector3(0.096, 0.062, 0.004), Vector3(seat_x, cl.x + 0.004, cl.y - 0.003), TRIM)
 			lit.box(Vector3(0.086, 0.052, 0.002), Vector3(seat_x, cl.x + 0.004, cl.y), Color(DIAL_FACE, 0.15))
@@ -649,7 +677,7 @@ func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vec
 				lit.box(Vector3(0.034, 0.020, 0.002), wc, Color(DIAL_FACE, 0.15))
 				lit.box(Vector3(0.002, 0.014, 0.002), wc + Vector3(0.0, -0.002, 0.001), Color(SODIUM, 0.7), Basis(Vector3.BACK, deg_to_rad(-30.0 + 60.0 * i)))
 		"centre":
-			_binnacle(k, seat_x + 0.02, 0.40, cl, 0.052, 0.09)
+			_hood(k, "centre", seat_x, cl)
 			for i in 2:   # fuel and temp, two small cans stacked left of the tach
 				var cc := Vector3(seat_x - 0.118, cl.x + 0.022 - 0.044 * i, cl.y)
 				lit.cylinder(0.015, -0.004, 0.0, cc, Color(DIAL_FACE, 0.15), 10, flat)
@@ -667,16 +695,16 @@ func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vec
 				k.cylinder(0.025, -0.008, -0.002, c + turn_c * Vector3(0, 0, 0.001), TRIM, 12, tilt_c)
 				lit.box(Vector3(0.003, 0.014, 0.002), c + tilt_c * Vector3(0.0, 0.0, -0.010), Color(SODIUM, 0.6), tilt_c)
 		"estate":   # a short hood: the wagon's screen comes down close over the dash
-			_binnacle(k, seat_x + 0.03, 0.36, cl, 0.060, 0.07)
+			_hood(k, "estate", seat_x, cl)
 		"quad":
-			_binnacle(k, seat_x, 0.50, cl)
+			_hood(k, "quad", seat_x, cl)
 			for i in 2:   # fuel and temp, a small can at each end of the binnacle
 				var cc := Vector3(seat_x + (-0.205 if i == 0 else 0.205), cl.x - 0.012, cl.y)
 				lit.cylinder(0.017, -0.004, 0.0, cc, Color(DIAL_FACE, 0.15), 10, flat)
 				k.cylinder(0.022, -0.008, -0.002, cc + Vector3(0, 0, -0.001), TRIM, 10, flat)
 				lit.box(Vector3(0.002, 0.011, 0.002), cc + Vector3(0.0, -0.002, 0.001), Color(SODIUM, 0.7), Basis(Vector3.BACK, deg_to_rad(-25.0 + 50.0 * i)))
 		"triple":
-			_binnacle(k, seat_x, 0.34, cl)
+			_hood(k, "triple", seat_x, cl)
 			# three aux gauges in a low hood in the middle of the dash top, turned to the driver
 			var eye: Vector3 = cab.eye
 			var mid := Vector3(0.0, cl.x + 0.026, float(cab.dash_face_z) - 0.06)
@@ -689,7 +717,7 @@ func _build_cluster_faces(k: CockpitKit, lit: CockpitKit, seat_x: float, cl: Vec
 				k.cylinder(0.029, -0.008, -0.002, c + turn * Vector3(0, 0, 0.001), TRIM, 12, tilt)
 				lit.box(Vector3(0.003, 0.016, 0.002), c + tilt * Vector3(0.0, 0.0, -0.012), Color(RED, 0.6), tilt)
 		_:
-			_binnacle(k, seat_x, 0.34, cl)
+			_hood(k, "dials", seat_x, cl)
 	# Dial faces (backlit dark), rings and tick marks: 0 = tach, 1 = speedo.
 	var a_start := 225.0 if dial_sweep > 180.0 else 90.0 + dial_sweep * 0.5
 	var ring_col := SILVER if style == "cans" else TRIM
@@ -759,6 +787,34 @@ func trim_colours() -> Dictionary:
 ## hood tapers to nothing there and falls away from the driver; a taller
 ## binnacle (bigger dials) gets a shorter hood. The dials' centres sit at the
 ## cluster height or above: below it the dash face is in front of them.
+## The cluster hood per style: [x off the seat centre, width, height over the
+## cluster line, depth]. The pod, cans and panel styles have no hood (the
+## panel's flat face is listed for the boost pod's clearance: a 0.44 m box,
+## its top 7 cm over the cluster line). GaugePod.mount_of keeps the boost
+## pod's lower gauge over the hood (binnacle_of).
+const BINNACLES := {
+	"strip": [0.08, 0.62, 0.054, 0.09], "tacho": [0.02, 0.36, 0.061, 0.09], "wide": [0.0, 0.46, 0.048, 0.16],
+	"centre": [0.02, 0.40, 0.052, 0.09], "estate": [0.03, 0.36, 0.060, 0.07], "quad": [0.0, 0.50, 0.048, 0.16],
+	"triple": [0.0, 0.34, 0.048, 0.16], "dials": [0.0, 0.34, 0.048, 0.16], "panel": [0.0, 0.40, 0.058, 0.03],
+}
+
+## The hood's box in car space for a cabin: {"x0", "x1", "top", "z0", "z1"}
+## (x0 the driver's side), or {} for a style without one.
+static func binnacle_of(cab: Dictionary) -> Dictionary:
+	var style := String(cab.cluster_style)
+	if style == "pod" or style == "cans":
+		return {}
+	var b: Array = BINNACLES.get(style, BINNACLES["dials"])
+	var cl: Vector2 = cab.cluster
+	var x: float = float(cab.seat_x) + float(b[0])
+	var half := (float(b[1]) + 0.04) * 0.5
+	var depth := float(b[3])
+	return {"x0": x - half, "x1": x + half, "top": cl.x + float(b[2]) + 0.012, "z0": cl.y + 0.01 - depth, "z1": cl.y + 0.01}
+
+func _hood(k: CockpitKit, style: String, seat_x: float, cl: Vector2) -> void:
+	var b: Array = BINNACLES[style]
+	_binnacle(k, seat_x + float(b[0]), float(b[1]), cl, float(b[2]), float(b[3]))
+
 func _binnacle(k: CockpitKit, x: float, w: float, cl: Vector2, top: float = 0.048, depth: float = 0.16) -> void:
 	var t := trim_colours()
 	var box_depth := minf(0.10, depth)
@@ -825,6 +881,64 @@ func dial_radii() -> Array:
 			return [0.046, 0.046]
 		_:
 			return [DIAL_R, DIAL_R]
+
+## The A-pillar trim: PILLAR_W wide, or narrower where that would be more than
+## PILLAR_MAX_DEG across from the eye (the sightline spec's limit; the driver's
+## side is nearer the eye and was 9 to 13 degrees at 7.5 cm, the kei 19), never
+## under PILLAR_MIN_W. Measured at the point of the bar nearest eye level.
+const PILLAR_W := 0.075
+const PILLAR_MIN_W := 0.03
+const PILLAR_MAX_DEG := 6.0
+var pillar_mat: StandardMaterial3D
+var _pillar_alpha := 1.0
+
+static func pillar_width(eye: Vector3, a: Vector3, b: Vector3, col: Color) -> float:
+	# The bar is seen slantwise, so its width on screen is not its `w`: build
+	# it at PILLAR_W, measure how many degrees of yaw it covers from the eye at
+	# eye level and a little above and below, and scale the width down to the
+	# limit (the cover scales with the width, near enough).
+	var seen := pillar_apparent_deg(eye, a, b, PILLAR_W, col)
+	if seen <= PILLAR_MAX_DEG:
+		return PILLAR_W
+	return clampf(PILLAR_W * PILLAR_MAX_DEG / seen, PILLAR_MIN_W, PILLAR_W)
+
+## Degrees of yaw a pillar bar of width `w` covers from the eye, the widest of
+## three heights (eye level, 6 degrees up, 6 down), quarter-degree steps.
+static func pillar_apparent_deg(eye: Vector3, a: Vector3, b: Vector3, w: float, col: Color) -> float:
+	var k := CockpitKit.new()
+	_bar(k, a, b, w, col)
+	var tris: PackedVector3Array = k._v
+	var mid := (a + b) * 0.5 - eye
+	var centre_yaw := rad_to_deg(atan2(-mid.x, -mid.z))   # + = left, as the look keys
+	var widest := 0.0
+	for pitch in [0.0, 6.0, -6.0]:
+		var covered := 0.0
+		var yaw := centre_yaw - 20.0
+		while yaw <= centre_yaw + 20.0:
+			var dir := Vector3(0, 0, -1).rotated(Vector3.RIGHT, deg_to_rad(pitch)).rotated(Vector3.UP, deg_to_rad(yaw))
+			var t := 0
+			while t + 2 < tris.size():
+				if Geometry3D.ray_intersects_triangle(eye, dir, tris[t], tris[t + 1], tris[t + 2]) != null:
+					covered += 0.25
+					break
+				t += 3
+			yaw += 0.25
+		widest = maxf(widest, covered)
+	return widest
+
+## How solid the A-pillar trim is drawn: 1 in the chase and hood views, 1 minus
+## the View page's see-through amount in the cockpit (ChaseCamera sets it each
+## frame, so the slider shows behind the menu).
+func set_pillar_alpha(alpha: float) -> void:
+	alpha = clampf(alpha, 0.0, 1.0)
+	if pillar_mat == null or is_equal_approx(alpha, _pillar_alpha):
+		return
+	_pillar_alpha = alpha
+	pillar_mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED if alpha >= 0.999 else BaseMaterial3D.TRANSPARENCY_ALPHA
+	pillar_mat.albedo_color = Color(1.0, 1.0, 1.0, alpha)
+
+func pillar_alpha() -> float:
+	return _pillar_alpha
 
 ## A box from a to b, `w` across, for pillars.
 static func _bar(k: CockpitKit, a: Vector3, b: Vector3, w: float, col: Color) -> void:

@@ -107,6 +107,7 @@ var chase_fov_slider: HSlider
 var smoothing_option: OptionButton   # Chase follow: Tight / Smooth / Loose (smoothing A / B / C)
 var fov_slider: HSlider              # Cockpit FOV
 var hood_fov_slider: HSlider
+var pillar_slider: HSlider            # Pillars see-through
 var widening_check: CheckButton
 var shake_slider: HSlider
 var head_motion_check: CheckButton
@@ -419,6 +420,7 @@ func _sync_all() -> void:
 	smoothing_option.select(ViewSettings.camera_smoothing)
 	fov_slider.value = ViewSettings.cockpit_fov
 	hood_fov_slider.value = ViewSettings.hood_fov
+	pillar_slider.value = ViewSettings.pillar_see_through
 	widening_check.button_pressed = AccessSettings.fov_widening
 	shake_slider.value = AccessSettings.shake_scale
 	head_motion_check.button_pressed = FxSettings.is_on("head_motion")
@@ -588,6 +590,11 @@ func _build_view_page(parent: Control) -> Control:
 	hood_fov_slider = _add_slider(page, "Hood FOV", ViewSettings.HOOD_FOV_MIN, ViewSettings.HOOD_FOV_MAX, 1.0, ViewSettings.hood_fov,
 		func(v: float) -> void:
 			ViewSettings.set_hood_fov(v)
+			ViewSettings.save_settings())
+	# Pillars see-through 0-70%, default 35% (#738, Roy 1549): the cockpit A-pillars only
+	pillar_slider = _add_slider(page, "Pillars see-through", 0.0, ViewSettings.PILLAR_SEE_THROUGH_MAX, 0.05, ViewSettings.pillar_see_through,
+		func(v: float) -> void:
+			ViewSettings.set_pillar_see_through(v)
 			ViewSettings.save_settings())
 	_heading(page, "Comfort")
 	widening_check = _add_check(page, "Speed FOV widening", AccessSettings.fov_widening, func(on: bool) -> void:

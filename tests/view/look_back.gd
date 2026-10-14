@@ -118,13 +118,18 @@ func _physics_process(_delta: float) -> bool:
 		Step.COCKPIT_BACK:
 			if waited == 6:
 				var rel := p.global_transform.affine_inverse() * cam.global_position
-				_check(rel.distance_to(ChaseCamera.COCKPIT_EYE) < 0.02, "in the cockpit the eye stays put while looking back (%s)" % rel)
-				_check(_facing(p, cam) < -0.9, "the cockpit eye faces the rear (facing %.2f)" % _facing(p, cam))
+				# #739: the cockpit borrows the hood view's roof camera, body drawn
+				_check(rel.distance_to(cam.roof_back_cam) < 0.02, "in the cockpit B moves to the roof camera %s (at %s)" % [cam.roof_back_cam, rel])
+				_check(_facing(p, cam) < -0.9, "the roof camera faces the rear (facing %.2f)" % _facing(p, cam))
+				_check(cam.frame == null or not cam.frame.body_hidden_from_camera(), "the body is drawn while B is held in the cockpit")
 				Input.action_release("look_back")
 				_go(Step.COCKPIT_FWD)
 		Step.COCKPIT_FWD:
 			if waited == 6:
 				_check(_facing(p, cam) > 0.9, "released, the cockpit eye faces forward (facing %.2f)" % _facing(p, cam))
+				var rel_f := p.global_transform.affine_inverse() * cam.global_position
+				_check(rel_f.distance_to(cam.eye) < 0.06, "released, the camera is back at the eye %s (at %s)" % [cam.eye, rel_f])
+				_check(cam.frame == null or cam.frame.body_hidden_from_camera(), "released, the body is hidden from the cockpit camera again")
 				_check(hud.rear_threat < 0.02, "no cue with nothing behind (%.2f)" % hud.rear_threat)
 				cam.set_view(ChaseCamera.View.CHASE)
 				_put_car_behind(p, 6.0, false)

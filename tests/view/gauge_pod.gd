@@ -126,15 +126,21 @@ func _check_styles() -> void:
 	_check(GaugePod.psi_face_max(0.5) == 15.0 and GaugePod.psi_face_max(1.0) == 30.0, "PSI face steps: 0.5 bar -> 15, 1.0 bar -> 30")
 
 ## The pod sits in the A-pillar zone the sightline spec leaves to the pillars
-## (|x| > 0.55 in tests/view/cockpit_interior.gd), inside the cabin, under the
-## roof, and ahead of the eye.
+## (its inner edge at least GaugePod.MIN_YAW_DEG off the camera eye's centre
+## line; the eye is the arcade eye, #737), inside the cabin, under the roof,
+## and ahead of the eye.
 func _check_sightline(pod: GaugePod) -> void:
 	var pos := pod.position
-	_check(absf(pos.x) > 0.55 and pos.x > -0.80, "the pod is on the driver's pillar, inside the cabin (x %.2f)" % pos.x)
+	var eye := CabinSpec.arcade_eye(CabinSpec.for_kind(P1CoupeBuilder.KIND))
+	var inner_yaw := rad_to_deg(atan2(eye.x - (pos.x + GaugePod.HALF_W), maxf(eye.z - pos.z, 0.05)))
+	_check(inner_yaw >= GaugePod.MIN_YAW_DEG - 0.5 and pos.x > -0.80, "the pod is on the driver's pillar, inside the cabin (x %.2f, inner edge %.1f deg off the eye's line)" % [pos.x, inner_yaw])
 	_check(pos.y + GaugePod.GAUGE_R + GaugePod.PITCH * 0.5 < 1.30, "the pod stays under the roof (y %.2f)" % pos.y)
-	# 0.4 m: a raked pillar's pod stands off it toward the eye, or its faces would be behind the pillar trim
-	_check(pos.z < ChaseCamera.COCKPIT_EYE.z - 0.4, "the pod is well ahead of the eye (z %.2f)" % pos.z)
-	var to_eye: Vector3 = (ChaseCamera.COCKPIT_EYE - pos).normalized()
+	# a raked pillar's pod stands off it toward the eye, or its faces would be
+	# behind the pillar trim, but never nearer the camera eye than MIN_EYE_DIST
+	# (the coupe's pod slides past its cluster hood's corner, 22 cm ahead and
+	# 24 cm outboard of the eye: GaugePod.mount_of)
+	_check(pos.z < eye.z - 0.20 and pos.distance_to(eye) >= GaugePod.MIN_EYE_DIST - 0.01, "the pod is well ahead of the eye (z %.2f, eye z %.2f, %.2f m away)" % [pos.z, eye.z, pos.distance_to(eye)])
+	var to_eye: Vector3 = (eye - pos).normalized()
 	var facing: float = (pod.basis * Vector3.BACK).dot(to_eye)
 	_check(facing > 0.97, "the faces point at the eye (cos %.3f)" % facing)
 

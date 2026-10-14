@@ -31,6 +31,11 @@ const GLASS := ["glass"]
 const CABIN := {
 	"seat_x": -0.231, "seat_h": 0.385, "seat_z": -0.025,
 	"eye": Vector3(-0.191, 1.005, -0.085),
+	# arcade eye (#737, #738): 5 cm inboard, the cabin is narrow and the
+	# A-pillar sits 22 cm from the eye; not up at all and barely forward: the
+	# header bar's underside is 6 cm over the seated eye and only 29 cm ahead,
+	# so 5 cm up puts it (and the mirror) in the road band
+	"arcade_eye": Vector3(0.05, 0.0, -0.05),
 	"floor_y": 0.256, "belt_y": 0.842,
 	"cowl": Vector2(0.756, -0.775), "dash_face_z": -0.715,
 	"header": Vector2(1.165, -0.375), "roof_y": 1.165, "roof_z1": 0.475, "open_top": true,

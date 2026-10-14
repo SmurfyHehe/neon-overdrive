@@ -35,6 +35,29 @@ extends RefCounted
 #   hood_cam      Vector3   the hood camera, on the bonnet ahead of the windscreen
 #   roof_back_cam Vector3   the roof camera that looks straight back (B in hood view)
 
+## The arcade eye (#737, Roy 1550): the cockpit camera sits this far from the
+## car's CABIN eye, up and toward the windscreen, so the dash and wheel drop to
+## the bottom of the screen and the road fills it (coupe: road 14% -> 30% of
+## the screen). A car's CABIN may set its own `arcade_eye` offset (the kei:
+## 5 cm inboard too, its cabin is 20 cm narrower). The point is kept at least
+## ARCADE_EYE_GLASS_GAP behind the windscreen at its height and under the roof.
+const ARCADE_EYE_DEFAULT := Vector3(0.0, 0.08, -0.30)
+const ARCADE_EYE_GLASS_GAP := 0.15
+const ARCADE_EYE_ROOF_GAP := 0.10
+
+## Where the cockpit camera sits in this car (car space).
+static func arcade_eye(cab: Dictionary) -> Vector3:
+	var off: Vector3 = cab.get("arcade_eye", ARCADE_EYE_DEFAULT)
+	var e: Vector3 = (cab.eye as Vector3) + off
+	e.y = minf(e.y, float(cab.roof_y) - ARCADE_EYE_ROOF_GAP)
+	var cowl: Vector2 = cab.cowl
+	var header: Vector2 = cab.header
+	# the windscreen's z at the eye's height, between the cowl and the header
+	var t := clampf((e.y - cowl.x) / maxf(header.x - cowl.x, 0.01), 0.0, 1.0)
+	var glass_z := lerpf(cowl.y, header.y, t)
+	e.z = maxf(e.z, glass_z + ARCADE_EYE_GLASS_GAP)
+	return e
+
 ## Defaults for the hood camera: above and ahead of the cowl. These are the
 ## coupe's hand-placed offsets (#731): at 0.18 / 0.35 the wagon and the other
 ## cars without their own point saw the road only from 5 to 6 m ahead and the
